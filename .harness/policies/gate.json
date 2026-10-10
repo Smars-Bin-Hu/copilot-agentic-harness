@@ -76,6 +76,14 @@
         "pattern": "{cmd}mkfs(?:\\.\\w+)?\\b|{cmd}dd\\b[^\\n]*\\bof=/dev/|>\\s*/dev/(?:sd|nvme|disk)"
       },
       {
+        "why": "会用管理员权限运行",
+        "pattern": "{cmd}(?:sudo|gsudo|doas|runas)(?:\\.exe)?\\b|-verb\\s+[\\\"']?runas\\b"
+      },
+      {
+        "why": "会递归改权限，或删除容器、集群、基础设施",
+        "pattern": "\\b(?:chmod|chown|chgrp)\\s+(?:-R\\b|--recursive\\b)|\\bicacls(?:\\.exe)?\\b[^;&|\\n]*\\s/t\\b|\\btakeown(?:\\.exe)?\\b[^;&|\\n]*\\s/r\\b|-recurse\\b[^\\n]*\\bset-acl\\b|\\bdocker(?:\\.exe)?\\s+(?:rm|rmi|system\\s+prune|volume\\s+rm)\\b|\\bkubectl(?:\\.exe)?\\s+delete\\b|\\bterraform(?:\\.exe)?\\s+(?:apply|destroy)\\b"
+      },
+      {
         "why": "批准计划（approve-plan）、批准 promote（approve-promote）、恢复中途出错的 promote（recover）、批准 git 命令（approve-command）和开 admin 模式（admin on）只能由用户在自己的终端里运行。告诉用户运行这条命令，不要自己运行",
         "pattern": "\\b(?:cli\\.py|harness(?:\\.cmd)?)\\s+(?:(?:request|task)\\s+(?:approve-plan|approve-promote|recover)|approve-command|admin\\s+on)\\b"
       }
@@ -96,14 +104,6 @@
       {
         "why": "会安装软件包",
         "pattern": "\\b(?:pip3?|(?:python3?|py)(?:\\s+-[0-9.]+)?\\s+-m\\s+pip|npm|pnpm|yarn|brew|apt|apt-get|choco|winget|gem|cargo)\\s+(?:install|add|i)\\b|\\bgo\\s+(?:install|get)\\b|{cmd}npx\\b"
-      },
-      {
-        "why": "会用管理员权限运行",
-        "pattern": "{cmd}(?:sudo|runas)\\b"
-      },
-      {
-        "why": "会递归改权限，或删除容器、集群、基础设施",
-        "pattern": "\\b(?:chmod|chown)\\s+-R\\b|\\bdocker\\s+(?:rm|rmi|system\\s+prune|volume\\s+rm)\\b|\\bkubectl\\s+delete\\b|\\bterraform\\s+(?:apply|destroy)\\b"
       },
       {
         "why": "会删除会话日志",

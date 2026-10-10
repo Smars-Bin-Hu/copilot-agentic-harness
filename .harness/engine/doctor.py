@@ -7,11 +7,14 @@ import importlib
 import json
 import re
 import shutil
+import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
 from core import config, output, targets, user
+from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
 from core.state import TRACKED_EVENTS
@@ -23,7 +26,12 @@ KB_IGNORED = {"README.md", ".gitkeep", ".gitignore", ".DS_Store"}
 BROAD_APPLY_TO = {"**", "**/*", "*", "**/**"}
 MARKDOWN_LINK = re.compile(r"\]\(([^)\s]+)\)")
 SHOWN_BROKEN_LINKS = 5
-TOOL_KINDS = {"read", "edit", "create", "terminal", "search", "subagent", "mcp"}
+TOOL_KINDS = {"read", "edit", "create", "terminal", "search", "subagent", "mcp", "web", "skill", "meta"}
+INTERPRETER_SECONDS = 15
+RECENT_LOG_FILES = 20  # the hook self-check reads only the newest session logs
+STALE_HOOK_DAYS = 7
+SLOW_GATE_SHARE = 0.5  # of the PreToolUse timeout: the SDK engine lets a call through when the hook times out
+DEFAULT_HOOK_TIMEOUT = 30
 
 
 class Report:
@@ -52,12 +60,89 @@ def check_python(report: Report) -> None:
 
 
 def check_interpreter(report: Report) -> None:
-    """The launcher and the hook start `python` (Windows) or `python3` (elsewhere). It has to run from the terminal."""
+    """The launcher and the hook start `python` (Windows) or `python3` (elsewhere). It has to run, not only be found.
+
+    In a Copilot (SDK) session a hook that cannot start counts as a refusal: every tool call is denied (P2, 2026-10-10).
+    """
     name = python_command()
-    if shutil.which(name):
-        report.ok(f"终端里能找到 `{name}`")
+    consequence = "hook 启动不了时，Copilot 会话里所有工具调用都会被拒（界面只显示 hook errored）"
+    found = shutil.which(name)
+    if not found:
+        report.error(f"终端的 PATH 里找不到 `{name}`。短命令和 hook 都要用它；{consequence}。装好 Python，或把它加进 PATH")
+        return
+    try:
+        result = subprocess.run([found, "-c", "print(1)"], capture_output=True, text=True, timeout=INTERPRETER_SECONDS)
+        problem = "" if result.returncode == 0 and result.stdout.strip() == "1" else f"退出码 {result.returncode}"
+    except Exception as error:
+        problem = f"{type(error).__name__}"
+    if problem:
+        report.error(f"终端里的 `{name}`（{found}）不能执行：{problem}。{consequence}。Windows 上它可能是应用商店的占位程序，装真正的 Python")
     else:
-        report.warn(f"终端的 PATH 里找不到 `{name}`。短命令和 hook 都要用它。装好 Python，或把它加进 PATH")
+        report.ok(f"终端里的 `{name}` 能执行")
+
+
+def hook_timeout(root: Path) -> float:
+    """The PreToolUse timeout of the hook config, in seconds. The default when the config cannot be read."""
+    try:
+        path = sorted((root / ".github" / "hooks").glob("*.json"))[0]
+        entry = config.read_json(path)["hooks"]["PreToolUse"][0]
+        return float(entry.get("timeoutSec") or entry.get("timeout") or DEFAULT_HOOK_TIMEOUT)
+    except Exception:
+        return float(DEFAULT_HOOK_TIMEOUT)
+
+
+def recent_calls(root: Path) -> List[Dict[str, Any]]:
+    """The rows of the newest session logs, oldest first."""
+    files = sorted((path for _surface, path in session_files(root)), key=lambda path: path.stat().st_mtime)[-RECENT_LOG_FILES:]
+    rows = [row for path in files for row in read_lines(path) if isinstance(row.get("at"), str)]
+    return sorted(rows, key=lambda row: row["at"])
+
+
+def days_since(at: str) -> float:
+    try:
+        return (datetime.now(timezone.utc) - datetime.fromisoformat(at)).total_seconds() / 86400
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def check_hook_activity(report: Report, root: Path, registry: Dict[str, Any]) -> None:
+    """Is the hook really being called? The config can be right while the hook never runs (hooks switched off,
+    an engine that ignores the file). The session logs are the only proof, so this needs the observe module."""
+    entry = registry["modules"].get("observe")
+    if entry is None or not entry["enabled"]:
+        return
+    try:
+        rows = recent_calls(root)
+    except Exception as error:
+        report.warn(f"读不了会话日志，没法确认 hook 有没有在跑：{error}")
+        return
+    hint = "在 Copilot 里发一句话，再运行一次 doctor。还是没有，说明 hook 没在跑：确认 `.github/hooks/harness.json` 在，VS Code 打开的是这个仓库的根目录，聊天的 Session Target 是 Copilot；改过以后要 Reload Window"
+    if not rows:
+        report.warn(f"还没有任何 hook 调用记录，没法确认 hook 有没有在跑。{hint}")
+        return
+    last = rows[-1]
+    age = days_since(last["at"])
+    when = last["at"][:16].replace("T", " ") + " UTC"
+    if age > STALE_HOOK_DAYS:
+        report.warn(f"hook 最近一次被调用是 {when}（{int(age)} 天前）。这段时间用过 Copilot 的话，hook 没在跑。{hint}")
+    else:
+        report.ok(f"hook 最近一次被调用：{when}")
+    engines = [row.get("engine") for row in rows if row.get("event") == "PreToolUse" and row.get("engine") in ("cli", "legacy")]
+    if engines and engines[-1] == "legacy":
+        report.warn("最近的会话是 Local 会话。harness 只保证在 Copilot（SDK）会话里生效：聊天输入框的 Session Target 选 Copilot")
+    elif engines:
+        report.ok("最近的会话是 Copilot（SDK）会话")
+    gate = [float(row["ms"]) for row in rows if row.get("event") == "PreToolUse" and isinstance(row.get("ms"), (int, float))]
+    if not gate:
+        return
+    timeout = hook_timeout(root)
+    slowest = max(gate) / 1000
+    middle = sorted(gate)[len(gate) // 2]
+    text = f"gate 最近 {len(gate)} 次调用：一般 {middle:.0f} 毫秒，最慢 {max(gate):.0f} 毫秒（超时是 {timeout:.0f} 秒）"
+    if slowest >= timeout * SLOW_GATE_SHARE:
+        report.warn(f"{text}。离超时太近：hook 超时的调用会被直接放行，gate 等于没拦。查是什么拖慢了 Python 的启动（杀毒软件、网络盘）")
+    else:
+        report.ok(text)
 
 
 def launcher_files(root: Path) -> List[Path]:
@@ -110,16 +195,16 @@ def check_files(report: Report, root: Path, owner: str, files: List[str]) -> Non
 
 
 def interpreter_problems(entry: Dict[str, Any]) -> List[str]:
-    """Each runtime reads its own keys: VS Code `command`/`windows`, the Copilot CLI engine `bash`/`powershell`.
+    """The config carries two sets of keys: `command`/`windows`, and `bash`/`powershell` which a Copilot (SDK) session reads.
 
-    An engine that finds no key for its system runs the wrong one, and the CLI engine treats a hook that fails as a deny:
+    An engine that finds no key for its system runs the wrong one, and a hook that fails to start counts as a deny:
     every tool call is refused. Windows has `python` and often no `python3`.
     """
     problems = []
     for key, interpreter in (("command", "python3"), ("bash", "python3"), ("windows", "python"), ("powershell", "python")):
         value = entry.get(key)
         if not isinstance(value, str):
-            problems.append(f"缺少 `{key}`（{'Windows' if interpreter == 'python' else 'macOS/Linux'} 上的 {'VS Code' if key in ('command', 'windows') else 'Copilot CLI 引擎'} 读它）")
+            problems.append(f"缺少 `{key}`（{'Windows' if interpreter == 'python' else 'macOS/Linux'} 上的 {'VS Code' if key in ('command', 'windows') else 'Copilot（SDK）会话'} 读它）")
         elif value.split()[0] != interpreter:
             problems.append(f"`{key}` 应该用 `{interpreter}`，现在是 `{value.split()[0]}`")
     return problems
@@ -516,6 +601,7 @@ def run(root: Path) -> int:
     check_files(report, root, "engine", registry["engine"]["files"])
     check_tool_kinds(report)
     check_hook_config(report, root, registry)
+    check_hook_activity(report, root, registry)
     check_agents(report, root)
     check_logs(report, root, registry)
     check_overrides(report, root)

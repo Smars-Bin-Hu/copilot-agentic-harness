@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, List
 
-from support import REPO, payload, pre_tool
+from support import REPO, payload, pre_tool, subagent_start, subagent_stop
 
 from modules.evalcheck import checks, scenario
 from test_request import SESSION, RequestCase
@@ -43,7 +43,7 @@ class EvalCase(RequestCase):
         self.fill_assignment(request_id, number, role)
         self.dispatch(request_id, role)
         self.assertEqual(self.call_subagent(role), {})
-        self.hook(payload("SubagentStart", SESSION, agent_id="a1", agent_type=role))
+        self.hook(subagent_start(SESSION, role))
         if role == "builder" and status == "passed":
             for name in files:
                 self.output(request_id, number, "builder", name, f"# {name}\n")
@@ -56,7 +56,7 @@ class EvalCase(RequestCase):
             self.submit(request_id, "reviewer", status, "--evidence", "evidence/test.log", "--blocker", "wrong")
         else:
             self.submit(request_id, role, status, "--blocker", "wrong")
-        self.hook(payload("SubagentStop", SESSION, agent_id="a1", agent_type=role, stop_hook_active=False))
+        self.hook(subagent_stop(SESSION, role))
 
     def attempt_round(self, request_id: str, number: int, builder: str = "passed", reviewer: str = "passed", files: List[str] = None) -> None:
         self.attempt(request_id)
@@ -72,13 +72,13 @@ class EvalCase(RequestCase):
         self.attempt(request_id)
         self.fill_assignment(request_id, 1, "builder")
         if with_denial:
-            self.assertEqual(self.call_subagent("builder")["hookSpecificOutput"]["permissionDecision"], "deny")
+            self.assertEqual(self.call_subagent("builder")["permissionDecision"], "deny")
         self.dispatch(request_id, "builder")
         self.assertEqual(self.call_subagent("builder"), {})
-        self.hook(payload("SubagentStart", SESSION, agent_id="a1", agent_type="builder"))
+        self.hook(subagent_start(SESSION, "builder"))
         self.output(request_id, 1, "builder", "hello.txt", "hi")
         self.submit(request_id, "builder", "passed", "--output", "hello.txt")
-        self.hook(payload("SubagentStop", SESSION, agent_id="a1", agent_type="builder", stop_hook_active=False))
+        self.hook(subagent_stop(SESSION, "builder"))
         self.conclude(request_id, "abandoned")
         return request_id
 
@@ -180,10 +180,10 @@ class RequestScenarioTests(EvalCase):
         self.fill_assignment(request_id, 1, "builder")
         self.dispatch(request_id, "builder")  # dispatched first: no refusal ever happens
         self.call_subagent("builder")
-        self.hook(payload("SubagentStart", SESSION, agent_id="a1", agent_type="builder"))
+        self.hook(subagent_start(SESSION, "builder"))
         self.output(request_id, 1, "builder", "hello.txt", "hi")
         self.submit(request_id, "builder", "passed", "--output", "hello.txt")
-        self.hook(payload("SubagentStop", SESSION, agent_id="a1", agent_type="builder", stop_hook_active=False))
+        self.hook(subagent_stop(SESSION, "builder"))
         self.conclude(request_id, "abandoned")
         result = self.evaluate("s4", "--session-id", SESSION, ok=False)
         self.assertFalse(result["passed"])
@@ -327,7 +327,7 @@ class TaskScenarioTests(EvalCase):
         target = str(self.root.resolve() / name / "DEV" / "hello.txt")
         if try_early:
             early = self.hook(pre_tool("t1-session", "create_file", {"filePath": target, "content": "hi"}))
-            self.assertEqual(early["hookSpecificOutput"]["permissionDecision"], "deny")
+            self.assertEqual(early["permissionDecision"], "deny")
         (self.root / name / "PLAN.md").write_text("# 计划\n\n写 hello.txt。\n", encoding="utf-8")
         code = tasks.plan_digest(self.root, name)[:8]
         task_ops.approve_plan(self.root, name, reader=lambda _p: code, interactive=True, out=io.StringIO())

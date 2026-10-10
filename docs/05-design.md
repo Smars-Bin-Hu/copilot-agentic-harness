@@ -30,7 +30,7 @@
 ```text
 用户（切换 Level，批准关键动作）
    │
-Copilot 运行时（VS Code 本地会话、Copilot SDK 会话）
+Copilot 运行时（VS Code 里的 Copilot 会话）
    │
 ┌──┴─────────────────────────── 说明层：教模型怎么做 ───────────────────────────┐
 │ instructions   skills   agents   knowledge-base                             │
@@ -155,9 +155,26 @@ task close → 自动写报告
 
 不要一次加载全部内容。README 是索引，AGENTS.md 只放核心规则，技能先只读名字和描述，需要时才读全文。知识库同样：先读索引，再按需往下读。这样上下文短，agent 不容易被无关内容带偏。
 
+### 只支持 Copilot 会话
+
+VS Code 的聊天输入框有 Session Target。harness 只支持选 **Copilot** 的会话（底下是 Copilot SDK）。
+
+- **Local 会话**：不支持。hook 的输出是 Copilot 会话的格式，Local 会话读不懂，拒绝不生效。VS Code 的文档说 Local 以后会移除。用了 Local 会话，`harness doctor` 会给 `[WARN]`。
+- **Claude、Codex 会话**：没测过，当作不生效。
+- **`copilot -p`（命令行，无界面）**：实测仓库里的 hook 不运行，harness 不生效。
+
 ### hook 自己出错时放行
 
 hook 只在明确违反策略时拒绝。它自己出错（配置写坏、解析失败）时放行，并写入 `hook-errors.jsonl`。hook 在每次工具调用前运行，误伤的代价比漏拦大。`doctor` 负责发现配置问题。
+
+有两种情况 hook 自己管不了，由平台决定（2026-10-10 在 Copilot 会话里实测）：
+
+- **hook 启动不了**（例如找不到 Python）：平台当作拒绝，所有工具调用都失败，界面只显示 `hook errored`。
+- **hook 超时**：平台直接放行，没有提示。gate 平时几十毫秒，超时是 30 秒。
+
+另外，VS Code 的 `chat.useHooks` 设置管不到 Copilot（SDK）会话：用户设置和工作区设置都关掉，hook 照常运行。hook 配置文件是窗口启动时读的，改过要 Reload Window。
+
+所以 `doctor` 会试着执行一次 Python，并报告 gate 最近的耗时，离超时太近就给 `[WARN]`。
 
 ### 人批准关键动作，批准不能被 agent 代劳
 

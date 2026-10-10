@@ -36,7 +36,7 @@ class AdminTestCase(HarnessTestCase):
         return self.context(output)
 
     def context(self, output: dict) -> str:
-        return output.get("additionalContext") or output.get("hookSpecificOutput", {}).get("additionalContext", "")
+        return output.get("additionalContext", "")
 
     def switch_on(self, session: Optional[str] = None, code: Optional[str] = None) -> dict:
         asked = []
@@ -58,10 +58,10 @@ class AdminTestCase(HarnessTestCase):
         return self.hook(data)
 
     def decision(self, output: dict) -> str:
-        return output.get("hookSpecificOutput", {}).get("permissionDecision", "")
+        return output.get("permissionDecision", "")
 
     def reason(self, output: dict) -> str:
-        return output["hookSpecificOutput"]["permissionDecisionReason"]
+        return output["permissionDecisionReason"]
 
 
 class SwitchTests(AdminTestCase):
@@ -246,7 +246,7 @@ class LevelTests(AdminTestCase):
         self.switch_on()
         self.prompt("edit")
         self.write("notes.txt", tool="replace_string_in_file")
-        self.hook({**pre_tool(self.session, "replace_string_in_file", {"filePath": f"{self.base}/notes.txt"}), "hook_event_name": "PostToolUse", "tool_response": "ok"})
+        self.hook({**pre_tool(self.session, "replace_string_in_file", {"filePath": f"{self.base}/notes.txt"}), "hook_event_name": "PostToolUse", "tool_result": {"result_type": "success", "text_result_for_llm": "ok"}})
         output = self.hook(payload("Stop", self.session, stop_hook_active=False))
         self.assertNotEqual(output.get("decision"), "block")
 

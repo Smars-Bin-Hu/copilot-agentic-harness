@@ -1,5 +1,6 @@
 """observe: writes the call log. hook.py calls `record_call` after the decision is merged, so the record has the final
-decision and the time it took. The module subscribes to no event: it has no opinion on any call, and it never changes one.
+decision and the time it took. The module has no opinion on any call, and it never changes one. It subscribes to
+PostToolUseFailure only so the hook is started for a failed tool call and the call gets its line in the log.
 
 A broken policy does not stop the log: the defaults are used. A broken log does not stop the hook: hook.py catches it.
 """
@@ -45,8 +46,9 @@ def clip(text: Any, limit: int) -> Any:
 
 def clip_record(record: Dict[str, Any], limit: int) -> Dict[str, Any]:
     clipped = dict(record)
-    if "reason" in record:
-        clipped["reason"] = clip(record["reason"], limit)
+    for key in ("reason", "error"):
+        if key in record:
+            clipped[key] = clip(record[key], limit)
     target = record.get("target")
     if isinstance(target, dict):
         clipped["target"] = {"paths": [clip(item, limit) for item in target.get("paths", [])], "command": clip(target.get("command", ""), limit)}

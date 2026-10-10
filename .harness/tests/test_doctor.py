@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from support import CLI, ENGINE, REPO
@@ -210,7 +211,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("harness-task-level", result.stdout)
 
     def test_a_deleted_engine_file_is_an_error(self) -> None:
-        (self.root / ".harness" / "engine" / "adapters" / "copilot_cli.py").unlink()
+        (self.root / ".harness" / "engine" / "adapters" / "copilot_vscode.py").unlink()
         self.assertEqual(self.doctor().returncode, 1)
 
     def test_a_second_hook_config_is_an_error(self) -> None:
@@ -292,10 +293,81 @@ class DoctorTests(unittest.TestCase):
 
     # --- interpreter and cross-platform text -----------------------------------------------------
 
-    def test_a_missing_interpreter_is_a_warning(self) -> None:
+    def test_a_missing_interpreter_is_an_error_that_says_what_it_costs(self) -> None:
         result = self.doctor(PATH=str(self.root / ".harness" / "bin"))  # the launcher is there, python is not
-        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("PATH 里找不到 `python", result.stdout)
+        self.assertIn("所有工具调用都会被拒", result.stdout)
+
+    @unittest.skipIf(os.name == "nt", "a fake interpreter as a shell script")
+    def test_an_interpreter_that_is_found_but_does_not_run_is_an_error(self) -> None:
+        fake = self.root / "fakebin"
+        fake.mkdir()
+        (fake / "python3").write_text("#!/bin/sh\nexit 9\n", encoding="utf-8")
+        (fake / "python3").chmod(0o755)
+        result = self.doctor(PATH=str(fake) + os.pathsep + str(self.root / ".harness" / "bin"))
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("不能执行：退出码 9", result.stdout)
+
+    # --- is the hook really running ---------------------------------------------------------------
+
+    def write_log(self, rows: list, name: str = "s1") -> None:
+        folder = self.root / ".harness" / "runtime" / "logs" / "vscode"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"{name}.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    @staticmethod
+    def call(days_ago: float = 0.0, ms: float = 25.0, engine: str = "cli", event: str = "PreToolUse") -> dict:
+        at = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
+        return {"at": at, "event": event, "engine": engine, "ms": ms, "session_id": "s1", "surface": "vscode"}
+
+    def test_no_hook_call_yet_is_a_warning_that_says_how_to_check(self) -> None:
+        result = self.doctor()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("[WARN]  还没有任何 hook 调用记录", result.stdout)
+        self.assertIn("Reload Window", result.stdout)
+
+    def test_a_recent_hook_call_says_when_which_session_kind_and_how_fast_the_gate_is(self) -> None:
+        self.write_log([self.call(ms=20), self.call(ms=40), self.call(ms=30)])
+        result = self.doctor()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("[OK]    hook 最近一次被调用", result.stdout)
+        self.assertIn("[OK]    最近的会话是 Copilot（SDK）会话", result.stdout)
+        self.assertIn("[OK]    gate 最近 3 次调用：一般 30 毫秒，最慢 40 毫秒（超时是 30 秒）", result.stdout)
+
+    def test_a_hook_that_was_last_called_long_ago_is_a_warning(self) -> None:
+        self.write_log([self.call(days_ago=9)])
+        result = self.doctor()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("（9 天前）", result.stdout)
+        self.assertIn("Reload Window", result.stdout)
+
+    def test_a_gate_close_to_the_timeout_is_a_warning_because_a_timeout_lets_the_call_through(self) -> None:
+        self.write_log([self.call(ms=25), self.call(ms=16000)])
+        result = self.doctor()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("最慢 16000 毫秒", result.stdout)
+        self.assertIn("超时的调用会被直接放行", result.stdout)
+
+    def test_the_gate_is_measured_against_the_timeout_of_the_hook_config(self) -> None:
+        def change(data: dict) -> None:
+            for entry in data["hooks"]["PreToolUse"]:
+                entry["timeout"] = entry["timeoutSec"] = 5
+
+        self.edit_json(".github/hooks/harness.json", change)
+        self.write_log([self.call(ms=3000)])
+        result = self.doctor()
+        self.assertIn("（超时是 5 秒）。离超时太近", result.stdout)
+
+    def test_a_local_session_is_a_warning(self) -> None:
+        self.write_log([self.call(engine="legacy")])
+        result = self.doctor()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("[WARN]  最近的会话是 Local 会话", result.stdout)
+
+    def test_without_the_observe_module_the_hook_activity_is_not_checked(self) -> None:
+        self.edit_json(".harness/registry.json", lambda data: data["modules"]["observe"].update(enabled=False))
+        self.assertNotIn("hook 调用记录", self.doctor().stdout)
 
     def test_the_short_command_must_be_in_path(self) -> None:
         """M9-5: every command an agent is given starts with `harness`."""
@@ -448,6 +520,7 @@ class DoctorTests(unittest.TestCase):
     def test_instructions_with_a_broad_apply_to_are_loaded(self) -> None:
         self.kb({"README.md": "# KB\n- [a](a/x.md)\n", "a/x.md": "text\n"})
         self.kb_instructions("---\napplyTo: '**'\n---\n按 knowledge-base/README.md 的索引读。\n")
+        self.write_log([self.call()])  # the hook has run: no warning about that either
         result = self.doctor()
         self.assertIn("会被加载（applyTo 是 **）", result.stdout)
         self.assertNotIn("[WARN]", result.stdout)

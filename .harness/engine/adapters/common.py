@@ -42,7 +42,7 @@ def is_terminal_search(command: str) -> bool:
 
 
 def as_dict(value: Any) -> Dict[str, Any]:
-    """tool_input is an object in VS Code. Copilot CLI may send it as a JSON string."""
+    """tool_input is an object. A JSON string is read too."""
     if isinstance(value, dict):
         return value
     if isinstance(value, str):
@@ -100,7 +100,7 @@ def build_event(
     tool_name: Any,
     tool_input: Any,
 ) -> HookEvent:
-    """Fill a HookEvent from already-extracted common values. Shared by both runtimes."""
+    """Fill a HookEvent from already-extracted common values."""
     if event not in EVENT_NAMES:
         raise ValueError(f"Unsupported hook event: {event!r}")
     if not isinstance(session_id, str) or not session_id:
@@ -118,6 +118,9 @@ def build_event(
     result.command = command
     result.paths = paths
     result.is_search = kind == "search" or (kind == "terminal" and is_terminal_search(command))
+    if kind == "skill":
+        skill = arguments.get(config.get("skill_key", "skill"))
+        result.skill = skill if isinstance(skill, str) else ""
     if kind == "subagent":
         keys = config.get("subagent_target_keys") or [config["subagent_target_key"]]
         target = next((arguments[key] for key in keys if isinstance(arguments.get(key), str) and arguments[key]), "")
@@ -127,25 +130,8 @@ def build_event(
     return result
 
 
-def render_nested(event: HookEvent, decision: Optional[Decision]) -> Dict[str, Any]:
-    """VS Code output format: everything inside hookSpecificOutput, with hookEventName (B1, R4b/R9a)."""
-    if decision is None or decision.is_empty():
-        return {}
-    body: Dict[str, Any] = {"hookEventName": event.event}
-    if event.event == "PreToolUse" and decision.permission:
-        body["permissionDecision"] = decision.permission
-        if decision.reason:
-            body["permissionDecisionReason"] = decision.reason
-    if event.event in ("Stop", "SubagentStop") and decision.block:
-        body["decision"] = "block"
-        body["reason"] = decision.reason
-    if decision.context and event.event not in ("Stop", "SubagentStop"):
-        body["additionalContext"] = decision.context
-    return {"hookSpecificOutput": body} if len(body) > 1 else {}
-
-
-def render_top_level(event: HookEvent, decision: Optional[Decision]) -> Dict[str, Any]:
-    """Copilot SDK engine output format: plain top-level keys (recorded 2026-10-01; the nested format is ignored there)."""
+def render(event: HookEvent, decision: Optional[Decision]) -> Dict[str, Any]:
+    """Copilot SDK engine output format: plain top-level keys (recorded 2026-10-01; a nested `hookSpecificOutput` is ignored there)."""
     if decision is None or decision.is_empty():
         return {}
     output: Dict[str, Any] = {}

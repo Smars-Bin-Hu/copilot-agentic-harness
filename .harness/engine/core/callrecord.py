@@ -2,7 +2,7 @@
 
 Only the facts a person needs to judge a run: what happened, at which Level, who decided, and for a refusal
 what it was about. Tool arguments are not recorded, except the paths and the command of a call that was
-denied or sent to a person (`target`). A call that went through leaves no trace of what it touched.
+denied or sent to a person (`target`), and the name of a loaded skill. A call that went through leaves no trace of what it touched.
 """
 
 from __future__ import annotations
@@ -60,6 +60,10 @@ def build(
     }
     if event.tool_kind:
         record["tool_kind"] = event.tool_kind
+    if event.skill:
+        record["skill"] = event.skill  # which skill was loaded, to find the ones nobody uses
+    if event.event == "PostToolUseFailure":
+        record["error"] = event.error  # the engine's own words; clipped like a reason
     if admin:
         record["admin"] = True  # the call ran in admin mode: guardrail files were open to it
     if parent_session_id:

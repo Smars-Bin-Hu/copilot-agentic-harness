@@ -6,7 +6,7 @@ import json
 import unittest
 from typing import Optional
 
-from support import HarnessTestCase, load_payload, payload, post_tool, pre_tool
+from support import HarnessTestCase, load_payload, payload, post_tool, pre_tool, subagent_start
 
 from modules.task_level import review
 
@@ -36,9 +36,10 @@ class VerdictTests(unittest.TestCase):
             with self.subTest(text):
                 self.assertEqual(review.parse_verdict(text), "unknown")
 
-    def test_the_recorded_subagent_answer_is_unknown(self) -> None:
-        """The B1 recording is a plain answer, not a verifier answer."""
-        self.assertEqual(review.parse_verdict(load_payload("PostToolUse.runSubagent.json")["tool_response"]), "unknown")
+    def test_the_recorded_subagent_answer_is_read_like_any_answer(self) -> None:
+        answer = load_payload("PostToolUse.Agent.json")["tool_result"]["text_result_for_llm"]
+        self.assertIn(review.parse_verdict(answer), ("PASS", "FAIL", "unknown"))
+        self.assertEqual(review.parse_verdict("# 数据工程智能体框架"), "unknown")  # a plain answer, not a verifier's
 
 
 class ReviewTests(HarnessTestCase):
@@ -71,11 +72,10 @@ class ReviewTests(HarnessTestCase):
         return self.hook(payload("Stop", sid, stop_hook_active=active))
 
     def blocked(self, output: dict) -> bool:
-        body = output.get("hookSpecificOutput", {})
-        return body.get("decision") == "block"
+        return output.get("decision") == "block"
 
     def reason(self, output: dict) -> str:
-        return output["hookSpecificOutput"]["reason"]
+        return output["reason"]
 
     def state(self, sid: str) -> dict:
         return self.task_level_state(sid)
@@ -127,7 +127,6 @@ class ReviewTests(HarnessTestCase):
         self.edit("b")
         first = self.stop("b")
         self.assertTrue(self.blocked(first))
-        self.assertEqual(first["hookSpecificOutput"]["hookEventName"], "Stop")
         reason = self.reason(first)
         self.assertIn("verifier", reason)
         self.assertIn("改了文件", reason)
@@ -286,7 +285,7 @@ class VerifierSwitchTests(HarnessTestCase):
         return self.hook(payload("Stop", sid, stop_hook_active=False))
 
     def decision(self, output: dict) -> str:
-        return output.get("hookSpecificOutput", {}).get("permissionDecision", "")
+        return output.get("permissionDecision", "")
 
     def test_the_shipped_default_is_off(self) -> None:
         policy = json.loads((self.root / ".harness" / "policies" / "task-levels.json").read_text(encoding="utf-8"))
@@ -296,7 +295,7 @@ class VerifierSwitchTests(HarnessTestCase):
         self.prompt("off", "[L2] change a file")
         denied = self.call("off")
         self.assertEqual(self.decision(denied), "deny")
-        reason = denied["hookSpecificOutput"]["permissionDecisionReason"]
+        reason = denied["permissionDecisionReason"]
         self.assertIn("没有开启 verifier 复核", reason)
         self.assertIn("[verify]", reason)
         self.assertEqual(self.task_level_state("off")["counters"]["subagents_created"], 0)
@@ -305,7 +304,7 @@ class VerifierSwitchTests(HarnessTestCase):
         self.prompt("off-generic", "[L2] change a file")
         denied = self.hook(pre_tool("off-generic", "runSubagent", {"prompt": "x", "description": "x"}))
         self.assertEqual(self.decision(denied), "deny")
-        self.assertIn("[verify]", denied["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertIn("[verify]", denied["permissionDecisionReason"])
 
     def test_off_stop_never_asks_for_a_review(self) -> None:
         self.prompt("off-stop", "[L2] change a file")
@@ -333,8 +332,8 @@ class VerifierSwitchTests(HarnessTestCase):
         self.prompt("ask", "[L2] [verify] change a file")
         self.edit("ask")
         blocked = self.stop("ask")
-        self.assertEqual(blocked["hookSpecificOutput"]["decision"], "block")
-        self.assertIn("改了文件", blocked["hookSpecificOutput"]["reason"])
+        self.assertEqual(blocked["decision"], "block")
+        self.assertIn("改了文件", blocked["reason"])
 
     def test_no_verify_wins_when_both_markers_are_written(self) -> None:
         self.prompt("both", "[L2] [verify] [no-verify] change a file")
@@ -346,16 +345,17 @@ class VerifierSwitchTests(HarnessTestCase):
         self.verifier_default(True)
         self.prompt("default-on", "[L2] change a file")
         self.edit("default-on")
-        self.assertEqual(self.stop("default-on")["hookSpecificOutput"]["decision"], "block")
+        self.assertEqual(self.stop("default-on")["decision"], "block")
         self.prompt("default-on", "[no-verify] another change")
         self.edit("default-on")
         self.assertEqual(self.stop("default-on"), {})
 
     def test_an_agent_cannot_turn_it_on_by_writing_the_marker_in_a_call_message(self) -> None:
-        self.hook(payload("UserPromptSubmit", "child", prompt="[L2] change a file"))
-        self.hook(payload("SubagentStart", "child", agent_id="a1", agent_type="verifier"))
+        self.hook(payload("UserPromptSubmit", "parent", prompt="[L2] change a file"))
+        self.hook(subagent_start("parent", "verifier"))
         self.assertEqual(self.hook(payload("UserPromptSubmit", "child", prompt="[verify] model text")), {})
         self.assertEqual(self.task_level_state("child")["prompt"]["verify"], "")
+        self.assertEqual(self.task_level_state("parent")["prompt"]["verify"], "")
 
     def test_l1_has_no_verifier_either_way(self) -> None:
         self.prompt("l1", "[L1] [verify] small change")

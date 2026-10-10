@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from support import CLI, REPO, payload
+from support import CLI, REPO, payload, subagent_start
 
 from core.state import update_state
 from test_doctor import copy_repo
@@ -32,14 +32,14 @@ def frontmatter(path: Path) -> Dict[str, str]:
 
 class DispatchGateTests(RequestCase):
     def call(self, role: str, session: str = SESSION, tool: str = "runSubagent") -> Dict[str, Any]:
-        data = payload("PreToolUse", session, tool_name=tool, tool_input={"agentName": role, "prompt": f"do the {role} job", "description": role}, tool_use_id="t1")
+        data = payload("PreToolUse", session, tool_name=tool, tool_input={"agentName": role, "prompt": f"do the {role} job", "description": role})
         return self.hook(data)
 
     def decision(self, output: Dict[str, Any]) -> str:
-        return output.get("hookSpecificOutput", {}).get("permissionDecision", "")
+        return output.get("permissionDecision", "")
 
     def reason(self, output: Dict[str, Any]) -> str:
-        return output["hookSpecificOutput"]["permissionDecisionReason"]
+        return output["permissionDecisionReason"]
 
     def ready_builder(self) -> str:
         request_id = self.new_request()
@@ -60,7 +60,7 @@ class DispatchGateTests(RequestCase):
         self.assertEqual(self.request(request_id)["pending_dispatch"][0]["role"], "builder")
         self.assertEqual(self.call("builder"), {})
         self.assertEqual(self.request(request_id)["pending_dispatch"], [])
-        self.hook(payload("SubagentStart", SESSION, agent_id="a-builder", agent_type="builder"))  # the call really started
+        self.hook(subagent_start(SESSION, "builder"))  # the call really started
         output = self.call("builder")
         self.assertEqual(self.decision(output), "deny")
         self.assertIn("已经调用过了", self.reason(output))
@@ -73,7 +73,7 @@ class DispatchGateTests(RequestCase):
         self.assertEqual(self.call("builder"), {})  # passes the hook; the tool then refuses it, no SubagentStart follows
         self.assertEqual(self.call("builder"), {})  # the retry is allowed
         self.assertEqual(self.call("builder"), {})  # and again
-        self.hook(payload("SubagentStart", SESSION, agent_id="a-builder", agent_type="builder"))
+        self.hook(subagent_start(SESSION, "builder"))
         self.assertEqual(self.decision(self.call("builder")), "deny")  # it started once: no second run for this dispatch
 
     def test_a_retry_is_only_for_the_role_and_attempt_that_never_started(self) -> None:
@@ -151,7 +151,7 @@ class DispatchGateTests(RequestCase):
 
 class SubagentStartTests(RequestCase):
     def start(self, role: str, session: str = SESSION) -> Dict[str, Any]:
-        return self.hook(payload("SubagentStart", session, agent_id=f"a-{role}", agent_type=role))
+        return self.hook(subagent_start(session, role))
 
     def called(self, role: str) -> str:
         request_id = self.new_request()
@@ -163,12 +163,12 @@ class SubagentStartTests(RequestCase):
             self.submit(request_id, "builder", "passed", "--output", "src/slug.py")
             self.fill_assignment(request_id, 1, "reviewer")
             self.dispatch(request_id, "reviewer")
-        self.hook(payload("PreToolUse", SESSION, tool_name="runSubagent", tool_input={"agentName": role, "prompt": "p"}, tool_use_id="t"))
+        self.hook(payload("PreToolUse", SESSION, tool_name="runSubagent", tool_input={"agentName": role, "prompt": "p"}))
         return request_id
 
     def test_the_called_subagent_is_told_its_assignment_and_output_folder(self) -> None:
         request_id = self.called("builder")
-        context = self.start("builder")["hookSpecificOutput"]["additionalContext"]
+        context = self.start("builder")["additionalContext"]
         base = f".workspace/sandbox/requests/{request_id}"
         self.assertIn(f"{base}/handoffs/orchestrator/attempt-001/to-builder/assignment.md", context)
         self.assertIn("manifest.json", context)
@@ -183,14 +183,14 @@ class SubagentStartTests(RequestCase):
 
     def test_the_reviewer_gets_its_own_package(self) -> None:
         request_id = self.called("reviewer")
-        context = self.start("reviewer")["hookSpecificOutput"]["additionalContext"]
+        context = self.start("reviewer")["additionalContext"]
         self.assertIn("to-reviewer/assignment.md", context)
         self.assertIn("reviewer/outputs/attempt-001/", context)
         self.assertNotIn("to-builder", context)
 
     def test_the_context_is_given_once(self) -> None:
         self.called("builder")
-        self.assertIn("additionalContext", self.start("builder")["hookSpecificOutput"])
+        self.assertIn("additionalContext", self.start("builder"))
         self.assertEqual(self.start("builder"), {})
 
     def test_a_subagent_that_was_not_called_through_the_gate_gets_nothing(self) -> None:
@@ -346,11 +346,11 @@ class ModelSeriesDoctorTests(unittest.TestCase):
 class CallLogTests(RequestCase):
     def test_start_and_stop_calls_log_where_the_transcript_is_and_the_model(self) -> None:
         self.hook(payload("SessionStart", "log-session", model="claude-opus-5.5", source="new"))
-        self.hook(payload("SubagentStart", "log-session", agent_id="a1", agent_type="builder"))
+        self.hook(subagent_start("log-session", "builder"))
         calls = {item["event"]: item for item in self.call_lines() if item.get("session_id") == "log-session"}
         self.assertEqual(calls["SessionStart"]["model"], "claude-opus-5.5")
-        self.assertTrue(calls["SessionStart"]["transcript"].endswith("x.jsonl"))
-        self.assertTrue(calls["SubagentStart"]["transcript"])
+        self.assertEqual(calls["SessionStart"]["transcript"], "")  # this event has no transcript path
+        self.assertTrue(calls["SubagentStart"]["transcript"].endswith("events.jsonl"))
         self.assertNotIn("model", calls["SubagentStart"])
 
 

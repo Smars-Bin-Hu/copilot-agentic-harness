@@ -57,7 +57,7 @@ def cmd_approve_command(args: Any) -> Dict[str, Any]:
     return approve(repo_root())
 
 
-SURFACES = ("vscode", "cli")
+SURFACES = ("vscode",)
 
 
 def _known_session(root: Path, surface: str, session_id: str) -> None:

@@ -87,6 +87,8 @@ def collect(root: Path, session_id: str = "", surface: str = "", days: Optional[
     task_prompts = 0
     verifier: Dict[str, int] = {}
     subagents: Dict[str, int] = {}
+    failed: Dict[str, int] = {}
+    skills: Dict[str, int] = {}
     by_event: Dict[str, List[float]] = {}
     every: List[float] = []
     for row in rows:
@@ -98,6 +100,10 @@ def collect(root: Path, session_id: str = "", surface: str = "", days: Optional[
                 task_prompts += 1  # a prompt of an L2 session that is in task mode
         elif event == "PreToolUse":
             bump(tool_calls, level)
+            if row.get("skill"):
+                bump(skills, row["skill"])
+        elif event == "PostToolUseFailure":
+            bump(failed, row.get("tool_name") or "unknown")
         elif event == "SubagentStart":
             bump(subagents, row.get("agent_type") or "default")
         decision = row.get("decision")
@@ -141,6 +147,8 @@ def collect(root: Path, session_id: str = "", surface: str = "", days: Optional[
         "stop_blocks_by_module": blocked,
         "verifier_verdicts": verifier,
         "subagents_started": subagents,
+        "failed_tool_calls_by_tool": failed,
+        "skills_loaded": skills,
         "hook_time": timing(every),
         "hook_time_by_event": {name: timing(values) for name, values in sorted(by_event.items())},
         "possible_double_runs": doubles,

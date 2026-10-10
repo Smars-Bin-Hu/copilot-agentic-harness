@@ -132,10 +132,10 @@ class GateGitCommandTests(HarnessTestCase):
         return self.hook(data)
 
     def decision(self, output: dict) -> str:
-        return output.get("hookSpecificOutput", {}).get("permissionDecision", "")
+        return output.get("permissionDecision", "")
 
     def reason(self, output: dict) -> str:
-        return output["hookSpecificOutput"]["permissionDecisionReason"]
+        return output["permissionDecisionReason"]
 
     def approve(self, code: str) -> dict:
         return commands.approve(self.root, reader=lambda _prompt: code, interactive=True, out=_Sink())

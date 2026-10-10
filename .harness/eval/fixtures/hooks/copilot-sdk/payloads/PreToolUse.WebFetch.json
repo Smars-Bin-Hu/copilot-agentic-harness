@@ -1,0 +1,11 @@
+{
+  "hook_event_name": "PreToolUse",
+  "session_id": "00000000-0000-0000-0000-000000000000",
+  "timestamp": "2026-10-10T14:59:56.968Z",
+  "cwd": "/Users/user/Developer/DE-agentic-harness",
+  "tool_name": "WebFetch",
+  "tool_input": {
+    "url": "https://example.com",
+    "max_length": 2000
+  }
+}

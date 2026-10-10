@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "description": "Tool name -> tool kind, per surface. Kinds: read, edit, create, terminal, search, subagent, mcp. Unknown tools get kind 'other'.",
+  "description": "Tool name -> tool kind, per surface. Kinds: read, edit, create, terminal, search, subagent, mcp, web, skill, meta. Unknown tools get kind 'other'.",
   "surfaces": {
     "vscode": {
       "verified": true,
-      "source": "B1 recording 2026-09-30 (VS Code 1.140.0 / Copilot Chat 0.68.0) and the Copilot SDK engine recording 2026-10-01 (VS Code 1.140.0, @github/copilot 1.0.89-7)",
+      "source": "Copilot SDK engine recordings 2026-10-01 (VS Code 1.140.0, @github/copilot 1.0.89-7); WebFetch, skill, tool_search_tool and task_complete recorded 2026-10-10. The older names (read_file ... runSubagent) come from the B1 recording 2026-09-30; a subagent in a Copilot (SDK) session still uses some of them.",
       "tools": {
         "read_file": "read",
         "list_dir": "read",
@@ -16,6 +16,9 @@
         "run_in_terminal": "terminal",
         "runSubagent": "subagent",
         "Bash": "terminal",
+        "bash": "terminal",
+        "PowerShell": "terminal",
+        "powershell": "terminal",
         "Read": "read",
         "Write": "create",
         "Edit": "edit",
@@ -23,6 +26,10 @@
         "Glob": "search",
         "Agent": "subagent",
         "search_code_subagent": "search",
+        "WebFetch": "web",
+        "skill": "skill",
+        "tool_search_tool": "meta",
+        "task_complete": "meta",
         "multi_replace_string_in_file": "edit",
         "insert_edit_into_file": "edit",
         "apply_patch": "edit",
@@ -33,6 +40,7 @@
         "path"
       ],
       "command_key": "command",
+      "skill_key": "skill",
       "subagent_prompt_key": "prompt",
       "subagent_target_keys": [
         "agentName",
@@ -42,30 +50,12 @@
         "multi_replace_string_in_file",
         "insert_edit_into_file",
         "apply_patch",
-        "edit_notebook_file"
+        "edit_notebook_file",
+        "bash",
+        "PowerShell",
+        "powershell"
       ],
-      "unrecorded_note": "Edit tools named in VS Code, never recorded here. The gate needs them as 'edit'; their input shapes are read generically (nested filePath, patch headers). Record them when seen."
-    },
-    "cli": {
-      "verified": false,
-      "source": "GitHub Docs only. Not recorded. Re-check in M6-4.",
-      "tools": {
-        "bash": "terminal",
-        "powershell": "terminal",
-        "view": "read",
-        "create": "create",
-        "edit": "edit",
-        "grep": "search",
-        "glob": "search",
-        "task": "subagent"
-      },
-      "path_keys": [
-        "path",
-        "filePath"
-      ],
-      "command_key": "command",
-      "subagent_target_key": "agent_type",
-      "subagent_prompt_key": "prompt"
+      "unrecorded_note": "Edit tools named in VS Code, never recorded here. The gate needs them as 'edit'; their input shapes are read generically (nested filePath, patch headers). `bash`, `PowerShell` and `powershell` are guesses for the terminal tool of a Copilot session on Windows (never recorded there; the permission dialog on macOS shows `bash`), listed so the gate reads their `command` whatever the name. Record them when seen."
     }
   },
   "terminal_search_commands": [

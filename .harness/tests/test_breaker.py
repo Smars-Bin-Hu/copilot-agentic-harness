@@ -6,7 +6,7 @@ import json
 import unittest
 from typing import Any, Dict, List, Optional
 
-from support import HarnessTestCase, payload, pre_tool
+from support import HarnessTestCase, payload, pre_tool, subagent_start
 
 from core import breaker
 from core.events import Decision, HookEvent
@@ -81,9 +81,8 @@ class BreakerHookTests(HarnessTestCase):
 
     def denied_write(self, relative: str = GUARD, session: Optional[str] = None) -> str:
         output = self.tool("create_file", {"filePath": f"{self.base}/{relative}", "content": ""}, session)
-        body = output["hookSpecificOutput"]
-        self.assertEqual(body["permissionDecision"], "deny")
-        return body["permissionDecisionReason"]
+        self.assertEqual(output["permissionDecision"], "deny")
+        return output["permissionDecisionReason"]
 
     def test_the_third_identical_deny_becomes_a_stop_instruction(self) -> None:
         self.prompt()
@@ -111,12 +110,12 @@ class BreakerHookTests(HarnessTestCase):
         self.assertIn("guardrail", self.denied_write())
         self.assertNotIn("同一个拒绝", self.denied_write())
 
-    def test_a_subagent_message_or_a_stop_continuation_does_not_open_a_new_window(self) -> None:
+    def test_a_subagent_call_message_does_not_open_a_new_window(self) -> None:
         self.prompt()
         for _ in range(2):
             self.denied_write()
-        self.hook(payload("SubagentStart", self.session, agent_id="a1", agent_type="verifier"))
-        self.hook(payload("UserPromptSubmit", self.session, prompt="you are the verifier"))  # the call message
+        self.hook(subagent_start(self.session, "verifier"))
+        self.hook(payload("UserPromptSubmit", "child-of-" + self.session, prompt="you are the verifier"))  # the call message
         self.assertIn("同一个拒绝已出现 3 次", self.denied_write())
 
     def test_the_limit_comes_from_the_policy(self) -> None:
@@ -143,7 +142,7 @@ class BreakerHookTests(HarnessTestCase):
         self.prompt()
         self.assertEqual(self.tool("grep_search", {"query": "a"}), {})
         self.assertEqual(self.tool("grep_search", {"query": "b"}), {})
-        reasons: List[str] = [self.tool("grep_search", {"query": "c"})["hookSpecificOutput"]["permissionDecisionReason"] for _ in range(3)]
+        reasons: List[str] = [self.tool("grep_search", {"query": "c"})["permissionDecisionReason"] for _ in range(3)]
         self.assertIn("探索预算已用完", reasons[0])
         self.assertIn("探索预算已用完", reasons[1])
         self.assertIn("同一个拒绝已出现 3 次", reasons[2])
@@ -162,8 +161,8 @@ class BreakerHookTests(HarnessTestCase):
         self.prompt()
         for _ in range(5):
             output = self.tool("run_in_terminal", {"command": "git push"})
-            self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "ask")
-            self.assertNotIn("同一个拒绝", output["hookSpecificOutput"]["permissionDecisionReason"])
+            self.assertEqual(output["permissionDecision"], "ask")
+            self.assertNotIn("同一个拒绝", output["permissionDecisionReason"])
 
     def test_the_log_records_the_count_and_the_trip(self) -> None:
         self.prompt()
@@ -194,7 +193,7 @@ class BreakerHookTests(HarnessTestCase):
         self.tool("grep_search", {"query": "a"})
         self.tool("grep_search", {"query": "b"})
         output = self.tool("grep_search", {"query": "c"})
-        self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertEqual(output["permissionDecision"], "deny")
 
 
 if __name__ == "__main__":

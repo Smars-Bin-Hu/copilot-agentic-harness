@@ -1,0 +1,10 @@
+{
+  "hook_event_name": "PreToolUse",
+  "session_id": "00000000-0000-0000-0000-000000000000",
+  "timestamp": "2026-10-10T15:06:11.944Z",
+  "cwd": "/Users/user/Developer/DE-agentic-harness",
+  "tool_name": "skill",
+  "tool_input": {
+    "skill": "harness-task-level"
+  }
+}

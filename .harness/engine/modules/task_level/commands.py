@@ -36,7 +36,7 @@ def cmd_set(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def _session_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--surface", default="vscode", choices=["vscode", "cli"])
+    parser.add_argument("--surface", default="vscode", choices=["vscode"])
     parser.add_argument("--session-id", required=True)
 
 

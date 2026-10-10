@@ -2,7 +2,7 @@
 
 A hook can only refuse a call. It cannot stop an agent that keeps retrying. So from the Nth identical deny in one
 prompt window, the reason is replaced by an instruction to stop. Applies to every deny: budget, gate, subagent rules.
-The count is per session, because a hook cannot tell the main agent from a subagent in the legacy engine.
+The count is per session. A subagent runs in a session of its own, so it has its own count.
 """
 
 from __future__ import annotations

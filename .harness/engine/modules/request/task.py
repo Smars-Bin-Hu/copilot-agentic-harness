@@ -168,11 +168,16 @@ def start(
                     archive_round(root, task, data)
                 data.update(status="open", session_id=session_id, surface=surface, target_mode=found.configured)
                 note(data, "new-round" if new_round else "resume", f"会话 {session_id}")
-            marker = ((state["modules"].get("task_level") or {}).get("prompt") or {}).get("verify", "")
-            if marker in ("on", "off") and marker != tasks.verify_choice(data):
-                # The user wrote [verify] or [no-verify] in the prompt that starts the task: it holds for the whole task.
-                data["verify"] = marker
-                note(data, "verify", VERIFY_TEXT[marker])
+            asked = (state["modules"].get("request") or {}).get("review_n")
+            if isinstance(asked, int) and not isinstance(asked, bool):
+                from . import taskreview  # it needs this module
+
+                asked = min(asked, taskreview.settings(root)["max_n"])
+                # The user wrote [review]=n (or the old [verify], [no-verify]) in the prompt that starts the task: it holds for the whole task.
+                review = data.setdefault("review", {"n": 0, "rounds": [], "extra": 0, "waived": None})
+                if review.get("n") != asked:
+                    review["n"] = asked
+                    note(data, "review", f"n={asked}")
             if branch_name:
                 data["branch"] = branch_name
             elif found.configured and not data["branch"]:
@@ -344,7 +349,10 @@ def approve_plan(
             raise CommandError("你确认的时候计划变了。重新打开文件看一遍，再运行 approve-plan。")
         again["plan"] = {"approved_sha256": current, "approved_at": utc_now()}
         note(again, "approve-plan", current[:12])
-    return {"approved": True, "task": task, "plan": f"{task}/{tasks.PLAN_NAME}", "next": "告诉 agent 计划已批准，可以开工了。"}
+    from . import tasksnap  # it needs this module
+
+    snapshot = tasksnap.take(root, task, "plan")["snapshot"]
+    return {"approved": True, "task": task, "snapshot": snapshot, "plan": f"{task}/{tasks.PLAN_NAME}", "next": "告诉 agent 计划已批准，可以开工了。"}
 
 
 # --- fetch, delete, diff -------------------------------------------------------------------------
@@ -555,8 +563,13 @@ def run_promote(root: Path, raw_task: str, dry_run: bool) -> Dict[str, Any]:
             raise CommandError("这一轮已经 promote 过了，不再回写第二次。要再改，重新 `task start` 开新的一轮（要新计划、新批准）。")
         if record["state"] == "partial":
             raise CommandError(f"上次 promote 中途出错，仓库可能还是半成品。先请用户在自己的终端运行 `{recover_command(task)}`，再重新 --dry-run、批准。")
+        from . import taskreview, tasksnap  # they need this module
+
+        if dry_run:
+            taskreview.require(root, task, data)
         result = make_plan(root, task, data)
         if dry_run:
+            result["snapshot"] = tasksnap.take(root, task, "promote")["snapshot"]
             new = {"state": "dry_run", "plan_sha256": result["plan_sha256"], "at": utc_now()}
             if record.get("approved_plan_sha256") == result["plan_sha256"]:
                 new.update(approved_plan_sha256=record["approved_plan_sha256"], approved_at=record["approved_at"])  # same plan: keep the approval

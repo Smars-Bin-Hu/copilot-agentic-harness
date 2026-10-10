@@ -33,6 +33,14 @@ POLICY_SCHEMA = {
             "required": ["main_stop", "subagent_stop"],
             "properties": {"main_stop": {"type": "boolean"}, "subagent_stop": {"type": "string", "enum": ["block", "log", "off"]}, "task_file_reminder": {"type": "boolean"}},
         },
+        "review": {
+            "type": "object",
+            "properties": {"extra_checks": {"type": "integer", "minimum": 0}, "max_n": {"type": "integer", "minimum": 0}},
+        },
+        "snapshots": {
+            "type": "object",
+            "properties": {"keep_days": {"type": "number", "minimum": 0}, "max_file_mb": {"type": "number", "minimum": 0}},
+        },
     },
 }
 

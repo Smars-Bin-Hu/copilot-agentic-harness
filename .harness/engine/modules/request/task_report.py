@@ -27,13 +27,6 @@ def report_path(root: Path, task: str) -> Path:
     return root / report.REPORTS_DIR / f"task-{task_ops.name_of(task)}.md"
 
 
-def verdicts(root: Path, data: Dict[str, Any]) -> List[str]:
-    """What the verifier said in this task's session since the round began (from the hook log)."""
-    rows = read_session(root, data.get("surface", "vscode"), data.get("session_id", ""))
-    since = data.get("round_started_at", data["created_at"])
-    return [f"{row.get('at', '')[:19]} {row['verdict']}" for row in rows if row.get("judge") == "verifier" and row.get("verdict") and row.get("at", "") >= since]
-
-
 def render(root: Path, task: str, data: Dict[str, Any]) -> str:
     promote = data["promote"]
     plan = data.get("plan") or {}
@@ -48,7 +41,8 @@ def render(root: Path, task: str, data: Dict[str, Any]) -> str:
         f"- 会话：{data.get('session_id', '')}（{data.get('surface', '')}）",
         "- 计划：" + (f"由人批准于 {plan['approved_at']}" + ("" if approved_now else "；之后计划又改过，现在的版本没有批准") if plan.get("approved_at") else "没有人的批准"),
     ]
-    lines.append("- reviewer 复核：" + {"on": "开启", "off": "关闭"}.get(tasks.verify_choice(data), "没有开启（默认）"))
+    review = data.get("review") or {}
+    lines.append("- 独立检查：" + (f"要连续通过 {review['n']} 次（[review]={review['n']}）" if review.get("n") else "没有开启"))
     if data.get("branch"):
         lines.append(f"- 分支：{data['branch']}")
     lines += [f"- 目标仓库：{name}，{item['base_ref']} 在 {item['base_commit'][:12]}" for name, item in data.get("targets", {}).items()]
@@ -70,8 +64,19 @@ def render(root: Path, task: str, data: Dict[str, Any]) -> str:
     fetched = sorted(data.get("target_files", {}))
     if fetched:
         lines += ["", f"从 main 取过 {len(fetched)} 个文件：" + "、".join(fetched[:30]) + ("……" if len(fetched) > 30 else "")]
-    said = verdicts(root, data)
-    lines += ["", "## reviewer 复核", ""] + ([f"- {item}" for item in said] if said else ["这一轮没有 reviewer 的结论（没有开启，或没有调用）。"])
+    checks = [item for item in review.get("rounds") or [] if item.get("task_round") == data["round"]]
+    lines += ["", "## 独立检查", ""]
+    if checks:
+        lines += ["| 检查 | 开始 | 结论 | 成果的版本 | 结论全文 |", "| --- | --- | --- | --- | --- |"]
+        lines += [
+            f"| round-{item['number']:03d} | {str(item.get('started_at', ''))[:19]} | {item.get('verdict') or '没有结论'} | {str(item.get('digest', ''))[:12]} | {task}/REVIEW/round-{item['number']:03d}/verdict.md |"
+            for item in checks
+        ]
+        waived = review.get("waived") or {}
+        if waived.get("task_round") == data["round"]:
+            lines.append(f"\n人在 {waived.get('at', '')} 放行了版本 {str(waived.get('digest', ''))[:12]}，没有凑够通过次数。")
+    else:
+        lines.append("这一轮没有做过独立检查（没有开启，或还没有查）。")
     lines += ["", "## 计划（PLAN.md）", ""]
     try:
         plan_lines = tasks.plan_file(root, task).read_text(encoding="utf-8", errors="replace").splitlines()

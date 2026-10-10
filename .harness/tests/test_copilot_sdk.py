@@ -273,7 +273,7 @@ class RecordedScenarioTests(SdkTestCase):
         results = self.replay("cli-verifier-call.jsonl", edit=no_marker, drop=lambda d: sid(d) == CHILD)
         denied = [out for data, out, _ in results if data.get("tool_name") == "Agent" and ev(data) == "PreToolUse"]
         self.assertEqual(denied[0]["permissionDecision"], "deny")
-        self.assertIn("没有开启 verifier 复核", denied[0]["permissionDecisionReason"])
+        self.assertIn("没有开启 reviewer 复核", denied[0]["permissionDecisionReason"])
 
     def test_the_semantic_search_subagent_is_not_blocked_as_a_subagent_at_l2(self) -> None:
         self.feed({**sample("UserPromptSubmit.json"), "session_id": "s-search", "prompt": "[L2] find it"})

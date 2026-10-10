@@ -107,6 +107,7 @@
         ".harness/contracts/templates/task/",
         ".github/skills/harness-my-task/",
         ".harness/tests/test_tasklife.py",
+        ".harness/tests/test_taskreview.py",
         ".harness/tests/test_request.py",
         ".harness/policies/agents.json",
         ".github/agents/orchestrator.agent.md",

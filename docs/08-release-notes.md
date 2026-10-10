@@ -24,14 +24,25 @@
 - 需求写在任务目录的 `REQ.md`：agent 按和你的对话写，你看过才算数；需求变了它就更新，并记一行变更。你自己的文档（BRD、邮件）放 `REQ/`，agent 只读。
 - 这一轮 agent 在任务目录里写过文件、却没更新 `TASK.md` 时，它结束前会被提醒一次。开关是 `orchestration.json` 的 `verify.task_file_reminder`。
 
+- **独立检查 `[review]=n`**。在任务的提示里写 `[review]=2`，成果就要连续通过 2 次检查，每次换一个新的 reviewer，才能回写。
+  - 没通过，agent 自己按问题改了再查。改过成果，之前的通过不算，重新数。
+  - 每条问题带“文件:行”。第 2 次起只报影响正确性的问题。
+  - 每次检查的评审包和结论存在任务目录的 `REVIEW/round-NNN/`。结论是 reviewer 的原话，agent 改不了。
+  - 最多查 n + 2 次。用完了 agent 停下，由你决定：`task review extend` 再给几次，或 `task review waive` 放行这一版。
+  - 没凑够通过次数时，`task promote --dry-run` 被拒绝。
+- **关口快照**。计划批准时、每次检查前、promote 的 dry-run 前，任务的成果自动存一份到 `SNAPSHOT/`。改坏了能找回批准时的版本。默认留 14 天，`task snapshot list`、`task snapshot prune` 查看和清理。
+
 ### 变更
 
+- **检查员改叫 reviewer，verifier 没有了。** 模型是 Sonnet，没有就退到 Haiku。任务里旧的 `[verify]` 等于 `[review]=1`，`[no-verify]` 等于 `[review]=0`。
+- 接着任务的会话里，只能调用 reviewer 这一个子 agent，而且要先 `task review start`。这条不看 Level，L1 下也一样。
 - `task close` 之后目录原地不动，`task open` 可以重新打开。
 - 直接改目标仓库被拒时，理由不再分 Level，改成指向任务目录的 `DEV/` 和技能 `harness-my-task`。
 
 ### 退役
 
-暂无。
+- **L3 的多 agent 流程（orchestrator、builder、reviewer 三个角色）从这一版起不能用了。** `reviewer.agent.md` 改成了任务的检查员。命令和 agent 文件还在，下一版删掉。用任务加 `[review]=n` 代替。
+- `verifier` 这个 agent 删了。用 reviewer 代替。
 
 ## 1.0.3（2026-10-10）
 

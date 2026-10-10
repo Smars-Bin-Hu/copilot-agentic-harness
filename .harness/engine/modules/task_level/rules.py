@@ -85,8 +85,12 @@ def planning_rule(body: Dict[str, Any]) -> str:
     return PLANNING_TEXT.get(body.get("planning", ""), "")
 
 
-def prompt_rules(policy: Dict[str, Any], level: int, ignored_marker: str = "", choice: str = "", session_id: str = "") -> str:
-    """Injected on every user prompt (UserPromptSubmit) and at session start."""
+def prompt_rules(policy: Dict[str, Any], level: int, ignored_marker: str = "", choice: str = "", session_id: str = "", in_task: bool = False) -> str:
+    """Injected on every user prompt (UserPromptSubmit) and at session start.
+
+    `in_task`: the session holds a task. Its subagent and its checks are the task's (`[review]=n`, the request module
+    says so in its own lines), so the Level's lines about them are left out.
+    """
     body = level_policy(policy, level)
     lines = [f"Task Level：L{level}（{body['name']}）。"]
     if ignored_marker:
@@ -96,11 +100,12 @@ def prompt_rules(policy: Dict[str, Any], level: int, ignored_marker: str = "", c
         lines.append(planning)
     for name in ("repository_searches", "observed_tool_calls"):  # searches first: they are the rule that denies
         lines.append(budget_rule(name, body["budget_per_prompt"][name]))
-    off = "" if verifier_on(policy, level, choice) else verifier_name(policy, level)
-    lines.append(subagent_rule(body, off))
-    review = review_rule(policy, level, choice)
-    if review:
-        lines.append(review)
+    if not in_task:
+        off = "" if verifier_on(policy, level, choice) else verifier_name(policy, level)
+        lines.append(subagent_rule(body, off))
+        review = review_rule(policy, level, choice)
+        if review:
+            lines.append(review)
     lines.append(
         f"只有用户能切换 Level：用户在提示开头写 {marker_hint(policy)}。"
         "你不能自己切换，也不要运行 level set。任务超出当前 Level 时，停下来告诉用户原因并建议切换。"

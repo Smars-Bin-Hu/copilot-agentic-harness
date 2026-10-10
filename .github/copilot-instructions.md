@@ -5,7 +5,7 @@
 ## Task Level
 
 - 用户在提示开头写 `/l1`、`[L1]`、`/l2`、`[L2]` 来切换 Level。默认是 L1。
-- L2 的 verifier 复核默认关闭。用户在提示里写 `[verify]` 才开启。
+- 独立检查默认关闭。用户在提示里写 `[review]=n` 才开启（n 是成果要连续通过的次数）。接着任务时，照每条提示开头的规则做：先 `task review start`，再调用 reviewer。不要自己开，也不要把你的思路写进给 reviewer 的调用消息。
 - 只有用户能切换。你只能建议：任务超出当前 Level 时，停下来说明原因。
 - 每条用户提示开头，hook 会注入当前 Level 和规则。按它做。
 - 详细说明见技能 `harness-task-level`。

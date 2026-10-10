@@ -23,7 +23,7 @@ from core.paths import repo_root
 
 from core import tasks
 
-from . import check, ops, planapproval, promote, report, task, task_report, tasklife
+from . import check, ops, planapproval, promote, report, task, task_report, tasklife, taskreview, tasksnap
 
 
 def _request(parser: argparse.ArgumentParser) -> None:
@@ -149,6 +149,30 @@ def register_task(subparsers: Any) -> None:
     listing = commands.add_parser("list", help="every open task: kind, tier, what it waits for; --all adds the closed ones")
     listing.add_argument("--all", action="store_true")
     listing.set_defaults(handler=lambda a: tasklife.list_tasks(repo_root(), a.all))
+    review = commands.add_parser("review", help="independent checks of a task ([review]=n): start a check, see the count; extend and waive are the person's")
+    review_commands = review.add_subparsers(dest="review_command", required=True)
+
+    def add_review(name: str, text: str, handler: Any) -> argparse.ArgumentParser:
+        item = review_commands.add_parser(name, help=text)
+        item.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+        item.set_defaults(handler=handler)
+        return item
+
+    add_review("start", "snapshot the result, write REVIEW/round-NNN/package.md and open the check; then call the reviewer", lambda a: taskreview.start(repo_root(), a.task))
+    add_review("status", "n, the passes that count now, the checks used and what comes next", lambda a: taskreview.status(repo_root(), a.task))
+    extend = add_review("extend", "the person allows more checks after the limit (terminal only)", lambda a: taskreview.extend(repo_root(), a.task, a.checks))
+    extend.add_argument("--checks", type=int, default=2, choices=range(1, 10), metavar="1-9")
+    add_review("waive", "the person lets this version of the result be promoted without the passes (terminal only)", lambda a: taskreview.waive(repo_root(), a.task))
+    snapshot = commands.add_parser("snapshot", help="the copies of a task's result made at its gates (plan approval, each check, promote dry-run)")
+    snapshot_commands = snapshot.add_subparsers(dest="snapshot_command", required=True)
+    snapshot_list = snapshot_commands.add_parser("list", help="every snapshot of the task: gate, time, files")
+    snapshot_list.add_argument("--task", default="")
+    snapshot_list.set_defaults(handler=lambda a: {"snapshots": tasksnap.snapshots(repo_root(), task.resolve(repo_root(), a.task))})
+    snapshot_prune = snapshot_commands.add_parser("prune", help="remove snapshots older than --days (default: the policy); the newest always stays")
+    snapshot_prune.add_argument("--task", default="")
+    snapshot_prune.add_argument("--days", type=float, default=None)
+    snapshot_prune.add_argument("--dry-run", action="store_true")
+    snapshot_prune.set_defaults(handler=lambda a: {"removed": tasksnap.prune(repo_root(), task.resolve(repo_root(), a.task), a.days if a.days is not None else tasksnap.settings(repo_root())["keep_days"], dry_run=a.dry_run), "dry_run": a.dry_run})
     add("status", "where the task stands and what comes next", lambda a: task.status(repo_root(), a.task))
     add("approve-plan", "the person approves PLAN.md (terminal only)", lambda a: task.approve_plan(repo_root(), a.task))
     fetch = add("fetch", "copy files of a target repository's base branch into DEV/<repo>/<path>", lambda a: task.fetch(repo_root(), a.task, a.paths, a.overwrite))

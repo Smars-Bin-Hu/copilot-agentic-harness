@@ -112,26 +112,29 @@ def prompt_marker(ctx: Context) -> str:
     return ((ctx.state["modules"].get("task_level") or {}).get("prompt") or {}).get("verify", "")
 
 
-def keep_verify(ctx: Context, data: Dict[str, Any]) -> Dict[str, Any]:
-    """A verifier marker in a prompt of an open task becomes the task's standing choice, so later prompts need not repeat it."""
-    marker = prompt_marker(ctx)
-    if marker not in ("on", "off") or marker == tasks.verify_choice(data):
-        return data
-    from . import task as task_ops
+def user_review(event: HookEvent, ctx: Context) -> Optional[int]:
+    """The n of `[review]=n` in this prompt (or of the old `[verify]`, `[no-verify]`), or None when the user wrote none."""
+    from . import taskreview
 
-    return task_ops.set_verify(ctx.root, data["task"], marker)
+    return taskreview.marker(event.prompt, prompt_marker(ctx))
+
+
+def keep_review(event: HookEvent, ctx: Context, data: Dict[str, Any]) -> Dict[str, Any]:
+    """The marker in a prompt of an open task sets the task's n. It holds until the user writes another."""
+    from . import taskreview
+
+    number = user_review(event, ctx)
+    if number is None or number == taskreview.state_of(data)["n"]:
+        return data
+    return taskreview.set_n(ctx.root, data["task"], number)
 
 
 def task_text(ctx: Context, data: Dict[str, Any]) -> str:
     """Injected with every user prompt while a task is open: where the task stands, so the rules need not be read again."""
     from . import task as task_ops  # the CLI side of the task; imported late, a hook call rarely needs it
+    from . import taskreview
 
     name = data["task"]
-    choice = tasks.verify_choice(data)
-    review = {
-        "on": f"\n这个任务开启了 reviewer 复核，后面的提示不用再写标记：{name}/{tasks.DEV_NAME}/ 改完之后、`task promote --dry-run` 之前调用一次 reviewer。写 {tasks.PLAN_NAME} 不用复核。",
-        "off": "\n这个任务关闭了 reviewer 复核。",
-    }.get(choice, "")
     if data.get("tier") and tasks.task_file(ctx.root, name).is_file():
         head = messages.text(
             "task.inject.head", task=name, round=data["round"],
@@ -139,7 +142,67 @@ def task_text(ctx: Context, data: Dict[str, Any]) -> str:
         )
     else:
         head = messages.text("task.inject.head.plain", task=name, round=data["round"])
+    review = ""
+    if taskreview.state_of(data)["n"]:  # the count needs the digest of every result file: only when checks are on
+        info = taskreview.summary(ctx.root, name, data)
+        review = "\n" + messages.text(
+            "review.inject", n=info["n"], passes=info["passes"], used=info["checks_used"], limit=info["checks_limit"], agent=taskreview.AGENT, command=cli_command(),
+        )
     return f"{head}{task_ops.next_step(ctx.root, name, data)}{review}\n" + messages.text("task.inject.scope", task=name, command=cli_command())
+
+
+def on_task_subagent_call(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """A session that holds a task may call one subagent: the reviewer, and only with a check open (`task review start`)."""
+    from . import taskreview
+
+    data = open_task(ctx)
+    if data is None or ctx.state.get("parent_session_id"):
+        return None
+    called = event.subagent_target.strip() or "通用子 agent"
+    if called.lower() != taskreview.AGENT:
+        return Decision(permission="deny", reason=messages.text("review.call.other", agent=taskreview.AGENT, called=called), facts={"kind": "task-subagent"})
+    if taskreview.state_of(data)["n"] == 0:
+        return Decision(permission="deny", reason=messages.text("review.off"), facts={"kind": "task-subagent"})
+    if taskreview.pending(data) is None:
+        return Decision(permission="deny", reason=messages.text("review.call.no_round", agent=taskreview.AGENT, command=cli_command()), facts={"kind": "task-subagent"})
+    return None
+
+
+def on_task_review_done(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """The reviewer's call has finished: what it said closes the open check."""
+    from . import taskreview
+
+    data = open_task(ctx)
+    if data is None or event.tool_kind != "subagent" or event.subagent_target.strip().lower() != taskreview.AGENT:
+        return None
+    info = taskreview.record(ctx.root, data["task"], event.tool_response)
+    if info is None:
+        return None
+    return Decision(facts={"judge": "verifier", "verdict": info["verdict"], "kind": "task-review"})
+
+
+def on_task_review_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """The result has not passed its checks: say so once per prompt. Past the limit the agent is to stop and ask the person."""
+    from . import taskreview
+
+    if event.stop_hook_active or ctx.state.get("parent_session_id"):
+        return None
+    data = open_task(ctx)
+    if data is None:
+        return None
+    name = data["task"]
+    if taskreview.state_of(data)["n"] == 0:
+        return None
+    info = taskreview.summary(ctx.root, name, data)
+    if info["waived"] or info["passes"] >= info["n"] or not taskreview.has_something(ctx.root, name, data):
+        return None
+    if not info["pending_round"] and info["checks_used"] >= info["checks_limit"]:
+        return None
+    state = relay(ctx)
+    if state.get("review_reminded"):
+        return None
+    state["review_reminded"] = True
+    return Decision(block=True, reason=messages.text("review.stop", task=name, next=taskreview.next_text(ctx.root, name, data)), facts={"kind": "task_review_missing"})
 
 
 def relay(ctx: Context) -> Dict[str, Any]:
@@ -175,18 +238,16 @@ def on_task_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
     return Decision(block=True, reason=messages.text("task.relay.reminder", task=data["task"]), facts={"kind": "task_file_not_updated"})
 
 
-def verifier_text(data: Dict[str, Any]) -> str:
-    name = data["task"]
-    return (
-        f"这次复核的是任务 {name}。先运行 `{cli_command()} task diff --task {name}`，读输出里的 diff_file（{name}/{tasks.CHANGES_NAME}：成果和 main 的差异）。"
-        f"再读 {name}/REQ/ 里的需求和 {name}/{tasks.PLAN_NAME}。成果在 {name}/{tasks.DEV_NAME}/，不在 git 仓库里，不要用 git diff。大文件只读差异。"
-    )
-
-
 def on_subagent_start(event: HookEvent, ctx: Context) -> Optional[Decision]:
     task_data = open_task(ctx)
-    if task_data is not None and event.agent_type.strip().lower() in ("reviewer", "verifier"):
-        return Decision(context=verifier_text(task_data))
+    if task_data is not None and ctx.level != 3:
+        from . import taskreview
+
+        waiting = taskreview.pending(task_data)
+        if waiting is None or event.agent_type.strip().lower() != taskreview.AGENT:
+            return None
+        package = f"{taskreview.round_dir(task_data['task'], waiting['number'])}/{taskreview.PACKAGE}"
+        return Decision(context=messages.text("review.start.context", package=package))
     request_id = ctx.state.get("active_request")
     role = event.agent_type.strip().lower()
     if not request_id or role not in ROLES:
@@ -201,21 +262,28 @@ def on_subagent_start(event: HookEvent, ctx: Context) -> Optional[Decision]:
 
 def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.event == "PreToolUse" and event.tool_kind == "subagent":
-        return on_subagent_call(event, ctx)
+        return on_subagent_call(event, ctx) if ctx.level == 3 else on_task_subagent_call(event, ctx)
     if event.event == "SubagentStart":
         return on_subagent_start(event, ctx)
     if event.event == "PostToolUse":
         on_task_write(event, ctx)
-        return None
+        return on_task_review_done(event, ctx)
     if event.event == "Stop":
-        return verify.on_stop(event, ctx) or on_task_stop(event, ctx)
+        blocks = [item for item in (verify.on_stop(event, ctx), on_task_review_stop(event, ctx), on_task_stop(event, ctx)) if item is not None]
+        if not blocks:
+            return None
+        facts: Dict[str, Any] = {}
+        for item in reversed(blocks):
+            facts.update(item.facts)
+        return Decision(block=True, reason="\n".join(item.reason for item in blocks), facts=facts)
     if event.event == "SubagentStop":
         return verify.on_subagent_stop(event, ctx)
     if event.event == "UserPromptSubmit":
         if not (event.from_subagent or event.continuation):
             ctx.module_state(NAME)["relay"] = {"wrote": False, "task_file": False, "reminded": False}  # a new prompt, a new count
+            ctx.module_state(NAME)["review_n"] = user_review(event, ctx)  # for a task this prompt goes on to make or open
         task_data = None if (event.from_subagent or event.continuation) else open_task(ctx)
         if task_data is not None:
-            return Decision(context=task_text(ctx, keep_verify(ctx, task_data)), facts={"kind": "task"})
+            return Decision(context=task_text(ctx, keep_review(event, ctx, task_data)), facts={"kind": "task"})
         return verify.on_user_prompt(event, ctx)
     return None

@@ -49,6 +49,11 @@ def verify_choice(ctx: Context, ms: Dict[str, Any]) -> str:
     return ms["prompt"]["verify"] or tasks.verify_choice(tasks.open_of(ctx.root, ctx.state))
 
 
+def in_task(ctx: Context) -> bool:
+    """The session holds an open task. Then the task's own rules decide about the subagent and the checks (`[review]=n`)."""
+    return ctx.level != 3 and tasks.open_of(ctx.root, ctx.state) is not None
+
+
 def on_user_prompt(event: HookEvent, ctx: Context, ms: Dict[str, Any], policy: Dict[str, Any]) -> Optional[Decision]:
     if event.from_subagent or event.continuation:
         # A subagent call message, or the reason of a Stop block fed back by the engine. Not the user.
@@ -67,7 +72,7 @@ def on_user_prompt(event: HookEvent, ctx: Context, ms: Dict[str, Any], policy: D
     levelstate.begin_prompt(ms, markers.verify_choice(event.prompt, policy), written, event.prompt.strip()[:40])
     if ctx.admin:
         return Decision(context=admin_rules(ctx))
-    return Decision(context=rules.prompt_rules(policy, ctx.level, ignored, verify_choice(ctx, ms), ctx.state["session_id"]))
+    return Decision(context=rules.prompt_rules(policy, ctx.level, ignored, verify_choice(ctx, ms), ctx.state["session_id"], in_task=in_task(ctx)))
 
 
 def admin_rules(ctx: Context) -> str:
@@ -153,7 +158,7 @@ def on_pre_tool_use(event: HookEvent, ctx: Context, ms: Dict[str, Any], policy: 
             return Decision(permission="deny", reason=rules.admin_subagent_denied(event.subagent_target, is_generic_agent(event.subagent_target)))
         count_call(event, ctx, ms, policy, budgeted=False)
         return None
-    if event.tool_kind == "subagent":
+    if event.tool_kind == "subagent" and not in_task(ctx):  # in a task the request module decides: only the reviewer, with a check open
         denied = deny_subagent(event, ctx, ms, policy)
         if denied:
             return denied
@@ -178,9 +183,8 @@ def on_stop(event: HookEvent, ctx: Context, ms: Dict[str, Any], policy: Dict[str
         return None  # the subagent finishing is not the main agent finishing
     if ctx.admin:
         return None  # no verifier in admin mode: the person reviews harness changes
-    task = tasks.open_of(ctx.root, ctx.state)
-    if task is not None and not tasks.plan_approved(ctx.root, task["task"], task):
-        return None  # only PLAN.md can have been written: the person reviews the plan, not the verifier
+    if in_task(ctx):
+        return None  # a task counts its own checks (`[review]=n`, request module)
     return review.on_stop(event, ms, policy, ctx.level, verify_choice(ctx, ms))
 
 

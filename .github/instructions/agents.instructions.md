@@ -30,7 +30,7 @@ applyTo: '.github/agents/**/*.agent.md'
 - `tools` 只写需要的工具集。只读的 agent 不给 `edit`。
 - 子 agent 写 `agents: []`，不让它再调子 agent。
 - `model` 写显示名，可以写回退列表。名字以公司 Copilot 里看到的为准。
-- 正文只写输入、做法、不要做的事、输出格式。输出格式要让 hook 能读：例如 verifier 的第一行是 `VERDICT: PASS` 或 `VERDICT: FAIL`。
+- 正文只写输入、做法、不要做的事、输出格式。输出格式要让 hook 能读：例如 reviewer 的第一行是 `VERDICT: PASS` 或 `VERDICT: FAIL`。
 - 正文里不写预算数字。数字只在 `.harness/policies/*.json`。
 
 ## 现有的 agent
@@ -40,14 +40,12 @@ applyTo: '.github/agents/**/*.agent.md'
 | orchestrator | L3 的编排员：建请求、派发、判断、验收。用户在下拉列表里选 | 用户 |
 | admin | harness 的管理员：二开 harness、读报告和日志、查根因。用户先在终端开 admin 模式，才能改 guardrail 文件 | 用户 |
 | builder | L3 的执行者：按 assignment 产出成果并自测 | orchestrator（hook 要求先 dispatch） |
-| reviewer | L3 的独立评审员：按验收标准验证候选成果 | orchestrator（hook 要求先 dispatch） |
-| verifier | L2 交付前复核，不改文件。默认关闭，用户写 `[verify]` 才开 | 默认 agent（hook 只在开启时放行） |
+| reviewer | 独立检查员：只看需求、成果和差异，给 PASS 或 FAIL，不改文件。用户写 `[review]=n` 才开 | 默认 agent（hook 要求先 `task review start`） |
 
 ## 模型
 
-- orchestrator 和 reviewer 要推理和判断，用强模型。builder 按 assignment 执行，有验收标准和 reviewer 把关，用普通模型。
-- **builder 和 reviewer 必须是不同系列**，减少同类错误。`model` 的回退列表只能在同一系列里回退。
-  admin 例外（`agents.json` 的 `any_series`）：它不参与评审，强模型不可用时可以跨系列回退。
+- orchestrator 要推理和判断，用强模型。builder 按 assignment 执行，用普通模型。reviewer 用 Sonnet，没有就退到 Haiku：主模型是 Sonnet 或 Opus 时它都能运行。
+- `model` 的回退列表只能在同一系列里回退。admin 和 reviewer 例外（`agents.json` 的 `any_series`）：强模型不可用时可以跨系列回退。
   系列的划分在 `.harness/policies/agents.json`，`harness doctor` 会检查（macOS/Linux 把 `python` 换成 `python3`）。
 - 模型名以本机 Copilot 下拉列表里的显示名为准。不同的会话类型能选的模型不一样（例如有的会话没有 Opus），换环境后重新确认。
 

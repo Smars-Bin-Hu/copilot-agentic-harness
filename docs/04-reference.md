@@ -19,6 +19,9 @@
 | `task approve-promote` | 批准最后一次 `task promote --dry-run` 的计划。只能在终端，输入确认码 |
 | `task recover` | L2 任务的 promote 中途出错后，把仓库恢复原样。只能在终端，输入确认码 |
 | `task status`、`task report` | 看任务做到哪一步；重写任务报告 |
+| `task review extend` | 检查次数用完后，再给几次。只能在终端，输入确认码 |
+| `task review waive` | 没凑够通过次数，也放行这一版成果去回写。成果再改，放行失效。只能在终端，输入确认码 |
+| `task snapshot list`、`task snapshot prune` | 看任务在各个关口存下的成果；删掉过期的 |
 | `task list` | 列出所有没关闭的任务：种类、档位、在等你做什么。等你的排在前面。`--all` 连关闭的一起列 |
 | `approve-command` | 批准 agent 被拒绝的一条 git 命令。只能在终端，输入验证码 |
 | `admin on` | 给一个会话开 admin 模式：它可以改 guardrail 文件。只能在终端，输入确认码 |
@@ -38,6 +41,8 @@
 | --- | --- |
 | `task new` | `task new <名字> --kind <种类>`：在 `.workspace/sandbox/tasks/` 下新建任务，会话接上它。种类：`qa`（问答）、`rca`、`design`（设计方案、开发计划）、`dev`（开发）、`test`、`kb`（更新知识库）。`--tier` 选档位：`light` 只有 `TASK.md`；`medium` 多 `REQ.md`、`REQ/`、`REF/`、`LOG.md`；`full` 再多 `TODO.md`、`DEV/`、`TEST/`。不写就按种类定 |
 | `task open` | `task open <名字>`：会话接上一个已有的任务。关闭了的会重新打开。会话原来接着的任务不关，只是换过去 |
+| `task review start` | 开一次独立检查：存下这一版成果，写好评审包 `REVIEW/round-NNN/package.md`。之后才能调用 reviewer |
+| `task review status` | 要连续通过几次、现在几次、查了几次、上限几次、下一步 |
 | `task upgrade` | `task upgrade --tier <档位>`：把任务升到更高的档：补上缺的文件，已有的不动。只能升 |
 | `task start` | 进入任务模式：开始、接着做，或在回写过之后开新的一轮。只在 L2 |
 | `task fetch` | 把目标仓库 main 上的文件取到 `DEV/<仓库>/<路径>`；`--overwrite` 丢掉改动重新取 |
@@ -73,7 +78,7 @@
 | task-levels.json | `levels.1.budget_per_prompt.repository_searches.limit` | L1 每条提示的搜索次数上限（`on_exceed`：`deny` 或 `warn`） |
 | task-levels.json | `levels.1.budget_per_prompt.observed_tool_calls.limit` | 每条提示的工具调用提醒线 |
 | task-levels.json | `levels.2.subagents.allowed` | L2 允许的子 agent |
-| task-levels.json | `levels.2.verification.enabled` | verifier 复核默认开不开 |
+| task-levels.json | `levels.2.verification.enabled` | 没有任务的 L2 会话里，reviewer 复核默认开不开 |
 | task-levels.json | `levels.2.verification.enable_markers` | 开启复核的提示标记 |
 | task-levels.json | `levels.2.verification.skip_markers` | 跳过复核的提示标记 |
 | task-levels.json | `levels.2.verification.require_when.edits` | 本条提示改了文件，就要求复核 |
@@ -97,6 +102,11 @@
 | orchestration.json | `inputs.max_files` | 输入文件数上限 |
 | orchestration.json | `verify.main_stop` | 请求没结论时，主 agent 结束前拦一次 |
 | orchestration.json | `verify.subagent_stop` | 子 agent 没交 handoff 时的处理：`block`、`log`、`off` |
+| orchestration.json | `verify.task_file_reminder` | 任务里写过文件却没更新 `TASK.md` 时，agent 结束前提醒一次 |
+| orchestration.json | `review.extra_checks` | 开了 `[review]=n` 的任务，除了 n 次以外还能多查几次。用完要你在终端放行 |
+| orchestration.json | `review.max_n` | `[review]=n` 里 n 最大能写几 |
+| orchestration.json | `snapshots.keep_days` | 关口快照留几天 |
+| orchestration.json | `snapshots.max_file_mb` | 超过这个大小的文件，快照只记 sha256，不复制 |
 | observe.json | `max_text_chars` | 日志里每段文字的最大长度 |
 | observe.json | `capture.enabled` | 保存 hook 的原始输入输出 |
 | observe.json | `warn_session_files` | 会话日志文件数超过它时 `doctor` 提醒 |
@@ -133,7 +143,7 @@
 | `PreToolUse` | task_level（预算、子 agent）、gate（含 L2 任务的写入范围）、request（子 agent 要先 dispatch） |
 | `PostToolUse` | task_level（计数） |
 | `PostToolUseFailure` | observe（工具调用失败时只有它，没有 `PostToolUse`；日志里记下工具名和平台给的错误） |
-| `SubagentStart`、`SubagentStop` | request（记录启动、检查 handoff；告诉 L2 任务的 verifier 读差异） |
+| `SubagentStart`、`SubagentStop` | request（记录启动、检查 handoff；告诉任务的 reviewer 评审包在哪） |
 | `Stop` | task_level、request（请求没结论、没标等待时拦一次） |
 
 ## 运行时文件

@@ -148,7 +148,10 @@ def task_text(ctx: Context, data: Dict[str, Any]) -> str:
         review = "\n" + messages.text(
             "review.inject", n=info["n"], passes=info["passes"], used=info["checks_used"], limit=info["checks_limit"], agent=taskreview.AGENT, command=cli_command(),
         )
-    return f"{head}{task_ops.next_step(ctx.root, name, data)}{review}\n" + messages.text("task.inject.scope", task=name, command=cli_command())
+    requirement = ""
+    if (tasks.task_dir(ctx.root, name) / tasks.REQ_FILE).is_file():
+        requirement = "\n" + messages.text("task.inject.req", task=name)
+    return f"{head}{task_ops.next_step(ctx.root, name, data)}{requirement}{review}\n" + messages.text("task.inject.scope", task=name, command=cli_command())
 
 
 def on_task_subagent_call(event: HookEvent, ctx: Context) -> Optional[Decision]:

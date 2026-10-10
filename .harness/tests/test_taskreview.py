@@ -136,7 +136,7 @@ class SwitchTests(ReviewCase):
 
     def test_without_checks_the_prompt_says_nothing_about_them(self) -> None:
         self.new()
-        self.assertNotIn("独立检查", self.say("继续")["additionalContext"])
+        self.assertNotIn("要连续通过", self.say("继续")["additionalContext"])
 
 
 class OffTests(ReviewCase):

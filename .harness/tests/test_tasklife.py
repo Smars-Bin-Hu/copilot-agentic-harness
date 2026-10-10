@@ -433,6 +433,7 @@ class PromptRuleTests(LifeCase):
         self.assertIn(f"任务：{BASE}/job（RCA，中档）", context)
         self.assertIn(f"先读 {BASE}/job/TASK.md", context)
         self.assertIn("需求写在 REQ.md", context)
+        self.assertIn("直接下的指令", context)  # found in the hand test: an instruction that changes the requirement goes into REQ.md first
         self.assertNotIn("（L2）", context)
 
     def test_a_task_from_before_has_the_plain_head(self) -> None:
@@ -441,6 +442,7 @@ class PromptRuleTests(LifeCase):
         context = self.hook(payload("UserPromptSubmit", S1, prompt="next"))["additionalContext"]
         self.assertIn(f"任务：{tasks.TASKS_DIR}/old，第 1 轮", context)
         self.assertNotIn("TASK.md，再按", context)
+        self.assertNotIn("直接下的指令", context)  # no REQ.md in a task from before
 
 
 class MessageTests(unittest.TestCase):

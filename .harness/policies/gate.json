@@ -24,6 +24,9 @@
     ".workspace/current_tasks/*/.task/**",
     ".workspace/current_tasks/*/PROMOTE-PLAN.diff",
     ".workspace/current_tasks/*/CHANGES.diff",
+    ".workspace/sandbox/tasks/*/.task/**",
+    ".workspace/sandbox/tasks/*/PROMOTE-PLAN.diff",
+    ".workspace/sandbox/tasks/*/CHANGES.diff",
     ".workspace/reports/**"
   ],
   "l3_write_root": ".workspace/sandbox/requests/{request_id}",

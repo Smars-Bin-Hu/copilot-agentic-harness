@@ -18,7 +18,8 @@
 | `task approve-plan` | 批准 L2 任务的 `PLAN.md`。只能在终端，输入确认码 |
 | `task approve-promote` | 批准最后一次 `task promote --dry-run` 的计划。只能在终端，输入确认码 |
 | `task recover` | L2 任务的 promote 中途出错后，把仓库恢复原样。只能在终端，输入确认码 |
-| `task status`、`task report` | 看 L2 任务做到哪一步；重写任务报告 |
+| `task status`、`task report` | 看任务做到哪一步；重写任务报告 |
+| `task list` | 列出所有没关闭的任务：种类、档位、在等你做什么。等你的排在前面。`--all` 连关闭的一起列 |
 | `approve-command` | 批准 agent 被拒绝的一条 git 命令。只能在终端，输入验证码 |
 | `admin on` | 给一个会话开 admin 模式：它可以改 guardrail 文件。只能在终端，输入确认码 |
 | `admin off`、`admin status` | 关掉一个会话的 admin 模式；列出开着 admin 模式的会话 |
@@ -29,10 +30,15 @@
 | `logs prune` | 删除 N 天没写过的会话日志（`--dry-run` 先看） |
 | `eval list`、`eval show`、`eval check` | 固定场景：列出、给提示、判断一次运行 |
 
-### agent 在 L2 任务模式里用
+### agent 做任务时用
+
+前四条是新的，不看 Level。`task start` 是旧的入口，还能用。
 
 | 命令 | 作用 |
 | --- | --- |
+| `task new` | `task new <名字> --kind <种类>`：在 `.workspace/sandbox/tasks/` 下新建任务，会话接上它。种类：`qa`（问答）、`rca`、`design`（设计方案、开发计划）、`dev`（开发）、`test`、`kb`（更新知识库）。`--tier` 选档位：`light` 只有 `TASK.md`；`medium` 多 `REQ/`、`REF/`、`LOG.md`；`full` 再多 `TODO.md`、`DEV/`、`TEST/`。不写就按种类定 |
+| `task open` | `task open <名字>`：会话接上一个已有的任务。关闭了的会重新打开。会话原来接着的任务不关，只是换过去 |
+| `task upgrade` | `task upgrade --tier <档位>`：把任务升到更高的档：补上缺的文件，已有的不动。只能升 |
 | `task start` | 进入任务模式：开始、接着做，或在回写过之后开新的一轮。只在 L2 |
 | `task fetch` | 把目标仓库 main 上的文件取到 `DEV/<仓库>/<路径>`；`--overwrite` 丢掉改动重新取 |
 | `task delete` | 声明删除一个取过的文件 |

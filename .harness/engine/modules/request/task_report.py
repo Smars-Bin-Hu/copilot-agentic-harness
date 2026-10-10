@@ -102,7 +102,7 @@ def generate(root: Path, raw_task: str = "") -> Dict[str, Any]:
     if raw_task.strip():
         task = task_ops.resolve(root, raw_task)
     else:
-        known = [f"{tasks.TASKS_DIR}/{path.name}" for path in sorted((root / tasks.TASKS_DIR).iterdir())] if (root / tasks.TASKS_DIR).is_dir() else []
+        known = tasks.folders(root)
         started = [(tasks.read(root, name) or {}).get("updated_at", "") for name in known]
         ranked = sorted((stamp, name) for stamp, name in zip(started, known) if stamp)
         if not ranked:

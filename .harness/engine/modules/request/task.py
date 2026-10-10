@@ -91,9 +91,8 @@ def require_open(data: Dict[str, Any]) -> None:
 
 def open_tasks(root: Path) -> List[Dict[str, Any]]:
     found = []
-    base = root / tasks.TASKS_DIR
-    for path in sorted(base.iterdir()) if base.is_dir() else []:
-        data = tasks.read(root, f"{tasks.TASKS_DIR}/{path.name}")
+    for name in tasks.folders(root):
+        data = tasks.read(root, name)
         if data and data.get("status") == "open":
             found.append(data)
     return found
@@ -104,7 +103,7 @@ def resolve(root: Path, raw: str, waiting: Optional[Callable[[Dict[str, Any]], b
     text = raw.strip()
     if text:
         if "/" not in text.replace("\\", "/").strip("/"):
-            text = f"{tasks.TASKS_DIR}/{text}"
+            text = tasks.find(root, text) or f"{tasks.SANDBOX_TASKS_DIR}/{text}"
         return ops.clean_task(root, text)
     found = [item for item in open_tasks(root) if waiting is None or waiting(item)]
     if not found:
@@ -121,10 +120,13 @@ def rel(root: Path, path: Path) -> str:
 # --- start, status, close ------------------------------------------------------------------------
 
 
-def start(root: Path, raw_task: str, session_id: str, surface: str = "vscode", branch: str = "") -> Dict[str, Any]:
+def start(
+    root: Path, raw_task: str, session_id: str, surface: str = "vscode", branch: str = "", free: bool = False, kind: str = "", tier: str = "",
+) -> Dict[str, Any]:
+    """`free` is the 1.1 way in (`task new`, `task open`): any level, and the session may leave an open task for this one."""
     task = resolve(root, raw_task) if raw_task.strip() else ""
     if not task:
-        raise CommandError("--task 要是 .workspace/current_tasks/ 下的一个任务目录。")
+        raise CommandError(f"--task 要是 {tasks.SANDBOX_TASKS_DIR}/ 或 {tasks.TASKS_DIR}/ 下的一个任务目录。")
     found = ops.load_targets(root)
     branch_name = ops.clean_branch(branch)
     if not state_path(root, surface, session_id).exists():
@@ -138,10 +140,11 @@ def start(root: Path, raw_task: str, session_id: str, surface: str = "vscode", b
             raise CommandError("子 agent 不能开任务。")
         if admin_on(state):
             raise CommandError("这个会话在 admin 模式里，不能开任务。admin 只用来二开和排查 harness；做任务请用户换一个对话，或先运行 `admin off`。")
-        if state["level"] != 2:
+        if not free and state["level"] != 2:
             raise CommandError("任务模式只在 L2 用。停下来，请用户在提示开头写 /l2 重发。L1 不改目标仓库，也不开任务。")
         other = state.get("active_task")
-        if other and other != task and (tasks.read(root, other) or {}).get("status") == "open":
+        left = other if other and other != task and (tasks.read(root, other) or {}).get("status") == "open" else ""
+        if left and not free:
             raise CommandError(f"这个会话已经在做任务 `{other}`。先 `task close --task {other}`，再开新的。")
         with state_lock(path):
             data = tasks.read(root, task)
@@ -153,6 +156,7 @@ def start(root: Path, raw_task: str, session_id: str, surface: str = "vscode", b
                     "status": "open", "created_at": now, "updated_at": now, "round": 1, "round_started_at": now,
                     "target_mode": found.configured, "branch": "", "targets": {}, "target_files": {}, "deletes": [],
                     "plan": {}, "promote": {"state": "none"}, "rounds": [], "events": [], "verify": "",
+                    "kind": kind, "tier": tier, "waiting": None, "depends_on": [],
                 }
                 note(data, "start", f"会话 {session_id}")
             else:
@@ -173,7 +177,8 @@ def start(root: Path, raw_task: str, session_id: str, surface: str = "vscode", b
                 data["branch"] = branch_name
             elif found.configured and not data["branch"]:
                 data["branch"] = default_branch(task, data["round"])
-            tasks.dev_dir(root, task).mkdir(parents=True, exist_ok=True)
+            if not free or data.get("tier") == "full":
+                tasks.dev_dir(root, task).mkdir(parents=True, exist_ok=True)
             data["updated_at"] = utc_now()
             atomic_write(path, data)
         state["active_task"] = task
@@ -185,6 +190,8 @@ def start(root: Path, raw_task: str, session_id: str, surface: str = "vscode", b
     }
     if found.configured:
         result.update(branch=data["branch"], target_repos=found.names())
+    if free:
+        result.update(kind=data.get("kind", ""), tier=data.get("tier", ""), left_open=left)
     return result
 
 

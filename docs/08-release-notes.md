@@ -14,6 +14,19 @@
 
 下一版要带的内容，合进主分支后先记在这里。发布时移到对应的版本号下面。
 
+### 新增
+
+- 任务有了自己的命令，不看 Level：`task new` 新建、`task open` 接上（关了的会重开）、`task upgrade` 升档、`task list` 列出全部。
+- 任务分种类和三档。轻档只有 `TASK.md`；中档多 `REQ/`、`REF/`、`LOG.md`；全档再多 `TODO.md`、`DEV/`、`TEST/`。`TASK.md` 是接力文件：新会话先读它，就知道做到哪。
+- 新任务建在 `.workspace/sandbox/tasks/`。旧位置 `.workspace/current_tasks/` 里的任务照旧能用。
+- 一个会话可以换任务，原来那个不用先关。`task list` 把在等你批准的任务排在前面。
+
+### 变更
+
+- `task close` 之后目录原地不动，`task open` 可以重新打开。
+
+### 退役
+
 暂无。
 
 ## 1.0.3（2026-10-10）

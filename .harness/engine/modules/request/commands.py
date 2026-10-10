@@ -21,7 +21,9 @@ from typing import Any, Dict
 from core import targets
 from core.paths import repo_root
 
-from . import check, ops, planapproval, promote, report, task, task_report
+from core import tasks
+
+from . import check, ops, planapproval, promote, report, task, task_report, tasklife
 
 
 def _request(parser: argparse.ArgumentParser) -> None:
@@ -122,7 +124,7 @@ def register_task(subparsers: Any) -> None:
 
     def add(name: str, text: str, handler: Any, required: bool = False) -> argparse.ArgumentParser:
         item = commands.add_parser(name, help=text)
-        item.add_argument("--task", required=required, default="", help="the task folder under .workspace/current_tasks/ (or just its name); left out, the one open task")
+        item.add_argument("--task", required=required, default="", help="the task folder (or just its name); left out, the one open task")
         item.set_defaults(handler=handler)
         return item
 
@@ -130,6 +132,23 @@ def register_task(subparsers: Any) -> None:
     start.add_argument("--session-id", required=True, help="the session id written at the top of the prompt rules")
     start.add_argument("--surface", default="vscode", choices=["vscode"])
     start.add_argument("--branch", default="", help="feature/<name>; default feature/<task folder name>")
+    new = commands.add_parser("new", help="make a task under .workspace/sandbox/tasks/ with the files of its tier; this session picks it up (any level)")
+    new.add_argument("name", help="the task name: the folder name, no slashes")
+    new.add_argument("--kind", required=True, choices=list(tasks.KINDS), help="qa, rca, design (a design or a plan), dev, test, kb (a knowledge base update)")
+    new.add_argument("--tier", default="", choices=["", *tasks.TIERS], help="light: TASK.md only; medium: + REQ/, REF/, LOG.md; full: + TODO.md, DEV/, TEST/. Default: by kind")
+    new.add_argument("--session-id", required=True, help="the session id written at the top of the prompt rules")
+    new.add_argument("--surface", default="vscode", choices=["vscode"])
+    new.set_defaults(handler=lambda a: tasklife.new(repo_root(), a.name, a.kind, a.tier, a.session_id, a.surface))
+    open_parser = commands.add_parser("open", help="this session picks up a task that exists; a closed task is opened again (any level)")
+    open_parser.add_argument("name", help="the task name, or its folder")
+    open_parser.add_argument("--session-id", required=True, help="the session id written at the top of the prompt rules")
+    open_parser.add_argument("--surface", default="vscode", choices=["vscode"])
+    open_parser.set_defaults(handler=lambda a: tasklife.open_task(repo_root(), a.name, a.session_id, a.surface))
+    upgrade = add("upgrade", "give the task a higher tier: missing files are added, existing ones are left alone", lambda a: tasklife.upgrade(repo_root(), a.task, a.tier))
+    upgrade.add_argument("--tier", required=True, choices=list(tasks.TIERS))
+    listing = commands.add_parser("list", help="every open task: kind, tier, what it waits for; --all adds the closed ones")
+    listing.add_argument("--all", action="store_true")
+    listing.set_defaults(handler=lambda a: tasklife.list_tasks(repo_root(), a.all))
     add("status", "where the task stands and what comes next", lambda a: task.status(repo_root(), a.task))
     add("approve-plan", "the person approves PLAN.md (terminal only)", lambda a: task.approve_plan(repo_root(), a.task))
     fetch = add("fetch", "copy files of a target repository's base branch into DEV/<repo>/<path>", lambda a: task.fetch(repo_root(), a.task, a.paths, a.overwrite))

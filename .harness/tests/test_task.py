@@ -114,7 +114,7 @@ class StartTests(TaskCase):
         self.prompt("/l2 做任务")
         self.assertIn("没有会话", self.run_cli("task", "start", "--task", TASK, "--session-id", "nobody", ok=False)["stderr"])
         self.assertIn("任务目录", self.run_cli("task", "start", "--task", ".workspace/current_tasks/none", "--session-id", SESSION, ok=False)["stderr"])
-        self.assertIn("current_tasks", self.run_cli("task", "start", "--task", "docs", "--session-id", SESSION, ok=False)["stderr"])
+        self.assertIn("任务目录 `.workspace/sandbox/tasks/docs` 不存在", self.run_cli("task", "start", "--task", "docs", "--session-id", SESSION, ok=False)["stderr"])  # a bare name is looked up in both places
         request_id = self.target_request()
         self.assertIn("L3 请求", self.start(ok=False)["stderr"])
         self.run_cli("request", "set-status", "--request", request_id, "--status", "abandoned", "--reason", "x")

@@ -8,7 +8,8 @@ applyTo: '.workspace/**'
 目录约定和 gate 的能力边界见 [.workspace/README.md](../../.workspace/README.md)。
 
 - L1、L2：不走 sandbox。其他路径照常写，guardrail 文件除外。
-- L2 的任务模式（运行过 `task start`）：只能在任务目录 `current_tasks/<任务>/` 里写。
+- 任务模式（运行过 `task new`、`task open` 或 `task start`）：只能在任务目录里写。任务目录在 `sandbox/tasks/<任务>/`，旧的在 `current_tasks/<任务>/`。
+  - 目录里有 `TASK.md` 时，先读它，再按它的指向读别的；停下前更新它。
   - 要回写到目标仓库的成果放 `DEV/<仓库名>/<路径>`。计划写在 `PLAN.md`，用户在终端运行 `task approve-plan` 批准后，才能写 `DEV/`。
   - 不回写的成果（RCA、设计、笔记、一次性脚本）放任务目录根下，不用批准。
   - 步骤见技能 `harness-task-level`。

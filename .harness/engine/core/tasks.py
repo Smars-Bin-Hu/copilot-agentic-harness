@@ -1,6 +1,7 @@
-"""An L2 task: where its files live and what its state says. Core knows it so the gate need not import the task module.
+"""A task: where its files live and what its state says. Core knows it so the gate need not import the task module.
 
-A task is a folder under `.workspace/current_tasks/`. The person puts the requirement there (`REQ/`, `REF/`). In task mode
+A task is a folder under `.workspace/sandbox/tasks/` (`task new` makes it there) or, from before 1.1, under
+`.workspace/current_tasks/`. The person puts the requirement there (`REQ/`, `REF/`). In task mode
 the agent writes anywhere else in the folder: `PLAN.md`, results that stay in the task (an RCA, a design) at its top, and,
 once the person approved the plan, the results that go back to a target repository under `DEV/`. The CLI's own files are
 `.task/` (state, the main version of fetched files) and the two diff files.
@@ -13,7 +14,16 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-TASKS_DIR = ".workspace/current_tasks"
+TASKS_DIR = ".workspace/current_tasks"  # before 1.1; still read
+SANDBOX_TASKS_DIR = ".workspace/sandbox/tasks"
+TASK_DIRS = (SANDBOX_TASKS_DIR, TASKS_DIR)  # where a bare task name is looked up, in this order
+# What kind of work a task is (it decides what "done" means) and how many files it gets.
+KINDS = ("qa", "rca", "design", "dev", "test", "kb")
+TIERS = ("light", "medium", "full")
+DEFAULT_TIER = {"qa": "light", "rca": "medium", "design": "medium", "dev": "full", "test": "full", "kb": "full"}
+TASK_FILE = "TASK.md"
+TODO_FILE = "TODO.md"
+LOG_FILE = "LOG.md"
 PLAN_NAME = "PLAN.md"
 DEV_NAME = "DEV"
 STATE_DIR = ".task"
@@ -22,6 +32,24 @@ BASE_NAME = "base"
 CHANGES_NAME = "CHANGES.diff"
 REVIEW_NAME = "PROMOTE-PLAN.diff"
 PERSON_DIRS = ("req", "ref")  # lower case: the gate compares without case
+
+
+def find(root: Path, name: str) -> str:
+    """The repository-relative folder of the task called `name`, or an empty string when no such folder exists."""
+    for base in TASK_DIRS:
+        if (root / base / name).is_dir():
+            return f"{base}/{name}"
+    return ""
+
+
+def folders(root: Path) -> list:
+    """Every task folder, as repository-relative paths."""
+    found = []
+    for base in TASK_DIRS:
+        directory = root / base
+        if directory.is_dir():
+            found.extend(f"{base}/{path.name}" for path in sorted(directory.iterdir()) if path.is_dir() and not path.name.startswith("."))
+    return found
 
 
 def task_dir(root: Path, task: str) -> Path:

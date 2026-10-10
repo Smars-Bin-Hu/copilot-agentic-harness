@@ -14,7 +14,7 @@ import stat
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, repo_paths, targets
+from core import config, repo_paths, targets, tasks
 from core.paths import cli_command, mkdir_command, utc_now
 from core.state import admin_on, session, state_path
 
@@ -140,15 +140,16 @@ def clean_branch(branch: str) -> str:
 
 
 def clean_task(root: Path, raw: str) -> str:
-    """A task folder under .workspace/current_tasks/, as a path relative to the repository. Empty when none is given."""
+    """A task folder under one of the task directories, as a path relative to the repository. Empty when none is given."""
     text = raw.strip()
     if not text:
         return ""
     path = Path(text)
     path = path if path.is_absolute() else root / path
     relative = layout.inside(root, path)
-    if relative is None or not relative.startswith(TASKS_DIR + "/"):
-        raise CommandError(f"--task `{raw}` 要是 {TASKS_DIR}/ 下的一个任务目录，例如 {TASKS_DIR}/<任务名>。")
+    if relative is None or not any(relative.startswith(base + "/") for base in tasks.TASK_DIRS):
+        raise CommandError(f"--task `{raw}` 要是 {tasks.SANDBOX_TASKS_DIR}/ 或 {TASKS_DIR}/ 下的一个任务目录，例如 {tasks.SANDBOX_TASKS_DIR}/<任务名>。")
+    relative = relative.rstrip("/")
     if not path.is_dir():
         raise CommandError(f"任务目录 `{relative}` 不存在。")
     return relative

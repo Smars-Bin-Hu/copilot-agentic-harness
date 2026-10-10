@@ -104,6 +104,8 @@
         ".harness/contracts/manifest.schema.json",
         ".harness/contracts/handoff.schema.json",
         ".harness/contracts/templates/assignment.md",
+        ".harness/contracts/templates/task/",
+        ".harness/tests/test_tasklife.py",
         ".harness/tests/test_request.py",
         ".harness/policies/agents.json",
         ".github/agents/orchestrator.agent.md",

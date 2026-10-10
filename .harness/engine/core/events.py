@@ -10,6 +10,7 @@ EVENT_NAMES = (
     "UserPromptSubmit",
     "PreToolUse",
     "PostToolUse",
+    "PostToolUseFailure",
     "PreCompact",
     "SubagentStart",
     "SubagentStop",
@@ -38,6 +39,10 @@ class HookEvent:
     agent_id: str = ""
     agent_type: str = ""
     tool_response: str = ""
+    # PostToolUseFailure (SDK engine): why the tool call failed, in the words of the engine.
+    error: str = ""
+    # The name of the skill a `skill` tool call loads.
+    skill: str = ""
     stop_hook_active: bool = False
     # Set by core, not by the adapter: this UserPromptSubmit is a subagent call message, not the user.
     from_subagent: bool = False

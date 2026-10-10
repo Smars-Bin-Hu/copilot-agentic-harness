@@ -118,6 +118,9 @@ def build_event(
     result.command = command
     result.paths = paths
     result.is_search = kind == "search" or (kind == "terminal" and is_terminal_search(command))
+    if kind == "skill":
+        skill = arguments.get(config.get("skill_key", "skill"))
+        result.skill = skill if isinstance(skill, str) else ""
     if kind == "subagent":
         keys = config.get("subagent_target_keys") or [config["subagent_target_key"]]
         target = next((arguments[key] for key in keys if isinstance(arguments.get(key), str) and arguments[key]), "")

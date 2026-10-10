@@ -47,10 +47,10 @@ class VsCodeParseTests(unittest.TestCase):
             },
         )
 
-    def test_all_eight_event_names_are_known(self) -> None:
+    def test_all_nine_event_names_are_known(self) -> None:
         self.assertEqual(
             set(EVENT_NAMES),
-            {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "SubagentStart", "SubagentStop", "Stop"},
+            {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PreCompact", "SubagentStart", "SubagentStop", "Stop"},
         )
 
     def test_session_start_and_prompt_fields(self) -> None:
@@ -183,7 +183,7 @@ class ToolKindsFileTests(unittest.TestCase):
         data = common.tool_kinds()
         for surface, body in data["surfaces"].items():
             for tool, kind in body["tools"].items():
-                self.assertIn(kind, {"read", "edit", "create", "terminal", "search", "subagent", "mcp"}, f"{surface}:{tool}")
+                self.assertIn(kind, {"read", "edit", "create", "terminal", "search", "subagent", "mcp", "web", "skill", "meta"}, f"{surface}:{tool}")
         self.assertTrue(data["surfaces"]["vscode"]["verified"])
         self.assertFalse(data["surfaces"]["cli"]["verified"])
 

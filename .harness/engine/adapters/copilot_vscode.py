@@ -4,6 +4,7 @@ legacy  The Copilot Chat engine, recorded in B1 (2026-09-30). Fixtures: eval/fix
         snake_case, tool names like `run_in_terminal`, output wrapped in `hookSpecificOutput`.
 cli     The Copilot SDK engine (`@github/copilot`), recorded 2026-10-01. Fixtures: eval/fixtures/hooks/copilot-sdk/.
         Tool names like `Bash`, results in `tool_result`, SubagentStart is camelCase with no event name,
+        a failed tool call comes as PostToolUseFailure with `error` instead of PostToolUse (recorded 2026-10-10),
         a subagent runs in its own session, output is plain top-level keys.
 
 Both report to the same surface (`vscode`), so one state file serves a session whichever engine it runs on.
@@ -20,7 +21,7 @@ from . import common
 SURFACE = "vscode"
 
 # Tool names only the SDK engine uses. The tools a subagent runs there still carry the legacy names.
-_CLI_TOOLS = ("Bash", "Read", "Write", "Edit", "Grep", "Glob", "Agent", "search_code_subagent")
+_CLI_TOOLS = ("Bash", "Read", "Write", "Edit", "Grep", "Glob", "Agent", "search_code_subagent", "WebFetch", "skill", "tool_search_tool")
 
 
 def event_name(payload: Dict[str, Any]) -> Any:
@@ -42,6 +43,7 @@ def engine(payload: Dict[str, Any]) -> str:
         or "sessionId" in payload
         or "stop_reason" in payload
         or "agent_name" in payload
+        or payload.get("hook_event_name") == "PostToolUseFailure"
         or payload.get("tool_name") in _CLI_TOOLS
         or "session-state" in transcript
     ):
@@ -72,6 +74,7 @@ def parse(payload: Dict[str, Any]) -> HookEvent:
     event.prompt = common.text(payload.get("prompt"))
     event.tool_use_id = common.text(payload.get("tool_use_id"))
     event.tool_response = _result_text(payload)
+    event.error = common.text(payload.get("error"))
     event.agent_id = common.text(payload.get("agent_id"))
     event.agent_type = common.text(payload.get("agent_type") or payload.get("agentName"))
     event.stop_hook_active = bool(payload.get("stop_hook_active"))

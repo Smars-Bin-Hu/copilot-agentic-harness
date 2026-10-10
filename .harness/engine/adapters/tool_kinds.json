@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "description": "Tool name -> tool kind, per surface. Kinds: read, edit, create, terminal, search, subagent, mcp. Unknown tools get kind 'other'.",
+  "description": "Tool name -> tool kind, per surface. Kinds: read, edit, create, terminal, search, subagent, mcp, web, skill, meta. Unknown tools get kind 'other'.",
   "surfaces": {
     "vscode": {
       "verified": true,
-      "source": "B1 recording 2026-09-30 (VS Code 1.140.0 / Copilot Chat 0.68.0) and the Copilot SDK engine recording 2026-10-01 (VS Code 1.140.0, @github/copilot 1.0.89-7)",
+      "source": "B1 recording 2026-09-30 (VS Code 1.140.0 / Copilot Chat 0.68.0) and the Copilot SDK engine recording 2026-10-01 (VS Code 1.140.0, @github/copilot 1.0.89-7); WebFetch, skill and tool_search_tool recorded 2026-10-10",
       "tools": {
         "read_file": "read",
         "list_dir": "read",
@@ -23,6 +23,9 @@
         "Glob": "search",
         "Agent": "subagent",
         "search_code_subagent": "search",
+        "WebFetch": "web",
+        "skill": "skill",
+        "tool_search_tool": "meta",
         "multi_replace_string_in_file": "edit",
         "insert_edit_into_file": "edit",
         "apply_patch": "edit",
@@ -33,6 +36,7 @@
         "path"
       ],
       "command_key": "command",
+      "skill_key": "skill",
       "subagent_prompt_key": "prompt",
       "subagent_target_keys": [
         "agentName",

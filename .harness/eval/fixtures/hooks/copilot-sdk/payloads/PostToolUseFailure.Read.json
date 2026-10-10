@@ -1,0 +1,11 @@
+{
+  "hook_event_name": "PostToolUseFailure",
+  "session_id": "00000000-0000-0000-0000-000000000000",
+  "timestamp": "2026-10-10T15:05:51.164Z",
+  "cwd": "/Users/user/Developer/DE-agentic-harness",
+  "tool_name": "Read",
+  "tool_input": {
+    "path": "/Users/user/Developer/DE-agentic-harness/no_such_file.txt"
+  },
+  "error": "Path does not exist"
+}

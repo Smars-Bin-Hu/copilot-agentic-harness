@@ -8,6 +8,7 @@
 - L2 的 verifier 复核默认关闭。用户在提示里写 `[verify]` 才开启。
 - 只有用户能切换。你只能建议：任务超出当前 Level 时，停下来说明原因。
 - 每条用户提示开头，hook 会注入当前 Level 和规则。按它做。
+- 你直接和用户对话，却没看到以“Task Level：”开头的注入，说明 hook 没在跑。先告诉用户，请用户在终端运行 `harness doctor`，再做别的。子 agent 不用查这一条。
 - 详细说明见技能 `harness-task-level`。
 
 ## 被 hook 拒绝后

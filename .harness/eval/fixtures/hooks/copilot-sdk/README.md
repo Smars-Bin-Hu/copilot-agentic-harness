@@ -18,6 +18,18 @@ VS Code 1.140.0 里，Copilot 的 `@github/copilot` 1.0.89-7（SDK 引擎）发�
 | `cli-stop-block.jsonl` | 探针 hook 用顶层格式 block 一次 Stop。第二条 UserPromptSubmit 就是 reason 原文，第二个 Stop 的 `stop_hook_active` 为 true |
 | `cli-subagent-stop-block.jsonl` | 探针 hook 在 SubagentStop 上 block 一次：子会话收到 reason 作为新的 UserPromptSubmit，再 Stop，父会话收到第二个 SubagentStop |
 
+## 2026-10-10 补录（VS Code Copilot 会话，Mac）
+
+| 文件 | 说明 |
+| --- | --- |
+| `PostToolUseFailure.Read.json` | 读不存在的文件。失败的调用只发这个事件，不发 `PostToolUse`。比 `PreToolUse` 多一个 `error`，没有 `tool_result` |
+| `PostToolUse.Bash.exit1.json` | 终端命令退出码是 1。平台不当它是失败：走普通 `PostToolUse`，`result_type` 是 `success`，退出码只在文字里 |
+| `PreToolUse.WebFetch.json` | 联网。参数 `url`、`max_length` |
+| `PreToolUse.skill.json`、`PostToolUse.skill.json` | agent 用 skill 是一次工具调用。工具名 `skill`，参数 `{"skill": "<名字>"}` |
+| `PreToolUse.tool_search_tool.json` | agent 搜可用的工具。参数 `query` |
+
+同一轮实测的三条平台行为（记在 `docs/05-design.md`）：hook 启动不了算拒绝；hook 超时算放行；子 agent 有自己的 `session_id`。
+
 ## 和旧引擎的区别
 
 | 项 | 旧引擎（`../vscode/`） | SDK 引擎 |

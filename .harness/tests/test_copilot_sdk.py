@@ -89,6 +89,28 @@ class EngineDetectionTests(unittest.TestCase):
         event = copilot_vscode.parse(data)
         self.assertEqual((event.event, event.agent_type, event.session_id), ("SubagentStart", "verifier", data["sessionId"]))
 
+    def test_a_failed_tool_call_is_its_own_event_with_the_error(self) -> None:
+        data = sample("PostToolUseFailure.Read.json")
+        self.assertNotIn("tool_result", data)
+        event = copilot_vscode.parse(data)
+        self.assertEqual((event.event, event.tool_name, event.tool_kind, event.error), ("PostToolUseFailure", "Read", "read", "Path does not exist"))
+        self.assertEqual(copilot_vscode.engine(data), "cli")
+
+    def test_a_terminal_command_that_exits_non_zero_is_not_a_failed_call(self) -> None:
+        data = sample("PostToolUse.Bash.exit1.json")
+        self.assertEqual(data["tool_result"]["result_type"], "success")
+        self.assertIn("exit code 1", copilot_vscode.parse(data).tool_response)
+
+    def test_the_tools_recorded_on_2026_10_10_have_a_kind(self) -> None:
+        for name, kind in (("PreToolUse.WebFetch.json", "web"), ("PreToolUse.skill.json", "skill"), ("PreToolUse.tool_search_tool.json", "meta")):
+            data = sample(name)
+            self.assertEqual(copilot_vscode.parse(data).tool_kind, kind, name)
+            self.assertEqual(copilot_vscode.engine(data), "cli", name)
+
+    def test_loading_a_skill_gives_its_name(self) -> None:
+        self.assertEqual(copilot_vscode.parse(sample("PreToolUse.skill.json")).skill, "harness-task-level")
+        self.assertEqual(copilot_vscode.parse(sample("PreToolUse.Read.json")).skill, "")
+
     def test_the_engine_is_told_from_the_payload(self) -> None:
         self.assertEqual(copilot_vscode.engine(sample("PreToolUse.Bash.json")), "cli")
         self.assertEqual(copilot_vscode.engine(sample("Stop.json")), "cli")
@@ -318,6 +340,53 @@ class GenericSubagentTests(SdkTestCase):
         self.assertEqual(output["permissionDecision"], "deny")
         self.assertIn("只允许这些子 agent：verifier", output["permissionDecisionReason"])
         self.assertIn("explore", output["permissionDecisionReason"])
+
+
+
+class FailedCallsAndSkillsInTheLogTests(SdkTestCase):
+    """Recorded 2026-10-10. A failed call has no PostToolUse, so without PostToolUseFailure it never shows as done."""
+
+    def test_a_failed_call_goes_through_and_leaves_a_line_with_the_error(self) -> None:
+        self.feed(sample("UserPromptSubmit.json"))
+        data = {**sample("PostToolUseFailure.Read.json"), "session_id": sample("UserPromptSubmit.json")["session_id"]}
+        output, record = self.feed(data)
+        self.assertEqual(output, {})
+        self.assertEqual((record["event"], record["tool_name"], record["error"], record["decision"]), ("PostToolUseFailure", "Read", "Path does not exist", "none"))
+        self.assertNotIn("target", record)  # still no arguments in the log
+
+    def test_a_long_error_is_clipped_like_a_reason(self) -> None:
+        from modules.observe.handler import clip_record
+
+        self.assertEqual(clip_record({"error": "x" * 50}, 10)["error"], "x" * 10 + "…")
+
+    def test_a_skill_call_goes_through_and_the_log_names_the_skill(self) -> None:
+        self.feed(sample("UserPromptSubmit.json"))
+        session_id = sample("UserPromptSubmit.json")["session_id"]
+        output, record = self.feed({**sample("PreToolUse.skill.json"), "session_id": session_id})
+        self.assertNotIn("permissionDecision", output)
+        self.assertEqual((record["tool_kind"], record["skill"]), ("skill", "harness-task-level"))
+        _output, record = self.feed({**sample("PreToolUse.Read.json"), "session_id": session_id})
+        self.assertNotIn("skill", record)
+
+    def test_fetch_and_tool_search_are_not_refused(self) -> None:
+        self.feed(sample("UserPromptSubmit.json"))
+        session_id = sample("UserPromptSubmit.json")["session_id"]
+        for name in ("PreToolUse.WebFetch.json", "PreToolUse.tool_search_tool.json"):
+            output, record = self.feed({**sample(name), "session_id": session_id})
+            self.assertNotIn("permissionDecision", output, name)
+            self.assertEqual(record["engine"], "cli", name)
+
+    def test_stats_count_failed_calls_and_loaded_skills(self) -> None:
+        from modules.observe import record_call, stats
+
+        self.feed(sample("UserPromptSubmit.json"))
+        session_id = sample("UserPromptSubmit.json")["session_id"]
+        for name in ("PreToolUse.skill.json", "PostToolUseFailure.Read.json", "PostToolUseFailure.Read.json"):
+            _output, record = self.feed({**sample(name), "session_id": session_id})
+            record_call(self.root, record)
+        numbers = stats.collect(self.root)
+        self.assertEqual(numbers["failed_tool_calls_by_tool"], {"Read": 2})
+        self.assertEqual(numbers["skills_loaded"], {"harness-task-level": 1})
 
 
 if __name__ == "__main__":

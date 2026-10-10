@@ -1,0 +1,14 @@
+{
+  "hook_event_name": "PostToolUse",
+  "session_id": "00000000-0000-0000-0000-000000000000",
+  "timestamp": "2026-10-10T15:06:12.015Z",
+  "cwd": "/Users/user/Developer/DE-agentic-harness",
+  "tool_name": "skill",
+  "tool_input": {
+    "skill": "harness-task-level"
+  },
+  "tool_result": {
+    "result_type": "success",
+    "text_result_for_llm": "Skill \"harness-task-level\" loaded successfully. Follow the instructions in the skill context."
+  }
+}

@@ -125,7 +125,9 @@
     "observe": {
       "status": "active",
       "enabled": true,
-      "events": [],
+      "events": [
+        "PostToolUseFailure"
+      ],
       "enforcement": [
         "V"
       ],

@@ -10,7 +10,7 @@
 | --- | --- |
 | `--version` | 显示图案、版本、发布日期、作者。加 `--short` 只输出一行，例如 `harness 1.0.0`，给脚本用。都来自 `.harness/registry.json`；版本号格式 `主.次.修` |
 | `user` | 用这份 harness 的人的名字，和它来自哪：`user.override.json`、`git`（`git config user.name`）或 `none` |
-| `doctor` | 检查文件、策略、hook 配置、知识库、目标仓库是否一致 |
+| `doctor` | 检查文件、策略、hook 配置、知识库、目标仓库是否一致；Python 能不能执行；hook 最近有没有被调用、gate 有多快 |
 | `level status`、`level set` | 看或设会话的 Level（1 或 2）。只有人能设，agent 运行被拒绝 |
 | `request approve-plan` | 批准 L3 请求的 `orchestrator/plan.md`。只能在终端，输入确认码 |
 | `request approve-promote` | 批准最后一次 `promote --dry-run` 的计划。只能在终端，输入确认码 |
@@ -25,7 +25,7 @@
 | `request list`、`request show` | 看请求列表和某个请求的 `request.json` |
 | `target list`、`target show` | 看目标仓库：路径、base 分支、提交号、工作区是否干净 |
 | `report` | 重写某个请求的报告 |
-| `stats` | 日志汇总：调用数、拒绝数、各模块的拒绝 |
+| `stats` | 日志汇总：调用数、拒绝数、各模块的拒绝、失败的工具调用、用过哪些 skill |
 | `logs prune` | 删除 N 天没写过的会话日志（`--dry-run` 先看） |
 | `eval list`、`eval show`、`eval check` | 固定场景：列出、给提示、判断一次运行 |
 
@@ -126,6 +126,7 @@
 | `UserPromptSubmit` | task_level（读 Level 标记、注入规则）、request（L2 任务做到哪一步） |
 | `PreToolUse` | task_level（预算、子 agent）、gate（含 L2 任务的写入范围）、request（子 agent 要先 dispatch） |
 | `PostToolUse` | task_level（计数） |
+| `PostToolUseFailure` | observe（工具调用失败时只有它，没有 `PostToolUse`；日志里记下工具名和平台给的错误） |
 | `SubagentStart`、`SubagentStop` | request（记录启动、检查 handoff；告诉 L2 任务的 verifier 读差异） |
 | `Stop` | task_level、request（请求没结论、没标等待时拦一次） |
 

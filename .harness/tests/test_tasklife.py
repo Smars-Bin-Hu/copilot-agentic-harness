@@ -305,6 +305,163 @@ class ListTests(LifeCase):
         self.assertEqual((row["kind"], row["status"]), ("qa", "open"))
 
 
+class RequestWordsTests(LifeCase):
+    """The user's own words go into REQ/ by the CLI's hand (M11-4)."""
+
+    def say(self, text: str, session: str = S1) -> Dict[str, Any]:
+        return self.hook(payload("UserPromptSubmit", session, prompt=text))
+
+    def request(self, name: str = "job") -> str:
+        return (self.folder(name) / "REQ" / "request.md").read_text(encoding="utf-8")
+
+    def test_the_last_prompts_are_stored_word_for_word_oldest_first(self) -> None:
+        self.say("/harness-my-task 查一下 订单表 为什么延迟了 2 小时\n\n  日志在 REF/ 里")
+        self.say("2")
+        result = self.new()
+        self.assertEqual(result["request"], f"{BASE}/job/REQ/request.md")
+        self.assertIn("以它为准", result["next"])
+        text = self.request()
+        self.assertIn("/harness-my-task 查一下 订单表 为什么延迟了 2 小时\n\n  日志在 REF/ 里", text)
+        self.assertLess(text.index("hello"), text.index("订单表"))
+        self.assertLess(text.index("订单表"), text.index("## 第 3 条"))
+        self.assertIn(S1, text)
+
+    def test_only_the_last_six_and_only_of_this_session(self) -> None:
+        for number in range(8):
+            self.say(f"prompt-{number}")
+        self.say("from the other session", S2)
+        self.new()
+        text = self.request()
+        self.assertNotIn("prompt-1", text)
+        self.assertIn("prompt-2", text)
+        self.assertIn("prompt-7", text)
+        self.assertNotIn("other session", text)
+
+    def test_a_light_task_has_no_req_folder_and_no_file(self) -> None:
+        result = self.new("quick", "qa")
+        self.assertNotIn("request", result)
+        self.assertFalse((self.folder("quick") / "REQ").exists())
+
+    def test_a_subagent_message_and_a_stop_reason_are_not_the_users_words(self) -> None:
+        self.say("the real request")
+        self.hook(subagent_start(S1, "verifier"))
+        self.hook(payload("UserPromptSubmit", "child", prompt="message for the verifier"))
+        update_state(self.root, "vscode", S1, lambda state: state.update(continuation={"prompt": "fed back reason", "at": __import__("time").time()}))
+        self.say("fed back reason")
+        self.new()
+        text = self.request()
+        self.assertIn("the real request", text)
+        self.assertNotIn("verifier", text)
+        self.assertNotIn("fed back reason", text)
+
+    def test_the_agent_cannot_write_the_file(self) -> None:
+        self.new()
+        self.assertEqual(self.write(f"{BASE}/job/REQ/request.md")["permissionDecision"], "deny")
+
+    def test_open_and_upgrade_do_not_write_it_again(self) -> None:
+        self.new("job", "qa")
+        self.say("a later prompt")
+        self.cli_json("task", "upgrade", "--tier", "medium")
+        self.open()
+        self.assertFalse((self.folder() / "REQ" / "request.md").exists())
+
+    def test_a_very_long_prompt_is_cut_and_the_log_never_holds_the_words(self) -> None:
+        self.say("秘" * 30000)
+        self.new()
+        self.assertEqual(self.request().count("秘"), 20000)
+        self.assertNotIn("秘", json.dumps(self.session_log(S1), ensure_ascii=False))
+
+
+class RelayReminderTests(LifeCase):
+    """Files of the task were written in this prompt and TASK.md was not: one reminder at Stop (M11-8)."""
+
+    def done(self, relative: str, session: str = S1) -> None:
+        data = payload("PostToolUse", session, tool_name="Write", tool_input={"path": f"{self.base}/{relative}", "file_text": "x"},
+                       tool_result={"result_type": "success", "text_result_for_llm": "ok"})
+        data["cwd"] = self.base
+        self.hook(data)
+
+    def stop(self, session: str = S1, active: bool = False) -> Dict[str, Any]:
+        return self.hook(payload("Stop", session, stop_hook_active=active))
+
+    def test_a_write_without_the_task_file_is_reminded_once(self) -> None:
+        self.new()
+        self.done(f"{BASE}/job/RCA.md")
+        first = self.stop()
+        self.assertEqual(first["decision"], "block")
+        self.assertIn(f"{BASE}/job/TASK.md", first["reason"])
+        self.assertEqual(self.stop(active=True), {})
+        self.assertEqual(self.stop(), {})  # said once for this prompt
+        self.assertIn("task_file_not_updated", [row.get("kind") for row in self.session_log(S1)])
+
+    def test_the_fed_back_reminder_does_not_start_a_new_count(self) -> None:
+        self.new()
+        self.done(f"{BASE}/job/RCA.md")
+        reason = self.stop()["reason"]
+        self.hook(payload("UserPromptSubmit", S1, prompt=reason))
+        self.assertEqual(self.stop(), {})
+
+    def test_updating_the_task_file_is_enough(self) -> None:
+        self.new()
+        self.done(f"{BASE}/job/RCA.md")
+        self.done(f"{BASE}/job/TASK.md")
+        self.assertEqual(self.stop(), {})
+
+    def test_nothing_written_nothing_said(self) -> None:
+        self.new()
+        self.assertEqual(self.stop(), {})
+        self.done("README.md")  # outside the task
+        self.assertEqual(self.stop(), {})
+
+    def test_the_next_prompt_counts_again(self) -> None:
+        self.new()
+        self.done(f"{BASE}/job/RCA.md")
+        self.stop()
+        self.hook(payload("UserPromptSubmit", S1, prompt="go on"))
+        self.assertEqual(self.stop(), {})
+        self.done(f"{BASE}/job/RCA.md")
+        self.assertEqual(self.stop()["decision"], "block")
+
+    def test_a_task_without_a_task_file_and_a_session_without_a_task_are_left_alone(self) -> None:
+        (self.root / tasks.TASKS_DIR / "old").mkdir(parents=True)
+        self.open("old")
+        self.done(f"{tasks.TASKS_DIR}/old/notes.md")
+        self.assertEqual(self.stop(), {})
+        self.done("README.md", S2)
+        self.assertEqual(self.stop(S2), {})
+
+    def test_the_policy_switches_it_off(self) -> None:
+        path = self.root / ".harness" / "policies" / "orchestration.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["verify"]["task_file_reminder"] = False
+        path.write_text(json.dumps(data), encoding="utf-8")
+        self.new()
+        self.done(f"{BASE}/job/RCA.md")
+        self.assertEqual(self.stop(), {})
+
+
+class PromptRuleTests(LifeCase):
+    def test_a_session_without_a_task_is_pointed_at_the_skill(self) -> None:
+        context = self.hook(payload("UserPromptSubmit", S1, prompt="next"))["additionalContext"]
+        self.assertIn("harness-my-task", context)
+        self.assertNotIn("current_tasks", context)
+
+    def test_a_session_with_a_task_is_told_to_read_the_task_file_first(self) -> None:
+        self.new()
+        context = self.hook(payload("UserPromptSubmit", S1, prompt="next"))["additionalContext"]
+        self.assertIn(f"任务：{BASE}/job（RCA，中档）", context)
+        self.assertIn(f"先读 {BASE}/job/TASK.md", context)
+        self.assertIn("REQ/、REF/ 只读", context)
+        self.assertNotIn("（L2）", context)
+
+    def test_a_task_from_before_has_the_plain_head(self) -> None:
+        (self.root / tasks.TASKS_DIR / "old").mkdir(parents=True)
+        self.open("old")
+        context = self.hook(payload("UserPromptSubmit", S1, prompt="next"))["additionalContext"]
+        self.assertIn(f"任务：{tasks.TASKS_DIR}/old，第 1 轮", context)
+        self.assertNotIn("TASK.md，再按", context)
+
+
 class MessageTests(unittest.TestCase):
     def test_a_message_is_filled_in(self) -> None:
         self.assertEqual(messages.text("task.upgrade.same", current="轻"), "任务已经是“轻”档。")
@@ -338,6 +495,7 @@ class MessageTests(unittest.TestCase):
     def test_no_message_is_left_unused(self) -> None:
         source = "\n".join(path.read_text(encoding="utf-8") for path in ENGINE.rglob("*.py"))
         dynamic = ("task.kind.", "task.tier.", "task.next.light", "task.next.medium", "task.next.full")
+        source = source.replace('messages.text(\n            "', 'messages.text("')
         unused = [name for name in messages.table() if f'"{name}"' not in source and not name.startswith(dynamic)]
         self.assertEqual(unused, [])
 

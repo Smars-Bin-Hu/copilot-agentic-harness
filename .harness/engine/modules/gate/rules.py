@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from core import messages
 from core.paths import cli_command
 
 
@@ -55,12 +56,9 @@ def target_refused_file(repo: str, relative: str, pattern: str) -> str:
 
 
 def target_tree_file(repo: str, relative: str, level: int) -> str:
-    how = (
-        "在请求目录里改，再用 promote 回写（需要用户批准）。"
-        if level == 3
-        else f"用任务模式：`{cli_command()} task fetch <仓库名>/<路径>` 把文件取到任务目录的 DEV/ 下，在那里改，再用 `task promote` 回写（需要用户批准）。没有任务目录时，停下来告诉用户。"
-    )
-    return f"`{repo}/{relative}` 在目标仓库 {repo} 的工作区里。目标仓库只能由 promote 写，任何 Level 都不能直接改。{how}"
+    if level == 3:
+        return f"`{repo}/{relative}` 在目标仓库 {repo} 的工作区里。目标仓库只能由 promote 写，任何 Level 都不能直接改。在请求目录里改，再用 promote 回写（需要用户批准）。"
+    return messages.text("gate.target.direct", repo=repo, relative=relative, command=cli_command())
 
 
 def target_tree_terminal(why: str) -> str:

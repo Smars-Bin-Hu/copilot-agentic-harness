@@ -84,6 +84,7 @@ harness 之外：目标仓库（企业的代码仓库）
 | [AGENTS.md](AGENTS.md)、[.github/copilot-instructions.md](.github/copilot-instructions.md) | 核心规则和安全边界；仓库级规则 |
 | [.github/instructions/](.github/instructions/) | 分类规则：[agents](.github/instructions/agents.instructions.md)、[skills](.github/instructions/skills.instructions.md)、[tools](.github/instructions/tools.instructions.md)、[workspace](.github/instructions/workspace.instructions.md)（`.workspace/` 的读写规则） |
 | [.github/skills/harness-task-level/](.github/skills/harness-task-level/)、[.github/skills/harness-orchestration/](.github/skills/harness-orchestration/) | Task Level 的使用流程和 L2 任务模式的每一步；L3 请求的每一步用哪条命令 |
+| [.github/skills/harness-my-task/](.github/skills/harness-my-task/) | 开任务、接着做、换任务、升档：问清楚后运行 `task new`、`task open`、`task upgrade` |
 | [.github/skills/harness-repo-initialize/](.github/skills/harness-repo-initialize/) | 第一次配置：短命令、知识库、公司技能、目标仓库、用户名字，最后 `doctor` 检查。用户用 `/harness-repo-initialize` 启动 |
 | [.github/skills/generic-goal-driven/](.github/skills/generic-goal-driven/) | 长周期任务的目标驱动流程：中心思想、TODO、进度指针存成文件，换 session 能接上。只由用户用 `/generic-goal-driven` 启动 |
 | [.github/agents/](.github/agents/) | 自定义智能体：orchestrator、admin（用户可选）、builder、reviewer、verifier。admin 用来二开和排查 harness，要先在终端开 admin 模式 |

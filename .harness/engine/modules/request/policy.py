@@ -31,7 +31,7 @@ POLICY_SCHEMA = {
         "verify": {
             "type": "object",
             "required": ["main_stop", "subagent_stop"],
-            "properties": {"main_stop": {"type": "boolean"}, "subagent_stop": {"type": "string", "enum": ["block", "log", "off"]}},
+            "properties": {"main_stop": {"type": "boolean"}, "subagent_stop": {"type": "string", "enum": ["block", "log", "off"]}, "task_file_reminder": {"type": "boolean"}},
         },
     },
 }

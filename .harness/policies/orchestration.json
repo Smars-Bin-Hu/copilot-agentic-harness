@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Limits for an L3 request: how many attempts, how large the knowledge brief and the handoff summary may be. verify: the end checks (main_stop: block once when the request is open and not waiting; subagent_stop: block, log or off).",
+  "description": "Limits for an L3 request: how many attempts, how large the knowledge brief and the handoff summary may be. verify: the end checks (main_stop: block once when the request is open and not waiting; subagent_stop: block, log or off; task_file_reminder: a task with a TASK.md whose files were written in a prompt while TASK.md was not, is asked once at Stop to update it).",
   "max_attempts": 2,
   "brief": {
     "max_bytes": 8000,
@@ -14,6 +14,7 @@
   },
   "verify": {
     "main_stop": true,
-    "subagent_stop": "block"
+    "subagent_stop": "block",
+    "task_file_reminder": true
   }
 }

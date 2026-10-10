@@ -267,7 +267,7 @@ class SubagentStopTests(VerifyCase):
 class PolicyTests(VerifyCase):
     def test_the_shipped_policy_has_both_checks_on(self) -> None:
         policy = json.loads((self.root / ".harness" / "policies" / "orchestration.json").read_text(encoding="utf-8"))
-        self.assertEqual(policy["verify"], {"main_stop": True, "subagent_stop": "block"})
+        self.assertEqual(policy["verify"], {"main_stop": True, "subagent_stop": "block", "task_file_reminder": True})
 
     def test_a_policy_without_verify_uses_the_defaults(self) -> None:
         path = self.root / ".harness" / "policies" / "orchestration.json"

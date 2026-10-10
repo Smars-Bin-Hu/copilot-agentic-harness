@@ -61,6 +61,10 @@ def state_file(root: Path, task: str) -> Path:
     return task_dir(root, task) / STATE_DIR / STATE_NAME
 
 
+def task_file(root: Path, task: str) -> Path:
+    return task_dir(root, task) / TASK_FILE
+
+
 def plan_file(root: Path, task: str) -> Path:
     return task_dir(root, task) / PLAN_NAME
 

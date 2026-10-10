@@ -85,6 +85,7 @@
       "events": [
         "UserPromptSubmit",
         "PreToolUse",
+        "PostToolUse",
         "SubagentStart",
         "SubagentStop",
         "Stop"
@@ -105,6 +106,7 @@
         ".harness/contracts/handoff.schema.json",
         ".harness/contracts/templates/assignment.md",
         ".harness/contracts/templates/task/",
+        ".github/skills/harness-my-task/",
         ".harness/tests/test_tasklife.py",
         ".harness/tests/test_request.py",
         ".harness/policies/agents.json",

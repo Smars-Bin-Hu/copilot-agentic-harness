@@ -136,18 +136,18 @@ class StartTests(TaskCase):
         self.assertEqual(self.run_cli("task", "start", "--task", "job2", "--session-id", SESSION)["task"], ".workspace/current_tasks/job2")
 
     def test_every_prompt_of_a_task_says_where_it_stands(self) -> None:
-        self.assertIn("task start", self.context(self.prompt("/l2 hello")))  # free L2: the one-line pointer
-        self.assertNotIn("任务模式（L2）", self.context(self.prompt("hello")))
+        self.assertIn("harness-my-task", self.context(self.prompt("/l2 hello")))  # no task: the one-line pointer
+        self.assertNotIn(f"任务：{TASK}", self.context(self.prompt("hello")))
         self.start()
         text = self.context(self.prompt("继续"))
-        self.assertIn(f"任务模式（L2）：任务目录 {TASK}", text)
+        self.assertIn(f"任务：{TASK}，第 1 轮", text)
         self.assertIn("把计划写到", text)
         self.write_plan()
         self.assertIn("还没有经用户批准", self.context(self.prompt("继续")))
         self.approve_plan()
         self.assertIn("计划已批准", self.context(self.prompt("继续")))
         self.run_cli("task", "close")
-        self.assertNotIn("任务模式（L2）", self.context(self.prompt("继续")))
+        self.assertNotIn(f"任务：{TASK}", self.context(self.prompt("继续")))
         self.assertEqual(self.run_cli("stats")["task_mode_prompts"], 3)
 
     def test_without_target_repositories_a_task_only_fills_dev(self) -> None:

@@ -41,6 +41,9 @@ CONTINUATION_TTL_SECONDS = 120.0
 CHILD_CLAIM_SECONDS = 10.0
 CHILD_SCAN_FILES = 30
 CHILD_SCAN_AGE_SECONDS = 600.0
+# The user's own words, kept so `task new` can store them in REQ/ without the agent rewriting them. State only, never the log.
+PROMPTS_KEPT = 6
+PROMPT_MAX_CHARS = 20000
 # Events core needs even when no module subscribes (subagent tracking). The hook config must cover them.
 TRACKED_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "SubagentStart", "SubagentStop", "Stop")
 
@@ -238,6 +241,10 @@ def track_before(state: Dict[str, Any], event: HookEvent) -> None:
                 event.continuation = True
                 return
         breaker.reset(state)  # a real user prompt opens a new window for counting repeated denies
+        if text:
+            prompts = state.setdefault("prompts", [])
+            prompts.append({"text": event.prompt[:PROMPT_MAX_CHARS], "at": utc_now()})
+            del prompts[:-PROMPTS_KEPT]
 
 
 def claim_child(root: Path, surface: str, event: HookEvent) -> Optional[Dict[str, Any]]:

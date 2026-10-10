@@ -20,10 +20,15 @@
 - 任务分种类和三档。轻档只有 `TASK.md`；中档多 `REQ/`、`REF/`、`LOG.md`；全档再多 `TODO.md`、`DEV/`、`TEST/`。`TASK.md` 是接力文件：新会话先读它，就知道做到哪。
 - 新任务建在 `.workspace/sandbox/tasks/`。旧位置 `.workspace/current_tasks/` 里的任务照旧能用。
 - 一个会话可以换任务，原来那个不用先关。`task list` 把在等你批准的任务排在前面。
+- 技能 `/harness-my-task`：问清楚新建还是接着做、哪一种、改不改目标仓库，然后替你开任务或接上任务。每条提示的规则里会提醒 agent 先用它。
+- `task new` 把你开任务前最近几条提示的原文存成 `REQ/request.md`。agent 改不了这个文件，所以需求不会被它转述走样。
+- 这一轮 agent 在任务目录里写过文件、却没更新 `TASK.md` 时，它结束前会被提醒一次。开关是 `orchestration.json` 的 `verify.task_file_reminder`。
 
 ### 变更
 
 - `task close` 之后目录原地不动，`task open` 可以重新打开。
+- 会话状态文件（`.harness/runtime/state/`，不进 git）现在会存你最近 6 条提示的原文，供 `task new` 用。会话日志仍然不记提示内容。
+- 直接改目标仓库被拒时，理由不再分 Level，改成指向任务目录的 `DEV/` 和技能 `harness-my-task`。
 
 ### 退役
 

@@ -31,6 +31,7 @@ TIER_FILES = {
     "full": (tasks.TODO_FILE, tasks.DEV_NAME + "/", "TEST/"),
 }
 FALLBACK = "# {name}\n"
+REQUEST_FILE = "request.md"
 
 
 def say(key: str, **values: Any) -> str:
@@ -93,8 +94,11 @@ def add_files(root: Path, task: str, tier: str, kind: str) -> List[str]:
     return made
 
 
-def check_session(root: Path, session_id: str, surface: str) -> None:
-    """The refusals that need no task: said before a folder is made, so a refused `task new` leaves nothing behind."""
+def check_session(root: Path, session_id: str, surface: str) -> List[Dict[str, Any]]:
+    """The refusals that need no task: said before a folder is made, so a refused `task new` leaves nothing behind.
+
+    Returns the user's last prompts in this session, as the hook kept them.
+    """
     if not state_path(root, surface, session_id).exists():
         raise CommandError(say("task.session.missing", session_id=session_id))
     with session(root, surface, session_id) as state:
@@ -104,6 +108,23 @@ def check_session(root: Path, session_id: str, surface: str) -> None:
             raise CommandError(say("task.session.subagent"))
         if admin_on(state):
             raise CommandError(say("task.session.admin"))
+        return [item for item in state.get("prompts") or [] if isinstance(item, dict) and item.get("text")]
+
+
+def keep_request(root: Path, task: str, prompts: List[Dict[str, Any]], session_id: str) -> str:
+    """The user's own words into REQ/, written by the CLI: the agent cannot write there, so it cannot reword them.
+
+    Only when the task has a REQ/ folder and the file is not there yet. Returns the file's path, or an empty string.
+    """
+    folder = tasks.task_dir(root, task) / "REQ"
+    path = folder / REQUEST_FILE
+    if not prompts or not folder.is_dir() or path.exists():
+        return ""
+    parts = [say("task.request.header", name=task_ops.name_of(task), session_id=session_id, count=len(prompts)), ""]
+    for number, item in enumerate(prompts, 1):
+        parts += [say("task.request.item", number=number, at=str(item.get("at", ""))[:19]), "", item["text"].rstrip(), ""]
+    path.write_text("\n".join(parts), encoding="utf-8")
+    return f"{task}/REQ/{REQUEST_FILE}"
 
 
 def next_text(root: Path, task: str, data: Dict[str, Any], left: str) -> str:
@@ -133,11 +154,15 @@ def new(root: Path, raw_name: str, kind: str, tier: str, session_id: str, surfac
     old = tasks.find(root, name)
     if old:
         raise CommandError(say("task.exists.old", task=old, name=name))
-    check_session(root, session_id, surface)
+    prompts = check_session(root, session_id, surface)
     tasks.task_dir(root, task).mkdir(parents=True)
     made = add_files(root, task, tier, kind)
+    kept = keep_request(root, task, prompts, session_id)
     result = attach(root, task, session_id, surface, kind, tier)
     result["made"] = made
+    if kept:
+        result["request"] = kept
+        result["next"] += say("task.request.kept", path=kept)
     return result
 
 

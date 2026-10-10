@@ -592,17 +592,17 @@ class DoctorTests(unittest.TestCase):
 
     def test_a_disabled_module_is_not_asked_for_events(self) -> None:
         def registry(data: dict) -> None:
-            data["modules"]["task_level"]["events"].append("PostToolUse")
+            data["modules"]["task_level"]["events"].append("PreCompact")
             data["modules"]["task_level"]["enabled"] = False
 
         def hooks(data: dict) -> None:
-            data["hooks"]["PostToolUse"] = data["hooks"]["Stop"]
+            data["hooks"]["PreCompact"] = data["hooks"]["Stop"]
 
         self.edit_json(".harness/registry.json", registry)
         self.edit_json(".github/hooks/harness.json", hooks)
         result = self.doctor()
-        self.assertIn("[WARN]", result.stdout)  # PostToolUse is no longer needed by the hook config
-        self.assertIn("PostToolUse", result.stdout)
+        self.assertIn("[WARN]", result.stdout)  # PreCompact is no longer needed by the hook config
+        self.assertIn("PreCompact", result.stdout)
         self.assertEqual(result.returncode, 0, result.stdout)
 
 

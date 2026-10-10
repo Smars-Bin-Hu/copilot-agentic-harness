@@ -4,6 +4,9 @@
                          Other names are refused by task_level. A subagent session cannot call a subagent.
   SubagentStart          the subagent that was just called is told its request, attempt, assignment path and output folder
   Stop, SubagentStop, UserPromptSubmit   the end checks of an L3 request (verify.py)
+  UserPromptSubmit       a session that holds a task is told where the task stands
+  PostToolUse, Stop      a task with a TASK.md: files of the task were written in this prompt and TASK.md was not, so the
+                         agent is asked once, at its Stop, to bring it up to date (M11-8). A reminder, said once per prompt.
 
 The pending records live in request.json (written by `dispatch`). The calls waiting for their SubagentStart live in this
 module's state of the session that made the call. Both engines report SubagentStart on that session.
@@ -16,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from core import tasks
+from core import messages, repo_paths, tasks
 from core.context import Context
 from core.events import Decision, HookEvent
 from core.paths import cli_command, mkdir_command
@@ -129,11 +132,47 @@ def task_text(ctx: Context, data: Dict[str, Any]) -> str:
         "on": f"\n这个任务开启了 verifier 复核，后面的提示不用再写标记：{name}/{tasks.DEV_NAME}/ 改完之后、`task promote --dry-run` 之前调用一次 verifier。写 {tasks.PLAN_NAME} 不用复核。",
         "off": "\n这个任务关闭了 verifier 复核。",
     }.get(choice, "")
-    return (
-        f"任务模式（L2）：任务目录 {name}，第 {data['round']} 轮。{task_ops.next_step(ctx.root, name, data)}{review}\n"
-        f"编辑工具只能写 {name}/{tasks.PLAN_NAME} 和（计划批准后）{name}/{tasks.DEV_NAME}/。目标仓库只能用 `{cli_command()} task promote` 回写，"
-        "先 --dry-run，用户在终端批准。approve-plan、approve-promote、recover 只能由用户运行。不用 `rm` 清理文件。"
-    )
+    if data.get("tier") and tasks.task_file(ctx.root, name).is_file():
+        head = messages.text(
+            "task.inject.head", task=name, round=data["round"],
+            kind=messages.text(f"task.kind.{data.get('kind') or 'none'}"), tier=messages.text(f"task.tier.{data['tier']}"),
+        )
+    else:
+        head = messages.text("task.inject.head.plain", task=name, round=data["round"])
+    return f"{head}{task_ops.next_step(ctx.root, name, data)}{review}\n" + messages.text("task.inject.scope", task=name, command=cli_command())
+
+
+def relay(ctx: Context) -> Dict[str, Any]:
+    return ctx.module_state(NAME).setdefault("relay", {"wrote": False, "task_file": False, "reminded": False})
+
+
+def on_task_write(event: HookEvent, ctx: Context) -> None:
+    """A write that went through, inside the task of this session: remember it, and whether it was TASK.md."""
+    data = open_task(ctx)
+    if data is None or event.tool_kind not in ("edit", "create"):
+        return
+    name = data["task"].lower().rstrip("/")
+    for raw in event.paths:
+        for relative in repo_paths.repo_relative(raw, ctx.root, event.cwd):
+            if relative is None or not relative.lower().startswith(name + "/"):
+                continue
+            state = relay(ctx)
+            state["wrote"] = True
+            if relative.lower() == f"{name}/{tasks.TASK_FILE}".lower():
+                state["task_file"] = True
+
+
+def on_task_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    if event.stop_hook_active or ctx.state.get("parent_session_id") or not verify.rules(ctx).get("task_file_reminder", True):
+        return None
+    data = open_task(ctx)
+    if data is None or not tasks.task_file(ctx.root, data["task"]).is_file():
+        return None
+    state = relay(ctx)
+    if not state["wrote"] or state["task_file"] or state["reminded"]:
+        return None
+    state["reminded"] = True
+    return Decision(block=True, reason=messages.text("task.relay.reminder", task=data["task"]), facts={"kind": "task_file_not_updated"})
 
 
 def verifier_text(data: Dict[str, Any]) -> str:
@@ -165,11 +204,16 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
         return on_subagent_call(event, ctx)
     if event.event == "SubagentStart":
         return on_subagent_start(event, ctx)
+    if event.event == "PostToolUse":
+        on_task_write(event, ctx)
+        return None
     if event.event == "Stop":
-        return verify.on_stop(event, ctx)
+        return verify.on_stop(event, ctx) or on_task_stop(event, ctx)
     if event.event == "SubagentStop":
         return verify.on_subagent_stop(event, ctx)
     if event.event == "UserPromptSubmit":
+        if not (event.from_subagent or event.continuation):
+            ctx.module_state(NAME)["relay"] = {"wrote": False, "task_file": False, "reminded": False}  # a new prompt, a new count
         task_data = None if (event.from_subagent or event.continuation) else open_task(ctx)
         if task_data is not None:
             return Decision(context=task_text(ctx, keep_verify(ctx, task_data)), facts={"kind": "task"})

@@ -29,5 +29,14 @@
   "task.tier.medium": "中",
   "task.tier.full": "全",
   "task.tier.none": "没写",
-  "task.upgrade.done": "已升到“{tier}”档。把 {task}/TASK.md 里的“档位”改成“{tier}”。"
+  "task.upgrade.done": "已升到“{tier}”档。把 {task}/TASK.md 里的“档位”改成“{tier}”。",
+  "task.request.header": "# 需求原话：{name}\n\n> 由 CLI 存的。会话 {session_id} 开任务前最近 {count} 条提示的原文，一个字没改，旧的在前。agent 不能改这个文件。",
+  "task.request.item": "## 第 {number} 条（{at} UTC）",
+  "task.request.kept": "用户的原话已存到 {path}，以它为准，不要另写一份转述。",
+  "task.relay.reminder": "这一轮你在任务目录 {task} 里写过文件，但没有更新 {task}/TASK.md。现在更新它：状态、现在在做、下一步、已定的事。只改这一个文件，改完就结束。它是给下一个会话读的接力文件。",
+  "task.inject.head": "任务：{task}（{kind}，{tier}档），第 {round} 轮。新会话先读 {task}/TASK.md，再按它的指向读别的；停下前更新它。",
+  "task.inject.head.plain": "任务：{task}，第 {round} 轮。",
+  "task.inject.scope": "编辑工具只能写这个任务目录：不回写的成果写在根下，要回写的写在 {task}/DEV/（计划批准后）；REQ/、REF/ 只读。目标仓库只能用 `{command} task promote` 回写，先 --dry-run，用户在终端批准。approve-plan、approve-promote、recover 只能由用户运行。不用 `rm` 清理文件。",
+  "rules.task.entry": "用户要你产出或修改文件（RCA、设计、计划、开发、测试、改知识库）时，先用技能 `harness-my-task` 开任务或接上已有的任务，再动手。只是问答、不落盘时，不用开任务。目标仓库的文件任何时候都不能直接改。",
+  "gate.target.direct": "`{repo}/{relative}` 在目标仓库 {repo} 的工作区里。目标仓库任何时候都不能直接改，只能由 promote 写。在任务目录的 `DEV/{repo}/{relative}` 里改，再用 `{command} task promote` 回写（要用户批准）。这个文件仓库里已经有：先 `{command} task fetch {repo}/{relative}` 取进来。还没有任务：用技能 `harness-my-task` 开一个。"
 }

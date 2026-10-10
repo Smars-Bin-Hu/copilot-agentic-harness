@@ -4,7 +4,7 @@
   "surfaces": {
     "vscode": {
       "verified": true,
-      "source": "Copilot SDK engine recordings 2026-10-01 (VS Code 1.140.0, @github/copilot 1.0.89-7); WebFetch, skill, tool_search_tool and task_complete recorded 2026-10-10. The older names (read_file ... runSubagent) come from the B1 recording 2026-09-30; a subagent in a Copilot (SDK) session still uses some of them.",
+      "source": "Copilot SDK engine recordings 2026-10-01 (VS Code 1.140.0, @github/copilot 1.0.89-7); WebFetch, skill, tool_search_tool, task_complete and AskUserQuestion recorded 2026-10-10. The older names (read_file ... runSubagent) come from the B1 recording 2026-09-30; a subagent in a Copilot (SDK) session still uses some of them.",
       "tools": {
         "read_file": "read",
         "list_dir": "read",
@@ -30,6 +30,7 @@
         "skill": "skill",
         "tool_search_tool": "meta",
         "task_complete": "meta",
+        "AskUserQuestion": "meta",
         "multi_replace_string_in_file": "edit",
         "insert_edit_into_file": "edit",
         "apply_patch": "edit",

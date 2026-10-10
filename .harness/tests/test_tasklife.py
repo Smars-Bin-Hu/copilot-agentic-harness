@@ -412,6 +412,21 @@ class PromptRuleTests(LifeCase):
         self.assertIn("harness-my-task", context)
         self.assertNotIn("current_tasks", context)
 
+    def test_a_session_without_a_task_is_told_which_tasks_are_open(self) -> None:
+        self.assertNotIn("没关闭的任务", self.hook(payload("UserPromptSubmit", S2, prompt="hello"))["additionalContext"])
+        self.new("order-delay", "rca")
+        self.new("done-one", "qa")
+        self.cli_json("task", "close", "--task", "done-one")
+        context = self.hook(payload("UserPromptSubmit", S2, prompt="接着做那个任务，做到哪了"))["additionalContext"]
+        self.assertIn("没关闭的任务（1 个）：order-delay（RCA）", context)
+        self.assertIn("task open <任务名>", context)
+        self.assertNotIn("done-one", context)
+        self.assertIn("哪怕只是问做到哪了", context)
+
+    def test_the_task_scope_says_search_tools_do_not_see_the_folder(self) -> None:
+        self.new()
+        self.assertIn("搜不到", self.hook(payload("UserPromptSubmit", S1, prompt="next"))["additionalContext"])
+
     def test_a_session_with_a_task_is_told_to_read_the_task_file_first(self) -> None:
         self.new()
         context = self.hook(payload("UserPromptSubmit", S1, prompt="next"))["additionalContext"]

@@ -205,6 +205,25 @@ def on_task_review_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
     return Decision(block=True, reason=messages.text("review.stop", task=name, next=taskreview.next_text(ctx.root, name, data)), facts={"kind": "task_review_missing"})
 
 
+OPEN_TASKS_SHOWN = 5
+
+
+def open_tasks_hint(ctx: Context) -> Optional[Decision]:
+    """A session that holds no task is told which tasks are open, so "go on with that task" leads to `task open`."""
+    names = []
+    for folder in tasks.folders(ctx.root):
+        data = tasks.read(ctx.root, folder)
+        if data and data.get("status") == "open":
+            names.append((data.get("updated_at", ""), data.get("name") or folder.rsplit("/", 1)[-1], data.get("kind", "")))
+    if not names:
+        return None
+    names.sort(reverse=True)
+    shown = "、".join(f"{name}（{messages.text('task.kind.' + (kind or 'none'))}）" for _stamp, name, kind in names[:OPEN_TASKS_SHOWN])
+    if len(names) > OPEN_TASKS_SHOWN:
+        shown += " 等"
+    return Decision(context=messages.text("rules.task.open_list", count=len(names), names=shown, command=cli_command()))
+
+
 def relay(ctx: Context) -> Dict[str, Any]:
     return ctx.module_state(NAME).setdefault("relay", {"wrote": False, "task_file": False, "reminded": False})
 
@@ -285,5 +304,7 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
         task_data = None if (event.from_subagent or event.continuation) else open_task(ctx)
         if task_data is not None:
             return Decision(context=task_text(ctx, keep_review(event, ctx, task_data)), facts={"kind": "task"})
+        if ctx.level != 3 and not (event.from_subagent or event.continuation) and not ctx.admin:
+            return open_tasks_hint(ctx)
         return verify.on_user_prompt(event, ctx)
     return None

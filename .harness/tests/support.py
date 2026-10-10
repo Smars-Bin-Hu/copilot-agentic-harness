@@ -17,7 +17,7 @@ ENGINE = REPO / ".harness" / "engine"
 HOOK = ENGINE / "hook.py"
 CLI = ENGINE / "cli.py"
 POLICY = REPO / ".harness" / "policies" / "task-levels.json"
-FIXTURES = REPO / ".harness" / "eval" / "fixtures" / "hooks" / "vscode"
+FIXTURES = REPO / ".harness" / "eval" / "fixtures" / "hooks" / "copilot-sdk"
 
 if str(ENGINE) not in sys.path:
     sys.path.insert(0, str(ENGINE))
@@ -35,12 +35,11 @@ def load_payload(name: str) -> Dict[str, Any]:
 
 
 def payload(event: str, session_id: str, **fields: Any) -> Dict[str, Any]:
-    """A VS Code payload in the recorded shape."""
+    """A Copilot (SDK) session payload in the recorded shape."""
     base = {
-        "timestamp": "2026-01-01T00:00:00.000Z",
         "hook_event_name": event,
         "session_id": session_id,
-        "transcript_path": "<VSCODE_STORAGE>/transcripts/x.jsonl",
+        "timestamp": "2026-01-01T00:00:00.000Z",
         "cwd": "/workspace",
     }
     base.update(fields)
@@ -48,12 +47,36 @@ def payload(event: str, session_id: str, **fields: Any) -> Dict[str, Any]:
 
 
 def pre_tool(session_id: str, tool_name: str, tool_input: Optional[dict] = None) -> Dict[str, Any]:
-    return payload("PreToolUse", session_id, tool_name=tool_name, tool_input=tool_input or {}, tool_use_id="t1")
+    return payload("PreToolUse", session_id, tool_name=tool_name, tool_input=tool_input or {})
 
 
 def post_tool(session_id: str, tool_name: str, tool_input: Optional[dict] = None, response: str = "") -> Dict[str, Any]:
+    result = {"result_type": "success", "text_result_for_llm": response}
+    return payload("PostToolUse", session_id, tool_name=tool_name, tool_input=tool_input or {}, tool_result=result)
+
+
+def subagent_start(session_id: str, agent: str) -> Dict[str, Any]:
+    """The parent session's SubagentStart: camelCase, no event name (recorded 2026-10-01)."""
+    return {
+        "sessionId": session_id,
+        "timestamp": 1790907432584,
+        "cwd": "/workspace",
+        "transcriptPath": "<COPILOT_HOME>/session-state/events.jsonl",
+        "agentName": agent,
+        "agentDescription": "",
+    }
+
+
+def subagent_stop(session_id: str, agent: str, child_session_id: str = "", message: str = "") -> Dict[str, Any]:
+    """The parent session's SubagentStop. `agent_id` is the child's session id."""
     return payload(
-        "PostToolUse", session_id, tool_name=tool_name, tool_input=tool_input or {}, tool_response=response, tool_use_id="t1"
+        "SubagentStop",
+        session_id,
+        agent_id=child_session_id,
+        agent_type=agent,
+        agent_name=agent,
+        last_assistant_message=message,
+        stop_reason="end_turn",
     )
 
 

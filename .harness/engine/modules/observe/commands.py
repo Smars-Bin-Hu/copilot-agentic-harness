@@ -25,7 +25,7 @@ def cmd_prune(args: argparse.Namespace) -> Dict[str, Any]:
 def register(subparsers: Any) -> None:
     stats_parser = subparsers.add_parser("stats", help="counts and times from the session logs")
     stats_parser.add_argument("--session-id", default="", help="only this session")
-    stats_parser.add_argument("--surface", default="", choices=["", "vscode", "cli"])
+    stats_parser.add_argument("--surface", default="", choices=["", "vscode"])
     stats_parser.add_argument("--days", type=int, default=None, help="only the calls of the last N days")
     stats_parser.set_defaults(handler=cmd_stats)
 

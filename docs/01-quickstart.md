@@ -7,7 +7,7 @@
 - Python 3.9 或更新。macOS/Linux 用 `python3`，Windows 用 `python`。
 - 只用标准库，不需要 `pip install`。
 - git。用目标仓库时必须有。
-- VS Code 和 GitHub Copilot Chat。`.vscode/settings.json` 里要开 `chat.useHooks`（仓库已经写好）。
+- VS Code 和 GitHub Copilot Chat。聊天输入框的 Session Target 选 **Copilot**。harness 只支持这种会话，见[设计](05-design.md)的“只支持 Copilot 会话”。
 
 ## 1. 短命令（必须）
 

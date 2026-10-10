@@ -30,7 +30,7 @@
 ```text
 用户（切换 Level，批准关键动作）
    │
-Copilot 运行时（VS Code 本地会话、Copilot SDK 会话）
+Copilot 运行时（VS Code 里的 Copilot 会话）
    │
 ┌──┴─────────────────────────── 说明层：教模型怎么做 ───────────────────────────┐
 │ instructions   skills   agents   knowledge-base                             │
@@ -154,6 +154,14 @@ task close → 自动写报告
 ### 渐进式披露
 
 不要一次加载全部内容。README 是索引，AGENTS.md 只放核心规则，技能先只读名字和描述，需要时才读全文。知识库同样：先读索引，再按需往下读。这样上下文短，agent 不容易被无关内容带偏。
+
+### 只支持 Copilot 会话
+
+VS Code 的聊天输入框有 Session Target。harness 只支持选 **Copilot** 的会话（底下是 Copilot SDK）。
+
+- **Local 会话**：不支持。hook 的输出是 Copilot 会话的格式，Local 会话读不懂，拒绝不生效。VS Code 的文档说 Local 以后会移除。用了 Local 会话，`harness doctor` 会给 `[WARN]`。
+- **Claude、Codex 会话**：没测过，当作不生效。
+- **`copilot -p`（命令行，无界面）**：实测仓库里的 hook 不运行，harness 不生效。
 
 ### hook 自己出错时放行
 

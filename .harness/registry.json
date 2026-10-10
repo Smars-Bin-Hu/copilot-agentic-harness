@@ -11,7 +11,6 @@
       ".harness/engine/doctor.py",
       ".harness/engine/core/",
       ".harness/engine/adapters/copilot_vscode.py",
-      ".harness/engine/adapters/copilot_cli.py",
       ".harness/engine/adapters/tool_kinds.json",
       ".github/hooks/harness.json",
       ".harness/policies/cli.json",
@@ -19,7 +18,7 @@
       ".harness/bin/harness",
       ".harness/bin/harness.cmd",
       ".github/skills/harness-repo-initialize/",
-      ".harness/eval/fixtures/hooks/vscode/",
+      ".harness/eval/fixtures/hooks/copilot-sdk/",
       ".harness/tests/test_breaker.py",
       ".harness/tests/test_docs.py"
     ]

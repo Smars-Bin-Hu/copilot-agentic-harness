@@ -2,7 +2,7 @@
 
 ## 前置
 
-- 会话类型选 **Local**（orchestrator 和 reviewer 用 Opus，SDK 会话里没有）。agent 下拉列表里选 **orchestrator**。
+- 会话类型选 **Copilot**（SDK）。orchestrator 和 reviewer 只写了 Opus：你的账号在这种会话里没有 Opus 时，这个场景跑不了。agent 下拉列表里选 **orchestrator**。
 - 每个场景新开一个对话。
 - orchestrator 写完计划会停下来，给你 `plan.md` 的链接。你在**自己的终端**运行 `harness request approve-plan`，输入确认码，再在对话里回“计划批准了”。没批准，它开不了第一轮。
 - 先确认仓库根没有 `demo-b8/`；有就删掉。

@@ -128,7 +128,7 @@ def register_task(subparsers: Any) -> None:
 
     start = add("start", "enter task mode for a task folder (L2 only); starts, resumes, or opens a new round after a promote", lambda a: task.start(repo_root(), a.task, a.session_id, a.surface, a.branch), required=True)
     start.add_argument("--session-id", required=True, help="the session id written at the top of the prompt rules")
-    start.add_argument("--surface", default="vscode", choices=["vscode", "cli"])
+    start.add_argument("--surface", default="vscode", choices=["vscode"])
     start.add_argument("--branch", default="", help="feature/<name>; default feature/<task folder name>")
     add("status", "where the task stands and what comes next", lambda a: task.status(repo_root(), a.task))
     add("approve-plan", "the person approves PLAN.md (terminal only)", lambda a: task.approve_plan(repo_root(), a.task))
@@ -157,7 +157,7 @@ def register(subparsers: Any) -> None:
     new = commands.add_parser("new", help="create a request and put the session into L3")
     new.add_argument("--title", required=True)
     new.add_argument("--session-id", required=True, help="the session id written at the top of the prompt rules")
-    new.add_argument("--surface", default="vscode", choices=["vscode", "cli"])
+    new.add_argument("--surface", default="vscode", choices=["vscode"])
     new.add_argument("--task", default="", help="the task folder under .workspace/current_tasks/ (promote backs the result up to its DEV folder)")
     new.add_argument("--branch", default="", help="feature/<name> for the target repositories (letters, digits, `_`); can be set later")
     new.set_defaults(handler=cmd_new)

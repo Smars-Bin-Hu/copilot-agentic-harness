@@ -6,18 +6,18 @@ import json
 import unittest
 from typing import Any, Dict
 
-from support import payload
+from support import payload, subagent_start, subagent_stop
 
 from core.state import update_state
 from test_request import SESSION, RequestCase
 
 
 def blocked(output: Dict[str, Any]) -> bool:
-    return output.get("hookSpecificOutput", {}).get("decision") == "block" or output.get("decision") == "block"
+    return output.get("decision") == "block"
 
 
 def reason_of(output: Dict[str, Any]) -> str:
-    return output.get("hookSpecificOutput", {}).get("reason") or output.get("reason", "")
+    return output.get("reason", "")
 
 
 class VerifyCase(RequestCase):
@@ -25,7 +25,7 @@ class VerifyCase(RequestCase):
         return self.hook(payload("Stop", session, stop_hook_active=active))
 
     def sub_stop(self, role: str = "builder", session: str = SESSION) -> Dict[str, Any]:
-        return self.hook(payload("SubagentStop", session, agent_id="a1", agent_type=role, stop_hook_active=False))
+        return self.hook(subagent_stop(session, role))
 
     def user_prompt(self, text: str = "ok") -> Dict[str, Any]:
         return self.hook(payload("UserPromptSubmit", SESSION, prompt=text))
@@ -129,10 +129,10 @@ class WaitTests(VerifyCase):
     def test_a_subagent_call_message_does_not_clear_the_mark(self) -> None:
         request_id = self.new_request()
         self.wait(request_id)
-        self.hook(payload("SubagentStart", SESSION, agent_id="a1", agent_type="builder"))
-        self.user_prompt("the message the orchestrator wrote for the builder")
+        self.hook(subagent_start(SESSION, "builder"))
+        self.hook(payload("UserPromptSubmit", "child-of-waiting", prompt="the message the orchestrator wrote for the builder"))
         self.assertIn("waiting", self.request(request_id))
-        self.hook(payload("SubagentStop", SESSION, agent_id="a1", agent_type="builder", stop_hook_active=False))
+        self.hook(subagent_stop(SESSION, "builder", "child-of-waiting"))
         self.user_prompt("a real prompt")
         self.assertNotIn("waiting", self.request(request_id))
 

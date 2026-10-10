@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from support import ENGINE, REPO, HarnessTestCase, payload, pre_tool
+from support import ENGINE, REPO, HarnessTestCase, payload, pre_tool, subagent_start
 
 from core import config
 from core.state import update_state
@@ -337,10 +337,10 @@ class GateHookTests(HarnessTestCase):
         return self.hook(data)
 
     def decision(self, output: dict) -> str:
-        return output.get("hookSpecificOutput", {}).get("permissionDecision", "")
+        return output.get("permissionDecision", "")
 
     def reason(self, output: dict) -> str:
-        return output["hookSpecificOutput"]["permissionDecisionReason"]
+        return output["permissionDecisionReason"]
 
     def enter_l3(self, request_id: str = "20261002-1200-demo-ab12", session: Optional[str] = None) -> str:
         def mutate(state: dict) -> None:
@@ -526,7 +526,7 @@ class GateHookTests(HarnessTestCase):
     def test_a_subagent_session_inherits_the_gate_through_the_shared_state(self) -> None:
         request = self.enter_l3()
         # Legacy engine: the subagent's tool calls arrive on the parent's session.
-        self.hook(payload("SubagentStart", self.session, agent_id="a1", agent_type="builder"))
+        self.hook(subagent_start(self.session, "builder"))
         output = self.pre("create_file", {"filePath": self.path("README.md"), "content": "x"})
         self.assertEqual(self.decision(output), "deny")
         self.assertEqual(self.pre("create_file", {"filePath": self.path(f".workspace/sandbox/requests/{request}/a"), "content": "x"}), {})
@@ -566,8 +566,6 @@ class GateHookTests(HarnessTestCase):
         for name, key in (
             ("copilot-sdk/payloads/PreToolUse.Write.json", "path"),
             ("copilot-sdk/payloads/PreToolUse.Edit.json", "path"),
-            ("vscode/payloads/PreToolUse.create_file.json", "filePath"),
-            ("vscode/payloads/PreToolUse.replace_string_in_file.json", "filePath"),
         ):
             with self.subTest(name):
                 data = json.loads((REPO / ".harness" / "eval" / "fixtures" / "hooks" / name).read_text(encoding="utf-8"))

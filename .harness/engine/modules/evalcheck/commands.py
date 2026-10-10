@@ -53,5 +53,5 @@ def register(subparsers: Any) -> None:
     check.add_argument("scenario")
     check.add_argument("--session-id", default="", help="the session of the run; left out, the newest main session is used")
     check.add_argument("--request", default="", help="the request id; left out, the request of that session is used")
-    check.add_argument("--surface", default="vscode", choices=["vscode", "cli"])
+    check.add_argument("--surface", default="vscode", choices=["vscode"])
     check.set_defaults(handler=cmd_check)

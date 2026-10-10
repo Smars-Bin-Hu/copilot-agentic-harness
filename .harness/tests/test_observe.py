@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
-from support import HOOK, HarnessTestCase, payload, post_tool, pre_tool
+from support import HOOK, HarnessTestCase, payload, post_tool, pre_tool, subagent_start
 
 GUARD = ".harness/policies/gate.json"
 GREP = {"query": "sandbox", "isRegexp": False}
@@ -133,7 +133,7 @@ class SessionLogTests(ObserveCase):
 
     def test_a_subagent_session_records_its_parent(self) -> None:
         self.prompt("parent")
-        self.hook(payload("SubagentStart", "parent", agent_id="a1", agent_type="builder"))
+        self.hook(subagent_start("parent", "builder"))
         row = self.last("parent")
         self.assertEqual((row["event"], row["agent_type"]), ("SubagentStart", "builder"))
 
@@ -148,7 +148,7 @@ class SwitchTests(ObserveCase):
     def test_with_the_module_off_nothing_is_logged_and_the_hook_still_works(self) -> None:
         self.disable()
         output = self.hook(pre_tool("off", "create_file", {"filePath": self.path(GUARD), "content": "x"}))
-        self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertEqual(output["permissionDecision"], "deny")
         self.assertEqual(list(self.logs().glob("*/*.jsonl")), [])
 
     def test_a_broken_policy_falls_back_to_the_defaults_and_the_log_goes_on(self) -> None:
@@ -251,7 +251,7 @@ class StatsTests(ObserveCase):
         call = {"agentName": "verifier", "prompt": "check", "description": "check"}
         self.hook(post_tool("v", "runSubagent", call, "VERDICT: PASS\n- ok"))
         self.hook(post_tool("v", "runSubagent", call, "VERDICT: FAIL\n- no"))
-        self.hook(payload("SubagentStart", "v", agent_id="a1", agent_type="verifier"))
+        self.hook(subagent_start("v", "verifier"))
         result = self.stats()
         self.assertEqual(result["verifier_verdicts"], {"PASS": 1, "FAIL": 1})
         self.assertEqual(result["subagents_started"], {"verifier": 1})
@@ -325,9 +325,9 @@ class PruneTests(ObserveCase):
         self.assertIn("--days", completed.stderr)
 
     def test_an_agent_running_prune_is_sent_to_the_person(self) -> None:
-        self.assertEqual(self.hook(pre_tool("agent", "run_in_terminal", {"command": "harness logs prune --days 1"}))["hookSpecificOutput"]["permissionDecision"], "ask")  # the short command too
+        self.assertEqual(self.hook(pre_tool("agent", "run_in_terminal", {"command": "harness logs prune --days 1"}))["permissionDecision"], "ask")  # the short command too
         output = self.hook(pre_tool("agent", "run_in_terminal", {"command": "python3 .harness/engine/cli.py logs prune --days 1"}))
-        self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "ask")
+        self.assertEqual(output["permissionDecision"], "ask")
 
 
 if __name__ == "__main__":

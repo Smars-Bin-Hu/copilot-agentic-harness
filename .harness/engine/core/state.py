@@ -31,13 +31,13 @@ SCHEMA_VERSION = 2
 LOCK_TIMEOUT_SECONDS = 7.0
 # A critical section takes milliseconds. A lock older than this belongs to a killed process (I-9).
 LOCK_STALE_SECONDS = 5.0
-# Safety nets so a missing SubagentStop cannot make the session ignore the user forever.
+# Safety nets so a missing SubagentStop does not leave entries behind for a later child session to claim.
 SUBAGENT_ACTIVE_TTL_SECONDS = 1800.0
 PENDING_PROMPT_TTL_SECONDS = 300.0
 PENDING_PROMPT_MAX = 8
 # After a Stop block the SDK engine sends the reason back as a new UserPromptSubmit, within moments.
 CONTINUATION_TTL_SECONDS = 120.0
-# A subagent session (Copilot SDK engine) sends its first UserPromptSubmit within moments of its SubagentStart.
+# A subagent session sends its first UserPromptSubmit within moments of its SubagentStart.
 CHILD_CLAIM_SECONDS = 10.0
 CHILD_SCAN_FILES = 30
 CHILD_SCAN_AGE_SECONDS = 600.0
@@ -210,19 +210,14 @@ def track_before(state: Dict[str, Any], event: HookEvent) -> None:
         subagents["pending_prompts"] = []
         breaker.reset(state)
     elif name == "SubagentStart":
-        if event.agent_id:
-            if not any(a["agent_id"] == event.agent_id for a in subagents["active"]):
-                subagents["active"].append({"agent_id": event.agent_id, "agent_type": event.agent_type, "at": now})
-        else:
-            # Copilot SDK engine: no agent id yet. The subagent runs in a session of its own, which claims this entry.
-            subagents["active"].append(
-                {"agent_id": f"{event.agent_type}@{now:.3f}", "agent_type": event.agent_type, "at": now, "awaiting_child": True}
-            )
+        # The payload has no agent id. The subagent runs in a session of its own, which claims this entry.
+        subagents["active"].append(
+            {"agent_id": f"{event.agent_type}@{now:.3f}", "agent_type": event.agent_type, "at": now, "awaiting_child": True}
+        )
     elif name == "SubagentStop":
         active = subagents["active"]
-        index = next((i for i, a in enumerate(active) if a["agent_id"] == event.agent_id), None)
-        if index is None:  # the SDK engine reports the child's session id here, not the id we made up
-            index = next((i for i, a in enumerate(active) if a["agent_type"] == event.agent_type), None)
+        # The payload reports the child's session id, not the id made up at SubagentStart, so match by agent name.
+        index = next((i for i, a in enumerate(active) if a["agent_type"] == event.agent_type), None)
         if index is not None:
             del active[index]
     elif name == "Stop":
@@ -242,18 +237,11 @@ def track_before(state: Dict[str, Any], event: HookEvent) -> None:
                 state["continuation"] = None
                 event.continuation = True
                 return
-        matched = next((p for p in subagents["pending_prompts"] if p["prompt"].strip() == text), None)
-        if matched is not None:
-            subagents["pending_prompts"].remove(matched)
-            event.from_subagent = True
-        elif subagents["active"]:
-            event.from_subagent = True
-        else:
-            breaker.reset(state)  # a real user prompt opens a new window for counting repeated denies
+        breaker.reset(state)  # a real user prompt opens a new window for counting repeated denies
 
 
 def claim_child(root: Path, surface: str, event: HookEvent) -> Optional[Dict[str, Any]]:
-    """Copilot SDK engine: a subagent runs in its own session. Is this new session one?
+    """A subagent runs in its own session. Is this new session one?
 
     Called for the first UserPromptSubmit of a session that has no state yet. A parent that just reported a
     SubagentStart is waiting for its child. Match by the call message first, then by time. On a match the parent's

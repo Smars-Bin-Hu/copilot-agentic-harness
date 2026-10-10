@@ -135,4 +135,4 @@ admin 模式的会话能改 engine 和策略，所以它的底线不是硬的：
 
 ## hook 怎么接进来
 
-所有 hook 事件走同一个入口 [hook.py](../.harness/engine/hook.py)。它识别运行环境（VS Code 的本地会话和 Copilot SDK 会话发来的内容格式不同），把事件分发给模块，合并结果。模块清单和开关在 [registry.json](../.harness/registry.json)。hook 自己出错时放行，并写入 `hook-errors.jsonl`，不会误伤正常工作。
+所有 hook 事件走同一个入口 [hook.py](../.harness/engine/hook.py)。它把平台发来的内容读成统一的事件，分发给模块，合并结果。模块清单和开关在 [registry.json](../.harness/registry.json)。hook 自己出错时放行，并写入 `hook-errors.jsonl`，不会误伤正常工作。

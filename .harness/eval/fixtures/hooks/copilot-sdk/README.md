@@ -1,7 +1,7 @@
 # Copilot SDK 引擎的 hook 真实输入（fixtures）
 
 VS Code 1.140.0 里，Copilot 的 `@github/copilot` 1.0.89-7（SDK 引擎）发给 hook 的真实 stdin。2026-10-01 录制。
-和 `../vscode/`（B1，旧引擎）不是同一种格式。已脱敏：用户目录、transcript 路径。`session_id` 换成固定名字。
+已脱敏：用户目录、transcript 路径。`session_id` 换成固定名字。
 
 ## 目录
 
@@ -30,19 +30,20 @@ VS Code 1.140.0 里，Copilot 的 `@github/copilot` 1.0.89-7（SDK 引擎）发�
 
 同一轮实测的三条平台行为（记在 `docs/05-design.md`）：hook 启动不了算拒绝；hook 超时算放行；子 agent 有自己的 `session_id`。
 
-## 和旧引擎的区别
+## payload 的形状
 
-| 项 | 旧引擎（`../vscode/`） | SDK 引擎 |
-| --- | --- | --- |
-| 工具名 | `run_in_terminal`、`read_file`、`create_file`、`replace_string_in_file`、`runSubagent` | `Bash`、`Read`、`Write`、`Edit`、`Grep`、`Glob`、`Agent`、`search_code_subagent` |
-| 工具参数 | `command`、`filePath`、`agentName` | `Bash.command`；`Read/Write.path`（Write 内容在 `file_text`）；`Edit.path/old_str/new_str`；`Agent.name/agent_type/prompt/description/mode` |
-| 工具结果 | `tool_response`（字符串） | `tool_result`：`{result_type, text_result_for_llm}` |
-| `tool_use_id` | 有 | 没有 |
-| SubagentStart | 有 `hook_event_name`、`agent_id` | **没有 `hook_event_name`**。camelCase：`sessionId`、`agentName`、`agentDescription`；时间戳是毫秒数 |
-| 子 agent 的会话 | 和主 agent 同一个 `session_id` | **独立的 `session_id`**（verifier 是 UUID，`search_code_subagent` 是 `toolu_…`）。子会话没有 SessionStart |
-| SubagentStop | `agent_id`、`agent_type` | 多 `agent_name`、`last_assistant_message`、`stop_reason`；`agent_id` 是子会话的 id |
-| 事件顺序 | SessionStart 在 UserPromptSubmit 之前 | UserPromptSubmit 先，SessionStart 后（同一毫秒） |
-| 输出格式 | deny、Stop block、SubagentStart 注入用 `hookSpecificOutput`（嵌套） | **顶层键**。嵌套的 `additionalContext`（UserPromptSubmit、PostToolUse）实测不送达；顶层的送达，PostToolUse 也送达 |
+harness 只支持这种会话。Local 会话（旧引擎）的录制已删。
+
+| 项 | 实测 |
+| --- | --- |
+| 工具名 | `Bash`、`Read`、`Write`、`Edit`、`Grep`、`Glob`、`Agent`、`search_code_subagent`。子 agent 自己的工具还在用旧名字：`read_file`、`grep_search`、`file_search` |
+| 工具参数 | `Bash.command`；`Read/Write.path`（Write 内容在 `file_text`）；`Edit.path/old_str/new_str`；`Agent.name/agent_type/prompt/description/mode`；旧名字的工具用 `filePath` |
+| 工具结果 | `tool_result`：`{result_type, text_result_for_llm}` |
+| SubagentStart | **没有 `hook_event_name`**。camelCase：`sessionId`、`agentName`、`agentDescription`；时间戳是毫秒数 |
+| 子 agent 的会话 | **独立的 `session_id`**（verifier 是 UUID，`search_code_subagent` 是 `toolu_…`）。子会话没有 SessionStart |
+| SubagentStop | `agent_type`、`agent_name`、`last_assistant_message`、`stop_reason`；`agent_id` 是子会话的 id |
+| 事件顺序 | UserPromptSubmit 先，SessionStart 后（同一毫秒） |
+| 输出格式 | **顶层键**。嵌套的 `hookSpecificOutput` 不送达 |
 
 输出格式的实测结果：
 - 顶层 `permissionDecision`/`permissionDecisionReason` 拒绝 Bash 有效，模型读到理由。

@@ -1,6 +1,6 @@
 """Task Level behavior (B4): user-chosen level, per-prompt budgets, subagent allow list.
 
-Scenarios use real VS Code tool names (runSubagent, grep_search, read_file) and the hookSpecificOutput format.
+Scenarios use the older tool names (runSubagent, grep_search, read_file), which the engine still reads, in the Copilot (SDK) payload shape.
 """
 
 from __future__ import annotations
@@ -19,6 +19,8 @@ from support import (
     make_root,
     payload,
     pre_tool,
+    subagent_start,
+    subagent_stop,
 )
 
 VERIFIER = {"agentName": "verifier", "prompt": "check it", "description": "check"}
@@ -35,10 +37,10 @@ class TaskLevelTests(HarnessTestCase):
         return self.hook(pre_tool(session_id, tool, tool_input))
 
     def decision(self, output: dict) -> str:
-        return output.get("hookSpecificOutput", {}).get("permissionDecision", "")
+        return output.get("permissionDecision", "")
 
     def reason(self, output: dict) -> str:
-        return output["hookSpecificOutput"]["permissionDecisionReason"]
+        return output["permissionDecisionReason"]
 
     def level(self, session_id: str) -> int:
         return self.session_state(session_id)["level"]
@@ -124,24 +126,19 @@ class TaskLevelTests(HarnessTestCase):
         self.assertIn("[L2] 已被忽略", context)
 
     def test_a_marker_in_a_subagent_call_message_does_not_switch(self) -> None:
-        """Layer 1 of hard conclusion 5: the UserPromptSubmit text equals the allowed runSubagent prompt."""
+        """The call message opens the subagent's own session. It is not the user, there or in the parent."""
         self.verifier_default(True)
-        self.user_prompt("child-msg", "[L2] start")
+        self.user_prompt("parent-msg", "[L2] start")
         message = "[L1] " + VERIFIER["prompt"]
-        self.assertEqual(self.pre("child-msg", "runSubagent", {**VERIFIER, "prompt": message}), {})
+        self.assertEqual(self.pre("parent-msg", "runSubagent", {**VERIFIER, "prompt": message}), {})
+        self.hook(subagent_start("parent-msg", "verifier"))
         self.assertEqual(self.user_prompt("child-msg", message), {})
-        self.assertEqual(self.level("child-msg"), 2)
-        self.assertEqual(self.task_level_state("child-msg")["prompt"]["count"], 1)
-
-    def test_a_marker_inside_the_subagent_window_does_not_switch(self) -> None:
-        """Layer 2: anything between SubagentStart and SubagentStop is not the user."""
-        self.user_prompt("window", "[L2] start")
-        self.hook(payload("SubagentStart", "window", agent_id="a1", agent_type="verifier"))
-        self.assertEqual(self.user_prompt("window", "[L1] text the model wrote"), {})
-        self.assertEqual(self.level("window"), 2)
-        self.hook(payload("SubagentStop", "window", agent_id="a1", agent_type="verifier", stop_hook_active=False))
-        self.user_prompt("window", "[L1] now the user speaks")
-        self.assertEqual(self.level("window"), 1)
+        self.assertEqual(self.level("child-msg"), 2)  # inherited, not switched
+        self.assertEqual(self.level("parent-msg"), 2)
+        self.assertEqual(self.task_level_state("parent-msg")["prompt"]["count"], 1)
+        self.hook(subagent_stop("parent-msg", "verifier", "child-msg"))
+        self.user_prompt("parent-msg", "[L1] now the user speaks")
+        self.assertEqual(self.level("parent-msg"), 1)
 
     def test_verify_markers_cover_one_prompt(self) -> None:
         choices = [
@@ -209,7 +206,6 @@ class TaskLevelTests(HarnessTestCase):
         self.assertEqual(self.pre("l1-search", "file_search", {"query": "a"}), {})
         third = self.pre("l1-search", "semantic_search", {"query": "b"})
         self.assertEqual(self.decision(third), "deny")
-        self.assertEqual(third["hookSpecificOutput"]["hookEventName"], "PreToolUse")
         self.assertIn("L1 探索预算已用完", self.reason(third))
         self.assertIn("直接完成", self.reason(third))
         self.assertIn("/l2", self.reason(third))
@@ -273,15 +269,12 @@ class TaskLevelTests(HarnessTestCase):
 
     # --- subagents (M2-5 allow list, B4 part) -------------------------------------------------
 
-    def test_l1_denies_every_subagent_in_the_vscode_format(self) -> None:
+    def test_l1_denies_every_subagent(self) -> None:
         self.user_prompt("l1-sub")
         for tool_input in (VERIFIER, GENERIC):
             output = self.pre("l1-sub", "runSubagent", tool_input)
-            body = output["hookSpecificOutput"]
-            self.assertEqual(body["hookEventName"], "PreToolUse")
-            self.assertEqual(body["permissionDecision"], "deny")
-            self.assertIn("L1 不允许子 agent", body["permissionDecisionReason"])
-            self.assertNotIn("permissionDecision", output)  # the top-level format is ignored by VS Code (B1, R4a)
+            self.assertEqual(output["permissionDecision"], "deny")
+            self.assertIn("L1 不允许子 agent", output["permissionDecisionReason"])
         self.assertEqual(self.counters("l1-sub")["subagents_created"], 0)
 
     def test_l2_allows_only_the_verifier_by_agent_name(self) -> None:

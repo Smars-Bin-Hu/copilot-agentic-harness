@@ -52,10 +52,10 @@ class GateGitTests(HarnessTestCase):
         return self.hook(data)
 
     def decision(self, output: dict) -> str:
-        return output.get("hookSpecificOutput", {}).get("permissionDecision", "")
+        return output.get("permissionDecision", "")
 
     def reason(self, output: dict) -> str:
-        return output["hookSpecificOutput"]["permissionDecisionReason"]
+        return output["permissionDecisionReason"]
 
     def edit(self, path: str, cwd: Optional[str] = None) -> dict:
         return self.pre("create_file", {"filePath": path, "content": "x"}, cwd)

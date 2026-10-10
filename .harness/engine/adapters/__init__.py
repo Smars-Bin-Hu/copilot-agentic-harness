@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from . import copilot_cli, copilot_vscode
+from . import copilot_vscode
 
-_ADAPTERS = (copilot_vscode, copilot_cli)
+_ADAPTERS = (copilot_vscode,)
 
 
 def detect(payload: Dict[str, Any]) -> Any:
-    """Pick the adapter for this payload. VS Code is the main runtime, so it is tried first."""
+    """Pick the adapter for this payload."""
     for adapter in _ADAPTERS:
         if adapter.matches(payload):
             return adapter

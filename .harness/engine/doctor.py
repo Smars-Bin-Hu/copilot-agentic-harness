@@ -195,16 +195,16 @@ def check_files(report: Report, root: Path, owner: str, files: List[str]) -> Non
 
 
 def interpreter_problems(entry: Dict[str, Any]) -> List[str]:
-    """Each runtime reads its own keys: VS Code `command`/`windows`, the Copilot CLI engine `bash`/`powershell`.
+    """The config carries two sets of keys: `command`/`windows`, and `bash`/`powershell` which a Copilot (SDK) session reads.
 
-    An engine that finds no key for its system runs the wrong one, and the CLI engine treats a hook that fails as a deny:
+    An engine that finds no key for its system runs the wrong one, and a hook that fails to start counts as a deny:
     every tool call is refused. Windows has `python` and often no `python3`.
     """
     problems = []
     for key, interpreter in (("command", "python3"), ("bash", "python3"), ("windows", "python"), ("powershell", "python")):
         value = entry.get(key)
         if not isinstance(value, str):
-            problems.append(f"缺少 `{key}`（{'Windows' if interpreter == 'python' else 'macOS/Linux'} 上的 {'VS Code' if key in ('command', 'windows') else 'Copilot CLI 引擎'} 读它）")
+            problems.append(f"缺少 `{key}`（{'Windows' if interpreter == 'python' else 'macOS/Linux'} 上的 {'VS Code' if key in ('command', 'windows') else 'Copilot（SDK）会话'} 读它）")
         elif value.split()[0] != interpreter:
             problems.append(f"`{key}` 应该用 `{interpreter}`，现在是 `{value.split()[0]}`")
     return problems

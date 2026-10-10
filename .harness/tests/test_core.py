@@ -210,16 +210,15 @@ class StateTests(unittest.TestCase):
 
     # --- subagent tracking --------------------------------------------------------------------
 
-    def test_pending_prompt_is_matched_once_then_the_user_is_the_user_again(self) -> None:
+    def test_a_prompt_in_the_parent_session_is_the_user_even_when_it_repeats_a_call_message(self) -> None:
+        # A subagent runs in a session of its own, so its call message never arrives here as a prompt.
         data = state.new_state("vscode", "s")
         call = self.event("PreToolUse", tool_kind="subagent", subagent_prompt="  read the file  ", subagent_target="verifier")
         state.track_after(data, call, Decision())
-        first = self.event("UserPromptSubmit", prompt="read the file")
-        state.track_before(data, first)
-        self.assertTrue(first.from_subagent)
-        second = self.event("UserPromptSubmit", prompt="read the file")
-        state.track_before(data, second)
-        self.assertFalse(second.from_subagent)
+        self.assertEqual([item["prompt"] for item in data["subagents"]["pending_prompts"]], ["  read the file  "])
+        prompt = self.event("UserPromptSubmit", prompt="read the file")
+        state.track_before(data, prompt)
+        self.assertFalse(prompt.from_subagent)
 
     def test_a_denied_subagent_call_leaves_no_pending_prompt(self) -> None:
         data = state.new_state("vscode", "s")
@@ -227,34 +226,37 @@ class StateTests(unittest.TestCase):
         state.track_after(data, call, Decision(permission="deny", reason="no"))
         self.assertEqual(data["subagents"]["pending_prompts"], [])
 
-    def test_activity_window_opens_on_start_and_closes_on_stop(self) -> None:
+    def test_a_start_waits_for_its_child_session_and_a_stop_removes_it_by_agent_name(self) -> None:
         data = state.new_state("vscode", "s")
-        state.track_before(data, self.event("SubagentStart", agent_id="a1", agent_type="x"))
+        state.track_before(data, self.event("SubagentStart", agent_type="verifier"))
+        entry = data["subagents"]["active"][0]
+        self.assertEqual((entry["agent_type"], entry["awaiting_child"]), ("verifier", True))
         inside = self.event("UserPromptSubmit", prompt="anything")
         state.track_before(data, inside)
-        self.assertTrue(inside.from_subagent)
-        state.track_before(data, self.event("SubagentStop", agent_id="a1", agent_type="x"))
-        outside = self.event("UserPromptSubmit", prompt="anything")
-        state.track_before(data, outside)
-        self.assertFalse(outside.from_subagent)
+        self.assertFalse(inside.from_subagent)  # the user can write while a subagent runs
+        state.track_before(data, self.event("SubagentStop", agent_id="child-session", agent_type="verifier"))
+        self.assertEqual(data["subagents"]["active"], [])
 
-    def test_nested_subagents_keep_the_window_open_until_all_stop(self) -> None:
+    def test_a_stop_removes_one_entry_per_call(self) -> None:
         data = state.new_state("vscode", "s")
-        state.track_before(data, self.event("SubagentStart", agent_id="a1"))
-        state.track_before(data, self.event("SubagentStart", agent_id="a2"))
-        state.track_before(data, self.event("SubagentStop", agent_id="a2"))
-        still = self.event("UserPromptSubmit", prompt="x")
-        state.track_before(data, still)
-        self.assertTrue(still.from_subagent)
+        state.track_before(data, self.event("SubagentStart", agent_type="reviewer"))
+        state.track_before(data, self.event("SubagentStart", agent_type="reviewer"))
+        state.track_before(data, self.event("SubagentStop", agent_type="reviewer"))
+        self.assertEqual(len(data["subagents"]["active"]), 1)
 
-    def test_main_stop_and_session_start_close_a_stuck_window(self) -> None:
+    def test_a_prompt_in_a_subagent_session_is_never_the_user(self) -> None:
+        data = state.new_state("vscode", "child")
+        data["parent_session_id"] = "s"
+        prompt = self.event("UserPromptSubmit", prompt="the reason of a SubagentStop block")
+        state.track_before(data, prompt)
+        self.assertTrue(prompt.from_subagent)
+
+    def test_main_stop_and_session_start_clear_the_running_subagents(self) -> None:
         for closing in ("Stop", "SessionStart"):
             data = state.new_state("vscode", "s")
-            state.track_before(data, self.event("SubagentStart", agent_id="lost"))
+            state.track_before(data, self.event("SubagentStart", agent_type="lost"))
             state.track_before(data, self.event(closing))
-            prompt = self.event("UserPromptSubmit", prompt="x")
-            state.track_before(data, prompt)
-            self.assertFalse(prompt.from_subagent, closing)
+            self.assertEqual(data["subagents"]["active"], [], closing)
 
     def test_stale_window_and_pending_entries_expire(self) -> None:
         data = state.new_state("vscode", "s")

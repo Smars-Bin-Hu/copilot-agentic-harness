@@ -434,7 +434,7 @@ class PlanApprovalTests(RequestCase):
             planapproval.approve(self.root, request_id, reader=lambda _p: "x", interactive=False, out=io.StringIO())
         for command in (f"python3 .harness/engine/cli.py request approve-plan --request {request_id}", "harness request approve-plan", "harness task approve-plan", "harness task approve-promote"):
             denied = self.hook(pre_tool(SESSION, "run_in_terminal", {"command": command}))
-            self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny", command)
+            self.assertEqual(denied["permissionDecision"], "deny", command)
 
     def test_without_an_id_the_one_request_waiting_for_its_plan_is_used(self) -> None:
         with self.assertRaises(layout.CommandError):
@@ -830,7 +830,7 @@ class PromoteTests(RequestCase):
         self.assertIn("+    return s.lower().replace(' ', '-')", text)
         self.assertIn("-    return s.lower()", text)
         denied = self.hook(pre_tool(SESSION, "create_file", {"filePath": str(review), "content": "x"}))
-        self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")  # only the CLI writes it
+        self.assertEqual(denied["permissionDecision"], "deny")  # only the CLI writes it
 
     def test_the_real_run_needs_a_matching_dry_run(self) -> None:
         request_id = self.passed_request()
@@ -1008,10 +1008,10 @@ class PromoteTests(RequestCase):
     def test_the_gate_denies_an_agent_that_runs_approve_and_lets_promote_through(self) -> None:
         request_id = self.passed_request()
         def ask(command: str) -> dict:
-            return self.hook({**payload("PreToolUse", "s-gate", tool_name="run_in_terminal", tool_input={"command": command}), "tool_use_id": "1"})
+            return self.hook(payload("PreToolUse", "s-gate", tool_name="run_in_terminal", tool_input={"command": command}))
         data = ask(f"python3 .harness/engine/cli.py request approve-promote --request {request_id}")
-        self.assertEqual(data["hookSpecificOutput"]["permissionDecision"], "deny")
-        self.assertIn("用户在自己的终端", data["hookSpecificOutput"]["permissionDecisionReason"])
+        self.assertEqual(data["permissionDecision"], "deny")
+        self.assertIn("用户在自己的终端", data["permissionDecisionReason"])
         self.assertEqual(ask(f"python3 .harness/engine/cli.py promote --request {request_id}"), {})
         self.assertEqual(ask(f"python3 .harness/engine/cli.py promote --request {request_id} --dry-run"), {})
 

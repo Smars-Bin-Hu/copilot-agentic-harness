@@ -16,7 +16,7 @@ import support  # noqa: F401  (puts the engine on sys.path)
 from core import tasks
 from modules.request import promote_target, task as task_ops
 from modules.request.layout import CommandError
-from support import payload, post_tool, pre_tool
+from support import payload, post_tool, pre_tool, subagent_start
 from test_promote_target import git_text, porcelain
 from test_request import SESSION
 from test_target_inputs import TASK, TargetCase
@@ -39,7 +39,7 @@ class TaskCase(TargetCase):
         return self.hook(payload("UserPromptSubmit", session, prompt=text))
 
     def context(self, output: Dict[str, Any]) -> str:
-        return output.get("additionalContext") or output.get("hookSpecificOutput", {}).get("additionalContext", "")
+        return output.get("additionalContext", "")
 
     def start(self, *extra: str, ok: bool = True) -> Any:
         return self.run_cli("task", "start", "--task", TASK, "--session-id", SESSION, *extra, ok=ok)
@@ -73,10 +73,10 @@ class TaskCase(TargetCase):
         return self.hook(data)
 
     def decision(self, output: Dict[str, Any]) -> str:
-        return output.get("hookSpecificOutput", {}).get("permissionDecision", "")
+        return output.get("permissionDecision", "")
 
     def reason(self, output: Dict[str, Any]) -> str:
-        return output["hookSpecificOutput"]["permissionDecisionReason"]
+        return output["permissionDecisionReason"]
 
     def approve_promote(self, code: Optional[str] = None, out: Any = None) -> Dict[str, Any]:
         typed = code if code is not None else self.data()["promote"].get("plan_sha256", "")[:8]
@@ -252,7 +252,7 @@ class PlanApprovalTests(TaskCase):
 
     def test_a_verifier_of_a_task_is_told_to_read_the_diff(self) -> None:
         self.ready()
-        output = self.hook(payload("SubagentStart", SESSION, agent_id="a1", agent_type="verifier"))
+        output = self.hook(subagent_start(SESSION, "verifier"))
         text = self.context(output)
         self.assertIn("task diff", text)
         self.assertIn("CHANGES.diff", text)
@@ -275,7 +275,7 @@ class VerifyTests(TaskCase):
 
     def blocked(self) -> bool:
         output = self.hook(payload("Stop", SESSION, stop_hook_active=False))
-        return output.get("hookSpecificOutput", {}).get("decision") == "block"
+        return output.get("decision") == "block"
 
     def test_the_marker_of_the_first_prompt_holds_for_the_later_prompts(self) -> None:
         self.prompt("/l2 [verify] 做任务 job1")

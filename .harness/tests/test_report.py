@@ -216,7 +216,7 @@ class LogSectionTests(ReportCase):
 
     def test_the_orchestrator_cannot_write_the_report_with_an_edit_tool(self) -> None:
         output = self.hook(pre_tool(SESSION, "create_file", {"filePath": str(self.root / ".workspace/reports/x.md"), "content": "x"}))
-        self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertEqual(output["permissionDecision"], "deny")
 
 
 if __name__ == "__main__":

@@ -30,7 +30,6 @@ class HookEvent:
     prompt: str = ""
     tool_name: str = ""
     tool_kind: str = ""
-    tool_use_id: str = ""
     command: str = ""
     paths: List[str] = field(default_factory=list)
     is_search: bool = False

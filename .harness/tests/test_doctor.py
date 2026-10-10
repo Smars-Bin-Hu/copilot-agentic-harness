@@ -211,7 +211,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("harness-task-level", result.stdout)
 
     def test_a_deleted_engine_file_is_an_error(self) -> None:
-        (self.root / ".harness" / "engine" / "adapters" / "copilot_cli.py").unlink()
+        (self.root / ".harness" / "engine" / "adapters" / "copilot_vscode.py").unlink()
         self.assertEqual(self.doctor().returncode, 1)
 
     def test_a_second_hook_config_is_an_error(self) -> None:

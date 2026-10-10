@@ -31,7 +31,8 @@
 
 ### 退役
 
-暂无。
+- **Local 会话不再支持。** 只支持 Session Target 选 Copilot 的会话。hook 的输出只留 Copilot 会话的格式，Local 会话里拒绝不再生效。用 Copilot 会话代替；`harness doctor` 发现最近用的是 Local 会话会给 `[WARN]`。
+- 删掉 Copilot CLI 的适配器。它是照文档写的，从没在真实环境里验证过；实测 `copilot -p` 下仓库的 hook 也不运行。命令的 `--surface` 选项只剩 `vscode` 一个值。没有代替。
 
 ## 1.0.2（2026-10-10）
 

@@ -7,13 +7,12 @@ import time
 import unittest
 from typing import Any, Dict, List, Optional
 
-from support import REPO, HarnessTestCase
+from support import FIXTURES, HarnessTestCase
 
 import hook
 from adapters import copilot_vscode
 from core import state
 
-FIXTURES = REPO / ".harness" / "eval" / "fixtures" / "hooks" / "copilot-sdk"
 PARENT = "session-parent-verifier"
 CHILD = "session-child-verifier"
 
@@ -121,9 +120,9 @@ class EngineDetectionTests(unittest.TestCase):
         self.assertEqual(copilot_vscode.engine(sample("PreToolUse.Bash.json")), "cli")
         self.assertEqual(copilot_vscode.engine(sample("Stop.json")), "cli")
         self.assertEqual(copilot_vscode.engine(sample("SubagentStart.json")), "cli")
-        # A subagent's own tools carry the legacy names and no other sign.
+        # A subagent's own tools carry older names and no other sign.
         self.assertEqual(copilot_vscode.engine(sample("PreToolUse.file_search.json")), "unknown")
-        self.assertEqual(copilot_vscode.engine({"hook_event_name": "PreToolUse", "tool_use_id": "t1", "tool_name": "x"}), "legacy")
+        self.assertEqual(copilot_vscode.engine({"hook_event_name": "PreToolUse", "tool_use_id": "t1", "tool_name": "x"}), "legacy")  # a Local session: not supported, but `doctor` names it
 
 
 class OutputFormatTests(SdkTestCase):
@@ -136,13 +135,13 @@ class OutputFormatTests(SdkTestCase):
         self.assertIn("[verify]", output["permissionDecisionReason"])
         self.assertNotIn("hookSpecificOutput", output)
 
-    def test_deny_with_no_engine_sign_carries_both_formats(self) -> None:
+    def test_deny_with_no_engine_sign_is_top_level_too(self) -> None:
         self.feed({**sample("UserPromptSubmit.json"), "session_id": "s", "prompt": "[L1] x"})
         data = {"hook_event_name": "PreToolUse", "session_id": "s", "tool_name": "runSubagent",
                 "tool_input": {"agentName": "builder", "prompt": "p"}}
         output, _ = self.feed(data)
         self.assertEqual(output["permissionDecision"], "deny")
-        self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertNotIn("hookSpecificOutput", output)
 
     def test_stop_block_is_top_level_on_the_sdk_engine(self) -> None:
         self.verifier_default(True)

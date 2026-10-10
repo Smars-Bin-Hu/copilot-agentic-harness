@@ -63,8 +63,8 @@ class NewTests(LifeCase):
     def test_each_tier_gets_its_files_and_no_more(self) -> None:
         expected = {
             "light": {"TASK.md", ".task"},
-            "medium": {"TASK.md", "REQ", "REF", "LOG.md", ".task"},
-            "full": {"TASK.md", "REQ", "REF", "LOG.md", "TODO.md", "DEV", "TEST", ".task"},
+            "medium": {"TASK.md", "REQ.md", "REQ", "REF", "LOG.md", ".task"},
+            "full": {"TASK.md", "REQ.md", "REQ", "REF", "LOG.md", "TODO.md", "DEV", "TEST", ".task"},
         }
         for tier, names in expected.items():
             with self.subTest(tier):
@@ -202,7 +202,7 @@ class WriteScopeTests(LifeCase):
         self.assertIn("PLAN.md", self.write(f"{BASE}/job/DEV/repo/a.sql")["permissionDecisionReason"])
         self.assertEqual(self.write(f"{BASE}/job/REQ/x.md")["permissionDecision"], "deny")
         self.assertIn("CLI", self.write(f"{BASE}/job/.task/task.json")["permissionDecisionReason"])
-        for name in ("TASK.md", "TODO.md", "LOG.md", "DESIGN.md", "TEST/case.md"):
+        for name in ("TASK.md", "REQ.md", "TODO.md", "LOG.md", "DESIGN.md", "TEST/case.md"):
             self.assertEqual(self.write(f"{BASE}/job/{name}"), {}, name)
 
     def test_the_state_file_is_closed_to_a_session_with_no_task_too(self) -> None:
@@ -230,7 +230,7 @@ class UpgradeTests(LifeCase):
         (self.folder() / "LOG.md").write_text("my log\n", encoding="utf-8")
         result = self.cli_json("task", "upgrade", "--tier", "full")
         self.assertEqual(result["from"], "light")
-        self.assertEqual(result["made"], ["REQ/", "REF/", "TODO.md", "DEV/", "TEST/"])
+        self.assertEqual(result["made"], ["REQ.md", "REQ/", "REF/", "TODO.md", "DEV/", "TEST/"])
         self.assertEqual(task_file.read_text(encoding="utf-8"), "mine\n")
         self.assertEqual((self.folder() / "LOG.md").read_text(encoding="utf-8"), "my log\n")
         self.assertEqual(self.data()["tier"], "full")
@@ -239,7 +239,7 @@ class UpgradeTests(LifeCase):
 
     def test_one_step_up(self) -> None:
         self.new("job", "qa")
-        self.assertEqual(self.cli_json("task", "upgrade", "--tier", "medium")["made"], ["REQ/", "REF/", "LOG.md"])
+        self.assertEqual(self.cli_json("task", "upgrade", "--tier", "medium")["made"], ["REQ.md", "REQ/", "REF/", "LOG.md"])
 
     def test_down_and_same_are_refused(self) -> None:
         self.new("job", "dev")
@@ -254,7 +254,7 @@ class UpgradeTests(LifeCase):
     def test_a_task_with_no_tier_can_be_given_one(self) -> None:
         (self.root / BASE / "hand").mkdir(parents=True)
         self.open("hand")
-        self.assertEqual(self.cli_json("task", "upgrade", "--tier", "medium")["made"], ["TASK.md", "REQ/", "REF/", "LOG.md"])
+        self.assertEqual(self.cli_json("task", "upgrade", "--tier", "medium")["made"], ["TASK.md", "REQ.md", "REQ/", "REF/", "LOG.md"])
 
 
 class ListTests(LifeCase):
@@ -305,71 +305,37 @@ class ListTests(LifeCase):
         self.assertEqual((row["kind"], row["status"]), ("qa", "open"))
 
 
-class RequestWordsTests(LifeCase):
-    """The user's own words go into REQ/ by the CLI's hand (M11-4)."""
+class RequirementFileTests(LifeCase):
+    """REQ.md is the agent's to write and keep up to date; REQ/ holds the person's own documents (decided 2026-10-10)."""
 
-    def say(self, text: str, session: str = S1) -> Dict[str, Any]:
-        return self.hook(payload("UserPromptSubmit", session, prompt=text))
-
-    def request(self, name: str = "job") -> str:
-        return (self.folder(name) / "REQ" / "request.md").read_text(encoding="utf-8")
-
-    def test_the_last_prompts_are_stored_word_for_word_oldest_first(self) -> None:
-        self.say("/harness-my-task 查一下 订单表 为什么延迟了 2 小时\n\n  日志在 REF/ 里")
-        self.say("2")
-        result = self.new()
-        self.assertEqual(result["request"], f"{BASE}/job/REQ/request.md")
-        self.assertIn("以它为准", result["next"])
-        text = self.request()
-        self.assertIn("/harness-my-task 查一下 订单表 为什么延迟了 2 小时\n\n  日志在 REF/ 里", text)
-        self.assertLess(text.index("hello"), text.index("订单表"))
-        self.assertLess(text.index("订单表"), text.index("## 第 3 条"))
-        self.assertIn(S1, text)
-
-    def test_only_the_last_six_and_only_of_this_session(self) -> None:
-        for number in range(8):
-            self.say(f"prompt-{number}")
-        self.say("from the other session", S2)
+    def test_a_medium_task_gets_the_file_with_its_sections(self) -> None:
         self.new()
-        text = self.request()
-        self.assertNotIn("prompt-1", text)
-        self.assertIn("prompt-2", text)
-        self.assertIn("prompt-7", text)
-        self.assertNotIn("other session", text)
+        text = (self.folder() / "REQ.md").read_text(encoding="utf-8")
+        self.assertIn("# REQ：job", text)
+        for heading in ("## 要做什么", "## 做完的标准", "## 变更记录", "用户确认"):
+            self.assertIn(heading, text)
 
-    def test_a_light_task_has_no_req_folder_and_no_file(self) -> None:
-        result = self.new("quick", "qa")
-        self.assertNotIn("request", result)
-        self.assertFalse((self.folder("quick") / "REQ").exists())
-
-    def test_a_subagent_message_and_a_stop_reason_are_not_the_users_words(self) -> None:
-        self.say("the real request")
-        self.hook(subagent_start(S1, "verifier"))
-        self.hook(payload("UserPromptSubmit", "child", prompt="message for the verifier"))
-        update_state(self.root, "vscode", S1, lambda state: state.update(continuation={"prompt": "fed back reason", "at": __import__("time").time()}))
-        self.say("fed back reason")
+    def test_the_agent_writes_the_file_and_not_the_folder(self) -> None:
         self.new()
-        text = self.request()
-        self.assertIn("the real request", text)
-        self.assertNotIn("verifier", text)
-        self.assertNotIn("fed back reason", text)
+        self.assertEqual(self.write(f"{BASE}/job/REQ.md"), {})
+        self.assertEqual(self.write(f"{BASE}/job/REQ/brd.md")["permissionDecision"], "deny")
 
-    def test_the_agent_cannot_write_the_file(self) -> None:
+    def test_a_light_task_has_neither(self) -> None:
+        self.new("quick", "qa")
+        self.assertEqual(self.names("quick"), {"TASK.md", ".task"})
+
+    def test_nothing_stores_the_users_prompts_for_the_task(self) -> None:
+        self.hook(payload("UserPromptSubmit", S1, prompt="x" * 200 + " 秘密的表名 t_secret"))
         self.new()
-        self.assertEqual(self.write(f"{BASE}/job/REQ/request.md")["permissionDecision"], "deny")
+        state = json.loads(self.state_file(S1).read_text(encoding="utf-8"))
+        self.assertNotIn("prompts", state)
+        self.assertNotIn("t_secret", json.dumps(state, ensure_ascii=False))  # only the first characters of a prompt are kept, by task_level
+        self.assertNotIn("t_secret", json.dumps(self.session_log(S1), ensure_ascii=False))
+        self.assertEqual([path.name for path in (self.folder() / "REQ").iterdir()], [])
 
-    def test_open_and_upgrade_do_not_write_it_again(self) -> None:
-        self.new("job", "qa")
-        self.say("a later prompt")
-        self.cli_json("task", "upgrade", "--tier", "medium")
-        self.open()
-        self.assertFalse((self.folder() / "REQ" / "request.md").exists())
-
-    def test_a_very_long_prompt_is_cut_and_the_log_never_holds_the_words(self) -> None:
-        self.say("秘" * 30000)
-        self.new()
-        self.assertEqual(self.request().count("秘"), 20000)
-        self.assertNotIn("秘", json.dumps(self.session_log(S1), ensure_ascii=False))
+    def test_the_next_step_says_to_write_the_requirement_down(self) -> None:
+        self.assertIn(f"{BASE}/job/REQ.md", self.new()["next"])
+        self.assertNotIn("REQ.md", self.new("quick", "qa")["next"])
 
 
 class RelayReminderTests(LifeCase):
@@ -451,7 +417,7 @@ class PromptRuleTests(LifeCase):
         context = self.hook(payload("UserPromptSubmit", S1, prompt="next"))["additionalContext"]
         self.assertIn(f"任务：{BASE}/job（RCA，中档）", context)
         self.assertIn(f"先读 {BASE}/job/TASK.md", context)
-        self.assertIn("REQ/、REF/ 只读", context)
+        self.assertIn("需求写在 REQ.md", context)
         self.assertNotIn("（L2）", context)
 
     def test_a_task_from_before_has_the_plain_head(self) -> None:

@@ -7,7 +7,7 @@ agent 和人的工作区。这里的运行内容不进 git，只有本文件和�
 | 路径 | 用途 | 谁写 |
 | --- | --- | --- |
 | `sandbox/requests/<request-id>/` | L3 请求的执行目录。L3 任务只在这里写 | L3 的 agent 和 CLI |
-| `sandbox/tasks/<任务>/` | 任务目录的新位置。`harness task new` 建在这里，按档位带 `TASK.md`（接力文件，新会话先读它）、`TODO.md`、`LOG.md`。其余和下面一行相同 | 人、agent；`.task/` 和两个 `.diff` 由 CLI 写 |
+| `sandbox/tasks/<任务>/` | 任务目录的新位置。`harness task new` 建在这里，按档位带 `TASK.md`（接力文件，新会话先读它）、`REQ.md`（需求，agent 写，你确认）、`TODO.md`、`LOG.md`。其余和下面一行相同 | 人、agent；`.task/` 和两个 `.diff` 由 CLI 写 |
 | `current_tasks/<任务>/` | 人放任务材料（`REQ/`、`REF/`）。L2 任务模式下：`PLAN.md`（计划）、`DEV/`（要回写的成果，路径和目标仓库一样）、目录根下的其他文件（不回写的成果，例如 `RCA.md`）、`CHANGES.diff` 和 `PROMOTE-PLAN.diff`（给人看的差异）、`.task/`（状态） | 人；L2 的 agent 写 `PLAN.md`、`DEV/` 和不回写的成果；两个 `.diff` 和 `.task/` 由 CLI 写 |
 | `goals/<id>/` | 长任务的目标文件：`GOAL.md`（中心思想）、`TODO.md`（步骤）、`NOW.md`（进度指针）、`LOG.md`（改动日志），复杂步骤另有 `accept/`（验收指南）。用户输入 `/generic-goal-driven` 才建 | 人和 agent；L2 任务模式和 L3 进行中不能写 |
 | `reports/` | 请求的执行报告。请求收尾时自动写，也可以 `harness report` 重写 | CLI |

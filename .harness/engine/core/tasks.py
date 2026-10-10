@@ -24,6 +24,7 @@ DEFAULT_TIER = {"qa": "light", "rca": "medium", "design": "medium", "dev": "full
 TASK_FILE = "TASK.md"
 TODO_FILE = "TODO.md"
 LOG_FILE = "LOG.md"
+REQ_FILE = "REQ.md"  # the requirement as the agent understands it; REQ/ holds the person's own documents
 PLAN_NAME = "PLAN.md"
 DEV_NAME = "DEV"
 STATE_DIR = ".task"

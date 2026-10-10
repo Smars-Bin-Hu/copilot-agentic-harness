@@ -107,6 +107,12 @@ class EngineDetectionTests(unittest.TestCase):
             self.assertEqual(copilot_vscode.parse(data).tool_kind, kind, name)
             self.assertEqual(copilot_vscode.engine(data), "cli", name)
 
+    def test_a_terminal_tool_under_a_windows_name_is_still_a_terminal(self) -> None:
+        # Never recorded on Windows. Whatever the engine calls the tool there, the gate has to read its command.
+        for name in ("bash", "PowerShell", "powershell"):
+            event = copilot_vscode.parse({**sample("PreToolUse.Bash.json"), "tool_name": name, "tool_input": {"command": "sudo ls"}})
+            self.assertEqual((event.tool_kind, event.command), ("terminal", "sudo ls"), name)
+
     def test_loading_a_skill_gives_its_name(self) -> None:
         self.assertEqual(copilot_vscode.parse(sample("PreToolUse.skill.json")).skill, "harness-task-level")
         self.assertEqual(copilot_vscode.parse(sample("PreToolUse.Read.json")).skill, "")

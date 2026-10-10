@@ -223,6 +223,24 @@ class TerminalTests(unittest.TestCase):
             "dd if=/dev/zero of=/dev/sda",
             "Remove-Item -Recurse -Force C:\\",
             "python3 .harness/engine/cli.py request approve-promote --request r1",
+            # Refused since 2026-10-10: "Allow all" skips an ask, so what a person must run is not left to a dialog.
+            "sudo ls",
+            "runas /user:admin cmd",
+            "chmod -R 755 src",
+            "docker rm c1",
+            "kubectl delete pod p",
+            "terraform destroy",
+            # The same on Windows (PowerShell, cmd). The company machine is Windows.
+            "Start-Process powershell -Verb RunAs -ArgumentList 'x'",
+            "start-process cmd -verb runas",
+            "gsudo choco upgrade all",
+            "sudo.exe netsh winsock reset",
+            "icacls C:\\repos\\x /grant Everyone:F /T",
+            "takeown /F C:\\repos\\x /R",
+            "Get-ChildItem . -Recurse | Set-Acl -AclObject $acl",
+            "kubectl.exe delete pod p",
+            "terraform.exe apply -auto-approve",
+            "chown --recursive me src",
             "python3 .harness/engine/cli.py request recover --request r1",
             "python .harness\\engine\\cli.py request recover",
             "python .harness/engine/cli.py request approve-promote --request r1",
@@ -270,16 +288,21 @@ class TerminalTests(unittest.TestCase):
             "npm install",
             "npx tsc",
             "brew install jq",
-            "sudo ls",
-            "chmod -R 755 src",
-            "docker rm c1",
-            "kubectl delete pod p",
         ):
             with self.subTest(command):
                 self.assertEqual(self.verdict(command), "ask")
 
     def test_git_restore_staged_and_promote_are_allowed(self) -> None:
         for command in (
+            # Close to the refused ones, but harmless: one file, a read, a word inside an argument.
+            "chmod 644 a.txt",
+            "icacls C:\\repos\\x",
+            "Get-Acl . | Format-List",
+            "docker ps",
+            "kubectl get pods",
+            "terraform plan",
+            "Start-Process notepad a.txt",
+            "echo runas",
             "git restore --staged a.py",
             "python3 .harness/engine/cli.py promote --request r1 --dry-run",
             "python3 .harness/engine/cli.py promote --request r1",  # the person's approval guards it, not a tool-call dialog
@@ -585,8 +608,8 @@ class GateHookTests(HarnessTestCase):
 
     def test_an_ask_rule_added_by_override_asks(self) -> None:
         override = self.root / ".harness" / "policies" / "gate.override.json"
-        override.write_text(json.dumps({"terminal": {"ask+": [{"pattern": "{cmd}terraform\\s+apply\\b", "why": "改线上资源"}]}}), encoding="utf-8")
-        self.assertEqual(self.decision(self.pre("run_in_terminal", {"command": "terraform apply -auto-approve"})), "ask")
+        override.write_text(json.dumps({"terminal": {"ask+": [{"pattern": "{cmd}make\\s+deploy\\b", "why": "改线上资源"}]}}), encoding="utf-8")
+        self.assertEqual(self.decision(self.pre("run_in_terminal", {"command": "make deploy"})), "ask")
         self.assertEqual(self.decision(self.pre("run_in_terminal", {"command": "rm -rf build"})), "ask")  # the defaults are still there
 
     def test_a_disabled_module_is_not_called(self) -> None:

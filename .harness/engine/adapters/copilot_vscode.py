@@ -21,7 +21,7 @@ from . import common
 SURFACE = "vscode"
 
 # Tool names only the SDK engine uses. The tools a subagent runs there still carry the legacy names.
-_CLI_TOOLS = ("Bash", "Read", "Write", "Edit", "Grep", "Glob", "Agent", "search_code_subagent", "WebFetch", "skill", "tool_search_tool")
+_CLI_TOOLS = ("Bash", "bash", "PowerShell", "powershell", "Read", "Write", "Edit", "Grep", "Glob", "Agent", "search_code_subagent", "WebFetch", "skill", "tool_search_tool", "task_complete")
 
 
 def event_name(payload: Dict[str, Any]) -> Any:

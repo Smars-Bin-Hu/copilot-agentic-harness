@@ -19,10 +19,12 @@
 - `doctor` 检查 hook 是不是真的在跑：最近一次被调用的时间、是不是 Copilot（SDK）会话、gate 最近的耗时。从没被调用过、超过 7 天没被调用、gate 最慢的一次超过超时的一半，都给 `[WARN]`。
 - 失败的工具调用进日志。平台在工具调用失败时发 `PostToolUseFailure`，不发 `PostToolUse`，以前这类调用在日志里没有“做完”的记录。现在记下工具名和平台给的错误。
 - 日志记下 agent 用了哪个 skill。`harness stats` 多两项：`failed_tool_calls_by_tool`、`skills_loaded`。
-- 认得三个新工具名：`WebFetch`（联网）、`skill`、`tool_search_tool`。以前都归成“其他”。
+- 认得四个新工具名：`WebFetch`（联网）、`skill`、`tool_search_tool`、`task_complete`。以前都归成“其他”。
 
 ### 变更
 
+- **两类终端命令从“要你确认”改成直接拒绝**：用管理员权限运行（`sudo`、`runas`、`Start-Process -Verb RunAs`）；递归改权限或删容器、集群、基础设施（`chmod -R`、`icacls /T`、`takeown /R`、`docker rm`、`kubectl delete`、`terraform apply`、`terraform destroy`）。原因：实测权限选 Allow all 时确认框不弹，命令直接执行。要用这些命令，自己在终端运行。在 `gate.override.json` 里加过同类 ask 规则的不受影响。
+- 文档写明：其余“要你确认”的命令只是提醒，Allow all 会跳过。
 - `doctor` 找不到 Python 从 `[WARN]` 改成 `[ERROR]`，并且会真的执行一次。原因：在 Copilot 会话里，hook 启动不了时所有工具调用都会被拒。
 - 刚下载、还没在 Copilot 里用过时，`doctor` 会有一条 `[WARN]`：还没有任何 hook 调用记录。在 Copilot 里发一句话就消失。
 - hook 配置多了一个事件 `PostToolUseFailure`。自己改过 `.github/hooks/harness.json` 的，升级时要带上它，否则 `doctor` 报错。

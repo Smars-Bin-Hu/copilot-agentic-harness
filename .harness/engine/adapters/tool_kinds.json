@@ -4,7 +4,7 @@
   "surfaces": {
     "vscode": {
       "verified": true,
-      "source": "B1 recording 2026-09-30 (VS Code 1.140.0 / Copilot Chat 0.68.0) and the Copilot SDK engine recording 2026-10-01 (VS Code 1.140.0, @github/copilot 1.0.89-7); WebFetch, skill and tool_search_tool recorded 2026-10-10",
+      "source": "B1 recording 2026-09-30 (VS Code 1.140.0 / Copilot Chat 0.68.0) and the Copilot SDK engine recording 2026-10-01 (VS Code 1.140.0, @github/copilot 1.0.89-7); WebFetch, skill, tool_search_tool and task_complete recorded 2026-10-10",
       "tools": {
         "read_file": "read",
         "list_dir": "read",
@@ -16,6 +16,9 @@
         "run_in_terminal": "terminal",
         "runSubagent": "subagent",
         "Bash": "terminal",
+        "bash": "terminal",
+        "PowerShell": "terminal",
+        "powershell": "terminal",
         "Read": "read",
         "Write": "create",
         "Edit": "edit",
@@ -26,6 +29,7 @@
         "WebFetch": "web",
         "skill": "skill",
         "tool_search_tool": "meta",
+        "task_complete": "meta",
         "multi_replace_string_in_file": "edit",
         "insert_edit_into_file": "edit",
         "apply_patch": "edit",
@@ -46,9 +50,12 @@
         "multi_replace_string_in_file",
         "insert_edit_into_file",
         "apply_patch",
-        "edit_notebook_file"
+        "edit_notebook_file",
+        "bash",
+        "PowerShell",
+        "powershell"
       ],
-      "unrecorded_note": "Edit tools named in VS Code, never recorded here. The gate needs them as 'edit'; their input shapes are read generically (nested filePath, patch headers). Record them when seen."
+      "unrecorded_note": "Edit tools named in VS Code, never recorded here. The gate needs them as 'edit'; their input shapes are read generically (nested filePath, patch headers). `bash`, `PowerShell` and `powershell` are guesses for the terminal tool of a Copilot session on Windows (never recorded there; the permission dialog on macOS shows `bash`), listed so the gate reads their `command` whatever the name. Record them when seen."
     },
     "cli": {
       "verified": false,

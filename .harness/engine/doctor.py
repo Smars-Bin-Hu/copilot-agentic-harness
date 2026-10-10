@@ -116,7 +116,7 @@ def check_hook_activity(report: Report, root: Path, registry: Dict[str, Any]) ->
     except Exception as error:
         report.warn(f"读不了会话日志，没法确认 hook 有没有在跑：{error}")
         return
-    hint = "在 Copilot 里发一句话，再运行一次 doctor。还是没有，说明 hook 没在跑：查 VS Code 设置 `chat.useHooks`，并确认用 VS Code 打开的是这个仓库的根目录"
+    hint = "在 Copilot 里发一句话，再运行一次 doctor。还是没有，说明 hook 没在跑：确认 `.github/hooks/harness.json` 在，VS Code 打开的是这个仓库的根目录，聊天的 Session Target 是 Copilot；改过以后要 Reload Window"
     if not rows:
         report.warn(f"还没有任何 hook 调用记录，没法确认 hook 有没有在跑。{hint}")
         return

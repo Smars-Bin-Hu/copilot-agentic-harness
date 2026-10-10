@@ -164,6 +164,8 @@ hook 只在明确违反策略时拒绝。它自己出错（配置写坏、解析
 - **hook 启动不了**（例如找不到 Python）：平台当作拒绝，所有工具调用都失败，界面只显示 `hook errored`。
 - **hook 超时**：平台直接放行，没有提示。gate 平时几十毫秒，超时是 30 秒。
 
+另外，VS Code 的 `chat.useHooks` 设置管不到 Copilot（SDK）会话：用户设置和工作区设置都关掉，hook 照常运行。hook 配置文件是窗口启动时读的，改过要 Reload Window。
+
 所以 `doctor` 会试着执行一次 Python，并报告 gate 最近的耗时，离超时太近就给 `[WARN]`。
 
 ### 人批准关键动作，批准不能被 agent 代劳

@@ -325,7 +325,7 @@ class DoctorTests(unittest.TestCase):
         result = self.doctor()
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("[WARN]  还没有任何 hook 调用记录", result.stdout)
-        self.assertIn("chat.useHooks", result.stdout)
+        self.assertIn("Reload Window", result.stdout)
 
     def test_a_recent_hook_call_says_when_which_session_kind_and_how_fast_the_gate_is(self) -> None:
         self.write_log([self.call(ms=20), self.call(ms=40), self.call(ms=30)])
@@ -340,7 +340,7 @@ class DoctorTests(unittest.TestCase):
         result = self.doctor()
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("（9 天前）", result.stdout)
-        self.assertIn("chat.useHooks", result.stdout)
+        self.assertIn("Reload Window", result.stdout)
 
     def test_a_gate_close_to_the_timeout_is_a_warning_because_a_timeout_lets_the_call_through(self) -> None:
         self.write_log([self.call(ms=25), self.call(ms=16000)])

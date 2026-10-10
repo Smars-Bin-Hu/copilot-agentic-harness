@@ -10,7 +10,7 @@ from support import HarnessTestCase, load_payload, payload, post_tool, pre_tool,
 
 from modules.task_level import review
 
-VERIFIER = {"agentName": "verifier", "prompt": "check it", "description": "check"}
+VERIFIER = {"agentName": "reviewer", "prompt": "check it", "description": "check"}
 EDIT = {"filePath": "/w/a.txt", "oldString": "a", "newString": "b"}
 GREP = {"query": "x"}
 
@@ -39,11 +39,11 @@ class VerdictTests(unittest.TestCase):
     def test_the_recorded_subagent_answer_is_read_like_any_answer(self) -> None:
         answer = load_payload("PostToolUse.Agent.json")["tool_result"]["text_result_for_llm"]
         self.assertIn(review.parse_verdict(answer), ("PASS", "FAIL", "unknown"))
-        self.assertEqual(review.parse_verdict("# 数据工程智能体框架"), "unknown")  # a plain answer, not a verifier's
+        self.assertEqual(review.parse_verdict("# 数据工程智能体框架"), "unknown")  # a plain answer, not a reviewer's
 
 
 class ReviewTests(HarnessTestCase):
-    """The review checks with the verifier switched on by the policy default."""
+    """The review checks with the reviewer switched on by the policy default."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -61,7 +61,7 @@ class ReviewTests(HarnessTestCase):
             self.hook(pre_tool(sid, "read_file", {"filePath": "/w/a.txt"}))
             self.hook(post_tool(sid, "read_file", {"filePath": "/w/a.txt"}))
 
-    def verify(self, sid: str, answer: str = "VERDICT: PASS\n- ok", agent: str = "verifier") -> dict:
+    def verify(self, sid: str, answer: str = "VERDICT: PASS\n- ok", agent: str = "reviewer") -> dict:
         tool_input = {**VERIFIER, "agentName": agent}
         output = self.hook(pre_tool(sid, "runSubagent", tool_input))
         if not output:
@@ -101,7 +101,7 @@ class ReviewTests(HarnessTestCase):
         state = self.state("forget")
         self.assertEqual((state["prompt"]["edits"], state["reviews"]), (0, []))
 
-    def test_only_the_verifier_is_recorded_as_a_review(self) -> None:
+    def test_only_the_reviewer_is_recorded_as_a_review(self) -> None:
         self.prompt("who")
         self.hook(pre_tool("who", "runSubagent", {**VERIFIER, "agentName": "builder"}))  # denied at L2
         self.hook(post_tool("who", "runSubagent", {**VERIFIER, "agentName": "builder"}, "VERDICT: PASS"))
@@ -111,12 +111,12 @@ class ReviewTests(HarnessTestCase):
 
     def test_the_agent_name_is_matched_without_case(self) -> None:
         self.prompt("case")
-        self.verify("case", agent="Verifier")
+        self.verify("case", agent="Reviewer")
         self.assertEqual(len(self.state("case")["reviews"]), 1)
 
     # --- the Stop check, one test per branch (M2-5) --------------------------------------------
 
-    def test_l2_a_edit_then_verifier_pass_stops_normally(self) -> None:
+    def test_l2_a_edit_then_reviewer_pass_stops_normally(self) -> None:
         self.prompt("a")
         self.edit("a")
         self.verify("a")
@@ -128,7 +128,7 @@ class ReviewTests(HarnessTestCase):
         first = self.stop("b")
         self.assertTrue(self.blocked(first))
         reason = self.reason(first)
-        self.assertIn("verifier", reason)
+        self.assertIn("reviewer", reason)
         self.assertIn("改了文件", reason)
         self.assertIn("[no-verify]", reason)
         self.verify("b")
@@ -163,7 +163,7 @@ class ReviewTests(HarnessTestCase):
         self.edit("late")
         self.assertTrue(self.blocked(self.stop("late")))
 
-    def test_l2_d_an_exhausted_verifier_lets_it_stop(self) -> None:
+    def test_l2_d_an_exhausted_reviewer_lets_it_stop(self) -> None:
         self.prompt("used")
         self.edit("used")
         self.verify("used", "VERDICT: FAIL")
@@ -242,7 +242,7 @@ class ReviewTests(HarnessTestCase):
     def test_the_rules_for_the_prompt_mention_the_review(self) -> None:
         context = self.prompt("rules")["additionalContext"]
         self.assertIn("复核：本条提示改了文件或工具调用达到 10 次时", context)
-        self.assertIn("调用 verifier 复核一次", context)
+        self.assertIn("调用 reviewer 复核一次", context)
         self.assertIn("[no-verify]", context)
         level1 = self.prompt("rules", "[L1] small")["additionalContext"]
         self.assertNotIn("复核", level1)
@@ -269,7 +269,7 @@ if __name__ == "__main__":
 
 
 class VerifierSwitchTests(HarnessTestCase):
-    """M2-8: the verifier is off by default. `[verify]` turns it on for one prompt, `[no-verify]` turns it off."""
+    """M2-8: the reviewer is off by default. `[verify]` turns it on for one prompt, `[no-verify]` turns it off."""
 
     def prompt(self, sid: str, text: str) -> dict:
         return self.hook(payload("UserPromptSubmit", sid, prompt=text))
@@ -278,7 +278,7 @@ class VerifierSwitchTests(HarnessTestCase):
         self.hook(pre_tool(sid, "replace_string_in_file", EDIT))
         self.hook(post_tool(sid, "replace_string_in_file", EDIT))
 
-    def call(self, sid: str, agent: str = "verifier") -> dict:
+    def call(self, sid: str, agent: str = "reviewer") -> dict:
         return self.hook(pre_tool(sid, "runSubagent", {**VERIFIER, "agentName": agent}))
 
     def stop(self, sid: str) -> dict:
@@ -291,12 +291,12 @@ class VerifierSwitchTests(HarnessTestCase):
         policy = json.loads((self.root / ".harness" / "policies" / "task-levels.json").read_text(encoding="utf-8"))
         self.assertIs(policy["levels"]["2"]["verification"]["enabled"], False)
 
-    def test_off_the_verifier_call_is_denied_with_the_way_to_turn_it_on(self) -> None:
+    def test_off_the_reviewer_call_is_denied_with_the_way_to_turn_it_on(self) -> None:
         self.prompt("off", "[L2] change a file")
         denied = self.call("off")
         self.assertEqual(self.decision(denied), "deny")
         reason = denied["permissionDecisionReason"]
-        self.assertIn("没有开启 verifier 复核", reason)
+        self.assertIn("没有开启 reviewer 复核", reason)
         self.assertIn("[verify]", reason)
         self.assertEqual(self.task_level_state("off")["counters"]["subagents_created"], 0)
 
@@ -315,8 +315,8 @@ class VerifierSwitchTests(HarnessTestCase):
 
     def test_off_the_prompt_rules_say_so_and_do_not_ask_for_a_review(self) -> None:
         context = self.prompt("off-rules", "[L2] go")["additionalContext"]
-        self.assertIn("没有开启 verifier 复核", context)
-        self.assertNotIn("调用 verifier 复核一次", context)
+        self.assertIn("没有开启 reviewer 复核", context)
+        self.assertNotIn("调用 reviewer 复核一次", context)
 
     def test_the_enable_marker_turns_it_on_for_that_prompt_only(self) -> None:
         self.prompt("on", "[L2] [verify] change a file")
@@ -352,12 +352,12 @@ class VerifierSwitchTests(HarnessTestCase):
 
     def test_an_agent_cannot_turn_it_on_by_writing_the_marker_in_a_call_message(self) -> None:
         self.hook(payload("UserPromptSubmit", "parent", prompt="[L2] change a file"))
-        self.hook(subagent_start("parent", "verifier"))
+        self.hook(subagent_start("parent", "reviewer"))
         self.assertEqual(self.hook(payload("UserPromptSubmit", "child", prompt="[verify] model text")), {})
         self.assertEqual(self.task_level_state("child")["prompt"]["verify"], "")
         self.assertEqual(self.task_level_state("parent")["prompt"]["verify"], "")
 
-    def test_l1_has_no_verifier_either_way(self) -> None:
+    def test_l1_has_no_reviewer_either_way(self) -> None:
         self.prompt("l1", "[L1] [verify] small change")
         self.edit("l1")
         self.assertEqual(self.stop("l1"), {})

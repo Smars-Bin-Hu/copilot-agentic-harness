@@ -130,4 +130,4 @@ def verifier_on(policy: Dict[str, Any], level: int, choice: str) -> bool:
 def verifier_name(policy: Dict[str, Any], level: int) -> str:
     """The agent name of the level's verifier, or an empty string if the level has none."""
     rule = verification(policy, level)
-    return rule.get("agent", "verifier") if rule["mode"] == "verifier" else ""
+    return rule.get("agent", "reviewer") if rule["mode"] == "verifier" else ""

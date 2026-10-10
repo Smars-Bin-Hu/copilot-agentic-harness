@@ -485,7 +485,7 @@ def diff(root: Path, raw_task: str = "") -> Dict[str, Any]:
     changed = [item for item in items if item["action"] != "unchanged"]
     return {
         "task": task, "files": changed, "unchanged": len(items) - len(changed) + 0, "diff_file": rel(root, path),
-        "next": "差异全文在 diff_file 里。verifier 复核时让它读这个文件、REQ/ 和 PLAN.md，不用读整份成果。",
+        "next": "差异全文在 diff_file 里。reviewer 检查时让它读这个文件、REQ/ 和 PLAN.md，不用读整份成果。",
     }
 
 

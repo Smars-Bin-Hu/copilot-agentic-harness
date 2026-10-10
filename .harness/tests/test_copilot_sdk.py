@@ -35,6 +35,10 @@ def sample(name: str) -> Dict[str, Any]:
 
 
 class SdkTestCase(HarnessTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.recorded_checker_name()
+
     def feed(self, data: Dict[str, Any]) -> tuple:
         return hook.process(json.dumps(data), self.root)
 

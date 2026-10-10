@@ -44,7 +44,6 @@
         ".harness/policies/task-levels.json",
         ".harness/engine/modules/task_level/",
         ".harness/tests/test_task_level.py",
-        ".github/agents/verifier.agent.md",
         ".github/skills/l1/",
         ".github/skills/l2/",
         ".harness/tests/test_review.py"

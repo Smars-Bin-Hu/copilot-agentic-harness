@@ -222,7 +222,7 @@ class SubagentStopTests(VerifyCase):
         self.assertFalse(blocked(self.sub_stop()))  # no request
         request_id = self.new_request()
         self.dispatched_builder(request_id)
-        self.assertFalse(blocked(self.sub_stop("verifier")))
+        self.assertFalse(blocked(self.sub_stop("reviewer")))
         self.assertFalse(blocked(self.sub_stop("search-subagent")))
 
     def test_a_concluded_request_is_left_alone(self) -> None:

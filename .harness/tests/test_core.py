@@ -213,7 +213,7 @@ class StateTests(unittest.TestCase):
     def test_a_prompt_in_the_parent_session_is_the_user_even_when_it_repeats_a_call_message(self) -> None:
         # A subagent runs in a session of its own, so its call message never arrives here as a prompt.
         data = state.new_state("vscode", "s")
-        call = self.event("PreToolUse", tool_kind="subagent", subagent_prompt="  read the file  ", subagent_target="verifier")
+        call = self.event("PreToolUse", tool_kind="subagent", subagent_prompt="  read the file  ", subagent_target="reviewer")
         state.track_after(data, call, Decision())
         self.assertEqual([item["prompt"] for item in data["subagents"]["pending_prompts"]], ["  read the file  "])
         prompt = self.event("UserPromptSubmit", prompt="read the file")
@@ -228,13 +228,13 @@ class StateTests(unittest.TestCase):
 
     def test_a_start_waits_for_its_child_session_and_a_stop_removes_it_by_agent_name(self) -> None:
         data = state.new_state("vscode", "s")
-        state.track_before(data, self.event("SubagentStart", agent_type="verifier"))
+        state.track_before(data, self.event("SubagentStart", agent_type="reviewer"))
         entry = data["subagents"]["active"][0]
-        self.assertEqual((entry["agent_type"], entry["awaiting_child"]), ("verifier", True))
+        self.assertEqual((entry["agent_type"], entry["awaiting_child"]), ("reviewer", True))
         inside = self.event("UserPromptSubmit", prompt="anything")
         state.track_before(data, inside)
         self.assertFalse(inside.from_subagent)  # the user can write while a subagent runs
-        state.track_before(data, self.event("SubagentStop", agent_id="child-session", agent_type="verifier"))
+        state.track_before(data, self.event("SubagentStop", agent_id="child-session", agent_type="reviewer"))
         self.assertEqual(data["subagents"]["active"], [])
 
     def test_a_stop_removes_one_entry_per_call(self) -> None:

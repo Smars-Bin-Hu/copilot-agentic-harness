@@ -86,5 +86,5 @@ def on_stop(event: HookEvent, ms: Dict[str, Any], policy: Dict[str, Any], level:
     maximum = level_policy(policy, level)["subagents"].get("max_per_prompt")
     if maximum is not None and ms["counters"]["subagents_created"] >= maximum:
         return None  # the verifier is used up: the agent reports what is left
-    agent = verification(policy, level).get("agent", "verifier")
+    agent = verification(policy, level).get("agent", "reviewer")
     return Decision(block=True, reason=rules.review_required(policy, level, agent, review_reason(ms, need), bool(reviews)))

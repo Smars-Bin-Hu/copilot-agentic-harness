@@ -114,8 +114,8 @@ class BreakerHookTests(HarnessTestCase):
         self.prompt()
         for _ in range(2):
             self.denied_write()
-        self.hook(subagent_start(self.session, "verifier"))
-        self.hook(payload("UserPromptSubmit", "child-of-" + self.session, prompt="you are the verifier"))  # the call message
+        self.hook(subagent_start(self.session, "reviewer"))
+        self.hook(payload("UserPromptSubmit", "child-of-" + self.session, prompt="you are the reviewer"))  # the call message
         self.assertIn("同一个拒绝已出现 3 次", self.denied_write())
 
     def test_the_limit_comes_from_the_policy(self) -> None:

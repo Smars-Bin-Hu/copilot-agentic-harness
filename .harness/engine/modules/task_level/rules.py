@@ -55,7 +55,7 @@ def review_rule(policy: Dict[str, Any], level: int, choice: str = "") -> str:
     if rule["mode"] != "verifier":
         return ""
     if not verifier_on(policy, level, choice):
-        text = "复核：本条提示没有开启 verifier 复核。自己检查交付物，不要调用子 agent。"
+        text = "复核：本条提示没有开启 reviewer 复核。自己检查交付物，不要调用子 agent。"
         markers = rule.get("enable_markers", [])
         if markers:
             text += f"用户需要独立复核时，会在提示里写 {'、'.join(markers)}。"
@@ -66,7 +66,7 @@ def review_rule(policy: Dict[str, Any], level: int, choice: str = "") -> str:
         triggers.append("改了文件")
     if when.get("min_tool_calls") is not None:
         triggers.append(f"工具调用达到 {when['min_tool_calls']} 次")
-    text = f"复核：本条提示{'或'.join(triggers)}时，结束前在最后一次修改之后调用 {rule.get('agent', 'verifier')} 复核一次。"
+    text = f"复核：本条提示{'或'.join(triggers)}时，结束前在最后一次修改之后调用 {rule.get('agent', 'reviewer')} 复核一次。"
     text += f"简报写三项：用户的原话、交付物、检查项。复核结论是 FAIL 时，修复后再复核一次；第二次仍 FAIL，就把问题交给用户。"
     markers = rule.get("skip_markers", [])
     if markers:
@@ -190,7 +190,7 @@ def subagent_denied(policy: Dict[str, Any], level: int, target: str, generic: bo
 def verifier_off(policy: Dict[str, Any], level: int, target: str, generic: bool) -> str:
     """A subagent call refused because the only allowed subagent, the verifier, is off for this prompt."""
     called = GENERIC_AGENT if generic else target
-    text = f"L{level} 本条提示没有开启 verifier 复核，不能调用子 agent（你调用的是：{called}）。请自己检查交付物。"
+    text = f"L{level} 本条提示没有开启 reviewer 复核，不能调用子 agent（你调用的是：{called}）。请自己检查交付物。"
     markers = verification(policy, level).get("enable_markers", [])
     if markers:
         text += f"需要独立复核时，停下来告诉用户，请用户在提示里写 {'、'.join(markers)}。"

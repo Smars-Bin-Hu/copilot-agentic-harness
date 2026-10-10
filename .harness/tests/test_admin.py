@@ -219,7 +219,7 @@ class LevelTests(AdminTestCase):
 
     def test_no_subagent(self) -> None:
         self.switch_on()
-        for name in ("verifier", "builder", ""):
+        for name in ("reviewer", "builder", ""):
             output = self.hook(pre_tool(self.session, "runSubagent", {"agentName": name, "prompt": "p", "description": "d"}))
             self.assertEqual(self.decision(output), "deny", name)
             self.assertIn("admin 模式不允许子 agent", self.reason(output))
@@ -240,7 +240,7 @@ class LevelTests(AdminTestCase):
         self.assertEqual(completed.returncode, 1)
         self.assertIn("admin 模式", completed.stderr)
 
-    def test_stop_asks_for_no_verifier(self) -> None:
+    def test_stop_asks_for_no_reviewer(self) -> None:
         self.verifier_default(True)
         self.hook(payload("UserPromptSubmit", self.session, prompt="/l2 edit"))
         self.switch_on()

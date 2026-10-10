@@ -110,7 +110,7 @@ class DispatchGateTests(RequestCase):
 
     def test_other_names_and_the_generic_subagent_are_refused_in_l3(self) -> None:
         self.ready_builder()
-        for name in ("verifier", "explore", "", "default"):
+        for name in ("reviewer", "explore", "", "default"):
             with self.subTest(name):
                 self.assertEqual(self.decision(self.call(name)), "deny")
 
@@ -196,7 +196,7 @@ class SubagentStartTests(RequestCase):
     def test_a_subagent_that_was_not_called_through_the_gate_gets_nothing(self) -> None:
         self.new_request()
         self.assertEqual(self.start("builder"), {})
-        self.assertEqual(self.start("verifier"), {})
+        self.assertEqual(self.start("reviewer"), {})
 
     def test_outside_l3_nothing_is_injected(self) -> None:
         self.hook(payload("UserPromptSubmit", "plain", prompt="[L2] x"))
@@ -231,10 +231,11 @@ class AgentFileTests(unittest.TestCase):
     def test_the_models_follow_the_split(self) -> None:
         names = {name: frontmatter(AGENTS / f"{name}.agent.md")["model"] for name in ("orchestrator", "builder", "reviewer")}
         self.assertIn("Opus", names["orchestrator"])
-        self.assertIn("Opus", names["reviewer"])
         self.assertIn("Sonnet", names["builder"])
         self.assertNotIn("Opus", names["builder"])
-        self.assertNotIn("Sonnet", names["reviewer"])
+        self.assertTrue(names["reviewer"].startswith("['Claude Sonnet"))  # the task checker since B26: Sonnet, then Haiku
+        self.assertIn("Haiku", names["reviewer"])
+        self.assertNotIn("Opus", names["reviewer"])
 
     def test_every_cli_command_the_agents_and_the_skill_name_exists(self) -> None:
         texts = [path.read_text(encoding="utf-8") for path in AGENTS.glob("*.agent.md")]
@@ -257,7 +258,7 @@ class AgentFileTests(unittest.TestCase):
     def test_the_bodies_and_the_skill_have_no_hard_coded_numbers(self) -> None:
         paths = list(AGENTS.glob("*.agent.md")) + [REPO / ".github" / "skills" / "harness-orchestration" / "SKILL.md"]
         for path in paths:
-            if path.name == "verifier.agent.md":
+            if path.name == "reviewer.agent.md":
                 continue
             with self.subTest(path.name):
                 found = re.findall(r"\d+\s*(?:轮|次|行|字节|条|个|秒|分钟)", path.read_text(encoding="utf-8"))
@@ -272,11 +273,10 @@ class AgentFileTests(unittest.TestCase):
             self.assertIn(needle, text)
 
     def test_the_roles_are_told_to_keep_the_last_reply_short_and_the_reviewer_to_read_the_diff(self) -> None:
-        for name in ("builder", "reviewer"):
-            text = (REPO / ".github" / "agents" / f"{name}.agent.md").read_text(encoding="utf-8")
-            self.assertIn("## 最后一条回复", text, name)
-            self.assertIn("已交接", text, name)
-        self.assertIn("candidate.diff", (REPO / ".github" / "agents" / "reviewer.agent.md").read_text(encoding="utf-8"))
+        text = (REPO / ".github" / "agents" / "builder.agent.md").read_text(encoding="utf-8")
+        self.assertIn("## 最后一条回复", text)
+        self.assertIn("已交接", text)
+        self.assertIn("CHANGES.diff", (REPO / ".github" / "agents" / "reviewer.agent.md").read_text(encoding="utf-8"))
         skill = (REPO / ".github" / "skills" / "harness-orchestration" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("assignment_copied_from_builder", skill)
         self.assertIn("candidate.diff", skill)
@@ -311,12 +311,6 @@ class ModelSeriesDoctorTests(unittest.TestCase):
         result = self.doctor()
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("模型系列检查完成", result.stdout)
-
-    def test_reviewer_on_the_builders_series_is_an_error(self) -> None:
-        self.set_model("reviewer", "['Claude Sonnet 5.5 (copilot)']")
-        result = self.doctor()
-        self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("builder 和 reviewer 用了同一系列", result.stdout.replace("agent ", "").replace("reviewer 和 builder", "builder 和 reviewer"))
 
     def test_a_fallback_list_that_crosses_series_is_an_error(self) -> None:
         self.set_model("builder", "['Claude Sonnet 5.5', 'Claude Opus 5.5']")

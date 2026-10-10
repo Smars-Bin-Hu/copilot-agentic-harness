@@ -90,9 +90,9 @@ class SessionLogTests(ObserveCase):
         row = self.last("budget")
         self.assertEqual((row["decision"], row["kind"], row["by"]), ("deny", "budget", ["task_level"]))
 
-    def test_the_verdict_of_a_verifier_call_is_recorded_with_the_verifier_as_judge(self) -> None:
+    def test_the_verdict_of_a_reviewer_call_is_recorded_with_the_reviewer_as_judge(self) -> None:
         self.prompt("verdict", "[L2] [verify] change a file")
-        call = {"agentName": "verifier", "prompt": "check", "description": "check"}
+        call = {"agentName": "reviewer", "prompt": "check", "description": "check"}
         self.hook(post_tool("verdict", "runSubagent", call, "VERDICT: FAIL\n- missing"))
         row = self.last("verdict")
         self.assertEqual((row["judge"], row["verdict"]), ("verifier", "FAIL"))
@@ -248,13 +248,13 @@ class StatsTests(ObserveCase):
 
     def test_verifier_verdicts_and_started_subagents(self) -> None:
         self.prompt("v", "[L2] [verify] work")
-        call = {"agentName": "verifier", "prompt": "check", "description": "check"}
+        call = {"agentName": "reviewer", "prompt": "check", "description": "check"}
         self.hook(post_tool("v", "runSubagent", call, "VERDICT: PASS\n- ok"))
         self.hook(post_tool("v", "runSubagent", call, "VERDICT: FAIL\n- no"))
-        self.hook(subagent_start("v", "verifier"))
+        self.hook(subagent_start("v", "reviewer"))
         result = self.stats()
         self.assertEqual(result["verifier_verdicts"], {"PASS": 1, "FAIL": 1})
-        self.assertEqual(result["subagents_started"], {"verifier": 1})
+        self.assertEqual(result["subagents_started"], {"reviewer": 1})
 
     def test_days_keeps_only_recent_calls(self) -> None:
         self.build()

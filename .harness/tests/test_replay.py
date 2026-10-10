@@ -26,6 +26,10 @@ def session_of(data: Dict[str, Any]) -> str:
 
 
 class ReplayTests(HarnessTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.recorded_checker_name()
+
     def feed(self, data: Dict[str, Any]) -> tuple:
         return hook.process(json.dumps(data), self.root)
 
@@ -107,6 +111,10 @@ class ReplayTests(HarnessTestCase):
 
 class ReplayThroughTheRealProcessTests(HarnessTestCase):
     """One process per event, as VS Code runs it: one call record per event, in order."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.recorded_checker_name()
 
     def test_each_event_leaves_exactly_one_call_record(self) -> None:
         events = list(iter_session(VERIFIER))

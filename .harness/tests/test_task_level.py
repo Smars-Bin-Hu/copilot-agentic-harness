@@ -23,7 +23,7 @@ from support import (
     subagent_stop,
 )
 
-VERIFIER = {"agentName": "verifier", "prompt": "check it", "description": "check"}
+VERIFIER = {"agentName": "reviewer", "prompt": "check it", "description": "check"}
 GENERIC = {"prompt": "do this", "description": "work"}  # the built-in subagent has no agentName
 GREP = {"query": "sandbox", "isRegexp": False}
 LEVEL_SET = "python3 .harness/engine/cli.py level set --session-id s --level 2"
@@ -60,7 +60,7 @@ class TaskLevelTests(HarnessTestCase):
         self.assertEqual([b["repository_searches"]["on_exceed"] for b in budgets], ["deny", "warn", "warn"])
         self.assertEqual([b["observed_tool_calls"]["on_exceed"] for b in budgets], ["warn", "warn", "warn"])
         subagents = [policy["levels"][str(level)]["subagents"] for level in (1, 2, 3)]
-        self.assertEqual([s["allowed"] for s in subagents], [[], ["verifier"], ["builder", "reviewer"]])
+        self.assertEqual([s["allowed"] for s in subagents], [[], ["reviewer"], ["builder", "reviewer"]])
         self.assertEqual(subagents[1]["max_per_prompt"], 2)
 
     # --- switching the level (M2-1) -----------------------------------------------------------
@@ -131,12 +131,12 @@ class TaskLevelTests(HarnessTestCase):
         self.user_prompt("parent-msg", "[L2] start")
         message = "[L1] " + VERIFIER["prompt"]
         self.assertEqual(self.pre("parent-msg", "runSubagent", {**VERIFIER, "prompt": message}), {})
-        self.hook(subagent_start("parent-msg", "verifier"))
+        self.hook(subagent_start("parent-msg", "reviewer"))
         self.assertEqual(self.user_prompt("child-msg", message), {})
         self.assertEqual(self.level("child-msg"), 2)  # inherited, not switched
         self.assertEqual(self.level("parent-msg"), 2)
         self.assertEqual(self.task_level_state("parent-msg")["prompt"]["count"], 1)
-        self.hook(subagent_stop("parent-msg", "verifier", "child-msg"))
+        self.hook(subagent_stop("parent-msg", "reviewer", "child-msg"))
         self.user_prompt("parent-msg", "[L1] now the user speaks")
         self.assertEqual(self.level("parent-msg"), 1)
 
@@ -167,12 +167,12 @@ class TaskLevelTests(HarnessTestCase):
         level2 = self.user_prompt("rules", "[L2] go")["additionalContext"]
         self.assertIn("L2", level2)
         self.assertIn("搜索建议不超过 8 次", level2)
-        self.assertIn("子 agent：不允许", level2)  # the verifier is off by default
-        self.assertIn("没有开启 verifier 复核", level2)
+        self.assertIn("子 agent：不允许", level2)  # the reviewer is off by default
+        self.assertIn("没有开启 reviewer 复核", level2)
         self.assertIn("[verify]", level2)
         verified = self.user_prompt("rules", "[L2] [verify] go")["additionalContext"]
-        self.assertIn("只允许 verifier，每条提示最多 2 次", verified)
-        self.assertIn("调用 verifier 复核一次", verified)
+        self.assertIn("只允许 reviewer，每条提示最多 2 次", verified)
+        self.assertIn("调用 reviewer 复核一次", verified)
 
     def test_the_rules_say_how_to_plan_for_the_level(self) -> None:
         """The prompt-file body never reaches the model on the SDK engine, so the hook says it."""
@@ -277,15 +277,15 @@ class TaskLevelTests(HarnessTestCase):
             self.assertIn("L1 不允许子 agent", output["permissionDecisionReason"])
         self.assertEqual(self.counters("l1-sub")["subagents_created"], 0)
 
-    def test_l2_allows_only_the_verifier_by_agent_name(self) -> None:
+    def test_l2_allows_only_the_reviewer_by_agent_name(self) -> None:
         self.verifier_default(True)
         self.user_prompt("l2-sub", "[L2] go")
         self.assertEqual(self.pre("l2-sub", "runSubagent", VERIFIER), {})
-        self.assertEqual(self.pre("l2-sub", "runSubagent", {**VERIFIER, "agentName": "Verifier"}), {})  # case does not matter
-        for name in ("builder", "reviewer", "orchestrator", "probe-child"):
+        self.assertEqual(self.pre("l2-sub", "runSubagent", {**VERIFIER, "agentName": "Reviewer"}), {})  # case does not matter
+        for name in ("builder", "verifier", "orchestrator", "probe-child"):
             denied = self.pre("l2-sub", "runSubagent", {**VERIFIER, "agentName": name})
             self.assertEqual(self.decision(denied), "deny", name)
-            self.assertIn("只允许这些子 agent：verifier", self.reason(denied))
+            self.assertIn("只允许这些子 agent：reviewer", self.reason(denied))
             self.assertIn(name, self.reason(denied))
 
     def test_the_generic_subagent_is_denied_at_every_level(self) -> None:
@@ -297,7 +297,7 @@ class TaskLevelTests(HarnessTestCase):
             self.assertIn("通用子 agent", self.reason(denied))
         self.assertEqual(self.counters("generic")["subagents_created"], 0)
 
-    def test_l2_allows_the_verifier_at_most_twice_per_prompt(self) -> None:
+    def test_l2_allows_the_reviewer_at_most_twice_per_prompt(self) -> None:
         self.verifier_default(True)
         self.user_prompt("l2-max", "[L2] go")
         self.assertEqual(self.pre("l2-max", "runSubagent", VERIFIER), {})
@@ -317,7 +317,7 @@ class TaskLevelTests(HarnessTestCase):
         path.write_text(json.dumps(data), encoding="utf-8")
         self.assertEqual(self.pre("l3-sub", "runSubagent", {**VERIFIER, "agentName": "builder"}), {})
         self.assertEqual(self.pre("l3-sub", "runSubagent", {**VERIFIER, "agentName": "reviewer"}), {})
-        self.assertEqual(self.decision(self.pre("l3-sub", "runSubagent", VERIFIER)), "deny")
+        self.assertEqual(self.decision(self.pre("l3-sub", "runSubagent", {**VERIFIER, "agentName": "verifier"})), "deny")
 
     # --- the agent cannot switch (M2-1) -------------------------------------------------------
 

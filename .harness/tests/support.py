@@ -99,6 +99,14 @@ class HarnessTestCase(unittest.TestCase):
         make_root(self.root)
         self.env = {**os.environ, "HARNESS_ROOT": str(self.root)}
 
+    def recorded_checker_name(self) -> None:
+        """The recordings were made when the checker agent was called `verifier`: let this test's policy copy say so."""
+        path = self.root / ".harness" / "policies" / "task-levels.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["levels"]["2"]["subagents"]["allowed"] = ["verifier"]
+        data["levels"]["2"]["verification"]["agent"] = "verifier"
+        path.write_text(json.dumps(data), encoding="utf-8")
+
     def verifier_default(self, on: bool) -> None:
         """Set the L2 verifier default in this test's policy copy (the shipped default is off)."""
         path = self.root / ".harness" / "policies" / "task-levels.json"

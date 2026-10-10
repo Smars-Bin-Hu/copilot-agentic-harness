@@ -129,8 +129,8 @@ def task_text(ctx: Context, data: Dict[str, Any]) -> str:
     name = data["task"]
     choice = tasks.verify_choice(data)
     review = {
-        "on": f"\n这个任务开启了 verifier 复核，后面的提示不用再写标记：{name}/{tasks.DEV_NAME}/ 改完之后、`task promote --dry-run` 之前调用一次 verifier。写 {tasks.PLAN_NAME} 不用复核。",
-        "off": "\n这个任务关闭了 verifier 复核。",
+        "on": f"\n这个任务开启了 reviewer 复核，后面的提示不用再写标记：{name}/{tasks.DEV_NAME}/ 改完之后、`task promote --dry-run` 之前调用一次 reviewer。写 {tasks.PLAN_NAME} 不用复核。",
+        "off": "\n这个任务关闭了 reviewer 复核。",
     }.get(choice, "")
     if data.get("tier") and tasks.task_file(ctx.root, name).is_file():
         head = messages.text(
@@ -185,7 +185,7 @@ def verifier_text(data: Dict[str, Any]) -> str:
 
 def on_subagent_start(event: HookEvent, ctx: Context) -> Optional[Decision]:
     task_data = open_task(ctx)
-    if task_data is not None and event.agent_type.strip().lower() == "verifier":
+    if task_data is not None and event.agent_type.strip().lower() in ("reviewer", "verifier"):
         return Decision(context=verifier_text(task_data))
     request_id = ctx.state.get("active_request")
     role = event.agent_type.strip().lower()

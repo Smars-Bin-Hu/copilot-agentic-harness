@@ -21,14 +21,14 @@
       "name": "Standard Engineering Task",
       "agent": "default",
       "planning": "short",
-      "subagents": { "allowed": ["verifier"], "max_per_prompt": 2 },
+      "subagents": { "allowed": ["reviewer"], "max_per_prompt": 2 },
       "budget_per_prompt": {
         "repository_searches": { "limit": 8, "on_exceed": "warn" },
         "observed_tool_calls": { "limit": 40, "on_exceed": "warn" }
       },
       "verification": {
         "mode": "verifier",
-        "agent": "verifier",
+        "agent": "reviewer",
         "enabled": false,
         "enable_markers": ["[verify]"],
         "require_when": { "edits": true, "min_tool_calls": 10 },

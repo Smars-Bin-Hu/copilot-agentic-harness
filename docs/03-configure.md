@@ -39,7 +39,7 @@ harness 面向的目标仓库，是**庞大的、有合规要求的数据工程�
 所以在这类仓库里，**能力主要来自对代码的理解，不来自运行**。agent 没有“跑一下看对不对”这个办法，只能靠读代码、读差异和读规则来判断。这带来几个结论：
 
 - **知识库不是可选项。** 要用你们的团队对这批代码学习之后整理出来的知识库：domain 怎么划分、命名和目录约定、哪些文件要一起改、部署流程的步骤、合规要求、以往改动的例子。没有它，agent 只能凭猜，做不了这类任务。知识库越具体，计划和评审越准。接入方法见下面“知识库”一节。
-- **评审靠读，不靠运行。** reviewer 读成果和 `candidate.diff`，标准来自知识库。它不能运行代码，所以评审结论的可信度，取决于知识库里有没有写明规则。
+- **检查靠读，不靠运行。** reviewer 读成果和差异（`CHANGES.diff`），标准来自需求和知识库。它不能运行代码，所以结论的可信度，取决于知识库里有没有写明规则。
 - **不整个复制仓库**，只按路径取要改的文件（见 [核心功能](02-features.md)）。
 - **回写只改文件，不提交、不推送。** 部署由你们的发布流水线负责。
 - **部署用的配置、流水线定义等不该被 agent 碰的路径**，写进 `refused_paths`。
@@ -76,7 +76,7 @@ harness 面向的目标仓库，是**庞大的、有合规要求的数据工程�
 1. 把知识库放进 `knowledge-base/`。**入口是 `knowledge-base/README.md`**：它是索引，只放主题和相对链接，agent 先读它，再按需往下读，不要一次读全部。
 2. 把知识库自带的、讲怎么读怎么写的 instructions 放进 `.github/instructions/knowledgebase.instructions.md`（替换空占位），frontmatter 写 `applyTo: '**'`。只写 `applyTo: 'knowledge-base/**'` 不够：agent 读到知识库文件之前它不会生效。
 3. 运行 `doctor`。它检查：有没有 README、README 里的链接是否都有文件、`.gitignore` 有没有忽略 `knowledge-base/`、instructions 会不会被加载。
-4. 知识库的写作规则只有一个主要来源：知识库自带的 instructions。orchestrator 读知识库后，把结论蒸馏成带来源的“知识简报”（`brief set`），之后每个角色共用。
+4. 知识库的写作规则只有一个主要来源：知识库自带的 instructions。
 
 ## 技能（Skills）
 
@@ -89,10 +89,25 @@ harness 面向的目标仓库，是**庞大的、有合规要求的数据工程�
 
 ## agent 与模型
 
-自定义 agent 在 `.github/agents/`：`orchestrator`（L3 入口）、`builder`、`reviewer`、`verifier`。
+自定义 agent 在 `.github/agents/`：`admin`（你在下拉里选）和 `reviewer`（独立检查员，只当子 agent）。平时用默认 agent。
 
-- 每个 agent 文件的 `model` 列表按顺序回退。[agents.json](../.harness/policies/agents.json) 规定：回退只能在同一个系列内；builder 和 reviewer 必须不同系列（`doctor` 检查）。
+- 主对话用哪个模型由你在下拉里选。harness 换不了模型。
+- 每个 agent 文件的 `model` 列表按顺序回退。[agents.json](../.harness/policies/agents.json) 规定：回退只能在同一个系列内，`any_series` 里的 agent 除外（`doctor` 检查）。
+- reviewer 默认 Sonnet，没有就退到 Haiku。子 agent 的模型比主模型贵一档时，平台可能不运行它，所以不要把它改成比你常用的主模型更贵的。
 - 改模型名时，改 agent 文件的 `model`，再运行 `doctor`。
+
+## 任务的设置
+
+在 `task.override.json` 里改，字段见 [参考](04-reference.md)：
+
+```json
+{
+  "review": { "extra_checks": 3 },
+  "snapshots": { "keep_days": 30 }
+}
+```
+
+任务的三个文件模板在 `.harness/contracts/templates/task/`（`TASK.md`、`REQ.md`、`TODO.md`、`LOG.md`）。它们是 guardrail 之外的普通文件，可以按团队习惯改。
 
 ## 日志和清理
 
@@ -103,4 +118,4 @@ harness 面向的目标仓库，是**庞大的、有合规要求的数据工程�
 
 CLI 输出里的中文显示成 `\uXXXX`：运行 `doctor`，看“输出编码”那几行。最后有一行“UTF-8 样例”。那一行能读，就新建 `.harness/policies/cli.override.json`，写 `{"output": {"encoding": "utf-8"}}`。那一行是乱码，就不要改。
 
-请求目录加仓库路径会让文件路径很长，Windows 默认上限 260 个字符。把 harness 放在短路径、不同步的位置（例如 `C:\h`），不要放在 OneDrive 下。`doctor` 会对过长的路径给 WARN。
+任务目录加仓库路径会让文件路径很长，Windows 默认上限 260 个字符。把 harness 放在短路径、不同步的位置（例如 `C:\h`），不要放在 OneDrive 下。`doctor` 会对过长的路径给 WARN。

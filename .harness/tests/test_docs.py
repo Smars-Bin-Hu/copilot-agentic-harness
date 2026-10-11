@@ -176,7 +176,7 @@ class PolicyFieldTests(unittest.TestCase):
 
     def test_every_documented_field_exists(self) -> None:
         rows = self.rows()
-        self.assertGreater(len(rows), 30)
+        self.assertGreater(len(rows), 25)
         for name, path in rows:
             with self.subTest(f"{name} {path}"):
                 data = json.loads(text(REPO / ".harness" / "policies" / name))
@@ -201,11 +201,12 @@ class ReferenceCoverageTests(unittest.TestCase):
         for event in events:
             self.assertIn(f"`{event}`", reference, event)
 
-    def test_every_contract_is_listed(self) -> None:
-        reference = section(text(REFERENCE), "交接格式（contracts）")
-        for schema in (REPO / ".harness" / "contracts").glob("*.json"):
-            self.assertIn(schema.name, reference)
-        self.assertIn("templates/assignment.md", reference)
+    def test_every_task_template_is_listed(self) -> None:
+        reference = section(text(REFERENCE), "模板（contracts）")
+        templates = sorted(path.name for path in (REPO / ".harness" / "contracts" / "templates" / "task").glob("*.md"))
+        self.assertEqual(templates, ["LOG.md", "REQ.md", "TASK.md", "TODO.md"])
+        for name in templates:
+            self.assertIn(f"`{name}`", reference)
 
     def test_every_guardrail_the_features_doc_names_is_a_guardrail(self) -> None:
         policy = json.loads(text(REPO / ".harness" / "policies" / "gate.json"))

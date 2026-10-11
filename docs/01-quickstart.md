@@ -1,6 +1,6 @@
 # 快速开始
 
-从克隆仓库到跑通第一个 L2 任务和第一个 L3 请求。可以直接复制的提示见 [提示模板](07-prompts.md)。
+从克隆仓库到跑通第一个任务。可以直接复制的提示见 [提示模板](07-prompts.md)。想让 agent 带你走一遍：在 Copilot 对话里输入 `/harness-quick-start`。
 
 ## 要求
 
@@ -57,17 +57,20 @@ harness doctor
 
 第 1 步没做好时，`harness` 本身运行不了。这时用完整路径运行一次，看它怎么说：macOS/Linux 是 `.harness/bin/harness doctor`，Windows 是 `.harness\bin\harness.cmd doctor`。
 
-## 3. 选 Level
+## 3. 任务是什么
 
-每个会话开始都是 L1。在提示开头写标记来切换：
+一个任务一个目录，在 `.workspace/sandbox/tasks/<任务名>/`。里面的 `TASK.md` 记着做到哪，换一个会话也能接着做。
 
-| 标记                       | 含义                                                |
-| -------------------------- | --------------------------------------------------- |
-| `/l1`、`[L1]`          | 确定的小任务，直接做                                |
-| `/l2`、`[L2]`          | 标准工程任务，先短计划；写`[verify]` 开启独立复核。指定任务目录并要改文件时，走任务模式（第 5 节） |
-| 选择`orchestrator` agent | L3：编排 builder 和 reviewer，见下一节              |
+你不用记命令。说一句要做什么，agent 会用技能 `harness-my-task` 问清楚再开任务。你也可以直接输入 `/harness-my-task`。
 
-只有你能切换 Level，agent 只能建议。详细见 [核心功能](02-features.md)。
+| 你说的 | agent 做的 |
+| --- | --- |
+| “帮我查订单表为什么延迟，出一份 RCA” | 新建任务，写需求和 RCA |
+| “接着做那个订单表的任务” | 接上已有的任务，读 `TASK.md` |
+| “这个任务要改仓库了” | 把任务升到带 `DEV/` 的那一档 |
+| 只是问一个问题 | 直接回答，不开任务 |
+
+要独立检查，在提示里写 `[review]=1`（要更稳写 2）。任务里写一次就够。详细见 [核心功能](02-features.md)。
 
 ## 4. 配置目标仓库
 
@@ -85,13 +88,13 @@ harness target list
 
 更多写法见 [配置与定制](03-configure.md)。
 
-## 5. 跑第一个 L2 任务
+## 5. 跑第一个改仓库的任务
 
-日常的开发任务用它：一个 agent，你批准计划，你批准回写。
+一个 agent，你批准计划，你批准回写。
 
-1. 在 `.workspace/current_tasks/<任务名>/REQ/` 放需求文件（参考代码放 `REF/`）。
-2. 在 Copilot Chat 里用默认 agent，提示开头写 `/l2`，说清任务目录、目标仓库、知识库在哪（模板见 [提示模板](07-prompts.md)）。
-3. agent 运行 `task start`，读需求和知识库，把计划写到 `<任务>/PLAN.md`，然后停下来，给你文件的链接。
+1. 在 Copilot Chat 里用默认 agent，说清要做什么、改哪个目标仓库（模板见 [提示模板](07-prompts.md)）。要独立检查就加上 `[review]=1`。
+2. agent 问你几个问题，然后新建任务，把它理解的需求写进 `REQ.md`，请你看一眼。你有需求文档就放进任务的 `REQ/`，参考代码放 `REF/`。
+3. agent 读需求和知识库，把计划写到 `PLAN.md`，然后停下来，给你文件的链接。
 4. 你在编辑器里看计划。同意就在**自己的终端**运行：
 
    ```bash
@@ -99,8 +102,8 @@ harness target list
    ```
 
    输入屏幕上的确认码。要改计划，直接告诉 agent，改完再批准。
-5. 你说“批准了”。agent 用 `task fetch` 把要改的文件取到 `<任务>/DEV/<仓库名>/<路径>`，在那里改。它只能写任务目录；不回写的东西（RCA、一次性脚本）放任务目录根下。
-6. 写了 `[review]=1`（或旧写法 `[verify]`）的话，reviewer 读差异做独立检查，通过了才能回写。任务里写一次就够，后面的“计划批准了”“批准了”不用再写。
+5. 你说“批准了”。agent 用 `task fetch` 把要改的文件取到 `DEV/<仓库名>/<路径>`，在那里改。它只能写任务目录。
+6. 开了独立检查的话，agent 运行 `task review start`，再调用 reviewer。没通过它自己改了再查，凑够次数才能往下走。结论在 `REVIEW/` 下。
 7. agent 运行 `task promote --dry-run`，给你 `PROMOTE-PLAN.diff` 的链接。你在编辑器里看差异，同意就运行：
 
    ```bash
@@ -108,38 +111,26 @@ harness target list
    ```
 
 8. 你说“批准了”，agent 运行 `task promote`：在每个目标仓库从 main 新建分支 `feature/<任务名>`，把文件写进去，**不提交**。
-9. `task close` 后报告在 `.workspace/reports/task-<任务名>.md`。
+9. 你自己看差异、提交、建 PR。`task close` 后报告在 `.workspace/reports/task-<任务名>.md`。
 
-只是问答、RCA、出方案，不改文件时，不用任务目录，照常用 `/l2` 提问就行。
+不改仓库的任务（RCA、设计方案）没有第 3、4、5、7、8 步：成果直接写在任务目录根下。
 
-## 6. 跑第一个 L3 请求
+## 6. 看有哪些任务
 
-1. 在 `.workspace/current_tasks/<任务名>/REQ/` 放需求文件。
-2. 在 Copilot Chat 里选 `orchestrator` agent，告诉它任务、任务目录和分支名（`feature/` 加字母、数字、下划线）。
-3. orchestrator 自己建请求、取文件、写计划。它停下来给你 `plan.md` 的链接。你在编辑器里看，同意就在**自己的终端**运行：
+```bash
+harness task list
+```
 
-   ```bash
-   harness request approve-plan --request <请求 id>
-   ```
-
-4. 你说“批准了”，orchestrator 派发 builder 和 reviewer。每一步的命令和判断见技能 [harness-orchestration](../.github/skills/harness-orchestration/SKILL.md)。
-5. reviewer 通过后，orchestrator 运行 `promote --dry-run`，给你 `promote-plan.diff` 的链接。你在编辑器里看差异，同意就运行它给出的命令：
-
-   ```bash
-   harness request approve-promote --request <请求 id>
-   ```
-
-   输入屏幕上提示的确认码。
-6. 你说“批准了”，orchestrator 运行 `promote`：在每个目标仓库新建分支，把成果写进去，**不提交**。成果和补丁另存在 `.workspace/current_tasks/<任务名>/DEV/`。
-7. 你自己看差异、提交、建 PR。
-8. 请求结束时报告写在 `.workspace/reports/<请求 id>.md`。
+每个没关闭的任务一行：种类、档位、在等你做什么。等你批准的排在前面。`--all` 连关闭的一起列。
 
 ## 常见情况
 
 - **工具调用被拒绝**：理由里写了原因和下一步。agent 会照做或停下来告诉你。
 - **agent 要运行 git 写命令**：被拒绝，理由里有整条命令和验证码。你在自己的终端运行 `harness approve-command`，输入验证码，agent 再运行同一条命令（只放行一次）。
-- **agent 想直接改目标仓库的文件**：被拒绝。目标仓库只有 promote 能写。L2 用任务模式，L3 用请求。
-- **promote 中途出错**：进入 `partial`，信息里列出已写好、出错、没动的仓库。你在自己的终端运行 `harness request recover`（L2 任务是 `harness task recover`），再让 agent 重新 `--dry-run`。
-- **任务很大，要做很多天或跨多个 session**：输入 `/generic-goal-driven` 建目标，之后每个新 session 输入 `/generic-goal-driven 继续`。日常任务不要用。提示见 [07-prompts.md](07-prompts.md)。
+- **agent 想直接改目标仓库的文件**：被拒绝。目标仓库只有 promote 能写。
+- **独立检查一直不通过**：最多查 n + 2 次，用完 agent 会停下。你在自己的终端运行 `harness task review extend` 再给几次，或 `harness task review waive` 放行这一版。
+- **promote 中途出错**：进入 `partial`，信息里列出已写好、出错、没动的仓库。你在自己的终端运行 `harness task recover`，再让 agent 重新 `--dry-run`。
+- **任务很大，要做很多天**：输入 `/generic-goal-driven` 建目标，之后每个新 session 输入 `/generic-goal-driven 继续`。日常任务不要用。
 - **看用量和拒绝次数**：`harness stats`。
 - **要改 harness 自己，或查 harness 为什么出错**：在 agent 下拉里选 admin，照它给的命令在终端运行 `harness admin on`。用完运行 `harness admin off`。见 [02-features.md](02-features.md) 的“admin”一节。
+- **从 1.1.0 之前升级**：没有 Level 了，`/l1`、`/l2` 不用再写；`task start` 换成 `task new` 和 `task open`；旧任务目录要自己搬，见 [版本记录](08-release-notes.md)。

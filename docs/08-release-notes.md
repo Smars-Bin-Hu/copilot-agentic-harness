@@ -14,35 +14,60 @@
 
 下一版要带的内容，合进主分支后先记在这里。发布时移到对应的版本号下面。
 
+暂无。
+
+## 1.1.0（2026-10-10）
+
+以任务为中心。没有 Level 了：工作的单位是任务，一个任务一个目录，换会话能接着做；独立检查由代码数。**这一版有不兼容的改动，升级前先看“退役”和“怎么升级”。**
+
 ### 新增
 
-- 任务有了自己的命令，不看 Level：`task new` 新建、`task open` 接上（关了的会重开）、`task upgrade` 升档、`task list` 列出全部。
-- 任务分种类和三档。轻档只有 `TASK.md`；中档多 `REQ.md`、`REQ/`、`REF/`、`LOG.md`；全档再多 `TODO.md`、`DEV/`、`TEST/`。`TASK.md` 是接力文件：新会话先读它，就知道做到哪。
-- 新任务建在 `.workspace/sandbox/tasks/`。旧位置 `.workspace/current_tasks/` 里的任务照旧能用。
-- 一个会话可以换任务，原来那个不用先关。`task list` 把在等你批准的任务排在前面。
-- 技能 `/harness-my-task`：问清楚新建还是接着做、哪一种、改不改目标仓库，然后替你开任务或接上任务。每条提示的规则里会提醒 agent 先用它。
-- 需求写在任务目录的 `REQ.md`：agent 按和你的对话写，你看过才算数；需求变了它就更新，并记一行变更。你自己的文档（BRD、邮件）放 `REQ/`，agent 只读。
-- 这一轮 agent 在任务目录里写过文件、却没更新 `TASK.md` 时，它结束前会被提醒一次。开关是 `orchestration.json` 的 `verify.task_file_reminder`。
-
+- **任务**：`task new` 新建、`task open` 接上（关了的会重开）、`task upgrade` 升档、`task list` 列出全部。任务建在 `.workspace/sandbox/tasks/`。
+- **种类和三档**。种类有问答、RCA、设计、开发、测试、更新知识库。轻档只有 `TASK.md`；中档多 `REQ.md`、`REQ/`、`REF/`、`LOG.md`；全档再多 `TODO.md`、`DEV/`、`TEST/`。
+- **接力文件 `TASK.md`**：新会话先读它，就知道做到哪。agent 在一条提示里写过任务文件、却没更新它时，结束前会被提醒一次（开关：`task.json` 的 `task_file_reminder`）。
+- **需求文件 `REQ.md`**：agent 按和你的对话写，你看过才算数；需求变了它先改这里，并记一行变更。你自己的文档（BRD、邮件）放 `REQ/`，agent 只读。
+- **技能 `/harness-my-task`**：你说要做什么，它问清楚再开任务或接上任务。每条提示的规则里会提醒 agent 用它，并告诉它有哪些没关闭的任务。
+- **技能 `/harness-quick-start`**：带你用一个小任务走一遍。
+- **一个会话可以换任务**，原来那个不用先关。`task list` 把在等你批准的任务排在前面。
 - **独立检查 `[review]=n`**。在任务的提示里写 `[review]=2`，成果就要连续通过 2 次检查，每次换一个新的 reviewer，才能回写。
-  - 没通过，agent 自己按问题改了再查。改过成果，之前的通过不算，重新数。
-  - 每条问题带“文件:行”。第 2 次起只报影响正确性的问题。
+  - 没通过，agent 自己按问题改了再查。改过成果、需求或计划，之前的通过不算，重新数。
+  - 每条问题带“文件:行”。第 2 次起只报影响正确性的问题。reviewer 只指出问题，不写怎么改。
   - 每次检查的评审包和结论存在任务目录的 `REVIEW/round-NNN/`。结论是 reviewer 的原话，agent 改不了。
   - 最多查 n + 2 次。用完了 agent 停下，由你决定：`task review extend` 再给几次，或 `task review waive` 放行这一版。
   - 没凑够通过次数时，`task promote --dry-run` 被拒绝。
 - **关口快照**。计划批准时、每次检查前、promote 的 dry-run 前，任务的成果自动存一份到 `SNAPSHOT/`。改坏了能找回批准时的版本。默认留 14 天，`task snapshot list`、`task snapshot prune` 查看和清理。
+- `doctor` 发现旧位置 `.workspace/current_tasks/` 下还有任务目录时给 `[WARN]`，并说怎么办。
 
 ### 变更
 
-- **检查员改叫 reviewer，verifier 没有了。** 模型是 Sonnet，没有就退到 Haiku。任务里旧的 `[verify]` 等于 `[review]=1`，`[no-verify]` 等于 `[review]=0`。
-- 接着任务的会话里，只能调用 reviewer 这一个子 agent，而且要先 `task review start`。这条不看 Level，L1 下也一样。
+- **不用再选 Level，不用再写 `/l1`、`/l2`。** 写了也没有作用。
+- **子 agent 的规则变了**：没有接着任务的会话不能调用子 agent；接着任务的会话只能调用 reviewer，而且要先 `task review start`。
+- **检查员叫 reviewer**，模型是 Sonnet，没有就退到 Haiku。`[verify]` 等于 `[review]=1`，`[no-verify]` 等于 `[review]=0`，还能用。
+- **每条提示开头注入的规则短了**：没接任务时三四行，接着任务时是这个任务做到哪。不再有 Level 和预算的说明。
+- **搜索和工具调用不再有次数上限。**
 - `task close` 之后目录原地不动，`task open` 可以重新打开。
-- 直接改目标仓库被拒时，理由不再分 Level，改成指向任务目录的 `DEV/` 和技能 `harness-my-task`。
+- 直接改目标仓库被拒时，理由指向任务目录的 `DEV/` 和技能 `harness-my-task`。
+- agent 在终端运行 `task review extend`、`task review waive` 会被 gate 拒绝，和其他批准类命令一样。
+- 策略文件 `orchestration.json` 改名 `task.json`，字段变了：`fetch.max_files`、`task_file_reminder`、`review`、`snapshots`。`gate.json` 去掉了 `l3_write_root`。
+- `harness stats` 的输出变了：`prompts`、`task_prompts`、`tool_calls` 是数字，不再按 Level 分；`verifier_verdicts` 改名 `review_verdicts`；没有 `budget_denials` 了。
+- 会话日志每行不再有 `level`；独立检查的结论那一行 `judge` 是 `reviewer`。
 
 ### 退役
 
-- **L3 的多 agent 流程（orchestrator、builder、reviewer 三个角色）从这一版起不能用了。** `reviewer.agent.md` 改成了任务的检查员。命令和 agent 文件还在，下一版删掉。用任务加 `[review]=n` 代替。
-- `verifier` 这个 agent 删了。用 reviewer 代替。
+- **Task Level（L1、L2、L3）**：整个删掉，包括 `level status`、`level set`、搜索预算、技能 `l1`、`l2`、`harness-task-level`、策略 `task-levels.json`。用任务代替：要落盘就开任务，要检查就写 `[review]=n`。
+- **L3 的多 agent 流程**：`request`、`brief`、`attempt`、`dispatch`、`handoff`、`check`、`promote`、`report` 这些命令，orchestrator 和 builder 两个 agent，技能 `harness-orchestration`，请求目录 `.workspace/sandbox/requests/`，交接格式的 schema。用任务加 `[review]=n` 代替：一个 agent 做，reviewer 查。原因见 [设计思想](05-design.md) 的“为什么没有 Level”。
+- **`verifier` agent**。用 reviewer 代替。
+- **`task start`**。新建用 `task new`，接着做用 `task open`。运行 `task start` 会告诉你这两条。
+- **旧任务目录 `.workspace/current_tasks/`**：不再读，没有迁移命令。见下面“怎么升级”。
+- **Local 会话的兼容**在 1.0.3 已经去掉。
+
+### 怎么升级
+
+1. 换上新版本的文件，运行 `harness doctor`。
+2. **旧任务**：要接着做的，把目录从 `.workspace/current_tasks/<任务>` 搬到 `.workspace/sandbox/tasks/<任务>`，再让 agent `task open <任务名>`。计划和回写的批准记录跟着目录走，还有效。它没有 `TASK.md` 和 `REQ.md`：要的话运行 `harness task upgrade --task <任务名> --tier full` 补上。不接着做的，留在原地就行。
+3. **你的 override**：`orchestration.override.json` 要改名 `task.override.json` 并按新字段改；`task-levels.override.json` 删掉；`gate.override.json` 里有 `l3_write_root` 的话删掉那一项。`doctor` 会报出没对上的 override。
+4. **你的提示模板**：去掉 `/l1`、`/l2` 和“先 task start”。新模板见 [提示模板](07-prompts.md)。
+5. 正在进行的 L3 请求不能接着做。把请求目录里的成果手动放进一个新任务的 `DEV/`。
 
 ## 1.0.3（2026-10-10）
 
@@ -85,7 +110,7 @@
 - **短命令 `harness` 变成必须配置。** 文档、agent 收到的规则、拒绝理由里的命令都写成 `harness <命令>`，不再写 `python .harness/engine/cli.py <命令>`。升级后先把 `.harness/bin` 加进 PATH（见 [快速开始](01-quickstart.md) 第 1 步），否则 `doctor` 报错，agent 的命令会失败。
 - `harness` 像 git 一样，操作当前目录所在的那一份仓库。电脑上有两份 harness 时不会再操作错。不在任何 harness 仓库里时，才用启动脚本自己所在的那一份。
 - `harness --version` 以前输出一行，现在输出图案。脚本要一行的，改用 `harness --version --short`。
-- agent 用短命令运行 `harness level set`、`harness logs prune` 现在也会被拦。以前只拦长命令的写法。
+- agent 用短命令运行切换 Level 的命令和 `harness logs prune` 现在也会被拦。以前只拦长命令的写法。
 
 ### 退役
 

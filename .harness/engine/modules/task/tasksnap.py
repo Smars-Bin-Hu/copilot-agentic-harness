@@ -30,7 +30,7 @@ SKIP_FILES = (tasks.TASK_FILE.lower(), tasks.TODO_FILE.lower(), tasks.LOG_FILE.l
 
 
 def settings(root: Path) -> Dict[str, Any]:
-    """`snapshots` of orchestration.json. A missing or broken policy gives the defaults: a snapshot must not stop a gate."""
+    """`snapshots` of task.json. A missing or broken policy gives the defaults: a snapshot must not stop a gate."""
     try:
         found = config.load_policy(root, POLICY_NAME).get("snapshots") or {}
     except Exception:  # noqa: BLE001

@@ -10,7 +10,7 @@ reviewer, all of them on the result as it is at the end: a result that changed s
   task review extend   the person allows more checks after the limit (terminal only)
   task review waive    the person lets the promote go ahead without the passes (terminal only)
 
-The number of checks is limited: n + `review.extra_checks` (orchestration.json) + what the person allowed.
+The number of checks is limited: n + `review.extra_checks` (task.json) + what the person allowed.
 A promote dry-run is refused until the passes are there or the person waived them.
 The state is `review` in task.json. Passes are not stored as a number: they are counted from the rounds and the
 digest of the result as it is now, so nobody has to remember to reset them.

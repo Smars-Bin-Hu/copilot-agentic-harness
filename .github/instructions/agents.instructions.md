@@ -17,11 +17,11 @@ applyTo: '.github/agents/**/*.agent.md'
 
 ## 谁能直接选
 
-- 用户直接选的 agent 只有三个：默认 agent、orchestrator 和 admin。
-- admin 不能当子 agent：它不在任何 Level 的 `subagents.allowed` 里，hook 会拒绝。它的写权限不来自 agent 文件，
+- 用户直接选的 agent 只有两个：默认 agent 和 admin。
+- admin 不能当子 agent，hook 会拒绝。它的写权限不来自 agent 文件，
   来自用户在终端运行的 `admin on`（hook 看不到主 agent 是谁）。
 - 其他 agent 都只当子 agent 用，写 `user-invocable: false`。
-  这个字段只让它不出现在下拉列表，**拦不住被当子 agent 调用**。能不能调用，由 hook 按 Level 判断。
+  这个字段只让它不出现在下拉列表，**拦不住被当子 agent 调用**。能不能调用，由 hook 判断。
 - 不写 `disable-model-invocation: true`，同样拦不住调用。
 
 ## 编写要求
@@ -37,18 +37,14 @@ applyTo: '.github/agents/**/*.agent.md'
 
 | agent | 用途 | 谁能调用 |
 | --- | --- | --- |
-| orchestrator | L3 的编排员：建请求、派发、判断、验收。用户在下拉列表里选 | 用户 |
 | admin | harness 的管理员：二开 harness、读报告和日志、查根因。用户先在终端开 admin 模式，才能改 guardrail 文件 | 用户 |
-| builder | L3 的执行者：按 assignment 产出成果并自测 | orchestrator（hook 要求先 dispatch） |
 | reviewer | 独立检查员：只看需求、成果和差异，给 PASS 或 FAIL，不改文件。用户写 `[review]=n` 才开 | 默认 agent（hook 要求先 `task review start`） |
+
+没有接着任务的会话不能调用任何子 agent。接着任务的会话只能调用 reviewer。
 
 ## 模型
 
-- orchestrator 要推理和判断，用强模型。builder 按 assignment 执行，用普通模型。reviewer 用 Sonnet，没有就退到 Haiku：主模型是 Sonnet 或 Opus 时它都能运行。
+- reviewer 用 Sonnet，没有就退到 Haiku：主模型是 Sonnet 或 Opus 时它都能运行。
 - `model` 的回退列表只能在同一系列里回退。admin 和 reviewer 例外（`agents.json` 的 `any_series`）：强模型不可用时可以跨系列回退。
-  系列的划分在 `.harness/policies/agents.json`，`harness doctor` 会检查（macOS/Linux 把 `python` 换成 `python3`）。
-- 模型名以本机 Copilot 下拉列表里的显示名为准。不同的会话类型能选的模型不一样（例如有的会话没有 Opus），换环境后重新确认。
-
-## Builder 的不同形态
-
-开发、RCA、学习知识这些形态，用 assignment 和 Skill 区分，不新增 agent。
+  系列的划分在 `.harness/policies/agents.json`，`harness doctor` 会检查。
+- 模型名以本机 Copilot 下拉列表里的显示名为准。换环境后重新确认。

@@ -10,7 +10,7 @@
   不得为了兼容 Claude Code 而设计仓库结构。
 - 本仓库只建设与 Knowledge Base 解耦的通用 AI agentic harness SDK。
   范围包括 agents、multi-agents、Hooks、通用 Skills、instructions、tools、
-  权限、Task Level、sandbox 和 observability 等通用组件与能力。
+  权限、任务、独立检查、sandbox 和 observability 等通用组件与能力。
 - 本 SDK 用于帮助企业团队以轻量 harness 完成 SDLC。接入企业环境后，
   团队可以加入自己的 Knowledge Base、Skills 和其他定制内容，
   让 harness 直接执行团队任务。
@@ -45,17 +45,18 @@
 
 - 操作前先看真实文件。不要猜路径、命令、配置或测试方式。
 - 保留用户已有的修改。不要改动无关文件。
-- Task Level 只控制智能体的工作方式，不改变文件、网络、环境或生产权限。
-- 使用最低够用的 Task Level。只有用户能切换 Level，你只能建议。
-  L1 不用子智能体，L2 只在用户开启复核时用 verifier，只有 L3 做编排。
+- 工作的单位是任务：一个任务一个目录，在 `.workspace/sandbox/tasks/<任务>/`。
+  用户要你产出或修改文件，或提到一个已有的任务时，先用技能 `harness-my-task` 开任务或接上任务。只是问答时不用。
+- 接上任务后只在任务目录里写。新会话先读 `TASK.md`，停下前更新它。
+  需求写在 `REQ.md`，变了就先改它。`REQ/`、`REF/` 只读。
+- 目标仓库里的文件不能直接改，只能经用户批准的 promote 写入。
+  要回写的成果放任务的 `DEV/`，计划（`PLAN.md`）要用户在终端批准后才能写；不回写的成果放任务目录根下，不用批准。
+- 独立检查只有用户能开：用户在提示里写 `[review]=n`。你不能自己开，也不能替用户批准、放行。
+  子智能体只有 reviewer，只在开了检查的任务里用。
 - 只有明确违反策略时，钩子才能阻止操作。钩子自身出错时不能误伤正常工作。
 - 删除、覆盖或执行难以恢复的操作前，必须确认目标和范围。
-- guardrail 文件任何 Level 都不能改，hook 会拒绝。清单见
+- guardrail 文件不能改，hook 会拒绝。清单见
   [.harness/policies/gate.json](.harness/policies/gate.json)。需要改时，告诉用户。
   唯一的例外是用户在终端开了 admin 模式的会话，给 admin agent 二开 harness 用，见
   [admin.agent.md](.github/agents/admin.agent.md)。你不能自己开。
-- 目标仓库里的文件任何 Level 都不能直接改，只能经用户批准的 promote 写入。
-- L2 的任务模式只在任务目录里写。要回写到目标仓库的成果放 `DEV/`，计划要用户在终端批准后才能写；
-  不回写的成果放任务目录根下，不用批准。`REQ/`、`REF/` 只读。
-- L3 只在当前请求目录 `.workspace/sandbox/requests/<id>/` 下写入。计划要用户在终端批准后才能开第一轮。
-  目录约定见 [workspace.instructions.md](.github/instructions/workspace.instructions.md)。
+- 目录约定见 [workspace.instructions.md](.github/instructions/workspace.instructions.md)。

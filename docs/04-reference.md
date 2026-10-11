@@ -8,65 +8,40 @@
 
 | 命令 | 作用 |
 | --- | --- |
-| `--version` | 显示图案、版本、发布日期、作者。加 `--short` 只输出一行，例如 `harness 1.0.0`，给脚本用。都来自 `.harness/registry.json`；版本号格式 `主.次.修` |
+| `--version` | 显示图案、版本、发布日期、作者。加 `--short` 只输出一行，例如 `harness 1.1.0`，给脚本用。都来自 `.harness/registry.json`；版本号格式 `主.次.修` |
 | `user` | 用这份 harness 的人的名字，和它来自哪：`user.override.json`、`git`（`git config user.name`）或 `none` |
 | `doctor` | 检查文件、策略、hook 配置、知识库、目标仓库是否一致；Python 能不能执行；hook 最近有没有被调用、gate 有多快 |
-| `level status`、`level set` | 看或设会话的 Level（1 或 2）。只有人能设，agent 运行被拒绝 |
-| `request approve-plan` | 批准 L3 请求的 `orchestrator/plan.md`。只能在终端，输入确认码 |
-| `request approve-promote` | 批准最后一次 `promote --dry-run` 的计划。只能在终端，输入确认码 |
-| `request recover` | promote 中途出错后，把仓库恢复原样。只能在终端，输入确认码 |
-| `task approve-plan` | 批准 L2 任务的 `PLAN.md`。只能在终端，输入确认码 |
+| `task list` | 列出所有没关闭的任务：种类、档位、在等你做什么。等你的排在前面。`--all` 连关闭的一起列 |
+| `task approve-plan` | 批准任务的 `PLAN.md`。只能在终端，输入确认码 |
 | `task approve-promote` | 批准最后一次 `task promote --dry-run` 的计划。只能在终端，输入确认码 |
-| `task recover` | L2 任务的 promote 中途出错后，把仓库恢复原样。只能在终端，输入确认码 |
-| `task status`、`task report` | 看任务做到哪一步；重写任务报告 |
+| `task recover` | promote 中途出错后，把仓库恢复原样。只能在终端，输入确认码 |
 | `task review extend` | 检查次数用完后，再给几次。只能在终端，输入确认码 |
 | `task review waive` | 没凑够通过次数，也放行这一版成果去回写。成果再改，放行失效。只能在终端，输入确认码 |
+| `task status`、`task report` | 看任务做到哪一步；重写任务报告 |
 | `task snapshot list`、`task snapshot prune` | 看任务在各个关口存下的成果；删掉过期的 |
-| `task list` | 列出所有没关闭的任务：种类、档位、在等你做什么。等你的排在前面。`--all` 连关闭的一起列 |
 | `approve-command` | 批准 agent 被拒绝的一条 git 命令。只能在终端，输入验证码 |
 | `admin on` | 给一个会话开 admin 模式：它可以改 guardrail 文件。只能在终端，输入确认码 |
 | `admin off`、`admin status` | 关掉一个会话的 admin 模式；列出开着 admin 模式的会话 |
-| `request list`、`request show` | 看请求列表和某个请求的 `request.json` |
 | `target list`、`target show` | 看目标仓库：路径、base 分支、提交号、工作区是否干净 |
-| `report` | 重写某个请求的报告 |
-| `stats` | 日志汇总：调用数、拒绝数、各模块的拒绝、失败的工具调用、用过哪些 skill |
+| `stats` | 日志汇总：提示数、工具调用数、拒绝数、各模块的拒绝、独立检查的结论、失败的工具调用、用过哪些 skill |
 | `logs prune` | 删除 N 天没写过的会话日志（`--dry-run` 先看） |
 | `eval list`、`eval show`、`eval check` | 固定场景：列出、给提示、判断一次运行 |
 
 ### agent 做任务时用
 
-前四条是新的，不看 Level。`task start` 是旧的入口，还能用。
-
 | 命令 | 作用 |
 | --- | --- |
 | `task new` | `task new <名字> --kind <种类>`：在 `.workspace/sandbox/tasks/` 下新建任务，会话接上它。种类：`qa`（问答）、`rca`、`design`（设计方案、开发计划）、`dev`（开发）、`test`、`kb`（更新知识库）。`--tier` 选档位：`light` 只有 `TASK.md`；`medium` 多 `REQ.md`、`REQ/`、`REF/`、`LOG.md`；`full` 再多 `TODO.md`、`DEV/`、`TEST/`。不写就按种类定 |
-| `task open` | `task open <名字>`：会话接上一个已有的任务。关闭了的会重新打开。会话原来接着的任务不关，只是换过去 |
-| `task review start` | 开一次独立检查：存下这一版成果，写好评审包 `REVIEW/round-NNN/package.md`。之后才能调用 reviewer |
-| `task review status` | 要连续通过几次、现在几次、查了几次、上限几次、下一步 |
+| `task open` | `task open <名字>`：会话接上一个已有的任务。关闭了的会重新打开；回写过的开新的一轮。会话原来接着的任务不关，只是换过去 |
 | `task upgrade` | `task upgrade --tier <档位>`：把任务升到更高的档：补上缺的文件，已有的不动。只能升 |
-| `task start` | 进入任务模式：开始、接着做，或在回写过之后开新的一轮。只在 L2 |
 | `task fetch` | 把目标仓库 main 上的文件取到 `DEV/<仓库>/<路径>`；`--overwrite` 丢掉改动重新取 |
 | `task delete` | 声明删除一个取过的文件 |
 | `task diff` | 列出 `DEV/` 的改动，差异全文写到 `CHANGES.diff` |
+| `task review start` | 开一次独立检查：存下这一版成果，写好评审包 `REVIEW/round-NNN/package.md`。之后才能调用 reviewer |
+| `task review status` | 要连续通过几次、现在几次、查了几次、上限几次、下一步 |
 | `task set-branch` | 改 feature 分支名。格式是 `feature/` 加字母、数字、下划线（最长 60 个字符），不能有 `-`、`.`、`/`。默认取任务目录名，其中不合格的字符变成 `_`（`my-task` 变成 `feature/my_task`）；任务开新一轮时加 `_r2`、`_r3` |
-| `task promote` | 把 `DEV/<仓库>/` 下的文件回写到各目标仓库的新分支；`--dry-run` 只列计划，差异写到 `PROMOTE-PLAN.diff`。直接放在 `DEV/` 根目录的文件不回写 |
-| `task close` | 退出任务模式，写报告 |
-
-### agent 在 L3 里用
-
-| 命令 | 作用 |
-| --- | --- |
-| `request new` | 建请求，会话进入 L3。可带 `--task`、`--branch` |
-| `request add-input` | 把文件复制进 `init-inputs/`；`--from-target <仓库>/<路径>` 从目标仓库的 main 取 |
-| `request set-branch` | 设 feature 分支名 |
-| `request wait` | 声明在等人，agent 可以结束这一轮 |
-| `request set-status` | 给结论：`accepted`、`hitl`、`abandoned` |
-| `brief set` | 交知识简报 |
-| `attempt new` | 开下一轮。计划没有经人批准（`request approve-plan`）会被拒绝 |
-| `dispatch` | 冻结一个角色的输入包 |
-| `handoff submit` | builder 或 reviewer 交 handoff |
-| `check` | 检查请求目录自洽；`--require-conclusion` 还要求有结论 |
-| `promote` | 把 reviewer 通过的成果回写；`--dry-run` 只列计划，差异写到 `promote-plan.diff` |
+| `task promote` | 把 `DEV/<仓库>/` 下的文件回写到各目标仓库的新分支；`--dry-run` 只列计划，差异写到 `PROMOTE-PLAN.diff`。直接放在 `DEV/` 根目录的文件不回写。开了独立检查、没凑够通过次数时被拒绝 |
+| `task close` | 会话放开任务，写报告。目录原地不动 |
 
 ## 策略字段
 
@@ -74,39 +49,21 @@
 
 | 文件 | 字段 | 含义 |
 | --- | --- | --- |
-| task-levels.json | `switch_markers` | 切换 Level 的提示标记 |
-| task-levels.json | `levels.1.budget_per_prompt.repository_searches.limit` | L1 每条提示的搜索次数上限（`on_exceed`：`deny` 或 `warn`） |
-| task-levels.json | `levels.1.budget_per_prompt.observed_tool_calls.limit` | 每条提示的工具调用提醒线 |
-| task-levels.json | `levels.2.subagents.allowed` | L2 允许的子 agent |
-| task-levels.json | `levels.2.verification.enabled` | 没有任务的 L2 会话里，reviewer 复核默认开不开 |
-| task-levels.json | `levels.2.verification.enable_markers` | 开启复核的提示标记 |
-| task-levels.json | `levels.2.verification.skip_markers` | 跳过复核的提示标记 |
-| task-levels.json | `levels.2.verification.require_when.edits` | 本条提示改了文件，就要求复核 |
-| task-levels.json | `levels.2.verification.require_when.min_tool_calls` | 工具调用达到这个数，也要求复核 |
-| task-levels.json | `levels.3.subagents.allowed` | L3 允许的子 agent（builder、reviewer） |
-| task-levels.json | `levels.3.subagents.require_dispatch` | 调子 agent 前必须 `dispatch` |
-| gate.json | `guardrail_paths` | 所有 Level 都不能改的路径 |
+| gate.json | `guardrail_paths` | 不能改的路径 |
 | gate.json | `extra_guardrail_paths` | 你追加的 guardrail 路径 |
 | gate.json | `admin_locked_paths` | admin 模式下也不能改的 guardrail 路径。`.harness/runtime/**` 删不掉 |
 | gate.json | `cli_owned_paths` | 只有 CLI 能写的路径 |
-| gate.json | `l3_write_root` | L3 的可写目录，含 `{request_id}` |
 | gate.json | `terminal.guardrail_write` | 终端命令写 guardrail 的识别规则 |
 | gate.json | `terminal.deny` | 直接拒绝的终端命令 |
 | gate.json | `terminal.ask` | 要你确认的终端命令 |
 | gate.json | `git.approval_minutes` | git 命令批准后的有效分钟数 |
 | gate.json | `circuit_breaker.repeat_limit` | 同一个拒绝出现几次后换成“停止重试” |
-| orchestration.json | `max_attempts` | 一个请求最多几轮 |
-| orchestration.json | `brief.max_bytes` | 知识简报的大小上限 |
-| orchestration.json | `brief.max_entries` | 知识简报的条数上限 |
-| orchestration.json | `handoff.summary_max_lines` | handoff 摘要的行数上限 |
-| orchestration.json | `inputs.max_files` | 输入文件数上限 |
-| orchestration.json | `verify.main_stop` | 请求没结论时，主 agent 结束前拦一次 |
-| orchestration.json | `verify.subagent_stop` | 子 agent 没交 handoff 时的处理：`block`、`log`、`off` |
-| orchestration.json | `verify.task_file_reminder` | 任务里写过文件却没更新 `TASK.md` 时，agent 结束前提醒一次 |
-| orchestration.json | `review.extra_checks` | 开了 `[review]=n` 的任务，除了 n 次以外还能多查几次。用完要你在终端放行 |
-| orchestration.json | `review.max_n` | `[review]=n` 里 n 最大能写几 |
-| orchestration.json | `snapshots.keep_days` | 关口快照留几天 |
-| orchestration.json | `snapshots.max_file_mb` | 超过这个大小的文件，快照只记 sha256，不复制 |
+| task.json | `fetch.max_files` | 一次 `task fetch` 最多取几个文件 |
+| task.json | `task_file_reminder` | 任务里写过文件却没更新 `TASK.md` 时，agent 结束前提醒一次 |
+| task.json | `review.extra_checks` | 开了 `[review]=n` 的任务，除了 n 次以外还能多查几次。用完要你在终端放行 |
+| task.json | `review.max_n` | `[review]=n` 里 n 最大能写几 |
+| task.json | `snapshots.keep_days` | 关口快照留几天 |
+| task.json | `snapshots.max_file_mb` | 超过这个大小的文件，快照只记 sha256，不复制 |
 | observe.json | `max_text_chars` | 日志里每段文字的最大长度 |
 | observe.json | `capture.enabled` | 保存 hook 的原始输入输出 |
 | observe.json | `warn_session_files` | 会话日志文件数超过它时 `doctor` 提醒 |
@@ -114,23 +71,23 @@
 | cli.json | `output.encoding` | CLI 输出的编码。`auto`（默认）跟着终端；`utf-8` 一律输出 UTF-8 |
 | agents.json | `series` | 模型系列 |
 | agents.json | `different_series` | 必须用不同系列的角色组 |
-| agents.json | `any_series` | 回退列表可以跨系列的 agent（admin） |
+| agents.json | `any_series` | 回退列表可以跨系列的 agent（admin、reviewer） |
 | target.json | `repos_root` | 目标仓库的父文件夹 |
 | target.json | `repos` | 单个仓库的 `path`、`base_ref`、`refused_paths` |
 | target.json | `base_ref` | 取文件的分支 |
 | target.json | `refused_paths` | 不许回写、agent 也不能直接写的路径 |
 | target.json | `git_timeout_seconds` | 每条 git 命令的超时 |
 
-## 交接格式（contracts）
+## 模板（contracts）
 
-`.harness/contracts/` 里是 JSON Schema，CLI 写文件时按它校验。
+`.harness/contracts/templates/task/` 里是任务文件的模板，`task new` 和 `task upgrade` 按档位复制。
 
 | 文件 | 内容 |
 | --- | --- |
-| `request.schema.json` | `request.json`：状态、轮次、输入、计划的批准、promote 状态、分支、目标仓库 |
-| `manifest.schema.json` | 输入包清单：每个文件的路径、用途（input、candidate、base、diff、deleted、previous-attempt）、sha256；目标仓库文件还有仓库名、blob、提交号 |
-| `handoff.schema.json` | builder 和 reviewer 的交接：`status`（passed、failed、blocked）、成果、`deletes`（builder 声明要删除的目标仓库文件，没有就没这个字段）、证据、阻塞、建议 |
-| `templates/assignment.md` | orchestrator 给角色的任务书模板 |
+| `TASK.md` | 接力文件：种类、档位、状态、现在在做、下一步、要读的文件、已定的事、没解决的问题 |
+| `REQ.md` | 需求：用户确认、要做什么、不做什么、做完的标准、来源、没问清的、变更记录 |
+| `TODO.md` | 步骤清单 |
+| `LOG.md` | 做过的事和决定，只追加 |
 
 ## hook 事件
 
@@ -138,13 +95,13 @@
 
 | 事件 | 谁处理 |
 | --- | --- |
-| `SessionStart` | task_level（建会话状态） |
-| `UserPromptSubmit` | task_level（读 Level 标记、注入规则）、request（L2 任务做到哪一步） |
-| `PreToolUse` | task_level（预算、子 agent）、gate（含 L2 任务的写入范围）、request（子 agent 要先 dispatch） |
-| `PostToolUse` | task_level（计数） |
+| `SessionStart`、`UserPromptSubmit` | task（注入会话 id 和规则；接着任务时注入任务做到哪；读 `[review]=n`） |
+| `PreToolUse` | task（子 agent：只有接着任务、开了检查时放行 reviewer）、gate（guardrail、任务的写入范围、目标仓库、危险命令） |
+| `PostToolUse` | task（记下任务里的写入；reviewer 回答后把结论落盘） |
 | `PostToolUseFailure` | observe（工具调用失败时只有它，没有 `PostToolUse`；日志里记下工具名和平台给的错误） |
-| `SubagentStart`、`SubagentStop` | request（记录启动、检查 handoff；告诉任务的 reviewer 评审包在哪） |
-| `Stop` | task_level、request（请求没结论、没标等待时拦一次） |
+| `SubagentStart` | task（告诉 reviewer 评审包在哪） |
+| `SubagentStop` | 没有模块处理；核心用它记子 agent 结束 |
+| `Stop` | task（成果没凑够通过次数、或写过任务文件没更新 `TASK.md` 时拦一次） |
 
 ## 运行时文件
 
@@ -152,19 +109,18 @@
 
 | 路径 | 内容 |
 | --- | --- |
-| `state/<surface>/<会话>.json` | 每个会话的 Level、当前请求、子 agent、预算计数、是否在 admin 模式 |
+| `state/<surface>/<会话>.json` | 每个会话接着哪个任务、子 agent、是否在 admin 模式 |
 | `logs/<surface>/<会话>.jsonl` | 会话日志 |
 | `logs/hook-errors.jsonl` | hook 自己出的错 |
 | `git-approvals.json` | 等待批准和已批准的 git 命令 |
 | `capture/` | `capture.enabled` 打开时的原始 hook 输入输出 |
 
-`<surface>` 是 `vscode` 或 `cli`，由 hook 识别运行环境后写入。
+`<surface>` 现在只有 `vscode`。
 
 ## 工作区
 
 | 路径 | 内容 |
 | --- | --- |
-| `.workspace/sandbox/requests/<请求 id>/` | L3 请求目录，由 CLI 建立 |
-| `.workspace/current_tasks/<任务>/` | 你放任务材料（需求、参考、测试数据）；promote 把备份写进它的 `DEV/` |
-| `.workspace/reports/` | 请求报告，由 CLI 写 |
-| `.workspace/goals/<目标名>/` | 长任务的 `GOAL.md`、`TODO.md`、`NOW.md`、`LOG.md`、`accept/`，用 `/generic-goal-driven` 才建；L2 任务模式和 L3 进行中不能写 |
+| `.workspace/sandbox/tasks/<任务>/` | 任务目录，由 `task new` 建。里面每个文件是什么见 [.workspace/README.md](../.workspace/README.md) |
+| `.workspace/reports/` | 任务报告，由 CLI 写 |
+| `.workspace/goals/<目标名>/` | 长任务的 `GOAL.md`、`TODO.md`、`NOW.md`、`LOG.md`、`accept/`，用 `/generic-goal-driven` 才建；接着任务时不能写 |

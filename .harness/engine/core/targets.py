@@ -1,4 +1,4 @@
-"""Target repositories: git repositories outside the harness folder that an L3 request reads from and promotes into.
+"""Target repositories: git repositories outside the harness folder that a task reads from and promotes into.
 
 Policy `target.json` (override: `target.override.json`):
   repos_root  a folder; every subfolder that is a git repository is a target, named after the folder

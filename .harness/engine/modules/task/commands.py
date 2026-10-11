@@ -55,7 +55,7 @@ def register_task(subparsers: Any) -> None:
     start.set_defaults(handler=gone)
     new = commands.add_parser("new", help="make a task under .workspace/sandbox/tasks/ with the files of its tier; this session picks it up")
     new.add_argument("name", help="the task name: the folder name, no slashes")
-    new.add_argument("--kind", required=True, choices=list(tasks.KINDS), help="qa, rca, design (a design or a plan), dev, test, kb (a knowledge base update)")
+    new.add_argument("--kind", required=True, choices=list(tasks.KINDS), help="qa, rca, design (a design or a plan), dev, test, kb (a knowledge base update), other (a broad question or a case that fits none of these; the standard of done is agreed with the person and written in REQ.md)")
     new.add_argument("--tier", default="", choices=["", *tasks.TIERS], help="light: TASK.md only; medium: + REQ.md, REQ/, REF/, LOG.md; full: + TODO.md, DEV/, TEST/. Default: by kind")
     new.add_argument("--session-id", required=True, help="the session id written at the top of the prompt rules")
     new.add_argument("--surface", default="vscode", choices=["vscode"])

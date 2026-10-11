@@ -17,9 +17,9 @@ from typing import Any, Dict, Optional
 TASKS_DIR = ".workspace/sandbox/tasks"
 OLD_TASKS_DIR = ".workspace/current_tasks"  # before 1.1.0; not read any more, doctor says so when it still holds folders
 # What kind of work a task is (it decides what "done" means) and how many files it gets.
-KINDS = ("qa", "rca", "design", "dev", "test", "kb")
+KINDS = ("qa", "rca", "design", "dev", "test", "kb", "other")  # other: fits none of the six; its standard of done is agreed with the person
 TIERS = ("light", "medium", "full")
-DEFAULT_TIER = {"qa": "light", "rca": "medium", "design": "medium", "dev": "full", "test": "full", "kb": "full"}
+DEFAULT_TIER = {"qa": "light", "rca": "medium", "design": "medium", "dev": "full", "test": "full", "kb": "full", "other": "medium"}
 TASK_FILE = "TASK.md"
 TODO_FILE = "TODO.md"
 LOG_FILE = "LOG.md"

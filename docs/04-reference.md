@@ -31,7 +31,7 @@
 
 | 命令 | 作用 |
 | --- | --- |
-| `task new` | `task new <名字> --kind <种类>`：在 `.workspace/sandbox/tasks/` 下新建任务，会话接上它。种类：`qa`（问答）、`rca`、`design`（设计方案、开发计划）、`dev`（开发）、`test`、`kb`（更新知识库）。`--tier` 选档位：`light` 只有 `TASK.md`；`medium` 多 `REQ.md`、`REQ/`、`REF/`、`LOG.md`；`full` 再多 `TODO.md`、`DEV/`、`TEST/`。不写就按种类定 |
+| `task new` | `task new <名字> --kind <种类>`：在 `.workspace/sandbox/tasks/` 下新建任务，会话接上它。种类：`qa`（问答）、`rca`、`design`（设计方案、开发计划）、`dev`（开发）、`test`、`kb`（更新知识库）、`other`（其他：宽泛的问题，或不属于前面任何一种的情况分析）。`--tier` 选档位：`light` 只有 `TASK.md`；`medium` 多 `REQ.md`、`REQ/`、`REF/`、`LOG.md`；`full` 再多 `TODO.md`、`DEV/`、`TEST/`。不写就按种类定 |
 | `task open` | `task open <名字>`：会话接上一个已有的任务。关闭了的会重新打开；回写过的开新的一轮。会话原来接着的任务不关，只是换过去 |
 | `task upgrade` | `task upgrade --tier <档位>`：把任务升到更高的档：补上缺的文件，已有的不动。只能升 |
 | `task fetch` | 把目标仓库 main 上的文件取到 `DEV/<仓库>/<路径>`；`--overwrite` 丢掉改动重新取 |

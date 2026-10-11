@@ -74,7 +74,7 @@ def build(
             record["target"] = {"paths": list(event.paths[:MAX_PATHS]), "command": event.command}
     if denial:
         record["denial"] = denial
-    for key in ("kind", "judge", "verdict"):
+    for key in ("kind", "judge", "verdict", "task"):  # task: whose prompt it was, so a report can add up a task's time
         if facts.get(key):
             record[key] = facts[key]
     if event.event in ("SessionStart", "SubagentStart", "SubagentStop"):

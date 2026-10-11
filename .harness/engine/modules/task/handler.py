@@ -8,7 +8,8 @@
   SubagentStart                    the reviewer is told where its package is
   PostToolUse                      a write inside the task is remembered; the reviewer's answer closes the open check
   Stop                             once per prompt: the result has not passed its checks; task files were written and
-                                   TASK.md was not
+                                   TASK.md was not. A Stop that goes through leaves a mark in the task for the board:
+                                   the agent stopped, the person is next. The next prompt takes the mark away
 
 Hook failures are fail-open: hook.py rolls back this module's state changes and carries on.
 """
@@ -139,8 +140,11 @@ def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
     state = ctx.module_state(NAME)
     state["relay"] = {"wrote": False, "task_file": False, "reminded": False}  # a new prompt, a new count
     state["review_n"] = asked  # for a task this prompt goes on to make or open
-    in_task = open_task(ctx) is not None and not ctx.admin
-    return Decision(context=prompt_text(ctx, asked), facts={"kind": "task"} if in_task else {})
+    data = open_task(ctx) if not ctx.admin else None
+    if data is not None and data.get("waiting"):
+        mark_waiting(ctx, data, False)  # the person answered
+    # `task`: the log says whose prompt this was, so a report can add up the task's time
+    return Decision(context=prompt_text(ctx, asked), facts={"kind": "task", "task": data["task"]} if data is not None else {})
 
 
 # --- subagents -------------------------------------------------------------------------------------
@@ -244,14 +248,30 @@ def task_file_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
     return Decision(block=True, reason=say("task.relay.reminder", task=data["task"]), facts={"kind": "task_file_not_updated"})
 
 
+def mark_waiting(ctx: Context, data: Dict[str, Any], stopped: bool) -> None:
+    """The board's mark (M12-1): the agent of this task stopped, so the person is next. Never in the way of the hook."""
+    from core.paths import utc_now
+
+    from . import tasklife
+
+    try:
+        tasklife.set_waiting(ctx.root, data["task"], {"since": utc_now(), "why": "stopped"} if stopped else None)
+    except Exception:  # noqa: BLE001 - the mark is for a list; losing it must not turn a Stop into an error
+        pass
+
+
 def on_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
-    if event.stop_hook_active or is_subagent_session(ctx) or ctx.admin:
-        return None  # the second Stop of a block; a subagent finishing; admin mode has no task
+    if is_subagent_session(ctx) or ctx.admin:
+        return None  # a subagent finishing; admin mode has no task
     data = open_task(ctx)
     if data is None:
         return None
+    if event.stop_hook_active:
+        mark_waiting(ctx, data, True)  # the second Stop of a block: this time the agent does stop
+        return None
     blocks: List[Decision] = [item for item in (review_stop(ctx, data), task_file_stop(ctx, data)) if item is not None]
     if not blocks:
+        mark_waiting(ctx, data, True)
         return None
     facts: Dict[str, Any] = {}
     for item in reversed(blocks):

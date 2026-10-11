@@ -11,13 +11,15 @@
 | `--version` | 显示图案、版本、发布日期、作者。加 `--short` 只输出一行，例如 `harness 1.1.0`，给脚本用。都来自 `.harness/registry.json`；版本号格式 `主.次.修` |
 | `user` | 用这份 harness 的人的名字，和它来自哪：`user.override.json`、`git`（`git config user.name`）或 `none` |
 | `doctor` | 检查文件、策略、hook 配置、知识库、目标仓库是否一致；Python 能不能执行；hook 最近有没有被调用、gate 有多快 |
-| `task list` | 列出所有没关闭的任务：种类、档位、在等你做什么。等你的排在前面。`--all` 连关闭的一起列 |
+| `task list` | 列出所有没关闭的任务：种类、档位、在等你做什么、等了多久。等你的排在前面，等得最久的在最上面。`--all` 连关闭的一起列；`--text` 输出表格；`--watch` 每 5 秒刷新（`--interval` 改秒数），Ctrl+C 退出 |
+| `task board` | 写 `.workspace/reports/board.html`：所有任务的看板，带每个任务的时间和用量。`--all` 连关闭的一起列；`--open` 用浏览器打开；`--refresh N` 让页面每 N 秒重新载入 |
 | `task approve-plan` | 批准任务的 `PLAN.md`。只能在终端，输入确认码 |
 | `task approve-promote` | 批准最后一次 `task promote --dry-run` 的计划。只能在终端，输入确认码 |
 | `task recover` | promote 中途出错后，把仓库恢复原样。只能在终端，输入确认码 |
 | `task review extend` | 检查次数用完后，再给几次。只能在终端，输入确认码 |
 | `task review waive` | 没凑够通过次数，也放行这一版成果去回写。成果再改，放行失效。只能在终端，输入确认码 |
-| `task status`、`task report` | 看任务做到哪一步；重写任务报告 |
+| `task status` | 看任务做到哪一步 |
+| `task report` | 重写任务报告（`.md`：做了什么）和分析页（`.html`：时间和用量花在哪）。`--open` 用浏览器打开分析页 |
 | `task snapshot list`、`task snapshot prune` | 看任务在各个关口存下的成果；删掉过期的 |
 | `approve-command` | 批准 agent 被拒绝的一条 git 命令。只能在终端，输入验证码 |
 | `admin on` | 给一个会话开 admin 模式：它可以改 guardrail 文件。只能在终端，输入确认码 |
@@ -64,6 +66,7 @@
 | task.json | `review.max_n` | `[review]=n` 里 n 最大能写几 |
 | task.json | `snapshots.keep_days` | 关口快照留几天 |
 | task.json | `snapshots.max_file_mb` | 超过这个大小的文件，快照只记 sha256，不复制 |
+| task.json | `report.copilot_events` | 任务分析和看板读不读 Copilot 自己的会话记录（`~/.copilot/session-state/`）。读了才有用量；只取数字。`false` 时只用 hook 日志 |
 | observe.json | `max_text_chars` | 日志里每段文字的最大长度 |
 | observe.json | `capture.enabled` | 保存 hook 的原始输入输出 |
 | observe.json | `warn_session_files` | 会话日志文件数超过它时 `doctor` 提醒 |

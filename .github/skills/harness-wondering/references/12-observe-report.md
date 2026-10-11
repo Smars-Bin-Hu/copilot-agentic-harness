@@ -2,17 +2,19 @@
 
 ## 一句话
 
-harness 记“发生了什么”，不记“你说了什么”。日志、统计、任务报告、`doctor` 自检、固定场景 `eval`，五样东西回答五个问题。
+harness 记“发生了什么”，不记“你说了什么”。日志、统计、任务报告、任务分析页、任务看板、`doctor` 自检、固定场景 `eval`，七样东西回答七个问题。
 
 ## 分块
 
-### 12.1 五样东西
+### 12.1 七样东西
 
 | 东西 | 回答什么 | 命令 |
 | --- | --- | --- |
 | 会话日志 | 这个会话里每次调用发生了什么 | 文件 `.harness/runtime/logs/<surface>/<会话>.jsonl` |
 | 统计 | 整体上有多少提示、调用、拒绝 | `harness stats` |
 | 任务报告 | 这个任务做了什么、谁批准的 | `task close` 自动写，`task report` 重写 |
+| 任务分析页 | 这个任务的时间和用量花在哪 | 同上，文件是 `task-<任务名>.html` |
+| 任务看板 | 哪个任务在等你、等了多久 | `task list`、`task board` |
 | 自检 | harness 配置对不对、hook 在不在跑 | `harness doctor` |
 | 固定场景 | 改了 harness 之后，行为变没变 | `harness eval list`、`show`、`check` |
 
@@ -26,11 +28,17 @@ harness 记“发生了什么”，不记“你说了什么”。日志、统计
 
 ### 12.3 token 和耗时
 
-harness 自己**不统计 token**，读 Copilot 的 OTel（OpenTelemetry）。observe 只记 gate 的决定和任务报告。原因：平台对 token 和耗时有原生数据，重复造一份会过期。
+harness 的 hook 日志**不记 token**。平台对 token 和耗时有原生数据，重复造一份会过期。
+
+任务分析页要用量时，去读 Copilot 自己的会话记录（`~/.copilot/session-state/<会话>/events.jsonl`）：每一轮、每个工具、每个子 agent 的时间，和累计的 AIU、premium request 数。只取数字、时间和名字。这个文件不是公开的格式，可能变，也可能读不到；读不到就退回 hook 日志，只有耗时。
+
+两份记录怎么对上：hook 日志里每条提示记着它属于哪个任务，按时间找到 Copilot 记录里的同一条提示。
 
 ### 12.4 任务报告
 
 `task close` 写 `.workspace/reports/task-<任务名>.md`：计划全文、两次批准的时间、取了哪些文件、改动的增删行数、每次独立检查的结论、被拒绝的调用。事后回答“改了什么、谁批准的、为什么返工”不用靠回忆。
+
+旁边的 `task-<任务名>.html` 回答另一个问题：时间和用量花在哪。它把每条提示拆成模型在想、工具在跑、子 agent、等你点确认，再算出等你的时间、各阶段的占比、上下文涨了多少。想让 agent 讲解，用技能 `harness-task-report`。
 
 ### 12.5 doctor：自检
 

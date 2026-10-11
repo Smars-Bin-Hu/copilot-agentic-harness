@@ -10,7 +10,9 @@
 
 | 命令 | 什么时候 |
 | --- | --- |
-| `harness task list` | 看有哪些任务、哪个在等你。`--all` 连关闭的一起列 |
+| `harness task list` | 看有哪些任务、哪个在等你、等了多久。`--all` 连关闭的一起列；`--watch` 自动刷新 |
+| `harness task board` | 把看板写成一个 HTML 页面 |
+| `harness task report` | 写任务报告和分析页：时间和用量花在哪 |
 | `harness doctor` | 配置有没有问题；hook 在不在跑 |
 | `harness task status` | 当前任务做到哪 |
 | `harness stats` | 日志汇总 |

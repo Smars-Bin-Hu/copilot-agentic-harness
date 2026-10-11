@@ -1,6 +1,7 @@
 """CLI commands of the task module.
 
-  task new|open|upgrade|list                 the life of a task (tasklife.py)
+  task new|open|upgrade|list                 the life of a task (tasklife.py); list --text|--watch: the board in a terminal
+  task board                                 the board as a page (taskboard.py)
   task status|fetch|delete|diff|set-branch|promote|close|report      the work on a task (task.py)
   task approve-plan|approve-promote|recover  a person at a terminal
   task review start|status                   independent checks, `[review]=n` (taskreview.py); extend|waive: a person at a terminal
@@ -16,7 +17,7 @@ from typing import Any, Dict
 from core import messages, targets, tasks
 from core.paths import cli_command, repo_root
 
-from . import task, task_report, tasklife, taskreview, tasksnap
+from . import task, task_report, taskboard, tasklife, taskreview, tasksnap
 from .common import CommandError
 
 
@@ -36,6 +37,27 @@ def cmd_target_list(args: argparse.Namespace) -> Dict[str, Any]:
 def cmd_target_show(args: argparse.Namespace) -> Dict[str, Any]:
     found = targets.load(repo_root())
     return targets.summary(found.get(args.repo), found.timeout)
+
+
+def cmd_list(args: argparse.Namespace) -> Dict[str, Any]:
+    if args.watch:
+        return taskboard.watch(repo_root(), args.all, args.interval)
+    result = tasklife.list_tasks(repo_root(), args.all)
+    return {"_text": taskboard.table(result)} if args.text else result
+
+
+def cmd_board(args: argparse.Namespace) -> Dict[str, Any]:
+    result = taskboard.board(repo_root(), args.all, max(0, args.refresh))
+    if args.open:
+        result["opened"] = taskboard.open_in_browser(repo_root(), result["board"])
+    return result
+
+
+def cmd_report(args: argparse.Namespace) -> Dict[str, Any]:
+    result = task_report.generate(repo_root(), args.task)
+    if args.open and result.get("analysis"):
+        result["opened"] = taskboard.open_in_browser(repo_root(), result["analysis"])
+    return result
 
 
 def register_task(subparsers: Any) -> None:
@@ -69,7 +91,15 @@ def register_task(subparsers: Any) -> None:
     upgrade.add_argument("--tier", required=True, choices=list(tasks.TIERS))
     listing = commands.add_parser("list", help="every open task: kind, tier, what it waits for; --all adds the closed ones")
     listing.add_argument("--all", action="store_true")
-    listing.set_defaults(handler=lambda a: tasklife.list_tasks(repo_root(), a.all))
+    listing.add_argument("--text", action="store_true", help="a table for a person to read, not JSON")
+    listing.add_argument("--watch", action="store_true", help="the table, drawn again every --interval seconds until Ctrl+C")
+    listing.add_argument("--interval", type=float, default=5.0)
+    listing.set_defaults(handler=cmd_list)
+    board = commands.add_parser("board", help="write .workspace/reports/board.html: every task, what it waits for, its time and usage")
+    board.add_argument("--all", action="store_true", help="the closed tasks too")
+    board.add_argument("--refresh", type=int, default=0, help="the page loads itself again every N seconds (run the command again to renew the numbers)")
+    board.add_argument("--open", action="store_true", help="open the page in the browser (a person at a terminal)")
+    board.set_defaults(handler=cmd_board)
     review = commands.add_parser("review", help="independent checks of a task ([review]=n): start a check, see the count; extend and waive are the person's")
     review_commands = review.add_subparsers(dest="review_command", required=True)
 
@@ -110,7 +140,8 @@ def register_task(subparsers: Any) -> None:
     add("recover", "the person puts the repositories back after a task promote stopped halfway (terminal only)", lambda a: task.recover(repo_root(), a.task))
     close = add("close", "the session lets go of the task and the report is written; the folder stays where it is", lambda a: task.close(repo_root(), a.task, a.reason))
     close.add_argument("--reason", default="")
-    add("report", "write .workspace/reports/task-<name>.md", lambda a: task_report.generate(repo_root(), a.task))
+    report = add("report", "write .workspace/reports/task-<name>.md (what was done) and task-<name>.html (where the time and usage went)", cmd_report)
+    report.add_argument("--open", action="store_true", help="open the HTML page in the browser (a person at a terminal)")
 
 
 def register(subparsers: Any) -> None:

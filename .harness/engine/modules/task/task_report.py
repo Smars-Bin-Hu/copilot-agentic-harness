@@ -2,6 +2,7 @@
 
 It lists facts and judges nothing. It is written to .workspace/reports/task-<name>.md when the
 task is closed, and again whenever `task report` runs. Earlier rounds of the same task stay on the page.
+Next to it goes task-<name>.html: where the task's time and usage went (taskinsight.py, taskhtml.py).
 """
 
 from __future__ import annotations
@@ -117,4 +118,18 @@ def generate(root: Path, raw_task: str = "") -> Dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True)
     text = render(root, task, data)
     path.write_text(text, encoding="utf-8")
-    return {"task": task, "report": path.relative_to(root).as_posix(), "status": data["status"], "lines": text.count("\n")}
+    result: Dict[str, Any] = {"task": task, "report": path.relative_to(root).as_posix(), "status": data["status"], "lines": text.count("\n")}
+    try:  # where the time and usage went: a page for the person, the same numbers for the agent that explains them
+        from . import taskboard, taskinsight
+
+        info = taskinsight.of_task(root, task)
+        result["analysis"] = taskboard.write_task_page(root, task, info).relative_to(root).as_posix()
+        result["insight"] = {
+            "source": info["source"], "span": info["span"], "totals": info["totals"], "stages": info["stages"], "waits": info["waits"],
+            "findings": [item["text"] for item in info["findings"]],
+            "slowest_prompts": sorted(info["prompts"], key=lambda entry: -entry["active_s"])[:3],
+            "tools": info["tools"][:5], "reviews": info["reviews"],
+        }
+    except Exception as error:  # noqa: BLE001 - the Markdown report is written; the page must not undo that
+        result["analysis_error"] = f"{type(error).__name__}: {error}"
+    return result

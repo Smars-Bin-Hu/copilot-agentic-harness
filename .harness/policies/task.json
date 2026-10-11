@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Tasks. fetch.max_files: how many files one `task fetch` may copy. task_file_reminder: a prompt that wrote task files but not TASK.md is asked once, at Stop, to update it. review: a task with [review]=n may use n + extra_checks checks before a person must allow more; max_n caps the n a prompt can ask for. snapshots: how long the copies made at the gates are kept, and the largest file that is copied.",
+  "description": "Tasks. fetch.max_files: how many files one `task fetch` may copy. task_file_reminder: a prompt that wrote task files but not TASK.md is asked once, at Stop, to update it. review: a task with [review]=n may use n + extra_checks checks before a person must allow more; max_n caps the n a prompt can ask for. snapshots: how long the copies made at the gates are kept, and the largest file that is copied. report.copilot_events: the task report and the board read Copilot's own session record (~/.copilot/session-state/<session>/events.jsonl) for time and usage, numbers only; false: the hook log only, no usage.",
   "fetch": {
     "max_files": 200
   },
@@ -12,5 +12,8 @@
   "snapshots": {
     "keep_days": 14,
     "max_file_mb": 5
+  },
+  "report": {
+    "copilot_events": true
   }
 }

@@ -95,6 +95,10 @@ def main(argv=None) -> int:
     try:
         result = args.handler(args)
         code = result.pop("exit_code", 0) if isinstance(result, dict) else 0
+        if isinstance(result, dict) and "_text" in result:  # a command for a person's eyes (`task list --text`)
+            if result["_text"]:
+                print(result["_text"])
+            return code
         print(json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False))
         return code
     except Exception as error:

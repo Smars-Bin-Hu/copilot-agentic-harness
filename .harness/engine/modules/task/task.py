@@ -33,6 +33,7 @@ from .common import CommandError
 
 SCHEMA_VERSION = 1
 EVENTS_KEPT = 200
+SESSIONS_KEPT = 100
 SKIP_TOP = ("_deleted",)
 HINTS = {
     "fetch": "先 `task fetch {key}` 取过再改。",
@@ -162,6 +163,10 @@ def attach(root: Path, raw_task: str, session_id: str, surface: str = "vscode", 
                 # `task`: a folder the person moved (from the place of before 1.1.0) keeps its state and gets its new path
                 data.update(task=task, name=name_of(task), status="open", session_id=session_id, surface=surface, target_mode=found.configured)
                 note(data, "new-round" if new_round else "resume", f"会话 {session_id}")
+            # Every pick-up, for the report: which sessions' logs hold this task's time.
+            data.setdefault("sessions", []).append({"session_id": session_id, "surface": surface, "at": utc_now()})
+            del data["sessions"][:-SESSIONS_KEPT]
+            data["waiting"] = None
             asked = (state["modules"].get("task") or {}).get("review_n")
             if isinstance(asked, int) and not isinstance(asked, bool):
                 from . import taskreview  # it needs this module

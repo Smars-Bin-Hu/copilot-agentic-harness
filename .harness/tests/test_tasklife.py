@@ -489,7 +489,10 @@ class MessageTests(unittest.TestCase):
 
     def test_no_message_is_left_unused(self) -> None:
         source = "\n".join(path.read_text(encoding="utf-8") for path in ENGINE.rglob("*.py"))
-        dynamic = ("task.kind.", "task.tier.", "task.next.light", "task.next.medium", "task.next.full")
+        dynamic = (
+            "task.kind.", "task.tier.", "task.next.light", "task.next.medium", "task.next.full", "task.waiting.",
+            "insight.stage.", "insight.part.", "insight.wait.", "insight.finding.", "report.source.", "report.status.", "board.state.",
+        )
         source = source.replace('messages.text(\n            "', 'messages.text("')
         unused = [name for name in messages.table() if f'"{name}"' not in source and not name.startswith(dynamic)]
         self.assertEqual(unused, [])

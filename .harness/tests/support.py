@@ -96,7 +96,8 @@ class HarnessTestCase(unittest.TestCase):
         self.addCleanup(self._temporary.cleanup)
         self.root = Path(self._temporary.name)
         make_root(self.root)
-        self.env = {**os.environ, "HARNESS_ROOT": str(self.root)}
+        # COPILOT_HOME: the report reads Copilot's own session record; a test must not read the real one of this machine
+        self.env = {**os.environ, "HARNESS_ROOT": str(self.root), "COPILOT_HOME": str(self.root / "copilot-home")}
 
     # --- running the engine -------------------------------------------------------------------
 

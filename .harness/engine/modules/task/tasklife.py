@@ -5,7 +5,7 @@
                  and keeps it up to date; the person's own documents go into REQ/, which the agent only reads
   task open      the session picks up a task that exists; a closed one is opened again
   task upgrade   a higher tier: the files that are missing are added, the ones that exist are left alone
-  task list      every task with its kind, tier, state and what it waits for; read from `.task/task.json`, not from Markdown
+  task list      every task with its kind, tier, state, what it waits for and since when; read from `.task/task.json`, not from Markdown
 
 A task is open or closed in its state, wherever its folder is: closing moves nothing. A session holds one task at a
 time and may change it; the task it leaves stays open.
@@ -14,12 +14,13 @@ What a task writes back and the two approvals are in `task.py`.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from core import messages, tasks
 from core.paths import cli_command, repo_root, utc_now
-from core.state import admin_on, session, state_path
+from core.state import admin_on, atomic_write, session, state_lock, state_path
 
 from . import task as task_ops
 from .common import CommandError
@@ -170,34 +171,88 @@ def upgrade(root: Path, raw_task: str, tier: str) -> Dict[str, Any]:
     return {"task": task, "tier": tier, "from": current, "made": made, "next": say("task.upgrade.done", task=task, tier=label("tier", tier)) + next_text(root, task, data, "")}
 
 
-def waiting_for(root: Path, task: str, data: Dict[str, Any]) -> str:
-    """What the task waits on the person for, told from facts: the plan file, the approvals, the promote state."""
+def last_event(data: Dict[str, Any], *names: str) -> str:
+    return next((event.get("at", "") for event in reversed(data.get("events") or []) if event.get("what") in names), "")
+
+
+def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
+    """What the task waits on the person for and since when, told from facts. `why` is empty when it waits for nothing.
+
+    The order is by how much it blocks: a broken promote, an approval, checks that ran out, and last the mark the
+    Stop hook left (the agent of the task's session stopped: the next move is the person's).
+    """
     state = (data.get("promote") or {}).get("state", "none")
+    updated = data.get("updated_at", "")
     if state == "partial":
-        return messages.text("task.waiting.recover")
+        return {"why": "recover", "since": last_event(data, "promote-partial") or updated}
     if state == "dry_run":
-        return messages.text("task.waiting.promote")
+        return {"why": "promote", "since": last_event(data, "promote-dry-run") or updated}
     if tasks.plan_digest(root, task) and not tasks.plan_approved(root, task, data):
-        return messages.text("task.waiting.plan")
-    return ""
+        try:
+            changed = datetime.fromtimestamp(tasks.plan_file(root, task).stat().st_mtime, timezone.utc).isoformat()
+        except OSError:
+            changed = updated
+        return {"why": "plan", "since": changed}
+    try:
+        from . import taskreview  # it needs this module
+
+        if taskreview.state_of(data)["n"] and taskreview.has_something(root, task, data):
+            info = taskreview.summary(root, task, data)
+            if not info["waived"] and info["passes"] < info["n"] and not info["pending_round"] and info["checks_used"] >= info["checks_limit"]:
+                return {"why": "review", "since": last_event(data, "review") or updated}
+    except Exception:  # noqa: BLE001 - a list must not fail over one task's checks
+        pass
+    mark = data.get("waiting")
+    if isinstance(mark, dict) and mark.get("since"):
+        return {"why": "stopped", "since": str(mark["since"])}
+    return {"why": "", "since": ""}
+
+
+def waiting_for(root: Path, task: str, data: Dict[str, Any]) -> str:
+    why = waiting(root, task, data)["why"]
+    return messages.text(f"task.waiting.{why}") if why else ""
+
+
+def seconds_since(stamp: str) -> Optional[float]:
+    try:
+        return max(0.0, (datetime.now(timezone.utc) - datetime.fromisoformat(stamp)).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
+
+def set_waiting(root: Path, task: str, mark: Optional[Dict[str, str]]) -> None:
+    """The Stop hook's mark: the agent stopped, the person is next. A new prompt takes it away. `updated_at` is left alone."""
+    path = tasks.state_file(root, task)
+    with state_lock(path):
+        data = tasks.read(root, task)
+        if data is None or data.get("waiting") == mark:
+            return
+        data["waiting"] = mark
+        atomic_write(path, data)
 
 
 def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
-    """Tasks that wait for the person first, then the one touched last. A folder that was never started is listed as `new`."""
+    """Tasks that wait for the person first, the one that waited longest on top; then the one touched last. A folder that was never started is listed as `new`."""
     rows = []
     for task in tasks.folders(root):
         data = tasks.read(root, task)
         if data is None:
-            rows.append({"task": task, "name": task_ops.name_of(task), "status": "new", "kind": "", "tier": "", "updated_at": "", "waiting": "", "session_id": ""})
+            rows.append({
+                "task": task, "name": task_ops.name_of(task), "status": "new", "kind": "", "tier": "", "updated_at": "", "waiting": "",
+                "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "depends_on": [],
+            })
             continue
         if data.get("status") != "open" and not everything:
             continue
+        found = waiting(root, task, data) if data.get("status") == "open" else {"why": "", "since": ""}
+        waited = seconds_since(found["since"]) if found["why"] else None
         rows.append({
             "task": task, "name": data.get("name") or task_ops.name_of(task), "status": data.get("status", ""),
             "kind": data.get("kind", ""), "tier": data.get("tier", ""), "updated_at": data.get("updated_at", ""),
-            "waiting": waiting_for(root, task, data) if data.get("status") == "open" else "", "session_id": data.get("session_id", ""),
+            "waiting": messages.text(f"task.waiting.{found['why']}") if found["why"] else "", "waiting_why": found["why"], "waiting_since": found["since"],
+            "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
             "depends_on": list(data.get("depends_on") or []),
         })
     rows.sort(key=lambda row: row["updated_at"], reverse=True)
-    rows.sort(key=lambda row: (not row["waiting"], row["status"] != "open"))
+    rows.sort(key=lambda row: (not row["waiting"], row["status"] != "open", -(row["waited_s"] or 0)))
     return {"tasks": rows, "open": len([row for row in rows if row["status"] == "open"]), "waiting": len([row for row in rows if row["waiting"]])}

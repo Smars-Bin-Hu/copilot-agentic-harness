@@ -8,7 +8,7 @@ agent 和人的工作区。这里的运行内容不进 git，只有本文件和�
 | --- | --- | --- |
 | `sandbox/tasks/<任务>/` | 任务目录。一个任务一个，`harness task new` 建 | 见下表 |
 | `goals/<id>/` | 长任务的目标文件：`GOAL.md`、`TODO.md`、`NOW.md`、`LOG.md`，复杂步骤另有 `accept/`。用户输入 `/generic-goal-driven` 才建 | 人和 agent；接着任务时不能写 |
-| `reports/` | 任务报告。`task close` 时自动写，也可以 `harness task report` 重写 | CLI |
+| `reports/` | 任务报告（`task-<任务>.md`）和分析页（`task-<任务>.html`）：`task close` 时自动写，也可以 `harness task report` 重写。看板 `board.html`：`harness task board` 写 | CLI |
 
 任务目录里有什么：
 

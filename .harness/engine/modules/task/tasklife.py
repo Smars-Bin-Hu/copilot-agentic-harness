@@ -238,7 +238,7 @@ def paused_since(data: Dict[str, Any]) -> str:
 
 def pause(root: Path, raw_task: str = "", interactive: Optional[bool] = None) -> Dict[str, Any]:
     """The person puts the task aside: the board stops saying it waits, and the time aside is not counted as waiting."""
-    task_ops.person("task pause", interactive)
+    task_ops.person("task pause", interactive, typed=False)
     task = task_ops.resolve(root, raw_task)
     with task_ops.locked(root, task) as data:
         task_ops.require_open(data)
@@ -261,7 +261,7 @@ def resume_in(data: Dict[str, Any]) -> bool:
 
 
 def resume(root: Path, raw_task: str = "", interactive: Optional[bool] = None) -> Dict[str, Any]:
-    task_ops.person("task resume", interactive)
+    task_ops.person("task resume", interactive, typed=False)
     task = task_ops.resolve(root, raw_task)
     with task_ops.locked(root, task) as data:
         task_ops.require_open(data)

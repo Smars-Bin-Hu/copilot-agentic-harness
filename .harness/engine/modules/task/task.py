@@ -300,9 +300,9 @@ def require_plan(root: Path, task: str, data: Dict[str, Any]) -> None:
         raise CommandError(next_step(root, task, data) + "用户说批准了，再运行这条命令。")
 
 
-def person(command: str, interactive: Optional[bool]) -> None:
+def person(command: str, interactive: Optional[bool], typed: bool = True) -> None:
     try:
-        approval.require_person(command, interactive)
+        approval.require_person(command, interactive, typed)
     except approval.Refused as error:
         raise CommandError(str(error)) from error
 

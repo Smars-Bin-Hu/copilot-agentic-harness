@@ -23,12 +23,12 @@ def code_of(digest: str) -> str:
     return digest[:CODE_LENGTH]
 
 
-def require_person(command: str, interactive: Optional[bool] = None) -> None:
-    """`interactive` exists so tests can stand in for a person; the CLI passes None."""
+def require_person(command: str, interactive: Optional[bool] = None, typed: bool = True) -> None:
+    """`interactive` exists so tests can stand in for a person; the CLI passes None. `typed`: the command goes on to ask for a code."""
     if interactive is None:
         interactive = sys.stdin.isatty() and sys.stdout.isatty()
     if not interactive:
-        raise Refused(f"{command} 只能由用户在自己的终端里手动运行，要打字确认。agent 不能运行它，管道和脚本也不行。")
+        raise Refused(f"{command} 只能由用户在自己的终端里手动运行{'，要打字确认' if typed else ''}。agent 不能运行它，管道和脚本也不行。")
 
 
 def ask(question: str, digest: str, refusal: str, reader: Optional[Callable[[str], str]] = None) -> None:

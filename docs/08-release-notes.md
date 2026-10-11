@@ -42,7 +42,7 @@
 
 - **不用再选 Level，不用再写 `/l1`、`/l2`。** 写了也没有作用。
 - **子 agent 的规则变了**：没有接着任务的会话不能调用子 agent；接着任务的会话只能调用 reviewer，而且要先 `task review start`。
-- **检查员叫 reviewer**，模型是 Sonnet，没有就退到 Haiku。`[verify]` 等于 `[review]=1`，`[no-verify]` 等于 `[review]=0`，还能用。
+- **检查员叫 reviewer**，模型是 Sonnet，没有就退到 Haiku。旧的 `[verify]`、`[no-verify]` 不再认，改写 `[review]=1`、`[review]=0`。
 - **每条提示开头注入的规则短了**：没接任务时三四行，接着任务时是这个任务做到哪。不再有 Level 和预算的说明。
 - **搜索和工具调用不再有次数上限。**
 - `task close` 之后目录原地不动，`task open` 可以重新打开。

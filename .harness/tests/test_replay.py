@@ -83,12 +83,12 @@ class ReplayTests(HarnessTestCase):
         self.assertEqual(seen, set(expected))
 
     def test_the_markers_of_the_recorded_prompts_switch_nothing(self) -> None:
-        """One recorded prompt starts with a markdown code fence and `[L2] [verify]`. There are no Levels any more; `[verify]` asks for one check."""
+        """One recorded prompt starts with a markdown code fence and `[L2] [verify]`. The old markers switch and ask for nothing."""
         results = self.replay("cli-subagent-stop-block.jsonl")
         data, output, _ = results[0]
         self.assertTrue(data["prompt"].startswith("```\n[L2]"))
         self.assertNotIn("Task Level", output["additionalContext"])
-        self.assertIn("`[review]=1`", output["additionalContext"])
+        self.assertNotIn("[review]", output["additionalContext"])
 
 
 class ReplayThroughTheRealProcessTests(HarnessTestCase):

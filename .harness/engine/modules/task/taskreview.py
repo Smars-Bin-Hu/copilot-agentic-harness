@@ -53,16 +53,9 @@ def settings(root: Path) -> Dict[str, int]:
 
 
 def marker(prompt: str) -> Optional[int]:
-    """The n the user wrote in this prompt, or None. The markers of before 1.1.0 still count: `[verify]` is 1, `[no-verify]` is 0."""
+    """The n the user wrote in this prompt, or None."""
     found = _MARKER.search(prompt)
-    if found:
-        return int(found.group(1))
-    lowered = prompt.lower()
-    if "[no-verify]" in lowered:
-        return 0
-    if "[verify]" in lowered:
-        return 1
-    return None
+    return int(found.group(1)) if found else None
 
 
 def parse_verdict(response: str) -> str:

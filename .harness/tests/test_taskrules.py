@@ -43,11 +43,6 @@ class NoTaskTests(RuleCase):
         self.assertIn("当前会话 id：fresh", text)
         self.assertIn("harness-my-task", text)
 
-    def test_the_level_markers_of_before_do_nothing(self) -> None:
-        self.prompt("/l2 做点事")
-        self.prompt("[L1] 做点事")
-        self.assertNotIn("level", self.session_state(SESSION))
-
     def test_review_without_a_task_points_at_the_skill_and_the_n_is_kept_for_the_task(self) -> None:
         text = self.context(self.prompt("[review]=2 写一份设计"))
         self.assertIn("`[review]=2`", text)
@@ -57,9 +52,10 @@ class NoTaskTests(RuleCase):
         data = json.loads((self.root / tasks.TASKS_DIR / "design" / ".task" / "task.json").read_text(encoding="utf-8"))
         self.assertEqual(data["review"]["n"], 2)
 
-    def test_the_old_marker_still_asks_for_one_check(self) -> None:
-        self.assertIn("`[review]=1`", self.context(self.prompt("[verify] 写一份设计")))
-        self.assertNotIn("[review]", self.context(self.prompt("[no-verify] 写一份设计")))
+    def test_the_old_markers_ask_for_nothing(self) -> None:
+        for text in ("[verify] 写一份设计", "[no-verify] 写一份设计", "/l2 [L1] 写一份设计"):
+            self.assertNotIn("[review]", self.context(self.prompt(text)))
+        self.assertNotIn("level", self.session_state(SESSION))
 
     def test_no_subagent_may_be_called(self) -> None:
         for tool_input, called in ((REVIEWER, "reviewer"), (GENERIC, "general-purpose"), ({"prompt": "x"}, "通用子 agent")):

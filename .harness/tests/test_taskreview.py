@@ -33,11 +33,9 @@ class MarkerTests(unittest.TestCase):
             with self.subTest(text):
                 self.assertEqual(taskreview.marker(text), expected)
 
-    def test_the_old_markers_mean_one_and_zero_and_the_new_one_wins(self) -> None:
-        self.assertEqual(taskreview.marker("[verify] x"), 1)
-        self.assertEqual(taskreview.marker("x [No-Verify]"), 0)
-        self.assertEqual(taskreview.marker("[review]=2 [verify] x"), 2)
-        self.assertEqual(taskreview.marker("[verify] [no-verify]"), 0)
+    def test_the_old_markers_mean_nothing(self) -> None:
+        for text in ("[verify] x", "x [No-Verify]", "[L2] /l1 x"):
+            self.assertIsNone(taskreview.marker(text))
 
     def test_the_first_line_decides_the_verdict(self) -> None:
         self.assertEqual(taskreview.parse_verdict("**VERDICT: PASS**\n- ok"), "PASS")
@@ -105,13 +103,6 @@ class SwitchTests(ReviewCase):
         self.say("继续")
         self.assertEqual(self.review_state()["n"], 1)
         self.say("[review]=0 不查了")
-        self.assertEqual(self.review_state()["n"], 0)
-
-    def test_the_old_markers_work_in_a_task(self) -> None:
-        self.new()
-        self.say("[verify] 继续")
-        self.assertEqual(self.review_state()["n"], 1)
-        self.say("[no-verify] 继续")
         self.assertEqual(self.review_state()["n"], 0)
 
     def test_n_is_capped_by_the_policy(self) -> None:

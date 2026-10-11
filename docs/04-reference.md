@@ -19,7 +19,7 @@
 | `task review extend` | 检查次数用完后，再给几次。只能在终端，输入确认码 |
 | `task review waive` | 没凑够通过次数，也放行这一版成果去回写。成果再改，放行失效。只能在终端，输入确认码 |
 | `task status` | 看任务做到哪一步 |
-| `task report` | 重写任务报告（`.md`：做了什么）和分析页（`.html`：时间和用量花在哪）。`--open` 用浏览器打开分析页 |
+| `task report` | 重写任务报告（`.md`：做了什么）和分析页（`.html`：时间和用量花在哪）。`--open` 用浏览器打开分析页；`--detail` 让输出多带最慢的提示、工具和每次检查 |
 | `task snapshot list`、`task snapshot prune` | 看任务在各个关口存下的成果；删掉过期的 |
 | `approve-command` | 批准 agent 被拒绝的一条 git 命令。只能在终端，输入验证码 |
 | `admin on` | 给一个会话开 admin 模式：它可以改 guardrail 文件。只能在终端，输入确认码 |
@@ -79,6 +79,7 @@
 | task.json | `autorun.max_stalls` | 连续几次继续都没有进展就停 |
 | task.json | `mapreduce.max_agents` | 用户输入一次 `/generic-mapreduce` 后，最多能调用几次 mapper。`0` 是关掉 |
 | task.json | `mapreduce.minutes` | 这几次调用多少分钟内有效 |
+| task.json | `report.prompt_chars` | 任务分析页上，每条提示显示你输入的开头多少个字（只在页面上，不给 agent）。`0` 是不显示 |
 | task.json | `report.copilot_events` | 任务分析和看板读不读 Copilot 自己的会话记录（`~/.copilot/session-state/`）。读了才有用量；只取数字。`false` 时只用 hook 日志 |
 | observe.json | `max_text_chars` | 日志里每段文字的最大长度 |
 | observe.json | `capture.enabled` | 保存 hook 的原始输入输出 |

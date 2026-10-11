@@ -57,7 +57,7 @@ def cmd_board(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def cmd_report(args: argparse.Namespace) -> Dict[str, Any]:
-    result = task_report.generate(repo_root(), args.task)
+    result = task_report.generate(repo_root(), args.task, args.detail)
     if args.open and result.get("analysis"):
         result["opened"] = taskboard.open_in_browser(repo_root(), result["analysis"])
     return result
@@ -162,6 +162,7 @@ def register_task(subparsers: Any) -> None:
     close.add_argument("--reason", default="")
     report = add("report", "write .workspace/reports/task-<name>.md (what was done) and task-<name>.html (where the time and usage went)", cmd_report)
     report.add_argument("--open", action="store_true", help="open the HTML page in the browser (a person at a terminal)")
+    report.add_argument("--detail", action="store_true", help="add the slowest prompts, the tools and the checks to `insight` (more to read)")
 
 
 def register(subparsers: Any) -> None:

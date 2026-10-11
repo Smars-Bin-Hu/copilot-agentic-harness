@@ -11,6 +11,7 @@ mark the Stop hook leaves when the agent of the task's session stops.
 from __future__ import annotations
 
 import os
+from datetime import datetime
 import sys
 import time
 import unicodedata
@@ -39,9 +40,17 @@ def pad(text: str, size: int) -> str:
     return text + " " * max(0, size - width(text))
 
 
+def local_time(stamp: str) -> str:
+    """A UTC stamp as "YYYY-MM-DD HH:MM:SS" in the time of this machine. What cannot be read is given back as it is."""
+    try:
+        return datetime.fromisoformat(stamp).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        return str(stamp or "").replace("T", " ")
+
+
 def table(result: Dict[str, Any]) -> str:
     """The list as text. Waiting tasks first, the one that waited longest on top."""
-    head = say("board.text.head", open=result["open"], waiting=result["waiting"], paused=result.get("paused", 0), as_of=utc_now()[11:19])
+    head = say("board.text.head", open=result["open"], waiting=result["waiting"], paused=result.get("paused", 0), as_of=local_time(utc_now())[11:19])
     line = result.get("promote_queue") or []
     if line:
         names = [item["name"] + "（" + say(f"board.queue.{item['stage']}") + "）" for item in line]
@@ -57,7 +66,7 @@ def table(result: Dict[str, Any]) -> str:
             kind = say(f"task.kind.{row['kind'] or 'none'}") + "·" + say(f"task.tier.{row['tier'] or 'none'}")
             state = row["waiting"] or say("board.state.paused" if row.get("paused_since") else "board.state.running" if row["status"] == "open" else "board.state.closed")
         waited = taskinsight.clock(row["waited_s"]) if row["waiting"] and row["waited_s"] is not None else "-"
-        lines.append([("! " if row["waiting"] else "  ") + row["name"], kind, state, waited, row["updated_at"][5:16].replace("T", " ")])
+        lines.append([("! " if row["waiting"] else "  ") + row["name"], kind, state, waited, local_time(row["updated_at"])[5:16]])
     sizes = [max(width(names[index]) + (2 if index == 0 else 0), *(width(line[index]) for line in lines)) for index in range(len(names))]
     out = [head, "", "  ".join(pad(("  " if index == 0 else "") + name, sizes[index]) for index, name in enumerate(names))]
     out += ["  ".join(pad(value, sizes[index]) for index, value in enumerate(line)).rstrip() for line in lines]

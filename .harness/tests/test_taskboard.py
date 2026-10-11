@@ -339,6 +339,21 @@ class InsightTests(BoardCase):
         self.assertIn("dear_prompt", kinds)
         self.assertIn("context", kinds)
         self.assertNotIn("no_usage", kinds)
+        # the start of what was typed is on the page for the person; what an agent is given holds none of it
+        self.assertEqual(info["prompts"][0]["text"], SECRET)
+        self.assertNotIn(SECRET, json.dumps(taskinsight.for_agent(info, detail=True), ensure_ascii=False))
+        self.assertNotIn("slowest_prompts", taskinsight.for_agent(info))
+        self.assertNotIn("command", json.dumps(info))  # a tool's arguments are never read
+
+    def test_the_start_of_a_prompt_is_cut_and_can_be_switched_off(self) -> None:
+        self.assertEqual(copilot_events.start_of("  一句  很长的\n话 " + "长" * 60, 10), "一句 很长的 话 长…")
+        self.assertEqual(copilot_events.start_of("x", 0), "")
+        self.new()
+        first = self.prompt_times()[0]
+        self.copilot_record(S1, one_prompt(first, 10, 1, 40000))
+        (self.root / ".harness" / "policies" / "task.override.json").write_text(json.dumps({"report": {"prompt_chars": 0}}), encoding="utf-8")
+        info = taskinsight.of_task(self.root, f"{BASE}/job")
+        self.assertEqual(info["prompts"][0]["text"], "")
         self.assertNotIn(SECRET, json.dumps(info, ensure_ascii=False))
 
     def test_the_wait_between_two_prompts_is_the_persons_time(self) -> None:
@@ -403,8 +418,13 @@ class PageTests(BoardCase):
         self.assertIn("<title>任务分析：job</title>", text)
         data = page_data(text)
         self.assertEqual((data["info"]["name"], data["info"]["totals"]["aiu"], data["text"]["insight.part.model"]), ("job", 10.0, "模型在想"))
-        for banned in ("http://", "https://", " src=", SECRET):  # everything is in the file; nothing is fetched
+        for banned in ("http://", "https://", " src="):  # everything is in the file; nothing is fetched
             self.assertNotIn(banned, text.replace("http://www.w3.org/2000/svg", ""))
+        self.assertIn(SECRET, text)  # the page shows the person the start of each prompt
+        printed = self.cli("task", "report", "--task", "job").stdout
+        self.assertNotIn(SECRET, printed)  # what the command prints is what an agent reads
+        self.assertEqual(printed.count("\n"), 1)  # and it is not indented
+        self.assertIn("slowest_prompts", self.cli_json("task", "report", "--task", "job", "--detail")["insight"])
 
     def test_close_writes_the_page_too(self) -> None:
         self.new()

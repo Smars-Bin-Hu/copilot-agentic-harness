@@ -42,3 +42,4 @@ noscript{display:block;margin-top:16px;color:var(--bad)}
 .chart svg{position:absolute;inset:0;height:100%}
 .chart .line{fill:none;stroke:var(--model);stroke-width:2;vector-effect:non-scaling-stroke}
 .dots i{position:absolute;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--model)}
+.said{max-width:26em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

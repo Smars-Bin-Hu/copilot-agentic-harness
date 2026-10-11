@@ -38,6 +38,7 @@ STAGE_OF_EVENT = {
 }
 WAIT_OF_EVENT = {"approve-plan": "plan", "approve-promote": "promote", "review-extend": "review", "review-waive": "review", "recover": "recover"}
 SOURCE_EVENTS, SOURCE_LOG, SOURCE_NONE = "copilot-events", "hook-log", "none"
+PROMPT_CHARS = 40
 
 
 def say(key: str, **values: Any) -> str:
@@ -194,13 +195,22 @@ def from_hook_log(rows: List[Dict[str, Any]], hook_prompts: List[Dict[str, Any]]
     return found
 
 
+def prompt_chars(root: Path) -> int:
+    """Policy task.json `report.prompt_chars`: how much of what the user typed the page shows for a prompt. 0: nothing."""
+    try:
+        value = (common.config.load_policy(root, common.POLICY_NAME).get("report") or {}).get("prompt_chars", PROMPT_CHARS)
+        return max(0, int(value))
+    except Exception:  # noqa: BLE001
+        return PROMPT_CHARS
+
+
 def session_prompts(root: Path, task: str, session_id: str, surface: str, picked_up: List[float], closed: List[float], use_events: bool) -> Dict[str, Any]:
     rows = read_session(root, surface, session_id)
     hook_prompts = user_prompts(rows)
     mark_owned(task, hook_prompts, picked_up, closed)
     hint = next((row["transcript"] for row in rows if row.get("transcript")), "")
     path = copilot_events.events_path(session_id, hint) if use_events else None
-    record = copilot_events.read(path) if path is not None else None
+    record = copilot_events.read(path, prompt_chars(root)) if path is not None else None
     if record is not None:
         prompts, source = from_events(record, hook_prompts, picked_up), SOURCE_EVENTS
     elif hook_prompts:
@@ -355,6 +365,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
             "turns": prompt["turns"], "tool_calls": len(prompt["tools"]), "failed_tool_calls": len([tool for tool in prompt["tools"] if not tool["ok"]]),
             "slowest_tool": {"name": slowest["name"], "seconds": round(slowest["seconds"], 1)} if slowest and slowest["seconds"] >= 1 else None,
             "subagents": len(prompt["subagents"]), "skills": sorted(set(prompt["skills"])), "models": prompt["models"], **counted,
+            "text": prompt.get("text", ""),  # for the page only: `for_agent` takes it out
         }
         entry.update({key: round(value, 1) if value is not None else None for key, value in parts.items()})
         prompts.append(entry)
@@ -500,6 +511,21 @@ def where_time_went(entry: Dict[str, Any]) -> str:
     if key == "tool_s" and entry["slowest_tool"]:
         text += say("insight.why.tool", tool=entry["slowest_tool"]["name"], time=clock(entry["slowest_tool"]["seconds"]))
     return text
+
+
+def for_agent(result: Dict[str, Any], detail: bool = False) -> Dict[str, Any]:
+    """The numbers an agent reads to explain a task. Short by default; `detail` adds the slowest prompts, the tools and the checks.
+
+    What the user typed is never in it: the agent has the conversation, and a report must not carry prompts around."""
+    found: Dict[str, Any] = {
+        "source": result["source"], "span": result["span"], "totals": result["totals"], "stages": result["stages"], "waits": result["waits"][:3],
+        "findings": [item["text"] for item in result["findings"]],
+    }
+    if detail:
+        found["slowest_prompts"] = [{key: value for key, value in entry.items() if key != "text"} for entry in sorted(result["prompts"], key=lambda entry: -entry["active_s"])[:3]]
+        found["tools"] = result["tools"][:5]
+        found["reviews"] = result["reviews"]
+    return found
 
 
 def brief(result: Dict[str, Any]) -> Dict[str, Any]:

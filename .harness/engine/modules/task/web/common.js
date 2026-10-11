@@ -44,7 +44,14 @@ function amount(value) {
 
 const share = (part, whole) => (part && whole ? part / whole : 0);
 const percent = (value) => Math.round(value * 100) + "%";
-const when = (stamp, from, to) => String(stamp || "").slice(from, to).replace("T", " ");
+// A UTC stamp as the local time of whoever opens the page: "YYYY-MM-DD HH:MM:SS", then cut like the stamp was (from, to).
+function when(stamp, from, to) {
+  const date = new Date(stamp || "");
+  if (!stamp || isNaN(date.getTime())) return String(stamp || "").slice(from, to).replace("T", " ");
+  const two = (value) => String(value).padStart(2, "0");
+  const local = date.getFullYear() + "-" + two(date.getMonth() + 1) + "-" + two(date.getDate()) + " " + two(date.getHours()) + ":" + two(date.getMinutes()) + ":" + two(date.getSeconds());
+  return local.slice(from, to);
+}
 
 function kpi(value, label) {
   return h("div", {class: "kpi"}, h("b", null, value), h("span", null, label));

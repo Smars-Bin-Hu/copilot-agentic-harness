@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Tasks. fetch.max_files: how many files one `task fetch` may copy. task_file_reminder: a prompt that wrote task files but not TASK.md is asked once, at Stop, to update it. review: a task with [review]=n may use n + extra_checks checks before a person must allow more; max_n caps the n a prompt can ask for. snapshots: how long the copies made at the gates are kept, and the largest file that is copied. report.copilot_events: the task report and the board read Copilot's own session record (~/.copilot/session-state/<session>/events.jsonl) for time and usage, numbers only; false: the hook log only, no usage. mapreduce: after the user typed /generic-mapreduce, the session may call the read-only mapper subagent max_agents times within that many minutes; 0 turns it off. autorun (beta): a task in autorun is pushed on to its next TODO step at most max_steps times within minutes; it stops when the gate refused max_denies calls, or after max_stalls pushes in a row with nothing moved.",
+  "description": "Tasks. fetch.max_files: how many files one `task fetch` may copy. task_file_reminder: a prompt that wrote task files but not TASK.md is asked once, at Stop, to update it. review: a task with [review]=n may use n + extra_checks checks before a person must allow more; max_n caps the n a prompt can ask for. snapshots: how long the copies made at the gates are kept, and the largest file that is copied. report.copilot_events: the task report and the board read Copilot's own session record (~/.copilot/session-state/<session>/events.jsonl) for time and usage, numbers only; false: the hook log only, no usage. mapreduce: after the user typed /generic-mapreduce, the session may call the read-only mapper subagent max_agents times within that many minutes; 0 turns it off. autorun (beta): a task in autorun is pushed on to its next TODO step at most max_steps times within minutes; it stops when the gate refused max_denies calls, or after max_stalls pushes in a row with nothing moved. report.prompt_chars: how many characters of what the user typed the task page shows for each prompt (from Copilot's record; the page only, never given to an agent); 0: none.",
   "fetch": {
     "max_files": 200
   },
@@ -14,7 +14,8 @@
     "max_file_mb": 5
   },
   "report": {
-    "copilot_events": true
+    "copilot_events": true,
+    "prompt_chars": 40
   },
   "mapreduce": {
     "max_agents": 4,

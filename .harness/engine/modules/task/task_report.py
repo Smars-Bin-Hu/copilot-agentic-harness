@@ -117,7 +117,7 @@ def render(root: Path, task: str, data: Dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def generate(root: Path, raw_task: str = "") -> Dict[str, Any]:
+def generate(root: Path, raw_task: str = "", detail: bool = False) -> Dict[str, Any]:
     if raw_task.strip():
         task = task_ops.resolve(root, raw_task)
     else:
@@ -138,12 +138,8 @@ def generate(root: Path, raw_task: str = "") -> Dict[str, Any]:
 
         info = taskinsight.of_task(root, task)
         result["analysis"] = taskboard.write_task_page(root, task, info).relative_to(root).as_posix()
-        result["insight"] = {
-            "source": info["source"], "span": info["span"], "totals": info["totals"], "stages": info["stages"], "waits": info["waits"],
-            "findings": [item["text"] for item in info["findings"]],
-            "slowest_prompts": sorted(info["prompts"], key=lambda entry: -entry["active_s"])[:3],
-            "tools": info["tools"][:5], "reviews": info["reviews"],
-        }
+        result["insight"] = taskinsight.for_agent(info, detail)
+        result["_compact"] = True  # an agent reads this: no indentation
     except Exception as error:  # noqa: BLE001 - the Markdown report is written; the page must not undo that
         result["analysis_error"] = f"{type(error).__name__}: {error}"
     return result

@@ -19,7 +19,7 @@ POLICY_SCHEMA = {
             "type": "object",
             "properties": {"extra_checks": {"type": "integer", "minimum": 0}, "max_n": {"type": "integer", "minimum": 0}},
         },
-        "report": {"type": "object", "properties": {"copilot_events": {"type": "boolean"}}},
+        "report": {"type": "object", "properties": {"copilot_events": {"type": "boolean"}, "prompt_chars": {"type": "integer", "minimum": 0}}},
         "autorun": {
             "type": "object",
             "properties": {

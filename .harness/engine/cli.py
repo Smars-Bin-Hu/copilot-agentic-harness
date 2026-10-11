@@ -99,7 +99,8 @@ def main(argv=None) -> int:
             if result["_text"]:
                 print(result["_text"])
             return code
-        print(json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False))
+        compact = isinstance(result, dict) and result.pop("_compact", False)  # a result an agent reads in bulk: no indentation
+        print(json.dumps(result, indent=None if compact else 2, separators=(",", ":") if compact else None, sort_keys=True, ensure_ascii=False))
         return code
     except Exception as error:
         print(f"harness: {error}", file=sys.stderr)

@@ -55,7 +55,7 @@ specificTo: generic
    - **花在哪**：最大的两三块。从 `findings` 里挑，按它的顺序（大的在前）。每一块带上数字和占比。
    - **为什么，下次怎么省**：对着 [常见原因](references/reasons.md) 的表，只说数字支持的那几条。数字不支持的不要说。
 5. 给页面链接：输出里的 `analysis`（一个 `.html` 文件）。告诉用户用浏览器打开，里面有每一条提示的条形图。
-6. 用户追问某一条提示或某个工具：`insight.slowest_prompts`、`insight.tools`、`insight.reviews` 里有。不够就再读页面旁边的 `.md` 报告（做了什么、谁批准的）。
+6. 用户追问某一条提示或某个工具：再运行一次，加 `--detail`，输出里多 `insight.slowest_prompts`、`insight.tools`、`insight.reviews`。用户没追问就不要加，它多几倍的字。不够就再读页面旁边的 `.md` 报告（做了什么、谁批准的）。
 
 ## Gotchas
 

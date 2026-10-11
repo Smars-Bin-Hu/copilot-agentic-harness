@@ -5,8 +5,10 @@ ran, how long a permission waited, what a subagent used, and the usage the sessi
 report reads it for time and usage.
 
 The file is Copilot's, not ours: its format is not documented and may change, and a machine may not have it. So this
-reader never raises, takes only numbers, times and names (no prompt, no tool argument, no result), and returns None
-when it finds nothing it understands. The caller then falls back to the hook log.
+reader never raises, takes only numbers, times and names (no tool argument, no result), and returns None when it
+finds nothing it understands. The caller then falls back to the hook log. The one piece of text it can take is the
+start of what the user typed, and only when the caller asks for it (`text_chars`): the page of a task shows it so a
+person knows which prompt a row is. It is never given to an agent.
 """
 
 from __future__ import annotations
@@ -72,7 +74,7 @@ def new_prompt(at: float) -> Dict[str, Any]:
     return {
         "at": at, "end": at, "turns": 0, "model_s": 0.0, "turn_s": 0.0, "approval_s": 0.0, "hook_s": 0.0, "subagent_s": 0.0,
         "tools": [], "subagents": [], "skills": [], "models": [], "aiu": None, "premium_requests": None, "context_tokens": None,
-        "queued": False,
+        "queued": False, "text": "",
     }
 
 
@@ -92,7 +94,15 @@ def context_tokens(data: Dict[str, Any]) -> Optional[int]:
     return best
 
 
-def read(path: Path) -> Optional[Dict[str, Any]]:
+def start_of(content: Any, limit: int) -> str:
+    """The first characters of what the user typed, on one line."""
+    if limit <= 0 or not isinstance(content, str):
+        return ""
+    text = " ".join(content.split())
+    return text[:limit] + ("…" if len(text) > limit else "")
+
+
+def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
     """What the main agent of the session did, one entry per user message. None when the file gives nothing.
 
     A subagent's own turns and tools are left out (its rows carry an `agentId`): the call that started it is one tool
@@ -141,6 +151,7 @@ def read(path: Path) -> Optional[Dict[str, Any]]:
             if kind == "user.message":
                 current = new_prompt(at)
                 current["queued"] = data.get("delivery") == "queued"
+                current["text"] = start_of(data.get("content"), text_chars)
                 prompts.append(current)
                 turn_started = message_at = None
                 asked_in_turn = 0.0

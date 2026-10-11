@@ -42,7 +42,7 @@ specificTo: generic
 | 7 | guardrails | 哪些文件不能改、谁能改、怎么拦 | [07-guardrails.md](references/07-guardrails.md) |
 | 8 | 权限与沙箱 | 问和拒绝的区别、终端批准、gate 不是沙盒、admin | [08-permission-sandbox.md](references/08-permission-sandbox.md) |
 | 9 | 任务与生命周期 | 任务目录、种类和档位、接力、两次批准、多轮 | [09-task-lifecycle.md](references/09-task-lifecycle.md) |
-| 10 | 子 agent | 什么时候值得用、为什么只有 reviewer | [10-subagents.md](references/10-subagents.md) |
+| 10 | 子 agent | 什么时候值得用、为什么只有 reviewer 和 mapper | [10-subagents.md](references/10-subagents.md) |
 | 11 | 独立检查 | `[review]=n`、怎么数、上限、放行 | [11-review.md](references/11-review.md) |
 | 12 | observe 与 report | 日志、统计、报告、doctor、eval | [12-observe-report.md](references/12-observe-report.md) |
 | 13 | 常用命令 | 给人用的、给 agent 用的、什么时候用 | [13-commands.md](references/13-commands.md) |

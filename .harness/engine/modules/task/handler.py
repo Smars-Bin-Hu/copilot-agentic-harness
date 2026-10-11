@@ -4,8 +4,10 @@
                                    a session that holds none: which tasks are open and when to open one.
                                    `[review]=n` in the user's prompt sets the n of the task. Admin mode: the admin rules
   PreToolUse(subagent)             a session that holds a task: only the reviewer, and only with a check open
-                                   (`task review start`). A session that holds none, or is in admin mode: no subagent
-  SubagentStart                    the reviewer is told where its package is
+                                   (`task review start`). A session that holds none, or is in admin mode: no subagent.
+                                   The one other subagent is the read-only `mapper`, and only after the user typed
+                                   `/generic-mapreduce`: that prompt gives the session a number of calls (mapreduce.py)
+  SubagentStart                    the reviewer is told where its package is; a mapper is told it only reads
   PostToolUse                      a write inside the task is remembered; the reviewer's answer closes the open check
   Stop                             once per prompt: the result has not passed its checks; task files were written and
                                    TASK.md was not. A Stop that goes through leaves a mark in the task for the board:
@@ -23,6 +25,7 @@ from core.context import Context
 from core.events import Decision, HookEvent
 from core.paths import cli_command
 
+from . import mapreduce
 from .policy import POLICY_NAME, validate_policy
 
 NAME = "task"
@@ -140,6 +143,8 @@ def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
     state = ctx.module_state(NAME)
     state["relay"] = {"wrote": False, "task_file": False, "reminded": False}  # a new prompt, a new count
     state["review_n"] = asked  # for a task this prompt goes on to make or open
+    if not ctx.admin and mapreduce.asked(event.prompt):
+        mapreduce.grant(ctx)  # the user typed /generic-mapreduce: this session may call mappers, up to the limit
     data = open_task(ctx) if not ctx.admin else None
     if data is not None and data.get("paused"):
         try:
@@ -166,6 +171,8 @@ def on_subagent_call(event: HookEvent, ctx: Context) -> Optional[Decision]:
     called = event.subagent_target.strip() or GENERIC_AGENT
     if ctx.admin:
         return Decision(permission="deny", reason=say("rules.subagent.admin", called=called), facts={"kind": "subagent"})
+    if called.lower() == mapreduce.AGENT:
+        return mapreduce.on_call(ctx)
     data = open_task(ctx)
     if data is None:
         return Decision(permission="deny", reason=say("rules.subagent.no_task", called=called, agent=taskreview.AGENT), facts={"kind": "subagent"})
@@ -181,6 +188,8 @@ def on_subagent_call(event: HookEvent, ctx: Context) -> Optional[Decision]:
 def on_subagent_start(event: HookEvent, ctx: Context) -> Optional[Decision]:
     from . import taskreview
 
+    if event.agent_type.strip().lower() == mapreduce.AGENT:
+        return Decision(context=say("mapreduce.start.context"))
     data = open_task(ctx)
     if data is None or event.agent_type.strip().lower() != taskreview.AGENT:
         return None

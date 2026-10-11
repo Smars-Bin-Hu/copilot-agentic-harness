@@ -10,9 +10,9 @@
 
 查自己装的是哪一版：`harness --version`。
 
-## 未发布
+## 1.3.0（未发布）
 
-下一版要带的内容。发布时移到对应的版本号下面。
+任务可以更新知识库；几个任务排队回写；并行分块阅读。版本号已定，等 Copilot 里手测通过后发布。没有不兼容的改动。
 
 **测试情况**：自动测试通过。Copilot 里的手测还没做；Windows 没测。
 
@@ -21,11 +21,14 @@
 - **任务可以更新知识库**：在 `target.override.json` 里把知识库登记成目标仓库，加 `"knowledge_base": true`。之后更新知识库和改代码走同一条路：取文件、在 `DEV/` 下改、你批准计划和回写。不同的是，知识库直接写进它的主分支，harness 提交一次（只含这次的文件），不建新分支。harness 不 push。配置见 [03-configure.md](03-configure.md) 的“让任务更新知识库”。
 - **`harness kb reads`**：知识库的每个文件被读了几次、是哪些任务读的，哪些文件没人读过。hook 只记文件名，不记内容。开关：`observe.json` 的 `knowledge_base_reads`。
 - 任务报告多一节“读过的知识库文件”。
+- **并行分块阅读 `/generic-mapreduce`**：一件事要读很多东西、又能拆成互不相关的几块时，agent 把它派给几个只读的子 agent（mapper），各交一份带出处的摘要，再汇总。只有你输入 `/generic-mapreduce` 才能用；agent 先告诉你拆法和大概多花几倍用量，等你同意。一次最多 4 个 mapper（`task.json` 的 `mapreduce.max_agents`），hook 数次数。只做读，不并行改文件。
+- **新的子 agent `mapper`**：只读，没有编辑工具和终端。
 - **回写排队**：几个任务要写同一个仓库时，`harness task queue` 列出每个仓库现在被哪个任务占着（它回写的文件你还没提交）、后面排着谁、你下一步做什么。顺序：已批准的在前，等你批准的其次，还在做的最后。`task list` 的输出和终端看板也带上排队顺序。harness 仍然不替你提交。
 - `target.json` 里仓库的 `path` 可以写相对路径，从 harness 文件夹算起（例如 `knowledge-base`）。
 
 ### 变更
 
+- gate 多拦一种终端写法：先 `cd` 进一个目录，再用相对路径写 guardrail 文件、任务的 `.task/` 等受保护的文件。以前只认命令里直接写出的路径。gate 仍然不是沙盒，看不出的写法见 [02-features.md](02-features.md) 的 gate 一节。
 - promote 被“工作区不干净”挡住时，如果仓库正停在另一个任务回写的分支上，拒绝理由会说是哪个任务、让你先提交。
 - `task list` 的 JSON 多了 `promote_queue`。
 - 会话日志里，读了知识库文件的调用多一个字段 `kb`（文件名列表）。其他放行的调用仍然不记碰了什么。

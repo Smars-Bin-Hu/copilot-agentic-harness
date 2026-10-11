@@ -1,4 +1,4 @@
-"""task.json: how many files a fetch may copy, the TASK.md reminder, the checks of `[review]=n`, the snapshots, what the report reads."""
+"""task.json: how many files a fetch may copy, the TASK.md reminder, the checks of `[review]=n`, the snapshots, what the report reads, how many mappers `/generic-mapreduce` may call."""
 
 from __future__ import annotations
 
@@ -20,6 +20,10 @@ POLICY_SCHEMA = {
             "properties": {"extra_checks": {"type": "integer", "minimum": 0}, "max_n": {"type": "integer", "minimum": 0}},
         },
         "report": {"type": "object", "properties": {"copilot_events": {"type": "boolean"}}},
+        "mapreduce": {
+            "type": "object",
+            "properties": {"max_agents": {"type": "integer", "minimum": 0}, "minutes": {"type": "integer", "minimum": 1}},
+        },
         "snapshots": {
             "type": "object",
             "properties": {"keep_days": {"type": "number", "minimum": 0}, "max_file_mb": {"type": "number", "minimum": 0}},

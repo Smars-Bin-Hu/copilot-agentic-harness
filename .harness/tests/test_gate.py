@@ -422,6 +422,22 @@ class GateHookTests(HarnessTestCase):
             with self.subTest(command):
                 self.assertEqual(self.pre("run_in_terminal", {"command": command}), {})
 
+    def test_a_cd_into_a_guarded_folder_does_not_hide_the_write(self) -> None:
+        task = ".workspace/sandbox/tasks/t1"
+        for command in (
+            f"cd {task}/.task && echo x > task.json", f"cd {task} && echo x > .task/task.json", f"cd .workspace/sandbox/tasks && cd t1 && rm .task/task.json",
+            f"(cd {task}/.task && echo x >task.json)", "cd .harness/policies && sed -i 's/a/b/' gate.json", "pushd .harness/engine && cp /tmp/x.py cli.py",
+            f"cd {task}/.task; python3 -c \"import json;json.dump({{}},open('task.json','w'))\"",
+        ):
+            with self.subTest(command):
+                self.assertEqual(self.decision(self.pre("run_in_terminal", {"command": command})), "deny")
+        for command in (
+            f"cd {task}/.task && cat task.json", "cd .harness && python3 engine/cli.py doctor > /tmp/out.txt", "cd .harness/tests && python3 -m unittest test_gate 2>&1 | tail -3",
+            f"cd {task} && echo x > NOTES.md", f"cd {task} && python3 -c \"print(open('TASK.md').read())\"", "cd /tmp && echo x > task.json", "cd $SOMEWHERE && echo x > task.json",
+        ):
+            with self.subTest(command):
+                self.assertEqual(self.pre("run_in_terminal", {"command": command}), {})
+
     # --- subagents ----------------------------------------------------------------------------
 
     def test_a_subagent_session_inherits_the_scope_of_its_parents_task(self) -> None:

@@ -15,6 +15,7 @@
   "different_series": [],
   "any_series": [
     "admin",
-    "reviewer"
+    "reviewer",
+    "mapper"
   ]
 }

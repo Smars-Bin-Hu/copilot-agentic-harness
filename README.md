@@ -57,7 +57,7 @@ harness 本身是通用的，不带任何业务内容。**下面两样不接入�
 │   ├── copilot-instructions.md    仓库级规则
 │   ├── instructions/              分类规则；其中 knowledgebase.instructions.md 是企业知识库的一部分，必须接入（交付时为空）
 │   ├── skills/                    技能：harness-*、generic-*（企业自己加 domain-*）
-│   ├── agents/                    reviewer、admin
+│   ├── agents/                    reviewer、mapper、admin
 │   └── hooks/harness.json         hook 配置
 ├── .harness/
 │   ├── engine/                    hook 和命令行（引擎）
@@ -88,7 +88,8 @@ harness 之外：目标仓库（企业的代码仓库）
 | [.github/skills/harness-wondering/](.github/skills/harness-wondering/) | 深度教程：互动式讲解 coding agent 和 harness 的原理、实现、设计取舍，15 个主题。用户用 `/harness-wondering` 启动 |
 | [.github/skills/harness-repo-initialize/](.github/skills/harness-repo-initialize/) | 第一次配置：短命令、知识库、公司技能、目标仓库、用户名字，最后 `doctor` 检查。用户用 `/harness-repo-initialize` 启动 |
 | [.github/skills/generic-goal-driven/](.github/skills/generic-goal-driven/) | 长周期任务的目标驱动流程：中心思想、TODO、进度指针存成文件，换 session 能接上。只由用户用 `/generic-goal-driven` 启动 |
-| [.github/agents/](.github/agents/) | 自定义智能体：reviewer（独立检查员，只当子 agent）、admin（用户可选，用来二开和排查 harness，要先在终端开 admin 模式） |
+| [.github/skills/generic-mapreduce/](.github/skills/generic-mapreduce/) | 并行分块阅读：把“要读很多东西”的事拆成几块，派给只读的子 agent（mapper），各交摘要再汇总。贵，慎用。只由用户用 `/generic-mapreduce` 启动 |
+| [.github/agents/](.github/agents/) | 自定义智能体：reviewer（独立检查员，只当子 agent）、mapper（只读的分块阅读员，只当子 agent，用户输入 `/generic-mapreduce` 后才能用）、admin（用户可选，用来二开和排查 harness，要先在终端开 admin 模式） |
 | [.github/hooks/harness.json](.github/hooks/harness.json) | 唯一的 hook 配置，所有事件进同一个入口 |
 | [.harness/registry.json](.harness/registry.json) | 模块注册表：开关、订阅的事件、文件清单 |
 | [.harness/policies/](.harness/policies/) | 策略：task、gate、observe、agents、target、cli、user。覆盖写在同名 `.override.json`，规则见 [配置与定制](docs/03-configure.md) |

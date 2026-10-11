@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "released": "2026-10-11",
   "copyright": "Smars Hu",
   "contributors": [
@@ -55,6 +55,9 @@
         ".github/skills/harness-task-report/",
         ".github/skills/harness-quick-start/",
         ".github/agents/reviewer.agent.md",
+        ".github/agents/mapper.agent.md",
+        ".github/skills/generic-mapreduce/",
+        ".harness/tests/test_mapreduce.py",
         ".harness/tests/test_task.py",
         ".harness/tests/test_tasklife.py",
         ".harness/tests/test_taskboard.py",

@@ -40,11 +40,13 @@ applyTo: '.github/agents/**/*.agent.md'
 | admin | harness 的管理员：二开 harness、读报告和日志、查根因。用户先在终端开 admin 模式，才能改 guardrail 文件 | 用户 |
 | reviewer | 独立检查员：只看需求、成果和差异，给 PASS 或 FAIL，不改文件。用户写 `[review]=n` 才开 | 默认 agent（hook 要求先 `task review start`） |
 
-没有接着任务的会话不能调用任何子 agent。接着任务的会话只能调用 reviewer。
+| mapper | 只读的分块阅读员：读分给它的那一块，交带出处的摘要。没有编辑工具，没有终端 | 默认 agent，而且只在用户输入 `/generic-mapreduce` 之后（hook 数次数，上限在 `task.json` 的 `mapreduce.max_agents`） |
+
+没有接着任务的会话不能调用 reviewer。接着任务的会话要先 `task review start` 才能调用它。mapper 不看有没有任务，只看用户有没有输入 `/generic-mapreduce`。其他子 agent 一律被拒绝。
 
 ## 模型
 
-- reviewer 用 Sonnet，没有就退到 Haiku：主模型是 Sonnet 或 Opus 时它都能运行。
-- `model` 的回退列表只能在同一系列里回退。admin 和 reviewer 例外（`agents.json` 的 `any_series`）：强模型不可用时可以跨系列回退。
+- reviewer 和 mapper 用 Sonnet，没有就退到 Haiku：主模型是 Sonnet 或 Opus 时它们都能运行。
+- `model` 的回退列表只能在同一系列里回退。admin、reviewer、mapper 例外（`agents.json` 的 `any_series`）：强模型不可用时可以跨系列回退。
   系列的划分在 `.harness/policies/agents.json`，`harness doctor` 会检查。
 - 模型名以本机 Copilot 下拉列表里的显示名为准。换环境后重新确认。

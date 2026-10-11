@@ -51,7 +51,12 @@ gate 是一个 hook 模块，在每次工具调用前检查。它只管写，不
 
 拒绝在哪种权限模式下都生效（默认、Allow all、Autopilot，2026-10-10 实测）。
 
-gate 不是沙盒：终端命令可以用 gate 看不出的写法写任何路径。需要更强的隔离，用操作系统或容器。详细边界见 [.workspace/README.md](../.workspace/README.md)。规则全文在 [gate.json](../.harness/policies/gate.json)。
+gate 不是沙盒。它防的是 agent 犯错，不是防 agent 存心绕过：agent 和你是同一个系统用户，它的终端命令能做你能做的事。gate 靠读命令的文字来判断：
+
+- **看得出的**：直接写出路径的写入、删除、复制、原地修改、内联脚本；先 `cd` 进一个目录、再用相对路径写的。
+- **看不出的**：用变量拼出来的路径（`D=...; echo x > $D/file`）；先写一个脚本文件再运行它；程序自己决定写哪里的。
+
+批准记录存在任务的 `.task/` 里，所以上面“看不出的”写法理论上能伪造批准。需要更强的隔离，用操作系统或容器。详细边界见 [.workspace/README.md](../.workspace/README.md)。规则全文在 [gate.json](../.harness/policies/gate.json)。
 
 ## 改目标仓库：两次批准
 
@@ -95,10 +100,23 @@ gate 不是沙盒：终端命令可以用 gate 看不出的写法写任何路径
 
 ## 子 agent
 
-- 没有接着任务的会话不能调用子 agent。
-- 接着任务的会话只能调用 reviewer，而且要先 `task review start`。
-- admin 模式的会话不能调用子 agent。
+只有两个，都要你开，agent 自己开不了。
+
+- **reviewer**：独立检查。要接着任务，你写了 `[review]=n`，并且先 `task review start`。
+- **mapper**：并行分块阅读，只读。要你输入 `/generic-mapreduce`，见下面。
+- 其他子 agent 一律被拒绝。admin 模式的会话不能调用子 agent。
 - 平台自带的语义搜索是一个工具，不受这条限制。
+
+### 并行分块阅读：`/generic-mapreduce`
+
+一件事要读很多东西，而且能拆成互不相关的几块时用。例如：一个故障的三个可能原因各查一遍；五个 domain 的知识库各总结一页。
+
+- **只有你能开**：输入 `/generic-mapreduce <问题>`。hook 读你的这条提示来放行，agent 自己写这个命令不算。
+- **先问你**：agent 先判断值不值，不值就劝你别用。值的话告诉你拆成哪几块、大概多花几倍用量，等你同意再派。
+- **只读**：子 agent `mapper` 没有编辑工具，也没有终端。每个读自己那一块，交一份带出处（路径和行号）的摘要。主 agent 汇总。
+- **有上限**：一次最多 4 个，60 分钟内有效（`task.json` 的 `mapreduce.max_agents`、`minutes`）。hook 数次数，超了拒绝。再输入一次重新计数。
+- **不做的**：并行改文件。原因：目标仓库不能运行，合并后对不对没有东西能判定。
+- 不用先开任务。技能在 [.github/skills/generic-mapreduce/](../.github/skills/generic-mapreduce/)。
 
 ## admin：二开和排查 harness（可选）
 

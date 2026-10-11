@@ -15,7 +15,7 @@
 
 - **任务分三档**。问答只有一个 `TASK.md`，或者干脆不开任务；RCA 和设计多几个文件；只有改目标仓库的才有 `DEV/`、计划批准和回写。小任务不走重流程。
 - **独立检查默认关**。你写 `[review]=n` 才查，查几次由你定。不写就不为检查付费。
-- **只有一个子 agent**。没有接着任务的会话不能调子 agent；接着任务的只能调 reviewer。B13 实测多 agent 编排的用量约 4.5 倍（见第九节），所以 1.1 去掉了它。
+- **子 agent 只有两个，都要你开**。reviewer 要你写 `[review]=n`；mapper 要你输入 `/generic-mapreduce`，它先告诉你要多花多少、等你同意才派，一次最多 4 个（`task.json` 的 `mapreduce.max_agents`）。agent 自己开不了。B13 实测多 agent 编排的用量约 4.5 倍（见第九节），所以 1.1 去掉了它。
 - **模型由你选**。建议：强模型思考、出计划和方案；中等模型执行。reviewer 默认用 Sonnet，写在 `.github/agents/reviewer.agent.md`，企业可以改。
 
 ## 三、少读：让模型只读需要的

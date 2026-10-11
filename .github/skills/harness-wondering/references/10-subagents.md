@@ -11,13 +11,14 @@
 | 换来什么 | 例子 | 这个仓库的状态 |
 | --- | --- | --- |
 | 独立视角 | 让没看过作者思路的人检查 | **已做**：reviewer |
-| 并行 | 同时读很多文件，各出一份摘要 | 计划：`/generic-mapreduce`，先只做“读”类（未做） |
+| 并行 | 同时读很多文件，各出一份摘要 | **已做**：`/generic-mapreduce` 和只读的 mapper，只做“读”类 |
 | 无人值守 | 照清单一直做，碰到要人决定的事才停 | 计划：autorun（未做，beta） |
 
 ### 10.2 现在的规则
 
-- 没有接着任务的会话：**不能**调用子 agent。
-- 接着任务的会话：只能调用 reviewer，而且要先 `task review start`（开了检查）。
+- reviewer：要接着任务，用户写了 `[review]=n`，而且先 `task review start`（开了检查）。
+- mapper：要用户输入 `/generic-mapreduce`。hook 读**用户的那条提示**来放行（引擎会在提示里写明用户调用了哪个技能），给这个会话几次调用（默认 4 次，60 分钟内），每调用一次减一。agent 自己写这个命令不算，所以它开不了，也超不了。
+- 其他子 agent：一律拒绝。
 - admin 模式的会话：不能调用子 agent。
 - 平台自带的语义搜索（`search_code_subagent`）是工具，不受限。
 
@@ -50,12 +51,12 @@
 
 ## 动手看
 
-- 读 [reviewer.agent.md](../../../agents/reviewer.agent.md)。
+- 读 [reviewer.agent.md](../../../agents/reviewer.agent.md) 和 [mapper.agent.md](../../../agents/mapper.agent.md)：比较两者的 `tools`。
 - 在一个没接任务的会话里让 agent “开一个子 agent 帮我搜一下”，看拒绝理由。（可以只在你自己的会话里试。）
 
 ## 去哪看
 
-- `.harness/engine/modules/task/handler.py`（`on_subagent_call`、`on_subagent_start`）
+- `.harness/engine/modules/task/handler.py`（`on_subagent_call`、`on_subagent_start`）、`mapreduce.py`
 - [02-features.md](../../../../docs/02-features.md)“子 agent”
 
 ## 常见疑问

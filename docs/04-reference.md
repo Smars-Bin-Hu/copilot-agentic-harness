@@ -70,6 +70,8 @@
 | task.json | `review.max_n` | `[review]=n` 里 n 最大能写几 |
 | task.json | `snapshots.keep_days` | 关口快照留几天 |
 | task.json | `snapshots.max_file_mb` | 超过这个大小的文件，快照只记 sha256，不复制 |
+| task.json | `mapreduce.max_agents` | 用户输入一次 `/generic-mapreduce` 后，最多能调用几次 mapper。`0` 是关掉 |
+| task.json | `mapreduce.minutes` | 这几次调用多少分钟内有效 |
 | task.json | `report.copilot_events` | 任务分析和看板读不读 Copilot 自己的会话记录（`~/.copilot/session-state/`）。读了才有用量；只取数字。`false` 时只用 hook 日志 |
 | observe.json | `max_text_chars` | 日志里每段文字的最大长度 |
 | observe.json | `capture.enabled` | 保存 hook 的原始输入输出 |
@@ -79,7 +81,7 @@
 | cli.json | `output.encoding` | CLI 输出的编码。`auto`（默认）跟着终端；`utf-8` 一律输出 UTF-8 |
 | agents.json | `series` | 模型系列 |
 | agents.json | `different_series` | 必须用不同系列的角色组 |
-| agents.json | `any_series` | 回退列表可以跨系列的 agent（admin、reviewer） |
+| agents.json | `any_series` | 回退列表可以跨系列的 agent（admin、reviewer、mapper） |
 | target.json | `repos_root` | 目标仓库的父文件夹 |
 | target.json | `repos` | 单个仓库的 `path`、`base_ref`、`refused_paths`、`knowledge_base`（是知识库：回写直接提交到 `base_ref`） |
 | target.json | `base_ref` | 取文件的分支 |
@@ -104,10 +106,10 @@
 | 事件 | 谁处理 |
 | --- | --- |
 | `SessionStart`、`UserPromptSubmit` | task（注入会话 id 和规则；接着任务时注入任务做到哪；读 `[review]=n`） |
-| `PreToolUse` | task（子 agent：只有接着任务、开了检查时放行 reviewer）、gate（guardrail、任务的写入范围、目标仓库、危险命令） |
+| `PreToolUse` | task（子 agent：接着任务、开了检查时放行 reviewer；用户输入 `/generic-mapreduce` 后放行 mapper，数次数）、gate（guardrail、任务的写入范围、目标仓库、危险命令） |
 | `PostToolUse` | task（记下任务里的写入；reviewer 回答后把结论落盘） |
 | `PostToolUseFailure` | observe（工具调用失败时只有它，没有 `PostToolUse`；日志里记下工具名和平台给的错误） |
-| `SubagentStart` | task（告诉 reviewer 评审包在哪） |
+| `SubagentStart` | task（告诉 reviewer 评审包在哪；告诉 mapper 它只读、只交摘要） |
 | `SubagentStop` | 没有模块处理；核心用它记子 agent 结束 |
 | `Stop` | task（成果没凑够通过次数、或写过任务文件没更新 `TASK.md` 时拦一次） |
 

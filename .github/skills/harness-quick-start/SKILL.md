@@ -61,7 +61,7 @@ specificTo: generic
 
 ### 三、做一个模拟任务
 
-照 [walkthrough.md](references/walkthrough.md) 一步一步带。这是本课的主体：用户亲手发消息、打开文件、在终端敲命令。你每做一步，先说“我现在要做什么、为什么”，做完说“多了什么”，再停。
+照 [walkthrough.md](references/walkthrough.md) 一步一步带。场景在 [scenario.md](references/scenario.md)；`references/scenario.override.md` 存在时只用它（团队自定义场景用，不改上游文件）。这是本课的主体：用户亲手发消息、打开文件、在终端敲命令。你每做一步，先说“我现在要做什么、为什么”，做完说“多了什么”，再停。
 
 ### 四、以后每天怎么用
 
@@ -88,6 +88,6 @@ specificTo: generic
 | Issue | Solution |
 | --- | --- |
 | `harness: command not found` | 转去技能 `harness-repo-initialize` 的第 1 步 |
-| `任务 order-monitor 已经有了` | 上次练手留下的。用 `task open order-monitor` 接着用，或换一个名字 |
+| `任务 … 已经有了` | 上次练手留下的。用 `task open <任务名>` 接着用，或换一个名字 |
 | 调用 reviewer 被拒 | 用户还没发带 `[review]=1` 的消息，或还没运行 `task review start` |
 | 用户说“太长了” | 只保留第三部分，一、二部分各用三句话说完 |

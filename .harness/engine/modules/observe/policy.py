@@ -1,4 +1,5 @@
-"""observe.json: how long a recorded text may be, the capture switch, when doctor says the logs are many."""
+"""observe.json: how long a recorded text may be, the capture switch, when doctor says the logs are many,
+whether the knowledge base files a call read are kept (names only)."""
 
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ POLICY_SCHEMA = {
             "properties": {"enabled": {"type": "boolean"}},
         },
         "warn_session_files": {"type": "integer", "minimum": 1},
+        "knowledge_base_reads": {"type": "boolean"},
     },
 }
 
@@ -28,6 +30,7 @@ DEFAULTS: Dict[str, Any] = {
     "max_text_chars": 300,
     "capture": {"enabled": False},
     "warn_session_files": 500,
+    "knowledge_base_reads": True,
 }
 
 

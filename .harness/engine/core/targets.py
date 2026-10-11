@@ -5,6 +5,10 @@ Policy `target.json` (override: `target.override.json`):
   repos       name -> {path?, base_ref?, refused_paths?}: a repository elsewhere, or settings for a found one
   base_ref    the branch files are read from (default main)
 
+A repository with `knowledge_base: true` is the team's knowledge base (M8-7): promote writes it straight onto its base
+branch and commits once, instead of making a branch and leaving the commit to the person. Reads of its files are
+logged (M8-8). A `path` that is not absolute is taken from the harness folder (`knowledge-base`).
+
 Everything here reads. Nothing writes to a target repository. git is run with an argument list, never through a shell.
 """
 
@@ -37,7 +41,7 @@ POLICY_SCHEMA = {
             "type": "object",
             "additionalProperties": {
                 "type": "object",
-                "properties": {"path": {"type": "string"}, "base_ref": {"type": "string", "minLength": 1}, "refused_paths": _PATHS},
+                "properties": {"path": {"type": "string"}, "base_ref": {"type": "string", "minLength": 1}, "refused_paths": _PATHS, "knowledge_base": {"type": "boolean"}},
                 "additionalProperties": False,
             },
         },
@@ -58,6 +62,7 @@ class Repo:
     path: Path
     base_ref: str
     refused_paths: List[str] = field(default_factory=list)
+    knowledge_base: bool = False  # promote commits onto the base branch; reads are logged
 
 
 @dataclass
@@ -89,9 +94,10 @@ def validate_policy(policy: Dict[str, Any]) -> None:
         repo_paths.glob_regex(pattern)
 
 
-def expand(raw: str) -> Path:
-    """`~` and environment variables (`%USERPROFILE%`, `$HOME`) in a configured path."""
-    return Path(os.path.expandvars(os.path.expanduser(raw.strip())))
+def expand(raw: str, root: Optional[Path] = None) -> Path:
+    """`~` and environment variables (`%USERPROFILE%`, `$HOME`) in a configured path. With `root`: a path that is not absolute is under it."""
+    path = Path(os.path.expandvars(os.path.expanduser(raw.strip())))
+    return path if root is None or path.is_absolute() else root / path
 
 
 def is_repo(path: Path) -> bool:
@@ -117,7 +123,7 @@ def load(root: Path) -> Targets:
                     repos[child.name] = Repo(child.name, child, base_ref, list(refused))
     for name, entry in policy["repos"].items():
         if entry.get("path", "").strip():
-            location = expand(entry["path"])
+            location = expand(entry["path"], root)
             if not is_repo(location):
                 problems.append(f"仓库 {name} 的路径不是 git 仓库：{location}")
                 continue
@@ -128,7 +134,40 @@ def load(root: Path) -> Targets:
         repo = repos[name]
         repo.base_ref = entry.get("base_ref", repo.base_ref)
         repo.refused_paths = list(entry.get("refused_paths", repo.refused_paths))
+        repo.knowledge_base = bool(entry.get("knowledge_base", False))
     return Targets(configured=bool(base or policy["repos"]), repos=repos, problems=problems, timeout=timeout)
+
+
+KB_DIR = "knowledge-base"  # where a team puts its knowledge base when it is not registered as a repository
+
+
+def knowledge_bases(root: Path) -> List[Tuple[str, Path]]:
+    """(name, folder) of every knowledge base: the registered ones and `knowledge-base/` of the harness folder.
+
+    Reads the policy only (no git, no listing of repos_root): a hook calls it for every tool call. Never raises.
+    """
+    found: List[Tuple[str, Path]] = []
+    try:
+        policy = config.load_policy(root, POLICY_NAME)
+        base = str(policy.get("repos_root") or "").strip()
+        for name, entry in (policy.get("repos") or {}).items():
+            if not isinstance(entry, dict) or not entry.get("knowledge_base"):
+                continue
+            raw = str(entry.get("path") or "").strip()
+            if raw:
+                found.append((name, expand(raw, root)))
+            elif base:
+                found.append((name, expand(base) / name))
+    except Exception:  # noqa: BLE001 - a broken policy must not stop a hook
+        found = []
+    default = root / KB_DIR
+    try:
+        known = {path.resolve() for _name, path in found}
+        if default.resolve() not in known:
+            found.append((KB_DIR, default))
+    except OSError:
+        pass
+    return found
 
 
 # --- reading a repository ---------------------------------------------------------------------
@@ -232,6 +271,7 @@ def summary(repo: Repo, timeout: int = DEFAULT_GIT_TIMEOUT) -> Dict[str, Any]:
         "clean": not dirty,
         "uncommitted_files": len(dirty),
         "refused_paths": repo.refused_paths,
+        "knowledge_base": repo.knowledge_base,
     }
 
 

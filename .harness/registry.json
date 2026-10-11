@@ -61,7 +61,7 @@
         ".harness/tests/test_taskreview.py",
         ".harness/tests/test_taskrules.py",
         ".harness/tests/test_targets.py",
-        ".harness/tests/test_promote.py"
+        ".harness/tests/test_promote.py", ".harness/tests/test_kb.py"
       ],
       "retire_when": "Copilot 原生提供跟着任务走、能换会话接力的任务状态，并且有能拦住交付的批准。那时只留 gate 和 promote"
     },

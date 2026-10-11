@@ -10,15 +10,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict
 
-from core import tasks
+from core import kbreads, tasks
+from core.paths import cli_command
 
 from . import common, task as task_ops
 
 PLAN_LINES = 120
+KB_FILES_SHOWN = 30
 EVENT_TEXT = {
     "start": "开始", "resume": "接着做", "new-round": "开新的一轮", "approve-plan": "人批准计划", "fetch": "取文件", "delete": "声明删除",
     "set-branch": "设分支名", "review-start": "开一次独立检查", "review": "独立检查", "review-extend": "人再给检查次数", "review-waive": "人放行，不查了", "upgrade": "升档", "promote-dry-run": "回写计划（dry-run）", "approve-promote": "人批准回写", "promote": "回写到新分支",
-    "promote-partial": "回写中途出错", "recover": "人恢复仓库", "close": "关闭",
+    "promote-partial": "回写中途出错", "recover": "人恢复仓库", "close": "关闭", "pause": "人搁置任务", "unpause": "搁置的任务接着做",
 }
 PROMOTE_TEXT = {"none": "没有回写。", "dry_run": "已生成回写计划，没有回写。", "done": "已回写到目标仓库的新分支（没有提交）。", "partial": "回写中途出错，要人运行 task recover。"}
 
@@ -49,6 +51,9 @@ def render(root: Path, task: str, data: Dict[str, Any]) -> str:
     lines += ["", "## 结果", "", f"回写：{PROMOTE_TEXT.get(promote['state'], promote['state'])}"]
     if promote.get("approved_at"):
         lines.append(f"- 回写由人批准于 {promote['approved_at']}")
+    for name, item in (promote.get("repos") or {}).items():
+        if isinstance(item, dict) and item.get("commit"):
+            lines.append(f"- 知识库 {name}：没有建分支，直接提交在它的主分支上（{item['commit'][:12]}）")
     for item in promote.get("files", []):
         lines.append(f"- {item['action']} {item['path']}")
     if promote.get("patch"):
@@ -77,6 +82,15 @@ def render(root: Path, task: str, data: Dict[str, Any]) -> str:
             lines.append(f"\n人在 {waived.get('at', '')} 放行了版本 {str(waived.get('digest', ''))[:12]}，没有凑够通过次数。")
     else:
         lines.append("这一轮没有做过独立检查（没有开启，或还没有查）。")
+    try:
+        read = kbreads.of_task(root, task)
+    except Exception:  # noqa: BLE001 - a list in a report
+        read = []
+    if read:
+        lines += ["", "## 读过的知识库文件", "", "| 文件 | 次数 |", "| --- | --- |"]
+        lines += [f"| {item['file']} | {item['reads']} |" for item in read[:KB_FILES_SHOWN]]
+        if len(read) > KB_FILES_SHOWN:
+            lines.append(f"\n还有 {len(read) - KB_FILES_SHOWN} 个没列出。全部：`{cli_command()} kb reads --task {data['name']}`。")
     lines += ["", "## 计划（PLAN.md）", ""]
     try:
         plan_lines = tasks.plan_file(root, task).read_text(encoding="utf-8", errors="replace").splitlines()

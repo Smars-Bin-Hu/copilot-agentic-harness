@@ -256,7 +256,7 @@ def resume_in(data: Dict[str, Any]) -> bool:
     data["paused"] = None
     if isinstance(data.get("waiting"), dict):
         data["waiting"] = dict(data["waiting"], since=utc_now())
-    task_ops.note(data, "resume")
+    task_ops.note(data, "unpause")  # `resume` is taken: a session picking the task up again
     return True
 
 

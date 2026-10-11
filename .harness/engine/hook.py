@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import adapters  # noqa: E402
 from core import breaker  # noqa: E402
 from core import callrecord  # noqa: E402
+from core import kbreads  # noqa: E402
 from core import registry as registry_module  # noqa: E402
 from core import state as state_module  # noqa: E402
 from core.context import Context  # noqa: E402
@@ -84,6 +85,9 @@ def process(raw: str, root: Path) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         state_module.track_after(state, event, decision)
         admin = ctx.admin
         parent_session_id = state.get("parent_session_id")
+    read = kbreads.of_event(root, event)
+    if read:
+        facts = dict(facts, kb=read)  # which knowledge base files the call read: the one thing kept of a call that went through
     record = callrecord.build(
         event,
         decision,

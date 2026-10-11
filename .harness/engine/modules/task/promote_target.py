@@ -6,6 +6,10 @@ Only when all repositories pass does the real run start. Per repository it makes
 writes the files. It never commits, never resets, never switches back: the person reviews the files and commits them.
 
 Before the first repository is touched, a patch of the whole result is saved next to it (`<task>/DEV/<name>.patch`).
+A knowledge base (target.json: `knowledge_base: true`) is the one exception (M8-7): it has one keeper, so its files are
+written straight onto the base branch and committed once, with nothing but those files in the commit. It must be on its
+base branch with a clean working tree. Knowledge bases are written last, after every other repository went through.
+
 When a step fails halfway there is no automatic undo across repositories: the run stops, the task is marked `partial`,
 and the message says what is done, what is not, and the commands that put each touched repository back.
 """
@@ -95,9 +99,22 @@ def _file_problem(
     return "", "", None
 
 
+def direct_problems(repo: targets.Repo, timeout: int) -> List[str]:
+    """What stops a knowledge base from being written on its base branch and committed."""
+    found: List[str] = []
+    current = targets.current_branch(repo, timeout)
+    if current != repo.base_ref:
+        found.append(f"知识库现在在分支 `{current}` 上。知识库直接写进 `{repo.base_ref}`：请用户先在知识库里切回 `{repo.base_ref}`。")
+    for key in ("user.name", "user.email"):
+        if not targets.git(repo, "config", "--get", key, timeout=timeout, allow_failure=True).strip():
+            found.append(f"知识库的 git 没有设置 `{key}`，不能提交。请用户先运行 `git config {key} <值>`。")
+    return found
+
+
 def plan_digest(branch: str, repos: List[Dict[str, Any]], files: List[Dict[str, Any]]) -> str:
+    # `direct` is in the code only for a knowledge base, so the code of every other plan stays what it was
     return common.sha256_text(json.dumps([
-        branch, [[r["name"], r["base_commit"]] for r in repos], [[f["path"], f["action"], f["sha256"]] for f in files],
+        branch, [[r["name"], r["base_commit"]] + (["direct"] if r.get("direct") else []) for r in repos], [[f["path"], f["action"], f["sha256"]] for f in files],
     ]))
 
 
@@ -136,7 +153,9 @@ def plan_files(
                 if dirty:
                     shown = "、".join(dirty[:PROBLEMS_SHOWN]) + (f" 等 {len(dirty)} 个" if len(dirty) > PROBLEMS_SHOWN else "")
                     mine.append(f"工作区不干净（{shown}）。先提交、stash 或丢弃这些改动，再 promote。")
-                if branch and targets.valid_branch(branch) and targets.git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", timeout=timeout, allow_failure=True).strip():
+                if repo.knowledge_base:
+                    mine += direct_problems(repo, timeout)
+                elif branch and targets.valid_branch(branch) and targets.git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", timeout=timeout, allow_failure=True).strip():
                     mine.append(f"分支 `{branch}` 已经存在。" + hints["rename_branch"])
         except targets.TargetError as error:
             problems.append(f"{name}：{error}")
@@ -181,9 +200,11 @@ def plan_files(
         if not mine:
             repos.append({
                 "name": name, "path": str(repo.path), "base_ref": repo.base_ref, "base_commit": commit,
-                "current_branch": targets.current_branch(repo, timeout), "files": entries,
+                "current_branch": targets.current_branch(repo, timeout), "files": entries, **({"direct": True} if repo.knowledge_base else {}),
             })
-            files += entries
+    repos.sort(key=lambda item: bool(item.get("direct")))  # a knowledge base is committed: it goes last, when the others are through
+    for item in repos:
+        files += item["files"]
     if problems:
         raise CommandError("现在不能 promote，没有写任何东西。先解决这些，再重新 --dry-run：\n" + "\n".join(f"- {text}" for text in problems))
     return repos, files
@@ -264,13 +285,19 @@ def render(step: Dict[str, Any]) -> str:
 def recovery_steps(repo: Dict[str, Any], branch: str, switched: bool, written: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """The steps that put one repository back as it was: the written files, the checkout, the branch."""
     path = repo["path"]
-    steps = []
+    steps: List[Dict[str, Any]] = []
+    if repo.get("direct"):  # a knowledge base: no branch was made; `on`: the branch it must still be on
+        if repo.get("commit"):
+            return [{"repo": path, "git": ["revert", "--no-edit", repo["commit"]], "on": repo["base_ref"]}]
+        switched = False
     modified = [item["relative"] for item in written if item["action"] in ("modify", "delete")]  # a deleted file comes back with `restore`
     created = [item["relative"] for item in written if item["action"] == "create"]
     if modified:
         steps.append({"repo": path, "git": ["restore", "--", *modified]})
     if created:
         steps.append({"repo": path, "git": ["clean", "-f", "--", *created]})
+    if repo.get("direct"):
+        return [dict(step, on=repo["base_ref"]) for step in steps]
     if switched:
         original = repo["current_branch"] if repo["current_branch"] != "(detached)" else repo["base_ref"]
         steps.append({"repo": path, "git": ["switch", original]})
@@ -294,19 +321,20 @@ def run_recovery(steps: List[Dict[str, Any]], branch: str, timeout: int) -> List
     for step in steps:
         by_repo.setdefault(step["repo"], []).append(step)
     for path, own in by_repo.items():
-        on_branch = targets.run_step(Path(path), ["symbolic-ref", "--short", "-q", "HEAD"], timeout)[1] == branch
+        now_on = targets.run_step(Path(path), ["symbolic-ref", "--short", "-q", "HEAD"], timeout)[1]
         stopped = False
         for step in own:
             result = {"command": render(step), "status": "", "message": ""}
             results.append(result)
             verb = step["git"][0]
+            on_branch = now_on == step.get("on", branch)
             if stopped:
                 result["status"] = "skipped"
                 result["message"] = "这个仓库前面的一步失败了。"
                 continue
-            if verb in ("restore", "clean", "switch") and not on_branch:
+            if verb in ("restore", "clean", "switch", "revert") and not on_branch:
                 result["status"] = "skipped"
-                result["message"] = f"仓库已经不在分支 {branch} 上，不动它的文件和当前分支。"
+                result["message"] = f"仓库已经不在分支 {step.get('on', branch)} 上，不动它的文件和当前分支。"
                 continue
             if verb == "branch":
                 exists = targets.run_step(Path(path), ["rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"], timeout)[0] == 0
@@ -331,9 +359,18 @@ def prune_empty_folders(top: Path, folder: Path) -> None:
 
 
 def write_repo(root: Path, found: targets.Targets, repo: Dict[str, Any], branch: str, written: List[Dict[str, Any]]) -> bool:
-    """Make the branch and write the files of one repository. Returns whether the branch was made; fills `written`."""
+    """Make the branch and write the files of one repository. Returns whether the branch was made; fills `written`.
+
+    A knowledge base gets no branch: the files go onto its base branch and are committed with `repo["message"]`."""
     handle = found.repos[repo["name"]]
-    targets.git(handle, "switch", "-c", branch, handle.base_ref, timeout=found.timeout)
+    direct = bool(repo.get("direct"))
+    if direct:  # the plan was checked a moment ago; look again right before writing on the base branch
+        if targets.current_branch(handle, found.timeout) != handle.base_ref or targets.ref_commit(handle, found.timeout) != repo["base_commit"]:
+            raise CommandError(f"知识库 {repo['name']} 在批准之后变了（分支或 {handle.base_ref} 的提交）")
+        if targets.dirty_paths(handle, found.timeout):
+            raise CommandError(f"知识库 {repo['name']} 的工作区不干净")
+    else:
+        targets.git(handle, "switch", "-c", branch, handle.base_ref, timeout=found.timeout)
     top = handle.path.resolve()
     for item in repo["files"]:
         if item["action"] == "unchanged":
@@ -351,7 +388,30 @@ def write_repo(root: Path, found: targets.Targets, repo: Dict[str, Any], branch:
         common.copy_file(Path(item["source"]), destination)
         if common.sha256_file(destination) != item["sha256"]:
             raise OSError(f"写入后 `{item['relative']}` 的内容和成果不一致")
-    return True
+    if direct:
+        commit_direct(handle, repo, written, repo.get("message") or f"harness task: {len(written)} file(s)", found.timeout)
+    return not direct
+
+
+def commit_direct(handle: targets.Repo, repo: Dict[str, Any], written: List[Dict[str, Any]], message: str, timeout: int) -> None:
+    """One commit on the base branch with the written files and nothing else. A failure leaves nothing staged."""
+    names = [item["relative"] for item in written]
+    try:
+        targets.git(handle, "add", "-A", "--", *names, timeout=timeout)
+        targets.git(handle, "commit", "-q", "-m", message, "--", *names, timeout=timeout)
+    except targets.TargetError:
+        targets.git(handle, "reset", "-q", "--", *names, timeout=timeout, allow_failure=True)
+        raise
+    repo["commit"] = targets.git(handle, "rev-parse", "HEAD", timeout=timeout).decode("ascii", errors="replace").strip()
+
+
+def written_count(repo: Dict[str, Any]) -> int:
+    return len([item for item in repo["files"] if item["action"] != "unchanged"])
+
+
+def commit_message(result: Dict[str, Any], count: int) -> str:
+    name = str(result.get("task", "")).rsplit("/", 1)[-1] or "task"
+    return f"harness task {name}: {count} file(s)\n\nWritten by `task promote` after the person approved plan {result['plan_sha256'][:12]} (round {result.get('round', 1)})."
 
 
 def run_result(
@@ -367,6 +427,8 @@ def run_result(
         written: List[Dict[str, Any]] = []
         switched = False
         try:
+            if repo.get("direct"):
+                repo["message"] = commit_message(result, written_count(repo))
             switched = write_repo(root, found, repo, branch, written)
         except (OSError, targets.TargetError, CommandError) as error:
             # `switch -c` may have worked before the failure: ask git, do not guess
@@ -383,7 +445,10 @@ def run_result(
         "approved_at": approval["approved_at"],
         "at": utc_now(),
         "branch": branch,
-        "repos": {repo["name"]: {"path": repo["path"], "base_commit": repo["base_commit"], "current_branch": repo["current_branch"]} for repo in result["repos"]},
+        "repos": {
+            repo["name"]: {"path": repo["path"], "base_commit": repo["base_commit"], "current_branch": repo["current_branch"], **({"commit": repo["commit"]} if repo.get("commit") else {})}
+            for repo in result["repos"]
+        },
         "files": [{"path": f["path"], "action": f["action"], "sha256": f["sha256"]} for f in result["files"]],
         **saved,
     }

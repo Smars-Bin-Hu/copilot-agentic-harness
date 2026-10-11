@@ -449,6 +449,13 @@ def check_knowledge_base(report: Report, root: Path) -> None:
             report.warn(f"{KB_DIR}/README.md 里有指向不存在文件的链接：{shown}")
         else:
             report.ok(f"{KB_DIR}/README.md 的相对链接都能找到文件")
+    if (kb / ".git").exists():
+        try:
+            registered = any(folder.resolve() == kb.resolve() for name, folder in targets.knowledge_bases(root) if name != targets.KB_DIR)
+        except OSError:
+            registered = True
+        if not registered:
+            report.ok(f"{KB_DIR}/ 是 git 仓库，但没有登记成目标仓库：任务只能读它，不能更新它。要更新，在 target.override.json 的 repos 里加 \"kb\": {{\"path\": \"{KB_DIR}\", \"knowledge_base\": true}}")
     if kb_git_ignored(root):
         report.warn(f".gitignore 忽略了 {KB_DIR}/。Copilot 的搜索会跳过被忽略的文件，agent 可能搜不到它（按路径直接读一般不受影响）")
     files = kb_instruction_files(root)
@@ -493,7 +500,10 @@ def check_targets(report: Report, root: Path) -> None:
             report.error(f"目标仓库 {name}：本地没有分支 `{repo.base_ref}`。先在那个仓库里 git switch 或 git fetch 一次，或在 target.override.json 的 repos 里改 base_ref")
             continue
         state = "工作区干净" if info["clean"] else f"有 {info['uncommitted_files']} 个未提交的文件（promote 要求工作区干净）"
-        report.ok(f"目标仓库 {name}：{repo.base_ref} 在 {info['base_commit']}（{info['base_commit_date'][:10]}），当前分支 {info['current_branch']}，{state}")
+        kind = "知识库" if repo.knowledge_base else "目标仓库"
+        report.ok(f"{kind} {name}：{repo.base_ref} 在 {info['base_commit']}（{info['base_commit_date'][:10]}），当前分支 {info['current_branch']}，{state}")
+        if repo.knowledge_base and info["current_branch"] != repo.base_ref:
+            report.warn(f"知识库 {name} 不在 `{repo.base_ref}` 上。promote 直接写进 `{repo.base_ref}`，回写前要先切回去")
 
 
 def check_location(report: Report, root: Path) -> None:

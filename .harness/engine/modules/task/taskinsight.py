@@ -236,7 +236,7 @@ def pauses(events: List[Tuple[float, str]]) -> List[Tuple[float, float]]:
     for at, what in events:
         if what == "pause" and began is None:
             began = at
-        elif what in ("resume", "close") and began is not None:
+        elif what in ("unpause", "close") and began is not None:
             found.append((began, at))
             began = None
     if began is not None:

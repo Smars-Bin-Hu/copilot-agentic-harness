@@ -51,6 +51,7 @@ specificTo: generic
 5. **知识库。** 问用户知识库现在在哪（一个文件夹的路径）。
    - 把它的内容放进 `knowledge-base/`。入口必须是 `knowledge-base/README.md`。
    - 把知识库自带的、讲怎么读怎么写的 instructions 放进 `.github/instructions/knowledgebase.instructions.md`，frontmatter 写 `applyTo: '**'`。
+   - 问用户：要不要让任务也能更新知识库。要，而且 `knowledge-base/` 自己是 git 仓库（有 `.git`）：在 `target.override.json` 的 `repos` 里加 `"kb": { "path": "knowledge-base", "knowledge_base": true }`，再运行 `harness target show --repo kb` 核对。不是 git 仓库就不加，告诉用户原因。细节见 [docs/03-configure.md](../../../docs/03-configure.md) 的“让任务更新知识库”。
    - 用户还没有知识库：标“跳过”，并告诉用户影响（见 Gotchas）。
 6. **公司技能。** 问用户有没有公司专用的技能，在哪。每个技能一个文件夹，放进 `.github/skills/`。文件夹名和 `SKILL.md` 的 `name` 要一致，用 `domain-<领域>-<名>` 前缀。前缀不对时告诉用户，问清楚再改名，不要自己改。
 7. **其他覆盖配置（可选）。** 问用户有没有要改的默认值。常见的两个：CLI 的中文显示成 `\uXXXX`（见 Troubleshooting）；要多保护几个路径（`gate.override.json` 的 `extra_guardrail_paths+`）。规则见 [docs/03-configure.md](../../../docs/03-configure.md) 的“override”。没有就跳过。

@@ -16,6 +16,7 @@
 | `harness doctor` | 配置有没有问题；hook 在不在跑 |
 | `harness task status` | 当前任务做到哪 |
 | `harness stats` | 日志汇总 |
+| `harness kb reads` | 知识库哪些文件有人读、哪些没人读 |
 
 ### 13.2 只有你能运行（需要确认码）
 

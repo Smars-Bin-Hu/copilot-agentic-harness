@@ -26,6 +26,7 @@
 | `admin off`、`admin status` | 关掉一个会话的 admin 模式；列出开着 admin 模式的会话 |
 | `target list`、`target show` | 看目标仓库：路径、base 分支、提交号、工作区是否干净 |
 | `stats` | 日志汇总：提示数、工具调用数、拒绝数、各模块的拒绝、独立检查的结论、失败的工具调用、用过哪些 skill |
+| `kb reads` | 知识库的每个文件被读了几次、是哪些任务读的，哪些文件没人读过。`--days N` 只看最近 N 天，`--task <名>` 只看一个任务 |
 | `logs prune` | 删除 N 天没写过的会话日志（`--dry-run` 先看） |
 | `eval list`、`eval show`、`eval check` | 固定场景：列出、给提示、判断一次运行 |
 
@@ -72,13 +73,14 @@
 | observe.json | `max_text_chars` | 日志里每段文字的最大长度 |
 | observe.json | `capture.enabled` | 保存 hook 的原始输入输出 |
 | observe.json | `warn_session_files` | 会话日志文件数超过它时 `doctor` 提醒 |
+| observe.json | `knowledge_base_reads` | 记不记每次调用读了知识库的哪些文件（只记文件名）。`kb reads` 靠它 |
 | user.json | `name` | 你的名字。agent 在要署名的地方用（例如文件开头的改动记录）。空着就用 `git config user.name` |
 | cli.json | `output.encoding` | CLI 输出的编码。`auto`（默认）跟着终端；`utf-8` 一律输出 UTF-8 |
 | agents.json | `series` | 模型系列 |
 | agents.json | `different_series` | 必须用不同系列的角色组 |
 | agents.json | `any_series` | 回退列表可以跨系列的 agent（admin、reviewer） |
 | target.json | `repos_root` | 目标仓库的父文件夹 |
-| target.json | `repos` | 单个仓库的 `path`、`base_ref`、`refused_paths` |
+| target.json | `repos` | 单个仓库的 `path`、`base_ref`、`refused_paths`、`knowledge_base`（是知识库：回写直接提交到 `base_ref`） |
 | target.json | `base_ref` | 取文件的分支 |
 | target.json | `refused_paths` | 不许回写、agent 也不能直接写的路径 |
 | target.json | `git_timeout_seconds` | 每条 git 命令的超时 |

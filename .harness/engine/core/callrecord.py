@@ -2,7 +2,8 @@
 
 Only the facts a person needs to judge a run: what happened, at which Level, who decided, and for a refusal
 what it was about. Tool arguments are not recorded, except the paths and the command of a call that was
-denied or sent to a person (`target`), and the name of a loaded skill. A call that went through leaves no trace of what it touched.
+denied or sent to a person (`target`), the name of a loaded skill, and the knowledge base files a call read (`kb`, names only).
+Any other call that went through leaves no trace of what it touched.
 """
 
 from __future__ import annotations
@@ -74,7 +75,7 @@ def build(
             record["target"] = {"paths": list(event.paths[:MAX_PATHS]), "command": event.command}
     if denial:
         record["denial"] = denial
-    for key in ("kind", "judge", "verdict", "task"):  # task: whose prompt it was, so a report can add up a task's time
+    for key in ("kind", "judge", "verdict", "task", "kb"):  # task: whose prompt it was; kb: the knowledge base files the call read
         if facts.get(key):
             record[key] = facts[key]
     if event.event in ("SessionStart", "SubagentStart", "SubagentStop"):

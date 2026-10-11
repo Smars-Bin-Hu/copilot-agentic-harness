@@ -12,6 +12,7 @@ harness 记“发生了什么”，不记“你说了什么”。日志、统计
 | --- | --- | --- |
 | 会话日志 | 这个会话里每次调用发生了什么 | 文件 `.harness/runtime/logs/<surface>/<会话>.jsonl` |
 | 统计 | 整体上有多少提示、调用、拒绝 | `harness stats` |
+| 知识库的阅读记录 | 哪些知识库文件有人读、是哪些任务读的、哪些没人读 | `harness kb reads` |
 | 任务报告 | 这个任务做了什么、谁批准的 | `task close` 自动写，`task report` 重写 |
 | 任务分析页 | 这个任务的时间和用量花在哪 | 同上，文件是 `task-<任务名>.html` |
 | 任务看板 | 哪个任务在等你、等了多久 | `task list`、`task board` |
@@ -24,6 +25,7 @@ harness 记“发生了什么”，不记“你说了什么”。日志、统计
 - **不记工具参数，不记提示内容**（里面可能有代码）。
 - 被拒绝或要人确认的调用，才记路径和命令，长度有限（`observe.json` 的 `max_text_chars`）。
 - 用过的技能名会记下来（因为用技能是一次工具调用）。
+- 读了知识库的哪些文件会记下来，只记文件名（`harness kb reads` 用它算哪些文件没人读）。这是“放行的调用不记碰了什么”的唯一例外，可以用 `observe.json` 的 `knowledge_base_reads` 关掉。
 - 日志保存在本机，不进 git。`harness logs prune` 清理旧的（先 `--dry-run`）。
 
 ### 12.3 token 和耗时

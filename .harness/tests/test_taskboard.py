@@ -240,14 +240,14 @@ class PauseTests(BoardCase):
         self.assertIsNone(data["paused"])
         self.assertGreaterEqual(data["waiting"]["since"], marked)  # the wait starts again from the resume
         self.assertEqual(self.listed()["waiting"], 1)
-        self.assertEqual([item["what"] for item in data["events"]][-2:], ["pause", "resume"])
+        self.assertEqual([item["what"] for item in data["events"]][-2:], ["pause", "unpause"])
 
     def test_a_prompt_in_the_tasks_session_takes_it_back(self) -> None:
         self.new()
         tasklife.pause(self.root, "job", interactive=True)
         self.prompt()
         self.assertIsNone(self.data()["paused"])
-        self.assertEqual(self.data()["events"][-1]["what"], "resume")
+        self.assertEqual(self.data()["events"][-1]["what"], "unpause")
 
     def test_pause_and_resume_are_the_persons(self) -> None:
         self.new()
@@ -268,7 +268,7 @@ class PauseTests(BoardCase):
         later = first + timedelta(seconds=400)
         path = self.root / BASE / "job" / ".task" / "task.json"
         data = self.data()
-        for what, after in (("pause", 100), ("resume", 350)):
+        for what, after in (("pause", 100), ("unpause", 350)):
             data["events"].append({"at": (first + timedelta(seconds=after)).isoformat(), "round": 1, "what": what, "detail": ""})
         path.write_text(json.dumps(data), encoding="utf-8")
         log = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{S1}.jsonl"

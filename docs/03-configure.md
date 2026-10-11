@@ -61,7 +61,7 @@ harness 面向的目标仓库，是**庞大的、有合规要求的数据工程�
 | 字段 | 含义 |
 | --- | --- |
 | `repos_root` | 一个文件夹。它下面每个带 `.git` 的子文件夹是一个目标仓库，名字是文件夹名 |
-| `repos` | 名字到设置：`path` 指向别处的仓库；`base_ref` 改这个仓库的取文件分支；`refused_paths` 改这个仓库不许回写的路径 |
+| `repos` | 名字到设置：`path` 指向别处的仓库（不是绝对路径时，从 harness 文件夹算起）；`base_ref` 改这个仓库的取文件分支；`refused_paths` 改这个仓库不许回写的路径；`knowledge_base: true` 说明它是知识库，见下面“让任务更新知识库” |
 | `base_ref` | 取文件的分支，默认 `main`。要在本地存在 |
 | `refused_paths` | promote 不写、agent 也不能直接写的路径（git 风格 glob）。`.git/**` 总是被保护 |
 
@@ -77,6 +77,51 @@ harness 面向的目标仓库，是**庞大的、有合规要求的数据工程�
 2. 把知识库自带的、讲怎么读怎么写的 instructions 放进 `.github/instructions/knowledgebase.instructions.md`（替换空占位），frontmatter 写 `applyTo: '**'`。只写 `applyTo: 'knowledge-base/**'` 不够：agent 读到知识库文件之前它不会生效。
 3. 运行 `doctor`。它检查：有没有 README、README 里的链接是否都有文件、`.gitignore` 有没有忽略 `knowledge-base/`、instructions 会不会被加载。
 4. 知识库的写作规则只有一个主要来源：知识库自带的 instructions。
+
+### 让任务更新知识库
+
+agent 不能直接改知识库。要让任务能更新它，把知识库登记成一个目标仓库。前提：`knowledge-base/` 自己是一个 git 仓库（有 `.git`）。
+
+在 `.harness/policies/target.override.json` 的 `repos` 里加一项：
+
+```json
+{
+  "repos": {
+    "kb": { "path": "knowledge-base", "knowledge_base": true }
+  }
+}
+```
+
+之后更新知识库和改代码仓库走同一条路：开一个种类是 `kb` 的任务，`task fetch kb/<路径>` 取文件，在 `DEV/kb/` 下改，你批准计划，`task promote --dry-run`，你批准回写。
+
+和普通目标仓库有三点不同：
+
+| | 普通目标仓库 | 知识库 |
+| --- | --- | --- |
+| 写到哪 | 新分支 `feature/...` | 直接写进 `base_ref`（默认 `main`） |
+| 提交 | 不提交，你自己看了再提交 | harness 提交一次，只含这次回写的文件 |
+| 回写前的要求 | 工作区干净，分支名没被占用 | 工作区干净，当前就在 `base_ref` 上，git 设了 `user.name` 和 `user.email` |
+
+- harness 不 push。提交之后你自己 push。
+- 工作区不干净时拒绝回写，并列出没提交的文件。先自己提交或丢弃。
+- 一次任务同时改代码仓库和知识库时，知识库最后写。
+- 回写中途出错：`task recover` 把没提交的文件恢复原样。
+
+### 哪些知识库文件有人读
+
+hook 会记下每次工具调用读了知识库的哪些文件。只记文件名，不记内容。
+
+```bash
+harness kb reads                # 每个文件被读了几次、是哪些任务读的；哪些文件没人读过
+harness kb reads --days 30      # 只看最近 30 天
+harness kb reads --task <任务名> # 只看一个任务读过的
+```
+
+- **没人读的文件**（`never_read`）：可能没用，也可能索引没指到它。
+- **任务失败时没读到的文件**：是知识库的缺口，或 README 索引要补一条。
+- 任务报告（`task report`）里也有一节“读过的知识库文件”。
+- 能记到的：read、search 工具点名的路径，和终端命令里写出来的路径（`cat knowledge-base/x.md`）。记不到的：搜索一个文件夹时，只知道搜了这个文件夹，不知道读了其中哪些文件。
+- 不想记：`observe.override.json` 写 `{ "knowledge_base_reads": false }`。
 
 ## 技能（Skills）
 

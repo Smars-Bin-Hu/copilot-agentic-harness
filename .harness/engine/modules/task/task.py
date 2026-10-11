@@ -167,6 +167,9 @@ def attach(root: Path, raw_task: str, session_id: str, surface: str = "vscode", 
             data.setdefault("sessions", []).append({"session_id": session_id, "surface": surface, "at": utc_now()})
             del data["sessions"][:-SESSIONS_KEPT]
             data["waiting"] = None
+            if data.get("paused"):  # a session picks it up: it is no longer put aside
+                data["paused"] = None
+                note(data, "unpause", f"会话 {session_id}")
             asked = (state["modules"].get("task") or {}).get("review_n")
             if isinstance(asked, int) and not isinstance(asked, bool):
                 from . import taskreview  # it needs this module
@@ -585,13 +588,22 @@ def run_promote(root: Path, raw_task: str, dry_run: bool) -> Dict[str, Any]:
         data["promote"] = new  # a `partial` record is saved too: the lock writes it back, the error is raised after
         note(data, "promote" if not failed else "promote-partial", result["branch"])
         if not failed:
-            result["next"] = (
-                f"已写到各仓库的新分支 {result['branch']}，文件没有提交，补丁在 {new['patch']}。"
-                "告诉用户：在每个仓库里检查改动、自己 commit。然后 `task close`。"
-            )
+            result["next"] = promoted_text(result, new)
             return {"dry_run": False, **common.shown(result)}
         failure = promote_target.partial_message(new)
     raise CommandError(failure)
+
+
+def promoted_text(result: Dict[str, Any], record: Dict[str, Any]) -> str:
+    """What to tell the person after a promote: which repositories wait for a commit, which knowledge base was committed."""
+    direct = [repo for repo in result["repos"] if repo.get("direct")]
+    others = [repo for repo in result["repos"] if not repo.get("direct")]
+    parts: List[str] = []
+    if others:
+        parts.append(f"已写到{'、'.join(repo['name'] for repo in others)}的新分支 {result['branch']}，文件没有提交。告诉用户：在仓库里检查改动、自己 commit。")
+    for repo in direct:
+        parts.append(f"知识库 {repo['name']} 已直接写进 {repo['base_ref']} 并提交（{str(repo.get('commit', ''))[:12]}）。harness 不 push，告诉用户自己 push。")
+    return "".join(parts) + f"补丁在 {record['patch']}。然后 `task close`。"
 
 
 def approve_promote(
@@ -609,6 +621,9 @@ def approve_promote(
     review = write_review(root, task, data, result)  # written again now: it is what gets approved
     lines = [f"任务 {task}（第 {data['round']} 轮）。将回写这些文件："]
     for repo in result["repos"]:
+        if repo.get("direct"):
+            lines.append(f"  知识库 {repo['name']}（{repo['path']}）：直接写进 {repo['base_ref']}（{repo['base_commit'][:12]}），并提交一次。")
+            continue
         lines.append(f"  仓库 {repo['name']}（{repo['path']}）：从 {repo['base_ref']}（{repo['base_commit'][:12]}）新建分支 {result['branch']}，写入文件，不提交。")
     if any(item["action"] == "delete" for item in result["files"]):
         lines.append("  注意：标着 delete 的文件会被删除。")

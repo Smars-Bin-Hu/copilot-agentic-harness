@@ -20,7 +20,7 @@ KB_FILES_SHOWN = 30
 EVENT_TEXT = {
     "start": "开始", "resume": "接着做", "new-round": "开新的一轮", "approve-plan": "人批准计划", "fetch": "取文件", "delete": "声明删除",
     "set-branch": "设分支名", "review-start": "开一次独立检查", "review": "独立检查", "review-extend": "人再给检查次数", "review-waive": "人放行，不查了", "upgrade": "升档", "promote-dry-run": "回写计划（dry-run）", "approve-promote": "人批准回写", "promote": "回写到新分支",
-    "promote-partial": "回写中途出错", "recover": "人恢复仓库", "close": "关闭", "pause": "人搁置任务", "unpause": "搁置的任务接着做",
+    "promote-partial": "回写中途出错", "recover": "人恢复仓库", "close": "关闭", "autorun-on": "人开 autorun", "autorun-off": "autorun 停下", "pause": "人搁置任务", "unpause": "搁置的任务接着做",
 }
 PROMOTE_TEXT = {"none": "没有回写。", "dry_run": "已生成回写计划，没有回写。", "done": "已回写到目标仓库的新分支（没有提交）。", "partial": "回写中途出错，要人运行 task recover。"}
 

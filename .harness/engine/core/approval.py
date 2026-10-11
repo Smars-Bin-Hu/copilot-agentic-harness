@@ -31,6 +31,11 @@ def require_person(command: str, interactive: Optional[bool] = None, typed: bool
         raise Refused(f"{command} 只能由用户在自己的终端里手动运行{'，要打字确认' if typed else ''}。agent 不能运行它，管道和脚本也不行。")
 
 
+def is_person(interactive: Optional[bool] = None) -> bool:
+    """Is this a person at a terminal? `interactive`: for the tests."""
+    return bool(sys.stdin.isatty() and sys.stdout.isatty()) if interactive is None else bool(interactive)
+
+
 def ask(question: str, digest: str, refusal: str, reader: Optional[Callable[[str], str]] = None) -> None:
     """Ask the person to type the code of `digest`. Anything else raises Refused(refusal)."""
     code = code_of(digest)

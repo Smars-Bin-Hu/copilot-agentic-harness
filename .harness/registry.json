@@ -57,6 +57,8 @@
         ".github/agents/reviewer.agent.md",
         ".github/agents/mapper.agent.md",
         ".github/skills/generic-mapreduce/",
+        ".github/skills/harness-autorun/",
+        ".harness/tests/test_autorun.py",
         ".harness/tests/test_mapreduce.py",
         ".harness/tests/test_task.py",
         ".harness/tests/test_tasklife.py",

@@ -20,6 +20,13 @@ POLICY_SCHEMA = {
             "properties": {"extra_checks": {"type": "integer", "minimum": 0}, "max_n": {"type": "integer", "minimum": 0}},
         },
         "report": {"type": "object", "properties": {"copilot_events": {"type": "boolean"}}},
+        "autorun": {
+            "type": "object",
+            "properties": {
+                "max_steps": {"type": "integer", "minimum": 1}, "minutes": {"type": "integer", "minimum": 1},
+                "max_denies": {"type": "integer", "minimum": 1}, "max_stalls": {"type": "integer", "minimum": 1},
+            },
+        },
         "mapreduce": {
             "type": "object",
             "properties": {"max_agents": {"type": "integer", "minimum": 0}, "minutes": {"type": "integer", "minimum": 1}},

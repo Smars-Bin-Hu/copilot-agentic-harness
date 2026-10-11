@@ -204,6 +204,10 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
         pass
     mark = data.get("waiting")
     if isinstance(mark, dict) and mark.get("since"):
+        run = data.get("autorun") if isinstance(data.get("autorun"), dict) else {}
+        ended = run.get("stopped") if run.get("state") == "off" else None
+        if isinstance(ended, dict) and str(ended.get("at", "")) <= str(mark["since"]) and ended.get("why") not in ("person",):
+            return {"why": "autorun", "since": str(ended.get("at") or mark["since"])}  # the run ended and nobody has answered yet
         return {"why": "stopped", "since": str(mark["since"])}
     return {"why": "", "since": ""}
 
@@ -229,6 +233,16 @@ def set_waiting(root: Path, task: str, mark: Optional[Dict[str, str]]) -> None:
             return
         data["waiting"] = mark
         atomic_write(path, data)
+
+
+def waiting_text(data: Dict[str, Any], why: str) -> str:
+    if not why:
+        return ""
+    text = messages.text(f"task.waiting.{why}")
+    if why == "autorun":
+        ended = (data.get("autorun") or {}).get("stopped") or {}
+        text += "（" + messages.text(f"autorun.why.{ended.get('why') or 'done'}") + (f"：{ended['detail']}" if ended.get("detail") else "") + "）"
+    return text
 
 
 def paused_since(data: Dict[str, Any]) -> str:
@@ -308,7 +322,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
         rows.append({
             "task": task, "name": data.get("name") or task_ops.name_of(task), "status": data.get("status", ""),
             "kind": data.get("kind", ""), "tier": data.get("tier", ""), "updated_at": data.get("updated_at", ""),
-            "waiting": messages.text(f"task.waiting.{found['why']}") if found["why"] else "", "waiting_why": found["why"], "waiting_since": found["since"],
+            "waiting": waiting_text(data, found["why"]), "waiting_why": found["why"], "waiting_since": found["since"],
             "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
             "depends_on": list(data.get("depends_on") or []), "paused_since": aside,
         })

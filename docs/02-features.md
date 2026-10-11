@@ -118,6 +118,20 @@ gate 不是沙盒。它防的是 agent 犯错，不是防 agent 存心绕过：a
 - **不做的**：并行改文件。原因：目标仓库不能运行，合并后对不对没有东西能判定。
 - 不用先开任务。技能在 [.github/skills/generic-mapreduce/](../.github/skills/generic-mapreduce/)。
 
+## autorun：照清单一直做（beta，只有你能开）
+
+计划批准之后，剩下的是照计划一步步做。autorun 让 agent 照 `TODO.md` 一直做下去，你不用每步盯着，回来只看一份总差异。
+
+- **只有你能开**：在终端运行 `harness task autorun on`，屏幕列出还没做的步骤和上限，你输入确认码。agent 运行这条命令会被拒绝。
+- **开之前要有**：批准过的计划、`TODO.md` 里没勾的步骤、独立检查（`[review]=n`，n 至少 1）。输入 `/harness-autorun`，agent 会带你把这些准备好。
+- **怎么推进**：agent 每次想停下，hook 看事实。还有没勾的步骤，就让它接着做下一步；步骤勾完了，就让它过独立检查；检查过了，就让它生成回写计划，然后停。
+- **什么时候停**（都由代码判断）：做完了；计划被改；检查次数用完还没通过；被 gate 拒绝 2 次；被推着继续满 20 次；过了 120 分钟；连续 3 次没有进展；agent 自己说走不下去（`task autorun off --reason`）；你关掉（`task autorun off`）。
+- **范围不变**：只能写任务目录，计划是你批准的那一版，git 和目标仓库照旧碰不了。中间不回写。
+- **做完之后**：回写仍然要你 `task approve-promote`。停下的原因显示在看板上（`task list`）。
+- **换会话能接上**：状态在任务里，新会话接上任务后次数和时间接着算。
+- **为什么是 beta**：它和“人盯着做完”哪个好，还没有评测。上限的数字在 `task.json` 的 `autorun` 里。
+- **和 Copilot 自己的 Autopilot 不是一回事**：那个是“所有工具调用自动同意”。两个可以一起用；autorun 的停止不靠“问你”，所以 Autopilot 开着也有效。
+
 ## admin：二开和排查 harness（可选）
 
 在 agent 下拉里选 admin。它用来改 harness 自己的文件、读报告和日志、查 harness 出错的根因。它不做业务任务，也不能被当成子 agent 调用。

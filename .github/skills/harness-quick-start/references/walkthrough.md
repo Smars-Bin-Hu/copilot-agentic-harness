@@ -74,12 +74,13 @@ harness task list
 
 运行 `harness task close`，把报告链接给用户。告诉他：文件夹还在，`task open` 能再打开。问他要不要删这个练手的文件夹；要删由他自己删。
 
-最后用三行告诉他还有哪些要他自己输入才会启动的功能（都花用量，所以 agent 不会自己用）：
+最后用这张表告诉他还有哪些要他自己输入才会启动的功能（都花用量，所以 agent 不会自己用）：
 
 | 输入 | 做什么 |
 | --- | --- |
 | `[review]=n` | 独立检查，刚才用过 |
 | `/harness-task-report` | 讲一个任务的时间和用量花在哪 |
 | `/generic-mapreduce` | 要读很多东西时，拆成几块并行读。贵，它会先问你 |
+| `/harness-autorun` | 计划批准后让 agent 照清单一直做（beta）。真正的开关是你在终端运行的 `harness task autorun on` |
 
 想了解原理，输入 `/harness-wondering`。

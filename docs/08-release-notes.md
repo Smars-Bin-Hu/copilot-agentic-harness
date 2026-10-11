@@ -12,7 +12,7 @@
 
 ## 1.3.0（未发布）
 
-任务可以更新知识库；几个任务排队回写；并行分块阅读。版本号已定，等 Copilot 里手测通过后发布。没有不兼容的改动。
+任务可以更新知识库；几个任务排队回写；并行分块阅读；autorun（beta）。版本号已定，等 Copilot 里手测通过后发布。没有不兼容的改动。
 
 **测试情况**：自动测试通过。Copilot 里的手测还没做；Windows 没测。
 
@@ -22,6 +22,7 @@
 - **`harness kb reads`**：知识库的每个文件被读了几次、是哪些任务读的，哪些文件没人读过。hook 只记文件名，不记内容。开关：`observe.json` 的 `knowledge_base_reads`。
 - 任务报告多一节“读过的知识库文件”。
 - **并行分块阅读 `/generic-mapreduce`**：一件事要读很多东西、又能拆成互不相关的几块时，agent 把它派给几个只读的子 agent（mapper），各交一份带出处的摘要，再汇总。只有你输入 `/generic-mapreduce` 才能用；agent 先告诉你拆法和大概多花几倍用量，等你同意。一次最多 4 个 mapper（`task.json` 的 `mapreduce.max_agents`），hook 数次数。只做读，不并行改文件。
+- **autorun（beta）**：计划批准后，agent 照 `TODO.md` 一直做，不用你每步盯着。你在终端运行 `harness task autorun on` 并输入确认码才开；要先有批准的计划、没勾的步骤和 `[review]=n`。hook 按事实推进或停下：做完、计划被改、检查用完、被拒绝 2 次、继续满 20 次、过了 120 分钟、连续 3 次没进展、agent 说走不下去、你关掉。中间不回写，做完生成回写计划等你批准。技能 `/harness-autorun` 带你做准备。数字在 `task.json` 的 `autorun`。
 - **新的子 agent `mapper`**：只读，没有编辑工具和终端。
 - **回写排队**：几个任务要写同一个仓库时，`harness task queue` 列出每个仓库现在被哪个任务占着（它回写的文件你还没提交）、后面排着谁、你下一步做什么。顺序：已批准的在前，等你批准的其次，还在做的最后。`task list` 的输出和终端看板也带上排队顺序。harness 仍然不替你提交。
 - `target.json` 里仓库的 `path` 可以写相对路径，从 harness 文件夹算起（例如 `knowledge-base`）。

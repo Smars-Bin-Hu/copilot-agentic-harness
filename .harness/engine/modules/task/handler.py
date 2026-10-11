@@ -9,7 +9,8 @@
                                    `/generic-mapreduce`: that prompt gives the session a number of calls (mapreduce.py)
   SubagentStart                    the reviewer is told where its package is; a mapper is told it only reads
   PostToolUse                      a write inside the task is remembered; the reviewer's answer closes the open check
-  Stop                             once per prompt: the result has not passed its checks; task files were written and
+  Stop                             a task in autorun: the next open step, until a fact says stop (autorun.py);
+                                   once per prompt: the result has not passed its checks; task files were written and
                                    TASK.md was not. A Stop that goes through leaves a mark in the task for the board:
                                    the agent stopped, the person is next. The next prompt takes the mark away
 
@@ -98,6 +99,9 @@ def task_text(ctx: Context, data: Dict[str, Any]) -> str:
         info = taskreview.summary(ctx.root, name, data)
         lines.append(say("review.inject", n=info["n"], passes=info["passes"], used=info["checks_used"], limit=info["checks_limit"], agent=taskreview.AGENT))
     lines.append(say("task.inject.scope", task=name))
+    run = data.get("autorun") if isinstance(data.get("autorun"), dict) else {}
+    if run.get("state") == "on":
+        lines.append(say("autorun.inject", step=run.get("steps", 0), limit=run.get("max_steps", 0), task=name))
     return "\n".join(lines)
 
 
@@ -276,12 +280,27 @@ def mark_waiting(ctx: Context, data: Dict[str, Any], stopped: bool) -> None:
         pass
 
 
+def autorun_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
+    """A task in autorun (M13-1): the facts say whether the agent is pushed on to the next step or may stop."""
+    if not (isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on"):
+        return None
+    from . import autorun
+
+    text = autorun.on_stop(ctx.root, data["task"])
+    if text is None:
+        return None  # it ends here; the task says why, and the Stop goes on as any other
+    return Decision(block=True, reason=text, facts={"kind": "autorun"})
+
+
 def on_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if is_subagent_session(ctx) or ctx.admin:
         return None  # a subagent finishing; admin mode has no task
     data = open_task(ctx)
     if data is None:
         return None
+    pushed = autorun_stop(ctx, data)
+    if pushed is not None:
+        return pushed  # autorun: on to the next step, however often the agent has been pushed before
     if event.stop_hook_active:
         mark_waiting(ctx, data, True)  # the second Stop of a block: this time the agent does stop
         return None

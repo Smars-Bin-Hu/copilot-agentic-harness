@@ -4,6 +4,7 @@
   task board                                 the board as a page (taskboard.py)
   task queue                                 the promote queue: who holds a repository, who is in line (taskqueue.py)
   task status|fetch|delete|diff|set-branch|promote|close|report      the work on a task (task.py)
+  task autorun on|off|status                 autorun, beta: down TODO.md without a person; on is a person at a terminal (autorun.py)
   task pause|resume                          a person puts a task aside and takes it back (tasklife.py)
   task approve-plan|approve-promote|recover  a person at a terminal
   task review start|status                   independent checks, `[review]=n` (taskreview.py); extend|waive: a person at a terminal
@@ -19,7 +20,7 @@ from typing import Any, Dict
 from core import messages, targets, tasks
 from core.paths import cli_command, repo_root
 
-from . import task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
+from . import autorun, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
 from .common import CommandError
 
 
@@ -144,6 +145,19 @@ def register_task(subparsers: Any) -> None:
     add("recover", "the person puts the repositories back after a task promote stopped halfway (terminal only)", lambda a: task.recover(repo_root(), a.task))
     add("pause", "the person puts the task aside: the board stops saying it waits, the time aside is not counted as waiting (terminal only)", lambda a: tasklife.pause(repo_root(), a.task))
     add("resume", "the person takes a task back that was put aside (terminal only); a prompt in the task's session does the same", lambda a: tasklife.resume(repo_root(), a.task))
+    auto = commands.add_parser("autorun", help="autorun (beta): the agent goes down TODO.md by itself and stops where a person is needed")
+    auto_commands = auto.add_subparsers(dest="autorun_command", required=True)
+
+    def add_auto(name: str, text: str, handler: Any) -> argparse.ArgumentParser:
+        item = auto_commands.add_parser(name, help=text)
+        item.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+        item.set_defaults(handler=handler)
+        return item
+
+    add_auto("on", "the person turns autorun on for the task (terminal only, a typed code)", lambda a: autorun.turn_on(repo_root(), a.task))
+    off = add_auto("off", "turn autorun off: the person at a terminal, or the agent with --reason when it cannot go on", lambda a: autorun.turn_off(repo_root(), a.task, a.reason))
+    off.add_argument("--reason", default="")
+    add_auto("status", "on or off, the steps done, how often it was pushed on, why it stopped", lambda a: autorun.status(repo_root(), a.task))
     close = add("close", "the session lets go of the task and the report is written; the folder stays where it is", lambda a: task.close(repo_root(), a.task, a.reason))
     close.add_argument("--reason", default="")
     report = add("report", "write .workspace/reports/task-<name>.md (what was done) and task-<name>.html (where the time and usage went)", cmd_report)

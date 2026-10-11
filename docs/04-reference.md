@@ -45,6 +45,9 @@
 | `task set-branch` | 改 feature 分支名。格式是 `feature/` 加字母、数字、下划线（最长 60 个字符），不能有 `-`、`.`、`/`。默认取任务目录名，其中不合格的字符变成 `_`（`my-task` 变成 `feature/my_task`）；任务开新一轮时加 `_r2`、`_r3` |
 | `task promote` | 把 `DEV/<仓库>/` 下的文件回写到各目标仓库的新分支；`--dry-run` 只列计划，差异写到 `PROMOTE-PLAN.diff`。直接放在 `DEV/` 根目录的文件不回写。开了独立检查、没凑够通过次数时被拒绝 |
 | `task queue` | 回写排队：每个目标仓库现在在哪个分支、干不干净、是哪个任务回写的文件还没提交、后面排着哪些任务、你下一步做什么 |
+| `task autorun on` | 开 autorun（beta）：agent 照 `TODO.md` 一直做，该人决定时才停。要有批准的计划、没勾的步骤、`[review]=n`。只能在终端，输入确认码 |
+| `task autorun off` | 关 autorun。你在终端直接关；agent 关要带 `--reason`，说明卡在哪 |
+| `task autorun status` | 开没开、做了几步、被推着继续了几次、为什么停；没开时列出还缺什么 |
 | `task pause` | 把任务先放一边：看板不再说它在等你，搁置的时间不算“等你”。只能在终端 |
 | `task resume` | 接着做搁置的任务。在它的会话里发提示也会自动恢复。只能在终端 |
 | `task close` | 会话放开任务，写报告。目录原地不动 |
@@ -70,6 +73,10 @@
 | task.json | `review.max_n` | `[review]=n` 里 n 最大能写几 |
 | task.json | `snapshots.keep_days` | 关口快照留几天 |
 | task.json | `snapshots.max_file_mb` | 超过这个大小的文件，快照只记 sha256，不复制 |
+| task.json | `autorun.max_steps` | autorun 里 hook 最多推着 agent 继续几次 |
+| task.json | `autorun.minutes` | autorun 最长多少分钟 |
+| task.json | `autorun.max_denies` | autorun 里被 gate 拒绝几次就停 |
+| task.json | `autorun.max_stalls` | 连续几次继续都没有进展就停 |
 | task.json | `mapreduce.max_agents` | 用户输入一次 `/generic-mapreduce` 后，最多能调用几次 mapper。`0` 是关掉 |
 | task.json | `mapreduce.minutes` | 这几次调用多少分钟内有效 |
 | task.json | `report.copilot_events` | 任务分析和看板读不读 Copilot 自己的会话记录（`~/.copilot/session-state/`）。读了才有用量；只取数字。`false` 时只用 hook 日志 |
@@ -111,7 +118,7 @@
 | `PostToolUseFailure` | observe（工具调用失败时只有它，没有 `PostToolUse`；日志里记下工具名和平台给的错误） |
 | `SubagentStart` | task（告诉 reviewer 评审包在哪；告诉 mapper 它只读、只交摘要） |
 | `SubagentStop` | 没有模块处理；核心用它记子 agent 结束 |
-| `Stop` | task（成果没凑够通过次数、或写过任务文件没更新 `TASK.md` 时拦一次） |
+| `Stop` | task（成果没凑够通过次数、或写过任务文件没更新 `TASK.md` 时拦一次；任务开着 autorun 时，按事实让它接着做下一步，或让它停并记下原因） |
 
 ## 运行时文件
 

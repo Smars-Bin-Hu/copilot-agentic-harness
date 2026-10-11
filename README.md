@@ -84,6 +84,7 @@ harness 之外：目标仓库（企业的代码仓库）
 | [.github/instructions/](.github/instructions/) | 分类规则：[agents](.github/instructions/agents.instructions.md)、[skills](.github/instructions/skills.instructions.md)、[tools](.github/instructions/tools.instructions.md)、[workspace](.github/instructions/workspace.instructions.md)（`.workspace/` 的读写规则） |
 | [.github/skills/harness-my-task/](.github/skills/harness-my-task/) | 开任务、接着做、换任务、升档：问清楚后运行 `task new`、`task open`、`task upgrade` |
 | [.github/skills/harness-quick-start/](.github/skills/harness-quick-start/) | 给新用户上入门课：先讲 harness 是什么，再讲目录，最后做一个模拟任务。用户用 `/harness-quick-start` 启动 |
+| [.github/skills/harness-wondering/](.github/skills/harness-wondering/) | 深度教程：互动式讲解 coding agent 和 harness 的原理、实现、设计取舍，15 个主题。用户用 `/harness-wondering` 启动 |
 | [.github/skills/harness-repo-initialize/](.github/skills/harness-repo-initialize/) | 第一次配置：短命令、知识库、公司技能、目标仓库、用户名字，最后 `doctor` 检查。用户用 `/harness-repo-initialize` 启动 |
 | [.github/skills/generic-goal-driven/](.github/skills/generic-goal-driven/) | 长周期任务的目标驱动流程：中心思想、TODO、进度指针存成文件，换 session 能接上。只由用户用 `/generic-goal-driven` 启动 |
 | [.github/agents/](.github/agents/) | 自定义智能体：reviewer（独立检查员，只当子 agent）、admin（用户可选，用来二开和排查 harness，要先在终端开 admin 模式） |

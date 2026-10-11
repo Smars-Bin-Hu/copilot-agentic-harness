@@ -65,6 +65,12 @@ def one_prompt(start: datetime, usage: float, premium: int, context: int) -> Lis
     ]
 
 
+def page_data(text: str) -> Dict[str, Any]:
+    """The JSON a page carries for its scripts."""
+    start = text.index('<script type="application/json" id="data">') + len('<script type="application/json" id="data">')
+    return json.loads(text[start:text.index("</script>", start)])
+
+
 class EventsFileTests(unittest.TestCase):
     def setUp(self) -> None:
         import tempfile
@@ -337,10 +343,11 @@ class PageTests(BoardCase):
         self.assertEqual(result["insight"]["totals"]["aiu"], 10.0)
         self.assertTrue(result["insight"]["findings"])
         text = (self.root / result["analysis"]).read_text(encoding="utf-8")
-        self.assertIn("任务分析：job", text)
-        self.assertIn("模型在想", text)
-        for banned in ("<script", "http://", "https://", SECRET):
-            self.assertNotIn(banned, text)
+        self.assertIn("<title>任务分析：job</title>", text)
+        data = page_data(text)
+        self.assertEqual((data["info"]["name"], data["info"]["totals"]["aiu"], data["text"]["insight.part.model"]), ("job", 10.0, "模型在想"))
+        for banned in ("http://", "https://", " src=", SECRET):  # everything is in the file; nothing is fetched
+            self.assertNotIn(banned, text.replace("http://www.w3.org/2000/svg", ""))
 
     def test_close_writes_the_page_too(self) -> None:
         self.new()
@@ -353,13 +360,32 @@ class PageTests(BoardCase):
             path.unlink()
         result = self.cli_json("task", "report")
         self.assertEqual(result["insight"]["source"], "none")
-        self.assertIn("没有找到这个任务的会话记录", (self.root / result["analysis"]).read_text(encoding="utf-8"))
+        self.assertEqual(page_data((self.root / result["analysis"]).read_text(encoding="utf-8"))["info"]["prompts"], [])
 
-    def test_names_are_escaped(self) -> None:
-        self.new("a<b>&c")
+    def test_a_name_cannot_become_markup(self) -> None:
+        name = "a<script><b>&c<!--"
+        self.new(name)
         text = (self.root / self.cli_json("task", "report")["analysis"]).read_text(encoding="utf-8")
-        self.assertIn("a&lt;b&gt;&amp;c", text)
-        self.assertNotIn("a<b>", text)
+        self.assertIn("<title>任务分析：a&lt;script&gt;&lt;b&gt;&amp;c&lt;!--</title>", text)
+        self.assertEqual((text.count("<script"), text.count("</script>")), (2, 2))
+        self.assertNotIn("<b>", text)
+        self.assertEqual(page_data(text)["info"]["name"], name)
+
+    def test_the_scripts_draw_with_text_nodes_only(self) -> None:
+        for path in sorted(taskhtml.WEB.glob("*.js")):
+            source = path.read_text(encoding="utf-8")
+            for banned in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "fetch(", "XMLHttpRequest", "import("):
+                self.assertNotIn(banned, source.split("\n", 3)[-1] if path.name == "common.js" else source, f"{path.name}: {banned}")
+
+    def test_a_skeleton_without_a_mark_is_an_error_not_a_broken_page(self) -> None:
+        with mock.patch.object(taskhtml, "read", lambda name: "<html></html>" if name.endswith(".html") else ""):
+            with self.assertRaises(ValueError):
+                taskhtml.board_page([], "2026-01-01T00:00:00+00:00")
+
+    def test_a_mark_inside_the_data_is_left_alone(self) -> None:
+        text = taskhtml.board_page([], "/*JS*/ /*CSS*/")
+        self.assertEqual(page_data(text)["as_of"], "/*JS*/ /*CSS*/")
+        self.assertIn('"use strict"', text)
 
     def test_the_board_lists_every_task_and_links_its_page(self) -> None:
         self.new("alpha")
@@ -370,19 +396,20 @@ class PageTests(BoardCase):
         result = self.cli_json("task", "board")
         self.assertEqual(result, {"board": ".workspace/reports/board.html", "tasks": 2, "open": 1, "waiting": 1})
         text = (self.root / result["board"]).read_text(encoding="utf-8")
-        self.assertIn('href="task-alpha.html"', text)
-        self.assertIn("agent 停下了，等你", text)
-        self.assertIn("还没开始", text)
-        self.assertNotIn("task-beta.html", text)
+        rows = {item["name"]: item for item in page_data(text)["rows"]}
+        self.assertEqual((rows["alpha"]["report"], rows["alpha"]["waiting"], rows["hand"]["status"], rows["hand"]["report"]), ("task-alpha.html", "agent 停下了，等你", "new", ""))
+        self.assertNotIn("beta", rows)
+        self.assertIsInstance(rows["alpha"]["brief"]["active_s"], float)
         self.assertNotIn("http-equiv", text)
         everything = self.cli_json("task", "board", "--all", "--refresh", "30")
         self.assertEqual(everything["tasks"], 3)
         text = (self.root / result["board"]).read_text(encoding="utf-8")
-        self.assertIn('href="task-beta.html"', text)
+        self.assertEqual([item["report"] for item in page_data(text)["rows"] if item["name"] == "beta"], ["task-beta.html"])
         self.assertIn('http-equiv="refresh" content="30"', text)
 
     def test_an_empty_board(self) -> None:
-        self.assertIn("还没有任务。", taskhtml.board_page([], "2026-01-01T00:00:00+00:00"))
+        data = page_data(taskhtml.board_page([], "2026-01-01T00:00:00+00:00"))
+        self.assertEqual((data["rows"], data["text"]["board.empty"]), ([], "还没有任务。"))
 
     def test_one_broken_task_does_not_take_the_board_away(self) -> None:
         self.new("good")
@@ -397,7 +424,8 @@ class PageTests(BoardCase):
         with mock.patch.object(taskinsight, "of_task", of_task):
             result = taskboard.board(self.root)
         self.assertEqual([item["task"] for item in result["problems"]], [f"{BASE}/bad"])
-        self.assertIn("task-good.html", (self.root / result["board"]).read_text(encoding="utf-8"))
+        rows = {item["name"]: item for item in page_data((self.root / result["board"]).read_text(encoding="utf-8"))["rows"]}
+        self.assertEqual((rows["good"]["report"], rows["bad"]["report"], rows["bad"]["brief"]), ("task-good.html", "", None))
 
 
 if __name__ == "__main__":

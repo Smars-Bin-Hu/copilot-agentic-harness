@@ -25,7 +25,8 @@
   - 各个阶段（需求和计划、开发、独立检查和返修、回写）的时间和用量。
   - 上下文大小的变化、每个工具的耗时和结果 token、每次独立检查的结论和 token。
   - 最上面是“要点”：最突出的几件事，写成句子。
-  - 页面是一个自包含的文件：没有脚本，不联网，双击就能打开。`task close` 时也会写。
+  - 页面是一个自包含的文件：样式、脚本、数据都在里面，不联网，双击就能打开。`task close` 时也会写。
+  - 页面的样子和画法在 `.harness/engine/modules/task/web/`（HTML 骨架、CSS、JS），和算数的 Python 分开。要改外观只改这里。
 - **用量**：读 Copilot 自己的会话记录 `~/.copilot/session-state/<会话>/events.jsonl`，得到 AIU 和 premium request 数。只取数字、时间和名字，不取提示原文、工具参数和结果。读不到时退回 hook 日志：只有耗时，没有用量，页面上会写明。开关：`task.json` 的 `report.copilot_events`。
 - **任务看板**：
   - `harness task list` 多了“等了多久”，等你的任务里等得最久的排最上面。

@@ -184,5 +184,6 @@
   "board.text.head": "任务看板  进行中 {open}  在等你 {waiting}  （{as_of} UTC）",
   "board.text.watch": "每 {seconds} 秒刷新。按 Ctrl+C 退出。",
   "insight.finding.review_plain": "独立检查做了 {checks} 次，{fails} 次没通过。",
-  "insight.finding.review_time": "独立检查做了 {checks} 次，{fails} 次没通过。检查和返修用了 {time}，占干活时间的 {share}。"
+  "insight.finding.review_time": "独立检查做了 {checks} 次，{fails} 次没通过。检查和返修用了 {time}，占干活时间的 {share}。",
+  "report.noscript": "这个页面要浏览器开着 JavaScript 才能显示。脚本都在文件里，不联网。"
 }

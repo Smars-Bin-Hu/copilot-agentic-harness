@@ -476,6 +476,8 @@ class MessageTests(unittest.TestCase):
         for path in ENGINE.rglob("*.py"):
             source = path.read_text(encoding="utf-8")
             named.update(re.findall(r'(?:messages\.text|say)\(\s*"([a-z0-9_.]+)"', source))
+        for path in (ENGINE / "modules" / "task" / "web").glob("*.js"):  # the pages name their messages with t("...")
+            named.update(name for name in re.findall(r'\bt\(\s*"([a-z0-9_.]+)"', path.read_text(encoding="utf-8")) if not name.endswith("."))
         self.assertTrue(named)
         self.assertEqual(sorted(name for name in named if name not in known), [])
 
@@ -488,10 +490,10 @@ class MessageTests(unittest.TestCase):
             self.assertIn(f"task.next.{tier}", known)
 
     def test_no_message_is_left_unused(self) -> None:
-        source = "\n".join(path.read_text(encoding="utf-8") for path in ENGINE.rglob("*.py"))
+        source = "\n".join(path.read_text(encoding="utf-8") for path in [*ENGINE.rglob("*.py"), *(ENGINE / "modules" / "task" / "web").glob("*.js")])
         dynamic = (
             "task.kind.", "task.tier.", "task.next.light", "task.next.medium", "task.next.full", "task.waiting.",
-            "insight.stage.", "insight.part.", "insight.wait.", "insight.finding.", "report.source.", "report.status.", "board.state.",
+            "insight.stage.", "insight.part.", "insight.wait.", "insight.finding.", "report.source.", "report.status.", "board.state.", "unit.",
         )
         source = source.replace('messages.text(\n            "', 'messages.text("')
         unused = [name for name in messages.table() if f'"{name}"' not in source and not name.startswith(dynamic)]

@@ -10,11 +10,11 @@
 
 查自己装的是哪一版：`harness --version`。
 
-## 未发布
+## 1.2.0（2026-10-11）
 
-下一版要带的内容，合进主分支后先记在这里。发布时移到对应的版本号下面。
+任务看板和任务分析：一眼看出哪个任务在等你，一个任务的时间和用量花在哪。没有不兼容的改动。
 
-**测试情况**：自动测试通过。Copilot 里的手测还没做；Windows 没测。
+**测试情况**：在 Mac 的 Copilot（SDK）会话里手测通过。`task pause`、`task resume` 是手测之后加的，只跑过自动测试。**Windows 还没有测**：Copilot 的会话记录在不在、`--watch` 清屏、`--open` 开浏览器，要在 Windows 上确认。
 
 ### 新增
 
@@ -34,11 +34,12 @@
   - `harness task board` 写 `.workspace/reports/board.html`：每个任务在等什么、等了多久、时间和用量，点任务名进它的分析页。`--all` 连关闭的一起列，`--open` 直接用浏览器打开。
 - **“agent 停下了，等你”**：任务所在会话的 agent 停下时，hook 在任务状态里记一笔；你发下一条提示时去掉。看板靠它知道球在你手里。
 - **新的等待原因**：“检查次数用完了，等你决定”。
+- **搁置任务**：`harness task pause --task <任务名>` 把任务先放一边。看板把它标成“搁置”，不再算进“在等你”；搁置的这段时间，分析页也不算“等你”。接着做：`harness task resume --task <任务名>`，或直接在它的会话里发提示。两条命令只能由你在终端运行。
 - **技能 `/harness-task-report`**：agent 读看板或一个任务的数字，用几句话讲清楚花在哪、为什么、下次怎么省，再给页面链接。只有你输入它才运行，agent 不会自己调用；看板、分析页和“等你”的标记默认都不花 token。
 
 ### 变更
 
-- `task list` 的 JSON 每个任务多了 `waiting_why`、`waiting_since`、`waited_s`。
+- `task list` 的 JSON 每个任务多了 `waiting_why`、`waiting_since`、`waited_s`、`paused_since`，总数多了 `paused`。
 - `task report` 的输出多了 `analysis`（页面路径）和 `insight`（同一份数字）。
 - 会话日志里，任务的提示多记一个字段 `task`（任务目录）。报告靠它分清一条提示属于哪个任务。升级前的日志没有这个字段，报告按“会话当时接着哪个任务”推算。
 - 任务状态多了 `sessions`：每次有会话接上任务都记一笔。

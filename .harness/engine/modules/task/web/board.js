@@ -30,6 +30,7 @@
 
   function state(row) {
     if (row.status !== "open") return tag(t("board.state." + (row.status === "new" ? "new" : "closed")));
+    if (row.paused_since) return tag(t("board.state.paused"));
     return row.waiting ? tag(row.waiting, "hot") : tag(t("board.state.running"), "good");
   }
 

@@ -24,7 +24,7 @@ Copilot 的批准规则最多做到“问一下用户”。但：
 - 确认码绑定计划（或命令）的 sha256：计划在批准后变了，批准失效。
 - 内容在编辑器里看（计划和差异在终端不好读），终端只显示路径和确认码。
 
-需要人在终端批准的：`task approve-plan`、`task approve-promote`、`task recover`、`task review extend`、`task review waive`、`approve-command`（git 写命令）、`admin on`。
+需要人在终端批准的：`task approve-plan`、`task approve-promote`、`task recover`、`task review extend`、`task review waive`、`task pause`、`task resume`（搁置任务，不用输确认码）、`approve-command`（git 写命令）、`admin on`。
 
 ### 8.3 后果分级
 

@@ -229,6 +229,26 @@ def stage_at(events: List[Tuple[float, str]], moment: float, planned: bool) -> s
     return stage
 
 
+def pauses(events: List[Tuple[float, str]]) -> List[Tuple[float, float]]:
+    """When the person had the task put aside (`task pause` to `task resume`, or to now)."""
+    found: List[Tuple[float, float]] = []
+    began: Optional[float] = None
+    for at, what in events:
+        if what == "pause" and began is None:
+            began = at
+        elif what in ("resume", "close") and began is not None:
+            found.append((began, at))
+            began = None
+    if began is not None:
+        found.append((began, float("inf")))
+    return found
+
+
+def aside(spans: List[Tuple[float, float]], start: float, end: float) -> float:
+    """How much of start..end the task was put aside."""
+    return sum(max(0.0, min(end, right) - max(start, left)) for left, right in spans)
+
+
 def wait_reason(events: List[Tuple[float, str]], start: float, end: float) -> str:
     for at, what in events:
         if start <= at <= end and what in WAIT_OF_EVENT:
@@ -301,6 +321,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
     closed = closes(data)
     events = sorted((at, event.get("what", "")) for at, event in ((copilot_events.seconds(event.get("at")), event) for event in data.get("events") or []) if at is not None)
     planned = bool(tasks.plan_digest(root, task)) or any(what == "approve-plan" for _at, what in events)
+    paused = pauses(events)
     sessions: List[Dict[str, Any]] = []
     seen = set()
     for item in picked:
@@ -313,7 +334,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
     mine: List[Dict[str, Any]] = sorted((prompt for found in sessions for prompt in found["prompts"] if prompt["mine"]), key=lambda prompt: prompt["at"])
     rows_of = {found["session_id"]: found["rows"] for found in sessions}
     totals: Dict[str, Any] = {
-        "prompts": len(mine), "active_s": 0.0, "waiting_s": 0.0, "model_s": None, "tool_s": None, "approval_s": None, "subagent_s": None, "other_s": None,
+        "prompts": len(mine), "active_s": 0.0, "waiting_s": 0.0, "paused_s": 0.0, "model_s": None, "tool_s": None, "approval_s": None, "subagent_s": None, "other_s": None,
         "tool_calls": 0, "failed_tool_calls": 0, "denied": 0, "asked": 0, "stop_blocks": 0,
         "aiu": None, "premium_requests": None, "subagent_tokens": None, "context_tokens_first": None, "context_tokens_max": None,
     }
@@ -324,7 +345,8 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
         parts = split(prompt)
         until = prompt["next_at"] if prompt["next_at"] is not None else float("inf")
         counted = count_rows(rows_of[prompt["session_id"]], prompt["at"] - 1, until - 1)
-        waited = max(0.0, prompt["next_at"] - prompt["end"]) if prompt["next_at"] is not None else None
+        put_aside = aside(paused, prompt["end"], prompt["next_at"]) if prompt["next_at"] is not None else 0.0
+        waited = max(0.0, prompt["next_at"] - prompt["end"] - put_aside) if prompt["next_at"] is not None else None  # time aside is not waiting
         slowest = max(prompt["tools"], key=lambda tool: tool["seconds"], default=None)
         entry = {
             "n": number, "session_id": prompt["session_id"], "at": utc_text(prompt["at"]), "stage": stage_at(events, prompt["end"], planned),
@@ -345,6 +367,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
         if prompt["context_tokens"] is not None:
             totals["context_tokens_first"] = totals["context_tokens_first"] or prompt["context_tokens"]
             totals["context_tokens_max"] = max(totals["context_tokens_max"] or 0, prompt["context_tokens"])
+        totals["paused_s"] += put_aside
         if waited is not None and waited >= 1:
             totals["waiting_s"] += waited
             waits.append({"after_prompt": number, "from": utc_text(prompt["end"]), "seconds": round(waited, 1), "reason": wait_reason(events, prompt["end"], prompt["next_at"])})
@@ -374,7 +397,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
             "aiu": round(usage, 2) if usage is not None else None, "share_time": share(time_spent, totals["active_s"]), "share_aiu": share(usage, totals["aiu"]),
         })
 
-    for key in ("active_s", "waiting_s", "model_s", "tool_s", "approval_s", "subagent_s", "other_s", "aiu"):
+    for key in ("active_s", "waiting_s", "paused_s", "model_s", "tool_s", "approval_s", "subagent_s", "other_s", "aiu"):
         if totals[key] is not None:
             totals[key] = round(totals[key], 2 if key == "aiu" else 1)
     first = mine[0]["at"] if mine else copilot_events.seconds(data.get("created_at"))
@@ -419,6 +442,8 @@ def findings(result: Dict[str, Any]) -> List[Dict[str, Any]]:
             "waiting", share(waiting, active + waiting), waiting=clock(waiting), active=clock(active), share=percent(share(waiting, active + waiting)),
             longest=clock(longest["seconds"]), prompt=longest["after_prompt"], reason=say(f"insight.wait.{longest['reason']}"),
         )
+    if (totals.get("paused_s") or 0) >= 60:
+        note("paused", 0.0, time=clock(totals["paused_s"]))
     slowest = max(prompts, key=lambda entry: entry["active_s"])
     if len(prompts) > 1 and slowest["active_s"] >= 30:
         note("slow_prompt", share(slowest["active_s"], active), prompt=slowest["n"], time=clock(slowest["active_s"]), share=percent(share(slowest["active_s"], active)), why=where_time_went(slowest))

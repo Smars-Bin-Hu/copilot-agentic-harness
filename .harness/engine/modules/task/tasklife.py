@@ -231,6 +231,54 @@ def set_waiting(root: Path, task: str, mark: Optional[Dict[str, str]]) -> None:
         atomic_write(path, data)
 
 
+def paused_since(data: Dict[str, Any]) -> str:
+    mark = data.get("paused")
+    return str(mark.get("since") or "") if isinstance(mark, dict) else ""
+
+
+def pause(root: Path, raw_task: str = "", interactive: Optional[bool] = None) -> Dict[str, Any]:
+    """The person puts the task aside: the board stops saying it waits, and the time aside is not counted as waiting."""
+    task_ops.person("task pause", interactive)
+    task = task_ops.resolve(root, raw_task)
+    with task_ops.locked(root, task) as data:
+        task_ops.require_open(data)
+        if paused_since(data):
+            raise CommandError(messages.text("task.pause.already", command=cli_command(), name=task_ops.name_of(task)))
+        data["paused"] = {"since": utc_now()}
+        task_ops.note(data, "pause")
+        return {"task": task, "paused": True, "since": data["paused"]["since"], "next": messages.text("task.pause.next", command=cli_command(), name=task_ops.name_of(task))}
+
+
+def resume_in(data: Dict[str, Any]) -> bool:
+    """Take the task back. What it waited for before starts counting from now. False when it was not aside."""
+    if not paused_since(data):
+        return False
+    data["paused"] = None
+    if isinstance(data.get("waiting"), dict):
+        data["waiting"] = dict(data["waiting"], since=utc_now())
+    task_ops.note(data, "resume")
+    return True
+
+
+def resume(root: Path, raw_task: str = "", interactive: Optional[bool] = None) -> Dict[str, Any]:
+    task_ops.person("task resume", interactive)
+    task = task_ops.resolve(root, raw_task)
+    with task_ops.locked(root, task) as data:
+        task_ops.require_open(data)
+        if not resume_in(data):
+            raise CommandError(messages.text("task.resume.not_paused", name=task_ops.name_of(task)))
+    return {"task": task, "paused": False}
+
+
+def resume_on_prompt(root: Path, task: str) -> None:
+    """A prompt in the task's session: the person is back at it. `updated_at` is left alone."""
+    path = tasks.state_file(root, task)
+    with state_lock(path):
+        data = tasks.read(root, task)
+        if data is not None and resume_in(data):
+            atomic_write(path, data)
+
+
 def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
     """Tasks that wait for the person first, the one that waited longest on top; then the one touched last. A folder that was never started is listed as `new`."""
     rows = []
@@ -239,20 +287,24 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
         if data is None:
             rows.append({
                 "task": task, "name": task_ops.name_of(task), "status": "new", "kind": "", "tier": "", "updated_at": "", "waiting": "",
-                "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "depends_on": [],
+                "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "depends_on": [], "paused_since": "",
             })
             continue
         if data.get("status") != "open" and not everything:
             continue
-        found = waiting(root, task, data) if data.get("status") == "open" else {"why": "", "since": ""}
+        aside = paused_since(data) if data.get("status") == "open" else ""
+        found = waiting(root, task, data) if data.get("status") == "open" and not aside else {"why": "", "since": ""}
         waited = seconds_since(found["since"]) if found["why"] else None
         rows.append({
             "task": task, "name": data.get("name") or task_ops.name_of(task), "status": data.get("status", ""),
             "kind": data.get("kind", ""), "tier": data.get("tier", ""), "updated_at": data.get("updated_at", ""),
             "waiting": messages.text(f"task.waiting.{found['why']}") if found["why"] else "", "waiting_why": found["why"], "waiting_since": found["since"],
             "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
-            "depends_on": list(data.get("depends_on") or []),
+            "depends_on": list(data.get("depends_on") or []), "paused_since": aside,
         })
     rows.sort(key=lambda row: row["updated_at"], reverse=True)
-    rows.sort(key=lambda row: (not row["waiting"], row["status"] != "open", -(row["waited_s"] or 0)))
-    return {"tasks": rows, "open": len([row for row in rows if row["status"] == "open"]), "waiting": len([row for row in rows if row["waiting"]])}
+    rows.sort(key=lambda row: (not row["waiting"], row["status"] != "open", bool(row.get("paused_since")), -(row["waited_s"] or 0)))
+    return {
+        "tasks": rows, "open": len([row for row in rows if row["status"] == "open"]), "waiting": len([row for row in rows if row["waiting"]]),
+        "paused": len([row for row in rows if row.get("paused_since")]),
+    }

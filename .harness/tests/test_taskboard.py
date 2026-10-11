@@ -17,6 +17,7 @@ from support import HarnessTestCase, payload
 from core import copilot_events, tasks
 from modules.task import task as task_ops
 from modules.task import taskboard, taskhtml, taskinsight, tasklife
+from modules.task.common import CommandError
 
 S1, S2 = "session-one", "session-two"
 BASE = tasks.TASKS_DIR
@@ -222,6 +223,62 @@ class WaitingMarkTests(BoardCase):
         rows = [item for item in self.session_log(S1) if item["event"] == "UserPromptSubmit"]
         self.assertNotIn("task", rows[0])
         self.assertEqual((rows[-1]["kind"], rows[-1]["task"]), ("task", f"{BASE}/job"))
+
+
+class PauseTests(BoardCase):
+    def test_a_task_put_aside_does_not_wait_and_comes_back_on_resume(self) -> None:
+        self.new()
+        self.stop()
+        tasklife.pause(self.root, "job", interactive=True)
+        found = self.listed()
+        self.assertEqual((found["waiting"], found["paused"], found["tasks"][0]["waiting"]), (0, 1, ""))
+        self.assertTrue(found["tasks"][0]["paused_since"])
+        self.assertIn("搁置", taskboard.table(found))
+        marked = self.data()["waiting"]["since"]
+        tasklife.resume(self.root, "job", interactive=True)
+        data = self.data()
+        self.assertIsNone(data["paused"])
+        self.assertGreaterEqual(data["waiting"]["since"], marked)  # the wait starts again from the resume
+        self.assertEqual(self.listed()["waiting"], 1)
+        self.assertEqual([item["what"] for item in data["events"]][-2:], ["pause", "resume"])
+
+    def test_a_prompt_in_the_tasks_session_takes_it_back(self) -> None:
+        self.new()
+        tasklife.pause(self.root, "job", interactive=True)
+        self.prompt()
+        self.assertIsNone(self.data()["paused"])
+        self.assertEqual(self.data()["events"][-1]["what"], "resume")
+
+    def test_pause_and_resume_are_the_persons(self) -> None:
+        self.new()
+        for command in ("pause", "resume"):
+            result = self.cli("task", command, "--task", "job")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("只能由用户", result.stdout + result.stderr)
+        self.assertFalse(self.data().get("paused"))
+        with self.assertRaises(CommandError):
+            tasklife.resume(self.root, "job", interactive=True)
+        tasklife.pause(self.root, "job", interactive=True)
+        with self.assertRaises(CommandError):
+            tasklife.pause(self.root, "job", interactive=True)
+
+    def test_time_aside_is_not_counted_as_waiting(self) -> None:
+        self.new()
+        first = self.prompt_times()[0]
+        later = first + timedelta(seconds=400)
+        path = self.root / BASE / "job" / ".task" / "task.json"
+        data = self.data()
+        for what, after in (("pause", 100), ("resume", 350)):
+            data["events"].append({"at": (first + timedelta(seconds=after)).isoformat(), "round": 1, "what": what, "detail": ""})
+        path.write_text(json.dumps(data), encoding="utf-8")
+        log = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{S1}.jsonl"
+        rows = self.session_log(S1)
+        extra = {**rows[0], "at": later.isoformat(), "kind": "task", "task": f"{BASE}/job"}
+        log.write_text("\n".join(json.dumps(item) for item in rows + [extra]) + "\n", encoding="utf-8")
+        self.copilot_record(S1, one_prompt(first, 10, 1, 40000) + one_prompt(later, 20, 2, 41000))
+        info = taskinsight.of_task(self.root, f"{BASE}/job")
+        self.assertEqual((round(info["totals"]["waiting_s"]), round(info["totals"]["paused_s"])), (90, 250))
+        self.assertIn("paused", [item["kind"] for item in info["findings"]])
 
 
 class TextBoardTests(BoardCase):

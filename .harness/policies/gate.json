@@ -79,8 +79,8 @@
         "pattern": "\\b(?:chmod|chown|chgrp)\\s+(?:-R\\b|--recursive\\b)|\\bicacls(?:\\.exe)?\\b[^;&|\\n]*\\s/t\\b|\\btakeown(?:\\.exe)?\\b[^;&|\\n]*\\s/r\\b|-recurse\\b[^\\n]*\\bset-acl\\b|\\bdocker(?:\\.exe)?\\s+(?:rm|rmi|system\\s+prune|volume\\s+rm)\\b|\\bkubectl(?:\\.exe)?\\s+delete\\b|\\bterraform(?:\\.exe)?\\s+(?:apply|destroy)\\b"
       },
       {
-        "why": "批准计划（task approve-plan）、批准回写（task approve-promote）、恢复中途出错的 promote（task recover）、再给检查次数或放行（task review extend、task review waive）、批准 git 命令（approve-command）、开 admin 模式（admin on）只能由用户在自己的终端里运行。告诉用户运行这条命令，不要自己运行",
-        "pattern": "\\b(?:cli\\.py|harness(?:\\.cmd)?)\\s+(?:task\\s+(?:approve-plan|approve-promote|recover|review\\s+(?:extend|waive))|approve-command|admin\\s+on)\\b"
+        "why": "批准计划（task approve-plan）、批准回写（task approve-promote）、恢复中途出错的 promote（task recover）、再给检查次数或放行（task review extend、task review waive）、搁置和恢复任务（task pause、task resume）、批准 git 命令（approve-command）、开 admin 模式（admin on）只能由用户在自己的终端里运行。告诉用户运行这条命令，不要自己运行",
+        "pattern": "\\b(?:cli\\.py|harness(?:\\.cmd)?)\\s+(?:task\\s+(?:approve-plan|approve-promote|recover|pause|resume|review\\s+(?:extend|waive))|approve-command|admin\\s+on)\\b"
       }
     ],
     "ask": [

@@ -25,6 +25,7 @@
 | `task approve-promote` | `task promote --dry-run` 之后，你看过 `PROMOTE-PLAN.diff` |
 | `task recover` | 回写中途出错，任务进入 `partial` |
 | `task review extend` / `waive` | 检查次数用完，你决定再查还是放行 |
+| `task pause` / `resume` | 一个任务你暂时不想管：搁置它，看板不再催，这段时间不算“等你”。要做了再恢复 |
 | `approve-command` | agent 的 git 写命令被拒绝，你决定批准 |
 | `admin on` / `off` / `status` | 二开 harness 时开关 admin 模式 |
 

@@ -41,7 +41,7 @@ def pad(text: str, size: int) -> str:
 
 def table(result: Dict[str, Any]) -> str:
     """The list as text. Waiting tasks first, the one that waited longest on top."""
-    head = say("board.text.head", open=result["open"], waiting=result["waiting"], as_of=utc_now()[11:19])
+    head = say("board.text.head", open=result["open"], waiting=result["waiting"], paused=result.get("paused", 0), as_of=utc_now()[11:19])
     if not result["tasks"]:
         return head + "\n" + say("board.empty")
     names = [say("board.col.task"), say("board.col.kind"), say("board.col.waiting"), say("board.col.waited"), say("board.col.updated")]
@@ -51,7 +51,7 @@ def table(result: Dict[str, Any]) -> str:
             kind, state = "-", say("board.state.new")
         else:
             kind = say(f"task.kind.{row['kind'] or 'none'}") + "·" + say(f"task.tier.{row['tier'] or 'none'}")
-            state = row["waiting"] or say("board.state.running" if row["status"] == "open" else "board.state.closed")
+            state = row["waiting"] or say("board.state.paused" if row.get("paused_since") else "board.state.running" if row["status"] == "open" else "board.state.closed")
         waited = taskinsight.clock(row["waited_s"]) if row["waiting"] and row["waited_s"] is not None else "-"
         lines.append([("! " if row["waiting"] else "  ") + row["name"], kind, state, waited, row["updated_at"][5:16].replace("T", " ")])
     sizes = [max(width(names[index]) + (2 if index == 0 else 0), *(width(line[index]) for line in lines)) for index in range(len(names))]

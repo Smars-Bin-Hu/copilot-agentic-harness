@@ -141,6 +141,13 @@ def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
     state["relay"] = {"wrote": False, "task_file": False, "reminded": False}  # a new prompt, a new count
     state["review_n"] = asked  # for a task this prompt goes on to make or open
     data = open_task(ctx) if not ctx.admin else None
+    if data is not None and data.get("paused"):
+        try:
+            from . import tasklife
+
+            tasklife.resume_on_prompt(ctx.root, data["task"])  # the person is back at a task they had put aside
+        except Exception:  # noqa: BLE001 - a mark for a list; never in the way of the prompt
+            pass
     if data is not None and data.get("waiting"):
         mark_waiting(ctx, data, False)  # the person answered
     # `task`: the log says whose prompt this was, so a report can add up the task's time

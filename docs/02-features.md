@@ -46,7 +46,7 @@ gate 是一个 hook 模块，在每次工具调用前检查。它只管写，不
 | `.git` | `.git` 文件夹不能写（含 Windows 的别名写法），目标仓库的 `refused_paths` 也不能写 |
 | 危险终端命令（拒绝） | 删根目录、`curl \| sh`、格式化磁盘、用管理员权限运行（`sudo`、`runas`、`Start-Process -Verb RunAs`）、递归改权限（`chmod -R`、`icacls /T`、`takeown /R`）、删容器或基础设施（`docker rm`、`kubectl delete`、`terraform apply`）。要用就由你自己在终端运行 |
 | 有风险的终端命令（要你确认） | 删文件、联网、装软件包、丢弃 git 改动、删会话日志。**这只是提醒，不是保护**：权限选 Allow all 时不弹框，直接执行；点过一次 Allow in this Session 后，同一会话里也不再问 |
-| 批准类命令 | `task approve-plan`、`task approve-promote`、`task recover`、`task review extend`、`task review waive`、`approve-command`、`admin on` 只能由你在终端运行，agent 运行会被拒绝 |
+| 批准类命令 | `task approve-plan`、`task approve-promote`、`task recover`、`task review extend`、`task review waive`、`task pause`、`task resume`、`approve-command`、`admin on` 只能由你在终端运行，agent 运行会被拒绝 |
 | 重复被拒 | 同一个拒绝出现多次，理由换成“停止重试”（熔断） |
 
 拒绝在哪种权限模式下都生效（默认、Allow all、Autopilot，2026-10-10 实测）。

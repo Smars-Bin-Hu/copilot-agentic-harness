@@ -270,7 +270,7 @@ class UpgradeTests(LifeCase):
 
 class ListTests(LifeCase):
     def test_no_tasks(self) -> None:
-        self.assertEqual(self.listed(), {"tasks": [], "open": 0, "waiting": 0})
+        self.assertEqual(self.listed(), {"tasks": [], "open": 0, "waiting": 0, "paused": 0})
 
     def test_open_tasks_are_listed_and_closed_ones_only_with_all(self) -> None:
         self.new("a", "qa")

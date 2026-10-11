@@ -32,12 +32,16 @@
 | 命令 | 什么时候 |
 | --- | --- |
 | `harness task list` | 看有哪些任务、哪个在等你 |
+| `harness task list --watch` | 终端看板，每几秒刷新，哪个任务在等你、等了多久 |
+| `harness task board --open` | 网页看板，点任务名进它的分析页 |
+| `harness task report --open` | 一个任务的时间和用量花在哪（网页）。想让 agent 讲解，输入 `/harness-task-report` |
 | `harness task approve-plan` | 批准 agent 写的计划（改仓库才有） |
 | `harness task approve-promote` | 批准把改动写回仓库 |
 | `harness task review extend` / `waive` | 独立检查次数用完了，你决定再查还是放行 |
+| `harness task pause` / `resume` | 一个任务暂时不想管，先搁置；要做了再恢复 |
 | `harness task close` | 任务做完，关掉 |
 
-这些命令 agent 不能替你敲，门卫会拦。
+批准、放行、搁置这几条（`approve-*`、`review extend` / `waive`、`pause` / `resume`）agent 不能替你敲，门卫会拦。
 
 ## 你不用管的
 

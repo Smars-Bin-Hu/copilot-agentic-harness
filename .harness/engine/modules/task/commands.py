@@ -3,6 +3,7 @@
   task new|open|upgrade|list                 the life of a task (tasklife.py); list --text|--watch: the board in a terminal
   task board                                 the board as a page (taskboard.py)
   task status|fetch|delete|diff|set-branch|promote|close|report      the work on a task (task.py)
+  task pause|resume                          a person puts a task aside and takes it back (tasklife.py)
   task approve-plan|approve-promote|recover  a person at a terminal
   task review start|status                   independent checks, `[review]=n` (taskreview.py); extend|waive: a person at a terminal
   task snapshot list|prune                   the copies made at the gates (tasksnap.py)
@@ -138,6 +139,8 @@ def register_task(subparsers: Any) -> None:
     promote_parser.add_argument("--dry-run", action="store_true")
     add("approve-promote", "the person approves the plan of the last task promote --dry-run (terminal only)", lambda a: task.approve_promote(repo_root(), a.task))
     add("recover", "the person puts the repositories back after a task promote stopped halfway (terminal only)", lambda a: task.recover(repo_root(), a.task))
+    add("pause", "the person puts the task aside: the board stops saying it waits, the time aside is not counted as waiting (terminal only)", lambda a: tasklife.pause(repo_root(), a.task))
+    add("resume", "the person takes a task back that was put aside (terminal only); a prompt in the task's session does the same", lambda a: tasklife.resume(repo_root(), a.task))
     close = add("close", "the session lets go of the task and the report is written; the folder stays where it is", lambda a: task.close(repo_root(), a.task, a.reason))
     close.add_argument("--reason", default="")
     report = add("report", "write .workspace/reports/task-<name>.md (what was done) and task-<name>.html (where the time and usage went)", cmd_report)

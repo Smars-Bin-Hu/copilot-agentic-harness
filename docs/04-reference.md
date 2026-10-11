@@ -8,7 +8,7 @@
 
 | 命令 | 作用 |
 | --- | --- |
-| `--version` | 显示图案、版本、发布日期、作者。加 `--short` 只输出一行，例如 `harness 1.1.0`，给脚本用。都来自 `.harness/registry.json`；版本号格式 `主.次.修` |
+| `--version` | 显示图案、版本、发布日期、作者。加 `--short` 只输出一行，例如 `harness 1.2.0`，给脚本用。都来自 `.harness/registry.json`；版本号格式 `主.次.修` |
 | `user` | 用这份 harness 的人的名字，和它来自哪：`user.override.json`、`git`（`git config user.name`）或 `none` |
 | `doctor` | 检查文件、策略、hook 配置、知识库、目标仓库是否一致；Python 能不能执行；hook 最近有没有被调用、gate 有多快 |
 | `task list` | 列出所有没关闭的任务：种类、档位、在等你做什么、等了多久。等你的排在前面，等得最久的在最上面。`--all` 连关闭的一起列；`--text` 输出表格；`--watch` 每 5 秒刷新（`--interval` 改秒数），Ctrl+C 退出 |
@@ -43,6 +43,8 @@
 | `task review status` | 要连续通过几次、现在几次、查了几次、上限几次、下一步 |
 | `task set-branch` | 改 feature 分支名。格式是 `feature/` 加字母、数字、下划线（最长 60 个字符），不能有 `-`、`.`、`/`。默认取任务目录名，其中不合格的字符变成 `_`（`my-task` 变成 `feature/my_task`）；任务开新一轮时加 `_r2`、`_r3` |
 | `task promote` | 把 `DEV/<仓库>/` 下的文件回写到各目标仓库的新分支；`--dry-run` 只列计划，差异写到 `PROMOTE-PLAN.diff`。直接放在 `DEV/` 根目录的文件不回写。开了独立检查、没凑够通过次数时被拒绝 |
+| `task pause` | 把任务先放一边：看板不再说它在等你，搁置的时间不算“等你”。只能在终端 |
+| `task resume` | 接着做搁置的任务。在它的会话里发提示也会自动恢复。只能在终端 |
 | `task close` | 会话放开任务，写报告。目录原地不动 |
 
 ## 策略字段

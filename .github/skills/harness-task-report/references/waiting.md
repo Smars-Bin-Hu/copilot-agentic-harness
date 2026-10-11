@@ -10,6 +10,7 @@
 | `review` | 检查次数用完了，等你决定 | 独立检查没凑够通过次数，次数已用完 | 看最后一次的 `REVIEW/round-NNN/verdict.md`，再选 `harness task review extend --checks 2` 或 `harness task review waive` |
 | `stopped` | agent 停下了，等你 | 那个会话的 agent 说完了，轮到用户 | 回到那个会话看它说了什么。任务做完了就让它 `task close` |
 | 空 | 不在等你 | agent 还在跑，或任务从没停过 | 不用管 |
+| 空，`paused_since` 有值 | 搁置 | 用户运行了 `task pause`，暂时不管它 | 不催。用户想接着做：`harness task resume --task <任务名>`，或在它的会话里发提示 |
 
 ## 排序
 

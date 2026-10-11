@@ -1,6 +1,8 @@
 ---
 name: harness-task-report
-description: '看任务看板，分析一个任务的时间和用量花在哪。用户问“哪个任务在等我”“现在有哪些任务”“先看哪个”时用；用户问“这个任务为什么这么久”“钱花在哪了”“用了多少 premium request”“复盘一下这个任务”时也用。运行 harness task list、task board、task report，读它给的数字，用几句话讲清楚，再给 HTML 页面的链接。关键词：task report、任务报告、任务分析、任务看板、board、复盘、耗时、用量、AIU、premium request、哪里慢、哪里贵、等我。'
+description: '看任务看板，分析一个任务的时间和用量花在哪。只在用户明确输入 /harness-task-report 时使用，agent 不要自己调用。关键词：task report、任务分析、任务看板、复盘、耗时、用量。'
+argument-hint: '任务名，或“哪些任务在等我”'
+disable-model-invocation: true
 type: workflow
 specificTo: generic
 ---
@@ -10,6 +12,10 @@ specificTo: generic
 两件事：**看板**回答“哪个任务在等我”；**分析**回答“这个任务的时间和用量花在哪、为什么”。数字都由 CLI 从日志里算，你只负责读懂和讲清楚。
 
 ## When to Use This Skill
+
+**只有用户输入 `/harness-task-report` 才用。** 你不能自己调用它，也不要为了“顺便看看”去运行 `harness task report`：它会把一大段数字读进对话，花用户的 token。用户只是随口问进度时，运行 `harness task list` 就够了。
+
+用户调用后，分两种情况：
 
 - 用户想知道有哪些任务、哪个在等他、先处理哪个。
 - 用户想复盘一个任务：哪一步慢、哪一步贵、原因是什么。

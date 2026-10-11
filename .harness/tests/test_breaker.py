@@ -26,7 +26,7 @@ class BreakerUnitTests(unittest.TestCase):
             decision = Decision(permission="deny", reason="same reason")
             from pathlib import Path
 
-            info = breaker.apply(Path("/nowhere"), state, self.event(), decision, 1)  # no policy file: the default limit
+            info = breaker.apply(Path("/nowhere"), state, self.event(), decision)  # no policy file: the default limit
             reasons.append((info["count"], info["tripped"], decision.reason))
         self.assertEqual([item[:2] for item in reasons], [(1, False), (2, False), (3, True), (4, True)])
         self.assertEqual(reasons[0][2], "same reason")
@@ -45,14 +45,13 @@ class BreakerUnitTests(unittest.TestCase):
             (Decision(permission="deny", reason=""), "PreToolUse"),
             (Decision(context="hello"), "UserPromptSubmit"),
         ):
-            self.assertIsNone(breaker.apply(Path("/nowhere"), state, self.event(name), decision, 1))
+            self.assertIsNone(breaker.apply(Path("/nowhere"), state, self.event(name), decision))
         self.assertEqual(state.get("denials", {}), {})
 
-    def test_the_text_depends_on_the_level(self) -> None:
-        self.assertNotIn("blocked", breaker.stop_text(3, "r", 1))
-        self.assertIn("blocked", breaker.stop_text(3, "r", 3))
-        self.assertIn("告诉用户", breaker.stop_text(3, "r", 1))
-        self.assertIn("告诉用户", breaker.stop_text(3, "r", 3))
+    def test_the_text_says_to_stop_and_keeps_the_reason(self) -> None:
+        text = breaker.stop_text(3, "原来的理由")
+        self.assertIn("告诉用户", text)
+        self.assertIn("原来的理由", text)
 
 
 class BreakerHookTests(HarnessTestCase):
@@ -138,24 +137,14 @@ class BreakerHookTests(HarnessTestCase):
         self.assertIn("同一个拒绝已出现 3 次", self.denied_write())
 
     def test_it_covers_denies_of_any_module(self) -> None:
-        # task_level: the L1 search budget is two; the third and later searches are denied with the same reason.
+        # the task module: a session that holds no task may not call a subagent, and says so with the same reason each time.
         self.prompt()
-        self.assertEqual(self.tool("grep_search", {"query": "a"}), {})
-        self.assertEqual(self.tool("grep_search", {"query": "b"}), {})
-        reasons: List[str] = [self.tool("grep_search", {"query": "c"})["permissionDecisionReason"] for _ in range(3)]
-        self.assertIn("探索预算已用完", reasons[0])
-        self.assertIn("探索预算已用完", reasons[1])
+        agent = {"name": "x", "agent_type": "general-purpose", "prompt": "p"}
+        reasons: List[str] = [self.tool("Agent", agent)["permissionDecisionReason"] for _ in range(3)]
+        self.assertIn("不能调用子 agent", reasons[0])
+        self.assertIn("不能调用子 agent", reasons[1])
         self.assertIn("同一个拒绝已出现 3 次", reasons[2])
-        self.assertIn("探索预算已用完", reasons[2])  # the original text is kept inside
-
-    def test_the_text_for_l3_mentions_the_blocked_handoff(self) -> None:
-        self.prompt()
-        update_state(self.root, "vscode", self.session, lambda state: state.update(active_request="req-1"))
-        reason = ""
-        for _ in range(3):
-            reason = self.denied_write("README.md")  # outside the request folder
-        self.assertIn("同一个拒绝已出现 3 次", reason)
-        self.assertIn("blocked", reason)
+        self.assertIn("不能调用子 agent", reasons[2])  # the original text is kept inside
 
     def test_ask_is_not_counted(self) -> None:
         self.prompt()
@@ -189,10 +178,8 @@ class BreakerHookTests(HarnessTestCase):
     def test_a_broken_breaker_leaves_the_deny_in_place(self) -> None:
         (self.root / ".harness" / "policies" / "gate.json").write_text("{ broken", encoding="utf-8")
         self.prompt()
-        # gate itself fails open on a broken policy, so use the budget deny of task_level to get a deny.
-        self.tool("grep_search", {"query": "a"})
-        self.tool("grep_search", {"query": "b"})
-        output = self.tool("grep_search", {"query": "c"})
+        # gate itself fails open on a broken policy, so use the subagent deny of the task module to get a deny.
+        output = self.tool("Agent", {"name": "x", "agent_type": "general-purpose", "prompt": "p"})
         self.assertEqual(output["permissionDecision"], "deny")
 
 

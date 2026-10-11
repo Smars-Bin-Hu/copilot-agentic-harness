@@ -4,11 +4,10 @@
 expect.json:
   calls     [{name, match, min|max|exactly}]   rows of the session log; `min` 1 when nothing is given
   order     [{name, steps: [match, ...]}]      the steps match rows in this order (other rows may lie between)
-  request   {status, attempts, max_attempts_reached, handoffs, human_approved, pending_dispatch, promote, check, report}
   files     [{path, exists}]                   repo-relative paths
   json      [{file, path, equals|not_equals}]  one value in a JSON file; `path` is dotted
 
-A match is ANDed from: event, tool_name, tool_kind, decision, judge, by (a module name), kind, agent_type, level,
+A match is ANDed from: event, tool_name, tool_kind, decision, judge, by (a module name), kind, agent_type,
 from_subagent, reason_contains, target_contains (a path or the command of the refused call).
 """
 
@@ -25,11 +24,7 @@ SCENARIOS_DIR = ".harness/eval/scenarios"
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 MATCH_KEYS = {
     "event": str, "tool_name": str, "tool_kind": str, "decision": str, "judge": str, "by": str, "kind": str,
-    "agent_type": str, "level": int, "from_subagent": bool, "reason_contains": str, "target_contains": str,
-}
-REQUEST_KEYS = {
-    "status": str, "attempts": int, "max_attempts_reached": bool, "handoffs": dict, "human_approved": bool,
-    "pending_dispatch": int, "promote": str, "check": dict, "report": bool,
+    "agent_type": str, "from_subagent": bool, "reason_contains": str, "target_contains": str,
 }
 SECTIONS = ("## 前置", "## Prompt", "## 人工检查项")
 
@@ -47,7 +42,6 @@ EXPECT_SCHEMA = {
         "order": {"type": "array", "items": {"type": "object", "required": ["name", "steps"], "properties": {
             "name": {"type": "string", "minLength": 1}, "steps": {"type": "array", "minItems": 2, "items": {"type": "object"}}},
             "additionalProperties": False}},
-        "request": {"type": "object"},
         "files": {"type": "array", "items": {"type": "object", "required": ["path", "exists"], "properties": {
             "path": {"type": "string", "minLength": 1}, "exists": {"type": "boolean"}}, "additionalProperties": False}},
         "json": {"type": "array", "items": {"type": "object", "required": ["file", "path"], "properties": {
@@ -81,12 +75,6 @@ def expect_errors(expect: Dict[str, Any], where: str) -> List[str]:
     for number, item in enumerate(expect.get("order", [])):
         for step, match in enumerate(item.get("steps", [])):
             errors += match_errors(match, f"{where} order[{number}].steps[{step}]")
-    for key, value in expect.get("request", {}).items():
-        expected = REQUEST_KEYS.get(key)
-        if expected is None:
-            errors.append(f"{where} request：不认识的键 `{key}`（可用：{', '.join(sorted(REQUEST_KEYS))}）")
-        elif not isinstance(value, expected) or (expected is int and isinstance(value, bool)):
-            errors.append(f"{where} request：`{key}` 的类型不对")
     for number, item in enumerate(expect.get("json", [])):
         if sum(key in item for key in ("equals", "not_equals")) != 1:
             errors.append(f"{where} json[{number}]：要有且只有一个 `equals` 或 `not_equals`")

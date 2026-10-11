@@ -14,11 +14,11 @@ __pycache__/
 
 # Workspace runtime content (keep only .gitkeep)
 .workspace/sandbox/*
-!.workspace/sandbox/requests/
-.workspace/sandbox/requests/*
-!.workspace/sandbox/requests/.gitkeep
-.workspace/current_tasks/*
-!.workspace/current_tasks/.gitkeep
+!.workspace/sandbox/tasks/
+.workspace/sandbox/tasks/*
+!.workspace/sandbox/tasks/.gitkeep
+# Task folders of before 1.1.0. Not read any more; kept out of git.
+.workspace/current_tasks/
 .workspace/reports/*
 !.workspace/reports/.gitkeep
 .workspace/goals/*

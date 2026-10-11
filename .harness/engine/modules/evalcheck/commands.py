@@ -2,7 +2,7 @@
 
   eval list                          the fixed scenarios
   eval show <scenario>               the prompt to paste into Copilot, the setup, the manual checks
-  eval check <scenario>              judge a finished run: its session log and its request folder
+  eval check <scenario>              judge a finished run: its session log and the files it left
 """
 
 from __future__ import annotations
@@ -36,14 +36,14 @@ def cmd_show(args: argparse.Namespace) -> Dict[str, Any]:
 
 def cmd_check(args: argparse.Namespace) -> Dict[str, Any]:
     root = repo_root()
-    result = checks.run(root, scenario.load(root, args.scenario), args.surface, args.session_id, args.request)
+    result = checks.run(root, scenario.load(root, args.scenario), args.surface, args.session_id)
     if not result["passed"]:
         result["exit_code"] = 1
     return result
 
 
 def register(subparsers: Any) -> None:
-    evaluate = subparsers.add_parser("eval", help="fixed scenarios, judged from the session log and the request folder")
+    evaluate = subparsers.add_parser("eval", help="fixed scenarios, judged from the session log and the files it left")
     commands = evaluate.add_subparsers(dest="eval_command", required=True)
     commands.add_parser("list", help="list the scenarios").set_defaults(handler=cmd_list)
     show = commands.add_parser("show", help="print the prompt of a scenario, ready to paste, and what to do before and after")
@@ -52,6 +52,5 @@ def register(subparsers: Any) -> None:
     check = commands.add_parser("check", help="judge one finished run against a scenario")
     check.add_argument("scenario")
     check.add_argument("--session-id", default="", help="the session of the run; left out, the newest main session is used")
-    check.add_argument("--request", default="", help="the request id; left out, the request of that session is used")
     check.add_argument("--surface", default="vscode", choices=["vscode"])
     check.set_defaults(handler=cmd_check)

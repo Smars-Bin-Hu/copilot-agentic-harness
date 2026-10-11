@@ -8,8 +8,6 @@ from pathlib import Path
 from typing import Optional
 
 
-# Where L3 requests live. Core knows it so modules that only read a request (eval) need not import the request module.
-REQUESTS_DIR = ".workspace/sandbox/requests"
 
 
 CLI_PATH = ".harness/engine/cli.py"

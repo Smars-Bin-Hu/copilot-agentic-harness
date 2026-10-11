@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from . import config
-from .state import admin_on, effective_level
+from .state import admin_on
 
 
 class Context:
@@ -22,10 +22,6 @@ class Context:
         if name not in self._policies:
             self._policies[name] = config.load_policy(self.root, name)
         return self._policies[name]
-
-    @property
-    def level(self) -> int:
-        return effective_level(self.state)
 
     @property
     def admin(self) -> bool:

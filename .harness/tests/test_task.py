@@ -1,4 +1,4 @@
-"""The L2 task (M7, B15-B18): start, the plan approval, the write scope, fetch/delete/diff, promote, rounds, the report.
+"""A task with target repositories: picking it up, the plan approval, the write scope, fetch/delete/diff, promote, rounds, the report.
 
 The repositories are real git repositories made with `git init` in a temporary folder. Without git, these tests are skipped.
 """
@@ -14,87 +14,18 @@ from unittest import mock
 
 import support  # noqa: F401  (puts the engine on sys.path)
 from core import tasks
-from modules.request import promote_target, task as task_ops
-from modules.request.layout import CommandError
+from modules.task import promote_target, task as task_ops
+from modules.task.common import CommandError
 from support import payload, post_tool, pre_tool, subagent_start
-from test_promote_target import git_text, porcelain
-from test_request import SESSION
-from test_target_inputs import TASK, TargetCase
-from test_targets import GIT
+from taskcase import NAME, PLAN, SESSION, TASK, TaskCase
+from test_promote import git_text, porcelain
 
-PLAN = "# 计划\n\n给 a.sql 加一列。只改 bdtt_repo/src/a.sql。\n"
 BIG = "".join(f"select {number} as c;\n" for number in range(120000))  # about 2 MB
 
 
-@unittest.skipUnless(GIT, "git is not installed")
-class TaskCase(TargetCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.prompt("/l2 做任务 job1")
-        self.task = self.root / TASK
-
-    # --- helpers ------------------------------------------------------------------------------
-
-    def prompt(self, text: str, session: str = SESSION) -> Dict[str, Any]:
-        return self.hook(payload("UserPromptSubmit", session, prompt=text))
-
-    def context(self, output: Dict[str, Any]) -> str:
-        return output.get("additionalContext", "")
-
-    def start(self, *extra: str, ok: bool = True) -> Any:
-        return self.run_cli("task", "start", "--task", TASK, "--session-id", SESSION, *extra, ok=ok)
-
-    def data(self) -> Dict[str, Any]:
-        return json.loads((self.task / ".task" / "task.json").read_text(encoding="utf-8"))
-
-    def write_plan(self, text: str = PLAN) -> None:  # type: ignore[override]
-        (self.task / "PLAN.md").write_text(text, encoding="utf-8")
-
-    def approve_plan(self, code: Optional[str] = None, out: Any = None, task: str = TASK) -> Dict[str, Any]:  # type: ignore[override]
-        typed = code if code is not None else tasks.plan_digest(self.root, TASK)[:8]
-        return task_ops.approve_plan(self.root, task, reader=lambda _prompt: typed, interactive=True, out=out or io.StringIO())
-
-    def ready(self) -> None:
-        """Started, with an approved plan."""
-        self.start()
-        self.write_plan()
-        self.approve_plan()
-
-    def dev(self, key: str, text: Optional[str] = None) -> Path:
-        path = self.task / "DEV" / key
-        if text is not None:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding="utf-8")
-        return path
-
-    def edit(self, path: str, session: str = SESSION) -> Dict[str, Any]:
-        data = pre_tool(session, "create_file", {"filePath": path, "content": "x"})
-        data["cwd"] = str(self.root)
-        return self.hook(data)
-
-    def decision(self, output: Dict[str, Any]) -> str:
-        return output.get("permissionDecision", "")
-
-    def reason(self, output: Dict[str, Any]) -> str:
-        return output["permissionDecisionReason"]
-
-    def approve_promote(self, code: Optional[str] = None, out: Any = None) -> Dict[str, Any]:
-        typed = code if code is not None else self.data()["promote"].get("plan_sha256", "")[:8]
-        return task_ops.approve_promote(self.root, TASK, reader=lambda _prompt: typed, interactive=True, out=out or io.StringIO())
-
-    def promoted(self) -> Dict[str, Any]:
-        """A task with one changed file, promoted for real."""
-        self.ready()
-        self.run_cli("task", "fetch", "bdtt_repo/src/a.sql")
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")
-        self.run_cli("task", "promote", "--dry-run")
-        self.approve_promote()
-        return self.run_cli("task", "promote")
-
-
-class StartTests(TaskCase):
-    def test_start_makes_the_folders_and_puts_the_session_into_task_mode(self) -> None:
-        result = self.start()
+class PickUpTests(TaskCase):
+    def test_a_new_task_has_a_branch_and_the_session_holds_it(self) -> None:
+        result = self.new()
         self.assertEqual((result["task"], result["round"], result["resumed"], result["plan_approved"]), (TASK, 1, False, False))
         self.assertEqual(result["branch"], "feature/job1")
         self.assertEqual(result["target_repos"], ["b9td_repo", "bdtt_repo"])
@@ -104,55 +35,51 @@ class StartTests(TaskCase):
         self.assertEqual(self.session_state(SESSION)["active_task"], TASK)
         self.assertEqual((self.data()["status"], self.data()["promote"]["state"]), ("open", "none"))
 
-    def test_the_task_may_be_named_by_its_folder_name_or_an_absolute_path(self) -> None:
-        self.assertEqual(self.run_cli("task", "start", "--task", "job1", "--session-id", SESSION)["task"], TASK)
-        self.assertEqual(self.run_cli("task", "start", "--task", str(self.task), "--session-id", SESSION)["resumed"], True)
+    def test_the_task_may_be_named_by_its_name_or_its_folder(self) -> None:
+        self.new()
+        self.assertEqual(self.open()["task"], TASK)
+        self.assertEqual(self.open(str(self.task))["resumed"], True)
+        self.assertEqual(self.run_cli("task", "status", "--task", NAME)["task"], TASK)
 
-    def test_it_is_refused_at_l1_in_an_l3_request_for_a_missing_folder_and_for_an_unknown_session(self) -> None:
-        self.prompt("/l1 小事")
-        self.assertIn("只在 L2", self.start(ok=False)["stderr"])
-        self.prompt("/l2 做任务")
-        self.assertIn("没有会话", self.run_cli("task", "start", "--task", TASK, "--session-id", "nobody", ok=False)["stderr"])
-        self.assertIn("任务目录", self.run_cli("task", "start", "--task", ".workspace/current_tasks/none", "--session-id", SESSION, ok=False)["stderr"])
-        self.assertIn("任务目录 `.workspace/sandbox/tasks/docs` 不存在", self.run_cli("task", "start", "--task", "docs", "--session-id", SESSION, ok=False)["stderr"])  # a bare name is looked up in both places
-        request_id = self.target_request()
-        self.assertIn("L3 请求", self.start(ok=False)["stderr"])
-        self.run_cli("request", "set-status", "--request", request_id, "--status", "abandoned", "--reason", "x")
-        self.assertEqual(self.start()["round"], 1)
+    def test_start_is_gone_and_says_what_to_use(self) -> None:
+        text = self.refused("task", "start", "--task", TASK, "--session-id", SESSION)
+        self.assertIn("task new", text)
+        self.assertIn("task open", text)
+        self.assertFalse(self.task.exists())
 
-    def test_starting_again_resumes_and_keeps_the_approval(self) -> None:
+    def test_a_folder_outside_the_task_directory_is_not_a_task(self) -> None:
+        (self.root / tasks.OLD_TASKS_DIR / "old").mkdir(parents=True)
+        self.assertIn("没有任务", self.refused("task", "open", "old", "--session-id", SESSION))
+        self.assertIn("任务目录", self.refused("task", "status", "--task", f"{tasks.OLD_TASKS_DIR}/old"))
+
+    def test_picking_it_up_again_keeps_the_approval(self) -> None:
         self.ready()
-        self.prompt("/l2 another day", session="sess-2")
-        result = self.run_cli("task", "start", "--task", TASK, "--session-id", "sess-2")
+        self.prompt("another day", session="sess-2")
+        result = self.open(session="sess-2")
         self.assertEqual((result["resumed"], result["new_round"], result["plan_approved"], result["round"]), (True, False, True, 1))
         self.assertEqual(self.data()["session_id"], "sess-2")
         self.assertIn("计划已批准", result["next"])
 
-    def test_one_session_does_one_task_at_a_time(self) -> None:
-        (self.root / ".workspace/current_tasks/job2").mkdir()
-        self.start()
-        self.assertIn("已经在做任务", self.run_cli("task", "start", "--task", "job2", "--session-id", SESSION, ok=False)["stderr"])
-        self.run_cli("task", "close")
-        self.assertEqual(self.run_cli("task", "start", "--task", "job2", "--session-id", SESSION)["task"], ".workspace/current_tasks/job2")
-
     def test_every_prompt_of_a_task_says_where_it_stands(self) -> None:
-        self.assertIn("harness-my-task", self.context(self.prompt("/l2 hello")))  # no task: the one-line pointer
+        self.assertIn("harness-my-task", self.context(self.prompt("hello")))  # no task: the pointer to the skill
         self.assertNotIn(f"任务：{TASK}", self.context(self.prompt("hello")))
-        self.start()
+        self.new()
         text = self.context(self.prompt("继续"))
-        self.assertIn(f"任务：{TASK}，第 1 轮", text)
+        self.assertIn(f"任务：{TASK}（开发，全档），第 1 轮", text)
         self.assertIn("把计划写到", text)
+        self.assertNotIn("harness-my-task", text)
         self.write_plan()
         self.assertIn("还没有经用户批准", self.context(self.prompt("继续")))
         self.approve_plan()
         self.assertIn("计划已批准", self.context(self.prompt("继续")))
         self.run_cli("task", "close")
-        self.assertNotIn(f"任务：{TASK}", self.context(self.prompt("继续")))
-        self.assertEqual(self.run_cli("stats")["task_mode_prompts"], 3)
+        self.assertNotIn(f"任务：{TASK}（", self.context(self.prompt("继续")))
+        shown = self.run_cli("stats")
+        self.assertEqual((shown["task_prompts"], shown["prompts"]), (3, 7))
 
     def test_without_target_repositories_a_task_only_fills_dev(self) -> None:
         (self.root / ".harness" / "policies" / "target.override.json").unlink()
-        result = self.start()
+        result = self.new()
         self.assertNotIn("branch", result)
         self.write_plan()
         self.approve_plan()
@@ -166,7 +93,7 @@ class StartTests(TaskCase):
 
 class PlanApprovalTests(TaskCase):
     def test_before_the_approval_dev_is_closed_and_the_rest_of_the_task_folder_is_open(self) -> None:
-        self.start()
+        self.new()
         for path in (f"{TASK}/PLAN.md", f"{TASK}/RCA.md", f"{TASK}/notes/draft.md", str(self.task.resolve() / "DESIGN.md")):
             with self.subTest(path):
                 self.assertEqual(self.edit(path), {})  # a result that stays in the task needs no plan (M9-0)
@@ -214,7 +141,7 @@ class PlanApprovalTests(TaskCase):
         self.assertIn("只能由 promote 写", self.reason(self.edit(str(self.bdtt / "src" / "a.sql"))))
 
     def test_the_code_is_bound_to_the_plan_and_the_screen_only_names_the_file(self) -> None:
-        self.start()
+        self.new()
         with self.assertRaises(CommandError):
             self.approve_plan()  # no plan yet
         self.write_plan()
@@ -236,7 +163,7 @@ class PlanApprovalTests(TaskCase):
         self.assertEqual(self.edit(f"{TASK}/DEV/a.sql"), {})
 
     def test_only_a_person_at_a_terminal_approves(self) -> None:
-        self.start()
+        self.new()
         self.write_plan()
         self.assertIn("只能由用户在自己的终端里手动运行", self.run_cli("task", "approve-plan", ok=False)["stderr"])
         for command in ("python3 .harness/engine/cli.py task approve-plan", f"harness task approve-promote --task {TASK}", "python .harness/engine/cli.py task recover"):
@@ -245,7 +172,7 @@ class PlanApprovalTests(TaskCase):
 
     def test_no_task_no_rule_and_a_closed_task_binds_nobody(self) -> None:
         self.assertEqual(self.edit("docs/x.md"), {})  # free L2
-        self.start()
+        self.new()
         self.assertEqual(self.decision(self.edit("docs/x.md")), "deny")
         self.run_cli("task", "close")
         self.assertEqual(self.edit("docs/x.md"), {})
@@ -500,7 +427,7 @@ class RoundAndReportTests(TaskCase):
         self.run_cli("task", "close")
         git_text(self.bdtt, "commit", "-qam", "the person commits")
         git_text(self.bdtt, "switch", "-q", "main")
-        result = self.start()
+        result = self.open()
         self.assertEqual((result["round"], result["new_round"], result["plan_approved"], result["branch"]), (2, True, False, "feature/job1_r2"))
         self.assertTrue((self.task / "DEV_r1" / "bdtt_repo" / "src" / "a.sql").is_file())
         self.assertEqual(list((self.task / "DEV").iterdir()), [])
@@ -535,7 +462,7 @@ class RoundAndReportTests(TaskCase):
         self.assertEqual(self.decision(denied), "deny")
 
     def test_status_says_what_comes_next(self) -> None:
-        self.start()
+        self.new()
         shown = self.run_cli("task", "status")
         self.assertEqual((shown["plan_written"], shown["plan_approved"], shown["promote"]), (False, False, "none"))
         self.ready()

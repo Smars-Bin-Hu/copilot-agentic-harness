@@ -11,14 +11,13 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from support import payload, post_tool, pre_tool, subagent_start, subagent_stop
-from test_task import TaskCase
+from taskcase import TASK, TaskCase
 from test_tasklife import BASE, S1, S2, LifeCase
 
 from core import approval, tasks
-from modules.request import task as task_ops
-from modules.request import taskreview, tasksnap
-from modules.request.layout import CommandError
-from test_target_inputs import TASK
+from modules.task import task as task_ops
+from modules.task import taskreview, tasksnap
+from modules.task.common import CommandError
 from test_targets import GIT
 
 JOB = f"{BASE}/job"
@@ -35,9 +34,10 @@ class MarkerTests(unittest.TestCase):
                 self.assertEqual(taskreview.marker(text), expected)
 
     def test_the_old_markers_mean_one_and_zero_and_the_new_one_wins(self) -> None:
-        self.assertEqual(taskreview.marker("x", "on"), 1)
-        self.assertEqual(taskreview.marker("x", "off"), 0)
-        self.assertEqual(taskreview.marker("[review]=2 x", "on"), 2)
+        self.assertEqual(taskreview.marker("[verify] x"), 1)
+        self.assertEqual(taskreview.marker("x [No-Verify]"), 0)
+        self.assertEqual(taskreview.marker("[review]=2 [verify] x"), 2)
+        self.assertEqual(taskreview.marker("[verify] [no-verify]"), 0)
 
     def test_the_first_line_decides_the_verdict(self) -> None:
         self.assertEqual(taskreview.parse_verdict("**VERDICT: PASS**\n- ok"), "PASS")
@@ -131,8 +131,7 @@ class SwitchTests(ReviewCase):
         context = self.say("继续")["additionalContext"]
         self.assertIn("要连续通过 2 次", context)
         self.assertIn("现在 0 次，已查 0 次，上限 4 次", context)
-        self.assertNotIn("子 agent：不允许", context)  # L1, but the task's own rule speaks about the subagent
-        self.assertNotIn("没有开启 reviewer 复核", context)
+        self.assertNotIn("没有接着任务时不能调用子 agent", context)
 
     def test_without_checks_the_prompt_says_nothing_about_them(self) -> None:
         self.new()
@@ -212,7 +211,7 @@ class CheckTests(ReviewCase):
         self.assertIn("已经连续通过 1 次", info["next"])
         self.assertIn("已经连续通过", self.refused("task", "review", "start"))
         row = [item for item in self.session_log(S1) if item.get("kind") == "task-review"][0]
-        self.assertEqual((row["judge"], row["verdict"]), ("verifier", "PASS"))
+        self.assertEqual((row["judge"], row["verdict"]), ("reviewer", "PASS"))
 
     def test_a_fail_is_fixed_and_checked_again_with_the_old_problems_attached(self) -> None:
         self.job()
@@ -255,12 +254,6 @@ class CheckTests(ReviewCase):
         self.check(FAIL)
         for name in ("REVIEW/round-001/verdict.md", "REVIEW/round-002/verdict.md", "SNAPSHOT/x/manifest.json"):
             self.assertEqual(self.write(f"{JOB}/{name}")["permissionDecision"], "deny", name)
-
-    def test_the_whole_flow_works_in_a_session_that_never_left_l1(self) -> None:
-        self.assertEqual(self.session_state(S1)["level"], 1)
-        self.job()
-        self.check(PASS)
-        self.assertEqual(self.status()["passes"], 1)
 
 
 class CountTests(ReviewCase):
@@ -358,15 +351,6 @@ class StopTests(ReviewCase):
         self.assertIn("task review start", reason)
         self.assertIn("TASK.md", reason)
 
-    def test_the_old_check_of_the_level_stays_silent_in_a_task(self) -> None:
-        self.verifier_default(True)
-        self.say("[L2] 做任务")
-        self.new()
-        self.hook(pre_tool(S1, "Write", {"path": f"{self.base}/{JOB}/RCA.md", "file_text": "x"}))
-        self.hook(post_tool(S1, "Write", {"path": f"{self.base}/{JOB}/RCA.md", "file_text": "x"}))
-        self.hook(post_tool(S1, "Write", {"path": f"{self.base}/{JOB}/TASK.md", "file_text": "x"}))
-        self.assertEqual(self.stop(), {})
-
 
 class SnapshotTests(ReviewCase):
     def test_what_is_a_result_and_what_is_not(self) -> None:
@@ -398,7 +382,7 @@ class SnapshotTests(ReviewCase):
         self.assertEqual((self.root / listed[1]["snapshot"] / "files" / "RCA.md").read_text(encoding="utf-8"), "v2\n")
 
     def test_a_file_over_the_limit_is_listed_but_not_copied(self) -> None:
-        path = self.root / ".harness" / "policies" / "orchestration.json"
+        path = self.root / ".harness" / "policies" / "task.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         data["snapshots"]["max_file_mb"] = 0.001
         path.write_text(json.dumps(data), encoding="utf-8")
@@ -425,7 +409,7 @@ class SnapshotTests(ReviewCase):
         self.assertTrue(newest.exists())
 
     def test_a_broken_policy_gives_the_defaults(self) -> None:
-        (self.root / ".harness" / "policies" / "orchestration.json").write_text("{ broken", encoding="utf-8")
+        (self.root / ".harness" / "policies" / "task.json").write_text("{ broken", encoding="utf-8")
         self.assertEqual(tasksnap.settings(self.root), tasksnap.DEFAULTS)
         self.assertEqual(taskreview.settings(self.root), taskreview.DEFAULTS)
 
@@ -450,7 +434,7 @@ class PromoteGateTests(TaskCase):
         return started
 
     def test_approving_the_plan_keeps_a_copy_of_it(self) -> None:
-        self.start()
+        self.new()
         self.write_plan()
         result = self.approve_plan()
         copy = self.root / result["snapshot"] / "files" / "PLAN.md"

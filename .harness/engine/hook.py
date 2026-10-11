@@ -75,14 +75,13 @@ def process(raw: str, root: Path) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     with state_module.session(root, event.surface, event.session_id) as state:
         state_module.track_before(state, event)
         if link:
-            state.update(link)  # a subagent session: it inherits the parent's level, and its first prompt is not the user
+            state.update(link)  # a subagent session: it inherits the task its parent holds, and its first prompt is not the user
             event.from_subagent = True
         ctx = Context(root, state)
         sources, ran, facts = run_modules(root, event, ctx, names)
         decision = merge([item for _name, item in sources])
-        denial = call_safely(root, "breaker", breaker.apply, root, state, event, decision, ctx.level)  # a refusal stays a refusal
+        denial = call_safely(root, "breaker", breaker.apply, root, state, event, decision)  # a refusal stays a refusal
         state_module.track_after(state, event, decision)
-        level = ctx.level
         admin = ctx.admin
         parent_session_id = state.get("parent_session_id")
     record = callrecord.build(
@@ -92,7 +91,6 @@ def process(raw: str, root: Path) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         ran=ran,
         sources=sources,
         facts=facts,
-        level=level,
         parent_session_id=parent_session_id,
         denial=denial,
         admin=admin,

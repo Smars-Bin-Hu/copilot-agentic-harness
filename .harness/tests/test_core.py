@@ -141,20 +141,12 @@ class StateTests(unittest.TestCase):
     def event(self, name: str, **fields: object) -> HookEvent:
         return HookEvent(surface="vscode", event=name, session_id="s", **fields)
 
-    def test_effective_level_is_three_while_a_request_is_active(self) -> None:
-        current = state.new_state("vscode", "s")
-        self.assertEqual(state.effective_level(current), 1)
-        current["level"] = 2
-        self.assertEqual(state.effective_level(current), 2)
-        current["active_request"] = "20260930-1200-demo-ab12"
-        self.assertEqual(state.effective_level(current), 3)
-
     def test_state_round_trip_and_validation(self) -> None:
-        state.update_state(self.root, "vscode", "s", lambda data: data.update(level=2))
+        state.update_state(self.root, "vscode", "s", lambda data: data.update(active_task=".workspace/sandbox/tasks/x"))
         path = state.state_path(self.root, "vscode", "s")
-        self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["level"], 2)
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["active_task"], ".workspace/sandbox/tasks/x")
         data = json.loads(path.read_text(encoding="utf-8"))
-        data["level"] = 7
+        data["subagents"] = "broken"
         path.write_text(json.dumps(data), encoding="utf-8")
         with self.assertRaises(ValueError):
             state.read_state(path, "vscode", "s")

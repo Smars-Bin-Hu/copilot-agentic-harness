@@ -13,11 +13,11 @@ from support import ENGINE, HarnessTestCase, payload, subagent_start
 
 from core import messages, tasks
 from core.state import update_state
-from modules.request import task as task_ops
-from modules.request import tasklife
+from modules.task import task as task_ops
+from modules.task import tasklife
 
 S1, S2 = "session-one", "session-two"
-BASE = tasks.SANDBOX_TASKS_DIR
+BASE = tasks.TASKS_DIR
 
 
 class LifeCase(HarnessTestCase):
@@ -25,7 +25,7 @@ class LifeCase(HarnessTestCase):
         super().setUp()
         self.base = str(self.root.resolve())
         for session in (S1, S2):
-            self.hook(payload("UserPromptSubmit", session, prompt="hello"))  # L1: none of this looks at the level
+            self.hook(payload("UserPromptSubmit", session, prompt="hello"))
 
     def new(self, name: str = "job", kind: str = "rca", *extra: str, session: str = S1) -> Dict[str, Any]:
         return self.cli_json("task", "new", name, "--kind", kind, "--session-id", session, *extra)
@@ -94,18 +94,17 @@ class NewTests(LifeCase):
         self.assertIn("**档位**：中", text)
         self.assertNotIn("{", text.split("## 要读的文件")[0])
 
-    def test_it_works_at_l1_and_the_session_picks_the_task_up(self) -> None:
-        self.assertEqual(self.session_state(S1)["level"], 1)
+    def test_the_session_picks_the_task_up(self) -> None:
         result = self.new()
         self.assertEqual(result["task"], f"{BASE}/job")
         self.assertEqual(self.active(), f"{BASE}/job")
         self.assertEqual(result["read_first"], f"{BASE}/job/TASK.md")
 
-    def test_an_existing_name_is_refused_in_either_place(self) -> None:
+    def test_an_existing_name_is_refused(self) -> None:
         self.new()
         self.assertIn("已经有了", self.refused("task", "new", "job", "--kind", "qa", "--session-id", S1))
-        (self.root / tasks.TASKS_DIR / "old").mkdir(parents=True)
-        self.assertIn("旧位置", self.refused("task", "new", "old", "--kind", "qa", "--session-id", S1))
+        (self.root / BASE / "hand").mkdir()  # a folder the person made
+        self.assertIn("已经有了", self.refused("task", "new", "hand", "--kind", "qa", "--session-id", S1))
 
     def test_a_bad_name_is_refused(self) -> None:
         for name in ("a/b", "a\\b", ".hidden", "x" * 81, " "):
@@ -115,8 +114,6 @@ class NewTests(LifeCase):
 
     def test_a_refused_new_leaves_no_folder(self) -> None:
         self.assertIn("没有会话", self.refused("task", "new", "job", "--kind", "qa", "--session-id", "nobody"))
-        update_state(self.root, "vscode", S1, lambda state: state.update(active_request="req-1"))
-        self.assertIn("L3 请求", self.refused("task", "new", "job", "--kind", "qa", "--session-id", S1))
         update_state(self.root, "vscode", S2, lambda state: state.update(parent_session_id=S1))
         self.assertIn("子 agent", self.refused("task", "new", "job", "--kind", "qa", "--session-id", S2))
         self.assertFalse(self.folder().exists())
@@ -153,17 +150,10 @@ class OpenTests(LifeCase):
         self.assertEqual(sorted(str(path.relative_to(self.root)) for path in self.folder().rglob("*") if ".task" not in path.parts), before)
 
     def test_a_folder_the_person_made_can_be_opened(self) -> None:
-        for number, base in enumerate(tasks.TASK_DIRS):
-            with self.subTest(base):
-                (self.root / base / f"hand-{number}" / "REQ").mkdir(parents=True)
-                result = self.open(f"hand-{number}")
-                self.assertEqual(result["task"], f"{base}/hand-{number}")
-                self.assertEqual((result["kind"], result["tier"]), ("", ""))
-
-    def test_a_name_is_found_in_the_new_place_first(self) -> None:
-        for base in tasks.TASK_DIRS:
-            (self.root / base / "twin").mkdir(parents=True)
-        self.assertEqual(self.open("twin")["task"], f"{BASE}/twin")
+        (self.root / BASE / "hand" / "REQ").mkdir(parents=True)
+        result = self.open("hand")
+        self.assertEqual(result["task"], f"{BASE}/hand")
+        self.assertEqual((result["kind"], result["tier"]), ("", ""))
 
     def test_a_task_that_does_not_exist_is_refused_with_what_to_do(self) -> None:
         text = self.refused("task", "open", "nope", "--session-id", S1)
@@ -179,9 +169,30 @@ class OpenTests(LifeCase):
         self.assertEqual(self.data("first")["status"], "open")
         self.assertEqual(self.open("first")["left_open"], f"{BASE}/second")
 
-    def test_the_old_start_still_wants_l2_and_one_task(self) -> None:
-        self.new()
-        self.assertIn("只在 L2", self.refused("task", "start", "--task", "job", "--session-id", S1))
+    def test_a_task_moved_from_the_old_place_keeps_its_state_and_gets_its_new_path(self) -> None:
+        old = self.root / tasks.OLD_TASKS_DIR / "moved"
+        (old / ".task").mkdir(parents=True)
+        (old / "PLAN.md").write_text("# plan\n", encoding="utf-8")
+        before = {
+            "schema_version": 1, "task": f"{tasks.OLD_TASKS_DIR}/moved", "name": "moved", "session_id": "gone", "surface": "vscode", "status": "closed",
+            "created_at": "2026-10-01T00:00:00+00:00", "updated_at": "2026-10-01T00:00:00+00:00", "round": 1, "round_started_at": "2026-10-01T00:00:00+00:00",
+            "target_mode": False, "branch": "", "targets": {}, "target_files": {}, "deletes": [], "plan": {}, "promote": {"state": "none"}, "rounds": [], "events": [], "verify": "on",
+        }
+        (old / ".task" / "task.json").write_text(json.dumps(before), encoding="utf-8")
+        (self.root / BASE).mkdir(parents=True, exist_ok=True)
+        old.rename(self.root / BASE / "moved")
+        result = self.open("moved")
+        self.assertEqual((result["task"], result["reopened"]), (f"{BASE}/moved", True))
+        self.assertEqual(self.data("moved")["task"], f"{BASE}/moved")
+        context = self.hook(payload("UserPromptSubmit", S1, prompt="继续"))["additionalContext"]
+        self.assertIn(f"任务：{BASE}/moved，第 1 轮", context)
+        self.assertNotIn(tasks.OLD_TASKS_DIR, context)
+        self.assertEqual(self.write(f"{BASE}/moved/notes.md"), {})
+
+    def test_a_task_folder_of_before_1_1_is_not_found(self) -> None:
+        (self.root / tasks.OLD_TASKS_DIR / "old").mkdir(parents=True)
+        self.assertIn("没有任务 `old`", self.refused("task", "open", "old", "--session-id", S1))
+        self.assertEqual(self.listed()["tasks"], [])
 
 
 class WriteScopeTests(LifeCase):
@@ -216,7 +227,7 @@ class WriteScopeTests(LifeCase):
 
     def test_a_subagent_of_the_session_writes_inside_the_same_task(self) -> None:
         self.new()
-        self.hook(subagent_start(S1, "verifier"))
+        self.hook(subagent_start(S1, "reviewer"))
         self.hook(payload("UserPromptSubmit", "child", prompt="check it"))
         self.assertEqual(self.write(f"{BASE}/job/REVIEW.md", "child"), {})
         self.assertEqual(self.write("README.md", "child")["permissionDecision"], "deny")
@@ -290,12 +301,11 @@ class ListTests(LifeCase):
                 data["promote"] = {"state": state}
             self.assertEqual(self.listed()["tasks"][0]["waiting"], text)
 
-    def test_folders_in_both_places_are_listed_and_an_unstarted_one_is_new(self) -> None:
-        (self.root / tasks.TASKS_DIR / "old").mkdir(parents=True)
+    def test_a_folder_that_was_never_picked_up_is_listed_as_new(self) -> None:
+        (self.root / BASE / "hand").mkdir(parents=True)
         self.new("fresh", "qa")
         rows = {row["name"]: row for row in self.listed()["tasks"]}
-        self.assertEqual(rows["old"]["status"], "new")
-        self.assertEqual(rows["old"]["task"], f"{tasks.TASKS_DIR}/old")
+        self.assertEqual(rows["hand"]["status"], "new")
         self.assertEqual(rows["fresh"]["status"], "open")
 
     def test_the_list_reads_the_state_not_the_markdown(self) -> None:
@@ -329,7 +339,7 @@ class RequirementFileTests(LifeCase):
         self.new()
         state = json.loads(self.state_file(S1).read_text(encoding="utf-8"))
         self.assertNotIn("prompts", state)
-        self.assertNotIn("t_secret", json.dumps(state, ensure_ascii=False))  # only the first characters of a prompt are kept, by task_level
+        self.assertNotIn("秘密", json.dumps(state, ensure_ascii=False))
         self.assertNotIn("t_secret", json.dumps(self.session_log(S1), ensure_ascii=False))
         self.assertEqual([path.name for path in (self.folder() / "REQ").iterdir()], [])
 
@@ -389,17 +399,17 @@ class RelayReminderTests(LifeCase):
         self.assertEqual(self.stop()["decision"], "block")
 
     def test_a_task_without_a_task_file_and_a_session_without_a_task_are_left_alone(self) -> None:
-        (self.root / tasks.TASKS_DIR / "old").mkdir(parents=True)
-        self.open("old")
-        self.done(f"{tasks.TASKS_DIR}/old/notes.md")
+        (self.root / BASE / "hand").mkdir(parents=True)  # a folder the person made: no TASK.md
+        self.open("hand")
+        self.done(f"{BASE}/hand/notes.md")
         self.assertEqual(self.stop(), {})
         self.done("README.md", S2)
         self.assertEqual(self.stop(S2), {})
 
     def test_the_policy_switches_it_off(self) -> None:
-        path = self.root / ".harness" / "policies" / "orchestration.json"
+        path = self.root / ".harness" / "policies" / "task.json"
         data = json.loads(path.read_text(encoding="utf-8"))
-        data["verify"]["task_file_reminder"] = False
+        data["task_file_reminder"] = False
         path.write_text(json.dumps(data), encoding="utf-8")
         self.new()
         self.done(f"{BASE}/job/RCA.md")
@@ -410,7 +420,9 @@ class PromptRuleTests(LifeCase):
     def test_a_session_without_a_task_is_pointed_at_the_skill(self) -> None:
         context = self.hook(payload("UserPromptSubmit", S1, prompt="next"))["additionalContext"]
         self.assertIn("harness-my-task", context)
+        self.assertIn(f"当前会话 id：{S1}", context)
         self.assertNotIn("current_tasks", context)
+        self.assertNotIn("Level", context)
 
     def test_a_session_without_a_task_is_told_which_tasks_are_open(self) -> None:
         self.assertNotIn("没关闭的任务", self.hook(payload("UserPromptSubmit", S2, prompt="hello"))["additionalContext"])
@@ -434,15 +446,15 @@ class PromptRuleTests(LifeCase):
         self.assertIn(f"先读 {BASE}/job/TASK.md", context)
         self.assertIn("需求写在 REQ.md", context)
         self.assertIn("直接下的指令", context)  # found in the hand test: an instruction that changes the requirement goes into REQ.md first
-        self.assertNotIn("（L2）", context)
+        self.assertNotIn("Task Level", context)
 
-    def test_a_task_from_before_has_the_plain_head(self) -> None:
-        (self.root / tasks.TASKS_DIR / "old").mkdir(parents=True)
-        self.open("old")
+    def test_a_folder_without_the_task_files_has_the_plain_head(self) -> None:
+        (self.root / BASE / "hand").mkdir(parents=True)
+        self.open("hand")
         context = self.hook(payload("UserPromptSubmit", S1, prompt="next"))["additionalContext"]
-        self.assertIn(f"任务：{tasks.TASKS_DIR}/old，第 1 轮", context)
+        self.assertIn(f"任务：{BASE}/hand，第 1 轮", context)
         self.assertNotIn("TASK.md，再按", context)
-        self.assertNotIn("直接下的指令", context)  # no REQ.md in a task from before
+        self.assertNotIn("直接下的指令", context)  # no REQ.md there
 
 
 class MessageTests(unittest.TestCase):

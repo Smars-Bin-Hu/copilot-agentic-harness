@@ -3,7 +3,9 @@
   "version": "1.0.3",
   "released": "2026-10-10",
   "copyright": "Smars Hu",
-  "contributors": ["Claude Code"],
+  "contributors": [
+    "Claude Code"
+  ],
   "engine": {
     "files": [
       ".harness/engine/hook.py",
@@ -24,7 +26,7 @@
     ]
   },
   "modules": {
-    "task_level": {
+    "task": {
       "status": "active",
       "enabled": true,
       "events": [
@@ -32,23 +34,33 @@
         "UserPromptSubmit",
         "PreToolUse",
         "PostToolUse",
+        "SubagentStart",
         "Stop"
       ],
       "enforcement": [
         "S",
+        "C",
         "H"
       ],
-      "surfaces_verified": [],
-      "files": [
-        ".github/skills/harness-task-level/",
-        ".harness/policies/task-levels.json",
-        ".harness/engine/modules/task_level/",
-        ".harness/tests/test_task_level.py",
-        ".github/skills/l1/",
-        ".github/skills/l2/",
-        ".harness/tests/test_review.py"
+      "surfaces_verified": [
+        "vscode"
       ],
-      "retire_when": "Copilot 原生支持按模式限制探索预算和子 agent"
+      "files": [
+        ".harness/policies/task.json",
+        ".harness/policies/target.json",
+        ".harness/policies/agents.json",
+        ".harness/engine/modules/task/",
+        ".harness/contracts/templates/task/",
+        ".github/skills/harness-my-task/",
+        ".github/agents/reviewer.agent.md",
+        ".harness/tests/test_task.py",
+        ".harness/tests/test_tasklife.py",
+        ".harness/tests/test_taskreview.py",
+        ".harness/tests/test_taskrules.py",
+        ".harness/tests/test_targets.py",
+        ".harness/tests/test_promote.py"
+      ],
+      "retire_when": "Copilot 原生提供跟着任务走、能换会话接力的任务状态，并且有能拦住交付的批准。那时只留 gate 和 promote"
     },
     "gate": {
       "status": "active",
@@ -76,54 +88,7 @@
         ".github/instructions/workspace.instructions.md",
         ".workspace/README.md"
       ],
-      "retire_when": "Copilot 原生支持按路径限制写入，并能拒绝危险的终端命令。guardrail 和 L3 写入范围不退役"
-    },
-    "request": {
-      "status": "active",
-      "enabled": true,
-      "events": [
-        "UserPromptSubmit",
-        "PreToolUse",
-        "PostToolUse",
-        "SubagentStart",
-        "SubagentStop",
-        "Stop"
-      ],
-      "enforcement": [
-        "C",
-        "H"
-      ],
-      "surfaces_verified": [
-        "vscode"
-      ],
-      "files": [
-        ".harness/policies/orchestration.json",
-        ".harness/policies/target.json",
-        ".harness/engine/modules/request/",
-        ".harness/contracts/request.schema.json",
-        ".harness/contracts/manifest.schema.json",
-        ".harness/contracts/handoff.schema.json",
-        ".harness/contracts/templates/assignment.md",
-        ".harness/contracts/templates/task/",
-        ".github/skills/harness-my-task/",
-        ".harness/tests/test_tasklife.py",
-        ".harness/tests/test_taskreview.py",
-        ".harness/tests/test_request.py",
-        ".harness/policies/agents.json",
-        ".github/agents/orchestrator.agent.md",
-        ".github/agents/builder.agent.md",
-        ".github/agents/reviewer.agent.md",
-        ".github/skills/harness-orchestration/",
-        ".harness/tests/test_orchestration.py",
-        ".harness/tests/test_report.py",
-        ".harness/tests/test_verify.py",
-        ".harness/tests/test_targets.py",
-        ".harness/tests/test_target_inputs.py",
-        ".harness/tests/test_promote_target.py",
-        ".harness/tests/test_promote_delete.py",
-        ".harness/tests/test_task.py"
-      ],
-      "retire_when": "Copilot 原生支持带隔离目录和交接文件的多 agent 编排，以及“计划批准后才执行”。请求目录、任务模式的 DEV/ 和 promote 不退役"
+      "retire_when": "Copilot 原生支持按路径限制写入，并能拒绝危险的终端命令。guardrail 和任务的写入范围不退役"
     },
     "observe": {
       "status": "active",

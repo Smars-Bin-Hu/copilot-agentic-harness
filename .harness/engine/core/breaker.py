@@ -1,7 +1,7 @@
 """Deny circuit breaker (M3-4): the same deny, again and again, ends with a plain stop instruction.
 
 A hook can only refuse a call. It cannot stop an agent that keeps retrying. So from the Nth identical deny in one
-prompt window, the reason is replaced by an instruction to stop. Applies to every deny: budget, gate, subagent rules.
+prompt window, the reason is replaced by an instruction to stop. Applies to every deny: gate, subagent rules, the task rules.
 The count is per session. A subagent runs in a session of its own, so it has its own count.
 """
 
@@ -34,16 +34,11 @@ def reset(state: Dict[str, Any]) -> None:
     state["denials"] = {}
 
 
-def stop_text(count: int, reason: str, level: int) -> str:
-    text = f"同一个拒绝已出现 {count} 次。停止重试，不要换个办法绕过。"
-    if level == 3:
-        text += "L3 子 agent：提交 `blocked` handoff，写明缺什么。其他情况：告诉用户被什么拦住了。"
-    else:
-        text += "告诉用户被什么拦住了，等用户决定。"
-    return text + f"\n被拒的原因：{reason}"
+def stop_text(count: int, reason: str) -> str:
+    return f"同一个拒绝已出现 {count} 次。停止重试，不要换个办法绕过。告诉用户被什么拦住了，等用户决定。\n被拒的原因：{reason}"
 
 
-def apply(root: Path, state: Dict[str, Any], event: HookEvent, decision: Decision, level: int) -> Optional[Dict[str, Any]]:
+def apply(root: Path, state: Dict[str, Any], event: HookEvent, decision: Decision) -> Optional[Dict[str, Any]]:
     """Count a PreToolUse deny. From the limit on, change `decision.reason` in place. Returns the log entry, or None."""
     if event.event != "PreToolUse" or decision.permission != "deny" or not decision.reason:
         return None
@@ -54,5 +49,5 @@ def apply(root: Path, state: Dict[str, Any], event: HookEvent, decision: Decisio
     count = counts[key]
     tripped = limit > 0 and count >= limit
     if tripped:
-        decision.reason = stop_text(count, decision.reason, level)
+        decision.reason = stop_text(count, decision.reason)
     return {"reason_hash": key, "count": count, "tripped": tripped}

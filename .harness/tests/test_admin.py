@@ -108,11 +108,11 @@ class SwitchTests(AdminTestCase):
     def test_an_agent_may_switch_it_off(self) -> None:
         self.assertEqual(self.decision(self.term(f"python3 .harness/engine/cli.py admin off --session-id {self.session}")), "")
 
-    def test_it_does_not_mix_with_a_request(self) -> None:
-        self.cli_json("request", "new", "--title", "t", "--session-id", self.session)
+    def test_it_does_not_mix_with_a_task(self) -> None:
+        self.cli_json("task", "new", "job", "--kind", "qa", "--session-id", self.session)
         with self.assertRaises(commands.CommandError) as caught:
             self.switch_on()
-        self.assertIn("L3 请求", str(caught.exception))
+        self.assertIn("在做任务", str(caught.exception))
 
     def test_a_subagent_session_cannot_be_admin(self) -> None:
         path = self.state_file(self.session)
@@ -165,13 +165,13 @@ class GateTests(AdminTestCase):
     def test_the_other_rules_stay(self) -> None:
         self.switch_on()
         self.assertEqual(self.decision(self.write(".workspace/reports/r.md")), "deny")
-        self.assertEqual(self.decision(self.write(".workspace/sandbox/requests/r1/request.json")), "deny")
+        self.assertEqual(self.decision(self.write(".workspace/sandbox/tasks/t1/.task/task.json")), "deny")
         self.assertEqual(self.decision(self.write(".git/config")), "deny")
         self.assertEqual(self.decision(self.term("rm -rf /")), "deny")
         self.assertEqual(self.decision(self.term("python3 .harness/engine/cli.py approve-command")), "deny")
-        self.assertEqual(self.decision(self.term("python3 .harness/engine/cli.py request approve-promote --request r")), "deny")
+        for command in ("task approve-promote --task t", "task approve-plan", "task recover", "task review extend --checks 2", "task review waive"):
+            self.assertEqual(self.decision(self.term(f"python3 .harness/engine/cli.py {command}")), "deny", command)
         self.assertEqual(self.decision(self.term("curl https://example.com")), "ask")
-        self.assertEqual(self.decision(self.term(f"python3 .harness/engine/cli.py level set --session-id {self.session} --level 2")), "deny")
 
     def test_a_policy_can_keep_more_closed_but_cannot_open_the_runtime_folder(self) -> None:
         override = self.root / ".harness" / "policies" / "gate.override.json"
@@ -190,32 +190,17 @@ class GateTests(AdminTestCase):
         self.assertEqual([row.get("admin", False) for row in rows], [False, True])
 
 
-class LevelTests(AdminTestCase):
-    def search(self) -> dict:
-        return self.hook(pre_tool(self.session, "grep_search", {"query": "x"}))
+class RuleTests(AdminTestCase):
 
-    def test_the_rules_say_admin_mode_and_markers_do_nothing(self) -> None:
-        self.assertIn("Task Level：L1", self.prompt("hello"))
+    def test_the_rules_say_admin_mode(self) -> None:
+        self.assertIn("harness-my-task", self.prompt("hello"))
         self.switch_on()
-        text = self.prompt("/l2 do it")
+        text = self.prompt("[review]=1 do it")
         self.assertIn("admin 模式：已开", text)
-        self.assertNotIn("Task Level：L", text)
+        self.assertNotIn("harness-my-task", text)
         self.assertIn(self.session, text)
         self.assertIn(".harness/runtime/**", text)
-        self.assertEqual(self.session_state(self.session)["level"], 1)
         self.assertIn("admin 模式：已开", self.context(self.hook(payload("SessionStart", self.session))))
-
-    def test_no_budget(self) -> None:
-        for _ in range(2):
-            self.assertEqual(self.decision(self.search()), "")
-        self.assertEqual(self.decision(self.search()), "deny")
-        self.switch_on()
-        self.prompt("go")
-        for _ in range(30):
-            self.assertEqual(self.decision(self.search()), "")
-        state = self.task_level_state(self.session)
-        self.assertEqual(state["counters"]["repository_searches"], 30)
-        self.assertEqual(state["exceeded"], [])
 
     def test_no_subagent(self) -> None:
         self.switch_on()
@@ -225,30 +210,19 @@ class LevelTests(AdminTestCase):
             self.assertIn("admin 模式不允许子 agent", self.reason(output))
 
     def test_admin_is_never_a_subagent(self) -> None:
-        for marker in ("", "/l2 [verify] "):
-            self.prompt(marker + "go")
-            output = self.hook(pre_tool(self.session, "runSubagent", {"agentName": "admin", "prompt": "p", "description": "d"}))
-            self.assertEqual(self.decision(output), "deny", marker)
+        self.prompt("[review]=1 go")
+        self.assertEqual(self.decision(self.hook(pre_tool(self.session, "runSubagent", {"agentName": "admin", "prompt": "p", "description": "d"}))), "deny")
+        self.cli_json("task", "new", "job", "--kind", "rca", "--session-id", self.session)
+        output = self.hook(pre_tool(self.session, "Agent", {"name": "admin", "agent_type": "admin", "prompt": "p"}))
+        self.assertEqual(self.decision(output), "deny")
+        self.assertIn("只能调用子 agent `reviewer`", self.reason(output))
 
-    def test_no_request_and_no_task(self) -> None:
+    def test_no_task(self) -> None:
         self.switch_on()
-        completed = self.cli("request", "new", "--title", "t", "--session-id", self.session)
+        completed = self.cli("task", "new", "demo", "--kind", "qa", "--session-id", self.session)
         self.assertEqual(completed.returncode, 1)
         self.assertIn("admin 模式", completed.stderr)
-        (self.root / ".workspace" / "current_tasks" / "demo").mkdir(parents=True)
-        completed = self.cli("task", "start", "--task", ".workspace/current_tasks/demo", "--session-id", self.session)
-        self.assertEqual(completed.returncode, 1)
-        self.assertIn("admin 模式", completed.stderr)
-
-    def test_stop_asks_for_no_reviewer(self) -> None:
-        self.verifier_default(True)
-        self.hook(payload("UserPromptSubmit", self.session, prompt="/l2 edit"))
-        self.switch_on()
-        self.prompt("edit")
-        self.write("notes.txt", tool="replace_string_in_file")
-        self.hook({**pre_tool(self.session, "replace_string_in_file", {"filePath": f"{self.base}/notes.txt"}), "hook_event_name": "PostToolUse", "tool_result": {"result_type": "success", "text_result_for_llm": "ok"}})
-        output = self.hook(payload("Stop", self.session, stop_hook_active=False))
-        self.assertNotEqual(output.get("decision"), "block")
+        self.assertFalse((self.root / ".workspace" / "sandbox" / "tasks" / "demo").exists())
 
 
 class AgentFileTests(unittest.TestCase):
@@ -261,10 +235,7 @@ class AgentFileTests(unittest.TestCase):
         self.assertNotIn("'agent'", head)
         self.assertIn("admin on", text)
 
-    def test_no_level_allows_admin_as_a_subagent(self) -> None:
-        policy = json.loads((REPO / ".harness" / "policies" / "task-levels.json").read_text(encoding="utf-8"))
-        for level, body in policy["levels"].items():
-            self.assertNotIn("admin", body["subagents"]["allowed"], level)
+    def test_no_agent_file_lists_admin_as_a_subagent(self) -> None:
         for path in (REPO / ".github" / "agents").glob("*.agent.md"):
             head = path.read_text(encoding="utf-8").split("---")[1]
             self.assertNotRegex(head, r"agents:.*admin", path.name)

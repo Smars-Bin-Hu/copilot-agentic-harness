@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from .events import Decision, HookEvent
 
 # Who decided. `model` is reserved: a hook cannot see what the main model decided.
-JUDGES = ("rule", "verifier", "human", "model")
+JUDGES = ("rule", "reviewer", "human", "model")
 MAX_PATHS = 5
 
 
@@ -39,7 +39,6 @@ def build(
     ran: List[str],
     sources: List[Any],
     facts: Dict[str, Any],
-    level: int,
     parent_session_id: Optional[str],
     denial: Optional[Dict[str, Any]],
     admin: bool = False,
@@ -50,7 +49,6 @@ def build(
         "engine": engine,
         "event": event.event,
         "session_id": event.session_id,
-        "level": level,
         "tool_name": event.tool_name,
         "agent_type": event.agent_type,
         "from_subagent": event.from_subagent,

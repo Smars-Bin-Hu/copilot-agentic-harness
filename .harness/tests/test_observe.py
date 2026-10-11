@@ -14,6 +14,7 @@ from support import HOOK, HarnessTestCase, payload, post_tool, pre_tool, subagen
 
 GUARD = ".harness/policies/gate.json"
 GREP = {"query": "sandbox", "isRegexp": False}
+REVIEWER = {"name": "reviewer", "agent_type": "reviewer", "prompt": "检查评审包", "description": "check"}
 EDIT = {"filePath": "/w/a.txt", "oldString": "a", "newString": "b"}
 
 
@@ -38,6 +39,13 @@ class ObserveCase(HarnessTestCase):
     def logs(self) -> Path:
         return self.root / ".harness" / "runtime" / "logs"
 
+    def review_task(self, sid: str, n: int = 1) -> None:
+        """A session that holds a task with `[review]=n`, a result, and one check open."""
+        self.prompt(sid, f"[review]={n} 写 RCA")
+        self.cli_json("task", "new", f"job-{sid}", "--kind", "rca", "--session-id", sid)
+        (self.root / ".workspace" / "sandbox" / "tasks" / f"job-{sid}" / "RCA.md").write_text("v1\n", encoding="utf-8")
+        self.cli_json("task", "review", "start", "--task", f"job-{sid}")
+
 
 class SessionLogTests(ObserveCase):
     def test_every_session_has_its_own_file_and_there_is_no_shared_call_log(self) -> None:
@@ -48,17 +56,14 @@ class SessionLogTests(ObserveCase):
         self.assertFalse((self.logs() / "hook-calls.jsonl").exists())
         self.assertEqual({row["session_id"] for row in self.session_log("one")}, {"one"})
 
-    def test_a_line_has_the_event_the_level_the_modules_the_decision_and_the_time(self) -> None:
+    def test_a_line_has_the_event_the_modules_the_decision_and_the_time(self) -> None:
         self.prompt("fields")
         row = self.last("fields")
-        for key in ("at", "surface", "engine", "event", "session_id", "level", "modules", "decision", "ms", "pid"):
+        for key in ("at", "surface", "engine", "event", "session_id", "modules", "decision", "ms", "pid"):
             self.assertIn(key, row)
-        self.assertEqual((row["event"], row["level"], row["decision"]), ("UserPromptSubmit", 1, "context"))
-        self.assertIn("task_level", row["modules"])
-
-    def test_the_level_in_the_line_is_the_level_of_the_session(self) -> None:
-        self.prompt("lv", "[L2] work")
-        self.assertEqual(self.last("lv")["level"], 2)
+        self.assertNotIn("level", row)
+        self.assertEqual((row["event"], row["decision"]), ("UserPromptSubmit", "context"))
+        self.assertIn("task", row["modules"])
 
     def test_an_allowed_call_leaves_no_paths_no_command_and_no_reason(self) -> None:
         self.hook(pre_tool("allowed", "read_file", {"filePath": self.path("secret/customer.sql")}))
@@ -82,20 +87,11 @@ class SessionLogTests(ObserveCase):
         self.assertEqual((row["decision"], row["judge"], row["by"]), ("ask", "human", ["gate"]))
         self.assertEqual(row["target"]["command"], "rm build/old.txt")
 
-    def test_a_budget_denial_is_marked_as_one(self) -> None:
-        self.prompt("budget")
-        for _ in range(2):
-            self.hook(pre_tool("budget", "grep_search", GREP))
-        self.hook(pre_tool("budget", "grep_search", GREP))
-        row = self.last("budget")
-        self.assertEqual((row["decision"], row["kind"], row["by"]), ("deny", "budget", ["task_level"]))
-
     def test_the_verdict_of_a_reviewer_call_is_recorded_with_the_reviewer_as_judge(self) -> None:
-        self.prompt("verdict", "[L2] [verify] change a file")
-        call = {"agentName": "reviewer", "prompt": "check", "description": "check"}
-        self.hook(post_tool("verdict", "runSubagent", call, "VERDICT: FAIL\n- missing"))
+        self.review_task("verdict")
+        self.hook(post_tool("verdict", "Agent", REVIEWER, "VERDICT: FAIL\n- RCA.md:1 missing"))
         row = self.last("verdict")
-        self.assertEqual((row["judge"], row["verdict"]), ("verifier", "FAIL"))
+        self.assertEqual((row["judge"], row["verdict"], row["kind"]), ("reviewer", "FAIL", "task-review"))
 
     def test_a_repeated_denial_keeps_the_circuit_breaker_entry(self) -> None:
         for _ in range(3):
@@ -193,24 +189,25 @@ class StatsTests(ObserveCase):
         return self.cli_json("stats", *arguments)
 
     def build(self) -> None:
-        self.prompt("a", "[L2] work")
+        """Session a: two prompts, a read, a command a person must confirm. Session b: one prompt, a subagent and a guardrail write, both refused."""
+        self.prompt("a", "work")
         self.prompt("a", "more")
         self.hook(pre_tool("a", "read_file", {"filePath": "/w/a.txt"}))
         self.hook(pre_tool("a", "run_in_terminal", {"command": "rm x"}))
         self.prompt("b")
-        for _ in range(3):
-            self.hook(pre_tool("b", "grep_search", GREP))
+        self.hook(pre_tool("b", "Agent", {"name": "x", "agent_type": "general-purpose", "prompt": "p"}))
         self.hook(pre_tool("b", "create_file", {"filePath": self.path(GUARD), "content": "x"}))
 
-    def test_counts_prompts_per_level_refusals_asks_and_budget_denials(self) -> None:
+    def test_counts_prompts_tool_calls_refusals_and_asks(self) -> None:
         self.build()
         result = self.stats()
         self.assertEqual(result["sessions"], 2)
-        self.assertEqual(result["prompts_by_level"], {"L1": 1, "L2": 2})
-        self.assertEqual(result["denied_by_module"], {"gate": 1, "task_level": 1})
-        self.assertEqual(result["budget_denials"], 1)
+        self.assertEqual((result["prompts"], result["task_prompts"], result["tool_calls"]), (3, 0, 4))
+        self.assertEqual(result["denied_by_module"], {"gate": 1, "task": 1})
         self.assertEqual(result["asked_by_module"], {"gate": 1})
-        self.assertEqual(result["tool_calls_by_level"], {"L1": 4, "L2": 2})
+        for gone in ("prompts_by_level", "tool_calls_by_level", "budget_denials", "verifier_verdicts"):
+            self.assertNotIn(gone, result)
+        self.assertNotIn("highest_level", result["recent_sessions"][0])
 
     def write_rows(self, rows: list) -> None:
         folder = self.logs() / "vscode"
@@ -244,17 +241,23 @@ class StatsTests(ObserveCase):
     def test_one_session_only(self) -> None:
         self.build()
         result = self.stats("--session-id", "b")
-        self.assertEqual((result["sessions"], result["prompts_by_level"]), (1, {"L1": 1}))
+        self.assertEqual((result["sessions"], result["prompts"], result["tool_calls"]), (1, 1, 2))
 
-    def test_verifier_verdicts_and_started_subagents(self) -> None:
-        self.prompt("v", "[L2] [verify] work")
-        call = {"agentName": "reviewer", "prompt": "check", "description": "check"}
-        self.hook(post_tool("v", "runSubagent", call, "VERDICT: PASS\n- ok"))
-        self.hook(post_tool("v", "runSubagent", call, "VERDICT: FAIL\n- no"))
+    def test_review_verdicts_and_started_subagents(self) -> None:
+        self.review_task("v", n=2)
+        self.hook(post_tool("v", "Agent", REVIEWER, "VERDICT: PASS\n- ok"))
+        self.cli_json("task", "review", "start")
+        self.hook(post_tool("v", "Agent", REVIEWER, "VERDICT: FAIL\n- no"))
         self.hook(subagent_start("v", "reviewer"))
         result = self.stats()
-        self.assertEqual(result["verifier_verdicts"], {"PASS": 1, "FAIL": 1})
+        self.assertEqual(result["review_verdicts"], {"PASS": 1, "FAIL": 1})
         self.assertEqual(result["subagents_started"], {"reviewer": 1})
+
+    def test_verdicts_logged_before_1_1_are_still_counted(self) -> None:
+        folder = self.logs() / "vscode"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "old.jsonl").write_text(json.dumps({"at": "2026-10-01T00:00:00+00:00", "event": "PostToolUse", "judge": "verifier", "verdict": "PASS"}) + "\n", encoding="utf-8")
+        self.assertEqual(self.stats()["review_verdicts"], {"PASS": 1})
 
     def test_days_keeps_only_recent_calls(self) -> None:
         self.build()

@@ -78,14 +78,13 @@ def collect(root: Path, session_id: str = "", surface: str = "", days: Optional[
             rows.append(row)
             sessions.add((found_surface, path.stem))
 
-    prompts: Dict[str, int] = {}
-    tool_calls: Dict[str, int] = {}
+    prompts = 0
+    tool_calls = 0
     refused: Dict[str, int] = {}
     asked: Dict[str, int] = {}
     blocked: Dict[str, int] = {}
-    budget_denials = 0
     task_prompts = 0
-    verifier: Dict[str, int] = {}
+    verdicts: Dict[str, int] = {}
     subagents: Dict[str, int] = {}
     failed: Dict[str, int] = {}
     skills: Dict[str, int] = {}
@@ -93,13 +92,12 @@ def collect(root: Path, session_id: str = "", surface: str = "", days: Optional[
     every: List[float] = []
     for row in rows:
         event = row.get("event", "")
-        level = f"L{row.get('level', 1)}"
         if event == "UserPromptSubmit" and not row.get("from_subagent") and not row.get("continuation"):
-            bump(prompts, level)
+            prompts += 1
             if row.get("kind") == "task":
-                task_prompts += 1  # a prompt of an L2 session that is in task mode
+                task_prompts += 1  # a prompt of a session that holds a task
         elif event == "PreToolUse":
-            bump(tool_calls, level)
+            tool_calls += 1
             if row.get("skill"):
                 bump(skills, row["skill"])
         elif event == "PostToolUseFailure":
@@ -110,14 +108,12 @@ def collect(root: Path, session_id: str = "", surface: str = "", days: Optional[
         owners = ",".join(row.get("by") or []) or "unknown"
         if decision == "deny":
             bump(refused, owners)
-            if row.get("kind") == "budget":
-                budget_denials += 1
         elif decision == "ask":
             bump(asked, owners)
         elif decision == "block":
             bump(blocked, owners)
-        if row.get("judge") == "verifier":
-            bump(verifier, row.get("verdict") or "unknown")
+        if row.get("judge") in ("reviewer", "verifier"):  # `verifier`: logs written before 1.1.0
+            bump(verdicts, row.get("verdict") or "unknown")
         if isinstance(row.get("ms"), (int, float)):
             by_event.setdefault(event, []).append(float(row["ms"]))
             every.append(float(row["ms"]))
@@ -131,21 +127,19 @@ def collect(root: Path, session_id: str = "", surface: str = "", days: Optional[
         if lines:
             recent.append({
                 "surface": found_surface, "session_id": path.stem, "first_call": lines[0].get("at", ""), "calls": len(lines),
-                "highest_level": max(int(row.get("level", 1)) for row in lines),
                 "subagent_session": bool(lines[0].get("parent_session_id")),
             })
     errors = [row for row in read_lines(logs_dir(root) / "hook-errors.jsonl") if not since or row.get("at", "") >= since]
     return {
         "sessions": len(sessions),
         "calls": len(rows),
-        "prompts_by_level": prompts,
-        "task_mode_prompts": task_prompts,
-        "tool_calls_by_level": tool_calls,
+        "prompts": prompts,
+        "task_prompts": task_prompts,
+        "tool_calls": tool_calls,
         "denied_by_module": refused,
-        "budget_denials": budget_denials,
         "asked_by_module": asked,
         "stop_blocks_by_module": blocked,
-        "verifier_verdicts": verifier,
+        "review_verdicts": verdicts,
         "subagents_started": subagents,
         "failed_tool_calls_by_tool": failed,
         "skills_loaded": skills,

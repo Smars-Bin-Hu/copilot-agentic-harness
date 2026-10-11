@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "The gate only guards writes. It never blocks a read. Guardrail files cannot be changed at any level, except in a session a person switched to admin mode (admin_locked_paths stay closed there too); in L3 writes stay inside the request folder; dangerous terminal commands are denied or need a person to confirm.",
+  "description": "The gate only guards writes. It never blocks a read. Guardrail files cannot be changed, except in a session a person switched to admin mode (admin_locked_paths stay closed there too); a session that holds a task writes inside the task folder only; dangerous terminal commands are denied or need a person to confirm.",
   "guardrail_paths": [
     ".github/hooks/**",
     ".harness/policies/**",
@@ -15,25 +15,13 @@
     ".harness/runtime/**"
   ],
   "cli_owned_paths": [
-    ".workspace/sandbox/requests/*/request.json",
-    ".workspace/sandbox/requests/*/handoffs/**/handoff.json",
-    ".workspace/sandbox/requests/*/handoffs/**/manifest.json",
-    ".workspace/sandbox/requests/*/handoffs/orchestrator/init-inputs/knowledge-brief.md",
-    ".workspace/sandbox/requests/*/handoffs/orchestrator/init-inputs/brief-history/**",
-    ".workspace/sandbox/requests/*/promote-plan.diff",
-    ".workspace/current_tasks/*/.task/**",
-    ".workspace/current_tasks/*/PROMOTE-PLAN.diff",
-    ".workspace/current_tasks/*/CHANGES.diff",
     ".workspace/sandbox/tasks/*/.task/**",
     ".workspace/sandbox/tasks/*/PROMOTE-PLAN.diff",
     ".workspace/sandbox/tasks/*/CHANGES.diff",
     ".workspace/sandbox/tasks/*/REVIEW/**",
     ".workspace/sandbox/tasks/*/SNAPSHOT/**",
-    ".workspace/current_tasks/*/REVIEW/**",
-    ".workspace/current_tasks/*/SNAPSHOT/**",
     ".workspace/reports/**"
   ],
-  "l3_write_root": ".workspace/sandbox/requests/{request_id}",
   "terminal": {
     "guardrail_write": [
       {
@@ -91,8 +79,8 @@
         "pattern": "\\b(?:chmod|chown|chgrp)\\s+(?:-R\\b|--recursive\\b)|\\bicacls(?:\\.exe)?\\b[^;&|\\n]*\\s/t\\b|\\btakeown(?:\\.exe)?\\b[^;&|\\n]*\\s/r\\b|-recurse\\b[^\\n]*\\bset-acl\\b|\\bdocker(?:\\.exe)?\\s+(?:rm|rmi|system\\s+prune|volume\\s+rm)\\b|\\bkubectl(?:\\.exe)?\\s+delete\\b|\\bterraform(?:\\.exe)?\\s+(?:apply|destroy)\\b"
       },
       {
-        "why": "批准计划（approve-plan）、批准 promote（approve-promote）、恢复中途出错的 promote（recover）、批准 git 命令（approve-command）和开 admin 模式（admin on）只能由用户在自己的终端里运行。告诉用户运行这条命令，不要自己运行",
-        "pattern": "\\b(?:cli\\.py|harness(?:\\.cmd)?)\\s+(?:(?:request|task)\\s+(?:approve-plan|approve-promote|recover)|approve-command|admin\\s+on)\\b"
+        "why": "批准计划（task approve-plan）、批准回写（task approve-promote）、恢复中途出错的 promote（task recover）、再给检查次数或放行（task review extend、task review waive）、批准 git 命令（approve-command）、开 admin 模式（admin on）只能由用户在自己的终端里运行。告诉用户运行这条命令，不要自己运行",
+        "pattern": "\\b(?:cli\\.py|harness(?:\\.cmd)?)\\s+(?:task\\s+(?:approve-plan|approve-promote|recover|review\\s+(?:extend|waive))|approve-command|admin\\s+on)\\b"
       }
     ],
     "ask": [

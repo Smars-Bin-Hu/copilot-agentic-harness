@@ -3,9 +3,8 @@
 
   doctor                       check that the harness files and config are consistent
   user                         the name of the person using this copy (for a change note that needs an author)
-  level status|set             level of a session (task_level module)
-  request, brief, attempt, dispatch, handoff, check, promote   the L3 request (request module)
-  target list|show             the target repositories (request module)
+  task ...                     tasks: new, open, upgrade, list, fetch, diff, promote, review, snapshot, close (task module)
+  target list|show             the target repositories (task module)
   approve-command              a person approves a git command the gate refused (gate module)
   admin on|off|status          a person switches admin mode on for one session: it may then change guardrail files (gate module)
   stats, logs prune            numbers from the session logs; delete old logs (observe module)
@@ -29,8 +28,7 @@ import doctor  # noqa: E402
 from modules.evalcheck import commands as eval_commands  # noqa: E402
 from modules.gate import commands as gate_commands  # noqa: E402
 from modules.observe import commands as observe_commands  # noqa: E402
-from modules.request import commands as request_commands  # noqa: E402
-from modules.task_level import commands as task_level_commands  # noqa: E402
+from modules.task import commands as task_commands  # noqa: E402
 
 
 SHORT_FLAG = "--short"
@@ -64,8 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     check.set_defaults(handler=None)
     name = commands.add_parser("user", help="the name of the person using this copy (user.override.json, else git config user.name)")
     name.set_defaults(handler=lambda _args: user.who(repo_root()))
-    task_level_commands.register(commands)
-    request_commands.register(commands)
+    task_commands.register(commands)
     gate_commands.register(commands)
     observe_commands.register(commands)
     eval_commands.register(commands)

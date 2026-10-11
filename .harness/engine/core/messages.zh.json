@@ -2,10 +2,8 @@
   "task.name.empty": "任务名不能为空。",
   "task.name.bad": "任务名 `{name}` 不能用。不要带 `/`、`\\`，不要以 `.` 开头，最长 {limit} 个字。",
   "task.exists": "任务 `{task}` 已经有了。要接着做，运行 `{command} task open {name} --session-id <会话 id>`。",
-  "task.exists.old": "旧位置已经有同名的任务 `{task}`。换一个名字，或接着做那个：`{command} task open {name} --session-id <会话 id>`。",
   "task.missing": "没有任务 `{name}`。先看有哪些：`{command} task list --all`。要新建：`{command} task new {name} --kind <种类> --session-id <会话 id>`。",
   "task.session.missing": "没有会话 `{session_id}`。用本条提示开头规则里写的“当前会话 id”，原样抄，不要改。",
-  "task.session.request": "这个会话有进行中的 L3 请求 `{request}`。先结束那个请求。",
   "task.session.subagent": "子 agent 不能开任务，也不能换任务。",
   "task.session.admin": "这个会话在 admin 模式里，不能做任务。请用户换一个对话，或先运行 `admin off`。",
   "task.closed": "任务 `{task}` 已经关闭。要接着做，运行 `{command} task open {name} --session-id <会话 id>`。",
@@ -34,7 +32,7 @@
   "task.inject.head": "任务：{task}（{kind}，{tier}档），第 {round} 轮。新会话先读 {task}/TASK.md，再按它的指向读别的；停下前更新它。",
   "task.inject.head.plain": "任务：{task}，第 {round} 轮。",
   "task.inject.scope": "编辑工具只能写这个任务目录：需求写在 REQ.md，不回写的成果写在根下，要回写的写在 {task}/DEV/（计划批准后）；REQ/、REF/ 是用户放的材料，只读。目标仓库只能用 `{command} task promote` 回写，先 --dry-run，用户在终端批准。approve-plan、approve-promote、recover 只能由用户运行。不用 `rm` 清理文件。任务目录被 git 忽略，Glob、Grep 这类搜索工具搜不到里面的文件：用读文件工具按路径直接读，或用终端 `ls`。",
-  "rules.task.entry": "用户要你产出或修改文件（RCA、设计、计划、开发、测试、改知识库），或提到接着做、继续、查看某个已有的任务（哪怕只是问做到哪了）时，先用技能 `harness-my-task` 开任务或接上任务，再读、再动手。只是问答、不落盘、也不涉及已有任务时，不用。目标仓库的文件任何时候都不能直接改。",
+  "rules.task.entry": "用户要你产出或修改文件（RCA、设计、计划、开发、测试、改知识库），或提到接着做、继续、查看某个已有的任务（哪怕只是问做到哪了）时，先用技能 `harness-my-task` 开任务或接上任务，再读、再动手。只是问答、不落盘、也不涉及已有任务时，不用。没有接着任务时不能调用子 agent。目标仓库的文件任何时候都不能直接改。",
   "gate.target.direct": "`{repo}/{relative}` 在目标仓库 {repo} 的工作区里。目标仓库任何时候都不能直接改，只能由 promote 写。在任务目录的 `DEV/{repo}/{relative}` 里改，再用 `{command} task promote` 回写（要用户批准）。这个文件仓库里已经有：先 `{command} task fetch {repo}/{relative}` 取进来。还没有任务：用技能 `harness-my-task` 开一个。",
   "review.off": "这个任务没有开启独立检查。用户在提示里写 `[review]=n`（n 是要连续通过的次数）才查。不要自己开，也不要调用 reviewer。",
   "review.nothing": "任务 {task} 还没有可以检查的成果。先把成果写出来（要回写的在 DEV/ 下，不回写的在任务目录根下），再运行 `{command} task review start`。",
@@ -70,5 +68,11 @@
   "review.inject": "独立检查：这个任务要连续通过 {n} 次（`[review]={n}`），现在 {passes} 次，已查 {used} 次，上限 {limit} 次。成果写完后：`{command} task review start`，再调用 `{agent}`；没通过就按 verdict.md 改了再查；凑够了才能 `task promote --dry-run`。",
   "review.start.context": "这次检查的评审包：{package}。先读它，照它检查。你的回答会被原样存成同目录的 verdict.md。",
   "rules.task.open_list": "没关闭的任务（{count} 个）：{names}。用户说的是其中一个时，先运行 `{command} task open <任务名> --session-id <当前会话 id>` 接上它，再读它的 TASK.md。不接上就读写，规则不生效。",
-  "task.inject.req": "用户这条提示里的要求和 {task}/REQ.md 不一致，或多出了新条件时：先改 REQ.md 并在“变更记录”记一行，再动成果。直接下的指令（“就写成……”“加一句……”）也算需求变更。独立检查只认 REQ.md。"
+  "task.inject.req": "用户这条提示里的要求和 {task}/REQ.md 不一致，或多出了新条件时：先改 REQ.md 并在“变更记录”记一行，再动成果。直接下的指令（“就写成……”“加一句……”）也算需求变更。独立检查只认 REQ.md。",
+  "rules.session": "当前会话 id：{session_id}。`{command} task new`、`task open` 的 --session-id 原样用它。工具调用被拒绝时，照拒绝理由里的下一步做，不要换个办法绕过。",
+  "rules.review.no_task": "用户在这条提示里写了 `[review]={n}`：要独立检查。检查要有任务才能做。先用技能 `harness-my-task` 开任务或接上任务（简单的事开轻档就行），n 会自动带进任务。",
+  "rules.subagent.no_task": "这个会话没有接着任务，不能调用子 agent（你调用的是：{called}）。自己完成。要独立检查：先用技能 `harness-my-task` 开任务或接上任务，用户写了 `[review]=n` 之后才能调用 `{agent}`。",
+  "rules.subagent.admin": "admin 模式不允许子 agent（你调用的是：{called}）。请自己完成。",
+  "rules.admin": "admin 模式：已开（用户在自己的终端批准的）。这个会话用来二开和排查 harness。\n可以改 harness 的文件，包括 guardrail 文件。仍然不能改：{locked}（只读）、CLI 生成的文件（报告、任务的 `.task/` 等）、`.git`、目标仓库。\n不能调用子 agent，不能开任务。批准类命令（approve-plan、approve-promote、recover、approve-command、admin on、task review extend、task review waive）只能由用户运行。git 写命令和危险命令的规则不变。\n改了 `.harness/engine/`、策略或 hook 配置后，运行 `{command} doctor` 和测试，都通过再交给用户。工具调用被拒绝时，照拒绝理由里的下一步做。\n当前会话 id：{session_id}。做完后提醒用户运行 `{command} admin off --session-id {session_id}`。",
+  "task.start.gone": "`task start` 在 1.1.0 删掉了。新建任务：`{command} task new <任务名> --kind <种类> --session-id <会话 id>`。接着做已有的任务：`{command} task open <任务名> --session-id <会话 id>`。任务现在放在 .workspace/sandbox/tasks/ 下。"
 }

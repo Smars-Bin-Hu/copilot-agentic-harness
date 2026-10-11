@@ -3,8 +3,7 @@
 State file: .harness/runtime/state/<surface>/<session>.json
 
 Shared fields (one writer each, see 00 section 8.3):
-  level           1 or 2, the level the user chose. Written by task_level.
-  active_request  id of the running L3 request. Written by the request module.
+  active_task     the task folder the session holds, or nothing. Written by the task CLI (`task new`, `task open`, `task close`).
   admin           {"on": true, ...} while the person has switched admin mode on for this session. Written by the gate CLI
                   (`admin on|off`, a person at a terminal). Optional: a session without it is not admin.
 Module state lives in state["modules"][<name>].
@@ -27,7 +26,7 @@ from . import breaker, schema
 from .events import Decision, HookEvent
 from .paths import state_dir, utc_now
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 LOCK_TIMEOUT_SECONDS = 7.0
 # A critical section takes milliseconds. A lock older than this belongs to a killed process (I-9).
 LOCK_STALE_SECONDS = 5.0
@@ -46,13 +45,11 @@ TRACKED_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "SubagentSta
 
 STATE_SCHEMA = {
     "type": "object",
-    "required": ["schema_version", "surface", "session_id", "level", "active_request", "subagents", "modules"],
+    "required": ["schema_version", "surface", "session_id", "subagents", "modules"],
     "properties": {
         "schema_version": {"type": "integer", "enum": [SCHEMA_VERSION]},
         "surface": {"type": "string"},
         "session_id": {"type": "string"},
-        "level": {"type": "integer", "enum": [1, 2]},
-        "active_request": {"type": ["string", "null"]},
         "admin": {"type": "object", "required": ["on"], "properties": {"on": {"type": "boolean"}}},
         "subagents": {
             "type": "object",
@@ -88,8 +85,6 @@ def new_state(surface: str, session_id: str) -> Dict[str, Any]:
         "session_id": session_id,
         "created_at": now,
         "updated_at": now,
-        "level": 1,
-        "active_request": None,
         "subagents": {"active": [], "pending_prompts": []},
         "modules": {},
     }
@@ -106,8 +101,22 @@ def read_state(path: Path, surface: str, session_id: str) -> Dict[str, Any]:
         return new_state(surface, session_id)
     with path.open(encoding="utf-8") as handle:
         state = json.load(handle)
+    upgrade(state)
     validate_state(state, surface, session_id)
     return state
+
+
+def upgrade(state: Any) -> None:
+    """A session that began before 1.1.0 goes on: what the Levels and the L3 request kept is dropped, the task it holds stays."""
+    if not isinstance(state, dict) or state.get("schema_version") != 2:
+        return
+    for key in ("level", "active_request"):
+        state.pop(key, None)
+    modules = state.get("modules")
+    if isinstance(modules, dict):
+        for name in ("task_level", "request"):
+            modules.pop(name, None)
+    state["schema_version"] = SCHEMA_VERSION
 
 
 def atomic_write(path: Path, value: Any) -> None:
@@ -178,11 +187,6 @@ def update_state(root: Path, surface: str, session_id: str, mutator: Callable[[D
     return state
 
 
-def effective_level(state: Dict[str, Any]) -> int:
-    """3 while an L3 request is active, otherwise the level the user chose."""
-    return 3 if state.get("active_request") else state["level"]
-
-
 def admin_on(state: Dict[str, Any]) -> bool:
     """The person switched admin mode on for this session. A subagent session is never admin."""
     return bool((state.get("admin") or {}).get("on")) and not state.get("parent_session_id")
@@ -245,7 +249,7 @@ def claim_child(root: Path, surface: str, event: HookEvent) -> Optional[Dict[str
 
     Called for the first UserPromptSubmit of a session that has no state yet. A parent that just reported a
     SubagentStart is waiting for its child. Match by the call message first, then by time. On a match the parent's
-    entry is marked as claimed, and its level and request are returned for the child to inherit.
+    entry is marked as claimed, and the task it holds is returned for the child to inherit.
     """
     directory = state_dir(root, surface)
     if not directory.is_dir():
@@ -285,7 +289,7 @@ def claim_child(root: Path, surface: str, event: HookEvent) -> Optional[Dict[str
                 entry["awaiting_child"] = False
                 entry["child_session_id"] = event.session_id
                 break
-        claimed.update(parent_session_id=parent["session_id"], level=parent["level"], active_request=parent["active_request"], active_task=parent.get("active_task"))
+        claimed.update(parent_session_id=parent["session_id"], active_task=parent.get("active_task"))
 
     with state_lock(path):
         parent_state = read_state(path, surface, parent_id)

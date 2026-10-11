@@ -84,8 +84,6 @@ def admin_switch_on(
     with session(root, surface, session_id) as state:
         if state.get("parent_session_id"):
             raise CommandError("这是一个子 agent 的会话。admin 不能是子 agent。")
-        if state["active_request"]:
-            raise CommandError(f"这个会话有进行中的 L3 请求 `{state['active_request']}`。admin 模式不和任务混用：换一个新对话再开。")
         if tasks.open_of(root, state) is not None:
             raise CommandError(f"这个会话在做任务 `{state.get('active_task')}`。admin 模式不和任务混用：换一个新对话再开。")
         if admin_on(state):
@@ -95,7 +93,7 @@ def admin_switch_on(
             f"会话 {session_id}（{surface}）将进入 admin 模式，直到你运行 `admin off`：",
             "  这个会话里的 agent 可以改 harness 的 guardrail 文件（hook 配置、策略、engine、短命令、registry、.vscode/settings.json）。",
             f"  仍然不能改：{'、'.join(locked)}、CLI 生成的文件、.git、目标仓库。批准类命令仍然只有你能运行。",
-            "  Task Level 的预算不再限制它。只在你要二开或排查 harness 时开，用完就关。",
+            "  它不能开任务，不能调用子 agent。只在你要二开或排查 harness 时开，用完就关。",
         )
         try:
             approval.ask("确认开启", hashlib.sha256(f"admin\n{surface}\n{session_id}".encode("utf-8")).hexdigest(), "没有开启。什么都没有改。", reader)

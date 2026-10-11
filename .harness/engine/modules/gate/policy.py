@@ -12,7 +12,6 @@ from core.guardrails import CORE_GUARDRAILS, admin_locked, guardrail_paths, miss
 POLICY_NAME = "gate"
 # Any `.git` folder (in a target repository or anywhere else) in a terminal command, with the spellings Windows treats as the same.
 GIT_FOLDER = r"(?<![\w.-])(?:\.git|git~\d+)\.*(?:::\$\w+)?(?:/[^\s\"']*)?(?![\w.-])"
-REQUEST_PLACEHOLDER = "{request_id}"
 GUARD_PLACEHOLDER = "{guard}"
 # Where a command can start: the beginning, or after `;`, `&`, `|`, `(`, a new line. An optional `sudo` may lead.
 # Patterns use it so that `grep "rm -rf" file` (rm inside an argument) does not look like a command.
@@ -28,14 +27,13 @@ _RULES_SCHEMA = {"type": "array", "items": _RULE_SCHEMA}
 
 POLICY_SCHEMA = {
     "type": "object",
-    "required": ["schema_version", "guardrail_paths", "l3_write_root", "terminal"],
+    "required": ["schema_version", "guardrail_paths", "terminal"],
     "properties": {
         "schema_version": {"type": "integer", "enum": [1]},
         "guardrail_paths": {"type": "array", "items": {"type": "string"}},
         "extra_guardrail_paths": {"type": "array", "items": {"type": "string"}},
         "admin_locked_paths": {"type": "array", "items": {"type": "string"}},
         "cli_owned_paths": {"type": "array", "items": {"type": "string"}},
-        "l3_write_root": {"type": "string"},
         "terminal": {
             "type": "object",
             "required": ["guardrail_write", "deny", "ask"],
@@ -64,8 +62,6 @@ def validate_policy(policy: Dict[str, Any], floor: bool = True) -> None:
         )
     if any(not item.strip() for item in patterns + list(policy.get("cli_owned_paths", [])) + list(policy.get("admin_locked_paths", []))):
         raise ValueError(f"Invalid {POLICY_NAME}.json: empty guardrail path")
-    if REQUEST_PLACEHOLDER not in policy["l3_write_root"]:
-        raise ValueError(f"Invalid {POLICY_NAME}.json: l3_write_root must contain {REQUEST_PLACEHOLDER}")
     for group in ("guardrail_write", "deny", "ask"):
         for rule in policy["terminal"][group]:
             if group == "guardrail_write" and GUARD_PLACEHOLDER not in rule["pattern"]:
@@ -91,7 +87,7 @@ class Compiled:
             (re.compile(expand(rule["pattern"], guard), re.IGNORECASE), rule["why"])
             for rule in policy["terminal"]["guardrail_write"]
         ]
-        # Files only the CLI writes (request.json, handoff.json...). Same write patterns as for guardrail files.
+        # Files only the CLI writes (a task's `.task/`, `REVIEW/`, `SNAPSHOT/`, the reports). Same write patterns as for guardrail files.
         self.owned = list(policy.get("cli_owned_paths", []))
         self.owned_regexes: List[Tuple[str, Pattern[str]]] = [(item, repo_paths.glob_regex(item)) for item in self.owned]
         owned_guard = repo_paths.command_regex(self.owned).pattern if self.owned else ""
@@ -101,7 +97,6 @@ class Compiled:
         ] if self.owned else []
         self.deny = [(re.compile(expand(rule["pattern"], ""), re.IGNORECASE), rule["why"]) for rule in policy["terminal"]["deny"]]
         self.ask = [(re.compile(expand(rule["pattern"], ""), re.IGNORECASE), rule["why"]) for rule in policy["terminal"]["ask"]]
-        self.l3_write_root = policy["l3_write_root"]
         # A `.git` folder is never written by an agent (A4); a target repository's refused_paths are not written either.
         self.repos: List[Tuple[str, Path, List[Tuple[str, Pattern[str]]]]] = [
             (name, path, [(item, repo_paths.glob_regex(item)) for item in refused if item.strip() != ".git/**"])
@@ -138,9 +133,6 @@ class Compiled:
             if regex.match(relative):
                 return pattern
         return ""
-
-    def request_root(self, request_id: str) -> str:
-        return self.l3_write_root.replace(REQUEST_PLACEHOLDER, request_id).strip("/")
 
     def repo_of(self, absolute: str) -> Optional[Tuple[str, str]]:
         """`(repo name, repo-relative path)` when an absolute path is inside the working tree of a target repository."""

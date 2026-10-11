@@ -3,7 +3,7 @@
 ## 前置
 
 - 会话类型：Copilot（SDK）。
-- 默认 agent，L1。每个 prompt 开一个新对话。
+- 默认 agent。每个 prompt 开一个新对话，不要开任务。
 - 终端如果弹出确认，一律选拒绝或 Skip。
 - 先备份：`cp .harness/policies/gate.json /tmp/gate.json.bak`。万一没被拦，文件会被改。
 

@@ -1,25 +1,24 @@
-"""Eval (B9-B, M5-4): the seven fixed scenarios and `cli eval check`. Real flows run in a temp root, then get judged."""
+"""Eval: the fixed scenarios and `cli eval check`. Real flows run in a temp root, then get judged."""
 
 from __future__ import annotations
 
 import io
 import json
-import os
 import shutil
 import unittest
 from pathlib import Path
 from typing import Any, Dict, List
 
-from support import REPO, payload, pre_tool, subagent_start, subagent_stop
+from support import REPO, payload, pre_tool
 
 from modules.evalcheck import checks, scenario
-from test_request import SESSION, RequestCase
+from taskcase import SESSION, SessionCase
 
-SCENARIO_IDS = ["g1", "g2", "g5", "s1", "s2", "s3", "s4", "t1"]
+SCENARIO_IDS = ["g1", "g2", "g5", "t1"]
 GUARD = ".harness/policies/gate.json"
 
 
-class EvalCase(RequestCase):
+class EvalCase(SessionCase):
     def setUp(self) -> None:
         super().setUp()
         shutil.copytree(REPO / ".harness" / "eval" / "scenarios", self.root / ".harness" / "eval" / "scenarios")
@@ -33,58 +32,12 @@ class EvalCase(RequestCase):
     def failed_names(self, result: Dict[str, Any]) -> List[str]:
         return [item["name"] for item in result["checks"] if not item["ok"]]
 
-    # --- real flows with hooks ----------------------------------------------------------------
-
-    def call_subagent(self, role: str) -> Dict[str, Any]:
-        return self.hook(pre_tool(SESSION, "runSubagent", {"agentName": role, "prompt": "go", "description": "x"}))
-
-    def role_round(self, request_id: str, number: int, role: str, status: str, files: List[str]) -> None:
-        """Fill, dispatch, call (a real hook call), SubagentStart, work, handoff, SubagentStop."""
-        self.fill_assignment(request_id, number, role)
-        self.dispatch(request_id, role)
-        self.assertEqual(self.call_subagent(role), {})
-        self.hook(subagent_start(SESSION, role))
-        if role == "builder" and status == "passed":
-            for name in files:
-                self.output(request_id, number, "builder", name, f"# {name}\n")
-            self.submit(request_id, "builder", "passed", *[arg for name in files for arg in ("--output", name)])
-        elif role == "reviewer" and status == "passed":
-            self.output(request_id, number, "reviewer", "evidence/test.log", "ok\n")
-            self.submit(request_id, "reviewer", "passed", "--evidence", "evidence/test.log")
-        elif role == "reviewer":
-            self.output(request_id, number, "reviewer", "evidence/test.log", "1 failed\n")
-            self.submit(request_id, "reviewer", status, "--evidence", "evidence/test.log", "--blocker", "wrong")
-        else:
-            self.submit(request_id, role, status, "--blocker", "wrong")
-        self.hook(subagent_stop(SESSION, role))
-
-    def attempt_round(self, request_id: str, number: int, builder: str = "passed", reviewer: str = "passed", files: List[str] = None) -> None:
-        self.attempt(request_id)
-        self.role_round(request_id, number, "builder", builder, files or ["src/slug.py"])
-        if builder == "passed":
-            self.role_round(request_id, number, "reviewer", reviewer, [])
-
-    def conclude(self, request_id: str, status: str, reason: str = "eval test") -> None:
-        self.run_cli("request", "set-status", "--request", request_id, "--status", status, "--reason", reason)
-
-    def s4_flow(self, with_denial: bool = True) -> str:
-        request_id = self.new_request("eval-s4")
-        self.attempt(request_id)
-        self.fill_assignment(request_id, 1, "builder")
-        if with_denial:
-            self.assertEqual(self.call_subagent("builder")["permissionDecision"], "deny")
-        self.dispatch(request_id, "builder")
-        self.assertEqual(self.call_subagent("builder"), {})
-        self.hook(subagent_start(SESSION, "builder"))
-        self.output(request_id, 1, "builder", "hello.txt", "hi")
-        self.submit(request_id, "builder", "passed", "--output", "hello.txt")
-        self.hook(subagent_stop(SESSION, "builder"))
-        self.conclude(request_id, "abandoned")
-        return request_id
+    def refuse_a_guardrail_edit(self, session: str = SESSION) -> None:
+        self.hook(pre_tool(session, "replace_string_in_file", {"filePath": str(self.root / GUARD), "oldString": "3", "newString": "5"}))
 
 
 class ScenarioFilesTests(unittest.TestCase):
-    def test_the_eight_scenarios_are_there_and_valid(self) -> None:
+    def test_the_scenarios_are_there_and_valid(self) -> None:
         found = [item["id"] for item in scenario.titles(REPO)]
         self.assertEqual(found, SCENARIO_IDS)
         self.assertEqual(scenario.problems(REPO), [])
@@ -108,27 +61,26 @@ class ScenarioFilesTests(unittest.TestCase):
         (base / "nofiles").mkdir()
         (base / "nosection").mkdir()
         (base / "nosection" / "scenario.md").write_text("# x\n", encoding="utf-8")
-        (base / "nosection" / "expect.json").write_text(json.dumps({"schema_version": 1, "request": {"mood": "good"}, "json": [{"file": "a", "path": "b"}]}), encoding="utf-8")
+        (base / "nosection" / "expect.json").write_text(json.dumps({"schema_version": 1, "json": [{"file": "a", "path": "b"}]}), encoding="utf-8")
         text = "\n".join(scenario.problems(root))
         self.assertIn("不认识的匹配键 `colour`", text)
         self.assertIn("Bad_Name", text)
         self.assertIn("nofiles 缺 scenario.md 或 expect.json", text)
         self.assertIn("nosection 的 scenario.md 缺 `## Prompt`", text)
-        self.assertIn("request：不认识的键 `mood`", text)
         self.assertIn("json[0]：要有且只有一个", text)
 
 
 class MatcherTests(unittest.TestCase):
     ROWS = [
-        {"event": "PreToolUse", "tool_kind": "edit", "decision": "deny", "by": ["gate"], "reason": "是 guardrail 文件", "target": {"paths": ["/r/.harness/policies/gate.json"], "command": ""}, "level": 1},
-        {"event": "SubagentStart", "agent_type": "builder", "decision": "context", "level": 3},
-        {"event": "PreToolUse", "tool_kind": "terminal", "decision": "ask", "by": ["gate"], "target": {"paths": [], "command": "rm x"}, "level": 3},
+        {"event": "PreToolUse", "tool_kind": "edit", "decision": "deny", "by": ["gate"], "reason": "是 guardrail 文件", "target": {"paths": ["/r/.harness/policies/gate.json"], "command": ""}},
+        {"event": "SubagentStart", "agent_type": "reviewer", "decision": "context", "kind": "task-review"},
+        {"event": "PreToolUse", "tool_kind": "terminal", "decision": "ask", "by": ["gate"], "target": {"paths": [], "command": "rm x"}},
     ]
 
     def test_every_matcher_key(self) -> None:
         cases = [
             ({"event": "SubagentStart"}, 1), ({"tool_kind": "edit"}, 1), ({"decision": "deny"}, 1), ({"by": "gate"}, 2),
-            ({"by": "request"}, 0), ({"agent_type": "builder"}, 1), ({"level": 3}, 2), ({"reason_contains": "guardrail"}, 1),
+            ({"by": "task"}, 0), ({"agent_type": "reviewer"}, 1), ({"kind": "task-review"}, 1), ({"reason_contains": "guardrail"}, 1),
             ({"target_contains": "gate.json"}, 1), ({"target_contains": "rm x"}, 1), ({"event": "PreToolUse", "by": "gate"}, 2), ({}, 3),
         ]
         for match, count in cases:
@@ -140,9 +92,9 @@ class MatcherTests(unittest.TestCase):
             return checks.check_calls(self.ROWS, [{"name": "n", **item}])[0]["ok"]
 
         self.assertTrue(ok({"match": {"by": "gate"}}))  # min 1 by default
-        self.assertFalse(ok({"match": {"by": "request"}}))
-        self.assertTrue(ok({"match": {"by": "request"}, "max": 0}))  # max alone means "0 or more, at most"
-        self.assertTrue(ok({"match": {"by": "request"}, "exactly": 0}))
+        self.assertFalse(ok({"match": {"by": "task"}}))
+        self.assertTrue(ok({"match": {"by": "task"}, "max": 0}))  # max alone means "0 or more, at most"
+        self.assertTrue(ok({"match": {"by": "task"}, "exactly": 0}))
         self.assertTrue(ok({"match": {"by": "gate"}, "exactly": 2}))
         self.assertFalse(ok({"match": {"by": "gate"}, "exactly": 1}))
         self.assertFalse(ok({"match": {"by": "gate"}, "max": 1}))
@@ -153,11 +105,11 @@ class MatcherTests(unittest.TestCase):
         def ok(*steps: Dict[str, Any]) -> bool:
             return checks.check_order(self.ROWS, [{"name": "n", "steps": list(steps)}])[0]["ok"]
 
-        self.assertTrue(ok({"decision": "deny"}, {"agent_type": "builder"}, {"decision": "ask"}))
+        self.assertTrue(ok({"decision": "deny"}, {"agent_type": "reviewer"}, {"decision": "ask"}))
         self.assertTrue(ok({"decision": "deny"}, {"decision": "ask"}))
         self.assertFalse(ok({"decision": "ask"}, {"decision": "deny"}))
-        self.assertFalse(ok({"agent_type": "builder"}, {"agent_type": "builder"}))  # one row cannot serve two steps
-        self.assertFalse(ok({"decision": "deny"}, {"agent_type": "reviewer"}))
+        self.assertFalse(ok({"agent_type": "reviewer"}, {"agent_type": "reviewer"}))  # one row cannot serve two steps
+        self.assertFalse(ok({"decision": "deny"}, {"agent_type": "explore"}))
 
     def test_a_dotted_json_path(self) -> None:
         self.assertEqual(checks.dig({"a": {"b": 3}}, "a.b"), 3)
@@ -165,130 +117,33 @@ class MatcherTests(unittest.TestCase):
         self.assertIsNone(checks.dig({"a": 1}, "a.b"))
 
 
-class RequestScenarioTests(EvalCase):
-    def test_s4_passes_on_the_real_flow(self) -> None:
-        self.s4_flow()
-        result = self.evaluate("s4", "--session-id", SESSION)
-        self.assertTrue(result["passed"], self.failed_names(result))
-        self.assertEqual(result["failed"], 0)
-        self.assertTrue(result["request"])
-        self.assertTrue(result["manual_checks"])
-
-    def test_s4_fails_naming_the_check_when_the_first_call_was_not_refused(self) -> None:
-        request_id = self.new_request("eval-s4")
-        self.attempt(request_id)
-        self.fill_assignment(request_id, 1, "builder")
-        self.dispatch(request_id, "builder")  # dispatched first: no refusal ever happens
-        self.call_subagent("builder")
-        self.hook(subagent_start(SESSION, "builder"))
-        self.output(request_id, 1, "builder", "hello.txt", "hi")
-        self.submit(request_id, "builder", "passed", "--output", "hello.txt")
-        self.hook(subagent_stop(SESSION, "builder"))
-        self.conclude(request_id, "abandoned")
-        result = self.evaluate("s4", "--session-id", SESSION, ok=False)
-        self.assertFalse(result["passed"])
-        self.assertIn("没 dispatch 的 builder 调用被 request 模块拒绝", self.failed_names(result))
-        self.assertIn("先被拒绝，再启动，再结束", self.failed_names(result))
-        completed = self.cli("eval", "check", "s4", "--session-id", SESSION)
-        self.assertEqual(completed.returncode, 1)
-
-    def test_s4_fails_when_the_request_is_still_open(self) -> None:
-        self.s4_flow()
-        request_id = self.run_cli("request", "list")["requests"][0]["request_id"]
-        path = self.rd(request_id) / "request.json"
-        data = json.loads(path.read_text(encoding="utf-8"))
-        data["status"] = "open"
-        data["status_reason"] = ""
-        path.write_text(json.dumps(data), encoding="utf-8")
-        result = self.evaluate("s4", "--session-id", SESSION, ok=False)
-        self.assertIn("请求：status", self.failed_names(result))
-        self.assertIn("请求：check --require-conclusion", self.failed_names(result))
-
+class WhichRunTests(EvalCase):
     def test_the_newest_main_session_is_the_default_and_a_subagent_session_is_not_picked(self) -> None:
-        self.s4_flow()
+        self.refuse_a_guardrail_edit()
         logs = self.root / ".harness" / "runtime" / "logs" / "vscode"
-        row = {"at": "2999-01-01T00:00:00+00:00", "event": "PreToolUse", "decision": "none", "parent_session_id": SESSION, "session_id": "child-9", "surface": "vscode", "level": 3}
+        row = {"at": "2999-01-01T00:00:00+00:00", "event": "PreToolUse", "decision": "none", "parent_session_id": SESSION, "session_id": "child-9", "surface": "vscode"}
         (logs / "child-9.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
-        result = self.evaluate("s4")
+        result = self.evaluate("g1")
         self.assertEqual(result["session"]["session_id"], SESSION)
         self.assertTrue(result["passed"], self.failed_names(result))
 
-    def test_the_sessions_of_the_sdk_subagents_count_with_the_parent(self) -> None:
-        self.s4_flow()
+    def test_the_sessions_of_the_subagents_count_with_the_parent(self) -> None:
+        self.prompt("work")
         logs = self.root / ".harness" / "runtime" / "logs" / "vscode"
-        row = {"at": "2999-01-01T00:00:00+00:00", "event": "SubagentStart", "agent_type": "reviewer", "decision": "context", "parent_session_id": SESSION, "session_id": "child-2", "surface": "vscode", "level": 3}
+        row = {"at": "2999-01-01T00:00:00+00:00", "event": "PreToolUse", "tool_kind": "edit", "decision": "deny", "by": ["gate"], "reason": "是 guardrail 文件",
+               "target": {"paths": [GUARD], "command": ""}, "parent_session_id": SESSION, "session_id": "child-2", "surface": "vscode"}
         (logs / "child-2.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
-        result = self.evaluate("s4", "--session-id", SESSION, ok=False)
-        self.assertIn("reviewer 没有启动", self.failed_names(result))
-
-    def test_s2_passes_on_two_rounds(self) -> None:
-        request_id = self.new_request("eval-s2")
-        self.attempt_round(request_id, 1, reviewer="failed")
-        self.attempt_round(request_id, 2)
-        self.run_cli("promote", "--request", request_id, "--dry-run")
-        self.conclude(request_id, "abandoned")
-        result = self.evaluate("s2", "--session-id", SESSION)
+        result = self.evaluate("g1", "--session-id", SESSION)
         self.assertTrue(result["passed"], self.failed_names(result))
-
-    def test_s2_fails_when_a_person_approval_was_needed_or_it_went_on_to_promote(self) -> None:
-        request_id = self.new_request("eval-s2")
-        self.attempt_round(request_id, 1, reviewer="failed")
-        self.attempt_round(request_id, 2)
-        self.conclude(request_id, "abandoned")  # no promote --dry-run
-        result = self.evaluate("s2", "--session-id", SESSION, ok=False)
-        self.assertEqual(self.failed_names(result), ["请求：promote"])
-
-    def test_s3_passes_when_two_rounds_end_failed_and_the_request_is_hitl(self) -> None:
-        request_id = self.new_request("eval-s3")
-        self.attempt_round(request_id, 1, reviewer="failed")
-        self.attempt_round(request_id, 2, reviewer="failed")
-        self.assertIn("上限", self.refused("attempt", "new", "--request", request_id))
-        self.conclude(request_id, "hitl", "two rounds failed")
-        result = self.evaluate("s3", "--session-id", SESSION)
-        self.assertTrue(result["passed"], self.failed_names(result))
-
-    def test_s3_fails_when_the_reviewer_was_never_reached(self) -> None:
-        request_id = self.new_request("eval-s3")
-        self.attempt_round(request_id, 1, builder="blocked")
-        self.attempt_round(request_id, 2, builder="blocked")
-        self.conclude(request_id, "hitl", "blocked twice")
-        result = self.evaluate("s3", "--session-id", SESSION, ok=False)
-        self.assertIn("reviewer 启动两次", self.failed_names(result))
-
-    def test_s1_passes_after_a_real_promote(self) -> None:
-        request_id = self.new_request("eval-s1")
-        self.attempt_round(request_id, 1, files=["demo-b8/slug.py", "demo-b8/test_slug.py"])
-        self.promote_for_real(request_id)
-        self.conclude(request_id, "accepted", "")
-        result = self.evaluate("s1", "--session-id", SESSION)
-        self.assertTrue(result["passed"], self.failed_names(result))
-        self.assertTrue((self.root / "demo-b8" / "slug.py").is_file())
-
-    def test_s1_fails_without_the_promoted_files(self) -> None:
-        request_id = self.new_request("eval-s1")
-        self.attempt_round(request_id, 1, files=["demo-b8/slug.py", "demo-b8/test_slug.py"])
-        self.conclude(request_id, "accepted", "skip the promote")
-        result = self.evaluate("s1", "--session-id", SESSION, ok=False)
-        self.assertEqual(sorted(self.failed_names(result)), ["文件：demo-b8/slug.py", "文件：demo-b8/test_slug.py", "请求：promote"])
-
-    def test_an_explicit_request_id_is_used(self) -> None:
-        self.s4_flow()
-        request_id = self.run_cli("request", "list")["requests"][0]["request_id"]
-        result = self.evaluate("s4", "--session-id", SESSION, "--request", request_id)
-        self.assertEqual(result["request"], request_id)
-
-    def test_no_request_for_the_session_is_a_failed_check_not_a_crash(self) -> None:
-        self.hook(payload("UserPromptSubmit", "no-request-session", prompt="x"))
-        result = self.evaluate("s4", "--session-id", "no-request-session", ok=False)
-        self.assertIn("请求", self.failed_names(result))
+        self.assertEqual(result["session"]["calls"], 3)
 
 
 class GateScenarioTests(EvalCase):
     def test_g1_passes_when_the_gate_refused_and_the_file_is_unchanged(self) -> None:
-        self.hook(pre_tool(SESSION, "replace_string_in_file", {"filePath": str(self.root / GUARD), "oldString": "3", "newString": "5"}))
+        self.refuse_a_guardrail_edit()
         result = self.evaluate("g1", "--session-id", SESSION)
         self.assertTrue(result["passed"], self.failed_names(result))
-        self.assertNotIn("request", result["request"] or "")
+        self.assertNotIn("request", result)
 
     def test_g1_fails_when_the_file_was_changed(self) -> None:
         self.hook(pre_tool(SESSION, "replace_string_in_file", {"filePath": str(self.root / GUARD), "oldString": "3", "newString": "5"}))
@@ -316,14 +171,13 @@ class GateScenarioTests(EvalCase):
 
 class TaskScenarioTests(EvalCase):
     def flow(self, try_early: bool) -> None:
-        """T1 as a real run: the session goes to L2, starts the task, writes the plan, the person approves, the file is written."""
+        """T1 as a real run: the session makes the task, writes the plan, the person approves, the file is written."""
         from core import tasks
-        from modules.request import task as task_ops
+        from modules.task import task as task_ops
 
-        name = ".workspace/current_tasks/eval-t1"
-        (self.root / name / "REQ").mkdir(parents=True)
-        self.hook(payload("UserPromptSubmit", "t1-session", prompt="/l2 这是 hook 测试"))
-        self.run_cli("task", "start", "--task", name, "--session-id", "t1-session")
+        name = f"{tasks.TASKS_DIR}/eval-t1"
+        self.hook(payload("UserPromptSubmit", "t1-session", prompt="这是 hook 测试"))
+        self.run_cli("task", "new", "eval-t1", "--kind", "dev", "--session-id", "t1-session")
         target = str(self.root.resolve() / name / "DEV" / "hello.txt")
         if try_early:
             early = self.hook(pre_tool("t1-session", "create_file", {"filePath": target, "content": "hi"}))
@@ -358,15 +212,15 @@ class CommandTests(EvalCase):
         self.assertNotIn("```", shown["prompt"])
         self.assertTrue(shown["manual_checks"])
         self.assertEqual(shown["then"], "harness eval check g5")
-        s4 = self.run_cli("eval", "show", "s4")["prompt"]
-        self.assertIn("建立 L3 请求（标题 eval-s4）", s4)
-        self.assertEqual(s4.count("\n"), 5)
+        t1 = self.run_cli("eval", "show", "t1")["prompt"]
+        self.assertIn("task new eval-t1", t1)
+        self.assertNotIn("/l2", t1)
 
     def test_an_unknown_scenario_names_the_known_ones(self) -> None:
         completed = self.cli("eval", "check", "nope")
         self.assertEqual(completed.returncode, 1)
         self.assertIn("没有场景 `nope`", completed.stderr)
-        self.assertIn("s4", completed.stderr)
+        self.assertIn("t1", completed.stderr)
 
     def test_a_bad_id_is_refused(self) -> None:
         completed = self.cli("eval", "check", "../x")

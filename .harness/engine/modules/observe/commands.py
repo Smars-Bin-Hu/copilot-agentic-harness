@@ -1,6 +1,6 @@
 """CLI commands of the observe module.
 
-  stats                numbers from the session logs: prompts per Level, refusals, verifier verdicts, hook time
+  stats                numbers from the session logs: prompts, refusals, review verdicts, hook time
   logs prune           delete session logs not written to for N days (a person decides; no hook deletes anything)
 """
 

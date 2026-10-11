@@ -16,7 +16,6 @@ REPO = Path(__file__).resolve().parents[2]
 ENGINE = REPO / ".harness" / "engine"
 HOOK = ENGINE / "hook.py"
 CLI = ENGINE / "cli.py"
-POLICY = REPO / ".harness" / "policies" / "task-levels.json"
 FIXTURES = REPO / ".harness" / "eval" / "fixtures" / "hooks" / "copilot-sdk"
 
 if str(ENGINE) not in sys.path:
@@ -99,21 +98,6 @@ class HarnessTestCase(unittest.TestCase):
         make_root(self.root)
         self.env = {**os.environ, "HARNESS_ROOT": str(self.root)}
 
-    def recorded_checker_name(self) -> None:
-        """The recordings were made when the checker agent was called `verifier`: let this test's policy copy say so."""
-        path = self.root / ".harness" / "policies" / "task-levels.json"
-        data = json.loads(path.read_text(encoding="utf-8"))
-        data["levels"]["2"]["subagents"]["allowed"] = ["verifier"]
-        data["levels"]["2"]["verification"]["agent"] = "verifier"
-        path.write_text(json.dumps(data), encoding="utf-8")
-
-    def verifier_default(self, on: bool) -> None:
-        """Set the L2 verifier default in this test's policy copy (the shipped default is off)."""
-        path = self.root / ".harness" / "policies" / "task-levels.json"
-        data = json.loads(path.read_text(encoding="utf-8"))
-        data["levels"]["2"]["verification"]["enabled"] = on
-        path.write_text(json.dumps(data), encoding="utf-8")
-
     # --- running the engine -------------------------------------------------------------------
 
     def run_script(self, script: Path, *arguments: str, stdin: Optional[str] = None) -> subprocess.CompletedProcess:
@@ -143,10 +127,11 @@ class HarnessTestCase(unittest.TestCase):
     # --- state --------------------------------------------------------------------------------
 
     def session_state(self, session_id: str) -> Dict[str, Any]:
-        return self.cli_json("level", "status", "--session-id", session_id)
+        """The state file of a session, as it is on disk."""
+        return json.loads(self.state_file(session_id).read_text(encoding="utf-8"))
 
-    def task_level_state(self, session_id: str) -> Dict[str, Any]:
-        return self.session_state(session_id)["modules"]["task_level"]
+    def module_state(self, session_id: str, name: str = "task") -> Dict[str, Any]:
+        return self.session_state(session_id)["modules"].get(name, {})
 
     def state_file(self, session_id: str) -> Path:
         return self.root / ".harness" / "runtime" / "state" / "vscode" / f"{session_id}.json"
@@ -168,6 +153,3 @@ class HarnessTestCase(unittest.TestCase):
         for path in sorted(base.glob("*/*.jsonl")):
             rows.extend(json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
         return sorted(rows, key=lambda row: row["at"])
-
-    def set_level(self, session_id: str, level: int, reason: str = "test transition") -> Dict[str, Any]:
-        return self.cli_json("level", "set", "--session-id", session_id, "--level", str(level), "--reason", reason)

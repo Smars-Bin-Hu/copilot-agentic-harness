@@ -26,21 +26,12 @@ def session_of(data: Dict[str, Any]) -> str:
 
 
 class ReplayTests(HarnessTestCase):
-    def setUp(self) -> None:
-        super().setUp()
-        self.recorded_checker_name()
-
     def feed(self, data: Dict[str, Any]) -> tuple:
         return hook.process(json.dumps(data), self.root)
 
-    def replay(self, name: str, first_prompt: str = "") -> List[tuple]:
-        """Feed a recorded session in order. `first_prompt` replaces the recorded first prompt, to pick the level."""
-        results = []
-        for index, data in enumerate(iter_session(name)):
-            if first_prompt and index == 0:
-                data = {**data, "prompt": first_prompt}
-            results.append((data, *self.feed(data)))
-        return results
+    def replay(self, name: str) -> List[tuple]:
+        """Feed a recorded session in order."""
+        return [(data, *self.feed(data)) for data in iter_session(name)]
 
     def test_five_sessions_are_recorded(self) -> None:
         self.assertEqual(len(SESSIONS), 5)
@@ -58,63 +49,50 @@ class ReplayTests(HarnessTestCase):
                 self.feed(json.loads(path.read_text(encoding="utf-8")))
         self.assertEqual(self.log_lines("hook-errors.jsonl"), [])
 
-    def test_l1_denies_the_recorded_subagent_call(self) -> None:
-        results = self.replay(VERIFIER, first_prompt="[L1] 创建文件，然后调用 verifier 复核一次。")
+    def test_the_recorded_subagent_call_is_refused_because_the_session_holds_no_task(self) -> None:
+        results = self.replay(VERIFIER)
         calls = [output for data, output, _ in results if name_of(data) == "PreToolUse" and data["tool_name"] == "Agent"]
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["permissionDecision"], "deny")
-        self.assertIn("L1 不允许子 agent", calls[0]["permissionDecisionReason"])
+        self.assertIn("没有接着任务", calls[0]["permissionDecisionReason"])
 
-    def test_the_recorded_verifier_call_passes_and_its_call_message_is_flagged(self) -> None:
+    def test_the_call_message_of_the_recorded_subagent_is_flagged(self) -> None:
         results = self.replay(VERIFIER)
-        call = next(output for data, output, _ in results if name_of(data) == "PreToolUse" and data["tool_name"] == "Agent")
-        self.assertEqual(call, {})
         prompts = [(session_of(data), output, record) for data, output, record in results if name_of(data) == "UserPromptSubmit"]
         self.assertEqual([record["from_subagent"] for _, _, record in prompts], [False, True])
-        self.assertEqual(prompts[1][1], {})  # nothing injected into the subagent, no new budget window
+        self.assertEqual(prompts[1][1], {})  # nothing injected into the subagent
         parent, child = prompts[0][0], prompts[1][0]
         final = state.read_state(state.state_path(self.root, "vscode", parent), "vscode", parent)
         self.assertEqual(final["subagents"]["active"], [])  # nothing is left open afterwards
-        self.assertEqual(final["modules"]["task_level"]["counters"]["subagents_created"], 1)
-        self.assertEqual(final["modules"]["task_level"]["prompt"]["count"], 1)
         linked = state.read_state(state.state_path(self.root, "vscode", child), "vscode", child)
-        self.assertEqual((linked["parent_session_id"], linked["level"]), (parent, 2))
+        self.assertEqual(linked["parent_session_id"], parent)
 
-    def test_tool_counts_match_the_recording(self) -> None:
-        events = list(iter_session(TOOLS))
-        parent = session_of(events[0])
-        self.replay(TOOLS, first_prompt="[L2] " + events[0]["prompt"])  # L1 would deny the third search
-        own = [copilot_vscode.parse(e) for e in events if name_of(e) == "PreToolUse" and session_of(e) == parent]
-        self.assertEqual([e.tool_name for e in own], ["Edit", "Grep", "Glob", "search_code_subagent"])
-        counters = self.task_level_state(parent)["counters"]
-        self.assertEqual(counters["observed_tool_calls"], len(own))
-        self.assertEqual(counters["repository_searches"], len([e for e in own if e.is_search]))
+    def test_the_tools_of_the_recording_are_all_let_through(self) -> None:
+        results = self.replay(TOOLS)
+        own = [copilot_vscode.parse(data) for data, _, _ in results if name_of(data) == "PreToolUse"]
+        self.assertIn("search_code_subagent", [event.tool_name for event in own])
+        self.assertEqual([output for _, output, _ in results if output.get("permissionDecision")], [])
 
-    def test_stop_and_subagent_events_go_to_the_modules_that_listen(self) -> None:
-        # task_level handles Stop (the L2 review check). The request module listens to SubagentStart, SubagentStop and Stop.
-        expected = {"Stop": ["task_level", "request"], "SubagentStart": ["request"], "SubagentStop": ["request"]}
+    def test_every_event_goes_to_the_modules_that_listen(self) -> None:
+        expected = {"UserPromptSubmit": ["task"], "SessionStart": ["task"], "Stop": ["task"], "SubagentStart": ["task"], "SubagentStop": []}
         seen = set()
         for data, _, record in self.replay(TOOLS):
             if name_of(data) in expected:
-                self.assertEqual(record["modules"], expected[name_of(data)])
+                self.assertEqual(record["modules"], expected[name_of(data)], name_of(data))
                 seen.add(name_of(data))
         self.assertEqual(seen, set(expected))
 
-    def test_the_recorded_pasted_marker_switches_to_l2(self) -> None:
-        """The recorded prompt starts with a markdown code fence (a paste artifact), then `[L2]`."""
+    def test_the_markers_of_the_recorded_prompts_switch_nothing(self) -> None:
+        """One recorded prompt starts with a markdown code fence and `[L2] [verify]`. There are no Levels any more; `[verify]` asks for one check."""
         results = self.replay("cli-subagent-stop-block.jsonl")
-        data = results[0][0]
+        data, output, _ = results[0]
         self.assertTrue(data["prompt"].startswith("```\n[L2]"))
-        self.assertEqual(self.session_state(session_of(data))["level"], 2)
-        self.assertEqual(self.task_level_state(session_of(data))["level_changes"][-1]["source"], "marker")
+        self.assertNotIn("Task Level", output["additionalContext"])
+        self.assertIn("`[review]=1`", output["additionalContext"])
 
 
 class ReplayThroughTheRealProcessTests(HarnessTestCase):
     """One process per event, as VS Code runs it: one call record per event, in order."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.recorded_checker_name()
 
     def test_each_event_leaves_exactly_one_call_record(self) -> None:
         events = list(iter_session(VERIFIER))
@@ -129,10 +107,10 @@ class ReplayThroughTheRealProcessTests(HarnessTestCase):
         self.assertTrue(all(c["ms"] < 300 for c in calls), [c["ms"] for c in calls])
 
     def test_a_denied_recorded_call_leaves_a_deny_record(self) -> None:
-        for index, data in enumerate(iter_session(VERIFIER)):
-            self.hook({**data, "prompt": "[L1] 调用 verifier"} if index == 0 else data)
+        for data in iter_session(VERIFIER):
+            self.hook(data)
         denied = [c for c in self.call_lines() if c["decision"] == "deny"]
-        self.assertEqual([c["tool_name"] for c in denied], ["Agent"])
+        self.assertEqual([(c["tool_name"], c["by"]) for c in denied], [("Agent", ["task"])])
 
     def test_the_output_of_a_recorded_payload_is_valid_json_with_ascii_only(self) -> None:
         completed = self.run_script(HOOK, stdin=json.dumps(load_payload("UserPromptSubmit.json")))

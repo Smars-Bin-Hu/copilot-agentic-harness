@@ -1,10 +1,10 @@
 """A task: where its files live and what its state says. Core knows it so the gate need not import the task module.
 
-A task is a folder under `.workspace/sandbox/tasks/` (`task new` makes it there) or, from before 1.1, under
-`.workspace/current_tasks/`. The person puts the requirement there (`REQ/`, `REF/`). In task mode
-the agent writes anywhere else in the folder: `PLAN.md`, results that stay in the task (an RCA, a design) at its top, and,
-once the person approved the plan, the results that go back to a target repository under `DEV/`. The CLI's own files are
-`.task/` (state, the main version of fetched files) and the two diff files.
+A task is a folder under `.workspace/sandbox/tasks/` (`task new` makes it). The person's own material goes into `REQ/`
+and `REF/`. The agent writes anywhere else in the folder: `TASK.md` and the other progress files, `REQ.md`, `PLAN.md`,
+results that stay in the task (an RCA, a design) at its top, and, once the person approved the plan, the results that
+go back to a target repository under `DEV/`. The CLI's own files are `.task/` (state, the main version of fetched
+files), `REVIEW/`, `SNAPSHOT/` and the two diff files.
 """
 
 from __future__ import annotations
@@ -14,9 +14,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-TASKS_DIR = ".workspace/current_tasks"  # before 1.1; still read
-SANDBOX_TASKS_DIR = ".workspace/sandbox/tasks"
-TASK_DIRS = (SANDBOX_TASKS_DIR, TASKS_DIR)  # where a bare task name is looked up, in this order
+TASKS_DIR = ".workspace/sandbox/tasks"
+OLD_TASKS_DIR = ".workspace/current_tasks"  # before 1.1.0; not read any more, doctor says so when it still holds folders
 # What kind of work a task is (it decides what "done" means) and how many files it gets.
 KINDS = ("qa", "rca", "design", "dev", "test", "kb")
 TIERS = ("light", "medium", "full")
@@ -37,20 +36,15 @@ PERSON_DIRS = ("req", "ref")  # lower case: the gate compares without case
 
 def find(root: Path, name: str) -> str:
     """The repository-relative folder of the task called `name`, or an empty string when no such folder exists."""
-    for base in TASK_DIRS:
-        if (root / base / name).is_dir():
-            return f"{base}/{name}"
-    return ""
+    return f"{TASKS_DIR}/{name}" if (root / TASKS_DIR / name).is_dir() else ""
 
 
 def folders(root: Path) -> list:
     """Every task folder, as repository-relative paths."""
-    found = []
-    for base in TASK_DIRS:
-        directory = root / base
-        if directory.is_dir():
-            found.extend(f"{base}/{path.name}" for path in sorted(directory.iterdir()) if path.is_dir() and not path.name.startswith("."))
-    return found
+    directory = root / TASKS_DIR
+    if not directory.is_dir():
+        return []
+    return [f"{TASKS_DIR}/{path.name}" for path in sorted(directory.iterdir()) if path.is_dir() and not path.name.startswith(".")]
 
 
 def task_dir(root: Path, task: str) -> Path:
@@ -89,18 +83,12 @@ def read(root: Path, task: str) -> Optional[Dict[str, Any]]:
 
 
 def open_of(root: Path, state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """The open task of a session, or None. An L3 request in the session hides it."""
+    """The open task a session holds, or None."""
     name = state.get("active_task")
-    if not name or state.get("active_request"):
+    if not name:
         return None
     data = read(root, name)
     return data if data and data.get("status") == "open" else None
-
-
-def verify_choice(data: Optional[Dict[str, Any]]) -> str:
-    """The standing verifier choice of a task: `on`, `off`, or `` (the level's default). Set by a marker in any prompt of the task."""
-    choice = (data or {}).get("verify", "")
-    return choice if choice in ("on", "off") else ""
 
 
 def plan_digest(root: Path, task: str) -> str:

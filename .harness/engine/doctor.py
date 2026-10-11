@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import config, output, targets, user
+from core import config, output, targets, tasks, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -586,6 +586,18 @@ def check_agents(report: Report, root: Path) -> None:
     report.ok(f"agent 的模型系列检查完成（{len(chosen)} 个 agent）")
 
 
+def check_old_tasks(report: Report, root: Path) -> None:
+    """Task folders of before 1.1.0 are not read any more. Say so, so nobody waits for a task that cannot be opened."""
+    old = root / tasks.OLD_TASKS_DIR
+    names = sorted(path.name for path in old.iterdir() if path.is_dir()) if old.is_dir() else []
+    if names:
+        shown = "、".join(names[:5]) + (" 等" if len(names) > 5 else "")
+        report.warn(
+            f"{tasks.OLD_TASKS_DIR}/ 下还有 {len(names)} 个旧任务目录（{shown}）。1.1.0 起任务放在 {tasks.TASKS_DIR}/，旧位置不再读。"
+            f"要接着做：把目录搬到 {tasks.TASKS_DIR}/ 下，再 `task open <任务名>`。不用了就留着或删掉。"
+        )
+
+
 def run(root: Path) -> int:
     report = Report()
     check_python(report)
@@ -610,6 +622,7 @@ def run(root: Path) -> int:
     check_targets(report, root)
     check_location(report, root)
     check_knowledge_base(report, root)
+    check_old_tasks(report, root)
     for name, entry in registry["modules"].items():
         check_module(report, root, name, entry)
     print("\n".join(report.lines))

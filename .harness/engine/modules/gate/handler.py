@@ -1,12 +1,12 @@
 """gate hook handler. PreToolUse only. It guards writes and never blocks a read.
 
-  edit / create tools   a guardrail file or a file only the CLI writes is denied; in L3 a path outside the request folder is denied
+  edit / create tools   a guardrail file or a file only the CLI writes is denied; a session that holds a task writes inside the task folder only
   admin mode            the person switched it on for this session (`admin on`): guardrail files are open, except those
                         that stay closed for an admin (the runtime folder). Every other rule here stays as it is
   terminal              a command that writes a guardrail file or is dangerous is denied; some commands ask a person
   git commands          with target repositories configured (A5): a git read passes, a write is refused until a person approves that exact command
                         (`approve-command`), some are never approved (push, clean, reset --hard, branch -D, any force)
-  `.git`                a path in a `.git` folder is denied at every Level, in a terminal command too (A4); so is a path a target
+  `.git`                a path in a `.git` folder is always denied, in a terminal command too (A4); so is a path a target
                         repository lists in refused_paths
 
 A call with no path the gate can read is allowed: the gate only denies what it can see clearly (AGENTS.md).
@@ -14,7 +14,6 @@ A call with no path the gate can read is allowed: the gate only denies what it c
 
 from __future__ import annotations
 
-import re
 from typing import Optional
 
 from core import repo_paths, targets, tasks
@@ -26,17 +25,9 @@ from .policy import POLICY_NAME, Compiled, validate_policy
 
 NAME = "gate"
 WRITE_KINDS = ("edit", "create")
-_REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def check_write(event: HookEvent, ctx: Context, compiled: Compiled) -> Optional[Decision]:
-    request_id = ctx.state.get("active_request") if ctx.level == 3 else None
-    request_root = ""
-    if request_id:
-        if not _REQUEST_ID.match(request_id) or ".." in request_id:
-            return Decision(permission="deny", reason=rules.bad_request_id(request_id))
-        request_root = compiled.request_root(request_id)
-    outside: Optional[Decision] = None
     for raw in event.paths:
         for absolute in repo_paths.resolve(raw, ctx.root, event.cwd):
             if repo_paths.has_git_folder(absolute):
@@ -46,7 +37,7 @@ def check_write(event: HookEvent, ctx: Context, compiled: Compiled) -> Optional[
                 return Decision(permission="deny", reason=rules.target_refused_file(*hit))
             tree = compiled.repo_of(absolute)
             if tree:
-                return Decision(permission="deny", reason=rules.target_tree_file(tree[0], tree[1], ctx.level))
+                return Decision(permission="deny", reason=rules.target_tree_file(tree[0], tree[1]))
         readings = repo_paths.repo_relative(raw, ctx.root, event.cwd)
         for relative in (item for item in readings if item is not None):
             pattern = compiled.guardrail_match(relative)
@@ -55,24 +46,14 @@ def check_write(event: HookEvent, ctx: Context, compiled: Compiled) -> Optional[
                 return Decision(permission="deny", reason=reason)
             if compiled.owned_match(relative):
                 return Decision(permission="deny", reason=rules.cli_owned_file(relative))
-        if request_id and outside is None and readings:
-            stray = [item for item in readings if item is None or not _within(item, request_root)]
-            if stray:
-                shown = next((item for item in stray if item is not None), None)
-                reason = (
-                    rules.outside_request(shown, request_id, request_root)
-                    if shown is not None
-                    else rules.outside_repo_in_request(request_id, request_root)
-                )
-                outside = Decision(permission="deny", reason=reason)
-    return outside or check_task_write(event, ctx)
+    return check_task_write(event, ctx)
 
 
 def check_task_write(event: HookEvent, ctx: Context) -> Optional[Decision]:
-    """A task (M7-4, M9-0): the agent writes inside the task folder only. DEV/ holds what goes back to a target repository
+    """A session that holds a task: the agent writes inside the task folder only. DEV/ holds what goes back to a target repository
     and opens once the person approved PLAN.md; the rest of the folder needs no approval. REQ/ and REF/ are the person's."""
     task = ctx.state.get("active_task")
-    if not task or ctx.level == 3:
+    if not task:
         return None
     data = tasks.read(ctx.root, task)
     if data is None or data.get("status") != "open":

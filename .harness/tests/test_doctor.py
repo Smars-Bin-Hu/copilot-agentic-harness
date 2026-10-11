@@ -199,16 +199,16 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
 
     def test_a_deleted_registered_file_is_an_error(self) -> None:
-        (self.root / ".harness" / "tests" / "test_task_level.py").unlink()
+        (self.root / ".harness" / "tests" / "test_tasklife.py").unlink()
         result = self.doctor()
         self.assertEqual(result.returncode, 1)
-        self.assertIn("test_task_level.py", result.stdout)
+        self.assertIn("test_tasklife.py", result.stdout)
 
     def test_a_deleted_registered_directory_is_an_error(self) -> None:
-        shutil.rmtree(self.root / ".github" / "skills" / "harness-task-level")
+        shutil.rmtree(self.root / ".github" / "skills" / "harness-my-task")
         result = self.doctor()
         self.assertEqual(result.returncode, 1)
-        self.assertIn("harness-task-level", result.stdout)
+        self.assertIn("harness-my-task", result.stdout)
 
     def test_a_deleted_engine_file_is_an_error(self) -> None:
         (self.root / ".harness" / "engine" / "adapters" / "copilot_vscode.py").unlink()
@@ -278,16 +278,16 @@ class DoctorTests(unittest.TestCase):
 
     def test_a_broken_policy_is_an_error(self) -> None:
         def change(data: dict) -> None:
-            data["levels"]["1"]["budget_per_prompt"]["repository_searches"]["limit"] = "two"
+            data["fetch"]["max_files"] = "two"
 
-        self.edit_json(".harness/policies/task-levels.json", change)
+        self.edit_json(".harness/policies/task.json", change)
         result = self.doctor()
         self.assertEqual(result.returncode, 1)
-        self.assertIn("task-levels.json", result.stdout)
+        self.assertIn("task.json", result.stdout)
 
     def test_a_broken_override_is_caught_by_the_same_check(self) -> None:
-        (self.root / ".harness" / "policies" / "task-levels.override.json").write_text(
-            json.dumps({"levels": {"2": {"subagents": {"allowed": "yes"}}}}), encoding="utf-8"
+        (self.root / ".harness" / "policies" / "task.override.json").write_text(
+            json.dumps({"review": {"max_n": "many"}}), encoding="utf-8"
         )
         self.assertEqual(self.doctor().returncode, 1)
 
@@ -438,7 +438,7 @@ class DoctorTests(unittest.TestCase):
 
     def test_the_cli_does_not_crash_on_a_terminal_that_cannot_show_chinese(self) -> None:
         result = subprocess.run(
-            [sys.executable, str(CLI), "eval", "show", "s4"], capture_output=True, check=False,
+            [sys.executable, str(CLI), "eval", "show", "t1"], capture_output=True, check=False,
             env={**os.environ, "HARNESS_ROOT": str(REPO), "PYTHONIOENCODING": "ascii"},
         )
         self.assertEqual(result.returncode, 0, result.stderr.decode("ascii", "replace"))
@@ -487,10 +487,18 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("只有一层", result.stdout)
 
     def test_a_plus_key_on_a_non_array_is_an_error(self) -> None:
-        self.override("gate", {"l3_write_root+": ["x"]})
+        self.override("gate", {"schema_version+": ["x"]})
         result = self.doctor()
         self.assertEqual(result.returncode, 1)
         self.assertIn("needs an array", result.stdout)
+
+    def test_task_folders_left_in_the_old_place_are_a_warning_that_says_what_to_do(self) -> None:
+        self.assertNotIn("旧任务目录", self.doctor().stdout)
+        (self.root / ".workspace" / "current_tasks" / "job-a").mkdir(parents=True)
+        result = self.doctor()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("[WARN]  .workspace/current_tasks/ 下还有 1 个旧任务目录（job-a）", result.stdout)
+        self.assertIn("task open", result.stdout)
 
     # --- knowledge base ---------------------------------------------------------------------
 
@@ -577,7 +585,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("hook-calls.jsonl", result.stdout)
 
     def test_a_bad_registry_is_an_error(self) -> None:
-        self.edit_json(".harness/registry.json", lambda data: data["modules"]["task_level"].update(events=["NotAnEvent"]))
+        self.edit_json(".harness/registry.json", lambda data: data["modules"]["task"].update(events=["NotAnEvent"]))
         self.assertEqual(self.doctor().returncode, 1)
 
     def test_a_missing_registry_is_an_error(self) -> None:
@@ -592,8 +600,8 @@ class DoctorTests(unittest.TestCase):
 
     def test_a_disabled_module_is_not_asked_for_events(self) -> None:
         def registry(data: dict) -> None:
-            data["modules"]["task_level"]["events"].append("PreCompact")
-            data["modules"]["task_level"]["enabled"] = False
+            data["modules"]["gate"]["events"].append("PreCompact")
+            data["modules"]["gate"]["enabled"] = False
 
         def hooks(data: dict) -> None:
             data["hooks"]["PreCompact"] = data["hooks"]["Stop"]

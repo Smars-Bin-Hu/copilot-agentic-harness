@@ -9,10 +9,9 @@ import json
 import unittest
 from typing import Optional
 
-from support import HarnessTestCase, pre_tool
+from support import HarnessTestCase, payload, pre_tool
 
 from core import repo_paths
-from core.state import update_state
 from test_targets import GIT, make_repo
 
 
@@ -63,11 +62,9 @@ class GateGitTests(HarnessTestCase):
     def term(self, command: str, cwd: Optional[str] = None) -> dict:
         return self.pre("run_in_terminal", {"command": command, "explanation": "t", "isBackground": False}, cwd)
 
-    def enter_l3(self) -> None:
-        def mutate(state: dict) -> None:
-            state["active_request"] = "20261002-1200-demo-ab12"
-
-        update_state(self.root, "vscode", self.session, mutate)
+    def enter_task(self) -> None:
+        self.hook(payload("UserPromptSubmit", self.session, prompt="work"))
+        self.cli_json("task", "new", "job", "--kind", "dev", "--session-id", self.session)
 
     # --- edit tools -----------------------------------------------------------------------------
 
@@ -86,12 +83,12 @@ class GateGitTests(HarnessTestCase):
         self.assertEqual(self.decision(self.edit(".git/config", cwd=f"{self.repos}/bdtt_repo")), "deny")
         self.assertEqual(self.decision(self.edit("hooks/pre-commit", cwd=f"{self.repos}/bdtt_repo/.git")), "deny")
 
-    def test_every_level_is_covered(self) -> None:
+    def test_a_session_with_a_task_gets_the_same_reason(self) -> None:
         self.assertEqual(self.decision(self.edit(f"{self.repos}/bdtt_repo/.git/config")), "deny")
-        self.enter_l3()
+        self.enter_task()
         output = self.edit(f"{self.repos}/bdtt_repo/.git/config")
         self.assertEqual(self.decision(output), "deny")
-        self.assertIn("`.git` 文件夹", self.reason(output))  # the specific reason, not the generic L3 one
+        self.assertIn("`.git` 文件夹", self.reason(output))  # the specific reason, not the one about the task folder
 
     def test_the_floor_needs_no_target_configuration(self) -> None:
         (self.root / ".harness" / "policies" / "target.override.json").unlink()
@@ -104,7 +101,7 @@ class GateGitTests(HarnessTestCase):
         self.assertEqual(self.edit(f"{self.repos}/bdtt_repo/src/a.sql"), {})
 
     def test_the_working_tree_of_a_target_repository_is_written_by_promote_only(self) -> None:
-        """M7-4: no Level edits a file of a target repository directly. The reason names the way that works."""
+        """A file of a target repository is never edited directly. The reason names the way that works."""
         for path in (
             f"{self.repos}/bdtt_repo/src/a.sql", f"{self.repos}/bdtt_repo/.gitignore", f"{self.repos}/bdtt_repo/.github/workflows/ci.yml",
             f"{self.repos}/bdtt_repo/.gitattributes", f"{self.repos}/bdtt_repo/x.git/y", f"{self.repos}/BDTT_REPO/new/file.sql",
@@ -116,8 +113,7 @@ class GateGitTests(HarnessTestCase):
         self.assertIn("task fetch", self.reason(self.edit(f"{self.repos}/bdtt_repo/src/a.sql")))
         self.assertEqual(self.pre("read_file", {"filePath": f"{self.repos}/bdtt_repo/src/a.sql"}), {})  # reading stays free
         self.assertEqual(self.edit(f"{self.repos}/not_a_repo.txt"), {})  # beside the repositories, not in one
-        self.enter_l3()
-        self.assertIn("请求目录", self.reason(self.edit(f"{self.repos}/bdtt_repo/src/a.sql")))
+        self.assertIn("harness-my-task", self.reason(self.edit(f"{self.repos}/bdtt_repo/src/a.sql")))
 
     def test_terminal_writes_into_a_target_working_tree_are_denied(self) -> None:
         repo = f"{self.repos}/bdtt_repo"

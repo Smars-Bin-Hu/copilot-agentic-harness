@@ -555,3 +555,67 @@ class SetBranchTests(PromoteCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class QueueTests(PromoteCase):
+    """M12-2: several tasks for the same repository, one branch each, one after the other."""
+
+    def test_the_tasks_in_line_are_ordered_approved_first(self) -> None:
+        working = self.flow({"bdtt_repo/src/a.sql": "select 1, 2;\n"}, branch="feature/one")
+        asked = self.flow({"bdtt_repo/src/new.sql": "select 3;\n"}, branch="feature/two")
+        ready = self.flow({"b9td_repo/a.sql": "select 9, 9;\n"}, branch="feature/three")
+        self.dry_run(asked)
+        self.dry_run(ready)
+        self.approve(ready)
+        found = self.run_cli("task", "queue")
+        self.assertEqual([(row["name"], row["stage"]) for row in found["tasks"]], [("job3", "approved"), ("job2", "dry_run"), ("job1", "working")])
+        by_repo = {repo["name"]: repo for repo in found["repos"]}
+        self.assertEqual([item["name"] for item in by_repo["bdtt_repo"]["waiting"]], ["job2", "job1"])
+        self.assertTrue(by_repo["bdtt_repo"]["clean"])
+        self.assertIn("approve-promote --task job2", by_repo["bdtt_repo"]["next"])
+        self.assertIn("job3 已批准", by_repo["b9td_repo"]["next"])
+        listed = self.run_cli("task", "list")["promote_queue"]
+        self.assertEqual([item["name"] for item in listed], ["job3", "job2", "job1"])
+        self.assertEqual(working, f"{tasks.TASKS_DIR}/job1")
+
+    def test_a_repository_held_by_a_promoted_task_names_that_task(self) -> None:
+        first = self.flow({"bdtt_repo/src/a.sql": "select 1, 2;\n"}, branch="feature/one")
+        self.promote_for_real(first)
+        second = self.flow({"bdtt_repo/src/new.sql": "select 3;\n"}, branch="feature/two")
+        said = self.dry_run(second, ok=False)["stderr"]
+        self.assertIn("工作区不干净", said)
+        self.assertIn("这是任务 job1 回写的，文件还没提交", said)
+        self.assertIn("task queue", said)
+        repo = self.run_cli("task", "queue")["repos"][0]
+        self.assertEqual((repo["name"], repo["held_by"], repo["current_branch"], repo["clean"]), ("bdtt_repo", "job1", "feature/one", False))
+        self.assertIn("任务 job1 回写的", repo["next"])
+        self.assertEqual([item["name"] for item in repo["waiting"]], ["job2"])
+        # the person commits: the next task goes through
+        run_git(self.bdtt, "add", "-A")
+        run_git(self.bdtt, "commit", "-q", "-m", "job1")
+        self.dry_run(second)
+        self.assertEqual(self.run_cli("task", "queue")["repos"][0]["held_by"], "")
+
+    def test_files_that_no_task_wrote_are_the_persons_own(self) -> None:
+        task = self.flow({"bdtt_repo/src/new.sql": "select 3;\n"})
+        (self.bdtt / "mine.txt").write_text("x\n", encoding="utf-8")
+        said = self.dry_run(task, ok=False)["stderr"]
+        self.assertIn("先提交、stash 或丢弃这些改动", said)
+        self.assertNotIn("回写的", said)
+        self.assertIn("不是 harness 的任务回写的", self.run_cli("task", "queue")["repos"][0]["next"])
+
+    def test_a_task_that_is_done_or_has_no_results_is_not_in_line(self) -> None:
+        done = self.flow({"bdtt_repo/src/a.sql": "select 1, 2;\n"})
+        self.promote_for_real(done)
+        self.new(name="notes", kind="design")
+        found = self.run_cli("task", "queue")
+        self.assertEqual((found["tasks"], found["repos"]), ([], []))
+        self.assertEqual(self.run_cli("task", "list")["promote_queue"], [])
+
+    def test_the_text_board_shows_the_line(self) -> None:
+        from modules.task import taskboard, tasklife
+
+        task = self.flow({"bdtt_repo/src/new.sql": "select 3;\n"})
+        self.dry_run(task)
+        text = taskboard.table(tasklife.list_tasks(self.root))
+        self.assertIn("回写排队：job1（等你批准）", text)

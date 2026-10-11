@@ -279,6 +279,16 @@ def resume_on_prompt(root: Path, task: str) -> None:
             atomic_write(path, data)
 
 
+def promote_queue(root: Path) -> List[Dict[str, Any]]:
+    """The tasks in line for a promote, in order (M12-2). From the task files; `task queue` adds the state of the repositories."""
+    try:
+        from . import taskqueue  # it needs this module's neighbours
+
+        return taskqueue.order(root)
+    except Exception:  # noqa: BLE001 - a list must not fail over the queue
+        return []
+
+
 def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
     """Tasks that wait for the person first, the one that waited longest on top; then the one touched last. A folder that was never started is listed as `new`."""
     rows = []
@@ -307,4 +317,5 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
     return {
         "tasks": rows, "open": len([row for row in rows if row["status"] == "open"]), "waiting": len([row for row in rows if row["waiting"]]),
         "paused": len([row for row in rows if row.get("paused_since")]),
+        "promote_queue": promote_queue(root),
     }

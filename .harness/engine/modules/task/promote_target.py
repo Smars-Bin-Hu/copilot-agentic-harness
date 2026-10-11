@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import repo_paths, targets
 from core.paths import cli_command, utc_now
 
-from . import common
+from . import common, taskqueue
 from .common import CommandError
 
 DIFF_PREVIEW_LINES = 40
@@ -152,7 +152,8 @@ def plan_files(
                 dirty = targets.dirty_paths(repo, timeout)
                 if dirty:
                     shown = "、".join(dirty[:PROBLEMS_SHOWN]) + (f" 等 {len(dirty)} 个" if len(dirty) > PROBLEMS_SHOWN else "")
-                    mine.append(f"工作区不干净（{shown}）。先提交、stash 或丢弃这些改动，再 promote。")
+                    whose = taskqueue.holder_text(root, repo, targets.current_branch(repo, timeout))
+                    mine.append(f"工作区不干净（{shown}）。" + (whose or "先提交、stash 或丢弃这些改动，再 promote。"))
                 if repo.knowledge_base:
                     mine += direct_problems(repo, timeout)
                 elif branch and targets.valid_branch(branch) and targets.git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", timeout=timeout, allow_failure=True).strip():

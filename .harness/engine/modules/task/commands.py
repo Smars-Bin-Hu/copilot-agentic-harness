@@ -2,6 +2,7 @@
 
   task new|open|upgrade|list                 the life of a task (tasklife.py); list --text|--watch: the board in a terminal
   task board                                 the board as a page (taskboard.py)
+  task queue                                 the promote queue: who holds a repository, who is in line (taskqueue.py)
   task status|fetch|delete|diff|set-branch|promote|close|report      the work on a task (task.py)
   task pause|resume                          a person puts a task aside and takes it back (tasklife.py)
   task approve-plan|approve-promote|recover  a person at a terminal
@@ -18,7 +19,7 @@ from typing import Any, Dict
 from core import messages, targets, tasks
 from core.paths import cli_command, repo_root
 
-from . import task, task_report, taskboard, tasklife, taskreview, tasksnap
+from . import task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
 from .common import CommandError
 
 
@@ -96,6 +97,8 @@ def register_task(subparsers: Any) -> None:
     listing.add_argument("--watch", action="store_true", help="the table, drawn again every --interval seconds until Ctrl+C")
     listing.add_argument("--interval", type=float, default=5.0)
     listing.set_defaults(handler=cmd_list)
+    line = commands.add_parser("queue", help="the promote queue: per target repository, whose files wait for a commit and which tasks are in line")
+    line.set_defaults(handler=lambda a: taskqueue.queue(repo_root()))
     board = commands.add_parser("board", help="write .workspace/reports/board.html: every task, what it waits for, its time and usage")
     board.add_argument("--all", action="store_true", help="the closed tasks too")
     board.add_argument("--refresh", type=int, default=0, help="the page loads itself again every N seconds (run the command again to renew the numbers)")

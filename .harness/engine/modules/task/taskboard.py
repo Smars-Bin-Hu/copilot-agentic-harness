@@ -42,6 +42,10 @@ def pad(text: str, size: int) -> str:
 def table(result: Dict[str, Any]) -> str:
     """The list as text. Waiting tasks first, the one that waited longest on top."""
     head = say("board.text.head", open=result["open"], waiting=result["waiting"], paused=result.get("paused", 0), as_of=utc_now()[11:19])
+    line = result.get("promote_queue") or []
+    if line:
+        names = [item["name"] + "（" + say(f"board.queue.{item['stage']}") + "）" for item in line]
+        head += "\n" + say("board.text.queue", names=" → ".join(names))
     if not result["tasks"]:
         return head + "\n" + say("board.empty")
     names = [say("board.col.task"), say("board.col.kind"), say("board.col.waiting"), say("board.col.waited"), say("board.col.updated")]

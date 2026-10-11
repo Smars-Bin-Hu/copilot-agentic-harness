@@ -38,6 +38,7 @@
 | `harness task approve-plan` | 批准 agent 写的计划（改仓库才有） |
 | `harness task approve-promote` | 批准把改动写回仓库 |
 | `harness task review extend` / `waive` | 独立检查次数用完了，你决定再查还是放行 |
+| `harness task queue` | 几个任务要写同一个仓库时，看谁占着、谁在排队 |
 | `harness task pause` / `resume` | 一个任务暂时不想管，先搁置；要做了再恢复 |
 | `harness task close` | 任务做完，关掉 |
 

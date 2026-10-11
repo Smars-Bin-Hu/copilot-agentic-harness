@@ -270,7 +270,7 @@ class UpgradeTests(LifeCase):
 
 class ListTests(LifeCase):
     def test_no_tasks(self) -> None:
-        self.assertEqual(self.listed(), {"tasks": [], "open": 0, "waiting": 0, "paused": 0})
+        self.assertEqual(self.listed(), {"tasks": [], "open": 0, "waiting": 0, "paused": 0, "promote_queue": []})
 
     def test_open_tasks_are_listed_and_closed_ones_only_with_all(self) -> None:
         self.new("a", "qa")
@@ -493,7 +493,7 @@ class MessageTests(unittest.TestCase):
         source = "\n".join(path.read_text(encoding="utf-8") for path in [*ENGINE.rglob("*.py"), *(ENGINE / "modules" / "task" / "web").glob("*.js")])
         dynamic = (
             "task.kind.", "task.tier.", "task.next.light", "task.next.medium", "task.next.full", "task.waiting.",
-            "insight.stage.", "insight.part.", "insight.wait.", "insight.finding.", "report.source.", "report.status.", "board.state.", "unit.",
+            "insight.stage.", "insight.part.", "insight.wait.", "insight.finding.", "report.source.", "report.status.", "board.state.", "board.queue.", "unit.",
         )
         source = source.replace('messages.text(\n            "', 'messages.text("')
         unused = [name for name in messages.table() if f'"{name}"' not in source and not name.startswith(dynamic)]

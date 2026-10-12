@@ -74,11 +74,11 @@ hook 的输出格式是这类会话的格式；Local 会话读不懂，拒绝不
 ## 动手看
 
 - 读 [05-design.md](../../../../docs/05-design.md) 全文，对照本页。
-- 读 [08-release-notes.md](../../../../docs/08-release-notes.md) 的 1.1.0，看“退役”一节。
+- 读 [07-release-notes.md](../../../../docs/07-release-notes.md) 的 1.1.0，看“退役”一节。
 
 ## 去哪看
 
-- [05-design.md](../../../../docs/05-design.md)、[08-release-notes.md](../../../../docs/08-release-notes.md)
+- [05-design.md](../../../../docs/05-design.md)、[07-release-notes.md](../../../../docs/07-release-notes.md)
 
 ## 常见疑问
 

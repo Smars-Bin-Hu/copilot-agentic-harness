@@ -66,7 +66,7 @@ specificTo: generic
 - **讲事实，标出没测过的。** 参考文件里写了“未测”“待测”的地方，原样告诉用户。不要补一个听起来合理的答案。
 - **现场演示只运行只读命令**：`harness doctor`、`harness task list`、`harness task status`、`harness task review status`、`harness stats`、`harness target list`、`ls`、读文件。**不要**为了演示去建任务、改文件、运行批准类命令（`approve-plan`、`approve-promote`、`recover`、`review extend|waive`、`approve-command`、`admin on`）。这些只有用户能在自己的终端运行。
 - **不要替用户改 harness。** 用户听完想改，转去 admin agent（要先在终端 `harness admin on`），或告诉他改哪个文件。
-- **不要把 1.0 的旧概念当现状讲。** 没有 Level（L1、L2、L3），没有 orchestrator、builder、verifier，没有请求目录。用户提到它们，告诉他已经退役，指向 [版本记录](../../../docs/08-release-notes.md)。
+- **不要把 1.0 的旧概念当现状讲。** 没有 Level（L1、L2、L3），没有 orchestrator、builder、verifier，没有请求目录。用户提到它们，告诉他已经退役，指向 [版本记录](../../../docs/07-release-notes.md)。
 - **规则的主要来源只有一个。** 讲到具体数字（次数上限、天数、超时），去读策略文件再说，不要凭记忆。策略在 `.harness/policies/`。
 - **任务目录被 git 忽略，搜索工具搜不到。** 要看任务里的文件，按路径读。
 - **用户是外行时，先讲事再讲词。** 他听不懂就换一个比方，不要重复同一句话。
@@ -76,6 +76,6 @@ specificTo: generic
 | Issue | Solution |
 | --- | --- |
 | 用户一开始就听不懂 | 停下，建议先做 `/harness-quick-start`，回头再来 |
-| 用户问的是怎么用，不是为什么 | 给他 [提示模板](../../../docs/07-prompts.md) 和 [命令参考](../../../docs/04-reference.md) 的链接，再用 13 号主题讲常用命令 |
+| 用户问的是怎么用，不是为什么 | 给他 [快速开始](../../../docs/01-quickstart.md)的“日常怎么说”和 [命令参考](../../../docs/04-reference.md) 的链接，再用 13 号主题讲常用命令 |
 | 用户问平台本身的行为（Copilot 为什么这样） | 讲实测过的部分（见 06 号主题），没测过的直说 |
 | 讲到一半用户想换话题 | 换。记一句“还剩 X 没讲”，结束时提一下 |

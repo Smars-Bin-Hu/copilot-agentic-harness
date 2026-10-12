@@ -19,6 +19,11 @@
 - **README 重排**：开头一句话说清它是什么；“三步上手”直接给三条命令（`/harness-repo-initialize`、`/harness-quick-start`、`/harness-wondering`）；麻烦和做法并成一张表；加了版本号等徽章；目录树默认折叠。
 - **路径索引搬出 README**，放到 `.harness/INDEX.md`。agent 找文件时只读这一份，不用读 README。`AGENTS.md` 和 admin agent 的指向跟着改了。
 - `AGENTS.md` 开头的“定位”一节写短了，意思没变。
+- **版本记录改名**：`docs/08-release-notes.md` 改成 `docs/07-release-notes.md`。
+
+### 退役
+
+- **`docs/07-prompts.md`（提示模板）删除**。有了 `/harness-my-task`，不用再抄长提示：agent 会问清楚，需求落在 `REQ.md`，计划要你批准。仍有用的内容（一句话怎么说、`[review]=n` 标记）并进了 [快速开始](01-quickstart.md) 的“日常怎么说”。
 
 ## 1.3.0（2026-10-12）
 
@@ -139,7 +144,7 @@
 1. 换上新版本的文件，运行 `harness doctor`。
 2. **旧任务**：要接着做的，把目录从 `.workspace/current_tasks/<任务>` 搬到 `.workspace/sandbox/tasks/<任务>`，再让 agent `task open <任务名>`。计划和回写的批准记录跟着目录走，还有效。它没有 `TASK.md` 和 `REQ.md`：要的话运行 `harness task upgrade --task <任务名> --tier full` 补上。不接着做的，留在原地就行。
 3. **你的 override**：`orchestration.override.json` 要改名 `task.override.json` 并按新字段改；`task-levels.override.json` 删掉；`gate.override.json` 里有 `l3_write_root` 的话删掉那一项。`doctor` 会报出没对上的 override。
-4. **你的提示模板**：去掉 `/l1`、`/l2` 和“先 task start”。新模板见 [提示模板](07-prompts.md)。
+4. **你的提示模板**：去掉 `/l1`、`/l2` 和“先 task start”。现在的说法见 [快速开始](01-quickstart.md) 的“日常怎么说”。
 5. 正在进行的 L3 请求不能接着做。把请求目录里的成果手动放进一个新任务的 `DEV/`。
 
 ## 1.0.3（2026-10-10）

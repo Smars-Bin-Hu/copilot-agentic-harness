@@ -45,11 +45,12 @@ specificTo: generic
 
 ### 一、这是什么，为什么需要它
 
-照 [concepts.md](references/concepts.md) 讲。讲到这四点就够：
+照 [concepts.md](references/concepts.md) 讲。讲到这五点就够：
 
 - Copilot 现在不只补全，它能自己读文件、改文件、跑命令。这样用的 Copilot 叫 **agent**。
 - agent 会犯的三种错，所以要给它定规矩。
 - harness 是“给 agent 定的工作规矩，加一套工作台”。
+- 四样东西各管什么：Copilot agent、知识库和领域技能、harness 框架、被作用的对象。先画图，再讲每样管什么、不管什么。
 - 六个词：任务、门卫、技能、独立检查、批准、知识库。第一次出现时一个词一句话，不展开。
 
 ### 二、目录里你要关心什么

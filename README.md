@@ -29,6 +29,7 @@ Copilot 很会写代码，但在企业里用 VS Code 做复杂任务时，常有
 
 | 文档 | 你会看到什么 |
 | --- | --- |
+| [docs/00-overview.md](docs/00-overview.md) | **先看这篇**：它解决什么问题；Copilot agent、知识库和 domain 技能、harness 框架、被作用对象四部分各管什么；harness 对每类对象管到哪里；接入要做什么 |
 | [docs/01-quickstart.md](docs/01-quickstart.md) | **想马上跑起来**：环境要求（Python 3.9+，不用 `pip install`）、配好 `harness` 短命令（必须）、`doctor` 自检、配置目标仓库、跑通第一个任务 |
 | [docs/02-features.md](docs/02-features.md) | **它到底能做什么**：任务的种类和三档；gate 拦住越界写和危险命令；改目标仓库的两次批准；独立检查 `[review]=n` 和关口快照；人批准的 git 命令；日志、统计、报告 |
 | [docs/03-configure.md](docs/03-configure.md) | **接入你们自己的东西**：用 override 改配置而不动默认值，配置目标仓库，接入知识库和 domain 技能，选模型 |

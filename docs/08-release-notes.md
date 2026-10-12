@@ -25,6 +25,7 @@
 - **autorun（beta）**：计划批准后，agent 照 `TODO.md` 一直做，不用你每步盯着。你在终端运行 `harness task autorun on` 并输入确认码才开；要先有批准的计划、没勾的步骤和 `[review]=n`。hook 按事实推进或停下：做完、计划被改、检查用完、被拒绝 2 次、继续满 20 次、过了 120 分钟、连续 3 次没进展、agent 说走不下去、你关掉。中间不回写，做完生成回写计划等你批准。技能 `/harness-autorun` 带你做准备。数字在 `task.json` 的 `autorun`。
 - **新的子 agent `mapper`**：只读，没有编辑工具和终端。
 - **回写排队**：几个任务要写同一个仓库时，`harness task queue` 列出每个仓库现在被哪个任务占着（它回写的文件你还没提交）、后面排着谁、你下一步做什么。顺序：已批准的在前，等你批准的其次，还在做的最后。`task list` 的输出和终端看板也带上排队顺序。harness 仍然不替你提交。
+- **总览文档 [00-overview.md](00-overview.md)**：它解决什么问题；Copilot agent、知识库和 domain 技能、harness 框架、被作用对象四部分各管什么；harness 对代码仓库、Azure DevOps、服务器、数据库管到哪里；接入要做什么。入门课 `/harness-quick-start` 第一部分同步加了“四样东西各管什么”。
 - `target.json` 里仓库的 `path` 可以写相对路径，从 harness 文件夹算起（例如 `knowledge-base`）。
 
 ### 变更

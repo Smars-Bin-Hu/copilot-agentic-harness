@@ -32,7 +32,7 @@ class NoTaskTests(RuleCase):
         text = self.context(self.prompt("帮我看看这个表"))
         self.assertIn(f"当前会话 id：{SESSION}", text)
         self.assertIn("harness-my-task", text)
-        self.assertIn("没有接着任务时不能调用子 agent", text)
+        self.assertIn("没有接着任务时不能调用 reviewer", text)
         self.assertIn("照拒绝理由里的下一步做", text)
         for gone in ("Task Level", "L1", "L2", "/l2", "orchestrator", "搜索最多", "预算", "verifier"):
             self.assertNotIn(gone, text)

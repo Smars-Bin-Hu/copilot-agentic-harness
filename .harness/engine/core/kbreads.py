@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import config, targets
+from . import config, targets, tasks
 from .events import HookEvent
 from .logs import read_lines, session_files
 
@@ -91,8 +91,31 @@ def task_name(task: str) -> str:
     return task.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
 
 
+def pickups(root: Path) -> Dict[str, List[Tuple[str, str]]]:
+    """session id -> [(when, task)] from the `sessions` list of every task: the moments a session picked a task up."""
+    found: Dict[str, List[Tuple[str, str]]] = {}
+    for folder in tasks.folders(root):
+        data = tasks.read(root, folder) or {}
+        for item in data.get("sessions") or []:
+            found.setdefault(str(item.get("session_id", "")), []).append((str(item.get("at", "")), task_name(folder)))
+    for items in found.values():
+        items.sort()
+    return found
+
+
+def picked_up(items: List[Tuple[str, str]], when: str) -> str:
+    """The task a session had picked up by `when`. A session that opens a task in its first prompt has no task on that prompt."""
+    name = ""
+    for at, task in items:
+        if at <= when:
+            name = task
+    return name
+
+
 def reads_by_task(root: Path, days: Optional[int] = None) -> Dict[str, Dict[str, Any]]:
-    """path -> {reads, tasks, sessions}. The task of a read is the task of the prompt it came after ("" when none)."""
+    """path -> {reads, tasks, sessions}. The task of a read is the task of the prompt it came after; when that prompt had
+    none (the task was opened in it), the task the session picked up before the read."""
+    known = pickups(root)
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat() if days is not None else ""
     found: Dict[str, Dict[str, Any]] = {}
     for _surface, path in session_files(root):
@@ -106,8 +129,9 @@ def reads_by_task(root: Path, days: Optional[int] = None) -> Dict[str, Dict[str,
                 entry = found.setdefault(str(name), {"reads": 0, "tasks": set(), "sessions": set()})
                 entry["reads"] += 1
                 entry["sessions"].add(path.stem)
-                if task:
-                    entry["tasks"].add(task)
+                owner = task or picked_up(known.get(path.stem, []), row.get("at", ""))
+                if owner:
+                    entry["tasks"].add(owner)
     return found
 
 

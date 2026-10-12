@@ -210,6 +210,13 @@ class ReadLogTests(KbCase):
         self.assertEqual(self.run_cli("kb", "reads", "--task", "other")["files"], [])
         self.assertEqual(kbstats.collect(self.root, task="job1")["files"][0]["file"], "kb/orders/delay.md")
 
+    def test_a_task_opened_in_the_prompt_that_reads_is_still_the_owner_of_the_read(self) -> None:
+        self.prompt("开一个任务，读知识库")  # no task yet: the agent opens it after this prompt
+        self.new(kind="qa")
+        self.read("Read", {"path": str(self.kb / "README.md")})
+        found = self.run_cli("kb", "reads")
+        self.assertEqual([(row["file"], row["tasks"]) for row in found["files"]], [("kb/README.md", ["job1"])])
+
     def test_the_task_report_lists_them(self) -> None:
         self.new(kind="qa")
         self.prompt("问一下")

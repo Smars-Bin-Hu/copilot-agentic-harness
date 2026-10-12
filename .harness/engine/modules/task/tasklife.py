@@ -185,7 +185,7 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     updated = data.get("updated_at", "")
     if state == "partial":
         return {"why": "recover", "since": last_event(data, "promote-partial") or updated}
-    if state == "dry_run":
+    if state == "dry_run" and "approved_plan_sha256" not in (data.get("promote") or {}):
         return {"why": "promote", "since": last_event(data, "promote-dry-run") or updated}
     if tasks.plan_digest(root, task) and not tasks.plan_approved(root, task, data):
         try:

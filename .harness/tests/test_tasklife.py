@@ -301,6 +301,12 @@ class ListTests(LifeCase):
                 data["promote"] = {"state": state}
             self.assertEqual(self.listed()["tasks"][0]["waiting"], text)
 
+    def test_an_approved_promote_is_no_longer_waiting_for_the_person(self) -> None:
+        self.new("job", "dev")
+        with task_ops.locked(self.root, f"{BASE}/job") as data:
+            data["promote"] = {"state": "dry_run", "approved_plan_sha256": "abc"}
+        self.assertNotEqual(self.listed()["tasks"][0]["waiting"], "回写等你批准")
+
     def test_a_folder_that_was_never_picked_up_is_listed_as_new(self) -> None:
         (self.root / BASE / "hand").mkdir(parents=True)
         self.new("fresh", "qa")

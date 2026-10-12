@@ -14,7 +14,7 @@
 
 任务可以更新知识库；几个任务排队回写；并行分块阅读；autorun（beta）。版本号已定，等 Copilot 里手测通过后发布。没有不兼容的改动。
 
-**测试情况**：自动测试通过。Copilot 里的手测还没做；Windows 没测。
+**测试情况**：自动测试通过。Mac 上的 Copilot 手测做完（知识库回写、排队、mapper、autorun 连续推进）；Windows 和公司电脑没测。
 
 ### 新增
 
@@ -30,6 +30,7 @@
 
 ### 变更
 
+- `REQ.md` 的“用户确认”只有用户能改，autorun 下也一样。没确认就在 `LOG.md` 记一笔，reviewer 按“待确认”看。（`AGENTS.md`）
 - gate 多拦一种终端写法：先 `cd` 进一个目录，再用相对路径写 guardrail 文件、任务的 `.task/` 等受保护的文件。以前只认命令里直接写出的路径。gate 仍然不是沙盒，看不出的写法见 [02-features.md](02-features.md) 的 gate 一节。
 - 任务分析页和看板的时间改成你这台电脑的本地时间（以前是 UTC）。终端看板（`task list --text`）也是。JSON 输出里的时间仍是 UTC。
 - 任务分析页的每条提示下面，显示你输入的开头 40 个字，方便认出是哪一条。只在页面上，不给 agent。不想显示：`task.json` 的 `report.prompt_chars` 设成 `0`。

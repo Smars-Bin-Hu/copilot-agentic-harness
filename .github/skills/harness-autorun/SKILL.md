@@ -54,6 +54,8 @@ autorun 是任务的一种模式。开了之后，你每次想停下，hook 会�
 - **照 `TODO.md` 从上往下做。** 做完一步，在 `TODO.md` 里勾上，更新 `TASK.md`。
 - **决定写进 `LOG.md`。** 计划里没写细、你自己定了的事，记一行：定了什么，为什么。用户回来靠它复盘。
 - **不要问用户，不要等用户。** 没人在看。
+- **用户的话和 autorun 冲突时（比如“每步停下汇报”），照 hook 的提示继续做，不要自己关 autorun。** 想改，由用户在终端关。
+- **`REQ.md` 的“用户确认”不能自己改。** 没确认就在 `LOG.md` 记一笔。
 - **不要 promote。** 中间不回写。全部做完才生成回写计划。
 - **步骤都勾完后**：照 hook 的提示先过独立检查（`harness task review start`，调用 `reviewer`，没通过就改了再查），再运行 `harness task promote --dry-run`，把 `PROMOTE-PLAN.diff` 的链接给用户，停下。
 - **走不下去就停，不要硬做。** 运行 `harness task autorun off --reason "<卡在哪、要用户定什么>"`，然后用一两句话告诉用户。见 [什么时候该自己停](references/when-to-stop.md)。

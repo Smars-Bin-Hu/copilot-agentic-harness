@@ -19,6 +19,7 @@
 - **README 重排**：开头一句话说清它是什么；“三步上手”直接给三条命令（`/harness-repo-initialize`、`/harness-quick-start`、`/harness-wondering`）；麻烦和做法并成一张表；加了版本号等徽章；目录树默认折叠。
 - **路径索引搬出 README**，放到 `.harness/INDEX.md`。agent 找文件时只读这一份，不用读 README。`AGENTS.md` 和 admin agent 的指向跟着改了。
 - `AGENTS.md` 开头的“定位”一节写短了，意思没变。
+- **门卫认 PowerShell 的 `Push-Location`**：和 `cd`、`Set-Location` 一样，进了某个文件夹再写，写的还是那个文件夹里的受保护文件会被拒绝。以前只认 `pushd`、`Set-Location`、`sl`。
 - **版本记录改名**：`docs/08-release-notes.md` 改成 `docs/07-release-notes.md`。
 
 ### 退役

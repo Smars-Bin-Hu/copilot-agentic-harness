@@ -422,6 +422,19 @@ class GateHookTests(HarnessTestCase):
             with self.subTest(command):
                 self.assertEqual(self.pre("run_in_terminal", {"command": command}), {})
 
+    def test_a_powershell_location_change_does_not_hide_the_write_either(self) -> None:
+        task = ".workspace\\sandbox\\tasks\\t1"
+        for command in (
+            f"Set-Location {task}\\.task; Set-Content task.json x", f"Push-Location {task}\\.task; Set-Content task.json x",
+            f"Set-Location -Path {task}\\.task; Set-Content -Path task.json -Value x", f"sl {task}; Set-Content .task\\task.json x",
+            "Set-Location -LiteralPath .harness\\policies; Add-Content gate.json x", "Push-Location .harness\\policies; Remove-Item gate.json",
+        ):
+            with self.subTest(command):
+                self.assertEqual(self.decision(self.pre("run_in_terminal", {"command": command})), "deny")
+        for command in (f"Set-Location {task}; Set-Content NOTES.md x", f"Push-Location {task}\\.task; Get-Content task.json"):
+            with self.subTest(command):
+                self.assertEqual(self.pre("run_in_terminal", {"command": command}), {})
+
     def test_a_cd_into_a_guarded_folder_does_not_hide_the_write(self) -> None:
         task = ".workspace/sandbox/tasks/t1"
         for command in (

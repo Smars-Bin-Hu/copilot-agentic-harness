@@ -42,7 +42,7 @@ def normalize(command: str) -> str:
     return "".join(out)
 
 
-_CD = re.compile(r"^(?:cd|pushd|chdir|set-location|sl)$", re.IGNORECASE)
+_CD = re.compile(r"^(?:cd|pushd|chdir|set-location|push-location|sl)$", re.IGNORECASE)
 _SPLIT = re.compile(r"(\s*(?:&&|\|\||[;&|\n()])\s*)")
 _REDIRECT = re.compile(r"^(\d*>>?)(.*)$")
 _INLINE = re.compile(r"^(?:python3?|py|node|perl|ruby)$", re.IGNORECASE)

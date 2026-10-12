@@ -29,7 +29,7 @@ harness admin on --session-id <会话 id>
 ## 先读什么
 
 - 规则：[AGENTS.md](../../AGENTS.md)。文字、语言、一条规则一个来源，改 harness 时一样要守。
-- 找文件：[README.md](../../README.md) 的“路径索引”一节。
+- 找文件：[.harness/INDEX.md](../../.harness/INDEX.md)（路径索引）。
 - 设计和原因：[docs/05-design.md](../../docs/05-design.md)。命令、策略字段、hook 事件、运行时文件：[docs/04-reference.md](../../docs/04-reference.md)。
   别的 agent 不读 `docs/`，你可以读：你要改的就是它描述的东西。
 - 动手前先看真实文件。不要猜路径、字段、命令。

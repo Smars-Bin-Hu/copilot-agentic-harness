@@ -22,7 +22,7 @@ instructions 是写给 agent 看的规则文件。有的每次都加载，有的
 
 - `AGENTS.md` 只放核心。
 - 细则放进 instructions 或技能，需要时才读。
-- README 是索引，告诉 agent “需要找文件时只读这一节”。
+- 路径索引单独放在 `.harness/INDEX.md`。agent 要找文件时才读它，不用为了查一个路径读完整份 README。
 
 ### 2.3 一条规则只有一个主要来源
 

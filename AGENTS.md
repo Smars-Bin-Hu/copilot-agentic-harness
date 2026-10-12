@@ -1,21 +1,18 @@
 # 智能体工作规则
 
-本文件只放每个智能体都必须遵守的规则。文件索引见
-[README.md](README.md) 的“路径索引”一节：需要找文件时只读这一节，不要通读 README，也不要读 `docs/`（那是给人看的）。具体规则放在对应的指令、技能或策略文件中。
+本文件只放每个智能体都必须遵守的规则。具体规则在对应的指令、技能或策略文件里。
 
-## 核心开发定位
+要找文件时，读 [.harness/INDEX.md](.harness/INDEX.md)（路径索引）。不要读 `README.md` 和 `docs/`，那是给人看的。
 
-- 本仓库虽然使用 Claude Code 开发，但最终用户是 GitHub Copilot 用户。
-  所有交付给用户的目录、文件和配置都必须使用 GitHub Copilot 支持的格式，
-  不得为了兼容 Claude Code 而设计仓库结构。
-- 本仓库只建设与 Knowledge Base 解耦的通用 AI agentic harness SDK。
-  范围包括 agents、multi-agents、Hooks、通用 Skills、instructions、tools、
-  权限、任务、独立检查、sandbox 和 observability 等通用组件与能力。
-- 本 SDK 用于帮助企业团队以轻量 harness 完成 SDLC。接入企业环境后，
-  团队可以加入自己的 Knowledge Base、Skills 和其他定制内容，
-  让 harness 直接执行团队任务。
-- `knowledge-base/` 当前必须保持为空，只作为企业团队将来自定义的
-  Knowledge Base 接入位置。不要在本仓库内预置、模拟或耦合具体业务知识。
+## 定位
+
+- 本仓库是通用的 AI agentic harness，最终用户是 GitHub Copilot 用户。
+  交付的目录、文件和配置只用 GitHub Copilot 支持的格式，不为兼容别的工具改仓库结构。
+- 它与 Knowledge Base 解耦，只做通用能力：agents、Hooks、通用 Skills、instructions、
+  tools、权限、任务、独立检查和 observability。
+- 企业团队接入自己的 Knowledge Base、Skills 和目标仓库后，用它完成团队任务。
+- `knowledge-base/` 交付时必须为空，只是企业知识库的接入位置。
+  不要在本仓库内预置、模拟或耦合具体业务知识。
 
 ## 文档语言
 
@@ -34,7 +31,7 @@
 ## 信息放置
 
 - 遵守渐进式披露：本文件只放核心规则和安全边界。
-- README 是仓库的第一目录，只介绍仓库并指向具体文件。
+- `README.md` 给人看：介绍仓库，指向文档。路径索引在 `.harness/INDEX.md`，给 agent 查；加了新目录或技能，同步改它。
 - 详细规则放在 `.github/copilot-instructions.md`、`.github/instructions/`、
   `.github/skills/` 或 `.harness/policies/` 中。
 - 一条规则只能有一个主要来源。其他文件只放链接和一句说明，不复制全文。

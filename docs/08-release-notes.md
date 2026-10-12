@@ -10,6 +10,16 @@
 
 查自己装的是哪一版：`harness --version`。
 
+## 下一版（未发布）
+
+只改文档，行为没变。
+
+### 变更
+
+- **README 重排**：开头一句话说清它是什么；“三步上手”直接给三条命令（`/harness-repo-initialize`、`/harness-quick-start`、`/harness-wondering`）；麻烦和做法并成一张表；加了版本号等徽章；目录树默认折叠。
+- **路径索引搬出 README**，放到 `.harness/INDEX.md`。agent 找文件时只读这一份，不用读 README。`AGENTS.md` 和 admin agent 的指向跟着改了。
+- `AGENTS.md` 开头的“定位”一节写短了，意思没变。
+
 ## 1.3.0（2026-10-12）
 
 任务可以更新知识库；几个任务排队回写；并行分块阅读；autorun（beta）。没有不兼容的改动。

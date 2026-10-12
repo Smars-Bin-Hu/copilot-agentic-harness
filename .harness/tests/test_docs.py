@@ -99,14 +99,22 @@ class LinkTests(unittest.TestCase):
 
 
 class ReadmeStructureTests(unittest.TestCase):
-    def test_the_readme_only_introduces_and_points_at_the_docs(self) -> None:
+    def test_the_readme_introduces_gets_the_reader_started_and_points_at_the_docs(self) -> None:
         readme = text(REPO / "README.md")
         self.assertTrue(readme.startswith("# GitHub Copilot Agentic Harness for DE Team"))
-        self.assertEqual(re.findall(r"^## (.+)$", readme, re.M), ["文档", "必须接入的部分", "目录结构", "路径索引"])
-        intro = readme[readme.index("\n"):readme.index("## 文档")]
-        self.assertIn("常有这些麻烦", intro)
-        self.assertIn("这个 harness 的做法", intro)
-        self.assertGreater(len(intro), 600)
+        self.assertEqual(re.findall(r"^## (.+)$", readme, re.M), ["它是什么", "三步上手", "它能做什么", "必须接入的部分", "文档", "目录结构"])
+        start = section(readme, "三步上手")
+        for skill in ("harness-repo-initialize", "harness-quick-start", "harness-wondering"):
+            self.assertIn(f"`/{skill}`", start, skill)
+            self.assertTrue((REPO / ".github" / "skills" / skill / "SKILL.md").is_file(), skill)
+        self.assertIn("harness 的做法", section(readme, "它能做什么"))
+
+    def test_the_readme_shows_the_version_of_the_registry(self) -> None:
+        readme = text(REPO / "README.md")
+        version = json.loads(text(REPO / ".harness" / "registry.json"))["version"]
+        self.assertIn(f"badge/version-{version}-", readme)
+        self.assertIn(f"版本 {version} ·", readme)
+        self.assertIn(f"## {version}（", text(REPO / "docs" / "08-release-notes.md"))
 
     def test_the_readme_has_the_directory_tree_with_both_parts(self) -> None:
         readme = text(REPO / "README.md")
@@ -121,6 +129,37 @@ class ReadmeStructureTests(unittest.TestCase):
         configure = text(REPO / "docs" / "03-configure.md")
         self.assertIn("必须接入", section(configure, "知识库"))
         self.assertTrue((REPO / ".github" / "instructions" / "knowledgebase.instructions.md").is_file())
+
+
+class PathIndexTests(unittest.TestCase):
+    """The path index is the agent's map. It lives outside the README, so finding a file does not load the introduction."""
+
+    INDEX = REPO / ".harness" / "INDEX.md"
+
+    def paths(self) -> List[str]:
+        found = []
+        for line in text(self.INDEX).splitlines():
+            if line.startswith("| `"):
+                found.append(re.match(r"\| `([^`]+)`", line).group(1))
+        return found
+
+    def test_every_indexed_path_exists(self) -> None:
+        paths = self.paths()
+        self.assertGreater(len(paths), 15)
+        self.assertEqual([path for path in paths if not (REPO / path).exists()], [])
+
+    def test_every_shipped_skill_and_harness_folder_is_indexed(self) -> None:
+        index = text(self.INDEX)
+        for skill in sorted((REPO / ".github" / "skills").glob("harness-*")):
+            self.assertIn(f"`.github/skills/{skill.name}/`", index, skill.name)
+        for folder in ("engine", "policies", "contracts", "bin", "eval", "tests"):
+            self.assertIn(f"`.harness/{folder}/`", index, folder)
+
+    def test_agents_md_points_at_the_index_and_the_readme_holds_no_copy(self) -> None:
+        self.assertIn("(.harness/INDEX.md)", text(REPO / "AGENTS.md"))
+        readme = text(REPO / "README.md")
+        self.assertIn("(.harness/INDEX.md)", readme)
+        self.assertNotIn("## 路径索引", readme)
 
 
 class CommandTests(unittest.TestCase):

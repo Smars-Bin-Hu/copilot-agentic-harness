@@ -13,7 +13,7 @@ a{color:var(--model);text-decoration:none}a:hover{text-decoration:underline}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-top:16px}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:20px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
-.kpi b{display:block;font-size:22px;font-weight:650;line-height:1.3}
+.kpi b{display:block;font-size:20px;font-weight:650;line-height:1.4;white-space:nowrap}
 .kpi span{color:var(--soft);font-size:12px}
 .bar{display:flex;height:18px;border-radius:5px;overflow:hidden;background:var(--track)}
 .bar.thin{height:8px;border-radius:4px}
@@ -40,7 +40,7 @@ td.when{white-space:nowrap}
 td.state{min-width:13em}
 td.kind{min-width:8em}
 main.wide{max-width:1200px}
-.kpi b.long{font-size:15px;line-height:2;white-space:nowrap}
+.kpi b.long{font-size:15px;line-height:1.87}
 .now{margin-top:12px}.now .tag{font-size:13px;padding:4px 10px}
 tr.gap td{color:var(--soft);font-size:12px;padding:3px 0 3px 0;border-bottom:1px dashed var(--line)}
 .empty{color:var(--soft)}

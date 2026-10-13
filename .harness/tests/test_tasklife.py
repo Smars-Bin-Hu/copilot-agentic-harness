@@ -8,6 +8,7 @@ import re
 import unittest
 from pathlib import Path
 from typing import Any, Dict
+from unittest import mock
 
 from support import ENGINE, HarnessTestCase, payload, subagent_start
 
@@ -15,6 +16,7 @@ from core import messages, tasks
 from core.state import update_state
 from modules.task import task as task_ops
 from modules.task import tasklife
+from modules.task.common import CommandError
 
 S1, S2 = "session-one", "session-two"
 BASE = tasks.TASKS_DIR
@@ -111,6 +113,17 @@ class NewTests(LifeCase):
             with self.subTest(name):
                 self.assertIn("任务名", self.refused("task", "new", name, "--kind", "qa", "--session-id", S1))
         self.assertFalse((self.root / BASE).exists())
+
+    def test_on_windows_a_name_no_folder_can_have_is_refused_in_words(self) -> None:
+        """Windows round: `task new "a<b"` answered with the raw WinError 123."""
+        with mock.patch.object(tasklife, "ON_WINDOWS", True):
+            for name in ("a<b", "a>b", "a:b", 'a"b', "a|b", "a?b", "a*b", "ab.", "a\tb"):
+                with self.subTest(name), self.assertRaises(CommandError) as caught:
+                    tasklife.clean_name(name)
+                self.assertIn("在 Windows 上不能用", str(caught.exception))
+            self.assertEqual(tasklife.clean_name("查订单-a&b (1)"), "查订单-a&b (1)")
+        with mock.patch.object(tasklife, "ON_WINDOWS", False):
+            self.assertEqual(tasklife.clean_name("a<b"), "a<b")  # elsewhere the file system takes it
 
     def test_a_refused_new_leaves_no_folder(self) -> None:
         self.assertIn("没有会话", self.refused("task", "new", "job", "--kind", "qa", "--session-id", "nobody"))

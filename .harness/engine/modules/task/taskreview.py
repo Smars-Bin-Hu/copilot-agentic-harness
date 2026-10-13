@@ -34,6 +34,7 @@ AGENT = "reviewer"
 DEFAULTS = {"extra_checks": 2, "max_n": 5}
 PACKAGE = "package.md"
 VERDICT_FILE = "verdict.md"
+VERDICT_LINES = 3  # the verdict is looked for in this many non-empty lines from the top
 _MARKER = re.compile(r"\[\s*review\s*\]\s*[=＝]\s*(\d{1,2})", re.IGNORECASE)
 _VERDICT = re.compile(r"^VERDICT\s*[:：]\s*(PASS|FAIL)\b", re.IGNORECASE)
 # These kinds give back files of a target repository: before DEV/ holds something there is nothing to check yet.
@@ -59,13 +60,34 @@ def marker(prompt: str) -> Optional[int]:
 
 
 def parse_verdict(response: str) -> str:
-    """`PASS`, `FAIL`, or `unknown`: the first non-empty line, markdown marks around it ignored."""
+    """`PASS`, `FAIL`, or `unknown`: the verdict line among the first non-empty lines, markdown marks around it ignored.
+
+    It is meant to be the first line. A reviewer that says a sentence before it must not use up a check for that.
+    """
+    seen = 0
     for line in response.splitlines():
         line = line.strip().strip("*#>`_ ")
-        if line:
-            found = _VERDICT.match(line)
-            return found.group(1).upper() if found else "unknown"
+        if not line:
+            continue
+        found = _VERDICT.match(line)
+        if found:
+            return found.group(1).upper()
+        seen += 1
+        if seen >= VERDICT_LINES:
+            break
     return "unknown"
+
+
+def req_confirmed(root: Path, task: str) -> Optional[bool]:
+    """Has the person filled in the "用户确认" line of REQ.md? None: no REQ.md, or no such line."""
+    try:
+        text = (tasks.task_dir(root, task) / tasks.REQ_FILE).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        if "用户确认" in line:
+            return "已确认" in line and "还没确认" not in line  # the template has both words on the line
+    return None
 
 
 # --- state ---------------------------------------------------------------------------------------
@@ -162,6 +184,8 @@ def package_text(root: Path, task: str, data: Dict[str, Any], entry: Dict[str, A
             lines.append(f"- {task}/{name}")
     if (folder / "REQ").is_dir() and any((folder / "REQ").iterdir()):
         lines.append(f"- {task}/REQ/")
+    if req_confirmed(root, task) is False:  # only the person fills that line in: the author cannot fix it, so it must not cost a check
+        lines += ["", say("review.package.unconfirmed", req=f"{task}/{tasks.REQ_FILE}")]
     if diff_file:
         lines += ["", say("review.package.diff", path=diff_file)]
     lines += ["", say("review.package.files"), "", "| 文件 | sha256 | 字节 |", "| --- | --- | --- |"]

@@ -14,6 +14,7 @@ What a task writes back and the two approvals are in `task.py`.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -26,6 +27,8 @@ from . import task as task_ops
 from .common import CommandError
 
 NAME_LIMIT = 80
+ON_WINDOWS = os.name == "nt"
+WINDOWS_BAD = set('<>:"|?*')  # what Windows takes in no folder name (`/` and `\` are refused everywhere)
 TEMPLATES = Path(".harness") / "contracts" / "templates" / "task"
 # What each tier adds to the one below it. A name that ends in `/` is a folder.
 TIER_FILES = {
@@ -50,6 +53,8 @@ def clean_name(raw: str) -> str:
         raise CommandError(say("task.name.empty"))
     if "/" in name or "\\" in name or name.startswith(".") or len(name) > NAME_LIMIT or name in (".", ".."):
         raise CommandError(say("task.name.bad", name=name, limit=NAME_LIMIT))
+    if ON_WINDOWS and (set(name) & WINDOWS_BAD or name.endswith(".") or any(ord(char) < 32 for char in name)):
+        raise CommandError(say("task.name.windows", name=name))  # the name is the folder name: say so before Windows answers with WinError 123
     return name
 
 

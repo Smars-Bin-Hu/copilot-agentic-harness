@@ -40,7 +40,7 @@ specificTo: generic
 ```
 
 1. **短命令（必须，先做）。** 运行 `harness --version --short`。
-   - 输出 `harness <版本>`：已经配好，跳到第 2 步。
+   - 输出 `harness <版本>`：已经配好，跳到第 2 步。Windows 上先多查一次：运行只读的 `(Get-Command harness).Source` 和 `[Environment]::GetEnvironmentVariable("Path", "User")`。前一条的文件夹不在后一条里时，告诉用户：这个 VS Code 窗口带着旧的 PATH，重开后 `harness` 会找不到；然后按“找不到命令”那一条配。
    - 找不到命令：先自己运行只读的 `uname`、`echo $SHELL`、`echo $PATH`（Windows 不用），按 [短命令怎么配](./references/short-command.md) 的“先判断”选出要给的命令。PATH 里已有 `~/bin` 就不给改 shell 配置文件的那一条。把命令给用户，请用户**在自己的终端**运行，然后**重开终端和 VS Code**。你不运行这些命令。用户说做完了，再运行一次 `harness --version --short` 确认。
    - 这一步没通过，不做后面的。后面的命令都以 `harness` 开头。
 2. **开 admin 模式。** 看提示开头的规则。没写“admin 模式：已开”时，把 `harness admin on --session-id <当前会话 id>` 给用户，请用户在自己的终端运行并输入确认码。会话 id 原样抄规则里的。你不能自己运行它。
@@ -78,6 +78,7 @@ specificTo: generic
 | Issue | Solution |
 |-------|----------|
 | 用户说配了 PATH，`harness` 还是找不到 | 先确认重开了 VS Code。再让用户在自己的终端运行 `echo $PATH`（Windows：`echo $env:Path`），看有没有那个文件夹。macOS 上最常见的原因：只建了链接，没把 `~/bin` 加进 PATH |
+| `harness` 在 VS Code 里能用，新开的终端里找不到 | VS Code 是在改 PATH 之前打开的，或 PATH 后来被删了。Windows 上看 `[Environment]::GetEnvironmentVariable("Path", "User")` 里有没有那个文件夹，没有就重新加，再重开 VS Code |
 | `doctor` 说 PATH 里的 `harness` 不是这个仓库的 | 电脑上有另一份 harness。能用，但建议让 PATH 指向常用的那一份。见 [短命令怎么配](./references/short-command.md) |
 | 写 `*.override.json` 被拒绝 | admin 模式没开，或开的是别的会话。回到第 2 步 |
 | `harness target list` 没列出仓库 | `repos_root` 下的子文件夹要有 `.git`。路径写错时 `doctor` 会报 |

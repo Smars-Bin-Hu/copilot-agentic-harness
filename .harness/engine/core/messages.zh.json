@@ -1,5 +1,6 @@
 {
   "task.name.empty": "任务名不能为空。",
+  "task.name.windows": "任务名 `{name}` 在 Windows 上不能用：任务名就是文件夹名。不要带 `< > : \" | ? *`，结尾不要是空格或点。",
   "task.name.bad": "任务名 `{name}` 不能用。不要带 `/`、`\\`，不要以 `.` 开头，最长 {limit} 个字。",
   "task.exists": "任务 `{task}` 已经有了。要接着做，运行 `{command} task open {name} --session-id <会话 id>`。",
   "task.missing": "没有任务 `{name}`。先看有哪些：`{command} task list --all`。要新建：`{command} task new {name} --kind <种类> --session-id <会话 id>`。",
@@ -48,6 +49,7 @@
   "review.package.first": "这是第 1 次检查。做完整的检查。",
   "review.package.later": "这是第 {ordinal} 次检查（第 2 次及以后）。仍然做完整的检查，但**只报影响正确性的问题**：措辞、格式、命名、可以更好的写法都不报。",
   "review.package.requirement": "## 需求在哪",
+  "review.package.unconfirmed": "{req} 的“用户确认”一行还没填。这一行只有用户能改，作者改不了，**不算问题，不要因此判 FAIL**。需求按“待确认”看：照 REQ.md 现在写的内容检查。",
   "review.package.diff": "## 差异\n\n成果和 main 的差异在 {path}。先读它，大文件只读差异和附近的行。成果不在 git 仓库里，不要用 git diff。",
   "review.package.files": "## 要检查的文件",
   "review.package.previous": "## 上一次的问题\n\n上一次没有通过，原文在 {path}。先逐条确认修没修好，再做完整检查。",

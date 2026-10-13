@@ -42,6 +42,12 @@ class MarkerTests(unittest.TestCase):
         self.assertEqual(taskreview.parse_verdict("\nverdict：fail"), "FAIL")
         self.assertEqual(taskreview.parse_verdict("looks fine"), "unknown")
 
+    def test_a_sentence_before_the_verdict_does_not_lose_it(self) -> None:
+        self.assertEqual(taskreview.parse_verdict("我读完了评审包。\n\nVERDICT: FAIL\n- a.sql:1 x | 依据：REQ.md:3"), "FAIL")
+        self.assertEqual(taskreview.parse_verdict("one\ntwo\nVERDICT: PASS"), "PASS")
+        self.assertEqual(taskreview.parse_verdict("one\ntwo\nthree\nVERDICT: PASS"), "unknown")  # far down it is a quote, not the verdict
+        self.assertEqual(taskreview.parse_verdict("上一次的结论是 VERDICT: FAIL，这次看过了"), "unknown")
+
 
 class ReviewCase(LifeCase):
     def say(self, text: str, session: str = S1) -> Dict[str, Any]:
@@ -158,6 +164,22 @@ class CheckTests(ReviewCase):
         copy = self.root / result["snapshot"] / "files" / "RCA.md"
         self.assertEqual(copy.read_text(encoding="utf-8"), "v1\n")
         self.assertEqual(self.status()["pending_round"], 1)
+
+    def test_the_package_says_an_unconfirmed_requirement_is_not_a_problem(self) -> None:
+        """Windows round, W7: the reviewer failed two checks over the "用户确认" line, which only the person can fill in."""
+        self.job()
+        req = self.folder() / "REQ.md"
+        self.assertIn("还没确认 / yyyy-mm-dd 已确认", req.read_text(encoding="utf-8"))  # the template, as `task new` leaves it
+        self.assertIs(taskreview.req_confirmed(self.root, JOB), False)
+        package = (self.root / self.start()["package"]).read_text(encoding="utf-8")
+        self.assertIn(f"{JOB}/REQ.md 的“用户确认”一行还没填", package)
+        self.assertIn("不要因此判 FAIL", package)
+        self.answer(FAIL)
+        req.write_text(req.read_text(encoding="utf-8").replace("<还没确认 / yyyy-mm-dd 已确认>", "2026-10-12 已确认"), encoding="utf-8")
+        self.assertIs(taskreview.req_confirmed(self.root, JOB), True)
+        self.assertNotIn("用户确认", (self.root / self.start()["package"]).read_text(encoding="utf-8"))  # confirmed: nothing to say
+        req.unlink()
+        self.assertIsNone(taskreview.req_confirmed(self.root, JOB))
 
     def test_nothing_to_check_is_refused(self) -> None:
         self.job(result=False)

@@ -132,6 +132,26 @@ class InitializeSkillTests(unittest.TestCase):
         for name in ("target", "user", "cli"):
             self.assertIn(f".harness/policies/{name}.override.json", ignored, name)
 
+    def test_step_1_on_windows_checks_the_path_that_stays_and_not_only_the_one_of_this_window(self) -> None:
+        """Windows round, W13: VS Code kept a PATH the person had removed, and the skill said the command was set up."""
+        step = self.steps()["1"]
+        self.assertIn("(Get-Command harness).Source", step)
+        self.assertIn('[Environment]::GetEnvironmentVariable("Path", "User")', step)
+
+
+class RequirementConfirmedTests(unittest.TestCase):
+    """Only the person fills in the "用户确认" line of REQ.md. Every file that speaks of it says the same."""
+
+    def test_no_file_tells_the_agent_to_fill_it_in(self) -> None:
+        self.assertIn("“用户确认”只有用户能改", text(REPO / "AGENTS.md"))
+        walk = text(REPO / ".github" / "skills" / "harness-quick-start" / "references" / "walkthrough.md")
+        self.assertIn("请用户自己把“用户确认”一行改成", walk)
+        self.assertNotIn("你在“用户确认”一行写上", walk)
+
+    def test_the_reviewer_does_not_fail_a_task_over_it(self) -> None:
+        self.assertIn("“用户确认”一行没填不算问题", text(REPO / ".github" / "agents" / "reviewer.agent.md"))
+        self.assertIn("评审包会告诉 reviewer 按“待确认”看", text(REPO / "AGENTS.md"))
+
 
 class ReadmeStructureTests(unittest.TestCase):
     def test_the_readme_introduces_gets_the_reader_started_and_points_at_the_docs(self) -> None:

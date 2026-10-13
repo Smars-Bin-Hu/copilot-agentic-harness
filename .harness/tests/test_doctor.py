@@ -77,7 +77,7 @@ class DoctorTests(unittest.TestCase):
 
     def test_it_says_how_chinese_is_printed_here(self) -> None:
         """ISSUE-20261005-03: a Windows pipe is cp1252 and cannot write Chinese. `auto` prints UTF-8 there and doctor says so."""
-        fine = self.doctor().stdout
+        fine = self.doctor(PYTHONIOENCODING="utf-8").stdout  # a pipe that can write Chinese, whatever this machine gives a pipe
         self.assertIn("输出编码：stdout=utf-8", fine)
         self.assertIn("output.encoding=auto", fine)
         self.assertIn("中文样例：成果已写入（这一行能读，中文输出就正常）", fine)
@@ -112,7 +112,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("cli.override.json", sample[0].decode("utf-8"))
         self.assertIn("改成 auto 或 utf-8", sample[0].decode("utf-8"))
         self.assertTrue(narrow.rstrip().endswith(b'{"errors": 0}'))
-        self.assertIn("输出编码：stdout=utf-8", self.doctor().stdout)  # a pipe that can write Chinese is left as it is
+        self.assertIn("输出编码：stdout=utf-8", self.doctor(PYTHONIOENCODING="utf-8").stdout)  # a pipe that can write Chinese is left as it is
 
     def test_the_switch_prints_utf8_whatever_the_terminal_says(self) -> None:
         (self.root / ".harness" / "policies" / "cli.override.json").write_text('{"output": {"encoding": "utf-8"}}', encoding="utf-8")

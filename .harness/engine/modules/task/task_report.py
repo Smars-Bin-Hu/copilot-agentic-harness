@@ -1,8 +1,8 @@
 """`task report`: one Markdown page about a task, from task.json, PLAN.md, DEV/ and the hook log of its session.
 
-It lists facts and judges nothing. It is written to .workspace/reports/task-<name>.md when the
+It lists facts and judges nothing. It is written to .workspace/reports/tasks/<name>/report.md when the
 task is closed, and again whenever `task report` runs. Earlier rounds of the same task stay on the page.
-Next to it goes task-<name>.html: where the task's time and usage went (taskinsight.py, taskhtml.py).
+Next to it goes report.html: where the task's time and usage went (taskinsight.py, taskhtml.py).
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ PROMOTE_TEXT = {"none": "没有回写。", "dry_run": "已生成回写计划，�
 
 
 def report_path(root: Path, task: str) -> Path:
-    return root / common.REPORTS_DIR / f"task-{task_ops.name_of(task)}.md"
+    return common.task_report_file(root, task_ops.name_of(task), common.REPORT_MD)
 
 
 def render(root: Path, task: str, data: Dict[str, Any]) -> str:

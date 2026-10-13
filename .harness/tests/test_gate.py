@@ -413,7 +413,7 @@ class GateHookTests(HarnessTestCase):
         output = self.pre("replace_string_in_file", {"filePath": self.path(owned), "oldString": "a", "newString": "b"})
         self.assertIn("由 CLI 生成", self.reason(output))
         for command in (f"echo '{{}}' > {owned}", f"sed -i 's/a/b/' {owned}", f"rm {owned}",
-                        "tee .workspace/sandbox/tasks/t1/REVIEW/round-001/verdict.md", "rm -r .workspace/reports/task-t1.md"):
+                        "tee .workspace/sandbox/tasks/t1/REVIEW/round-001/verdict.md", "rm -r .workspace/reports/tasks/t1/report.md"):
             with self.subTest(command):
                 output = self.pre("run_in_terminal", {"command": command})
                 self.assertEqual(self.decision(output), "deny")

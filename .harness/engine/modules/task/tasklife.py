@@ -250,6 +250,17 @@ def paused_since(data: Dict[str, Any]) -> str:
     return str(mark.get("since") or "") if isinstance(mark, dict) else ""
 
 
+def waiting_now(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """What an open task that is not put aside waits for at this moment: the words, since when, for how long. None: nothing."""
+    if data.get("status") != "open" or paused_since(data):
+        return None
+    found = waiting(root, task, data)
+    if not found["why"]:
+        return None
+    waited = seconds_since(found["since"])
+    return {"text": waiting_text(data, found["why"]), "since": found["since"], "seconds": round(waited) if waited is not None else None}
+
+
 def pause(root: Path, raw_task: str = "", interactive: Optional[bool] = None) -> Dict[str, Any]:
     """The person puts the task aside: the board stops saying it waits, and the time aside is not counted as waiting."""
     task_ops.person("task pause", interactive, typed=False)

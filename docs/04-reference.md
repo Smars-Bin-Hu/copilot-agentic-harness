@@ -12,7 +12,7 @@
 | `user` | 用这份 harness 的人的名字，和它来自哪：`user.override.json`、`git`（`git config user.name`）或 `none` |
 | `doctor` | 检查文件、策略、hook 配置、知识库、目标仓库是否一致；Python 能不能执行；hook 最近有没有被调用、gate 有多快 |
 | `task list` | 列出所有没关闭的任务：种类、档位、在等你做什么、等了多久。等你的排在前面，等得最久的在最上面。`--all` 连关闭的一起列；`--text` 输出表格；`--watch` 每 5 秒刷新（`--interval` 改秒数），Ctrl+C 退出 |
-| `task board` | 写 `.workspace/reports/board.html`：所有任务的看板，带每个任务的时间和用量。`--all` 连关闭的一起列；`--open` 用浏览器打开；`--refresh N` 让页面每 N 秒重新载入 |
+| `task board` | 写 `.workspace/reports/board.html`：所有任务的看板，带每个任务的时间和用量。`--all` 连关闭的一起列；`--open` 用浏览器打开；`--refresh N` 让看板一直是新的：命令不退出，每 N 秒重新生成一次（写在原来的文件上，不多出文件），页面自己重新载入，Ctrl+C 退出 |
 | `task approve-plan` | 批准任务的 `PLAN.md`。只能在终端，输入确认码 |
 | `task approve-promote` | 批准最后一次 `task promote --dry-run` 的计划。只能在终端，输入确认码 |
 | `task recover` | promote 中途出错后，把仓库恢复原样。只能在终端，输入确认码 |
@@ -140,5 +140,5 @@
 | 路径 | 内容 |
 | --- | --- |
 | `.workspace/sandbox/tasks/<任务>/` | 任务目录，由 `task new` 建。里面每个文件是什么见 [.workspace/README.md](../.workspace/README.md) |
-| `.workspace/reports/` | 任务报告，由 CLI 写 |
+| `.workspace/reports/` | 看板 `board.html`，和每个任务的报告 `tasks/<任务名>/report.md`、`report.html`。由 CLI 写 |
 | `.workspace/goals/<目标名>/` | 长任务的 `GOAL.md`、`TODO.md`、`NOW.md`、`LOG.md`、`accept/`，用 `/generic-goal-driven` 才建；接着任务时不能写 |

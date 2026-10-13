@@ -1,5 +1,6 @@
 // The board: every task, what it waits for, its time and usage. DATA.rows is what `task list` gives, each row with
-// `brief` (a few numbers of the task, or null) and `report` (the file name of its page, or "").
+// `brief` (a few numbers of the task, or null) and `report` (the path of its page from the board's folder, or "").
+// DATA.refresh: the seconds between two boards while `task board --refresh` runs, or 0.
 "use strict";
 
 (function () {
@@ -12,7 +13,7 @@
 
   app.replaceChildren(
     h("h1", null, t("board.title")),
-    h("div", {class: "sub"}, t("board.subtitle", {as_of: when(DATA.as_of, 0, 19)})),
+    h("div", {class: "sub"}, t(DATA.refresh ? "board.subtitle.fresh" : "board.subtitle", {as_of: when(DATA.as_of, 0, 19), seconds: DATA.refresh})),
     h("div", {class: "kpis"},
       kpi(rows.filter((row) => row.status === "open").length, t("board.kpi.open")),
       kpi(waiting.length, t("board.kpi.waiting")),
@@ -31,14 +32,14 @@
   function state(row) {
     if (row.status !== "open") return tag(t("board.state." + (row.status === "new" ? "new" : "closed")));
     if (row.paused_since) return tag(t("board.state.paused"));
-    return row.waiting ? tag(row.waiting, "hot") : tag(t("board.state.running"), "good");
+    return row.waiting ? tag(row.waiting, "hot long") : tag(t("board.state.running"), "good");
   }
 
   const lines = rows.map((row) => {
     const brief = row.brief;
     const kind = row.status === "new" ? "-" : t("task.kind." + (row.kind || "none")) + " · " + t("task.tier." + (row.tier || "none"));
     return h("tr", null,
-      h("td", null, row.report ? h("a", {href: encodeURI(row.report)}, row.name) : row.name,
+      h("td", {class: "name"}, row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : row.name,
         row.depends_on && row.depends_on.length ? h("div", {class: "sub"}, t("board.depends", {names: row.depends_on.join("、")})) : null),
       h("td", null, kind), h("td", null, state(row)),
       num(row.waiting && row.waited_s !== null ? clock(row.waited_s) : "-"),

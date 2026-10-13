@@ -16,7 +16,7 @@ from support import HarnessTestCase, payload
 
 from core import copilot_events, tasks
 from modules.task import task as task_ops
-from modules.task import taskboard, taskhtml, taskinsight, tasklife
+from modules.task import common, taskboard, taskhtml, taskinsight, tasklife
 from modules.task.common import CommandError
 
 S1, S2 = "session-one", "session-two"
@@ -411,7 +411,7 @@ class PageTests(BoardCase):
         self.new()
         self.copilot_record(S1, one_prompt(self.prompt_times()[0], 10, 1, 40000))
         result = self.cli_json("task", "report")
-        self.assertEqual((result["report"], result["analysis"]), (".workspace/reports/task-job.md", ".workspace/reports/task-job.html"))
+        self.assertEqual((result["report"], result["analysis"]), (".workspace/reports/tasks/job/report.md", ".workspace/reports/tasks/job/report.html"))
         self.assertEqual(result["insight"]["totals"]["aiu"], 10.0)
         self.assertTrue(result["insight"]["findings"])
         text = (self.root / result["analysis"]).read_text(encoding="utf-8")
@@ -429,7 +429,17 @@ class PageTests(BoardCase):
     def test_close_writes_the_page_too(self) -> None:
         self.new()
         self.cli_json("task", "close")
-        self.assertTrue((self.root / ".workspace/reports/task-job.html").is_file())
+        self.assertTrue((self.root / ".workspace/reports/tasks/job/report.html").is_file())
+
+    def test_the_reports_of_a_task_are_in_its_own_folder_and_the_files_of_before_are_removed(self) -> None:
+        self.new()
+        reports = self.root / ".workspace/reports"
+        reports.mkdir(parents=True, exist_ok=True)
+        for old in ("task-job.md", "task-job.html", "task-other.md"):
+            (reports / old).write_text("old", encoding="utf-8")
+        self.cli_json("task", "report")
+        self.assertEqual(sorted(path.name for path in (reports / "tasks/job").iterdir()), ["report.html", "report.md"])
+        self.assertEqual(sorted(path.name for path in reports.iterdir() if path.is_file() and path.name != ".gitkeep"), ["task-other.md"])
 
     def test_a_task_with_no_log_still_gets_a_page(self) -> None:
         self.new()
@@ -482,15 +492,107 @@ class PageTests(BoardCase):
         self.assertEqual(result, {"board": ".workspace/reports/board.html", "tasks": 2, "open": 1, "waiting": 1})
         text = (self.root / result["board"]).read_text(encoding="utf-8")
         rows = {item["name"]: item for item in page_data(text)["rows"]}
-        self.assertEqual((rows["alpha"]["report"], rows["alpha"]["waiting"], rows["hand"]["status"], rows["hand"]["report"]), ("task-alpha.html", "agent 停下了，等你", "new", ""))
+        self.assertEqual((rows["alpha"]["report"], rows["alpha"]["waiting"], rows["hand"]["status"], rows["hand"]["report"]), ("tasks/alpha/report.html", "agent 停下了，等你", "new", ""))
+        self.assertTrue((self.root / ".workspace/reports" / rows["alpha"]["report"]).is_file())
         self.assertNotIn("beta", rows)
         self.assertIsInstance(rows["alpha"]["brief"]["active_s"], float)
         self.assertNotIn("http-equiv", text)
-        everything = self.cli_json("task", "board", "--all", "--refresh", "30")
+        self.assertEqual(page_data(text)["refresh"], 0)
+        everything = self.cli_json("task", "board", "--all")
         self.assertEqual(everything["tasks"], 3)
         text = (self.root / result["board"]).read_text(encoding="utf-8")
-        self.assertEqual([item["report"] for item in page_data(text)["rows"] if item["name"] == "beta"], ["task-beta.html"])
+        self.assertEqual([item["report"] for item in page_data(text)["rows"] if item["name"] == "beta"], ["tasks/beta/report.html"])
+
+    def test_refresh_writes_the_board_again_over_the_same_files_until_it_is_stopped(self) -> None:
+        self.new("alpha")
+        reports = self.root / ".workspace/reports"
+        seen: List[Any] = []
+
+        def sleep(seconds: float) -> None:  # between two boards: a second task appears
+            seen.append((seconds, len(page_data((reports / "board.html").read_text(encoding="utf-8"))["rows"])))
+            if len(seen) == 1:
+                self.new("beta", "dev", session=S2)
+
+        printed = io.StringIO()
+        opened: List[str] = []
+        with mock.patch.object(taskboard.time, "sleep", sleep):
+            result = taskboard.keep_fresh(self.root, False, 30, lambda board: opened.append(board) or True, printed, rounds=3)
+        self.assertEqual(seen, [(30, 1), (30, 2)])  # the page of the second round has the new task
+        self.assertEqual((result["written"], result["tasks"], opened), (3, 2, [".workspace/reports/board.html"]))  # the browser is opened once
+        self.assertEqual(printed.getvalue().count("\n"), 1)
+        self.assertIn("每 30 秒重新生成", printed.getvalue())
+        text = (reports / "board.html").read_text(encoding="utf-8")
         self.assertIn('http-equiv="refresh" content="30"', text)
+        self.assertEqual(page_data(text)["refresh"], 30)
+        self.assertIn('http-equiv="refresh" content="30"', (reports / "tasks/alpha/report.html").read_text(encoding="utf-8"))
+        files = sorted(path.relative_to(reports).as_posix() for path in reports.rglob("*") if path.is_file() and path.name != ".gitkeep")
+        self.assertEqual(files, ["board.html", "tasks/alpha/report.html", "tasks/beta/report.html"])  # three rounds, still one file each
+
+    def test_ctrl_c_ends_refresh_without_an_error(self) -> None:
+        self.new("alpha")
+
+        def sleep(_seconds: float) -> None:
+            raise KeyboardInterrupt
+
+        with mock.patch.object(taskboard.time, "sleep", sleep):
+            self.assertEqual(taskboard.keep_fresh(self.root, False, 5, out=io.StringIO()), {"_text": ""})
+
+    def test_a_page_another_program_is_reading_is_tried_again_and_does_not_end_refresh(self) -> None:
+        path = self.root / ".workspace/reports/board.html"
+        common.replace_text(path, "one")
+        real, refused = os.replace, [3]
+
+        def replace(source: Any, target: Any) -> None:  # what Windows does while a browser loads the page
+            if refused[0]:
+                refused[0] -= 1
+                raise PermissionError(13, "Permission denied")
+            real(source, target)
+
+        with mock.patch.object(common.os, "replace", replace), mock.patch.object(common.time, "sleep", lambda _s: None):
+            common.replace_text(path, "two")
+            self.assertEqual(path.read_text(encoding="utf-8"), "two")
+            refused[0] = 99
+            with self.assertRaises(PermissionError):
+                common.replace_text(path, "three")
+        self.assertEqual((path.read_text(encoding="utf-8"), [item.name for item in path.parent.glob("*.tmp")]), ("two", []))  # the page of before stays, nothing is left behind
+
+        self.new("alpha")
+        real_board, calls = taskboard.board, []
+
+        def board(*args: Any) -> Dict[str, Any]:
+            calls.append(1)
+            if len(calls) == 2:
+                raise PermissionError(13, "Permission denied")
+            return real_board(*args)
+
+        with mock.patch.object(taskboard, "board", board), mock.patch.object(taskboard.time, "sleep", lambda _s: None):
+            result = taskboard.keep_fresh(self.root, False, 5, out=io.StringIO(), rounds=3)
+        self.assertEqual((len(calls), result["written"], result["tasks"]), (3, 3, 1))
+
+    def test_the_task_page_says_what_the_task_waits_for_at_this_moment(self) -> None:
+        self.new()
+        page = self.root / ".workspace/reports/tasks/job/report.html"
+        self.cli_json("task", "report")
+        self.assertIsNone(page_data(page.read_text(encoding="utf-8"))["now"])  # the agent has not stopped: it waits for nothing
+        self.stop(S1)
+        self.cli_json("task", "board")
+        now = page_data(page.read_text(encoding="utf-8"))["now"]
+        self.assertEqual((now["text"], isinstance(now["seconds"], int)), ("agent 停下了，等你", True))
+        with mock.patch.object(tasklife, "seconds_since", lambda _stamp: 600.0):  # ten minutes later nothing happened: the line grows, the numbers do not
+            before = page_data(page.read_text(encoding="utf-8"))["info"]["totals"]["waiting_s"]
+            taskboard.board(self.root)
+            data = page_data(page.read_text(encoding="utf-8"))
+        self.assertEqual((data["now"]["seconds"], data["info"]["totals"]["waiting_s"]), (600, before))
+        self.cli_json("task", "close")
+        self.assertIsNone(page_data(page.read_text(encoding="utf-8"))["now"])  # a closed task waits for nothing
+        script = (taskhtml.WEB / "task.js").read_text(encoding="utf-8")
+        self.assertIn('t("report.now"', script)
+        self.assertIn("as_of: when(info.as_of", script)
+
+    def test_a_long_reason_wraps_inside_its_cell(self) -> None:
+        css = (taskhtml.WEB / "page.css").read_text(encoding="utf-8")
+        self.assertRegex(css, r"\.tag\.long\{[^}]*white-space:normal[^}]*overflow-wrap:anywhere")
+        self.assertIn('tag(row.waiting, "hot long")', (taskhtml.WEB / "board.js").read_text(encoding="utf-8"))
 
     def test_an_empty_board(self) -> None:
         data = page_data(taskhtml.board_page([], "2026-01-01T00:00:00+00:00"))
@@ -510,7 +612,7 @@ class PageTests(BoardCase):
             result = taskboard.board(self.root)
         self.assertEqual([item["task"] for item in result["problems"]], [f"{BASE}/bad"])
         rows = {item["name"]: item for item in page_data((self.root / result["board"]).read_text(encoding="utf-8"))["rows"]}
-        self.assertEqual((rows["good"]["report"], rows["bad"]["report"], rows["bad"]["brief"]), ("task-good.html", "", None))
+        self.assertEqual((rows["good"]["report"], rows["bad"]["report"], rows["bad"]["brief"]), ("tasks/good/report.html", "", None))
 
 
 if __name__ == "__main__":

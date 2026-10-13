@@ -6,10 +6,12 @@ A refusal raises CommandError with the reason and the next step. Files are copie
 from __future__ import annotations
 
 import hashlib
+import os
 import posixpath
 import re
 import shutil
 import stat
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -219,6 +221,46 @@ def shown(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 REPORTS_DIR = ".workspace/reports"
+TASK_REPORTS_DIR = REPORTS_DIR + "/tasks"  # one folder per task: report.md and report.html
+REPORT_MD = "report.md"
+REPORT_HTML = "report.html"
+REPLACE_TRIES = 10
+REPLACE_WAIT = 0.05
+
+
+def task_report_file(root: Path, name: str, file_name: str) -> Path:
+    """Where a report of the task `name` goes. The file of before (reports/task-<name>.*, all tasks in one folder) is removed."""
+    old = root / REPORTS_DIR / f"task-{name}{Path(file_name).suffix}"
+    try:
+        if old.is_file():
+            writable(old)
+            old.unlink()
+    except OSError:
+        pass
+    return root / TASK_REPORTS_DIR / name / file_name
+
+
+def replace_text(path: Path, text: str) -> None:
+    """Write over the file in one step: a browser that loads the page again never gets half of it.
+
+    On Windows the step is refused while another program reads the file, so it is tried a few times. When it is still
+    refused, the file of before stays as it is and the OSError goes to the caller.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    half = path.with_name(path.name + ".tmp")
+    half.write_text(text, encoding="utf-8")
+    for left in range(REPLACE_TRIES - 1, -1, -1):
+        try:
+            os.replace(half, path)
+            return
+        except OSError:
+            if not left:
+                try:
+                    half.unlink()
+                except OSError:
+                    pass
+                raise
+            time.sleep(REPLACE_WAIT)
 
 
 LOG_ROWS = 40

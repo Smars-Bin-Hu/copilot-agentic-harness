@@ -447,7 +447,7 @@ class RoundAndReportTests(TaskCase):
     def test_close_releases_the_session_and_writes_the_report(self) -> None:
         self.promoted()
         result = self.run_cli("task", "close", "--reason", "done")
-        self.assertEqual((result["status"], result["session_released"], result["report"]), ("closed", True, ".workspace/reports/task-job1.md"))
+        self.assertEqual((result["status"], result["session_released"], result["report"]), ("closed", True, ".workspace/reports/tasks/job1/report.md"))
         self.assertIsNone(self.session_state(SESSION)["active_task"])
         text = (self.root / result["report"]).read_text(encoding="utf-8")
         for needle in (
@@ -457,8 +457,8 @@ class RoundAndReportTests(TaskCase):
             self.assertIn(needle, text)
         self.assertIn("任务已经关闭", self.run_cli("task", "fetch", "--task", TASK, "bdtt_repo/src/a.sql", ok=False)["stderr"])
         self.assertIn("没有进行中的任务", self.run_cli("task", "fetch", "bdtt_repo/src/a.sql", ok=False)["stderr"])
-        self.assertEqual(self.run_cli("task", "report")["report"], ".workspace/reports/task-job1.md")
-        denied = self.edit(".workspace/reports/task-job1.md")
+        self.assertEqual(self.run_cli("task", "report")["report"], ".workspace/reports/tasks/job1/report.md")
+        denied = self.edit(".workspace/reports/tasks/job1/report.md")
         self.assertEqual(self.decision(denied), "deny")
 
     def test_status_says_what_comes_next(self) -> None:

@@ -12,9 +12,13 @@
 
 ## 下一版（未发布）
 
-Windows 上 CLI 的中文不用配就能读。其余只改文档。
+Windows 上 CLI 的中文不用配就能读。看板能自己更新，报告按任务分文件夹。
 
 ### 变更
+
+- **`task board --refresh N` 让看板一直是新的**：以前它只让页面每 N 秒重新载入，数字不变，要自己再运行一次命令。现在命令不退出，每 N 秒重新生成看板和每个任务的分析页，页面自己重新载入，Ctrl+C 退出。每次都写在原来的文件上，不多出文件。它会占着终端，是给人用的。
+- **报告按任务分文件夹**：以前所有任务的报告都在 `.workspace/reports/` 一层（`task-<任务名>.md`、`task-<任务名>.html`）。现在是 `.workspace/reports/tasks/<任务名>/report.md` 和 `report.html`。看板还在 `.workspace/reports/board.html`。一个任务的报告重新生成时，它旧位置的文件会被删掉；没再生成过的旧报告留在原处，可以自己删。
+- **看板上很长的“在等什么”会换行**：以前它挤在一行，把表格撑出页面，后半句看不到。
 
 - **Windows 上 CLI 的中文默认就能读**：输出给管道或重定向时，Windows 的编码是 cp1252，写不出中文。以前中文显示成 `\uXXXX`，`doctor` 给 WARN，要自己写 `cli.override.json`。现在 `output.encoding: auto` 在这种管道上直接输出 UTF-8，`doctor` 那一行是 OK，并说明原来的编码。终端不受影响。
 - **`output.encoding` 多一个值 `native`**：一律不改编码，写不出的字显示成 `\uXXXX`（以前 `auto` 的做法）。读输出的程序不认 UTF-8、中文成了乱码时用它。已经写了 `utf-8` 的不用改。

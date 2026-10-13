@@ -71,7 +71,7 @@ python -m unittest discover -s .harness/tests
 | 会话现在的状态（接着哪个任务、子 agent、admin） | `.harness/runtime/state/<surface>/<会话>.json`（只读） |
 | 调用数、拒绝数的汇总 | `harness stats` |
 | 有哪些任务，各在等什么 | `harness task list --all` |
-| 一个任务的全过程 | `harness task status --task <任务名>`，`.workspace/reports/task-<任务名>.md`，再看任务目录（`.task/task.json`、`REVIEW/`、`SNAPSHOT/`） |
+| 一个任务的全过程 | `harness task status --task <任务名>`，`.workspace/reports/tasks/<任务名>/report.md`，再看任务目录（`.task/task.json`、`REVIEW/`、`SNAPSHOT/`） |
 
 结论要写清：现象、证据（文件和行）、根因、是 harness 的错还是模型的失误、建议怎么改。证据不够就说不够，不要编。
 日志里拒绝理由是规则给的，先判断规则对不对：规则对、模型错，改说明文字；规则误伤，改规则并补一个测试。

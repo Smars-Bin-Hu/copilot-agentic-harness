@@ -33,6 +33,10 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:now
 td.grow{width:42%}
 .tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;background:var(--track);color:var(--soft);white-space:nowrap}
 .tag.good{color:var(--good)}.tag.bad{color:var(--bad)}.tag.hot{background:var(--approval);color:#fff}
+/* A long reason (why autorun stopped) takes several lines; it must not push the table out of the card. */
+.tag.long{white-space:normal;overflow-wrap:anywhere;border-radius:10px;padding:2px 8px}
+td.name{white-space:nowrap}
+.now{margin-top:12px}.now .tag{font-size:13px;padding:4px 10px}
 tr.gap td{color:var(--soft);font-size:12px;padding:3px 0 3px 0;border-bottom:1px dashed var(--line)}
 .empty{color:var(--soft)}
 footer{margin-top:22px;color:var(--soft);font-size:12px}

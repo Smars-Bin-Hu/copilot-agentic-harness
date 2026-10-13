@@ -19,7 +19,7 @@ import json
 import re
 from html import escape
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from core import messages
 
@@ -65,10 +65,11 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
     return MARKS.sub(lambda found: parts[found.group(0)], skeleton_text)
 
 
-def task_page(info: Dict[str, Any]) -> str:
-    return build("task.html", ["common.js", "task.js"], say("report.title", name=info["name"]), {"info": info})
+def task_page(info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, Any]] = None) -> str:
+    """now: what the task waits for at this moment (tasklife.waiting_now), or None."""
+    return build("task.html", ["common.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now}, refresh)
 
 
 def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0) -> str:
     """rows: what `task list` gives, each with `brief` (taskinsight.brief or None) and `report` (the file name of its page or '')."""
-    return build("board.html", ["common.js", "board.js"], say("board.title"), {"rows": rows, "as_of": as_of}, refresh)
+    return build("board.html", ["common.js", "board.js"], say("board.title"), {"rows": rows, "as_of": as_of, "refresh": int(refresh)}, refresh)

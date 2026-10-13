@@ -3,6 +3,7 @@
   task list --text     the list as a table a person reads
   task list --watch    the same table, drawn again every few seconds, until Ctrl+C
   task board           .workspace/reports/board.html: every task, what it waits for, its time and usage, a link to its page
+  task board --refresh N   the same, written again every N seconds until Ctrl+C; the pages load themselves again
 
 What a task waits for is told from facts (`tasklife.waiting`): the promote state, the plan file, the checks, and the
 mark the Stop hook leaves when the agent of the task's session stops.
@@ -98,15 +99,18 @@ def watch(root: Path, everything: bool, interval: float, out: Optional[TextIO] =
     return {"_text": ""}
 
 
-def write_task_page(root: Path, task: str, info: Dict[str, Any]) -> Path:
-    path = root / common.REPORTS_DIR / f"task-{task_ops.name_of(task)}.html"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(taskhtml.task_page(info), encoding="utf-8")
+def write_task_page(root: Path, task: str, info: Dict[str, Any], refresh: int = 0) -> Path:
+    path = common.task_report_file(root, task_ops.name_of(task), common.REPORT_HTML)
+    try:  # the wait that is still going on: the numbers of the page end at the last prompt and do not have it
+        now = tasklife.waiting_now(root, task, task_ops.read(root, task))
+    except Exception:  # noqa: BLE001 - one line of the page
+        now = None
+    common.replace_text(path, taskhtml.task_page(info, refresh, now))
     return path
 
 
 def board(root: Path, everything: bool = False, refresh: int = 0) -> Dict[str, Any]:
-    """Write the board and the page of every task on it. A task whose numbers cannot be worked out is listed without them."""
+    """Write the board and the page of every task on it, over the ones of before. A task whose numbers cannot be worked out is listed without them."""
     result = tasklife.list_tasks(root, everything)
     use_events = taskinsight.events_allowed(root)
     problems = []
@@ -117,16 +121,43 @@ def board(root: Path, everything: bool = False, refresh: int = 0) -> Dict[str, A
         try:
             info = taskinsight.of_task(root, row["task"], use_events)
             row["brief"] = taskinsight.brief(info)
-            row["report"] = write_task_page(root, row["task"], info).name
+            row["report"] = write_task_page(root, row["task"], info, refresh).relative_to(root / common.REPORTS_DIR).as_posix()
         except Exception as error:  # noqa: BLE001 - one bad task must not take the board away
             problems.append({"task": row["task"], "error": f"{type(error).__name__}: {error}"})
     path = root / common.REPORTS_DIR / BOARD_NAME
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(taskhtml.board_page(result["tasks"], utc_now(), refresh), encoding="utf-8")
+    common.replace_text(path, taskhtml.board_page(result["tasks"], utc_now(), refresh))
     out: Dict[str, Any] = {"board": path.relative_to(root).as_posix(), "tasks": len(result["tasks"]), "open": result["open"], "waiting": result["waiting"]}
     if problems:
         out["problems"] = problems
     return out
+
+
+def keep_fresh(root: Path, everything: bool, refresh: int, opened: Any = None, out: Optional[TextIO] = None, rounds: Optional[int] = None) -> Dict[str, Any]:
+    """`task board --refresh N`: write the board again every N seconds until Ctrl+C, so the page that loads itself
+    again shows new numbers. The same files are written over; nothing piles up. `opened`: called once, after the
+    first board is there. `rounds`: stop after that many (the tests)."""
+    out = out or sys.stdout
+    seconds = max(int(MIN_INTERVAL), refresh)
+    result: Dict[str, Any] = {}
+    written = 0
+    try:
+        while rounds is None or written < rounds:
+            try:
+                result = board(root, everything, seconds)
+            except OSError:  # the page could not be written over this time (Windows, a program reading it): the one of before stays
+                if not written:
+                    raise
+            written += 1
+            if written == 1:
+                if opened:
+                    result["opened"] = opened(result["board"])
+                out.write(say("board.text.fresh", board=result["board"], seconds=seconds) + "\n")
+                out.flush()
+            if rounds is None or written < rounds:
+                time.sleep(seconds)
+    except KeyboardInterrupt:
+        pass
+    return {"_text": ""} if rounds is None else dict(result, written=written)
 
 
 def open_in_browser(root: Path, relative: str) -> bool:

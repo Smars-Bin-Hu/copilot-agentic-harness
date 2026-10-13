@@ -1,4 +1,5 @@
 // One task: where its time and usage went. DATA.info is what taskinsight.build returns.
+// DATA.now: what the task waits for at this moment ({text, since, seconds}), or null. The numbers of info end at the last prompt.
 "use strict";
 
 (function () {
@@ -21,8 +22,9 @@
       h("div", {class: "sub"}, t("report.subtitle", {
         kind: t("task.kind." + (info.kind || "none")), tier: t("task.tier." + (info.tier || "none")),
         status: t("report.status." + (info.status === "open" ? "open" : "closed")),
-        start: when(info.span.from, 0, 16), end: when(info.span.to, 0, 16),
+        start: when(info.span.from, 0, 16), end: when(info.span.to, 0, 16), as_of: when(info.as_of, 0, 19),
       })),
+      DATA.now ? h("div", {class: "now"}, tag(t("report.now", {text: DATA.now.text, time: clock(DATA.now.seconds)}), "hot long")) : null,
       h("div", {class: "kpis"},
         kpi(clock(active), t("report.kpi.active")),
         kpi(clock(waiting), t("report.kpi.waiting")),
@@ -34,7 +36,7 @@
   }
 
   function footer(note) {
-    const line = t("report.footer", {as_of: when(info.as_of, 0, 19), source: t("report.source." + info.source.replace("-", "_"))});
+    const line = t("report.footer", {source: t("report.source." + info.source.replace("-", "_"))});
     return h("footer", null, line, note ? [h("br"), t("report.footer.note")] : null);
   }
 

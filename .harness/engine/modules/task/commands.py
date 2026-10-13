@@ -50,7 +50,9 @@ def cmd_list(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def cmd_board(args: argparse.Namespace) -> Dict[str, Any]:
-    result = taskboard.board(repo_root(), args.all, max(0, args.refresh))
+    if args.refresh > 0:
+        return taskboard.keep_fresh(repo_root(), args.all, args.refresh, (lambda board: taskboard.open_in_browser(repo_root(), board)) if args.open else None)
+    result = taskboard.board(repo_root(), args.all)
     if args.open:
         result["opened"] = taskboard.open_in_browser(repo_root(), result["board"])
     return result
@@ -102,7 +104,7 @@ def register_task(subparsers: Any) -> None:
     line.set_defaults(handler=lambda a: taskqueue.queue(repo_root()))
     board = commands.add_parser("board", help="write .workspace/reports/board.html: every task, what it waits for, its time and usage")
     board.add_argument("--all", action="store_true", help="the closed tasks too")
-    board.add_argument("--refresh", type=int, default=0, help="the page loads itself again every N seconds (run the command again to renew the numbers)")
+    board.add_argument("--refresh", type=int, default=0, help="keep the board fresh: write it again every N seconds until Ctrl+C, and the pages load themselves again (a person at a terminal)")
     board.add_argument("--open", action="store_true", help="open the page in the browser (a person at a terminal)")
     board.set_defaults(handler=cmd_board)
     review = commands.add_parser("review", help="independent checks of a task ([review]=n): start a check, see the count; extend and waive are the person's")
@@ -160,7 +162,7 @@ def register_task(subparsers: Any) -> None:
     add_auto("status", "on or off, the steps done, how often it was pushed on, why it stopped", lambda a: autorun.status(repo_root(), a.task))
     close = add("close", "the session lets go of the task and the report is written; the folder stays where it is", lambda a: task.close(repo_root(), a.task, a.reason))
     close.add_argument("--reason", default="")
-    report = add("report", "write .workspace/reports/task-<name>.md (what was done) and task-<name>.html (where the time and usage went)", cmd_report)
+    report = add("report", "write .workspace/reports/tasks/<name>/report.md (what was done) and report.html (where the time and usage went)", cmd_report)
     report.add_argument("--open", action="store_true", help="open the HTML page in the browser (a person at a terminal)")
     report.add_argument("--detail", action="store_true", help="add the slowest prompts, the tools and the checks to `insight` (more to read)")
 

@@ -113,7 +113,7 @@ harness target list
    ```
 
 8. 你说“批准了”，agent 运行 `task promote`：在每个目标仓库从 main 新建分支 `feature/<任务名>`，把文件写进去，**不提交**。
-9. 你自己看差异、提交、建 PR。`task close` 后报告在 `.workspace/reports/task-<任务名>.md`。
+9. 你自己看差异、提交、建 PR。`task close` 后报告在 `.workspace/reports/tasks/<任务名>/report.md`。
 
 不改仓库的任务（RCA、设计方案）没有第 3、4、5、7、8 步：成果直接写在任务目录根下。
 

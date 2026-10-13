@@ -14,8 +14,8 @@ harness 记“发生了什么”，不记“你说了什么”。日志、统计
 | 统计 | 整体上有多少提示、调用、拒绝 | `harness stats` |
 | 知识库的阅读记录 | 哪些知识库文件有人读、是哪些任务读的、哪些没人读 | `harness kb reads` |
 | 任务报告 | 这个任务做了什么、谁批准的 | `task close` 自动写，`task report` 重写 |
-| 任务分析页 | 这个任务的时间和用量花在哪 | 同上，文件是 `task-<任务名>.html` |
-| 任务看板 | 哪个任务在等你、等了多久 | `task list`、`task board` |
+| 任务分析页 | 这个任务的时间和用量花在哪 | 同上，文件是 `tasks/<任务名>/report.html` |
+| 任务看板 | 哪个任务在等你、等了多久 | `task list`、`task board`（`--refresh N` 每 N 秒自己更新） |
 | 自检 | harness 配置对不对、hook 在不在跑 | `harness doctor` |
 | 固定场景 | 改了 harness 之后，行为变没变 | `harness eval list`、`show`、`check` |
 
@@ -38,9 +38,9 @@ harness 的 hook 日志**不记 token**。平台对 token 和耗时有原生数�
 
 ### 12.4 任务报告
 
-`task close` 写 `.workspace/reports/task-<任务名>.md`：计划全文、两次批准的时间、取了哪些文件、改动的增删行数、每次独立检查的结论、被拒绝的调用。事后回答“改了什么、谁批准的、为什么返工”不用靠回忆。
+`task close` 写 `.workspace/reports/tasks/<任务名>/report.md`（一个任务一个文件夹）：计划全文、两次批准的时间、取了哪些文件、改动的增删行数、每次独立检查的结论、被拒绝的调用。事后回答“改了什么、谁批准的、为什么返工”不用靠回忆。
 
-旁边的 `task-<任务名>.html` 回答另一个问题：时间和用量花在哪。它把每条提示拆成模型在想、工具在跑、子 agent、等你点确认，再算出等你的时间、各阶段的占比、上下文涨了多少。想让 agent 讲解，输入 `/harness-task-report`（只有用户能启动）。
+旁边的 `report.html` 回答另一个问题：时间和用量花在哪。它把每条提示拆成模型在想、工具在跑、子 agent、等你点确认，再算出等你的时间、各阶段的占比、上下文涨了多少。想让 agent 讲解，输入 `/harness-task-report`（只有用户能启动）。
 
 ### 12.5 doctor：自检
 

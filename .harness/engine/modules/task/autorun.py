@@ -43,7 +43,7 @@ STEP_SHOWN = 120
 STOPS = ("done", "plan", "review", "denied", "steps", "time", "stalled", "agent", "person")
 
 
-def say(key: str, **values: Any) -> str:
+def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
 
 
@@ -147,7 +147,7 @@ def turn_on(
         say("autorun.screen.head", task=task, round=data["round"]),
         say("autorun.screen.steps", open=len(open_steps), total=len(steps)),
         *[f"    [ ] {step['text'][:STEP_SHOWN]}" for step in open_steps[:10]],
-        *([f"    …… 还有 {len(open_steps) - 10} 步"] if len(open_steps) > 10 else []),
+        *([say("autorun.screen.more", count=len(open_steps) - 10)] if len(open_steps) > 10 else []),
         say("autorun.screen.limits", steps=limits["max_steps"], minutes=limits["minutes"], denies=limits["max_denies"], n=review["n"], checks=review["checks_limit"]),
         say("autorun.screen.scope", task=task),
         say("autorun.screen.end"),
@@ -164,7 +164,7 @@ def turn_on(
             "stalls": 0, "progress": None, "stopped": None,
         }
         again["paused"] = None
-        task_ops.note(again, "autorun-on", f"{len(open_steps)} 步，上限 {limits['max_steps']} 次、{limits['minutes']} 分钟")
+        task_ops.note(again, "autorun-on", say("autorun.note.on", steps=len(open_steps), max_steps=limits["max_steps"], minutes=limits["minutes"]))
     return {"task": task, "autorun": "on", "open_steps": len(open_steps), **limits, "next": say("autorun.on.next")}
 
 
@@ -172,7 +172,7 @@ def stop_in(data: Dict[str, Any], why: str, detail: str = "") -> None:
     run = state_of(data)
     run.update(state="off", stopped={"why": why, "detail": detail, "at": utc_now()})
     data["autorun"] = run
-    task_ops.note(data, "autorun-off", say(f"autorun.why.{why}") + (f"：{detail}" if detail else ""))
+    task_ops.note(data, "autorun-off", say("note.detail", what=say(f"autorun.why.{why}"), detail=detail) if detail else say(f"autorun.why.{why}"))
 
 
 def turn_off(root: Path, raw_task: str = "", reason: str = "", interactive: Optional[bool] = None) -> Dict[str, Any]:

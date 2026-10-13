@@ -10,19 +10,28 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict
 
-from core import kbreads, tasks
+from core import kbreads, messages, tasks
 from core.paths import cli_command
 
 from . import common, task as task_ops
 
 PLAN_LINES = 120
 KB_FILES_SHOWN = 30
-EVENT_TEXT = {
-    "start": "开始", "resume": "接着做", "new-round": "开新的一轮", "approve-plan": "人批准计划", "fetch": "取文件", "delete": "声明删除",
-    "set-branch": "设分支名", "review-start": "开一次独立检查", "review": "独立检查", "review-extend": "人再给检查次数", "review-waive": "人放行，不查了", "upgrade": "升档", "promote-dry-run": "回写计划（dry-run）", "approve-promote": "人批准回写", "promote": "回写到新分支",
-    "promote-partial": "回写中途出错", "recover": "人恢复仓库", "close": "关闭", "autorun-on": "人开 autorun", "autorun-off": "autorun 停下", "pause": "人搁置任务", "unpause": "搁置的任务接着做",
-}
-PROMOTE_TEXT = {"none": "没有回写。", "dry_run": "已生成回写计划，没有回写。", "done": "已回写到目标仓库的新分支（没有提交）。", "partial": "回写中途出错，要人运行 task recover。"}
+
+
+def say(key: str, /, **values: Any) -> str:
+    return messages.text(key, command=cli_command(), **values)
+
+
+def event_text(what: str) -> str:
+    """The name of a task event in words. An event that has no text keeps its own name."""
+    found = say(f"event.{what}")
+    return what if found == f"event.{what}" else found
+
+
+def promote_text(state: str) -> str:
+    found = say(f"mdreport.promote.{state}")
+    return state if found == f"mdreport.promote.{state}" else found
 
 
 def report_path(root: Path, task: str) -> Path:
@@ -34,64 +43,65 @@ def render(root: Path, task: str, data: Dict[str, Any]) -> str:
     plan = data.get("plan") or {}
     approved_now = tasks.plan_approved(root, task, data)
     lines = [
-        f"# 任务报告：{data['name']}",
+        say("mdreport.title", name=data["name"]),
         "",
-        f"- 任务目录：{task}",
-        f"- 状态：{data['status']}，第 {data['round']} 轮",
-        f"- 创建：{data['created_at']}",
-        f"- 更新：{data['updated_at']}",
-        f"- 会话：{data.get('session_id', '')}（{data.get('surface', '')}）",
-        "- 计划：" + (f"由人批准于 {plan['approved_at']}" + ("" if approved_now else "；之后计划又改过，现在的版本没有批准") if plan.get("approved_at") else "没有人的批准"),
+        say("mdreport.folder", task=task),
+        say("mdreport.status", status=data["status"], round=data["round"]),
+        say("mdreport.created", at=data["created_at"]),
+        say("mdreport.updated", at=data["updated_at"]),
+        say("mdreport.session", session_id=data.get("session_id", ""), surface=data.get("surface", "")),
+        say("mdreport.plan.approved" if approved_now else "mdreport.plan.changed", at=plan["approved_at"]) if plan.get("approved_at") else say("mdreport.plan.none"),
     ]
     review = data.get("review") or {}
-    lines.append("- 独立检查：" + (f"要连续通过 {review['n']} 次（[review]={review['n']}）" if review.get("n") else "没有开启"))
+    lines.append(say("mdreport.review.on", n=review["n"]) if review.get("n") else say("mdreport.review.off"))
     if data.get("branch"):
-        lines.append(f"- 分支：{data['branch']}")
-    lines += [f"- 目标仓库：{name}，{item['base_ref']} 在 {item['base_commit'][:12]}" for name, item in data.get("targets", {}).items()]
-    lines += ["", "## 结果", "", f"回写：{PROMOTE_TEXT.get(promote['state'], promote['state'])}"]
+        lines.append(say("mdreport.branch", branch=data["branch"]))
+    lines += [say("mdreport.target", name=name, base_ref=item["base_ref"], commit=item["base_commit"][:12]) for name, item in data.get("targets", {}).items()]
+    lines += ["", say("mdreport.result.title"), "", say("mdreport.result.promote", text=promote_text(promote["state"]))]
     if promote.get("approved_at"):
-        lines.append(f"- 回写由人批准于 {promote['approved_at']}")
+        lines.append(say("mdreport.result.approved", at=promote["approved_at"]))
     for name, item in (promote.get("repos") or {}).items():
         if isinstance(item, dict) and item.get("commit"):
-            lines.append(f"- 知识库 {name}：没有建分支，直接提交在它的主分支上（{item['commit'][:12]}）")
+            lines.append(say("mdreport.result.kb", name=name, commit=item["commit"][:12]))
     for item in promote.get("files", []):
         lines.append(f"- {item['action']} {item['path']}")
     if promote.get("patch"):
-        lines.append(f"- 补丁：{promote['patch']}")
+        lines.append(say("mdreport.result.patch", patch=promote["patch"]))
     items, _text = task_ops.changes(root, task, data)
     changed = [item for item in items if item["action"] != "unchanged"]
-    lines += ["", "## DEV/ 里的改动", ""]
+    lines += ["", say("mdreport.changes.title"), ""]
     if changed:
-        lines += ["| 文件 | 动作 | 增 | 删 |", "| --- | --- | --- | --- |"]
+        lines += [say("mdreport.changes.header"), "| --- | --- | --- | --- |"]
         lines += [f"| {item['path']} | {item['action']} | {item['added']} | {item['removed']} |" for item in changed]
     else:
-        lines.append("没有改动。")
+        lines.append(say("mdreport.changes.none"))
     fetched = sorted(data.get("target_files", {}))
     if fetched:
-        lines += ["", f"从 main 取过 {len(fetched)} 个文件：" + "、".join(fetched[:30]) + ("……" if len(fetched) > 30 else "")]
+        lines += ["", say("mdreport.fetched", count=len(fetched), files=messages.joined(fetched[:30]) + (say("mdreport.fetched.more") if len(fetched) > 30 else ""))]
     checks = [item for item in review.get("rounds") or [] if item.get("task_round") == data["round"]]
-    lines += ["", "## 独立检查", ""]
+    lines += ["", say("mdreport.checks.title"), ""]
     if checks:
-        lines += ["| 检查 | 开始 | 结论 | 成果的版本 | 结论全文 |", "| --- | --- | --- | --- | --- |"]
+        no_verdict = say("mdreport.checks.no_verdict")
+        lines += [say("mdreport.checks.header"), "| --- | --- | --- | --- | --- |"]
         lines += [
-            f"| round-{item['number']:03d} | {str(item.get('started_at', ''))[:19]} | {item.get('verdict') or '没有结论'} | {str(item.get('digest', ''))[:12]} | {task}/REVIEW/round-{item['number']:03d}/verdict.md |"
+            f"| round-{item['number']:03d} | {str(item.get('started_at', ''))[:19]} | {item.get('verdict') or no_verdict} | {str(item.get('digest', ''))[:12]} | {task}/REVIEW/round-{item['number']:03d}/verdict.md |"
             for item in checks
         ]
         waived = review.get("waived") or {}
         if waived.get("task_round") == data["round"]:
-            lines.append(f"\n人在 {waived.get('at', '')} 放行了版本 {str(waived.get('digest', ''))[:12]}，没有凑够通过次数。")
+            lines.append(say("mdreport.checks.waived", at=waived.get("at", ""), digest=str(waived.get("digest", ""))[:12]))
     else:
-        lines.append("这一轮没有做过独立检查（没有开启，或还没有查）。")
+        lines.append(say("mdreport.checks.none"))
     try:
         read = kbreads.of_task(root, task)
     except Exception:  # noqa: BLE001 - a list in a report
         read = []
     if read:
-        lines += ["", "## 读过的知识库文件", "", "| 文件 | 次数 |", "| --- | --- |"]
+        lines += ["", say("mdreport.kb.title"), "", say("mdreport.kb.header"), "| --- | --- |"]
         lines += [f"| {item['file']} | {item['reads']} |" for item in read[:KB_FILES_SHOWN]]
         if len(read) > KB_FILES_SHOWN:
-            lines.append(f"\n还有 {len(read) - KB_FILES_SHOWN} 个没列出。全部：`{cli_command()} kb reads --task {data['name']}`。")
-    lines += ["", "## 计划（PLAN.md）", ""]
+            lines.append(say("mdreport.kb.more", count=len(read) - KB_FILES_SHOWN, name=data["name"]))
+    lines += ["", say("mdreport.plan.title"), ""]
     try:
         plan_lines = tasks.plan_file(root, task).read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
@@ -99,20 +109,20 @@ def render(root: Path, task: str, data: Dict[str, Any]) -> str:
     if plan_lines:
         lines += ["> " + line for line in plan_lines[:PLAN_LINES]]
         if len(plan_lines) > PLAN_LINES:
-            lines.append(f"> （还有 {len(plan_lines) - PLAN_LINES} 行，见 {task}/{tasks.PLAN_NAME}）")
+            lines.append(say("mdreport.plan.more", count=len(plan_lines) - PLAN_LINES, plan=f"{task}/{tasks.PLAN_NAME}"))
     else:
-        lines.append("没有计划文件。")
-    lines += ["", "## 经过", "", "| 时间（UTC） | 轮 | 事件 | 说明 |", "| --- | --- | --- | --- |"]
+        lines.append(say("mdreport.plan.no_file"))
+    lines += ["", say("mdreport.events.title"), "", say("mdreport.events.header"), "| --- | --- | --- | --- |"]
     for event in data.get("events", []):
-        lines.append(f"| {event['at'][:19]} | {event.get('round', '')} | {EVENT_TEXT.get(event['what'], event['what'])} | {common.cell(event.get('detail', '')) or '-'} |")
+        lines.append(f"| {event['at'][:19]} | {event.get('round', '')} | {event_text(event['what'])} | {common.cell(event.get('detail', '')) or '-'} |")
     for old in data.get("rounds", []):
-        lines += ["", f"## 第 {old['round']} 轮（已结束）", ""]
-        lines.append(f"- 计划批准：{(old.get('plan') or {}).get('approved_at', '没有')}")
-        lines.append(f"- 回写：{PROMOTE_TEXT.get(old['promote']['state'], old['promote']['state'])} 分支 {old.get('branch', '')}")
+        lines += ["", say("mdreport.old.title", round=old["round"]), ""]
+        lines.append(say("mdreport.old.plan", at=(old.get("plan") or {}).get("approved_at") or say("mdreport.old.plan.none")))
+        lines.append(say("mdreport.old.promote", text=promote_text(old["promote"]["state"]), branch=old.get("branch", "")))
         lines += [f"- {item['action']} {item['path']}" for item in old["promote"].get("files", [])]
-        lines.append(f"- 当时的成果：{old.get('dev', '')}")
+        lines.append(say("mdreport.old.dev", dev=old.get("dev", "")))
         if old.get("plan_file"):
-            lines.append(f"- 当时的计划：{old['plan_file']}")
+            lines.append(say("mdreport.old.plan_file", plan=old["plan_file"]))
     lines += common.log_section(root, {"session_id": data.get("session_id", ""), "surface": data.get("surface", "vscode"), "created_at": data.get("round_started_at", data["created_at"])})
     return "\n".join(lines) + "\n"
 
@@ -125,7 +135,7 @@ def generate(root: Path, raw_task: str = "", detail: bool = False) -> Dict[str, 
         started = [(tasks.read(root, name) or {}).get("updated_at", "") for name in known]
         ranked = sorted((stamp, name) for stamp, name in zip(started, known) if stamp)
         if not ranked:
-            raise task_ops.CommandError("还没有开始过的任务。")
+            raise task_ops.CommandError(say("mdreport.no_task"))
         task = ranked[-1][1]
     data = task_ops.read(root, task)
     path = report_path(root, task)

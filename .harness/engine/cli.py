@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from core import output, user  # noqa: E402
+from core import messages, output, user  # noqa: E402
 from core.paths import repo_root  # noqa: E402
 from core.registry import harness_version, version_banner  # noqa: E402
 import doctor  # noqa: E402
@@ -48,7 +48,7 @@ class ShowVersion(argparse.Action):
             else:
                 print(version_banner(repo_root()))
         except Exception as error:
-            print(f"harness: 读不到版本号：{error}", file=sys.stderr)
+            print(messages.text("cli.version.unreadable", error=error), file=sys.stderr)
             parser.exit(1)
         parser.exit(0)
 

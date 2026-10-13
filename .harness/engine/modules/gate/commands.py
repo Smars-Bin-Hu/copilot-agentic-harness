@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core import approval, config, guardrails, tasks
+from core import approval, config, guardrails, messages, tasks
 from core.paths import cli_command, repo_root, state_dir, utc_now
 from core.state import admin_on, session, state_path
 
@@ -24,6 +24,10 @@ from .policy import POLICY_NAME
 
 class CommandError(Exception):
     """A refused command. The message says why and what to do next."""
+
+
+def say(key: str, /, **values: Any) -> str:
+    return messages.text(key, command=cli_command(), **values)
 
 
 def approve(
@@ -37,20 +41,20 @@ def approve(
     if interactive is None:
         interactive = sys.stdin.isatty() and sys.stdout.isatty()
     if not interactive:
-        raise CommandError("approve-command 只能由用户在自己的终端里手动运行，要打字确认。agent 不能运行它，管道和脚本也不行。")
+        raise CommandError(say("gate.approve.terminal_only"))
     minutes = approvals.minutes(config.load_policy(root, POLICY_NAME))
     waiting = approvals.pending(root, minutes)
     if not waiting:
-        raise CommandError(f"没有等待批准的 git 命令（{minutes} 分钟内）。让 agent 先运行那条命令，被拒绝后再来。")
-    print("这些 git 命令在等你批准。批准后，同一个会话里同一条命令 %d 分钟内可以运行一次：" % minutes, file=out)
+        raise CommandError(say("gate.approve.none", minutes=minutes))
+    print(say("gate.approve.header", minutes=minutes), file=out)
     for number, item in enumerate(waiting, 1):
-        print(f"  [{number}] 会话 {item['session_id']}（{item['surface']}），{item['created_at']}", file=out)
+        print(say("gate.approve.item", number=number, session_id=item["session_id"], surface=item["surface"], created_at=item["created_at"]), file=out)
         print(f"      {item['command']}", file=out)
-    answer = (reader or input)("输入 agent 给你的验证码来批准其中一条（其他任何输入都是取消）：").strip()
+    answer = (reader or input)(say("gate.approve.prompt")).strip()
     done = approvals.approve(root, answer, minutes) if answer else None
     if done is None:
-        raise CommandError("没有批准。什么都没有运行。")
-    return {"approved": True, "command": done["command"], "valid_minutes": minutes, "next": "告诉 agent 可以再运行这条命令了（写法要完全一样）。"}
+        raise CommandError(say("gate.approve.refused"))
+    return {"approved": True, "command": done["command"], "valid_minutes": minutes, "next": say("gate.approve.next")}
 
 
 def cmd_approve_command(args: Any) -> Dict[str, Any]:
@@ -62,7 +66,7 @@ SURFACES = ("vscode",)
 
 def _known_session(root: Path, surface: str, session_id: str) -> None:
     if not state_path(root, surface, session_id).exists():
-        raise CommandError(f"没有会话 `{session_id}`。会话 id 写在 agent 每条提示开头的规则里，让 agent 原样给你。")
+        raise CommandError(say("gate.session.missing", session_id=session_id))
 
 
 def admin_switch_on(
@@ -83,24 +87,24 @@ def admin_switch_on(
     locked = guardrails.admin_locked(config.load_policy(root, POLICY_NAME))
     with session(root, surface, session_id) as state:
         if state.get("parent_session_id"):
-            raise CommandError("这是一个子 agent 的会话。admin 不能是子 agent。")
+            raise CommandError(say("gate.admin.subagent"))
         if tasks.open_of(root, state) is not None:
-            raise CommandError(f"这个会话在做任务 `{state.get('active_task')}`。admin 模式不和任务混用：换一个新对话再开。")
+            raise CommandError(say("gate.admin.has_task", task=state.get("active_task")))
         if admin_on(state):
-            return {"admin": True, "session_id": session_id, "note": "这个会话已经在 admin 模式里。"}
+            return {"admin": True, "session_id": session_id, "note": say("gate.admin.already")}
         approval.say(
             out,
-            f"会话 {session_id}（{surface}）将进入 admin 模式，直到你运行 `admin off`：",
-            "  这个会话里的 agent 可以改 harness 的 guardrail 文件（hook 配置、策略、engine、短命令、registry、.vscode/settings.json）。",
-            f"  仍然不能改：{'、'.join(locked)}、CLI 生成的文件、.git、目标仓库。批准类命令仍然只有你能运行。",
-            "  它不能开任务，不能调用子 agent。只在你要二开或排查 harness 时开，用完就关。",
+            say("gate.admin.on.1", session_id=session_id, surface=surface),
+            say("gate.admin.on.2"),
+            say("gate.admin.on.3", locked=messages.joined(locked)),
+            say("gate.admin.on.4"),
         )
         try:
-            approval.ask("确认开启", hashlib.sha256(f"admin\n{surface}\n{session_id}".encode("utf-8")).hexdigest(), "没有开启。什么都没有改。", reader)
+            approval.ask(say("gate.admin.on.question"), hashlib.sha256(f"admin\n{surface}\n{session_id}".encode("utf-8")).hexdigest(), say("gate.admin.on.refused"), reader)
         except approval.Refused as error:
             raise CommandError(str(error)) from error
         state["admin"] = {"on": True, "at": utc_now()}
-    return {"admin": True, "session_id": session_id, "locked": locked, "next": f"告诉 agent 可以继续了。用完后运行 `{cli_command()} admin off --session-id {session_id}`。"}
+    return {"admin": True, "session_id": session_id, "locked": locked, "next": say("gate.admin.on.next", session_id=session_id)}
 
 
 def admin_switch_off(root: Path, session_id: str, surface: str = "vscode") -> Dict[str, Any]:

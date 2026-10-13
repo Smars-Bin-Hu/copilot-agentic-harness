@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "description": "终端命令写 guardrail 路径被 gate 拒绝，文件没有建出来。",
+  "description": "The gate refuses a terminal command that writes to a guardrail path; the file is not created.",
   "calls": [
     {
-      "name": "终端命令被 gate 拒绝",
+      "name": "the gate refuses the terminal command",
       "match": {
         "event": "PreToolUse",
         "tool_kind": "terminal",

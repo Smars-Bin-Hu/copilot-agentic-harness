@@ -86,6 +86,7 @@
 | observe.json | `warn_session_files` | 会话日志文件数超过它时 `doctor` 提醒 |
 | observe.json | `knowledge_base_reads` | 记不记每次调用读了知识库的哪些文件（只记文件名）。`kb reads` 靠它 |
 | user.json | `name` | 你的名字。agent 在要署名的地方用（例如文件开头的改动记录）。空着就用 `git config user.name` |
+| user.json | `language` | harness 说哪种语言：`en`（默认）或 `zh`。管 CLI 和 hook 的输出、任务文件的模板、agent 用哪种语言回答和写文件。在 `user.override.json` 里改 |
 | cli.json | `output.encoding` | CLI 输出的编码。`auto`（默认）：终端不动；管道的编码写不出中文时（Windows 的 cp1252）输出 UTF-8。`utf-8`：一律输出 UTF-8。`native`：一律不动，写不出的字显示成 `\uXXXX` |
 | agents.json | `series` | 模型系列 |
 | agents.json | `different_series` | 必须用不同系列的角色组 |

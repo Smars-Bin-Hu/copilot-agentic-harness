@@ -25,83 +25,83 @@
   "terminal": {
     "guardrail_write": [
       {
-        "why": "写入、删除或移动",
+        "why": {"en": "it writes, deletes or moves one", "zh": "写入、删除或移动"},
         "pattern": "(?:>>?\\s*|\\btee\\b[^;&|\\n]*\\s)[\"']?(?:[^\\s\"';&|<>]*/)?{guard}"
       },
       {
-        "why": "写入、删除或改权限",
+        "why": {"en": "it writes, deletes or changes the rights of one", "zh": "写入、删除或改权限"},
         "pattern": "{cmd}(?:rm|rmdir|unlink|mv|touch|chmod|chown|truncate|ln|mkdir|patch|del|erase|rd|ren|move|remove-item|move-item|rename-item|new-item|set-content|add-content|clear-content|out-file)\\b[^;&|\\n]*{guard}"
       },
       {
-        "why": "用 find 删除或改写",
+        "why": {"en": "it deletes or rewrites one with find", "zh": "用 find 删除或改写"},
         "pattern": "\\bfind\\b[^;&|\\n]*{guard}[^;&|\\n]*(?:-delete\\b|-exec\\s+(?:rm|mv|chmod|sed)\\b)"
       },
       {
-        "why": "复制到它里面",
+        "why": {"en": "it copies into one", "zh": "复制到它里面"},
         "pattern": "{cmd}(?:cp|rsync|install|copy|xcopy|copy-item)\\b[^;&|\\n]*{guard}[^\\s\"';&|]*[\"']?\\s*(?:[;&|]|$)"
       },
       {
-        "why": "原地修改",
+        "why": {"en": "it edits one in place", "zh": "原地修改"},
         "pattern": "{cmd}(?:sed|perl|ruby)\\b[^;&|\\n]*\\s-[a-z]*i[a-z]*\\b[^;&|\\n]*{guard}"
       },
       {
-        "why": "用 git 覆盖或改写",
+        "why": {"en": "it overwrites or rewrites one with git", "zh": "用 git 覆盖或改写"},
         "pattern": "{cmd}git\\s+(?:checkout|restore|rm|mv|apply|stash|reset)\\b[^;&|\\n]*{guard}"
       },
       {
-        "why": "用内联脚本改写",
+        "why": {"en": "it rewrites one with an inline script", "zh": "用内联脚本改写"},
         "pattern": "{cmd}(?:python3?|py|node|perl|ruby)\\b[^\\n]*\\s-[ce]\\s[^\\n]*{guard}[^\\n]*(?:open|write|unlink|remove|rmtree|rename|replace|truncate)"
       }
     ],
     "deny": [
       {
-        "why": "递归删除根目录、家目录或当前目录",
+        "why": {"en": "it recursively deletes the root, the home folder or the current folder", "zh": "递归删除根目录、家目录或当前目录"},
         "pattern": "{cmd}rm\\s+(?:-[a-z]+\\s+)*-[a-z]*(?:r[a-z]*f|f[a-z]*r)[a-z]*\\s+(?:/|~|\\$home|\\*|\\.|\\.\\.)/?\\*?(?:\\s|$|[;&|])"
       },
       {
-        "why": "递归强制删除根目录、家目录或所有文件",
+        "why": {"en": "it recursively force-deletes the root, the home folder or every file", "zh": "递归强制删除根目录、家目录或所有文件"},
         "pattern": "{cmd}remove-item\\b[^;&|\\n]*-recurse[^;&|\\n]*\\s(?:/|~|\\*|[a-z]:/?)(?:\\s|$|[;&|])"
       },
       {
-        "why": "把下载的内容直接交给 shell 或解释器执行",
+        "why": {"en": "it hands a download straight to a shell or an interpreter to run", "zh": "把下载的内容直接交给 shell 或解释器执行"},
         "pattern": "{cmd}(?:curl|wget|iwr|invoke-webrequest|irm|invoke-restmethod)\\b[^\\n]*\\|\\s*(?:sudo\\s+)?(?:sh|bash|zsh|python3?|py|node|perl|iex|invoke-expression)\\b"
       },
       {
-        "why": "格式化磁盘或直接写磁盘设备",
+        "why": {"en": "it formats a disk or writes to a disk device directly", "zh": "格式化磁盘或直接写磁盘设备"},
         "pattern": "{cmd}mkfs(?:\\.\\w+)?\\b|{cmd}dd\\b[^\\n]*\\bof=/dev/|>\\s*/dev/(?:sd|nvme|disk)"
       },
       {
-        "why": "会用管理员权限运行",
+        "why": {"en": "it runs with administrator rights", "zh": "会用管理员权限运行"},
         "pattern": "{cmd}(?:sudo|gsudo|doas|runas)(?:\\.exe)?\\b|-verb\\s+[\\\"']?runas\\b"
       },
       {
-        "why": "会递归改权限，或删除容器、集群、基础设施",
+        "why": {"en": "it changes rights recursively, or deletes containers, clusters or infrastructure", "zh": "会递归改权限，或删除容器、集群、基础设施"},
         "pattern": "\\b(?:chmod|chown|chgrp)\\s+(?:-R\\b|--recursive\\b)|\\bicacls(?:\\.exe)?\\b[^;&|\\n]*\\s/t\\b|\\btakeown(?:\\.exe)?\\b[^;&|\\n]*\\s/r\\b|-recurse\\b[^\\n]*\\bset-acl\\b|\\bdocker(?:\\.exe)?\\s+(?:rm|rmi|system\\s+prune|volume\\s+rm)\\b|\\bkubectl(?:\\.exe)?\\s+delete\\b|\\bterraform(?:\\.exe)?\\s+(?:apply|destroy)\\b"
       },
       {
-        "why": "批准计划（task approve-plan）、批准回写（task approve-promote）、恢复中途出错的 promote（task recover）、再给检查次数或放行（task review extend、task review waive）、搁置和恢复任务（task pause、task resume）、开 autorun（task autorun on）、批准 git 命令（approve-command）、开 admin 模式（admin on）只能由用户在自己的终端里运行。告诉用户运行这条命令，不要自己运行",
+        "why": {"en": "only the user may run these, in their own terminal: approving a plan (task approve-plan), approving a write-back (task approve-promote), recovering a promote that failed halfway (task recover), giving more checks or waiving them (task review extend, task review waive), pausing and resuming a task (task pause, task resume), switching autorun on (task autorun on), approving a git command (approve-command), switching admin mode on (admin on). Tell the user to run the command; do not run it yourself", "zh": "批准计划（task approve-plan）、批准回写（task approve-promote）、恢复中途出错的 promote（task recover）、再给检查次数或放行（task review extend、task review waive）、搁置和恢复任务（task pause、task resume）、开 autorun（task autorun on）、批准 git 命令（approve-command）、开 admin 模式（admin on）只能由用户在自己的终端里运行。告诉用户运行这条命令，不要自己运行"},
         "pattern": "\\b(?:cli\\.py|harness(?:\\.cmd)?)\\s+(?:task\\s+(?:approve-plan|approve-promote|recover|pause|resume|autorun\\s+on|review\\s+(?:extend|waive))|approve-command|admin\\s+on)\\b"
       }
     ],
     "ask": [
       {
-        "why": "删除文件",
+        "why": {"en": "it deletes files", "zh": "删除文件"},
         "pattern": "{cmd}(?:rm|rmdir|unlink|del|erase|rd|remove-item)\\b|\\bxargs\\s+rm\\b|\\bfind\\b[^;&|\\n]*(?:-delete\\b|-exec\\s+rm\\b)"
       },
       {
-        "why": "会改写或丢弃 git 历史、分支或未提交的改动",
+        "why": {"en": "it rewrites or drops git history, branches or changes that are not committed", "zh": "会改写或丢弃 git 历史、分支或未提交的改动"},
         "pattern": "\\bgit\\s+(?:push|reset\\s+--hard|clean|checkout\\s+(?:-f|--force)|branch\\s+-D|stash\\s+(?:drop|clear)|restore(?!\\s+--staged)|filter-branch|reflog\\s+expire)\\b"
       },
       {
-        "why": "会联网",
+        "why": {"en": "it goes on the network", "zh": "会联网"},
         "pattern": "{cmd}(?:curl|wget|nc|ncat|ssh|scp|sftp|rsync|ftp|telnet|invoke-webrequest|iwr|invoke-restmethod|irm)\\b"
       },
       {
-        "why": "会安装软件包",
+        "why": {"en": "it installs packages", "zh": "会安装软件包"},
         "pattern": "\\b(?:pip3?|(?:python3?|py)(?:\\s+-[0-9.]+)?\\s+-m\\s+pip|npm|pnpm|yarn|brew|apt|apt-get|choco|winget|gem|cargo)\\s+(?:install|add|i)\\b|\\bgo\\s+(?:install|get)\\b|{cmd}npx\\b"
       },
       {
-        "why": "会删除会话日志",
+        "why": {"en": "it deletes session logs", "zh": "会删除会话日志"},
         "pattern": "\\b(?:cli\\.py|harness(?:\\.cmd)?)\\s+logs\\s+prune\\b"
       }
     ]

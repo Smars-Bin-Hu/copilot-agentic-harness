@@ -6,7 +6,10 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from core import messages
 from core.logs import read_lines, session_files
+
+say = messages.text
 
 
 def check_result(name: str, ok: bool, detail: str = "") -> Dict[str, Any]:
@@ -59,7 +62,7 @@ def row_matches(row: Dict[str, Any], match: Dict[str, Any]) -> bool:
 
 
 def describe(match: Dict[str, Any]) -> str:
-    return "、".join(f"{key}={value}" for key, value in match.items()) or "任何行"
+    return messages.joined(f"{key}={value}" for key, value in match.items()) or say("eval.match.any")
 
 
 def check_calls(rows: List[Dict[str, Any]], items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -72,8 +75,8 @@ def check_calls(rows: List[Dict[str, Any]], items: List[Dict[str, Any]]) -> List
             high = item.get("max")
             low = item.get("min", 0 if high is not None and "min" not in item else 1)
         ok = count >= low and (high is None or count <= high)
-        wanted = f"恰好 {low}" if low == high else f"{low} 到 {high}" if high is not None and low else f"最多 {high}" if high is not None else f"至少 {low}"
-        results.append(check_result(item["name"], ok, f"匹配 {describe(item['match'])} 的有 {count} 行，要求{wanted}。"))
+        wanted = say("eval.calls.exactly", low=low) if low == high else say("eval.calls.between", low=low, high=high) if high is not None and low else say("eval.calls.most", high=high) if high is not None else say("eval.calls.least", low=low)
+        results.append(check_result(item["name"], ok, say("eval.calls.result", match=describe(item["match"]), count=count, wanted=wanted)))
     return results
 
 
@@ -89,7 +92,7 @@ def check_order(rows: List[Dict[str, Any]], items: List[Dict[str, Any]]) -> List
                 break
             position += 1
         ok = missing is None
-        results.append(check_result(item["name"], ok, "顺序对。" if ok else f"找不到按顺序出现的这一步：{describe(missing or {})}。"))
+        results.append(check_result(item["name"], ok, say("eval.order.ok") if ok else say("eval.order.missing", step=describe(missing or {}))))
     return results
 
 
@@ -100,7 +103,7 @@ def check_files(root: Path, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     results = []
     for item in items:
         exists = (root / item["path"]).exists()
-        results.append(check_result(f"文件：{item['path']}", exists == item["exists"], "存在。" if exists else "不存在。"))
+        results.append(check_result(say("eval.file.name", path=item["path"]), exists == item["exists"], say("eval.file.exists") if exists else say("eval.file.missing")))
     return results
 
 
@@ -115,16 +118,16 @@ def dig(data: Any, dotted: str) -> Any:
 def check_json(root: Path, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     results = []
     for item in items:
-        name = f"JSON：{item['file']} 的 {item['path']}"
+        name = say("eval.json.name", file=item["file"], path=item["path"])
         try:
             value = dig(json.loads((root / item["file"]).read_text(encoding="utf-8-sig")), item["path"])
         except (OSError, ValueError) as error:
-            results.append(check_result(name, False, f"读不了：{error}"))
+            results.append(check_result(name, False, say("eval.json.unreadable", error=error)))
             continue
         if "equals" in item:
-            results.append(check_result(name, value == item["equals"], f"值是 {value!r}，要求等于 {item['equals']!r}。"))
+            results.append(check_result(name, value == item["equals"], say("eval.json.equals", value=repr(value), wanted=repr(item["equals"]))))
         else:
-            results.append(check_result(name, value != item["not_equals"], f"值是 {value!r}，要求不等于 {item['not_equals']!r}。"))
+            results.append(check_result(name, value != item["not_equals"], say("eval.json.not_equals", value=repr(value), wanted=repr(item["not_equals"]))))
     return results
 
 
@@ -136,11 +139,11 @@ def run(root: Path, scenario: Dict[str, Any], surface: str, session_id: str) -> 
     if not session_id:
         picked = newest_session(root, surface)
         if picked is None:
-            raise ValueError("没有找到会话日志。先在 Copilot 里跑一遍场景，或用 --session-id 指定。")
+            raise ValueError(say("eval.log.none"))
         surface, session_id = picked
     rows = session_rows(root, surface, session_id)
     if not rows:
-        raise ValueError(f"会话 `{session_id}` 在 {surface} 下没有日志。检查 id（`harness stats` 能列出日志在不在），或日志是否被清理。")
+        raise ValueError(say("eval.log.missing", session_id=session_id, surface=surface))
     results = check_calls(rows, expect.get("calls", [])) + check_order(rows, expect.get("order", []))
     results += check_files(root, expect.get("files", [])) + check_json(root, expect.get("json", []))
     failed = [item for item in results if not item["ok"]]
@@ -151,5 +154,5 @@ def run(root: Path, scenario: Dict[str, Any], surface: str, session_id: str) -> 
         "checks": results,
         "session": {"surface": surface, "session_id": session_id, "calls": len(rows)},
         "manual_checks": scenario["manual"],
-        "note": "通过只代表确定性检查全部满足。人工检查项要你自己看。",
+        "note": say("eval.note"),
     }

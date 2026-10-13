@@ -14,10 +14,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import targets, tasks
+from core import messages, targets, tasks
 from core.paths import cli_command
 
 from . import common
+
+
+def say(key: str, /, **values: Any) -> str:
+    return messages.text(key, command=cli_command(), **values)
 
 READY, ASKED, WORKING = "approved", "dry_run", "working"  # the plan is approved; it waits for the approval; it has results, no plan yet
 ORDER = {READY: 0, ASKED: 1, WORKING: 2}
@@ -112,11 +116,7 @@ def holder_text(root: Path, repo: targets.Repo, current: str) -> str:
     if not found:
         return ""
     first = found[0]
-    return (
-        f"仓库现在在分支 `{current}` 上：这是任务 {first['name']} 回写的，文件还没提交。"
-        f"请用户在这个仓库里检查并提交（`git add`、`git commit`），或确认不要了再丢弃；然后重新 --dry-run。"
-        f"排队情况：`{cli_command()} task queue`。"
-    )
+    return say("queue.blocked", current=current, task=first["name"])
 
 
 def order(root: Path) -> List[Dict[str, Any]]:
@@ -157,7 +157,7 @@ def queue(root: Path) -> Dict[str, Any]:
         repos.append(entry)
     return {
         "repos": repos, "tasks": [{key: row[key] for key in ("name", "stage", "branch", "repos", "since")} for row in line],
-        "note": "一个任务一个分支，按顺序回写。harness 不替你提交：上一个任务的文件提交了，下一个才能写进同一个仓库。",
+        "note": say("queue.note"),
     }
 
 
@@ -165,12 +165,12 @@ def next_step(entry: Dict[str, Any]) -> str:
     first = entry["waiting"][0] if entry["waiting"] else None
     if not entry["clean"]:
         if entry["held_by"]:
-            return f"仓库在分支 {entry['current_branch']} 上，是任务 {entry['held_by']} 回写的，有 {entry['uncommitted_files']} 个文件没提交。你在仓库里检查并提交，排队的任务才能回写。"
-        return f"仓库有 {entry['uncommitted_files']} 个没提交的文件，不是 harness 的任务回写的。你先提交、stash 或丢弃。"
+            return say("queue.next.held", branch=entry["current_branch"], task=entry["held_by"], files=entry["uncommitted_files"])
+        return say("queue.next.dirty", files=entry["uncommitted_files"])
     if first is None:
         return ""
     if first["stage"] == READY:
-        return f"仓库是干净的。任务 {first['name']} 已批准，告诉它的 agent 运行 task promote。"
+        return say("queue.next.ready", task=first["name"])
     if first["stage"] == ASKED:
-        return f"仓库是干净的。任务 {first['name']} 的回写计划等你批准：`{cli_command()} task approve-promote --task {first['name']}`。"
-    return f"仓库是干净的。任务 {first['name']} 还在做，没有回写计划。"
+        return say("queue.next.asked", task=first["name"])
+    return say("queue.next.working", task=first["name"])

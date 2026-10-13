@@ -24,7 +24,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
-from core import approval, tasks
+from core import approval, messages, tasks
 from core.paths import cli_command, utc_now
 from core.state import admin_on, atomic_write, session, state_lock, state_path
 
@@ -35,14 +35,16 @@ SCHEMA_VERSION = 1
 EVENTS_KEPT = 200
 SESSIONS_KEPT = 100
 SKIP_TOP = ("_deleted",)
-HINTS = {
-    "fetch": "先 `task fetch {key}` 取过再改。",
-    "refetch": "把你的改动另存，`task fetch --overwrite` 重新取文件，再改一遍。",
-    "set_branch": "用 `task set-branch --branch feature/<名字>` 设一个。",
-    "rename_branch": "换一个分支名（`task set-branch`），或先处理掉那个分支。",
-    "drop": "把它从 DEV/ 里拿掉。",
-    "stray": "要回写：放到 DEV/<仓库名>/<路径> 下。不回写：用 mv 把它移到任务目录根下（DEV/ 之外），空目录留着就行，不要 rmdir（删除要用户确认），再重新 --dry-run。",
-}
+HINT_NAMES = ("fetch", "refetch", "set_branch", "rename_branch", "drop", "stray")
+
+
+def say(key: str, /, **values: Any) -> str:
+    return messages.text(key, command=cli_command(), **values)
+
+
+def hints() -> Dict[str, str]:
+    """What to do about each kind of promote problem. `fetch` keeps its `{key}` for the file it is about."""
+    return {name: messages.table(messages.language()).get(f"promote.hint.{name}", "") for name in HINT_NAMES}
 
 
 # --- state ---------------------------------------------------------------------------------------
@@ -60,7 +62,7 @@ def default_branch(task: str, number: int) -> str:
 def read(root: Path, task: str) -> Dict[str, Any]:
     data = tasks.read(root, task)
     if data is None:
-        raise CommandError(f"任务 `{task}` 还没有开始。先运行 `{cli_command()} task open {name_of(task)} --session-id <会话 id>`。")
+        raise CommandError(say("task.not_started", task=task, name=name_of(task)))
     return data
 
 
@@ -85,7 +87,7 @@ def note(data: Dict[str, Any], what: str, detail: str = "") -> None:
 
 def require_open(data: Dict[str, Any]) -> None:
     if data["status"] != "open":
-        raise CommandError(f"任务已经关闭。要接着做，运行 `{cli_command()} task open {name_of(data['task'])} --session-id <会话 id>`。")
+        raise CommandError(say("task.closed.bare", name=name_of(data["task"])))
 
 
 def open_tasks(root: Path) -> List[Dict[str, Any]]:
@@ -98,7 +100,10 @@ def open_tasks(root: Path) -> List[Dict[str, Any]]:
 
 
 def resolve(root: Path, raw: str, waiting: Optional[Callable[[Dict[str, Any]], bool]] = None, what: str = "") -> str:
-    """The task a command means. `raw` may be the folder path or just its name. Left out: the one open task (that `waiting` picks)."""
+    """The task a command means. `raw` may be the folder path or just its name. Left out: the one open task (that `waiting` picks).
+
+    `what`: which tasks `waiting` picks, for the refusal: `plan`, `promote`, `partial` (`open` when empty).
+    """
     text = raw.strip()
     if text:
         if "/" not in text.replace("\\", "/").strip("/"):
@@ -106,9 +111,9 @@ def resolve(root: Path, raw: str, waiting: Optional[Callable[[Dict[str, Any]], b
         return common.clean_task(root, text)
     found = [item for item in open_tasks(root) if waiting is None or waiting(item)]
     if not found:
-        raise CommandError(f"没有{what or '进行中的'}任务。用 --task 指定任务目录。")
+        raise CommandError(say(f"task.resolve.none.{what or 'open'}"))
     if len(found) > 1:
-        raise CommandError(f"有好几个{what or '进行中的'}任务：" + "、".join(item["task"] for item in found) + "。用 --task 指定一个。")
+        raise CommandError(say(f"task.resolve.many.{what or 'open'}", tasks=messages.joined(item["task"] for item in found)))
     return found[0]["task"]
 
 
@@ -126,18 +131,18 @@ def attach(root: Path, raw_task: str, session_id: str, surface: str = "vscode", 
     """
     task = resolve(root, raw_task) if raw_task.strip() else ""
     if not task:
-        raise CommandError(f"任务要在 {tasks.TASKS_DIR}/ 下。")
+        raise CommandError(say("task.place", tasks_dir=tasks.TASKS_DIR))
     found = common.load_targets(root)
     branch_name = common.clean_branch(branch)
     if not state_path(root, surface, session_id).exists():
-        raise CommandError(f"没有会话 `{session_id}`。用本条提示开头规则里写的“当前会话 id”，原样抄，不要改。")
+        raise CommandError(say("task.session.missing", session_id=session_id))
     path = tasks.state_file(root, task)
     path.parent.mkdir(parents=True, exist_ok=True)
     with session(root, surface, session_id) as state:
         if state.get("parent_session_id"):
-            raise CommandError("子 agent 不能开任务。")
+            raise CommandError(say("task.session.subagent.open"))
         if admin_on(state):
-            raise CommandError("这个会话在 admin 模式里，不能开任务。admin 只用来二开和排查 harness；做任务请用户换一个对话，或先运行 `admin off`。")
+            raise CommandError(say("task.session.admin.open"))
         other = state.get("active_task")
         left = other if other and other != task and (tasks.read(root, other) or {}).get("status") == "open" else ""
         with state_lock(path):
@@ -152,24 +157,24 @@ def attach(root: Path, raw_task: str, session_id: str, surface: str = "vscode", 
                     "plan": {}, "promote": {"state": "none"}, "rounds": [], "events": [],
                     "kind": kind, "tier": tier, "waiting": None, "depends_on": [],
                 }
-                note(data, "start", f"会话 {session_id}")
+                note(data, "start", say("task.note.session", session_id=session_id))
             else:
                 state_now = data["promote"]["state"]
                 if state_now == "partial":
-                    raise CommandError(f"这个任务上次的 promote 中途出错。先请用户在自己的终端运行 `{cli_command()} task recover --task {task}`。")
+                    raise CommandError(say("task.promote.partial.first", task=task))
                 if state_now == "done":
                     new_round = True
                     archive_round(root, task, data)
                 # `task`: a folder the person moved (from the place of before 1.1.0) keeps its state and gets its new path
                 data.update(task=task, name=name_of(task), status="open", session_id=session_id, surface=surface, target_mode=found.configured)
-                note(data, "new-round" if new_round else "resume", f"会话 {session_id}")
+                note(data, "new-round" if new_round else "resume", say("task.note.session", session_id=session_id))
             # Every pick-up, for the report: which sessions' logs hold this task's time.
             data.setdefault("sessions", []).append({"session_id": session_id, "surface": surface, "at": utc_now()})
             del data["sessions"][:-SESSIONS_KEPT]
             data["waiting"] = None
             if data.get("paused"):  # a session picks it up: it is no longer put aside
                 data["paused"] = None
-                note(data, "unpause", f"会话 {session_id}")
+                note(data, "unpause", say("task.note.session", session_id=session_id))
             asked = (state["modules"].get("task") or {}).get("review_n")
             if isinstance(asked, int) and not isinstance(asked, bool):
                 from . import taskreview  # it needs this module
@@ -220,22 +225,15 @@ def archive_round(root: Path, task: str, data: Dict[str, Any]) -> None:
 
 
 def next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
-    plan = f"{task}/{tasks.PLAN_NAME}"
+    plan, dev = f"{task}/{tasks.PLAN_NAME}", f"{task}/{tasks.DEV_NAME}"
     if not tasks.plan_digest(root, task):
-        return (
-            f"读 REQ/、REF/ 和知识库。要改目标仓库：把计划写到 {plan}（要改哪些文件、怎么改、怎么验收），写完就停，给用户 [PLAN.md]({plan}) 的链接，"
-            f"请用户在自己的终端运行 `{cli_command()} task approve-plan`；批准前不能写 {task}/{tasks.DEV_NAME}/。"
-            f"不改目标仓库的成果（RCA、设计、笔记）不需要计划，直接写在 {task}/ 根下。"
-        )
+        return say("task.step.plan", plan=plan, dev=dev, task=task)
     if not tasks.plan_approved(root, task, data):
-        return (
-            f"计划还没有经用户批准（或批准之后改过）。给用户 [PLAN.md]({plan}) 的链接，请用户在自己的终端运行 `{cli_command()} task approve-plan`。"
-            f"批准前不能写 {task}/{tasks.DEV_NAME}/；不回写的成果可以先写在 {task}/ 根下。"
-        )
-    text = f"计划已批准。要回写到目标仓库的成果写在 {task}/{tasks.DEV_NAME}/<仓库名>/<路径> 下；不回写的成果（RCA、设计、一次性脚本）写在 {task}/ 根下。"
+        return say("task.step.approve", plan=plan, dev=dev, task=task)
+    text = say("task.step.approved", dev=dev, task=task)
     if data.get("target_mode"):
-        text += "要改仓库里已有的文件，先用 `task fetch <仓库名>/<路径>` 取进来；做完 `task diff`，再 `task promote --dry-run`。"
-    return text + "全部做完后 `task close`。"
+        text += say("task.step.fetch")
+    return text + say("task.step.close")
 
 
 def status(root: Path, raw_task: str = "") -> Dict[str, Any]:
@@ -252,14 +250,14 @@ def status(root: Path, raw_task: str = "") -> Dict[str, Any]:
 def set_branch(root: Path, raw_task: str, branch: str) -> Dict[str, Any]:
     name = common.clean_branch(branch)
     if not name:
-        raise CommandError("--branch 不能为空。")
+        raise CommandError(say("branch.empty"))
     task = resolve(root, raw_task)
     with locked(root, task) as data:
         require_open(data)
         if not data.get("target_mode"):
-            raise CommandError("没有配置目标仓库，不需要分支名。")
+            raise CommandError(say("branch.no_target"))
         if data["promote"]["state"] in ("done", "partial"):
-            raise CommandError("已经 promote 过（或中途出错），分支名不能再改。")
+            raise CommandError(say("branch.too_late"))
         reset = data["promote"]["state"] == "dry_run"
         if reset:
             data["promote"] = {"state": "none"}  # the plan names the branch: a new name needs a new dry-run and a new approval
@@ -272,7 +270,7 @@ def close(root: Path, raw_task: str = "", reason: str = "") -> Dict[str, Any]:
     task = resolve(root, raw_task)
     with locked(root, task) as data:
         if data["promote"]["state"] == "partial":
-            raise CommandError(f"promote 中途出错，还没有恢复。先请用户在自己的终端运行 `{cli_command()} task recover --task {task}`。")
+            raise CommandError(say("task.promote.partial.open", task=task))
         data["status"] = "closed"
         note(data, "close", reason.strip())
         surface, session_id = data.get("surface", "vscode"), data["session_id"]
@@ -297,7 +295,7 @@ def close(root: Path, raw_task: str = "", reason: str = "") -> Dict[str, Any]:
 
 def require_plan(root: Path, task: str, data: Dict[str, Any]) -> None:
     if not tasks.plan_approved(root, task, data):
-        raise CommandError(next_step(root, task, data) + "用户说批准了，再运行这条命令。")
+        raise CommandError(next_step(root, task, data) + say("task.step.then"))
 
 
 def person(command: str, interactive: Optional[bool], typed: bool = True) -> None:
@@ -319,31 +317,31 @@ def approve_plan(
 ) -> Dict[str, Any]:
     """The person approves PLAN.md as it is now. The screen names the file; the person reads it in the editor."""
     person("approve-plan", interactive)
-    task = resolve(root, raw_task, lambda item: bool(tasks.plan_digest(root, item["task"])) and not tasks.plan_approved(root, item["task"], item), "等待批准计划的")
+    task = resolve(root, raw_task, lambda item: bool(tasks.plan_digest(root, item["task"])) and not tasks.plan_approved(root, item["task"], item), "plan")
     data = read(root, task)
     require_open(data)
     current = tasks.plan_digest(root, task)
     plan = tasks.plan_file(root, task)
     if not current or not plan.read_text(encoding="utf-8", errors="replace").strip():
-        raise CommandError(f"还没有计划文件 {task}/{tasks.PLAN_NAME}，或者它是空的。先让 agent 写好计划。")
+        raise CommandError(say("plan.missing", plan=f"{task}/{tasks.PLAN_NAME}"))
     lines = len(plan.read_text(encoding="utf-8", errors="replace").splitlines())
     approval.say(
         out,
-        f"任务 {task}（第 {data['round']} 轮）",
-        f"计划在这个文件里（{lines} 行），先在编辑器里打开看：{task}/{tasks.PLAN_NAME}",
-        f"批准后 agent 才能在 {task}/{tasks.DEV_NAME}/ 下写文件。计划再改，要重新批准。",
+        say("plan.screen.head", task=task, round=data["round"]),
+        say("plan.screen.file", lines=lines, plan=f"{task}/{tasks.PLAN_NAME}"),
+        say("plan.screen.after", dev=f"{task}/{tasks.DEV_NAME}"),
     )
-    typed("确认按这份计划做", current, "没有批准。agent 还不能开工。", reader)
+    typed(say("plan.question"), current, say("plan.refused"), reader)
     with locked(root, task) as again:
         require_open(again)
         if tasks.plan_digest(root, task) != current:
-            raise CommandError("你确认的时候计划变了。重新打开文件看一遍，再运行 approve-plan。")
+            raise CommandError(say("plan.changed"))
         again["plan"] = {"approved_sha256": current, "approved_at": utc_now()}
         note(again, "approve-plan", current[:12])
     from . import tasksnap  # it needs this module
 
     snapshot = tasksnap.take(root, task, "plan")["snapshot"]
-    return {"approved": True, "task": task, "snapshot": snapshot, "plan": f"{task}/{tasks.PLAN_NAME}", "next": "告诉 agent 计划已批准，可以开工了。"}
+    return {"approved": True, "task": task, "snapshot": snapshot, "plan": f"{task}/{tasks.PLAN_NAME}", "next": say("plan.next")}
 
 
 # --- fetch, delete, diff -------------------------------------------------------------------------
@@ -351,7 +349,7 @@ def approve_plan(
 
 def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False) -> Dict[str, Any]:
     if not specs:
-        raise CommandError("要写 `<仓库名>/<路径>`，例如 bdtt_repo/src/a.sql。")
+        raise CommandError(say("fetch.empty"))
     task = resolve(root, raw_task)
     limit = common.policy(root)["fetch"]["max_files"]
     base, dev = tasks.base_dir(root, task), tasks.dev_dir(root, task)
@@ -361,7 +359,7 @@ def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False) 
         require_open(data)
         require_plan(root, task, data)
         if data["promote"]["state"] in ("done", "partial"):
-            raise CommandError("这一轮已经 promote 过。要再改，重新 `task start` 开新的一轮。")
+            raise CommandError(say("fetch.promoted"))
         found = common.load_targets(root)
         for spec in specs:
             name, _, rest = spec.strip().replace("\\", "/").partition("/")
@@ -380,29 +378,29 @@ def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False) 
                 data["deletes"].remove(key)
         if fetched or kept:
             data["promote"] = {"state": "none"} if data["promote"]["state"] == "dry_run" else data["promote"]
-            note(data, "fetch", "、".join(fetched + kept))
+            note(data, "fetch", messages.joined(fetched + kept))
     result: Dict[str, Any] = {"task": task, "fetched": [f"{task}/{tasks.DEV_NAME}/{key}" for key in fetched], "total_fetched": len(data["target_files"])}
     if kept:
         result["kept"] = kept
-        result["note"] = "这些文件在 DEV/ 里已经改过，没有覆盖。要丢掉改动重新取，加 --overwrite。"
+        result["note"] = say("fetch.kept")
     return result
 
 
 def delete(root: Path, raw_task: str, specs: List[str]) -> Dict[str, Any]:
     if not specs:
-        raise CommandError("要写 `<仓库名>/<路径>`。")
+        raise CommandError(say("delete.empty"))
     task = resolve(root, raw_task)
     with locked(root, task) as data:
         require_open(data)
         require_plan(root, task, data)
         if not data.get("target_mode"):
-            raise CommandError("没有配置目标仓库，回写不能删文件。")
+            raise CommandError(say("delete.no_target"))
         found = common.load_targets(root)
         for spec in specs:
-            key = common.relative_name(spec, "要删的文件")
+            key = common.relative_name(spec, "delete.what")
             common.check_target_output(found, key, "delete")
             if key not in data["target_files"]:
-                raise CommandError(f"`{key}` 不是这个任务从 main 取过的文件。先 `task fetch {key}`，再 `task delete {key}`。")
+                raise CommandError(say("delete.not_fetched", key=key))
             copy = tasks.dev_dir(root, task) / key
             if copy.is_file():
                 common.writable(copy)
@@ -411,8 +409,8 @@ def delete(root: Path, raw_task: str, specs: List[str]) -> Dict[str, Any]:
                 data["deletes"].append(key)
         if data["promote"]["state"] == "dry_run":
             data["promote"] = {"state": "none"}
-        note(data, "delete", "、".join(specs))
-    return {"task": task, "deletes": data["deletes"], "next": "改名或移动：新路径的文件直接建在 DEV/ 下。"}
+        note(data, "delete", messages.joined(specs))
+    return {"task": task, "deletes": data["deletes"], "next": say("delete.next")}
 
 
 def dev_files(root: Path, task: str) -> List[Tuple[str, Path]]:
@@ -441,7 +439,7 @@ def changes(root: Path, task: str, data: Dict[str, Any]) -> Tuple[List[Dict[str,
     """What DEV/ changes against the fetched versions: one entry per file, and the whole thing as a unified diff."""
     base = tasks.base_dir(root, task)
     items: List[Dict[str, Any]] = []
-    out: List[str] = [f"# 任务 {task} 第 {data['round']} 轮：DEV/ 和取文件时 main 上版本的差异。只列改动的行，每处带 3 行上下文。"]
+    out: List[str] = [say("diff.header", task=task, round=data["round"])]
     for key, path in dev_files(root, task):
         new = path.read_bytes()
         old_path = base / key
@@ -452,7 +450,7 @@ def changes(root: Path, task: str, data: Dict[str, Any]) -> Tuple[List[Dict[str,
         before, after = (_text(old) if old is not None else []), _text(new)
         out.append(f"diff --git a/{key} b/{key}")
         if before is None or after is None:
-            out.append("（二进制文件，不显示差异）")
+            out.append(say("diff.binary"))
             items.append({"path": key, "action": "modify" if old is not None else "create", "added": 0, "removed": 0})
             continue
         if old is None:
@@ -470,7 +468,7 @@ def changes(root: Path, task: str, data: Dict[str, Any]) -> Tuple[List[Dict[str,
         old_path = base / key
         before = _text(old_path.read_bytes()) if old_path.is_file() else []
         out += [f"diff --git a/{key} b/{key}", "deleted file", f"--- a/{key}", "+++ /dev/null"]
-        out += ["-" + line for line in before] if before is not None else ["（二进制文件，不显示内容）"]
+        out += ["-" + line for line in before] if before is not None else [say("diff.binary.content")]
         items.append({"path": key, "action": "delete", "added": 0, "removed": len(before or [])})
     return items, "\n".join(out) + "\n"
 
@@ -484,7 +482,7 @@ def diff(root: Path, raw_task: str = "") -> Dict[str, Any]:
     changed = [item for item in items if item["action"] != "unchanged"]
     return {
         "task": task, "files": changed, "unchanged": len(items) - len(changed) + 0, "diff_file": rel(root, path),
-        "next": "差异全文在 diff_file 里。reviewer 检查时让它读这个文件、REQ/ 和 PLAN.md，不用读整份成果。",
+        "next": say("diff.next"),
     }
 
 
@@ -513,28 +511,25 @@ def header(task: str, data: Dict[str, Any]) -> str:
 
 def make_plan(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     if not data.get("target_mode"):
-        raise CommandError("没有配置目标仓库，没有地方可回写。成果就在 DEV/ 下，做完 `task close`。")
+        raise CommandError(say("promote.no_target"))
     found = dev_files(root, task)
     loose = [key for key, _path in found if "/" not in key]  # directly in DEV/: under no repository, so it is not written back
     items: List[Dict[str, Any]] = [{"key": key, "source": path, "sha256": common.sha256_file(path), "delete": False} for key, path in found if "/" in key]
     clash = [item["key"] for item in items if item["key"] in data["deletes"]]
     if clash:
-        raise CommandError(f"`{clash[0]}` 已经声明删除，但 DEV/ 里又有这个文件。二选一：删掉 DEV/ 里的文件，或 `task fetch {clash[0]}` 取消删除。")
+        raise CommandError(say("promote.clash", key=clash[0]))
     items += [{"key": key, "source": None, "sha256": "", "delete": True} for key in data["deletes"]]
     if not items:
-        raise CommandError(
-            "DEV/ 里没有要回写的成果，没有东西可回写。"
-            + (f"直接放在 DEV/ 根目录的文件不回写（{'、'.join(loose)}）；要回写的放到 DEV/<仓库名>/<路径> 下。" if loose else "")
-        )
+        raise CommandError(say("promote.nothing") + (say("promote.nothing.loose", loose=messages.joined(loose)) if loose else ""))
     branch = data.get("branch", "")
-    repos, files = promote_target.plan_files(root, items, data["target_files"], branch, HINTS)
+    repos, files = promote_target.plan_files(root, items, data["target_files"], branch, hints())
     result: Dict[str, Any] = {
         "task": task, "round": data["round"], "branch": branch, "repos": repos, "files": files,
         "plan_sha256": promote_target.plan_digest(branch, repos, files),
     }
     if loose:
         result["not_promoted"] = loose
-        result["not_promoted_note"] = "这些文件直接放在 DEV/ 根目录，不属于任何目标仓库，不会回写。要回写，放到 DEV/<仓库名>/<路径> 下。"
+        result["not_promoted_note"] = say("promote.loose.note")
     return result
 
 
@@ -551,9 +546,9 @@ def run_promote(root: Path, raw_task: str, dry_run: bool) -> Dict[str, Any]:
         require_plan(root, task, data)
         record = data["promote"]
         if record["state"] == "done":
-            raise CommandError("这一轮已经 promote 过了，不再回写第二次。要再改，重新 `task open` 开新的一轮（要新计划、新批准）。")
+            raise CommandError(say("promote.done_already"))
         if record["state"] == "partial":
-            raise CommandError(f"上次 promote 中途出错，仓库可能还是半成品。先请用户在自己的终端运行 `{recover_command(task)}`，再重新 --dry-run、批准。")
+            raise CommandError(say("promote.partial.before", recover=recover_command(task)))
         from . import taskreview, tasksnap  # they need this module
 
         if dry_run:
@@ -569,19 +564,15 @@ def run_promote(root: Path, raw_task: str, dry_run: bool) -> Dict[str, Any]:
             result["approved"] = "approved_plan_sha256" in new
             result["review_file"] = write_review(root, task, data, result)
             result["next"] = (
-                "已经有用户的批准，可以运行 task promote（去掉 --dry-run）。"
+                say("promote.dry.approved")
                 if result["approved"]
-                else f"告诉用户：完整差异在 [{tasks.REVIEW_NAME}]({result['review_file']})（给出这个链接，让用户在编辑器里打开看，不要把差异贴进对话）。"
-                "看完后请用户在自己的终端运行：" + approve_command(task) + "，输入确认码。用户批准后，再运行 task promote（去掉 --dry-run）。"
+                else say("promote.dry.ask", review_name=tasks.REVIEW_NAME, review_file=result["review_file"], approve=approve_command(task))
             )
             return {"dry_run": True, **common.shown(result)}
         if record["state"] != "dry_run" or record.get("plan_sha256") != result["plan_sha256"]:
-            raise CommandError("还没有对应的 --dry-run，或者 DEV/、仓库在 dry-run 之后变了。先重新运行 --dry-run，让用户看过再批准。")
+            raise CommandError(say("promote.no_dry_run"))
         if record.get("approved_plan_sha256") != result["plan_sha256"]:
-            raise CommandError(
-                "用户还没有批准这份回写计划。请用户在自己的终端运行：" + approve_command(task)
-                + "，在编辑器里看完差异，按提示输入确认码。你不能自己运行它。用户说批准了，再运行 task promote。"
-            )
+            raise CommandError(say("promote.not_approved", approve=approve_command(task)))
         new, failed = promote_target.run_result(
             root, result, tasks.dev_dir(root, task), patch_name(data), record, recover_command(task), header(task, data),
         )
@@ -600,48 +591,48 @@ def promoted_text(result: Dict[str, Any], record: Dict[str, Any]) -> str:
     others = [repo for repo in result["repos"] if not repo.get("direct")]
     parts: List[str] = []
     if others:
-        parts.append(f"已写到{'、'.join(repo['name'] for repo in others)}的新分支 {result['branch']}，文件没有提交。告诉用户：在仓库里检查改动、自己 commit。")
+        parts.append(say("promote.done.branch", repos=messages.joined(repo["name"] for repo in others), branch=result["branch"]))
     for repo in direct:
-        parts.append(f"知识库 {repo['name']} 已直接写进 {repo['base_ref']} 并提交（{str(repo.get('commit', ''))[:12]}）。harness 不 push，告诉用户自己 push。")
-    return "".join(parts) + f"补丁在 {record['patch']}。然后 `task close`。"
+        parts.append(say("promote.done.kb", name=repo["name"], base_ref=repo["base_ref"], commit=str(repo.get("commit", ""))[:12]))
+    return "".join(parts) + say("promote.done.patch", patch=record["patch"])
 
 
 def approve_promote(
     root: Path, raw_task: str = "", reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None,
 ) -> Dict[str, Any]:
     person("approve-promote", interactive)
-    task = resolve(root, raw_task, lambda item: item["promote"]["state"] == "dry_run" and "approved_plan_sha256" not in item["promote"], "等待批准回写的")
+    task = resolve(root, raw_task, lambda item: item["promote"]["state"] == "dry_run" and "approved_plan_sha256" not in item["promote"], "promote")
     data = read(root, task)
     require_open(data)
     if data["promote"]["state"] != "dry_run":
-        raise CommandError("还没有 --dry-run 的计划，或者已经 promote 过。先让 agent 运行 task promote --dry-run。")
+        raise CommandError(say("promote.approve.none"))
     result = make_plan(root, task, data)
     if result["plan_sha256"] != data["promote"]["plan_sha256"]:
-        raise CommandError("DEV/ 或仓库在 dry-run 之后变了。让 agent 重新运行 task promote --dry-run，再来批准。")
+        raise CommandError(say("promote.approve.changed"))
     review = write_review(root, task, data, result)  # written again now: it is what gets approved
-    lines = [f"任务 {task}（第 {data['round']} 轮）。将回写这些文件："]
+    lines = [say("promote.screen.head", task=task, round=data["round"])]
     for repo in result["repos"]:
         if repo.get("direct"):
-            lines.append(f"  知识库 {repo['name']}（{repo['path']}）：直接写进 {repo['base_ref']}（{repo['base_commit'][:12]}），并提交一次。")
+            lines.append(say("promote.screen.kb", name=repo["name"], path=repo["path"], base_ref=repo["base_ref"], commit=repo["base_commit"][:12]))
             continue
-        lines.append(f"  仓库 {repo['name']}（{repo['path']}）：从 {repo['base_ref']}（{repo['base_commit'][:12]}）新建分支 {result['branch']}，写入文件，不提交。")
+        lines.append(say("promote.screen.repo", name=repo["name"], path=repo["path"], base_ref=repo["base_ref"], commit=repo["base_commit"][:12], branch=result["branch"]))
     if any(item["action"] == "delete" for item in result["files"]):
-        lines.append("  注意：标着 delete 的文件会被删除。")
+        lines.append(say("promote.screen.delete"))
     lines += [f"  {item['action']:9} {item['path']}  (+{item['added']} -{item['removed']})" for item in result["files"]]
     if result.get("not_promoted"):
-        lines.append("  不回写（直接放在 DEV/ 根目录，不属于任何仓库）：" + "、".join(result["not_promoted"]))
-    lines.append(f"完整差异在这个文件里，先在编辑器里打开看：{review}")
+        lines.append(say("promote.screen.loose", loose=messages.joined(result["not_promoted"])))
+    lines.append(say("promote.screen.file", review=review))
     approval.say(out, *lines)
-    typed("确认回写", result["plan_sha256"], "没有批准。什么都没有写。", reader)
+    typed(say("promote.question"), result["plan_sha256"], say("promote.refused"), reader)
     with locked(root, task) as again:
         require_open(again)
         check = make_plan(root, task, again)
         if check["plan_sha256"] != result["plan_sha256"] or again["promote"].get("plan_sha256") != result["plan_sha256"]:
-            raise CommandError("你确认的时候计划变了。让 agent 重新运行 task promote --dry-run，再来批准。")
+            raise CommandError(say("promote.changed"))
         again["promote"]["approved_plan_sha256"] = result["plan_sha256"]
         again["promote"]["approved_at"] = utc_now()
         note(again, "approve-promote", result["plan_sha256"][:12])
-    return {"approved": True, "task": task, "files": len(result["files"]), "review_file": review, "next": "告诉 agent 可以运行 task promote 了。"}
+    return {"approved": True, "task": task, "files": len(result["files"]), "review_file": review, "next": say("promote.next")}
 
 
 def recover(
@@ -649,23 +640,23 @@ def recover(
 ) -> Dict[str, Any]:
     """The person puts the repositories back after a task promote that stopped halfway. """
     person("recover", interactive)
-    task = resolve(root, raw_task, lambda item: item["promote"]["state"] == "partial", "promote 中途出错的")
+    task = resolve(root, raw_task, lambda item: item["promote"]["state"] == "partial", "partial")
     data = read(root, task)
     record = data["promote"]
     if record["state"] != "partial":
-        raise CommandError("这个任务的 promote 没有中途出错，不需要恢复。")
-    lines = [f"任务 {task}：promote 中途出错（出错的仓库 {record.get('repo_failed', '')}：{record.get('error', '')}）。将运行："]
-    lines += [f"  {command}" for command in record.get("recovery", [])] or ["  （没有要运行的命令：没有仓库被改动）"]
+        raise CommandError(say("recover.not_needed"))
+    lines = [say("recover.screen.head", task=task, repo=record.get("repo_failed", ""), error=record.get("error", ""))]
+    lines += [f"  {command}" for command in record.get("recovery", [])] or [say("recover.screen.none")]
     approval.say(out, *lines)
-    typed("确认恢复", record["plan_sha256"], "没有确认。什么都没有做。", reader)
+    typed(say("recover.question"), record["plan_sha256"], say("recover.refused"), reader)
     found = common.load_targets(root)
     results = promote_target.run_recovery(record["recovery_steps"], record["branch"], found.timeout)
     approval.say(out, *[f"  [{item['status']}] {item['command']}" + (f"  {item['message']}" if item["message"] else "") for item in results])
     failed = [item for item in results if item["status"] == "failed"]
     if failed:
-        raise CommandError(f"{len(failed)} 步没有成功（上面标 [failed] 的）。先按 git 的提示处理（例如文件夹只读、文件被占用），再运行一次 recover：已经做完的步骤会跳过。")
+        raise CommandError(say("recover.failed", count=len(failed)))
     with locked(root, task) as again:
         again["promote"] = {"state": "none", "recovered_at": utc_now()}
         note(again, "recover")
     counts = {name: sum(1 for item in results if item["status"] == name) for name in ("done", "skipped")}
-    return {"recovered": True, "task": task, **counts, "next": "仓库已经恢复。让 agent 重新运行 task promote --dry-run，用户再批准。"}
+    return {"recovered": True, "task": task, **counts, "next": say("recover.next")}

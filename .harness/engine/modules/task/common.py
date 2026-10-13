@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, repo_paths, targets, tasks
+from core import config, messages, repo_paths, targets, tasks
 from core.logs import read_lines, read_session, session_files
 
 from .policy import POLICY_NAME
@@ -25,14 +25,22 @@ class CommandError(Exception):
     """A refused command. The message says why and what to do next."""
 
 
-def relative_name(raw: str, what: str = "路径") -> str:
-    """A clean relative path inside a folder: no drive, no `..`, no leading slash. Returns it with `/`."""
+def say(key: str, /, **values: Any) -> str:
+    return messages.text(key, **values)
+
+
+def relative_name(raw: str, what: str = "") -> str:
+    """A clean relative path inside a folder: no drive, no `..`, no leading slash. Returns it with `/`.
+
+    `what`: the name of a message that says what the path is (`path.what` when empty).
+    """
+    what = say(what or "path.what")
     text = raw.strip().replace("\\", "/")
     if not text or text.startswith("/") or re.match(r"^[A-Za-z]:", text):
-        raise CommandError(f"{what} `{raw}` 必须是相对路径。")
+        raise CommandError(say("path.relative", what=what, raw=raw))
     clean = posixpath.normpath(text)
     if clean == "." or clean == ".." or clean.startswith("../"):
-        raise CommandError(f"{what} `{raw}` 不能指向目录之外。")
+        raise CommandError(say("path.outside", what=what, raw=raw))
     return clean
 
 
@@ -93,7 +101,7 @@ def load_targets(root: Path) -> targets.Targets:
     try:
         return targets.load(root)
     except Exception as error:
-        raise CommandError(f"目标仓库的配置有问题（target.json 或 target.override.json）：{error}") from error
+        raise CommandError(say("target.config.bad", error=error)) from error
 
 
 def target_repo(found: targets.Targets, name: str) -> targets.Repo:
@@ -106,7 +114,7 @@ def target_repo(found: targets.Targets, name: str) -> targets.Repo:
 def clean_branch(branch: str) -> str:
     name = branch.strip()
     if name and not targets.valid_branch(name):
-        raise CommandError(f"分支名 `{name}` 不合法。写成 `feature/<名字>`，名字只能用字母、数字和下划线，不能有 `-`、`.`、`/`。")
+        raise CommandError(say("branch.bad", name=name))
     return name
 
 
@@ -119,10 +127,10 @@ def clean_task(root: Path, raw: str) -> str:
     path = path if path.is_absolute() else root / path
     relative = inside(root, path)
     if relative is None or not relative.startswith(tasks.TASKS_DIR + "/"):
-        raise CommandError(f"--task `{raw}` 要是 {tasks.TASKS_DIR}/ 下的一个任务目录，例如 {tasks.TASKS_DIR}/<任务名>。")
+        raise CommandError(say("task.option.bad", raw=raw, tasks_dir=tasks.TASKS_DIR))
     relative = relative.rstrip("/")
     if not path.is_dir():
-        raise CommandError(f"任务目录 `{relative}` 不存在。")
+        raise CommandError(say("task.folder.missing", relative=relative))
     return relative
 
 
@@ -138,23 +146,23 @@ def copy_from_target(
         return []
     found = load_targets(root)
     if not found.configured:
-        raise CommandError("还没有配置目标仓库。在 .harness/policies/target.override.json 里写 repos_root，运行 `target list` 确认。")
+        raise CommandError(say("target.unset"))
     records = data.setdefault("targets", {})
     files = data.setdefault("target_files", {})
     wanted: Dict[str, Any] = {}
     for spec in specs:
         name, _, rest = spec.strip().replace("\\", "/").partition("/")
         if not name or not rest.strip("/"):
-            raise CommandError(f"`{spec}` 要写成 `<仓库名>/<仓库里的路径>`，例如 bdtt_repo/src/a.sql。")
+            raise CommandError(say("fetch.spec", spec=spec))
         repo = target_repo(found, name)
-        relative = relative_name(rest, "仓库里的路径")
+        relative = relative_name(rest, "path.what.in_repo")
         if name not in records:
             try:
                 commit = targets.ref_commit(repo, found.timeout)
             except targets.TargetError as error:
                 raise CommandError(str(error)) from error
             if not commit:
-                raise CommandError(f"仓库 {name} 本地没有分支 `{repo.base_ref}`。先在那个仓库里准备好它，运行 `doctor` 确认。")
+                raise CommandError(say("fetch.no_branch", name=name, base_ref=repo.base_ref))
             records[name] = {"path": str(repo.path), "base_ref": repo.base_ref, "base_commit": commit}
         commit = records[name]["base_commit"]
         try:
@@ -162,15 +170,15 @@ def copy_from_target(
         except targets.TargetError as error:
             raise CommandError(str(error)) from error
         if not listed:
-            raise CommandError(f"仓库 {name} 的 {repo.base_ref}（{commit[:12]}）上没有 `{relative}`。要新建的文件不用取，直接在 DEV/ 下创建。")
+            raise CommandError(say("fetch.no_file", name=name, base_ref=repo.base_ref, commit=commit[:12], relative=relative))
         for mode, blob, path in listed:
             if mode not in targets.REGULAR_FILE_MODES:
                 if path == relative:
-                    raise CommandError(f"`{name}/{path}` 不是普通文件（符号链接或子模块），不能复制。")
+                    raise CommandError(say("fetch.not_file", name=name, path=path))
                 continue
             wanted[f"{name}/{path}"] = (repo, commit, blob, path)
     if len(wanted) > limit:
-        raise CommandError(f"一次复制了 {len(wanted)} 个文件，上限 {limit}。只复制这个任务要用的文件。")
+        raise CommandError(say("fetch.too_many", count=len(wanted), limit=limit))
     entries = []
     for key, (repo, commit, blob, path) in sorted(wanted.items()):
         try:
@@ -199,11 +207,11 @@ def check_target_output(found: targets.Targets, name: str, label: str = "--outpu
     """Every result path is `<repo>/<path in the repo>`, and not a path promote refuses."""
     repo_name, _, rest = name.partition("/")
     if repo_name not in found.repos or not rest:
-        known = "、".join(found.names()) or "（没有）"
-        raise CommandError(f"{label} `{name}` 的第一段要是仓库名，后面是仓库里的路径，例如 bdtt_repo/src/a.sql。已知的仓库：{known}。")
+        known = messages.joined(found.names()) or say("output.none_known")
+        raise CommandError(say("output.repo_first", label=label, name=name, known=known))
     for pattern in found.repos[repo_name].refused_paths:
         if repo_paths.glob_regex(pattern).match(rest):
-            raise CommandError(f"{label} `{name}` 属于不能回写的路径（{repo_name} 的 {pattern}）。把它从成果里去掉。")
+            raise CommandError(say("output.refused", label=label, name=name, repo=repo_name, pattern=pattern))
 
 
 def shown(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -293,34 +301,35 @@ def child_sessions(root: Path, surface: str, session_id: str, since: str) -> Lis
 def log_section(root: Path, data: Dict[str, Any]) -> List[str]:
     session_id, surface = data.get("session_id", ""), data.get("surface", "vscode")
     rows = read_session(root, surface, session_id)
-    lines = ["", "## hook 日志（会话 " + session_id + "）", ""]
+    lines = ["", say("log.section.title", session_id=session_id), ""]
     if not rows:
-        return lines + ["没有找到这个会话的日志（observe 没开，或日志已被 `logs prune` 清理）。"]
+        return lines + [say("log.section.none")]
     children = child_sessions(root, surface, session_id, data["created_at"])
     every = rows + [row for child in children for row in child["rows"]]
     since = data["created_at"]
     window = [row for row in every if row.get("at", "") >= since]
     counted = {
-        "hook 调用": len(window),
-        "拒绝（deny）": sum(1 for row in window if row.get("decision") == "deny"),
-        "要人确认（ask）": sum(1 for row in window if row.get("decision") == "ask"),
-        "Stop 被拦": sum(1 for row in window if row.get("decision") == "block"),
-        "子 agent 启动": sum(1 for row in window if row.get("event") == "SubagentStart"),
+        "calls": len(window),
+        "deny": sum(1 for row in window if row.get("decision") == "deny"),
+        "ask": sum(1 for row in window if row.get("decision") == "ask"),
+        "block": sum(1 for row in window if row.get("decision") == "block"),
+        "subagent": sum(1 for row in window if row.get("event") == "SubagentStart"),
     }
-    lines.append("任务开始之后：" + "，".join(f"{name} {number}" for name, number in counted.items()) + "。")
+    items = [say("log.count.item", name=say(f"log.count.{name}"), number=number) for name, number in counted.items()]
+    lines.append(say("log.count.line", counts=say("list.comma.wide").join(items)))
     if children:
-        lines.append(f"子 agent 另有 {len(children)} 个会话（SDK 引擎），已一起统计。")
+        lines.append(say("log.children", count=len(children)))
     refusals = [row for row in window if row.get("decision") in ("deny", "ask", "block")]
     if not refusals:
-        return lines + ["", "没有拒绝和确认记录。"]
-    lines += ["", "拒绝和确认记录（时间是 UTC）：", "", "| 时间 | 事件 | 工具 | 决定 | 谁 | 原因 | 对象 |", "| --- | --- | --- | --- | --- | --- | --- |"]
+        return lines + ["", say("log.refusals.none")]
+    lines += ["", say("log.refusals.title"), "", say("log.refusals.header"), "| --- | --- | --- | --- | --- | --- | --- |"]
     for row in refusals[:LOG_ROWS]:
         target = row.get("target") or {}
-        about = "、".join(target.get("paths", [])) or target.get("command", "")
+        about = messages.joined(target.get("paths", [])) or target.get("command", "")
         lines.append(
             f"| {row.get('at', '')[11:19]} | {row.get('event', '')} | {row.get('tool_name', '') or '-'} | {row.get('decision', '')}"
             f" | {row.get('judge', '')}:{','.join(row.get('by') or [])} | {cell(row.get('reason', ''))} | {cell(about) or '-'} |"
         )
     if len(refusals) > LOG_ROWS:
-        lines.append(f"\n（还有 {len(refusals) - LOG_ROWS} 条，见会话日志。）")
+        lines.append(say("log.refusals.more", count=len(refusals) - LOG_ROWS))
     return lines

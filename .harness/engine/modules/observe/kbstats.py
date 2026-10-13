@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import targets
+from core import messages, targets
 from core.kbreads import reads_by_task, task_name
 from core.paths import utc_now
 
@@ -52,5 +52,5 @@ def collect(root: Path, days: Optional[int] = None, task: str = "") -> Dict[str,
     return {
         "knowledge_bases": bases, "files": files, "folders_searched": [row for row in rows if row["file"].endswith("/")],
         "task": wanted, "days": days, "as_of": utc_now(),
-        "note": "只记工具点名的文件：read、search 工具的路径，和终端命令里写出来的路径。搜索一个文件夹只记文件夹，不知道读了其中哪些文件。",
+        "note": messages.text("kb.reads.note"),
     }

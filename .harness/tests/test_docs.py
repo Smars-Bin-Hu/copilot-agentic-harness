@@ -156,31 +156,31 @@ class RequirementConfirmedTests(unittest.TestCase):
 class ReadmeStructureTests(unittest.TestCase):
     def test_the_readme_introduces_gets_the_reader_started_and_points_at_the_docs(self) -> None:
         readme = text(REPO / "README.md")
-        self.assertTrue(readme.startswith("# GitHub Copilot Agentic Harness for DE Team"))
-        self.assertEqual(re.findall(r"^## (.+)$", readme, re.M), ["它是什么", "三步上手", "它能做什么", "必须接入的部分", "文档", "目录结构"])
-        start = section(readme, "三步上手")
+        self.assertTrue(readme.startswith("# Copilot Agentic Harness\n"))
+        self.assertEqual(re.findall(r"^## (.+)$", readme, re.M), ["What it is", "Get started", "What it does", "What you must plug in", "Docs", "Directory layout"])
+        start = section(readme, "Get started")
         for skill in ("harness-repo-initialize", "harness-quick-start", "harness-wondering"):
             self.assertIn(f"`/{skill}`", start, skill)
             self.assertTrue((REPO / ".github" / "skills" / skill / "SKILL.md").is_file(), skill)
-        self.assertIn("harness 的做法", section(readme, "它能做什么"))
+        self.assertIn("What the harness does", section(readme, "What it does"))
 
     def test_the_readme_shows_the_version_of_the_registry(self) -> None:
         readme = text(REPO / "README.md")
         version = json.loads(text(REPO / ".harness" / "registry.json"))["version"]
         self.assertIn(f"badge/version-{version}-", readme)
-        self.assertIn(f"版本 {version} ·", readme)
+        self.assertIn(f"Version {version} ·", readme)
         self.assertIn(f"## {version}（", text(REPO / "docs" / "07-release-notes.md"))
 
     def test_the_readme_has_the_directory_tree_with_both_parts(self) -> None:
         readme = text(REPO / "README.md")
-        tree = readme[readme.index("## 目录结构"):]
-        for needle in ("knowledge-base/", "knowledgebase.instructions.md", ".harness/", "engine/", ".workspace/", "repos_root", "harness 之外"):
+        tree = readme[readme.index("## Directory layout"):]
+        for needle in ("knowledge-base/", "knowledgebase.instructions.md", ".harness/", "engine/", ".workspace/", "repos_root", "Outside the harness"):
             self.assertIn(needle, tree, needle)
 
     def test_the_knowledge_base_instructions_must_be_connected_and_are_not_hidden(self) -> None:
         readme = text(REPO / "README.md")
         self.assertIn("(.github/instructions/knowledgebase.instructions.md)", readme)
-        self.assertIn("必须接入", readme[readme.index("## 必须接入的部分"):])
+        self.assertIn("must be plugged in", readme[readme.index("## What you must plug in"):])
         configure = text(REPO / "docs" / "03-configure.md")
         self.assertIn("必须接入", section(configure, "知识库"))
         self.assertTrue((REPO / ".github" / "instructions" / "knowledgebase.instructions.md").is_file())
@@ -297,7 +297,7 @@ class ReferenceCoverageTests(unittest.TestCase):
 
     def test_every_task_template_is_listed(self) -> None:
         reference = section(text(REFERENCE), "模板（contracts）")
-        templates = sorted(path.name for path in (REPO / ".harness" / "contracts" / "templates" / "task").glob("*.md"))
+        templates = sorted(path.name for path in (REPO / ".harness" / "contracts" / "templates" / "task" / "en").glob("*.md"))
         self.assertEqual(templates, ["LOG.md", "REQ.md", "TASK.md", "TODO.md"])
         for name in templates:
             self.assertIn(f"`{name}`", reference)

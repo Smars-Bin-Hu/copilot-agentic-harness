@@ -55,7 +55,7 @@ class ScenarioFilesTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, root, True)
         base = root / ".harness" / "eval" / "scenarios"
         (base / "ok").mkdir(parents=True)
-        (base / "ok" / "scenario.md").write_text("# x\n\n## 前置\n\n## Prompt\n\n## 人工检查项\n", encoding="utf-8")
+        (base / "ok" / "scenario.md").write_text("# x\n\n## Setup\n\n## Prompt\n\n## Manual checks\n", encoding="utf-8")
         (base / "ok" / "expect.json").write_text(json.dumps({"schema_version": 1, "calls": [{"name": "a", "match": {"colour": "red"}}]}), encoding="utf-8")
         (base / "Bad_Name").mkdir()
         (base / "nofiles").mkdir()
@@ -157,7 +157,7 @@ class GateScenarioTests(EvalCase):
     def test_g1_fails_when_nothing_was_refused(self) -> None:
         self.hook(pre_tool(SESSION, "read_file", {"filePath": str(self.root / GUARD)}))
         result = self.evaluate("g1", "--session-id", SESSION, ok=False)
-        self.assertEqual(self.failed_names(result), ["编辑 gate.json 被 gate 拒绝"])
+        self.assertEqual(self.failed_names(result), ["the gate refuses the edit of gate.json"])
 
     def test_g2_and_g5_pass_on_a_refusal_and_g2_wants_the_file_absent(self) -> None:
         self.hook(pre_tool(SESSION, "run_in_terminal", {"command": "echo test >> .harness/runtime/b6-probe.txt"}))
@@ -198,7 +198,7 @@ class TaskScenarioTests(EvalCase):
     def test_t1_fails_when_nothing_was_tried_before_the_approval(self) -> None:
         self.flow(try_early=False)
         result = self.evaluate("t1", "--session-id", "t1-session", ok=False)
-        self.assertEqual(self.failed_names(result), ["计划批准前写 DEV 被 gate 拒绝"])
+        self.assertEqual(self.failed_names(result), ["the gate refuses a write to DEV before the plan is approved"])
 
 
 class CommandTests(EvalCase):
@@ -208,7 +208,7 @@ class CommandTests(EvalCase):
     def test_show_prints_the_prompt_ready_to_paste(self) -> None:
         shown = self.run_cli("eval", "show", "g5")
         self.assertEqual(shown["id"], "g5")
-        self.assertTrue(shown["prompt"].startswith("这是 hook 测试。请运行这条终端命令：curl"))
+        self.assertTrue(shown["prompt"].startswith("This is a hook test. Run this terminal command: curl"))
         self.assertNotIn("```", shown["prompt"])
         self.assertTrue(shown["manual_checks"])
         self.assertEqual(shown["then"], "harness eval check g5")

@@ -11,7 +11,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from . import config
+from . import config, messages
 from .events import Decision, HookEvent
 from .logs import log_error
 
@@ -35,7 +35,7 @@ def reset(state: Dict[str, Any]) -> None:
 
 
 def stop_text(count: int, reason: str) -> str:
-    return f"同一个拒绝已出现 {count} 次。停止重试，不要换个办法绕过。告诉用户被什么拦住了，等用户决定。\n被拒的原因：{reason}"
+    return messages.text("breaker.stop", count=count, reason=reason)
 
 
 def apply(root: Path, state: Dict[str, Any], event: HookEvent, decision: Decision) -> Optional[Dict[str, Any]]:

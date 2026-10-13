@@ -1,4 +1,4 @@
-# GitHub Copilot Agentic Harness for DE Team
+# Copilot Agentic Harness
 
 <p>
   <img alt="version" src="https://img.shields.io/badge/version-1.3.1-blue">
@@ -8,124 +8,127 @@
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey">
 </p>
 
-**让 GitHub Copilot 按团队的方式，把一件事从头做到尾：守规矩、有边界、可复盘。**
+**Make GitHub Copilot carry a task from start to finish the way your team works: it follows the rules, stays inside its boundaries, and leaves a record you can review.**
 
-[三步上手](#三步上手) · [它能做什么](#它能做什么) · [必须接入的部分](#必须接入的部分) · [文档](#文档) · [版本记录](docs/07-release-notes.md)
+[Get started](#get-started) · [What it does](#what-it-does) · [What you must plug in](#what-you-must-plug-in) · [Docs](#docs) · [Release notes](docs/07-release-notes.md)
 
 ---
 
-## 它是什么
+## What it is
 
-团队拿到 Copilot，常常只用来补全代码、改几行。因为：
+Teams that get Copilot often use it only to complete code or change a few lines. There are three reasons:
 
-- **它不懂你们的活**。表怎么命名、口径怎么算、出错先查哪，它都不知道。
-- **它没有工作流程**。一件事做几天，换个窗口就忘了。
-- **它没有边界**。放它去改生产相关的仓库，没人敢。
+- **It doesn't know your work.** How tables are named, how a metric is defined, where to look first when a job fails: it knows none of this.
+- **It has no workflow.** A task that takes several days is forgotten as soon as you open a new chat.
+- **It has no boundaries.** Nobody dares to let it change a repository that feeds production.
 
-这个仓库是一套套在 Copilot 外面的框架（harness），把后两件补上；第一件由你们接入的知识库和技能补上。
+This repository is a framework (a harness) that wraps Copilot and fixes the second and third problems. The first is fixed by the knowledge base and skills you plug in.
 
 ```text
-① Copilot agent          会思考、会调用工具        GitHub 提供
-② 知识库 + domain 技能    你们的活和代码是什么样     你们接入
-③ harness 框架           规矩、边界、检查、可观测   本仓库
-④ 被作用的对象            代码仓库、数据库等        你们的环境
+1. Copilot agent                  thinks and calls tools                    provided by GitHub
+2. Knowledge base + domain skills what your work and code look like         you plug these in
+3. Harness                        rules, boundaries, checks, observability  this repository
+4. Targets                        code repositories, databases and so on    your environment
 ```
 
-框架本身不带业务知识。它让团队敢用、能管；知识库和技能让它做对。详见 [总览](docs/00-overview.md)。
+The harness carries no business knowledge. It makes the agent safe to use and possible to manage; the knowledge base and skills make it do the work correctly. See the [overview](docs/00-overview.md).
 
-## 三步上手
+## Get started
 
-要求：VS Code 和 GitHub Copilot Chat、Python 3.9+、git。不用 `pip install`。
+You need VS Code with GitHub Copilot Chat, Python 3.9 or later, and git. There is nothing to `pip install`.
 
-克隆本仓库，或在 GitHub 页面下载 zip 再解压（不用 git 也行，Windows 上解压到短路径，例如 `C:\dev\harness`）。用 VS Code 打开，在 Copilot 对话里输入：
+Clone this repository, or download the zip from GitHub and extract it (git is optional; on Windows extract to a short path such as `C:\dev\harness`). Open it in VS Code and type these in Copilot Chat:
 
-| 步骤 | 输入 | 它带你做什么 |
+| Step | Type | What it walks you through |
 | --- | --- | --- |
-| 1 | `/harness-repo-initialize` | **配置和接入**：短命令、知识库、公司技能、目标仓库，最后自检 |
-| 2 | `/harness-quick-start` | **入门课**：它是干什么的，目录怎么看，再做一个模拟任务。约 20 分钟 |
-| 3 | `/harness-wondering` | **想弄明白再学**：互动式讲原理和实现，15 个主题，随时提问 |
+| 1 | `/harness-repo-initialize` | **Setup**: the short command, knowledge base, company skills and target repositories, then a self-check |
+| 2 | `/harness-quick-start` | **Introductory lesson**: what the harness is for, how to read the directories, and one simulated task. About 20 minutes |
+| 3 | `/harness-wondering` | **Understand it first**: an interactive explanation of the principles and implementation, 15 topics, ask anything |
 
-三步都由 agent 带着做，不用先读文档。想自己动手，看 [快速开始](docs/01-quickstart.md)。
+The agent leads all three steps, so you don't need to read the docs first. To do it by hand, see the [quickstart](docs/01-quickstart.md).
 
-之后日常只要一句话：告诉 Copilot 你要做什么，它会问清楚再开任务。不用写长提示，也不用写路径。见 [日常怎么说](docs/01-quickstart.md#7-日常怎么说)。
+After that, daily use takes one sentence: tell Copilot what you want done, and it asks until the request is clear, then opens a task. You don't write long prompts or paths. See [what to say day to day](docs/01-quickstart.md#7-日常怎么说).
 
-## 它能做什么
+## What it does
 
-| 用 Copilot 的麻烦 | harness 的做法 |
+| The problem with Copilot | What the harness does |
 | --- | --- |
-| **规则只是请求**。写在提示词里的规则，模型可以不照做，会改到不该改的文件、跑危险命令 | **用代码强制规则**。hook 在每次工具调用前检查，越界写、动 `.git`、危险命令直接拒绝 |
-| **做到哪只在对话里**。上下文一压缩、换一个会话，就不知道做到哪了 | **一个任务一个目录**。需求、计划、进度、成果都是文件，新会话读 `TASK.md` 就能接着做 |
-| **自己评自己**。让它检查自己的成果，它总说没问题 | **独立检查由代码数**。你写 `[review]=n`，成果要连续通过 n 次检查；查的人没看过作者的思路 |
-| **确认弹窗靠不住**。“Allow in this Session”点一次就等于没有确认 | **关键动作由人批准**。计划、回写仓库、git 写命令，要你在自己的终端确认；`push` 永远不能批准 |
-| **改企业仓库有风险**。可能误提交、误推送 | **安全地回写**。只取要改的文件，写到新分支且不提交，留有补丁、快照和恢复命令 |
-| **说“完成”没有证据**。改了什么、谁查过，事后难查 | **看得见、能复盘**。每个会话有日志，每个任务有报告，`harness task list` 一眼看出哪个任务在等你 |
-| **成本不好控**。小任务也走重流程 | **省时间和钱**。命令代替模型做确定的事，只读需要的，小任务不走重流程 |
+| **Rules are only requests.** A model can ignore a rule written in a prompt, edit files it shouldn't, and run dangerous commands | **Rules are enforced by code.** A hook checks every tool call before it runs. Out-of-scope writes, changes to `.git` and dangerous commands are rejected |
+| **Progress lives only in the chat.** Once the context is compacted or you start a new session, nobody knows where the task stood | **One directory per task.** The requirement, plan, progress and results are files. A new session reads `TASK.md` and continues |
+| **It grades its own work.** Ask it to check its own output and it always says everything is fine | **Independent checks, counted by code.** You write `[review]=n` and the result must pass n checks in a row. The reviewer never sees the author's reasoning |
+| **Confirmation pop-ups can't be trusted.** One click on "Allow in this Session" and there is no confirmation any more | **A person approves the key actions.** The plan, write-back to a repository and git write commands are confirmed in your own terminal. `push` can never be approved |
+| **Changing a company repository is risky.** It may commit or push by mistake | **Safe write-back.** The harness takes only the files to be changed and writes to a new branch without committing. It keeps a patch, a snapshot and a restore command |
+| **"Done" comes without evidence.** What changed and who checked it are hard to trace afterwards | **Visible and reviewable.** Every session has a log and every task has a report. `harness task list` shows which tasks are waiting for you |
+| **Cost is hard to control.** Small tasks go through the same heavy process | **Saves time and money.** Commands do the deterministic work instead of the model, the agent reads only what it needs, and small tasks skip the heavy process |
 
-还有：几个任务排队回写同一个仓库、任务更新知识库、并行分块阅读（`/generic-mapreduce`）、照清单一直做的 autorun（beta）。全部功能见 [功能](docs/02-features.md)。
+There is more: queued write-back when several tasks target the same repository, tasks that update the knowledge base, parallel chunked reading (`/generic-mapreduce`), and autorun, which works through a checklist unattended (beta). See [features](docs/02-features.md) for the full list.
 
-> 门卫检查的是命令文本，**防犯错，不防存心绕过**。不要把它当 sandbox。
+> The gate checks the text of a command. It **prevents mistakes; it does not stop someone who is trying to get around it**. Do not treat it as a sandbox.
 
-## 必须接入的部分
+## What you must plug in
 
-harness 是通用的，不带业务内容。**下面两样不接入，它没法做你们的日常需求**。`/harness-repo-initialize` 会带你配。
+The harness is generic and carries no business content. **Without the two items below it cannot do your daily work.** `/harness-repo-initialize` helps you set them up.
 
-- **企业知识库**：把知识库放进 `knowledge-base/`，把知识库**自带的 instructions** 放到 [.github/instructions/knowledgebase.instructions.md](.github/instructions/knowledgebase.instructions.md)。这个文件交付时是空的：没有它，agent 不知道怎么按索引读知识库。`doctor` 会提醒。
-- **目标仓库**：在 `target.override.json` 里写 `repos_root`，指向放着你们代码仓库的文件夹。没配置时，agent 改不了你们的代码；配置后，目标仓库只能经你批准的 promote 写入。
+- **Company knowledge base.** Put the knowledge base in `knowledge-base/`, and put the **instructions that come with it** in [.github/instructions/knowledgebase.instructions.md](.github/instructions/knowledgebase.instructions.md). This file ships empty. Without it the agent doesn't know how to read the knowledge base through its index. `doctor` reminds you.
+- **Target repositories.** In `target.override.json`, set `repos_root` to the folder that holds your code repositories. Until this is set, the agent cannot change your code. Once it is set, a target repository can be written only through a promote that you approve.
 
-它面向的是数据工程（DE）团队的 git 代码库：没有入口、不能在本机运行，按 domain 存放大量 Python、SQL、`.json`、`.sh`、PowerShell 文件。agent 不能靠运行来验证，所以更依赖知识库。方法见 [配置与定制](docs/03-configure.md)。
+The harness is designed for the git repositories of data engineering teams: no entry point, cannot be run on a laptop, and a large number of Python, SQL, `.json`, `.sh` and PowerShell files organised by domain. The agent cannot verify its work by running it, so it depends more on the knowledge base. See [configuration](docs/03-configure.md).
 
-## 文档
+## Docs
 
-不想读文档，用上面三条命令就够。要查细节时：
+If you'd rather not read docs, the three commands above are enough. The docs are currently written in Chinese.
 
-| 文档 | 你会看到什么 |
+| Doc | What you will find |
 | --- | --- |
-| [00 总览](docs/00-overview.md) | **先看这篇**：解决什么问题，四个部分各管什么，harness 对每类对象管到哪里 |
-| [01 快速开始](docs/01-quickstart.md) | **手动跑起来**：环境要求、配好 `harness` 短命令、`doctor` 自检、跑通第一个任务、日常怎么说 |
-| [02 功能](docs/02-features.md) | **它到底能做什么**：任务、gate、两次批准、独立检查 `[review]=n`、日志和报告 |
-| [03 配置与定制](docs/03-configure.md) | **接入你们自己的东西**：override、目标仓库、知识库、domain 技能、选模型 |
-| [04 参考](docs/04-reference.md) | **查表用**：全部命令、策略字段、任务文件的模板、hook 事件 |
-| [05 设计](docs/05-design.md) | **为什么这样设计**：怎么分层，哪些事交给代码、哪些交给模型 |
-| [06 省成本](docs/06-cost-optimization.md) | **怎么省时间和钱**，以及哪里仍然会贵 |
-| [07 版本记录](docs/07-release-notes.md) | **每个版本改了什么**：新增、变更、退役 |
+| [00 Overview](docs/00-overview.md) | **Read this first.** The problem it solves, what each of the four parts is responsible for, and how far the harness governs each kind of target |
+| [01 Quickstart](docs/01-quickstart.md) | **Run it by hand.** Requirements, setting up the `harness` short command, the `doctor` self-check, a first task, and what to say day to day |
+| [02 Features](docs/02-features.md) | **What it can do.** Tasks, the gate, the two approvals, independent checks with `[review]=n`, logs and reports |
+| [03 Configuration](docs/03-configure.md) | **Plug in your own material.** Overrides, target repositories, the knowledge base, domain skills, choosing a model |
+| [04 Reference](docs/04-reference.md) | **For lookup.** All commands, policy fields, task file templates and hook events |
+| [05 Design](docs/05-design.md) | **Why it is built this way.** The layers, and which work goes to code and which to the model |
+| [06 Cost](docs/06-cost-optimization.md) | **How it saves time and money**, and where it is still expensive |
+| [07 Release notes](docs/07-release-notes.md) | **What changed in each version.** Additions, changes and retirements |
 
-## 目录结构
+## Directory layout
 
 <details>
-<summary>展开看目录树</summary>
+<summary>Show the directory tree</summary>
 
 ```text
-本仓库（harness）
-├── AGENTS.md                      所有 agent 都要遵守的核心规则
-├── README.md、docs/               说明文档（给人看）
+This repository (the harness)
+├── AGENTS.md                      core rules every agent must follow
+├── README.md, docs/               documentation for people
 ├── .github/
-│   ├── copilot-instructions.md    仓库级规则
-│   ├── instructions/              分类规则；其中 knowledgebase.instructions.md 是企业知识库的一部分，必须接入（交付时为空）
-│   ├── skills/                    技能：harness-*、generic-*（企业自己加 domain-*）
-│   ├── agents/                    reviewer、mapper、admin
-│   └── hooks/harness.json         hook 配置
+│   ├── copilot-instructions.md    repository-level rules
+│   ├── instructions/              rules by category; knowledgebase.instructions.md belongs to the company
+│   │                              knowledge base and must be plugged in (ships empty)
+│   ├── skills/                    skills: harness-*, generic-* (companies add their own domain-*)
+│   ├── agents/                    reviewer, mapper, admin
+│   └── hooks/harness.json         hook configuration
 ├── .harness/
-│   ├── INDEX.md                   路径索引（给 agent 查）
-│   ├── engine/                    hook 和命令行（引擎）
-│   ├── policies/                  策略；企业用 *.override.json 覆盖，目标仓库在 target.override.json 里配
-│   ├── contracts/、eval/、tests/  任务文件的模板、固定场景、测试
-│   ├── bin/                       短命令 harness、harness.cmd
-│   └── runtime/                   状态和日志（不进 git）
+│   ├── INDEX.md                   path index (for the agent)
+│   ├── engine/                    hooks and the command line (the engine)
+│   ├── policies/                  policies; companies override with *.override.json,
+│   │                              target repositories are set in target.override.json
+│   ├── contracts/, eval/, tests/  task file templates, fixed scenarios, tests
+│   ├── bin/                       short commands: harness, harness.cmd
+│   └── runtime/                   state and logs (not in git)
 ├── .workspace/
-│   ├── sandbox/tasks/<任务>/      任务目录：TASK.md、REQ.md、PLAN.md、成果、DEV/、REVIEW/、SNAPSHOT/（不进 git）
-│   └── reports/                   任务报告（不进 git）
-└── knowledge-base/                企业知识库的接入位置（交付时为空）
+│   ├── sandbox/tasks/<task>/      task directory: TASK.md, REQ.md, PLAN.md, results,
+│   │                              DEV/, REVIEW/, SNAPSHOT/ (not in git)
+│   └── reports/                   task reports (not in git)
+└── knowledge-base/                where the company knowledge base goes (ships empty)
 
-harness 之外：目标仓库（企业的代码仓库）
-<repos_root>/                      在 target.override.json 里配置的文件夹
-├── bdtt_repo/                     每个带 .git 的子文件夹是一个目标仓库
-└── b9td_repo/                     harness 只读它们的 main；promote 经人批准后才写到新分支
+Outside the harness: target repositories (the company's code)
+<repos_root>/                      the folder set in target.override.json
+├── repo_a/                        each subfolder with a .git is one target repository
+└── repo_b/                        main is read-only; an approved promote writes to a new branch
 ```
 
 </details>
 
-每个路径的用途见 [.harness/INDEX.md](.harness/INDEX.md)。那份索引主要给 agent 查。
+For what each path is for, see [.harness/INDEX.md](.harness/INDEX.md). That index is written mainly for the agent.
 
 ---
 
-版本 1.3.1 · [版本记录](docs/07-release-notes.md) · 查自己装的版本：`harness --version`
+Version 1.3.1 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

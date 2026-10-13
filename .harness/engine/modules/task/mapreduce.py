@@ -31,7 +31,7 @@ DEFAULTS = {"max_agents": 4, "minutes": 60}
 MARKS = (f'<skill-context name="{SKILL}">', f'invoked the "/{SKILL}" skill')
 
 
-def say(key: str, **values: Any) -> str:
+def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
 
 

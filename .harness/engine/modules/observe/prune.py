@@ -6,13 +6,14 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 
+from core import messages
 from core.logs import session_files
 from core.paths import logs_dir
 
 
 def prune(root: Path, days: int, dry_run: bool) -> Dict[str, Any]:
     if days < 1:
-        raise ValueError("--days 要 1 或更大。")
+        raise ValueError(messages.text("logs.prune.days"))
     cutoff = time.time() - days * 86400
     old: List[Path] = []
     kept = 0

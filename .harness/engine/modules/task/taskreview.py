@@ -36,12 +36,15 @@ PACKAGE = "package.md"
 VERDICT_FILE = "verdict.md"
 VERDICT_LINES = 3  # the verdict is looked for in this many non-empty lines from the top
 _MARKER = re.compile(r"\[\s*review\s*\]\s*[=＝]\s*(\d{1,2})", re.IGNORECASE)
+_CONFIRM_LABEL = re.compile(r"用户确认|user confirmed", re.IGNORECASE)
+_CONFIRMED = re.compile(r"已确认|confirmed|\d{4}-\d{2}-\d{2}")
+_NOT_CONFIRMED = re.compile(r"还没确认|not yet|not confirmed|yyyy-mm-dd")
 _VERDICT = re.compile(r"^VERDICT\s*[:：]\s*(PASS|FAIL)\b", re.IGNORECASE)
 # These kinds give back files of a target repository: before DEV/ holds something there is nothing to check yet.
 DEV_KINDS = ("dev", "test", "kb")
 
 
-def say(key: str, **values: Any) -> str:
+def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
 
 
@@ -79,14 +82,21 @@ def parse_verdict(response: str) -> str:
 
 
 def req_confirmed(root: Path, task: str) -> Optional[bool]:
-    """Has the person filled in the "用户确认" line of REQ.md? None: no REQ.md, or no such line."""
+    """Has the person filled in the confirmation line of REQ.md? None: no REQ.md, or no such line.
+
+    The line is found by its label, in either language, so a task made in one language is still read in the other.
+    It counts as filled in when what follows the label has a date or the word for confirmed, and not the words the
+    template starts with.
+    """
     try:
         text = (tasks.task_dir(root, task) / tasks.REQ_FILE).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
     for line in text.splitlines():
-        if "用户确认" in line:
-            return "已确认" in line and "还没确认" not in line  # the template has both words on the line
+        found = _CONFIRM_LABEL.search(line)
+        if found:
+            value = line[found.end():].lower()
+            return bool(_CONFIRMED.search(value)) and not _NOT_CONFIRMED.search(value)  # the template has both on the line
     return None
 
 
@@ -188,7 +198,7 @@ def package_text(root: Path, task: str, data: Dict[str, Any], entry: Dict[str, A
         lines += ["", say("review.package.unconfirmed", req=f"{task}/{tasks.REQ_FILE}")]
     if diff_file:
         lines += ["", say("review.package.diff", path=diff_file)]
-    lines += ["", say("review.package.files"), "", "| 文件 | sha256 | 字节 |", "| --- | --- | --- |"]
+    lines += ["", say("review.package.files"), "", say("review.package.table"), "| --- | --- | --- |"]
     lines += [f"| {task}/{item['path']} | {item['sha256'][:16]} | {item['bytes']} |" for item in files]
     if previous is not None:
         lines += ["", say("review.package.previous", path=f"{round_dir(task, previous['number'])}/{VERDICT_FILE}"), ""]

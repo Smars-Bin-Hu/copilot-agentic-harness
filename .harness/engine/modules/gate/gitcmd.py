@@ -13,7 +13,9 @@ from __future__ import annotations
 import posixpath
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
+
+from core import messages
 
 NONE, APPROVE, NEVER = "none", "approve", "never"
 MAX_DEPTH = 3
@@ -24,13 +26,24 @@ READ_ONLY = frozenset(
     "whatchanged cherry range-diff show-branch verify-commit verify-tag var archive".split()
 )
 NEVER_SUBCOMMANDS = {
-    "push": "它会把提交发到远程仓库",
-    "clean": "它会删除没有跟踪的文件",
-    "filter-branch": "它会改写整个历史",
-    "filter-repo": "它会改写整个历史",
-    "update-ref": "它会直接移动分支或删除引用",
-    "prune": "它会永久删除没有引用的对象",
+    "push": "push",
+    "clean": "clean",
+    "filter-branch": "rewrite",
+    "filter-repo": "rewrite",
+    "update-ref": "update-ref",
+    "prune": "prune",
 }
+
+
+def _why(name: str, **values: Any) -> str:
+    return messages.text(f"gate.git.why.{name}", **values)
+
+
+def _named(what: str, name: str) -> str:
+    """`git push`: why it is never approved."""
+    return _why("named", what=what, why=_why(name))
+
+
 # Subcommands where a lone `-f` means force. (`git tag -F`, `git config -f <file>` mean something else.)
 FORCE_SHORT = frozenset("add checkout switch branch tag mv rm fetch pull worktree submodule clean push".split())
 # Words that may stand before `git` without hiding it.
@@ -171,32 +184,32 @@ def _git(tokens: List[str], start: int) -> Tuple[str, str]:
         return NONE, ""  # `git`, `git --version`, `git --help`
     subcommand, arguments = rest[index].lower(), rest[index + 1:]
     if re.search(r"[$%]|^\W", subcommand):
-        return APPROVE, "git 的子命令看不清楚"
+        return APPROVE, _why("unclear")
     if subcommand in NEVER_SUBCOMMANDS:
-        return NEVER, f"`git {subcommand}`：{NEVER_SUBCOMMANDS[subcommand]}"
+        return NEVER, _named(f"git {subcommand}", NEVER_SUBCOMMANDS[subcommand])
     if subcommand == "reset" and any(item == "--hard" for item in arguments):
-        return NEVER, "`git reset --hard`：它会丢掉没有提交的改动"
+        return NEVER, _named("git reset --hard", "reset_hard")
     if subcommand == "gc" and any(item.startswith("--prune") for item in arguments):
-        return NEVER, "`git gc --prune`：它会永久删除没有引用的对象"
+        return NEVER, _named("git gc --prune", "prune")
     if subcommand == "reflog" and _positional(arguments)[:1] in (["expire"], ["delete"]):
-        return NEVER, "`git reflog expire/delete`：它会丢掉恢复用的记录"
+        return NEVER, _named("git reflog expire/delete", "reflog")
     if subcommand == "branch" and any(item == "-D" for item in arguments):
-        return NEVER, "`git branch -D`：它会强制删除分支"
+        return NEVER, _named("git branch -D", "branch_delete")
     if _force(subcommand, arguments):
-        return NEVER, f"`git {subcommand}` 带了强制选项（--force、-f）"
+        return NEVER, _why("force", subcommand=subcommand)
     if exotic or any(item.startswith("--output") or item == "-o" for item in arguments if subcommand in READ_ONLY):
-        return APPROVE, "它带了会改配置或写文件的选项"
+        return APPROVE, _why("exotic")
     if subcommand == "grep" and any(item.startswith(("-O", "--open-files-in-pager")) for item in arguments):
-        return APPROVE, "`git grep -O` 会运行别的程序"
+        return APPROVE, _why("grep_open")
     if _reads(subcommand, arguments):
         return NONE, ""
-    return APPROVE, f"`git {subcommand}` 会改仓库"
+    return APPROVE, _why("writes", subcommand=subcommand)
 
 
 def _gh(tokens: List[str], start: int) -> Tuple[str, str]:
     words = _positional(tokens[start + 1:])
     if words and words[0].lower() == "pr":
-        return NEVER, "`gh pr`：它会在远程创建或改动 pull request"
+        return NEVER, _named("gh pr", "gh_pr")
     return NONE, ""
 
 
@@ -225,7 +238,7 @@ def _scan(text: str, depth: int, found: List[Tuple[str, str, str]]) -> None:
                     _scan(" ".join(tokens[i + 1:]) if len(tokens) > i + 2 else tokens[i + 1], depth + 1, found)
                     break
         elif program in SCRIPT_RUNNERS and any(item in SCRIPT_FLAGS for item in tokens) and re.search(r"\bgit\b", line):
-            found.append((APPROVE, "内联脚本里有 git", line))
+            found.append((APPROVE, _why("inline"), line))
 
 
 def classify(command: str) -> Verdict:
@@ -236,4 +249,4 @@ def classify(command: str) -> Verdict:
         return Verdict()
     never = [item for item in found if item[0] == NEVER]
     pick = never or found
-    return Verdict(NEVER if never else APPROVE, "；".join(dict.fromkeys(item[1] for item in pick)), [item[2] for item in found])
+    return Verdict(NEVER if never else APPROVE, messages.text("list.semicolon").join(dict.fromkeys(item[1] for item in pick)), [item[2] for item in found])

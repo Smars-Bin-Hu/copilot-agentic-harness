@@ -21,6 +21,10 @@ FIXTURES = REPO / ".harness" / "eval" / "fixtures" / "hooks" / "copilot-sdk"
 if str(ENGINE) not in sys.path:
     sys.path.insert(0, str(ENGINE))
 
+# The texts the tests compare are the Chinese ones. The hook and the CLI run as subprocesses and inherit this.
+# test_language.py checks the other language: every name has both texts, with the same placeholders.
+os.environ["HARNESS_LANGUAGE"] = "zh"
+
 
 def iter_session(name: str) -> Iterator[Dict[str, Any]]:
     with (FIXTURES / "sessions" / name).open(encoding="utf-8") as handle:

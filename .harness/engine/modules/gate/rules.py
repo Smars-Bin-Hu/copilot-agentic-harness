@@ -1,128 +1,88 @@
-"""Texts the model sees when the gate refuses a call. Each says why it was refused and what to do next."""
+"""Texts the model sees when the gate refuses a call. Each says why it was refused and what to do next.
+
+The texts are in the message table (`gate.*`). The log keeps only the first characters of a reason
+(observe.json: max_text_chars), so each text starts with what happened and what to do.
+"""
 
 from __future__ import annotations
+
+from typing import Any
 
 from core import messages
 from core.paths import cli_command
 
 
+def say(key: str, /, **values: Any) -> str:
+    return messages.text(key, command=cli_command(), **values)
+
+
 def guardrail_file(relative: str, pattern: str) -> str:
-    return (
-        f"`{relative}` 是 guardrail 文件（{pattern}），不能改。"
-        "不要改它，也不要用终端命令绕过。需要改它时，停下来告诉用户要改什么，由用户自己改，或由用户切到 admin agent 改。"
-    )
+    return say("gate.guardrail.file", relative=relative, pattern=pattern)
 
 
 def admin_locked_file(relative: str, pattern: str) -> str:
-    return (
-        f"`{relative}` 在 admin 模式下也不能改（{pattern}）：这里放着会话状态、批准记录和日志，只能读。"
-        "不要用终端命令绕过。确实要清理或修复它时，停下来告诉用户，由用户自己做。"
-    )
+    return say("gate.admin.file", relative=relative, pattern=pattern)
 
 
 def admin_locked_terminal(why: str) -> str:
-    return (
-        f"这条终端命令会改 admin 模式下也不能改的文件（{why}），例如 `.harness/runtime/` 里的会话状态、批准记录和日志。"
-        "不要换个命令重试。确实要清理或修复它时，停下来告诉用户，由用户自己做。"
-    )
+    return say("gate.admin.terminal", why=why)
 
 
 def guardrail_terminal(why: str) -> str:
-    return (
-        f"这条终端命令会改 guardrail 文件（{why}）。guardrail 文件不能改。"
-        "不要换个命令重试。需要改它时，停下来告诉用户要改什么，由用户自己改，或由用户切到 admin agent 改。"
-    )
+    return say("gate.guardrail.terminal", why=why)
 
 
 def git_folder(shown: str) -> str:
-    return (
-        f"`{shown}` 在 `.git` 文件夹里。任何时候都不能直接改 `.git`，改它会弄坏仓库的历史和配置。"
-        "不要改它，也不要用终端命令绕过。需要提交或切分支时，停下来告诉用户。"
-    )
+    return say("gate.git_folder.file", shown=shown)
 
 
 def git_folder_terminal(why: str) -> str:
-    return (
-        f"这条终端命令会直接改 `.git` 文件夹或目标仓库不许写的路径（{why}）。"
-        "不要换个命令重试。需要时，停下来告诉用户要做什么，由用户自己做。"
-    )
+    return say("gate.git_folder.terminal", why=why)
 
 
 def target_refused_file(repo: str, relative: str, pattern: str) -> str:
-    return (
-        f"`{repo}/{relative}` 属于目标仓库 {repo} 不许写的路径（{pattern}，见 target.json 的 refused_paths）。"
-        "任何时候都不能改它。需要改它时，停下来告诉用户，由用户自己改。"
-    )
+    return say("gate.target.refused", repo=repo, relative=relative, pattern=pattern)
 
 
 def target_tree_file(repo: str, relative: str) -> str:
-    return messages.text("gate.target.direct", repo=repo, relative=relative, command=cli_command())
+    return say("gate.target.direct", repo=repo, relative=relative)
 
 
 def target_tree_terminal(why: str) -> str:
-    return (
-        f"这条终端命令会直接改目标仓库工作区里的文件（{why}）。目标仓库只能由 promote 写。"
-        "不要换个命令重试。把文件取到任务的 DEV/ 里改，再用 promote 回写。"
-    )
+    return say("gate.target.terminal", why=why)
 
 
 def task_plan_first(relative: str, task: str) -> str:
-    # The log keeps only the first characters of a reason (observe.json: max_text_chars): what to do comes first.
-    return (
-        f"`{relative}` 在任务的 `DEV/` 下。`DEV/` 要等计划经用户批准后才能写（现在没批准，或批准之后改过）。"
-        f"写好 [PLAN.md]({task}/PLAN.md) 就停下，请用户在自己的终端运行 `{cli_command()} task approve-plan`，用户说批准了再继续。"
-        f"不回写的成果（RCA、设计、笔记）不用等批准，直接写在 `{task}/` 根下。"
-    )
+    return say("gate.task.plan_first", relative=relative, task=task)
 
 
 def task_outside(relative: str, task: str) -> str:
-    return (
-        f"任务 {task} 进行中，只能在任务目录 `{task}/` 里写，你要写的是 `{relative}`。"
-        f"不回写的成果（RCA、设计、笔记）写在任务目录根下；要回写到目标仓库的成果写在 `{task}/DEV/<仓库名>/<路径>` 下。"
-    )
+    return say("gate.task.outside", relative=relative, task=task)
 
 
 def task_person_files(relative: str, task: str) -> str:
-    return (
-        f"`{relative}` 在任务 {task} 的 `REQ/` 或 `REF/` 里。那是用户放的材料，只读。"
-        f"要记笔记或写成果，写在任务目录 `{task}/` 根下。"
-    )
+    return say("gate.task.person_files", relative=relative, task=task)
 
 
 def terminal_denied(why: str) -> str:
-    return f"这条终端命令被拒绝：{why}。不要重试同类命令。需要时，停下来告诉用户原因，由用户自己运行。"
+    return say("gate.terminal.denied", why=why)
 
 
 def terminal_ask(why: str) -> str:
-    return f"这条终端命令{why}，需要用户确认。"
+    return say("gate.terminal.ask", why=why)
 
 
 def cli_owned_file(relative: str) -> str:
-    return (
-        f"`{relative}` 由 CLI 生成和更新，不能直接写。"
-        f"用 `{cli_command()}` 的命令来改它；没有对应的命令时，停下来告诉用户。"
-    )
+    return say("gate.cli_owned.file", relative=relative)
 
 
 def cli_owned_terminal(why: str) -> str:
-    return (
-        f"这条终端命令会直接改由 CLI 生成的文件（{why}），例如任务的 `.task/`、`REVIEW/`、`SNAPSHOT/` 和报告。"
-        f"用 `{cli_command()}` 的命令来改；没有对应的命令时，停下来告诉用户。"
-    )
+    return say("gate.cli_owned.terminal", why=why)
 
 
 def git_never(why: str, command: str) -> str:
-    return (
-        f"这条 git 命令永远不能批准：{why}。命令：{command}\n"
-        "不要换个写法重试。需要时，停下来告诉用户原因，由用户自己在终端运行。"
-    )
+    return say("gate.git.never", why=why, git_command=command)
 
 
 def git_needs_approval(why: str, command: str, code: str, minutes: int) -> str:
-    return (
-        f"这条命令里的 git 命令会改仓库，agent 不能直接运行（{why}）。\n"
-        f"命令：{command}\n"
-        f"请把整条命令和验证码 {code} 告诉用户，让用户在自己的终端运行 `{cli_command()} approve-command`，看清命令后输入验证码。"
-        f"用户批准后，{minutes} 分钟内可以把同一条命令再运行一次（只放行一次，写法要完全一样）。"
-        "不要换个写法，也不要自己运行 approve-command。"
-    )
+    return say("gate.git.needs_approval", why=why, git_command=command, code=code, minutes=minutes)

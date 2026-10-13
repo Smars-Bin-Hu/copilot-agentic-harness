@@ -28,13 +28,16 @@ MARKS = re.compile("|".join(re.escape(mark) for mark in ("<!--REFRESH-->", "<!--
 TEXT_PREFIXES = ("report.", "board.", "insight.", "unit.", "task.kind.", "task.tier.")
 
 
-def say(key: str, **values: Any) -> str:
+def say(key: str, /, **values: Any) -> str:
     return messages.text(key, **values)
 
 
 def page_text() -> Dict[str, str]:
     """The messages a page may show, by name. The scripts fill in the placeholders."""
-    return {key: value for key, value in messages.table().items() if key.startswith(TEXT_PREFIXES)}
+    return {key: value for key, value in messages.table(messages.language()).items() if key.startswith(TEXT_PREFIXES)}
+
+
+PAGE_LANGUAGE = '<html lang="en">'  # as the skeletons have it; the page gets the language of its texts
 
 
 def as_json(data: Dict[str, Any]) -> str:
@@ -62,7 +65,7 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
         if skeleton_text.count(mark) != 1:
             raise ValueError(f"{skeleton}: the mark {mark} must be there once")
     # One pass over the skeleton: a mark that happens to be inside the data or a script is not touched.
-    return MARKS.sub(lambda found: parts[found.group(0)], skeleton_text)
+    return MARKS.sub(lambda found: parts[found.group(0)], skeleton_text).replace(PAGE_LANGUAGE, f'<html lang="{messages.language()}">', 1)
 
 
 def task_page(info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, Any]] = None) -> str:

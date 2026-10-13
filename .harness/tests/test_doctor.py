@@ -461,12 +461,12 @@ class DoctorTests(unittest.TestCase):
 
     def test_the_cli_does_not_crash_on_a_pipe_that_cannot_show_chinese(self) -> None:
         result = subprocess.run(
-            [sys.executable, str(CLI), "eval", "show", "t1"], capture_output=True, check=False,
-            env={**os.environ, "HARNESS_ROOT": str(REPO), "PYTHONIOENCODING": "ascii"},
+            [sys.executable, str(CLI), "kb", "reads"], capture_output=True, check=False,
+            env=self.env(PYTHONIOENCODING="ascii"),
         )
         self.assertEqual(result.returncode, 0, result.stderr.decode("ascii", "replace"))
         self.assertNotIn(b"\\u", result.stdout)
-        self.assertIn("默认 agent", json.loads(result.stdout.decode("utf-8"))["before"])  # UTF-8, not \\uXXXX
+        self.assertIn("只记工具点名的文件", json.loads(result.stdout.decode("utf-8"))["note"])  # UTF-8, not \\uXXXX
 
     # --- override ---------------------------------------------------------------------------
 

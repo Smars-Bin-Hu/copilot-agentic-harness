@@ -12,6 +12,8 @@ from __future__ import annotations
 import sys
 from typing import Any, Callable, Optional
 
+from . import messages
+
 CODE_LENGTH = 8
 
 
@@ -28,7 +30,7 @@ def require_person(command: str, interactive: Optional[bool] = None, typed: bool
     if interactive is None:
         interactive = sys.stdin.isatty() and sys.stdout.isatty()
     if not interactive:
-        raise Refused(f"{command} 只能由用户在自己的终端里手动运行{'，要打字确认' if typed else ''}。agent 不能运行它，管道和脚本也不行。")
+        raise Refused(messages.text("approval.person_only.typed" if typed else "approval.person_only", name=command))
 
 
 def is_person(interactive: Optional[bool] = None) -> bool:
@@ -39,7 +41,7 @@ def is_person(interactive: Optional[bool] = None) -> bool:
 def ask(question: str, digest: str, refusal: str, reader: Optional[Callable[[str], str]] = None) -> None:
     """Ask the person to type the code of `digest`. Anything else raises Refused(refusal)."""
     code = code_of(digest)
-    answer = (reader or input)(f"{question}，输入 {code}（其他任何输入都是取消）：").strip()
+    answer = (reader or input)(messages.text("approval.ask", question=question, code=code)).strip()
     if answer != code:
         raise Refused(refusal)
 

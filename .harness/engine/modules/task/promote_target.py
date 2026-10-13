@@ -21,10 +21,14 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import repo_paths, targets
+from core import messages, repo_paths, targets
 from core.paths import cli_command, utc_now
 
 from . import common, taskqueue
+
+
+def say(key: str, /, **values: Any) -> str:
+    return messages.text(key, command=cli_command(), **values)
 from .common import CommandError
 
 DIFF_PREVIEW_LINES = 40
@@ -41,7 +45,7 @@ def _diff(old: bytes, new: bytes, name: str) -> Dict[str, Any]:
     try:
         before, after = old.decode("utf-8").splitlines(), new.decode("utf-8").splitlines()
     except UnicodeDecodeError:
-        return {"added": 0, "removed": 0, "diff": ["（二进制文件，不显示差异）"]}
+        return {"added": 0, "removed": 0, "diff": [say("diff.binary")]}
     lines = list(difflib.unified_diff(before, after, f"a/{name}", f"b/{name}", lineterm="", n=1))
     added = sum(1 for line in lines if line.startswith("+") and not line.startswith("+++"))
     removed = sum(1 for line in lines if line.startswith("-") and not line.startswith("---"))
@@ -68,34 +72,31 @@ def _file_problem(
     listed = targets.tracked_files(repo, commit, relative, timeout)
     exact = [item for item in listed if item[2] == relative]
     if listed and not exact:
-        return f"`{key}` 在 {repo.base_ref} 上是一个文件夹。", "", None
+        return say("promote.file.folder", key=key, base_ref=repo.base_ref), "", None
     if exact:
         mode, blob, _path = exact[0]
         if mode not in targets.REGULAR_FILE_MODES:
-            return f"`{key}` 在 {repo.base_ref} 上不是普通文件（符号链接或子模块）。", "", None
+            return say("promote.file.not_regular", key=key, base_ref=repo.base_ref), "", None
         if recorded is None:
-            return f"`{key}` 在 {repo.base_ref} 上已经有了，但这个请求没有从 {repo.base_ref} 取过它，不知道成果是基于哪一版改的。" + hints["fetch"].format(key=key), "", None
+            return say("promote.file.not_fetched", key=key, base_ref=repo.base_ref) + hints["fetch"].format(key=key), "", None
         if recorded["blob"] != blob:
-            return (
-                f"`{key}` 在 {repo.base_ref} 上变了：这个请求取走它时是 {recorded['blob'][:10]}，现在是 {blob[:10]}。"
-                "成果是基于旧版本改的，直接回写会丢掉别人的改动。" + hints["refetch"]
-            ), "", None
+            return say("promote.file.changed", key=key, base_ref=repo.base_ref, old=recorded["blob"][:10], new=blob[:10]) + hints["refetch"], "", None
         return "", blob, targets.read_blob(repo, blob, timeout)
     if recorded is not None:
-        return f"`{key}` 是这个请求从 {repo.base_ref} 取走的，现在 {repo.base_ref} 上没有了（被删除或改名）。", "", None
+        return say("promote.file.gone", key=key, base_ref=repo.base_ref), "", None
     parts = relative.split("/")
     for index in range(1, len(parts)):  # a file (or link) where a folder is needed
         folder = "/".join(parts[: index - 1])
         names = _names_in(repo, commit, folder, timeout)
         clash = [kind for kind, name in names if name == parts[index - 1]]
         if clash and clash != ["tree"]:
-            return f"`{key}` 的上级 `{'/'.join(parts[:index])}` 在 {repo.base_ref} 上是文件，不能在它下面建文件。", "", None
+            return say("promote.file.parent_file", key=key, parent="/".join(parts[:index]), base_ref=repo.base_ref), "", None
         for _kind, name in names:
             if name != parts[index - 1] and name.lower() == parts[index - 1].lower():
-                return f"`{key}` 的上级 `{parts[index - 1]}` 和 {repo.base_ref} 上的 `{name}` 只差大小写。macOS 和 Windows 的文件系统会把它们当成同一个文件夹。", "", None
+                return say("promote.file.parent_case", key=key, parent=parts[index - 1], base_ref=repo.base_ref, name=name), "", None
     for kind, name in _names_in(repo, commit, "/".join(parts[:-1]), timeout):  # same name in another letter case
         if name != parts[-1] and name.lower() == parts[-1].lower():
-            return f"`{key}` 和 {repo.base_ref} 上的 `{name}` 只差大小写。macOS 和 Windows 的文件系统会把它们当成同一个文件，直接写会盖掉 `{name}`。", "", None
+            return say("promote.file.case", key=key, base_ref=repo.base_ref, name=name), "", None
     return "", "", None
 
 
@@ -104,10 +105,10 @@ def direct_problems(repo: targets.Repo, timeout: int) -> List[str]:
     found: List[str] = []
     current = targets.current_branch(repo, timeout)
     if current != repo.base_ref:
-        found.append(f"知识库现在在分支 `{current}` 上。知识库直接写进 `{repo.base_ref}`：请用户先在知识库里切回 `{repo.base_ref}`。")
+        found.append(say("promote.kb.branch", current=current, base_ref=repo.base_ref))
     for key in ("user.name", "user.email"):
         if not targets.git(repo, "config", "--get", key, timeout=timeout, allow_failure=True).strip():
-            found.append(f"知识库的 git 没有设置 `{key}`，不能提交。请用户先运行 `git config {key} <值>`。")
+            found.append(say("promote.kb.git_config", key=key))
     return found
 
 
@@ -128,9 +129,9 @@ def plan_files(
     found = common.load_targets(root)
     problems: List[str] = []
     if not branch:
-        problems.append("还没有分支名。" + hints["set_branch"])
+        problems.append(say("promote.branch.none") + hints["set_branch"])
     elif not targets.valid_branch(branch):
-        problems.append(f"分支名 `{branch}` 不合规（`feature/` 加字母、数字、下划线）。" + hints["set_branch"])
+        problems.append(say("promote.branch.bad", branch=branch) + hints["set_branch"])
     by_repo: Dict[str, List[Dict[str, Any]]] = {}
     for item in items:
         name, _, relative = item["key"].partition("/")
@@ -139,7 +140,7 @@ def plan_files(
     files: List[Dict[str, Any]] = []
     for name in sorted(by_repo):
         if name not in found.repos or not by_repo[name][0]["relative"]:
-            problems.append(f"成果的第一段 `{name}` 不是已配置的目标仓库（已知：{'、'.join(found.names()) or '没有'}）。" + hints.get("stray", ""))
+            problems.append(say("promote.repo.unknown", name=name, known=messages.joined(found.names()) or say("promote.repo.unknown.none")) + hints.get("stray", ""))
             continue
         repo = found.repos[name]
         timeout = found.timeout
@@ -147,26 +148,26 @@ def plan_files(
         try:
             commit = targets.ref_commit(repo, timeout)
             if not commit:
-                mine.append(f"本地没有分支 `{repo.base_ref}`。")
+                mine.append(say("promote.repo.no_branch", base_ref=repo.base_ref))
             else:
                 dirty = targets.dirty_paths(repo, timeout)
                 if dirty:
-                    shown = "、".join(dirty[:PROBLEMS_SHOWN]) + (f" 等 {len(dirty)} 个" if len(dirty) > PROBLEMS_SHOWN else "")
+                    shown = messages.joined(dirty[:PROBLEMS_SHOWN]) + (say("promote.repo.dirty.more", count=len(dirty)) if len(dirty) > PROBLEMS_SHOWN else "")
                     whose = taskqueue.holder_text(root, repo, targets.current_branch(repo, timeout))
-                    mine.append(f"工作区不干净（{shown}）。" + (whose or "先提交、stash 或丢弃这些改动，再 promote。"))
+                    mine.append(say("promote.repo.dirty", shown=shown) + (whose or say("promote.repo.dirty.fix")))
                 if repo.knowledge_base:
                     mine += direct_problems(repo, timeout)
                 elif branch and targets.valid_branch(branch) and targets.git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", timeout=timeout, allow_failure=True).strip():
-                    mine.append(f"分支 `{branch}` 已经存在。" + hints["rename_branch"])
+                    mine.append(say("promote.repo.branch_exists", branch=branch) + hints["rename_branch"])
         except targets.TargetError as error:
-            problems.append(f"{name}：{error}")
+            problems.append(messages.text("note.detail", what=name, detail=error))
             continue
         entries: List[Dict[str, Any]] = []
         for item in by_repo[name]:
             key, relative = item["key"], item["relative"]
             refused = [pattern for pattern in list(ALWAYS_REFUSED) + list(repo.refused_paths) if repo_paths.glob_regex(pattern).match(relative)]
             if refused:
-                mine.append(f"成果里有 `{key}`，它属于不能回写的路径（{refused[0]}）。" + hints["drop"])
+                mine.append(say("promote.repo.refused", key=key, pattern=refused[0]) + hints["drop"])
                 continue
             if not commit:
                 continue
@@ -181,7 +182,7 @@ def plan_files(
             entry: Dict[str, Any] = {"path": key, "repo": name, "relative": relative, "sha256": item["sha256"]}
             if item["delete"]:
                 if old_bytes is None:
-                    mine.append(f"`{key}` 在 {repo.base_ref} 上不存在，没有东西可删。")
+                    mine.append(say("promote.repo.delete_missing", key=key, base_ref=repo.base_ref))
                     continue
                 entry.update(action="delete", base_blob=blob, **_diff(old_bytes, b"", key))
                 entries.append(entry)
@@ -196,8 +197,8 @@ def plan_files(
                 entry.update(action="modify", base_blob=blob, **_diff(old_bytes, new_bytes, key))
             entries.append(entry)
         if not mine and all(item["action"] == "unchanged" for item in entries):
-            mine.append(f"成果和 {repo.base_ref} 上的文件完全一样，没有东西可回写。")
-        problems += [f"{name}：{text}" for text in mine]
+            mine.append(say("promote.repo.same", base_ref=repo.base_ref))
+        problems += [messages.text("note.detail", what=name, detail=text) for text in mine]
         if not mine:
             repos.append({
                 "name": name, "path": str(repo.path), "base_ref": repo.base_ref, "base_commit": commit,
@@ -207,7 +208,7 @@ def plan_files(
     for item in repos:
         files += item["files"]
     if problems:
-        raise CommandError("现在不能 promote，没有写任何东西。先解决这些，再重新 --dry-run：\n" + "\n".join(f"- {text}" for text in problems))
+        raise CommandError(say("promote.blocked", problems="\n".join(f"- {text}" for text in problems)))
     return repos, files
 
 
@@ -229,7 +230,7 @@ def full_patch(root: Path, result: Dict[str, Any], header: str = "") -> str:
             try:
                 out += ["-" + line for line in old_content(found, item).decode("utf-8").splitlines()]
             except UnicodeDecodeError:
-                out.append("（二进制文件，不显示内容）")
+                out.append(say("diff.binary.content"))
             continue
         new_bytes = Path(item["source"]).read_bytes()
         if item["action"] == "create":
@@ -238,13 +239,13 @@ def full_patch(root: Path, result: Dict[str, Any], header: str = "") -> str:
             try:
                 out += ["+" + line for line in new_bytes.decode("utf-8").splitlines()]
             except UnicodeDecodeError:
-                out.append("（二进制文件，不显示内容）")
+                out.append(say("diff.binary.content"))
             continue
         try:
             before, after = old_content(found, item).decode("utf-8").splitlines(), new_bytes.decode("utf-8").splitlines()
             out += list(difflib.unified_diff(before, after, f"a/{item['path']}", f"b/{item['path']}", lineterm="", n=3))
         except UnicodeDecodeError:
-            out.append("（二进制文件，不显示差异）")
+            out.append(say("diff.binary"))
     return "\n".join(out) + "\n"
 
 
@@ -268,7 +269,7 @@ def save_dev(root: Path, base: Path, patch_name: str, result: Dict[str, Any], he
         patch.parent.mkdir(parents=True, exist_ok=True)
         patch.write_text(full_patch(root, result, header), encoding="utf-8")
     except (OSError, targets.TargetError) as error:
-        raise CommandError(f"备份到 DEV 目录失败（{error}）。仓库一个都没有改。") from error
+        raise CommandError(say("promote.backup.failed", error=error)) from error
     return {"dev": common.inside(root, base) or str(base), "patch": common.inside(root, patch) or str(patch)}
 
 
@@ -331,17 +332,17 @@ def run_recovery(steps: List[Dict[str, Any]], branch: str, timeout: int) -> List
             on_branch = now_on == step.get("on", branch)
             if stopped:
                 result["status"] = "skipped"
-                result["message"] = "这个仓库前面的一步失败了。"
+                result["message"] = say("recover.step.earlier")
                 continue
             if verb in ("restore", "clean", "switch", "revert") and not on_branch:
                 result["status"] = "skipped"
-                result["message"] = f"仓库已经不在分支 {step.get('on', branch)} 上，不动它的文件和当前分支。"
+                result["message"] = say("recover.step.moved", branch=step.get("on", branch))
                 continue
             if verb == "branch":
                 exists = targets.run_step(Path(path), ["rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"], timeout)[0] == 0
                 if not exists:
                     result["status"] = "skipped"
-                    result["message"] = f"分支 {branch} 已经不存在。"
+                    result["message"] = say("recover.step.no_branch", branch=branch)
                     continue
             code, said = targets.run_step(Path(path), step["git"], timeout)
             result["status"], result["message"] = ("done", said) if code == 0 else ("failed", said)
@@ -367,9 +368,9 @@ def write_repo(root: Path, found: targets.Targets, repo: Dict[str, Any], branch:
     direct = bool(repo.get("direct"))
     if direct:  # the plan was checked a moment ago; look again right before writing on the base branch
         if targets.current_branch(handle, found.timeout) != handle.base_ref or targets.ref_commit(handle, found.timeout) != repo["base_commit"]:
-            raise CommandError(f"知识库 {repo['name']} 在批准之后变了（分支或 {handle.base_ref} 的提交）")
+            raise CommandError(say("promote.kb.changed", name=repo["name"], base_ref=handle.base_ref))
         if targets.dirty_paths(handle, found.timeout):
-            raise CommandError(f"知识库 {repo['name']} 的工作区不干净")
+            raise CommandError(say("promote.kb.dirty", name=repo["name"]))
     else:
         targets.git(handle, "switch", "-c", branch, handle.base_ref, timeout=found.timeout)
     top = handle.path.resolve()
@@ -378,17 +379,17 @@ def write_repo(root: Path, found: targets.Targets, repo: Dict[str, Any], branch:
             continue
         destination = handle.path / item["relative"]
         if common.inside(top, destination) is None:
-            raise OSError(f"`{item['relative']}` 指向仓库之外")
+            raise OSError(say("promote.write.outside", relative=item["relative"]))
         written.append(item)  # before the write: a half-written file is undone like a finished one
         if item["action"] == "delete":
             destination.unlink()
             prune_empty_folders(handle.path, destination.parent)
             if destination.exists():
-                raise OSError(f"`{item['relative']}` 没有被删掉")
+                raise OSError(say("promote.write.not_deleted", relative=item["relative"]))
             continue
         common.copy_file(Path(item["source"]), destination)
         if common.sha256_file(destination) != item["sha256"]:
-            raise OSError(f"写入后 `{item['relative']}` 的内容和成果不一致")
+            raise OSError(say("promote.write.mismatch", relative=item["relative"]))
     if direct:
         commit_direct(handle, repo, written, repo.get("message") or f"harness task: {len(written)} file(s)", found.timeout)
     return not direct
@@ -483,19 +484,19 @@ def partial_record(
 
 
 def partial_message(record: Dict[str, Any]) -> str:
-    done = "、".join(record["repos_done"]) or "（没有）"
-    untouched = "、".join(record["repos_untouched"]) or "（没有）"
+    done = messages.joined(record["repos_done"]) or say("output.none_known")
+    untouched = messages.joined(record["repos_untouched"]) or say("output.none_known")
     lines = [
-        f"promote 中途出错，已经停下，没有自动恢复。出错的仓库：{record['repo_failed']}。原因：{record['error']}",
-        f"- 已经写好的仓库（在新分支 {record['branch']} 上，文件没有提交）：{done}",
-        f"- 出错的仓库：{record['repo_failed']}（可能写了一部分）",
-        f"- 没有动过的仓库：{untouched}",
-        f"- 成果和补丁已经备份在 {record['dev']}。",
+        say("promote.partial.head", repo=record["repo_failed"], error=record["error"]),
+        say("promote.partial.done", branch=record["branch"], done=done),
+        say("promote.partial.failed", repo=record["repo_failed"]),
+        say("promote.partial.untouched", untouched=untouched),
+        say("promote.partial.backup", dev=record["dev"]),
     ]
     if record["recovery"]:
         recover = record.get("recover_command") or f"{cli_command()} task recover"
-        lines.append(f"把仓库恢复成原样：请用户在自己的终端运行 `{recover}`（看清要做的事，输入确认码，它逐条运行）。")
-        lines.append("也可以自己逐条运行下面的命令：")
+        lines.append(say("promote.partial.recover", recover=recover))
+        lines.append(say("promote.partial.by_hand"))
         lines += [f"    {command}" for command in record["recovery"]]
-    lines.append("恢复后，让 agent 重新 `task promote --dry-run`，用户再批准。不要自己关闭任务。")
+    lines.append(say("promote.partial.after"))
     return "\n".join(lines)

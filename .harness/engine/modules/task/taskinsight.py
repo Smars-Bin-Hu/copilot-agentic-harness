@@ -26,7 +26,7 @@ from core.paths import utc_now
 from . import common
 
 ATTACH_EVENTS = ("start", "resume", "new-round")
-SESSION_IN_DETAIL = re.compile(r"会话 (\S+)")
+SESSION_IN_DETAIL = re.compile(r"(?:会话|session) (\S+)")  # the note of either language (`task.note.session`)
 MATCH_SECONDS = 5.0  # a user message in Copilot's record and its UserPromptSubmit in the hook log are the same prompt
 TOP = 5
 FINDINGS_KEPT = 8
@@ -41,7 +41,7 @@ SOURCE_EVENTS, SOURCE_LOG, SOURCE_NONE = "copilot-events", "hook-log", "none"
 PROMPT_CHARS = 40
 
 
-def say(key: str, **values: Any) -> str:
+def say(key: str, /, **values: Any) -> str:
     return messages.text(key, **values)
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import importlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -13,11 +14,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import config, output, targets, tasks, user
+from core import config, messages, output, targets, tasks, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
 from core.state import TRACKED_EVENTS
+
+
+def say(key: str, /, **values: Any) -> str:
+    return messages.text(key, command=cli_command(), **values)
 
 HOOK_ENTRY = ".harness/engine/hook.py"
 COMMAND_KEYS = ("command", "windows", "linux", "osx", "bash", "powershell")
@@ -56,7 +61,7 @@ def check_python(report: Report) -> None:
     if version >= (3, 9):
         report.ok(f"Python {text}")
     else:
-        report.error(f"Python {text} 太旧，需要 3.9 或更高")
+        report.error(say("doctor.python.old", version=text))
 
 
 def check_interpreter(report: Report) -> None:
@@ -65,20 +70,20 @@ def check_interpreter(report: Report) -> None:
     In a Copilot (SDK) session a hook that cannot start counts as a refusal: every tool call is denied (P2, 2026-10-10).
     """
     name = python_command()
-    consequence = "hook 启动不了时，Copilot 会话里所有工具调用都会被拒（界面只显示 hook errored）"
+    consequence = say("doctor.interpreter.consequence")
     found = shutil.which(name)
     if not found:
-        report.error(f"终端的 PATH 里找不到 `{name}`。短命令和 hook 都要用它；{consequence}。装好 Python，或把它加进 PATH")
+        report.error(say("doctor.interpreter.missing", name=name, consequence=consequence))
         return
     try:
         result = subprocess.run([found, "-c", "print(1)"], capture_output=True, text=True, timeout=INTERPRETER_SECONDS)
-        problem = "" if result.returncode == 0 and result.stdout.strip() == "1" else f"退出码 {result.returncode}"
+        problem = "" if result.returncode == 0 and result.stdout.strip() == "1" else say("doctor.interpreter.exit", code=result.returncode)
     except Exception as error:
         problem = f"{type(error).__name__}"
     if problem:
-        report.error(f"终端里的 `{name}`（{found}）不能执行：{problem}。{consequence}。Windows 上它可能是应用商店的占位程序，装真正的 Python")
+        report.error(say("doctor.interpreter.broken", name=name, found=found, problem=problem, consequence=consequence))
     else:
-        report.ok(f"终端里的 `{name}` 能执行")
+        report.ok(say("doctor.interpreter.ok", name=name))
 
 
 def hook_timeout(root: Path) -> float:
@@ -114,33 +119,33 @@ def check_hook_activity(report: Report, root: Path, registry: Dict[str, Any]) ->
     try:
         rows = recent_calls(root)
     except Exception as error:
-        report.warn(f"读不了会话日志，没法确认 hook 有没有在跑：{error}")
+        report.warn(say("doctor.hook.logs_unreadable", error=error))
         return
-    hint = "在 Copilot 里发一句话，再运行一次 doctor。还是没有，说明 hook 没在跑：确认 `.github/hooks/harness.json` 在，VS Code 打开的是这个仓库的根目录，聊天的 Session Target 是 Copilot；改过以后要 Reload Window"
+    hint = say("doctor.hook.hint")
     if not rows:
-        report.warn(f"还没有任何 hook 调用记录，没法确认 hook 有没有在跑。{hint}")
+        report.warn(say("doctor.hook.never", hint=hint))
         return
     last = rows[-1]
     age = days_since(last["at"])
     when = last["at"][:16].replace("T", " ") + " UTC"
     if age > STALE_HOOK_DAYS:
-        report.warn(f"hook 最近一次被调用是 {when}（{int(age)} 天前）。这段时间用过 Copilot 的话，hook 没在跑。{hint}")
+        report.warn(say("doctor.hook.stale", when=when, days=int(age), hint=hint))
     else:
-        report.ok(f"hook 最近一次被调用：{when}")
+        report.ok(say("doctor.hook.last", when=when))
     engines = [row.get("engine") for row in rows if row.get("event") == "PreToolUse" and row.get("engine") in ("cli", "legacy")]
     if engines and engines[-1] == "legacy":
-        report.warn("最近的会话是 Local 会话。harness 只保证在 Copilot（SDK）会话里生效：聊天输入框的 Session Target 选 Copilot")
+        report.warn(say("doctor.hook.local"))
     elif engines:
-        report.ok("最近的会话是 Copilot（SDK）会话")
+        report.ok(say("doctor.hook.sdk"))
     gate = [float(row["ms"]) for row in rows if row.get("event") == "PreToolUse" and isinstance(row.get("ms"), (int, float))]
     if not gate:
         return
     timeout = hook_timeout(root)
     slowest = max(gate) / 1000
     middle = sorted(gate)[len(gate) // 2]
-    text = f"gate 最近 {len(gate)} 次调用：一般 {middle:.0f} 毫秒，最慢 {max(gate):.0f} 毫秒（超时是 {timeout:.0f} 秒）"
+    text = say("doctor.gate.speed", count=len(gate), middle=f"{middle:.0f}", slowest=f"{max(gate):.0f}", timeout=f"{timeout:.0f}")
     if slowest >= timeout * SLOW_GATE_SHARE:
-        report.warn(f"{text}。离超时太近：hook 超时的调用会被直接放行，gate 等于没拦。查是什么拖慢了 Python 的启动（杀毒软件、网络盘）")
+        report.warn(say("doctor.gate.slow", text=text))
     else:
         report.ok(text)
 
@@ -163,11 +168,7 @@ def check_short_command(report: Report, root: Path) -> None:
     found = shutil.which(cli_command())
     if not found:
         folder = root / ".harness" / "bin"
-        report.error(
-            f"PATH 里找不到短命令 `{cli_command()}`。agent 收到的命令都以它开头，现在都会失败。"
-            f"把 `{folder}` 加进 PATH（或在 PATH 里的文件夹建一个指向 `{folder / 'harness'}` 的链接），重开终端和 VS Code，再运行 doctor。"
-            "步骤见 docs/01-quickstart.md 第 1 步，或让 agent 用技能 harness-repo-initialize 带你配"
-        )
+        report.error(say("doctor.short.missing", folder=folder, launcher=folder / "harness"))
         return
     try:
         resolved = Path(found).resolve()
@@ -175,23 +176,19 @@ def check_short_command(report: Report, root: Path) -> None:
     except OSError:
         resolved, mine = Path(found), False
     if mine:
-        report.ok(f"短命令 `{cli_command()}` 在 PATH 里（{found}）")
+        report.ok(say("doctor.short.ok", found=found))
     elif same_launcher(resolved, root):
-        report.ok(f"短命令 `{cli_command()}` 在 PATH 里（{found}），是本仓库启动脚本的拷贝")
+        report.ok(say("doctor.short.copy", found=found))
     else:
-        report.warn(
-            f"PATH 里的 `{cli_command()}` 是 `{resolved}`，不是这个仓库的 `.harness/bin/`。"
-            "1.0.2 起的启动脚本会先找当前目录所在的仓库，所以能用；它要是更早的版本，会操作它自己那一份仓库。"
-            "它要是 PATH 里固定文件夹的拷贝，内容和这个仓库的 `.harness/bin/` 不一样，就从仓库里重新拷一份"
-        )
+        report.warn(say("doctor.short.other", resolved=resolved))
 
 
 def check_files(report: Report, root: Path, owner: str, files: List[str]) -> None:
     missing = [name for name in files if not (root / name).exists()]
     for name in missing:
-        report.error(f"{owner}：登记的文件不存在：{name}")
+        report.error(say("doctor.files.missing", owner=owner, name=name))
     if not missing:
-        report.ok(f"{owner}：{len(files)} 个登记文件都存在")
+        report.ok(say("doctor.files.ok", owner=owner, count=len(files)))
 
 
 def interpreter_problems(entry: Dict[str, Any]) -> List[str]:
@@ -204,9 +201,9 @@ def interpreter_problems(entry: Dict[str, Any]) -> List[str]:
     for key, interpreter in (("command", "python3"), ("bash", "python3"), ("windows", "python"), ("powershell", "python")):
         value = entry.get(key)
         if not isinstance(value, str):
-            problems.append(f"缺少 `{key}`（{'Windows' if interpreter == 'python' else 'macOS/Linux'} 上的 {'VS Code' if key in ('command', 'windows') else 'Copilot（SDK）会话'} 读它）")
+            problems.append(say("doctor.hookcfg.key_missing", key=key, system="Windows" if interpreter == "python" else "macOS/Linux", engine="VS Code" if key in ("command", "windows") else say("doctor.hookcfg.engine.sdk")))
         elif value.split()[0] != interpreter:
-            problems.append(f"`{key}` 应该用 `{interpreter}`，现在是 `{value.split()[0]}`")
+            problems.append(say("doctor.hookcfg.key_wrong", key=key, interpreter=interpreter, found=value.split()[0]))
     return problems
 
 
@@ -214,65 +211,65 @@ def check_hook_config(report: Report, root: Path, registry: Dict[str, Any]) -> N
     directory = root / ".github" / "hooks"
     configs = sorted(directory.glob("*.json")) if directory.is_dir() else []
     if not configs:
-        report.error("没有 hook 配置：.github/hooks/*.json")
+        report.error(say("doctor.hookcfg.none"))
         return
     if len(configs) > 1:
         names = ", ".join(path.name for path in configs)
-        report.error(f"有 {len(configs)} 个 hook 配置（{names}）。同一事件会被执行多次，只保留一份")
+        report.error(say("doctor.hookcfg.many", count=len(configs), names=names))
     configured: Set[str] = set()
     for path in configs:
         try:
             data = config.read_json(path)
             hooks = data["hooks"]
         except Exception as error:
-            report.error(f"{path.name} 不能解析：{error}")
+            report.error(say("doctor.hookcfg.unparsable", name=path.name, error=error))
             continue
         for event, entries in hooks.items():
             configured.add(event)
             for entry in entries:
                 commands = [entry[key] for key in COMMAND_KEYS if isinstance(entry.get(key), str)]
                 if not commands or any(HOOK_ENTRY not in command for command in commands):
-                    report.error(f"{path.name} 的 {event} 没有指向 {HOOK_ENTRY}")
+                    report.error(say("doctor.hookcfg.wrong_entry", name=path.name, event=event, entry=HOOK_ENTRY))
                 for problem in interpreter_problems(entry):
-                    report.error(f"{path.name} 的 {event}：{problem}")
+                    report.error(say("doctor.hookcfg.problem", name=path.name, event=event, problem=problem))
     needed: Set[str] = set(TRACKED_EVENTS)
     for name, entry in registry["modules"].items():
         if entry["enabled"] and entry["status"] != "retired":
             needed.update(entry["events"])
     for event in sorted(needed - configured):
-        report.error(f"hook 配置缺少事件 {event}（core 或模块需要它）")
+        report.error(say("doctor.hookcfg.event_missing", event=event))
     for event in sorted(configured - needed):
-        report.warn(f"hook 配置里的 {event} 没有模块订阅，白白多启动一个进程")
+        report.warn(say("doctor.hookcfg.event_unused", event=event))
     if configured >= needed:
-        report.ok(f"hook 配置指向 hook.py，覆盖 {len(configured & needed)} 个需要的事件")
+        report.ok(say("doctor.hookcfg.ok", count=len(configured & needed)))
 
 
 def check_module(report: Report, root: Path, name: str, entry: Dict[str, Any]) -> None:
     if entry["status"] == "retired":
         return
-    check_files(report, root, f"模块 {name}", entry["files"])
+    check_files(report, root, say("doctor.module.owner", name=name), entry["files"])
     try:
         module = importlib.import_module(f"modules.{name}")
         if not callable(getattr(module, "handle", None)):
-            raise AttributeError("没有 handle(event, ctx)")
+            raise AttributeError(say("doctor.module.no_handle"))
     except Exception as error:
-        (report.error if entry["enabled"] else report.warn)(f"模块 {name} 不能加载：{error}")
+        (report.error if entry["enabled"] else report.warn)(say("doctor.module.unloadable", name=name, error=error))
         return
-    report.ok(f"模块 {name} 可以加载")
+    report.ok(say("doctor.module.loadable", name=name))
     own_check = getattr(module, "doctor", None)
     if callable(own_check):
         found = own_check(root)
         for text in found:
-            report.error(f"模块 {name}：{text}")
+            report.error(say("doctor.module.problem", name=name, text=text))
         if not found:
-            report.ok(f"模块 {name} 自己的检查通过")
+            report.ok(say("doctor.module.checked", name=name))
     policy_name = getattr(module, "POLICY_NAME", None)
     if policy_name:
         try:
             module.validate_policy(config.load_policy(root, policy_name))
-            report.ok(f"策略 {policy_name}.json 正常")
+            report.ok(say("doctor.policy.ok", name=policy_name))
         except Exception as error:
-            report.error(f"策略 {policy_name}.json 有问题：{error}")
+            report.error(say("doctor.policy.bad", name=policy_name, error=error))
 
 
 def check_logs(report: Report, root: Path, registry: Dict[str, Any]) -> None:
@@ -287,9 +284,9 @@ def check_logs(report: Report, root: Path, registry: Dict[str, Any]) -> None:
     base = root / ".harness" / "runtime" / "logs"
     count = len(list(base.glob("*/*.jsonl"))) if base.is_dir() else 0
     if count > limit:
-        report.warn(f"有 {count} 个会话日志（超过 {limit}）。不用的可以删：{cli_command()} logs prune --days 30")
+        report.warn(say("doctor.logs.many", count=count, limit=limit))
     if (base / "hook-calls.jsonl").exists():
-        report.warn("还有旧的 .harness/runtime/logs/hook-calls.jsonl。现在每个会话一个文件，这个旧文件不再写入，可以删除")
+        report.warn(say("doctor.logs.old_file"))
 
 
 def check_output(report: Report, root: Path) -> bool:
@@ -297,24 +294,23 @@ def check_output(report: Report, root: Path) -> bool:
     try:
         raw = config.load_policy(root, output.POLICY_NAME)["output"]["encoding"]
     except Exception as error:
-        report.error(f"cli.json 不能读取或缺 output.encoding：{error}")
+        report.error(say("doctor.output.unreadable", error=error))
         return False
     if raw not in output.CHOICES:
-        report.error(f"cli.json 的 output.encoding 是 `{raw}`，只能是 {'、'.join(output.CHOICES)}。现在按 auto 处理")
+        report.error(say("doctor.output.bad_choice", raw=raw, choices=messages.joined(output.CHOICES)))
     facts = output.facts()
     pages = facts["code_pages"]
-    where = "终端" if facts["terminal"] else "管道或重定向"
-    shown = f"输出编码：stdout={facts['stdout_encoding']}（{where}），系统默认={facts['preferred']}"
+    where = say("doctor.output.terminal") if facts["terminal"] else say("doctor.output.pipe")
+    shown = say("doctor.output.shown", stdout=facts["stdout_encoding"], where=where, preferred=facts["preferred"])
     if pages:
-        shown += f"，代码页 输出={pages['console_output']} ANSI={pages['ansi']}"
-    shown += f"；output.encoding={output.setting(root)}"
+        shown += say("doctor.output.pages", console=pages["console_output"], ansi=pages["ansi"])
+    shown += say("doctor.output.setting", setting=output.setting(root))
     if output.shows(output.SAMPLE, facts["stdout_encoding"]):
         replaced = output.REPLACED.get("stdout", "")
-        report.ok(shown + (f"（这里原来是 {replaced}，写不出中文，auto 改用了 UTF-8）" if replaced else ""))
-        back = '是乱码，就在 .harness/policies/cli.override.json 写 {"output": {"encoding": "native"}}' if replaced else ""
-        report.ok(f"  {output.SAMPLE}（这一行能读，中文输出就正常{'；' + back if back else ''}）")
+        report.ok(shown + (say("doctor.output.replaced", replaced=replaced) if replaced else ""))
+        report.ok(say("doctor.output.sample.back" if replaced else "doctor.output.sample", sample=output.SAMPLE))
         return False
-    report.warn(shown + "。这个编码写不出中文，CLI 的中文会显示成 \\uXXXX")
+    report.warn(shown + say("doctor.output.cannot"))
     return True
 
 
@@ -323,10 +319,7 @@ def print_utf8_sample() -> None:
 
     The advice is in that line too: a person who can read it is a person for whom UTF-8 works.
     """
-    text = (
-        f"[INFO]  UTF-8 样例：{output.SAMPLE}。这一行能读，就把 .harness/policies/cli.override.json 里的 "
-        "output.encoding 改成 auto 或 utf-8，CLI 的中文就不再是 \\uXXXX；这一行是乱码，就不要改。\n"
-    )
+    text = say("doctor.output.utf8_sample", sample=output.SAMPLE)
     try:
         sys.stdout.flush()
         sys.stdout.buffer.write(text.encode("utf-8"))
@@ -335,20 +328,30 @@ def print_utf8_sample() -> None:
         pass
 
 
+def check_language(report: Report, raw: Any) -> None:
+    """Which language the engine speaks and where that comes from. A value it does not know falls back to the default."""
+    if raw is not None and raw not in messages.LANGUAGES:
+        report.error(say("doctor.language.bad", raw=raw, choices=messages.joined(messages.LANGUAGES), default=messages.DEFAULT_LANGUAGE))
+    source = "env" if os.environ.get(messages.ENVIRONMENT, "").strip().lower() in messages.LANGUAGES else "policy" if raw in messages.LANGUAGES else "default"
+    report.ok(say("doctor.language.ok", language=messages.language(), source=say(f"doctor.language.source.{source}")))
+
+
 def check_user(report: Report, root: Path) -> None:
     try:
-        raw = config.load_policy(root, user.POLICY_NAME).get("name", "")
+        policy = config.load_policy(root, user.POLICY_NAME)
     except Exception as error:
-        report.error(f"user.json 不能读取：{error}")
+        report.error(say("doctor.user.unreadable", error=error))
         return
+    raw = policy.get("name", "")
+    check_language(report, policy.get("language"))
     if not isinstance(raw, str):
-        report.error("user.json 的 name 要是一段文字")
+        report.error(say("doctor.user.name_type"))
         return
     found = user.who(root)
     if found["source"] == "none":
-        report.warn("不知道用户的名字：user.override.json 没写 name，git 也没有 user.name。要署名的地方会空着。新建 .harness/policies/user.override.json，写 {\"name\": \"你的名字\"}")
+        report.warn(say("doctor.user.unknown"))
     else:
-        report.ok(f"用户名字：{found['name']}（来自 {found['source']}）")
+        report.ok(say("doctor.user.name", name=found["name"], source=found["source"]))
 
 
 def check_overrides(report: Report, root: Path) -> None:
@@ -356,27 +359,27 @@ def check_overrides(report: Report, root: Path) -> None:
     directory = policies_dir(root)
     found = sorted(directory.glob("*" + config.OVERRIDE_SUFFIX)) if directory.is_dir() else []
     if not found:
-        report.ok("没有 override 文件，所有策略都用默认值")
+        report.ok(say("doctor.override.none"))
         return
     for path in found:
         name = path.name[: -len(config.OVERRIDE_SUFFIX)]
         if config.OVERRIDE_SUFFIX[:-5] in name or not (directory / f"{name}.json").exists():
-            report.error(f"{path.name}：找不到它要覆盖的 {name}.json（override 只有一层，名字必须是 <策略名>.override.json）")
+            report.error(say("doctor.override.orphan", file=path.name, name=name))
             continue
         try:
             base = config.read_json(directory / f"{name}.json")
             override = config.read_json(path)
             config.deep_merge(base, override)
         except Exception as error:
-            report.error(f"{path.name}：不能合并到 {name}.json：{error}")
+            report.error(say("doctor.override.unmergeable", file=path.name, name=name, error=error))
             continue
         touched = config.changes(base, override)
-        report.ok(f"{path.name}：改了 {len(touched)} 处，其余都来自 {name}.json（default）")
+        report.ok(say("doctor.override.summary", file=path.name, count=len(touched), name=name))
         for where, how, size in touched:
             if how == "replaced" and size:
-                report.warn(f"{path.name}：{where} 整体替换了默认的数组（{size} 项）。要保留默认项，改用 \"{where.split('.')[-1]}+\" 追加")
+                report.warn(say("doctor.override.replaced", file=path.name, where=where, size=size, key=where.split(".")[-1]))
             else:
-                report.ok(f"  来自 override：{where}（{ {'replaced': '替换', 'appended': '追加', 'added': '新增'}[how] }）")
+                report.ok(say("doctor.override.item", where=where, how=say(f"doctor.override.how.{how}")))
 
 
 def front_matter(text: str) -> Dict[str, str]:
@@ -406,11 +409,11 @@ def kb_instruction_loads(root: Path, path: Path) -> str:
     """Why Copilot would load the file on its own, or an empty string when nothing makes it."""
     apply_to = front_matter(path.read_text(encoding="utf-8")).get("applyTo", "")
     if any(part.strip() in BROAD_APPLY_TO for part in apply_to.split(",")):
-        return f"applyTo 是 {apply_to}"
+        return say("doctor.kb.loads.apply_to", apply_to=apply_to)
     for name in ("AGENTS.md", ".github/copilot-instructions.md"):
         entry = root / name
         if entry.is_file() and path.name in entry.read_text(encoding="utf-8"):
-            return f"{name} 里有链接"
+            return say("doctor.kb.loads.link", name=name)
     return ""
 
 
@@ -439,40 +442,37 @@ def check_knowledge_base(report: Report, root: Path) -> None:
     kb = root / KB_DIR
     content = [item for item in sorted(kb.iterdir()) if item.name not in KB_IGNORED and not item.name.startswith(".")] if kb.is_dir() else []
     if not content:
-        report.ok(f"{KB_DIR}/ 里还没有内容（没有接入知识库）")
+        report.ok(say("doctor.kb.empty", kb=KB_DIR))
         return
-    report.ok(f"{KB_DIR}/ 有内容：{len(content)} 项（README 以外）")
+    report.ok(say("doctor.kb.content", kb=KB_DIR, count=len(content)))
     if not (kb / "README.md").is_file():
-        report.warn(f"{KB_DIR}/ 没有 README.md。agent 按索引渐进读取时，没有入口可读")
+        report.warn(say("doctor.kb.no_readme", kb=KB_DIR))
     else:
         broken = kb_broken_links(kb)
-        shown = ", ".join(broken[:SHOWN_BROKEN_LINKS]) + (f" 等 {len(broken)} 个" if len(broken) > SHOWN_BROKEN_LINKS else "")
+        shown = ", ".join(broken[:SHOWN_BROKEN_LINKS]) + (say("doctor.kb.links.more", count=len(broken)) if len(broken) > SHOWN_BROKEN_LINKS else "")
         if broken:
-            report.warn(f"{KB_DIR}/README.md 里有指向不存在文件的链接：{shown}")
+            report.warn(say("doctor.kb.links.broken", kb=KB_DIR, shown=shown))
         else:
-            report.ok(f"{KB_DIR}/README.md 的相对链接都能找到文件")
+            report.ok(say("doctor.kb.links.ok", kb=KB_DIR))
     if (kb / ".git").exists():
         try:
             registered = any(folder.resolve() == kb.resolve() for name, folder in targets.knowledge_bases(root) if name != targets.KB_DIR)
         except OSError:
             registered = True
         if not registered:
-            report.ok(f"{KB_DIR}/ 是 git 仓库，但没有登记成目标仓库：任务只能读它，不能更新它。要更新，在 target.override.json 的 repos 里加 \"kb\": {{\"path\": \"{KB_DIR}\", \"knowledge_base\": true}}")
+            report.ok(say("doctor.kb.unregistered", kb=KB_DIR))
     if kb_git_ignored(root):
-        report.warn(f".gitignore 忽略了 {KB_DIR}/。Copilot 的搜索会跳过被忽略的文件，agent 可能搜不到它（按路径直接读一般不受影响）")
+        report.warn(say("doctor.kb.ignored", kb=KB_DIR))
     files = kb_instruction_files(root)
     if not files:
-        report.warn("没有讲知识库的指令文件。把知识库自带的 instructions 放到 .github/instructions/（例如 knowledgebase.instructions.md），agent 才知道怎么按索引读")
+        report.warn(say("doctor.kb.no_instructions"))
         return
     for path in files:
         reason = kb_instruction_loads(root, path)
         if reason:
-            report.ok(f"{path.name} 讲知识库，而且会被加载（{reason}）")
+            report.ok(say("doctor.kb.instructions.loaded", file=path.name, reason=reason))
         else:
-            report.warn(
-                f"{path.name} 讲知识库，但没有让 Copilot 加载它的条件。给它写 applyTo: '**'，或在 AGENTS.md 里放一个指向它的链接；"
-                "只写 applyTo: 'knowledge-base/**' 不够：agent 读到知识库文件之前，它不会生效"
-            )
+            report.warn(say("doctor.kb.instructions.not_loaded", file=path.name))
 
 
 def check_targets(report: Report, root: Path) -> None:
@@ -480,32 +480,32 @@ def check_targets(report: Report, root: Path) -> None:
     try:
         found = targets.load(root)
     except Exception as error:
-        report.error(f"策略 target.json 有问题：{error}")
+        report.error(say("doctor.target.policy_bad", error=error))
         return
     if not found.configured:
-        report.ok("没有配置目标仓库（target.override.json 里写 repos_root），请求沿用 harness 自己的仓库")
+        report.ok(say("doctor.target.none"))
         return
     for problem in found.problems:
-        report.error(f"目标仓库：{problem}")
+        report.error(say("doctor.target.problem", problem=problem))
     if not found.repos:
         if not found.problems:
-            report.warn("repos_root 下没有 git 仓库（要有 .git 的子文件夹）")
+            report.warn(say("doctor.target.no_repos"))
         return
     for name in found.names():
         repo = found.repos[name]
         try:
             info = targets.summary(repo, found.timeout)
         except targets.TargetError as error:
-            report.error(f"目标仓库 {name}：{error}")
+            report.error(say("doctor.target.error", name=name, error=error))
             continue
         if not info["has_base_ref"]:
-            report.error(f"目标仓库 {name}：本地没有分支 `{repo.base_ref}`。先在那个仓库里 git switch 或 git fetch 一次，或在 target.override.json 的 repos 里改 base_ref")
+            report.error(say("doctor.target.no_branch", name=name, base_ref=repo.base_ref))
             continue
-        state = "工作区干净" if info["clean"] else f"有 {info['uncommitted_files']} 个未提交的文件（promote 要求工作区干净）"
-        kind = "知识库" if repo.knowledge_base else "目标仓库"
-        report.ok(f"{kind} {name}：{repo.base_ref} 在 {info['base_commit']}（{info['base_commit_date'][:10]}），当前分支 {info['current_branch']}，{state}")
+        state = say("doctor.target.clean") if info["clean"] else say("doctor.target.dirty", files=info["uncommitted_files"])
+        kind = say("doctor.target.kind.kb" if repo.knowledge_base else "doctor.target.kind.repo")
+        report.ok(say("doctor.target.info", kind=kind, name=name, base_ref=repo.base_ref, commit=info["base_commit"], date=info["base_commit_date"][:10], branch=info["current_branch"], state=state))
         if repo.knowledge_base and info["current_branch"] != repo.base_ref:
-            report.warn(f"知识库 {name} 不在 `{repo.base_ref}` 上。promote 直接写进 `{repo.base_ref}`，回写前要先切回去")
+            report.warn(say("doctor.target.kb_branch", name=name, base_ref=repo.base_ref))
 
 
 def check_location(report: Report, root: Path) -> None:
@@ -513,7 +513,7 @@ def check_location(report: Report, root: Path) -> None:
     for text in problems:
         report.warn(text)
     if not problems:
-        report.ok("harness 的路径长度和位置没有问题")
+        report.ok(say("doctor.location.ok"))
 
 
 def check_tool_kinds(report: Report) -> None:
@@ -527,12 +527,12 @@ def check_tool_kinds(report: Report) -> None:
             if kind not in TOOL_KINDS
         ]
     except Exception as error:
-        report.error(f"tool_kinds.json 不能解析：{error}")
+        report.error(say("doctor.tool_kinds.unparsable", error=error))
         return
     if bad:
-        report.error("tool_kinds.json 有未知的类别：" + ", ".join(bad))
+        report.error(say("doctor.tool_kinds.unknown", bad=", ".join(bad)))
     else:
-        report.ok("tool_kinds.json 正常")
+        report.ok(say("doctor.tool_kinds.ok"))
 
 
 def agent_models(path: Path) -> Any:
@@ -570,7 +570,7 @@ def check_agents(report: Report, root: Path) -> None:
     try:
         policy = config.load_policy(root, "agents")
     except Exception as error:
-        report.error(f"策略 agents.json 不能读取：{error}")
+        report.error(say("doctor.agents.unreadable", error=error))
         return
     chosen: Dict[str, str] = {}
     for path in sorted(directory.glob("*.agent.md")):
@@ -580,12 +580,12 @@ def check_agents(report: Report, root: Path) -> None:
             continue
         labels = {series_of(name, policy["series"]) for name in names}
         if "" in labels:
-            report.warn(f"agent {agent} 的 model 里有不认识的模型名：{', '.join(n for n in names if not series_of(n, policy['series']))}。在 agents.json 里加系列关键词，或检查拼写")
+            report.warn(say("doctor.agents.unknown_model", agent=agent, names=", ".join(n for n in names if not series_of(n, policy["series"]))))
             labels.discard("")
         if len(labels) > 1 and agent in policy.get("any_series", []):
             continue  # this agent may fall back across series; it takes no part in `different_series`
         if len(labels) > 1:
-            report.error(f"agent {agent} 的 model 回退列表跨了系列（{', '.join(sorted(labels))}）。回退只能在同一系列里")
+            report.error(say("doctor.agents.mixed", agent=agent, labels=", ".join(sorted(labels))))
         elif labels:
             chosen[agent] = next(iter(labels))
     for group in policy.get("different_series", []):
@@ -593,9 +593,9 @@ def check_agents(report: Report, root: Path) -> None:
         seen: Dict[str, str] = {}
         for name in present:
             if chosen[name] in seen:
-                report.error(f"agent {seen[chosen[name]]} 和 {name} 用了同一系列（{chosen[name]}），必须不同系列")
+                report.error(say("doctor.agents.same", first=seen[chosen[name]], second=name, series=chosen[name]))
             seen[chosen[name]] = name
-    report.ok(f"agent 的模型系列检查完成（{len(chosen)} 个 agent）")
+    report.ok(say("doctor.agents.ok", count=len(chosen)))
 
 
 def check_old_tasks(report: Report, root: Path) -> None:
@@ -603,11 +603,8 @@ def check_old_tasks(report: Report, root: Path) -> None:
     old = root / tasks.OLD_TASKS_DIR
     names = sorted(path.name for path in old.iterdir() if path.is_dir()) if old.is_dir() else []
     if names:
-        shown = "、".join(names[:5]) + (" 等" if len(names) > 5 else "")
-        report.warn(
-            f"{tasks.OLD_TASKS_DIR}/ 下还有 {len(names)} 个旧任务目录（{shown}）。1.1.0 起任务放在 {tasks.TASKS_DIR}/，旧位置不再读。"
-            f"要接着做：把目录搬到 {tasks.TASKS_DIR}/ 下，再 `task open <任务名>`。不用了就留着或删掉。"
-        )
+        shown = messages.joined(names[:5]) + (say("rules.task.open_more") if len(names) > 5 else "")
+        report.warn(say("doctor.old_tasks", old=tasks.OLD_TASKS_DIR, count=len(names), shown=shown, tasks_dir=tasks.TASKS_DIR))
 
 
 def run(root: Path) -> int:
@@ -618,10 +615,10 @@ def run(root: Path) -> int:
     try:
         registry = load_registry(root)
     except Exception as error:
-        report.error(f"registry.json 不能读取：{error}")
+        report.error(say("doctor.registry.unreadable", error=error))
         print("\n".join(report.lines))
         return 1
-    report.ok("registry.json 正常")
+    report.ok(say("doctor.registry.ok"))
     check_files(report, root, "engine", registry["engine"]["files"])
     check_tool_kinds(report)
     check_hook_config(report, root, registry)

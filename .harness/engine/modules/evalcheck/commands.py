@@ -27,7 +27,7 @@ def cmd_show(args: argparse.Namespace) -> Dict[str, Any]:
     return {
         "id": loaded["id"],
         "title": loaded["text"].splitlines()[0].lstrip("# ").strip(),
-        "before": scenario.section(loaded["text"], "## 前置"),
+        "before": scenario.section(loaded["text"], scenario.SECTIONS[0]),
         "prompt": prompt,
         "manual_checks": loaded["manual"],
         "then": f"{cli_command()} eval check {loaded['id']}",

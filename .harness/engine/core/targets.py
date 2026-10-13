@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import config, repo_paths, schema
+from . import config, messages, repo_paths, schema
 
 POLICY_NAME = "target"
 REPO_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -77,8 +77,8 @@ class Targets:
 
     def get(self, name: str) -> Repo:
         if name not in self.repos:
-            known = "、".join(self.names()) or "（没有配置目标仓库）"
-            raise TargetError(f"没有叫 `{name}` 的目标仓库。已知的仓库：{known}。")
+            known = messages.joined(self.names()) or messages.text("target.none")
+            raise TargetError(messages.text("target.unknown", name=name, known=known))
         return self.repos[name]
 
 
@@ -116,7 +116,7 @@ def load(root: Path) -> Targets:
     if base:
         folder = expand(base)
         if not folder.is_dir():
-            problems.append(f"repos_root 不存在或不是文件夹：{folder}")
+            problems.append(messages.text("target.root.missing", folder=folder))
         else:
             for child in sorted(folder.iterdir(), key=lambda item: item.name.lower()):
                 if REPO_NAME.match(child.name) and is_repo(child):
@@ -125,11 +125,11 @@ def load(root: Path) -> Targets:
         if entry.get("path", "").strip():
             location = expand(entry["path"], root)
             if not is_repo(location):
-                problems.append(f"仓库 {name} 的路径不是 git 仓库：{location}")
+                problems.append(messages.text("target.not_git", name=name, location=location))
                 continue
             repos[name] = Repo(name, location, base_ref, list(refused))
         elif name not in repos:
-            problems.append(f"repos 里的 {name} 没有 path，repos_root 下也没有这个仓库")
+            problems.append(messages.text("target.no_path", name=name))
             continue
         repo = repos[name]
         repo.base_ref = entry.get("base_ref", repo.base_ref)
@@ -180,12 +180,12 @@ def git(repo: Repo, *arguments: str, timeout: int = DEFAULT_GIT_TIMEOUT, allow_f
     try:
         done = subprocess.run(command, capture_output=True, timeout=timeout, env=env, check=False)
     except (FileNotFoundError, PermissionError) as error:  # PermissionError: PATH is empty and the folder holds a directory called `git`
-        raise TargetError("找不到 git 命令。确认 git 在 PATH 里。") from error
+        raise TargetError(messages.text("target.git.missing")) from error
     except subprocess.TimeoutExpired as error:
-        raise TargetError(f"git {' '.join(arguments)} 超过 {timeout} 秒没有结束（仓库 {repo.name}）。") from error
+        raise TargetError(messages.text("target.git.timeout", arguments=" ".join(arguments), timeout=timeout, repo=repo.name)) from error
     if done.returncode != 0 and not allow_failure:
         message = done.stderr.decode("utf-8", errors="replace").strip()
-        raise TargetError(f"git {' '.join(arguments)} 失败（仓库 {repo.name}）：{message}")
+        raise TargetError(messages.text("target.git.failed", arguments=" ".join(arguments), repo=repo.name, message=message))
     return done.stdout if done.returncode == 0 else b""
 
 
@@ -196,9 +196,9 @@ def run_step(path: Path, arguments: List[str], timeout: int = DEFAULT_GIT_TIMEOU
     try:
         done = subprocess.run(command, capture_output=True, timeout=timeout, env=env, check=False)
     except (FileNotFoundError, PermissionError):
-        return 127, "找不到 git 命令。确认 git 在 PATH 里。"
+        return 127, messages.text("target.git.missing")
     except subprocess.TimeoutExpired:
-        return 124, f"超过 {timeout} 秒没有结束。"
+        return 124, messages.text("target.timeout", timeout=timeout)
     said = (done.stderr or done.stdout).decode("utf-8", errors="replace").strip()
     return done.returncode, said
 
@@ -283,10 +283,7 @@ def location_warnings(root: str, windows: Optional[bool] = None) -> List[str]:
     found = []
     on_windows = os.name == "nt" if windows is None else windows
     if on_windows and len(root) > LONG_PATH_WARNING:
-        found.append(
-            f"harness 的路径有 {len(root)} 个字符。请求目录和仓库内的路径还要再加上一百多个字符，Windows 默认上限是 260。"
-            "把 harness 放到短路径，例如 C:\\dev\\harness"
-        )
+        found.append(messages.text("target.windows.long", length=len(root)))
     if "onedrive" in root.lower():
-        found.append("harness 在 OneDrive 下。请求目录里的文件会被同步，数量多时很慢，也可能同步到一半出错。放到不同步的位置，例如 C:\\dev\\harness")
+        found.append(messages.text("target.windows.onedrive"))
     return found

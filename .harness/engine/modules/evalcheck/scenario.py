@@ -18,7 +18,9 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
-from core import schema
+from core import messages, schema
+
+say = messages.text
 
 SCENARIOS_DIR = ".harness/eval/scenarios"
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -26,7 +28,7 @@ MATCH_KEYS = {
     "event": str, "tool_name": str, "tool_kind": str, "decision": str, "judge": str, "by": str, "kind": str,
     "agent_type": str, "from_subagent": bool, "reason_contains": str, "target_contains": str,
 }
-SECTIONS = ("## 前置", "## Prompt", "## 人工检查项")
+SECTIONS = ("## Setup", "## Prompt", "## Manual checks")
 
 EXPECT_SCHEMA = {
     "type": "object",
@@ -59,39 +61,39 @@ def match_errors(match: Dict[str, Any], where: str) -> List[str]:
     for key, value in match.items():
         expected = MATCH_KEYS.get(key)
         if expected is None:
-            errors.append(f"{where}：不认识的匹配键 `{key}`（可用：{', '.join(sorted(MATCH_KEYS))}）")
+            errors.append(say("note.detail", what=where, detail=say("eval.match.unknown_key", key=key, known=", ".join(sorted(MATCH_KEYS)))))
         elif not isinstance(value, expected) or (expected is int and isinstance(value, bool)):
-            errors.append(f"{where}：`{key}` 的类型不对")
+            errors.append(say("note.detail", what=where, detail=say("eval.match.bad_type", key=key)))
     return errors
 
 
 def expect_errors(expect: Dict[str, Any], where: str) -> List[str]:
     errors = schema.validate(expect, EXPECT_SCHEMA)
-    errors = [f"{where}：{item}" for item in errors]
+    errors = [messages.text("note.detail", what=where, detail=item) for item in errors]
     for number, item in enumerate(expect.get("calls", [])):
         errors += match_errors(item.get("match", {}), f"{where} calls[{number}]")
         if sum(key in item for key in ("min", "max", "exactly")) > 1 and "exactly" in item:
-            errors.append(f"{where} calls[{number}]：`exactly` 不和 `min`、`max` 一起用")
+            errors.append(say("eval.calls.mixed", where=where, number=number))
     for number, item in enumerate(expect.get("order", [])):
         for step, match in enumerate(item.get("steps", [])):
             errors += match_errors(match, f"{where} order[{number}].steps[{step}]")
     for number, item in enumerate(expect.get("json", [])):
         if sum(key in item for key in ("equals", "not_equals")) != 1:
-            errors.append(f"{where} json[{number}]：要有且只有一个 `equals` 或 `not_equals`")
+            errors.append(say("eval.json.one_of", where=where, number=number))
     return errors
 
 
 def load(root: Path, scenario_id: str) -> Dict[str, Any]:
     if not ID_PATTERN.match(scenario_id):
-        raise ValueError(f"场景 id `{scenario_id}` 不合法：只用小写字母、数字和连字符。")
+        raise ValueError(say("eval.scenario.bad_id", scenario_id=scenario_id))
     folder = scenarios_dir(root) / scenario_id
     if not folder.is_dir():
-        known = ", ".join(sorted(path.name for path in scenarios_dir(root).iterdir() if path.is_dir())) if scenarios_dir(root).is_dir() else "（没有）"
-        raise ValueError(f"没有场景 `{scenario_id}`。有：{known}")
+        known = ", ".join(sorted(path.name for path in scenarios_dir(root).iterdir() if path.is_dir())) if scenarios_dir(root).is_dir() else say("output.none_known")
+        raise ValueError(say("eval.scenario.missing", scenario_id=scenario_id, known=known))
     expect = json.loads((folder / "expect.json").read_text(encoding="utf-8-sig"))
     errors = expect_errors(expect, f"{scenario_id}/expect.json")
     if errors:
-        raise ValueError("；".join(errors))
+        raise ValueError(messages.text("list.semicolon").join(errors))
     text = (folder / "scenario.md").read_text(encoding="utf-8")
     return {"id": scenario_id, "folder": folder, "expect": expect, "text": text, "manual": manual_items(text)}
 
@@ -110,7 +112,7 @@ def section(text: str, heading: str) -> str:
 
 
 def manual_items(text: str) -> List[str]:
-    return [line[2:].strip() for line in section(text, "## 人工检查项").splitlines() if line.startswith("- ")]
+    return [line[2:].strip() for line in section(text, SECTIONS[2]).splitlines() if line.startswith("- ")]
 
 
 def titles(root: Path) -> List[Dict[str, str]]:
@@ -131,18 +133,18 @@ def problems(root: Path) -> List[str]:
         if not path.is_dir():
             continue
         if not ID_PATTERN.match(path.name):
-            found.append(f"场景目录名 `{path.name}` 不合法：只用小写字母、数字和连字符。")
+            found.append(say("eval.scenario.bad_folder", name=path.name))
             continue
         text_file, expect_file = path / "scenario.md", path / "expect.json"
         if not text_file.is_file() or not expect_file.is_file():
-            found.append(f"场景 {path.name} 缺 scenario.md 或 expect.json。")
+            found.append(say("eval.scenario.files", name=path.name))
             continue
         text = text_file.read_text(encoding="utf-8")
         for heading in SECTIONS:
             if heading not in text.splitlines():
-                found.append(f"场景 {path.name} 的 scenario.md 缺 `{heading}`。")
+                found.append(say("eval.scenario.heading", name=path.name, heading=heading))
         try:
             found += expect_errors(json.loads(expect_file.read_text(encoding="utf-8-sig")), f"{path.name}/expect.json")
         except ValueError as error:
-            found.append(f"场景 {path.name} 的 expect.json 读不了：{error}")
+            found.append(say("eval.scenario.expect", name=path.name, error=error))
     return found

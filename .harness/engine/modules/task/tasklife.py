@@ -39,7 +39,7 @@ TIER_FILES = {
 FALLBACK = "# {name}\n"
 
 
-def say(key: str, **values: Any) -> str:
+def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
 
 
@@ -67,12 +67,17 @@ def files_of(tier: str) -> List[str]:
 
 
 def template(root: Path, name: str) -> str:
-    """The shipped template, or one line when it is missing: a task must not fail to start over a template."""
-    for base in (root, repo_root()):
-        try:
-            return (base / TEMPLATES / name).read_text(encoding="utf-8")
-        except OSError:
-            continue
+    """The shipped template in the language of this run, or one line when it is missing: a task must not fail to start over a template.
+
+    Templates are in one folder per language. A template right in `templates/task/` (a team's own, in one language) is
+    used when the language folder has none; the default language is the last resort.
+    """
+    for folder in (messages.language(), "", messages.DEFAULT_LANGUAGE):
+        for base in (root, repo_root()):
+            try:
+                return (base / TEMPLATES / folder / name).read_text(encoding="utf-8")
+            except OSError:
+                continue
     return FALLBACK
 
 
@@ -152,7 +157,7 @@ def open_task(root: Path, raw_name: str, session_id: str, surface: str = "vscode
     if text and not task and "/" in text.replace("\\", "/").strip("/"):
         task = task_ops.resolve(root, text)
     if not task:
-        raise CommandError(say("task.missing", name=name or "<任务名>"))
+        raise CommandError(say("task.missing", name=name or say("task.name.placeholder")))
     check_session(root, session_id, surface)
     before = tasks.read(root, task)
     result = attach(root, task, session_id, surface)
@@ -246,7 +251,8 @@ def waiting_text(data: Dict[str, Any], why: str) -> str:
     text = messages.text(f"task.waiting.{why}")
     if why == "autorun":
         ended = (data.get("autorun") or {}).get("stopped") or {}
-        text += "（" + messages.text(f"autorun.why.{ended.get('why') or 'done'}") + (f"：{ended['detail']}" if ended.get("detail") else "") + "）"
+        why = messages.text(f"autorun.why.{ended.get('why') or 'done'}")
+        text += say("note.brackets", text=say("note.detail", what=why, detail=ended["detail"]) if ended.get("detail") else why)
     return text
 
 

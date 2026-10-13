@@ -490,7 +490,7 @@ class MessageTests(unittest.TestCase):
         self.assertEqual(messages.table("xx"), {})
 
     def test_every_message_the_code_names_is_in_the_table(self) -> None:
-        known = messages.table()
+        known = messages.table("zh")
         named = set()
         for path in ENGINE.rglob("*.py"):
             source = path.read_text(encoding="utf-8")
@@ -501,7 +501,7 @@ class MessageTests(unittest.TestCase):
         self.assertEqual(sorted(name for name in named if name not in known), [])
 
     def test_every_kind_and_tier_has_a_label_and_a_next_step(self) -> None:
-        known = messages.table()
+        known = messages.table("zh")
         for kind in (*tasks.KINDS, "none"):
             self.assertIn(f"task.kind.{kind}", known)
         for tier in tasks.TIERS:
@@ -513,9 +513,10 @@ class MessageTests(unittest.TestCase):
         dynamic = (
             "task.kind.", "task.tier.", "task.next.light", "task.next.medium", "task.next.full", "task.waiting.",
             "insight.stage.", "insight.part.", "insight.wait.", "insight.finding.", "report.source.", "report.status.", "board.state.", "board.queue.", "autorun.why.", "unit.",
+            "gate.git.why.", "promote.hint.", "task.resolve.", "log.count.", "path.what", "delete.what", "approval.person_only", "event.", "mdreport.promote.", "doctor.language.source.", "doctor.override.how.", "doctor.target.kind.", "doctor.output.sample",
         )
         source = source.replace('messages.text(\n            "', 'messages.text("')
-        unused = [name for name in messages.table() if f'"{name}"' not in source and not name.startswith(dynamic)]
+        unused = [name for name in messages.table("zh") if f'"{name}"' not in source and not name.startswith(dynamic)]
         self.assertEqual(unused, [])
 
 

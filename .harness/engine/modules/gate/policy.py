@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Pattern, Tuple
 
-from core import repo_paths, schema
+from core import messages, repo_paths, schema
 from core.guardrails import CORE_GUARDRAILS, admin_locked, guardrail_paths, missing_core
 
 POLICY_NAME = "gate"
@@ -21,7 +21,8 @@ COMMAND_START = r"(?:^|[;&|(\n]\s*)(?:sudo\s+)?"
 _RULE_SCHEMA = {
     "type": "object",
     "required": ["pattern", "why"],
-    "properties": {"pattern": {"type": "string"}, "why": {"type": "string"}},
+    # `why` is one text, or one text per language: {"en": "...", "zh": "..."}.
+    "properties": {"pattern": {"type": "string"}, "why": {"type": ["string", "object"], "additionalProperties": {"type": "string"}}},
 }
 _RULES_SCHEMA = {"type": "array", "items": _RULE_SCHEMA}
 
@@ -84,7 +85,7 @@ class Compiled:
         self.path_regexes: List[Tuple[str, Pattern[str]]] = [(item, repo_paths.glob_regex(item)) for item in self.paths]
         guard = repo_paths.command_regex(self.paths).pattern
         self.guard_writes = [
-            (re.compile(expand(rule["pattern"], guard), re.IGNORECASE), rule["why"])
+            (re.compile(expand(rule["pattern"], guard), re.IGNORECASE), messages.pick(rule["why"]))
             for rule in policy["terminal"]["guardrail_write"]
         ]
         # Files only the CLI writes (a task's `.task/`, `REVIEW/`, `SNAPSHOT/`, the reports). Same write patterns as for guardrail files.
@@ -92,11 +93,11 @@ class Compiled:
         self.owned_regexes: List[Tuple[str, Pattern[str]]] = [(item, repo_paths.glob_regex(item)) for item in self.owned]
         owned_guard = repo_paths.command_regex(self.owned).pattern if self.owned else ""
         self.owned_writes = [
-            (re.compile(expand(rule["pattern"], owned_guard), re.IGNORECASE), rule["why"])
+            (re.compile(expand(rule["pattern"], owned_guard), re.IGNORECASE), messages.pick(rule["why"]))
             for rule in policy["terminal"]["guardrail_write"]
         ] if self.owned else []
-        self.deny = [(re.compile(expand(rule["pattern"], ""), re.IGNORECASE), rule["why"]) for rule in policy["terminal"]["deny"]]
-        self.ask = [(re.compile(expand(rule["pattern"], ""), re.IGNORECASE), rule["why"]) for rule in policy["terminal"]["ask"]]
+        self.deny = [(re.compile(expand(rule["pattern"], ""), re.IGNORECASE), messages.pick(rule["why"])) for rule in policy["terminal"]["deny"]]
+        self.ask = [(re.compile(expand(rule["pattern"], ""), re.IGNORECASE), messages.pick(rule["why"])) for rule in policy["terminal"]["ask"]]
         # A `.git` folder is never written by an agent (A4); a target repository's refused_paths are not written either.
         self.repos: List[Tuple[str, Path, List[Tuple[str, Pattern[str]]]]] = [
             (name, path, [(item, repo_paths.glob_regex(item)) for item in refused if item.strip() != ".git/**"])
@@ -108,7 +109,7 @@ class Compiled:
         ]
         target_guard = "(?:" + GIT_FOLDER + (("|" + repo_paths.command_regex(absolute).pattern) if absolute else "") + ")"
         self.target_writes = [
-            (re.compile(expand(rule["pattern"], target_guard), re.IGNORECASE), rule["why"])
+            (re.compile(expand(rule["pattern"], target_guard), re.IGNORECASE), messages.pick(rule["why"]))
             for rule in policy["terminal"]["guardrail_write"]
         ]
         # The working tree of a target repository is written by promote only (M7-4). A git command is not judged here:
@@ -116,7 +117,7 @@ class Compiled:
         trees = [f"{repo_paths.normal(str(path))}/**" for _name, path, _refused in (repos or [])]
         tree_guard = repo_paths.command_regex(trees).pattern if trees else ""
         self.tree_writes = [
-            (re.compile(expand(rule["pattern"], tree_guard), re.IGNORECASE), rule["why"])
+            (re.compile(expand(rule["pattern"], tree_guard), re.IGNORECASE), messages.pick(rule["why"]))
             for rule in policy["terminal"]["guardrail_write"] if not rule["pattern"].startswith(COMMAND_PLACEHOLDER + "git")
         ] if trees else []
 

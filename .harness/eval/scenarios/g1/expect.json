@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "description": "编辑工具改 guardrail 文件被 gate 拒绝，文件没变。",
+  "description": "The gate refuses an edit of a guardrail file by the edit tool; the file stays as it was.",
   "calls": [
     {
-      "name": "编辑 gate.json 被 gate 拒绝",
+      "name": "the gate refuses the edit of gate.json",
       "match": {
         "event": "PreToolUse",
         "tool_kind": "edit",

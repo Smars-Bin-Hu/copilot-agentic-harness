@@ -31,10 +31,9 @@ from .policy import POLICY_NAME, validate_policy
 
 NAME = "task"
 OPEN_TASKS_SHOWN = 5
-GENERIC_AGENT = "通用子 agent"
 
 
-def say(key: str, **values: Any) -> str:
+def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
 
 
@@ -60,7 +59,7 @@ def admin_rules(ctx: Context) -> str:
         locked = guardrails.admin_locked(ctx.policy("gate"))
     except Exception:  # noqa: BLE001 - a broken gate.json must not take the rules away; the gate reports it
         locked = list(guardrails.ADMIN_LOCKED)
-    return say("rules.admin", locked="、".join(f"`{item}`" for item in locked), session_id=ctx.state["session_id"])
+    return say("rules.admin", locked=messages.joined(f"`{item}`" for item in locked), session_id=ctx.state["session_id"])
 
 
 def user_review(event: HookEvent) -> Optional[int]:
@@ -115,17 +114,17 @@ def open_tasks_text(ctx: Context) -> str:
     if not names:
         return ""
     names.sort(reverse=True)
-    shown = "、".join(f"{name}（{messages.text('task.kind.' + (kind or 'none'))}）" for _stamp, name, kind in names[:OPEN_TASKS_SHOWN])
+    shown = messages.joined(say("rules.task.open_item", name=name, kind=messages.text(f"task.kind.{kind or 'none'}")) for _stamp, name, kind in names[:OPEN_TASKS_SHOWN])
     if len(names) > OPEN_TASKS_SHOWN:
-        shown += " 等"
+        shown += say("rules.task.open_more")
     return say("rules.task.open_list", count=len(names), names=shown)
 
 
 def prompt_text(ctx: Context, asked: Optional[int] = None) -> str:
     """Injected at session start and with every user prompt. `asked`: the `[review]=n` of this prompt, if any."""
     if ctx.admin:
-        return admin_rules(ctx)
-    lines = [say("rules.session", session_id=ctx.state["session_id"])]
+        return admin_rules(ctx) + "\n" + say("rules.language")
+    lines = [say("rules.session", session_id=ctx.state["session_id"]), say("rules.language")]
     data = open_task(ctx)
     if data is not None:
         lines.append(task_text(ctx, keep_review(ctx, data, asked)))
@@ -172,7 +171,7 @@ def on_subagent_call(event: HookEvent, ctx: Context) -> Optional[Decision]:
 
     if is_subagent_session(ctx):
         return None  # the platform does not nest subagents; a subagent's own tools are not this module's business
-    called = event.subagent_target.strip() or GENERIC_AGENT
+    called = event.subagent_target.strip() or say("rules.subagent.generic")
     if ctx.admin:
         return Decision(permission="deny", reason=say("rules.subagent.admin", called=called), facts={"kind": "subagent"})
     if called.lower() == mapreduce.AGENT:
@@ -193,7 +192,7 @@ def on_subagent_start(event: HookEvent, ctx: Context) -> Optional[Decision]:
     from . import taskreview
 
     if event.agent_type.strip().lower() == mapreduce.AGENT:
-        return Decision(context=say("mapreduce.start.context"))
+        return Decision(context=say("mapreduce.start.context") + "\n" + say("rules.language"))
     data = open_task(ctx)
     if data is None or event.agent_type.strip().lower() != taskreview.AGENT:
         return None
@@ -201,7 +200,7 @@ def on_subagent_start(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if waiting is None:
         return None
     package = f"{taskreview.round_dir(data['task'], waiting['number'])}/{taskreview.PACKAGE}"
-    return Decision(context=say("review.start.context", package=package))
+    return Decision(context=say("review.start.context", package=package) + "\n" + say("rules.language"))
 
 
 # --- what happened, and the reminders at Stop ----------------------------------------------------

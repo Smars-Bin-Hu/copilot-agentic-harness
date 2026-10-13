@@ -189,6 +189,7 @@
   "report.col.total": "总耗时",
   "report.col.longest": "最长一次",
   "report.col.failed": "失败",
+  "report.col.tokens": "token 数",
   "report.col.result_tokens": "结果 token",
   "report.col.check": "检查",
   "report.col.verdict": "结论",

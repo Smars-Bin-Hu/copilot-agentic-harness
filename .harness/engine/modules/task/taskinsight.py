@@ -355,8 +355,10 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
         parts = split(prompt)
         until = prompt["next_at"] if prompt["next_at"] is not None else float("inf")
         counted = count_rows(rows_of[prompt["session_id"]], prompt["at"] - 1, until - 1)
-        put_aside = aside(paused, prompt["end"], prompt["next_at"]) if prompt["next_at"] is not None else 0.0
-        waited = max(0.0, prompt["next_at"] - prompt["end"] - put_aside) if prompt["next_at"] is not None else None  # time aside is not waiting
+        # The wait runs to the next prompt of the task, in whatever session: a person who opens a new chat was away in between.
+        following = mine[number]["at"] if number < len(mine) else None
+        put_aside = aside(paused, prompt["end"], following) if following is not None else 0.0
+        waited = max(0.0, following - prompt["end"] - put_aside) if following is not None else None  # time aside is not waiting
         slowest = max(prompt["tools"], key=lambda tool: tool["seconds"], default=None)
         entry = {
             "n": number, "session_id": prompt["session_id"], "at": utc_text(prompt["at"]), "stage": stage_at(events, prompt["end"], planned),
@@ -381,7 +383,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
         totals["paused_s"] += put_aside
         if waited is not None and waited >= 1:
             totals["waiting_s"] += waited
-            waits.append({"after_prompt": number, "from": utc_text(prompt["end"]), "seconds": round(waited, 1), "reason": wait_reason(events, prompt["end"], prompt["next_at"])})
+            waits.append({"after_prompt": number, "from": utc_text(prompt["end"]), "seconds": round(waited, 1), "reason": wait_reason(events, prompt["end"], following)})
         for run in prompt["subagents"]:
             add(totals, "subagent_tokens", run["tokens"])
             subagents.append({"prompt": number, "agent": run["agent"], "model": run["model"], "at": run["at"], "seconds": round(run["seconds"], 1), "tokens": run["tokens"], "tool_calls": run["tool_calls"]})

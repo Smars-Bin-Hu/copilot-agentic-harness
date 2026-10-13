@@ -71,7 +71,7 @@
       const notes = [["report.tag.denied", "denied"], ["report.tag.blocks", "stop_blocks"], ["report.tag.failed", "failed_tool_calls"]]
         .filter(([, field]) => entry[field]).map(([key, field]) => [" ", tag(t(key, {n: entry[field]}), "bad")]);
       rows.push(h("tr", null,
-        h("td", null, entry.n), h("td", null, when(entry.at, 5, 16)),
+        h("td", null, entry.n), h("td", {class: "when"}, when(entry.at, 5, 16)),
         h("td", null, tag(t("insight.stage." + entry.stage)), notes, entry.text ? h("div", {class: "sub said"}, entry.text) : null),
         h("td", {class: "grow"}, bar(timeParts(entry), longest)), num(clock(entry.active_s)),
         hasUsage ? [h("td", {style: "width:14%"}, bar([["usage", entry.aiu || 0, "AIU " + amount(entry.aiu)]], dearest, true)), num(amount(entry.aiu))] : null,
@@ -133,9 +133,9 @@
 
   function reviewsCard() {
     if (!info.reviews.length) return null;
-    const head = [th(t("report.col.check")), th(t("report.col.at")), th(t("report.col.verdict")), th(t("report.col.time"), true), th("token", true), th(t("report.col.model"))];
+    const head = [th(t("report.col.check")), th(t("report.col.at")), th(t("report.col.verdict")), th(t("report.col.time"), true), th(t("report.col.tokens"), true), th(t("report.col.model"))];
     const rows = info.reviews.map((item) => h("tr", null,
-      h("td", null, "round-" + String(item.number || 0).padStart(3, "0")), h("td", null, when(item.started_at, 5, 16)),
+      h("td", null, "round-" + String(item.number || 0).padStart(3, "0")), h("td", {class: "when"}, when(item.started_at, 5, 16)),
       h("td", null, item.verdict ? tag(item.verdict, item.verdict === "PASS" ? "good" : "bad") : tag(t("report.review.none"))),
       num(clock(item.seconds)), num(amount(item.tokens)), h("td", null, item.model || "-")));
     return card(t("report.reviews"), table(head, rows));

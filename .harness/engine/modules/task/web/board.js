@@ -11,6 +11,7 @@
   const usage = briefs.filter((brief) => brief.aiu !== null).map((brief) => brief.aiu);
   const sum = (values) => values.reduce((total, value) => total + value, 0);
 
+  document.querySelector("main").classList.add("wide");
   app.replaceChildren(
     h("h1", null, t("board.title")),
     h("div", {class: "sub"}, t(DATA.refresh ? "board.subtitle.fresh" : "board.subtitle", {as_of: when(DATA.as_of, 0, 19), seconds: DATA.refresh})),
@@ -41,15 +42,15 @@
     return h("tr", null,
       h("td", {class: "name"}, row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : row.name,
         row.depends_on && row.depends_on.length ? h("div", {class: "sub"}, t("board.depends", {names: row.depends_on.join("、")})) : null),
-      h("td", null, kind), h("td", null, state(row)),
+      h("td", {class: "kind"}, kind), h("td", {class: "state"}, state(row)),
       num(row.waiting && row.waited_s !== null ? clock(row.waited_s) : "-"),
       brief
-        ? [h("td", {style: "width:22%"}, bar([
+        ? [h("td", {style: "width:18%"}, bar([
             ["work", brief.active_s, t("report.active") + " " + clock(brief.active_s)],
             ["wait", brief.waiting_s, t("report.waiting") + " " + clock(brief.waiting_s)]], longest, true)),
           num(clock(brief.active_s)), num(amount(brief.aiu)), num(brief.prompts), num(brief.reviews ? reviewsText(brief.reviews, brief.review_fails) : "-")]
         : [h("td"), num("-"), num("-"), num("-"), num("-")],
-      h("td", {class: "sub"}, when(row.updated_at, 5, 16)));
+      h("td", {class: "sub when"}, when(row.updated_at, 5, 16)));
   });
   app.append(
     h("div", {class: "card"}, table(head, lines), legend([["work", t("report.active"), ""], ["wait", t("report.waiting"), ""]])),

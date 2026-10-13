@@ -370,6 +370,22 @@ class InsightTests(BoardCase):
         self.assertEqual((info["waits"][0]["after_prompt"], info["waits"][0]["reason"]), (1, "reply"))
         self.assertEqual(info["findings"][0]["kind"], "waiting")
 
+    def test_the_wait_between_two_sessions_of_one_task_counts_too(self) -> None:
+        # A person who opens a new chat for the same task was away in between; that time is the person's, as inside one chat.
+        self.new()
+        first = self.prompt_times()[0]
+        later = first + timedelta(seconds=400)
+        self.cli_json("task", "open", "job", "--session-id", S2)
+        log = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{S2}.jsonl"
+        rows = self.session_log(S2)
+        extra = {**rows[0], "at": later.isoformat(), "kind": "task", "task": f"{BASE}/job"}
+        log.write_text("\n".join(json.dumps(item) for item in rows + [extra]) + "\n", encoding="utf-8")
+        self.copilot_record(S1, one_prompt(first, 10, 1, 40000))
+        self.copilot_record(S2, one_prompt(later, 20, 2, 41000))
+        info = taskinsight.of_task(self.root, f"{BASE}/job")
+        self.assertEqual(round(info["totals"]["waiting_s"]), 340)
+        self.assertEqual((info["waits"][0]["after_prompt"], info["waits"][0]["reason"]), (1, "reply"))
+
     def test_a_message_copilot_queued_itself_goes_on_with_the_prompt_before_it(self) -> None:
         self.new()
         first = self.prompt_times()[0]

@@ -54,7 +54,7 @@ function when(stamp, from, to) {
 }
 
 function kpi(value, label) {
-  return h("div", {class: "kpi"}, h("b", null, value), h("span", null, label));
+  return h("div", {class: "kpi"}, h("b", {class: String(value).length > 12 ? "long" : ""}, value), h("span", null, label));
 }
 
 // parts: [css class, value, tooltip]. Each part takes value / whole of the bar.

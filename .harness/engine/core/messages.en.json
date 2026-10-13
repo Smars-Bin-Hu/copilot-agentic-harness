@@ -189,6 +189,7 @@
   "report.col.total": "Total time",
   "report.col.longest": "Longest",
   "report.col.failed": "Failed",
+  "report.col.tokens": "Tokens",
   "report.col.result_tokens": "Result tokens",
   "report.col.check": "Check",
   "report.col.verdict": "Verdict",

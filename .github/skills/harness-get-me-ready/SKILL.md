@@ -1,11 +1,11 @@
 ---
-name: harness-repo-initialize
-description: 'First setup after getting the harness repository: set up the short command harness, plug in the knowledge base and the company skills, set up the target repositories, the user name and the language, and check it all with doctor. Use when the user types /harness-repo-initialize, or says "initialize the harness", "first setup", "the harness command is not found", "doctor reports an error about the short command". Keywords: initialize, setup, install, first use, PATH, short command, target.override.json, plug in the knowledge base, language.'
+name: harness-get-me-ready
+description: 'First setup after getting the harness repository: set up the short command harness, plug in the knowledge base and the company skills, set up the target repositories, the user name and the language, and check it all with doctor. Use when the user types /harness-get-me-ready, or says "get me ready", "initialize the harness", "first setup", "the harness command is not found", "doctor reports an error about the short command". Keywords: get me ready, initialize, setup, install, first use, PATH, short command, target.override.json, plug in the knowledge base, language.'
 type: workflow
 specificTo: generic
 ---
 
-# Initialize the harness repository
+# Get me ready: the first setup of the harness
 
 Take the user from a freshly received harness repository to one that works: the short command, the user name and the language, the target repositories, the knowledge base, the company skills. Check with `doctor` after every item.
 

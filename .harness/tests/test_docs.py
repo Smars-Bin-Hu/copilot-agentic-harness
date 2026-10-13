@@ -102,7 +102,7 @@ class InitializeSkillTests(unittest.TestCase):
     """The CLI prints UTF-8 on a Windows pipe by itself. The skill only acts when that reads as garbage: it writes `native`."""
 
     def steps(self) -> Dict[str, str]:
-        skill = text(REPO / ".github" / "skills" / "harness-repo-initialize" / "SKILL.md")
+        skill = text(REPO / ".github" / "skills" / "harness-get-me-ready" / "SKILL.md")
         body = skill[skill.index("## Step-by-Step Workflows"):skill.index("## Gotchas")]
         return {number: chunk for number, chunk in re.findall(r"^(\d)\. (.+?)(?=^\d\. |\Z)", body, re.M | re.S)}
 
@@ -159,7 +159,7 @@ class ReadmeStructureTests(unittest.TestCase):
         self.assertTrue(readme.startswith("# Copilot Agentic Harness\n"))
         self.assertEqual(re.findall(r"^## (.+)$", readme, re.M), ["What it is", "Get started", "What it does", "What you must plug in", "Docs", "Directory layout"])
         start = section(readme, "Get started")
-        for skill in ("harness-repo-initialize", "harness-quick-start", "harness-wondering"):
+        for skill in ("harness-get-me-ready", "harness-quick-start", "harness-wondering"):
             self.assertIn(f"`/{skill}`", start, skill)
             self.assertTrue((REPO / ".github" / "skills" / skill / "SKILL.md").is_file(), skill)
         self.assertIn("What the harness does", section(readme, "What it does"))

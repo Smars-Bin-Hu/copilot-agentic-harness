@@ -25,10 +25,11 @@ The harness speaks two languages: one setting picks English or Chinese for what 
 - **Every text of the engine in both languages**: `core/messages.en.json` and `core/messages.zh.json`, with the same names and placeholders. The code holds only the names. A test fails when the two differ.
 - **`doctor` shows the language** in effect and where it comes from, and reports a value other than `en` or `zh` as an error.
 - **The reasons in `gate.json` are in both languages**: `"why": {"en": "...", "zh": "..."}`. An override may still give one plain string.
-- The initialize skill asks for the language in its user step; the first lesson and the deep course say what the setting does.
+- The setup skill (`/harness-get-me-ready`) asks for the language in its user step; the first lesson and the deep course say what the setting does.
 
 ### Changed
 
+- **The setup skill has a new name: `/harness-get-me-ready`** (before: `/harness-repo-initialize`). What it does is the same. The old name no longer works; older entries below still call it by its old name.
 - **The default language is English.** After upgrading, the CLI, the refusals and the injected rules are in English, and the agent is told to answer in English. To keep Chinese: write `{"language": "zh"}` in `.harness/policies/user.override.json`.
 - **The docs, rules and skills are in English only**: `README.md`, `docs/`, `AGENTS.md`, `.github/` (instructions, agents, skills), `.harness/INDEX.md`, `.workspace/README.md`, the eval scenarios. The Chinese originals are in the tag `1.3.1`.
 - **The task file templates moved into one folder per language**: `.harness/contracts/templates/task/en/` and `zh/`. A template of your own placed right in `templates/task/` is still used when the language folder has none; move changed templates into the language folder.

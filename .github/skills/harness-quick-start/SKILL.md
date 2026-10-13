@@ -14,11 +14,11 @@ Teach a first-time user three things: what this is for; which folders matter; ho
 - The user uses this harness for the first time and wants to know what it is and how to use it.
 - The user used a version before 1.1.0 (the one with Levels) and wants to know how it works now.
 
-When the environment is not set up (the `harness` command is not found, no target repository is set up), use the skill `harness-repo-initialize` first. For opening tasks day to day use `harness-my-task`, not this skill.
+When the environment is not set up (the `harness` command is not found, no target repository is set up), use the skill `harness-get-me-ready` first. For opening tasks day to day use `harness-my-task`, not this skill.
 
 ## Prerequisites
 
-- `harness doctor` runs. If it does not, go to `harness-repo-initialize` first.
+- `harness doctor` runs. If it does not, go to `harness-get-me-ready` first.
 - The knowledge base, the company skills and the target repositories are taken to be set up. If they are not, the lesson still works.
 
 ## Step-by-Step Workflows
@@ -36,7 +36,7 @@ At the start, send the user the list, and tick each item as it is done:
 
 ### Opening
 
-1. Run `harness doctor`. If there is an `[ERROR]`, stop and go to `harness-repo-initialize`. Read any `[WARN]` to the user; it does not block.
+1. Run `harness doctor`. If there is an `[ERROR]`, stop and go to `harness-get-me-ready`. Read any `[WARN]` to the user; it does not block.
 2. Ask the user one question, so you know how slowly to go. Use a question tool if you have one; if not, list numbers:
    1. Only used code completion (the grey text while typing code)
    2. Asked questions in the Chat window
@@ -82,14 +82,14 @@ The link: [Quick start](../../../docs/01-quickstart.md) (it has what to say day 
 - **Do not touch a target repository.** The practice task is of kind `design` and has no `DEV/`.
 - **Do not write `[review]=1` yourself.** The user must send that message: the hook goes by the user's own words only.
 - **The task folder is ignored by git, and search tools do not find it.** Give the user links by path, and let them click it open in the file tree on the left.
-- **The language.** The harness speaks English by default and can speak Chinese: `language` in `.harness/policies/user.override.json` (`en` or `zh`). When the user would rather have Chinese, say so; the skill `harness-repo-initialize` sets it. Teach this lesson in the language the rules at the top of the prompt name.
+- **The language.** The harness speaks English by default and can speak Chinese: `language` in `.harness/policies/user.override.json` (`en` or `zh`). When the user would rather have Chinese, say so; the skill `harness-get-me-ready` sets it. Teach this lesson in the language the rules at the top of the prompt name.
 - **A user of an old version** will ask about `/l2` and `task start`. The answer: there are no Levels any more, nothing to write for them; `task start` became `task new` and `task open`; old task folders have to move to `.workspace/sandbox/tasks/`.
 
 ## Troubleshooting
 
 | Issue | Solution |
 | --- | --- |
-| `harness: command not found` | Go to step 1 of the skill `harness-repo-initialize` |
+| `harness: command not found` | Go to step 1 of the skill `harness-get-me-ready` |
 | `Task ... exists already` | Left over from the last practice. Go on with it using `task open <task name>`, or pick another name |
 | A call of the reviewer is refused | The user has not sent a message with `[review]=1` yet, or `task review start` has not been run |
 | The user says "this is too long" | Keep only part 3, and say parts 1 and 2 in three sentences each |

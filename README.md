@@ -41,7 +41,7 @@ Clone this repository, or download the zip from GitHub and extract it (git is op
 
 | Step | Type | What it walks you through |
 | --- | --- | --- |
-| 1 | `/harness-repo-initialize` | **Setup**: the short command, knowledge base, company skills and target repositories, then a self-check |
+| 1 | `/harness-get-me-ready` | **Setup**: the short command, knowledge base, company skills and target repositories, then a self-check |
 | 2 | `/harness-quick-start` | **Introductory lesson**: what the harness is for, how to read the directories, and one simulated task. About 20 minutes |
 | 3 | `/harness-wondering` | **Understand it first**: an interactive explanation of the principles and implementation, 15 topics, ask anything |
 
@@ -67,7 +67,7 @@ There is more: queued write-back when several tasks target the same repository, 
 
 ## What you must plug in
 
-The harness is generic and carries no business content. **Without the two items below it cannot do your daily work.** `/harness-repo-initialize` helps you set them up.
+The harness is generic and carries no business content. **Without the two items below it cannot do your daily work.** `/harness-get-me-ready` helps you set them up.
 
 - **Company knowledge base.** Put the knowledge base in `knowledge-base/`, and put the **instructions that come with it** in [.github/instructions/knowledgebase.instructions.md](.github/instructions/knowledgebase.instructions.md). This file ships empty. Without it the agent doesn't know how to read the knowledge base through its index. `doctor` reminds you.
 - **Target repositories.** In `target.override.json`, set `repos_root` to the folder that holds your code repositories. Until this is set, the agent cannot change your code. Once it is set, a target repository can be written only through a promote that you approve.

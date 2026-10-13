@@ -18,7 +18,7 @@ The folder name of a skill and its `name` field must be the same, and use one of
 
 - `harness-<name>`: a skill of the harness itself. Maintained upstream. Two kinds:
   - The semantic side of a module: the name matches `.harness/engine/modules/<module>/`, with underscores in the module name written as hyphens.
-  - A flow for using the harness itself: it matches no module, and the name says what it does (`harness-repo-initialize`).
+  - A flow for using the harness itself: it matches no module, and the name says what it does (`harness-get-me-ready`).
 - `generic-<skill-name>`: a general skill for any domain. Maintained upstream.
 - `domain-<domain name>-<skill-name>`: a skill for one business domain. Maintained by the team; upstream makes none.
 

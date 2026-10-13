@@ -17,7 +17,7 @@ There are two ways to get the harness, both fine: `git clone`, or downloading th
 
 Every command is written `harness <command>`: in the docs, in the rules the agent receives, and in refusal reasons. So the terminal has to know `harness` first. This is done once.
 
-To have the agent take you through it: type `/harness-repo-initialize` in a Copilot conversation. Below is how to do it by hand.
+To have the agent take you through it: type `/harness-get-me-ready` in a Copilot conversation. Below is how to do it by hand.
 
 The launchers are in `.harness/bin/`: `harness` on macOS/Linux, `harness.cmd` on Windows. There is one thing to do: get it on PATH.
 

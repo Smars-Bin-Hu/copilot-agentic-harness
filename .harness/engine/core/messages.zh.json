@@ -594,7 +594,7 @@
   "doctor.hook.sdk": "最近的会话是 Copilot（SDK）会话",
   "doctor.gate.speed": "gate 最近 {count} 次调用：一般 {middle} 毫秒，最慢 {slowest} 毫秒（超时是 {timeout} 秒）",
   "doctor.gate.slow": "{text}。离超时太近：hook 超时的调用会被直接放行，gate 等于没拦。查是什么拖慢了 Python 的启动（杀毒软件、网络盘）",
-  "doctor.short.missing": "PATH 里找不到短命令 `{command}`。agent 收到的命令都以它开头，现在都会失败。把 `{folder}` 加进 PATH（或在 PATH 里的文件夹建一个指向 `{launcher}` 的链接），重开终端和 VS Code，再运行 doctor。步骤见 docs/01-quickstart.md 第 1 步，或让 agent 用技能 harness-repo-initialize 带你配",
+  "doctor.short.missing": "PATH 里找不到短命令 `{command}`。agent 收到的命令都以它开头，现在都会失败。把 `{folder}` 加进 PATH（或在 PATH 里的文件夹建一个指向 `{launcher}` 的链接），重开终端和 VS Code，再运行 doctor。步骤见 docs/01-quickstart.md 第 1 步，或让 agent 用技能 harness-get-me-ready 带你配",
   "doctor.short.ok": "短命令 `{command}` 在 PATH 里（{found}）",
   "doctor.short.copy": "短命令 `{command}` 在 PATH 里（{found}），是本仓库启动脚本的拷贝",
   "doctor.short.other": "PATH 里的 `{command}` 是 `{resolved}`，不是这个仓库的 `.harness/bin/`。1.0.2 起的启动脚本会先找当前目录所在的仓库，所以能用；它要是更早的版本，会操作它自己那一份仓库。它要是 PATH 里固定文件夹的拷贝，内容和这个仓库的 `.harness/bin/` 不一样，就从仓库里重新拷一份",

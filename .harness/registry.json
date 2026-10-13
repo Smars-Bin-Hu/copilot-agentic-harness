@@ -19,7 +19,7 @@
       ".harness/policies/user.json",
       ".harness/bin/harness",
       ".harness/bin/harness.cmd",
-      ".github/skills/harness-repo-initialize/",
+      ".github/skills/harness-get-me-ready/",
       ".harness/eval/fixtures/hooks/copilot-sdk/",
       ".harness/tests/test_breaker.py",
       ".harness/tests/test_docs.py"

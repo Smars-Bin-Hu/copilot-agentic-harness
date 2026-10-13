@@ -82,4 +82,4 @@ Most commands print JSON, and in it there is a `next`: what to do next. The agen
 ## Common questions
 
 - **"Where did `task start` go?"** It was removed, and replaced with `task new` and `task open`.
-- **"The command is not found?"** Go back to `/harness-repo-initialize` and set up the short command.
+- **"The command is not found?"** Go back to `/harness-get-me-ready` and set up the short command.

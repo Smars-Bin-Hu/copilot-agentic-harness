@@ -11,6 +11,8 @@
 - git。用目标仓库时必须有。
 - VS Code 和 GitHub Copilot Chat。聊天输入框的 Session Target 选 **Copilot**。harness 只支持这种会话，见[设计](05-design.md)的“只支持 Copilot 会话”。
 
+拿到 harness 有两种办法，都行：`git clone`，或在 GitHub 页面下载 zip 再解压。解压出来的没有 `.git`，不影响使用。Windows 上放在短路径，例如 `C:\dev\harness`：路径太长 `doctor` 会警告。
+
 ## 1. 短命令（必须）
 
 所有命令都写成 `harness <命令>`：文档里、agent 收到的规则里、拒绝理由里都是。所以要先让终端认得 `harness`。只做一次。

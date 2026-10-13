@@ -1,7 +1,7 @@
 # GitHub Copilot Agentic Harness for DE Team
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.3.0-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.3.1-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
   <img alt="dependencies" src="https://img.shields.io/badge/dependencies-none-brightgreen">
@@ -37,7 +37,7 @@
 
 要求：VS Code 和 GitHub Copilot Chat、Python 3.9+、git。不用 `pip install`。
 
-克隆本仓库，用 VS Code 打开，在 Copilot 对话里输入：
+克隆本仓库，或在 GitHub 页面下载 zip 再解压（不用 git 也行，Windows 上解压到短路径，例如 `C:\dev\harness`）。用 VS Code 打开，在 Copilot 对话里输入：
 
 | 步骤 | 输入 | 它带你做什么 |
 | --- | --- | --- |
@@ -128,4 +128,4 @@ harness 之外：目标仓库（企业的代码仓库）
 
 ---
 
-版本 1.3.0 · [版本记录](docs/07-release-notes.md) · 查自己装的版本：`harness --version`
+版本 1.3.1 · [版本记录](docs/07-release-notes.md) · 查自己装的版本：`harness --version`

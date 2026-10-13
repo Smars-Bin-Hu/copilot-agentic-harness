@@ -10,35 +10,56 @@
 
 查自己装的是哪一版：`harness --version`。
 
-## 下一版（未发布）
+## 1.3.1（2026-10-12）
 
-Windows 上 CLI 的中文不用配就能读。看板能自己更新，报告按任务分文件夹。
+在 Windows 上实测了一遍，修了测出来的问题。看板能自己更新。没有不兼容的改动；任务报告换了位置，见“变更”。
+
+**测试情况**：自动测试在 Windows 上通过（704 个）。Windows 个人电脑上的 Copilot 手测做完，13 项：自检、全量测试、短命令、换行、目标仓库和知识库、门卫、改仓库、更新知识库、看板和报告、并行分块阅读、autorun 连续推进、admin、初始化技能。从 GitHub 下载 zip、解压后运行 `doctor` 也试过。独立检查的两条修复（“用户确认”、结论前多一句）只有自动测试，没有在 Copilot 里再跑一次。Mac 没有重跑这一版。公司电脑没测。
+
+### Windows 实测发现并修好的
+
+- **CLI 的中文显示成 `\uXXXX`**：输出给管道或重定向时，Windows 的编码是 cp1252，写不出中文。Copilot 的终端就是这种情况，agent 读到的全是转义码。以前 `doctor` 给 WARN，要自己写 `cli.override.json`。现在 `output.encoding: auto` 在这种管道上直接输出 UTF-8，`doctor` 那一行是 OK，并说明原来的编码。终端不受影响。
+- **“用户确认”没填，独立检查就不通过**：`REQ.md` 的这一行只有用户能改。reviewer 按没确认判 FAIL，作者又改不了，一个任务白用了 2 次检查。现在评审包会写明这一行没填、不算问题，reviewer 的规则和 `AGENTS.md` 也这样写。新手引导里“agent 替你写上已确认”的说法改成了请你自己填。
+- **reviewer 在结论前多说一句，结论就丢了**：`VERDICT:` 要在第一行。前面多一行，结论记成“没有结论”，白用一次检查。现在在开头三行里找。
+- **看板上很长的“在等什么”把表格撑出页面**：autorun 停下的原因是一长句，后半句和右边几列都看不到。现在在格子里换行。
+- **门卫不认 PowerShell 的 `Push-Location`**：先 `Push-Location` 进一个文件夹，再写里面受保护的文件，以前拦不住。现在和 `cd`、`Set-Location` 一样拒绝。以前只认 `pushd`、`Set-Location`、`sl`。
+- **任务名带 `< > : " | ? *` 时报原始的 WinError 123**：任务名就是文件夹名，Windows 不收这些字符。现在 `task new` 用一句话说清楚。
+- **初始化技能误报“短命令已配好”**：VS Code 带着旧的 PATH 时，`harness` 在这个窗口能用，重开后找不到。技能现在在 Windows 上多对一次账户的 PATH，不一致就告诉你。
+- **初始化技能为编码问用户**：第 7 步不再问；第 8 步里 agent 看 `doctor` 的“中文样例”一行，是乱码才自己写 `native`。
+- **没有全局 git 身份的电脑上，7 个自动测试失败**：6 个是测试里的知识库仓库没有身份，1 个用了 Windows 不收的任务名。被测的代码没有问题，改的是测试。另有 2 个 doctor 测试从 Git Bash 启动会失败，也改了。
+
+### 新增
+
+- **`task board --refresh N` 让看板一直是新的**：以前它只让页面每 N 秒重新载入，数字不变，要自己再运行一次命令。现在命令不退出，每 N 秒重新生成看板和每个任务的分析页，页面自己重新载入，Ctrl+C 退出。每次都写在原来的文件上，不多出文件。它会占着终端，是给人用的。
+- **任务分析页写出“现在在等你”**：任务开着、在等你时，页面顶部有一行，写在等什么、已等多久。下面的数字不变，仍只算到最后一条提示。“生成于”挪到标题下面。
+- **`output.encoding` 多一个值 `native`**：一律不改编码，写不出的字显示成 `\uXXXX`（以前 `auto` 的做法）。读输出的程序不认 UTF-8、中文成了乱码时用它。已经写了 `utf-8` 的不用改。
 
 ### 变更
 
-- **`task board --refresh N` 让看板一直是新的**：以前它只让页面每 N 秒重新载入，数字不变，要自己再运行一次命令。现在命令不退出，每 N 秒重新生成看板和每个任务的分析页，页面自己重新载入，Ctrl+C 退出。每次都写在原来的文件上，不多出文件。它会占着终端，是给人用的。
 - **报告按任务分文件夹**：以前所有任务的报告都在 `.workspace/reports/` 一层（`task-<任务名>.md`、`task-<任务名>.html`）。现在是 `.workspace/reports/tasks/<任务名>/report.md` 和 `report.html`。看板还在 `.workspace/reports/board.html`。一个任务的报告重新生成时，它旧位置的文件会被删掉；没再生成过的旧报告留在原处，可以自己删。
-- **看板上很长的“在等什么”会换行**：以前它挤在一行，把表格撑出页面，后半句看不到。
-- **任务分析页写出“现在在等你”**：任务开着、在等你时，页面顶部有一行，写在等什么、已等多久。下面的数字不变，仍只算到最后一条提示。“生成于”挪到标题下面。
-- **“用户确认”没填，独立检查不再因此不通过**：`REQ.md` 的这一行只有用户能改。以前 reviewer 会按没确认判 FAIL，作者又改不了，白用检查次数。现在评审包会写明这一行没填、不算问题。新手引导里“agent 替你写上已确认”的说法也改掉了。
-- **reviewer 在结论前多说一句，不再丢结论**：`VERDICT:` 要在第一行。以前前面多一行，结论就记成“没有结论”，白用一次检查。现在在开头三行里找。
-- **Windows 上任务名带 `< > : " | ? *` 时说人话**：以前 `task new` 报原始的 WinError 123。
-- **初始化技能在 Windows 上多查一次 PATH**：VS Code 带着旧 PATH 时，`harness` 在这个窗口能用、重开后找不到。技能现在会对一下账户的 PATH，不一致就告诉你。
-
-- **Windows 上 CLI 的中文默认就能读**：输出给管道或重定向时，Windows 的编码是 cp1252，写不出中文。以前中文显示成 `\uXXXX`，`doctor` 给 WARN，要自己写 `cli.override.json`。现在 `output.encoding: auto` 在这种管道上直接输出 UTF-8，`doctor` 那一行是 OK，并说明原来的编码。终端不受影响。
-- **`output.encoding` 多一个值 `native`**：一律不改编码，写不出的字显示成 `\uXXXX`（以前 `auto` 的做法）。读输出的程序不认 UTF-8、中文成了乱码时用它。已经写了 `utf-8` 的不用改。
-- **初始化技能**：第 7 步不再问编码；第 8 步里 agent 看 `doctor` 的“中文样例”一行，是乱码才自己写 `native`。
+- **`output.encoding: auto` 的做法变了**：在写不出中文的管道上，以前输出 `\uXXXX`，现在输出 UTF-8。读输出的程序不认 UTF-8 时会看到乱码，写 `native` 换回原来的做法。
 - **`cli.override.json` 被 git 忽略**，和 `target.override.json`、`user.override.json` 一样。
-
+- **并行分块阅读**：派出 mapper 之后，agent 不再自己把同一批文件读一遍。
 - **README 重排**：开头一句话说清它是什么；“三步上手”直接给三条命令（`/harness-repo-initialize`、`/harness-quick-start`、`/harness-wondering`）；麻烦和做法并成一张表；加了版本号等徽章；目录树默认折叠。
 - **路径索引搬出 README**，放到 `.harness/INDEX.md`。agent 找文件时只读这一份，不用读 README。`AGENTS.md` 和 admin agent 的指向跟着改了。
 - `AGENTS.md` 开头的“定位”一节写短了，意思没变。
-- **门卫认 PowerShell 的 `Push-Location`**：和 `cd`、`Set-Location` 一样，进了某个文件夹再写，写的还是那个文件夹里的受保护文件会被拒绝。以前只认 `pushd`、`Set-Location`、`sl`。
 - **版本记录改名**：`docs/08-release-notes.md` 改成 `docs/07-release-notes.md`。
 
 ### 退役
 
 - **`docs/07-prompts.md`（提示模板）删除**。有了 `/harness-my-task`，不用再抄长提示：agent 会问清楚，需求落在 `REQ.md`，计划要你批准。仍有用的内容（一句话怎么说、`[review]=n` 标记）并进了 [快速开始](01-quickstart.md) 的“日常怎么说”。
+
+### 知道、还没改的
+
+- Windows PowerShell 5.1 的 `Get-Content` 读没有 BOM 的 UTF-8 文件是乱码。agent 在终端里这样读任务文件时会遇到；用读文件的工具没有这个问题。
+- `TASK.md` 里“建于”是 UTC 的日期，“更新”是本地的日期，夜里会差一天。
+- 公司电脑上要看的三件事还没有结果：`doctor` 的“中文样例”一行是不是乱码；autorun 能不能连续推进；Opus 5.5 不可用时是否回退。
+
+### 怎么升级
+
+1. 换上新版本的文件，运行 `harness doctor`。下载 zip 的：解压到短路径（例如 `C:\dev\harness`），路径太长 `doctor` 会警告。
+2. 旧的任务报告留在 `.workspace/reports/` 一层，不会自己搬。要用新位置的，对那个任务运行一次 `harness task report --task <任务名>`。
+3. 为了中文写过 `{"output": {"encoding": "utf-8"}}` 的，可以不动，也可以删掉：默认值现在就够了。
 
 ## 1.3.0（2026-10-12）
 

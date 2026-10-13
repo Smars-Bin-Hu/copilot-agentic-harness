@@ -1,4 +1,4 @@
-# Copilot Agentic Harness
+# GitHub Copilot Agentic Harness on VS Code
 
 <p>
   <img alt="version" src="https://img.shields.io/badge/version-1.4.0-blue">

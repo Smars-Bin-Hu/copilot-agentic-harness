@@ -99,19 +99,19 @@ class LinkTests(unittest.TestCase):
 
 
 class InitializeSkillTests(unittest.TestCase):
-    """Windows prints Chinese as \\uXXXX when stdout is a pipe; the skill fixes that itself instead of leaving the WARN."""
+    """The CLI prints UTF-8 on a Windows pipe by itself. The skill only acts when that reads as garbage: it writes `native`."""
 
     def steps(self) -> Dict[str, str]:
         skill = text(REPO / ".github" / "skills" / "harness-repo-initialize" / "SKILL.md")
         body = skill[skill.index("## Step-by-Step Workflows"):skill.index("## Gotchas")]
         return {number: chunk for number, chunk in re.findall(r"^(\d)\. (.+?)(?=^\d\. |\Z)", body, re.M | re.S)}
 
-    def test_step_8_writes_the_utf8_override_itself_when_the_sample_line_reads_fine(self) -> None:
+    def test_step_8_does_nothing_when_the_sample_line_reads_fine_and_writes_native_when_it_is_garbage(self) -> None:
         check = self.steps()["8"]
-        self.assertIn("UTF-8 样例", check)
-        self.assertIn("自己写 `.harness/policies/cli.override.json`", check)
+        self.assertIn("中文样例", check)
+        self.assertIn("你能读，什么都不用做", check)
+        self.assertIn("是乱码，就自己写 `.harness/policies/cli.override.json`", check)
         self.assertIn("再运行一次 `harness doctor`", check)
-        self.assertIn("是乱码，就不要改", check)
 
     def test_step_7_does_not_ask_the_user_about_the_encoding(self) -> None:
         step = self.steps()["7"]
@@ -119,13 +119,18 @@ class InitializeSkillTests(unittest.TestCase):
         self.assertNotIn("常见的两个", step)
 
     def test_the_json_the_skill_tells_the_agent_to_write_is_what_doctor_accepts(self) -> None:
-        written = json.loads(re.search(r"`(\{\"output\": \{\"encoding\": \"utf-8\"\}\})`", self.steps()["8"]).group(1))
+        written = json.loads(re.search(r"`(\{\"output\": \{\"encoding\": \"native\"\}\})`", self.steps()["8"]).group(1))
         sys.path.insert(0, str(ENGINE))
         try:
             from core import output
         finally:
             sys.path.remove(str(ENGINE))
-        self.assertIn(written["output"]["encoding"], output.CHOICES)
+        self.assertEqual(written["output"]["encoding"], output.NATIVE)
+
+    def test_the_overrides_that_are_about_this_machine_are_ignored_by_git(self) -> None:
+        ignored = text(REPO / ".gitignore").splitlines()
+        for name in ("target", "user", "cli"):
+            self.assertIn(f".harness/policies/{name}.override.json", ignored, name)
 
 
 class ReadmeStructureTests(unittest.TestCase):

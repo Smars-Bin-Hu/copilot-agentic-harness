@@ -12,11 +12,14 @@
 
 ## 下一版（未发布）
 
-只改文档和初始化技能的做法，引擎没变。
+Windows 上 CLI 的中文不用配就能读。其余只改文档。
 
 ### 变更
 
-- **初始化技能自己处理“输出编码”的 WARN**：Windows 上输出被管道或重定向时是 cp1252，CLI 的中文会显示成 `\uXXXX`，`doctor` 给 WARN。以前技能只问用户“有没有要改的默认值”，用户答“没有”，配完 `doctor` 还留着这条 WARN。现在第 7 步不再问；第 8 步里，agent 能读懂 `UTF-8 样例` 那一行，就自己写 `cli.override.json`（`output.encoding: utf-8`），再跑一次 `doctor` 确认。乱码就不改，告诉用户。
+- **Windows 上 CLI 的中文默认就能读**：输出给管道或重定向时，Windows 的编码是 cp1252，写不出中文。以前中文显示成 `\uXXXX`，`doctor` 给 WARN，要自己写 `cli.override.json`。现在 `output.encoding: auto` 在这种管道上直接输出 UTF-8，`doctor` 那一行是 OK，并说明原来的编码。终端不受影响。
+- **`output.encoding` 多一个值 `native`**：一律不改编码，写不出的字显示成 `\uXXXX`（以前 `auto` 的做法）。读输出的程序不认 UTF-8、中文成了乱码时用它。已经写了 `utf-8` 的不用改。
+- **初始化技能**：第 7 步不再问编码；第 8 步里 agent 看 `doctor` 的“中文样例”一行，是乱码才自己写 `native`。
+- **`cli.override.json` 被 git 忽略**，和 `target.override.json`、`user.override.json` 一样。
 
 - **README 重排**：开头一句话说清它是什么；“三步上手”直接给三条命令（`/harness-repo-initialize`、`/harness-quick-start`、`/harness-wondering`）；麻烦和做法并成一张表；加了版本号等徽章；目录树默认折叠。
 - **路径索引搬出 README**，放到 `.harness/INDEX.md`。agent 找文件时只读这一份，不用读 README。`AGENTS.md` 和 admin agent 的指向跟着改了。

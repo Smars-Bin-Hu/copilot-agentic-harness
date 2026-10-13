@@ -54,10 +54,10 @@ specificTo: generic
    - 问用户：要不要让任务也能更新知识库。要，而且 `knowledge-base/` 自己是 git 仓库（有 `.git`）：在 `target.override.json` 的 `repos` 里加 `"kb": { "path": "knowledge-base", "knowledge_base": true }`，再运行 `harness target show --repo kb` 核对。不是 git 仓库就不加，告诉用户原因。细节见 [docs/03-configure.md](../../../docs/03-configure.md) 的“让任务更新知识库”。
    - 用户还没有知识库：标“跳过”，并告诉用户影响（见 Gotchas）。
 6. **公司技能。** 问用户有没有公司专用的技能，在哪。每个技能一个文件夹，放进 `.github/skills/`。文件夹名和 `SKILL.md` 的 `name` 要一致，用 `domain-<领域>-<名>` 前缀。前缀不对时告诉用户，问清楚再改名，不要自己改。
-7. **其他覆盖配置（可选）。** 问用户有没有要改的默认值。常见的一个：要多保护几个路径（`gate.override.json` 的 `extra_guardrail_paths+`）。规则见 [docs/03-configure.md](../../../docs/03-configure.md) 的“override”。没有就跳过。CLI 的中文显示成 `\uXXXX` 不用问用户，第 8 步处理。
+7. **其他覆盖配置（可选）。** 问用户有没有要改的默认值。常见的一个：要多保护几个路径（`gate.override.json` 的 `extra_guardrail_paths+`）。规则见 [docs/03-configure.md](../../../docs/03-configure.md) 的“override”。没有就跳过。CLI 的中文显示不对不用问用户，第 8 步处理。
 8. **检查。** 运行 `harness doctor`。
    - `[ERROR]`：照信息修，修完再运行，直到 `{"errors": 0}`。修不了的，原样告诉用户。
-   - `[WARN]` 讲“输出编码”（Windows 上常见，CLI 的中文会显示成 `\uXXXX`）：看最后的 `[INFO]  UTF-8 样例` 一行。你能读，就自己写 `.harness/policies/cli.override.json`：`{"output": {"encoding": "utf-8"}}`（要 admin 模式开着），再运行一次 `harness doctor`，确认这条 WARN 没了。是乱码，就不要改，告诉用户。
+   - “输出编码”那一行说“auto 改用了 UTF-8”（Windows 上常见）：看它下面的“中文样例”一行。你能读，什么都不用做。是乱码，就自己写 `.harness/policies/cli.override.json`：`{"output": {"encoding": "native"}}`（要 admin 模式开着），再运行一次 `harness doctor`，并告诉用户：这台电脑上 CLI 的中文会显示成 `\uXXXX`。
    - 其他 `[WARN]`：逐条告诉用户它影响什么，由用户决定修不修。
    - 最后给用户一张表：八项各是“配好、跳过、没通过”，跳过的各有什么影响。提醒用户运行 `harness admin off --session-id <会话 id>`，并换一个新对话做日常任务。
 
@@ -67,7 +67,7 @@ specificTo: generic
 - **配完 PATH 必须重开 VS Code。** Copilot 的终端用的是 VS Code 启动时的 PATH。只重开终端窗口，你自己运行 `harness` 仍然找不到。
 - **不要教用户用 alias 或 PowerShell 函数。** 它们只在用户自己的交互式终端里有效，agent 的终端里没有，`doctor` 也查不到。
 - **`harness` 操作的是当前目录所在的那一份仓库。** 电脑上有两份 harness 时，在哪一份里运行就操作哪一份。所以命令要在这个仓库里运行。
-- **只写 `*.override.json`，不改默认的策略文件。** 默认文件以后升级会被覆盖。`target.override.json`、`user.override.json` 含本机的路径和名字，已被 git 忽略，不要提交。
+- **只写 `*.override.json`，不改默认的策略文件。** 默认文件以后升级会被覆盖。`target.override.json`、`user.override.json`、`cli.override.json` 是本机的路径、名字和终端设置，已被 git 忽略，不要提交。
 - **不要往 `knowledge-base/` 里编内容。** 用户没有知识库就空着。没有知识库时，agent 做目标仓库的任务只能靠猜，计划和检查都不准：这一点要明确告诉用户。
 - **知识库的 instructions 的 `applyTo` 要是 `'**'`。** 只写 `'knowledge-base/**'` 时，agent 读到知识库文件之前它不生效。
 - **复制大的知识库用终端命令**（`cp -R`，Windows 用 `Copy-Item -Recurse`），不要一个文件一个文件地读了再写。
@@ -82,5 +82,6 @@ specificTo: generic
 | 写 `*.override.json` 被拒绝 | admin 模式没开，或开的是别的会话。回到第 2 步 |
 | `harness target list` 没列出仓库 | `repos_root` 下的子文件夹要有 `.git`。路径写错时 `doctor` 会报 |
 | `doctor` 报知识库的 README 里有断链 | 链接要用相对路径，指向 `knowledge-base/` 里真实存在的文件。把断的几条告诉用户 |
-| CLI 输出的中文是 `\uXXXX` | 第 8 步已经处理。单独遇到时：看 `doctor` 最后的 `[INFO]  UTF-8 样例` 一行。能读，就写 `.harness/policies/cli.override.json`：`{"output": {"encoding": "utf-8"}}`。是乱码就不要改，告诉用户 |
+| CLI 输出的中文是乱码 | 读输出的程序不认 UTF-8。写 `.harness/policies/cli.override.json`：`{"output": {"encoding": "native"}}`，中文会变成 `\uXXXX`，能看出是哪个字 |
+| CLI 输出的中文是 `\uXXXX` | `cli.override.json` 里是 `native`。看 `doctor` 最后的 `[INFO]  UTF-8 样例` 一行。能读，就把 `output.encoding` 改成 `auto`。是乱码就不要改，告诉用户 |
 | Windows 上 `python3` 找不到 | 正常。Windows 用 `python`，启动脚本会自己选 |

@@ -76,20 +76,43 @@ class DoctorTests(unittest.TestCase):
         ).stdout
 
     def test_it_says_how_chinese_is_printed_here(self) -> None:
-        """ISSUE-20261005-03: on a pipe that cannot show Chinese the CLI prints \\uXXXX; doctor shows what UTF-8 would look like."""
+        """ISSUE-20261005-03: a Windows pipe is cp1252 and cannot write Chinese. `auto` prints UTF-8 there and doctor says so."""
         fine = self.doctor().stdout
         self.assertIn("输出编码：stdout=utf-8", fine)
         self.assertIn("output.encoding=auto", fine)
-        self.assertIn("中文样例：成果已写入（这一行能读", fine)
+        self.assertIn("中文样例：成果已写入（这一行能读，中文输出就正常）", fine)
+        self.assertNotIn("原来是", fine)
         self.assertNotIn("UTF-8 样例", fine)
+        narrow = self.doctor_as("cp1252").decode("utf-8")  # UTF-8 bytes on the cp1252 pipe
+        self.assertIn("[OK]    输出编码：stdout=utf-8", narrow)
+        self.assertIn("output.encoding=auto（这里原来是 cp1252，写不出中文，auto 改用了 UTF-8）", narrow)
+        self.assertIn('是乱码，就在 .harness/policies/cli.override.json 写 {"output": {"encoding": "native"}}', narrow)
+        self.assertNotIn("\\u", narrow)
+        self.assertNotIn("[WARN]  输出编码", narrow)
+        self.assertNotIn("[INFO]", narrow)
+        self.assertTrue(narrow.rstrip().endswith('{"errors": 0}'))
+
+    def test_auto_prints_utf8_on_a_pipe_that_cannot_write_chinese_on_both_streams(self) -> None:
+        refused = subprocess.run(
+            [sys.executable, str(CLI), "task", "status"], capture_output=True, check=False,
+            env=self.env(PYTHONIOENCODING="cp1252"),
+        )
+        self.assertIn("没有进行中的任务", refused.stderr.decode("utf-8"))
+        self.assertNotIn(b"\\u", refused.stderr)
+
+    def test_native_keeps_the_encoding_of_the_pipe_and_doctor_shows_what_utf8_looks_like(self) -> None:
+        (self.root / ".harness" / "policies" / "cli.override.json").write_text('{"output": {"encoding": "native"}}', encoding="utf-8")
         narrow = self.doctor_as("cp1252")
         self.assertIn(b"[WARN]  \\u8f93\\u51fa\\u7f16\\u7801", narrow)  # 输出编码, escaped: what the company machine showed
         self.assertIn(b"stdout=cp1252", narrow)
+        self.assertIn(b"output.encoding=native", narrow)
         sample = [line for line in narrow.splitlines() if line.startswith(b"[INFO]")]
         self.assertEqual(len(sample), 1)
         self.assertIn("UTF-8 样例：中文样例：成果已写入", sample[0].decode("utf-8"))  # raw UTF-8 bytes, whatever the stream is
         self.assertIn("cli.override.json", sample[0].decode("utf-8"))
+        self.assertIn("改成 auto 或 utf-8", sample[0].decode("utf-8"))
         self.assertTrue(narrow.rstrip().endswith(b'{"errors": 0}'))
+        self.assertIn("输出编码：stdout=utf-8", self.doctor().stdout)  # a pipe that can write Chinese is left as it is
 
     def test_the_switch_prints_utf8_whatever_the_terminal_says(self) -> None:
         (self.root / ".harness" / "policies" / "cli.override.json").write_text('{"output": {"encoding": "utf-8"}}', encoding="utf-8")
@@ -436,13 +459,14 @@ class DoctorTests(unittest.TestCase):
                     offenders.append(f"{path.relative_to(REPO)}:{number}")
         self.assertEqual(offenders, [])
 
-    def test_the_cli_does_not_crash_on_a_terminal_that_cannot_show_chinese(self) -> None:
+    def test_the_cli_does_not_crash_on_a_pipe_that_cannot_show_chinese(self) -> None:
         result = subprocess.run(
             [sys.executable, str(CLI), "eval", "show", "t1"], capture_output=True, check=False,
             env={**os.environ, "HARNESS_ROOT": str(REPO), "PYTHONIOENCODING": "ascii"},
         )
         self.assertEqual(result.returncode, 0, result.stderr.decode("ascii", "replace"))
-        self.assertIn(b"\\u", result.stdout)
+        self.assertNotIn(b"\\u", result.stdout)
+        self.assertIn("默认 agent", json.loads(result.stdout.decode("utf-8"))["before"])  # UTF-8, not \\uXXXX
 
     # --- override ---------------------------------------------------------------------------
 

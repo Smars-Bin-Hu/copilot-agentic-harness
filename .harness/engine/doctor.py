@@ -309,21 +309,23 @@ def check_output(report: Report, root: Path) -> bool:
         shown += f"，代码页 输出={pages['console_output']} ANSI={pages['ansi']}"
     shown += f"；output.encoding={output.setting(root)}"
     if output.shows(output.SAMPLE, facts["stdout_encoding"]):
-        report.ok(shown)
-        report.ok(f"  {output.SAMPLE}（这一行能读，中文输出就正常）")
+        replaced = output.REPLACED.get("stdout", "")
+        report.ok(shown + (f"（这里原来是 {replaced}，写不出中文，auto 改用了 UTF-8）" if replaced else ""))
+        back = '是乱码，就在 .harness/policies/cli.override.json 写 {"output": {"encoding": "native"}}' if replaced else ""
+        report.ok(f"  {output.SAMPLE}（这一行能读，中文输出就正常{'；' + back if back else ''}）")
         return False
     report.warn(shown + "。这个编码写不出中文，CLI 的中文会显示成 \\uXXXX")
     return True
 
 
 def print_utf8_sample() -> None:
-    """One line as raw UTF-8 bytes, whatever the stream encoding is: it shows what `output.encoding: utf-8` would look like here.
+    """One line as raw UTF-8 bytes, whatever the stream encoding is: it shows what UTF-8 output would look like here.
 
-    The advice is in that line too: a person who can read it is a person for whom the switch works.
+    The advice is in that line too: a person who can read it is a person for whom UTF-8 works.
     """
     text = (
-        f"[INFO]  UTF-8 样例：{output.SAMPLE}。这一行能读，就新建 .harness/policies/cli.override.json，"
-        '写 {"output": {"encoding": "utf-8"}}，CLI 的中文就不再是 \\uXXXX；这一行是乱码，就不要改。\n'
+        f"[INFO]  UTF-8 样例：{output.SAMPLE}。这一行能读，就把 .harness/policies/cli.override.json 里的 "
+        "output.encoding 改成 auto 或 utf-8，CLI 的中文就不再是 \\uXXXX；这一行是乱码，就不要改。\n"
     )
     try:
         sys.stdout.flush()

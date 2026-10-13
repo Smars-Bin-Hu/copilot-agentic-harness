@@ -72,13 +72,17 @@ def build_parser() -> argparse.ArgumentParser:
 def safe_streams() -> None:
     """A character the terminal encoding cannot show (a Chinese text on a Windows pipe) must not kill the command.
 
-    It is printed as \\uXXXX. `output.encoding: utf-8` in the cli policy prints UTF-8 instead, for a reader that decodes UTF-8.
+    On a pipe it is printed as UTF-8 (`output.encoding: auto` in the cli policy), on a terminal as \\uXXXX.
+    `native` keeps the encoding of the pipe too, for a reader that does not decode UTF-8.
     """
-    encoding = output.configured_encoding()
-    for stream in (sys.stdout, sys.stderr):
+    for name, stream in (("stdout", sys.stdout), ("stderr", sys.stderr)):
         try:
+            encoding = output.encoding_for(stream)
+            before = stream.encoding
             if encoding:
                 stream.reconfigure(encoding=encoding, errors="backslashreplace")
+                if output.setting() == output.AUTO:
+                    output.REPLACED[name] = before
             else:
                 stream.reconfigure(errors="backslashreplace")
         except (AttributeError, ValueError, LookupError):

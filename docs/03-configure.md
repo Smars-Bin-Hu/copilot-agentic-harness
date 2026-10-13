@@ -161,6 +161,6 @@ harness kb reads --task <任务名> # 只看一个任务读过的
 
 ## 路径太长（Windows）
 
-CLI 输出里的中文显示成 `\uXXXX`：运行 `doctor`，看“输出编码”那几行。最后有一行“UTF-8 样例”。那一行能读，就新建 `.harness/policies/cli.override.json`，写 `{"output": {"encoding": "utf-8"}}`。那一行是乱码，就不要改。
+CLI 输出里的中文：Windows 上输出给管道时，系统编码（cp1252）写不出中文，harness 改用 UTF-8，不用配。`doctor` 的“输出编码”那一行会说明，下面有一行“中文样例”。那一行是乱码，说明读输出的程序不认 UTF-8：新建 `.harness/policies/cli.override.json`，写 `{"output": {"encoding": "native"}}`，中文会显示成 `\uXXXX`。
 
 任务目录加仓库路径会让文件路径很长，Windows 默认上限 260 个字符。把 harness 放在短路径、不同步的位置（例如 `C:\h`），不要放在 OneDrive 下。`doctor` 会对过长的路径给 WARN。

@@ -33,7 +33,7 @@ Remind the user: this folder is ignored by git, and the VS Code search does not 
 | --- | --- |
 | `harness task list` | To see which tasks there are and which waits for you |
 | `harness task list --watch` | The board in the terminal, refreshed every few seconds: which task waits for you, and for how long |
-| `harness task board --open` | The board as a web page; click a task name for its analysis page |
+| `harness task board --open` | The board as a web page that keeps itself up to date (Ctrl+C stops it); click a task name for its analysis page |
 | `harness task report --open` | Where the time and usage of one task went (a web page). To have the agent explain it, type `/harness-task-report` |
 | `harness task approve-plan` | To approve the plan the agent wrote (only when a repository changes) |
 | `harness task approve-promote` | To approve writing the changes back to the repository |

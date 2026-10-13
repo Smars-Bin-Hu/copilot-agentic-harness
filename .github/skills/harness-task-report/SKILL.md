@@ -38,7 +38,7 @@ It changes no task file. Neither of the two needs a task picked up first.
    - One sentence of summary: how many are open, how many wait for them.
    - Which to look at first, and why (the longest wait, or it blocks other tasks: see `depends_on`).
    - What they have to do next for that task. Say it as the table in [What it waits for](references/waiting.md) has it, and give the command as written.
-4. The user wants a page: run `harness task board` and give the link to the file under `board`. On the page, a click on a task name shows the analysis of that task.
+4. The user wants a page: run `harness task board` and give the link to the file under `board`. On the page, a click on a task name shows the analysis of that task. Run by you, the command writes the page once and returns. For a page that keeps itself up to date, the user runs `harness task board --open` in their own terminal.
 
 The user wants to keep watching: tell them to run `harness task list --watch` in the terminal; it refreshes every 5 seconds, and Ctrl+C quits. Do not run `--watch` yourself: it never ends by itself.
 

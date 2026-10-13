@@ -594,16 +594,33 @@ class PageTests(BoardCase):
         self.cli_json("task", "board")
         now = page_data(page.read_text(encoding="utf-8"))["now"]
         self.assertEqual((now["text"], isinstance(now["seconds"], int)), ("agent 停下了，等你", True))
-        with mock.patch.object(tasklife, "seconds_since", lambda _stamp: 600.0):  # ten minutes later nothing happened: the line grows, the numbers do not
-            before = page_data(page.read_text(encoding="utf-8"))["info"]["totals"]["waiting_s"]
+        with mock.patch.object(tasklife, "seconds_since", lambda _stamp: 600.0):  # ten minutes later nothing happened: the line grows, and "waiting for you" with it
             taskboard.board(self.root)
             data = page_data(page.read_text(encoding="utf-8"))
-        self.assertEqual((data["now"]["seconds"], data["info"]["totals"]["waiting_s"]), (600, before))
+            listed = taskboard.board(self.root)
+        info = data["info"]
+        self.assertEqual((data["now"]["seconds"], data["now"]["why"], info["totals"]["waiting_s"]), (600, "stopped", 600.0))
+        self.assertEqual([(item["seconds"], item["reason"], item.get("open")) for item in info["waits"]], [(600.0, "reply", True)])
+        self.assertEqual(info["findings"][0]["kind"], "waiting")  # the sentences are written again with the wait in
+        self.assertEqual(listed["tasks"], 1)
         self.cli_json("task", "close")
-        self.assertIsNone(page_data(page.read_text(encoding="utf-8"))["now"])  # a closed task waits for nothing
+        closed = page_data(page.read_text(encoding="utf-8"))
+        self.assertIsNone(closed["now"])  # a closed task waits for nothing
+        self.assertEqual((closed["info"]["totals"]["waiting_s"], closed["info"]["waits"]), (0.0, []))
+        self.assertIn('"report.gap.open"', (taskhtml.WEB / "task.js").read_text(encoding="utf-8"))
         script = (taskhtml.WEB / "task.js").read_text(encoding="utf-8")
         self.assertIn('t("report.now"', script)
         self.assertIn("as_of: when(info.as_of", script)
+
+    def test_the_board_keeps_itself_fresh_for_a_person_and_returns_for_anything_else(self) -> None:
+        seconds = taskboard.refresh_seconds
+        self.assertEqual(seconds(None, False, True), taskboard.DEFAULT_REFRESH)  # a person at a terminal, nothing asked
+        self.assertEqual(seconds(None, False, False), 0)  # an agent, a script, a pipe: a command that never returns would hang it
+        self.assertEqual((seconds(None, True, True), seconds(0, False, True), seconds(30, True, True)), (0, 0, 0))  # --once, --refresh 0
+        self.assertEqual((seconds(30, False, True), seconds(30, False, False), seconds(-5, False, True)), (30, 30, 0))  # asked outright
+        self.new()
+        self.assertEqual(self.cli_json("task", "board")["tasks"], 1)  # the tests are no terminal: it returned
+        self.assertEqual(self.cli_json("task", "board", "--once")["tasks"], 1)
 
     def test_a_long_reason_wraps_inside_its_cell(self) -> None:
         css = (taskhtml.WEB / "page.css").read_text(encoding="utf-8")

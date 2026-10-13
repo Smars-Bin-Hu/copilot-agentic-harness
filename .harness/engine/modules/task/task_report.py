@@ -146,8 +146,8 @@ def generate(root: Path, raw_task: str = "", detail: bool = False) -> Dict[str, 
     try:  # where the time and usage went: a page for the person, the same numbers for the agent that explains them
         from . import taskboard, taskinsight
 
-        info = taskinsight.of_task(root, task)
-        result["analysis"] = taskboard.write_task_page(root, task, info).relative_to(root).as_posix()
+        info, now = taskboard.insight(root, task)
+        result["analysis"] = taskboard.write_task_page(root, task, info, 0, now).relative_to(root).as_posix()
         result["insight"] = taskinsight.for_agent(info, detail)
         result["_compact"] = True  # an agent reads this: no indentation
     except Exception as error:  # noqa: BLE001 - the Markdown report is written; the page must not undo that

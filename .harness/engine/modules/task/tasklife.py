@@ -269,7 +269,7 @@ def waiting_now(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[st
     if not found["why"]:
         return None
     waited = seconds_since(found["since"])
-    return {"text": waiting_text(data, found["why"]), "since": found["since"], "seconds": round(waited) if waited is not None else None}
+    return {"text": waiting_text(data, found["why"]), "why": found["why"], "since": found["since"], "seconds": round(waited) if waited is not None else None}
 
 
 def pause(root: Path, raw_task: str = "", interactive: Optional[bool] = None) -> Dict[str, Any]:

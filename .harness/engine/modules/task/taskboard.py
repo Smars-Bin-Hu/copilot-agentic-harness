@@ -17,7 +17,7 @@ import sys
 import time
 import unicodedata
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TextIO
+from typing import Any, Dict, List, Optional, TextIO, Tuple
 
 from core import messages
 from core.paths import utc_now
@@ -26,6 +26,7 @@ from . import common, task as task_ops, taskhtml, taskinsight, tasklife
 
 BOARD_NAME = "board.html"
 MIN_INTERVAL = 1.0
+DEFAULT_REFRESH = 10  # seconds, for a person at a terminal who gave no --refresh
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -99,12 +100,17 @@ def watch(root: Path, everything: bool, interval: float, out: Optional[TextIO] =
     return {"_text": ""}
 
 
-def write_task_page(root: Path, task: str, info: Dict[str, Any], refresh: int = 0) -> Path:
-    path = common.task_report_file(root, task_ops.name_of(task), common.REPORT_HTML)
-    try:  # the wait that is still going on: the numbers of the page end at the last prompt and do not have it
+def insight(root: Path, task: str, use_events: Optional[bool] = None) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    """The numbers of a task, with the wait that is still going on counted in, and that wait itself (or None)."""
+    try:
         now = tasklife.waiting_now(root, task, task_ops.read(root, task))
     except Exception:  # noqa: BLE001 - one line of the page
         now = None
+    return taskinsight.add_open_wait(taskinsight.of_task(root, task, use_events), now), now
+
+
+def write_task_page(root: Path, task: str, info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, Any]] = None) -> Path:
+    path = common.task_report_file(root, task_ops.name_of(task), common.REPORT_HTML)
     common.replace_text(path, taskhtml.task_page(info, refresh, now))
     return path
 
@@ -119,9 +125,9 @@ def board(root: Path, everything: bool = False, refresh: int = 0) -> Dict[str, A
         if row["status"] == "new":
             continue
         try:
-            info = taskinsight.of_task(root, row["task"], use_events)
+            info, now = insight(root, row["task"], use_events)
             row["brief"] = taskinsight.brief(info)
-            row["report"] = write_task_page(root, row["task"], info, refresh).relative_to(root / common.REPORTS_DIR).as_posix()
+            row["report"] = write_task_page(root, row["task"], info, refresh, now).relative_to(root / common.REPORTS_DIR).as_posix()
         except Exception as error:  # noqa: BLE001 - one bad task must not take the board away
             problems.append({"task": row["task"], "error": f"{type(error).__name__}: {error}"})
     path = root / common.REPORTS_DIR / BOARD_NAME
@@ -130,6 +136,19 @@ def board(root: Path, everything: bool = False, refresh: int = 0) -> Dict[str, A
     if problems:
         out["problems"] = problems
     return out
+
+
+def refresh_seconds(asked: Optional[int], once: bool, person: bool) -> int:
+    """How often `task board` writes the board again; 0: once, then it returns.
+
+    A person at a terminal wants a page that stays true, so it keeps going by itself. An agent or a script must get its
+    answer and go on: a command that never returns would hang it. `--once` and `--refresh N` say it outright.
+    """
+    if once:
+        return 0
+    if asked is not None:
+        return max(0, asked)
+    return DEFAULT_REFRESH if person else 0
 
 
 def keep_fresh(root: Path, everything: bool, refresh: int, opened: Any = None, out: Optional[TextIO] = None, rounds: Optional[int] = None) -> Dict[str, Any]:

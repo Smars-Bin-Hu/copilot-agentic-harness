@@ -49,7 +49,7 @@ def clock(seconds: Optional[float]) -> str:
     """A length of time in words: 45 秒, 3 分 20 秒, 2 小时 5 分, 3 天 4 小时."""
     if seconds is None:
         return "-"
-    total = int(round(max(0.0, seconds)))
+    total = int(max(0.0, seconds) + 0.5)  # half goes up, as Math.round does on the page: the sentences and the cards must agree
     if total < 60:
         return say("unit.seconds", s=total)
     if total < 3600:
@@ -427,6 +427,29 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
     }
     result["totals"]["reviews"] = len([item for item in reviews if item["verdict"]])
     result["totals"]["review_fails"] = len([item for item in reviews if item["verdict"] and item["verdict"] != "PASS"])
+    result["findings"] = findings(result)
+    return result
+
+
+# What the task waits for now (tasklife.waiting) -> the reason of a wait (insight.wait.*). Anything else: the agent stopped.
+WAIT_OF_NOW = {"plan": "plan", "promote": "promote", "review": "review", "recover": "recover"}
+
+
+def add_open_wait(result: Dict[str, Any], now: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Count the wait that is still going on: from the last stop to this moment (`now`: tasklife.waiting_now, or None).
+
+    `build` ends at the last prompt, because the log ends there. A person reading the page sees one more stretch: the task
+    has waited since. Without it a task with one prompt reads "waiting for you 0 s" under a line that says it waited an hour.
+    """
+    seconds = float((now or {}).get("seconds") or 0)
+    if seconds < 1:
+        return result
+    totals = result["totals"]
+    totals["waiting_s"] = round(totals["waiting_s"] + seconds, 1)
+    entry = {"after_prompt": len(result["prompts"]), "from": now.get("since") or "", "seconds": round(seconds, 1), "reason": WAIT_OF_NOW.get(now.get("why") or "", "reply"), "open": True}
+    result["waits"] = sorted(result["waits"] + [entry], key=lambda item: -item["seconds"])[:TOP]
+    if result["prompts"]:
+        result["prompts"][-1]["waited_after_s"] = round(seconds, 1)
     result["findings"] = findings(result)
     return result
 

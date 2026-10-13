@@ -29,7 +29,7 @@ The **kind** decides what counts as done. The **tier** decides which files the f
 - **The requirement**: the agent writes `REQ.md` from the conversation, and you confirm it. When the requirement changes in the conversation, it changes `REQ.md` first, then the work. Your own documents (a BRD, emails) go in `REQ/`; the agent only reads them.
 - **Tasks and sessions are separate**: a session holds one task at a time. It can switch, and the old task need not be closed first. Closing only changes the state; the folder stays where it is, and `task open` opens it again. When a task grows, `task upgrade` raises the tier and only adds the missing files.
 - **Writing the task folder only**: with a task, the edit tools can write this folder only.
-- **The board**: `task list` lists every task that is not closed, what it waits for from you, and for how long. `--watch` refreshes by itself in the terminal; `task board` makes an HTML page. When the agent stops, a hook notes "waiting for you", so you need not go through session after session.
+- **The board**: `task list` lists every task that is not closed, what it waits for from you, and for how long. `--watch` refreshes by itself in the terminal; `task board` makes an HTML page and, run in your own terminal, keeps it up to date until Ctrl+C (`--once`: write it once). When the agent stops, a hook notes "waiting for you", so you need not go through session after session.
 - For plain Q&A that writes nothing, no task is opened.
 - When a job is so big that it spans many days: use `/generic-goal-driven`; see "Long tasks" below.
 

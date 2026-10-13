@@ -14,7 +14,7 @@ To see which version you have: `harness --version`.
 
 The harness speaks two languages: one setting picks English or Chinese for what it prints and for what the agent answers in. English is the default now. The docs, rules and skills are in English only. **Take note of "Changed" before upgrading: the default language changed.**
 
-**Testing**: the automatic tests pass on the Mac (725). Nothing of this version has been run in Copilot yet: whether the agent follows the English rules as it followed the Chinese ones, whether it answers in the language the injected line names, and whether skills still trigger on Chinese prompts all have to be tested by hand, on the Mac and on Windows.
+**Testing**: the automatic tests pass on the Mac (726). Nothing of this version has been run in Copilot yet: whether the agent follows the English rules as it followed the Chinese ones, whether it answers in the language the injected line names, and whether skills still trigger on Chinese prompts all have to be tested by hand, on the Mac and on Windows.
 
 ### Added
 
@@ -36,7 +36,9 @@ The harness speaks two languages: one setting picks English or Chinese for what 
 - `AGENTS.md`: the language part now says that shipped files are English, and that what the agent says and writes follows the setting. Before, it said to write documents in Chinese only.
 - The eval scenario `g5` matches on the command, not on the text of the refusal reason, so it passes in either language.
 - The pages (`report.html`, `board.html`) carry the language of their texts in `<html lang>`.
-- **The analysis page counts the wait between two sessions of one task.** Before, the time between the last prompt of one chat and the first prompt of the next chat was counted as neither working nor waiting, so "waiting for you" could read 0 s while the banner said the task had waited for 20 minutes. Now every gap between two prompts of a task is waiting, in whatever chat, except time put aside with `task pause`. The stretch after the last prompt is still left out of the numbers and shown in the banner.
+- **The analysis page counts the wait between two sessions of one task.** Before, the time between the last prompt of one chat and the first prompt of the next chat was counted as neither working nor waiting, so "waiting for you" could read 0 s while the banner said the task had waited for 20 minutes. Now every gap between two prompts of a task is waiting, in whatever chat, except time put aside with `task pause`. 
+- **The wait that is still going on is counted too.** Before, the numbers of the analysis page and of the board ended at the last prompt, so a task with one prompt read "waiting for you 0 s" under a line that said it had waited for an hour. Now the stretch from the last stop to the moment the page is made is part of "waiting for you", of the time bar and of the key points; the list of prompts shows it as "still waiting since then". A closed or paused task has no such stretch.
+- **`task board` keeps the page up to date by itself when you run it in your own terminal**: every 10 seconds, until Ctrl+C. Before, you had to add `--refresh N`. `--refresh N` still sets the seconds; the new `--once` writes the pages once and returns. Run by an agent or a script (no terminal), the command writes once and returns as before, so nothing hangs.
 - **The board and the analysis page fit the longer English texts**: the "waiting for" tag and the kind column no longer squeeze into narrow strips, times do not break over three lines, and a long value in a number card is set smaller. The header of the token column of the checks table is a message now.
 
 ### Retired

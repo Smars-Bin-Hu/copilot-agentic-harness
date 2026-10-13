@@ -40,7 +40,7 @@ td.when{white-space:nowrap}
 td.state{min-width:13em}
 td.kind{min-width:8em}
 main.wide{max-width:1200px}
-.kpi b.long{font-size:16px;line-height:1.9}
+.kpi b.long{font-size:15px;line-height:2;white-space:nowrap}
 .now{margin-top:12px}.now .tag{font-size:13px;padding:4px 10px}
 tr.gap td{color:var(--soft);font-size:12px;padding:3px 0 3px 0;border-bottom:1px dashed var(--line)}
 .empty{color:var(--soft)}

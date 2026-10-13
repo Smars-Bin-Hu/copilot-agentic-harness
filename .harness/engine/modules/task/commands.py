@@ -17,7 +17,7 @@ from __future__ import annotations
 import argparse
 from typing import Any, Dict
 
-from core import messages, targets, tasks
+from core import approval, messages, targets, tasks
 from core.paths import cli_command, repo_root
 
 from . import autorun, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
@@ -50,8 +50,9 @@ def cmd_list(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def cmd_board(args: argparse.Namespace) -> Dict[str, Any]:
-    if args.refresh > 0:
-        return taskboard.keep_fresh(repo_root(), args.all, args.refresh, (lambda board: taskboard.open_in_browser(repo_root(), board)) if args.open else None)
+    refresh = taskboard.refresh_seconds(args.refresh, args.once, approval.is_person())
+    if refresh > 0:
+        return taskboard.keep_fresh(repo_root(), args.all, refresh, (lambda board: taskboard.open_in_browser(repo_root(), board)) if args.open else None)
     result = taskboard.board(repo_root(), args.all)
     if args.open:
         result["opened"] = taskboard.open_in_browser(repo_root(), result["board"])
@@ -104,7 +105,8 @@ def register_task(subparsers: Any) -> None:
     line.set_defaults(handler=lambda a: taskqueue.queue(repo_root()))
     board = commands.add_parser("board", help="write .workspace/reports/board.html: every task, what it waits for, its time and usage")
     board.add_argument("--all", action="store_true", help="the closed tasks too")
-    board.add_argument("--refresh", type=int, default=0, help="keep the board fresh: write it again every N seconds until Ctrl+C, and the pages load themselves again (a person at a terminal)")
+    board.add_argument("--once", action="store_true", help="write the pages once and return. A person at a terminal gets a board that keeps itself fresh; anything else (an agent, a script, a pipe) gets this anyway")
+    board.add_argument("--refresh", type=int, default=None, help=f"keep the board fresh: write it again every N seconds until Ctrl+C, and the pages load themselves again. For a person at a terminal this is on by itself, every {taskboard.DEFAULT_REFRESH} seconds; 0 is the same as --once")
     board.add_argument("--open", action="store_true", help="open the page in the browser (a person at a terminal)")
     board.set_defaults(handler=cmd_board)
     review = commands.add_parser("review", help="independent checks of a task ([review]=n): start a check, see the count; extend and waive are the person's")

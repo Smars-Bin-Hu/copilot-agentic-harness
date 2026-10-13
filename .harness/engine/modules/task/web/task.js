@@ -1,5 +1,5 @@
 // One task: where its time and usage went. DATA.info is what taskinsight.build returns.
-// DATA.now: what the task waits for at this moment ({text, since, seconds}), or null. The numbers of info end at the last prompt.
+// DATA.now: what the task waits for at this moment ({text, why, since, seconds}), or null. That wait is counted in the numbers of info.
 "use strict";
 
 (function () {
@@ -79,7 +79,7 @@
       if (entry.waited_after_s && entry.waited_after_s >= 60) {
         const wait = info.waits.find((item) => item.after_prompt === entry.n);
         rows.push(h("tr", {class: "gap"}, h("td"), h("td", {colspan: columns - 1},
-          "⏸ " + t("report.gap", {time: clock(entry.waited_after_s), reason: t("insight.wait." + (wait ? wait.reason : "reply"))}))));
+          "⏸ " + t(wait && wait.open ? "report.gap.open" : "report.gap", {time: clock(entry.waited_after_s), reason: t("insight.wait." + (wait ? wait.reason : "reply"))}))));
       }
     }
     return card(t("report.prompts"), table(head, rows), hasSplit ? legend(PARTS.map((name) => [name, partLabel(name), ""])) : null);

@@ -1,81 +1,82 @@
 ---
 name: harness-wondering
-description: '深度教程：互动式讲解 coding agent 和这个 harness 的原理与实现。主题有 agent 怎么工作、instructions、skills、agents、tools、hooks、guardrails、权限与沙箱、任务与生命周期、子 agent、独立检查、observe 与 report、常用命令、底层实现、设计取舍。用户想深入了解、问“为什么这样设计”“hook 怎么工作”“怎么实现的”，或输入 /harness-wondering 时用。第一次接触 harness 的新手先用 harness-quick-start。关键词：wondering、原理、深入、为什么、怎么实现、底层、架构、教程、深度。'
+description: 'The deep course: an interactive explanation of how coding agents and this harness work and how they are built. Topics: how an agent works, instructions, skills, agents, tools, hooks, guardrails, permissions and sandbox, tasks and their life cycle, subagents, independent checks, observe and report, common commands, internals, design choices. Use when the user wants to go deep, asks "why is it designed this way", "how does the hook work", "how is it built", or types /harness-wondering. A beginner new to the harness uses harness-quick-start first. Keywords: wondering, how it works, deep dive, why, how it is built, internals, architecture, tutorial, in depth.'
 type: workflow
 specificTo: generic
 ---
 
-# harness 深度教程
+# The harness deep course
 
-给想弄明白的人。两件事一起讲：coding agent 本身是怎么回事；这个 harness 具体是怎么做的。用户可以随时打断提问。
+For people who want to understand. Two things are taught together: what a coding agent is in itself, and how this harness does things. The user can interrupt with a question at any time.
 
-和 `harness-quick-start` 的分工：quick-start 带新手做完第一个任务；本技能让人深入理解。用户连 agent、任务是什么都不清楚，先建议他用 `/harness-quick-start`。
+How it divides the work with `harness-quick-start`: quick-start takes a beginner through a first task; this skill gives a deep understanding. When the user is not even clear what an agent or a task is, suggest `/harness-quick-start` first.
 
 ## When to Use This Skill
 
-- 用户想知道某个组件是什么、为什么这样设计、底层怎么实现。
-- 用户在用 harness 时遇到“为什么被拒绝”“为什么它不能这样”之类的疑问，想知道根源。
-- 用户想自己改或扩展 harness，先要读懂它。
-- 用户输入 `/harness-wondering`。
+- The user wants to know what a component is, why it is designed this way, and how it is built underneath.
+- While using the harness, the user wonders "why was this refused" or "why can it not do that" and wants the root of it.
+- The user wants to change or extend the harness and has to understand it first.
+- The user types `/harness-wondering`.
 
 ## Prerequisites
 
-- 无。需要现场演示时，只运行只读命令（见 Gotchas）。
+- None. For a live demonstration, run read-only commands only (see Gotchas).
 
 ## Step-by-Step Workflows
 
-### 开场
+### Opening
 
-1. 问用户想从哪里开始。有提问工具就用，没有就列编号。给下面的主题表，再加一项“我有个具体问题”。
-2. 用户选了主题，读对应的 `references/` 文件。用户问具体问题，先答问题，再问要不要顺着讲相关主题。
+1. Ask the user where to start. Use a question tool if you have one; if not, list numbers. Give the topic table below, plus one item "I have a specific question".
+2. When the user picks a topic, read the matching file in `references/`. When the user asks a specific question, answer it first, then ask whether to go on with the related topic.
 
-### 主题表
+### Topic table
 
-| 编号 | 主题 | 讲什么 | 文件 |
+| No. | Topic | What it covers | File |
 | --- | --- | --- | --- |
-| 1 | coding agent 怎么工作 | 循环、上下文、工具、为什么会出错 | [01-agent-loop.md](references/01-agent-loop.md) |
-| 2 | instructions | `AGENTS.md`、常驻规则、按文件生效的规则、渐进式披露 | [02-instructions.md](references/02-instructions.md) |
-| 3 | skills | 技能是什么、怎么被发现和加载、怎么写 | [03-skills.md](references/03-skills.md) |
-| 4 | agents | `.agent.md`、模型、工具、为什么平时只用默认 agent | [04-agents.md](references/04-agents.md) |
-| 5 | tools | 原生工具、终端、MCP、harness 命令 | [05-tools.md](references/05-tools.md) |
-| 6 | hooks | 事件、输入输出、怎么拦、出错怎么办 | [06-hooks.md](references/06-hooks.md) |
-| 7 | guardrails | 哪些文件不能改、谁能改、怎么拦 | [07-guardrails.md](references/07-guardrails.md) |
-| 8 | 权限与沙箱 | 问和拒绝的区别、终端批准、gate 不是沙盒、admin | [08-permission-sandbox.md](references/08-permission-sandbox.md) |
-| 9 | 任务与生命周期 | 任务目录、种类和档位、接力、两次批准、多轮 | [09-task-lifecycle.md](references/09-task-lifecycle.md) |
-| 10 | 子 agent | 什么时候值得用、为什么只有 reviewer 和 mapper | [10-subagents.md](references/10-subagents.md) |
-| 11 | 独立检查 | `[review]=n`、怎么数、上限、放行 | [11-review.md](references/11-review.md) |
-| 12 | observe 与 report | 日志、统计、报告、doctor、eval | [12-observe-report.md](references/12-observe-report.md) |
-| 13 | 常用命令 | 给人用的、给 agent 用的、什么时候用 | [13-commands.md](references/13-commands.md) |
-| 14 | 底层实现 | 一次 hook 调用的路径、模块、状态、策略、适配器 | [14-internals.md](references/14-internals.md) |
-| 15 | 设计取舍 | 为什么没有 Level、为什么不做的事 | [15-design-choices.md](references/15-design-choices.md) |
+| 1 | How a coding agent works | The loop, the context, tools, why it goes wrong | [01-agent-loop.md](references/01-agent-loop.md) |
+| 2 | instructions | `AGENTS.md`, always-on rules, rules that apply by file, step-by-step disclosure | [02-instructions.md](references/02-instructions.md) |
+| 3 | skills | What a skill is, how it is found and loaded, how to write one | [03-skills.md](references/03-skills.md) |
+| 4 | agents | `.agent.md`, models, tools, why only the default agent is used day to day | [04-agents.md](references/04-agents.md) |
+| 5 | tools | Built-in tools, the terminal, MCP, harness commands | [05-tools.md](references/05-tools.md) |
+| 6 | hooks | Events, input and output, how they stop a call, what happens on an error | [06-hooks.md](references/06-hooks.md) |
+| 7 | guardrails | Which files cannot be changed, who can change them, how they are guarded | [07-guardrails.md](references/07-guardrails.md) |
+| 8 | Permissions and sandbox | Asking versus refusing, approval in the terminal, the gate is not a sandbox, admin | [08-permission-sandbox.md](references/08-permission-sandbox.md) |
+| 9 | Tasks and their life cycle | The task folder, kinds and tiers, handover, two approvals, several rounds | [09-task-lifecycle.md](references/09-task-lifecycle.md) |
+| 10 | Subagents | When one is worth it, why there are only the reviewer and the mapper | [10-subagents.md](references/10-subagents.md) |
+| 11 | Independent checks | `[review]=n`, how they are counted, the limit, the waiver | [11-review.md](references/11-review.md) |
+| 12 | observe and report | Logs, statistics, reports, doctor, eval | [12-observe-report.md](references/12-observe-report.md) |
+| 13 | Common commands | Those for people, those for agents, when to use which | [13-commands.md](references/13-commands.md) |
+| 14 | Internals | The path of one hook call, modules, state, policies, adapters | [14-internals.md](references/14-internals.md) |
+| 15 | Design choices | Why there are no Levels, what is left undone on purpose | [15-design-choices.md](references/15-design-choices.md) |
 
-主题之间有顺序：1 到 6 是积木，7 到 8 是安全，9 到 12 是工作流，13 到 15 是查表和原理。用户没想法时，建议从 1 或 6 开始。
+The topics have an order: 1 to 6 are the building blocks, 7 and 8 are safety, 9 to 12 are the way of working, 13 to 15 are for looking things up and for the principles. When the user has no idea, suggest starting at 1 or 6.
 
-### 每个主题怎么讲
+### How to teach a topic
 
-1. **一句话开场**：这个主题回答什么问题，为什么值得懂。
-2. **分块讲**：参考文件里每个小节是一块。一次讲一块，每块 5 句以内，先说事，再说名字。每块之后停下，问一个小问题，或问“要继续，还是先问问题？”。
-3. **动手看**：每个主题都有“动手看”，给用户一个真实的文件或命令，让他自己打开或运行。你可以代跑只读命令，把输出里要紧的几行讲给他。
-4. **收口**：主题讲完，用三句话总结，再问“还有疑问吗？”。然后推荐一个相关主题。
+1. **Open with one sentence**: which question this topic answers, and why it is worth understanding.
+2. **Teach in chunks**: every section of the reference file is one chunk. One chunk at a time, 5 sentences at most, what happens first and the name after. Stop after each chunk and ask a small question, or ask "go on, or a question first?".
+3. **Hands on**: every topic has a "Hands on" part that gives the user a real file or command to open or run themselves. You may run read-only commands for them and explain the few lines of the output that matter.
+4. **Close**: when the topic is done, sum up in three sentences, then ask "any questions left?". Then recommend one related topic.
 
-用户的问题优先。他问了参考文件里没有的，去读真实文件（路径在各主题的“去哪看”里），再回答。读完还不确定，就说“我没查到，不能确定”。
+The user's questions come first. When they ask something the reference file does not have, read the real files (the paths are under "Where to look" in each topic), then answer. If you are still not sure after reading, say "I did not find it and cannot be sure".
 
 ## Gotchas
 
-- **参考文件是你的讲稿，不是要念给用户的。** 不要整篇贴出来。按块讲，用户的话题往哪走就往哪走。
-- **讲事实，标出没测过的。** 参考文件里写了“未测”“待测”的地方，原样告诉用户。不要补一个听起来合理的答案。
-- **现场演示只运行只读命令**：`harness doctor`、`harness task list`、`harness task status`、`harness task review status`、`harness stats`、`harness target list`、`ls`、读文件。**不要**为了演示去建任务、改文件、运行批准类命令（`approve-plan`、`approve-promote`、`recover`、`review extend|waive`、`approve-command`、`admin on`）。这些只有用户能在自己的终端运行。
-- **不要替用户改 harness。** 用户听完想改，转去 admin agent（要先在终端 `harness admin on`），或告诉他改哪个文件。
-- **不要把 1.0 的旧概念当现状讲。** 没有 Level（L1、L2、L3），没有 orchestrator、builder、verifier，没有请求目录。用户提到它们，告诉他已经退役，指向 [版本记录](../../../docs/07-release-notes.md)。
-- **规则的主要来源只有一个。** 讲到具体数字（次数上限、天数、超时），去读策略文件再说，不要凭记忆。策略在 `.harness/policies/`。
-- **任务目录被 git 忽略，搜索工具搜不到。** 要看任务里的文件，按路径读。
-- **用户是外行时，先讲事再讲词。** 他听不懂就换一个比方，不要重复同一句话。
+- **The reference files are your notes, not something to read out to the user.** Do not paste a whole file. Teach in chunks, and go where the user's topic goes.
+- **Tell facts, and mark what was not tested.** Where a reference file says "not tested" or "to be tested", tell the user as written. Do not supply an answer that merely sounds right.
+- **In a live demonstration run read-only commands only**: `harness doctor`, `harness task list`, `harness task status`, `harness task review status`, `harness stats`, `harness target list`, `ls`, reading files. Do **not** open a task, change files or run approval commands for a demonstration (`approve-plan`, `approve-promote`, `recover`, `review extend|waive`, `approve-command`, `admin on`). Only the user can run those, in their own terminal.
+- **Do not change the harness for the user.** When the user wants a change after listening, send them to the admin agent (after `harness admin on` in the terminal), or tell them which file to change.
+- **Do not teach the old 1.0 ideas as the present.** There are no Levels (L1, L2, L3), no orchestrator, builder or verifier, no request folders. When the user mentions them, say they are retired and point to the [release notes](../../../docs/07-release-notes.md).
+- **A rule has one main source.** For an exact number (a limit of times, days, a timeout), read the policy file before you say it; do not go by memory. The policies are in `.harness/policies/`.
+- **The task folder is ignored by git, and search tools do not find it.** To look at a file in a task, read it by path.
+- **With a layperson, say what happens first and the word after.** When they do not follow, use another comparison; do not repeat the same sentence.
+- **The examples of engine texts in the reference files are the English ones.** With `language` set to `zh` the engine prints the Chinese text of the same message.
 
 ## Troubleshooting
 
 | Issue | Solution |
 | --- | --- |
-| 用户一开始就听不懂 | 停下，建议先做 `/harness-quick-start`，回头再来 |
-| 用户问的是怎么用，不是为什么 | 给他 [快速开始](../../../docs/01-quickstart.md)的“日常怎么说”和 [命令参考](../../../docs/04-reference.md) 的链接，再用 13 号主题讲常用命令 |
-| 用户问平台本身的行为（Copilot 为什么这样） | 讲实测过的部分（见 06 号主题），没测过的直说 |
-| 讲到一半用户想换话题 | 换。记一句“还剩 X 没讲”，结束时提一下 |
+| The user is lost from the start | Stop and suggest doing `/harness-quick-start` first, then coming back |
+| The user asks how to use it, not why | Give the links to what to say day to day in the [quick start](../../../docs/01-quickstart.md) and to the [command reference](../../../docs/04-reference.md), then teach the common commands with topic 13 |
+| The user asks about the platform itself (why Copilot behaves this way) | Teach what was measured (see topic 6), and say plainly what was not |
+| Halfway through, the user wants another topic | Switch. Note "X is still left", and mention it at the end |

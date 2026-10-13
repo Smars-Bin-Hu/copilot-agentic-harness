@@ -1,94 +1,95 @@
 ---
 name: harness-quick-start
-description: '给第一次用 harness 的人上一堂入门课：先用大白话讲清 harness 是干什么的和几个必须知道的词，再讲目录里哪些要关心、哪些不用管，最后用一个模拟任务边做边教。假设用户只知道 Copilot 能补全代码，不懂 agent、skill、hook。用户输入 /harness-quick-start，或说“怎么用 harness”“带我上手”“第一次用”“这是干什么的”“教我用”时用。关键词：quick start、上手、入门、教程、新手、介绍、这是什么。'
+description: 'A first lesson for someone new to the harness: first say in plain words what the harness is for and the few words one has to know, then which folders matter and which can be left alone, and last teach by doing one practice task. It assumes the user only knows that Copilot completes code, and knows nothing of agents, skills or hooks. Use when the user types /harness-quick-start, or says "how do I use the harness", "get me started", "first time", "what is this for", "teach me". Keywords: quick start, get started, first lesson, tutorial, beginner, introduction, what is this.'
 type: workflow
 specificTo: generic
 ---
 
-# harness 入门课
+# The harness first lesson
 
-给第一次用的人讲三件事：这套东西是干什么的；目录里哪些要关心；怎么做完一个任务。用户可能完全不懂 AI 的词，只知道 Copilot 能补全代码。全程约 20 分钟。
+Teach a first-time user three things: what this is for; which folders matter; how to get one task done. The user may know none of the AI words and only that Copilot completes code. About 20 minutes in all.
 
 ## When to Use This Skill
 
-- 用户第一次用这份 harness，想知道它是什么、怎么用。
-- 用户用过 1.1.0 之前的版本（有 Level 的），想知道现在怎么用。
+- The user uses this harness for the first time and wants to know what it is and how to use it.
+- The user used a version before 1.1.0 (the one with Levels) and wants to know how it works now.
 
-环境没配好（`harness` 命令找不到、目标仓库没配）时，先用技能 `harness-repo-initialize`。日常开任务用 `harness-my-task`，不用本技能。
+When the environment is not set up (the `harness` command is not found, no target repository is set up), use the skill `harness-repo-initialize` first. For opening tasks day to day use `harness-my-task`, not this skill.
 
 ## Prerequisites
 
-- `harness doctor` 能运行。运行不了，先转去 `harness-repo-initialize`。
-- 知识库、公司技能、目标仓库，默认已经配好。没配好也不影响本课。
+- `harness doctor` runs. If it does not, go to `harness-repo-initialize` first.
+- The knowledge base, the company skills and the target repositories are taken to be set up. If they are not, the lesson still works.
 
 ## Step-by-Step Workflows
 
-本课分四部分。**每部分讲完停下**，问用户“清楚吗？有没有想问的？”，再讲下一部分。不要一口气讲完。用户说“这个我懂”，就跳过那一部分。
+The lesson has four parts. **Stop after each part** and ask the user "Is that clear? Any questions?", then go on to the next. Do not go through it all in one breath. When the user says "I know this", skip that part.
 
-开始时把清单发给用户，做完一项勾一项：
+At the start, send the user the list, and tick each item as it is done:
 
 ```markdown
-- [ ] 一、这是什么，为什么需要它
-- [ ] 二、目录里你要关心什么
-- [ ] 三、做一个模拟任务
-- [ ] 四、以后每天怎么用
+- [ ] 1. What this is, and why it is needed
+- [ ] 2. What matters in the folders
+- [ ] 3. Do a practice task
+- [ ] 4. How to use it every day
 ```
 
-### 开场
+### Opening
 
-1. 运行 `harness doctor`。有 `[ERROR]` 就停下，转去 `harness-repo-initialize`。`[WARN]` 念给用户听，不拦。
-2. 问用户一个问题，让你知道讲多慢。有提问工具就用，没有就列编号：
-   1. 只用过代码补全（敲代码时它灰字提示）
-   2. 用过 Chat 窗口提问
-   3. 让 Copilot 改过文件、跑过命令
-3. 选 1 的人，第一部分多讲一点；选 3 的人，第一部分一笔带过。
+1. Run `harness doctor`. If there is an `[ERROR]`, stop and go to `harness-repo-initialize`. Read any `[WARN]` to the user; it does not block.
+2. Ask the user one question, so you know how slowly to go. Use a question tool if you have one; if not, list numbers:
+   1. Only used code completion (the grey text while typing code)
+   2. Asked questions in the Chat window
+   3. Had Copilot change files and run commands
+3. For someone who picks 1, say more in part 1; for someone who picks 3, pass over part 1 quickly.
 
-### 一、这是什么，为什么需要它
+### 1. What this is, and why it is needed
 
-照 [concepts.md](references/concepts.md) 讲。讲到这五点就够：
+Teach from [concepts.md](references/concepts.md). These five points are enough:
 
-- Copilot 现在不只补全，它能自己读文件、改文件、跑命令。这样用的 Copilot 叫 **agent**。
-- agent 会犯的三种错，所以要给它定规矩。
-- harness 是“给 agent 定的工作规矩，加一套工作台”。
-- 四样东西各管什么：Copilot agent、知识库和领域技能、harness 框架、被作用的对象。先画图，再讲每样管什么、不管什么。
-- 六个词：任务、门卫、技能、独立检查、批准、知识库。第一次出现时一个词一句话，不展开。
+- Copilot no longer only completes: it can read files, change files and run commands by itself. A Copilot used this way is called an **agent**.
+- The three kinds of mistakes an agent makes, which is why it needs rules.
+- The harness is "working rules for the agent, plus a workbench".
+- What each of four things does: the Copilot agent, the knowledge base and domain skills, the harness framework, what is acted on. Draw the picture first, then say what each does and does not do.
+- Six words: task, gatekeeper, skill, independent check, approval, knowledge base. One sentence per word the first time it comes up; no more.
 
-### 二、目录里你要关心什么
+### 2. What matters in the folders
 
-照 [map.md](references/map.md) 讲。先用 `ls` 把用户仓库的第一层列出来给他看，再讲：
+Teach from [map.md](references/map.md). First list the top level of the user's repository with `ls` and show it, then say:
 
-- 他每天会碰到的只有三处：聊天窗口、任务文件夹、终端里的 `harness` 命令。
-- 其余目录不用管。知识库和公司技能已经配好。
+- There are only three places the user meets every day: the chat window, the task folder, and the `harness` command in the terminal.
+- The other folders can be left alone. The knowledge base and the company skills are set up already.
 
-### 三、做一个模拟任务
+### 3. Do a practice task
 
-照 [walkthrough.md](references/walkthrough.md) 一步一步带。场景在 [scenario.md](references/scenario.md)；`references/scenario.override.md` 存在时只用它（团队自定义场景用，不改上游文件）。这是本课的主体：用户亲手发消息、打开文件、在终端敲命令。你每做一步，先说“我现在要做什么、为什么”，做完说“多了什么”，再停。
+Go step by step from [walkthrough.md](references/walkthrough.md). The scenario is in [scenario.md](references/scenario.md); when `references/scenario.override.md` exists, use only that (it is for a team's own scenario, so the upstream file stays unchanged). This is the main part of the lesson: the user sends messages, opens files and types commands in the terminal with their own hands. For every step you do, first say "what I am about to do, and why", after it say "what is new", then stop.
 
-### 四、以后每天怎么用
+### 4. How to use it every day
 
-用三句话收尾，再给链接：
+Wrap up in three sentences, then give the link:
 
-1. 想问问题：直接问。
-2. 想要产出文件，或改仓库：说“我要做什么”，其他的 agent 会问你。
-3. 隔几天回来：说“接着做某某任务”。
+1. To ask a question: just ask.
+2. To get files produced, or a repository changed: say what you want done; the agent asks you the rest.
+3. Back after a few days: say "go on with task so-and-so".
 
-链接：[快速开始](../../../docs/01-quickstart.md)（里面有“日常怎么说”）。最后问用户：哪一部分讲得不清楚？记下来告诉他，可以改本课。
+The link: [Quick start](../../../docs/01-quickstart.md) (it has what to say day to day). Last, ask the user which part was not clear. Note it and tell them the lesson can be changed.
 
 ## Gotchas
 
-- **不要先讲词，先讲事。** 先说“它会改错文件”，再说“所以有个门卫”。用户记得住事，记不住词。
-- **一次只引入一个新词。** 没讲过的词（hook、skill、policy、sandbox）不要出现。用户问到再解释。
-- **不要把目录全念一遍。** 用户只需要知道三处。`.harness/`、`.github/` 告诉他“不用打开”。
-- **不要碰目标仓库。** 模拟任务的种类是 `design`，不带 `DEV/`。
-- **不要自己写 `[review]=1`。** 那一步必须由用户发消息，hook 只认用户的原话。
-- **任务目录被 git 忽略，搜索工具搜不到。** 给用户链接时按路径写，让他在左侧文件树里点开。
-- **用过旧版本的用户**会问 `/l2` 和 `task start`。回答：没有 Level 了，不用写；`task start` 换成了 `task new` 和 `task open`；旧任务目录要搬到 `.workspace/sandbox/tasks/`。
+- **Do not start with words; start with what happens.** First "it may change the wrong file", then "so there is a gatekeeper". People remember what happens, not words.
+- **Bring in one new word at a time.** Words that were not taught (hook, skill, policy, sandbox) must not come up. Explain them when the user asks.
+- **Do not read out every folder.** The user needs to know three places. For `.harness/` and `.github/`, say "no need to open them".
+- **Do not touch a target repository.** The practice task is of kind `design` and has no `DEV/`.
+- **Do not write `[review]=1` yourself.** The user must send that message: the hook goes by the user's own words only.
+- **The task folder is ignored by git, and search tools do not find it.** Give the user links by path, and let them click it open in the file tree on the left.
+- **The language.** The harness speaks English by default and can speak Chinese: `language` in `.harness/policies/user.override.json` (`en` or `zh`). When the user would rather have Chinese, say so; the skill `harness-repo-initialize` sets it. Teach this lesson in the language the rules at the top of the prompt name.
+- **A user of an old version** will ask about `/l2` and `task start`. The answer: there are no Levels any more, nothing to write for them; `task start` became `task new` and `task open`; old task folders have to move to `.workspace/sandbox/tasks/`.
 
 ## Troubleshooting
 
 | Issue | Solution |
 | --- | --- |
-| `harness: command not found` | 转去技能 `harness-repo-initialize` 的第 1 步 |
-| `任务 … 已经有了` | 上次练手留下的。用 `task open <任务名>` 接着用，或换一个名字 |
-| 调用 reviewer 被拒 | 用户还没发带 `[review]=1` 的消息，或还没运行 `task review start` |
-| 用户说“太长了” | 只保留第三部分，一、二部分各用三句话说完 |
+| `harness: command not found` | Go to step 1 of the skill `harness-repo-initialize` |
+| `Task ... exists already` | Left over from the last practice. Go on with it using `task open <task name>`, or pick another name |
+| A call of the reviewer is refused | The user has not sent a message with `[review]=1` yet, or `task review start` has not been run |
+| The user says "this is too long" | Keep only part 3, and say parts 1 and 2 in three sentences each |

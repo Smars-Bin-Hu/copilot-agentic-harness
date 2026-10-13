@@ -1,10 +1,10 @@
-# NOW：<目标名>
+# NOW: <goal name>
 
-> 进度指针。每次动手前后都改。新 session 先读这个文件。保持在一屏内：只写当前一步和下一步，已通过的细节在 `LOG.md`。
+> The progress pointer. It changes before and after every piece of work. A new session reads this file first. Keep it within one screen: only the current step and the next; the details of steps that passed are in `LOG.md`.
 
-- **更新**：<yyyy-mm-dd>
-- **当前步骤**：<第几步，名称>
-- **状态**：<做中 / 已交棒，等用户验收 / 已通过，等用户说开始下一步>
-- **任务**：<`.workspace/sandbox/tasks/<任务>/`；没有写“无”>
-- **下一步**：<接下来要做的一件事>
-- **卡点和遗留问题**：<最多 5 条，解决了就删；没有写“无”>
+- **Updated**: <yyyy-mm-dd>
+- **Current step**: <which step, its name>
+- **Status**: <doing / handed over, waiting for the user's acceptance / passed, waiting for the user to say start the next step>
+- **Task**: <`.workspace/sandbox/tasks/<task>/`; write "none" if there is none>
+- **Next step**: <the one thing to do next>
+- **Blockers and open issues**: <5 at most; delete each when it is solved; write "none" if there are none>

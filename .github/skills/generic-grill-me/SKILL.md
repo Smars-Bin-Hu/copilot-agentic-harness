@@ -1,79 +1,79 @@
 ---
 name: generic-grill-me
-description: '任务有任何不清楚的地方时，先向用户大量提问，问到没有盲区并得到确认，再开始执行。用于需求模糊、信息不全、有多种理解、涉及取舍的任务，防止 agent 按自己的猜测做事。关键词：grill me、澄清需求、追问、确认需求、需求不明确、先问清楚再做、ask clarifying questions。'
+description: 'When anything about a task is unclear, ask the user many questions first, until no blind spot is left and the user has confirmed, and only then start. For tasks with a vague requirement, missing information, several readings or trade-offs: it keeps the agent from acting on its own guesses. Keywords: grill me, clarify the requirement, follow-up questions, confirm the requirement, unclear requirement, ask before doing, ask clarifying questions.'
 type: unit
 specificTo: generic
 ---
 
-# Grill Me：问清楚再动手
+# Grill Me: ask until it is clear, then act
 
-任务里只要有一处不清楚，就先停下来问用户。问到没有盲区、用户确认后，才执行。
+When even one thing about a task is unclear, stop and ask the user first. Act only when no blind spot is left and the user has confirmed.
 
-目的：不让 agent 用自己的估计、想法或猜测补全用户没说的内容。
+The aim: the agent must not fill in what the user did not say with its own estimates, ideas or guesses.
 
-## 使用时机
+## When to use it
 
-- 任务描述有缺口：目标、范围、输入、输出、约束、验收标准里有任何一项没说清。
-- 一句话可以有两种以上理解。
-- 需要在多个方案之间取舍，而用户没有表态。
-- 你发现自己在想“应该是这样吧”“大概这样就行”。这就是要问的信号。
-- 用户直接说“grill me”“先问清楚再做”。
+- The task description has a gap: any one of goal, scope, input, output, constraints or acceptance standard is not clear.
+- A sentence can be read in two or more ways.
+- There is a choice between several approaches, and the user has not said which.
+- You catch yourself thinking "it is probably like this" or "this should do". That is the signal to ask.
+- The user says "grill me" or "ask first, then do it".
 
-任务的每个维度都已明确、只有一种做法时，不需要本 Skill。不要为了提问而提问。
+When every dimension of the task is clear and there is only one way to do it, this skill is not needed. Do not ask for the sake of asking.
 
-## 工作流
+## Workflow
 
-1. **冻结执行。** 从现在起不改文件、不跑有副作用的命令、不开始“显然没问题的那一部分”。只允许只读操作：读文件、搜索代码、看文档。
-2. **先查再问。** 能从仓库、文件、文档、配置里查到的事实，自己去查，不要问用户。只问查不到的内容：用户的意图、偏好、取舍、验收标准。
-3. **列出所有盲区。** 对照 [提问维度清单](./references/question_dimensions.md) 逐项检查。对每个维度问自己：“我猜错了，用户会不会返工？”会，就列入问题。
-4. **按依赖顺序提问。** 上游决定先问，下游决定后问。互相独立的问题放在同一轮，一轮不超过 5 个。
-   - 有向用户提问的工具时，优先用它。没有就直接在聊天里问。
-   - 每个问题给出具体选项，并标出你推荐的选项和一句理由。
-   - 推荐项只是建议，不是决定。用户没确认前，它不算数。
-5. **每轮回答后更新台账。** 台账分三栏：已确认、待确认、用户明确授权我决定。回答可能带出新问题，把它们加入待确认。
-6. **循环第 4、5 步，直到“待确认”为空。** 不因为“差不多够了”而停。回答含糊时继续追问，处理方式见 Gotchas。
-7. **交付需求确认清单。** 用 [确认清单模板](#需求确认清单) 汇总所有已确认内容，请用户确认或修改。只有用户明确回复“确认”，才算通过。
-8. **开始执行。** 严格按确认清单做。执行中遇到清单没覆盖的新歧义，停下来，回到第 4 步，不要自己决定。
+1. **Freeze the work.** From now on change no file, run no command with side effects, and do not start on "the part that is obviously fine". Only read-only actions are allowed: reading files, searching code, reading docs.
+2. **Look it up before asking.** Facts that can be found in the repository, files, docs or settings you look up yourself; do not ask the user. Ask only what cannot be looked up: the user's intent, preferences, trade-offs, acceptance standard.
+3. **List every blind spot.** Go through the [question dimensions](./references/question_dimensions.md) one by one. For each, ask yourself: "If I guess wrong, will the user have to redo it?" If so, put it on the list.
+4. **Ask in order of dependency.** Upstream decisions first, downstream ones after. Questions that do not depend on each other go in the same round, 5 at most per round.
+   - When you have a tool for asking the user, prefer it. If not, ask in the chat.
+   - Give concrete options for every question, and mark the one you recommend with one sentence of reason.
+   - A recommendation is advice, not a decision. It does not count until the user confirms.
+5. **Update the ledger after every round of answers.** The ledger has three columns: confirmed, to be confirmed, things the user clearly lets me decide. Answers may raise new questions: add them to "to be confirmed".
+6. **Repeat steps 4 and 5 until "to be confirmed" is empty.** Do not stop because it is "about enough". When an answer is vague, keep asking; see Gotchas for how.
+7. **Hand over the requirement checklist.** Sum up everything confirmed with the [checklist template](#requirement-checklist) and ask the user to confirm or change it. It passes only when the user clearly answers "confirmed".
+8. **Start the work.** Follow the checklist strictly. When a new ambiguity comes up that the checklist does not cover, stop and go back to step 4. Do not decide it yourself.
 
-## 需求确认清单
+## Requirement checklist
 
 ```markdown
-## 需求确认清单
+## Requirement checklist
 
-- **目标**：……
-- **范围（做）**：……
-- **边界（不做）**：……
-- **输入 / 输出**：……
-- **约束**：……
-- **验收标准**：……
-- **已确认的决定**：
-  1. 问题 → 用户的选择
-- **用户授权我决定的事**：
-  1. 事项 → 我将采用的做法（用户已同意）
+- **Goal**: ...
+- **Scope (to do)**: ...
+- **Limits (not to do)**: ...
+- **Input / output**: ...
+- **Constraints**: ...
+- **Acceptance standard**: ...
+- **Decisions confirmed**:
+  1. Question → the user's choice
+- **Things the user lets me decide**:
+  1. Item → what I will do (the user has agreed)
 
-请回复“确认”，或指出要修改的地方。
+Please answer "confirmed", or point out what to change.
 ```
 
-没有内容的项写“无”，不要省略这一项。
+For an item with nothing in it write "none". Do not leave the item out.
 
 ## Gotchas
 
-- **不要静默采用推荐项或默认值。** 你觉得“显然”的默认值，恰恰是最容易猜错的地方。必须问，并等用户确认。
-- **不要把没回答的问题当作同意。** 用户漏答某个问题时，再问一次。
-- **“随便”“你定”“都行”不算已确认。** 回问一次：“这件事我按 X 做，可以吗？”用户同意后，记入“用户授权我决定的事”。
-- **不要问查得到的事实。** 问“项目用什么测试框架”会浪费用户时间，也说明你没有先看仓库。
-- **不要问开放式大问题。** “你想要什么样的？”太空。改成“A、B、C 三选一，我推荐 B，因为……”。
-- **不要边等边做。** 等待回答期间不要动手。提前做的部分可能要全部推翻。
-- **不要在清单确认前宣布“信息已足够”。** 是否足够，由用户确认清单来判定，不由你判定。
-- **不要用问题淹没次要细节。** 先问会改变结果的大问题，再问细节。同一个答案能覆盖的多个细节，合并成一个问题。
-- **本 Skill 不改变权限。** 它只决定“先问后做”，不放宽任何操作权限。
+- **Do not silently take a recommended option or a default.** The default you find "obvious" is exactly where a guess goes wrong most easily. Ask, and wait for the user to confirm.
+- **Do not treat an unanswered question as a yes.** When the user skips a question, ask it once more.
+- **"Whatever", "you decide" and "either is fine" are not a confirmation.** Ask back once: "I will do this as X. Is that all right?" After the user agrees, put it under "Things the user lets me decide".
+- **Do not ask for facts you can look up.** Asking "which test framework does the project use" wastes the user's time and shows you did not look at the repository first.
+- **Do not ask big open questions.** "What would you like?" is too empty. Make it "one of A, B, C; I recommend B, because ...".
+- **Do not work while you wait.** Do nothing while waiting for answers. What you did early may all have to be thrown away.
+- **Do not declare "there is enough information" before the checklist is confirmed.** Whether it is enough is decided by the user confirming the checklist, not by you.
+- **Do not bury the user in questions about minor details.** Ask the big questions that change the result first, then the details. Several details that one answer covers become one question.
+- **This skill changes no permission.** It only decides "ask first, then act". It loosens no right to do anything.
 
-## 故障处理
+## Troubleshooting
 
-| 问题 | 处理方式 |
+| Issue | Solution |
 | --- | --- |
-| 用户不想回答太多问题 | 说明每类未确认项猜错的代价，让用户选择：继续回答，或对某些事项明确授权你决定。授权要记入清单。 |
-| 用户的回答互相矛盾 | 指出矛盾的两处原话，请用户选一个。 |
-| 用户回答后又改主意 | 更新台账。检查这次改动是否让已确认项失效，失效的重新提问。 |
-| 无法向用户提问（非交互环境） | 不执行。输出完整的待确认问题列表和推荐项，说明需要用户回复后才能继续。 |
-| 执行中发现清单漏了内容 | 停止。只问这个新缺口，补进清单，再继续。 |
+| The user does not want to answer many questions | Explain what a wrong guess costs for each kind of open item, and let the user choose: go on answering, or clearly let you decide certain things. Record what you are let to decide in the checklist. |
+| The user's answers contradict each other | Point to the two statements that conflict, in the user's own words, and ask the user to pick one. |
+| The user changes their mind after answering | Update the ledger. Check whether the change makes confirmed items invalid, and ask again about those. |
+| The user cannot be asked (a non-interactive environment) | Do not act. Output the full list of open questions with your recommendations, and say that it can go on only after the user answers. |
+| During the work you find the checklist missed something | Stop. Ask only about this new gap, add it to the checklist, then go on. |

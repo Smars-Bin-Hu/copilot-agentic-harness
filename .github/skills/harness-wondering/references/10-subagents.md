@@ -1,65 +1,65 @@
-# 10. 子 agent：什么时候值得用
+# 10. Subagents: when one is worth it
 
-## 一句话
+## In one sentence
 
-子 agent 是主 agent 调用的另一个 agent。它在**独立的会话**里工作，只把结论还回来。分工本身没有价值，多 agent 只在换来下面三样之一时才值：独立的视角、并行、无人值守。
+A subagent is another agent that the main agent calls. It works in **its own session** and hands back only its conclusion. Dividing the work has no value in itself: several agents are worth it only when they buy one of three things: an independent point of view, parallel work, or working unattended.
 
-## 分块
+## Chunks
 
-### 10.1 三种值得的情况
+### 10.1 The three cases worth it
 
-| 换来什么 | 例子 | 这个仓库的状态 |
+| What it buys | Example | State in this repository |
 | --- | --- | --- |
-| 独立视角 | 让没看过作者思路的人检查 | **已做**：reviewer |
-| 并行 | 同时读很多文件，各出一份摘要 | **已做**：`/generic-mapreduce` 和只读的 mapper，只做“读”类 |
-| 无人值守 | 照清单一直做，碰到要人决定的事才停 | **已做（beta）**：autorun。它是任务的一种模式，不是 agent：Stop hook 按事实推着负责任务的 agent 做下一步 |
+| An independent point of view | A check by someone who has not seen the author's reasoning | **Done**: the reviewer |
+| Parallel work | Reading many files at the same time, a summary of each | **Done**: `/generic-mapreduce` and the read-only mapper, for reading only |
+| Working unattended | Working down a list, stopping only for what a person must decide | **Done (beta)**: autorun. It is a mode of a task, not an agent: the Stop hook pushes the agent that holds the task on to the next step, by the facts |
 
-### 10.2 现在的规则
+### 10.2 The rules now
 
-- reviewer：要接着任务，用户写了 `[review]=n`，而且先 `task review start`（开了检查）。
-- mapper：要用户输入 `/generic-mapreduce`。hook 读**用户的那条提示**来放行（引擎会在提示里写明用户调用了哪个技能），给这个会话几次调用（默认 4 次，60 分钟内），每调用一次减一。agent 自己写这个命令不算，所以它开不了，也超不了。
-- 其他子 agent：一律拒绝。
-- admin 模式的会话：不能调用子 agent。
-- 平台自带的语义搜索（`search_code_subagent`）是工具，不受限。
+- The reviewer: needs a task, a `[review]=n` written by the user, and `task review start` first (checks on).
+- The mapper: needs the user to type `/generic-mapreduce`. The hook lets it through by reading **the user's prompt** (the engine writes into the prompt which skill the user called) and gives this session a number of calls (4 by default, within 60 minutes), one less with every call. The agent writing the command itself does not count, so it can neither switch it on nor go over.
+- Other subagents: always refused.
+- A session in admin mode: cannot call a subagent.
+- The platform's own semantic search (`search_code_subagent`) is a tool and is not limited.
 
-这些由 PreToolUse 判断（按调用里的 agent 名），不靠 `.agent.md` 的 `user-invocable`、`disable-model-invocation`，因为那两个字段拦不住。
+PreToolUse judges these (by the agent name in the call), not `user-invocable` or `disable-model-invocation` in the `.agent.md`, because those two fields do not stop anything.
 
-### 10.3 为什么没有调度 agent
+### 10.3 Why there is no dispatching agent
 
-1.0 有 orchestrator（调度）、builder（执行）、verifier。结论：
+1.0 had an orchestrator (dispatch), a builder (doing) and a verifier. The conclusions:
 
-- 调度的人不懂任务，干活的人要重学；你也只能和不懂任务的调度者对话。
-- 需求清楚的任务上，三角色编排不比单个 agent 好：用量约 4.5 倍，时间约 6 倍。
-- 所以推进任务的，就是负责这个任务的 agent。
+- The one dispatching does not understand the task, and the one working has to learn it again; you, too, can only talk to a dispatcher who does not understand the task.
+- On tasks with a clear requirement, the three-role setup was no better than a single agent: about 4.5 times the usage and about 6 times the time.
+- So the one who moves a task forward is the agent that holds the task.
 
-### 10.4 子 agent 之间怎么交接：文件
+### 10.4 How subagents hand over: files
 
-- 子 agent **无状态、不能追问**，所以输入要完整：reviewer 的输入是评审包 `REVIEW/round-NNN/package.md`。
-- **agent 之间不传话**，都读写任务目录的文件。文件人也能看，断了能接着做。
-- 输出要让 hook 能读：reviewer 第一行 `VERDICT: PASS` 或 `FAIL`，hook 原样存成 `verdict.md`。
+- A subagent **has no state and cannot ask back**, so its input must be complete: the reviewer's input is the review package `REVIEW/round-NNN/package.md`.
+- **Agents do not pass messages to each other.** They all read and write the files of the task folder. People can read the files too, and the work can go on after a break.
+- The output must be readable by a hook: the reviewer's first line is `VERDICT: PASS` or `FAIL`, and the hook saves it as written, as `verdict.md`.
 
-### 10.5 为什么不让多个子 agent 并行改同一批文件
+### 10.5 Why several subagents do not change the same files in parallel
 
-合并时有隐含的冲突；成本高；目标仓库不能运行，没法判定合并后对不对。所以并行先只做“读”。
+Merging hides conflicts; it costs a lot; and a target repository cannot be run, so there is no way to judge whether the merged result is right. So for now parallel work is for reading only.
 
-### 10.6 子 agent 在 hook 里是什么样
+### 10.6 What a subagent looks like to a hook
 
-- 它有自己的 `session_id`，它的工具调用都过 hook。
-- 引擎用 `parent_session_id` 把它连到主会话；子会话继承主会话的任务。
-- `SubagentStart` 时 hook 注入评审包路径给 reviewer。
-- 平台限制：子 agent 的模型比主模型贵一档就不运行，没有提示。
+- It has its own `session_id`, and all its tool calls go through hooks.
+- The engine links it to the main session with `parent_session_id`; the child session inherits the task of the main session.
+- At `SubagentStart` the hook injects the path of the review package for the reviewer.
+- A platform limit: a subagent whose model is a class above the main model is not run, with no notice.
 
-## 动手看
+## Hands on
 
-- 读 [reviewer.agent.md](../../../agents/reviewer.agent.md) 和 [mapper.agent.md](../../../agents/mapper.agent.md)：比较两者的 `tools`。
-- 在一个没接任务的会话里让 agent “开一个子 agent 帮我搜一下”，看拒绝理由。（可以只在你自己的会话里试。）
+- Read [reviewer.agent.md](../../../agents/reviewer.agent.md) and [mapper.agent.md](../../../agents/mapper.agent.md): compare the `tools` of the two.
+- In a session with no task, ask the agent to "start a subagent to search for me" and look at the refusal reason. (Try it only in your own session.)
 
-## 去哪看
+## Where to look
 
-- `.harness/engine/modules/task/handler.py`（`on_subagent_call`、`on_subagent_start`）、`mapreduce.py`
-- [02-features.md](../../../../docs/02-features.md)“子 agent”
+- `.harness/engine/modules/task/handler.py` (`on_subagent_call`, `on_subagent_start`), `mapreduce.py`
+- The part of [02-features.md](../../../../docs/02-features.md) about subagents
 
-## 常见疑问
+## Common questions
 
-- **“能让 reviewer 和 agent 直接讨论吗？”** 不能。会把作者的思路带给 reviewer，失去独立性。交接只走文件。
-- **“mapreduce 什么时候做？”** 在计划里，还没做。只会由用户启动，先提示“贵，慎用”。
+- **"Can the reviewer and the agent discuss directly?"** No. That would carry the author's reasoning to the reviewer and lose the independence. Handing over goes through files only.
+- **"Can the agent start mapreduce when a job is big?"** No. Only the user starts it, by typing `/generic-mapreduce`, and the skill says first that it is expensive.

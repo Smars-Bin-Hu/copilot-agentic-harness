@@ -1,67 +1,67 @@
-# 1. coding agent 怎么工作
+# 1. How a coding agent works
 
-## 一句话
+## In one sentence
 
-agent = 一个会调用工具的循环。模型不直接改你的文件。它说“我想读这个文件”，外面的程序替它读，把结果还给它，它再想下一步。
+An agent = a loop that calls tools. The model does not change your files directly. It says "I want to read this file", the program around it reads the file for it and hands back the result, and then it thinks about the next step.
 
-## 分块
+## Chunks
 
-### 1.1 循环
+### 1.1 The loop
 
 ```text
-你说一句话
-  → 模型想：要做什么？需要什么信息？
-  → 模型发出一次“工具调用”（读文件、搜索、改文件、跑命令……）
-  → 外面的程序执行，把结果文字还给模型
-  → 模型看结果，再想
-  → 重复，直到模型说“做完了”
+You say something
+  -> the model thinks: what is to be done? which information is needed?
+  -> the model sends one "tool call" (read a file, search, change a file, run a command ...)
+  -> the program around it runs the call and hands the result back to the model as text
+  -> the model looks at the result and thinks again
+  -> repeat, until the model says "done"
 ```
 
-要点：
+Key points:
 
-- 模型只会产生文字。“改文件”是它产生了一段“调用改文件工具”的文字，由 Copilot 去真的改。
-- 所以**一切动作都经过工具调用**。这也是 harness 能拦的原因：它守在每次工具调用的门口（见主题 6）。
+- The model only produces text. "Changing a file" means it produced a piece of text that says "call the tool that changes files", and Copilot does the real change.
+- So **every action goes through a tool call**. That is also why the harness can stop things: it stands at the door of every tool call (see topic 6).
 
-### 1.2 上下文窗口
+### 1.2 The context window
 
-模型一次能看到的文字有上限，叫上下文窗口。里面装着：规则、你的话、它读过的文件、工具返回的结果、它自己说过的话。
+There is a limit to how much text the model can see at once: the context window. It holds: the rules, your words, the files it read, the results the tools returned, and what it said itself.
 
-- 对话越长，窗口越满。满了会被压缩（摘要），细节会丢。
-- 换一个新会话，窗口是空的，它不记得以前的事。
-- 读一个大文件，整份文字进窗口，很占地方。
+- The longer the conversation, the fuller the window. When it is full it gets compressed (summarised), and details are lost.
+- In a new session the window is empty: it remembers nothing from before.
+- Reading a large file puts the whole text into the window, which takes a lot of room.
 
-harness 的对策：**重要的状态写进文件**（`TASK.md`、`REQ.md`），不靠对话记；规则分层、按需加载（主题 2、3）。
+What the harness does about it: **important state is written into files** (`TASK.md`, `REQ.md`) and does not rely on the conversation; rules are layered and loaded when needed (topics 2 and 3).
 
-### 1.3 工具
+### 1.3 Tools
 
-读、搜、写、跑命令、调用子 agent、查网页。工具越强，出错的代价越大：“跑命令”能删东西，“写文件”能改错。工具有哪些，见主题 5。
+Reading, searching, writing, running commands, calling a subagent, looking up web pages. The stronger a tool, the more a mistake costs: "run a command" can delete things, "write a file" can change the wrong thing. Which tools there are is in topic 5.
 
-### 1.4 为什么 agent 会出错
+### 1.4 Why an agent goes wrong
 
-| 现象 | 原因 |
+| What you see | Why |
 | --- | --- |
-| 改了不该改的 | 它在推理“怎么完成”，不在推理“允不允许”。提示词里的规则只是请求 |
-| 做着做着忘了 | 窗口被压缩，或换了会话 |
-| 自己检查自己说没问题 | 同一个模型、同一个思路，盲点相同 |
-| 一直重试被拒绝的操作 | 它想完成任务，不会自然放弃 |
-| 说“完成”但没做 | 模型倾向于报告成功。需要用事实检查 |
+| It changed what it should not | It reasons about "how to get it done", not about "is it allowed". A rule in a prompt is only a request |
+| It forgot along the way | The window was compressed, or the session changed |
+| It checks its own work and says it is fine | The same model with the same reasoning has the same blind spots |
+| It keeps retrying an action that was refused | It wants to finish the task and does not give up by nature |
+| It says "done" without having done it | Models lean towards reporting success. Facts have to be checked |
 
-harness 的对策分两类：**能判断对错的，用代码拦**（主题 6、7）；**判断不了的，让另一个视角查**（主题 10、11）。
+What the harness does falls into two kinds: **what can be judged right or wrong is stopped by code** (topics 6 and 7); **what cannot be judged is checked from another point of view** (topics 10 and 11).
 
-### 1.5 模型选择
+### 1.5 Choosing a model
 
-强模型适合思考、计划；快模型适合执行、快答。harness 不能在会话中途换模型，也不能设推理强度。模型由用户在下拉里选，子 agent 的模型写在它的 `.agent.md` 里（主题 4）。
+A strong model suits thinking and planning; a fast model suits doing and quick answers. The harness cannot change the model in the middle of a session, and cannot set the reasoning effort. The user picks the model in the drop-down; a subagent's model is written in its `.agent.md` (topic 4).
 
-## 动手看
+## Hands on
 
-- 打开 Copilot 的聊天窗口，让 agent 读一个文件。注意聊天里显示的“Read ……”，那是一次工具调用。
-- 运行 `harness stats`，看“tool_calls”：这个会话里工具被调用了多少次。
+- Open Copilot's chat window and let the agent read a file. Note the "Read ..." the chat shows: that is one tool call.
+- Run `harness stats` and look at "tool_calls": how many times tools were called in this session.
 
-## 去哪看
+## Where to look
 
-- [docs/05-design.md](../../../../docs/05-design.md) 第一节“目标”。
+- Section 1, the goal, of [docs/05-design.md](../../../../docs/05-design.md).
 
-## 常见疑问
+## Common questions
 
-- **“agent 和 chatbot 差在哪？”** chatbot 只回答。agent 会自己调用工具、多步完成。
-- **“为什么不直接让模型更聪明就不出错？”** 更强的模型出错更少，但不会归零；在有合规要求的仓库里，一次错就够贵。
+- **"What is the difference between an agent and a chatbot?"** A chatbot only answers. An agent calls tools by itself and finishes in several steps.
+- **"Why not just make the model smarter so it makes no mistakes?"** A stronger model makes fewer mistakes, but never none; in a repository with compliance requirements, one mistake is costly enough.

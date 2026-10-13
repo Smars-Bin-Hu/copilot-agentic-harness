@@ -1,26 +1,26 @@
-# TODO：<目标名>
+# TODO: <goal name>
 
-> 状态：`待做`、`做中`、`已交棒`（等用户验收）、`已通过`、`已取消`。
-> 步骤编号不复用。已通过的步骤不改写，受影响就加新步骤。
+> Statuses: `todo`, `doing`, `handed over` (waiting for the user's acceptance), `passed`, `cancelled`.
+> Step numbers are not reused. A step that passed is not rewritten; when it is affected, add a new step.
 
-## 步骤
+## Steps
 
-### 1. <步骤名>
+### 1. <step name>
 
-- 状态：`待做`
-- 任务：<要不要开任务；种类：qa / rca / design / dev / test / kb / other>
-- 做什么：<一两句话>
-- 验收标准：<简单步骤写一行：看哪里、预期是什么。复杂步骤写“见 accept/<步骤号>.md”>
-- 自验结果：
-- 反馈记录：
-- 通过日期：
+- Status: `todo`
+- Task: <whether a task is needed; kind: qa / rca / design / dev / test / kb / other>
+- What to do: <a sentence or two>
+- Acceptance standard: <for a simple step, one line: where to look and what to expect. For a complex step write "see accept/<step number>.md">
+- Result of own check:
+- Feedback:
+- Passed on:
 
-### 2. <步骤名>
+### 2. <step name>
 
-- 状态：`待做`
-- 任务：
-- 做什么：
-- 验收标准：
-- 自验结果：
-- 反馈记录：
-- 通过日期：
+- Status: `todo`
+- Task:
+- What to do:
+- Acceptance standard:
+- Result of own check:
+- Feedback:
+- Passed on:

@@ -1,22 +1,22 @@
-# 续接
+# Picking up again
 
-新 session 里用户说“继续”时，按下面做。读得少一点：先读指针，再读需要的。
+When the user says "continue" in a new session, do as below. Read little: the pointer first, then what is needed.
 
-1. **找目标。** 看 `.workspace/goals/` 下有哪些目录。只有一个就用它；有多个就让用户选。
-2. **读 `NOW.md`。** 知道上次停在哪一步、记录的任务。
-3. **读 `GOAL.md`。** 确认中心思想、“已定的事”和最近的变更记录。
-4. **读 `TODO.md`。** 只细读当前步骤和它前后各一步，其他步骤看状态就够。当前步骤有验收指南（`accept/<步骤号>.md`）的，也读。`LOG.md` 只看最上面几条，需要查历史时再往下翻。
-5. **核对磁盘。** 记录是人写的，磁盘是真的：
-   - `NOW.md` 里写了任务：运行 `harness task list --all` 和 `harness task status --task <任务名>`，再读任务的 `TASK.md`。
-   - 步骤涉及目标仓库：看 `git status`，看分支。
-   - `TODO.md` 里“已通过”的步骤，`LOG.md` 都有对应条目；缺了就补记，并告诉用户。
-   - 不一致以磁盘为准。修正 `NOW.md` 和 `TODO.md`，并告诉用户改了什么。
-6. **汇报，用三句话。** 目标是什么；进度（已通过几步，共几步）；下一步做什么、要不要开任务。
-7. **停下，等用户说开始。** 上次的任务还开着，就用 `task open` 接上它。
+1. **Find the goal.** See which folders `.workspace/goals/` has. If there is one, use it; if there are several, let the user choose.
+2. **Read `NOW.md`.** It says which step was reached last time and which task is on record.
+3. **Read `GOAL.md`.** Confirm the central idea, "Decided", and the latest entries of the change record.
+4. **Read `TODO.md`.** Read closely only the current step and one step before and after it; for the others the status is enough. When the current step has an acceptance guide (`accept/<step number>.md`), read that too. Of `LOG.md` read only the top few entries; go further down only to look up history.
+5. **Check against the disk.** The records are written by hand; the disk is real:
+   - When `NOW.md` names a task: run `harness task list --all` and `harness task status --task <task name>`, then read the task's `TASK.md`.
+   - When the step involves a target repository: look at `git status` and at the branch.
+   - Every step that is `passed` in `TODO.md` has a matching entry in `LOG.md`; where one is missing, add it and tell the user.
+   - When they disagree, the disk wins. Correct `NOW.md` and `TODO.md`, and tell the user what you changed.
+6. **Report, in three sentences.** What the goal is; the progress (how many steps passed, out of how many); what the next step is, and whether it needs a task.
+7. **Stop and wait for the user to say start.** When the task of last time is still open, pick it up with `task open`.
 
-## 常见情况
+## Common cases
 
-- **上次停在 `做中`，且任务还开着**：先问用户继续还是放弃这一步。继续就 `task open` 接着用；放弃就 `task close`，步骤改回 `待做`，在“反馈记录”写原因。
-- **上次停在 `已交棒`**：用户可能已经测过。问一句结果，不要重做。
-- **`NOW.md` 的日期很旧**：先确认目标和需求还有效，再继续。
-- **`NOW.md` 超过一屏**：先按 `SKILL.md` 的“NOW.md 保持短”整理，细节挪去 `LOG.md`，再汇报。
+- **Last time it stopped at `doing`, and the task is still open**: first ask the user whether to go on with the step or give it up. To go on, pick the task up with `task open`; to give it up, run `task close`, set the step back to `todo`, and write the reason under "Feedback".
+- **Last time it stopped at `handed over`**: the user may have tested it already. Ask for the result; do not do it again.
+- **The date in `NOW.md` is old**: first confirm the goal and the requirements still hold, then go on.
+- **`NOW.md` is longer than one screen**: tidy it first as "Keep NOW.md short" in `SKILL.md` says, move the details to `LOG.md`, then report.

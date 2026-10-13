@@ -1,12 +1,12 @@
-# LOG：<目标名>
+# LOG: <goal name>
 
-> 改动日志。每个步骤通过时加一条，新的写在最上面。只写已完成并通过的改动。已写的条目不改，写错了加一条更正。
+> The change log. Add one entry when a step passes, the newest on top. Write only changes that are finished and passed. Entries that are written are not changed; if one is wrong, add a correction.
 
-<!-- 新条目写在这里 -->
+<!-- New entries go here -->
 
-### <yyyy-mm-dd>｜第 <n> 步：<名称>
+### <yyyy-mm-dd> | Step <n>: <name>
 
-- **改了什么**：<文件、命令、行为，给链接；不要贴代码>
-- **以前**：<一句话>
-- **现在**：<一句话>
-- **验收**：<TODO 的哪一行，或 accept 的哪个文件>
+- **What changed**: <files, commands, behaviour, with links; do not paste code>
+- **Before**: <one sentence>
+- **Now**: <one sentence>
+- **Acceptance**: <which line of TODO, or which accept file>

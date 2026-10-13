@@ -1,69 +1,69 @@
-# 3. skills：按需加载的“操作手册”
+# 3. skills: the "manuals" loaded on demand
 
-## 一句话
+## In one sentence
 
-skill 是一个文件夹，里面的 `SKILL.md` 写着“遇到某类事怎么做”。agent 平时只看到名字和描述，用到时才读全文。
+A skill is a folder whose `SKILL.md` says "how to do a certain kind of job". Normally the agent sees only the name and the description, and reads the whole text when it uses the skill.
 
-## 分块
+## Chunks
 
-### 3.1 三层加载
+### 3.1 Three levels of loading
 
-| 层 | 加载什么 | 什么时候 |
+| Level | What is loaded | When |
 | --- | --- | --- |
-| 1. 发现 | 只有 `name` 和 `description` | 每次，很轻 |
-| 2. 指令 | 整个 `SKILL.md` | 请求和描述匹配时，或用户输入 `/技能名` |
-| 3. 资源 | `references/`、`scripts/` 里的文件 | agent 需要时才读 |
+| 1. Discovery | Only `name` and `description` | Every time; very light |
+| 2. Instructions | The whole `SKILL.md` | When the request matches the description, or the user types `/skill-name` |
+| 3. Resources | The files in `references/` and `scripts/` | Only when the agent needs them |
 
-所以**描述是技能能不能被找到的关键**。描述写得含糊，技能永远不会被用到。好描述回答三件事：做什么、什么时候用、用户可能说哪些词。
+So **the description decides whether a skill can be found**. With a vague description the skill is never used. A good description answers three things: what it does, when to use it, and which words the user may say.
 
-用 skill 在 hook 看来是一次工具调用：工具名 `skill`，参数里有技能名。所以日志能记下“用过哪些技能”。
+To a hook, using a skill is one tool call: the tool name is `skill`, and the arguments have the skill name. So the log can record "which skills were used".
 
-### 3.2 一个技能里有什么
+### 3.2 What a skill holds
 
 ```text
 harness-xxx/
-├── SKILL.md       必须有。frontmatter + 正文
-├── references/    讲稿、规则全文：agent 需要时读
-├── scripts/       可执行脚本：要确定性时用
-├── assets/        原样使用的文件
-└── templates/     agent 要改了再用的起点
+├── SKILL.md       Required. Frontmatter + body
+├── references/    Notes, full rules: the agent reads them when it needs to
+├── scripts/       Runnable scripts: for when the result must be certain
+├── assets/        Files used as they are
+└── templates/     Starting points the agent changes before use
 ```
 
-正文建议：什么时候用、前提、步骤、**Gotchas**（提前警告）、Troubleshooting（出了问题怎么办）。Gotchas 最有价值：每次发现 agent 做错了，加一条。
+Suggested body: when to use it, prerequisites, steps, **Gotchas** (warnings ahead of time), Troubleshooting (what to do when something goes wrong). Gotchas are worth the most: every time the agent is found to get something wrong, add one.
 
-### 3.3 名字前缀
+### 3.3 Name prefixes
 
-| 前缀 | 谁维护 | 例子 |
+| Prefix | Who maintains it | Examples |
 | --- | --- | --- |
-| `harness-*` | 上游 | `harness-my-task`、`harness-quick-start`、`harness-wondering` |
-| `generic-*` | 上游，跨领域通用 | `generic-goal-driven`、`generic-build-new-skill` |
-| `domain-*` | 企业，上游不建 | 你们自己的业务技能 |
+| `harness-*` | Upstream | `harness-my-task`, `harness-quick-start`, `harness-wondering` |
+| `generic-*` | Upstream, general for any domain | `generic-goal-driven`, `generic-build-new-skill` |
+| `domain-*` | The company; upstream makes none | Your own business skills |
 
-分开维护的原因：企业在公司电脑上 `git pull` 上游更新时不会冲突。
+Why they are maintained apart: when a company runs `git pull` for upstream updates on a company computer, nothing conflicts.
 
-### 3.4 技能不是强制的
+### 3.4 A skill is not enforced
 
-技能是说明，agent 可以不用。所以关键规则不能只靠技能：例如“开任务”由 `harness-my-task` 教，但“接着任务的会话只能写任务目录”由 gate 强制。技能让做事顺，代码让做错事做不成。
+A skill is text, and the agent may not use it. So a key rule cannot rest on a skill alone: "opening a task" is taught by `harness-my-task`, but "a session with a task writes only the task folder" is enforced by the gate. A skill makes the work go smoothly; code makes the wrong thing impossible.
 
-### 3.5 技能怎么写
+### 3.5 How to write a skill
 
-- 只写模型不知道的：这个仓库的约定、不明显的默认值、容易踩的坑。标准语法、常见库用法不要写。
-- 步骤只给确定的流程（建、部署）。开放的事给判断标准，不给死步骤。
-- 超过 200 行就拆到 `references/`，`SKILL.md` 只留流程和链接。
-- 新技能用 `generic-build-new-skill` 生成骨架。
+- Write only what the model does not know: the conventions of this repository, defaults that are not obvious, traps that are easy to fall into. Standard syntax and the usage of common libraries stay out.
+- Give steps only for a fixed process (build, deploy). For open work give standards to judge by, not fixed steps.
+- Past 200 lines, split into `references/`; `SKILL.md` keeps only the flow and the links.
+- Make the skeleton of a new skill with `generic-build-new-skill`.
 
-## 动手看
+## Hands on
 
-- 读 [harness-my-task](../../harness-my-task/SKILL.md) 的 frontmatter 和 Gotchas，对比它的 description。
-- 在 Copilot 里输入 `/`，看列出的技能名。
-- 运行 `harness stats`，看“skills”一栏。
+- Read the frontmatter and the Gotchas of [harness-my-task](../../harness-my-task/SKILL.md), and compare them with its description.
+- Type `/` in Copilot and look at the skill names listed.
+- Run `harness stats` and look at the "skills" column.
 
-## 去哪看
+## Where to look
 
 - `.github/skills/`
-- [skills.instructions.md](../../../instructions/skills.instructions.md)：写技能的规则
+- [skills.instructions.md](../../../instructions/skills.instructions.md): the rules for writing skills
 
-## 常见疑问
+## Common questions
 
-- **“技能和 instructions 有什么区别？”** instructions 常驻或按文件触发，适合短规则；技能按请求触发，适合长流程。
-- **“用户怎么强制用某个技能？”** 输入 `/技能名`。`generic-goal-driven` 这类花钱的技能只有用户能这样启动。
+- **"What is the difference between a skill and instructions?"** Instructions are always on or triggered by a file, and suit short rules; a skill is triggered by a request and suits a long flow.
+- **"How does the user force a certain skill?"** By typing `/skill-name`. Skills that cost money, such as `generic-goal-driven`, can only be started by the user this way.

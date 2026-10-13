@@ -1,3 +1,4 @@
 {
-  "name": "<用户的名字，要署名的地方会用它>"
+  "name": "<the user's name; used where a name is to be signed>",
+  "language": "<en or zh: the language the harness speaks; leave the line out for en>"
 }

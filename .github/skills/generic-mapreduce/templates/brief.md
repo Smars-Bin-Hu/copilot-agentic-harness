@@ -1,18 +1,18 @@
-# 给 mapper 的简报
+# The brief for a mapper
 
-每个 mapper 一份。它看不到你的对话，简报要自己能读懂。
+One per mapper. It cannot see your conversation, so the brief must make sense by itself.
 
 ```text
-问题：<要回答什么，一两句话>
+Question: <what to answer, in a sentence or two>
 
-范围：只读下面这些。
-- <文件或文件夹的路径>
-- <文件或文件夹的路径>
+Scope: read only these.
+- <path of a file or folder>
+- <path of a file or folder>
 
-要交的：
-- <摘要里要有的第 1 项>
-- <摘要里要有的第 2 项>
+To hand in:
+- <item 1 the summary must have>
+- <item 2 the summary must have>
 
-长度：不超过 <N> 行。每条结论带出处（路径:行号）。
-背景：<它需要知道的一两句话；没有就删掉这一行>
+Length: <N> lines at most. Every conclusion has its source (path:line).
+Background: <a sentence or two it needs to know; delete this line if there is none>
 ```

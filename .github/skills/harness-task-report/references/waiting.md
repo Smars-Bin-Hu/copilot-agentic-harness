@@ -1,26 +1,28 @@
-# 在等什么
+# What it waits for
 
-`harness task list` 每个任务的 `waiting_why`，和用户下一步该做的事。命令都在用户自己的终端运行，你不能替他运行。
+The `waiting_why` of each task in `harness task list`, and what the user should do next. Every command runs in the user's own terminal; you cannot run it for them.
 
-| `waiting_why` | 看板上写的 | 含义 | 用户下一步 |
+| `waiting_why` | What the board says | Meaning | The user's next step |
 | --- | --- | --- | --- |
-| `recover` | promote 中途出错，等你恢复 | 回写写到一半出错，目标仓库可能是半成品 | `harness task recover --task <任务名>` |
-| `promote` | 回写等你批准 | 回写计划（dry-run）已生成 | 先看任务目录的 `PROMOTE-PLAN.diff`，再 `harness task approve-promote --task <任务名>` |
-| `plan` | 计划等你批准 | `PLAN.md` 写好了，或批准后又改过 | 先看 `PLAN.md`，再 `harness task approve-plan --task <任务名>` |
-| `review` | 检查次数用完了，等你决定 | 独立检查没凑够通过次数，次数已用完 | 看最后一次的 `REVIEW/round-NNN/verdict.md`，再选 `harness task review extend --checks 2` 或 `harness task review waive` |
-| `autorun` | autorun 停下了，等你（括号里是原因） | 任务开过 autorun，它按事实停了：做完、到上限、被拒绝、没进展，或 agent 说走不下去 | 看括号里的原因。做完了就看回写计划；卡住了就回那个会话回答它。想接着跑：`harness task autorun on` |
-| `stopped` | agent 停下了，等你 | 那个会话的 agent 说完了，轮到用户 | 回到那个会话看它说了什么。任务做完了就让它 `task close` |
-| 空 | 不在等你 | agent 还在跑，或任务从没停过 | 不用管 |
-| 空，`paused_since` 有值 | 搁置 | 用户运行了 `task pause`，暂时不管它 | 不催。用户想接着做：`harness task resume --task <任务名>`，或在它的会话里发提示 |
+| `recover` | the promote failed halfway and waits for you to recover | The write-back failed partway, and the target repository may be half written | `harness task recover --task <task name>` |
+| `promote` | the write-back waits for your approval | The write-back plan (dry run) is made | Read `PROMOTE-PLAN.diff` in the task folder first, then `harness task approve-promote --task <task name>` |
+| `plan` | the plan waits for your approval | `PLAN.md` is written, or it changed after the approval | Read `PLAN.md` first, then `harness task approve-plan --task <task name>` |
+| `review` | the checks are used up and wait for your decision | The independent checks did not reach enough passes, and they are used up | Read the last `REVIEW/round-NNN/verdict.md`, then pick `harness task review extend --checks 2` or `harness task review waive` |
+| `autorun` | autorun stopped and waits for you (the reason is in brackets) | The task had autorun on, and it stopped by the facts: done, a limit reached, refused, no progress, or the agent said it cannot go on | Read the reason in the brackets. If it is done, read the write-back plan; if it is stuck, go back to that session and answer it. To let it go on: `harness task autorun on` |
+| `stopped` | the agent stopped and waits for you | The agent of that session has finished speaking; it is the user's turn | Go back to that session and read what it said. If the task is done, let it run `task close` |
+| empty | not waiting for you | The agent is still running, or the task has never stopped | Nothing to do |
+| empty, with a value in `paused_since` | paused | The user ran `task pause` and leaves it for now | Do not push. When the user wants to go on: `harness task resume --task <task name>`, or a prompt in its session |
 
-## 排序
+The board texts above are the English ones; with `language` set to `zh` the board shows them in Chinese.
 
-- 在等用户的排前面。里面按 `waited_s` 从大到小。
-- 上面几种原因同时成立时，只报最挡事的一种，顺序就是表里从上到下。
+## Order
 
-## 建议先看哪个
+- Tasks waiting for the user come first, the largest `waited_s` on top.
+- When several of the reasons above hold at once, only the one that blocks most is reported, in the order of the table from the top.
 
-1. 有 `recover` 的最先：仓库可能处在半成品状态。
-2. 别的任务依赖它的（看别的任务的 `depends_on` 里有没有它）。
-3. 等得最久的。
-4. `stopped` 的排最后：多数只是 agent 答完了。
+## Which to look at first
+
+1. One with `recover` first of all: the repository may be half written.
+2. One that other tasks depend on (see whether it is in the `depends_on` of other tasks).
+3. The one that has waited longest.
+4. `stopped` ones last: mostly the agent has just finished answering.

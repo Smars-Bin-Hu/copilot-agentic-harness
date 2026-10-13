@@ -1,85 +1,85 @@
-# 13. 常用命令
+# 13. Common commands
 
-## 一句话
+## In one sentence
 
-`harness` 是短命令（macOS/Linux 用 `.harness/bin/harness`，Windows 用 `harness.cmd`，需要加进 PATH）。命令分两类：给人用的，和 agent 做任务时用的。完整列表看 [04-reference.md](../../../../docs/04-reference.md)，参数用 `--help`。
+`harness` is the short command (`.harness/bin/harness` on macOS/Linux, `harness.cmd` on Windows; it has to be on PATH). The commands fall into two kinds: those for people, and those an agent uses while doing a task. The full list is in [04-reference.md](../../../../docs/04-reference.md); for the arguments use `--help`.
 
-## 分块
+## Chunks
 
-### 13.1 每天会用的（给人）
+### 13.1 Used every day (for people)
 
-| 命令 | 什么时候 |
+| Command | When |
 | --- | --- |
-| `harness task list` | 看有哪些任务、哪个在等你、等了多久。`--all` 连关闭的一起列；`--watch` 自动刷新 |
-| `harness task board` | 把看板写成一个 HTML 页面 |
-| `harness task report` | 写任务报告和分析页：时间和用量花在哪 |
-| `harness doctor` | 配置有没有问题；hook 在不在跑 |
-| `harness task status` | 当前任务做到哪 |
-| `harness stats` | 日志汇总 |
-| `harness kb reads` | 知识库哪些文件有人读、哪些没人读 |
+| `harness task list` | To see which tasks there are, which waits for you, and for how long. `--all` lists closed ones too; `--watch` refreshes by itself |
+| `harness task board` | Writes the board as an HTML page |
+| `harness task report` | Writes the task report and the analysis page: where the time and usage went |
+| `harness doctor` | Whether the setup has problems; whether the hook runs; which language is in effect |
+| `harness task status` | How far the current task is |
+| `harness stats` | A summary of the logs |
+| `harness kb reads` | Which knowledge base files are read, and which nobody reads |
 
-### 13.2 只有你能运行（需要确认码）
+### 13.2 Only you can run these (most need a code)
 
-| 命令 | 什么时候 |
+| Command | When |
 | --- | --- |
-| `task approve-plan` | agent 写好 `PLAN.md` 并给了链接，你看过之后 |
-| `task approve-promote` | `task promote --dry-run` 之后，你看过 `PROMOTE-PLAN.diff` |
-| `task recover` | 回写中途出错，任务进入 `partial` |
-| `task review extend` / `waive` | 检查次数用完，你决定再查还是放行 |
-| `task queue` | 几个任务要写同一个仓库时：谁占着、谁排队、你下一步做什么 |
-| `task autorun on` / `off` / `status` | autorun（beta）：照 `TODO.md` 一直做。`on` 只能你在终端开 |
-| `task pause` / `resume` | 一个任务你暂时不想管：搁置它，看板不再催，这段时间不算“等你”。要做了再恢复 |
-| `approve-command` | agent 的 git 写命令被拒绝，你决定批准 |
-| `admin on` / `off` / `status` | 二开 harness 时开关 admin 模式 |
+| `task approve-plan` | The agent wrote `PLAN.md` and gave the link, and you have read it |
+| `task approve-promote` | After `task promote --dry-run`, when you have read `PROMOTE-PLAN.diff` |
+| `task recover` | A write-back failed partway and the task went to `partial` |
+| `task review extend` / `waive` | The checks are used up: you decide to check more or to let it through |
+| `task queue` | When several tasks write to the same repository: who holds it, who waits, what you do next |
+| `task autorun on` / `off` / `status` | autorun (beta): working down `TODO.md`. Only you can run `on`, in the terminal |
+| `task pause` / `resume` | A task you do not want to deal with for now: put it aside, and the board stops pushing and the time does not count as "waiting for you". Take it up again when you are ready |
+| `approve-command` | A git write command of the agent was refused, and you decide to approve it |
+| `admin on` / `off` / `status` | Switching admin mode when extending the harness |
 
-这些命令 agent 运行会被 gate 拒绝，管道和脚本也不行。
+When an agent runs these, the gate refuses; a pipe or a script does not work either.
 
-### 13.3 agent 做任务时用
+### 13.3 What an agent uses while doing a task
 
-| 命令 | 作用 |
+| Command | What it does |
 | --- | --- |
-| `task new <名> --kind <种类> [--tier ...]` | 新建任务，会话接上它 |
-| `task open <名>` | 接着做；关闭的重新打开；回写过的开新一轮 |
-| `task upgrade --tier <档位>` | 升档，补缺的文件 |
-| `task fetch <仓库>/<路径>` | 从目标仓库 main 取文件到 `DEV/` |
-| `task delete <仓库>/<路径>` | 声明删除 |
-| `task diff` | 写 `CHANGES.diff` |
-| `task review start` / `status` | 开一次检查；看次数 |
-| `task promote [--dry-run]` | 回写到新分支，不提交 |
-| `task set-branch` | 改 feature 分支名 |
-| `task close` | 放开任务，写报告 |
+| `task new <name> --kind <kind> [--tier ...]` | Makes a new task, and the session picks it up |
+| `task open <name>` | Goes on with one; reopens a closed one; starts a new round after a write-back |
+| `task upgrade --tier <tier>` | Raises the tier and adds the missing files |
+| `task fetch <repository>/<path>` | Fetches a file from main of the target repository into `DEV/` |
+| `task delete <repository>/<path>` | Marks a file for deletion |
+| `task diff` | Writes `CHANGES.diff` |
+| `task review start` / `status` | Starts a check; shows the counts |
+| `task promote [--dry-run]` | Writes back to a new branch, without committing |
+| `task set-branch` | Changes the name of the feature branch |
+| `task close` | Lets go of the task and writes the report |
 
-### 13.4 查看类
+### 13.4 For looking things up
 
-| 命令 | 作用 |
+| Command | What it does |
 | --- | --- |
-| `target list` / `show` | 目标仓库：路径、base 分支、提交号、工作区是否干净 |
-| `task snapshot list` / `prune` | 看关口快照；清理过期的 |
-| `logs prune [--dry-run]` | 清理旧日志 |
-| `eval list` / `show` / `check` | 固定场景 |
-| `user` | 你的名字来自哪 |
-| `--version` | 版本 |
+| `target list` / `show` | Target repositories: path, base branch, commit, whether the working tree is clean |
+| `task snapshot list` / `prune` | Shows the snapshots at the gates; removes expired ones |
+| `logs prune [--dry-run]` | Removes old logs |
+| `eval list` / `show` / `check` | Fixed scenarios |
+| `user` | Where your name comes from |
+| `--version` | The version |
 
-### 13.5 输出是 JSON
+### 13.5 The output is JSON
 
-大多数命令输出 JSON，里面有一个 `next`：下一步该做什么。agent 靠它决定怎么走。人读时看 `next` 就够。
+Most commands print JSON, and in it there is a `next`: what to do next. The agent decides by it how to go on. For a person, reading `next` is enough. The texts in it come in the language of the setting (`language` in `user.json`).
 
-### 13.6 Windows 差异
+### 13.6 Differences on Windows
 
-- 短命令是 `harness.cmd`。
-- 终端工具叫什么（`bash`、`PowerShell`、`powershell`）是猜着登记的，Windows 上还要实测。
-- 路径一律支持 `\` 和大小写不同的写法。
+- The short command is `harness.cmd`.
+- What the terminal tool is called (`bash`, `PowerShell`, `powershell`) was registered by guessing, and still has to be measured on Windows.
+- Paths with `\` and with different letter case are supported everywhere.
 
-## 动手看
+## Hands on
 
-- `harness --help`，再试 `harness task --help`、`harness task review --help`。
-- 对比 `harness task list` 和 `harness task list --all`。
+- `harness --help`, then try `harness task --help` and `harness task review --help`.
+- Compare `harness task list` with `harness task list --all`.
 
-## 去哪看
+## Where to look
 
-- `.harness/engine/cli.py` 和各模块的 `commands.py`
+- `.harness/engine/cli.py` and the `commands.py` of each module
 
-## 常见疑问
+## Common questions
 
-- **“`task start` 去哪了？”** 删了，换成 `task new` 和 `task open`。
-- **“命令找不到？”** 回到 `/harness-repo-initialize`，配短命令。
+- **"Where did `task start` go?"** It was removed, and replaced with `task new` and `task open`.
+- **"The command is not found?"** Go back to `/harness-repo-initialize` and set up the short command.

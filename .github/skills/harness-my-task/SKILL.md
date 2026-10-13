@@ -1,107 +1,109 @@
 ---
 name: harness-my-task
-description: '开任务、接着做任务、换任务、给任务升档。用户要产出或修改文件（RCA、设计方案、开发计划、开发、测试、更新知识库）时先用它；用户说“接着做某任务”“换到某任务”“这个任务要改仓库了”时也用它。用编号选项问清楚，再运行 harness task new、task open、task upgrade。关键词：my task、新任务、开任务、接着做、继续任务、换任务、升级任务、任务目录、TASK.md、task new、task open。'
+description: 'Open a task, go on with a task, switch tasks, raise the tier of a task. Use it first when the user wants files produced or changed (RCA, design, development plan, development, tests, knowledge base update); also when the user says "go on with task X", "switch to task X" or "this task has to change the repository now". Ask with numbered options until things are clear, then run harness task new, task open or task upgrade. Keywords: my task, new task, open task, go on, continue task, switch task, upgrade task, task folder, TASK.md, task new, task open.'
 type: workflow
 specificTo: generic
 ---
 
-# 我的任务
+# My task
 
-一个任务一个目录。目录在 `.workspace/sandbox/tasks/<任务名>/`，里面的 `TASK.md` 让任何新会话都能接着做。本技能只负责问清楚和运行命令，目录和文件由 CLI 建。
+One task, one folder. The folder is `.workspace/sandbox/tasks/<task name>/`, and the `TASK.md` in it lets any new session go on with the work. This skill only asks until things are clear and runs the commands; the CLI makes the folder and the files.
 
 ## When to Use This Skill
 
-- 用户要你产出或修改文件，而这个会话还没有接着任务。
-- 用户要接着做一个已有的任务，或从一个任务换到另一个。只是问“那个任务做到哪了”也要先接上：不接上，这个会话就不受任务规则的管，独立检查也用不了。
-- 任务做到一半变大了：原来只是问答或 RCA，现在要改目标仓库。
+- The user wants you to produce or change files, and this session has no task yet.
+- The user wants to go on with an existing task, or to switch from one task to another. Pick the task up even when the user only asks "how far is that task": without that, this session is not under the task rules, and independent checks cannot be used.
+- A task grew halfway: it was only Q&A or an RCA, and now it has to change a target repository.
 
-只是问答、不落盘时不用它。
+Do not use it for plain Q&A that writes nothing.
 
 ## Prerequisites
 
-- 会话 id：每条提示开头的规则里有一行“当前会话 id”。`--session-id` 原样用它。
-- 命令都是 `harness <命令>`。
+- The session id: the rules at the top of every prompt have a line "Current session id". Use it as written for `--session-id`.
+- Every command is `harness <command>`.
 
 ## Step-by-Step Workflows
 
-### 1. 先看有哪些任务
+### 1. See which tasks there are
 
-运行 `harness task list`。它不花用户的时间，输出里有每个任务的名字、种类、档位、在等什么。
+Run `harness task list`. It costs the user no time, and the output has each task's name, kind, tier and what it waits for.
 
-### 2. 问用户，一次问完
+### 2. Ask the user, all at once
 
-用户已经说清楚的不要再问。有提问工具（能出单选的）就用它；没有就在聊天里列编号，让用户回编号。问完就停，等用户回答。
+Do not ask again what the user has already made clear. If you have a question tool (one that offers single choices), use it; if not, list numbers in the chat and let the user answer with a number. Stop after asking and wait for the answer.
 
-1. **新建还是接着做？** 列出第 1 步里没关闭的任务，再加一项“新建”。没有任务时跳过这一问。
-2. **种类**（只在新建时问）：
+1. **New, or go on with one?** List the tasks from step 1 that are not closed, plus one item "new". Skip this question when there are no tasks.
+2. **Kind** (only for a new task):
 
-   | 编号 | 种类 | `--kind` | 做完的标准 | 默认档位 |
+   | No. | Kind | `--kind` | Done when | Default tier |
    | --- | --- | --- | --- | --- |
-   | 1 | 问答（含查知识库） | `qa` | 答案有出处 | 轻 |
-   | 2 | RCA | `rca` | 有证据链：现象、日志、根因、验证 | 中 |
-   | 3 | 设计方案、开发计划 | `design` | 有备选方案和取舍 | 中 |
-   | 4 | 开发 | `dev` | 改动符合批准的计划，有自测记录 | 全 |
-   | 5 | 测试 | `test` | 用例和结果落盘 | 全 |
-   | 6 | 更新知识库 | `kb` | 来源清楚，走 promote | 全 |
-   | 7 | 其他：宽泛的问题、一次性的情况分析、不属于上面任何一种 | `other` | 没有固定标准：开任务时和用户商定，写进 `REQ.md` 的“做完的标准” | 中 |
+   | 1 | Q&A (looking things up in the knowledge base included) | `qa` | The answer has a source | light |
+   | 2 | RCA | `rca` | There is a chain of evidence: what was seen, logs, root cause, verification | medium |
+   | 3 | Design, development plan | `design` | There are options and trade-offs | medium |
+   | 4 | Development | `dev` | The changes match the approved plan, with a record of self-testing | full |
+   | 5 | Testing | `test` | Cases and results are on disk | full |
+   | 6 | Knowledge base update | `kb` | The source is clear; it goes through promote | full |
+   | 7 | Other: a broad question, a one-off look at a situation, none of the above | `other` | No fixed standard: agree on one with the user when opening the task, and write it into "Done when" in `REQ.md` | medium |
 
-   **不要硬套。** 前六种只是常见的。用户的事很宽泛（“帮我看看这个情况”“这个方案值不值得做”），或者横跨几种，或者说不准，就选 7。归错一类，做完的标准就错了。
+   **Do not force a fit.** The first six are only the common ones. When what the user wants is broad ("have a look at this situation", "is this approach worth doing"), or spans several kinds, or is hard to tell, pick 7. With the wrong kind, the standard for done is wrong.
 
-3. **要不要改目标仓库？**（种类是 1、2、3、7 时问）要改就用全档：加 `--tier full`。
+3. **Does a target repository have to change?** (Ask for kinds 1, 2, 3, 7.) If so, use the full tier: add `--tier full`.
 
-任务名不用问：你起一个短的英文名（小写、连字符），开完告诉用户叫什么。它就是目录名：不带 `/`，不以 `.` 开头。分支名默认取它。
+Do not ask for the task name: make up a short English one (lower case, hyphens) and tell the user what it is after opening. It is the folder name: no `/`, no `.` at the start. The branch name defaults to it.
 
-### 3. 运行命令
+### 3. Run the command
 
-| 情况 | 命令 |
+| Case | Command |
 | --- | --- |
-| 新建 | `harness task new <任务名> --kind <种类> [--tier light\|medium\|full] --session-id <会话 id>` |
-| 接着做，或换过去 | `harness task open <任务名> --session-id <会话 id>` |
-| 变大了 | `harness task upgrade --tier <档位>` |
+| New | `harness task new <task name> --kind <kind> [--tier light\|medium\|full] --session-id <session id>` |
+| Go on, or switch over | `harness task open <task name> --session-id <session id>` |
+| It grew | `harness task upgrade --tier <tier>` |
 
-三档各有什么：
+What each tier has:
 
-- `light`：只有 `TASK.md`。
-- `medium`：加 `REQ.md`、`REQ/`、`REF/`、`LOG.md`。
-- `full`：再加 `TODO.md`、`DEV/`、`TEST/`。
+- `light`: only `TASK.md`.
+- `medium`: adds `REQ.md`, `REQ/`, `REF/`, `LOG.md`.
+- `full`: adds `TODO.md`, `DEV/`, `TEST/`.
 
-### 4. 照输出做
+### 4. Do what the output says
 
-- 先读输出里 `read_first` 指的 `TASK.md`，再按它的指向读别的。
-- 照输出里的 `next` 做。
-- 新建的任务：把 `TASK.md` 的“现在在做”“下一步”填上。有 `REQ.md` 时，把你理解的需求写进去，请用户看一眼再动手。
-- 种类是 `other` 的任务：没有现成的做完标准。先问用户一句“做到什么样你会觉得可以了？”，把答案写进 `REQ.md` 的“做完的标准”，用户看过再动手。用户也说不清，就写你的建议，标明“待用户确认”。
-- 种类是 `kb` 的任务：知识库不能直接改。先运行 `harness target list`，找 `knowledge_base` 是 `true` 的那个仓库（例如 `kb`）。有：`harness task fetch <仓库名>/<路径>` 取文件，在 `DEV/<仓库名>/` 下改，照常走计划和 promote；回写会直接提交到知识库的主分支。没有：停下告诉用户，知识库还没登记成目标仓库，配置方法在 `docs/03-configure.md` 的“让任务更新知识库”。
-- 接着做的任务：先读 `REQ.md`，再看 `REQ/` 里有没有新放的文档。
-- 每次停下前更新 `TASK.md`。做过的决定和原因追加到 `LOG.md`（有的话）。
-- **新建任务后，回复的最后固定加一句**（种类是问答时不用）：“要独立检查，在下一条消息里写 `[review]=1`。”这件事不当问题问：只有用户自己写了标记才算开启，你不能替他开。
+- First read the `TASK.md` that `read_first` in the output points to, then what it points to.
+- Do what `next` in the output says.
+- For a new task: fill in "Doing now" and "Next step" in `TASK.md`. When there is a `REQ.md`, write the requirement as you understand it and ask the user to look at it before you act.
+- For a task of kind `other`: there is no ready standard for done. First ask the user "what would make you say this is good enough?", write the answer into "Done when" in `REQ.md`, and act after the user has read it. If the user cannot say either, write your suggestion and mark it "to be confirmed by the user".
+- For a task of kind `kb`: the knowledge base cannot be changed directly. First run `harness target list` and find the repository whose `knowledge_base` is `true` (for example `kb`). If there is one: fetch files with `harness task fetch <repository>/<path>`, change them under `DEV/<repository>/`, and go through the plan and promote as usual; the write-back is committed straight to the main branch of the knowledge base. If there is none: stop and tell the user that the knowledge base is not registered as a target repository yet; how to set it up is in `docs/03-configure.md`, in the part about letting a task update the knowledge base.
+- For a task you go on with: read `REQ.md` first, then see whether `REQ/` has new documents.
+- Update `TASK.md` every time before you stop. Append the decisions you made, and why, to `LOG.md` (when there is one).
+- **After opening a new task, always end your reply with this sentence** (not for Q&A): "For an independent check, write `[review]=1` in your next message." Do not ask it as a question: checks are on only when the user writes the mark, and you cannot switch them on for the user.
 
 ## Gotchas
 
-- **任务目录被 git 忽略，Glob、Grep 搜不到里面的文件。** 搜不到不等于文件不在。按路径直接读，或用终端 `ls`。
-- **不要自己建任务目录，也不要自己写 `.task/` 里的文件。** 目录、三个管理文件、状态都由 CLI 建。自己写会被拒绝。
-- **需求写在 `REQ.md`，不是 `REQ/`。** `REQ.md` 在任务目录根下，由你写、你更新。`REQ/` 是用户放文档的地方（BRD、邮件），你只能读。
-- **`REQ.md` 写用户的原意，不加你的设想。** 没问清的写进“没问清的”一节并问用户，不要自己补。用户看过之前，“用户确认”一行保持“还没确认”。
-- **需求变了就先改 `REQ.md`，再动成果。** 对话里用户改了主意、补了条件、放了新文档，都要更新它，并在“变更记录”里记一行。**用户直接下的指令也算**：他说“根因就写成 X”“加一句 Y”，而 `REQ.md` 里写的不一样或没有，就是需求变了。独立检查只认 `REQ.md`：成果照对话改了、`REQ.md` 没改，会被判不通过。
-- **换任务不用先关旧的。** `task open` 另一个就行，旧的还开着。只有任务真的做完了才 `task close`。
-- **接上任务后，编辑工具只能写这个任务目录。** 要写别处，先和用户确认是不是该换任务。
-- **`DEV/` 要等计划批准。** 不回写的成果（`RCA.md`、`DESIGN.md`）直接写在任务目录根下，不用计划。要回写到目标仓库的才放 `DEV/<仓库名>/<路径>`，先写 `PLAN.md`，停下，等用户在终端运行 `harness task approve-plan`。
-- **开了独立检查的任务（提示开头的规则里有“独立检查”一行）**：
-  - 成果写完后运行 `harness task review start`，再调用子 agent `reviewer`。调用消息只写“检查评审包 <路径>”，不要写你的思路和结论。
-  - 没通过：读 `REVIEW/round-NNN/verdict.md`，按问题改，再 `task review start`。通过了但还差次数：直接再 `task review start`，会换一个新的 reviewer。
-  - 改过成果，之前的通过就不算了。所以先改完，再查。
-  - 次数用完了就停下，告诉用户。`task review extend`、`task review waive` 只能由用户在终端运行。
-  - 没凑够通过次数时，`task promote --dry-run` 会被拒绝。
-- **档位只能升。** 不确定时选低的，以后再 `task upgrade`。
-- **种类选错了不要紧。** 它写在 `TASK.md` 里，用户看一眼就能发现。发现后告诉用户，不要自己改状态文件。
+- **The task folder is ignored by git, so Glob and Grep do not find the files in it.** Not found does not mean not there. Read by path, or use `ls` in the terminal.
+- **Do not make a task folder yourself, and do not write the files in `.task/` yourself.** The CLI makes the folder, the management files and the state. Writing them yourself is refused.
+- **The requirement goes in `REQ.md`, not `REQ/`.** `REQ.md` is at the root of the task folder; you write and update it. `REQ/` is where the user puts documents (a BRD, emails); you can only read it.
+- **`REQ.md` holds what the user meant, with nothing of your own added.** What is not clear goes into its "Not clear yet" part and is asked of the user; do not fill it in yourself. Leave the confirmation line as the template has it ("not yet"): only the user changes it.
+- **When the requirement changes, change `REQ.md` first, then touch the work.** When the user changes their mind in the conversation, adds a condition or drops in a new document, update it and add a line to its change record. **A direct instruction counts too**: when the user says "write the root cause as X" or "add a sentence Y", and `REQ.md` says something else or nothing, the requirement has changed. An independent check goes by `REQ.md` only: work changed to follow the conversation while `REQ.md` stayed the same fails the check.
+- **Switching tasks does not need the old one closed.** Just `task open` the other; the old one stays open. Run `task close` only when a task is really done.
+- **With a task, the edit tools can write this task folder only.** Before writing elsewhere, check with the user whether to switch tasks.
+- **`DEV/` waits for the plan to be approved.** Work that is not written back (`RCA.md`, `DESIGN.md`) goes straight to the root of the task folder and needs no plan. Only work to write back to a target repository goes in `DEV/<repository>/<path>`: write `PLAN.md` first, stop, and wait for the user to run `harness task approve-plan` in the terminal.
+- **A task with independent checks on (the rules at the top of the prompt have a line "Independent checks")**:
+  - When the work is written, run `harness task review start`, then call the subagent `reviewer`. The call message says only "Check the review package <path>"; do not write your reasoning or your conclusion.
+  - Not passed: read `REVIEW/round-NNN/verdict.md`, fix what it lists, then `task review start` again. Passed but more passes are needed: just run `task review start` again; a new reviewer takes it.
+  - Once the work changes, earlier passes no longer count. So finish the changes first, then check.
+  - When the checks are used up, stop and tell the user. Only the user can run `task review extend` and `task review waive`, in the terminal.
+  - Without enough passes, `task promote --dry-run` is refused.
+- **A tier only goes up.** When unsure, pick the lower one and run `task upgrade` later.
+- **A wrong kind is no disaster.** It is written in `TASK.md`, and the user sees it at a glance. When you notice it, tell the user; do not change the state file yourself.
 
 ## Troubleshooting
 
+The messages below are the English ones; with `language` set to `zh` they come in Chinese.
+
 | Issue | Solution |
 | --- | --- |
-| `没有会话 <id>` | 会话 id 抄错了。用本条提示开头规则里的那一个，原样抄 |
-| `任务 ... 已经有了` | 同名任务已存在。改用 `task open`，或换一个名字 |
-| `没有任务 <名字>` | 先 `harness task list --all` 看名字 |
-| `task start` 报“删掉了” | 1.1.0 起用 `task new` 和 `task open` |
-| `这个会话在 admin 模式里` | admin 会话不做任务。请用户换一个对话 |
-| `档位只能升，不能降` | 不用降。多出来的文件留着不影响 |
+| `There is no session <id>` | The session id was copied wrongly. Use the one in the rules at the top of this prompt, as written |
+| `Task ... exists already` | A task of that name exists. Use `task open`, or pick another name |
+| `There is no task <name>` | Run `harness task list --all` first to see the names |
+| `task start` says it was removed | From 1.1.0 on, use `task new` and `task open` |
+| `This session is in admin mode` | An admin session does no tasks. Ask the user to open another conversation |
+| `A tier only goes up, never down` | No need to go down. The extra files do no harm |

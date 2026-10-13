@@ -1,96 +1,96 @@
 ---
 name: harness-autorun
-description: 'autorun（beta）：让负责任务的 agent 照 TODO.md 一直做下去，不用用户每步盯着，碰到要人决定的事才停。这个技能带用户做好准备、开 autorun，并规定 autorun 期间怎么做。只在用户明确输入 /harness-autorun 时使用，agent 不要自己调用。关键词：autorun、无人值守、自动跑完、一直做、不用盯着。'
-argument-hint: '任务名（可省略，默认当前任务）'
+description: 'autorun (beta): the agent that holds a task works down TODO.md without the user watching every step, and stops only for what a person must decide. This skill takes the user through getting ready and switching autorun on, and sets the rules while it runs. Use only when the user clearly types /harness-autorun; an agent must not call it by itself. Keywords: autorun, unattended, run to the end, keep going, no need to watch.'
+argument-hint: 'Task name (optional; the current task by default)'
 disable-model-invocation: true
 type: workflow
 specificTo: generic
 ---
 
-# autorun：照清单一直做（beta）
+# autorun: working down the list (beta)
 
-autorun 是任务的一种模式。开了之后，你每次想停下，hook 会按事实判断：还有没做的步骤就让你继续；该人决定了就让你停，并把原因记进任务。
+Autorun is a mode of a task. Once it is on, every time you want to stop, the hook judges by the facts: if steps are left, it makes you go on; if a person has to decide, it lets you stop and records the reason in the task.
 
-它是放权，所以只有用户能开：用户在自己的终端运行 `harness task autorun on`，输入确认码。你开不了。
+It hands over control, so only the user can switch it on: the user runs `harness task autorun on` in their own terminal and types the code. You cannot.
 
 ## When to Use This Skill
 
-**只有用户输入 `/harness-autorun` 才用。** 你不能自己调用它，也不能建议用户“干脆开 autorun 吧”来省事。
+**Use it only when the user types `/harness-autorun`.** You cannot call it yourself, and you cannot suggest "let's just switch autorun on" to save effort.
 
-适合：
+It fits when:
 
-- 计划已经批准，剩下的是照计划一步步做，中间没有要用户选的事。
-- 用户要离开一阵子，回来只想看一份总差异。
+- The plan is approved, what is left is doing it step by step, and nothing on the way needs the user to choose.
+- The user will be away for a while and only wants to see one whole diff on return.
 
-不适合：
+It does not fit when:
 
-- 需求或设计还没定。先和用户定下来。
-- 每一步都要用户看过才能往下。那就照常做。
+- The requirement or the design is not settled. Settle it with the user first.
+- The user has to look at every step before the next. Then work as usual.
 
 ## Prerequisites
 
-开之前四样都要有。缺哪样，`harness task autorun status` 的 `cannot_turn_on` 会列出来。
+All four are needed before switching on. `cannot_turn_on` of `harness task autorun status` lists what is missing.
 
-- 会话接着一个任务，任务是全档（有 `TODO.md`）。
-- `PLAN.md` 已经由用户批准，之后没改过。
-- `TODO.md` 里有没勾的步骤，每步一行 `- [ ] ……`，写到“照着就能做”的程度。
-- 任务开了独立检查：用户发过带 `[review]=n` 的提示。
+- The session holds a task, and the task is at the full tier (it has a `TODO.md`).
+- `PLAN.md` is approved by the user and has not changed since.
+- `TODO.md` has unticked steps, one line `- [ ] ...` each, written so that they can simply be done.
+- Independent checks are on for the task: the user has sent a prompt with `[review]=n`.
 
 ## Step-by-Step Workflows
 
-### A. 准备和开启
+### A. Getting ready and switching on
 
-1. 运行 `harness task autorun status`，看 `cannot_turn_on`。
-2. 缺什么补什么，照 [准备清单](references/prepare.md) 做。**这一步该问用户的都问完**：autorun 期间你不能问。
-3. 把 `TODO.md` 给用户看一眼：步骤对不对、顺序对不对、有没有他想自己做的。
-4. 告诉用户三件事，然后停下等他：
-   - 在自己的终端运行 `harness task autorun on`，看屏幕上的步骤和上限，输入确认码。
-   - 它什么时候会停（见下面 C）。
-   - 做完之后他要做的只有一件：看总差异，批准回写。
-5. 用户说开好了，再开始做第一个没勾的步骤。
+1. Run `harness task autorun status` and look at `cannot_turn_on`.
+2. Supply what is missing, following the [preparation list](references/prepare.md). **Ask the user everything that needs asking in this step**: you cannot ask while autorun runs.
+3. Show the user `TODO.md`: are the steps right, is the order right, is there anything they want to do themselves.
+4. Tell the user three things, then stop and wait:
+   - Run `harness task autorun on` in their own terminal, read the steps and the limits on the screen, and type the code.
+   - When it will stop (see C below).
+   - After it is done there is one thing left for them: read the whole diff and approve the write-back.
+5. When the user says it is on, start with the first unticked step.
 
-### B. autorun 期间怎么做
+### B. What to do while autorun runs
 
-- **照 `TODO.md` 从上往下做。** 做完一步，在 `TODO.md` 里勾上，更新 `TASK.md`。
-- **决定写进 `LOG.md`。** 计划里没写细、你自己定了的事，记一行：定了什么，为什么。用户回来靠它复盘。
-- **不要问用户，不要等用户。** 没人在看。
-- **`REQ.md` 的“用户确认”不能自己改。** 没确认就在 `LOG.md` 记一笔。
-- **不要 promote。** 中间不回写。全部做完才生成回写计划。
-- **步骤都勾完后**：照 hook 的提示先过独立检查（`harness task review start`，调用 `reviewer`，没通过就改了再查），再运行 `harness task promote --dry-run`，把 `PROMOTE-PLAN.diff` 的链接给用户，停下。
-- **走不下去就停，不要硬做。** 运行 `harness task autorun off --reason "<卡在哪、要用户定什么>"`，然后用一两句话告诉用户。见 [什么时候该自己停](references/when-to-stop.md)。
+- **Work down `TODO.md` from the top.** When a step is done, tick it in `TODO.md` and update `TASK.md`.
+- **Write decisions into `LOG.md`.** For what the plan left open and you decided, add a line: what you decided, and why. The user goes over it on return.
+- **Do not ask the user, and do not wait for the user.** Nobody is watching.
+- **Do not change the confirmation line of `REQ.md` yourself.** If it is not confirmed, note it in `LOG.md`.
+- **Do not promote.** Nothing is written back on the way. The write-back plan is made only when everything is done.
+- **When every step is ticked**: as the hook says, first pass the independent check (`harness task review start`, call `reviewer`, fix and check again if it does not pass), then run `harness task promote --dry-run`, give the user the link to `PROMOTE-PLAN.diff`, and stop.
+- **When you cannot go on, stop. Do not force it.** Run `harness task autorun off --reason "<where it is stuck, and what the user has to decide>"`, then tell the user in a sentence or two. See [When to stop by yourself](references/when-to-stop.md).
 
-### C. 它什么时候会停
+### C. When it stops
 
-都由代码按事实判断，不是你说了算：
+The code judges all of these by the facts. It is not up to you:
 
-| 原因 | 事实 |
+| Reason | The fact |
 | --- | --- |
-| 做完了 | 步骤都勾了，检查通过，回写计划已生成（或没有要回写的） |
-| 计划变了 | `PLAN.md` 不再是用户批准的那一版 |
-| 检查用完 | 独立检查次数用完还没通过 |
-| 被拒绝 | 这次 autorun 里被 gate 拒绝了 2 次 |
-| 到上限 | 被推着继续满 20 次，或过了 120 分钟 |
-| 没进展 | 连续 3 次继续，没有新勾的步骤、没有新的检查 |
-| 你说走不下去 | `task autorun off --reason` |
-| 用户关掉 | 用户在终端 `task autorun off` |
+| Done | Every step is ticked, the check passed, and the write-back plan is made (or there is nothing to write back) |
+| The plan changed | `PLAN.md` is no longer the version the user approved |
+| Checks used up | The independent checks are used up without a pass |
+| Refused | The gate refused twice during this autorun |
+| A limit is reached | Pushed on 20 times, or 120 minutes have passed |
+| No progress | Pushed on 3 times in a row with no newly ticked step and no new check |
+| You said you cannot go on | `task autorun off --reason` |
+| The user switched it off | The user ran `task autorun off` in the terminal |
 
-数字在 `.harness/policies/task.json` 的 `autorun` 里。停下之后看板会写原因。
+The numbers are under `autorun` in `.harness/policies/task.json`. After it stops, the board shows the reason.
 
 ## Gotchas
 
-- **不要为了不被拒绝而绕路。** 被 gate 拒绝说明这一步超出了范围。照拒绝理由改一次；还不行就 `autorun off --reason`。
-- **不要改 `PLAN.md`。** 改了批准就失效，autorun 立刻停，`DEV/` 也不能写了。计划要改，是用户的事。
-- **不要为了“有进展”乱勾步骤。** 步骤是不是真做完，reviewer 会查，用户也会看差异。
-- **不要把没写进计划的取舍自己定了继续做。** 小的实现细节可以定并记进 `LOG.md`；会改变结果的取舍（用哪张表、删不删一个字段）要停下。
-- **不要调用 reviewer 以外的子 agent。** autorun 不放开别的子 agent。
-- **换了会话照样接着跑。** 新会话读 `TASK.md` 和 `TODO.md`，次数和时间接着算。
+- **Do not take a detour to avoid a refusal.** A refusal by the gate means the step is out of scope. Change it once as the reason says; if that does not work either, run `autorun off --reason`.
+- **Do not change `PLAN.md`.** A change ends the approval: autorun stops at once, and `DEV/` cannot be written any more. Changing the plan is the user's business.
+- **Do not tick steps just to show progress.** Whether a step is really done, the reviewer checks, and the user reads the diff.
+- **Do not settle a trade-off the plan does not cover and go on.** Small implementation details you may decide and note in `LOG.md`; a trade-off that changes the result (which table to use, whether to drop a field) means stop.
+- **Do not call a subagent other than the reviewer.** Autorun opens up no other subagent.
+- **A new session carries on the same run.** It reads `TASK.md` and `TODO.md`, and the counts and the time go on.
 
 ## Troubleshooting
 
-| 问题 | 处理方式 |
+| Issue | Solution |
 | --- | --- |
-| `task autorun on` 说不能开 | 照它列的原因补；每条都写着下一步 |
-| 你停下了，却没被推着继续 | autorun 已经停了。运行 `harness task autorun status` 看 `stopped` 里的原因，告诉用户 |
-| 被推着继续，但其实该停 | `harness task autorun off --reason "<原因>"` |
-| 用户回来想接着跑 | 用户再运行一次 `harness task autorun on`（次数和时间重新算） |
-| 用户想中途看进度 | 让他在终端运行 `harness task list --watch` 或 `harness task autorun status` |
+| `task autorun on` says it cannot be switched on | Supply what it lists; each item says the next step |
+| You stopped and were not pushed on | Autorun has stopped already. Run `harness task autorun status`, read the reason under `stopped`, and tell the user |
+| You are pushed on, but it should stop | `harness task autorun off --reason "<why>"` |
+| The user is back and wants it to go on | The user runs `harness task autorun on` once more (the counts and the time start again) |
+| The user wants to see progress on the way | Let them run `harness task list --watch` or `harness task autorun status` in the terminal |

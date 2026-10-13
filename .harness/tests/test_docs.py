@@ -108,15 +108,15 @@ class InitializeSkillTests(unittest.TestCase):
 
     def test_step_8_does_nothing_when_the_sample_line_reads_fine_and_writes_native_when_it_is_garbage(self) -> None:
         check = self.steps()["8"]
-        self.assertIn("中文样例", check)
-        self.assertIn("你能读，什么都不用做", check)
-        self.assertIn("是乱码，就自己写 `.harness/policies/cli.override.json`", check)
-        self.assertIn("再运行一次 `harness doctor`", check)
+        self.assertIn("the sample line of Chinese", check)
+        self.assertIn("If you can read it, do nothing", check)
+        self.assertIn("If it is garbage, write `.harness/policies/cli.override.json` yourself", check)
+        self.assertIn("run `harness doctor` once more", check)
 
     def test_step_7_does_not_ask_the_user_about_the_encoding(self) -> None:
         step = self.steps()["7"]
-        self.assertIn("不用问用户", step)
-        self.assertNotIn("常见的两个", step)
+        self.assertIn("Do not ask the user about Chinese text", step)
+        self.assertNotIn("Two common ones", step)
 
     def test_the_json_the_skill_tells_the_agent_to_write_is_what_doctor_accepts(self) -> None:
         written = json.loads(re.search(r"`(\{\"output\": \{\"encoding\": \"native\"\}\})`", self.steps()["8"]).group(1))
@@ -145,12 +145,12 @@ class RequirementConfirmedTests(unittest.TestCase):
     def test_no_file_tells_the_agent_to_fill_it_in(self) -> None:
         self.assertIn("Only the user may change the confirmation line of `REQ.md`", text(REPO / "AGENTS.md"))
         walk = text(REPO / ".github" / "skills" / "harness-quick-start" / "references" / "walkthrough.md")
-        self.assertIn("请用户自己把“用户确认”一行改成", walk)
-        self.assertNotIn("你在“用户确认”一行写上", walk)
+        self.assertIn("ask the user to change the confirmation line themselves", walk)
+        self.assertIn("you do not fill it in for them", walk)
 
     def test_the_reviewer_does_not_fail_a_task_over_it(self) -> None:
         self.assertIn("An empty confirmation line in `REQ.md` is not a finding", text(REPO / ".github" / "agents" / "reviewer.agent.md"))
-        self.assertIn("评审包会告诉 reviewer 按“待确认”看", text(REPO / "AGENTS.md"))
+        self.assertIn("the review package tells the reviewer to treat the requirement as \"to be confirmed\"", text(REPO / "AGENTS.md"))
 
 
 class ReadmeStructureTests(unittest.TestCase):

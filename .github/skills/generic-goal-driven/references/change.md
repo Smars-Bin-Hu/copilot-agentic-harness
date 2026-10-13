@@ -1,26 +1,26 @@
-# 改需求
+# Requirement changes
 
-用户在做的过程中加、改或删需求时，按下面做。先改记录，再改计划。
+When the user adds, changes or drops a requirement on the way, do as below. Change the records first, then the plan.
 
-1. **先复述。** 一句话说清用户要变什么，让用户确认你听对了。
-2. **查影响。** 逐步看 `TODO.md`：
-   - `待做`、`做中` 的步骤：要不要改、拆、删？
-   - `已交棒`、`已通过` 的步骤：这个变更会不会让它的结果失效？
-   - `GOAL.md` 的目标、原则、范围、不做什么、整体验收：哪一条变了？
-3. **给用户看方案。** 列出：要改哪几行 `GOAL.md`，要加、改、取消哪几步。用户确认后才动手改。
-4. **改文件。**
-   - `GOAL.md` 末尾“变更记录”加一条：日期、改了什么、为什么、影响了哪些步骤。
-   - 中心思想变了，同时改 `GOAL.md` 正文，不要只记一条变更。
-   - `TODO.md`：新增步骤用新编号；不要的步骤改成 `已取消` 并写原因；已通过的步骤受影响，就加一个“返工”步骤，写明返工哪一步、为什么。
-   - 当前步骤受影响，在 `NOW.md` 写明。
-   - 用户定了一个决定（选 A 不选 B）：写进 `GOAL.md` 的“已定的事”，一句决定加一句原因。
-   - 已通过的步骤受影响、加了返工步骤：在 `LOG.md` 加一条，写明返工原因。旧条目不改。
-   - 受影响的步骤已经有验收指南：在指南里补一行说明，或为返工步骤写新指南。
-5. **告诉用户改了什么。** 给文件链接，不贴全文。
+1. **Say it back first.** One sentence on what the user wants changed, for the user to confirm you heard right.
+2. **Find what it affects.** Go through `TODO.md` step by step:
+   - Steps at `todo` or `doing`: do they need changing, splitting, deleting?
+   - Steps at `handed over` or `passed`: does this change make their result invalid?
+   - The goal, principles, scope, what is not done and overall acceptance in `GOAL.md`: which of them changed?
+3. **Show the user the proposal.** List: which lines of `GOAL.md` change, and which steps are added, changed or cancelled. Change things only after the user confirms.
+4. **Change the files.**
+   - Add an entry to the change record at the end of `GOAL.md`: the date, what changed, why, and which steps it affects.
+   - When the central idea changed, change the body of `GOAL.md` too; do not just add a change entry.
+   - `TODO.md`: a new step gets a new number; a step that is dropped is set to `cancelled` with the reason; when a step that passed is affected, add a "redo" step that says which step is redone, and why.
+   - When the current step is affected, say so in `NOW.md`.
+   - When the user made a decision (A, not B): write it under "Decided" in `GOAL.md`, one sentence of decision plus one of reason.
+   - When a step that passed is affected and a redo step was added: add an entry to `LOG.md` with the reason for the redo. Old entries are not changed.
+   - When an affected step already has an acceptance guide: add a line of explanation to the guide, or write a new guide for the redo step.
+5. **Tell the user what changed.** Give links to the files; do not paste the whole text.
 
-## 取舍
+## Judging
 
-- 小改动（措辞、验收标准微调）：直接改，记一条变更。
-- 会让已通过步骤失效、或改变目标和范围：一定先给用户看方案，等确认。
-- 用户随口提的想法，还没决定要不要做：写进 `GOAL.md` 的“待定”，不要加步骤。
-- 变更进来时正处在任务中间：文件现在写不了，见 `SKILL.md` 的“写文件和 gate”。
+- A small change (wording, a small adjustment of an acceptance standard): just change it, and add a change entry.
+- A change that makes a passed step invalid, or changes the goal or the scope: always show the user the proposal first and wait for a confirmation.
+- An idea the user mentions in passing, with no decision yet whether to do it: write it under "Undecided" in `GOAL.md`; do not add a step.
+- When the change arrives in the middle of a task: the files cannot be written now; see "Writing files and the gate" in `SKILL.md`.

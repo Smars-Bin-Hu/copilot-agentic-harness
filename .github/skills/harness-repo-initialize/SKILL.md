@@ -1,88 +1,90 @@
 ---
 name: harness-repo-initialize
-description: '拿到 harness 仓库后的第一次配置：配好短命令 harness、接入知识库和公司技能、配置目标仓库和用户名字，最后用 doctor 检查。用户输入 /harness-repo-initialize，或说“初始化 harness”“第一次配置”“harness 命令找不到”“doctor 报短命令的错”时用。关键词：初始化、initialize、setup、安装、第一次用、PATH、短命令、target.override.json、接入知识库。'
+description: 'First setup after getting the harness repository: set up the short command harness, plug in the knowledge base and the company skills, set up the target repositories, the user name and the language, and check it all with doctor. Use when the user types /harness-repo-initialize, or says "initialize the harness", "first setup", "the harness command is not found", "doctor reports an error about the short command". Keywords: initialize, setup, install, first use, PATH, short command, target.override.json, plug in the knowledge base, language.'
 type: workflow
 specificTo: generic
 ---
 
-# 初始化 harness 仓库
+# Initialize the harness repository
 
-带用户把一份刚拿到的 harness 仓库配到能用：短命令、知识库、公司技能、目标仓库、用户名字。每一项做完都用 `doctor` 检查。
+Take the user from a freshly received harness repository to one that works: the short command, the user name and the language, the target repositories, the knowledge base, the company skills. Check with `doctor` after every item.
 
 ## When to Use This Skill
 
-- 用户刚克隆或解压了 harness 仓库，第一次用。
-- `harness` 命令找不到，或 `doctor` 报“PATH 里找不到短命令”。
-- 用户换了电脑、换了仓库的位置，要重新配。
-- 用户要补配其中一项（例如只接入知识库）：只做那一步，再做最后的检查。
+- The user has just cloned or unpacked the harness repository and uses it for the first time.
+- The `harness` command is not found, or `doctor` reports that the short command is not on PATH.
+- The user has a new computer, or moved the repository, and has to set it up again.
+- The user wants to add one item (plugging in the knowledge base only, say): do just that step, then the final check.
 
-日常任务不用它。要改 hook、engine、默认策略，用 admin agent，不用本技能。
+Everyday tasks do not use it. To change hooks, the engine or the default policies, use the admin agent, not this skill.
 
 ## Prerequisites
 
-- Python 3.9 或更新，git。
-- 用户能打开自己的终端。短命令和 admin 模式都要用户亲手运行命令。
-- 写 `.harness/policies/*.override.json` 要 admin 模式（第 2 步开）。短命令那一步不用。
+- Python 3.9 or later, and git.
+- The user can open their own terminal. The short command and admin mode both need the user to run commands by hand.
+- Writing `.harness/policies/*.override.json` needs admin mode (switched on in step 2). The short-command step does not.
 
 ## Step-by-Step Workflows
 
-开始时把下面的清单发给用户，做完一项勾一项。用户说某项以后再配，就标“跳过”，接着做下一项。
+At the start, send the user the list below, and tick each item as it is done. When the user says an item is for later, mark it "skipped" and go on to the next.
 
 ```markdown
-- [ ] 1. 短命令 harness（必须）
-- [ ] 2. 开 admin 模式
-- [ ] 3. 用户名字
-- [ ] 4. 目标仓库
-- [ ] 5. 知识库和它的 instructions
-- [ ] 6. 公司技能
-- [ ] 7. 其他覆盖配置（可选）
-- [ ] 8. 检查
+- [ ] 1. The short command harness (required)
+- [ ] 2. Switch admin mode on
+- [ ] 3. User name and language
+- [ ] 4. Target repositories
+- [ ] 5. The knowledge base and its instructions
+- [ ] 6. Company skills
+- [ ] 7. Other overrides (optional)
+- [ ] 8. Check
 ```
 
-1. **短命令（必须，先做）。** 运行 `harness --version --short`。
-   - 输出 `harness <版本>`：已经配好，跳到第 2 步。Windows 上先多查一次：运行只读的 `(Get-Command harness).Source` 和 `[Environment]::GetEnvironmentVariable("Path", "User")`。前一条的文件夹不在后一条里时，告诉用户：这个 VS Code 窗口带着旧的 PATH，重开后 `harness` 会找不到；然后按“找不到命令”那一条配。
-   - 找不到命令：先自己运行只读的 `uname`、`echo $SHELL`、`echo $PATH`（Windows 不用），按 [短命令怎么配](./references/short-command.md) 的“先判断”选出要给的命令。PATH 里已有 `~/bin` 就不给改 shell 配置文件的那一条。把命令给用户，请用户**在自己的终端**运行，然后**重开终端和 VS Code**。你不运行这些命令。用户说做完了，再运行一次 `harness --version --short` 确认。
-   - 这一步没通过，不做后面的。后面的命令都以 `harness` 开头。
-2. **开 admin 模式。** 看提示开头的规则。没写“admin 模式：已开”时，把 `harness admin on --session-id <当前会话 id>` 给用户，请用户在自己的终端运行并输入确认码。会话 id 原样抄规则里的。你不能自己运行它。
-3. **用户名字。** 运行 `harness user`。
-   - `source` 是 `user.override.json`：已配好。
-   - 其他情况：把查到的名字给用户看，问要不要用它，或换一个。用户给了名字，按 [user.override.json](./templates/user.override.json) 写 `.harness/policies/user.override.json`。用户说就用 git 的名字，不写文件。
-4. **目标仓库。** 问用户：代码仓库都放在哪个文件夹；有没有不在那个文件夹里的仓库；取文件的分支是不是都叫 `main`；哪些路径不许 agent 碰（部署配置、流水线定义）。按 [target.override.json](./templates/target.override.json) 写 `.harness/policies/target.override.json`，只留用到的字段。然后运行 `harness target list`，把仓库名和分支给用户核对。字段的意思见 [docs/03-configure.md](../../../docs/03-configure.md) 的“目标仓库”。
-5. **知识库。** 问用户知识库现在在哪（一个文件夹的路径）。
-   - 把它的内容放进 `knowledge-base/`。入口必须是 `knowledge-base/README.md`。
-   - 把知识库自带的、讲怎么读怎么写的 instructions 放进 `.github/instructions/knowledgebase.instructions.md`，frontmatter 写 `applyTo: '**'`。
-   - 问用户：要不要让任务也能更新知识库。要，而且 `knowledge-base/` 自己是 git 仓库（有 `.git`）：在 `target.override.json` 的 `repos` 里加 `"kb": { "path": "knowledge-base", "knowledge_base": true }`，再运行 `harness target show --repo kb` 核对。不是 git 仓库就不加，告诉用户原因。细节见 [docs/03-configure.md](../../../docs/03-configure.md) 的“让任务更新知识库”。
-   - 用户还没有知识库：标“跳过”，并告诉用户影响（见 Gotchas）。
-6. **公司技能。** 问用户有没有公司专用的技能，在哪。每个技能一个文件夹，放进 `.github/skills/`。文件夹名和 `SKILL.md` 的 `name` 要一致，用 `domain-<领域>-<名>` 前缀。前缀不对时告诉用户，问清楚再改名，不要自己改。
-7. **其他覆盖配置（可选）。** 问用户有没有要改的默认值。常见的一个：要多保护几个路径（`gate.override.json` 的 `extra_guardrail_paths+`）。规则见 [docs/03-configure.md](../../../docs/03-configure.md) 的“override”。没有就跳过。CLI 的中文显示不对不用问用户，第 8 步处理。
-8. **检查。** 运行 `harness doctor`。
-   - `[ERROR]`：照信息修，修完再运行，直到 `{"errors": 0}`。修不了的，原样告诉用户。
-   - “输出编码”那一行说“auto 改用了 UTF-8”（Windows 上常见）：看它下面的“中文样例”一行。你能读，什么都不用做。是乱码，就自己写 `.harness/policies/cli.override.json`：`{"output": {"encoding": "native"}}`（要 admin 模式开着），再运行一次 `harness doctor`，并告诉用户：这台电脑上 CLI 的中文会显示成 `\uXXXX`。
-   - 其他 `[WARN]`：逐条告诉用户它影响什么，由用户决定修不修。
-   - 最后给用户一张表：八项各是“配好、跳过、没通过”，跳过的各有什么影响。提醒用户运行 `harness admin off --session-id <会话 id>`，并换一个新对话做日常任务。
+1. **The short command (required; do it first).** Run `harness --version --short`.
+   - It prints `harness <version>`: it is set up; go to step 2. On Windows check once more first: run the read-only `(Get-Command harness).Source` and `[Environment]::GetEnvironmentVariable("Path", "User")`. When the folder of the first is not in the second, tell the user: this VS Code window carries an old PATH, and `harness` will not be found after reopening; then set it up as for "command not found".
+   - The command is not found: first run the read-only `uname`, `echo $SHELL` and `echo $PATH` yourself (not on Windows), and pick the commands to give by the "Judge first" part of [Setting up the short command](./references/short-command.md). When PATH already has `~/bin`, do not give the line that changes the shell configuration file. Give the commands to the user, ask the user to run them **in their own terminal**, then to **reopen the terminal and VS Code**. You do not run these commands. When the user says it is done, run `harness --version --short` once more to confirm.
+   - If this step does not pass, do not do the later ones. Every later command starts with `harness`.
+2. **Switch admin mode on.** Look at the rules at the top of the prompt. When they do not say "Admin mode: on", give the user `harness admin on --session-id <current session id>` and ask them to run it in their own terminal and type the code. Copy the session id from the rules as written. You cannot run it yourself.
+3. **User name and language.** Run `harness user`.
+   - `source` is `user.override.json`: the name is set up.
+   - Otherwise: show the user the name that was found and ask whether to use it, or another. If the user gives a name, write `.harness/policies/user.override.json` from [user.override.json](./templates/user.override.json). If the user says the git name will do, write no name.
+   - Then ask which language the harness should speak: `en` (the default) or `zh`. It sets the language of what the CLI and the hooks print, of the task file templates, and of what the agent answers and writes. For `zh`, write `"language": "zh"` into the same `user.override.json`; for `en`, write nothing. The line "Language" of `harness doctor` shows what is in effect.
+4. **Target repositories.** Ask the user: which folder holds the code repositories; whether a repository is outside that folder; whether the branch to fetch files from is `main` everywhere; which paths the agent must not touch (deployment settings, pipeline definitions). Write `.harness/policies/target.override.json` from [target.override.json](./templates/target.override.json), keeping only the fields that are used. Then run `harness target list` and give the user the repository names and branches to check. What the fields mean is in the target repository part of [docs/03-configure.md](../../../docs/03-configure.md).
+5. **The knowledge base.** Ask the user where the knowledge base is now (the path of a folder).
+   - Put its content into `knowledge-base/`. The entry must be `knowledge-base/README.md`.
+   - Put the instructions that come with the knowledge base, the ones that say how to read and write it, into `.github/instructions/knowledgebase.instructions.md`, with `applyTo: '**'` in the frontmatter.
+   - Ask the user whether tasks should be able to update the knowledge base too. If so, and `knowledge-base/` is a git repository itself (it has a `.git`): add `"kb": { "path": "knowledge-base", "knowledge_base": true }` to `repos` in `target.override.json`, then run `harness target show --repo kb` to check. If it is not a git repository, do not add it, and tell the user why. The details are in the part of [docs/03-configure.md](../../../docs/03-configure.md) about letting a task update the knowledge base.
+   - The user has no knowledge base yet: mark it "skipped" and tell the user what that means (see Gotchas).
+6. **Company skills.** Ask the user whether there are skills of the company's own, and where. One folder per skill, put into `.github/skills/`. The folder name and the `name` in `SKILL.md` must be the same and use the prefix `domain-<domain>-<name>`. When a prefix is wrong, tell the user and ask before renaming; do not rename by yourself.
+7. **Other overrides (optional).** Ask the user whether any default should change. A common one: protecting a few more paths (`extra_guardrail_paths+` in `gate.override.json`). The rules are in the override part of [docs/03-configure.md](../../../docs/03-configure.md). If there is nothing, skip. Do not ask the user about Chinese text of the CLI showing wrongly: step 8 handles it.
+8. **Check.** Run `harness doctor`.
+   - `[ERROR]`: fix as the message says and run it again, until `{"errors": 0}`. What you cannot fix, tell the user as written.
+   - The "Output encoding" line says auto switched to UTF-8 (common on Windows): look at the sample line of Chinese below it. If you can read it, do nothing. If it is garbage, write `.harness/policies/cli.override.json` yourself: `{"output": {"encoding": "native"}}` (admin mode must be on), run `harness doctor` once more, and tell the user: on this computer Chinese text from the CLI shows as `\uXXXX`. With the language `en` this matters only for Chinese file names and content.
+   - Other `[WARN]` lines: tell the user what each one affects, and the user decides whether to fix it.
+   - Last, give the user a table: for each of the eight items "set up", "skipped" or "not passed", and what each skipped one means. Remind the user to run `harness admin off --session-id <session id>` and to open a new conversation for everyday tasks.
 
 ## Gotchas
 
-- **改 PATH 的命令只给用户，不自己运行。** 它改的是仓库之外的文件（`~/.zshrc`、Windows 的用户环境变量）。harness 的规则是 agent 不改用户的环境。
-- **配完 PATH 必须重开 VS Code。** Copilot 的终端用的是 VS Code 启动时的 PATH。只重开终端窗口，你自己运行 `harness` 仍然找不到。
-- **不要教用户用 alias 或 PowerShell 函数。** 它们只在用户自己的交互式终端里有效，agent 的终端里没有，`doctor` 也查不到。
-- **`harness` 操作的是当前目录所在的那一份仓库。** 电脑上有两份 harness 时，在哪一份里运行就操作哪一份。所以命令要在这个仓库里运行。
-- **只写 `*.override.json`，不改默认的策略文件。** 默认文件以后升级会被覆盖。`target.override.json`、`user.override.json`、`cli.override.json` 是本机的路径、名字和终端设置，已被 git 忽略，不要提交。
-- **不要往 `knowledge-base/` 里编内容。** 用户没有知识库就空着。没有知识库时，agent 做目标仓库的任务只能靠猜，计划和检查都不准：这一点要明确告诉用户。
-- **知识库的 instructions 的 `applyTo` 要是 `'**'`。** 只写 `'knowledge-base/**'` 时，agent 读到知识库文件之前它不生效。
-- **复制大的知识库用终端命令**（`cp -R`，Windows 用 `Copy-Item -Recurse`），不要一个文件一个文件地读了再写。
-- **不要自己决定跳过哪一项。** 每一项都问用户；用户说跳过才跳过。
+- **Commands that change PATH go to the user; do not run them yourself.** They change files outside the repository (`~/.zshrc`, the user environment variables of Windows). The rule of the harness is that an agent does not change the user's environment.
+- **VS Code must be reopened after PATH is set.** Copilot's terminal uses the PATH VS Code had when it started. With only the terminal window reopened, `harness` is still not found when you run it.
+- **Do not teach the user an alias or a PowerShell function.** Those work only in the user's own interactive terminal, not in the agent's, and `doctor` cannot see them.
+- **`harness` works on the repository the current folder is in.** With two copies of the harness on one computer, the one you run it in is the one it works on. So run the commands inside this repository.
+- **Write only `*.override.json`; do not change the default policy files.** A default file is overwritten by a later upgrade. `target.override.json`, `user.override.json` and `cli.override.json` hold this machine's paths, name, language and terminal settings; git ignores them, and they are not to be committed.
+- **Do not make up content for `knowledge-base/`.** If the user has no knowledge base, leave it empty. Without one, an agent working on a target repository can only guess, and plans and checks are off: tell the user this clearly.
+- **`applyTo` of the knowledge base instructions must be `'**'`.** With only `'knowledge-base/**'` it has no effect before the agent reads a knowledge base file.
+- **Copy a large knowledge base with a terminal command** (`cp -R`; on Windows `Copy-Item -Recurse`), not by reading and writing file after file.
+- **Do not decide by yourself to skip an item.** Ask the user about every item; skip only when the user says so.
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| 用户说配了 PATH，`harness` 还是找不到 | 先确认重开了 VS Code。再让用户在自己的终端运行 `echo $PATH`（Windows：`echo $env:Path`），看有没有那个文件夹。macOS 上最常见的原因：只建了链接，没把 `~/bin` 加进 PATH |
-| `harness` 在 VS Code 里能用，新开的终端里找不到 | VS Code 是在改 PATH 之前打开的，或 PATH 后来被删了。Windows 上看 `[Environment]::GetEnvironmentVariable("Path", "User")` 里有没有那个文件夹，没有就重新加，再重开 VS Code |
-| `doctor` 说 PATH 里的 `harness` 不是这个仓库的 | 电脑上有另一份 harness。能用，但建议让 PATH 指向常用的那一份。见 [短命令怎么配](./references/short-command.md) |
-| 写 `*.override.json` 被拒绝 | admin 模式没开，或开的是别的会话。回到第 2 步 |
-| `harness target list` 没列出仓库 | `repos_root` 下的子文件夹要有 `.git`。路径写错时 `doctor` 会报 |
-| `doctor` 报知识库的 README 里有断链 | 链接要用相对路径，指向 `knowledge-base/` 里真实存在的文件。把断的几条告诉用户 |
-| CLI 输出的中文是乱码 | 读输出的程序不认 UTF-8。写 `.harness/policies/cli.override.json`：`{"output": {"encoding": "native"}}`，中文会变成 `\uXXXX`，能看出是哪个字 |
-| CLI 输出的中文是 `\uXXXX` | `cli.override.json` 里是 `native`。看 `doctor` 最后的 `[INFO]  UTF-8 样例` 一行。能读，就把 `output.encoding` 改成 `auto`。是乱码就不要改，告诉用户 |
-| Windows 上 `python3` 找不到 | 正常。Windows 用 `python`，启动脚本会自己选 |
+| The user says PATH is set, and `harness` is still not found | First confirm VS Code was reopened. Then let the user run `echo $PATH` in their own terminal (Windows: `echo $env:Path`) and see whether the folder is there. The most common cause on macOS: the link was made, but `~/bin` was not added to PATH |
+| `harness` works in VS Code and is not found in a new terminal | VS Code was opened before PATH changed, or the PATH entry was removed later. On Windows see whether `[Environment]::GetEnvironmentVariable("Path", "User")` has the folder; if not, add it again, then reopen VS Code |
+| `doctor` says the `harness` on PATH is not this repository's | There is another copy of the harness on the computer. It works, but PATH had better point at the copy used most. See [Setting up the short command](./references/short-command.md) |
+| Writing `*.override.json` is refused | Admin mode is not on, or it is on for another session. Go back to step 2 |
+| `harness target list` lists no repository | A subfolder of `repos_root` needs a `.git`. A wrong path is reported by `doctor` |
+| `doctor` reports broken links in the README of the knowledge base | Links must be relative paths to files that really exist in `knowledge-base/`. Tell the user which ones are broken |
+| Chinese text from the CLI is garbage | The program reading the output does not know UTF-8. Write `.harness/policies/cli.override.json`: `{"output": {"encoding": "native"}}`; Chinese then shows as `\uXXXX`, from which the characters can be told |
+| Chinese text from the CLI is `\uXXXX` | `cli.override.json` has `native`. Look at the `[INFO]  UTF-8 sample` line at the end of `doctor`. If it reads right, set `output.encoding` to `auto`. If it is garbage, leave it and tell the user |
+| The harness speaks the wrong language | Look at the "Language" line of `harness doctor`. Set `"language"` to `en` or `zh` in `.harness/policies/user.override.json` (admin mode must be on). The environment variable `HARNESS_LANGUAGE` wins over the file |
+| `python3` is not found on Windows | That is normal. Windows uses `python`, and the launcher picks by itself |

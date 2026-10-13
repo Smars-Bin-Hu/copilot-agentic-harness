@@ -1,53 +1,64 @@
-# 2. instructions：给 agent 的常驻规则
+# 2. instructions: the standing rules for the agent
 
-## 一句话
+## In one sentence
 
-instructions 是写给 agent 看的规则文件。有的每次都加载，有的只在碰到特定文件时加载。
+Instructions are rule files written for the agent to read. Some are loaded every time, others only when it meets certain files.
 
-## 分块
+## Chunks
 
-### 2.1 三种位置
+### 2.1 Three places
 
-| 文件 | 什么时候加载 | 这个仓库里放什么 |
+| File | When it is loaded | What this repository puts there |
 | --- | --- | --- |
-| `AGENTS.md`（仓库根） | 每次 | 所有 agent 都必须遵守的核心规则和安全边界 |
-| `.github/copilot-instructions.md` | 每次 | 运行规则：会话开头怎么做、被 hook 拒绝后怎么做 |
-| `.github/instructions/*.instructions.md` | 碰到 `applyTo` 匹配的文件时 | 分类规则：写 agent、写技能、读写 `.workspace/` |
+| `AGENTS.md` (repository root) | Every time | The core rules and the safety limits every agent must follow |
+| `.github/copilot-instructions.md` | Every time | Rules for running: what to do at the start of a session, what to do after a hook refuses |
+| `.github/instructions/*.instructions.md` | When it meets a file that `applyTo` matches | Rules by topic: writing agents, writing skills, reading and writing `.workspace/` |
 
-`applyTo` 是文件头里的一行，例如 `applyTo: '.workspace/**'`。agent 打开那个目录下的文件，规则才加载。
+`applyTo` is a line in the file header, for example `applyTo: '.workspace/**'`. The rule is loaded only when the agent opens a file under that folder.
 
-### 2.2 为什么要分层：渐进式披露
+### 2.2 Why in layers: step-by-step disclosure
 
-全部规则都放在一个文件里，每次都占上下文，而且大部分和眼前的事无关。分层后：
+With all the rules in one file, they take up context every time, and most of them have nothing to do with the job at hand. In layers:
 
-- `AGENTS.md` 只放核心。
-- 细则放进 instructions 或技能，需要时才读。
-- 路径索引单独放在 `.harness/INDEX.md`。agent 要找文件时才读它，不用为了查一个路径读完整份 README。
+- `AGENTS.md` holds only the core.
+- The details go into instructions or skills and are read only when needed.
+- The path index is kept apart in `.harness/INDEX.md`. The agent reads it only to find a file, and need not read a whole README to look up one path.
 
-### 2.3 一条规则只有一个主要来源
+### 2.3 A rule has one main source
 
-同一条规则写在三个文件里，改的时候一定会漏一个，agent 就会读到互相矛盾的版本。所以：规则写在一处，其他地方放链接加一句话。
+When the same rule is written in three files, a change is sure to miss one, and the agent reads versions that contradict each other. So: a rule is written in one place, and other places hold a link and one sentence.
 
-### 2.4 说明会被忽略
+### 2.4 Instructions get ignored
 
-instructions 只是请求。模型可以不照做。所以**重要的规则要有代码强制**，说明只负责让模型知道“为什么”。这个仓库每条重要规则，都有说明和代码两层：说明教，代码拦（主题 6、7）。
+Instructions are only a request. The model can do otherwise. So **an important rule must be enforced by code**, and the instructions only let the model know "why". Every important rule in this repository has both layers: the text teaches, the code stops (topics 6 and 7).
 
-### 2.5 hook 注入的规则
+### 2.5 Rules a hook injects
 
-除了文件，hook 还会在**每条用户提示的开头**注入几行：会话 id、有哪些没关闭的任务、怎么开任务。这样规则不会随着对话变长被淹没。注入的文字都在 `core/messages.zh.json`。
+Besides the files, a hook injects a few lines **at the top of every user prompt**: the session id, which tasks are not closed, how to open a task. That way the rules are not buried as the conversation grows. The injected texts are all in the message table, `core/messages.<language>.json`.
 
-## 动手看
+### 2.6 The language
 
-- 读 [AGENTS.md](../../../../AGENTS.md)：它有多短？
-- 读 `.github/instructions/` 下任一文件，看头部的 `applyTo`。
-- 在 Copilot 里发一句话，展开看 agent 收到的提示开头，有一段“当前会话 id”。那是 hook 注入的。
+Everything the engine says (refusals, injected rules, what commands print) exists once per language: `messages.en.json` and `messages.zh.json`, with the same names and the same placeholders. Code names a message; the table of the chosen language gives the text.
 
-## 去哪看
+- The choice is `language` in `.harness/policies/user.json` (`en` by default; `zh`), set in `user.override.json`. The environment variable `HARNESS_LANGUAGE` wins over the file.
+- One of the injected lines tells the agent which language to answer and write in. That is a request to the model, like any instruction: the engine's own output is certain, the agent's reply is not.
+- The files the repository ships (rules, skills, docs) are in English only. A second copy in another language would drift, and nobody tests a copy.
+- The task file templates are in one folder per language; labels the code looks for (the confirmation line of `REQ.md`) are found in either language, so a task made in one language is still read in the other.
 
-- [AGENTS.md](../../../../AGENTS.md)、[.github/copilot-instructions.md](../../../../.github/copilot-instructions.md)、`.github/instructions/`
-- 文字的来源：`.harness/engine/core/messages.zh.json`
+## Hands on
 
-## 常见疑问
+- Read [AGENTS.md](../../../../AGENTS.md): how short is it?
+- Read any file under `.github/instructions/` and look at `applyTo` in the header.
+- Send a message in Copilot and unfold the top of the prompt the agent received: there is a line "Current session id". A hook injected it.
+- Run `harness doctor` and find the line "Language".
 
-- **“能不能把所有规则都写进 AGENTS.md？”** 能，但每次对话都要为它付上下文的钱，而且越长越容易被忽略。
-- **“企业想加自己的规则怎么办？”** 新建 `domain-*.instructions.md`，不改上游文件。见 [03-configure.md](../../../../docs/03-configure.md)。
+## Where to look
+
+- [AGENTS.md](../../../../AGENTS.md), [.github/copilot-instructions.md](../../../../.github/copilot-instructions.md), `.github/instructions/`
+- The source of the texts: `.harness/engine/core/messages.en.json` and `messages.zh.json`; the loader is `core/messages.py`
+
+## Common questions
+
+- **"Can all the rules go into AGENTS.md?"** They can, but every conversation pays for it in context, and the longer it is, the more easily it is ignored.
+- **"What if a company wants to add rules of its own?"** Create a `domain-*.instructions.md`; do not change the upstream files. See [03-configure.md](../../../../docs/03-configure.md).
+- **"Can the agent answer in Chinese while the rules are in English?"** Yes. The rules are for the model to read; the language it answers in is set by the language line a hook injects.

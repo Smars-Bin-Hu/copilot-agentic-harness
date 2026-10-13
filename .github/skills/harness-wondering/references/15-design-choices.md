@@ -1,86 +1,91 @@
-# 15. 设计取舍：为什么这样，为什么不做那样
+# 15. Design choices: why this way, and why not that
 
-## 一句话
+## In one sentence
 
-关键规则由代码强制，模型只负责判断。能确定的写成代码，不确定的写成说明，再用独立检查补上。每个“不做”都有原因，条件变了才重新考虑。
+Key rules are enforced by code, and the model only judges. What is certain is written as code, what is not certain as text, and independent checks fill in the rest. Every "not done" has a reason, and is reconsidered only when the conditions change.
 
-## 分块
+## Chunks
 
-### 15.1 为什么没有 Level
+### 15.1 Why there are no Levels
 
-1.0 把工作分成 L1、L2、L3，让用户每次先选。用了一段时间的结论：
+1.0 split work into L1, L2 and L3, and had the user pick one first every time. The conclusion after some use:
 
-- L2 是唯一用得上的一档，L1、L3 大部分时间不用。
-- 每次先定级多一步；两套规则并存时，agent 拿不准还会给出错的解释。
-- 开工前说不准难度，一个档位又绑了太多东西。
+- L2 was the only one that got used; L1 and L3 went unused most of the time.
+- Picking a level first is one more step each time; with two sets of rules side by side, the agent was unsure and gave wrong explanations.
+- How hard a job is cannot be told before it starts, and one level tied too many things together.
 
-所以 1.1 去掉了。现在按两样管：**做错了后果多大**（代码判断）和**任务是哪一种**（决定做完的标准）。
+So 1.1 dropped them. Things are guarded by two measures now: **how much a mistake costs** (code judges) and **which kind the task is** (it decides the standard for done).
 
-### 15.2 为什么是文件接力
+### 15.2 Why handover by files
 
-对话会压缩，会话会换。文件人能看，断了能接着做，也能被另一个会话读。代价是 agent 要记得更新，所以有 Stop 提醒；记录和磁盘不一致时以磁盘为准。
+A conversation gets compressed, and sessions change. Files can be read by people, the work can go on after a break, and another session can read them. The price is that the agent has to remember to update them, which is why there is the Stop reminder; when the record and the disk disagree, the disk wins.
 
-### 15.3 为什么不存用户原话
+### 15.3 Why the user's exact words are not kept
 
-提示可能有遗漏、不清楚，多轮对话里需求会变。一直存是浪费上下文。改成 agent 写 `REQ.md`、用户确认、需求变了先改它。
+A prompt may leave things out or be unclear, and the requirement changes over several turns. Keeping all of it wastes context. Instead the agent writes `REQ.md`, the user confirms, and when the requirement changes that file changes first.
 
-### 15.4 为什么批准放在终端
+### 15.4 Why approvals happen in the terminal
 
-弹窗可以被“本会话都允许”关掉；终端的确认码不能。agent 也不能替人打字。
+A pop-up can be switched off with "allow for this session"; a code in the terminal cannot. And the agent cannot type for a person.
 
-### 15.5 为什么 hook 出错时放行
+### 15.5 Why the hook lets a call through when it fails
 
-hook 在每次工具调用前运行，误伤的代价比漏拦大。自己出错放行并记日志，配置问题交给 `doctor`。平台那边启动失败当拒绝、超时当放行，是平台的规定。
+The hook runs before every tool call, and hurting normal work costs more than missing a stop. When it fails itself, it lets the call through and logs it, and setup problems are left to `doctor`. On the platform's side, a failed start counts as a refusal and a timeout as a pass: those are the platform's rules.
 
-### 15.6 为什么只支持 Copilot（SDK）会话
+### 15.6 Why only Copilot (SDK) sessions are supported
 
-hook 的输出格式是这类会话的格式；Local 会话读不懂，拒绝不生效，而且文档说 Local 以后会移除。Claude、Codex 会话没测过，当作不生效。`copilot -p` 下仓库的 hook 不运行。
+The output format of the hook is the format of this kind of session; a Local session cannot read it, a refusal has no effect there, and the documentation says Local will be removed. Claude and Codex sessions were not tested and are taken as not working. Under `copilot -p` the repository's hooks do not run.
 
-### 15.7 不做清单（和重新考虑的条件）
+### 15.7 Why the files are in English only, and the output in two languages
 
-| 不做 | 原因 | 重新考虑的条件 |
+The engine's texts are code-like: a table per language, with the same names and placeholders, and a test that fails when they differ. That can be kept right. Documents, rules and skills are prose: a second copy drifts from the first, a check can only compare structure, and nobody tests the copy. So prose exists once, in English, and what changes with the user is the output: what the CLI and the hooks print, the task file templates, and the language the agent is told to answer in.
+
+### 15.8 What is not done (and when to reconsider)
+
+| Not done | Why | When to reconsider |
 | --- | --- | --- |
-| 任务中途切换模型或推理强度 | hook 做不到 | 平台提供 API |
-| agent 自己开检查、mapreduce、autorun | 都花钱或放权，只能用户开 | — |
-| 任何形式的 Task Level | 开工前说不准；一个档位绑太多东西 | — |
-| 强制每次对话都开任务 | 拖慢快速问答 | 企业要求所有写入都审计 |
-| 按次数的预算拦截（搜索、读取） | 实测没多大用，模型自己会调节；省钱靠选模型 | 日志显示成本失控 |
-| 把主 agent 的推理交给 reviewer | 看了会失去独立性 | — |
-| 专门的调度 agent | 调度者不懂任务，干活的要重学 | Copilot 能恢复子 agent 的上下文 |
-| 多个子 agent 并行改同一批文件 | 合并冲突；仓库不能运行，无法判定对错 | 目标仓库能在本地跑测试 |
-| agent 之间直接发消息 | 子 agent 无状态；跨会话消息没查证 | 实测证明可靠且对方也过 gate |
-| 上游自建 MCP server（包括查知识库的） | 有的企业环境禁用非官方 MCP；CLI 在终端里就能用 | 企业放开 MCP，且日志显示 agent 常读错知识库 |
-| 知识库向量检索 / RAG | 要额外基础设施；文件索引已够用 | 知识库大到按索引选文件明显不准 |
-| 操作系统级隔离 | 超出 harness 范围 | 企业要求，可以用 devcontainer |
-| 看板和长期审计数据库 | V1 用不上 | 多人长期使用，需要统计 |
-| 自己做沙箱、上下文压缩、子 agent 调度 | 平台每月都在改，沙箱半年改了 8 次 | — |
-| 建在 Preview 或实验设置上的功能 | 随时会变或被移除 | 转稳定并在企业版本里验证过 |
-| 不自动 push、建 PR、fetch、pull、不自动回滚跨仓库的写入 | 对外的动作永远由人做；中途出错停下来说清楚 | — |
-| 把业务知识放进仓库 | `knowledge-base/` 交付时必须为空 | — |
+| Changing the model or the reasoning effort in the middle of a task | A hook cannot do it | The platform offers an API |
+| The agent switching on checks, mapreduce or autorun itself | They all cost money or hand over control; only the user switches them on | — |
+| Task Levels in any form | They cannot be told before the work starts; one level ties too many things together | — |
+| Forcing every conversation to open a task | It slows down quick Q&A | A company requires every write to be audited |
+| Stopping by a budget of counts (searches, reads) | Measured to be of little use: the model regulates itself; money is saved by choosing the model | The logs show the cost out of control |
+| Handing the main agent's reasoning to the reviewer | Having seen it, the reviewer is no longer independent | — |
+| A dedicated dispatching agent | The dispatcher does not understand the task, and the worker has to learn it again | Copilot can restore the context of a subagent |
+| Several subagents changing the same files in parallel | Merge conflicts; the repository cannot be run, so right and wrong cannot be judged | The target repository can run tests locally |
+| Agents sending messages directly to each other | A subagent has no state; messages across sessions are not verified | Measured to be reliable, with the other side going through the gate too |
+| An MCP server built upstream (one for the knowledge base included) | Some company environments forbid unofficial MCP; the CLI works in the terminal as it is | A company opens up MCP, and the logs show the agent often reads the wrong knowledge |
+| Vector search / RAG over the knowledge base | It needs extra infrastructure; a file index is enough | The knowledge base is so large that picking files by the index is clearly off |
+| Isolation at the level of the operating system | Beyond the harness | A company requires it; a devcontainer can be used |
+| A dashboard and a long-term audit database | Not needed in V1 | Many people use it for a long time and need statistics |
+| Our own sandbox, context compression or subagent scheduling | The platform changes these every month; the sandbox changed 8 times in half a year | — |
+| Features built on Preview or experimental settings | They may change or go away at any time | They become stable and are verified in the enterprise version |
+| No automatic push, PR, fetch or pull, and no automatic rollback of writes across repositories | Outward actions are always done by a person; on a failure partway it stops and says clearly what happened | — |
+| Business knowledge in the repository | `knowledge-base/` must be empty when shipped | — |
+| A second copy of the rules, skills or docs in another language | The copy drifts and nobody tests it | A team needs to read the docs in that language; then that copy is shipped and tested |
 
-### 15.8 模型升级后最可能变的部分
+### 15.9 What is most likely to change after a model upgrade
 
-| 部分 | 为什么会变 | 改动范围 |
+| Part | Why it would change | How far the change goes |
 | --- | --- | --- |
-| 任务种类的 playbook | 模型越来越不需要写明步骤 | 缩短或删技能正文，验收清单保留 |
-| 独立检查 | 模型自查越来越可靠 | 评测显示 n=0 和 n=1 没差别时，默认建议改成不查 |
-| 接力提醒 | 平台可能提供原生记忆 | 关掉 Stop 的提醒 |
-| 各角色的模型 | 新模型发布 | 只改 `.agent.md` 的 `model` |
-| 适配器 | 平台 payload 变 | 只改 `adapters/` |
-| 安全底线（guardrail、只能 promote、人在终端批准） | — | 不退役 |
+| The playbooks of the task kinds | Models need written-out steps less and less | Shorten or delete the body of skills; the acceptance lists stay |
+| Independent checks | Models check themselves more and more reliably | When an evaluation shows no difference between n=0 and n=1, the default advice becomes no check |
+| The handover reminder | The platform may offer memory of its own | Switch off the Stop reminder |
+| The models of the roles | New models come out | Only `model` in the `.agent.md` changes |
+| The adapter | The platform's payload changes | Only `adapters/` changes |
+| The safety floor (guardrails, promote only, a person approving in the terminal) | — | Does not retire |
 
-各层变化快慢不同：说明（L1 能力）最先改；规则（L2）改数字不改代码；执行（L3）按 registry 增删模块；适配（L4）跟着平台。
+The layers change at different speeds: text (the L1 ability) changes first; rules (L2) change numbers, not code; enforcement (L3) adds and removes modules by the registry; adaptation (L4) follows the platform.
 
-## 动手看
+## Hands on
 
-- 读 [05-design.md](../../../../docs/05-design.md) 全文，对照本页。
-- 读 [07-release-notes.md](../../../../docs/07-release-notes.md) 的 1.1.0，看“退役”一节。
+- Read all of [05-design.md](../../../../docs/05-design.md) and compare it with this page.
+- Read 1.1.0 in [07-release-notes.md](../../../../docs/07-release-notes.md), and look at what was retired.
 
-## 去哪看
+## Where to look
 
-- [05-design.md](../../../../docs/05-design.md)、[07-release-notes.md](../../../../docs/07-release-notes.md)
+- [05-design.md](../../../../docs/05-design.md), [07-release-notes.md](../../../../docs/07-release-notes.md)
 
-## 常见疑问
+## Common questions
 
-- **“这些设计是一开始就想好的吗？”** 不是。1.0 有 Level 和三角色，用了几天后按实测删掉。设计跟着证据改，这也是“不做清单”里每一条都写了重新考虑条件的原因。
-- **“我觉得某条不做的应该做，怎么办？”** 看它的“重新考虑的条件”满足没有。满足了，用 admin agent 讨论和实现。
+- **"Was all this designed from the start?"** No. 1.0 had Levels and three roles, and they were deleted after a few days of use, by what was measured. The design follows the evidence, which is also why every item of "what is not done" says when to reconsider.
+- **"I think something that is not done should be done. What now?"** See whether its "when to reconsider" holds. If it does, discuss and build it with the admin agent.

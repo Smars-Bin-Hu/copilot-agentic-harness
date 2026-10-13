@@ -1,33 +1,33 @@
-# 值不值得并行
+# Worth running in parallel or not
 
-并行换来两样：快，和主 agent 的上下文干净。代价是用量。每个 mapper 是一个独立会话，要从头读材料，读过的东西不能和别人共用。
+Parallel work buys two things: speed, and a clean context for the main agent. The price is usage. Every mapper is its own session, reads the material from the start, and cannot share what it read with the others.
 
-## 判断表
+## The table
 
-| 问题 | 值 | 不值 |
+| Question | Worth it | Not worth it |
 | --- | --- | --- |
-| 各块之间要不要对方的结论 | 不要：各查各的 | 要：后一块依赖前一块的发现 |
-| 每一块要读多少 | 很多：几十个文件、一个大模块、一批日志 | 很少：三五个文件 |
-| 主 agent 需要什么 | 只要摘要 | 要原文细节才能往下做 |
-| 要不要共用一份理解 | 不要 | 要：例如一起定一个设计 |
-| 任务大小 | 自己读会占掉大半上下文 | 自己读得完 |
+| Do the parts need each other's conclusions | No: each looks into its own | Yes: a later part depends on what an earlier one finds |
+| How much reading each part needs | A lot: dozens of files, a large module, a batch of logs | Little: three to five files |
+| What the main agent needs | Only summaries | The details of the original text, to go on |
+| Is one shared understanding needed | No | Yes: settling one design together, for example |
+| Size of the job | Reading it yourself would fill most of the context | You can read it all yourself |
 
-三条“值”都满足再用。有一条落在“不值”，就自己顺序做。
+Use it when all three "worth it" conditions of the skill hold. If one falls under "not worth it", do it yourself in order.
 
-## 花多少
+## What it costs
 
-- 经验数字：多 agent 编排的用量是单个 agent 的几倍（这个仓库早先实测过三角色编排，约 4.5 倍）。
-- 派得越多越贵。能两个解决的不要派四个。
-- mapper 用的模型写在 `.github/agents/mapper.agent.md`，默认比主模型便宜。
+- A number from experience: orchestrating several agents uses several times what one agent uses (an earlier measurement in this repository, with three roles, came to about 4.5 times).
+- The more you send, the more it costs. Do not send four where two will do.
+- The model a mapper uses is in `.github/agents/mapper.agent.md`; by default it is cheaper than the main model.
 
-## 典型的值
+## Typical cases worth it
 
-- “这个故障可能是上游延迟、调度失败、或者表结构变了，三个方向各查一下。”
-- “把这五个 domain 的知识库各总结一页。”
-- “这个方案从成本、风险、可维护性三个角度各挑一遍毛病。”
+- "This failure may come from an upstream delay, a failed schedule, or a changed table structure: look into each of the three."
+- "Sum up the knowledge base of each of these five domains on one page."
+- "Pick holes in this approach from three angles: cost, risk, maintainability."
 
-## 典型的不值
+## Typical cases not worth it
 
-- “帮我看看这个函数为什么报错。”（一个文件）
-- “设计订单表的监控，分成指标、告警、看板三块同时做。”（要共用一份理解）
-- “把这三个 SQL 文件改一下。”（是写，不是读）
+- "Have a look why this function fails." (one file)
+- "Design the monitoring of the orders table, doing metrics, alerts and dashboards at the same time." (needs one shared understanding)
+- "Change these three SQL files." (writing, not reading)

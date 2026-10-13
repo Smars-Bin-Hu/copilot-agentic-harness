@@ -1,36 +1,36 @@
-# 什么时候该自己停
+# When to stop by yourself
 
-hook 只能看事实：步骤勾没勾、检查过没过、被拒绝几次。有些该停的情况事实里看不出来，要你自己判断。碰到了，运行：
+The hook sees facts only: whether steps are ticked, whether a check passed, how many refusals there were. Some cases that call for a stop do not show in the facts; you have to judge them. When you meet one, run:
 
 ```bash
-harness task autorun off --reason "<卡在哪、要用户定什么>"
+harness task autorun off --reason "<where it is stuck, and what the user has to decide>"
 ```
 
-然后用一两句话告诉用户，停下。原因会显示在看板上。
+Then tell the user in a sentence or two, and stop. The reason shows on the board.
 
-## 该停的
+## Stop
 
-| 情况 | 例子 |
+| Case | Example |
 | --- | --- |
-| 计划里没写、会改变结果的取舍 | 两张表都有这个字段，口径不一样，计划没说用哪张 |
-| 缺信息，猜了可能错 | 知识库里查不到这个指标的定义 |
-| 步骤做不了 | 要改的文件在目标仓库里不存在；需要的权限没有 |
-| 要碰范围之外的东西 | 要改任务目录外的文件、要运行 git 写命令、要改计划 |
-| 发现计划本身有问题 | 照计划做会和需求矛盾 |
-| reviewer 两次指出同一个问题，你改不掉 | 说明理解有偏差，再改也是空转 |
+| A trade-off the plan does not cover and that changes the result | Both tables have the field, defined differently, and the plan does not say which to use |
+| Information is missing, and a guess may be wrong | The knowledge base has no definition of this metric |
+| A step cannot be done | The file to change does not exist in the target repository; a needed permission is missing |
+| Something out of scope has to be touched | A file outside the task folder, a git write command, a change to the plan |
+| The plan itself turns out wrong | Following the plan would contradict the requirement |
+| The reviewer names the same problem twice and you cannot fix it | Your understanding is off; more fixing just spins in place |
 
-## 不用停的
+## Do not stop
 
-| 情况 | 怎么办 |
+| Case | What to do |
 | --- | --- |
-| 实现上的小选择 | 自己定，在 `LOG.md` 记一行：定了什么，为什么 |
-| 一次工具调用失败 | 换个做法再试一次 |
-| reviewer 没通过，问题清楚 | 照问题改，再查 |
-| 被 gate 拒绝一次，理由里有下一步 | 照下一步做。第二次还被拒，autorun 会自己停 |
+| A small implementation choice | Decide it and add a line to `LOG.md`: what you decided, and why |
+| One tool call fails | Try once more another way |
+| The reviewer did not pass it, and the problem is clear | Fix as it says and check again |
+| The gate refuses once, and the reason has a next step | Do the next step. On a second refusal autorun stops by itself |
 
-## 原因怎么写
+## How to write the reason
 
-写给回来的用户看。一句话说清：卡在哪一步、为什么、要他定什么。
+Write it for the user who comes back. One sentence that says: which step is stuck, why, and what they have to decide.
 
-- 好：`第 3 步：orders 和 orders_v2 都有 updated_at，口径不同，计划没说用哪张。要你定。`
-- 不好：`遇到问题`
+- Good: `Step 3: orders and orders_v2 both have updated_at, defined differently, and the plan does not say which to use. Yours to decide.`
+- Bad: `Ran into a problem`

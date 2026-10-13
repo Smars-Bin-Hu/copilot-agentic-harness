@@ -1,77 +1,77 @@
-# 第一部分：这是什么，为什么需要它
+# Part 1: what this is, and why it is needed
 
-讲给不懂 AI 词的人听。每一段先说事，再给名字。
+For someone who knows none of the AI words. In every section, say what happens first, then give the name.
 
-## 1. Copilot 现在能做什么
+## 1. What Copilot can do now
 
-你以前用的 Copilot：你敲代码，它灰字提示下一行。
+The Copilot you used before: you type code, and it suggests the next line in grey.
 
-现在的 Copilot 在 Chat 窗口里，还能：
+The Copilot of today, in the Chat window, can also:
 
-- 自己打开文件，读懂它；
-- 自己改文件，自己建文件；
-- 自己在终端里敲命令；
-- 一步做完不行，就再做下一步，直到做完。
+- open a file by itself and understand it;
+- change files and create files by itself;
+- type commands in the terminal by itself;
+- when one step is not enough, do the next, until the job is done.
 
-它像一个坐在你旁边的新同事，你说“帮我查一下订单表为什么晚了”，他会自己去翻文件、跑查询、写结论。这样用的 Copilot 叫 **agent**（智能体）。
+It is like a new colleague sitting next to you. You say "find out why the orders table was late", and they go through files, run queries and write up a conclusion by themselves. A Copilot used this way is called an **agent**.
 
-## 2. 为什么要给它定规矩
+## 2. Why it needs rules
 
-新同事能干，也会出错。agent 常见的三种：
+A new colleague is able, and makes mistakes too. Three are common for an agent:
 
-- **改到不该改的**：你只让它看，它顺手改了生产仓库里的文件。
-- **做到哪忘了**：聊了两小时，换个窗口，它不记得做到哪、你们定过什么。
-- **自己夸自己**：它写完，自己检查，说“没问题”。可它和你一样看不出自己的盲点。
+- **It changes what it should not**: you only asked it to look, and it changed a file in the production repository on the way.
+- **It forgets where it was**: after two hours of talking, in a new window it no longer knows how far it got or what you decided together.
+- **It praises its own work**: it writes something, checks it itself and says "no problem". But like you, it cannot see its own blind spots.
 
-在写数据管道代码的团队里，这三种都贵。光在提示词里写“请不要乱改”不管用，因为它可以不听。
+In a team that writes data pipeline code, all three are costly. Writing "please do not change things carelessly" in the prompt does not work, because it can ignore that.
 
-## 3. harness 是什么
+## 3. What the harness is
 
-**harness = 给 agent 定的一套工作规矩，加一套工作台。**
+**The harness = a set of working rules for the agent, plus a workbench.**
 
-打个比方。新同事入职，公司会给他：
+A comparison. When a new colleague joins, the company gives them:
 
-| 公司给新同事 | harness 里对应的 | 一句话 |
+| The company gives the new colleague | What matches it in the harness | In one sentence |
 | --- | --- | --- |
-| 一个工位 | **任务** | 每件事一个文件夹，需求、进度、成果都在里面 |
-| 门禁 | **门卫** | 它要改不该改的文件，门卫直接拦住，不是请求，是拦 |
-| 操作手册 | **技能** | 做某类事的步骤，agent 需要时自己翻 |
-| 另一个人复核 | **独立检查** | 一个没看过它思路的 agent 来检查它的成果 |
-| 主管签字 | **批准** | 改仓库这种大事，要你在自己的终端里确认才行 |
-| 公司资料室 | **知识库** | 团队的文档和规范，agent 先读它再动手（已经配好） |
+| A desk | A **task** | One folder per job, holding the requirement, the progress and the results |
+| A door pass | The **gatekeeper** | When it tries to change a file it should not, the gatekeeper stops it. Not a request: a stop |
+| A manual | A **skill** | The steps for one kind of job; the agent looks them up when it needs them |
+| A second person to check | An **independent check** | An agent that has not seen its reasoning checks its work |
+| A manager's signature | An **approval** | Big things like changing a repository need you to confirm in your own terminal |
+| The company archive | The **knowledge base** | The team's documents and standards; the agent reads them before acting (set up already) |
 
-你不用管门卫怎么工作。你只要知道：**规矩由代码执行，agent 不能绕过去。**
+You need not know how the gatekeeper works. You only need to know: **code enforces the rules, and the agent cannot get around them.**
 
-## 4. 四样东西各管什么
+## 4. What each of the four things does
 
-先把全貌画给用户看，再讲细节。用这张图，边画边问“你们现在有哪几样”：
+Show the user the whole picture first, then the details. Use this picture, and ask while drawing "which of these do you have now":
 
 ```text
-① Copilot agent       会思考，会调用工具，一步步做完
-② 知识库 + 领域技能     你们的活和代码是什么样        ← 你们团队接入
-③ harness 框架        规矩、边界、检查、看得见        ← 这个仓库
-④ 被作用的对象         代码仓库、Azure DevOps、服务器、数据库
+1  Copilot agent                    thinks, calls tools, works step by step to the end
+2  Knowledge base + domain skills   what your work and your code look like    <- your team plugs these in
+3  Harness framework                rules, limits, checks, visibility         <- this repository
+4  What is acted on                 code repositories, Azure DevOps, servers, databases
 ```
 
-用新同事来讲：
+Tell it with the new colleague:
 
-| 部分 | 像什么 | 它管什么 | 它不管什么 |
+| Part | Like what | What it does | What it does not do |
 | --- | --- | --- | --- |
-| ① Copilot agent | 一个聪明、会用工具的新同事 | 读、想、调用工具，循环到做完 | 不懂你们的业务，也不会自己设边界 |
-| ② 知识库和领域技能 | 入职培训和团队手册 | 告诉它你们的任务和代码是什么样 | 不强制它照做；写得差，它就不懂行 |
-| ③ harness 框架 | 公司制度：门禁、签字、复核、记录 | 规矩、边界、工作流程、通用技能、日志和看板 | 不带业务知识 |
-| ④ 被作用的对象 | 活真正干在哪 | 代码仓库、Azure DevOps 上的 Jira 和 pipeline、服务器环境、数据库 | — |
+| 1 Copilot agent | A bright new colleague who can use tools | Reads, thinks, calls tools, in a loop until done | Does not know your business, and sets no limits for itself |
+| 2 Knowledge base and domain skills | Induction training and the team handbook | Tells it what your tasks and your code look like | Does not force it to comply; when poorly written, it does not know the trade |
+| 3 Harness framework | Company rules: door passes, signatures, second checks, records | Rules, limits, the way of working, general skills, logs and the board | Carries no business knowledge |
+| 4 What is acted on | Where the work really lands | Code repositories, Jira and pipelines on Azure DevOps, server environments, databases | — |
 
-要讲清三点：
+Three points to make clear:
 
-- **框架不带业务知识。** agent 懂不懂你们的活，看知识库和领域技能写得怎么样。
-- **harness 对每类对象管得不一样。** 代码仓库管得最严：只能经你批准写入。Azure DevOps、服务器、数据库目前主要靠账号权限，harness 只拦终端里的危险命令并留日志。建议给 agent 只读账号。
-- **门卫防犯错，不防存心绕过。** 不要说成“绝对安全”。
+- **The framework carries no business knowledge.** Whether the agent knows your work depends on how well the knowledge base and the domain skills are written.
+- **The harness guards each kind of target differently.** Code repositories are guarded most strictly: they are written only with your approval. For Azure DevOps, servers and databases it relies mainly on account rights for now; the harness only stops dangerous commands in the terminal and keeps a log. Giving the agent a read-only account is advised.
+- **The gatekeeper guards against mistakes, not against someone set on getting around it.** Do not call it "absolutely safe".
 
-完整说明在 [docs/00-overview.md](../../../../docs/00-overview.md)。用户想深入，指给他。
+The full account is in [docs/00-overview.md](../../../../docs/00-overview.md). Point the user to it when they want to go deeper.
 
-## 5. 你要做的只有一件事
+## 5. There is only one thing you have to do
 
-**说你要做什么。** 其余的，agent 会问你、会拦自己、会写进文件。
+**Say what you want done.** For the rest, the agent asks you, stops itself, and writes things into files.
 
-讲完停下，问：清楚吗？“任务”和“批准”这两个词，能用自己的话说一遍吗？说不出来就再举一个例子，比如：你让它改一个 SQL 文件，它不能直接改，要先写计划，你批准，它才能改，改完再你批准一次才写回仓库。
+Stop here and ask: is that clear? Can you say "task" and "approval" in your own words? If not, give one more example, such as: you ask it to change a SQL file; it cannot change it directly; it writes a plan first, you approve, and only then can it change the file; after the change you approve once more before it is written back to the repository.

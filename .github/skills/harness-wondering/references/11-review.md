@@ -1,76 +1,76 @@
-# 11. 独立检查：`[review]=n`
+# 11. Independent checks: `[review]=n`
 
-## 一句话
+## In one sentence
 
-默认不查。你在提示里写 `[review]=n`，任务的成果就要**连续通过 n 次**独立检查才能回写。检查的人（reviewer）没看过作者的思路，通过了几次由代码数，不信 agent 自己说。
+Nothing is checked by default. When you write `[review]=n` in a prompt, the work of the task has to **pass n independent checks in a row** before it can be written back. The checker (the reviewer) has not seen the author's reasoning, and the code counts the passes: the agent's own word is not trusted.
 
-## 分块
+## Chunks
 
-### 11.1 为什么需要
+### 11.1 Why it is needed
 
-自己检查自己，盲点相同。目标仓库不能运行，检查只能靠读。所以可信度来自三样：检查的人没看过作者的思路；每次换新的；知识库里写明了规则。
+Someone who checks their own work has the same blind spots. A target repository cannot be run, so checking can only be reading. So the trust comes from three things: the checker has not seen the author's reasoning; it is a new one every time; and the knowledge base states the rules.
 
-### 11.2 怎么用
+### 11.2 How to use it
 
-1. 你在任务的提示里写 `[review]=n`（写一次就够，`[review]=0` 关掉）。agent 不能自己写。
-2. agent 写完成果，运行 `task review start`：存一份快照，写评审包。
-3. agent 调用 reviewer（这时才放行；没开检查调用会被拒绝）。
-4. reviewer 回答，第一行 `VERDICT: PASS` 或 `FAIL`，每条问题带“文件:行”，只指出问题，不写怎么改。
-5. hook 把回答原样存成 `REVIEW/round-NNN/verdict.md`，agent 改不了。
-6. FAIL：agent 自己按问题改，再查，每次换新的 reviewer。第 2 次起只报影响正确性的问题。
-7. 凑够 n 次连续 PASS，才能 `task promote --dry-run`。
+1. You write `[review]=n` in a prompt of the task (once is enough; `[review]=0` switches it off). The agent cannot write it itself.
+2. When the work is written, the agent runs `task review start`: a snapshot is saved, and the review package is written.
+3. The agent calls the reviewer (only now is it let through; without checks on, the call is refused).
+4. The reviewer answers: the first line is `VERDICT: PASS` or `FAIL`, every finding has "file:line", and it only points out findings, never how to fix them.
+5. The hook saves the answer as written, as `REVIEW/round-NNN/verdict.md`; the agent cannot change it.
+6. FAIL: the agent fixes the findings itself and checks again, with a new reviewer every time. From the 2nd check on, only what affects correctness is reported.
+7. Only with n passes in a row can `task promote --dry-run` run.
 
-### 11.3 怎么数（重点）
+### 11.3 How it is counted (the main point)
 
-`passes` = 从最近一次检查往回数，连续的 PASS，而且**查的那一版和现在的成果一字不差**。
+`passes` = counting back from the latest check, the PASSes in a row whose **checked version is exactly the work as it is now**.
 
-- “一字不差”靠 sha256：成果文件、`REQ.md`、`PLAN.md` 一起算指纹。
-- 不算进去的：`TASK.md`、`TODO.md`、`LOG.md`、`.task`、`REQ/`、`REF/`、`REVIEW`、`SNAPSHOT`、`.diff`。更新进度不会让通过作废。
-- 改过成果、需求或计划，之前的通过都不算。
+- "Exactly" rests on sha256: the result files, `REQ.md` and `PLAN.md` make up the fingerprint together.
+- Not counted in: `TASK.md`, `TODO.md`, `LOG.md`, `.task`, `REQ/`, `REF/`, `REVIEW`, `SNAPSHOT`, the `.diff` files. Updating the progress does not undo a pass.
+- Once the work, the requirement or the plan changes, the earlier passes no longer count.
 
-### 11.4 次数上限
+### 11.4 The limit on checks
 
-最多查 `n + 2` 次（`task.json` 的 `review.extra_checks`），再加你给的额外次数。n 最大 5。用完了还没凑够，agent 停下，告诉你最后一次问题在哪。你在终端选：
+At most `n + 2` checks (`review.extra_checks` in `task.json`), plus the extra ones you give. n is 5 at most. When they are used up without enough passes, the agent stops and tells you where the last findings are. You choose in the terminal:
 
-- `harness task review extend --checks 2`：再给 2 次；
-- `harness task review waive`：不查了，放行**这一版**（成果再改，放行失效）。
+- `harness task review extend --checks 2`: 2 more checks;
+- `harness task review waive`: no more checks; **this version** is let through (if the work changes again, the waiver ends).
 
-上限的原因：reviewer 可能一直挑毛病。
+Why there is a limit: a reviewer may keep finding fault.
 
-### 11.5 `harness task review status` 的输出
+### 11.5 The output of `harness task review status`
 
-| 项 | 意思 |
+| Item | Meaning |
 | --- | --- |
-| `n` | 要求连续通过几次 |
-| `passes` | 针对现在这版成果的连续 PASS 数 |
-| `checks_used` / `checks_limit` | 已查几次 / 上限 |
-| `last_verdict` | 最近一次的结论 |
-| `pending_round` | 已开、还没答的那一轮 |
-| `waived` | 当前这一版是否被放行 |
-| `next` | 下一步。agent 靠这一句决定继续、停下还是往下走 |
+| `n` | How many passes in a row are needed |
+| `passes` | The number of PASSes in a row for the work as it is now |
+| `checks_used` / `checks_limit` | Checks done / the limit |
+| `last_verdict` | The verdict of the latest check |
+| `pending_round` | The round that is open and not answered yet |
+| `waived` | Whether the current version was let through |
+| `next` | The next step. The agent decides by this sentence whether to go on, stop or move ahead |
 
-### 11.6 开了却不查怎么办
+### 11.6 What if checks are on and nothing is checked
 
-Stop 钩子检查：开了检查却没查，或查完又改了文件，会拦一次，让 agent 补做。
+The Stop hook checks: when checks are on and nothing was checked, or files changed after a check, it blocks once and makes the agent catch up.
 
-### 11.7 诚实的局限
+### 11.7 The honest limits
 
-- 实测两个 reviewer 对同一份成果会给出不同结论。n=1 日常够用；重要的改动用 2。
-- reviewer 不能运行目标仓库的代码，只能读。
-- 检查有没有真的发生，靠 hook 落盘的 `verdict.md` 确认，不靠 agent 的话。
+- It was measured that two reviewers give different verdicts on the same work. n=1 is enough day to day; use 2 for an important change.
+- The reviewer cannot run the code of a target repository; it can only read.
+- Whether a check really happened is confirmed by the `verdict.md` the hook wrote to disk, not by the agent's word.
 
-## 动手看
+## Hands on
 
-- 读 [reviewer.agent.md](../../../agents/reviewer.agent.md)。
-- 打开某个任务的 `REVIEW/round-001/verdict.md` 和 `package.md`。
-- 运行 `harness task review status`。
+- Read [reviewer.agent.md](../../../agents/reviewer.agent.md).
+- Open `REVIEW/round-001/verdict.md` and `package.md` of some task.
+- Run `harness task review status`.
 
-## 去哪看
+## Where to look
 
-- `.harness/engine/modules/task/taskreview.py`（`passes`、`limit`、`summary`）、`tasksnap.py`（指纹）
-- [02-features.md](../../../../docs/02-features.md)“独立检查”
+- `.harness/engine/modules/task/taskreview.py` (`passes`, `limit`, `summary`), `tasksnap.py` (the fingerprint)
+- The part of [02-features.md](../../../../docs/02-features.md) about independent checks
 
-## 常见疑问
+## Common questions
 
-- **“agent 能让 reviewer 总是通过吗？”** 评审包由 CLI 写，结论由 hook 存，agent 都改不了；它只能改成果。
-- **“为什么是连续通过，不是通过一次？”** 一次 PASS 可能是运气。n=2 要求两个独立的 reviewer 都同意。
+- **"Can the agent make the reviewer always pass it?"** The CLI writes the review package and the hook saves the verdict; the agent can change neither. It can only change the work.
+- **"Why passes in a row, and not one pass?"** One PASS may be luck. n=2 needs two independent reviewers to agree.

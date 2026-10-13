@@ -1,64 +1,64 @@
-# 短命令怎么配
+# Setting up the short command
 
-目标：在任何终端里输入 `harness` 都能运行。做法只有一种：让启动脚本在 PATH 里。
+The aim: typing `harness` in any terminal runs it. There is one way only: the launcher must be on PATH.
 
-启动脚本在仓库的 `.harness/bin/`：`harness`（macOS/Linux）、`harness.cmd`（Windows）。
+The launchers are in `.harness/bin/` of the repository: `harness` (macOS/Linux), `harness.cmd` (Windows).
 
-下面的命令**给用户，请用户在自己的终端运行**。把 `<仓库>` 换成这个仓库的完整路径（你用 `pwd` 查到的，Windows 用 `(Get-Location).Path`），不要让用户自己填。
+**Give the commands below to the user and ask them to run them in their own terminal.** Replace `<repo>` with the full path of this repository (found with `pwd`; on Windows `(Get-Location).Path`). Do not leave it for the user to fill in.
 
-## 先判断
+## Judge first
 
-| 看什么 | 怎么看 |
+| What to look at | How |
 | --- | --- |
-| 系统 | 提示开头的环境信息；或运行 `uname`（macOS/Linux 有输出，Windows 的 PowerShell 没有这个命令） |
-| shell（macOS/Linux） | `echo $SHELL`。结尾是 `zsh` 改 `~/.zshrc`，是 `bash` 改 `~/.bashrc` |
-| 是不是已经有自己的 PATH 文件夹 | `echo $PATH` 里有 `~/bin` 或 `~/.local/bin` 时，直接把链接建在那里，不用再改 PATH |
+| The system | The environment information at the top of the prompt; or run `uname` (it prints on macOS/Linux; the PowerShell of Windows has no such command) |
+| The shell (macOS/Linux) | `echo $SHELL`. Ending in `zsh`: change `~/.zshrc`; in `bash`: change `~/.bashrc` |
+| Whether there is a PATH folder of the user's own already | When `echo $PATH` has `~/bin` or `~/.local/bin`, make the link there and leave PATH alone |
 
 ## macOS / Linux
 
 ```bash
 mkdir -p ~/bin
-ln -sf "<仓库>/.harness/bin/harness" ~/bin/harness
+ln -sf "<repo>/.harness/bin/harness" ~/bin/harness
 echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
 ```
 
-- `~/bin` 已经在 PATH 里时，不要第三行。
-- bash 把 `~/.zshrc` 换成 `~/.bashrc`。
-- 建的是链接，不是复制：仓库升级后不用重配。
+- When `~/bin` is on PATH already, leave out the third line.
+- For bash, replace `~/.zshrc` with `~/.bashrc`.
+- It is a link, not a copy: nothing needs redoing after the repository is upgraded.
 
 ## Windows
 
-用一个**固定的、仓库之外的文件夹**，PATH 只改一次，以后升级不用再改。默认用 `C:\Users\<用户名>\bin`（用户名用 `$env:USERNAME` 查到的，填好再给用户）。
+Use **a fixed folder outside the repository**: PATH changes once, and never again for an upgrade. The default is `C:\Users\<user name>\bin` (find the user name with `$env:USERNAME` and fill it in before giving it to the user).
 
-1. 建文件夹，把 `<仓库>\.harness\bin\harness.cmd` **拷**进去（拷贝，不用链接）：
+1. Make the folder and **copy** `<repo>\.harness\bin\harness.cmd` into it (a copy, not a link):
 
 ```powershell
 New-Item -ItemType Directory -Force "$env:USERPROFILE\bin"
-Copy-Item "<仓库>\.harness\bin\harness.cmd" "$env:USERPROFILE\bin\harness.cmd"
+Copy-Item "<repo>\.harness\bin\harness.cmd" "$env:USERPROFILE\bin\harness.cmd"
 ```
 
-2. 把这个文件夹加进**用户**的 PATH。两种做法给用户选：
-   - 界面：系统设置里搜“环境变量”→“编辑账户的环境变量”→ 选 `Path` → 编辑 → 新建 → 填 `C:\Users\<用户名>\bin`。
-   - PowerShell（只改用户变量，不用管理员权限）：
+2. Add the folder to the **user's** PATH. Two ways for the user to choose from:
+   - The screens: search the system settings for "environment variables" → "Edit environment variables for your account" → pick `Path` → Edit → New → enter `C:\Users\<user name>\bin`.
+   - PowerShell (changes the user variable only; no administrator rights needed):
 
 ```powershell
 [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:USERPROFILE\bin", "User")
 ```
 
-公司电脑不让自己改环境变量时，告诉用户：这一步是必须的，请 helpdesk 远程加这一条用户 PATH：“请把 `C:\Users\<用户名>\bin` 加进我账户的 Path”。只用加这一次。
+When a company computer does not let users change environment variables, tell the user: this step is required; ask the helpdesk to add this one user PATH entry remotely: "Please add `C:\Users\<user name>\bin` to the Path of my account". It is needed only this once.
 
-以后下载新版本，放在哪都行：`harness` 按当前目录找仓库。拷贝本身变了（`doctor` 给 `[WARN]`），从新仓库再拷一次，不用找 helpdesk。在仓库之外运行 `harness` 时，设环境变量 `HARNESS_HOME` 为某份仓库的路径。
+A new version downloaded later can go anywhere: `harness` finds the repository from the current folder. When the copy itself has changed (`doctor` gives a `[WARN]`), copy it again from the new repository; no helpdesk needed. To run `harness` outside any repository, set the environment variable `HARNESS_HOME` to the path of one repository.
 
-## 做完之后
+## Afterwards
 
-1. **重开终端，也重开 VS Code。** 不重开 VS Code，agent 的终端认不到新的 PATH。
-2. 运行 `harness --version --short`，应输出 `harness <版本>`。
-3. 运行 `harness doctor`，开头几行里应有一行 `[OK]`，写着“短命令 `harness` 在 PATH 里”。
+1. **Reopen the terminal, and reopen VS Code too.** Without reopening VS Code, the agent's terminal does not see the new PATH.
+2. Run `harness --version --short`. It should print `harness <version>`.
+3. Run `harness doctor`. Among the first lines there should be an `[OK]` line saying the short command `harness` is on PATH.
 
-## 电脑上有两份 harness
+## Two copies of the harness on one computer
 
-`harness` 像 git：从当前目录往上找 `.harness/engine/cli.py`，找到哪一份就操作哪一份。不在任何 harness 仓库里时，才用 PATH 里那个启动脚本自己所在的那一份。
+`harness` works like git: it looks upward from the current folder for `.harness/engine/cli.py`, and works on the copy it finds. Only outside any harness repository does it use the copy that the launcher on PATH belongs to.
 
-所以 PATH 里只要有一份的启动脚本就够，两份仓库都能用。`doctor` 这时会给一条 WARN，说 PATH 里的不是这个仓库的，可以不管。
+So the launcher of one copy on PATH is enough, and both repositories work. `doctor` then gives one WARN saying the one on PATH is not this repository's; it can be left alone.
 
-例外：PATH 里那一份是 1.0.2 之前的版本时，它不会找当前目录，永远操作它自己那一份。这时把 PATH 改成指向新的这一份。
+The exception: when the copy on PATH is older than 1.0.2, it does not look at the current folder and always works on its own copy. Then change PATH to point at the newer one.

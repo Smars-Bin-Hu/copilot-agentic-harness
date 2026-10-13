@@ -1,132 +1,134 @@
 ---
 name: generic-goal-driven
-description: '长周期任务的目标驱动流程：把中心思想、步骤清单、进度指针、改动日志和验收指南存成文件，换 session 也能接着做；每步做完等用户说“通过”；中途可以加或改需求。只在用户明确输入 /generic-goal-driven 时使用，日常任务不要用。关键词：长任务、goal-driven、续接、换 session、防失忆、TODO 清单、中心思想、进度指针、开发日志、验收指南、需求变更。'
-argument-hint: '新目标的描述，或“继续”'
+description: 'The goal-driven flow for long-running work: the central idea, the list of steps, the progress pointer, the change log and the acceptance guides are kept as files, so the work goes on after a change of session; after every step it waits for the user to say "passed"; requirements can be added or changed on the way. Use only when the user clearly types /generic-goal-driven; do not use it for everyday tasks. Keywords: long task, goal-driven, pick up again, change of session, not forgetting, TODO list, central idea, progress pointer, development log, acceptance guide, requirement change.'
+argument-hint: 'A description of the new goal, or "continue"'
 disable-model-invocation: true
 type: workflow
 specificTo: generic
 ---
 
-# Goal-Driven：长任务不失忆
+# Goal-Driven: a long task that does not forget
 
-用文件记住一个大任务。先定中心思想，再拆成小步，一步一步做、自验、交给用户验收。换了 session 或隔了几天，读文件就能接上。
+Remember one big job with files. First settle the central idea, then break it into small steps, and do them one by one: do, check yourself, hand over to the user for acceptance. After a change of session or a few days, reading the files is enough to pick up.
 
-## 使用时机
+## When to use it
 
-- 用户认为任务大、会跨很多天或多个 session，并明确输入了 `/generic-goal-driven`。
-- 用户说“继续”：接着做已有的目标。
-- 做的过程中用户加了需求或改了需求。
+- The user finds the job big, expects it to span many days or several sessions, and has clearly typed `/generic-goal-driven`.
+- The user says "continue": go on with an existing goal.
+- The user adds or changes a requirement on the way.
 
-## 不要用
+## When not to use it
 
-- 一个 session 能做完的任务。日常任务直接开一个任务（技能 `harness-my-task`）。
-- 用户没有明确要求。你觉得任务很长时，只能建议用户启用，不能自己启动。
-- 目标文件不是每个任务都要有。没有目标时，不要补建。
+- A job one session can finish. For everyday work just open a task (the skill `harness-my-task`).
+- The user has not clearly asked. When a job looks long to you, you may only suggest it to the user; you cannot start it yourself.
+- Not every task has goal files. When there is no goal, do not make them up.
 
-## 文件
+## Files
 
-放在 `.workspace/goals/<id>/`（git 忽略）。`<id>` 用短英文名，例如 `ledger-migration`。你直接读写这些文件。模板在 [templates/](templates/)。
+They live in `.workspace/goals/<id>/` (ignored by git). `<id>` is a short English name, for example `ledger-migration`. You read and write these files directly. The templates are in [templates/](templates/).
 
-| 文件 | 放什么 | 多久改一次 |
+| File | What it holds | How often it changes |
 | --- | --- | --- |
-| `GOAL.md` | 中心思想：目标、原则、范围、不做什么、整体验收；“已定的事”；末尾是变更记录 | 需求或决定变了才改 |
-| `TODO.md` | 步骤清单：每步有状态、验收标准、反馈记录 | 每步开工、交棒、通过时改 |
-| `NOW.md` | 进度指针：现在在哪一步、下一步做什么、用哪个任务 | 每次动手前后都改 |
-| `LOG.md` | 改动日志：每个通过的步骤改了什么，以前怎样、现在怎样。只往上加，不改旧条目 | 每步通过时加一条 |
-| `accept/<步骤号>.md` | 验收指南：复杂步骤才写，一步一步告诉用户怎么测 | 交棒时写，用户反馈后补 |
+| `GOAL.md` | The central idea: goal, principles, scope, what is not done, overall acceptance; "Decided"; the change record at the end | Only when a requirement or a decision changes |
+| `TODO.md` | The list of steps: each with a status, an acceptance standard and a feedback record | When a step starts, is handed over, and passes |
+| `NOW.md` | The progress pointer: which step it is at, what comes next, which task is used | Before and after every piece of work |
+| `LOG.md` | The change log: for every step that passed, what changed, how it was before and how it is now. Entries are only added on top; old ones are not changed | One entry when a step passes |
+| `accept/<step number>.md` | An acceptance guide: only for complex steps; tells the user step by step how to test | Written at the handover, added to after the user's feedback |
 
-状态只有五个：`待做`、`做中`、`已交棒`（等用户验收）、`已通过`、`已取消`。
+There are only five statuses: `todo`, `doing`, `handed over` (waiting for the user's acceptance), `passed`, `cancelled`.
 
-## 开始新目标
+The templates are in English. Write the content of the goal files in the language the rules at the top of the prompt name; keep the structure and the five status words as they are.
 
-1. 目标有不清楚的地方，先用技能 `generic-grill-me` 问用户。
-2. 建目录，按模板写 `GOAL.md`、`TODO.md`、`NOW.md`、`LOG.md`。步骤要小：一个 session 内能做完，用户能单独验收。
-3. 给用户文件的链接，让用户在编辑器里看。用户确认前不开始第 1 步。
+## Starting a new goal
 
-## 每一步的循环
+1. When anything about the goal is unclear, ask the user first with the skill `generic-grill-me`.
+2. Make the folder and write `GOAL.md`, `TODO.md`, `NOW.md` and `LOG.md` from the templates. Keep the steps small: one can be finished within a session and accepted by the user on its own.
+3. Give the user the links to the files to read in the editor. Do not start step 1 before the user confirms.
 
-1. **开工前**：`TODO.md` 该步改成 `做中`；`NOW.md` 写明第几步、用哪个任务。要落盘的步骤，一步开一个任务（技能 `harness-my-task`）。
-2. **做**：照任务的规则做。
-3. **自验**：跑能跑的检查。结果写下来，不要只说“应该没问题”。
-4. **收尾**：先 promote（如需要），再 `task close`。这是“步骤边界”，见下面的 gate 说明。
-5. **交棒**：
-   - `TODO.md` 该步改成 `已交棒`，写自验结果。
-   - 验收按 [验收指南](#验收指南) 写：简单步骤在 `TODO.md` 写一行；复杂步骤写 `accept/<步骤号>.md`，在 `TODO.md` 放链接。
-   - `NOW.md` 写“等用户验收”。在对话里告诉用户，然后停下。
-6. **用户反馈**：
-   - 有问题：写进该步的“反馈记录”（有验收指南的，也写进指南的“反馈记录”），状态改成 `做中`，回到第 2 步。
-   - 用户说“通过”：按下面顺序写，再停下等用户说开始。
-     1. `LOG.md` 加一条（见 [LOG.md 怎么写](#logmd-怎么写)）。
-     2. `TODO.md` 该步改成 `已通过` 并写日期。
-     3. `NOW.md` 指向下一步，并把这一步的细节删掉（见 [NOW.md 保持短](#nowmd-保持短)）。
-     4. 说下一步要不要开任务、开哪一种。
+## The loop of every step
 
-## 验收指南
+1. **Before starting**: set the step to `doing` in `TODO.md`; write in `NOW.md` which step it is and which task is used. For a step that writes files, open one task per step (the skill `harness-my-task`).
+2. **Do it**: by the rules of the task.
+3. **Check yourself**: run the checks that can be run. Write down the results; do not just say "it should be fine".
+4. **Wrap up**: promote first (if needed), then `task close`. This is the "step boundary": see the note on the gate below.
+5. **Hand over**:
+   - Set the step to `handed over` in `TODO.md` and write the results of your own check.
+   - Write the acceptance as [Acceptance guides](#acceptance-guides) says: one line in `TODO.md` for a simple step; `accept/<step number>.md` for a complex one, with a link in `TODO.md`.
+   - Write "waiting for the user's acceptance" in `NOW.md`. Tell the user in the conversation, then stop.
+6. **The user's feedback**:
+   - There is a problem: write it into the "Feedback" of the step (and, when there is an acceptance guide, into its "Feedback" too), set the status to `doing`, and go back to step 2.
+   - The user says "passed": write in the order below, then stop and wait for the user to say start.
+     1. Add an entry to `LOG.md` (see [How to write LOG.md](#how-to-write-logmd)).
+     2. Set the step to `passed` in `TODO.md`, with the date.
+     3. Point `NOW.md` at the next step and delete the details of this one (see [Keep NOW.md short](#keep-nowmd-short)).
+     4. Say whether the next step needs a task, and of which kind.
 
-- **简单步骤**（一个文件、一个命令就能看出对不对）：在 `TODO.md` 的“验收标准”写一行：看哪里，预期是什么。
-- **复杂步骤**（要多个操作、多个 prompt、跨文件看结果）：写 `accept/<步骤号>.md`，按 [templates/ACCEPT.md](templates/ACCEPT.md) 的固定节写：目的、前置、步骤、看哪里、预期、自验结果、反馈记录。
-- 每个步骤只测一件事。步骤要按顺序编号，每步写清“做什么”和“预期”。
-- 命令和 prompt 写成能直接复制的样子。不要让用户去猜。
-- 能在磁盘上看的结果（日志、文件、`git diff`），就让用户看文件，由你读。不要让用户复制大段输出回来。
-- 能用便宜的做法就用：最小的任务、最小的文件。
-- 你已经验过的写进“自验结果”；你验不了的（要用户的环境、账号、真实界面），明说，让用户来测。
+## Acceptance guides
 
-## LOG.md 怎么写
+- **A simple step** (one file or one command shows whether it is right): write one line under the acceptance standard in `TODO.md`: where to look, and what to expect.
+- **A complex step** (several actions, several prompts, results across files): write `accept/<step number>.md` with the fixed sections of [templates/ACCEPT.md](templates/ACCEPT.md): purpose, setup, steps, where to look, what to expect, results of your own check, feedback.
+- Every test step tests one thing. Number the test steps in order, and say for each "what to do" and "what to expect".
+- Write commands and prompts so that they can be copied as they are. Do not make the user guess.
+- For results that can be seen on disk (logs, files, `git diff`), let the user look at the file, and read it yourself. Do not make the user copy long output back.
+- Use the cheap way where there is one: the smallest task, the smallest file.
+- What you have checked goes into the results of your own check; what you cannot check (it needs the user's environment, account or a real screen), say plainly, and leave it for the user to test.
 
-每个步骤通过时加一条，新的写在最上面。只写已经完成并通过的改动，不写计划和猜测。
+## How to write LOG.md
+
+Add one entry when a step passes, the newest on top. Write only changes that are finished and passed, no plans and no guesses.
 
 ```markdown
-### <yyyy-mm-dd>｜第 <n> 步：<名称>
+### <yyyy-mm-dd> | Step <n>: <name>
 
-- **改了什么**：<文件、命令、行为，给链接；不要贴代码>
-- **以前**：<一句话>
-- **现在**：<一句话>
-- **验收**：<TODO 的哪一行，或 accept 的哪个文件>
+- **What changed**: <files, commands, behaviour, with links; do not paste code>
+- **Before**: <one sentence>
+- **Now**: <one sentence>
+- **Acceptance**: <which line of TODO, or which accept file>
 ```
 
-- 返工步骤也记一条，写明返工的是哪一步。
-- 已写的条目不改。写错了，加一条更正。
-- 目标整体完成后，用户可以把 `LOG.md` 交给技能 `generic-populate-development-log` 的格式整理，由用户决定。
+- A redo step gets an entry too, saying which step is redone.
+- Entries that are written are not changed. If one is wrong, add a correction.
+- When the whole goal is done, the user may have `LOG.md` put into the format of the skill `generic-populate-development-log`; the user decides.
 
-## NOW.md 保持短
+## Keep NOW.md short
 
-`NOW.md` 只是指针，新 session 第一个读它。
+`NOW.md` is only a pointer, and a new session reads it first.
 
-- 只写当前一步和下一步。已通过的步骤细节删掉，细节在 `LOG.md` 和 `TODO.md`。
-- 不放环境说明、历史、已完成的清单。
-- “卡点和遗留问题”最多 5 条。解决了就删，并在 `LOG.md` 对应条目里提一句。放不下的，说明该开一个新步骤。
-- 超过一屏，就是写多了。先删再写。
+- Write only the current step and the next one. Delete the details of steps that passed: they are in `LOG.md` and `TODO.md`.
+- No notes on the environment, no history, no list of what is done.
+- "Blockers and open issues": 5 at most. Delete each one when it is solved, and mention it in the matching entry of `LOG.md`. When they do not fit, a new step is due.
+- More than one screen means too much was written. Delete first, then write.
 
-## 改需求和续接
+## Requirement changes and picking up again
 
-- 用户加、改或删需求时，按 [references/change.md](references/change.md) 做。
-- 新 session 输入“继续”时，按 [references/resume.md](references/resume.md) 做。
+- When the user adds, changes or drops a requirement, follow [references/change.md](references/change.md).
+- When a new session gets "continue", follow [references/resume.md](references/resume.md).
 
-## 写文件和 gate
+## Writing files and the gate
 
-接着任务的会话（`task close` 之前），gate 不许写 `.workspace/goals/` 下的文件（含 `LOG.md`、`accept/`）。所以：
+In a session with a task (before `task close`), the gate does not allow writes to files under `.workspace/goals/` (`LOG.md` and `accept/` included). So:
 
-- 开工前先把 `NOW.md` 写好，再开任务。
-- 做完先 `task close`，再写 `TODO.md`、`NOW.md`、`LOG.md`、验收指南。
-- 任务进行中用户提了新需求：先在对话里记下，到步骤边界再写进文件。用户要立刻存下，就先 `task close`（之后 `task open` 能接回来）。
-- 写入被拒绝时，不要用终端命令绕过。照拒绝理由里的下一步做。
+- Write `NOW.md` before starting, then open the task.
+- When done, run `task close` first, then write `TODO.md`, `NOW.md`, `LOG.md` and the acceptance guide.
+- When the user brings a new requirement while a task is open: note it in the conversation first, and write it into the files at the step boundary. If the user wants it saved right away, run `task close` first (`task open` picks it up again afterwards).
+- When a write is refused, do not get around it with a terminal command. Do the next step the refusal gives.
 
 ## Gotchas
 
-- **只有用户本人在对话里说“通过”，才能标 `已通过`。** 没回应、“差不多”、“还行”都不算，再问一次。你自己宣布通过会让后面所有步骤建在没验收的东西上。
-- **不要一次做多步。** 一步交棒后停下，等用户验收，再开下一步。
-- **不要改写已通过的步骤和已写的日志。** 它受到需求变更影响时，加一个新步骤（返工）。步骤编号不复用，取消的步骤留着并写原因。
-- **记录和磁盘不一致时，以磁盘为准。** 修正记录，并告诉用户。不要照着旧记录继续做。
-- **`GOAL.md` 和 `NOW.md` 各保持在一屏左右。** 续接时每次都要读，太长会浪费上下文。旧细节往 `LOG.md` 挪，不要堆在这两个文件里。
-- **不要把知识库内容或业务数据抄进目标文件。** 只放指针和结论。
-- **本 Skill 不改变权限。** 它只管记录和流程。
+- **A step is marked `passed` only when the user says "passed" in the conversation.** No answer, "more or less" and "all right" do not count: ask once more. Declaring a pass yourself builds every later step on something not accepted.
+- **Do not do several steps at once.** After handing over one step, stop, wait for the user's acceptance, then start the next.
+- **Do not rewrite steps that passed or log entries that are written.** When a requirement change affects one, add a new step (a redo). Step numbers are not reused, and a cancelled step stays, with its reason.
+- **When the record and the disk disagree, the disk wins.** Correct the record and tell the user. Do not go on from the old record.
+- **Keep `GOAL.md` and `NOW.md` to about one screen each.** They are read every time the work is picked up, and length wastes context. Move old details to `LOG.md`; do not pile them up in these two files.
+- **Do not copy knowledge base content or business data into the goal files.** They hold only pointers and conclusions.
+- **This skill changes no permission.** It only looks after the records and the flow.
 
-## 故障处理
+## Troubleshooting
 
-| 问题 | 处理方式 |
+| Issue | Solution |
 | --- | --- |
-| 写 `TODO.md`、`NOW.md`、`LOG.md` 被拒绝 | 任务还没关。先 `task close`，再写 |
-| 找不到 `.workspace/goals/<id>/` | 问用户目标名。不要新建一个顶替 |
-| 目录下有多个目标，不知道接哪个 | 列出各目标的 `NOW.md` 第一行，让用户选 |
-| `NOW.md` 写“做中”，但磁盘上没有对应成果 | 当作该步没做。告诉用户，从这一步重新开始 |
-| `TODO.md` 写“已通过”，但 `LOG.md` 没有对应条目 | 补一条，写明是补记，并告诉用户 |
+| Writing `TODO.md`, `NOW.md` or `LOG.md` is refused | The task is not closed yet. Run `task close` first, then write |
+| `.workspace/goals/<id>/` is not found | Ask the user for the name of the goal. Do not make a new one in its place |
+| The folder has several goals, and it is not clear which to pick up | List the first line of each goal's `NOW.md` and let the user choose |
+| `NOW.md` says `doing`, but the matching work is not on disk | Treat the step as not done. Tell the user, and start again from this step |
+| `TODO.md` says `passed`, but `LOG.md` has no matching entry | Add one, say it was added later, and tell the user |

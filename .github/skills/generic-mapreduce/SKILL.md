@@ -1,88 +1,88 @@
 ---
 name: generic-mapreduce
-description: '把一件“要读很多东西”的事拆成几块，并行派给只读的子 agent（mapper），各交一份带出处的摘要，再由你汇总。贵，慎用。只在用户明确输入 /generic-mapreduce 时使用，agent 不要自己调用。关键词：mapreduce、并行、分块阅读、调研、分散 RCA、读代码、读知识库、头脑风暴。'
-argument-hint: '要并行读或调研的问题'
+description: 'Split a job that needs a lot of reading into parts, hand them in parallel to read-only subagents (mappers), get a summary with sources from each, then put them together yourself. Expensive: use with care. Use only when the user clearly types /generic-mapreduce; an agent must not call it by itself. Keywords: mapreduce, parallel, chunked reading, research, scattered RCA, reading code, reading the knowledge base, brainstorm.'
+argument-hint: 'The question to read or research in parallel'
 disable-model-invocation: true
 type: workflow
 specificTo: generic
 ---
 
-# MapReduce：并行分块阅读
+# MapReduce: reading in parallel chunks
 
-你拆任务、派发、收摘要、汇总。一批只读的子 agent（`mapper`）各读一块。它换来的是并行和干净的上下文，代价是用量：经验上是自己做的几倍。
+You split the job, hand out the parts, collect the summaries and put them together. A batch of read-only subagents (`mapper`) each reads one part. What it buys is parallel work and a clean context. What it costs is usage: by experience, several times what doing it yourself costs.
 
 ## When to Use This Skill
 
-**只有用户输入 `/generic-mapreduce` 才用。** 你不能自己调用它。你觉得值得并行时，可以告诉用户“这件事适合 `/generic-mapreduce`，大概多花几倍用量”，由用户决定。
+**Use it only when the user types `/generic-mapreduce`.** You cannot call it yourself. When parallel work seems worth it, you may tell the user "this suits `/generic-mapreduce`, at roughly several times the usage", and the user decides.
 
-只做“读”的事：
+It does reading only:
 
-- 调研：几个互不相关的方向各查一遍。
-- 分散的 RCA：几个可能的原因，各看各的日志和代码。
-- 分散地读代码或知识库：几个模块、几个 domain，各出一份摘要。
-- 头脑风暴：同一个问题，几个不同的角度各想一遍。
+- Research: several unrelated directions, each looked into.
+- A scattered RCA: several possible causes, each with its own logs and code.
+- Scattered reading of code or the knowledge base: several modules or domains, a summary of each.
+- Brainstorming: one question, thought through from several angles.
 
-**不做“写”的事。** mapper 没有编辑工具，也没有终端。要并行改文件，不用这个技能。
+**It does no writing.** A mapper has no edit tools and no terminal. To change files in parallel, this is not the skill.
 
 ## Prerequisites
 
-- 用户这一条提示输入了 `/generic-mapreduce`。hook 靠它放行；没有它，调用 `mapper` 会被拒绝。
-- 一次最多派几个 mapper，由 `.harness/policies/task.json` 的 `mapreduce.max_agents` 定。hook 会数，超了就拒绝。
-- 不需要先开任务。接着任务时，汇总可以写进任务目录。
+- The user typed `/generic-mapreduce` in this prompt. The hook lets the calls through because of it; without it, a call of `mapper` is refused.
+- How many mappers one run may send is set by `mapreduce.max_agents` in `.harness/policies/task.json`. The hook counts, and refuses beyond it.
+- No task needs to be open. With a task, the result can be written into the task folder.
 
 ## Step-by-Step Workflows
 
-### 1. 先判断值不值
+### 1. First judge whether it is worth it
 
-照 [值不值](references/worth-it.md) 里的表判断。三条都满足才值：
+Judge by the table in [Worth it or not](references/worth-it.md). It is worth it only when all three hold:
 
-- 各块之间不需要对方的结论。
-- 每一块都要读很多东西。
-- 你只需要每块的摘要，不需要原文。
+- No part needs the conclusions of another.
+- Every part needs a lot of reading.
+- You need only a summary of each part, not the original text.
 
-不值，就直说原因，建议你自己顺序做，然后停下等用户决定。不要为了用上这个技能硬拆。
+If it is not worth it, say why plainly, suggest doing it yourself in order, then stop and wait for the user to decide. Do not force a split just to use this skill.
 
-### 2. 告诉用户要花多少，等他同意
+### 2. Tell the user what it costs, and wait for a yes
 
-值的话，给用户看这三样，然后**停下等他回答**：
+If it is worth it, show the user these three things, then **stop and wait for the answer**:
 
-- 拆成哪几块（每块一句话：问题、范围）。不超过上限。
-- 这很贵：每个 mapper 是一个独立会话，要重新读一遍材料。总用量大约是你自己做的几倍。
-- 你建议派几个。能少就少。
+- Which parts you split it into (one sentence each: question, scope). No more than the limit.
+- It is expensive: every mapper is its own session and reads the material again from the start. The total usage is roughly several times doing it yourself.
+- How many you suggest sending. As few as will do.
 
-用户说可以，再往下。用户改了拆法，照他的来。
+Go on when the user says yes. If the user changes the split, do it their way.
 
-### 3. 派发
+### 3. Send them out
 
-- 在**同一条回复里**一次调用全部 mapper，它们才会并行。
-- 每个调用消息照 [简报模板](templates/brief.md) 写：问题、范围、要交的。mapper 看不到你的对话，简报要写全。
-- 各块的范围不要重叠。
-- 调用被 hook 拒绝：照拒绝理由做，不要换别的子 agent 重试。
+- Call all the mappers **in the same reply**, in one go: only then do they run in parallel.
+- Write each call message from the [brief template](templates/brief.md): question, scope, what to hand in. A mapper cannot see your conversation, so the brief must be complete.
+- The scopes of the parts must not overlap.
+- When the hook refuses a call: do what the reason says. Do not retry with another subagent.
 
-### 4. 汇总
+### 4. Put it together
 
-- 读每份摘要。结论要带出处（文件路径和行号）；没有出处的，标成“未核实”。
-- 摘要之间有矛盾：把两边都写出来，自己去读那几行原文再判断。不要挑一个顺眼的。
-- 有 mapper 说“简报缺”或“没查到”：告诉用户缺哪块，由用户决定要不要再来一次。不要自己再派。
-- 给用户的汇总：先结论，再每块的要点和出处，最后是没查到的和不确定的。
-- 接着任务时：把汇总写进任务目录（例如 `RESEARCH.md`），并更新 `TASK.md`。
+- Read every summary. A conclusion needs a source (file path and line number); mark one without a source as "not verified".
+- When summaries contradict each other: write down both sides, then read those lines yourself and judge. Do not just pick the one you like.
+- When a mapper says "Brief lacks" or "Not found": tell the user which part is missing, and the user decides whether to run it again. Do not send more yourself.
+- The result for the user: conclusions first, then the key points and sources of each part, and last what was not found and what is not sure.
+- With a task: write the result into the task folder (for example `RESEARCH.md`) and update `TASK.md`.
 
 ## Gotchas
 
-- **不要自己调用这个技能，也不要在没有它的时候调用 `mapper`。** hook 会拒绝，理由里写着怎么办。
-- **不要把要“共用一份理解”的事拆开。** 例如改一个设计的三个部分：各块会各想各的，合不到一起。
-- **不要派去读你自己读得完的东西。** 三五个文件自己读更快、更便宜。
-- **不要让 mapper 下最终结论。** 它只看到一块。结论由你汇总后下。
-- **不要超过上限，也不要分几轮绕过上限。** 用完了就用已有的摘要完成。
-- **mapper 的摘要不是事实。** 关键结论要自己核对出处的那几行。
-- **派出去之后，不要自己再把同一批文件读一遍。** 那是花两份钱。等摘要回来，只读要核对的那几行。
+- **Do not call this skill yourself, and do not call `mapper` without it.** The hook refuses, and the reason says what to do.
+- **Do not split work that needs one shared understanding.** Three parts of one design, for example: each part goes its own way, and they do not fit together.
+- **Do not send mappers to read what you can read yourself.** Three to five files are faster and cheaper to read yourself.
+- **Do not let a mapper draw the final conclusion.** It sees one part only. You draw the conclusion after putting things together.
+- **Do not go over the limit, and do not get around it with several rounds.** When the calls are used up, finish with the summaries you have.
+- **A mapper's summary is not fact.** For a key conclusion, check the lines of its source yourself.
+- **After sending them out, do not read the same files again yourself.** That pays twice. Wait for the summaries and read only the lines you need to check.
 
 ## Troubleshooting
 
-| 问题 | 处理方式 |
+| Issue | Solution |
 | --- | --- |
-| 调用 `mapper` 被拒，理由是用户没有输入 `/generic-mapreduce` | 你不能自己开。告诉用户可以输入它 |
-| 被拒，理由是次数用完 | 用已有的摘要完成；不够就告诉用户缺什么 |
-| mapper 没有并行，一个接一个跑 | 要在同一条回复里一次发出全部调用 |
-| mapper 没运行，也没有报错 | 它的模型比主模型贵一档时平台不运行它。告诉用户，换主模型或改 `mapper.agent.md` 的 `model` |
-| 摘要太长，占满上下文 | 简报里写明行数上限；下次拆得更细 |
+| A call of `mapper` is refused because the user did not type `/generic-mapreduce` | You cannot switch it on yourself. Tell the user they can type it |
+| Refused because the calls are used up | Finish with the summaries you have; if they are not enough, tell the user what is missing |
+| The mappers do not run in parallel but one after another | Send all the calls in the same reply, in one go |
+| A mapper did not run, and there was no error | The platform does not run it when its model is a class above the main model. Tell the user to change the main model, or the `model` in `mapper.agent.md` |
+| The summaries are too long and fill the context | Give a line limit in the brief; split finer next time |

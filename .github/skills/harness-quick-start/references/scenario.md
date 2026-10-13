@@ -1,16 +1,16 @@
-# 模拟任务的场景
+# The scenario of the practice task
 
-第三部分用的场景。想换成自己团队的场景，不要改本文件：在同一个目录新建 `scenario.override.md`，写同样的几项。存在 override 就只用它，本文件不读。这样上游更新本文件时不会冲突。
+The scenario used in part 3. To use your own team's scenario, do not change this file: create `scenario.override.md` in the same folder with the same items. When an override exists, only it is used and this file is not read. That way an upstream update of this file does not conflict.
 
-场景必须是**不改任何仓库**的任务（种类 `design`、`rca` 或 `other`），练手不会出事。
+The scenario must be a task that **changes no repository** (kind `design`, `rca` or `other`), so practising cannot go wrong.
 
-| 项 | 默认值 |
+| Item | Default |
 | --- | --- |
-| 场景一句话 | 团队要给订单表 `orders` 加数据延迟监控，先出一份设计方案 |
-| 示例提示（第 1 步，用户发） | 我要给订单表 orders 加数据延迟监控，先出一份设计方案，只要三行大纲。 |
-| 任务名 | `order-monitor` |
-| 种类 | `design`（设计方案、开发计划） |
-| 成果文件名 | `DESIGN.md`，三行大纲 |
-| 改主意的例子（第 5 步） | 要加一条：延迟超过 2 小时发邮件 |
-| 独立检查的提示（第 6 步，用户发） | `[review]=1 请对设计方案做一次独立检查。` |
-| 讲“看得见的好处”时用的例子（concepts.md） | “帮我查一下订单表为什么晚了” |
+| The scenario in one sentence | The team wants to add data delay monitoring for the orders table `orders`, and starts with a design |
+| Example prompt (step 1, sent by the user) | I want to add data delay monitoring for the orders table orders. Start with a design, a three-line outline is enough. |
+| Task name | `order-monitor` |
+| Kind | `design` (design, development plan) |
+| Name of the result file | `DESIGN.md`, a three-line outline |
+| Example of a change of mind (step 5) | Add one thing: send an email when the delay is over 2 hours |
+| The prompt for the independent check (step 6, sent by the user) | `[review]=1 Please do one independent check of the design.` |
+| The example for "what you gain" (concepts.md) | "Find out why the orders table was late" |

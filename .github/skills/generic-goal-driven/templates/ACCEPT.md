@@ -1,41 +1,41 @@
-# 第 <n> 步验收指南：<步骤名>
+# Acceptance guide for step <n>: <step name>
 
-> 复杂步骤才写。放在 `accept/<步骤号>.md`。每个步骤只测一件事，命令和 prompt 写成能直接复制的样子。
+> Only for complex steps. It goes in `accept/<step number>.md`. Every test step tests one thing, and commands and prompts are written so that they can be copied as they are.
 
-## 目的
+## Purpose
 
-<确认什么。一两句话>
+<What is confirmed. A sentence or two>
 
-## 前置
+## Setup
 
-- <要先有什么：环境、文件、哪个任务、哪个 agent>
+- <What has to be there first: the environment, files, which task, which agent>
 
-## 我已经自验过的
+## What I have checked myself
 
-| 东西 | 怎么验的 | 结果 |
+| Thing | How it was checked | Result |
 | --- | --- | --- |
-| <…> | <命令或做法> | <结果> |
+| <...> | <command or method> | <result> |
 
-我验不了的：<要用户的环境、账号或真实界面的部分；没有写“无”>
+What I cannot check: <the parts that need the user's environment, account or a real screen; write "none" if there is nothing>
 
-## 步骤
+## Steps
 
-**第 1 步：<这一步测什么>。**
+**Step 1: <what this step tests>.**
 
 ```text
-<可以直接复制的 prompt 或命令>
+<a prompt or command that can be copied as it is>
 ```
 
-预期：<看到什么>
+Expected: <what is seen>
 
-**第 2 步：<…>。**
+**Step 2: <...>.**
 
-预期：<…>
+Expected: <...>
 
-## 看哪里
+## Where to look
 
-- <文件或日志的路径，给链接>
+- <the path of a file or log, with a link>
 
-## 反馈记录
+## Feedback
 
-- <yyyy-mm-dd>，<用户>：<一句话>
+- <yyyy-mm-dd>, <user>: <one sentence>

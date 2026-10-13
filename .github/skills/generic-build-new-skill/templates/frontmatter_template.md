@@ -15,8 +15,8 @@ specificTo: generic
 | `name` | Yes | Lowercase, hyphens for spaces, max 64 characters (e.g., `generic-webapp-testing`) |
 | `description` | Yes | 10–1024 characters, clear capabilities AND use cases, wrapped in single quotes |
 | `license` | No | Reference to LICENSE.txt (e.g., `Complete terms in LICENSE.txt`) or SPDX identifier |
-| `type` | Yes | (e.g. `Type:Unit` Skill 是完成一个确定性的单元化任务，有确定的输入、输出，一般是一个工作流的 Step 或者是常被使用的工具；`Type:workflow`当Skill是一个复杂任务流的编排 |
-|  `specificTo` | Yes | e.g. `<domain-name>` or `generic` 跨Domain可用的Skill 或者 面向某一个业务领域的Skill |
+| `type` | Yes | `unit`: the skill does one well-defined unit of work with a fixed input and output, usually one step of a workflow or a tool that is used often. `workflow`: the skill arranges the steps of a complex task flow |
+| `specificTo` | Yes | `generic` for a skill usable in any domain, or `<domain-name>` for a skill for one business domain |
 
 ### Description Best Practices
 

@@ -1,75 +1,75 @@
-# 12. observe 与 report：看得见，能复盘
+# 12. observe and report: seeing it, and going over it afterwards
 
-## 一句话
+## In one sentence
 
-harness 记“发生了什么”，不记“你说了什么”。日志、统计、任务报告、任务分析页、任务看板、`doctor` 自检、固定场景 `eval`，七样东西回答七个问题。
+The harness records "what happened", not "what you said". The logs, the statistics, the knowledge base reading record, the task report, the task analysis page, the task board, the self-check `doctor` and the fixed scenarios of `eval`: eight things that answer eight questions.
 
-## 分块
+## Chunks
 
-### 12.1 七样东西
+### 12.1 The eight things
 
-| 东西 | 回答什么 | 命令 |
+| Thing | What it answers | Command |
 | --- | --- | --- |
-| 会话日志 | 这个会话里每次调用发生了什么 | 文件 `.harness/runtime/logs/<surface>/<会话>.jsonl` |
-| 统计 | 整体上有多少提示、调用、拒绝 | `harness stats` |
-| 知识库的阅读记录 | 哪些知识库文件有人读、是哪些任务读的、哪些没人读 | `harness kb reads` |
-| 任务报告 | 这个任务做了什么、谁批准的 | `task close` 自动写，`task report` 重写 |
-| 任务分析页 | 这个任务的时间和用量花在哪 | 同上，文件是 `tasks/<任务名>/report.html` |
-| 任务看板 | 哪个任务在等你、等了多久 | `task list`、`task board`（`--refresh N` 每 N 秒自己更新） |
-| 自检 | harness 配置对不对、hook 在不在跑 | `harness doctor` |
-| 固定场景 | 改了 harness 之后，行为变没变 | `harness eval list`、`show`、`check` |
+| Session log | What happened on every call in this session | The file `.harness/runtime/logs/<surface>/<session>.jsonl` |
+| Statistics | How many prompts, calls and refusals overall | `harness stats` |
+| Knowledge base reading record | Which knowledge base files are read, by which tasks, and which nobody reads | `harness kb reads` |
+| Task report | What this task did, and who approved | Written by `task close`; written again by `task report` |
+| Task analysis page | Where the time and usage of this task went | The same; the file is `tasks/<task name>/report.html` |
+| Task board | Which task waits for you, and for how long | `task list`, `task board` (`--refresh N` updates it by itself every N seconds) |
+| Self-check | Whether the harness is set up right, and whether the hook runs | `harness doctor` |
+| Fixed scenarios | Whether the behaviour changed after the harness was changed | `harness eval list`, `show`, `check` |
 
-### 12.2 日志记什么、不记什么
+### 12.2 What the log records, and what it does not
 
-- 每次 hook 调用一行：事件、工具类别、结果（放行、拒绝、哪个模块拒绝）、耗时。
-- **不记工具参数，不记提示内容**（里面可能有代码）。
-- 被拒绝或要人确认的调用，才记路径和命令，长度有限（`observe.json` 的 `max_text_chars`）。
-- 用过的技能名会记下来（因为用技能是一次工具调用）。
-- 读了知识库的哪些文件会记下来，只记文件名（`harness kb reads` 用它算哪些文件没人读）。这是“放行的调用不记碰了什么”的唯一例外，可以用 `observe.json` 的 `knowledge_base_reads` 关掉。
-- 日志保存在本机，不进 git。`harness logs prune` 清理旧的（先 `--dry-run`）。
+- One line per hook call: the event, the kind of tool, the result (let through, refused, which module refused), the time taken.
+- **No tool arguments and no prompt content** (they may hold code).
+- Only for a call that was refused or needed a person's confirmation are the path and the command recorded, up to a length (`max_text_chars` in `observe.json`).
+- The names of the skills used are recorded (because using a skill is one tool call).
+- Which knowledge base files were read is recorded, file names only (`harness kb reads` works out from it which files nobody reads). This is the one exception to "a call that is let through does not record what it touched", and it can be switched off with `knowledge_base_reads` in `observe.json`.
+- The logs stay on this machine and are not in git. `harness logs prune` removes old ones (`--dry-run` first).
 
-### 12.3 token 和耗时
+### 12.3 Tokens and time
 
-harness 的 hook 日志**不记 token**。平台对 token 和耗时有原生数据，重复造一份会过期。
+The hook log of the harness **records no tokens**. The platform has its own data on tokens and time, and a second copy would go stale.
 
-任务分析页要用量时，去读 Copilot 自己的会话记录（`~/.copilot/session-state/<会话>/events.jsonl`）：每一轮、每个工具、每个子 agent 的时间，和累计的 AIU、premium request 数。只取数字、时间和名字。这个文件不是公开的格式，可能变，也可能读不到；读不到就退回 hook 日志，只有耗时。
+When the task analysis page needs usage, it reads Copilot's own session record (`~/.copilot/session-state/<session>/events.jsonl`): the time of every turn, every tool and every subagent, and the running totals of AIU and premium requests. Only numbers, times and names are taken. This file is not a public format: it may change, and it may not be found; then it falls back to the hook log, with times only.
 
-两份记录怎么对上：hook 日志里每条提示记着它属于哪个任务，按时间找到 Copilot 记录里的同一条提示。
+How the two records are matched: the hook log notes for every prompt which task it belongs to, and the same prompt is found in Copilot's record by its time.
 
-### 12.4 任务报告
+### 12.4 The task report
 
-`task close` 写 `.workspace/reports/tasks/<任务名>/report.md`（一个任务一个文件夹）：计划全文、两次批准的时间、取了哪些文件、改动的增删行数、每次独立检查的结论、被拒绝的调用。事后回答“改了什么、谁批准的、为什么返工”不用靠回忆。
+`task close` writes `.workspace/reports/tasks/<task name>/report.md` (one folder per task): the whole plan, the times of the two approvals, which files were fetched, the lines added and removed, the verdict of every independent check, the calls that were refused. Afterwards, "what changed, who approved, why was it redone" can be answered without relying on memory.
 
-旁边的 `report.html` 回答另一个问题：时间和用量花在哪。它把每条提示拆成模型在想、工具在跑、子 agent、等你点确认，再算出等你的时间、各阶段的占比、上下文涨了多少。想让 agent 讲解，输入 `/harness-task-report`（只有用户能启动）。
+The `report.html` next to it answers another question: where the time and the usage went. It splits every prompt into model thinking, tools running, subagents and waiting for your confirmation click, and works out the time spent waiting for you, the share of each stage, and how much the context grew. To have the agent explain it, type `/harness-task-report` (only the user can start it).
 
-### 12.5 doctor：自检
+### 12.5 doctor: the self-check
 
-检查：文件齐不齐、策略合不合法、hook 配置、知识库和目标仓库、模型名写法；真的执行一次 Python；hook 最近有没有被调用；gate 最近最慢的一次，离 30 秒超时太近就警告。
+It checks: whether the files are all there, whether the policies are valid, the hook configuration, the knowledge base and the target repositories, the spelling of model names, the language; it really runs Python once; whether the hook was called recently; the slowest recent gate call, with a warning when it is too close to the 30-second timeout.
 
-输出三档：`[OK]`、`[WARN]`（不拦）、`[ERROR]`（要修）。`doctor` 是“事后验证”，能发现问题，不能预防。
+The output has three grades: `[OK]`, `[WARN]` (does not block), `[ERROR]` (has to be fixed). `doctor` is "checking afterwards": it finds problems; it cannot prevent them.
 
-### 12.6 eval：固定场景
+### 12.6 eval: fixed scenarios
 
-`.harness/eval/scenarios/` 里是几个固定场景（提示加期望）。流程：`eval show` 给出提示，你在 Copilot 里跑一遍，`eval check` 根据日志和留下的文件判断对不对。用途：改了 harness 之后看行为有没有变差；模型升级后判断该改哪一层。
+`.harness/eval/scenarios/` holds a few fixed scenarios (a prompt plus what is expected). The flow: `eval show` gives the prompt, you run it once in Copilot, and `eval check` judges from the log and the files left behind whether it went right. The use: to see whether behaviour got worse after the harness was changed; and after a model upgrade, to judge which layer to change.
 
-`copilot -p` 下 hook 不运行，所以成批自动评测目前走不通。用真实任务做前后对比的评测还没做。
+Under `copilot -p` hooks do not run, so batch evaluation does not work for now. An evaluation that compares before and after on real tasks is not done yet.
 
-### 12.7 hook 自己的错
+### 12.7 The hook's own errors
 
-hook 出错时放行，同时写 `.harness/runtime/logs/hook-errors.jsonl`。`doctor` 会提醒。
+When the hook fails it lets the call through and writes to `.harness/runtime/logs/hook-errors.jsonl`. `doctor` reminds you.
 
-## 动手看
+## Hands on
 
-- 运行 `harness stats`。
-- 运行 `harness doctor`，数 `[OK]`、`[WARN]`、`[ERROR]`。
-- 读一个任务报告：`.workspace/reports/`。
-- 打开一个会话日志的前几行（注意没有提示内容）。
+- Run `harness stats`.
+- Run `harness doctor` and count `[OK]`, `[WARN]`, `[ERROR]`.
+- Read a task report: `.workspace/reports/`.
+- Open the first lines of a session log (note there is no prompt content).
 
-## 去哪看
+## Where to look
 
-- `.harness/engine/modules/observe/`（`stats.py`）、`doctor.py`、`modules/evalcheck/`、`.harness/policies/observe.json`
+- `.harness/engine/modules/observe/` (`stats.py`), `doctor.py`, `modules/evalcheck/`, `.harness/policies/observe.json`
 
-## 常见疑问
+## Common questions
 
-- **“为什么不记提示内容？”** 里面可能有代码或敏感信息；日志只需要回答“发生了什么”。
-- **“怎么知道 hook 在不在跑？”** `doctor` 看最近一次被调用的时间。
+- **"Why is the prompt content not recorded?"** It may hold code or sensitive information; the log only has to answer "what happened".
+- **"How do I know whether the hook runs?"** `doctor` looks at when it was last called.

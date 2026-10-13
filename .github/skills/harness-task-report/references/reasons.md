@@ -1,32 +1,32 @@
-# 常见原因，和下次怎么省
+# Common reasons, and how to save next time
 
-左边是数字的样子，右边是能说的话。**数字不符合就不要说。**
+On the left is what the numbers look like, on the right what can be said. **When the numbers do not match, do not say it.**
 
-## 时间
+## Time
 
-| 数字 | 多半的原因 | 下次可以 |
+| The numbers | The likely reason | Next time |
 | --- | --- | --- |
-| `waiting_s` 远大于 `active_s`，最长的 `waits` 是 `plan` 或 `promote` | 批准卡在用户手里 | 用 `harness task list --watch` 盯着；计划写短一点更好批 |
-| `waits` 多数是 `reply`，每次几分钟 | 一条提示只做一小步，来回多 | 一次把范围和做完的标准说清 |
-| `approval_s` 占比高 | Copilot 的确认框一次次等用户点 | 常用又安全的命令，在 Copilot 里对这个会话选“允许”；危险命令照旧确认 |
-| `model_s` 占比高，`turns` 多 | 模型一轮一轮地试 | 给出明确的文件和范围，少让它找；任务拆小 |
-| `tool_s` 占比高，`tools` 里某一个 `total_s` 很大 | 某个工具慢（常见：终端命令、大范围搜索） | 看是哪一个；能缩小范围就缩小 |
-| “独立检查和返修”阶段占比高，`review_fails` 多 | 成果没达到 `REQ.md` 的标准，查了又改 | 先把 `REQ.md` 的“做完的标准”写清楚；看 `verdict.md` 里反复出现的问题 |
-| `denied` 或 `stop_blocks` 多 | agent 的做法被 hook 拒绝，换做法重来 | 看任务的 `.md` 报告里“拒绝和确认记录”，是不是同一类；是规则太紧，告诉维护的人 |
-| `failed_tool_calls` 多 | 命令写错、路径不对 | 提示里给准确的路径 |
+| `waiting_s` far above `active_s`, and the longest `waits` are `plan` or `promote` | Approvals were stuck with the user | Keep an eye on it with `harness task list --watch`; a shorter plan is easier to approve |
+| Most `waits` are `reply`, a few minutes each | Each prompt does one small step, with much back and forth | Say the scope and the standard for done in one go |
+| A high share of `approval_s` | Copilot's confirmation box waits for a click again and again | For commands that are common and safe, pick "allow" for the session in Copilot; dangerous commands still get confirmed |
+| A high share of `model_s`, and many `turns` | The model tries turn after turn | Name the files and the scope, so it searches less; split the task smaller |
+| A high share of `tool_s`, and one of `tools` has a large `total_s` | One tool is slow (common: terminal commands, wide searches) | See which one; narrow the scope where you can |
+| A high share of the stage "Independent checks and fixes", and many `review_fails` | The work did not meet the standard in `REQ.md` and was checked and fixed repeatedly | Write "Done when" in `REQ.md` clearly first; look for problems that keep coming back in `verdict.md` |
+| Many `denied` or `stop_blocks` | The hook refused the agent's way, and it started over another way | Look at the refusals and confirmations in the task's `.md` report: are they of one kind? If a rule is too tight, tell whoever maintains it |
+| Many `failed_tool_calls` | Mistyped commands, wrong paths | Give exact paths in the prompt |
 
-## 用量
+## Usage
 
-| 数字 | 多半的原因 | 下次可以 |
+| The numbers | The likely reason | Next time |
 | --- | --- | --- |
-| `context_tokens_max` 是 `context_tokens_first` 的好几倍 | 会话越聊越长，每一轮都带着全部历史 | 一个阶段做完换新会话，说“接着做 <任务名>”，`TASK.md` 会接上 |
-| 某个工具的 `result_tokens` 很大 | 读了大文件，或命令输出很长 | 让它只读需要的部分；命令加过滤 |
-| 一条提示的 `aiu` 特别高，`turns` 多 | 这条提示里跑了很多轮 | 同上面“一轮一轮地试” |
-| `subagent_tokens` 大，`reviews` 多 | 每次独立检查都是一个新的 reviewer，从头读一遍 | 不重要的任务用 `[review]=1` 或不查；先自己改到位再查 |
-| `premium_requests` 接近 `prompts` | 一条提示算一次 | 把几句小要求合成一条提示 |
+| `context_tokens_max` is several times `context_tokens_first` | The session grows longer and longer, and every turn carries the whole history | When a stage is done, open a new session and say "go on with <task name>"; `TASK.md` picks it up |
+| A large `result_tokens` for one tool | A large file was read, or a command printed a lot | Let it read only the part it needs; filter the command's output |
+| One prompt has a very high `aiu` and many `turns` | Many turns ran within this prompt | As for "tries turn after turn" above |
+| Large `subagent_tokens`, and many `reviews` | Every independent check is a new reviewer that reads everything from the start | Use `[review]=1` or no check for tasks that do not matter much; get the work right yourself first, then check |
+| `premium_requests` close to `prompts` | One prompt counts as one request | Put several small requests into one prompt |
 
-## 说的时候
+## When you say it
 
-- 先说最大的一块，带数字和占比。
-- 一条原因配一条能做的事。
-- 说不准原因时就说“数字只能看出这一步慢，看不出为什么”，再建议去看页面里那一条提示。
+- Start with the biggest part, with its number and its share.
+- One reason goes with one thing that can be done.
+- When you cannot tell the reason, say "the numbers only show that this step was slow, not why", and suggest looking at that prompt on the page.

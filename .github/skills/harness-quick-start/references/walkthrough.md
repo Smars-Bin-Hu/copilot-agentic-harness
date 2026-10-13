@@ -1,86 +1,86 @@
-# 第三部分：做一个模拟任务
+# Part 3: do a practice task
 
-场景、示例提示、任务名等都在 [scenario.md](scenario.md)。先看 `references/` 下有没有 `scenario.override.md`：有就只用它，没有用 `scenario.md`。下面写的 `<任务名>`、`<成果文件>` 等，都取自那份文件。场景不改任何仓库，所以不会出事。
+The scenario, the example prompts, the task name and so on are in [scenario.md](scenario.md). First see whether `references/` has a `scenario.override.md`: if so, use only that; if not, use `scenario.md`. `<task name>`, `<result file>` and the like below all come from that file. The scenario changes no repository, so nothing can go wrong.
 
-做法：每一步先说“我现在要做什么、为什么”，做完说“多了什么”，然后停下问用户。用户做的步骤，等他做完再往下。
+How to go about it: for every step, first say "what I am about to do, and why", after it say "what is new", then stop and ask the user. For a step the user does, wait until they have done it before going on.
 
-## 步骤
+## Steps
 
-### 1. 你说一句话（用户做）
+### 1. You say one sentence (the user does this)
 
-告诉用户：开任务不用写命令，用平常的话说。请他发“示例提示”那一条（可以改字）。
+Tell the user: opening a task needs no command, just ordinary words. Ask them to send the "example prompt" (they may change the wording).
 
-告诉他：你不用说“新建任务”，agent 听得出来。
+Tell them: you need not say "new task"; the agent can tell.
 
-### 2. agent 问几个问题（你来做）
+### 2. The agent asks a few questions (you do this)
 
-照技能 `harness-my-task` 做：`harness task list`，再问用户：种类（选场景里的种类）、要不要改目标仓库（选不改）。问之前说一句：“我在问你三件事，是为了决定任务文件夹里放几个文件。”
+Follow the skill `harness-my-task`: `harness task list`, then ask the user: the kind (pick the kind of the scenario) and whether a target repository has to change (pick no). Before asking, say: "I am asking you these things to decide how many files go into the task folder."
 
-问完运行 `harness task new <任务名> --kind <种类> --session-id <会话 id>`。
+After asking, run `harness task new <task name> --kind <kind> --session-id <session id>`.
 
-做完告诉用户：多了一个文件夹，路径是 `.workspace/sandbox/tasks/<任务名>/`。请他在左侧文件树里点开它。
+Afterwards tell the user: there is a new folder, at `.workspace/sandbox/tasks/<task name>/`. Ask them to click it open in the file tree on the left.
 
-### 3. 看两个文件（用户做）
+### 3. Look at two files (the user does this)
 
-请用户打开 `TASK.md` 和 `REQ.md`。各用一句话说它们是干什么的（见 map.md）。
+Ask the user to open `TASK.md` and `REQ.md`. Say in one sentence each what they are for (see map.md).
 
-然后你把对用户那句话的理解写进 `REQ.md`，请用户读一遍，问：“我理解对了吗？”用户说对，请用户自己把“用户确认”一行改成“<今天的日期> 已确认”：这一行只有用户能改，你不要替用户填。说不对，现场改。
+Then write what you understood from the user's sentence into `REQ.md`, ask the user to read it, and ask: "Did I get it right?" If the user says yes, ask the user to change the confirmation line themselves, to "confirmed <today's date>": only the user may change that line, and you do not fill it in for them. If they say no, fix it on the spot.
 
-停下来强调一次：**需求以 `REQ.md` 为准。** 以后你们聊着聊着需求变了，agent 先改它。
+Stop and stress once: **`REQ.md` is what counts as the requirement.** When the requirement changes later while you talk, the agent changes it first.
 
-### 4. agent 写成果
+### 4. The agent writes the result
 
-你在任务文件夹根下写“成果文件”，更新 `TASK.md` 的“现在在做”和“下一步”。告诉用户：成果放在文件夹根下；你每次停下前都会更新 `TASK.md`，这就是换个窗口也能接着做的原因。
+Write the "result file" at the root of the task folder, and update "Doing now" and "Next step" in `TASK.md`. Tell the user: results go at the root of the folder; you update `TASK.md` every time before stopping, and that is why the work can go on in another window.
 
-### 5. 你改主意（用户做）
+### 5. You change your mind (the user does this)
 
-请用户加一个条件，例如场景里的“改主意的例子”。你先改 `REQ.md` 并在“变更记录”里记一行，再改成果文件。告诉用户：顺序是先需求，后成果。
+Ask the user to add a condition, such as the "example of a change of mind" in the scenario. Change `REQ.md` first and add a line to its change record, then change the result file. Tell the user: the order is the requirement first, the result after.
 
-### 6. 找人复核（用户做）
+### 6. Get a second pair of eyes (the user does this)
 
-问用户要不要看一次独立检查。要，请他发场景里“独立检查的提示”那一条。
+Ask the user whether they want to see one independent check. If so, ask them to send "the prompt for the independent check" from the scenario.
 
-告诉他：只有他自己写的 `[review]=1` 才算数，agent 自己不能开。然后你运行 `harness task review start`，调用 `reviewer`。读完它的回答，把 `REVIEW/round-001/verdict.md` 的链接给用户，用两句话说结论。
+Tell them: only a `[review]=1` they write themselves counts; the agent cannot switch it on. Then run `harness task review start` and call `reviewer`. After reading its answer, give the user the link to `REVIEW/round-001/verdict.md` and say the verdict in two sentences.
 
-告诉用户两件事：检查的人没看过你的思路；你改过成果，通过次数就作废，要重新查。
+Tell the user two things: the checker has not seen your reasoning; and once you change the result, the passes so far no longer count and it has to be checked again.
 
-### 7. 换个窗口会怎样（用户做）
+### 7. What happens in another window (the user does this)
 
-请用户在终端运行：
+Ask the user to run this in the terminal:
 
 ```bash
 harness task list
 ```
 
-告诉他：新开一个聊天窗口，说一句“接着做 <任务名>”，agent 会读 `TASK.md`，从这里接上。不用重讲。
+Tell them: open a new chat window and say "go on with <task name>"; the agent reads `TASK.md` and picks up from here. No need to explain again.
 
-### 8. 如果要改仓库（只讲，不做）
+### 8. If a repository has to change (tell only, do not do)
 
-画一条线给用户看：
+Draw this line for the user:
 
 ```text
-你说要改什么
-  → agent 写 REQ.md 和 PLAN.md（计划）
-  → 你在终端批准计划          ← 第一次批准
-  → agent 在 DEV/ 里改（不碰真仓库）
-  → 独立检查
-  → 你在终端批准回写          ← 第二次批准
-  → 改动写到一个新分支，不提交。提交由你自己来
+You say what to change
+  -> the agent writes REQ.md and PLAN.md (the plan)
+  -> you approve the plan in the terminal             <- the first approval
+  -> the agent makes the changes in DEV/ (not in the real repository)
+  -> independent check
+  -> you approve the write-back in the terminal       <- the second approval
+  -> the changes are written to a new branch, not committed. Committing is yours to do
 ```
 
-三句话说：agent 永远不直接改真仓库；改之前你批准计划；写回前你再批准一次。
+Say it in three sentences: the agent never changes the real repository directly; before the changes you approve the plan; before the write-back you approve once more.
 
-### 9. 收尾
+### 9. Wrapping up
 
-运行 `harness task close`，把报告链接给用户。告诉他：文件夹还在，`task open` 能再打开。问他要不要删这个练手的文件夹；要删由他自己删。
+Run `harness task close` and give the user the link to the report. Tell them: the folder is still there, and `task open` opens it again. Ask whether they want this practice folder deleted; if so, they delete it themselves.
 
-最后用这张表告诉他还有哪些要他自己输入才会启动的功能（都花用量，所以 agent 不会自己用）：
+Last, use this table to tell them which other features start only when they type something themselves (all of them cost usage, so the agent does not use them by itself):
 
-| 输入 | 做什么 |
+| Type | What it does |
 | --- | --- |
-| `[review]=n` | 独立检查，刚才用过 |
-| `/harness-task-report` | 讲一个任务的时间和用量花在哪 |
-| `/generic-mapreduce` | 要读很多东西时，拆成几块并行读。贵，它会先问你 |
-| `/harness-autorun` | 计划批准后让 agent 照清单一直做（beta）。真正的开关是你在终端运行的 `harness task autorun on` |
+| `[review]=n` | An independent check; you just used it |
+| `/harness-task-report` | Explains where the time and usage of a task went |
+| `/generic-mapreduce` | When there is a lot to read: splits it into parts and reads them in parallel. Expensive; it asks you first |
+| `/harness-autorun` | After the plan is approved, lets the agent work down the list without stopping (beta). The real switch is `harness task autorun on`, which you run in the terminal |
 
-想了解原理，输入 `/harness-wondering`。
+To learn how it works inside, type `/harness-wondering`.

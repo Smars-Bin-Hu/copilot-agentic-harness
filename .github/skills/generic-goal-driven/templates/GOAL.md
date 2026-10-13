@@ -1,34 +1,34 @@
-# <目标名>
+# <goal name>
 
-> 中心思想。保持在一屏左右。需求变了才改，改时在末尾记一条变更。
+> The central idea. Keep it to about one screen. It changes only when a requirement changes; add a change entry at the end when it does.
 
-## 目标
+## Goal
 
-<一两句话：要做成什么>
+<A sentence or two: what is to be achieved>
 
-## 原则
+## Principles
 
-- <做决定时要遵守的几条，不超过 5 条>
+- <The few to follow when making decisions, 5 at most>
 
-## 范围
+## Scope
 
-- 做：<…>
-- 不做：<…>
+- Do: <...>
+- Not do: <...>
 
-## 整体验收
+## Overall acceptance
 
-- <做到什么程度，这个目标才算完成>
+- <How far it has to go for this goal to count as done>
 
-## 已定的事
+## Decided
 
-- <决定>：<原因，一句话>。<yyyy-mm-dd>
+- <decision>: <the reason, one sentence>. <yyyy-mm-dd>
 
-## 待定
+## Undecided
 
-- <用户提过、还没决定做不做的想法>
+- <ideas the user mentioned, with no decision yet whether to do them>
 
-## 变更记录
+## Change record
 
-| 日期 | 改了什么 | 为什么 | 影响的步骤 |
+| Date | What changed | Why | Steps affected |
 | --- | --- | --- | --- |
-| <yyyy-mm-dd> | 建立目标 | — | — |
+| <yyyy-mm-dd> | Goal set up | — | — |

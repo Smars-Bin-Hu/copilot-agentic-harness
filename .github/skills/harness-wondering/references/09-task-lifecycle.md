@@ -1,99 +1,99 @@
-# 9. 任务与生命周期
+# 9. Tasks and their life cycle
 
-## 一句话
+## In one sentence
 
-任务是工作的单位：一个任务一个目录。需求、计划、进度、成果都是目录里的文件，所以换一个会话、隔几天，agent 读文件就能接上。
+A task is the unit of work: one task, one folder. The requirement, the plan, the progress and the results are all files in the folder, so in another session, or days later, the agent picks up by reading files.
 
-## 分块
+## Chunks
 
-### 9.1 为什么是文件，不是对话
+### 9.1 Why files, not the conversation
 
-对话会被压缩，会话会换，agent 会忘。文件不会。所以：
+A conversation gets compressed, sessions change, and the agent forgets. Files do not. So:
 
-- `TASK.md`：接力文件。做到哪、下一步、已定的事。新会话只读它就能接上。
-- `REQ.md`：需求。独立检查只认它。
-- `.task/task.json`：给机器读的状态。`task list` 读它，不读 Markdown。
+- `TASK.md`: the handover file. How far it is, the next step, what is decided. A new session picks up by reading just this.
+- `REQ.md`: the requirement. An independent check goes by it alone.
+- `.task/task.json`: the state for machines to read. `task list` reads it, not Markdown.
 
-### 9.2 种类和档位
+### 9.2 Kinds and tiers
 
-**种类**决定“做完的标准”，**档位**决定“目录里有哪些文件”。
+The **kind** decides "what counts as done"; the **tier** decides "which files the folder has".
 
-| 种类 | 做完的标准 | 默认档位 |
+| Kind | Done when | Default tier |
 | --- | --- | --- |
-| `qa` 问答 | 答案有出处 | 轻 |
-| `rca` | 有证据链：现象、日志、根因、验证 | 中 |
-| `design` 设计、计划 | 有备选方案和取舍 | 中 |
-| `dev` 开发 | 改动符合批准的计划，有自测记录 | 全 |
-| `test` 测试 | 用例和结果落盘 | 全 |
-| `kb` 更新知识库 | 来源清楚，走 promote。知识库登记成目标仓库后，回写直接提交到它的主分支 | 全 |
-| `other` 其他 | 没有固定标准：开任务时和用户商定，写进 `REQ.md` | 中 |
+| `qa` Q&A | The answer has a source | light |
+| `rca` | There is a chain of evidence: what was seen, logs, root cause, verification | medium |
+| `design` design, plan | There are options and trade-offs | medium |
+| `dev` development | The changes match the approved plan, with a record of self-testing | full |
+| `test` testing | Cases and results are on disk | full |
+| `kb` knowledge base update | The source is clear; it goes through promote. Once the knowledge base is registered as a target repository, the write-back is committed straight to its main branch | full |
+| `other` | No fixed standard: agreed with the user when the task is opened, and written into `REQ.md` | medium |
 
-| 档位 | 文件 |
+| Tier | Files |
 | --- | --- |
-| 轻 | `TASK.md` |
-| 中 | 加 `REQ.md`、`REQ/`、`REF/`、`LOG.md` |
-| 全 | 加 `TODO.md`、`DEV/`、`TEST/` |
+| light | `TASK.md` |
+| medium | adds `REQ.md`, `REQ/`, `REF/`, `LOG.md` |
+| full | adds `TODO.md`, `DEV/`, `TEST/` |
 
-任务变大了用 `task upgrade`，只补缺的文件，只能升。
+When a task grows, use `task upgrade`: it only adds the missing files, and a tier only goes up.
 
-### 9.3 会话和任务分开
+### 9.3 Sessions and tasks are separate
 
-- 一个会话同一时间接着一个任务，可以换，原来那个不用先关。
-- 接上任务后，编辑工具只能写任务目录。
-- 每条提示开头，hook 告诉 agent 任务做到哪（接着任务）或有哪些没关闭的任务（没接任务）。
-- 关闭只改状态，目录原地不动，`task open` 可以重新打开。
+- A session holds one task at a time. It can switch, and the old task need not be closed first.
+- With a task, the edit tools can write the task folder only.
+- At the top of every prompt, a hook tells the agent how far the task is (with a task) or which tasks are not closed (without one).
+- Closing only changes the state; the folder stays where it is, and `task open` opens it again.
 
-### 9.4 需求：agent 写，你确认
+### 9.4 The requirement: the agent writes, you confirm
 
-`REQ.md` 由 agent 按对话写。**不用 hook 记你的原话**——这是一个已经放弃的设计：提示会漏、不清楚，多轮对话里需求会变，原话不等于需求。
+`REQ.md` is written by the agent from the conversation. **No hook records your exact words.** That was a design that was given up: prompts leave things out and are unclear, the requirement changes over several turns, and the exact words are not the requirement.
 
-- 需求变了，agent 先改 `REQ.md`，再动成果，并在“变更记录”里记一行。
-- 你直接下的指令如果和 `REQ.md` 冲突，hook 会提醒 agent 先同步。
-- 你自己的文档（BRD、邮件）放 `REQ/`，agent 只读。
+- When the requirement changes, the agent changes `REQ.md` first, then touches the work, and adds a line to the change record.
+- When a direct instruction of yours conflicts with `REQ.md`, a hook reminds the agent to bring them in line first.
+- Your own documents (a BRD, emails) go in `REQ/`; the agent only reads them.
 
-### 9.5 改目标仓库：两次批准
+### 9.5 Changing a target repository: two approvals
 
 ```text
-agent 写 REQ.md、PLAN.md，停下        → 你在编辑器看，终端运行 task approve-plan   ← 第一次批准
-agent task fetch 取文件到 DEV/         （用 git 读本地 main，不动你的工作区）
-agent 在 DEV/ 里改 → task diff（CHANGES.diff）
-（开了检查）task review start → reviewer 查 → 凑够 n 次
-task promote --dry-run → PROMOTE-PLAN.diff → 你终端运行 task approve-promote        ← 第二次批准
-task promote：每个仓库 git switch -c <分支> main，写文件，不提交
-task close → 写报告
+the agent writes REQ.md and PLAN.md, and stops    -> you read it in the editor and run task approve-plan in the terminal   <- the first approval
+the agent fetches files into DEV/ with task fetch    (reads the local main with git; your working tree is left alone)
+the agent makes the changes in DEV/ -> task diff (CHANGES.diff)
+(with checks on) task review start -> the reviewer checks -> n passes are reached
+task promote --dry-run -> PROMOTE-PLAN.diff -> you run task approve-promote in the terminal                               <- the second approval
+task promote: for each repository git switch -c <branch> main, files written, not committed
+task close -> the report is written
 ```
 
-要点：
+Key points:
 
-- 确认码绑定计划的 sha256，计划改了批准失效。
-- 回写前检查：工作区干净、分支名没被占、main 上要改的文件没变。所有仓库都通过才写。
-- 中途出错不自动回滚，任务进入 `partial`，你运行 `task recover`。
-- 不回写的成果（RCA、设计）放目录根下，不用批准，promote 不看它。
+- The code is bound to the sha256 of the plan; when the plan changes, the approval ends.
+- Checked before a write-back: the working tree is clean, the branch name is free, and the files to change have not changed on main. Nothing is written unless every repository passes.
+- A failure partway is not rolled back automatically: the task goes to `partial`, and you run `task recover`.
+- Work that is not written back (an RCA, a design) goes at the root of the folder, needs no approval, and promote does not look at it.
 
-### 9.6 多轮
+### 9.6 Several rounds
 
-回写过再 `task open`，开新的一轮：上一轮的成果移到 `DEV_r<n>/`，计划移到 `PLAN_r<n>.md`，要新计划、新批准。
+A `task open` after a write-back starts a new round: the work of the last round moves to `DEV_r<n>/`, the plan to `PLAN_r<n>.md`, and a new plan and a new approval are needed.
 
-### 9.7 关口快照
+### 9.7 Snapshots at the gates
 
-计划批准时、每次检查前、回写的 dry-run 前，成果自动存一份到 `SNAPSHOT/`。改坏了能找回当时的版本。默认留 14 天。
+When the plan is approved, before every check and before the dry run of a write-back, a copy of the work is saved to `SNAPSHOT/` by itself. When something is broken, the version of that moment can be found again. They are kept 14 days by default.
 
-### 9.8 太大的事：goal
+### 9.8 Something too big: a goal
 
-任务大到要很多次交付、计划一直变，用 `/generic-goal-driven`：把中心思想、步骤清单、进度指针存成文件，一步一步做，只有用户说“通过”才算过。每一步可以是一个任务。
+When a job is so big that it takes many deliveries and the plan keeps changing, use `/generic-goal-driven`: the central idea, the list of steps and the progress pointer are kept as files, it goes step by step, and a step passes only when the user says so. Every step can be a task.
 
-## 动手看
+## Hands on
 
-- 运行 `harness task list`，看任务在等什么。
-- 打开一个已有任务的 `TASK.md` 和 `.task/task.json`，对比人读的和机器读的。
-- 读 [.workspace/README.md](../../../../.workspace/README.md) 的表。
+- Run `harness task list` and see what the tasks wait for.
+- Open `TASK.md` and `.task/task.json` of an existing task, and compare what people read with what machines read.
+- Read the tables in [.workspace/README.md](../../../../.workspace/README.md).
 
-## 去哪看
+## Where to look
 
-- `.harness/engine/modules/task/`（`tasklife.py`：建、开、升档；`promote_target.py`：回写）
+- `.harness/engine/modules/task/` (`tasklife.py`: making, opening, raising the tier; `promote_target.py`: the write-back)
 - [02-features.md](../../../../docs/02-features.md)
 
-## 常见疑问
+## Common questions
 
-- **“为什么不是所有会话都必须开任务？”** 会拖慢快速问答。只是问答、不落盘时不用开。
-- **“旧版本的任务怎么办？”** 1.0 的任务目录要自己搬到 `.workspace/sandbox/tasks/`，再 `task open`。
+- **"Why does not every session have to open a task?"** It would slow down quick Q&A. For plain Q&A that writes nothing, none is opened.
+- **"What about the tasks of an old version?"** A task folder of 1.0 has to be moved to `.workspace/sandbox/tasks/` by hand, then `task open`.

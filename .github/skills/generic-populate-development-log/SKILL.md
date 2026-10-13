@@ -1,74 +1,74 @@
 ---
 name: generic-populate-development-log
-description: '将当前 session 已完成的 harness 升级写入 .local/开发日志.md。用于一次 session 完成一次开发后，按日期、核心组件更新和前后对比 Outcome 新增或修正一条开发日志。'
+description: 'Write the harness upgrade finished in the current session into .local/开发日志.md. Used after a session finishes one piece of development: adds or corrects one development log entry with the date, the core component updates and a before-and-after Outcome.'
 type: unit
 specificTo: harness-development
 ---
 
-# 写入 Harness 开发日志
+# Write the harness development log
 
-把当前 session 已完成的 harness 改动整理成一条短日志，并写入 `.local/开发日志.md`。
+Turn the harness changes finished in the current session into one short log entry and write it into `.local/开发日志.md`.
 
-## 使用时机
+## When to use it
 
-- 当前 session 已完成一次 harness 升级，需要记录开发结果。
-- 用户要求补写或修正当前 session 的开发日志。
+- The current session has finished a harness upgrade, and the result is to be recorded.
+- The user asks to add or correct the development log entry of the current session.
 
-## 工作流
+## Workflow
 
-1. 只从当前 session 的对话上下文提取事实。收集已完成的改动、验证结果和直接效果。
-2. 读取 `.local/开发日志.md`。只用它确认格式、插入位置和当前 session 是否已经写过，不把旧日志当成本次改动的事实来源。
-3. 如果当前 session 没有已经完成的改动，停止写入并说明原因。
-4. 使用运行环境的本地日期和时间。日期格式为 `YYYY-MM-DD`，时间格式为 `HH:mm`。
-5. 写一个能说明本次升级内容的短标题。
-6. 将改动归入下列分类，只保留本次实际改动过的分类：
+1. Take facts only from the conversation of the current session. Collect the finished changes, the results of verification and the direct effects.
+2. Read `.local/开发日志.md`. Use it only to confirm the format, the place to insert and whether the current session already wrote an entry. Old entries are not a source of facts for this change.
+3. If the current session has no finished change, do not write, and say why.
+4. Use the local date and time of the running environment. The date format is `YYYY-MM-DD`, the time format `HH:mm`.
+5. Write a short title that says what this upgrade is.
+6. Sort the changes into the categories below, and keep only those that really changed this time:
    - `instructions`
    - `agents`
    - `skills`
    - `tools`
    - `hooks`
    - `knowledge-base`
-   - `harness 其他功能（具体方向）`
-7. 将 contracts、eval、observability、permission control、optimization 和未列出的 harness 能力归入 `harness 其他功能`，并写明具体方向。
-8. 为每个分类写简短 bullet point。说明改了什么，以及它现在如何工作。不要写过程流水账。
-9. 写 1～3 条 Outcome。每条都用具体的前后对比，格式为“以前……；现在……”。
-10. 在 `DEVELOPMENT_LOG_ENTRIES_START` 和 `DEVELOPMENT_LOG_ENTRIES_END` 之间写入条目：
-    - 已有当天日期时，在该日期标题下方插入本次记录。
-    - 没有当天日期时，在开始标记下方新增日期和记录。
-    - 日期和同一天的记录都保持从新到旧。
-11. 如果本 session 已经写过一条日志，修改那一条。不要再新增一条。
-12. 写入后重读新增或修改的条目。确认分类准确、Outcome 简短，并且没有重复条目。
+   - `other harness features (the exact area)`
+7. Contracts, eval, observability, permission control, optimization and harness abilities not listed go under `other harness features`, with the exact area named.
+8. Write short bullet points for each category: what changed, and how it works now. No blow-by-blow account.
+9. Write 1 to 3 Outcome lines. Each is a concrete before-and-after, in the form "Before: ...; now: ...".
+10. Write the entry between `DEVELOPMENT_LOG_ENTRIES_START` and `DEVELOPMENT_LOG_ENTRIES_END`:
+    - If today's date is there already, insert this record under that date heading.
+    - If not, add the date and the record under the start mark.
+    - Dates, and records of the same day, stay newest first.
+11. If this session already wrote an entry, change that one. Do not add another.
+12. After writing, read the new or changed entry again. Confirm the categories are right, the Outcome is short, and no entry is doubled.
 
-条目使用以下结构：
+The entry has this structure. Write it in the language the log already uses, with the headings as the existing entries have them:
 
 ```markdown
 ### YYYY-MM-DD
 
-#### HH:mm｜本次升级标题
+#### HH:mm | Title of this upgrade
 
-##### 一、核心组件更新
+##### 1. Core component updates
 
 - **skills**
-  - 改了什么，以及它现在如何工作。
+  - What changed, and how it works now.
 
-##### 二、Outcome
+##### 2. Outcome
 
-- 以前……；现在……。
+- Before: ...; now: ....
 ```
 
 ## Gotchas
 
-- **不要读取 Git 历史、Git diff、提交记录或其他仓库文件来补全本次内容。** 本 Skill 的事实来源只能是当前 session。
-- **不要记录计划或声称没有验证过的效果。** 只写当前 session 已经完成并确认的内容。
-- **不要列出未改动的分类。** 空分类会让真正的改动难以看到。
-- **不要写空话。** “提升了效率”“增强了能力”必须改成可观察的前后差异。
-- **不要改动其他文件。** 本 Skill 只写 `.local/开发日志.md`。
-- **不要删除或改写其他 session 的记录。** 修正范围只限当前 session 创建的条目。
+- **Do not read git history, git diff, commit records or other repository files to fill in the content.** The only source of facts for this skill is the current session.
+- **Do not record plans, or claim effects that were not verified.** Write only what the current session finished and confirmed.
+- **Do not list categories that did not change.** Empty categories hide the real changes.
+- **No empty words.** "Improved efficiency" and "strengthened the ability" must become a before-and-after difference that can be seen.
+- **Do not change other files.** This skill writes only `.local/开发日志.md`.
+- **Do not delete or rewrite the records of other sessions.** Corrections are limited to the entry the current session made.
 
-## 故障处理
+## Troubleshooting
 
-| 问题 | 处理方式 |
+| Issue | Solution |
 | --- | --- |
-| 找不到 `.local/开发日志.md` | 停止写入，并请用户确认本地资料目录或恢复日志模板。 |
-| 找不到日志边界标记 | 不猜插入位置。停止写入，并请用户确认是否恢复模板标记。 |
-| 无法确认某项改动是否完成 | 不记录该项；需要它出现在日志中时，向用户确认。 |
+| `.local/开发日志.md` is not found | Do not write. Ask the user to confirm the local notes folder or to restore the log template. |
+| The log boundary marks are not found | Do not guess where to insert. Do not write, and ask the user whether to restore the template marks. |
+| It cannot be confirmed whether a change is finished | Do not record it; if it has to be in the log, confirm with the user. |

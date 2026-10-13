@@ -1,30 +1,30 @@
-# 提问维度清单
+# Question dimensions
 
-对照下表逐项检查任务。每一项问自己：用户说清楚了吗？我猜错了会返工吗？
-会返工就提问。表里的例子只是提示，按任务取舍，不要照搬。
+Check the task against the table below, one item at a time. For each, ask yourself: has the user made this clear? If I guess wrong, will it have to be redone?
+If it will, ask. The examples in the table are only hints: pick what suits the task, do not copy them.
 
-| 维度 | 要弄清的事 | 提问示例 |
+| Dimension | What to find out | Example question |
 | --- | --- | --- |
-| 目标 | 用户真正想要的结果是什么，为什么要做 | 这次改动要解决的具体问题是什么？ |
-| 成功标准 | 做到什么程度算完成 | 怎样算做完？有没有可以检查的标准？ |
-| 范围 | 哪些要做 | 只改 A，还是 A 和 B 都要改？ |
-| 边界 | 哪些明确不做、不能碰 | 有没有不能动的文件、接口或目录？ |
-| 输入 | 用什么数据、文件、参数 | 输入来自哪里？格式是什么？ |
-| 输出 | 产物的形式、位置、命名 | 结果放在哪个路径？用什么文件名和格式？ |
-| 约束 | 技术、风格、版本、依赖、兼容性限制 | 必须用哪种语言、库或版本？ |
-| 已有资产 | 能复用什么，是否要保持一致 | 有没有现成的做法要参照？还是重新设计？ |
-| 取舍 | 多个方案之间选哪个 | 速度和完整度冲突时，先保哪个？ |
-| 边缘情况 | 空数据、出错、重复、超大等情况怎么处理 | 遇到异常输入时，是报错、跳过，还是用默认值？ |
-| 风险与不可逆 | 删除、覆盖、外发、花钱的操作 | 这一步会覆盖已有文件，可以吗？要先备份吗？ |
-| 验证方式 | 怎么证明做对了 | 需要跑哪些测试？由谁来最终验收？ |
-| 顺序与依赖 | 先做什么，哪些能并行 | 有没有必须先完成的前置步骤？ |
-| 交付方式 | 是否提交、发布、通知谁 | 做完要提交 commit 吗？要不要更新文档？ |
-| 使用者 | 谁会用这个结果，他们懂多少 | 读者是谁？需要多详细？ |
-| 术语与指代 | 用户用的词、“它”“那个”指什么 | 你说的“旧版”是指哪个分支或哪个文件？ |
+| Goal | What result the user really wants, and why | Which exact problem is this change to solve? |
+| Standard for success | How far it has to go to be done | What counts as done? Is there a standard that can be checked? |
+| Scope | What is to be done | Change A only, or both A and B? |
+| Limits | What is clearly not to be done or touched | Are there files, interfaces or folders that must not be touched? |
+| Input | Which data, files, parameters | Where does the input come from? In which format? |
+| Output | The form, place and naming of what comes out | Which path does the result go to? Which file name and format? |
+| Constraints | Limits of technology, style, version, dependencies, compatibility | Which language, library or version must be used? |
+| What exists already | What can be reused; whether to stay consistent | Is there an existing way to follow, or is it a new design? |
+| Trade-offs | Which of several approaches | When speed and completeness conflict, which comes first? |
+| Edge cases | What to do with empty data, errors, duplicates, very large input | For bad input: fail, skip, or use a default? |
+| Risk and what cannot be undone | Deleting, overwriting, sending out, spending money | This step overwrites an existing file. Is that all right? Back it up first? |
+| How to verify | How to prove it is right | Which tests need to run? Who gives the final acceptance? |
+| Order and dependencies | What comes first, what can run in parallel | Is there a step that must be finished first? |
+| How to deliver | Whether to commit, release, notify someone | Should it be committed when done? Should the docs be updated? |
+| Who uses it | Who will use the result, and how much they know | Who is the reader? How detailed should it be? |
+| Terms and references | The user's own words; what "it" and "that one" point to | By "the old version", which branch or file do you mean? |
 
-## 判断该不该问
+## Whether to ask
 
-- 有两种以上合理理解，而它们的结果不同：问。
-- 有明显唯一的做法，且做错了改起来几乎没成本：可以不问，但写进确认清单让用户过目。
-- 涉及删除、覆盖、外发、花钱、改共享配置：一定问。
-- 你想用“通常会这样”来补空：问。
+- Two or more sensible readings with different results: ask.
+- One obvious way, and a mistake costs almost nothing to fix: you may skip the question, but put it in the checklist for the user to see.
+- Deleting, overwriting, sending out, spending money, changing shared settings: always ask.
+- You want to fill a gap with "it is usually like this": ask.

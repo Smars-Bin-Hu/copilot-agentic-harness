@@ -98,6 +98,36 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(len(names), 8, names)
 
 
+class InitializeSkillTests(unittest.TestCase):
+    """Windows prints Chinese as \\uXXXX when stdout is a pipe; the skill fixes that itself instead of leaving the WARN."""
+
+    def steps(self) -> Dict[str, str]:
+        skill = text(REPO / ".github" / "skills" / "harness-repo-initialize" / "SKILL.md")
+        body = skill[skill.index("## Step-by-Step Workflows"):skill.index("## Gotchas")]
+        return {number: chunk for number, chunk in re.findall(r"^(\d)\. (.+?)(?=^\d\. |\Z)", body, re.M | re.S)}
+
+    def test_step_8_writes_the_utf8_override_itself_when_the_sample_line_reads_fine(self) -> None:
+        check = self.steps()["8"]
+        self.assertIn("UTF-8 样例", check)
+        self.assertIn("自己写 `.harness/policies/cli.override.json`", check)
+        self.assertIn("再运行一次 `harness doctor`", check)
+        self.assertIn("是乱码，就不要改", check)
+
+    def test_step_7_does_not_ask_the_user_about_the_encoding(self) -> None:
+        step = self.steps()["7"]
+        self.assertIn("不用问用户", step)
+        self.assertNotIn("常见的两个", step)
+
+    def test_the_json_the_skill_tells_the_agent_to_write_is_what_doctor_accepts(self) -> None:
+        written = json.loads(re.search(r"`(\{\"output\": \{\"encoding\": \"utf-8\"\}\})`", self.steps()["8"]).group(1))
+        sys.path.insert(0, str(ENGINE))
+        try:
+            from core import output
+        finally:
+            sys.path.remove(str(ENGINE))
+        self.assertIn(written["output"]["encoding"], output.CHOICES)
+
+
 class ReadmeStructureTests(unittest.TestCase):
     def test_the_readme_introduces_gets_the_reader_started_and_points_at_the_docs(self) -> None:
         readme = text(REPO / "README.md")

@@ -54,10 +54,11 @@ specificTo: generic
    - 问用户：要不要让任务也能更新知识库。要，而且 `knowledge-base/` 自己是 git 仓库（有 `.git`）：在 `target.override.json` 的 `repos` 里加 `"kb": { "path": "knowledge-base", "knowledge_base": true }`，再运行 `harness target show --repo kb` 核对。不是 git 仓库就不加，告诉用户原因。细节见 [docs/03-configure.md](../../../docs/03-configure.md) 的“让任务更新知识库”。
    - 用户还没有知识库：标“跳过”，并告诉用户影响（见 Gotchas）。
 6. **公司技能。** 问用户有没有公司专用的技能，在哪。每个技能一个文件夹，放进 `.github/skills/`。文件夹名和 `SKILL.md` 的 `name` 要一致，用 `domain-<领域>-<名>` 前缀。前缀不对时告诉用户，问清楚再改名，不要自己改。
-7. **其他覆盖配置（可选）。** 问用户有没有要改的默认值。常见的两个：CLI 的中文显示成 `\uXXXX`（见 Troubleshooting）；要多保护几个路径（`gate.override.json` 的 `extra_guardrail_paths+`）。规则见 [docs/03-configure.md](../../../docs/03-configure.md) 的“override”。没有就跳过。
+7. **其他覆盖配置（可选）。** 问用户有没有要改的默认值。常见的一个：要多保护几个路径（`gate.override.json` 的 `extra_guardrail_paths+`）。规则见 [docs/03-configure.md](../../../docs/03-configure.md) 的“override”。没有就跳过。CLI 的中文显示成 `\uXXXX` 不用问用户，第 8 步处理。
 8. **检查。** 运行 `harness doctor`。
    - `[ERROR]`：照信息修，修完再运行，直到 `{"errors": 0}`。修不了的，原样告诉用户。
-   - `[WARN]`：逐条告诉用户它影响什么，由用户决定修不修。
+   - `[WARN]` 讲“输出编码”（Windows 上常见，CLI 的中文会显示成 `\uXXXX`）：看最后的 `[INFO]  UTF-8 样例` 一行。你能读，就自己写 `.harness/policies/cli.override.json`：`{"output": {"encoding": "utf-8"}}`（要 admin 模式开着），再运行一次 `harness doctor`，确认这条 WARN 没了。是乱码，就不要改，告诉用户。
+   - 其他 `[WARN]`：逐条告诉用户它影响什么，由用户决定修不修。
    - 最后给用户一张表：八项各是“配好、跳过、没通过”，跳过的各有什么影响。提醒用户运行 `harness admin off --session-id <会话 id>`，并换一个新对话做日常任务。
 
 ## Gotchas
@@ -81,5 +82,5 @@ specificTo: generic
 | 写 `*.override.json` 被拒绝 | admin 模式没开，或开的是别的会话。回到第 2 步 |
 | `harness target list` 没列出仓库 | `repos_root` 下的子文件夹要有 `.git`。路径写错时 `doctor` 会报 |
 | `doctor` 报知识库的 README 里有断链 | 链接要用相对路径，指向 `knowledge-base/` 里真实存在的文件。把断的几条告诉用户 |
-| CLI 输出的中文是 `\uXXXX` | 看 `doctor` 最后的 `[INFO]  UTF-8 样例` 一行。能读，就写 `.harness/policies/cli.override.json`：`{"output": {"encoding": "utf-8"}}`。是乱码就不要改，告诉用户 |
+| CLI 输出的中文是 `\uXXXX` | 第 8 步已经处理。单独遇到时：看 `doctor` 最后的 `[INFO]  UTF-8 样例` 一行。能读，就写 `.harness/policies/cli.override.json`：`{"output": {"encoding": "utf-8"}}`。是乱码就不要改，告诉用户 |
 | Windows 上 `python3` 找不到 | 正常。Windows 用 `python`，启动脚本会自己选 |

@@ -118,8 +118,8 @@ harness 是通用的，不带业务内容。**下面两样不接入，它没法�
 
 harness 之外：目标仓库（企业的代码仓库）
 <repos_root>/                      在 target.override.json 里配置的文件夹
-├── bdtt_repo/                     每个带 .git 的子文件夹是一个目标仓库
-└── b9td_repo/                     harness 只读它们的 main；promote 经人批准后才写到新分支
+├── a_repo/                     每个带 .git 的子文件夹是一个目标仓库
+└── b_repo/                     harness 只读它们的 main；promote 经人批准后才写到新分支
 ```
 
 </details>

@@ -64,7 +64,7 @@ def table(result: Dict[str, Any]) -> str:
         if row["status"] == "new":
             kind, state = "-", say("board.state.new")
         else:
-            kind = say(f"task.kind.{row['kind'] or 'none'}") + "·" + say(f"task.tier.{row['tier'] or 'none'}")
+            kind = say(f"task.kind.{row['kind'] or 'none'}") + " · " + say(f"task.tier.{row['tier'] or 'none'}")
             state = row["waiting"] or say("board.state.paused" if row.get("paused_since") else "board.state.running" if row["status"] == "open" else "board.state.closed")
         waited = taskinsight.clock(row["waited_s"]) if row["waiting"] and row["waited_s"] is not None else "-"
         lines.append([("! " if row["waiting"] else "  ") + row["name"], kind, state, waited, local_time(row["updated_at"])[5:16]])

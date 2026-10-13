@@ -439,6 +439,14 @@ class PageTests(BoardCase):
         self.assertEqual(result["insight"]["source"], "none")
         self.assertEqual(page_data((self.root / result["analysis"]).read_text(encoding="utf-8"))["info"]["prompts"], [])
 
+    def test_an_ampersand_in_a_name_is_escaped(self) -> None:
+        name = "a&amp;c&lt;b"  # the one markup character every file system takes in a folder name
+        self.new(name)
+        text = (self.root / self.cli_json("task", "report")["analysis"]).read_text(encoding="utf-8")
+        self.assertIn("<title>任务分析：a&amp;amp;c&amp;lt;b</title>", text)
+        self.assertEqual(page_data(text)["info"]["name"], name)
+
+    @unittest.skipIf(os.name == "nt", "Windows takes no < or > in a folder name, so a task with such a name cannot exist there")
     def test_a_name_cannot_become_markup(self) -> None:
         name = "a<script><b>&c<!--"
         self.new(name)

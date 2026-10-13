@@ -34,6 +34,8 @@ class KbCase(TaskCase):
                 item.unlink() if item.is_file() else item.rmdir()
             folder.rmdir()
         self.kb = make_repo(folder, {"README.md": "# index\n", "orders/delay.md": "old\n", "orders/unused.md": "nobody\n"})
+        for key, value in (("user.name", "t"), ("user.email", "t@example.com")):  # promote commits: not every machine has a global identity
+            run_git(self.kb, "config", key, value)
         self.override({"repos_root": str(self.repos), "repos": {"kb": {"path": KB, "knowledge_base": True}}})
 
     def kb_task(self, files: Dict[str, str], fetched: List[str]) -> None:
@@ -121,6 +123,14 @@ class PromoteTests(KbCase):
         self.kb_task({"kb/orders/delay.md": "new\n"}, ["kb/orders/delay.md"])
         run_git(self.kb, "switch", "-q", "-c", "draft")
         self.assertIn("切回 `main`", self.refused("task", "promote", "--dry-run"))
+
+    def test_no_git_identity_is_refused_before_anything_is_written(self) -> None:
+        self.kb_task({"kb/orders/delay.md": "new\n"}, ["kb/orders/delay.md"])
+        run_git(self.kb, "config", "user.name", "")  # empty here wins over a global one
+        said = self.refused("task", "promote", "--dry-run")
+        self.assertIn("没有设置 `user.name`", said)
+        self.assertNotIn("`user.email`", said)
+        self.assertEqual(run_git(self.kb, "status", "--porcelain"), "")
 
     def test_the_approval_screen_says_it_is_committed(self) -> None:
         import io

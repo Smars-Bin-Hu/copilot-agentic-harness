@@ -121,8 +121,8 @@ This repository (the harness)
 
 Outside the harness: target repositories (the company's code)
 <repos_root>/                      the folder set in target.override.json
-├── repo_a/                        each subfolder with a .git is one target repository
-└── repo_b/                        main is read-only; an approved promote writes to a new branch
+├── a_repo/                        each subfolder with a .git is one target repository
+└── b_repo/                        main is read-only; an approved promote writes to a new branch
 ```
 
 </details>

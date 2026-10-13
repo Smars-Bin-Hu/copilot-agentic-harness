@@ -1,199 +1,209 @@
-# 设计思想
+# Design
 
-先看全貌：有哪些组件、怎么分层。再看最关键的设计：以任务为中心。最后是其他设计，每条只写原因，规则本身以链接指向的文件为准。
+First the whole picture: which components there are, and how they are layered. Then the most important design: everything centres on the task. Last, the other designs, each with its reason only; the rules themselves are in the files the links point to.
 
-## 一、全貌
+## 1. The whole picture
 
-### 目标
+### The goal
 
-让 GitHub Copilot 在企业里做复杂任务时，**关键规则由代码强制，模型只负责判断**。它面向的场景是庞大的、有合规要求的数据工程（DE）团队的 git 代码库：没有入口、不能运行，比一般项目更复杂，必须有足够的、学习过代码之后整理的知识库才能胜任（见 [配置与定制](03-configure.md) 的“适用的代码库”）。模型会犯错、会乱试，只写说明它会忽略。所以 harness 把能确定的部分写成代码，不确定的部分写成说明，再用独立的检查补上。
+When GitHub Copilot does complex work in a company, **the key rules are enforced by code, and the model only judges**. The setting it is made for is the large git code stores of data engineering (DE) teams with compliance requirements: no entry point, cannot be run, more complex than an ordinary project, and manageable only with a sufficient knowledge base put together after studying the code (see the part of [Configure and customise](03-configure.md) about which code stores it suits). A model makes mistakes and tries things at random, and it ignores what is only written as text. So the harness writes what is certain as code and what is not certain as text, and fills in the rest with independent checks.
 
-### 核心可插拔组件
+### The core pluggable components
 
-| 组件 | 在哪里 | 作用 | 企业怎么定制 |
+| Component | Where | What it does | How a company customises it |
 | --- | --- | --- | --- |
-| 规则和指令 | [AGENTS.md](../AGENTS.md)、`.github/copilot-instructions.md`、`.github/instructions/` | 所有任务都要遵守的短规则，和分类规则 | 加自己的 instructions |
-| 知识库 | `knowledge-base/` 加 `knowledgebase.instructions.md` | 企业的领域资料；instructions 教 agent 按索引渐进地读 | **必须接入**，交付时为空 |
-| 技能（Skills） | `.github/skills/` | 按需加载的流程和参考 | 加 `domain-` 开头的业务技能 |
-| 智能体（Agents） | `.github/agents/` | reviewer（独立检查员）、admin（二开 harness）。平时用默认 agent | 改模型，加角色 |
-| 工具（Tools） | Copilot 原生工具；harness 的命令行 `harness` | 读、写、搜、运行命令；确定性的任务操作 | 加脚本或 MCP server |
-| Hooks 和引擎 | `.github/hooks/`、`.harness/engine/` | 在每次工具调用前后检查，强制规则 | 一般不改；用策略调 |
-| 策略 | `.harness/policies/` | “允许什么、上限多少” | 用 `*.override.json` 覆盖 |
-| 模板 | `.harness/contracts/templates/task/` | 任务文件的模板 | 按团队习惯改 |
-| 工作区 | `.workspace/` | 任务目录、报告 | — |
-| 验证 | `.harness/eval/`、`.harness/tests/`、`doctor` | 固定场景、测试、配置自检 | 加场景 |
+| Rules and instructions | [AGENTS.md](../AGENTS.md), `.github/copilot-instructions.md`, `.github/instructions/` | The short rules every task must follow, and rules by topic | Adds instructions of its own |
+| Knowledge base | `knowledge-base/` plus `knowledgebase.instructions.md` | The company's domain material; the instructions teach the agent to read step by step from the index | **Must be plugged in**; empty when shipped |
+| Skills | `.github/skills/` | Flows and references loaded on demand | Adds business skills whose names start with `domain-` |
+| Agents | `.github/agents/` | reviewer (the independent checker), mapper (the read-only chunk reader), admin (extends the harness). Day to day the default agent is used | Changes models, adds roles |
+| Tools | Copilot's built-in tools; the command line `harness` | Reading, writing, searching, running commands; task operations with a certain result | Adds scripts or MCP servers |
+| Hooks and engine | `.github/hooks/`, `.harness/engine/` | Check before and after every tool call, and enforce the rules | Usually unchanged; tuned through policies |
+| Policies | `.harness/policies/` | "What is allowed, and how much at most" | Overrides with `*.override.json` |
+| Templates | `.harness/contracts/templates/task/` | The templates of the task files, one folder per language | Changes them to suit the team |
+| Work area | `.workspace/` | Task folders, reports | — |
+| Verification | `.harness/eval/`, `.harness/tests/`, `doctor` | Fixed scenarios, tests, the self-check of the setup | Adds scenarios |
 
-引擎里的**模块**是可插拔的：`task`（任务、独立检查、每条提示的规则）、`gate`（拦截）、`observe`（日志）、`evalcheck`（场景检查）。`task` 和 `gate` 订阅自己关心的 hook 事件；`observe` 记录每次调用；`evalcheck` 只在命令行里用。每个模块有自己的策略文件和命令。开关和订阅写在 [registry.json](../.harness/registry.json)，关掉一个模块，其他照常。
+The **modules** of the engine are pluggable: `task` (tasks, independent checks, the rules with every prompt), `gate` (stopping), `observe` (logs), `evalcheck` (scenario checks). `task` and `gate` listen to the hook events they care about; `observe` records every call; `evalcheck` is used from the command line only. Every module has its own policy file and commands. The switches and the events are in [registry.json](../.harness/registry.json); with one module switched off, the others carry on.
 
-### 分层
+### The layers
 
 ```text
-用户（说要做什么，批准关键动作）
+The user (says what to do, approves the key actions)
    │
-Copilot 运行时（VS Code 里的 Copilot 会话）
+The Copilot runtime (a Copilot session in VS Code)
    │
-┌──┴─────────────────────────── 说明层：教模型怎么做 ───────────────────────────┐
-│ instructions   skills   agents   knowledge-base                             │
-└──────────────────────────────────────────────────────────────────────────────┘
-   │ 每次工具调用前后
-┌──┴─────────────────────────── 强制层：用代码拦 ───────────────────────────────┐
-│ hook.py（入口）→ adapters（读平台发来的内容）→ core（状态、合并结果）          │
-│                  → 模块：task  gate  observe  evalcheck                       │
-└──────────────────────────────────────────────────────────────────────────────┘
-   │ 读                              │ 读和写
-┌──┴────────────── 数据 ──────────┐ ┌┴──────────── 工作区和目标仓库 ─────────────┐
-│ policies（规则的数字）           │ │ .workspace/sandbox/tasks（任务目录）         │
-│ templates（任务文件的模板）      │ │ 目标仓库（只读 main；promote 经人批准才写）   │
-└──────────────────────────────────┘ └──────────────────────────────────────────────┘
+┌──┴───────────────────── The text layer: teaches the model how ─────────────────────┐
+│ instructions   skills   agents   knowledge-base                                    │
+└────────────────────────────────────────────────────────────────────────────────────┘
+   │ before and after every tool call
+┌──┴───────────────────── The enforcing layer: stops with code ──────────────────────┐
+│ hook.py (entry) -> adapters (read what the platform sends) -> core (state, merge)  │
+│                 -> modules: task  gate  observe  evalcheck                         │
+└────────────────────────────────────────────────────────────────────────────────────┘
+   │ reads                                │ reads and writes
+┌──┴──────────────── Data ─────────────┐ ┌┴──────── Work area and target repositories ─┐
+│ policies (the numbers of the rules)  │ │ .workspace/sandbox/tasks (task folders)     │
+│ templates (of the task files)        │ │ target repositories (main is only read;     │
+│ messages (the texts, per language)   │ │ promote writes after a person approves)     │
+└──────────────────────────────────────┘ └─────────────────────────────────────────────┘
 ```
 
-- **说明层**：模型会读，也会忽略。
-- **强制层**：模型忽略不了。一次工具调用的路径是：模型发出调用 → Copilot 运行 hook → `hook.py` 把事件交给订阅的模块 → 每个模块给出放行、询问或拒绝 → 合并（拒绝优先）→ 结果返回给 Copilot。
-- **数据**：规则的数字放在策略里，代码和文档里不写死。
+- **The text layer**: the model reads it, and may ignore it.
+- **The enforcing layer**: the model cannot ignore it. The path of one tool call: the model sends the call → Copilot runs the hook → `hook.py` hands the event to the modules that listen → each module says let through, ask or refuse → the results are merged (a refusal wins) → the result goes back to Copilot.
+- **Data**: the numbers of the rules are in the policies and are not hard-coded in code or docs.
 
-## 二、关键设计：以任务为中心
+## 2. The key design: everything centres on the task
 
-### 为什么没有 Level
+### Why there are no Levels
 
-1.0 把工作方式分成 L1、L2、L3 三级，让你每次先选。用了一段时间后的结论：
+1.0 split the way of working into three levels, L1, L2 and L3, and had you pick one first every time. The conclusion after some use:
 
-- L2 是唯一用得上的一档。L1、L3 大部分时间不用。
-- L3 的三角色编排在需求清楚的任务上不比单个 agent 好，用量约 4.5 倍，时间约 6 倍（见 [省时间和省钱](06-cost-optimization.md) 第九节）。
-- 每次先定级是多余的一步。两套规则并存时，agent 拿不准还会给出错的解释。
+- L2 was the only level that got used. L1 and L3 went unused most of the time.
+- The three-role setup of L3 was no better than a single agent on tasks with a clear requirement, at about 4.5 times the usage and about 6 times the time (see section 9 of [Saving time and money](06-cost-optimization.md)).
+- Picking a level first every time is a needless step. With two sets of rules side by side, the agent was unsure and gave wrong explanations.
 
-所以 1.1 去掉了 Level。不同的任务仍然受不同的管，但不按难度分，按两样分：
+So 1.1 dropped the Levels. Different tasks are still guarded differently, but not by difficulty. They are split by two things:
 
-- **做错了后果多大**。由代码按路径和命令判断，不用你选。
-- **任务是哪一种**。决定做完的标准和要哪些文件。
+- **How much a mistake costs.** Code judges it from paths and commands; you do not pick.
+- **Which kind the task is.** It decides the standard for done and which files are needed.
 
-| 后果 | 例子 | 怎么管 |
+| Consequence | Example | How it is guarded |
 | --- | --- | --- |
-| 只读 | 问答、查知识库 | 不拦 |
-| 改任务目录 | 写 RCA、设计、计划 | 不拦 |
-| 改目标仓库 | 代码、知识库 | 只能在任务的 `DEV/` 里写。计划和回写都要你在终端批准 |
-| 碰 git 或生产 | 提交、推送、改分支 | gate 拦，你在终端批准；`push` 等永远拒绝 |
+| Read only | Q&A, looking things up in the knowledge base | Not stopped |
+| Changes the task folder | Writing an RCA, a design, a plan | Not stopped |
+| Changes a target repository | Code, the knowledge base | Can be written only in the task's `DEV/`. The plan and the write-back both need your approval in the terminal |
+| Touches git or production | Committing, pushing, changing branches | The gate stops it, and you approve in the terminal; `push` and the like are always refused |
 
-### 任务目录就是沙箱
+### The task folder is the sandbox
 
-一个任务一个目录。先在目录里写好，你批准后才回写到目标仓库。
+One task, one folder. The work is written in the folder first, and written back to the target repository only after you approve.
 
 ```text
-你：说要做什么（要独立检查就写 [review]=n）
+You: say what to do (write [review]=n for independent checks)
    │
-agent：用 harness-my-task 问清楚 ─ task new ─ 把理解的需求写进 REQ.md，请你看
+The agent: asks until things are clear with harness-my-task ─ task new ─ writes the requirement as it understands it into REQ.md and asks you to look
    │
-（要改目标仓库）写 PLAN.md，停下 → 你在编辑器里看 → 在终端批准
+(a target repository is to change) writes PLAN.md and stops -> you read it in the editor -> you approve in the terminal
    │
-agent：task fetch 取文件到 DEV/ ─ 在 DEV/ 里改
+The agent: fetches files into DEV/ with task fetch ─ makes the changes in DEV/
    │
-（开了检查）task review start → reviewer 查 → 没通过就改了再查，凑够 n 次
+(with checks on) task review start -> the reviewer checks -> if it does not pass, fix and check again, until n passes
    │
-task promote --dry-run → 你在编辑器里看差异，在终端批准 → 写入目标仓库的新分支，不提交
+task promote --dry-run -> you read the diff in the editor and approve in the terminal -> written to a new branch of the target repository, not committed
    │
-task close → 自动写报告
+task close -> the report is written by itself
 ```
 
-- **这个“沙箱”靠 gate 的规则守住**，不是操作系统级的隔离。终端命令的间接写法拦不全。
-- **为什么两个批准都放在终端**：对话里的确认框可以被“本会话都允许”关掉，终端里的确认码不能。
-- **为什么内容在编辑器里看**：计划和差异在终端里不好读，所以终端只显示文件路径和确认码。
+- **This "sandbox" is held by the rules of the gate**, not by isolation at the level of the operating system. Indirect spellings of terminal commands are not all stopped.
+- **Why both approvals happen in the terminal**: a confirmation box in the conversation can be switched off with "allow for this session"; a code in the terminal cannot.
+- **Why the content is read in the editor**: plans and diffs are hard to read in a terminal, so the terminal shows only the file path and the code.
 
-### 文件接力，不靠对话
+### Handover by files, not by the conversation
 
-对话会被压缩，会话会换。所以任务的状态都在文件里：
+A conversation gets compressed, and sessions change. So the state of a task is all in files:
 
-- `TASK.md` 是接力文件：做到哪、下一步、已定的事。新会话只读它就能接上。
-- `REQ.md` 是需求。agent 按对话写，你确认；对话里需求变了，它先改这里。独立检查只认它。
-- `.task/task.json` 是给机器读的状态。`task list` 读它，不读 Markdown：agent 手写的进度会漏勾、会写错。
+- `TASK.md` is the handover file: how far it is, the next step, what is decided. A new session picks up by reading just this.
+- `REQ.md` is the requirement. The agent writes it from the conversation and you confirm it; when the requirement changes in the conversation, it changes this file first. An independent check goes by it alone.
+- `.task/task.json` is the state for machines to read. `task list` reads it, not Markdown: progress an agent writes by hand misses ticks and gets things wrong.
 
-为什么不存你的原话：提示可能有遗漏、不清楚，多轮对话里需求会变。原话不等于需求。
+Why your exact words are not kept: a prompt may leave things out or be unclear, and the requirement changes over several turns. The exact words are not the requirement.
 
-### 分工本身没有价值
+### Dividing the work has no value in itself
 
-多 agent 只在换来三样之一时才值：独立的视角、并行、无人值守。所以：
+Several agents are worth it only when they buy one of three things: an independent point of view, parallel work, or working unattended. So:
 
-- **没有专门的调度 agent**。调度的人要懂任务，推进任务的就是负责这个任务的 agent。
-- **子 agent 只有两个**。reviewer 换来独立视角：没看过作者的思路，只看需求、成果和差异。mapper 换来并行：几个只读的阅读员各读一块，只交摘要（`/generic-mapreduce`）。
-- **无人值守不是一个 agent，是任务的一种模式**（autorun，beta）。推进任务的还是负责它的那个 agent；Stop hook 按事实让它接着做或停下。
-- **这三样都要用户开**：它们花钱或放权。
-- **agent 之间不传话，都读写任务目录的文件**。子 agent 无状态、不能追问。文件人也能看，断了能接着做。reviewer 的输入是评审包，输出由 hook 落盘。
+- **There is no dedicated dispatching agent.** Whoever dispatches has to understand the task, and the one who moves a task forward is the agent that holds it.
+- **There are two subagents only.** The reviewer buys an independent point of view: it has not seen the author's reasoning and looks only at the requirement, the work and the diff. The mapper buys parallel work: several read-only readers each read one part and hand in a summary only (`/generic-mapreduce`).
+- **Working unattended is not an agent; it is a mode of a task** (autorun, beta). The one who moves the task forward is still the agent that holds it; the Stop hook makes it go on or lets it stop, by the facts.
+- **All three have to be switched on by the user**: they cost money or hand over control.
+- **Agents do not pass messages to each other; they all read and write the files of the task folder.** A subagent has no state and cannot ask back. People can read the files too, and the work can go on after a break. The reviewer's input is the review package, and a hook writes its output to disk.
 
-### 检查由代码数
+### The code counts the checks
 
-`[review]=n` 的规则见 [核心功能](02-features.md)。设计上的三点：
+The rules of `[review]=n` are in [Core features](02-features.md). Three points of design:
 
-- **关口用事实判断**。通过了几次，从检查记录和成果的 sha256 现算，不采信 agent 说“我查过了”。
-- **只有你能开**。hook 读你的提示原文里的标记。agent 自己多查会多花钱，这个决定由你做。
-- **次数有上限**。reviewer 可能一直挑毛病。到上限 agent 停下，由你决定再给几次还是放行。
+- **The gate judges by facts.** How many passes there are is worked out afresh from the record of checks and the sha256 of the work; the agent saying "I checked it" is not taken.
+- **Only you can switch it on.** A hook reads the mark in the text of your prompt. An agent checking more by itself costs more money, and that decision is yours.
+- **There is a limit on checks.** A reviewer may keep finding fault. At the limit the agent stops, and you decide whether to give more checks or to let it through.
 
-目标仓库不能运行，检查只能靠读。结论的可信度来自三样：检查的人没看过作者的思路、每次换新的、知识库里写明了规则。
+A target repository cannot be run, so checking can only be reading. The trust in a verdict comes from three things: the checker has not seen the author's reasoning, it is a new one every time, and the knowledge base states the rules.
 
-## 三、其他关键设计
+## 3. Other key designs
 
-### 用代码拦，用说明教
+### Stop with code, teach with text
 
-- 能确定的部分，用 hook 和命令行强制：危险命令、越界写、没开检查就调子 agent、没凑够通过次数就回写。
-- 不能确定的部分（需求对不对、成果好不好），写成说明和技能让模型做，再用 reviewer 独立检查。
-- harness 不替模型思考，输出质量仍取决于模型。它把错误挡在边界上，把事实留在日志里。
+- What is certain is enforced with hooks and the command line: dangerous commands, writes out of bounds, a subagent called without checks on, a write-back without enough passes.
+- What is not certain (whether the requirement is right, whether the work is good) is written as text and skills for the model to do, and then checked independently by the reviewer.
+- The harness does not think for the model; the quality of the output still depends on the model. It stops mistakes at the limits and keeps the facts in the logs.
 
-### 一条规则只有一个主要来源
+### A rule has one main source
 
-[AGENTS.md](../AGENTS.md) 放所有任务都要遵守的短规则。细则放在 `.github/instructions/`、`.github/skills/`、`.harness/policies/`。其他地方只放链接和一句话，不复制全文，避免改了一处忘了另一处。
+[AGENTS.md](../AGENTS.md) holds the short rules every task must follow. The details are in `.github/instructions/`, `.github/skills/` and `.harness/policies/`. Other places hold only a link and one sentence, never a copy, so that a change in one place does not leave another behind.
 
-### 渐进式披露
+### Step-by-step disclosure
 
-不要一次加载全部内容。README 是索引，AGENTS.md 只放核心规则，技能先只读名字和描述，需要时才读全文。知识库同样：先读索引，再按需往下读。这样上下文短，agent 不容易被无关内容带偏。
+Do not load everything at once. The README is an index, AGENTS.md holds only the core rules, and of a skill only the name and the description are read first, the whole text when needed. The same goes for the knowledge base: the index first, then further as needed. That keeps the context short, and the agent is less easily led astray by things that do not matter.
 
-### 只支持 Copilot 会话
+### One copy of the prose, two languages of output
 
-VS Code 的聊天输入框有 Session Target。harness 只支持选 **Copilot** 的会话（底下是 Copilot SDK）。
+The docs, rules and skills exist once, in English. What follows the user is the output: every text the engine prints is in a table per language (`messages.en.json`, `messages.zh.json`) with the same names and placeholders, the task templates are in a folder per language, and a hook tells the agent which language to answer and write in. One setting picks the language: `language` in `user.json`.
 
-- **Local 会话**：不支持。hook 的输出是 Copilot 会话的格式，Local 会话读不懂，拒绝不生效。VS Code 的文档说 Local 以后会移除。用了 Local 会话，`harness doctor` 会给 `[WARN]`。
-- **Claude、Codex 会话**：没测过，当作不生效。
-- **`copilot -p`（命令行，无界面）**：实测仓库里的 hook 不运行，harness 不生效。
+- A table can be kept right: a test fails when the two languages differ in a name or a placeholder. Prose cannot: a second copy drifts, and nobody tests it.
+- The engine's own output is certain. The agent's language is a request to the model, like any instruction.
+- What the code looks for in a task file (the confirmation line of `REQ.md`) is found in either language, so changing the setting does not break an existing task.
 
-### hook 自己出错时放行
+### Only Copilot sessions are supported
 
-hook 只在明确违反策略时拒绝。它自己出错（配置写坏、解析失败）时放行，并写入 `hook-errors.jsonl`。hook 在每次工具调用前运行，误伤的代价比漏拦大。`doctor` 负责发现配置问题。
+The chat box of VS Code has a Session Target. The harness supports only sessions with **Copilot** picked (the Copilot SDK underneath).
 
-有两种情况 hook 自己管不了，由平台决定（2026-10-10 在 Copilot 会话里实测）：
+- **Local sessions**: not supported. The output of the hook is in the format of Copilot sessions; a Local session cannot read it, and a refusal has no effect. The VS Code documentation says Local will be removed. With a Local session, `harness doctor` gives a `[WARN]`.
+- **Claude and Codex sessions**: not tested, and taken as not working.
+- **`copilot -p` (the command line, no window)**: measured: the hooks of the repository do not run, and the harness has no effect.
 
-- **hook 启动不了**（例如找不到 Python）：平台当作拒绝，所有工具调用都失败，界面只显示 `hook errored`。
-- **hook 超时**：平台直接放行，没有提示。gate 平时几十毫秒，超时是 30 秒。
+### The hook lets a call through when it fails itself
 
-另外，VS Code 的 `chat.useHooks` 设置管不到 Copilot（SDK）会话：用户设置和工作区设置都关掉，hook 照常运行。hook 配置文件是窗口启动时读的，改过要 Reload Window。
+The hook refuses only when a policy is clearly broken. When it fails itself (a broken setting, a parse error), it lets the call through and writes to `hook-errors.jsonl`. The hook runs before every tool call, and hurting normal work costs more than missing a stop. Finding setup problems is the job of `doctor`.
 
-所以 `doctor` 会试着执行一次 Python，并报告 gate 最近的耗时，离超时太近就给 `[WARN]`。
+There are two cases the hook itself cannot handle; the platform decides them (measured in a Copilot session on 2026-10-10):
 
-### 人批准关键动作，批准不能被 agent 代劳
+- **The hook cannot start** (Python is not found, say): the platform counts it as a refusal, every tool call fails, and the screen only says `hook errored`.
+- **The hook times out**: the platform just lets the call through, with no notice. The gate normally takes a few dozen milliseconds; the timeout is 30 seconds.
 
-批准计划、回写仓库（promote）、恢复仓库、放行独立检查、批准 git 写命令，都要你在自己的终端里打字确认：
+Also, the VS Code setting `chat.useHooks` does not reach Copilot (SDK) sessions: with it off in both the user and the workspace settings, the hooks run all the same. The hook configuration file is read when the window starts; after a change, Reload Window.
 
-- 要真终端（管道、脚本不行），agent 运行它们会被 gate 拒绝。
-- 弹窗确认不够用：VS Code 的“Allow in this Session”会关掉它，所以关键批准不用弹窗。
-- 确认码来自计划或命令本身，计划在批准后变了就失效。
+So `doctor` tries to run Python once and reports the recent times of the gate, with a `[WARN]` when they are too close to the timeout.
 
-### admin：权限跟着会话，不跟着 agent
+### A person approves the key actions, and the agent cannot do it for them
 
-二开 harness 要改 guardrail 文件。hook 的输入里没有主 agent 的名字，所以“选了 admin agent”不能当成放行的依据：别的 agent 也会被当成 admin。
-放行的依据是会话状态里的 admin 开关，只有你在终端输入确认码才能打开，状态文件在 admin 模式下仍然不能写。
-admin agent 文件只负责教它怎么做；admin 模式不和任务混用。
+Approving a plan, writing back to a repository (promote), recovering a repository, waiving independent checks and approving a git write command all need you to type a confirmation in your own terminal:
 
-### 目标仓库：只取要改的文件，不动工作区
+- A real terminal is needed (a pipe or a script will not do), and when an agent runs these commands the gate refuses.
+- A pop-up confirmation is not enough: "Allow in this Session" of VS Code switches it off, so the key approvals do not use pop-ups.
+- The code comes from the plan or the command itself; when the plan changes after the approval, it no longer holds.
 
-企业的仓库文件很多，不可能整个复制。目标场景是数据工程 pipeline 代码库：没有入口、不能在本机运行，按 domain 或功能存放大量类型混杂的文件（Python、SQL、`.json`、`.sh`、PowerShell）。所以 reviewer 靠读和差异来检查，不靠运行测试；检查和计划的质量取决于知识库，知识库是这类仓库的必需品，不是附加项。harness 用 `git` 读本地 main，把计划里要改的文件取进任务的 `DEV/`；回写时在新分支上写文件，不提交。你的工作区、当前分支、已有的提交都不被改动，出问题可以用 `task recover` 或 `git` 命令恢复。
+### admin: rights follow the session, not the agent
 
-### 长任务：一组任务
+Extending the harness means changing guardrail files. The input of a hook does not carry the name of the main agent, so "the admin agent was picked" cannot be the ground for letting things through: any other agent would pass for admin.
+The ground is the admin switch in the session state, which only you can set by typing a code in the terminal; the state file still cannot be written in admin mode.
+The admin agent file only teaches it how to work; admin mode does not mix with a task.
 
-一个任务是一次交付。任务大到要很多次交付、计划会一直变时，用 `/generic-goal-driven` 把三样东西存成文件：中心思想（`GOAL.md`）、步骤清单（`TODO.md`）、进度指针（`NOW.md`）。这也是开发这个仓库用的办法：先有中心思想，再拆步骤，一步一步做、自验、让人验收。
+### Target repositories: only the files to change are fetched, and the working tree is left alone
 
-- **只用文件，不加命令和状态机**：agent 直接读写，人也能直接改。记录和磁盘不一致时以磁盘为准。
-- **人把关**：只有用户启动，只有用户说“通过”步骤才通过。成本是 agent 自己宣布通过时没有代码拦它，靠说明约束。
-- **不改 gate**：接着任务的会话不能写这些文件，流程里规定“开工前写指针，结束后更新”，不为它开例外。
+A company's repositories have many files, and copying one as a whole is out of the question. The target setting is a data engineering pipeline code store: no entry point, it cannot run on a local machine, and it holds a large number of mixed files by domain or function (Python, SQL, `.json`, `.sh`, PowerShell). So the reviewer checks by reading and by the diff, not by running tests; the quality of checks and plans depends on the knowledge base, which is a necessity for such a repository, not an extra. The harness reads the local main with `git` and fetches the files the plan changes into the task's `DEV/`; for a write-back it writes the files on a new branch and does not commit. Your working tree, your current branch and your existing commits are not changed, and when something goes wrong it can be put right with `task recover` or with `git` commands.
 
-### 不做的事
+### Long tasks: a group of tasks
 
-- 不做多 agent 编排，不按次数限制搜索和工具调用。实测没有多大用，模型自己会调节，省钱靠选模型。
-- 不做沙盒：终端命令可以写任何路径，gate 只拦常见写法。需要强隔离用操作系统或容器。
-- 不自动 push、建 PR、fetch、pull。这些对外的动作永远由人做。
-- 不自动回滚跨仓库的写入：中途出错就停下来，说清楚做了什么，由人恢复。
-- 不把业务知识放进仓库。`knowledge-base/` 交付时是空的，由企业接入。
+A task is one delivery. When a job is so big that it takes many deliveries and the plan keeps changing, `/generic-goal-driven` keeps three things as files: the central idea (`GOAL.md`), the list of steps (`TODO.md`) and the progress pointer (`NOW.md`). This is also how this repository is developed: the central idea first, then the steps, then one step at a time: do, check, let a person accept.
+
+- **Files only, no commands and no state machine**: the agent reads and writes them directly, and a person can change them directly too. When the record and the disk disagree, the disk wins.
+- **A person holds the gate**: only the user starts it, and a step passes only when the user says "passed". The cost is that no code stops an agent that declares a pass itself; text has to hold it.
+- **The gate is not changed**: a session with a task cannot write these files; the flow says "write the pointer before starting, update after the end", and no exception is made for it.
+
+### What is not done
+
+- No orchestration of several agents, and no limit by count on searches and tool calls. It was measured to be of little use: the model regulates itself, and money is saved by choosing the model.
+- No sandbox: a terminal command can write any path, and the gate stops only the common spellings. For strong isolation use the operating system or a container.
+- No automatic push, PR, fetch or pull. These outward actions are always done by a person.
+- No automatic rollback of writes across repositories: on a failure partway it stops, says clearly what was done, and a person recovers.
+- No business knowledge in the repository. `knowledge-base/` is empty when shipped, and the company plugs its own in.
+- No second copy of the docs, rules or skills in another language.

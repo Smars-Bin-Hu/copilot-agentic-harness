@@ -1,317 +1,354 @@
-# 版本记录
+# Release notes
 
-每个版本改了什么。新的在上面。
+What changed in every version. The newest on top.
 
-每个版本分三栏：
+Every version has three parts:
 
-- **新增**：新功能。
-- **变更**：已有功能的行为变了。升级后要注意。
-- **退役**：删掉的功能，和用什么代替。
+- **Added**: new features.
+- **Changed**: the behaviour of an existing feature changed. Take note after upgrading.
+- **Retired**: features that were removed, and what replaces them.
 
-查自己装的是哪一版：`harness --version`。
+To see which version you have: `harness --version`.
 
-## 1.3.1（2026-10-12）
+## Next (not released)
 
-在 Windows 上实测了一遍，修了测出来的问题。看板能自己更新。没有不兼容的改动；任务报告换了位置，见“变更”。
+The harness speaks two languages: one setting picks English or Chinese for what it prints and for what the agent answers in. English is the default now. The docs, rules and skills are in English only. **Take note of "Changed" before upgrading: the default language changed.**
 
-**测试情况**：自动测试在 Windows 上通过（704 个）。Windows 个人电脑上的 Copilot 手测做完，13 项：自检、全量测试、短命令、换行、目标仓库和知识库、门卫、改仓库、更新知识库、看板和报告、并行分块阅读、autorun 连续推进、admin、初始化技能。从 GitHub 下载 zip、解压后运行 `doctor` 也试过。独立检查的两条修复（“用户确认”、结论前多一句）只有自动测试，没有在 Copilot 里再跑一次。Mac 没有重跑这一版。公司电脑没测。
+**Testing**: the automatic tests pass on the Mac (724). Nothing of this version has been run in Copilot yet: whether the agent follows the English rules as it followed the Chinese ones, whether it answers in the language the injected line names, and whether skills still trigger on Chinese prompts all have to be tested by hand, on the Mac and on Windows.
 
-### Windows 实测发现并修好的
+### Added
 
-- **CLI 的中文显示成 `\uXXXX`**：输出给管道或重定向时，Windows 的编码是 cp1252，写不出中文。Copilot 的终端就是这种情况，agent 读到的全是转义码。以前 `doctor` 给 WARN，要自己写 `cli.override.json`。现在 `output.encoding: auto` 在这种管道上直接输出 UTF-8，`doctor` 那一行是 OK，并说明原来的编码。终端不受影响。
-- **“用户确认”没填，独立检查就不通过**：`REQ.md` 的这一行只有用户能改。reviewer 按没确认判 FAIL，作者又改不了，一个任务白用了 2 次检查。现在评审包会写明这一行没填、不算问题，reviewer 的规则和 `AGENTS.md` 也这样写。新手引导里“agent 替你写上已确认”的说法改成了请你自己填。
-- **reviewer 在结论前多说一句，结论就丢了**：`VERDICT:` 要在第一行。前面多一行，结论记成“没有结论”，白用一次检查。现在在开头三行里找。
-- **看板上很长的“在等什么”把表格撑出页面**：autorun 停下的原因是一长句，后半句和右边几列都看不到。现在在格子里换行。
-- **门卫不认 PowerShell 的 `Push-Location`**：先 `Push-Location` 进一个文件夹，再写里面受保护的文件，以前拦不住。现在和 `cd`、`Set-Location` 一样拒绝。以前只认 `pushd`、`Set-Location`、`sl`。
-- **任务名带 `< > : " | ? *` 时报原始的 WinError 123**：任务名就是文件夹名，Windows 不收这些字符。现在 `task new` 用一句话说清楚。
-- **初始化技能误报“短命令已配好”**：VS Code 带着旧的 PATH 时，`harness` 在这个窗口能用，重开后找不到。技能现在在 Windows 上多对一次账户的 PATH，不一致就告诉你。
-- **初始化技能为编码问用户**：第 7 步不再问；第 8 步里 agent 看 `doctor` 的“中文样例”一行，是乱码才自己写 `native`。
-- **没有全局 git 身份的电脑上，7 个自动测试失败**：6 个是测试里的知识库仓库没有身份，1 个用了 Windows 不收的任务名。被测的代码没有问题，改的是测试。另有 2 个 doctor 测试从 Git Bash 启动会失败，也改了。
+- **The language setting**: `language` in `.harness/policies/user.json`, `en` (the default) or `zh`. Set it in `user.override.json`. The environment variable `HARNESS_LANGUAGE` wins over the file. It covers three things:
+  - what the CLI and the hooks print: refusal reasons, the rules injected with every prompt, command output, the task report, the analysis page, the board;
+  - the templates of the task files (`TASK.md`, `REQ.md`, `TODO.md`, `LOG.md`);
+  - the language the agent is told to answer and write in: one line injected with every prompt, and for the reviewer and the mapper when they start. This one is a request to the model; code cannot enforce it.
+- **Every text of the engine in both languages**: `core/messages.en.json` and `core/messages.zh.json`, with the same names and placeholders. The code holds only the names. A test fails when the two differ.
+- **`doctor` shows the language** in effect and where it comes from, and reports a value other than `en` or `zh` as an error.
+- **The reasons in `gate.json` are in both languages**: `"why": {"en": "...", "zh": "..."}`. An override may still give one plain string.
+- The initialize skill asks for the language in its user step; the first lesson and the deep course say what the setting does.
 
-### 新增
+### Changed
 
-- **`task board --refresh N` 让看板一直是新的**：以前它只让页面每 N 秒重新载入，数字不变，要自己再运行一次命令。现在命令不退出，每 N 秒重新生成看板和每个任务的分析页，页面自己重新载入，Ctrl+C 退出。每次都写在原来的文件上，不多出文件。它会占着终端，是给人用的。
-- **任务分析页写出“现在在等你”**：任务开着、在等你时，页面顶部有一行，写在等什么、已等多久。下面的数字不变，仍只算到最后一条提示。“生成于”挪到标题下面。
-- **`output.encoding` 多一个值 `native`**：一律不改编码，写不出的字显示成 `\uXXXX`（以前 `auto` 的做法）。读输出的程序不认 UTF-8、中文成了乱码时用它。已经写了 `utf-8` 的不用改。
+- **The default language is English.** After upgrading, the CLI, the refusals and the injected rules are in English, and the agent is told to answer in English. To keep Chinese: write `{"language": "zh"}` in `.harness/policies/user.override.json`.
+- **The docs, rules and skills are in English only**: `README.md`, `docs/`, `AGENTS.md`, `.github/` (instructions, agents, skills), `.harness/INDEX.md`, `.workspace/README.md`, the eval scenarios. The Chinese originals are in the tag `1.3.1`.
+- **The task file templates moved into one folder per language**: `.harness/contracts/templates/task/en/` and `zh/`. A template of your own placed right in `templates/task/` is still used when the language folder has none; move changed templates into the language folder.
+- **The confirmation line of `REQ.md` is found in either language** ("User confirmed" or "用户确认"), and counts as filled in when it has a date or the word for confirmed. A task made in Chinese is still read with the setting on English, and the other way round.
+- `AGENTS.md`: the language part now says that shipped files are English, and that what the agent says and writes follows the setting. Before, it said to write documents in Chinese only.
+- The eval scenario `g5` matches on the command, not on the text of the refusal reason, so it passes in either language.
+- The pages (`report.html`, `board.html`) carry the language of their texts in `<html lang>`.
 
-### 变更
+### Retired
 
-- **报告按任务分文件夹**：以前所有任务的报告都在 `.workspace/reports/` 一层（`task-<任务名>.md`、`task-<任务名>.html`）。现在是 `.workspace/reports/tasks/<任务名>/report.md` 和 `report.html`。看板还在 `.workspace/reports/board.html`。一个任务的报告重新生成时，它旧位置的文件会被删掉；没再生成过的旧报告留在原处，可以自己删。
-- **`output.encoding: auto` 的做法变了**：在写不出中文的管道上，以前输出 `\uXXXX`，现在输出 UTF-8。读输出的程序不认 UTF-8 时会看到乱码，写 `native` 换回原来的做法。
-- **`cli.override.json` 被 git 忽略**，和 `target.override.json`、`user.override.json` 一样。
-- **并行分块阅读**：派出 mapper 之后，agent 不再自己把同一批文件读一遍。
-- **README 重排**：开头一句话说清它是什么；“三步上手”直接给三条命令（`/harness-repo-initialize`、`/harness-quick-start`、`/harness-wondering`）；麻烦和做法并成一张表；加了版本号等徽章；目录树默认折叠。
-- **路径索引搬出 README**，放到 `.harness/INDEX.md`。agent 找文件时只读这一份，不用读 README。`AGENTS.md` 和 admin agent 的指向跟着改了。
-- `AGENTS.md` 开头的“定位”一节写短了，意思没变。
-- **版本记录改名**：`docs/08-release-notes.md` 改成 `docs/07-release-notes.md`。
+- **`README.zh-CN.md`** and the idea of a Chinese copy of the docs. One copy is kept, in English.
 
-### 退役
+### How to upgrade
 
-- **`docs/07-prompts.md`（提示模板）删除**。有了 `/harness-my-task`，不用再抄长提示：agent 会问清楚，需求落在 `REQ.md`，计划要你批准。仍有用的内容（一句话怎么说、`[review]=n` 标记）并进了 [快速开始](01-quickstart.md) 的“日常怎么说”。
+1. Put the files of the new version in place and run `harness doctor`. Look at the "Language" line.
+2. For Chinese output, write `{"language": "zh"}` in `.harness/policies/user.override.json` (it needs admin mode when an agent writes it; you can also just create the file yourself).
+3. If you changed the task templates, move your versions into `templates/task/en/` or `templates/task/zh/`.
+4. If your `gate.override.json` adds terminal rules, their `why` can stay one string; to have it in both languages, write `{"en": "...", "zh": "..."}`.
 
-### 知道、还没改的
+## 1.3.1 (2026-10-12)
 
-- Windows PowerShell 5.1 的 `Get-Content` 读没有 BOM 的 UTF-8 文件是乱码。agent 在终端里这样读任务文件时会遇到；用读文件的工具没有这个问题。
-- `TASK.md` 里“建于”是 UTC 的日期，“更新”是本地的日期，夜里会差一天。
-- 公司电脑上要看的三件事还没有结果：`doctor` 的“中文样例”一行是不是乱码；autorun 能不能连续推进；Opus 5.5 不可用时是否回退。
+Measured once through on Windows, and the problems found were fixed. The board can update by itself. No incompatible changes; the task reports moved: see "Changed".
 
-### 怎么升级
+**Testing**: the automatic tests pass on Windows (704). The manual Copilot test on a personal Windows computer is done, 13 items: self-check, the full tests, the short command, line endings, target repositories and the knowledge base, the gatekeeper, changing a repository, updating the knowledge base, the board and the reports, reading in parallel chunks, autorun pushing on, admin, the initialize skill. Downloading the zip from GitHub, unpacking it and running `doctor` was tried too. The two fixes for independent checks (the confirmation line, one sentence before the verdict) have automatic tests only and were not run again in Copilot. The Mac was not run again for this version. Company computers were not tested.
 
-1. 换上新版本的文件，运行 `harness doctor`。下载 zip 的：解压到短路径（例如 `C:\dev\harness`），路径太长 `doctor` 会警告。
-2. 旧的任务报告留在 `.workspace/reports/` 一层，不会自己搬。要用新位置的，对那个任务运行一次 `harness task report --task <任务名>`。
-3. 为了中文写过 `{"output": {"encoding": "utf-8"}}` 的，可以不动，也可以删掉：默认值现在就够了。
+### Found and fixed in the Windows measurement
 
-## 1.3.0（2026-10-12）
+- **Chinese text of the CLI showed as `\uXXXX`**: when output goes to a pipe or a redirect, the encoding on Windows is cp1252, which cannot write Chinese. Copilot's terminal is exactly this case, and all the agent read was escape codes. Before, `doctor` gave a WARN and you had to write `cli.override.json` yourself. Now `output.encoding: auto` prints UTF-8 on such a pipe, and that line of `doctor` is OK and names the original encoding. A terminal is not affected.
+- **An unfilled confirmation line made an independent check fail**: only the user can change this line of `REQ.md`. The reviewer gave FAIL for "not confirmed", the author could not change it, and a task wasted 2 checks. Now the review package states that the line is not filled in and that this is not a problem, and the reviewer's rules and `AGENTS.md` say the same. In the first lesson, "the agent writes confirmed for you" became asking you to fill it in yourself.
+- **One sentence of the reviewer before the verdict lost the verdict**: `VERDICT:` had to be on the first line. With one line before it, the verdict was recorded as "no verdict" and a check was wasted. Now it is looked for in the first three lines.
+- **A very long "waiting for" on the board pushed the table off the page**: the reason for an autorun stop is a long sentence, and its second half and the columns to the right could not be seen. Now it wraps inside the cell.
+- **The gatekeeper did not know `Push-Location` of PowerShell**: a `Push-Location` into a folder followed by a write to a protected file in it was not stopped. Now it is refused like `cd` and `Set-Location`. Before, only `pushd`, `Set-Location` and `sl` were known.
+- **A task name with `< > : " | ? *` gave a raw WinError 123**: the task name is the folder name, and Windows does not take these characters. Now `task new` says so in one sentence.
+- **The initialize skill wrongly reported "the short command is set up"**: when VS Code carries an old PATH, `harness` works in this window and is not found after reopening. On Windows the skill now also compares with the PATH of the account and tells you when they differ.
+- **The initialize skill asked the user about the encoding**: step 7 no longer asks; in step 8 the agent looks at the sample line of Chinese in `doctor` and writes `native` itself only when it is garbage.
+- **On a computer with no global git identity, 7 automatic tests failed**: in 6 the knowledge base repository of the test had no identity, and 1 used a task name Windows does not take. The code under test was fine; the tests were changed. 2 more doctor tests failed when started from Git Bash and were changed too.
 
-任务可以更新知识库；几个任务排队回写；并行分块阅读；autorun（beta）。没有不兼容的改动。
-
-**测试情况**：自动测试通过。Mac 上的 Copilot 手测做完（知识库回写、排队、mapper、autorun 连续推进）；Windows 和公司电脑没测。
+### Added
 
-### 新增
+- **`task board --refresh N` keeps the board fresh**: before, it only made the page reload every N seconds while the numbers stayed, and you had to run the command again yourself. Now the command does not exit, makes the board and the analysis page of every task again every N seconds, the page reloads by itself, and Ctrl+C quits. Each time it writes over the same files; no extra files. It holds the terminal, so it is for people.
+- **The task analysis page says "waiting for you now"**: while a task is open and waits for you, a line at the top of the page says what it waits for and for how long. The numbers below do not change and still run to the last prompt only. "Made at" moved below the title.
+- **`output.encoding` has one more value, `native`**: the encoding is never changed, and a character that cannot be written shows as `\uXXXX` (what `auto` did before). Use it when the program reading the output does not know UTF-8 and Chinese turns into garbage. If you wrote `utf-8` already, nothing has to change.
 
-- **任务可以更新知识库**：在 `target.override.json` 里把知识库登记成目标仓库，加 `"knowledge_base": true`。之后更新知识库和改代码走同一条路：取文件、在 `DEV/` 下改、你批准计划和回写。不同的是，知识库直接写进它的主分支，harness 提交一次（只含这次的文件），不建新分支。harness 不 push。配置见 [03-configure.md](03-configure.md) 的“让任务更新知识库”。
-- **`harness kb reads`**：知识库的每个文件被读了几次、是哪些任务读的，哪些文件没人读过。hook 只记文件名，不记内容。开关：`observe.json` 的 `knowledge_base_reads`。
-- 任务报告多一节“读过的知识库文件”。
-- **并行分块阅读 `/generic-mapreduce`**：一件事要读很多东西、又能拆成互不相关的几块时，agent 把它派给几个只读的子 agent（mapper），各交一份带出处的摘要，再汇总。只有你输入 `/generic-mapreduce` 才能用；agent 先告诉你拆法和大概多花几倍用量，等你同意。一次最多 4 个 mapper（`task.json` 的 `mapreduce.max_agents`），hook 数次数。只做读，不并行改文件。
-- **autorun（beta）**：计划批准后，agent 照 `TODO.md` 一直做，不用你每步盯着。你在终端运行 `harness task autorun on` 并输入确认码才开；要先有批准的计划、没勾的步骤和 `[review]=n`。hook 按事实推进或停下：做完、计划被改、检查用完、被拒绝 2 次、继续满 20 次、过了 120 分钟、连续 3 次没进展、agent 说走不下去、你关掉。中间不回写，做完生成回写计划等你批准。技能 `/harness-autorun` 带你做准备。数字在 `task.json` 的 `autorun`。
-- **新的子 agent `mapper`**：只读，没有编辑工具和终端。
-- **回写排队**：几个任务要写同一个仓库时，`harness task queue` 列出每个仓库现在被哪个任务占着（它回写的文件你还没提交）、后面排着谁、你下一步做什么。顺序：已批准的在前，等你批准的其次，还在做的最后。`task list` 的输出和终端看板也带上排队顺序。harness 仍然不替你提交。
-- **总览文档 [00-overview.md](00-overview.md)**：它解决什么问题；Copilot agent、知识库和 domain 技能、harness 框架、被作用对象四部分各管什么；harness 对代码仓库、Azure DevOps、服务器、数据库管到哪里；接入要做什么。入门课 `/harness-quick-start` 第一部分同步加了“四样东西各管什么”。
-- `target.json` 里仓库的 `path` 可以写相对路径，从 harness 文件夹算起（例如 `knowledge-base`）。
+### Changed
 
-### 变更
-
-- `REQ.md` 的“用户确认”只有用户能改，autorun 下也一样。没确认就在 `LOG.md` 记一笔，reviewer 按“待确认”看。（`AGENTS.md`）
-- gate 多拦一种终端写法：先 `cd` 进一个目录，再用相对路径写 guardrail 文件、任务的 `.task/` 等受保护的文件。以前只认命令里直接写出的路径。gate 仍然不是沙盒，看不出的写法见 [02-features.md](02-features.md) 的 gate 一节。
-- 任务分析页和看板的时间改成你这台电脑的本地时间（以前是 UTC）。终端看板（`task list --text`）也是。JSON 输出里的时间仍是 UTC。
-- 任务分析页的每条提示下面，显示你输入的开头 40 个字，方便认出是哪一条。只在页面上，不给 agent。不想显示：`task.json` 的 `report.prompt_chars` 设成 `0`。
-- `task report` 的输出改成紧凑的一行，`insight` 默认只有总数、阶段、等待和要点；最慢的提示、工具、每次检查要加 `--detail` 才有。给 agent 读的字数少了一半以上。
-- promote 被“工作区不干净”挡住时，如果仓库正停在另一个任务回写的分支上，拒绝理由会说是哪个任务、让你先提交。
-- `task list` 的 JSON 多了 `promote_queue`。
-- 会话日志里，读了知识库文件的调用多一个字段 `kb`（文件名列表）。其他放行的调用仍然不记碰了什么。
-- 任务经过里，搁置和恢复记成 `pause`、`unpause`（1.2.0 里恢复记成 `resume`，和“会话接上任务”重名）。另一个会话 `task open` 一个搁置的任务时，现在会自动恢复它。
+- **Reports are in one folder per task**: before, the reports of all tasks were in one level of `.workspace/reports/` (`task-<task name>.md`, `task-<task name>.html`). Now they are `.workspace/reports/tasks/<task name>/report.md` and `report.html`. The board is still `.workspace/reports/board.html`. When the report of a task is made again, its files at the old place are deleted; old reports that were never made again stay where they are, and you can delete them yourself.
+- **What `output.encoding: auto` does changed**: on a pipe that cannot write Chinese it used to print `\uXXXX`, and now prints UTF-8. A program reading the output that does not know UTF-8 sees garbage; write `native` to get the old way back.
+- **`cli.override.json` is ignored by git**, like `target.override.json` and `user.override.json`.
+- **Reading in parallel chunks**: after sending out the mappers, the agent no longer reads the same files again itself.
+- **The README was rearranged**: one sentence at the start says what it is; "Get started" gives three commands directly (`/harness-repo-initialize`, `/harness-quick-start`, `/harness-wondering`); the troubles and the answers became one table; badges for the version and the like were added; the folder tree is folded by default.
+- **The path index moved out of the README** into `.harness/INDEX.md`. An agent looking for a file reads only this and not the README. The pointers in `AGENTS.md` and in the admin agent follow.
+- The first part of `AGENTS.md`, on what the repository is, was shortened; the meaning is the same.
+- **The release notes were renamed**: `docs/08-release-notes.md` became `docs/07-release-notes.md`.
 
-## 1.2.0（2026-10-11）
+### Retired
 
-任务看板和任务分析：一眼看出哪个任务在等你，一个任务的时间和用量花在哪。没有不兼容的改动。
+- **`docs/07-prompts.md` (prompt templates) is deleted.** With `/harness-my-task`, long prompts need not be copied any more: the agent asks until things are clear, the requirement lands in `REQ.md`, and the plan needs your approval. What was still useful (how to say it in one sentence, the `[review]=n` marks) went into "What to say day to day" of the [Quick start](01-quickstart.md).
 
-**测试情况**：在 Mac 的 Copilot（SDK）会话里手测通过。`task pause`、`task resume` 是手测之后加的，只跑过自动测试。**Windows 还没有测**：Copilot 的会话记录在不在、`--watch` 清屏、`--open` 开浏览器，要在 Windows 上确认。
+### Known and not changed yet
 
-### 新增
+- `Get-Content` of Windows PowerShell 5.1 reads a UTF-8 file without a BOM as garbage. An agent reading task files this way in the terminal runs into it; the file-reading tool does not have the problem.
+- In `TASK.md`, the created date is a UTC date and the updated date a local one; at night they differ by a day.
+- Three things to look at on a company computer have no result yet: whether the sample line of Chinese in `doctor` is garbage; whether autorun can push on several times in a row; whether there is a fallback when Opus 5.5 is not available.
 
-- **任务分析页**：`harness task report` 除了原来的 Markdown 报告，再写一个 `task-<任务名>.html`。它回答“这个任务的时间和用量花在哪”：
-  - agent 干活多久，等你多久。
-  - 干活的时间里，模型在想、工具在跑、子 agent、等你点确认各占多少。
-  - 每一条提示一根条形图：耗时、用量、轮数、调用数，中间等了多久、在等什么。
-  - 各个阶段（需求和计划、开发、独立检查和返修、回写）的时间和用量。
-  - 上下文大小的变化、每个工具的耗时和结果 token、每次独立检查的结论和 token。
-  - 最上面是“要点”：最突出的几件事，写成句子。
-  - 页面是一个自包含的文件：样式、脚本、数据都在里面，不联网，双击就能打开。`task close` 时也会写。
-  - 页面的样子和画法在 `.harness/engine/modules/task/web/`（HTML 骨架、CSS、JS），和算数的 Python 分开。要改外观只改这里。
-- **用量**：读 Copilot 自己的会话记录 `~/.copilot/session-state/<会话>/events.jsonl`，得到 AIU 和 premium request 数。只取数字、时间和名字，不取提示原文、工具参数和结果。读不到时退回 hook 日志：只有耗时，没有用量，页面上会写明。开关：`task.json` 的 `report.copilot_events`。
-- **任务看板**：
-  - `harness task list` 多了“等了多久”，等你的任务里等得最久的排最上面。
-  - `harness task list --text` 输出给人看的表格；`--watch` 每隔几秒刷新（`--interval` 改间隔），Ctrl+C 退出。
-  - `harness task board` 写 `.workspace/reports/board.html`：每个任务在等什么、等了多久、时间和用量，点任务名进它的分析页。`--all` 连关闭的一起列，`--open` 直接用浏览器打开。
-- **“agent 停下了，等你”**：任务所在会话的 agent 停下时，hook 在任务状态里记一笔；你发下一条提示时去掉。看板靠它知道球在你手里。
-- **新的等待原因**：“检查次数用完了，等你决定”。
-- **搁置任务**：`harness task pause --task <任务名>` 把任务先放一边。看板把它标成“搁置”，不再算进“在等你”；搁置的这段时间，分析页也不算“等你”。接着做：`harness task resume --task <任务名>`，或直接在它的会话里发提示。两条命令只能由你在终端运行。
-- **技能 `/harness-task-report`**：agent 读看板或一个任务的数字，用几句话讲清楚花在哪、为什么、下次怎么省，再给页面链接。只有你输入它才运行，agent 不会自己调用；看板、分析页和“等你”的标记默认都不花 token。
-
-### 变更
-
-- `task list` 的 JSON 每个任务多了 `waiting_why`、`waiting_since`、`waited_s`、`paused_since`，总数多了 `paused`。
-- `task report` 的输出多了 `analysis`（页面路径）和 `insight`（同一份数字）。
-- 会话日志里，任务的提示多记一个字段 `task`（任务目录）。报告靠它分清一条提示属于哪个任务。升级前的日志没有这个字段，报告按“会话当时接着哪个任务”推算。
-- 任务状态多了 `sessions`：每次有会话接上任务都记一笔。
-
-## 1.1.0（2026-10-11）
-
-以任务为中心。没有 Level 了：工作的单位是任务，一个任务一个目录，换会话能接着做；独立检查由代码数。**这一版有不兼容的改动，升级前先看“退役”和“怎么升级”。**
-
-**测试情况**：在 Mac 的 Copilot（SDK）会话里手测通过。**Windows 还没有测**：路径用反斜杠时 gate 认不认得任务目录、PowerShell 里输确认码、中文不乱码，这几项要在 Windows 上确认。
-
-
-### 新增
-
-- **任务**：`task new` 新建、`task open` 接上（关了的会重开）、`task upgrade` 升档、`task list` 列出全部。任务建在 `.workspace/sandbox/tasks/`。
-- **种类和三档**。种类有问答、RCA、设计、开发、测试、更新知识库，和不属于它们的“其他”（`other`）。轻档只有 `TASK.md`；中档多 `REQ.md`、`REQ/`、`REF/`、`LOG.md`；全档再多 `TODO.md`、`DEV/`、`TEST/`。
-- **接力文件 `TASK.md`**：新会话先读它，就知道做到哪。agent 在一条提示里写过任务文件、却没更新它时，结束前会被提醒一次（开关：`task.json` 的 `task_file_reminder`）。
-- **需求文件 `REQ.md`**：agent 按和你的对话写，你看过才算数；需求变了它先改这里，并记一行变更。你自己的文档（BRD、邮件）放 `REQ/`，agent 只读。
-- **技能 `/harness-my-task`**：你说要做什么，它问清楚再开任务或接上任务。每条提示的规则里会提醒 agent 用它，并告诉它有哪些没关闭的任务。
-- **技能 `/harness-quick-start`**：给新用户上入门课：先讲 harness 是什么，再讲目录，最后做一个模拟任务。模拟任务的场景可以用 `references/scenario.override.md` 换成自己团队的，不用改上游文件。
-- **技能 `/harness-wondering`**：深度教程，15 个主题，互动式讲解 coding agent 和 harness 的原理、实现、设计取舍。
-- **任务种类 `other`（其他）**：宽泛的问题、一次性的情况分析、不属于前六种的事，不用硬套。没有固定的完成标准，开任务时和你商定，写进 `REQ.md`。
-- **一个会话可以换任务**，原来那个不用先关。`task list` 把在等你批准的任务排在前面。
-- **独立检查 `[review]=n`**。在任务的提示里写 `[review]=2`，成果就要连续通过 2 次检查，每次换一个新的 reviewer，才能回写。
-  - 没通过，agent 自己按问题改了再查。改过成果、需求或计划，之前的通过不算，重新数。
-  - 每条问题带“文件:行”。第 2 次起只报影响正确性的问题。reviewer 只指出问题，不写怎么改。
-  - 每次检查的评审包和结论存在任务目录的 `REVIEW/round-NNN/`。结论是 reviewer 的原话，agent 改不了。
-  - 最多查 n + 2 次。用完了 agent 停下，由你决定：`task review extend` 再给几次，或 `task review waive` 放行这一版。
-  - 没凑够通过次数时，`task promote --dry-run` 被拒绝。
-- **关口快照**。计划批准时、每次检查前、promote 的 dry-run 前，任务的成果自动存一份到 `SNAPSHOT/`。改坏了能找回批准时的版本。默认留 14 天，`task snapshot list`、`task snapshot prune` 查看和清理。
-- `doctor` 发现旧位置 `.workspace/current_tasks/` 下还有任务目录时给 `[WARN]`，并说怎么办。
+### How to upgrade
 
-### 变更
+1. Put the files of the new version in place and run `harness doctor`. If you download the zip: unpack it to a short path (for example `C:\dev\harness`); `doctor` warns when the path is too long.
+2. Old task reports stay in the one level of `.workspace/reports/` and do not move by themselves. To have one at the new place, run `harness task report --task <task name>` for that task once.
+3. If you wrote `{"output": {"encoding": "utf-8"}}` for Chinese, you can leave it or delete it: the default is enough now.
 
-- **不用再选 Level，不用再写 `/l1`、`/l2`。** 写了也没有作用。
-- **子 agent 的规则变了**：没有接着任务的会话不能调用子 agent；接着任务的会话只能调用 reviewer，而且要先 `task review start`。
-- **检查员叫 reviewer**，模型是 Sonnet，没有就退到 Haiku。旧的 `[verify]`、`[no-verify]` 不再认，改写 `[review]=1`、`[review]=0`。
-- **每条提示开头注入的规则短了**：没接任务时三四行，接着任务时是这个任务做到哪。不再有 Level 和预算的说明。
-- **搜索和工具调用不再有次数上限。**
-- `task close` 之后目录原地不动，`task open` 可以重新打开。
-- 直接改目标仓库被拒时，理由指向任务目录的 `DEV/` 和技能 `harness-my-task`。
-- agent 在终端运行 `task review extend`、`task review waive` 会被 gate 拒绝，和其他批准类命令一样。
-- 策略文件 `orchestration.json` 改名 `task.json`，字段变了：`fetch.max_files`、`task_file_reminder`、`review`、`snapshots`。`gate.json` 去掉了 `l3_write_root`。
-- `harness stats` 的输出变了：`prompts`、`task_prompts`、`tool_calls` 是数字，不再按 Level 分；`verifier_verdicts` 改名 `review_verdicts`；没有 `budget_denials` 了。
-- 会话日志每行不再有 `level`；独立检查的结论那一行 `judge` 是 `reviewer`。
+## 1.3.0 (2026-10-12)
+
+A task can update the knowledge base; several tasks queue for the write-back; reading in parallel chunks; autorun (beta). No incompatible changes.
+
+**Testing**: the automatic tests pass. The manual Copilot test on the Mac is done (knowledge base write-back, the queue, the mapper, autorun pushing on); Windows and company computers were not tested.
+
+### Added
+
+- **A task can update the knowledge base**: register the knowledge base as a target repository in `target.override.json`, with `"knowledge_base": true`. After that, updating the knowledge base goes the same way as changing code: fetch files, change them under `DEV/`, you approve the plan and the write-back. The difference: the knowledge base is written straight into its main branch, the harness commits once (with only the files of this time), and no new branch is made. The harness does not push. The setup is in the part of [03-configure.md](03-configure.md) about letting a task update the knowledge base.
+- **`harness kb reads`**: how often each file of the knowledge base was read and by which tasks, and which files nobody read. The hook records file names only, no content. The switch: `knowledge_base_reads` in `observe.json`.
+- The task report has one more part, on the knowledge base files read.
+- **Reading in parallel chunks, `/generic-mapreduce`**: for a job that needs a lot of reading and can be split into parts that have nothing to do with each other, the agent hands it to several read-only subagents (mappers), each hands in a summary with sources, and the agent puts them together. It can be used only when you type `/generic-mapreduce`; the agent first tells you the split and roughly how many times the usage, and waits for your yes. 4 mappers at most in one run (`mapreduce.max_agents` in `task.json`); a hook counts. Reading only; no changing files in parallel.
+- **autorun (beta)**: after the plan is approved, the agent works down `TODO.md` without you watching every step. It is on only after you run `harness task autorun on` in the terminal and type the code; an approved plan, unticked steps and `[review]=n` are needed first. A hook pushes on or stops by the facts: done, the plan changed, the checks used up, refused 2 times, pushed on 20 times, 120 minutes passed, 3 times in a row with no progress, the agent says it cannot go on, you switch it off. Nothing is written back on the way; at the end it makes the write-back plan and waits for your approval. The skill `/harness-autorun` takes you through getting ready. The numbers are under `autorun` in `task.json`.
+- **A new subagent, `mapper`**: read only, with no edit tools and no terminal.
+- **The write-back queue**: when several tasks write to the same repository, `harness task queue` lists for every repository which task holds it now (it wrote files back that you have not committed), who waits behind it, and what you do next. The order: approved ones first, then those waiting for your approval, then those still in progress. The output of `task list` and the board in the terminal carry the queue order too. The harness still does not commit for you.
+- **The overview doc [00-overview.md](00-overview.md)**: which problem it solves; what each of the four parts does (the Copilot agent, the knowledge base and domain skills, the harness framework, what is acted on); how far the harness reaches for code repositories, Azure DevOps, servers and databases; what plugging in takes. Part 1 of the first lesson `/harness-quick-start` got "what each of the four things does" at the same time.
+- The `path` of a repository in `target.json` can be a relative path, starting from the harness folder (for example `knowledge-base`).
+
+### Changed
+
+- Only the user can change the confirmation line of `REQ.md`, under autorun too. When it is not confirmed, a note goes into `LOG.md`, and the reviewer treats the requirement as "to be confirmed". (`AGENTS.md`)
+- The gate stops one more terminal spelling: a `cd` into a folder, then a write by a relative path to a guardrail file, a task's `.task/` or another protected file. Before, only paths spelled out in the command were known. The gate is still not a sandbox; the spellings it cannot see are in the gate part of [02-features.md](02-features.md).
+- The times on the task analysis page and the board are the local time of your computer now (they were UTC). The same for the board in the terminal (`task list --text`). Times in JSON output are still UTC.
+- Under every prompt on the task analysis page, the first 40 characters you typed are shown, to tell which prompt it is. On the page only, not given to the agent. To show none: set `report.prompt_chars` in `task.json` to `0`.
+- The output of `task report` became one compact line, and `insight` by default has only the totals, the stages, the waits and the key points; the slowest prompts, the tools and every check come only with `--detail`. The text an agent reads is less than half of what it was.
+- When promote is stopped by "the working tree is not clean" and the repository sits on the branch another task wrote back, the refusal reason says which task and asks you to commit first.
+- The JSON of `task list` has `promote_queue` now.
+- In the session log, a call that read knowledge base files has one more field, `kb` (the list of file names). For other calls that are let through, what they touched is still not recorded.
+- In the course of a task, pausing and resuming are recorded as `pause` and `unpause` (in 1.2.0 resuming was recorded as `resume`, the same name as "a session picks up the task"). When another session runs `task open` on a paused task, it is resumed by itself now.
+
+## 1.2.0 (2026-10-11)
+
+The task board and the task analysis: one look shows which task waits for you, and where the time and usage of a task went. No incompatible changes.
+
+**Testing**: passed by hand in a Copilot (SDK) session on the Mac. `task pause` and `task resume` were added after the manual test and have automatic tests only. **Windows was not tested yet**: whether Copilot's session record is there, clearing the screen for `--watch`, and opening the browser for `--open` have to be confirmed on Windows.
+
+### Added
+
+- **The task analysis page**: besides the Markdown report, `harness task report` writes a `task-<task name>.html`. It answers "where did the time and usage of this task go":
+  - How long the agent worked, and how long it waited for you.
+  - Of the working time, the shares of model thinking, tools running, subagents and waiting for your confirmation click.
+  - One bar per prompt: time, usage, turns, calls, and how long it waited in between and for what.
+  - The time and usage of each stage (requirement and plan, development, independent checks and fixes, write-back).
+  - How the size of the context changed, the time and result tokens of every tool, the verdict and tokens of every independent check.
+  - At the top are the "key points": the few things that stand out most, written as sentences.
+  - The page is one self-contained file: the styles, the scripts and the data are all in it, nothing goes on the network, and a double click opens it. It is written at `task close` too.
+  - How the page looks and draws is in `.harness/engine/modules/task/web/` (the HTML skeleton, CSS, JS), apart from the Python that does the sums. To change the look, change only this.
+- **Usage**: read from Copilot's own session record `~/.copilot/session-state/<session>/events.jsonl`, which gives AIU and the number of premium requests. Only numbers, times and names are taken, not the text of prompts or the arguments and results of tools. When it cannot be read, it falls back to the hook log: times only, no usage, and the page says so. The switch: `report.copilot_events` in `task.json`.
+- **The task board**:
+  - `harness task list` has "how long it has waited", and of the tasks waiting for you the longest wait is on top.
+  - `harness task list --text` prints a table for people; `--watch` refreshes every few seconds (`--interval` changes the gap), and Ctrl+C quits.
+  - `harness task board` writes `.workspace/reports/board.html`: what each task waits for and for how long, its time and usage, and a click on a task name leads to its analysis page. `--all` lists closed ones too, and `--open` opens it in the browser right away.
+- **"The agent stopped and waits for you"**: when the agent of a task's session stops, a hook notes it in the task state; your next prompt removes it. That is how the board knows the ball is with you.
+- **A new reason for waiting**: "the checks are used up and wait for your decision".
+- **Pausing a task**: `harness task pause --task <task name>` puts a task aside for now. The board marks it "paused" and no longer counts it as "waiting for you"; the paused time does not count as "waiting for you" on the analysis page either. To go on: `harness task resume --task <task name>`, or just a prompt in its session. Only you can run the two commands, in the terminal.
+- **The skill `/harness-task-report`**: the agent reads the board or the numbers of one task, says in a few sentences where it went, why, and how to save next time, and gives the link to the page. It runs only when you type it, and the agent does not call it by itself; the board, the analysis page and the "waiting for you" marks cost no tokens by default.
+
+### Changed
+
+- The JSON of `task list` has `waiting_why`, `waiting_since`, `waited_s` and `paused_since` for every task, and `paused` in the totals.
+- The output of `task report` has `analysis` (the path of the page) and `insight` (the same numbers).
+- In the session log, the prompts of a task record one more field, `task` (the task folder). The report tells by it which task a prompt belongs to. Logs from before the upgrade lack the field, and the report works it out from "which task the session held at the time".
+- The task state has `sessions`: a note every time a session picks the task up.
+
+## 1.1.0 (2026-10-11)
+
+Everything centres on the task. There are no Levels any more: the unit of work is the task, one task is one folder, the work goes on after a change of session, and the code counts the independent checks. **This version has incompatible changes: read "Retired" and "How to upgrade" before upgrading.**
+
+**Testing**: passed by hand in a Copilot (SDK) session on the Mac. **Windows was not tested yet**: whether the gate knows the task folder when paths use backslashes, typing the code in PowerShell, and Chinese not turning into garbage have to be confirmed on Windows.
+
+### Added
 
-### 退役
+- **Tasks**: `task new` makes one, `task open` picks one up (a closed one is reopened), `task upgrade` raises the tier, `task list` lists them all. Tasks are made in `.workspace/sandbox/tasks/`.
+- **Kinds and three tiers.** The kinds are Q&A, RCA, design, development, testing, knowledge base update, and "other" (`other`) for what is none of these. The light tier has only `TASK.md`; medium adds `REQ.md`, `REQ/`, `REF/`, `LOG.md`; full adds `TODO.md`, `DEV/`, `TEST/`.
+- **The handover file `TASK.md`**: a new session reads it first and knows how far the work is. When the agent wrote task files in a prompt and did not update it, it is reminded once before it ends (the switch: `task_file_reminder` in `task.json`).
+- **The requirement file `REQ.md`**: the agent writes it from the conversation with you, and it counts only after you have read it; when the requirement changes, the agent changes this file first and adds a change line. Your own documents (a BRD, emails) go in `REQ/`; the agent only reads them.
+- **The skill `/harness-my-task`**: you say what you want done, and it asks until things are clear, then opens a task or picks one up. The rules with every prompt remind the agent to use it and tell it which tasks are not closed.
+- **The skill `/harness-quick-start`**: a first lesson for new users: first what the harness is, then the folders, last one practice task. The scenario of the practice task can be replaced with your team's own in `references/scenario.override.md`, with no change to the upstream file.
+- **The skill `/harness-wondering`**: the deep course, 15 topics, an interactive explanation of how coding agents and the harness work, how they are built, and the design choices.
+- **The task kind `other`**: a broad question, a one-off look at a situation, anything that is none of the first six: no need to force a fit. There is no fixed standard for done; it is agreed with you when the task is opened and written into `REQ.md`.
+- **A session can switch tasks**, and the old one need not be closed first. `task list` puts the tasks waiting for your approval first.
+- **Independent checks, `[review]=n`.** Write `[review]=2` in a prompt of the task, and the work has to pass 2 checks in a row, each with a new reviewer, before it can be written back.
+  - When it does not pass, the agent fixes the findings itself and checks again. Once the work, the requirement or the plan changes, the earlier passes do not count, and the count starts again.
+  - Every finding has "file:line". From the 2nd check on only what affects correctness is reported. The reviewer only points out findings and does not write how to fix them.
+  - The review package and the verdict of every check are kept in `REVIEW/round-NNN/` of the task folder. The verdict is the reviewer's own words, and the agent cannot change it.
+  - At most n + 2 checks. When they are used up the agent stops and you decide: `task review extend` for more checks, or `task review waive` to let this version through.
+  - Without enough passes, `task promote --dry-run` is refused.
+- **Snapshots at the gates.** When the plan is approved, before every check and before the dry run of promote, a copy of the task's work is saved to `SNAPSHOT/` by itself. When something is broken, the version of the approval can be found again. Kept 14 days by default; `task snapshot list` and `task snapshot prune` show and remove them.
+- `doctor` gives a `[WARN]` when task folders are still at the old place `.workspace/current_tasks/`, and says what to do.
 
-- **Task Level（L1、L2、L3）**：整个删掉，包括 `level status`、`level set`、搜索预算、技能 `l1`、`l2`、`harness-task-level`、策略 `task-levels.json`。用任务代替：要落盘就开任务，要检查就写 `[review]=n`。
-- **L3 的多 agent 流程**：`request`、`brief`、`attempt`、`dispatch`、`handoff`、`check`、`promote`、`report` 这些命令，orchestrator 和 builder 两个 agent，技能 `harness-orchestration`，请求目录 `.workspace/sandbox/requests/`，交接格式的 schema。用任务加 `[review]=n` 代替：一个 agent 做，reviewer 查。原因见 [设计思想](05-design.md) 的“为什么没有 Level”。
-- **`verifier` agent**。用 reviewer 代替。
-- **`task start`**。新建用 `task new`，接着做用 `task open`。运行 `task start` 会告诉你这两条。
-- **旧任务目录 `.workspace/current_tasks/`**：不再读，没有迁移命令。见下面“怎么升级”。
-- **Local 会话的兼容**在 1.0.3 已经去掉。
+### Changed
 
-### 怎么升级
+- **No Level to pick any more, and no `/l1` or `/l2` to write.** Writing them has no effect.
+- **The rules for subagents changed**: a session with no task cannot call a subagent; a session with a task can call only the reviewer, and only after `task review start`.
+- **The checker is called reviewer**; its model is Sonnet, falling back to Haiku. The old `[verify]` and `[no-verify]` are no longer known: write `[review]=1` and `[review]=0`.
+- **The rules injected at the top of every prompt are shorter**: three or four lines without a task; with a task, how far this task is. No more notes on Levels and budgets.
+- **Searches and tool calls no longer have a limit by count.**
+- After `task close` the folder stays where it is, and `task open` opens it again.
+- When a direct change to a target repository is refused, the reason points to `DEV/` of the task folder and to the skill `harness-my-task`.
+- When an agent runs `task review extend` or `task review waive` in the terminal, the gate refuses, as for the other approval commands.
+- The policy file `orchestration.json` was renamed `task.json`, with changed fields: `fetch.max_files`, `task_file_reminder`, `review`, `snapshots`. `l3_write_root` was removed from `gate.json`.
+- The output of `harness stats` changed: `prompts`, `task_prompts` and `tool_calls` are numbers, no longer split by Level; `verifier_verdicts` was renamed `review_verdicts`; `budget_denials` is gone.
+- A line of the session log no longer has `level`; in the line with the verdict of an independent check, `judge` is `reviewer`.
 
-1. 换上新版本的文件，运行 `harness doctor`。
-2. **旧任务**：要接着做的，把目录从 `.workspace/current_tasks/<任务>` 搬到 `.workspace/sandbox/tasks/<任务>`，再让 agent `task open <任务名>`。计划和回写的批准记录跟着目录走，还有效。它没有 `TASK.md` 和 `REQ.md`：要的话运行 `harness task upgrade --task <任务名> --tier full` 补上。不接着做的，留在原地就行。
-3. **你的 override**：`orchestration.override.json` 要改名 `task.override.json` 并按新字段改；`task-levels.override.json` 删掉；`gate.override.json` 里有 `l3_write_root` 的话删掉那一项。`doctor` 会报出没对上的 override。
-4. **你的提示模板**：去掉 `/l1`、`/l2` 和“先 task start”。现在的说法见 [快速开始](01-quickstart.md) 的“日常怎么说”。
-5. 正在进行的 L3 请求不能接着做。把请求目录里的成果手动放进一个新任务的 `DEV/`。
+### Retired
 
-## 1.0.3（2026-10-10）
+- **Task Levels (L1, L2, L3)**: removed as a whole, including `level status`, `level set`, the search budget, the skills `l1`, `l2` and `harness-task-level`, and the policy `task-levels.json`. Tasks replace them: open a task to write to disk, and write `[review]=n` for a check.
+- **The multi-agent flow of L3**: the commands `request`, `brief`, `attempt`, `dispatch`, `handoff`, `check`, `promote` and `report`, the two agents orchestrator and builder, the skill `harness-orchestration`, the request folder `.workspace/sandbox/requests/`, and the schema of the handover format. A task plus `[review]=n` replaces them: one agent does the work, and the reviewer checks. The reason is in "Why there are no Levels" of [Design](05-design.md).
+- **The `verifier` agent.** The reviewer replaces it.
+- **`task start`.** Use `task new` for a new task and `task open` to go on. Running `task start` tells you these two.
+- **The old task folder `.workspace/current_tasks/`**: no longer read, and there is no migration command. See "How to upgrade" below.
+- **Compatibility with Local sessions** was already removed in 1.0.3.
 
-只支持 Copilot 会话；`doctor` 查 hook 有没有真的在跑；三类危险命令直接拒绝。
+### How to upgrade
 
-### 新增
+1. Put the files of the new version in place and run `harness doctor`.
+2. **Old tasks**: for one you want to go on with, move the folder from `.workspace/current_tasks/<task>` to `.workspace/sandbox/tasks/<task>`, then let the agent run `task open <task name>`. The approval records of the plan and the write-back go with the folder and still hold. It has no `TASK.md` and no `REQ.md`: if you want them, run `harness task upgrade --task <task name> --tier full`. One you do not go on with can stay where it is.
+3. **Your overrides**: rename `orchestration.override.json` to `task.override.json` and change it to the new fields; delete `task-levels.override.json`; if `gate.override.json` has `l3_write_root`, delete that entry. `doctor` reports overrides that do not match.
+4. **Your prompt templates**: take out `/l1`, `/l2` and "task start first". How to say it now is in "What to say day to day" of the [Quick start](01-quickstart.md).
+5. An L3 request in progress cannot be carried on. Put the work of the request folder into `DEV/` of a new task by hand.
 
-- `doctor` 检查 hook 是不是真的在跑：最近一次被调用的时间、是不是 Copilot（SDK）会话、gate 最近的耗时。从没被调用过、超过 7 天没被调用、gate 最慢的一次超过超时的一半，都给 `[WARN]`。
-- 失败的工具调用进日志。平台在工具调用失败时发 `PostToolUseFailure`，不发 `PostToolUse`，以前这类调用在日志里没有“做完”的记录。现在记下工具名和平台给的错误。
-- 日志记下 agent 用了哪个 skill。`harness stats` 多两项：`failed_tool_calls_by_tool`、`skills_loaded`。
-- 认得四个新工具名：`WebFetch`（联网）、`skill`、`tool_search_tool`、`task_complete`。以前都归成“其他”。
+## 1.0.3 (2026-10-10)
 
-### 变更
+Only Copilot sessions are supported; `doctor` checks whether the hook really runs; three kinds of dangerous commands are refused outright.
 
-- **两类终端命令从“要你确认”改成直接拒绝**：用管理员权限运行（`sudo`、`runas`、`Start-Process -Verb RunAs`）；递归改权限或删容器、集群、基础设施（`chmod -R`、`icacls /T`、`takeown /R`、`docker rm`、`kubectl delete`、`terraform apply`、`terraform destroy`）。原因：实测权限选 Allow all 时确认框不弹，命令直接执行。要用这些命令，自己在终端运行。在 `gate.override.json` 里加过同类 ask 规则的不受影响。
-- 文档写明：其余“要你确认”的命令只是提醒，Allow all 会跳过。
-- `doctor` 找不到 Python 从 `[WARN]` 改成 `[ERROR]`，并且会真的执行一次。原因：在 Copilot 会话里，hook 启动不了时所有工具调用都会被拒。
-- 刚下载、还没在 Copilot 里用过时，`doctor` 会有一条 `[WARN]`：还没有任何 hook 调用记录。在 Copilot 里发一句话就消失。
-- hook 配置多了一个事件 `PostToolUseFailure`。自己改过 `.github/hooks/harness.json` 的，升级时要带上它，否则 `doctor` 报错。
+### Added
 
-### 退役
+- `doctor` checks whether the hook really runs: when it was last called, whether it was a Copilot (SDK) session, and the recent times of the gate. Never called, not called for more than 7 days, and a slowest gate call over half the timeout each give a `[WARN]`.
+- Failed tool calls go into the log. When a tool call fails, the platform sends `PostToolUseFailure` and no `PostToolUse`, so before, such a call had no "finished" record in the log. Now the tool name and the error the platform gives are recorded.
+- The log records which skill an agent used. `harness stats` has two more items: `failed_tool_calls_by_tool` and `skills_loaded`.
+- Four new tool names are known: `WebFetch` (the network), `skill`, `tool_search_tool`, `task_complete`. Before, they all counted as "other".
 
-- **Local 会话不再支持。** 只支持 Session Target 选 Copilot 的会话。hook 的输出只留 Copilot 会话的格式，Local 会话里拒绝不再生效。用 Copilot 会话代替；`harness doctor` 发现最近用的是 Local 会话会给 `[WARN]`。
-- 删掉 Copilot CLI 的适配器。它是照文档写的，从没在真实环境里验证过；实测 `copilot -p` 下仓库的 hook 也不运行。命令的 `--surface` 选项只剩 `vscode` 一个值。没有代替。
+### Changed
 
-## 1.0.2（2026-10-10）
+- **Two kinds of terminal commands went from "you confirm" to refused outright**: running with administrator rights (`sudo`, `runas`, `Start-Process -Verb RunAs`); and changing rights recursively or deleting containers, clusters or infrastructure (`chmod -R`, `icacls /T`, `takeown /R`, `docker rm`, `kubectl delete`, `terraform apply`, `terraform destroy`). The reason: it was measured that with the permission set to Allow all the confirmation box does not pop up, and the command just runs. To use these commands, run them yourself in the terminal. If you added ask rules of the same kind in `gate.override.json`, they are not affected.
+- The docs state: the remaining "you confirm" commands are only a reminder, and Allow all skips them.
+- `doctor` not finding Python went from `[WARN]` to `[ERROR]`, and it really runs Python once. The reason: in a Copilot session, when the hook cannot start, every tool call is refused.
+- Right after a download, before any use in Copilot, `doctor` has one `[WARN]`: no hook call is on record yet. It goes away after one message in Copilot.
+- The hook configuration has one more event, `PostToolUseFailure`. If you changed `.github/hooks/harness.json` yourself, carry it over when upgrading, or `doctor` reports an error.
 
-上手体验：短命令、版本图案、用户名字、初始化技能。
+### Retired
 
-### 新增
+- **Local sessions are no longer supported.** Only sessions with Copilot picked as the Session Target are. The output of the hook keeps only the format of Copilot sessions, and a refusal no longer has an effect in a Local session. Use a Copilot session instead; `harness doctor` gives a `[WARN]` when the latest session was a Local one.
+- The adapter for the Copilot CLI is removed. It was written from the documentation and never verified in a real environment; it was also measured that under `copilot -p` the hooks of the repository do not run. The `--surface` option of the commands has only the value `vscode` left. Nothing replaces it.
 
-- 技能 `/harness-repo-initialize`：带你做第一次配置。短命令、用户名字、目标仓库、知识库、公司技能，最后用 `doctor` 检查。
-- `harness --version` 显示图案、版本、发布日期、作者。脚本里用 `harness --version --short`，只输出一行。
-- `user.json` 策略和 `harness user` 命令：你的名字。agent 在要署名的地方用。写在 `user.override.json`，没写就用 `git config user.name`。
-- `doctor` 检查短命令在不在 PATH 里，以及用户名字。
-- Windows 上 PATH 只用改一次：往 PATH 里加一个固定的文件夹（例如 `C:\Users\<你>\bin`），把 `harness.cmd` 拷一份进去。以后升级放在哪都行，不用再改 PATH（公司电脑不用再找 helpdesk）。拷贝在仓库之外运行时读环境变量 `HARNESS_HOME`。`doctor` 认得这种拷贝，拷贝过期时给 `[WARN]`。
+## 1.0.2 (2026-10-10)
 
-### 变更
+Getting started: the short command, the version logo, the user name, the initialize skill.
 
-- **短命令 `harness` 变成必须配置。** 文档、agent 收到的规则、拒绝理由里的命令都写成 `harness <命令>`，不再写 `python .harness/engine/cli.py <命令>`。升级后先把 `.harness/bin` 加进 PATH（见 [快速开始](01-quickstart.md) 第 1 步），否则 `doctor` 报错，agent 的命令会失败。
-- `harness` 像 git 一样，操作当前目录所在的那一份仓库。电脑上有两份 harness 时不会再操作错。不在任何 harness 仓库里时，才用启动脚本自己所在的那一份。
-- `harness --version` 以前输出一行，现在输出图案。脚本要一行的，改用 `harness --version --short`。
-- agent 用短命令运行切换 Level 的命令和 `harness logs prune` 现在也会被拦。以前只拦长命令的写法。
+### Added
 
-### 退役
+- The skill `/harness-repo-initialize`: takes you through the first setup. The short command, the user name, the target repositories, the knowledge base, the company skills, and a check with `doctor` at the end.
+- `harness --version` shows the logo, the version, the release date and the author. In scripts use `harness --version --short`, which prints one line only.
+- The policy `user.json` and the command `harness user`: your name. The agent uses it where a name is to be signed. It is written in `user.override.json`; when it is not, `git config user.name` is used.
+- `doctor` checks whether the short command is on PATH, and the user name.
+- On Windows PATH has to change only once: add one fixed folder to PATH (for example `C:\Users\<you>\bin`) and copy `harness.cmd` into it. A later upgrade can go anywhere, with no more change to PATH (on a company computer, no more calls to the helpdesk). When the copy runs outside a repository, it reads the environment variable `HARNESS_HOME`. `doctor` knows such a copy and gives a `[WARN]` when it is out of date.
 
-暂无。
+### Changed
 
-## 1.0.1（2026-10-10）
+- **The short command `harness` became a required setup.** The commands in the docs, in the rules the agent receives and in refusal reasons are all written `harness <command>`, no longer `python .harness/engine/cli.py <command>`. After upgrading, first add `.harness/bin` to PATH (see step 1 of the [Quick start](01-quickstart.md)); otherwise `doctor` reports an error and the agent's commands fail.
+- Like git, `harness` works on the repository the current folder is in. With two copies of the harness on one computer, the wrong one is no longer worked on. Only outside any harness repository does it use the copy the launcher belongs to.
+- `harness --version` used to print one line and prints the logo now. A script that wants one line uses `harness --version --short`.
+- An agent running the command that switches the Level, or `harness logs prune`, through the short command is stopped now too. Before, only the long spelling was stopped.
 
-补丁：任务目录的写入范围、`DEV/` 根目录的文件、CLI 中文显示。
+### Retired
 
-### 新增
+Nothing.
 
-- 任务目录里可以放不回写的成果。RCA、设计、笔记、一次性脚本写在任务目录根下，例如 `<任务>/RCA.md`，不需要计划和批准。
-- `cli.json` 策略和 `output.encoding` 开关。CLI 的中文显示成 `\uXXXX` 时，在 `cli.override.json` 里设成 `utf-8`。
-- `doctor` 多了“输出编码”几行：现在用什么编码、能不能显示中文。显示不了时，另打一行 UTF-8 样例，帮你判断开关该不该开。
+## 1.0.1 (2026-10-10)
 
-### 变更
+A patch: the write scope of the task folder, files at the root of `DEV/`, Chinese text of the CLI.
 
-- L2 任务模式的写入范围变了。以前：批准计划前只能写 `PLAN.md`，批准后只能写 `DEV/`。现在：任务目录里都能写，只有 `DEV/` 要等计划批准。`REQ/`、`REF/` 不能写。任务目录之外仍然不能写。
-- 直接放在 `DEV/` 根目录的文件不再挡住 `task promote`。它们不回写，计划和批准屏幕里会列出来。`DEV/<名字>/` 的名字不是已配置的仓库时仍然拒绝，防止仓库名写错。
-- 写入被拒绝时，理由不再一律提 `task fetch`。只有直接改目标仓库的文件时才提。
-- `DEV/` 里的名字不是仓库时，拒绝理由告诉你用 `mv` 移走，空目录留着就行，不要 `rmdir`（删除要你确认）。
+### Added
 
-### 退役
+- A task folder can hold work that is not written back. An RCA, a design, notes and one-off scripts are written at the root of the task folder, for example `<task>/RCA.md`, with no plan and no approval needed.
+- The policy `cli.json` and the switch `output.encoding`. When Chinese text of the CLI shows as `\uXXXX`, set it to `utf-8` in `cli.override.json`.
+- `doctor` has a few more lines on the "output encoding": which encoding is used now, and whether it can show Chinese. When it cannot, one more line with a UTF-8 sample is printed to help you judge whether to set the switch.
 
-暂无。
+### Changed
 
-## 1.0.0（2026-10-04）
+- The write scope of the L2 task mode changed. Before: only `PLAN.md` could be written before the plan was approved, and only `DEV/` after. Now: everything in the task folder can be written, and only `DEV/` waits for the plan approval. `REQ/` and `REF/` cannot be written. Outside the task folder nothing can be written, as before.
+- Files right at the root of `DEV/` no longer block `task promote`. They are not written back, and the plan and the approval screen list them. A `DEV/<name>/` whose name is not a repository that is set up is still refused, to guard against a mistyped repository name.
+- When a write is refused, the reason no longer always mentions `task fetch`. It does so only for a direct change to a file of a target repository.
+- When a name in `DEV/` is not a repository, the refusal reason tells you to move it away with `mv` and to leave the empty folder, not to `rmdir` it (a delete needs your confirmation).
 
-第一个正式版本。在 macOS 和 Windows 上验证过。
+### Retired
 
-### 新增
+Nothing.
 
-**三档 Task Level**
+## 1.0.0 (2026-10-04)
 
-- L1 快答，L2 中等任务，L3 多 agent 协作。只有用户能切换：提示开头写 `/l2`、`[L2]`，或在下拉列表选 orchestrator。
-- L1 的搜索有上限。L2 可以用 `[verify]` 打开独立复核（verifier）。
+The first official version. Verified on macOS and Windows.
 
-**gate（闸门）**
+### Added
 
-- guardrail 文件不能改。
-- 危险的终端命令被拒绝，或要人确认。
-- 目标仓库的工作区和任何 `.git` 文件夹不能直接写。
-- git 写命令要人在终端批准；`push` 等永远拒绝。
-- 同一个拒绝反复出现时，提示 agent 停止重试。
+**Three Task Levels**
 
-**目标仓库和 promote**
+- L1 quick answers, L2 medium tasks, L3 several agents working together. Only the user can switch: by writing `/l2` or `[L2]` at the start of a prompt, or by picking the orchestrator in the drop-down list.
+- Searches under L1 have a limit. Under L2 an independent review (the verifier) can be switched on with `[verify]`.
 
-- 在 `target.override.json` 里配置代码仓库。agent 只能读。
-- 从 main 取文件进工作区，改完后先 `--dry-run`，人在终端批准，再写到新分支。不提交。
-- 支持新建、修改、删除文件，支持多个仓库。
+**The gate**
 
-**L2 任务模式**
+- Guardrail files cannot be changed.
+- Dangerous terminal commands are refused, or need a person to confirm.
+- The working tree of a target repository and any `.git` folder cannot be written directly.
+- A git write command needs a person's approval in the terminal; `push` and the like are always refused.
+- When the same refusal keeps coming up, the agent is told to stop retrying.
 
-- 一个 agent 做一个任务：写 `PLAN.md`，人在终端批准，只写任务目录的 `DEV/`，再 promote。
-- 计划改了，批准失效。
+**Target repositories and promote**
 
-**L3 多 agent 协作**
+- Code repositories are set up in `target.override.json`. The agent can only read them.
+- Files are fetched from main into the work area; after the changes comes `--dry-run`, a person approves in the terminal, and then they are written to a new branch. Nothing is committed.
+- Creating, changing and deleting files are supported, and so are several repositories.
 
-- orchestrator 调度，builder 做，reviewer 评审。在请求目录里工作。
-- 计划要人批准才能开第一轮。评审不通过会返工，有轮数上限。
+**The L2 task mode**
 
-**admin 模式**
+- One agent does one task: it writes `PLAN.md`, a person approves in the terminal, it writes only `DEV/` of the task folder, then promote.
+- When the plan changes, the approval ends.
 
-- 人在终端运行 `admin on`，这个会话可以改 guardrail 文件，用来二次开发 harness。
+**L3: several agents working together**
 
-**日志、报告和检查**
+- The orchestrator dispatches, the builder does the work, the reviewer reviews. They work in a request folder.
+- The plan needs a person's approval before the first round starts. A failed review means rework, with a limit on rounds.
 
-- 每次工具调用和 gate 的决定都记进日志。`stats` 看统计，`logs prune` 清理。
-- 请求和任务结束时写报告。
-- `doctor` 自检配置。`eval check` 用固定场景检查行为。
+**Admin mode**
 
-**接入和定制**
+- A person runs `admin on` in the terminal, and this session can change guardrail files, for extending the harness.
 
-- 用同名的 `.override.json` 改策略，不动默认文件。
-- 知识库放进 `knowledge-base/`，`doctor` 会检查接入是否完整。
-- 短命令 `harness`（macOS、Linux、Windows）。
+**Logs, reports and checks**
 
-**skill**
+- Every tool call and every decision of the gate goes into the log. `stats` shows statistics, and `logs prune` cleans up.
+- A report is written when a request or a task ends.
+- `doctor` checks the setup. `eval check` checks behaviour with fixed scenarios.
 
-- `/generic-goal-driven`：把长任务拆成步骤，进度存成文件。
-- `/generic-grill-me`：需求不清时先问清楚。
-- `/generic-build-new-skill`：按模板新建 skill。
+**Plugging in and customising**
 
-### 变更
+- Policies are changed with an `.override.json` of the same name, leaving the default files alone.
+- The knowledge base goes into `knowledge-base/`, and `doctor` checks whether it is plugged in completely.
+- The short command `harness` (macOS, Linux, Windows).
 
-无。这是第一个版本。
+**Skills**
 
-### 退役
+- `/generic-goal-driven`: breaks a long task into steps and keeps the progress as files.
+- `/generic-grill-me`: asks first when a requirement is unclear.
+- `/generic-build-new-skill`: makes a new skill from a template.
 
-无。
+### Changed
+
+Nothing. This is the first version.
+
+### Retired
+
+Nothing.

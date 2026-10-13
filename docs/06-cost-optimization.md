@@ -1,96 +1,96 @@
-# 省时间和省钱
+# Saving time and money
 
-成本有三块：模型调用的次数、每次调用读和写的 token、人等待和介入的时间。harness 的做法是：**用最低够用的方式做事，能用代码做的不让模型做，每次模型调用少读、少写、少重做。**
+The cost has three parts: the number of model calls, the tokens each call reads and writes, and the time people spend waiting and stepping in. What the harness does: **do things in the cheapest way that is enough, do not let the model do what code can do, and have every model call read less, write less and redo less.**
 
-先说明：harness 自己的日志不记录 token 数，只记录调用数、被拒绝数、子 agent 启动数和 hook 耗时。一个任务实际用了多少，看任务分析页（`harness task report`）：它读 Copilot 自己的会话记录，报 AIU 和 premium request 数，不换算成钱。下面每一条都是“设计上省”，不是账单。
+One thing first: the harness's own log records no token counts, only the numbers of calls, refusals and subagent starts, and the time of hooks. How much a task really used is on the task analysis page (`harness task report`): it reads Copilot's own session record and reports AIU and premium requests, without turning them into money. Every point below is "saved by design", not a bill.
 
-## 一、少用模型：能用代码做的不用模型
+## 1. Use the model less: what code can do, the model does not do
 
-- **hook 是代码**。拦截、记日志、数检查次数都在本地运行，不调用模型，不耗 token。
-- **命令行做确定性的事**：建任务目录、复制文件、算 sha256、存快照、写评审包、写报告、回写前的预检。模型只运行命令，拿回一小段结果。
-- **任务看板是命令**：`task list` 读状态文件，不花 token 就能看到每个任务在等什么、等了多久。`task board` 把它写成一个页面。
-- **固定场景用代码判分**：`eval check` 根据日志和留下的文件判断对不对，不让模型打分。
+- **A hook is code.** Stopping, logging and counting checks all run locally, call no model and use no tokens.
+- **The command line does what is certain**: making a task folder, copying files, working out a sha256, saving snapshots, writing the review package, writing the report, the checks before a write-back. The model only runs the command and gets back a short result.
+- **The task board is a command**: `task list` reads the state files, so seeing what every task waits for, and for how long, costs no tokens. `task board` writes it as a page.
+- **Fixed scenarios are scored by code**: `eval check` judges from the log and the files left behind whether a run went right; no model gives the score.
 
-## 二、按任务选做法
+## 2. Pick the way by the task
 
-- **任务分三档**。问答只有一个 `TASK.md`，或者干脆不开任务；RCA 和设计多几个文件；只有改目标仓库的才有 `DEV/`、计划批准和回写。小任务不走重流程。
-- **独立检查默认关**。你写 `[review]=n` 才查，查几次由你定。不写就不为检查付费。
-- **子 agent 只有两个，都要你开**。reviewer 要你写 `[review]=n`；mapper 要你输入 `/generic-mapreduce`，它先告诉你要多花多少、等你同意才派，一次最多 4 个（`task.json` 的 `mapreduce.max_agents`）。agent 自己开不了。B13 实测多 agent 编排的用量约 4.5 倍（见第九节），所以 1.1 去掉了它。
-- **模型由你选**。建议：强模型思考、出计划和方案；中等模型执行。reviewer 默认用 Sonnet，写在 `.github/agents/reviewer.agent.md`，企业可以改。
+- **Tasks have three tiers.** Q&A has just a `TASK.md`, or no task at all; an RCA or a design has a few more files; only a task that changes a target repository has `DEV/`, a plan approval and a write-back. A small task does not go through the heavy flow.
+- **Independent checks are off by default.** They run only when you write `[review]=n`, and you decide how many. Without the mark you pay nothing for checks.
+- **There are two subagents only, both switched on by you.** The reviewer needs your `[review]=n`; the mapper needs you to type `/generic-mapreduce`, tells you first how much more it costs, sends mappers only after you agree, and sends 4 at most in one run (`mapreduce.max_agents` in `task.json`). The agent cannot switch them on. In B13 the orchestration of several agents was measured at about 4.5 times the usage (see section 9), so 1.1 dropped it.
+- **You pick the model.** The advice: a strong model for thinking, plans and approaches; a medium model for doing. The reviewer uses Sonnet by default, as written in `.github/agents/reviewer.agent.md`; a company can change it.
 
-## 三、少读：让模型只读需要的
+## 3. Read less: let the model read only what it needs
 
-- **渐进式披露**。[AGENTS.md](../AGENTS.md) 只放核心规则；README 只是索引；技能先只露名字和描述，需要时才读全文；分类规则用 `applyTo`，只有碰到对应文件才加载。知识库同样先读索引再往下读。
-- **每条提示只注入一小段规则**：没接任务时三四行；接着任务时是这个任务做到哪。不是整套规则。
-- **新会话只读 `TASK.md`**。它保持在一屏内，指向别的文件。不用把整个任务目录读一遍，也不用你重新解释背景。
-- **目标仓库只取要改的文件**。`task fetch` 从本地 main 读单个文件，不复制整个仓库；一次能取的文件数有上限（`fetch.max_files`）。
-- **reviewer 先读差异**。评审包指给它 `CHANGES.diff`（成果和 main 的差异，只有改动的行），不用把整个文件读两遍。它不读作者的过程（`LOG.md`、`TODO.md`）。
-- **reviewer 不继承主对话**。它在自己的会话里，上下文小，也不容易被带偏。
+- **Step-by-step disclosure.** [AGENTS.md](../AGENTS.md) holds only the core rules; the README is just an index; of a skill only the name and the description show at first, and the whole text is read when needed; rules by topic use `applyTo` and are loaded only when a matching file is met. The knowledge base likewise: the index first, then further.
+- **Only a short piece of rules is injected with every prompt**: three or four lines without a task; with a task, how far this task is. Not the whole set of rules.
+- **A new session reads only `TASK.md`.** It is kept within one screen and points to the other files. The whole task folder need not be read, and you need not explain the background again.
+- **Only the files to change are fetched from a target repository.** `task fetch` reads single files from the local main and does not copy the whole repository; the number of files in one fetch has a limit (`fetch.max_files`).
+- **The reviewer reads the diff first.** The review package points it at `CHANGES.diff` (the diff between the work and main: only the changed lines), so it need not read whole files twice. It does not read the author's process (`LOG.md`, `TODO.md`).
+- **The reviewer does not inherit the main conversation.** It is in its own session, with a small context, and is less easily led astray.
 
-## 四、少写：让输出变短
+## 4. Write less: make the output short
 
-- **给 reviewer 的调用消息只有一句**：“检查评审包 <路径>”。
-- **reviewer 的回答有行数上限**，每条问题一行。第 2 次起只报影响正确性的问题。
-- **`task promote --dry-run` 给 agent 的输出只有文件清单和增删行数**，不带差异。完整差异写在 `PROMOTE-PLAN.diff`，你在编辑器里看。
-- **命令输出是短 JSON，带 `next` 字段**，告诉 agent 下一步该做什么，不用它去猜。
-- **日志不记工具参数，不记提示内容**，只有被拒绝的调用才记路径和命令。
+- **The call message for the reviewer is one sentence**: "Check the review package <path>".
+- **The reviewer's answer has a line limit**, one line per finding. From the 2nd check on it reports only what affects correctness.
+- **What `task promote --dry-run` gives the agent is only the list of files and the lines added and removed**, without the diff. The whole diff is written to `PROMOTE-PLAN.diff`, which you read in the editor.
+- **Command output is short JSON with a `next` field** that tells the agent what to do next, so it need not guess.
+- **The log records no tool arguments and no prompt content**; only for a refused call are the path and the command recorded.
 
-## 五、少重做：早失败，能续做
+## 5. Redo less: fail early, and be able to go on
 
-- **先批准计划，再动手**。方向错了在这一步改。没批准的计划，`DEV/` 写不进去。
-- **需求落在 `REQ.md`**。对话里改了需求，agent 先改它再动成果，检查的人和下一个会话看到的是同一份。
-- **检查次数有上限**：n + 2 次。到了 agent 停下，由你决定，避免无限返修。
-- **熔断**：同一个拒绝重复出现，理由换成“停止重试”，避免 agent 反复撞墙。
-- **回写前先预检所有仓库**：工作区是否干净、分支名是否被占、main 上的文件有没有变。全部通过才写，避免写到一半才发现。
-- **关口快照**：计划批准时、每次检查前、回写前各存一份成果。改坏了不用重做，找回来就行。
-- **状态存在文件里**。上下文被压缩或会话中断后，新会话 `task open` 就能接着做。中途出错用 `task recover` 恢复。
-- **长任务用目标文件接着做**：`/generic-goal-driven`。只有真正的长任务才值得用。
+- **The plan is approved first, then the work starts.** A wrong direction is corrected at this step. Without an approved plan, nothing can be written into `DEV/`.
+- **The requirement lands in `REQ.md`.** When the requirement changes in the conversation, the agent changes it first and then the work, and the checker and the next session see the same text.
+- **There is a limit on checks**: n + 2. At the limit the agent stops and you decide, which avoids endless fixing.
+- **The breaker**: when the same refusal keeps coming up, the reason is replaced with one that says to stop retrying, which keeps the agent from running into the wall again and again.
+- **All repositories are checked before a write-back**: whether the working tree is clean, whether the branch name is taken, whether the files on main have changed. Nothing is written unless all pass, so a problem is not found halfway through the write.
+- **Snapshots at the gates**: a copy of the work is saved when the plan is approved, before every check and before a write-back. When something is broken, it need not be redone: get it back.
+- **The state is kept in files.** After the context is compressed or a session breaks off, a new session goes on with `task open`. A failure partway is recovered with `task recover`.
+- **A long task goes on from the goal files**: `/generic-goal-driven`. Only a really long task is worth it.
 
-## 六、省人的时间
+## 6. Saving people's time
 
-- **不用先定级，不用记命令**：说一句要做什么，agent 用技能问清楚再开任务。
-- **在编辑器里看，在终端批准**：计划和完整差异是文件，agent 给你链接。终端只显示文件路径和确认码。确认码绑定内容，内容变了就失效，不用反复核对。
-- **一眼看出哪个任务在等你**：`task list` 把等你批准的排在前面。
-- **报告自动生成**：`task close` 时写 `.workspace/reports/tasks/<任务名>/report.md`，不用自己翻日志。
-- **`doctor` 一条命令自检**配置是否一致。
-- **出问题能快速定位**：每次检查的评审包和结论、被拒绝的调用都留在任务目录和日志里。
+- **No level to pick first, no commands to remember**: say what you want done, and the agent asks until things are clear with a skill and opens a task.
+- **Read in the editor, approve in the terminal**: the plan and the whole diff are files, and the agent gives you the link. The terminal shows only the file path and the code. The code is bound to the content: when the content changes it no longer holds, so nothing has to be compared again and again.
+- **One look shows which task waits for you**: `task list` puts the ones waiting for your approval first.
+- **The report is made by itself**: `task close` writes `.workspace/reports/tasks/<task name>/report.md`, and you need not go through the logs yourself.
+- **`doctor` checks with one command** whether the setup agrees with itself.
+- **A problem can be located quickly**: the review package and the verdict of every check, and the refused calls, are kept in the task folder and the logs.
 
-## 七、怎么看成本
+## 7. How to see the cost
 
-- `stats`：提示数、工具调用数、拒绝数、子 agent 启动数、独立检查的结论。
-- 任务报告：每次检查的时间和结论、被拒绝的调用。
-- 模型的真实用量，请看 Copilot 自己的用量统计。harness 看不到。
+- `stats`: the numbers of prompts, tool calls, refusals and subagent starts, and the verdicts of independent checks.
+- The task report: the time and verdict of every check, and the refused calls.
+- For the real usage of the model, look at Copilot's own usage statistics. The harness cannot see it.
 
-## 八、哪里会更贵
+## 8. Where it costs more
 
-不回避这些：
+These are not hidden:
 
-- **独立检查要多调用模型**。`[review]=1` 至少多一次 reviewer；不通过再加一次返修和一次检查。`[review]=2` 至少两次。
-- **每次工具调用都会运行一次 hook**，有少量本地延迟。
-- **每条提示都注入规则**。这是有意的：保证规则每次都在，不靠模型记住。
-- **开了检查的任务，每条提示和每次结束都要算一遍成果的 sha256**。成果是几 MB 的大文件时，会多几十毫秒。
+- **Independent checks call the model more.** `[review]=1` is at least one more reviewer; when it does not pass, one fix and one check more. `[review]=2` is at least two.
+- **A hook runs on every tool call**, with a small local delay.
+- **Rules are injected with every prompt.** That is on purpose: it makes sure the rules are there every time and do not rest on the model's memory.
+- **For a task with checks on, the sha256 of the work is worked out with every prompt and every end.** When the work is a large file of several MB, that adds a few dozen milliseconds.
 
-harness 省的是返工、事故和排查的成本，不是单次调用的最低价。
+What the harness saves is the cost of rework, incidents and troubleshooting, not the lowest price of a single call.
 
-## 九、实测：多 agent 编排和单个 agent 的对比
+## 9. Measured: orchestrating several agents against a single agent
 
-这是 1.0 时做的对比，也是 1.1 去掉三角色编排的依据。
+This comparison was made at 1.0, and it is the ground on which 1.1 dropped the three-role setup.
 
-我们在一个仿真的数据工程仓库上做过一次对比（5 个 domain，93 个文件，不能运行）。
+We made one comparison on a simulated data engineering repository (5 domains, 93 files, cannot be run).
 
-- 4 个任务：新增一条 pipeline、跨 domain 加字段、pipeline 改名（含删除文件）、修一个公式（需求里还要求改受保护路径）。
-- 两种做法各做一遍：三角色编排（编排员、执行者、评审员，接了知识库），和单个高阶模型的 agent（没有 harness，规则写在需求文档里）。
-- 结果用同一个静态检查脚本判分，不运行代码。
+- 4 tasks: adding a pipeline, adding a field across domains, renaming a pipeline (with deleting files), fixing a formula (where the requirement also asked for a change to a protected path).
+- Each was done both ways: the three-role setup (orchestrator, builder, reviewer, with a knowledge base plugged in), and a single agent on a top model (no harness, the rules written in the requirement document).
+- The results were scored with the same static check script, without running code.
 
-| | 三角色编排 | 单个 agent |
+| | Three-role setup | Single agent |
 | --- | --- | --- |
-| 一轮就全部通过 | 4 个里 4 个 | 4 个里 4 个 |
-| 用量合计（AI credits） | 约 456 | 约 101 |
-| 时间合计 | 约 16 分钟 | 约 3 分钟 |
+| All passed in one round | 4 of 4 | 4 of 4 |
+| Total usage (AI credits) | about 456 | about 101 |
+| Total time | about 16 minutes | about 3 minutes |
 
-每个任务只做了一遍，数字只看量级。结论：
+Every task was done once only, so the numbers show the order of magnitude and no more. The conclusions:
 
-- **需求清楚、范围明确的任务，一个 agent 就够。** 编排的结果不比它好，用量约 4.5 倍，时间约 6 倍。
-- **编排多花的钱买的主要是独立检查**：有一次执行者漏改了两处跨 domain 的引用，评审员查出来并打回，人没有介入。
-- 所以 1.1 只留下独立检查这一样，做成按需打开的 `[review]=n`：一个 agent 做，reviewer 查。写进仓库前人批准、留下可查的记录，任务本来就有。
-- **这次没有测到的**：需求模糊、仓库很大很乱的任务。`[review]` 的 n 取 0、1、2 在真实任务上各差多少，要用你们真实的仓库和历史需求来验证。
+- **For a task with a clear requirement and a definite scope, one agent is enough.** The result of the orchestration was no better, at about 4.5 times the usage and about 6 times the time.
+- **What the extra money of the orchestration bought was mainly the independent check**: once the builder missed two references across domains, and the reviewer found them and sent the work back, with no person stepping in.
+- So 1.1 kept only the independent check, as `[review]=n` that is switched on when wanted: one agent does the work, and the reviewer checks. A person's approval before anything is written into a repository, and a record that can be looked up, come with a task anyway.
+- **What this did not measure**: tasks with a vague requirement in a very large and messy repository. How much n of 0, 1 and 2 for `[review]` differ on real tasks has to be verified with your real repositories and past requirements.

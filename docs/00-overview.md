@@ -1,85 +1,88 @@
-# 总览：它是什么，解决什么问题
+# Overview: what it is, and which problem it solves
 
-先看全貌，再决定怎么接入。
+See the whole picture first, then decide how to plug it in.
 
-## 它解决什么问题
+## Which problem it solves
 
-团队拿到 GitHub Copilot 后，常见的用法是补全代码、改几行。原因很简单：
+When a team gets GitHub Copilot, the common use is completing code and changing a few lines. The reasons are simple:
 
-- 它不懂你们的活。表怎么命名、口径怎么算、出错先查哪，它都不知道。
-- 它没有工作流程。一件事做几天，换个窗口就忘了。
-- 它没有边界。放它去改生产相关的仓库，没人敢。
+- It does not know your work. How tables are named, how a metric is defined, where to look first when something fails: it knows none of it.
+- It has no way of working. A job takes days, and in another window it has forgotten.
+- It has no limits. Nobody dares let it change a repository that touches production.
 
-这套 harness 把这三件事补上。接入你们的知识库和 domain 技能后，Copilot 能按团队的方式，把一件事从头做到尾，并且有人管、可复盘。
+This harness fills in these three. With your knowledge base and your domain skills plugged in, Copilot can take a job from start to end in the team's way, guarded and open to review afterwards.
 
-要说清楚一点：**框架本身不带业务知识。** 它让团队敢用、能管；知识库和 domain 技能让它做对。两样都要。
+One thing has to be clear: **the framework itself carries no business knowledge.** It makes the team dare to use Copilot and able to guard it; the knowledge base and the domain skills make it do things right. Both are needed.
 
-## 四个组成部分
+## The four parts
 
 ```text
-        ┌──────────────────────────────────────────────┐
-        │ ① Copilot agent        会思考、会调用工具          │
-        ├──────────────────────────────────────────────┤
-        │ ② 知识库 + domain 技能   你们的活和代码是什么样      │  ← 你们接入
-        ├──────────────────────────────────────────────┤
-        │ ③ harness 框架         规矩、边界、检查、可观测      │  ← 本仓库
-        ├──────────────────────────────────────────────┤
-        │ ④ 被作用的对象         代码仓库、Azure DevOps、      │
-        │                       服务器环境、数据库           │
-        └──────────────────────────────────────────────┘
+        ┌──────────────────────────────────────────────────────────┐
+        │ 1  Copilot agent                  thinks, calls tools     │
+        ├──────────────────────────────────────────────────────────┤
+        │ 2  Knowledge base + domain skills what your work and      │  <- you plug these in
+        │                                   your code look like     │
+        ├──────────────────────────────────────────────────────────┤
+        │ 3  Harness framework              rules, limits, checks,  │  <- this repository
+        │                                   observability           │
+        ├──────────────────────────────────────────────────────────┤
+        │ 4  What is acted on               code repositories,      │
+        │                                   Azure DevOps, servers,  │
+        │                                   databases               │
+        └──────────────────────────────────────────────────────────┘
 ```
 
-| 部分 | 谁提供 | 管什么 | 不管什么 |
+| Part | Who provides it | What it does | What it does not do |
 | --- | --- | --- | --- |
-| ① Copilot agent | GitHub | agent loop：读上下文，让大模型想，再调用读、写、搜、运行命令等基本工具，循环到做完 | 不知道你们的业务；没有任务的概念；不会自己设边界 |
-| ② 知识库和 domain 技能 | 你们团队 | 把公司的任务和代码上下文给 agent：规范、口径、表结构、排错经验、做某类事的步骤 | 不强制 agent 照做；写得差，agent 就不懂行 |
-| ③ harness 框架 | 本仓库 | 规矩（`AGENTS.md`、instructions）；边界（门卫、批准、独立检查）；工作流（任务、计划、回写、autorun）；通用技能；可观测（日志、看板、任务报告） | 不带业务知识；不替代 Copilot 执行；不是 sandbox |
-| ④ 被作用的对象 | 你们的环境 | 真正要改、要查、要更新的东西 | — |
+| 1 Copilot agent | GitHub | The agent loop: reads the context, lets the model think, then calls basic tools (read, write, search, run commands), in a loop until done | Does not know your business; has no idea of a task; sets no limits for itself |
+| 2 Knowledge base and domain skills | Your team | Gives the agent the context of the company's tasks and code: standards, definitions, table structures, troubleshooting experience, the steps for a kind of job | Does not force the agent to comply; when poorly written, the agent does not know the trade |
+| 3 Harness framework | This repository | Rules (`AGENTS.md`, instructions); limits (the gatekeeper, approvals, independent checks); the way of working (tasks, plans, write-back, autorun); general skills; observability (logs, the board, task reports) | Carries no business knowledge; does not replace Copilot in doing the work; is not a sandbox |
+| 4 What is acted on | Your environment | What really has to be changed, looked up or updated | — |
 
-一句话分工：
+The division of work in one sentence each:
 
-1. Copilot 提供**会干活的人**。
-2. 知识库和 domain 技能让这个人**懂你们的活**。
-3. harness 让这个人**守规矩、有边界、可复盘**。
-4. 被作用的对象是**活干在哪**。
+1. Copilot provides **someone who can do the work**.
+2. The knowledge base and the domain skills make that someone **know your work**.
+3. The harness makes that someone **keep to the rules, stay within limits, and leave a trail**.
+4. What is acted on is **where the work lands**.
 
-## 一个任务怎么穿过这四层
+## How one task passes through the four layers
 
-以“订单表晚了，查原因并改管道代码”为例：
+Take "the orders table is late: find out why and change the pipeline code":
 
-1. 你对 Copilot agent（①）说要做什么。
-2. agent 先读知识库、调用 domain 技能（②），知道订单表来自哪、口径怎么算。
-3. harness（③）开一个任务文件夹，agent 在里面写需求、方案和要改的文件。
-4. 改仓库前要你批准计划；写回仓库前要你再批准一次；需要时开独立检查。
-5. 批准后，改动才写进代码仓库（④）。
+1. You tell the Copilot agent (1) what you want done.
+2. The agent first reads the knowledge base and calls domain skills (2), and learns where the orders table comes from and how its metrics are defined.
+3. The harness (3) opens a task folder, and the agent writes the requirement, the approach and the files to change in it.
+4. Before a repository changes, you approve the plan; before the write-back, you approve once more; independent checks are switched on when needed.
+5. Only after the approvals are the changes written into the code repository (4).
 
-## harness 管到哪里
+## How far the harness reaches
 
-被作用的对象不同，harness 的控制力也不同。
+What is acted on differs, and so does the control the harness has.
 
-| 对象 | harness 现在做什么 |
+| Target | What the harness does now |
 | --- | --- |
-| 代码仓库 | 管得最多。目标仓库的文件不能直接改，只能经你批准的 promote 写入；写入前有计划批准和独立检查；harness 不 push |
-| 知识库 | 可以登记成目标仓库，用同一条批准流程更新；记录哪些文件被读过（`harness kb reads`） |
-| Azure DevOps（Jira、pipeline） | 没有专门的控制。agent 通过终端或 MCP 工具访问时，能做什么由你们给它的账号权限决定；harness 只拦终端命令里的越界写和危险命令，并在日志里留痕 |
-| 服务器环境、数据库 | 同上。目前主要靠账号权限；建议给 agent 只读账号。需要更严的控制，在 domain 技能里写明规则，并在 `.harness/policies/gate.json` 里加拦截 |
+| Code repositories | The most. Files of a target repository cannot be changed directly; they are written only by a promote you approve; before the write there are the plan approval and independent checks; the harness does not push |
+| The knowledge base | It can be registered as a target repository and updated through the same approval flow; which files were read is recorded (`harness kb reads`) |
+| Azure DevOps (Jira, pipelines) | No special control. When the agent reaches it through the terminal or MCP tools, what it can do is set by the rights of the account you give it; the harness only stops out-of-bounds writes and dangerous commands in the terminal, and leaves a trace in the log |
+| Server environments, databases | The same. For now it rests mainly on account rights; giving the agent a read-only account is advised. For tighter control, state the rules in a domain skill and add stops in `.harness/policies/gate.json` |
 
-门卫是对命令文本的检查，**防犯错，不防存心绕过**。不要把它当 sandbox。详见 [设计](05-design.md)。
+The gatekeeper checks the text of commands. **It guards against mistakes, not against someone set on getting around it.** Do not treat it as a sandbox. See [Design](05-design.md).
 
-## 接入要做什么
+## What plugging in takes
 
-| 步骤 | 做什么 | 看哪篇 |
+| Step | What to do | Where to read |
 | --- | --- | --- |
-| 1 | 配好 `harness` 短命令，运行 `doctor` | [快速开始](01-quickstart.md) |
-| 2 | 登记目标仓库 | [配置与定制](03-configure.md) |
-| 3 | 接入知识库和它自带的 instructions | [配置与定制](03-configure.md) |
-| 4 | 写 domain 技能（`domain-` 开头） | [配置与定制](03-configure.md) |
-| 5 | 用真实任务试，按结果改知识库和技能 | [日常怎么说](01-quickstart.md#7-日常怎么说) |
+| 1 | Set up the short command `harness` and run `doctor` | [Quick start](01-quickstart.md) |
+| 2 | Register the target repositories | [Configure and customise](03-configure.md) |
+| 3 | Plug in the knowledge base and the instructions that come with it | [Configure and customise](03-configure.md) |
+| 4 | Write domain skills (names start with `domain-`) | [Configure and customise](03-configure.md) |
+| 5 | Try it on real tasks, and improve the knowledge base and the skills by the results | [What to say day to day](01-quickstart.md#7-what-to-say-day-to-day) |
 
-不是装完就能用。知识库和技能的质量，决定 agent 懂多少。第 5 步要多做几轮。
+It is not ready to use right after installing. The quality of the knowledge base and the skills decides how much the agent knows. Step 5 takes several rounds.
 
-## 现在的限制
+## Limits for now
 
-- 在 Copilot 里的行为由 Copilot 决定。Copilot 升级后，个别功能可能要跟着改。
-- 任务分析读的是 Copilot 的会话记录。那不是公开格式，读不到时只有耗时。
-- Windows 和公司电脑上的实测还在进行中。
+- Behaviour inside Copilot is decided by Copilot. After a Copilot upgrade, some features may have to follow.
+- The task analysis reads Copilot's session record. That is not a public format; when it cannot be read, there are times only.
+- Measurements on Windows and on company computers are still going on.

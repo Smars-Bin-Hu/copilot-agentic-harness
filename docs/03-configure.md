@@ -1,18 +1,18 @@
-# 配置与定制
+# Configure and customise
 
-harness 本身不含任何业务内容。接入公司环境时，你加四样东西：目标仓库、知识库、策略覆盖、技能。
+The harness itself holds no business content. To plug it into a company environment, you add four things: target repositories, a knowledge base, policy overrides, and skills.
 
-## override：只写要改的项
+## Overrides: write only what you change
 
-每个策略 `.harness/policies/<名>.json` 都可以有同名的 `<名>.override.json`。只有一层，写在旁边，不改默认文件。
+Every policy `.harness/policies/<name>.json` can have a `<name>.override.json` of the same name. There is one layer only; it sits next to the default file, which stays unchanged.
 
-合并规则：
+How they merge:
 
-- 对象：逐项合并。
-- 其他值（包括数组）：整体替换。
-- `"<键>+": [...]`：往默认数组里追加。
+- Objects: merged key by key.
+- Other values (lists included): replaced as a whole.
+- `"<key>+": [...]`: appended to the default list.
 
-例子：往 gate 的 guardrail 里追加一个路径，并把 git 批准的有效时间改短。
+An example: appending one path to the guardrails of the gate, and shortening the time a git approval is valid.
 
 ```json
 {
@@ -21,36 +21,56 @@ harness 本身不含任何业务内容。接入公司环境时，你加四样东
 }
 ```
 
-- `doctor` 会列出每个 override 改了哪些项，写错会报错。
-- 核心 guardrail 删不掉：override 里去掉它们，gate 也会加回来，`doctor` 报错。
-- `*.override.json` 属于使用者。含本机路径的（例如 `target.override.json`）不要提交，仓库的 `.gitignore` 已忽略它。
+- `doctor` lists what every override changes, and reports an error when one is written wrongly.
+- The core guardrails cannot be removed: when an override drops them, the gate adds them back and `doctor` reports an error.
+- A `*.override.json` belongs to the person using the harness. One that holds paths of your machine (`target.override.json`, for example) is not to be committed; the repository's `.gitignore` already ignores it.
 
-## 目标仓库
+## Language
 
-### 适用的代码库
+The harness speaks English by default and can speak Chinese. Create `.harness/policies/user.override.json` (ignored by git):
 
-harness 面向的目标仓库，是**庞大的、有合规要求的数据工程（DE）团队的 git 代码库**。它不是常见的、能直接运行的应用项目，比那类项目更难做：
+```json
+{ "language": "zh" }
+```
 
-- **没有程序入口，不能在本机运行，也不能跑测试。** 代码由发布流水线按步骤、按 domain 部署到其他环境。改对还是改错，本机看不出来。
-- **规模大，类型杂。** 按 domain 或功能存放大量文件：Python、SQL、配置 `.json`，还有 `.sh`、PowerShell 等脚本。
-- **文件之间靠命名、目录和约定相互关联。** 例如一个 SQL 改了，对应的配置和调度脚本也要跟着改。不靠编译器或测试来发现错误。
-- **有合规要求。** 改动要能解释、能追溯，部署相关的路径不能碰。
+| Value | What you get |
+| --- | --- |
+| `en` (default) | English output from the CLI and the hooks, English task templates, and the agent is told to answer and write in English |
+| `zh` | The same three in Chinese |
 
-所以在这类仓库里，**能力主要来自对代码的理解，不来自运行**。agent 没有“跑一下看对不对”这个办法，只能靠读代码、读差异和读规则来判断。这带来几个结论：
+- The setting covers: refusal reasons, the rules injected with every prompt, command output, the task report, the analysis page and the board; the templates `TASK.md`, `REQ.md`, `TODO.md`, `LOG.md`; and one injected line that tells the agent which language to answer and write in.
+- The agent's own language is a request to the model. When you clearly ask for another language in a prompt, the agent follows you.
+- The environment variable `HARNESS_LANGUAGE` wins over the file (handy for one command: `HARNESS_LANGUAGE=zh harness doctor`).
+- `harness doctor` shows the language in effect and where it comes from. A value other than `en` or `zh` is an error, and English is used.
+- The docs, rules and skills of the repository are in English only. A task made in one language is still read after the setting changes.
+- The reasons in `gate.json` are given in both languages (`"why": {"en": "...", "zh": "..."}`). In an override you may write one plain string, or both.
 
-- **知识库不是可选项。** 要用你们的团队对这批代码学习之后整理出来的知识库：domain 怎么划分、命名和目录约定、哪些文件要一起改、部署流程的步骤、合规要求、以往改动的例子。没有它，agent 只能凭猜，做不了这类任务。知识库越具体，计划和评审越准。接入方法见下面“知识库”一节。
-- **检查靠读，不靠运行。** reviewer 读成果和差异（`CHANGES.diff`），标准来自需求和知识库。它不能运行代码，所以结论的可信度，取决于知识库里有没有写明规则。
-- **不整个复制仓库**，只按路径取要改的文件（见 [核心功能](02-features.md)）。
-- **回写只改文件，不提交、不推送。** 部署由你们的发布流水线负责。
-- **部署用的配置、流水线定义等不该被 agent 碰的路径**，写进 `refused_paths`。
+## Target repositories
 
-### 配置
+### Which code stores it suits
 
-新建 `.harness/policies/target.override.json`：
+The target repositories the harness is made for are **the large git code stores of data engineering (DE) teams with compliance requirements**. They are not the usual application projects that simply run, and they are harder to work in:
+
+- **No entry point; they cannot run on a local machine, and no tests can run.** A release pipeline deploys the code to other environments, step by step and domain by domain. Whether a change is right or wrong cannot be seen locally.
+- **Large and mixed.** Many files stored by domain or function: Python, SQL, `.json` settings, and scripts such as `.sh` and PowerShell.
+- **Files are tied together by naming, folders and conventions.** When one SQL file changes, the matching settings and scheduling scripts have to change too. No compiler or test finds the mistake.
+- **Compliance requirements.** A change has to be explainable and traceable, and paths that have to do with deployment must not be touched.
+
+So in such a repository, **ability comes mainly from understanding the code, not from running it**. The agent has no "run it and see"; it can only judge by reading code, diffs and rules. A few conclusions follow:
+
+- **The knowledge base is not optional.** Use the knowledge base your team put together after studying this code: how the domains are divided, the conventions for naming and folders, which files change together, the steps of the deployment flow, the compliance requirements, examples of earlier changes. Without it the agent can only guess and cannot do this kind of task. The more concrete the knowledge base, the more accurate the plans and the reviews. How to plug it in is under "Knowledge base" below.
+- **Checking is reading, not running.** The reviewer reads the work and the diff (`CHANGES.diff`), and its standards come from the requirement and the knowledge base. It cannot run code, so how far its verdict can be trusted depends on whether the knowledge base states the rules.
+- **The repository is not copied as a whole.** Only the files to change are fetched, by path (see [Core features](02-features.md)).
+- **A write-back only changes files; it does not commit or push.** Deployment is the job of your release pipeline.
+- **Paths the agent should not touch, such as deployment settings and pipeline definitions,** go into `refused_paths`.
+
+### Settings
+
+Create `.harness/policies/target.override.json`:
 
 ```json
 {
-  "repos_root": "/Users/你/repos",
+  "repos_root": "/Users/you/repos",
   "repos": {
     "bdtt_repo": { "refused_paths": [".git/**", ".github/workflows/**"] },
     "other_repo": { "path": "/elsewhere/other_repo", "base_ref": "develop" }
@@ -58,31 +78,31 @@ harness 面向的目标仓库，是**庞大的、有合规要求的数据工程�
 }
 ```
 
-| 字段 | 含义 |
+| Field | Meaning |
 | --- | --- |
-| `repos_root` | 一个文件夹。它下面每个带 `.git` 的子文件夹是一个目标仓库，名字是文件夹名 |
-| `repos` | 名字到设置：`path` 指向别处的仓库（不是绝对路径时，从 harness 文件夹算起）；`base_ref` 改这个仓库的取文件分支；`refused_paths` 改这个仓库不许回写的路径；`knowledge_base: true` 说明它是知识库，见下面“让任务更新知识库” |
-| `base_ref` | 取文件的分支，默认 `main`。要在本地存在 |
-| `refused_paths` | promote 不写、agent 也不能直接写的路径（git 风格 glob）。`.git/**` 总是被保护 |
+| `repos_root` | A folder. Every subfolder of it with a `.git` is a target repository, named after its folder |
+| `repos` | Settings by name: `path` points at a repository elsewhere (when it is not absolute, it starts from the harness folder); `base_ref` changes the branch files are fetched from for this repository; `refused_paths` changes the paths that cannot be written back for this repository; `knowledge_base: true` says it is a knowledge base: see "Letting a task update the knowledge base" below |
+| `base_ref` | The branch files are fetched from, `main` by default. It has to exist locally |
+| `refused_paths` | Paths promote does not write and the agent cannot write directly either (git-style glob). `.git/**` is always protected |
 
-- 路径里的 `~`、`%USERPROFILE%`、`$HOME` 会展开。
-- 仓库名只能用字母、数字、`_`、`.`、`-`。
-- 检查：`doctor`（列出每个仓库、分支、有没有未提交的文件）和 `target list`。
+- `~`, `%USERPROFILE%` and `$HOME` in a path are expanded.
+- A repository name takes only letters, digits, `_`, `.` and `-`.
+- To check: `doctor` (lists every repository, its branch, and whether it has uncommitted files) and `target list`.
 
-## 知识库
+## Knowledge base
 
-`knowledge-base/` 是接入公司知识库的位置，仓库里保持为空。`.github/instructions/knowledgebase.instructions.md` 是知识库的一个组件，交付时也是空的占位，**必须接入**：它教 agent 怎么按索引读知识库，没有它，agent 只会随便搜。接入步骤：
+`knowledge-base/` is where the company's knowledge base is plugged in; in the repository it stays empty. `.github/instructions/knowledgebase.instructions.md` is a component of the knowledge base; it is an empty placeholder when shipped, and it **must be plugged in**: it teaches the agent how to read the knowledge base from the index, and without it the agent only searches at random. The steps:
 
-1. 把知识库放进 `knowledge-base/`。**入口是 `knowledge-base/README.md`**：它是索引，只放主题和相对链接，agent 先读它，再按需往下读，不要一次读全部。
-2. 把知识库自带的、讲怎么读怎么写的 instructions 放进 `.github/instructions/knowledgebase.instructions.md`（替换空占位），frontmatter 写 `applyTo: '**'`。只写 `applyTo: 'knowledge-base/**'` 不够：agent 读到知识库文件之前它不会生效。
-3. 运行 `doctor`。它检查：有没有 README、README 里的链接是否都有文件、`.gitignore` 有没有忽略 `knowledge-base/`、instructions 会不会被加载。
-4. 知识库的写作规则只有一个主要来源：知识库自带的 instructions。
+1. Put the knowledge base into `knowledge-base/`. **The entry is `knowledge-base/README.md`**: it is the index and holds only topics and relative links; the agent reads it first and then goes further as needed, not everything at once.
+2. Put the instructions that come with the knowledge base, the ones that say how to read and write it, into `.github/instructions/knowledgebase.instructions.md` (replacing the empty placeholder), with `applyTo: '**'` in the frontmatter. `applyTo: 'knowledge-base/**'` alone is not enough: it has no effect before the agent reads a knowledge base file.
+3. Run `doctor`. It checks: whether there is a README, whether every link in the README leads to a file, whether `.gitignore` ignores `knowledge-base/`, and whether the instructions get loaded.
+4. The writing rules of the knowledge base have one main source: the instructions that come with the knowledge base.
 
-### 让任务更新知识库
+### Letting a task update the knowledge base
 
-agent 不能直接改知识库。要让任务能更新它，把知识库登记成一个目标仓库。前提：`knowledge-base/` 自己是一个 git 仓库（有 `.git`）。
+An agent cannot change the knowledge base directly. To let a task update it, register the knowledge base as a target repository. The condition: `knowledge-base/` is a git repository itself (it has a `.git`).
 
-在 `.harness/policies/target.override.json` 的 `repos` 里加一项：
+Add an entry to `repos` in `.harness/policies/target.override.json`:
 
 ```json
 {
@@ -92,58 +112,58 @@ agent 不能直接改知识库。要让任务能更新它，把知识库登记�
 }
 ```
 
-之后更新知识库和改代码仓库走同一条路：开一个种类是 `kb` 的任务，`task fetch kb/<路径>` 取文件，在 `DEV/kb/` 下改，你批准计划，`task promote --dry-run`，你批准回写。
+After that, updating the knowledge base goes the same way as changing a code repository: open a task of kind `kb`, fetch files with `task fetch kb/<path>`, change them under `DEV/kb/`, you approve the plan, `task promote --dry-run`, you approve the write-back.
 
-和普通目标仓库有三点不同：
+It differs from an ordinary target repository in three points:
 
-| | 普通目标仓库 | 知识库 |
+| | Ordinary target repository | Knowledge base |
 | --- | --- | --- |
-| 写到哪 | 新分支 `feature/...` | 直接写进 `base_ref`（默认 `main`） |
-| 提交 | 不提交，你自己看了再提交 | harness 提交一次，只含这次回写的文件 |
-| 回写前的要求 | 工作区干净，分支名没被占用 | 工作区干净，当前就在 `base_ref` 上，git 设了 `user.name` 和 `user.email` |
+| Where it is written | A new branch `feature/...` | Straight into `base_ref` (`main` by default) |
+| Commit | Not committed; you read it and commit yourself | The harness commits once, with only the files of this write-back |
+| Required before the write-back | A clean working tree, and a free branch name | A clean working tree, the current branch is `base_ref`, and git has `user.name` and `user.email` set |
 
-- harness 不 push。提交之后你自己 push。
-- 工作区不干净时拒绝回写，并列出没提交的文件。先自己提交或丢弃。
-- 一次任务同时改代码仓库和知识库时，知识库最后写。
-- 回写中途出错：`task recover` 把没提交的文件恢复原样。
+- The harness does not push. After the commit you push yourself.
+- When the working tree is not clean, the write-back is refused and the uncommitted files are listed. Commit or discard them yourself first.
+- When one task changes a code repository and the knowledge base, the knowledge base is written last.
+- A failure partway through a write-back: `task recover` puts the uncommitted files back as they were.
 
-### 哪些知识库文件有人读
+### Which knowledge base files are read
 
-hook 会记下每次工具调用读了知识库的哪些文件。只记文件名，不记内容。
+A hook notes which knowledge base files every tool call read. File names only, no content.
 
 ```bash
-harness kb reads                # 每个文件被读了几次、是哪些任务读的；哪些文件没人读过
-harness kb reads --days 30      # 只看最近 30 天
-harness kb reads --task <任务名> # 只看一个任务读过的
+harness kb reads                    # how often each file was read and by which tasks; which files nobody read
+harness kb reads --days 30          # the last 30 days only
+harness kb reads --task <task name> # what one task read
 ```
 
-- **没人读的文件**（`never_read`）：可能没用，也可能索引没指到它。
-- **任务失败时没读到的文件**：是知识库的缺口，或 README 索引要补一条。
-- 任务报告（`task report`）里也有一节“读过的知识库文件”。
-- 能记到的：read、search 工具点名的路径，和终端命令里写出来的路径（`cat knowledge-base/x.md`）。记不到的：搜索一个文件夹时，只知道搜了这个文件夹，不知道读了其中哪些文件。
-- 不想记：`observe.override.json` 写 `{ "knowledge_base_reads": false }`。
+- **Files nobody reads** (`never_read`): they may be of no use, or the index may not point at them.
+- **Files a failed task did not read**: a gap in the knowledge base, or an entry missing in the README index.
+- The task report (`task report`) has a part on the knowledge base files read, too.
+- What can be recorded: the paths the read and search tools name, and paths written out in a terminal command (`cat knowledge-base/x.md`). What cannot: for a search over a folder, only the folder is known, not which files in it were read.
+- To switch it off: write `{ "knowledge_base_reads": false }` in `observe.override.json`.
 
-## 技能（Skills）
+## Skills
 
-技能放在 `.github/skills/<名>/SKILL.md`，规则见 [skills.instructions.md](../.github/instructions/skills.instructions.md)。
+A skill is `.github/skills/<name>/SKILL.md`; the rules are in [skills.instructions.md](../.github/instructions/skills.instructions.md).
 
-- 目录名和 `name` 必须一致，用前缀：`harness-<名>`（harness 自带）、`generic-<名>`（通用）、`domain-<领域>-<名>`（你们的业务技能）。
-- `description` 写清“什么时候用”，它是 agent 决定要不要读全文的唯一依据。
-- 业务技能用 `domain-` 前缀，和自带的分开，方便以后升级 harness 时不冲突。
-- 新建技能可以用 `generic-build-new-skill`。
+- The folder name and `name` must be the same, with a prefix: `harness-<name>` (comes with the harness), `generic-<name>` (general), `domain-<domain>-<name>` (your business skills).
+- `description` says clearly "when to use it": it is the only ground on which the agent decides whether to read the whole text.
+- Business skills use the prefix `domain-`, apart from the ones that come with the harness, so that a later upgrade of the harness does not conflict.
+- A new skill can be made with `generic-build-new-skill`.
 
-## agent 与模型
+## Agents and models
 
-自定义 agent 在 `.github/agents/`：`admin`（你在下拉里选）和 `reviewer`（独立检查员，只当子 agent）。平时用默认 agent。
+The custom agents are in `.github/agents/`: `admin` (you pick it in the drop-down), and `reviewer` and `mapper` (subagents only). Day to day you use the default agent.
 
-- 主对话用哪个模型由你在下拉里选。harness 换不了模型。
-- 每个 agent 文件的 `model` 列表按顺序回退。[agents.json](../.harness/policies/agents.json) 规定：回退只能在同一个系列内，`any_series` 里的 agent 除外（`doctor` 检查）。
-- reviewer 默认 Sonnet，没有就退到 Haiku。子 agent 的模型比主模型贵一档时，平台可能不运行它，所以不要把它改成比你常用的主模型更贵的。
-- 改模型名时，改 agent 文件的 `model`，再运行 `doctor`。
+- Which model the main conversation uses is your pick in the drop-down. The harness cannot change the model.
+- The `model` list of every agent file falls back in order. [agents.json](../.harness/policies/agents.json) rules: a fallback stays within one series, except for the agents under `any_series` (`doctor` checks this).
+- The reviewer is Sonnet by default and falls back to Haiku. When a subagent's model is a class above the main model, the platform may not run it, so do not make it more expensive than the main model you usually use.
+- To change a model name, change `model` in the agent file, then run `doctor`.
 
-## 任务的设置
+## Task settings
 
-在 `task.override.json` 里改，字段见 [参考](04-reference.md)：
+Change them in `task.override.json`; the fields are in the [Reference](04-reference.md):
 
 ```json
 {
@@ -152,15 +172,15 @@ harness kb reads --task <任务名> # 只看一个任务读过的
 }
 ```
 
-任务的三个文件模板在 `.harness/contracts/templates/task/`（`TASK.md`、`REQ.md`、`TODO.md`、`LOG.md`）。它们是 guardrail 之外的普通文件，可以按团队习惯改。
+The templates of the task files are in `.harness/contracts/templates/task/`, one folder per language (`en/`, `zh/`), each with `TASK.md`, `REQ.md`, `TODO.md` and `LOG.md`. They are ordinary files outside the guardrails, and you can change them to suit the team. Keep the label of the confirmation line in `REQ.md` ("User confirmed", or "用户确认" in the Chinese one): the review looks for it.
 
-## 日志和清理
+## Logs and cleaning up
 
-- 日志在 `.harness/runtime/`，不进 git。`logs prune --days <N>` 删掉 N 天没写过的会话日志，先用 `--dry-run` 看。
-- 想知道某个运行环境的 hook 实际收到什么：在 `observe.override.json` 里把 `capture.enabled` 设为 `true`，原始输入输出会存到 `.harness/runtime/capture/`。用完关掉。
+- The logs are in `.harness/runtime/` and are not in git. `logs prune --days <N>` deletes the session logs not written for N days; look first with `--dry-run`.
+- To find out what the hook of some runtime really receives: set `capture.enabled` to `true` in `observe.override.json`, and the raw input and output are saved to `.harness/runtime/capture/`. Switch it off when done.
 
-## 路径太长（Windows）
+## Encoding and long paths (Windows)
 
-CLI 输出里的中文：Windows 上输出给管道时，系统编码（cp1252）写不出中文，harness 改用 UTF-8，不用配。`doctor` 的“输出编码”那一行会说明，下面有一行“中文样例”。那一行是乱码，说明读输出的程序不认 UTF-8：新建 `.harness/policies/cli.override.json`，写 `{"output": {"encoding": "native"}}`，中文会显示成 `\uXXXX`。
+Chinese text in CLI output: when the output goes to a pipe on Windows, the system encoding (cp1252) cannot write Chinese, and the harness switches to UTF-8 with nothing to set. The "Output encoding" line of `doctor` says so, and below it is a sample line of Chinese. When that line is garbage, the program reading the output does not know UTF-8: create `.harness/policies/cli.override.json` with `{"output": {"encoding": "native"}}`, and Chinese shows as `\uXXXX`. With the language `en` this matters only for Chinese file names and content.
 
-任务目录加仓库路径会让文件路径很长，Windows 默认上限 260 个字符。把 harness 放在短路径、不同步的位置（例如 `C:\h`），不要放在 OneDrive 下。`doctor` 会对过长的路径给 WARN。
+A task folder plus a repository path makes file paths long, and the Windows default limit is 260 characters. Put the harness on a short path where nothing syncs (for example `C:\h`), not under OneDrive. `doctor` gives a WARN for a path that is too long.

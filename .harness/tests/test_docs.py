@@ -169,7 +169,7 @@ class ReadmeStructureTests(unittest.TestCase):
         version = json.loads(text(REPO / ".harness" / "registry.json"))["version"]
         self.assertIn(f"badge/version-{version}-", readme)
         self.assertIn(f"Version {version} ·", readme)
-        self.assertIn(f"## {version}（", text(REPO / "docs" / "07-release-notes.md"))
+        self.assertIn(f"## {version} (", text(REPO / "docs" / "07-release-notes.md"))
 
     def test_the_readme_has_the_directory_tree_with_both_parts(self) -> None:
         readme = text(REPO / "README.md")
@@ -182,7 +182,7 @@ class ReadmeStructureTests(unittest.TestCase):
         self.assertIn("(.github/instructions/knowledgebase.instructions.md)", readme)
         self.assertIn("must be plugged in", readme[readme.index("## What you must plug in"):])
         configure = text(REPO / "docs" / "03-configure.md")
-        self.assertIn("必须接入", section(configure, "知识库"))
+        self.assertIn("must be plugged in", section(configure, "Knowledge base"))
         self.assertTrue((REPO / ".github" / "instructions" / "knowledgebase.instructions.md").is_file())
 
 
@@ -214,7 +214,7 @@ class PathIndexTests(unittest.TestCase):
         self.assertIn("(.harness/INDEX.md)", text(REPO / "AGENTS.md"))
         readme = text(REPO / "README.md")
         self.assertIn("(.harness/INDEX.md)", readme)
-        self.assertNotIn("## 路径索引", readme)
+        self.assertNotIn("## Path index", readme)
 
 
 class CommandTests(unittest.TestCase):
@@ -231,7 +231,7 @@ class CommandTests(unittest.TestCase):
 
     def test_the_command_tables_of_the_reference_list_real_commands(self) -> None:
         listed: Set[Tuple[str, ...]] = set()
-        for title in ("命令",):
+        for title in ("Commands",):
             for line in section(text(REFERENCE), title).splitlines():
                 if line.startswith("|"):
                     first = line.split("|")[1]
@@ -262,7 +262,7 @@ def dotted(data: dict, path: str) -> bool:
 class PolicyFieldTests(unittest.TestCase):
     def rows(self) -> List[Tuple[str, str]]:
         found = []
-        for line in section(text(REFERENCE), "策略字段").splitlines():
+        for line in section(text(REFERENCE), "Policy fields").splitlines():
             cells = [cell.strip() for cell in line.split("|")[1:-1]]
             if len(cells) >= 2 and cells[0].endswith(".json"):
                 found.append((cells[0], cells[1].strip("`")))
@@ -291,12 +291,12 @@ class PolicyFieldTests(unittest.TestCase):
 class ReferenceCoverageTests(unittest.TestCase):
     def test_every_hook_event_is_listed(self) -> None:
         events = json.loads(text(REPO / ".github" / "hooks" / "harness.json"))["hooks"]
-        reference = section(text(REFERENCE), "hook 事件")
+        reference = section(text(REFERENCE), "Hook events")
         for event in events:
             self.assertIn(f"`{event}`", reference, event)
 
     def test_every_task_template_is_listed(self) -> None:
-        reference = section(text(REFERENCE), "模板（contracts）")
+        reference = section(text(REFERENCE), "Templates (contracts)")
         templates = sorted(path.name for path in (REPO / ".harness" / "contracts" / "templates" / "task" / "en").glob("*.md"))
         self.assertEqual(templates, ["LOG.md", "REQ.md", "TASK.md", "TODO.md"])
         for name in templates:

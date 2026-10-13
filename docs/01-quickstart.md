@@ -1,27 +1,27 @@
-# 快速开始
+# Quick start
 
-第一次看，先读 [总览](00-overview.md)：它是什么，四个部分各管什么。
+On a first visit, read the [Overview](00-overview.md) first: what this is, and what each of the four parts does.
 
-从克隆仓库到跑通第一个任务。想让 agent 带你走一遍：在 Copilot 对话里输入 `/harness-quick-start`。
+From cloning the repository to a first finished task. To have the agent take you through it: type `/harness-quick-start` in a Copilot conversation.
 
-## 要求
+## Requirements
 
-- Python 3.9 或更新。macOS/Linux 用 `python3`，Windows 用 `python`。
-- 只用标准库，不需要 `pip install`。
-- git。用目标仓库时必须有。
-- VS Code 和 GitHub Copilot Chat。聊天输入框的 Session Target 选 **Copilot**。harness 只支持这种会话，见[设计](05-design.md)的“只支持 Copilot 会话”。
+- Python 3.9 or later. `python3` on macOS/Linux, `python` on Windows.
+- The standard library only; no `pip install` needed.
+- git. Required when you use target repositories.
+- VS Code and GitHub Copilot Chat. Pick **Copilot** as the Session Target of the chat box. The harness supports only this kind of session: see the part of [Design](05-design.md) about supporting only Copilot sessions.
 
-拿到 harness 有两种办法，都行：`git clone`，或在 GitHub 页面下载 zip 再解压。解压出来的没有 `.git`，不影响使用。Windows 上放在短路径，例如 `C:\dev\harness`：路径太长 `doctor` 会警告。
+There are two ways to get the harness, both fine: `git clone`, or downloading the zip from the GitHub page and unpacking it. The unpacked one has no `.git`, which does no harm. On Windows put it on a short path, for example `C:\dev\harness`: `doctor` warns when the path is too long.
 
-## 1. 短命令（必须）
+## 1. The short command (required)
 
-所有命令都写成 `harness <命令>`：文档里、agent 收到的规则里、拒绝理由里都是。所以要先让终端认得 `harness`。只做一次。
+Every command is written `harness <command>`: in the docs, in the rules the agent receives, and in refusal reasons. So the terminal has to know `harness` first. This is done once.
 
-想让 agent 带着你做：在 Copilot 对话里输入 `/harness-repo-initialize`。下面是手动的做法。
+To have the agent take you through it: type `/harness-repo-initialize` in a Copilot conversation. Below is how to do it by hand.
 
-启动脚本在 `.harness/bin/`：macOS/Linux 是 `harness`，Windows 是 `harness.cmd`。要做的事只有一件：让它在 PATH 里。
+The launchers are in `.harness/bin/`: `harness` on macOS/Linux, `harness.cmd` on Windows. There is one thing to do: get it on PATH.
 
-macOS/Linux（zsh；bash 把 `~/.zshrc` 换成 `~/.bashrc`），在仓库根目录运行：
+macOS/Linux (zsh; for bash replace `~/.zshrc` with `~/.bashrc`), run at the root of the repository:
 
 ```bash
 mkdir -p ~/bin
@@ -29,145 +29,155 @@ ln -sf "$PWD/.harness/bin/harness" ~/bin/harness
 echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
 ```
 
-你的 PATH 里已经有自己的文件夹时（`echo $PATH` 能看到），把链接建在那里就行，不用再改 PATH。
+When your PATH already has a folder of your own (`echo $PATH` shows it), make the link there and leave PATH alone.
 
-Windows：用一个**固定的文件夹**，PATH 只改这一次，以后升级不用再改。
+Windows: use **a fixed folder**. PATH changes this once, and never again for an upgrade.
 
-1. 建一个仓库之外的文件夹，例如 `C:\Users\<你>\bin`。
-2. 把 `.harness\bin\harness.cmd` **拷**一份进去（拷贝，不用链接：Windows 的链接要管理员权限）。
-3. 把这个文件夹加进用户 PATH（系统设置里搜“环境变量”，编辑用户变量 `Path`，新建一行，填完整路径）。
-   公司电脑不让自己改的话，请 helpdesk 远程加这一条：“请把 `C:\Users\<你>\bin` 加进我账户的 Path”。
+1. Make a folder outside the repository, for example `C:\Users\<you>\bin`.
+2. **Copy** `.harness\bin\harness.cmd` into it (a copy, not a link: a link on Windows needs administrator rights).
+3. Add the folder to the user PATH (search the system settings for "environment variables", edit the user variable `Path`, add a line with the full path).
+   When a company computer does not let you change it, ask the helpdesk to add this one entry remotely: "Please add `C:\Users\<you>\bin` to the Path of my account".
 
-以后下载新版本，放在哪都行。`harness` 按当前目录找仓库，进到哪一份就用哪一份。脚本本身变了时，`doctor` 会给 `[WARN]`，你再拷一份，不用找 helpdesk。
+A new version downloaded later can go anywhere. `harness` finds the repository from the current folder: whichever copy you are in is the one it uses. When the script itself has changed, `doctor` gives a `[WARN]`, and you copy it again; no helpdesk needed.
 
-然后**重开终端，也重开 VS Code**。Copilot 的终端用的是 VS Code 启动时的 PATH，不重开它认不到。
+Then **reopen the terminal, and reopen VS Code too**. Copilot's terminal uses the PATH VS Code had when it started; without a restart it does not see the change.
 
-- `harness` 像 git 一样，操作的是**当前目录所在的那一份** harness 仓库。电脑上有两份仓库时，在哪一份里运行，就操作哪一份。不在任何 harness 仓库里时，用启动脚本自己所在的那一份；固定文件夹里的拷贝没有自己的仓库，这时读环境变量 `HARNESS_HOME`（设成某份仓库的路径），没设就报“不在 harness 仓库里”。
-- 提示 `command not found` 时，运行 `echo $PATH`，看 `~/bin` 在不在里面：只建链接不改 PATH 是最常见的原因。
-- 不要用 alias 或 PowerShell 函数代替。它们只在你自己的交互式终端里有效，agent 的终端里没有。
-- 这一步由你自己做。harness 和 agent 都不改你的环境变量。
+- Like git, `harness` works on the harness repository **the current folder is in**. With two copies on one computer, the one you run it in is the one it works on. Outside any harness repository it uses the copy the launcher belongs to; a copy in a fixed folder has no repository of its own and then reads the environment variable `HARNESS_HOME` (set to the path of one repository); when that is not set, it says it is not in a harness repository.
+- When it says `command not found`, run `echo $PATH` and see whether `~/bin` is in it: a link without the PATH change is the most common cause.
+- Do not use an alias or a PowerShell function instead. Those work only in your own interactive terminal, not in the agent's.
+- You do this step yourself. Neither the harness nor the agent changes your environment variables.
 
-## 2. 检查
+## 2. Check
 
 ```bash
 harness doctor
 ```
 
-最后一行 `{"errors": 0}` 就是通过。
+A last line of `{"errors": 0}` means it passed.
 
-- `[OK]` 正常。
-- `[WARN]` 提醒，不影响运行（例如知识库没有 README）。
-- `[ERROR]` 要先修。信息里写了哪个文件、哪一项。
+- `[OK]` is fine.
+- `[WARN]` is a reminder and does not stop anything (the knowledge base has no README, say).
+- `[ERROR]` has to be fixed first. The message says which file and which item.
 
-第 1 步没做好时，`harness` 本身运行不了。这时用完整路径运行一次，看它怎么说：macOS/Linux 是 `.harness/bin/harness doctor`，Windows 是 `.harness\bin\harness.cmd doctor`。
+When step 1 is not done right, `harness` itself does not run. Then run it once by its full path and see what it says: `.harness/bin/harness doctor` on macOS/Linux, `.harness\bin\harness.cmd doctor` on Windows.
 
-## 3. 任务是什么
+## 3. What a task is
 
-一个任务一个目录，在 `.workspace/sandbox/tasks/<任务名>/`。里面的 `TASK.md` 记着做到哪，换一个会话也能接着做。
+One task, one folder, under `.workspace/sandbox/tasks/<task name>/`. The `TASK.md` in it records how far the work is, so it can go on in another session.
 
-你不用记命令。说一句要做什么，agent 会用技能 `harness-my-task` 问清楚再开任务。你也可以直接输入 `/harness-my-task`。
+You need not remember commands. Say what you want done, and the agent asks until things are clear with the skill `harness-my-task`, then opens a task. You can also type `/harness-my-task` directly.
 
-| 你说的 | agent 做的 |
+| What you say | What the agent does |
 | --- | --- |
-| “帮我查订单表为什么延迟，出一份 RCA” | 新建任务，写需求和 RCA |
-| “接着做那个订单表的任务” | 接上已有的任务，读 `TASK.md` |
-| “这个任务要改仓库了” | 把任务升到带 `DEV/` 的那一档 |
-| 只是问一个问题 | 直接回答，不开任务 |
+| "Find out why the orders table is delayed and write an RCA" | Makes a new task, writes the requirement and the RCA |
+| "Go on with that orders table task" | Picks up the existing task and reads `TASK.md` |
+| "This task has to change the repository now" | Raises the task to the tier that has `DEV/` |
+| Just a question | Answers directly, with no task |
 
-要独立检查，在提示里写 `[review]=1`（要更稳写 2）。任务里写一次就够。详细见 [核心功能](02-features.md)。
+For an independent check, write `[review]=1` in a prompt (2 for more certainty). Once per task is enough. The details are in [Core features](02-features.md).
 
-## 4. 配置目标仓库
+## 4. Set up the target repositories
 
-要让 agent 改公司的代码仓库，先告诉 harness 仓库在哪。新建 `.harness/policies/target.override.json`（这个文件含你本机的路径，已被 git 忽略）：
+To let the agent change the company's code repositories, first tell the harness where they are. Create `.harness/policies/target.override.json` (this file holds paths of your machine and is ignored by git):
 
 ```json
-{ "repos_root": "/Users/你/repos" }
+{ "repos_root": "/Users/you/repos" }
 ```
 
-`repos_root` 下每个带 `.git` 的子文件夹就是一个目标仓库，名字是文件夹名。检查：
+Every subfolder of `repos_root` with a `.git` is a target repository, named after its folder. Check:
 
 ```bash
 harness target list
 ```
 
-更多写法见 [配置与定制](03-configure.md)。
+More ways to write it are in [Configure and customise](03-configure.md).
 
-## 5. 跑第一个改仓库的任务
+## 5. Run a first task that changes a repository
 
-一个 agent，你批准计划，你批准回写。
+One agent; you approve the plan, and you approve the write-back.
 
-1. 在 Copilot Chat 里用默认 agent，说清要做什么、改哪个目标仓库。要独立检查就加上 `[review]=1`。
-2. agent 问你几个问题，然后新建任务，把它理解的需求写进 `REQ.md`，请你看一眼。你有需求文档就放进任务的 `REQ/`，参考代码放 `REF/`。
-3. agent 读需求和知识库，把计划写到 `PLAN.md`，然后停下来，给你文件的链接。
-4. 你在编辑器里看计划。同意就在**自己的终端**运行：
+1. In Copilot Chat, with the default agent, say clearly what you want done and which target repository changes. Add `[review]=1` for an independent check.
+2. The agent asks you a few questions, then makes a new task, writes the requirement as it understands it into `REQ.md`, and asks you to look at it. If you have requirement documents, put them in the task's `REQ/`; reference code goes in `REF/`.
+3. The agent reads the requirement and the knowledge base, writes the plan to `PLAN.md`, then stops and gives you the link to the file.
+4. You read the plan in the editor. If you agree, run this in **your own terminal**:
 
    ```bash
    harness task approve-plan
    ```
 
-   输入屏幕上的确认码。要改计划，直接告诉 agent，改完再批准。
-5. 你说“批准了”。agent 用 `task fetch` 把要改的文件取到 `DEV/<仓库名>/<路径>`，在那里改。它只能写任务目录。
-6. 开了独立检查的话，agent 运行 `task review start`，再调用 reviewer。没通过它自己改了再查，凑够次数才能往下走。结论在 `REVIEW/` 下。
-7. agent 运行 `task promote --dry-run`，给你 `PROMOTE-PLAN.diff` 的链接。你在编辑器里看差异，同意就运行：
+   Type the code shown on the screen. To change the plan, just tell the agent, and approve after the change.
+5. You say "approved". The agent fetches the files to change into `DEV/<repository>/<path>` with `task fetch` and changes them there. It can write the task folder only.
+6. With independent checks on, the agent runs `task review start`, then calls the reviewer. When it does not pass, the agent fixes things itself and checks again; it can go on only with enough passes. The verdicts are under `REVIEW/`.
+7. The agent runs `task promote --dry-run` and gives you the link to `PROMOTE-PLAN.diff`. You read the diff in the editor, and if you agree you run:
 
    ```bash
    harness task approve-promote
    ```
 
-8. 你说“批准了”，agent 运行 `task promote`：在每个目标仓库从 main 新建分支 `feature/<任务名>`，把文件写进去，**不提交**。
-9. 你自己看差异、提交、建 PR。`task close` 后报告在 `.workspace/reports/tasks/<任务名>/report.md`。
+8. You say "approved", and the agent runs `task promote`: in every target repository it makes a new branch `feature/<task name>` from main and writes the files into it, **without committing**.
+9. You read the diff, commit and open the PR yourself. After `task close` the report is at `.workspace/reports/tasks/<task name>/report.md`.
 
-不改仓库的任务（RCA、设计方案）没有第 3、4、5、7、8 步：成果直接写在任务目录根下。
+A task that changes no repository (an RCA, a design) has no steps 3, 4, 5, 7 and 8: the results are written straight to the root of the task folder.
 
-## 6. 看有哪些任务
+## 6. See which tasks there are
 
 ```bash
 harness task list
 ```
 
-每个没关闭的任务一行：种类、档位、在等你做什么。等你批准的排在前面。`--all` 连关闭的一起列。
+One line per task that is not closed: the kind, the tier, and what it waits for from you. The ones waiting for your approval come first. `--all` lists closed ones too.
 
-## 7. 日常怎么说
+## 7. What to say day to day
 
-一句话就够：**要做什么，在哪个仓库。** 不用写长提示，不用写知识库或任务目录的路径，也不用写“先给我看计划”。这些 harness 都会做：agent 先问清楚，把它理解的需求写进 `REQ.md` 等你确认；改仓库前必须有你批准的计划。
+One sentence is enough: **what to do, and in which repository.** No long prompt, no path of the knowledge base or of the task folder, and no "show me the plan first". The harness does all of that: the agent asks first until things are clear, writes the requirement as it understands it into `REQ.md` and waits for you to confirm; and before a repository changes there must be a plan you approved.
 
-想让结果更好，只多说两样：
+For a better result, say just two more things:
 
-- **范围**：哪个仓库、哪张表、哪个目录。
-- **做完的标准**：必须实现什么，不能影响什么。
+- **The scope**: which repository, which table, which folder.
+- **The standard for done**: what must be achieved, and what must not be affected.
 
-需求文档、日志这类材料，等任务开好后放进任务目录的 `REQ/`、`REF/`，再告诉它。
+Material such as requirement documents and logs goes into `REQ/` and `REF/` of the task folder once the task is open; then tell the agent.
 
-| 情况 | 你说的 |
+| Case | What you say |
 | --- | --- |
-| 问一个问题，解释一段代码 | 直接问。不开任务 |
-| RCA、设计、方案 | “查 <仓库> 的订单表为什么晚了，出一份 RCA” |
-| 改目标仓库 | “在 <仓库> 给订单表加一个字段 <名字>。验收：<标准>” |
-| 接着做 | “接着做 <任务名，或一句能认出它的话>” |
-| 回写之后再改一轮 | “任务 <任务名> 还要改：<新的要求>” |
-| 改需求 | “需求变了：<新的条件>”。它先改 `REQ.md`，再动成果 |
-| 分析变成要改仓库 | “这个任务要改 <仓库> 了” |
-| 只检查已有的成果 | “`[review]=1` 检查 <任务名> 的成果，不要改文件” |
-| 跨很多天的大事 | `/generic-goal-driven`，之后每个新 session 输入 `/generic-goal-driven 继续` |
+| A question, or a piece of code to explain | Just ask. No task is opened |
+| An RCA, a design, an approach | "Find out why the orders table of <repository> was late and write an RCA" |
+| Changing a target repository | "Add a field <name> to the orders table in <repository>. Acceptance: <standard>" |
+| Going on | "Go on with <the task name, or a sentence that identifies it>" |
+| One more round after a write-back | "Task <task name> needs more changes: <the new request>" |
+| Changing the requirement | "The requirement changed: <the new condition>". It changes `REQ.md` first, then the work |
+| An analysis turns into a repository change | "This task has to change <repository> now" |
+| Only checking existing work | "`[review]=1` check the work of <task name>; do not change files" |
+| Something big over many days | `/generic-goal-driven`, and after that `/generic-goal-driven continue` in every new session |
 
-标记写在提示里任意位置，一个任务写一次就够：
+A mark can stand anywhere in a prompt, and once per task is enough:
 
-| 标记 | 作用 |
+| Mark | What it does |
 | --- | --- |
-| `[review]=1` | 成果要通过 1 次独立检查才能回写 |
-| `[review]=2` | 要连续通过 2 次，每次换一个新的 reviewer。更稳，也更贵 |
-| `[review]=0` | 关掉这个任务的独立检查 |
+| `[review]=1` | The work has to pass 1 independent check before it can be written back |
+| `[review]=2` | It has to pass 2 in a row, each with a new reviewer. More certain, and more expensive |
+| `[review]=0` | Switches off the independent checks of this task |
 
-不写就是不查。
+Without a mark nothing is checked.
 
-## 常见情况
+## Language
 
-- **工具调用被拒绝**：理由里写了原因和下一步。agent 会照做或停下来告诉你。
-- **agent 要运行 git 写命令**：被拒绝，理由里有整条命令和验证码。你在自己的终端运行 `harness approve-command`，输入验证码，agent 再运行同一条命令（只放行一次）。
-- **agent 想直接改目标仓库的文件**：被拒绝。目标仓库只有 promote 能写。
-- **独立检查一直不通过**：最多查 n + 2 次，用完 agent 会停下。你在自己的终端运行 `harness task review extend` 再给几次，或 `harness task review waive` 放行这一版。
-- **promote 中途出错**：进入 `partial`，信息里列出已写好、出错、没动的仓库。你在自己的终端运行 `harness task recover`，再让 agent 重新 `--dry-run`。
-- **任务很大，要做很多天**：输入 `/generic-goal-driven` 建目标，之后每个新 session 输入 `/generic-goal-driven 继续`。日常任务不要用。
-- **看用量和拒绝次数**：`harness stats`。
-- **要改 harness 自己，或查 harness 为什么出错**：在 agent 下拉里选 admin，照它给的命令在终端运行 `harness admin on`。用完运行 `harness admin off`。见 [02-features.md](02-features.md) 的“admin”一节。
-- **从 1.1.0 之前升级**：没有 Level 了，`/l1`、`/l2` 不用再写；`task start` 换成 `task new` 和 `task open`；旧任务目录要自己搬，见 [版本记录](07-release-notes.md)。
+The harness speaks English by default, and can speak Chinese. The setting covers what the CLI and the hooks print, the templates of the task files, and the language the agent is told to answer and write in. To change it, create `.harness/policies/user.override.json` (ignored by git):
+
+```json
+{ "language": "zh" }
+```
+
+`harness doctor` shows the language in effect on its "Language" line. The docs, rules and skills of the repository are in English only. More in [Configure and customise](03-configure.md).
+
+## Common cases
+
+- **A tool call is refused**: the reason says why and what to do next. The agent does it, or stops and tells you.
+- **The agent wants to run a git write command**: it is refused, and the reason has the whole command and a code. You run `harness approve-command` in your own terminal and type the code, and the agent runs the same command again (let through once only).
+- **The agent wants to change a file of a target repository directly**: refused. Only promote writes a target repository.
+- **An independent check keeps failing**: there are at most n + 2 checks; when they are used up, the agent stops. You run `harness task review extend` in your own terminal for more checks, or `harness task review waive` to let this version through.
+- **A promote fails partway**: it goes to `partial`, and the message lists the repositories that are written, failed and untouched. You run `harness task recover` in your own terminal, then let the agent run `--dry-run` again.
+- **A task is very big and takes many days**: type `/generic-goal-driven` to set up a goal, and after that `/generic-goal-driven continue` in every new session. Do not use it for everyday tasks.
+- **Seeing usage and the number of refusals**: `harness stats`.
+- **Changing the harness itself, or finding out why the harness went wrong**: pick admin in the agent drop-down and run `harness admin on` in the terminal as it tells you. When done, run `harness admin off`. See the admin part of [02-features.md](02-features.md).
+- **Upgrading from before 1.1.0**: there are no Levels any more, and `/l1` and `/l2` are no longer written; `task start` became `task new` and `task open`; old task folders have to be moved by hand: see the [release notes](07-release-notes.md).

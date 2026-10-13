@@ -1,192 +1,202 @@
-# 核心功能
+# Core features
 
-harness 做六件事。每一件都分成“写给 agent 的说明”和“代码强制执行的检查”两层。说明会被模型忽略，检查不会。
+The harness does six things. Each has two layers: "text written for the agent" and "checks that code enforces". The model can ignore text; it cannot ignore the checks.
 
-## 任务：一个任务一个目录
+## Tasks: one task, one folder
 
-工作的单位是任务。一个任务是 `.workspace/sandbox/tasks/<任务名>/` 下的一个目录，由命令建立。目录里的文件让任何新会话都能接着做。
+The unit of work is the task. A task is a folder under `.workspace/sandbox/tasks/<task name>/`, made by a command. The files in the folder let any new session go on with the work.
 
-**种类**决定做完的标准。**档位**决定目录里有哪些文件。
+The **kind** decides what counts as done. The **tier** decides which files the folder has.
 
-| 种类 | `--kind` | 做完的标准 | 默认档位 |
+| Kind | `--kind` | Done when | Default tier |
 | --- | --- | --- | --- |
-| 问答（含查知识库） | `qa` | 答案有出处 | 轻 |
-| RCA | `rca` | 有证据链：现象、日志、根因、验证 | 中 |
-| 设计方案、开发计划 | `design` | 有备选方案和取舍 | 中 |
-| 开发 | `dev` | 改动符合批准的计划，有自测记录 | 全 |
-| 测试 | `test` | 用例和结果落盘 | 全 |
-| 更新知识库 | `kb` | 来源清楚，走 promote（知识库登记成目标仓库后，直接提交到它的主分支） | 全 |
-| 其他：宽泛的问题、一次性的情况分析、说不准归哪类 | `other` | 没有固定标准：开任务时和你商定，写进 `REQ.md` 的“做完的标准” | 中 |
+| Q&A (looking things up in the knowledge base included) | `qa` | The answer has a source | light |
+| RCA | `rca` | There is a chain of evidence: what was seen, logs, root cause, verification | medium |
+| Design, development plan | `design` | There are options and trade-offs | medium |
+| Development | `dev` | The changes match the approved plan, with a record of self-testing | full |
+| Testing | `test` | Cases and results are on disk | full |
+| Knowledge base update | `kb` | The source is clear; it goes through promote (once the knowledge base is registered as a target repository, straight into a commit on its main branch) | full |
+| Other: a broad question, a one-off look at a situation, hard to say which kind | `other` | No fixed standard: agreed with you when the task is opened, and written into "Done when" in `REQ.md` | medium |
 
-| 档位 | 目录里有什么 |
+| Tier | What the folder has |
 | --- | --- |
-| 轻 `light` | `TASK.md` |
-| 中 `medium` | 加 `REQ.md`、`REQ/`、`REF/`、`LOG.md` |
-| 全 `full` | 再加 `TODO.md`、`DEV/`、`TEST/` |
+| `light` | `TASK.md` |
+| `medium` | adds `REQ.md`, `REQ/`, `REF/`, `LOG.md` |
+| `full` | adds `TODO.md`, `DEV/`, `TEST/` |
 
-- **不用记命令**：你说要做什么，agent 用技能 `harness-my-task` 问清楚，再运行 `task new` 或 `task open`。每条提示开头，hook 会告诉它有哪些没关闭的任务。
-- **接力**：`TASK.md` 记着种类、状态、现在在做、下一步、已定的事。新会话先读它。agent 在一条提示里写过任务文件却没更新它，结束前会被提醒一次。
-- **需求**：`REQ.md` 由 agent 按对话写，你确认。对话里需求变了，它先改 `REQ.md` 再动成果。你自己的文档（BRD、邮件）放 `REQ/`，agent 只读。
-- **任务和会话分开**：一个会话同一时间接着一个任务，可以换，原来那个不用先关。关闭只改状态，目录原地不动，`task open` 能重新打开。任务变大了用 `task upgrade` 升档，只补缺的文件。
-- **只写任务目录**：接上任务后，编辑工具只能写这个目录。
-- **看板**：`task list` 列出所有没关闭的任务、它在等你做什么、等了多久。`--watch` 在终端里自动刷新；`task board` 生成一个 HTML 页面。agent 停下时 hook 会记一笔“等你”，所以不用一个个会话去翻。
-- 只是问答、不落盘时，不用开任务。
-- 任务大到要跨很多天：用 `/generic-goal-driven`，见下面“长任务”。
+- **No commands to remember**: you say what you want done, the agent asks until things are clear with the skill `harness-my-task`, then runs `task new` or `task open`. At the top of every prompt, a hook tells it which tasks are not closed.
+- **Handover**: `TASK.md` holds the kind, the status, what is being done, the next step, and what is decided. A new session reads it first. When the agent wrote task files in a prompt and did not update it, it is reminded once before it ends.
+- **The requirement**: the agent writes `REQ.md` from the conversation, and you confirm it. When the requirement changes in the conversation, it changes `REQ.md` first, then the work. Your own documents (a BRD, emails) go in `REQ/`; the agent only reads them.
+- **Tasks and sessions are separate**: a session holds one task at a time. It can switch, and the old task need not be closed first. Closing only changes the state; the folder stays where it is, and `task open` opens it again. When a task grows, `task upgrade` raises the tier and only adds the missing files.
+- **Writing the task folder only**: with a task, the edit tools can write this folder only.
+- **The board**: `task list` lists every task that is not closed, what it waits for from you, and for how long. `--watch` refreshes by itself in the terminal; `task board` makes an HTML page. When the agent stops, a hook notes "waiting for you", so you need not go through session after session.
+- For plain Q&A that writes nothing, no task is opened.
+- When a job is so big that it spans many days: use `/generic-goal-driven`; see "Long tasks" below.
 
-## gate：拦住危险的写和命令
+## The gate: stopping dangerous writes and commands
 
-gate 是一个 hook 模块，在每次工具调用前检查。它只管写，不管读。
+The gate is a hook module that checks before every tool call. It guards writes only, not reads.
 
-| 它拦 | 说明 |
+| What it stops | Notes |
 | --- | --- |
-| guardrail 文件 | `.github/hooks/`、`.harness/engine/`、`.harness/policies/`、`.harness/bin/`、`.harness/registry.json`、`.harness/runtime/`、`.vscode/settings.json`。不能改，也不能被 override 删掉。只有 admin 模式的会话例外（见下面“admin”一节） |
-| 任务越界写 | 接着任务的会话只能写任务目录。`DEV/` 要等你批准计划；`REQ/`、`REF/` 不能写 |
-| 目标仓库的工作区 | 目标仓库里的文件不能直接改，只有 promote 能写 |
-| CLI 专用文件 | 任务的 `.task/`、`REVIEW/`、`SNAPSHOT/`、两个 `.diff` 和报告，只能用命令改 |
-| `.git` | `.git` 文件夹不能写（含 Windows 的别名写法），目标仓库的 `refused_paths` 也不能写 |
-| 危险终端命令（拒绝） | 删根目录、`curl \| sh`、格式化磁盘、用管理员权限运行（`sudo`、`runas`、`Start-Process -Verb RunAs`）、递归改权限（`chmod -R`、`icacls /T`、`takeown /R`）、删容器或基础设施（`docker rm`、`kubectl delete`、`terraform apply`）。要用就由你自己在终端运行 |
-| 有风险的终端命令（要你确认） | 删文件、联网、装软件包、丢弃 git 改动、删会话日志。**这只是提醒，不是保护**：权限选 Allow all 时不弹框，直接执行；点过一次 Allow in this Session 后，同一会话里也不再问 |
-| 批准类命令 | `task approve-plan`、`task approve-promote`、`task recover`、`task review extend`、`task review waive`、`task pause`、`task resume`、`approve-command`、`admin on` 只能由你在终端运行，agent 运行会被拒绝 |
-| 重复被拒 | 同一个拒绝出现多次，理由换成“停止重试”（熔断） |
+| Guardrail files | `.github/hooks/`, `.harness/engine/`, `.harness/policies/`, `.harness/bin/`, `.harness/registry.json`, `.harness/runtime/`, `.vscode/settings.json`. They cannot be changed, and an override cannot remove them. The one exception is a session in admin mode (see "admin" below) |
+| Writes outside the task | A session with a task can write the task folder only. `DEV/` waits for you to approve the plan; `REQ/` and `REF/` cannot be written |
+| The working tree of a target repository | Files in a target repository cannot be changed directly; only promote writes them |
+| Files of the CLI | A task's `.task/`, `REVIEW/`, `SNAPSHOT/`, the two `.diff` files and the reports can be changed only by commands |
+| `.git` | No `.git` folder can be written (the alias spellings of Windows included), and neither can the `refused_paths` of a target repository |
+| Dangerous terminal commands (refused) | Deleting the root folder, `curl \| sh`, formatting a disk, running with administrator rights (`sudo`, `runas`, `Start-Process -Verb RunAs`), changing rights recursively (`chmod -R`, `icacls /T`, `takeown /R`), deleting containers or infrastructure (`docker rm`, `kubectl delete`, `terraform apply`). If you need one, run it yourself in the terminal |
+| Risky terminal commands (you confirm) | Deleting files, going on the network, installing packages, dropping git changes, deleting session logs. **This is only a reminder, not protection**: with the permission set to Allow all no box pops up and the command just runs; and after one click on Allow in this Session the same session is not asked again |
+| Approval commands | `task approve-plan`, `task approve-promote`, `task recover`, `task review extend`, `task review waive`, `task pause`, `task resume`, `approve-command` and `admin on` can be run only by you, in the terminal. When an agent runs them, they are refused |
+| Repeated refusals | When the same refusal comes up several times, the reason is replaced with one that says to stop retrying (the breaker) |
 
-拒绝在哪种权限模式下都生效（默认、Allow all、Autopilot，2026-10-10 实测）。
+A refusal works in every permission mode (default, Allow all, Autopilot; measured 2026-10-10).
 
-gate 不是沙盒。它防的是 agent 犯错，不是防 agent 存心绕过：agent 和你是同一个系统用户，它的终端命令能做你能做的事。gate 靠读命令的文字来判断：
+The gate is not a sandbox. It guards against an agent's mistakes, not against an agent set on getting around it: the agent and you are the same system user, and its terminal commands can do what you can do. The gate judges by reading the text of a command:
 
-- **看得出的**：直接写出路径的写入、删除、复制、原地修改、内联脚本；先 `cd` 进一个目录、再用相对路径写的。
-- **看不出的**：用变量拼出来的路径（`D=...; echo x > $D/file`）；先写一个脚本文件再运行它；程序自己决定写哪里的。
+- **What it can see**: writes, deletes, copies, in-place edits and inline scripts that spell out the path; and a write by a relative path after a `cd` into a folder.
+- **What it cannot see**: a path built from variables (`D=...; echo x > $D/file`); a script file written first and then run; a program that decides by itself where to write.
 
-批准记录存在任务的 `.task/` 里，所以上面“看不出的”写法理论上能伪造批准。需要更强的隔离，用操作系统或容器。详细边界见 [.workspace/README.md](../.workspace/README.md)。规则全文在 [gate.json](../.harness/policies/gate.json)。
+The approval records are kept in the task's `.task/`, so in theory one of the spellings it "cannot see" could forge an approval. For stronger isolation, use the operating system or a container. The detailed limits are in [.workspace/README.md](../.workspace/README.md). The full rules are in [gate.json](../.harness/policies/gate.json).
 
-## 改目标仓库：两次批准
+## Changing a target repository: two approvals
 
-目标仓库是公司的代码仓库，不在 harness 里，文件很多，不可能整个复制。典型的是数据工程 pipeline 代码库：没有入口、不能在本机运行。详见 [配置与定制](03-configure.md) 的“适用的代码库”。
+A target repository is one of the company's code repositories. It is outside the harness and has many files, so copying all of it is out of the question. The typical one is a data engineering pipeline code store: no entry point, and it cannot run on a local machine. See the part of [Configure and customise](03-configure.md) about which code stores it suits.
 
-要改它，任务用全档（种类 `dev`、`test`、`kb` 默认就是）。
+To change one, the task uses the full tier (the default for the kinds `dev`, `test` and `kb`).
 
-- **计划要你批准**：agent 把计划写到 `PLAN.md` 就停下，给你文件的链接。你在编辑器里看，在终端运行 `task approve-plan`，输入确认码。确认码绑定这份计划，计划改了要重新批准。
-- **成果分两种**：要回写的放 `DEV/<仓库>/<路径>`，你批准计划之后才能写。不回写的（RCA、设计、一次性脚本）放任务目录根下，不用批准，promote 不看它。
-- **取文件**：`task fetch <仓库>/<路径>` 用 `git` 读本地 main 分支（不动工作区），放到 `DEV/<仓库>/<路径>`，路径和仓库里一样。几 MB 的大文件按字节原样复制。
-- **差异**：`task diff` 把成果和取文件时的版本对比，写成 `CHANGES.diff`。reviewer 读差异，不读全文。
-- **回写要你批准**：`task promote --dry-run` 把完整差异写成 `PROMOTE-PLAN.diff`，你在编辑器里看，在终端运行 `task approve-promote`。
-- **回写前的检查**：每个仓库的工作区干净、分支名没被占、main 上要改的文件没变、新文件在 main 上还不存在。所有仓库都通过才写。
-- **怎么写**：对每个仓库 `git switch -c <分支> <main>`，写文件，**不提交**。分支默认 `feature/<任务名>`（任务名里的 `-` 变成 `_`），所有被改的仓库用同一个。直接放在 `DEV/` 根目录的文件不属于任何仓库，不回写。
-- **知识库**：登记成知识库的仓库不建分支，直接写进它的主分支并提交一次。见 [03-configure.md](03-configure.md) 的“让任务更新知识库”。
-- **几个任务写同一个仓库**：一个任务一个分支，按顺序来。上一个任务回写的文件你提交了，下一个才能写。`task queue` 列出每个仓库被谁占着、谁在排队、你下一步做什么。
-- **删除和改名**：`task delete <仓库>/<路径>` 声明删除（文件要先取过）。改名是新文件加删除旧文件。
-- **备份**：回写前，整份补丁存成 `DEV/<任务名>.patch`；被删的文件放在 `DEV/_deleted/`。
-- **中途出错**：不自动回滚。任务进入 `partial`，你在终端运行 `task recover` 恢复。
-- **多轮**：接着做沿用原来的批准。回写过之后再 `task open`，开新的一轮：上一轮的成果移到 `DEV_r<轮数>/`，计划移到 `PLAN_r<轮数>.md`，要新计划、新批准。
-- **报告**：`task close` 写 `.workspace/reports/tasks/<任务名>/report.md`（一个任务一个文件夹）：计划全文、两次批准的时间、取了哪些文件、改动的增删行数、每次独立检查的结论、被拒绝的调用。
-- **分析页**：同一个文件夹里同时写 `report.html`，用图说明这个任务的时间和用量花在哪：干活和等你各多久，模型、工具、子 agent、等确认各占多少，哪条提示最慢、最贵。用量读 Copilot 自己的会话记录，读不到时只有耗时。自己看页面不花 token。想让 agent 讲给你听，输入 `/harness-task-report`：只有你输入它才会运行，agent 不会自己调用。
+- **You approve the plan**: the agent writes the plan to `PLAN.md` and stops, giving you the link to the file. You read it in the editor and run `task approve-plan` in the terminal, typing the code. The code is bound to this plan: when the plan changes, it needs a new approval.
+- **Two kinds of results**: what is written back goes in `DEV/<repository>/<path>` and can be written only after you approve the plan. What is not written back (an RCA, a design, one-off scripts) goes at the root of the task folder, needs no approval, and promote does not look at it.
+- **Fetching files**: `task fetch <repository>/<path>` reads the local main branch with `git` (the working tree is left alone) and puts the file at `DEV/<repository>/<path>`, the same path as in the repository. A large file of several MB is copied byte for byte.
+- **The diff**: `task diff` compares the work with the version at the time of the fetch and writes `CHANGES.diff`. The reviewer reads the diff, not the whole text.
+- **You approve the write-back**: `task promote --dry-run` writes the whole diff as `PROMOTE-PLAN.diff`; you read it in the editor and run `task approve-promote` in the terminal.
+- **Checked before the write-back**: for every repository, the working tree is clean, the branch name is free, the files to change have not changed on main, and new files do not exist on main yet. Nothing is written unless every repository passes.
+- **How it is written**: for every repository `git switch -c <branch> <main>`, the files are written, and **nothing is committed**. The branch defaults to `feature/<task name>` (a `-` in the task name becomes `_`), the same for every repository that changes. Files right at the root of `DEV/` belong to no repository and are not written back.
+- **The knowledge base**: a repository registered as a knowledge base gets no branch: the files are written straight into its main branch with one commit. See the part of [03-configure.md](03-configure.md) about letting a task update the knowledge base.
+- **Several tasks writing the same repository**: one task, one branch, in order. The next can write only after you commit the files the one before wrote back. `task queue` lists for every repository who holds it, who waits, and what you do next.
+- **Deleting and renaming**: `task delete <repository>/<path>` marks a file for deletion (it has to be fetched first). A rename is a new file plus the deletion of the old one.
+- **Backup**: before the write-back, the whole patch is saved as `DEV/<task name>.patch`; deleted files are kept in `DEV/_deleted/`.
+- **A failure partway**: nothing is rolled back automatically. The task goes to `partial`, and you run `task recover` in the terminal to recover.
+- **Several rounds**: going on with a task keeps the approvals it has. A `task open` after a write-back starts a new round: the work of the last round moves to `DEV_r<round>/`, the plan to `PLAN_r<round>.md`, and a new plan and a new approval are needed.
+- **The report**: `task close` writes `.workspace/reports/tasks/<task name>/report.md` (one folder per task): the whole plan, the times of the two approvals, which files were fetched, the lines added and removed, the verdict of every independent check, the calls that were refused.
+- **The analysis page**: `report.html` is written into the same folder at the same time, and shows in charts where the time and the usage of this task went: how long the agent worked and how long it waited for you, the shares of the model, the tools, the subagents and waiting for confirmation, and which prompt was the slowest and the most expensive. The usage is read from Copilot's own session record; when that cannot be read, there are times only. Looking at the page yourself costs no tokens. To have the agent explain it to you, type `/harness-task-report`: it runs only when you type it, and the agent does not call it by itself.
 
-没配置目标仓库时，agent 改不了你们的代码。
+With no target repository set up, the agent cannot change your code.
 
-## 独立检查：`[review]=n`
+## Independent checks: `[review]=n`
 
-默认不查。你在任务的提示里写 `[review]=n`，成果就要**连续通过 n 次**独立检查，才能回写。写一次就够，之后的提示不用再写；写 `[review]=0` 关掉。
+Nothing is checked by default. When you write `[review]=n` in a prompt of the task, the work has to **pass n independent checks in a row** before it can be written back. Once is enough, and later prompts need not repeat it; `[review]=0` switches it off.
 
-- **谁查**：子 agent reviewer。它没看过作者的思路，只看需求（`REQ.md`、`PLAN.md`）、成果和差异。它没有编辑工具。每次都是一个新的 reviewer。
-- **怎么查**：agent 写完成果，运行 `task review start`（存一份快照，写好评审包），再调用 reviewer。没开检查时调用会被拒绝。
-- **结论**：reviewer 的回答第一行是 `VERDICT: PASS` 或 `VERDICT: FAIL`，后面每条问题带“文件:行”（行号是大概位置）。回答由 hook 原样存成 `REVIEW/round-NNN/verdict.md`，agent 改不了。
-- **没通过**：agent 自己按问题改，再查。第 2 次起 reviewer 只报影响正确性的问题。
-- **怎么数**：从检查记录往回数连续的 PASS，而且查的那一版要和现在的成果一字不差。改过成果、需求或计划，之前的通过都不算。
-- **上限**：最多查 n + 2 次。用完了 agent 停下，由你在终端决定：`task review extend` 再给几次，或 `task review waive` 放行这一版。
-- **没凑够**：`task promote --dry-run` 被拒绝。
-- n 写多大：1 够日常用。2 更稳，实测两个 reviewer 对同一份成果会给出不同结论。n 最大 5。
-- 数字在 [task.json](../.harness/policies/task.json) 的 `review`。
+- **Who checks**: the subagent reviewer. It has not seen the author's reasoning and looks only at the requirement (`REQ.md`, `PLAN.md`), the work and the diff. It has no edit tools. It is a new reviewer every time.
+- **How it checks**: when the work is written, the agent runs `task review start` (a snapshot is saved and the review package written), then calls the reviewer. Without checks on, the call is refused.
+- **The verdict**: the first line of the reviewer's answer is `VERDICT: PASS` or `VERDICT: FAIL`, and every finding after it has "file:line" (the line number is approximate). A hook saves the answer as written, as `REVIEW/round-NNN/verdict.md`; the agent cannot change it.
+- **Not passed**: the agent fixes the findings itself and checks again. From the 2nd check on the reviewer reports only what affects correctness.
+- **How it is counted**: the PASSes in a row, counting back through the record of checks, whose checked version is exactly the work as it is now. Once the work, the requirement or the plan changes, the earlier passes no longer count.
+- **The limit**: at most n + 2 checks. When they are used up the agent stops, and you decide in the terminal: `task review extend` for more checks, or `task review waive` to let this version through.
+- **Not enough passes**: `task promote --dry-run` is refused.
+- How large to make n: 1 is enough day to day. 2 is more certain: it was measured that two reviewers give different verdicts on the same work. n is 5 at most.
+- The numbers are under `review` in [task.json](../.harness/policies/task.json).
 
-**关口快照**：计划批准时、每次检查前、回写的 dry-run 前，任务的成果自动存一份到 `SNAPSHOT/`。改坏了能找回当时的版本。默认留 14 天，`task snapshot list`、`task snapshot prune` 查看和清理。
+**Snapshots at the gates**: when the plan is approved, before every check and before the dry run of a write-back, a copy of the task's work is saved to `SNAPSHOT/` by itself. When something is broken, the version of that moment can be found again. They are kept 14 days by default; `task snapshot list` and `task snapshot prune` show and remove them.
 
-## 子 agent
+## Subagents
 
-只有两个，都要你开，agent 自己开不了。
+There are two only, both switched on by you; the agent cannot switch them on.
 
-- **reviewer**：独立检查。要接着任务，你写了 `[review]=n`，并且先 `task review start`。
-- **mapper**：并行分块阅读，只读。要你输入 `/generic-mapreduce`，见下面。
-- 其他子 agent 一律被拒绝。admin 模式的会话不能调用子 agent。
-- 平台自带的语义搜索是一个工具，不受这条限制。
+- **reviewer**: the independent check. It needs a task, a `[review]=n` you wrote, and `task review start` first.
+- **mapper**: reading in parallel chunks, read only. It needs you to type `/generic-mapreduce`; see below.
+- Every other subagent is refused. A session in admin mode cannot call a subagent.
+- The platform's own semantic search is a tool and is not under this limit.
 
-### 并行分块阅读：`/generic-mapreduce`
+### Reading in parallel chunks: `/generic-mapreduce`
 
-一件事要读很多东西，而且能拆成互不相关的几块时用。例如：一个故障的三个可能原因各查一遍；五个 domain 的知识库各总结一页。
+For a job that needs a lot of reading and can be split into parts that have nothing to do with each other. For example: the three possible causes of a failure, each looked into; the knowledge bases of five domains, each summed up on one page.
 
-- **只有你能开**：输入 `/generic-mapreduce <问题>`。hook 读你的这条提示来放行，agent 自己写这个命令不算。
-- **先问你**：agent 先判断值不值，不值就劝你别用。值的话告诉你拆成哪几块、大概多花几倍用量，等你同意再派。
-- **只读**：子 agent `mapper` 没有编辑工具，也没有终端。每个读自己那一块，交一份带出处（路径和行号）的摘要。主 agent 汇总。
-- **有上限**：一次最多 4 个，60 分钟内有效（`task.json` 的 `mapreduce.max_agents`、`minutes`）。hook 数次数，超了拒绝。再输入一次重新计数。
-- **不做的**：并行改文件。原因：目标仓库不能运行，合并后对不对没有东西能判定。
-- 不用先开任务。技能在 [.github/skills/generic-mapreduce/](../.github/skills/generic-mapreduce/)。
+- **Only you can switch it on**: type `/generic-mapreduce <question>`. A hook lets it through by reading this prompt of yours; the agent writing the command itself does not count.
+- **It asks you first**: the agent first judges whether it is worth it, and advises against it when it is not. When it is, it tells you which parts it splits the job into and roughly how many times the usage it takes, and sends the mappers only after you agree.
+- **Read only**: the subagent `mapper` has no edit tools and no terminal. Each reads its own part and hands in a summary with sources (path and line number). The main agent puts them together.
+- **There is a limit**: 4 at most in one run, valid for 60 minutes (`mapreduce.max_agents` and `minutes` in `task.json`). A hook counts the calls and refuses beyond the limit. Typing it once more starts the count again.
+- **What it does not do**: changing files in parallel. The reason: a target repository cannot be run, so nothing can judge whether the merged result is right.
+- No task has to be open first. The skill is in [.github/skills/generic-mapreduce/](../.github/skills/generic-mapreduce/).
 
-## autorun：照清单一直做（beta，只有你能开）
+## autorun: working down the list (beta; only you can switch it on)
 
-计划批准之后，剩下的是照计划一步步做。autorun 让 agent 照 `TODO.md` 一直做下去，你不用每步盯着，回来只看一份总差异。
+After the plan is approved, what is left is doing it step by step. Autorun lets the agent work down `TODO.md` without you watching every step, and you come back to one whole diff.
 
-- **只有你能开**：在终端运行 `harness task autorun on`，屏幕列出还没做的步骤和上限，你输入确认码。agent 运行这条命令会被拒绝。
-- **开之前要有**：批准过的计划、`TODO.md` 里没勾的步骤、独立检查（`[review]=n`，n 至少 1）。输入 `/harness-autorun`，agent 会带你把这些准备好。
-- **怎么推进**：agent 每次想停下，hook 看事实。还有没勾的步骤，就让它接着做下一步；步骤勾完了，就让它过独立检查；检查过了，就让它生成回写计划，然后停。
-- **什么时候停**（都由代码判断）：做完了；计划被改；检查次数用完还没通过；被 gate 拒绝 2 次；被推着继续满 20 次；过了 120 分钟；连续 3 次没有进展；agent 自己说走不下去（`task autorun off --reason`）；你关掉（`task autorun off`）。
-- **范围不变**：只能写任务目录，计划是你批准的那一版，git 和目标仓库照旧碰不了。中间不回写。
-- **做完之后**：回写仍然要你 `task approve-promote`。停下的原因显示在看板上（`task list`）。
-- **换会话能接上**：状态在任务里，新会话接上任务后次数和时间接着算。
-- **为什么是 beta**：它和“人盯着做完”哪个好，还没有评测。上限的数字在 `task.json` 的 `autorun` 里。
-- **和 Copilot 自己的 Autopilot 不是一回事**：那个是“所有工具调用自动同意”。两个可以一起用；autorun 的停止不靠“问你”，所以 Autopilot 开着也有效。
+- **Only you can switch it on**: run `harness task autorun on` in the terminal; the screen lists the steps not done yet and the limits, and you type the code. When an agent runs this command, it is refused.
+- **Needed before switching on**: an approved plan, unticked steps in `TODO.md`, and independent checks (`[review]=n`, n at least 1). Type `/harness-autorun`, and the agent takes you through getting these ready.
+- **How it moves on**: every time the agent wants to stop, a hook looks at the facts. If unticked steps are left, it makes the agent do the next one; when the steps are all ticked, it makes it pass the independent check; when the check has passed, it makes it produce the write-back plan, and then it stops.
+- **When it stops** (the code judges all of these): it is done; the plan changed; the checks are used up without a pass; the gate refused 2 times; it was pushed on 20 times; 120 minutes have passed; 3 times in a row with no progress; the agent itself says it cannot go on (`task autorun off --reason`); you switch it off (`task autorun off`).
+- **The scope stays the same**: it can write the task folder only, the plan is the version you approved, and git and the target repositories stay out of reach as before. Nothing is written back on the way.
+- **When it is done**: the write-back still needs your `task approve-promote`. The reason for the stop shows on the board (`task list`).
+- **It carries on after a change of session**: the state is in the task, and after a new session picks the task up, the counts and the time go on.
+- **Why it is beta**: whether it or "a person watching to the end" is better has not been evaluated yet. The numbers of the limits are under `autorun` in `task.json`.
+- **It is not the same as Copilot's own Autopilot**: that one is "every tool call is agreed to automatically". The two can be used together; the stops of autorun do not rely on "asking you", so they work with Autopilot on too.
 
-## admin：二开和排查 harness（可选）
+## admin: extending and debugging the harness (optional)
 
-在 agent 下拉里选 admin。它用来改 harness 自己的文件、读报告和日志、查 harness 出错的根因。它不做业务任务，也不能被当成子 agent 调用。
+Pick admin in the agent drop-down. It is for changing the harness's own files, reading reports and logs, and finding the root cause when the harness goes wrong. It does no business tasks, and it cannot be called as a subagent.
 
-选了 admin 还不够：hook 看不到当前是哪个 agent，所以写权限由你在终端开。admin 会给你这条命令：
+Picking admin is not enough: a hook cannot see which agent is the current one, so you switch the write rights on in the terminal. admin gives you this command:
 
 ```text
-harness admin on --session-id <会话 id>
+harness admin on --session-id <session id>
 ```
 
-输入确认码后，只有这一个会话进入 admin 模式，直到你运行 `harness admin off --session-id <会话 id>`。`harness admin status` 列出开着的会话。
+After you type the code, this one session is in admin mode, until you run `harness admin off --session-id <session id>`. `harness admin status` lists the sessions that have it on.
 
-| admin 模式下 | 说明 |
+| In admin mode | Notes |
 | --- | --- |
-| 放开 | guardrail 文件可以改：hook 配置、策略、engine、短命令、registry、`.vscode/settings.json` |
-| 仍然锁住 | `.harness/runtime/`（会话状态、批准记录、日志，只读）、CLI 专用文件和报告、`.git`、目标仓库；git 写命令和危险命令的规则不变；批准类命令只有你能运行 |
-| 任务 | 不能开任务，不能调子 agent |
-| 日志 | 这个会话的每条日志带 `admin: true` |
+| Opened | Guardrail files can be changed: the hook configuration, policies, the engine, the short command, the registry, `.vscode/settings.json` |
+| Still locked | `.harness/runtime/` (session state, approval records, logs; read only), the files of the CLI and the reports, `.git`, target repositories; the rules for git write commands and dangerous commands stay; only you can run the approval commands |
+| Tasks | No task can be opened, and no subagent called |
+| Logs | Every log line of this session has `admin: true` |
 
-admin 模式的会话能改 engine 和策略，所以它的底线不是硬的：用完就关，改动用 git 看差异。公司电脑上尽量用 override 和新增文件做定制，见 [03-configure.md](03-configure.md)。
+A session in admin mode can change the engine and the policies, so its floor is not hard: switch it off when done, and read the diff of the changes with git. On a company computer, customise with overrides and new files as far as possible: see [03-configure.md](03-configure.md).
 
-## 长任务：目标驱动（可选，只有你能启动）
+## Long tasks: goal-driven (optional; only you can start it)
 
-任务大、会跨很多天或多个 session 时，输入 `/generic-goal-driven`，它把任务存成几个文件，放在 `.workspace/goals/<目标名>/`（git 忽略）：
+When a job is big and spans many days or several sessions, type `/generic-goal-driven`. It keeps the job as a few files in `.workspace/goals/<goal name>/` (ignored by git):
 
-| 文件 | 内容 |
+| File | What it holds |
 | --- | --- |
-| `GOAL.md` | 中心思想：目标、原则、范围、不做什么、整体验收、已定的事；末尾是变更记录 |
-| `TODO.md` | 步骤清单：每步的状态、验收标准、你的反馈 |
-| `NOW.md` | 进度指针：现在在哪一步、下一步做什么。保持在一屏内 |
-| `LOG.md` | 改动日志：每个通过的步骤改了什么，以前怎样、现在怎样 |
-| `accept/<步骤号>.md` | 验收指南：复杂步骤才有，一步一步告诉你怎么测 |
+| `GOAL.md` | The central idea: goal, principles, scope, what is not done, overall acceptance, what is decided; the change record at the end |
+| `TODO.md` | The list of steps: the status of each, its acceptance standard, your feedback |
+| `NOW.md` | The progress pointer: which step it is at, and what comes next. Kept within one screen |
+| `LOG.md` | The change log: for every step that passed, what changed, how it was before and how it is now |
+| `accept/<step number>.md` | An acceptance guide: only for complex steps; tells you step by step how to test |
 
-- **一步一步做**：每步做完自验，交给你验收。**只有你在对话里说“通过”，步骤才算通过**，然后才开下一步。每一步可以是一个任务。
-- **能随时接上**：换了 session 或隔了几天，输入 `/generic-goal-driven 继续`。agent 读 `NOW.md` 和 `TODO.md`，核对磁盘，记录和磁盘不一致时以磁盘为准，汇报后等你说开始。
-- **能改需求**：直接告诉 agent。它先给你看影响哪些步骤，你确认后才改。已通过的步骤不改写，要返工就加新步骤。
-- **和 gate 的关系**：接着任务的会话不许写这些文件。agent 在开工前写好 `NOW.md`，`task close` 之后再更新。
-- **日常任务不要用**：agent 觉得任务很长时，只能建议，不能自己启动。
-- 技能在 [.github/skills/generic-goal-driven/](../.github/skills/generic-goal-driven/)。
+- **Step by step**: after every step the agent checks its work and hands it to you for acceptance. **A step passes only when you say "passed" in the conversation**, and only then does the next one start. Every step can be a task.
+- **It can be picked up at any time**: after a change of session or a few days, type `/generic-goal-driven continue`. The agent reads `NOW.md` and `TODO.md` and checks them against the disk; when the record and the disk disagree, the disk wins; it reports and waits for you to say start.
+- **The requirement can change**: just tell the agent. It first shows you which steps are affected, and changes things only after you confirm. Steps that passed are not rewritten; a redo is a new step.
+- **How it goes with the gate**: a session with a task is not allowed to write these files. The agent writes `NOW.md` before starting, and updates the files after `task close`.
+- **Not for everyday tasks**: when a job looks long to the agent, it may only suggest this; it cannot start it itself.
+- The skill is in [.github/skills/generic-goal-driven/](../.github/skills/generic-goal-driven/).
 
-## git 命令：读放行，写要你批准
+## git commands: reads pass, writes need your approval
 
-配置了目标仓库后，agent 在终端里运行 git：
+With a target repository set up, when the agent runs git in the terminal:
 
-- **读**（`status`、`diff`、`log`、`show`、只列出的 `branch`……）：直接放行。
-- **写**（`add`、`commit`、`switch`、`merge`……）：被拒绝，理由里有整条命令和验证码。你运行 `approve-command`，看命令原文，输入验证码。同一会话里同一条命令在 `gate.json` 的 `git.approval_minutes` 分钟内放行一次。
-- **永远不能批准**：`push`、`gh pr`、`reset --hard`、`clean`、`branch -D`、任何强制选项（`--force`、`-f`）等。agent 要停下来告诉你，由你自己运行。
+- **Reads** (`status`, `diff`, `log`, `show`, a `branch` that only lists ...): pass directly.
+- **Writes** (`add`, `commit`, `switch`, `merge` ...): are refused, and the reason has the whole command and a code. You run `approve-command`, read the command as written, and type the code. The same command is let through once in the same session within `git.approval_minutes` minutes of `gate.json`.
+- **Can never be approved**: `push`, `gh pr`, `reset --hard`, `clean`, `branch -D`, any force option (`--force`, `-f`) and the like. The agent has to stop and tell you, and you run them yourself.
 
-## 可观测：日志、统计、报告、场景检查
+## Observability: logs, statistics, reports, scenario checks
 
-- 每个会话一个日志文件：`.harness/runtime/logs/<surface>/`。不记工具参数，不记提示内容；被拒绝的调用才记路径和命令（长度限制见 [observe.json](../.harness/policies/observe.json)）。
-- `stats` 汇总提示数、工具调用数、拒绝数、哪个模块拒绝的、独立检查的结论、用过哪些技能；`logs prune` 清理旧日志。
-- `task close` 时自动写任务报告。
-- `eval` 是固定场景：`eval show` 给出提示和要做的事，你在 Copilot 里跑一遍，`eval check` 根据日志和留下的文件判断对不对。
+- One log file per session: `.harness/runtime/logs/<surface>/`. No tool arguments and no prompt content are recorded; only for a refused call are the path and the command recorded (the length limit is in [observe.json](../.harness/policies/observe.json)).
+- `stats` sums up the numbers of prompts, tool calls and refusals, which module refused, the verdicts of independent checks, and which skills were used; `logs prune` removes old logs.
+- The task report is written by itself at `task close`.
+- `eval` is fixed scenarios: `eval show` gives the prompt and what to do, you run it once in Copilot, and `eval check` judges from the log and the files left behind whether it went right.
 
-## hook 怎么接进来
+## The language
 
-所有 hook 事件走同一个入口 [hook.py](../.harness/engine/hook.py)。它把平台发来的内容读成统一的事件，分发给模块，合并结果。模块清单和开关在 [registry.json](../.harness/registry.json)。hook 自己出错时放行，并写入 `hook-errors.jsonl`，不会误伤正常工作。
+One setting, `language` in `.harness/policies/user.json` (`en` by default, or `zh`; set it in `user.override.json`), covers three things:
+
+- what the CLI and the hooks print: refusal reasons, injected rules, command output, reports, the board;
+- the templates of the task files (`TASK.md`, `REQ.md`, `TODO.md`, `LOG.md`);
+- the language the agent is told to answer and write in: a hook injects one line for it with every prompt. This last one is a request to the model, not something code can enforce.
+
+The docs, rules and skills of the repository are in English only. A task made in one language is still read after the setting changes. See [Configure and customise](03-configure.md).
+
+## How the hooks are wired in
+
+Every hook event goes through the same entry, [hook.py](../.harness/engine/hook.py). It reads what the platform sends into one common event, hands it to the modules, and merges the results. The list of modules and their switches are in [registry.json](../.harness/registry.json). When the hook itself fails, it lets the call through and writes to `hook-errors.jsonl`, so normal work is not hurt.

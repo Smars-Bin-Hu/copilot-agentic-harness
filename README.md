@@ -47,7 +47,7 @@ Clone this repository, or download the zip from GitHub and extract it (git is op
 
 The agent leads all three steps, so you don't need to read the docs first. To do it by hand, see the [quickstart](docs/01-quickstart.md).
 
-After that, daily use takes one sentence: tell Copilot what you want done, and it asks until the request is clear, then opens a task. You don't write long prompts or paths. See [what to say day to day](docs/01-quickstart.md#7-日常怎么说).
+After that, daily use takes one sentence: tell Copilot what you want done, and it asks until the request is clear, then opens a task. You don't write long prompts or paths. See [what to say day to day](docs/01-quickstart.md#7-what-to-say-day-to-day).
 
 ## What it does
 

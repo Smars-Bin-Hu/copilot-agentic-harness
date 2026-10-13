@@ -1,7 +1,7 @@
 # Copilot Agentic Harness
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.3.1-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.4.0-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
   <img alt="dependencies" src="https://img.shields.io/badge/dependencies-none-brightgreen">
@@ -131,4 +131,4 @@ For what each path is for, see [.harness/INDEX.md](.harness/INDEX.md). That inde
 
 ---
 
-Version 1.3.1 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.4.0 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

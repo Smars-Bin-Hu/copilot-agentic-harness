@@ -10,11 +10,11 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
-## Next (not released)
+## 1.4.0 (2026-10-13)
 
 The harness speaks two languages: one setting picks English or Chinese for what it prints and for what the agent answers in. English is the default now. The docs, rules and skills are in English only. **Take note of "Changed" before upgrading: the default language changed.**
 
-**Testing**: the automatic tests pass on the Mac (726). Nothing of this version has been run in Copilot yet: whether the agent follows the English rules as it followed the Chinese ones, whether it answers in the language the injected line names, and whether skills still trigger on Chinese prompts all have to be tested by hand, on the Mac and on Windows.
+**Testing**: the automatic tests pass on the Mac (726). Tested by hand in Copilot on the Mac, in English and in Chinese: the agent follows the English rules (opens tasks, stops after a refusal, both approvals, independent checks), answers in the language the injected line names, and the skills trigger on Chinese prompts; a task made in one language is picked up in the other; one task carried on over several chats keeps one record on the board. **Not run on Windows yet.**
 
 ### Added
 

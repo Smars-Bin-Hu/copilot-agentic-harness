@@ -1,24 +1,24 @@
-# Copilot 指令
+# Copilot instructions
 
-核心规则在 [AGENTS.md](../AGENTS.md)。这里只补三条运行规则。
+The core rules are in [AGENTS.md](../AGENTS.md). This file adds three rules for running.
 
-## 任务
+## Tasks
 
-- 每条用户提示开头，hook 会注入当前会话 id 和规则。按它做。
-- 用户要你产出或修改文件，或提到一个已有的任务时，先用技能 `harness-my-task` 开任务或接上任务。
-- 独立检查默认关闭。用户在提示里写 `[review]=n` 才开启（n 是成果要连续通过的次数）。不要自己开。
+- At the top of every user prompt a hook injects the current session id and the rules. Do as they say.
+- When the user asks you to produce or change files, or mentions an existing task, first open or pick up the task with the skill `harness-my-task`.
+- Independent checks are off by default. They are on only when the user writes `[review]=n` in a prompt (n is how many times in a row the work must pass). Do not switch them on yourself.
 
-## 被 hook 拒绝后
+## After a hook refuses
 
-- 照拒绝理由里的下一步做。
-- 不要重试同一个调用，不要换个办法绕过（例如用终端命令代替被拒的写入，或改 state 文件）。
-- 理由没说清下一步时，停下来问用户。
-- 理由写着“停止重试”时，立刻停下，告诉用户被什么拦住了。
-- 终端命令需要用户确认时，等用户决定，不要换个命令绕过。
+- Do the next step the refusal gives.
+- Do not retry the same call, and do not look for a way around it (a terminal command in place of the refused write, or a change to a state file).
+- When the reason does not make the next step clear, stop and ask the user.
+- When the reason says to stop retrying, stop at once and tell the user what stopped you.
+- When a terminal command needs the user to confirm, wait for the user to decide. Do not get around it with another command.
 
-## git 命令
+## git commands
 
-- 配置了目标仓库后，读类 git 命令（`status`、`diff`、`log`、`show`、`branch`）直接运行。其他 git 命令会被拒绝，理由里有完整命令和验证码。
-- 把整条命令和验证码告诉用户，请用户在自己的终端运行 `approve-command`。用户批准后，把同一条命令再运行一次。你不能自己批准。
-- `push`、`gh pr`、`reset --hard`、`clean`、`branch -D` 和任何强制选项（`--force`、`-f`）永远不能批准，也没有验证码。停下来告诉用户，由用户自己运行。
-- 不要往 `.git` 文件夹里写东西。
+- With a target repository set up, read-only git commands (`status`, `diff`, `log`, `show`, `branch`) run directly. Other git commands are refused, and the reason has the whole command and a code.
+- Tell the user the whole command and the code, and ask the user to run `approve-command` in their own terminal. After the approval, run the same command once more. You cannot approve it yourself.
+- `push`, `gh pr`, `reset --hard`, `clean`, `branch -D` and any force option (`--force`, `-f`) can never be approved and get no code. Stop and tell the user: the user runs them.
+- Do not write anything into a `.git` folder.

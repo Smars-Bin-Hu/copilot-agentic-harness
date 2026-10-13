@@ -1,52 +1,51 @@
 ---
-description: '编写和修改 GitHub Copilot 自定义 agent（.agent.md）的规则'
+description: 'Rules for writing and changing GitHub Copilot custom agents (.agent.md)'
 applyTo: '.github/agents/**/*.agent.md'
 ---
 
-# agent 的基础规则
+# Basic rules for agents
 
-## 什么时候可以新增 agent
+## When a new agent is allowed
 
-先用别的办法：指令文件、Skill、hook。只有下面三件事至少有一件不能共用时，才新增 agent：
+Try something else first: an instruction file, a skill, a hook. Add an agent only when at least one of these three cannot be shared:
 
-- 工具范围不同（例如不能给编辑工具）。
-- 模型不同（例如固定用便宜的模型）。
-- 需要独立的上下文，不能看到调用方的推理。
+- The tools differ (for example, it must not get the edit tools).
+- The model differs (for example, it always uses a cheap model).
+- It needs its own context and must not see the caller's reasoning.
 
-新增前先回答：它防止什么失败？为什么现有的默认 agent 做不到？
+Before adding one, answer: which failure does it prevent? Why can the default agent not do it?
 
-## 谁能直接选
+## Who can be picked directly
 
-- 用户直接选的 agent 只有两个：默认 agent 和 admin。
-- admin 不能当子 agent，hook 会拒绝。它的写权限不来自 agent 文件，
-  来自用户在终端运行的 `admin on`（hook 看不到主 agent 是谁）。
-- 其他 agent 都只当子 agent 用，写 `user-invocable: false`。
-  这个字段只让它不出现在下拉列表，**拦不住被当子 agent 调用**。能不能调用，由 hook 判断。
-- 不写 `disable-model-invocation: true`，同样拦不住调用。
+- The user picks two agents directly: the default agent and admin.
+- admin cannot be a subagent: a hook refuses. Its write rights do not come from the agent file.
+  They come from `admin on`, which the user runs in the terminal (a hook cannot see which agent is the main one).
+- Every other agent is used as a subagent only and has `user-invocable: false`.
+  That field only keeps it out of the drop-down list. **It does not stop it from being called as a subagent.** A hook decides whether it can be called.
+- Do not write `disable-model-invocation: true`: it does not stop a call either.
 
-## 编写要求
+## How to write one
 
-- 文件名和 `name` 字段一致。
-- `tools` 只写需要的工具集。只读的 agent 不给 `edit`。
-- 子 agent 写 `agents: []`，不让它再调子 agent。
-- `model` 写显示名，可以写回退列表。名字以公司 Copilot 里看到的为准。
-- 正文只写输入、做法、不要做的事、输出格式。输出格式要让 hook 能读：例如 reviewer 的第一行是 `VERDICT: PASS` 或 `VERDICT: FAIL`。
-- 正文里不写预算数字。数字只在 `.harness/policies/*.json`。
+- The file name and the `name` field are the same.
+- `tools` lists only the tool sets it needs. A read-only agent gets no `edit`.
+- A subagent has `agents: []`, so it cannot call a subagent itself.
+- `model` is the display name, and can be a fallback list. Use the names the company's Copilot shows.
+- The body holds only: the input, how to work, what not to do, the output format. A hook must be able to read the output: the reviewer's first line, for example, is `VERDICT: PASS` or `VERDICT: FAIL`.
+- No budget numbers in the body. Numbers live only in `.harness/policies/*.json`.
 
-## 现有的 agent
+## The agents there are
 
-| agent | 用途 | 谁能调用 |
+| agent | What it is for | Who can call it |
 | --- | --- | --- |
-| admin | harness 的管理员：二开 harness、读报告和日志、查根因。用户先在终端开 admin 模式，才能改 guardrail 文件 | 用户 |
-| reviewer | 独立检查员：只看需求、成果和差异，给 PASS 或 FAIL，不改文件。用户写 `[review]=n` 才开 | 默认 agent（hook 要求先 `task review start`） |
+| admin | The administrator of the harness: extends the harness, reads reports and logs, finds root causes. It can change guardrail files only after the user switches admin mode on in the terminal | The user |
+| reviewer | The independent checker: looks only at the requirement, the work and the diff, gives PASS or FAIL, and changes no file. On only when the user writes `[review]=n` | The default agent (a hook requires `task review start` first) |
+| mapper | The read-only chunk reader: reads the part it is given and hands in a summary with sources. No edit tools, no terminal | The default agent, and only after the user types `/generic-mapreduce` (a hook counts the calls; the limit is `mapreduce.max_agents` in `task.json`) |
 
-| mapper | 只读的分块阅读员：读分给它的那一块，交带出处的摘要。没有编辑工具，没有终端 | 默认 agent，而且只在用户输入 `/generic-mapreduce` 之后（hook 数次数，上限在 `task.json` 的 `mapreduce.max_agents`） |
+A session with no task cannot call the reviewer. A session with a task must run `task review start` before calling it. The mapper does not depend on a task, only on whether the user typed `/generic-mapreduce`. Every other subagent is refused.
 
-没有接着任务的会话不能调用 reviewer。接着任务的会话要先 `task review start` 才能调用它。mapper 不看有没有任务，只看用户有没有输入 `/generic-mapreduce`。其他子 agent 一律被拒绝。
+## Models
 
-## 模型
-
-- reviewer 和 mapper 用 Sonnet，没有就退到 Haiku：主模型是 Sonnet 或 Opus 时它们都能运行。
-- `model` 的回退列表只能在同一系列里回退。admin、reviewer、mapper 例外（`agents.json` 的 `any_series`）：强模型不可用时可以跨系列回退。
-  系列的划分在 `.harness/policies/agents.json`，`harness doctor` 会检查。
-- 模型名以本机 Copilot 下拉列表里的显示名为准。换环境后重新确认。
+- The reviewer and the mapper use Sonnet and fall back to Haiku: they run whether the main model is Sonnet or Opus.
+- A `model` fallback list stays within one series. admin, reviewer and mapper are the exception (`any_series` in `agents.json`): they may fall back across series when a strong model is not available.
+  The series are defined in `.harness/policies/agents.json`, and `harness doctor` checks them.
+- Use the display names in the Copilot drop-down list of this machine. Check them again in a new environment.

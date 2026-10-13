@@ -143,13 +143,13 @@ class RequirementConfirmedTests(unittest.TestCase):
     """Only the person fills in the "用户确认" line of REQ.md. Every file that speaks of it says the same."""
 
     def test_no_file_tells_the_agent_to_fill_it_in(self) -> None:
-        self.assertIn("“用户确认”只有用户能改", text(REPO / "AGENTS.md"))
+        self.assertIn("Only the user may change the confirmation line of `REQ.md`", text(REPO / "AGENTS.md"))
         walk = text(REPO / ".github" / "skills" / "harness-quick-start" / "references" / "walkthrough.md")
         self.assertIn("请用户自己把“用户确认”一行改成", walk)
         self.assertNotIn("你在“用户确认”一行写上", walk)
 
     def test_the_reviewer_does_not_fail_a_task_over_it(self) -> None:
-        self.assertIn("“用户确认”一行没填不算问题", text(REPO / ".github" / "agents" / "reviewer.agent.md"))
+        self.assertIn("An empty confirmation line in `REQ.md` is not a finding", text(REPO / ".github" / "agents" / "reviewer.agent.md"))
         self.assertIn("评审包会告诉 reviewer 按“待确认”看", text(REPO / "AGENTS.md"))
 
 

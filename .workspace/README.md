@@ -1,56 +1,56 @@
 # .workspace
 
-agent 和人的工作区。这里的运行内容不进 git，只有本文件和三个 `.gitkeep`。
+The work area of agents and people. What runs here stays out of git; only this file and three `.gitkeep` files are tracked.
 
-## 目录
+## Folders
 
-| 路径 | 用途 | 谁写 |
+| Path | What it is for | Who writes |
 | --- | --- | --- |
-| `sandbox/tasks/<任务>/` | 任务目录。一个任务一个，`harness task new` 建 | 见下表 |
-| `goals/<id>/` | 长任务的目标文件：`GOAL.md`、`TODO.md`、`NOW.md`、`LOG.md`，复杂步骤另有 `accept/`。用户输入 `/generic-goal-driven` 才建 | 人和 agent；接着任务时不能写 |
-| `reports/` | 任务报告（`task-<任务>.md`）和分析页（`task-<任务>.html`）：`task close` 时自动写，也可以 `harness task report` 重写。看板 `board.html`：`harness task board` 写 | CLI |
+| `sandbox/tasks/<task>/` | A task folder. One per task; `harness task new` makes it | See the table below |
+| `goals/<id>/` | The goal files of a long task: `GOAL.md`, `TODO.md`, `NOW.md`, `LOG.md`, and `accept/` for complex steps. Made only when the user types `/generic-goal-driven` | People and agents; not writable while a task is open |
+| `reports/` | A folder per task, `tasks/<task>/`, with the task report (`report.md`) and the analysis page (`report.html`): written by itself at `task close`, or again with `harness task report`. The board `board.html`: written by `harness task board` | The CLI |
 
-任务目录里有什么：
+What a task folder holds:
 
-| 文件 | 用途 | 谁写 |
+| File | What it is for | Who writes |
 | --- | --- | --- |
-| `TASK.md` | 接力文件：种类、状态、现在在做、下一步、已定的事。新会话先读它 | agent |
-| `REQ.md` | 需求。agent 按对话写，你确认；需求变了它先改这里 | agent |
-| `REQ/`、`REF/` | 你自己的需求文档和参考材料 | 人。agent 只读 |
-| `TODO.md`、`LOG.md` | 步骤清单；做过的决定和原因 | agent |
-| `PLAN.md` | 要改目标仓库时的计划。你在终端批准后才能写 `DEV/` | agent |
-| `RCA.md`、`DESIGN.md` 等 | 不回写的成果，放目录根下，不用批准 | agent |
-| `DEV/<仓库>/<路径>` | 要回写到目标仓库的成果，路径和仓库一样 | agent（计划批准后） |
-| `TEST/` | 测试用例和结果 | agent |
-| `REVIEW/round-NNN/` | 开了独立检查才有：评审包和 reviewer 的结论 | CLI 和 hook |
-| `SNAPSHOT/<关口>-<时间>/` | 计划批准时、每次检查前、回写前存下的成果 | CLI |
-| `.task/`、`CHANGES.diff`、`PROMOTE-PLAN.diff` | 状态；给人看的差异 | CLI |
+| `TASK.md` | The handover file: kind, status, doing now, next step, what is decided. A new session reads it first | The agent |
+| `REQ.md` | The requirement. The agent writes it from the conversation and you confirm it; when the requirement changes, the agent changes this file first | The agent |
+| `REQ/`, `REF/` | Your own requirement documents and reference material | People. Agents only read |
+| `TODO.md`, `LOG.md` | The list of steps; the decisions made, and why | The agent |
+| `PLAN.md` | The plan, when a target repository is to change. `DEV/` can be written only after you approve it in the terminal | The agent |
+| `RCA.md`, `DESIGN.md` and the like | Work that is not written back. At the root of the folder; no approval needed | The agent |
+| `DEV/<repository>/<path>` | Work to write back to a target repository, at the same path as in the repository | The agent (after the plan is approved) |
+| `TEST/` | Test cases and results | The agent |
+| `REVIEW/round-NNN/` | Only with independent checks on: the review package and the reviewer's verdict | The CLI and the hook |
+| `SNAPSHOT/<gate>-<time>/` | The work as saved when the plan is approved, before every check and before a write-back | The CLI |
+| `.task/`, `CHANGES.diff`, `PROMOTE-PLAN.diff` | State; the diffs for people to read | The CLI |
 
-任务分三档，文件按档出现：轻档只有 `TASK.md`；中档加 `REQ.md`、`REQ/`、`REF/`、`LOG.md`；全档再加 `TODO.md`、`DEV/`、`TEST/`。
+A task has one of three tiers, and the files come with the tier: light has only `TASK.md`; medium adds `REQ.md`, `REQ/`, `REF/`, `LOG.md`; full adds `TODO.md`, `DEV/`, `TEST/`.
 
-`current_tasks/` 是 1.1.0 之前的任务位置，现在不读了。要接着做里面的任务，把目录搬到 `sandbox/tasks/` 下，再 `harness task open <任务名>`。
+`current_tasks/` is where tasks lived before 1.1.0. It is not read any more. To go on with a task in it, move the folder under `sandbox/tasks/`, then run `harness task open <task name>`.
 
-## 谁管着写入
+## Who guards the writes
 
-规则在 [.harness/policies/gate.json](../.harness/policies/gate.json)，由 gate 模块在每次工具调用前执行。
-agent 要遵守的写法见 [workspace.instructions.md](../.github/instructions/workspace.instructions.md)。
+The rules are in [.harness/policies/gate.json](../.harness/policies/gate.json); the gate module applies them before every tool call.
+How an agent should write is in [workspace.instructions.md](../.github/instructions/workspace.instructions.md).
 
-- guardrail 文件不能改。
-- admin 模式（用户在终端运行 `admin on` 的那个会话）：guardrail 文件可以改，`.harness/runtime/` 除外。下面的其他规则不变。
-- 接着任务的会话：编辑类工具只能写这个任务目录。`DEV/` 要等用户运行 `task approve-plan` 之后才能写，计划改了，批准失效。`REQ/`、`REF/` 不能写。
-- 目标仓库工作区里的文件不能直接改（编辑类工具，和带仓库完整路径的常见终端写法）。只有 promote 能写。
-- 任务目录的 `.task/`、`REVIEW/`、`SNAPSHOT/`、两个 `.diff` 和 `reports/` 下的报告只由 CLI 写，agent 直接写会被拒绝。
-- 任何 `.git` 文件夹和目标仓库的 `refused_paths` 不能写（含终端写法）。配置了目标仓库后，agent 的 git 写命令要人批准，`push` 等永远不能批准，见 [docs/02-features.md](../docs/02-features.md)。
-- gate 不管读取。skills、指令、知识库谁都能读。
+- Guardrail files cannot be changed.
+- Admin mode (the session the user ran `admin on` for in the terminal): guardrail files can be changed, except `.harness/runtime/`. The other rules below stay.
+- A session with a task: the edit tools can write this task folder only. `DEV/` can be written only after the user runs `task approve-plan`; when the plan changes, the approval ends. `REQ/` and `REF/` cannot be written.
+- Files in the working tree of a target repository cannot be changed directly (by the edit tools, or by the common terminal spellings with the full path of the repository). Only promote writes them.
+- `.task/`, `REVIEW/`, `SNAPSHOT/` and the two `.diff` files of a task folder, and the reports under `reports/`, are written by the CLI only. A direct write by an agent is refused.
+- No `.git` folder and no `refused_paths` of a target repository can be written (terminal spellings included). With a target repository set up, an agent's git write commands need a person's approval, and `push` and the like can never be approved: see [docs/02-features.md](../docs/02-features.md).
+- The gate does not guard reads. Anyone can read skills, instructions and the knowledge base.
 
-## 管得住什么，管不住什么
+## What it can and cannot guard
 
-| 能管住 | 管不住 |
+| It can guard | It cannot guard |
 | --- | --- |
-| agent 用编辑类工具改 guardrail 文件，或接着任务时写到任务目录之外 | 终端命令可以写任何路径。gate 只拦常见写法（重定向、`rm`、`mv`、`sed -i`、`cp` 到 guardrail 路径等），拦不住所有写法 |
-| 常见的危险终端命令：删根目录、`curl \| sh`、用管理员权限运行等（拒绝）；git 写命令（要人批准，部分永远拒绝） | reviewer 没有编辑工具，但有终端。它用终端写文件，gate 只拦得住常见写法 |
-| 同一个拒绝反复出现时，把拒绝理由换成“停止重试” | hook 只能拒绝，杀不掉一个一直重试的 agent。熔断靠那句话让它收尾 |
-| 没开 admin 模式的会话改不了 guardrail：开关在 `.harness/runtime/` 的会话状态里，只有人在终端能开 | admin 模式的会话能改 engine 和策略，也就能改掉 gate 自己。它的底线靠 admin agent 的说明和你看差异，不靠 hook |
-| 大小写、`..`、绝对路径、Windows 的 `\` 这些不同写法 | 间接写法，例如先 `cd` 进目录再用相对名字删除，或在脚本文件里写好再运行 |
+| An agent changing a guardrail file with an edit tool, or writing outside the task folder while it has a task | A terminal command can write any path. The gate stops only the common spellings (redirects, `rm`, `mv`, `sed -i`, `cp` into a guardrail path and so on), not every spelling |
+| Common dangerous terminal commands: deleting the root folder, `curl \| sh`, running with administrator rights and so on (refused); git write commands (a person must approve; some are always refused) | The reviewer has no edit tools but has a terminal. When it writes files through the terminal, the gate stops only the common spellings |
+| When the same refusal keeps coming up, the reason is replaced with one that says to stop retrying | A hook can only refuse. It cannot kill an agent that keeps retrying. The breaker relies on that sentence to make it wrap up |
+| A session without admin mode cannot change guardrails: the switch is in the session state under `.harness/runtime/`, and only a person at the terminal can set it | A session in admin mode can change the engine and the policies, so it can change the gate itself. Its floor rests on the admin agent's instructions and on you reading the diff, not on a hook |
+| Different spellings: letter case, `..`, absolute paths, the `\` of Windows | Indirect spellings, such as a `cd` into a folder and then a delete by a relative name, or a script file written first and then run |
 
-需要更强的隔离，要用操作系统或容器层面的沙盒。gate 不是沙盒。
+For stronger isolation, use a sandbox at the level of the operating system or a container. The gate is not a sandbox.

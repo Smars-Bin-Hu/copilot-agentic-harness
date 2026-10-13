@@ -1,5 +1,5 @@
 # Knowledge Base
 
-企业团队接入自己知识库的位置。本仓库不放任何业务内容。
+The place where a team plugs in its own knowledge base. This repository holds no business content.
 
-当前为空。
+Empty for now.

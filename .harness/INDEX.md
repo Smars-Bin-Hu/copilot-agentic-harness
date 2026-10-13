@@ -1,49 +1,49 @@
-# 路径索引
+# Path index
 
-给 agent 查路径用。只在要找文件时读。路径都从仓库根目录算起。
-人看的介绍在 `README.md` 和 `docs/`，agent 不用读。
+For agents, to find paths. Read it only when you need to find a file. Every path starts at the root of the repository.
+The introduction for people is in `README.md` and `docs/`; agents need not read them.
 
-## 规则
+## Rules
 
-| 路径 | 用途 |
+| Path | What it is for |
 | --- | --- |
-| `AGENTS.md` | 核心规则和安全边界。已自动加载 |
-| `.github/copilot-instructions.md` | 仓库级规则：任务、被 hook 拒绝后怎么做、git 命令 |
-| `.github/instructions/` | 分类规则：`agents`、`skills`、`tools`、`workspace`（`.workspace/` 的读写规则）、`knowledgebase`（企业知识库自带，交付时为空） |
-| `.workspace/README.md` | 工作区目录约定，以及 gate 管得住和管不住什么 |
+| `AGENTS.md` | The core rules and the safety limits. Loaded by itself |
+| `.github/copilot-instructions.md` | Rules for the whole repository: tasks, what to do after a hook refuses, git commands |
+| `.github/instructions/` | Rules by topic: `agents`, `skills`, `tools`, `workspace` (reading and writing in `.workspace/`), `knowledgebase` (comes with a team's knowledge base; empty when shipped) |
+| `.workspace/README.md` | The layout of the work area, and what the gate can and cannot guard |
 
-## 技能和智能体
+## Skills and agents
 
-| 路径 | 用途 |
+| Path | What it is for |
 | --- | --- |
-| `.github/skills/harness-my-task/` | 开任务、接着做、换任务：问清楚后运行 `task new`、`task open` |
-| `.github/skills/harness-task-report/` | 看任务看板；分析一个任务的时间和用量。只由用户用 `/harness-task-report` 启动 |
-| `.github/skills/harness-quick-start/` | 入门课。用户用 `/harness-quick-start` 启动 |
-| `.github/skills/harness-wondering/` | 深度教程，讲原理和实现。用户用 `/harness-wondering` 启动 |
-| `.github/skills/harness-repo-initialize/` | 第一次配置：短命令、知识库、公司技能、目标仓库、用户名字。用户用 `/harness-repo-initialize` 启动 |
-| `.github/skills/harness-autorun/` | autorun（beta）的准备和期间规则。只由用户用 `/harness-autorun` 启动 |
-| `.github/skills/generic-goal-driven/` | 长周期任务的目标驱动流程。只由用户用 `/generic-goal-driven` 启动 |
-| `.github/skills/generic-mapreduce/` | 并行分块阅读，派给只读的 mapper。只由用户用 `/generic-mapreduce` 启动 |
-| `.github/skills/generic-build-new-skill/` | 新建技能的脚手架 |
-| `.github/agents/` | `reviewer`（独立检查员）、`mapper`（只读的分块阅读员）、`admin`（二开和排查 harness，要用户先在终端开 admin 模式） |
+| `.github/skills/harness-my-task/` | Open a task, go on with one, switch tasks: asks until things are clear, then runs `task new` or `task open` |
+| `.github/skills/harness-task-report/` | The task board; where the time and usage of one task went. Started only by the user, with `/harness-task-report` |
+| `.github/skills/harness-quick-start/` | The first lesson. The user starts it with `/harness-quick-start` |
+| `.github/skills/harness-wondering/` | The deep course: how it works and how it is built. The user starts it with `/harness-wondering` |
+| `.github/skills/harness-repo-initialize/` | First setup: the short command, the knowledge base, company skills, target repositories, the user's name, the language. The user starts it with `/harness-repo-initialize` |
+| `.github/skills/harness-autorun/` | Getting ready for autorun (beta), and the rules while it runs. Started only by the user, with `/harness-autorun` |
+| `.github/skills/generic-goal-driven/` | The goal-driven flow for long tasks. Started only by the user, with `/generic-goal-driven` |
+| `.github/skills/generic-mapreduce/` | Reading in parallel chunks, handed to read-only mappers. Started only by the user, with `/generic-mapreduce` |
+| `.github/skills/generic-build-new-skill/` | The scaffold for a new skill |
+| `.github/agents/` | `reviewer` (the independent checker), `mapper` (the read-only chunk reader), `admin` (extends and debugs the harness; the user must switch admin mode on in the terminal first) |
 
-## 引擎和策略
+## Engine and policies
 
-| 路径 | 用途 |
+| Path | What it is for |
 | --- | --- |
-| `.github/hooks/harness.json` | 唯一的 hook 配置，所有事件进同一个入口 |
-| `.harness/registry.json` | 版本号；模块注册表：开关、订阅的事件、文件清单 |
-| `.harness/policies/` | 策略：`task`、`gate`、`observe`、`agents`、`target`、`cli`、`user`。覆盖写在同名 `.override.json` |
-| `.harness/contracts/` | 任务文件的模板：`templates/task/` 下的 `TASK.md`、`REQ.md`、`TODO.md`、`LOG.md` |
-| `.harness/engine/` | `hook.py`（hook 入口）、`cli.py`（命令入口）、`modules/`（task、gate、observe、evalcheck）、`adapters/`（运行时差异） |
-| `.harness/bin/` | 短命令的启动脚本：`harness`（macOS/Linux）、`harness.cmd`（Windows） |
-| `.harness/eval/` | 固定场景（`scenarios/`）和真实 hook 输入的录制样本（`fixtures/`） |
-| `.harness/tests/` | 全部测试：`python -m unittest discover -s .harness/tests`（macOS/Linux 用 `python3`） |
+| `.github/hooks/harness.json` | The one hook configuration; every event goes to the same entry |
+| `.harness/registry.json` | The version; the module registry: switches, the events each module listens to, file lists |
+| `.harness/policies/` | Policies: `task`, `gate`, `observe`, `agents`, `target`, `cli`, `user` (the user's name and the language). An override goes in the `.override.json` of the same name |
+| `.harness/contracts/` | The templates of the task files: `TASK.md`, `REQ.md`, `TODO.md`, `LOG.md` under `templates/task/<language>/` (`en`, `zh`) |
+| `.harness/engine/` | `hook.py` (the hook entry), `cli.py` (the command entry), `modules/` (task, gate, observe, evalcheck), `adapters/` (runtime differences), `core/messages.<language>.json` (every text the engine prints) |
+| `.harness/bin/` | The launchers of the short command: `harness` (macOS/Linux), `harness.cmd` (Windows) |
+| `.harness/eval/` | Fixed scenarios (`scenarios/`) and recorded samples of real hook input (`fixtures/`) |
+| `.harness/tests/` | All the tests: `python -m unittest discover -s .harness/tests` (`python3` on macOS/Linux) |
 
-## 工作区和知识库
+## Work area and knowledge base
 
-| 路径 | 用途 |
+| Path | What it is for |
 | --- | --- |
-| `.workspace/sandbox/tasks/` | 任务目录，一个任务一个文件夹，不进 git |
-| `.workspace/reports/` | 任务报告和看板，不进 git |
-| `knowledge-base/` | 接入企业知识库的位置，交付时为空 |
+| `.workspace/sandbox/tasks/` | Task folders, one folder per task, not in git |
+| `.workspace/reports/` | Task reports and the board, not in git |
+| `knowledge-base/` | Where a team's knowledge base is plugged in; empty when shipped |

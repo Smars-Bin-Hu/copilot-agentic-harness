@@ -9,25 +9,25 @@ applyTo: '.github/skills/**/SKILL.md'
 | --- | --- | --- |
 | 1. Discovery | `name` and `description` only | Always (lightweight metadata) |
 | 2. Instructions | Full `SKILL.md` body | When request matches description |
-| 3. Resources | Scripts, examples, docs | Only when Copilot
- 
-
-# Skill 名称前缀
-
-Skill 的目录名和 `name` 字段必须一致，并且用下面三种前缀之一。没有前缀的只有第三方 Skill，保留原名。
-
-- `harness-<名>`：harness 自己的 Skill。上游维护。分两种：
-  - 模块的语义面：名字和 `.harness/engine/modules/<module>/` 对应，模块名里的下划线写成连字符。
-  - 使用 harness 本身的流程：不对应模块，名字说明做什么（`harness-repo-initialize`）。
-- `generic-<skill-name>`：跨领域通用的 Skill。上游维护。
-- `domain-<domain name>-<skill-name>`：面向某一个业务领域的 Skill。企业维护，上游不建。
+| 3. Resources | Scripts, examples, docs | Only when Copilot needs them |
 
 
-# Unit Type vs Workflow Orchestration Tyle
+# Skill name prefixes
 
-- Unit Type: Skill 是完成一个确定性的单元化任务，有确定的输入、输出，一般是一个工作流的 Step 或者是常被使用的工具。
+The folder name of a skill and its `name` field must be the same, and use one of the three prefixes below. Only third-party skills have no prefix: they keep their own names.
 
-- Workflow Orchestration Type: 当Skill是一个复杂任务流的编排
+- `harness-<name>`: a skill of the harness itself. Maintained upstream. Two kinds:
+  - The semantic side of a module: the name matches `.harness/engine/modules/<module>/`, with underscores in the module name written as hyphens.
+  - A flow for using the harness itself: it matches no module, and the name says what it does (`harness-repo-initialize`).
+- `generic-<skill-name>`: a general skill for any domain. Maintained upstream.
+- `domain-<domain name>-<skill-name>`: a skill for one business domain. Maintained by the team; upstream makes none.
+
+
+# Unit type vs workflow orchestration type
+
+- Unit type: the skill does one well-defined unit of work, with a fixed input and output. It is usually one step of a workflow, or a tool that is used often.
+
+- Workflow orchestration type: the skill arranges the steps of a complex task flow.
 
 - Directory Structure Example
 # Skill Files Structure

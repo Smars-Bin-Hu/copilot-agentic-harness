@@ -1,21 +1,21 @@
 ---
-description: '在 .workspace/ 里读写文件的规则'
+description: 'Rules for reading and writing files in .workspace/'
 applyTo: '.workspace/**'
 ---
 
-# .workspace 的使用规则
+# Rules for .workspace
 
-目录约定和 gate 的能力边界见 [.workspace/README.md](../../.workspace/README.md)。
+The folder layout, and what the gate can and cannot guard, are in [.workspace/README.md](../../.workspace/README.md).
 
-- 任务目录在 `sandbox/tasks/<任务>/`，由 `harness task new` 建。不要自己建。
-- 接着任务的会话只能在这个任务目录里写：
-  - 先读 `TASK.md`，再按它的指向读别的；停下前更新它。
-  - 需求写在 `REQ.md`，变了就先改它。`REQ/`、`REF/` 是用户放的文档，只读。
-  - 不回写的成果（RCA、设计、笔记、一次性脚本）放任务目录根下，不用批准。
-  - 要回写到目标仓库的成果放 `DEV/<仓库名>/<路径>`。计划写在 `PLAN.md`，用户在终端运行 `task approve-plan` 批准后，才能写 `DEV/`。
-- 目标仓库里的文件不能直接改。用 `task fetch` 取到 `DEV/`，改完用 `task promote`：先 `--dry-run`，用户在终端批准。
-- 不要直接写任务目录里的 `.task/`、`REVIEW/`、`SNAPSHOT/`、`CHANGES.diff`、`PROMOTE-PLAN.diff`，和 `reports/`。它们由 CLI 写，hook 会拒绝。
-- 任务目录被 git 忽略，搜索工具搜不到里面的文件。按路径直接读，或用终端 `ls`。
-- 创建文件前，父目录要先存在。用终端建：macOS/Linux 用 `mkdir -p`，Windows 用 `mkdir`。
-- 要用户批准时，给出文件的链接（`PLAN.md`、`PROMOTE-PLAN.diff`），让用户在编辑器里看。不要把全文贴进对话。
-- `goals/<id>/` 是长任务的记录，用户用 `/generic-goal-driven` 启动后才有。接着任务时不能写它，要在 `task close` 之后写。
+- A task folder is `sandbox/tasks/<task>/`. `harness task new` makes it. Do not make one yourself.
+- A session with a task writes only inside that task folder:
+  - Read `TASK.md` first, then what it points to; update it before you stop.
+  - The requirement is in `REQ.md`; when it changes, change that file first. `REQ/` and `REF/` hold the user's documents and are read only.
+  - Work that is not written back (RCA, design, notes, one-off scripts) goes at the root of the task folder and needs no approval.
+  - Work to write back to a target repository goes in `DEV/<repository>/<path>`. The plan is in `PLAN.md`; `DEV/` can be written only after the user approves it by running `task approve-plan` in the terminal.
+- Files in a target repository cannot be changed directly. Fetch them into `DEV/` with `task fetch`, change them, then run `task promote`: `--dry-run` first, then the user approves in the terminal.
+- Do not write these directly: `.task/`, `REVIEW/`, `SNAPSHOT/`, `CHANGES.diff` and `PROMOTE-PLAN.diff` in a task folder, and `reports/`. The CLI writes them, and a hook refuses.
+- A task folder is ignored by git, so search tools do not find the files in it. Read them by path, or use `ls` in the terminal.
+- A parent folder must exist before you create a file in it. Make it in the terminal: `mkdir -p` on macOS/Linux, `mkdir` on Windows.
+- When you need the user's approval, give the link to the file (`PLAN.md`, `PROMOTE-PLAN.diff`) so the user reads it in the editor. Do not paste the whole text into the conversation.
+- `goals/<id>/` is the record of a long task; it exists only after the user starts `/generic-goal-driven`. With a task it cannot be written: write it after `task close`.

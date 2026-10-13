@@ -68,7 +68,7 @@
         ".harness/tests/test_targets.py",
         ".harness/tests/test_promote.py", ".harness/tests/test_kb.py"
       ],
-      "retire_when": "Copilot 原生提供跟着任务走、能换会话接力的任务状态，并且有能拦住交付的批准。那时只留 gate 和 promote"
+      "retire_when": "Copilot itself offers task state that follows the task and can be handed over between sessions, with an approval that can hold back a delivery. Then only the gate and promote stay"
     },
     "gate": {
       "status": "active",
@@ -96,7 +96,7 @@
         ".github/instructions/workspace.instructions.md",
         ".workspace/README.md"
       ],
-      "retire_when": "Copilot 原生支持按路径限制写入，并能拒绝危险的终端命令。guardrail 和任务的写入范围不退役"
+      "retire_when": "Copilot itself supports limiting writes by path and can refuse dangerous terminal commands. The guardrails and the write scope of a task do not retire"
     },
     "observe": {
       "status": "active",
@@ -115,7 +115,7 @@
         ".harness/engine/modules/observe/",
         ".harness/tests/test_observe.py"
       ],
-      "retire_when": "Copilot 提供按会话的 hook 调用日志和用量统计"
+      "retire_when": "Copilot offers a per-session log of hook calls and usage statistics"
     },
     "evalcheck": {
       "status": "active",
@@ -132,7 +132,7 @@
         ".harness/eval/scenarios/",
         ".harness/tests/test_evalcheck.py"
       ],
-      "retire_when": "Copilot 提供自己的 agent eval 和场景回归工具"
+      "retire_when": "Copilot offers its own agent eval and scenario regression tools"
     }
   }
 }

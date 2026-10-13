@@ -1,60 +1,60 @@
-# Copilot SDK 引擎的 hook 真实输入（fixtures）
+# Real hook input of the Copilot SDK engine (fixtures)
 
-VS Code 1.140.0 里，Copilot 的 `@github/copilot` 1.0.89-7（SDK 引擎）发给 hook 的真实 stdin。2026-10-01 录制。
-已脱敏：用户目录、transcript 路径。`session_id` 换成固定名字。
+The real stdin that Copilot's `@github/copilot` 1.0.89-7 (the SDK engine) sends to a hook in VS Code 1.140.0. Recorded 2026-10-01.
+Scrubbed: the user folder and the transcript path. `session_id` is replaced with fixed names.
 
-## 目录
+## Folders
 
-| 目录 | 内容 |
+| Folder | What it holds |
 | --- | --- |
-| `payloads/` | 每种事件、每种工具各一个样本。文件名是 `事件.工具名.json` |
-| `sessions/` | 完整会话，每行一个 hook 输入，按到达顺序排列 |
+| `payloads/` | One sample per event and per tool. The file name is `Event.ToolName.json` |
+| `sessions/` | Whole sessions, one hook input per line, in the order they arrived |
 
-| 会话 | 场景 |
+| Session | Scenario |
 | --- | --- |
-| `cli-verifier-call.jsonl` | `[L2] [verify]` 提示：Bash、Write、调用 verifier（子 agent）、再 Bash。含子 agent 的独立会话 |
-| `cli-tools-and-search-subagent.jsonl` | Edit、Grep、Glob、语义搜索（`search_code_subagent`，它自己再开一个子会话） |
-| `cli-deny-top.jsonl` | 探针 hook 用顶层格式拒绝一条 Bash |
-| `cli-stop-block.jsonl` | 探针 hook 用顶层格式 block 一次 Stop。第二条 UserPromptSubmit 就是 reason 原文，第二个 Stop 的 `stop_hook_active` 为 true |
-| `cli-subagent-stop-block.jsonl` | 探针 hook 在 SubagentStop 上 block 一次：子会话收到 reason 作为新的 UserPromptSubmit，再 Stop，父会话收到第二个 SubagentStop |
+| `cli-verifier-call.jsonl` | A `[L2] [verify]` prompt: Bash, Write, a call of the verifier (a subagent), Bash again. Includes the subagent's own session |
+| `cli-tools-and-search-subagent.jsonl` | Edit, Grep, Glob, semantic search (`search_code_subagent`, which opens one more child session itself) |
+| `cli-deny-top.jsonl` | A probe hook refuses a Bash call with the top-level format |
+| `cli-stop-block.jsonl` | A probe hook blocks a Stop once with the top-level format. The second UserPromptSubmit is the reason as written, and the second Stop has `stop_hook_active` true |
+| `cli-subagent-stop-block.jsonl` | A probe hook blocks once on SubagentStop: the child session gets the reason as a new UserPromptSubmit and stops again, and the parent session gets a second SubagentStop |
 
-## 2026-10-10 补录（VS Code Copilot 会话，Mac）
+## Recorded later, 2026-10-10 (VS Code Copilot session, Mac)
 
-| 文件 | 说明 |
+| File | What it shows |
 | --- | --- |
-| `PostToolUseFailure.Read.json` | 读不存在的文件。失败的调用只发这个事件，不发 `PostToolUse`。比 `PreToolUse` 多一个 `error`，没有 `tool_result` |
-| `PostToolUse.Bash.exit1.json` | 终端命令退出码是 1。平台不当它是失败：走普通 `PostToolUse`，`result_type` 是 `success`，退出码只在文字里 |
-| `PreToolUse.WebFetch.json` | 联网。参数 `url`、`max_length` |
-| `PreToolUse.skill.json`、`PostToolUse.skill.json` | agent 用 skill 是一次工具调用。工具名 `skill`，参数 `{"skill": "<名字>"}` |
-| `PreToolUse.tool_search_tool.json` | agent 搜可用的工具。参数 `query` |
+| `PostToolUseFailure.Read.json` | Reading a file that does not exist. A failed call sends only this event, no `PostToolUse`. It has an `error` that `PreToolUse` lacks, and no `tool_result` |
+| `PostToolUse.Bash.exit1.json` | A terminal command with exit code 1. The platform does not count it as a failure: it goes through a normal `PostToolUse`, `result_type` is `success`, and the exit code is only in the text |
+| `PreToolUse.WebFetch.json` | Going on the network. Arguments `url`, `max_length` |
+| `PreToolUse.skill.json`, `PostToolUse.skill.json` | An agent using a skill is one tool call. Tool name `skill`, argument `{"skill": "<name>"}` |
+| `PreToolUse.tool_search_tool.json` | An agent searching for tools it can use. Argument `query` |
 
-同一轮实测的三条平台行为（记在 `docs/05-design.md`）：hook 启动不了算拒绝；hook 超时算放行；子 agent 有自己的 `session_id`。
+Three platform behaviours measured in the same round (recorded in `docs/05-design.md`): a hook that cannot start counts as a refusal; a hook that times out counts as a pass; a subagent has its own `session_id`.
 
-## payload 的形状
+## The shape of a payload
 
-harness 只支持这种会话。Local 会话（旧引擎）的录制已删。
+The harness supports only this kind of session. The recordings of Local sessions (the old engine) are deleted.
 
-| 项 | 实测 |
+| Item | As measured |
 | --- | --- |
-| 工具名 | `Bash`、`Read`、`Write`、`Edit`、`Grep`、`Glob`、`Agent`、`search_code_subagent`。子 agent 自己的工具还在用旧名字：`read_file`、`grep_search`、`file_search` |
-| 工具参数 | `Bash.command`；`Read/Write.path`（Write 内容在 `file_text`）；`Edit.path/old_str/new_str`；`Agent.name/agent_type/prompt/description/mode`；旧名字的工具用 `filePath` |
-| 工具结果 | `tool_result`：`{result_type, text_result_for_llm}` |
-| SubagentStart | **没有 `hook_event_name`**。camelCase：`sessionId`、`agentName`、`agentDescription`；时间戳是毫秒数 |
-| 子 agent 的会话 | **独立的 `session_id`**（verifier 是 UUID，`search_code_subagent` 是 `toolu_…`）。子会话没有 SessionStart |
-| SubagentStop | `agent_type`、`agent_name`、`last_assistant_message`、`stop_reason`；`agent_id` 是子会话的 id |
-| 事件顺序 | UserPromptSubmit 先，SessionStart 后（同一毫秒） |
-| 输出格式 | **顶层键**。嵌套的 `hookSpecificOutput` 不送达 |
+| Tool names | `Bash`, `Read`, `Write`, `Edit`, `Grep`, `Glob`, `Agent`, `search_code_subagent`. A subagent's own tools still use the old names: `read_file`, `grep_search`, `file_search` |
+| Tool arguments | `Bash.command`; `Read/Write.path` (the content of a Write is in `file_text`); `Edit.path/old_str/new_str`; `Agent.name/agent_type/prompt/description/mode`; tools with the old names use `filePath` |
+| Tool result | `tool_result`: `{result_type, text_result_for_llm}` |
+| SubagentStart | **No `hook_event_name`.** camelCase: `sessionId`, `agentName`, `agentDescription`; the timestamp is in milliseconds |
+| A subagent's session | **Its own `session_id`** (a UUID for the verifier, `toolu_…` for `search_code_subagent`). A child session has no SessionStart |
+| SubagentStop | `agent_type`, `agent_name`, `last_assistant_message`, `stop_reason`; `agent_id` is the id of the child session |
+| Order of events | UserPromptSubmit first, SessionStart after (the same millisecond) |
+| Output format | **Top-level keys.** A nested `hookSpecificOutput` is not delivered |
 
-输出格式的实测结果：
-- 顶层 `permissionDecision`/`permissionDecisionReason` 拒绝 Bash 有效，模型读到理由。
-- UserPromptSubmit 顶层 `additionalContext` 送达，嵌套不送达。
-- PostToolUse 顶层 `additionalContext` 送达（拼进工具结果），嵌套不送达。
-- Stop 顶层 `decision: "block"` + `reason` **有效**。`reason` 会作为一条**新的 UserPromptSubmit**（`prompt` 就是 reason 原文）喂回模型；
-  这条不是用户输入，核心用 `continuation` 标记识别，不重置本条提示的窗口。第二个 Stop 的 `stop_hook_active` 为 true。
-- SubagentStart 顶层 `additionalContext` **有效**（verifier 的回答里出现了暗号）。
-- SubagentStop 顶层 `decision: "block"` + `reason` **有效**：子 agent 继续工作，`reason` 作为子会话里的一条新 UserPromptSubmit 喂给它。
-  所以子会话的后续 UserPromptSubmit 也不是用户输入，核心一律标记为 `from_subagent`。
-- 内置的通用子 agent，`Agent` 的 `agent_type` 是 `explore`（来自拒绝理由；抓取脚本没抓到这次调用，因为同一事件上有 hook 已拒绝）。
-- 模型会遵守注入的规则：L1 下被要求调用子 agent，它直接拒绝并建议用 `/l2`。
+What was measured for the output format:
+- Top-level `permissionDecision`/`permissionDecisionReason` refuses a Bash call, and the model reads the reason.
+- Top-level `additionalContext` on UserPromptSubmit is delivered; nested is not.
+- Top-level `additionalContext` on PostToolUse is delivered (joined to the tool result); nested is not.
+- Top-level `decision: "block"` + `reason` on Stop **works**. The `reason` is fed back to the model as a **new UserPromptSubmit** (its `prompt` is the reason as written);
+  this one is not user input: the core tells it by the `continuation` mark and does not reset the window of the prompt. The second Stop has `stop_hook_active` true.
+- Top-level `additionalContext` on SubagentStart **works** (the code word showed up in the verifier's answer).
+- Top-level `decision: "block"` + `reason` on SubagentStop **works**: the subagent goes on working, and the `reason` is fed to it as a new UserPromptSubmit in the child session.
+  So a later UserPromptSubmit of a child session is not user input either: the core always marks it `from_subagent`.
+- For the built-in general subagent, the `agent_type` of `Agent` is `explore` (taken from a refusal reason; the capture script did not catch this call, because a hook had already refused on the same event).
+- The model follows injected rules: asked to call a subagent under L1, it refused directly and suggested `/l2`.
 
-不要手改这些文件。平台升级后重新录制，再覆盖。
+Do not change these files by hand. After a platform upgrade, record again and overwrite.

@@ -139,6 +139,23 @@ def load(root: Path) -> Targets:
 
 
 KB_DIR = "knowledge-base"  # where a team puts its knowledge base when it is not registered as a repository
+KB_IGNORED = {"README.md", ".gitkeep", ".gitignore", ".DS_Store"}  # what is no content: the shipped placeholder and housekeeping files
+
+
+def knowledge_base_content(folder: Path) -> List[Path]:
+    """The items of a knowledge base folder that are content (not the README, not hidden files). Empty when the folder is missing."""
+    if not folder.is_dir():
+        return []
+    return [item for item in sorted(folder.iterdir()) if item.name not in KB_IGNORED and not item.name.startswith(".")]
+
+
+def kb_registered(root: Path) -> bool:
+    """Is `knowledge-base/` registered as a target repository (an entry with `knowledge_base: true` that points at it)?"""
+    try:
+        kb = (root / KB_DIR).resolve()
+        return any(folder.resolve() == kb for name, folder in knowledge_bases(root) if name != KB_DIR)
+    except OSError:
+        return True  # cannot tell: do not nag
 
 
 def knowledge_bases(root: Path) -> List[Tuple[str, Path]]:

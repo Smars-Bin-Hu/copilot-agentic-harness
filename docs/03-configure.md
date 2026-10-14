@@ -95,14 +95,17 @@ Create `.harness/policies/target.override.json`:
 
 1. Put the knowledge base into `knowledge-base/`. **The entry is `knowledge-base/README.md`**: it is the index and holds only topics and relative links; the agent reads it first and then goes further as needed, not everything at once.
 2. Put the instructions that come with the knowledge base, the ones that say how to read and write it, into `.github/instructions/knowledgebase.instructions.md` (replacing the empty placeholder), with `applyTo: '**'` in the frontmatter. `applyTo: 'knowledge-base/**'` alone is not enough: it has no effect before the agent reads a knowledge base file.
-3. Run `doctor`. It checks: whether there is a README, whether every link in the README leads to a file, whether `.gitignore` ignores `knowledge-base/`, and whether the instructions get loaded.
-4. The writing rules of the knowledge base have one main source: the instructions that come with the knowledge base.
+3. Make it a git repository tasks can update, and register it: see "Letting a task update the knowledge base" below. The setup skill `/harness-get-me-ready` does this for you.
+4. Run `doctor`. It checks: whether there is a README, whether every link in the README leads to a file, whether `knowledge-base/` is a git repository and registered as a target repository (a warning when not), whether `.gitignore` ignores `knowledge-base/`, and whether the instructions get loaded.
+5. The writing rules of the knowledge base have one main source: the instructions that come with the knowledge base.
 
 ### Letting a task update the knowledge base
 
-An agent cannot change the knowledge base directly. To let a task update it, register the knowledge base as a target repository. The condition: `knowledge-base/` is a git repository itself (it has a `.git`).
+An agent cannot change the knowledge base directly. To let a task update it, `knowledge-base/` must be a git repository of its own (it has a `.git`), and it must be registered as a target repository.
 
-Add an entry to `repos` in `.harness/policies/target.override.json`:
+If you copied the files in without a `.git`, run `harness target init-kb`. It runs `git init`, puts the repository on the base branch (`main` unless `base_ref` says otherwise) and makes one first commit with everything in the folder. It pushes nothing. Git must have a `user.name` and a `user.email`; if not, the command says so, and when you have set them, run it again. A knowledge base that already has a `.git` is not touched.
+
+Then add an entry to `repos` in `.harness/policies/target.override.json`:
 
 ```json
 {

@@ -555,7 +555,7 @@ class DoctorTests(unittest.TestCase):
         self.write_log([self.call()])  # the hook has run: no warning about that either
         result = self.doctor()
         self.assertIn("会被加载（applyTo 是 **）", result.stdout)
-        self.assertNotIn("[WARN]", result.stdout)
+        self.assertEqual([line for line in result.stdout.splitlines() if "[WARN]" in line and "git 仓库" not in line], [])  # the not-git warning is another test
 
     def test_instructions_linked_from_agents_md_are_loaded(self) -> None:
         self.kb({"README.md": "# KB\n", "a.md": "text\n"})
@@ -584,6 +584,20 @@ class DoctorTests(unittest.TestCase):
         result = self.doctor()
         self.assertIn("指向不存在文件的链接：b/c.md", result.stdout)
         self.assertNotIn("a.md,", result.stdout)
+
+    def test_a_knowledge_base_that_is_not_a_git_repository_is_a_warning_that_names_the_command(self) -> None:
+        self.kb({"README.md": "# KB\n", "a.md": "text\n"})
+        result = self.doctor()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("不是 git 仓库：任务能读它，不能更新它", result.stdout)
+        self.assertIn("target init-kb", result.stdout)
+
+    def test_a_git_knowledge_base_that_is_not_registered_is_a_warning(self) -> None:
+        self.kb({"README.md": "# KB\n", "a.md": "text\n"})
+        subprocess.run(["git", "-C", str(self.root / "knowledge-base"), "init", "-q"], check=True, capture_output=True)
+        result = self.doctor()
+        self.assertIn("[WARN]  knowledge-base/ 是 git 仓库，但没有登记成目标仓库", result.stdout)
+        self.assertNotIn("不是 git 仓库：任务能读它", result.stdout)
 
     def test_a_git_ignored_knowledge_base_is_a_warning(self) -> None:
         self.kb({"README.md": "# KB\n", "a.md": "text\n"})

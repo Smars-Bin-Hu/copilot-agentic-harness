@@ -27,7 +27,6 @@ def say(key: str, /, **values: Any) -> str:
 HOOK_ENTRY = ".harness/engine/hook.py"
 COMMAND_KEYS = ("command", "windows", "linux", "osx", "bash", "powershell")
 KB_DIR = "knowledge-base"
-KB_IGNORED = {"README.md", ".gitkeep", ".gitignore", ".DS_Store"}
 BROAD_APPLY_TO = {"**", "**/*", "*", "**/**"}
 MARKDOWN_LINK = re.compile(r"\]\(([^)\s]+)\)")
 SHOWN_BROKEN_LINKS = 5
@@ -440,7 +439,7 @@ def kb_git_ignored(root: Path) -> bool:
 def check_knowledge_base(report: Report, root: Path) -> None:
     """Can an agent reach the knowledge base? Looks at the folder, its README index and the instructions. Warns only."""
     kb = root / KB_DIR
-    content = [item for item in sorted(kb.iterdir()) if item.name not in KB_IGNORED and not item.name.startswith(".")] if kb.is_dir() else []
+    content = targets.knowledge_base_content(kb)
     if not content:
         report.ok(say("doctor.kb.empty", kb=KB_DIR))
         return
@@ -455,12 +454,10 @@ def check_knowledge_base(report: Report, root: Path) -> None:
         else:
             report.ok(say("doctor.kb.links.ok", kb=KB_DIR))
     if (kb / ".git").exists():
-        try:
-            registered = any(folder.resolve() == kb.resolve() for name, folder in targets.knowledge_bases(root) if name != targets.KB_DIR)
-        except OSError:
-            registered = True
-        if not registered:
-            report.ok(say("doctor.kb.unregistered", kb=KB_DIR))
+        if not targets.kb_registered(root):
+            report.warn(say("doctor.kb.unregistered", kb=KB_DIR))
+    elif not targets.kb_registered(root):  # registered but not git: check_targets reports that as an error
+        report.warn(say("doctor.kb.not_git", kb=KB_DIR))
     if kb_git_ignored(root):
         report.warn(say("doctor.kb.ignored", kb=KB_DIR))
     files = kb_instruction_files(root)

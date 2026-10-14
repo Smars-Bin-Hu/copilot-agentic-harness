@@ -10,6 +10,7 @@
   task review start|status                   independent checks, `[review]=n` (taskreview.py); extend|waive: a person at a terminal
   task snapshot list|prune                   the copies made at the gates (tasksnap.py)
   target list|show                           the target repositories (policy target.json): where they are, what their base branch is
+  target init-kb                             make knowledge-base/ a git repository (kbsetup.py), so that a task can update it
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from typing import Any, Dict
 from core import approval, messages, targets, tasks
 from core.paths import cli_command, repo_root
 
-from . import autorun, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
+from . import autorun, kbsetup, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
 from .common import CommandError
 
 
@@ -178,3 +179,5 @@ def register(subparsers: Any) -> None:
     target_show = target_commands.add_parser("show", help="one target repository")
     target_show.add_argument("--repo", required=True, help="the repository name (the folder name under repos_root)")
     target_show.set_defaults(handler=cmd_target_show)
+    init_kb = target_commands.add_parser("init-kb", help="make knowledge-base/ a git repository (init, branch = base branch, first commit) so that a task can update it; one that is a git repository already is left as it is")
+    init_kb.set_defaults(handler=lambda a: kbsetup.init(repo_root()))

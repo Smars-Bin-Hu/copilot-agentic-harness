@@ -1,0 +1,13 @@
+GitHub Copilot Agentic Harness on VS Code
+Copyright 2026 Smars Hu
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The name "Smars Hu" and this notice must be kept in every copy and every
+derived work, as section 4 of the license requires.
+
+Third-party material, under its own license:
+
+- .github/skills/typesafe-ai/
+  Copyright (c) 2026 TypeSafe AI. MIT License (see .github/skills/typesafe-ai/LICENSE).
+  The Apache License of this repository does not apply to this folder.

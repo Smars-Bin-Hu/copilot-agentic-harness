@@ -3,6 +3,7 @@
 <p>
   <img alt="version" src="https://img.shields.io/badge/version-1.4.0-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
+  <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
   <img alt="dependencies" src="https://img.shields.io/badge/dependencies-none-brightgreen">
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey">
@@ -98,6 +99,7 @@ If you'd rather not read docs, the three commands above are enough. The docs are
 This repository (the harness)
 ├── AGENTS.md                      core rules every agent must follow
 ├── README.md, docs/               documentation for people
+├── LICENSE, NOTICE                Apache License 2.0, and the copyright and third-party notice
 ├── .github/
 │   ├── copilot-instructions.md    repository-level rules
 │   ├── instructions/              rules by category; knowledgebase.instructions.md belongs to the company
@@ -128,6 +130,12 @@ Outside the harness: target repositories (the company's code)
 </details>
 
 For what each path is for, see [.harness/INDEX.md](.harness/INDEX.md). That index is written mainly for the agent.
+
+---
+
+## License
+
+Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENSE). The copyright notice in [NOTICE](NOTICE) must be kept in every copy and every derived work. `.github/skills/typesafe-ai/` is third-party and keeps its own MIT license.
 
 ---
 

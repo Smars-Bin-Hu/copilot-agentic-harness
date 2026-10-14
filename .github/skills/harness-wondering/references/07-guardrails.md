@@ -14,6 +14,7 @@ Guardrail files are the harness's own "fence": the hook configuration, the polic
 - `.harness/engine/`, `.harness/policies/`, `.harness/bin/`, `.harness/registry.json`
 - `.harness/runtime/` (session state, approval records, logs)
 - `.vscode/settings.json`
+- `LICENSE`, `NOTICE` (the copyright and the license of the repository)
 
 `AGENTS.md` and the instructions are not on this list: they are text, not a fence.
 

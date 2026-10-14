@@ -8,7 +8,9 @@
     ".harness/bin/**",
     ".harness/registry.json",
     ".harness/runtime/**",
-    ".vscode/settings.json"
+    ".vscode/settings.json",
+    "LICENSE",
+    "NOTICE"
   ],
   "extra_guardrail_paths": [],
   "admin_locked_paths": [

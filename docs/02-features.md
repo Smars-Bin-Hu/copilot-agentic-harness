@@ -39,7 +39,7 @@ The gate is a hook module that checks before every tool call. It guards writes o
 
 | What it stops | Notes |
 | --- | --- |
-| Guardrail files | `.github/hooks/`, `.harness/engine/`, `.harness/policies/`, `.harness/bin/`, `.harness/registry.json`, `.harness/runtime/`, `.vscode/settings.json`. They cannot be changed, and an override cannot remove them. The one exception is a session in admin mode (see "admin" below) |
+| Guardrail files | `.github/hooks/`, `.harness/engine/`, `.harness/policies/`, `.harness/bin/`, `.harness/registry.json`, `.harness/runtime/`, `.vscode/settings.json`, `LICENSE`, `NOTICE`. They cannot be changed, and an override cannot remove them. The one exception is a session in admin mode (see "admin" below) |
 | Writes outside the task | A session with a task can write the task folder only. `DEV/` waits for you to approve the plan; `REQ/` and `REF/` cannot be written |
 | The working tree of a target repository | Files in a target repository cannot be changed directly; only promote writes them |
 | Files of the CLI | A task's `.task/`, `REVIEW/`, `SNAPSHOT/`, the two `.diff` files and the reports can be changed only by commands |
@@ -146,7 +146,7 @@ After you type the code, this one session is in admin mode, until you run `harne
 
 | In admin mode | Notes |
 | --- | --- |
-| Opened | Guardrail files can be changed: the hook configuration, policies, the engine, the short command, the registry, `.vscode/settings.json` |
+| Opened | Guardrail files can be changed: the hook configuration, policies, the engine, the short command, the registry, `.vscode/settings.json`, `LICENSE`, `NOTICE` |
 | Still locked | `.harness/runtime/` (session state, approval records, logs; read only), the files of the CLI and the reports, `.git`, target repositories; the rules for git write commands and dangerous commands stay; only you can run the approval commands |
 | Tasks | No task can be opened, and no subagent called |
 | Logs | Every log line of this session has `admin: true` |

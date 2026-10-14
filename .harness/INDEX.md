@@ -10,6 +10,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `AGENTS.md` | The core rules and the safety limits. Loaded by itself |
 | `.github/copilot-instructions.md` | Rules for the whole repository: tasks, what to do after a hook refuses, git commands |
 | `.github/instructions/` | Rules by topic: `agents`, `skills`, `tools`, `workspace` (reading and writing in `.workspace/`), `knowledgebase` (comes with a team's knowledge base; empty when shipped) |
+| `LICENSE`, `NOTICE` | Apache License 2.0 and the copyright notice. They are guardrail files |
 | `.workspace/README.md` | The layout of the work area, and what the gate can and cannot guard |
 
 ## Skills and agents

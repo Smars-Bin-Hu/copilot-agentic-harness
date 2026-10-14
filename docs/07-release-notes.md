@@ -14,6 +14,7 @@ To see which version you have: `harness --version`.
 
 ### Added
 
+- **A license**: `LICENSE` (Apache License 2.0) and `NOTICE` (copyright 2026 Smars Hu, and the third-party skill `typesafe-ai`, which keeps its own MIT license) at the root of the repository. Before, the repository had none. Both are guardrail files: an agent cannot edit them, except in admin mode.
 - **`harness target init-kb`**: makes `knowledge-base/` a git repository (`git init`, the base branch, one first commit; nothing is pushed), so that a task can update it. A knowledge base that already has a `.git` is left as it is. If git has no name or email, the command stops after the init and says so; run it again once they are set.
 
 ### Changed

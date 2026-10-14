@@ -14,6 +14,7 @@ To see which version you have: `harness --version`.
 
 ### Added
 
+- **`/harness-vscode-updates`**: reads the VS Code release notes since the last check and advises, against the harness design (`retire_when` of each module, the hook events and tool names it relies on), what to retire, change or add. It changes no harness file; the advice goes to a local folder that git ignores, with an index of the versions checked. Started only by you; about once a month, or after an upgrade of VS Code.
 - **A license**: `LICENSE` (Apache License 2.0) and `NOTICE` (copyright 2026 Smars Hu, and the third-party skill `typesafe-ai`, which keeps its own MIT license) at the root of the repository. Before, the repository had none. Both are guardrail files: an agent cannot edit them, except in admin mode.
 - **`harness target init-kb`**: makes `knowledge-base/` a git repository (`git init`, the base branch, one first commit; nothing is pushed), so that a task can update it. A knowledge base that already has a `.git` is left as it is. If git has no name or email, the command stops after the init and says so; run it again once they are set.
 

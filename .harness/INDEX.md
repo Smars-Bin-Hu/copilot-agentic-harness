@@ -22,6 +22,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/skills/harness-quick-start/` | The first lesson. The user starts it with `/harness-quick-start` |
 | `.github/skills/harness-wondering/` | The deep course: how it works and how it is built. The user starts it with `/harness-wondering` |
 | `.github/skills/harness-get-me-ready/` | First setup: the short command, the knowledge base, company skills, target repositories, the user's name, the language. The user starts it with `/harness-get-me-ready` |
+| `.github/skills/harness-vscode-updates/` | Reads the newest VS Code release notes and advises what of the harness to retire, change or add; writes to `.local/vscode-updates/`. Started only by the user, with `/harness-vscode-updates` |
 | `.github/skills/harness-autorun/` | Getting ready for autorun (beta), and the rules while it runs. Started only by the user, with `/harness-autorun` |
 | `.github/skills/generic-goal-driven/` | The goal-driven flow for long tasks. Started only by the user, with `/generic-goal-driven` |
 | `.github/skills/generic-mapreduce/` | Reading in parallel chunks, handed to read-only mappers. Started only by the user, with `/generic-mapreduce` |

@@ -14,6 +14,8 @@ Build a skill from the template, check its form and test that it loads.
 - The user asks to create a new skill, or a `domain-*` skill for a company.
 - The user asks to check or test a skill that exists.
 
+**Who starts it: auto**, when the user asks for a new skill or for a check of one.
+
 ## Prerequisites
 
 - The short command `harness` works (step 5 uses it). If not, run `/harness-get-me-ready`.

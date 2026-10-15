@@ -15,6 +15,8 @@ A knowledge base that only takes things in goes stale, and one that takes everyt
 - The independent check found something the author missed (`REVIEW/round-*/verdict.md`). That is a fact the knowledge base lacked.
 - The user says to write something down, or to add it to the knowledge base.
 
+**Who starts it: offer.** When a task ends and it taught something, ask the user in one line whether to run this (it reads the task files and only drafts). Go on only after a yes, or when the user asked for it.
+
 ## Prerequisites
 
 - A task is open (`harness-my-task`). The draft is a file in its folder.

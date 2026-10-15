@@ -23,6 +23,16 @@ The folder name of a skill and its `name` field must be the same, and use one of
 - `domain-<domain name>-<skill-name>`: a skill for one business domain. Maintained by the team; upstream makes none.
 
 
+# Who starts a skill
+
+Every skill says in its first lines who starts it. Pick one of three, by what the skill costs and what it touches:
+
+- **auto**: the agent starts it when the situation fits. For a skill that is cheap and reads, or writes only a draft in the task folder, and that the user would want every time. Make the `description` match the situation (`Use when ...`, in the words a user says).
+- **offer**: the agent may start it, but first asks the user in one or two lines (what it will do, roughly what it costs) and goes on only after a yes. A skill that is asked for by name is not asked about again. For a skill that takes real time or tokens, or spreads work. Say so in the first step of the skill.
+- **user-only**: `disable-model-invocation: true`. The agent cannot start it, but when the situation fits it tells the user that the command exists (`you can type /name`). For a skill that spends money, hands over rights, or runs unattended.
+
+A skill never goes beyond the task it serves: it writes in the task folder only, and it does not change a target repository or the knowledge base, or switch on what only the user may switch on. Where a skill ends and a step needs the user (an approval, a copy into place), it says so and stops.
+
 # Unit type vs workflow orchestration type
 
 - Unit type: the skill does one well-defined unit of work, with a fixed input and output. It is usually one step of a workflow, or a tool that is used often.

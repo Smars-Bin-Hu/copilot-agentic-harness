@@ -15,6 +15,8 @@ A target repository cannot be run, so a missed reference fails nothing and shows
 - The user asks who uses something, or what a change would reach.
 - Not for a purely new thing that nothing refers to yet. (Searching to see that the name is free is fine.)
 
+**Who starts it: auto.** It reads and writes one file in the task folder, so run it yourself whenever the situation fits, and tell the user in one line that you did.
+
 ## Prerequisites
 
 - A task is open (`harness-my-task`) and `REQ.md` says what changes.

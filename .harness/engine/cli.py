@@ -4,7 +4,8 @@
   doctor                       check that the harness files and config are consistent
   user                         the name of the person using this copy (for a change note that needs an author)
   task ...                     tasks: new, open, upgrade, list, fetch, diff, promote, review, snapshot, close (task module)
-  target list|show             the target repositories (task module)
+  target list|show|refs|init-kb  the target repositories; refs: where names are used; init-kb: make the knowledge base a git repository (task module)
+  skill check [name|path ...]  is a skill well formed? (all skills when none is named)
   approve-command              a person approves a git command the gate refused (gate module)
   admin on|off|status          a person switches admin mode on for one session: it may then change guardrail files (gate module)
   stats, logs prune            numbers from the session logs; delete old logs (observe module)
@@ -21,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from core import messages, output, user  # noqa: E402
+from core import messages, output, skillcheck, user  # noqa: E402
 from core.paths import repo_root  # noqa: E402
 from core.registry import harness_version, version_banner  # noqa: E402
 import doctor  # noqa: E402
@@ -53,6 +54,19 @@ class ShowVersion(argparse.Action):
         parser.exit(0)
 
 
+def check_skills(only):
+    results = skillcheck.check_all(repo_root(), only)
+    errors = sum(len(item["errors"]) for item in results)
+    return {
+        "checked": len(results),
+        "errors": errors,
+        "warnings": sum(len(item["warnings"]) for item in results),
+        "skills": [item for item in results if item["errors"] or item["warnings"]],
+        "next": messages.text("skill.next.errors" if errors else "skill.next.ok"),
+        "exit_code": 1 if errors else 0,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="harness", description="Harness CLI")
     parser.add_argument("--version", action=ShowVersion)
@@ -62,6 +76,11 @@ def build_parser() -> argparse.ArgumentParser:
     check.set_defaults(handler=None)
     name = commands.add_parser("user", help="the name of the person using this copy (user.override.json, else git config user.name)")
     name.set_defaults(handler=lambda _args: user.who(repo_root()))
+    skill = commands.add_parser("skill", help="the skills in .github/skills/")
+    skill_commands = skill.add_subparsers(dest="skill_command", required=True)
+    skill_check = skill_commands.add_parser("check", help="is a skill well formed? name, description, size, links, files nobody points at. Exit code 1 when there is an error")
+    skill_check.add_argument("skills", nargs="*", help="a skill folder name under .github/skills/, or a path; none means every skill")
+    skill_check.set_defaults(handler=lambda a: check_skills(a.skills))
     task_commands.register(commands)
     gate_commands.register(commands)
     observe_commands.register(commands)

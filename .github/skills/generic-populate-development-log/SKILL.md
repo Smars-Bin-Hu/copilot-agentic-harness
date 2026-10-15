@@ -1,6 +1,6 @@
 ---
 name: generic-populate-development-log
-description: 'Write the harness upgrade finished in the current session into .local/开发日志.md. Used after a session finishes one piece of development: adds or corrects one development log entry with the date, the core component updates and a before-and-after Outcome.'
+description: 'Write the harness upgrade finished in the current session into .local/开发日志.md. Use when a session has finished one piece of development: adds or corrects one development log entry with the date, the core component updates and a before-and-after Outcome.'
 type: unit
 specificTo: harness-development
 ---

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import config, messages, output, targets, tasks, user
+from core import config, messages, output, skillcheck, targets, tasks, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -472,6 +472,19 @@ def check_knowledge_base(report: Report, root: Path) -> None:
             report.warn(say("doctor.kb.instructions.not_loaded", file=path.name))
 
 
+def check_skills(report: Report, root: Path) -> None:
+    """Are the skills well formed? A skill with an error is listed; so is a skill of ours or of the company (it has a prefix) with only a warning.
+
+    A third-party skill keeps its own name and form, so only its errors count. Warns only: a bad skill must not stop the harness.
+    """
+    results = skillcheck.check_all(root)
+    bad = [item["skill"] for item in results if item["errors"] or (item["warnings"] and item["skill"].startswith(skillcheck.PREFIXES))]
+    if bad:
+        report.warn(say("skill.doctor.summary", count=len(bad), names=", ".join(bad)))
+    elif results:
+        report.ok(say("skill.doctor.ok", count=len(results)))
+
+
 def check_targets(report: Report, root: Path) -> None:
     """The target repositories (target.json + target.override.json): found, git repositories, with their base branch."""
     try:
@@ -628,6 +641,7 @@ def run(root: Path) -> int:
     check_targets(report, root)
     check_location(report, root)
     check_knowledge_base(report, root)
+    check_skills(report, root)
     check_old_tasks(report, root)
     for name, entry in registry["modules"].items():
         check_module(report, root, name, entry)

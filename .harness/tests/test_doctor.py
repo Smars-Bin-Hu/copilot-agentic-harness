@@ -19,8 +19,9 @@ from support import CLI, ENGINE, REPO
 def copy_repo(destination: Path) -> None:
     """The parts of the repository that doctor looks at."""
     ignore = shutil.ignore_patterns("__pycache__", "runtime", "*.pyc", "*.override.json")
-    shutil.copytree(REPO / ".github", destination / ".github", ignore=ignore)
+    shutil.copytree(REPO / ".github", destination / ".github", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))  # the skills' own template *.override.json files stay
     shutil.copytree(REPO / ".harness", destination / ".harness", ignore=ignore)
+    shutil.copytree(REPO / "docs", destination / "docs")  # skills link to it, and doctor checks those links
     (destination / ".workspace").mkdir()
     shutil.copy(REPO / ".workspace" / "README.md", destination / ".workspace" / "README.md")  # a module lists it
 

@@ -10,6 +10,7 @@
   task review start|status                   independent checks, `[review]=n` (taskreview.py); extend|waive: a person at a terminal
   task snapshot list|prune                   the copies made at the gates (tasksnap.py)
   target list|show                           the target repositories (policy target.json): where they are, what their base branch is
+  target refs <name>...                      where names are used: every target repository and the knowledge base, in one search (refs.py)
   target init-kb                             make knowledge-base/ a git repository (kbsetup.py), so that a task can update it
 """
 
@@ -21,7 +22,7 @@ from typing import Any, Dict
 from core import approval, messages, targets, tasks
 from core.paths import cli_command, repo_root
 
-from . import autorun, kbsetup, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
+from . import autorun, kbsetup, refs, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
 from .common import CommandError
 
 
@@ -181,3 +182,12 @@ def register(subparsers: Any) -> None:
     target_show.set_defaults(handler=cmd_target_show)
     init_kb = target_commands.add_parser("init-kb", help="make knowledge-base/ a git repository (init, branch = base branch, first commit) so that a task can update it; one that is a git repository already is left as it is")
     init_kb.set_defaults(handler=lambda a: kbsetup.init(repo_root()))
+    find = target_commands.add_parser("refs", help="where are these names used? One search over every target repository (the committed base branch) and the knowledge base, with their spellings; for the impact of a change")
+    find.add_argument("terms", nargs="+", help="names: a table, a column, a procedure, a job, a config key. At least 3 characters; for a common column name give `table.column`")
+    find.add_argument("--repo", default="", help="only this repository")
+    find.add_argument("--no-kb", action="store_true", help="leave the knowledge base folder out")
+    find.add_argument("--exact", action="store_true", help="count only whole-word hits, not a name inside a longer name")
+    find.add_argument("--no-variants", action="store_true", help="search the names as typed, without the snake, kebab, joined and spaced spellings")
+    find.add_argument("--max-files", type=int, default=30, help="files shown per repository (the rest are counted)")
+    find.add_argument("--lines", type=int, default=2, help="sample lines shown per file")
+    find.set_defaults(handler=lambda a: refs.refs(repo_root(), a.terms, a.repo, a.no_kb, not a.no_variants, a.exact, a.max_files, a.lines))

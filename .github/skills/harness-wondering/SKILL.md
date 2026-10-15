@@ -1,6 +1,6 @@
 ---
 name: harness-wondering
-description: 'The deep course: an interactive explanation of how coding agents and this harness work and how they are built. Topics: how an agent works, instructions, skills, agents, tools, hooks, guardrails, permissions and sandbox, tasks and their life cycle, subagents, independent checks, observe and report, common commands, internals, design choices. Use when the user wants to go deep, asks "why is it designed this way", "how does the hook work", "how is it built", or types /harness-wondering. A beginner new to the harness uses harness-quick-start first. Keywords: wondering, how it works, deep dive, why, how it is built, internals, architecture, tutorial, in depth.'
+description: 'The deep course: an interactive explanation of how coding agents and this harness work and how they are built. Topics: how an agent works, instructions, skills, agents, tools, hooks, guardrails, permissions, tasks, subagents, independent checks, observe and report, commands, internals, design choices. Use when the user wants to go deep, asks "why is it designed this way", "how does the hook work", "how is it built", or types /harness-wondering. A beginner new to the harness uses harness-quick-start first. Keywords: wondering, how it works, deep dive, internals, architecture, tutorial.'
 type: workflow
 specificTo: generic
 ---

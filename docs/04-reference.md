@@ -25,7 +25,9 @@ Written from the code. For all the arguments of a command use `--help`. The `har
 | `admin on` | Switches admin mode on for one session: it can change guardrail files. Terminal only, with a typed code |
 | `admin off`, `admin status` | Switches admin mode off for one session; lists the sessions with admin mode on |
 | `target list`, `target show` | Shows the target repositories: path, base branch, commit, whether the working tree is clean |
+| `target refs <name>...` | Where names are used: one search over every target repository (the committed base branch) and the knowledge base, in several spellings. For the impact of a change; see `/generic-impact-analysis`. `--repo`, `--exact`, `--no-kb`, `--max-files`, `--lines` |
 | `target init-kb` | Makes `knowledge-base/` a git repository (init, base branch, first commit) so a task can update it. One that already has a `.git` is left as it is |
+| `skill check [name]` | Checks that skills are well formed: name, description, size, links, files nothing points at. Exit code 1 on an error. `doctor` runs it on every skill |
 | `stats` | A summary of the logs: the numbers of prompts, tool calls and refusals, the refusals of each module, the verdicts of independent checks, failed tool calls, which skills were used |
 | `kb reads` | How often each file of the knowledge base was read and by which tasks, and which files nobody read. `--days N` for the last N days only, `--task <name>` for one task only |
 | `logs prune` | Deletes the session logs not written for N days (look first with `--dry-run`) |

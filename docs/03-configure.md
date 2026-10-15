@@ -153,7 +153,7 @@ A skill is `.github/skills/<name>/SKILL.md`; the rules are in [skills.instructio
 - The folder name and `name` must be the same, with a prefix: `harness-<name>` (comes with the harness), `generic-<name>` (general), `domain-<domain>-<name>` (your business skills).
 - `description` says clearly "when to use it": it is the only ground on which the agent decides whether to read the whole text.
 - Business skills use the prefix `domain-`, apart from the ones that come with the harness, so that a later upgrade of the harness does not conflict.
-- A new skill can be made with `generic-build-new-skill`.
+- A new skill can be made with `generic-build-new-skill`. `harness skill check` tells whether a skill is well formed (name, description, size, links), and `doctor` runs it for every skill. The skill also says how to test that Copilot loads yours.
 
 ## Agents and models
 

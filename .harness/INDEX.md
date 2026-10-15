@@ -26,7 +26,9 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/skills/harness-autorun/` | Getting ready for autorun (beta), and the rules while it runs. Started only by the user, with `/harness-autorun` |
 | `.github/skills/generic-goal-driven/` | The goal-driven flow for long tasks. Started only by the user, with `/generic-goal-driven` |
 | `.github/skills/generic-mapreduce/` | Reading in parallel chunks, handed to read-only mappers. Started only by the user, with `/generic-mapreduce` |
-| `.github/skills/generic-build-new-skill/` | The scaffold for a new skill |
+| `.github/skills/generic-build-new-skill/` | The scaffold for a new skill, and how to check (`skill check`) and test it |
+| `.github/skills/generic-impact-analysis/` | Before a plan: where the names a change touches are used, in every target repository and the knowledge base (`target refs`); writes `IMPACT.md` in the task folder |
+| `.github/skills/generic-capture-knowledge/` | After a task: picks what a future agent would get wrong, drafts it as knowledge base entries or skill gotchas (`KB-DRAFT.md`) for the user to approve; writes nothing into the knowledge base |
 | `.github/agents/` | `reviewer` (the independent checker), `mapper` (the read-only chunk reader), `admin` (extends and debugs the harness; the user must switch admin mode on in the terminal first) |
 
 ## Engine and policies

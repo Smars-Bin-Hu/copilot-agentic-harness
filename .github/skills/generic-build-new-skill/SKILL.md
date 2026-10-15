@@ -1,27 +1,37 @@
 ---
 name: generic-build-new-skill
-description: Build a new skill using template. Use when create a new skill.
+description: 'Build a new skill from the template, then check and test it. Use when the user asks to create, write or scaffold a skill (a domain-* skill of the company included), or to check or test a skill. Keywords: new skill, SKILL.md, domain skill, skill check, skill trigger.'
 type: unit
 specificTo: generic
 ---
 
-# Title
+# Build a new skill
 
-Build a new skill scaffold using template. Use when create a new skill.
+Build a skill from the template, check its form and test that it loads.
 
 ## When to Use This Skill
 
-- User asks to create a new skill scaffold.
+- The user asks to create a new skill, or a `domain-*` skill for a company.
+- The user asks to check or test a skill that exists.
+
 ## Prerequisites
+
+- The short command `harness` works (step 5 uses it). If not, run `/harness-get-me-ready`.
 
 ## Step-by-Step Workflows
 
 1. Understand how to write [High Impact Skill](./references/high_impact_skill.md)
 2. Write `SKILL.md` frontmatter based on [Frontmatter Template](./templates/frontmatter_template.md)
-
 3. Write `SKILL.md` core content scaffold based on [Content Template](./templates/content_template.md)
 4. Build additional files directory based on [Build Additional Files](./references/build_additional_files.md). Keep directory structure even though no need to add any files for now.
+5. Check the form: run `harness skill check <skill folder name>` and fix every error. A warning is advice.
+6. Test that it loads and that it changes what the agent does: follow [Test a skill](./references/test_your_skill.md).
+
 ## Gotchas
+
+- **Write only what the model would get wrong or miss.** What it already knows (common practice, standard syntax) is a cost, not a help. A skill with no such line is short.
+- **The description is all Copilot sees when it picks a skill.** Put in the words a user would say. A skill that is never picked is not a skill.
+- **A skill serves a task and obeys its limits.** It cannot write outside the task folder, cannot change a target repository or the knowledge base directly, and cannot switch on what only the user may switch on. Do not write a step that needs this.
 
 ## Troubleshooting
 

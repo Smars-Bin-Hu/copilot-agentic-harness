@@ -54,6 +54,8 @@ When an agent runs these, the gate refuses; a pipe or a script does not work eit
 | Command | What it does |
 | --- | --- |
 | `target list` / `show` | Target repositories: path, base branch, commit, whether the working tree is clean |
+| `target refs <name>...` | Where names are used, over every target repository and the knowledge base (for the impact of a change) |
+| `skill check [name]` | Is a skill well formed? |
 | `target init-kb` | Makes `knowledge-base/` a git repository (first commit on the base branch) so a task can update it |
 | `task snapshot list` / `prune` | Shows the snapshots at the gates; removes expired ones |
 | `logs prune [--dry-run]` | Removes old logs |

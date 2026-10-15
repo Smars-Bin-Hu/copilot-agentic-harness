@@ -20,6 +20,7 @@ To see which version you have: `harness --version`.
 
 ### Changed
 
+- **`AGENTS.md` has a new writing rule**: do not write down what the model already knows; write only what it would get wrong or miss. It holds for every rule, instruction and skill.
 - **The setup skill makes the knowledge base updatable as part of its knowledge base step.** After the files are copied into `knowledge-base/`, it runs `target init-kb` when there is no `.git`, and registers the knowledge base in `target.override.json` (`"kb": {"path": "knowledge-base", "knowledge_base": true}`). Before, it registered one only when the user had asked for it and the folder already was a git repository.
 - **`doctor` warns** when `knowledge-base/` has content and is not a git repository (it names `target init-kb`), and now also warns, instead of just noting it, when it is a git repository that is not registered. Both mean a task can read the knowledge base and cannot update it.
 

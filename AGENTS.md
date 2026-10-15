@@ -26,6 +26,7 @@ To find a file, read [.harness/INDEX.md](.harness/INDEX.md) (the path index). Do
 - Use short sentences and common words. A 10-year-old should be able to read it.
 - Keep it short, exact and doable. Cut any sentence that carries no information.
 - No empty, inflated or advert-like words.
+- Do not write down what the model already knows (common practice, standard syntax, well-known method). Write only what it would get wrong or miss: this repository's own rules, limits, names and traps. This holds for every rule, instruction and skill you write.
 - Do not repeat what the user already knows. No empty opening or closing lines.
 
 ## Where information goes

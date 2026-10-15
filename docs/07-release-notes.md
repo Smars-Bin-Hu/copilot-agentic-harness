@@ -25,6 +25,8 @@ To see which version you have: `harness --version`.
 
 ### Changed
 
+- **Every skill says who starts it** (`skills.instructions.md`): *auto* (the agent starts it when the situation fits), *offer* (the agent asks the user first, in a line), or *user-only* (the agent cannot start it, but tells the user the command exists). `generic-impact-analysis` and `generic-build-new-skill` are auto; `generic-capture-knowledge` is offer.
+- **`task new`, `task open` and `task status` now say when to use a skill**: before a plan that renames or removes something, run `generic-impact-analysis`. After `task close`, the agent gives the report link, mentions `/harness-task-report`, and asks before running `generic-capture-knowledge`.
 - **`harness-wondering` and `generic-populate-development-log`**: the description of the first is shorter, and the second now says when to use it, so both pass `skill check` without a warning.
 - **`AGENTS.md` has a new writing rule**: do not write down what the model already knows; write only what it would get wrong or miss. It holds for every rule, instruction and skill.
 - **The setup skill makes the knowledge base updatable as part of its knowledge base step.** After the files are copied into `knowledge-base/`, it runs `target init-kb` when there is no `.git`, and registers the knowledge base in `target.override.json` (`"kb": {"path": "knowledge-base", "knowledge_base": true}`). Before, it registered one only when the user had asked for it and the folder already was a git repository.

@@ -11,6 +11,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/copilot-instructions.md` | Rules for the whole repository: tasks, what to do after a hook refuses, git commands |
 | `.github/instructions/` | Rules by topic: `agents`, `skills`, `tools`, `workspace` (reading and writing in `.workspace/`), `knowledgebase` (comes with a team's knowledge base; empty when shipped) |
 | `LICENSE`, `NOTICE` | Apache License 2.0 and the copyright notice. They are guardrail files |
+| `.harness/standards/code-standards.md` | The company's code standards, written by the company; ships without a rule. Read by `generic-code-standards` |
 | `.workspace/README.md` | The layout of the work area, and what the gate can and cannot guard |
 
 ## Skills and agents
@@ -28,6 +29,10 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/skills/generic-mapreduce/` | Reading in parallel chunks, handed to read-only mappers. Started only by the user, with `/generic-mapreduce` |
 | `.github/skills/generic-build-new-skill/` | The scaffold for a new skill, and how to check (`skill check`) and test it |
 | `.github/skills/generic-impact-analysis/` | Before a plan: where the names a change touches are used, in every target repository and the knowledge base (`target refs`); writes `IMPACT.md` in the task folder |
+| `.github/skills/generic-workflow-design/` | Designs an agentic workflow from a repeated manual routine and 2-3 finished examples; writes `WORKFLOW-DESIGN.md` for the user to approve; builds nothing. Asks the user first |
+| `.github/skills/generic-workflow-build/` | Builds the skills of an approved design: unit skills, an orchestration skill, scripts with tests, a replay test. Started only by the user, with `/generic-workflow-build` |
+| `.github/skills/generic-code-standards/` | Checks a task's code against the company's standards (`.harness/standards/code-standards.md`) and fixes what does not comply. Asks the user first |
+| `.github/skills/generic-skill-repair/` | Repairs the form of a skill to the template of `generic-build-new-skill`. Started only by the user, with `/generic-skill-repair` |
 | `.github/skills/generic-capture-knowledge/` | After a task: picks what a future agent would get wrong, drafts it as knowledge base entries or skill gotchas (`KB-DRAFT.md`) for the user to approve; writes nothing into the knowledge base |
 | `.github/agents/` | `reviewer` (the independent checker), `mapper` (the read-only chunk reader), `admin` (extends and debugs the harness; the user must switch admin mode on in the terminal first) |
 

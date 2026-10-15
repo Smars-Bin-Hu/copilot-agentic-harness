@@ -24,7 +24,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
-from core import approval, messages, tasks
+from core import approval, messages, standards, tasks
 from core.paths import cli_command, utc_now
 from core.state import admin_on, atomic_write, session, state_lock, state_path
 
@@ -233,6 +233,8 @@ def next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
     text = say("task.step.approved", dev=dev, task=task)
     if data.get("target_mode"):
         text += say("task.step.fetch")
+        if standards.plugged_in(root):
+            text += say("task.step.standards")
     return text + say("task.step.close")
 
 

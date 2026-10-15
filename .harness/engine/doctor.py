@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import config, messages, output, skillcheck, targets, tasks, user
+from core import config, messages, output, skillcheck, standards, targets, tasks, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -485,6 +485,19 @@ def check_skills(report: Report, root: Path) -> None:
         report.ok(say("skill.doctor.ok", count=len(results)))
 
 
+def check_standards(report: Report, root: Path) -> None:
+    """Are the code standards plugged in, and does each rule have the fields the check needs? Warns only."""
+    found = standards.rules(root)
+    if not found:
+        report.ok(say("doctor.standards.none", file=standards.STANDARDS_FILE))
+        return
+    report.ok(say("doctor.standards.ok", count=len(found), file=standards.STANDARDS_FILE))
+    bad = [item for item in found if item["missing"]]
+    if bad:
+        fields = ", ".join(sorted({name for item in bad for name in item["missing"]}))
+        report.warn(say("doctor.standards.incomplete", file=standards.STANDARDS_FILE, fields=fields, titles=", ".join(item["title"] for item in bad[:5])))
+
+
 def check_targets(report: Report, root: Path) -> None:
     """The target repositories (target.json + target.override.json): found, git repositories, with their base branch."""
     try:
@@ -642,6 +655,7 @@ def run(root: Path) -> int:
     check_location(report, root)
     check_knowledge_base(report, root)
     check_skills(report, root)
+    check_standards(report, root)
     check_old_tasks(report, root)
     for name, entry in registry["modules"].items():
         check_module(report, root, name, entry)

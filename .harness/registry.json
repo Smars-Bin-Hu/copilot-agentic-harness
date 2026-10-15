@@ -58,6 +58,11 @@
         ".github/skills/harness-quick-start/",
         ".github/skills/generic-impact-analysis/",
         ".github/skills/generic-capture-knowledge/",
+        ".github/skills/generic-workflow-design/",
+        ".github/skills/generic-workflow-build/",
+        ".github/skills/generic-code-standards/",
+        ".github/skills/generic-skill-repair/",
+        ".harness/standards/code-standards.md",
         ".github/agents/reviewer.agent.md",
         ".github/agents/mapper.agent.md",
         ".github/skills/generic-mapreduce/",
@@ -70,7 +75,7 @@
         ".harness/tests/test_taskreview.py",
         ".harness/tests/test_taskrules.py",
         ".harness/tests/test_targets.py",
-        ".harness/tests/test_promote.py", ".harness/tests/test_kb.py", ".harness/tests/test_kbsetup.py", ".harness/tests/test_refs.py"
+        ".harness/tests/test_promote.py", ".harness/tests/test_kb.py", ".harness/tests/test_kbsetup.py", ".harness/tests/test_refs.py", ".harness/tests/test_standards.py"
       ],
       "retire_when": "Copilot itself offers task state that follows the task and can be handed over between sessions, with an approval that can hold back a delivery. Then only the gate and promote stay"
     },

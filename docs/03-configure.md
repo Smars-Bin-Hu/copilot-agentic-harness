@@ -146,6 +146,12 @@ harness kb reads --task <task name> # what one task read
 - What can be recorded: the paths the read and search tools name, and paths written out in a terminal command (`cat knowledge-base/x.md`). What cannot: for a search over a folder, only the folder is known, not which files in it were read.
 - To switch it off: write `{ "knowledge_base_reads": false }` in `observe.override.json`.
 
+## Code standards
+
+`.harness/standards/code-standards.md` is where the company writes its code standards. It ships without a rule. Write one rule under each `###` heading, with `Applies to`, `Rule`, `Check`, `Fix` and `Severity`; the file explains each field and shows an example. Group the rules under a heading per language.
+
+After that, when a task that changed code is about to go to `task diff`, the agent asks you whether to run the skill `generic-code-standards`. On a yes it checks the files of the task against your rules (running the `Check` command of a rule, or reading the code), writes `STANDARDS-CHECK.md`, and fixes the lines that break a rule. It fixes only the lines the task changed, and only by your rules. `doctor` shows how many rules are plugged in and warns about a rule that lacks a field. The agent never changes this file.
+
 ## Skills
 
 A skill is `.github/skills/<name>/SKILL.md`; the rules are in [skills.instructions.md](../.github/instructions/skills.instructions.md).
@@ -153,7 +159,7 @@ A skill is `.github/skills/<name>/SKILL.md`; the rules are in [skills.instructio
 - The folder name and `name` must be the same, with a prefix: `harness-<name>` (comes with the harness), `generic-<name>` (general), `domain-<domain>-<name>` (your business skills).
 - `description` says clearly "when to use it": it is the only ground on which the agent decides whether to read the whole text.
 - Business skills use the prefix `domain-`, apart from the ones that come with the harness, so that a later upgrade of the harness does not conflict.
-- A new skill can be made with `generic-build-new-skill`. `harness skill check` tells whether a skill is well formed (name, description, size, links), and `doctor` runs it for every skill. The skill also says how to test that Copilot loads yours.
+- A new skill can be made with `generic-build-new-skill`. `harness skill check` tells whether a skill is well formed (name, description, size, links), and `doctor` runs it for every skill. The skill also says how to test that Copilot loads yours. To bring a skill that is off the template back to it, type `/generic-skill-repair <skill>`: it repairs the form and leaves what the skill says alone.
 
 ## Agents and models
 

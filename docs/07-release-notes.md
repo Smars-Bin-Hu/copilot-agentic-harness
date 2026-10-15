@@ -10,7 +10,11 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
-## Next (not released)
+## 1.4.1 (2026-10-15)
+
+More skills for the work around a task: finding what a change touches, keeping what a task taught, designing a workflow from a repeated routine, checking code against the company's standards, and checking and repairing skills. The harness has a license now. **No existing behaviour was removed.** Take note of "Changed" for the new hints in `task` output and the new check in `doctor`.
+
+**Testing**: the automatic tests pass on the Mac (769). The new skills and commands are **not yet tried in Copilot** and **not run on Windows**; the first real use is on a company computer.
 
 ### Added
 

@@ -49,7 +49,7 @@ What a command prints: text on a terminal, JSON on a pipe (a script, a redirect)
 | `task new` | `task new <name> --kind <kind>`: makes a new task under `.workspace/sandbox/tasks/`, and the session picks it up. Kinds: `qa` (Q&A), `rca`, `design` (design, development plan), `dev` (development), `test`, `kb` (knowledge base update), `other` (a broad question, or a look at a situation that is none of the others). `--tier` picks the tier: `light` has only `TASK.md`; `medium` adds `REQ.md`, `REQ/`, `REF/`, `LOG.md`; `full` adds `TODO.md`, `DEV/`, `TEST/`. Left out, it goes by the kind |
 | `task open` | `task open <name>`: the session picks up an existing task. A closed one is reopened; one that was written back starts a new round. The task the session held before is not closed; the session just switches over |
 | `task upgrade` | `task upgrade --tier <tier>`: raises the task to a higher tier: the missing files are added, existing ones are left alone. A tier only goes up |
-| `task fetch` | Fetches files on main of a target repository into `DEV/<repository>/<path>`; `--overwrite` drops the changes and fetches again |
+| `task fetch` | Fetches files on main of a target repository into `DEV/<repository>/<path>`; `--overwrite` drops the changes and fetches again. When the knowledge base has cards for the fetched files, `kb_cards` lists them, each marked `stale` when it was written from an older version of the file |
 | `task delete` | Marks a fetched file for deletion |
 | `task diff` | Lists the changes in `DEV/` and writes the whole diff to `CHANGES.diff` |
 | `task review start` | Starts one independent check: saves this version of the work and writes the review package `REVIEW/round-NNN/package.md`. Only after it can the reviewer be called |

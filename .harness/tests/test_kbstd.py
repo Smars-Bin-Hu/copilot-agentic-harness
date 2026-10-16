@@ -144,3 +144,35 @@ class StaleTests(CheckCase):
     def test_cards_of_finds_the_objects_of_fetched_files(self) -> None:
         hits = kbstd.cards_of(self.root, "shop_repo", ["db/usp_load_orders.sql", "other.sql"])
         self.assertEqual([hit["id"] for hit in hits], ["sp:Shop.dbo.usp_load_orders"])
+
+
+from taskcase import TaskCase  # noqa: E402
+
+
+class FetchKnowledgeTests(TaskCase):
+    """`task fetch` names the cards of the files it fetched, and marks those written from an older version."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        folder = self.root / "knowledge-base" / "domains" / "orders"
+        (folder / "objects").mkdir(parents=True)
+        (folder / "objects" / "sp.md").write_text("# SP\n\n## sp:a\n\ntext\n", encoding="utf-8")
+        sha = kbstd.blob_shas(self.repo_b, "main", ["src/a.sql"])["src/a.sql"][:12]
+        self.index = folder / "objects" / "index.jsonl"
+        self.row = {"id": "sp:a", "type": "stored-procedure", "repo": "repo_b", "sources": [{"path": "src/a.sql", "sha": sha}], "card": "objects/sp.md#sp:a", "level": "verified"}
+        self.index.write_text(json.dumps(self.row) + "\n", encoding="utf-8")
+        self.ready()
+
+    def test_the_card_comes_with_the_file(self) -> None:
+        result = self.fetch("repo_b/src/a.sql")
+        self.assertEqual(result["kb_cards"], [{"id": "sp:a", "card": "knowledge-base/domains/orders/objects/sp.md#sp:a", "file": "repo_b/src/a.sql", "stale": False}])
+
+    def test_a_card_of_an_older_version_is_marked(self) -> None:
+        self.index.write_text(json.dumps({**self.row, "sources": [{"path": "src/a.sql", "sha": "0000000000ab"}]}) + "\n", encoding="utf-8")
+        result = self.fetch("repo_b/src/a.sql")
+        self.assertTrue(result["kb_cards"][0]["stale"])
+        self.assertIn("sp:a", result["kb_note"])
+
+    def test_no_knowledge_base_no_noise(self) -> None:
+        self.index.unlink()
+        self.assertNotIn("kb_cards", self.fetch("repo_b/src/b.sql"))

@@ -247,5 +247,34 @@ def cards_of(root: Path, repo_name: str, paths: List[str]) -> List[Dict[str, str
                 continue
             for source in row.get("sources") or []:
                 if isinstance(source, dict) and source.get("path") in wanted:
-                    hits.append({"domain": domain, "id": row["id"], "path": source["path"], "sha": str(source.get("sha") or ""), "card": str(row.get("card", ""))})
+                    card_file, mark, anchor = str(row.get("card", "")).partition("#")
+                    shown = domainskills.shown_path(root, folder / card_file) + mark + anchor if card_file else ""
+                    hits.append({"domain": domain, "id": row["id"], "path": source["path"], "sha": str(source.get("sha") or ""), "card": shown})
     return hits
+
+
+def knowledge_for(root: Path, keys: List[str]) -> List[Dict[str, Any]]:
+    """For fetched `<repo>/<path>` keys: the cards that describe those files, each marked stale when the file on the
+    base branch is not the one the card was written from. Never raises: a fetch must not fail over the knowledge base."""
+    try:
+        if not domainskills.domains(root):
+            return []
+        found = targets.load(root)
+        by_repo: Dict[str, List[str]] = {}
+        for key in keys:
+            name, _, path = key.partition("/")
+            if name in found.repos and path:
+                by_repo.setdefault(name, []).append(path)
+        out = []
+        for name, paths in by_repo.items():
+            hits = cards_of(root, name, paths)
+            if not hits:
+                continue
+            repo = found.repos[name]
+            current = blob_shas(repo.path, repo.base_ref, sorted({hit["path"] for hit in hits}))
+            for hit in hits:
+                now = current.get(hit["path"], "")
+                out.append({"id": hit["id"], "card": hit["card"], "file": f"{name}/{hit['path']}", "stale": bool(hit["sha"]) and not now.startswith(hit["sha"])})
+        return out
+    except Exception:  # noqa: BLE001
+        return []

@@ -10,6 +10,21 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.10 (2026-10-16)
+
+The agent meets the knowledge base where it works: the files it fetches.
+
+**Testing**: the automatic tests pass on the Mac (824). **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **`task fetch` names the cards of the files it fetched** (`kb_cards`), from the `sources` of every domain's `objects/index.jsonl`. A card written from an older version of the file is marked `stale`, and `kb_note` tells the agent to treat it as history, check it against the code, note it in `LOG.md`, and ask you at the next stop whether to update the knowledge base. No knowledge base, or no card for the file: nothing is added.
+
+### Changed
+
+- **`task close`** asks about knowledge base cards noted in `LOG.md` as wrong, stale or missing, not only about new lessons.
+- **`/generic-capture-knowledge`** starts from those notes too, and drafts in the standard form: the card `objects/<type>.md#<id>`, the level, and the source with its sha.
+
 ## 1.4.9 (2026-10-16)
 
 Move an existing knowledge base into the standard form by code.

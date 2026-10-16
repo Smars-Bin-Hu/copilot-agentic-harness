@@ -1,7 +1,7 @@
 # GitHub Copilot Agentic Harness on VS Code
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.4.9-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.4.10-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
@@ -139,4 +139,4 @@ Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENS
 
 ---
 
-Version 1.4.9 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.4.10 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

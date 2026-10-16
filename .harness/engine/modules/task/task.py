@@ -385,6 +385,13 @@ def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False) 
     if kept:
         result["kept"] = kept
         result["note"] = say("fetch.kept")
+    from core import kbstd  # read only when something was fetched
+
+    cards = kbstd.knowledge_for(root, fetched + kept)
+    if cards:
+        result["kb_cards"] = cards
+        stale = [item["id"] for item in cards if item["stale"]]
+        result["kb_note"] = say("fetch.kb.stale", ids=", ".join(stale)) if stale else say("fetch.kb.cards")
     return result
 
 

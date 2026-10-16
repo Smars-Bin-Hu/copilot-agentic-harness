@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.7 (2026-10-16)
+
+A skill for turning a Chinese knowledge base into English.
+
+**Testing**: the automatic tests pass on the Mac. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **`/generic-kb-translate`**: translates knowledge base pages from Simplified Chinese to English, in a `kb` task. The glossary comes first: a script lists the Chinese terms of the pages (the ones in headings, tables and bold first), the agent drafts `glossary.md`, and you agree it before anything is translated. Each page is overwritten by its English through the usual plan approval and write-back; the Chinese stays in git history. A check script compares every translation with its original: headings, tables, code (only Chinese comments may change), inline code, links, Chinese left over, and every glossary term. YAML and JSON keep their keys. The agent asks before it starts.
+
 ## 1.4.6 (2026-10-16)
 
 Domain skills move into the knowledge base, and reach the agent only for tasks of their domain. **Take note of "Changed"** if you keep `domain-*` skills in `.github/skills/`.

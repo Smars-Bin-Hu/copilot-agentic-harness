@@ -151,7 +151,7 @@ def orphans(folder: Path, skill_text: str) -> List[str]:
     found = []
     for name in RESOURCE_DIRS:
         for item in sorted((folder / name).rglob("*")) if (folder / name).is_dir() else []:
-            if item.is_file() and item.name != ".gitkeep":
+            if item.is_file() and item.name != ".gitkeep" and "__pycache__" not in item.parts:  # Python's own cache of a script
                 relative = item.relative_to(folder).as_posix()
                 if relative not in joined and item.name not in joined:
                     found.append(say("skill.orphan", path=relative))

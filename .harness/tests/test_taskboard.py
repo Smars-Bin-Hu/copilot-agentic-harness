@@ -356,6 +356,23 @@ class InsightTests(BoardCase):
         self.assertEqual(info["prompts"][0]["text"], "")
         self.assertNotIn(SECRET, json.dumps(info, ensure_ascii=False))
 
+    def test_the_board_offers_the_commands_for_what_a_task_waits_for(self) -> None:
+        def names(**row):
+            return [item["action"] for item in taskboard.actions({"name": "job", "status": "open", "waiting_why": "", "paused_since": "", **row})]
+        self.assertEqual(names(waiting_why="plan"), ["approve-plan", "pause"])
+        self.assertEqual(names(waiting_why="promote"), ["approve-promote", "pause"])
+        self.assertEqual(names(waiting_why="review"), ["review extend", "review waive", "pause"])
+        self.assertEqual(names(paused_since="2026-10-16T10:00:00+00:00"), ["resume"])
+        self.assertEqual(names(status="closed"), [])
+        command = taskboard.actions({"name": "job", "status": "open", "waiting_why": "plan", "paused_since": ""})[0]["command"]
+        self.assertTrue(command.endswith(" task approve-plan --task job"))
+
+    def test_a_prompt_keeps_300_characters_and_the_page_shows_them_on_hover(self) -> None:
+        self.assertEqual(taskinsight.prompt_chars(self.root), 300)
+        self.assertEqual(len(copilot_events.start_of("a" * 400, taskinsight.prompt_chars(self.root))), 301)  # and the …
+        page = (Path(taskinsight.__file__).parent / "web" / "task.js").read_text(encoding="utf-8")
+        self.assertIn('class: "sub said", title: entry.text', page)
+
     def test_the_wait_between_two_prompts_is_the_persons_time(self) -> None:
         self.new()
         first = self.prompt_times()[0]

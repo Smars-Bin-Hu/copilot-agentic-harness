@@ -38,7 +38,7 @@ STAGE_OF_EVENT = {
 }
 WAIT_OF_EVENT = {"approve-plan": "plan", "approve-promote": "promote", "review-extend": "review", "review-waive": "review", "recover": "recover"}
 SOURCE_EVENTS, SOURCE_LOG, SOURCE_NONE = "copilot-events", "hook-log", "none"
-PROMPT_CHARS = 40
+PROMPT_CHARS = 300
 
 
 def say(key: str, /, **values: Any) -> str:

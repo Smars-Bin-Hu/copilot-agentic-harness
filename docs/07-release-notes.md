@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.3 (2026-10-16)
+
+The board tells you what to run, and the task page shows more of each prompt.
+
+**Testing**: the automatic tests pass on the Mac (782). **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **A Do column on the board** (`task board`). Each open task has a button for each thing you can do about it: approve the plan, approve the write-back, recover, more checks, waive checks, and pause or resume. The buttons of what the task waits for are marked. A click copies the command (`harness task approve-plan --task <name>` and so on); you paste it in a terminal. Nothing runs from the page.
+
+### Changed
+
+- **The task page keeps 300 characters of each prompt**, not 40 (`report.prompt_chars` in `task.json`; `0` still shows none). The row still shows one line; the mouse over it shows all that is kept.
+
 ## 1.4.2 (2026-10-16)
 
 Commands print text you can read. **Take note of "Changed"**: in a terminal, a command now prints aligned lines instead of JSON.

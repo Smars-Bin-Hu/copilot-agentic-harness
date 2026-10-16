@@ -72,7 +72,7 @@
         .filter(([, field]) => entry[field]).map(([key, field]) => [" ", tag(t(key, {n: entry[field]}), "bad")]);
       rows.push(h("tr", null,
         h("td", null, entry.n), h("td", {class: "when"}, when(entry.at, 5, 16)),
-        h("td", null, tag(t("insight.stage." + entry.stage)), notes, entry.text ? h("div", {class: "sub said"}, entry.text) : null),
+        h("td", null, tag(t("insight.stage." + entry.stage)), notes, entry.text ? h("div", {class: "sub said", title: entry.text}, entry.text) : null),
         h("td", {class: "grow"}, bar(timeParts(entry), longest)), num(clock(entry.active_s)),
         hasUsage ? [h("td", {style: "width:14%"}, bar([["usage", entry.aiu || 0, "AIU " + amount(entry.aiu)]], dearest, true)), num(amount(entry.aiu))] : null,
         num(entry.turns || "-"), num(entry.tool_calls)));

@@ -1,5 +1,6 @@
 // The board: every task, what it waits for, its time and usage. DATA.rows is what `task list` gives, each row with
 // `brief` (a few numbers of the task, or null) and `report` (the path of its page from the board's folder, or "").
+// `actions`: what the person can do about the task, each with the command to paste in a terminal.
 // DATA.refresh: the seconds between two boards while `task board --refresh` runs, or 0.
 "use strict";
 
@@ -28,7 +29,34 @@
 
   const longest = Math.max(0, ...briefs.map((brief) => brief.active_s + brief.waiting_s)) || 1;
   const head = [th(t("board.col.task")), th(t("board.col.kind")), th(t("board.col.waiting")), th(t("board.col.waited"), true), th(t("board.col.time")), th("", true),
-    th("AIU", true), th(t("board.col.prompts"), true), th(t("board.col.reviews"), true), th(t("board.col.updated"))];
+    th("AIU", true), th(t("board.col.prompts"), true), th(t("board.col.reviews"), true), th(t("board.col.updated")), th(t("board.col.actions"))];
+
+  // A click copies the command; the person pastes it in a terminal. Nothing runs from the page.
+  function copy(button, command) {
+    const done = () => {
+      button.textContent = t("board.copied");
+      setTimeout(() => { button.textContent = button.dataset.label; }, 1500);
+    };
+    const fallback = () => {
+      const area = h("textarea", {style: "position:fixed;opacity:0"}, command);
+      document.body.append(area);
+      area.select();
+      try { document.execCommand("copy"); done(); } catch (error) { window.prompt(t("board.copy.manual"), command); }
+      area.remove();
+    };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(command).then(done, fallback);
+    else fallback();
+  }
+
+  function actionCell(row) {
+    const buttons = (row.actions || []).map((item) => {
+      const label = t("board.action." + item.action.replace(" ", "-"));
+      const button = h("button", {class: "act" + (row.waiting && item.action !== "pause" ? " hot" : ""), type: "button", title: item.command, "data-label": label}, label);
+      button.addEventListener("click", () => copy(button, item.command));
+      return button;
+    });
+    return h("td", {class: "acts"}, buttons.length ? buttons : "-");
+  }
 
   function state(row) {
     if (row.status !== "open") return tag(t("board.state." + (row.status === "new" ? "new" : "closed")));
@@ -50,9 +78,9 @@
             ["wait", brief.waiting_s, t("report.waiting") + " " + clock(brief.waiting_s)]], longest, true)),
           num(clock(brief.active_s)), num(amount(brief.aiu)), num(brief.prompts), num(brief.reviews ? reviewsText(brief.reviews, brief.review_fails) : "-")]
         : [h("td"), num("-"), num("-"), num("-"), num("-")],
-      h("td", {class: "sub when"}, when(row.updated_at, 5, 16)));
+      h("td", {class: "sub when"}, when(row.updated_at, 5, 16)), actionCell(row));
   });
   app.append(
     h("div", {class: "card"}, table(head, lines), legend([["work", t("report.active"), ""], ["wait", t("report.waiting"), ""]])),
-    h("footer", null, t("board.footer")));
+    h("footer", null, t("board.footer"), " ", t("board.copy.hint")));
 })();

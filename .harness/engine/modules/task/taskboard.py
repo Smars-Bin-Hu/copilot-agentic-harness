@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, TextIO, Tuple
 
 from core import messages
 from core.render import local_time, pad, width  # noqa: F401 - the page and the tests use them from here too
-from core.paths import utc_now
+from core.paths import cli_command, utc_now
 
 from . import common, task as task_ops, taskhtml, taskinsight, tasklife
 
@@ -97,13 +97,26 @@ def write_task_page(root: Path, task: str, info: Dict[str, Any], refresh: int = 
     return path
 
 
+ACTIONS_BY_WAIT = {"plan": ("approve-plan",), "promote": ("approve-promote",), "recover": ("recover",), "review": ("review extend", "review waive")}
+
+
+def actions(row: Dict[str, Any]) -> List[Dict[str, str]]:
+    """What the person can do about an open task from the board: the action and the command to run in a terminal.
+    What it waits for comes first; then pause, or resume when it is paused."""
+    if row.get("status") != "open":
+        return []
+    found = list(ACTIONS_BY_WAIT.get(row.get("waiting_why") or "", ()))
+    found.append("resume" if row.get("paused_since") else "pause")
+    return [{"action": action, "command": f"{cli_command()} task {action} --task {row['name']}"} for action in found]
+
+
 def board(root: Path, everything: bool = False, refresh: int = 0) -> Dict[str, Any]:
     """Write the board and the page of every task on it, over the ones of before. A task whose numbers cannot be worked out is listed without them."""
     result = tasklife.list_tasks(root, everything)
     use_events = taskinsight.events_allowed(root)
     problems = []
     for row in result["tasks"]:
-        row["brief"], row["report"] = None, ""
+        row["brief"], row["report"], row["actions"] = None, "", actions(row)
         if row["status"] == "new":
             continue
         try:

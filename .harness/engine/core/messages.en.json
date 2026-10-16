@@ -827,7 +827,7 @@
   "kb.object.repo": "`{id}` has sources but no repo.",
   "kb.object.card_file": "`{id}`: card `{card}` points at a file that is not there.",
   "kb.object.no_anchor": "`{id}`: card `{card}` names a file but no section (`file#{id}`): an agent must read the whole file.",
-  "kb.object.anchor": "`{id}`: card `{card}` names a section that is not a `## ` heading of that file.",
+  "kb.object.anchor": "`{id}`: card `{card}` names a section that is not a heading of that file.",
   "kb.object.card_long": "`{id}`: its card section has {lines} lines (more than {limit}). A card longer than the code is not worth reading.",
   "kb.local_path": "{file} holds a path of one computer (`{found}`). Write `<repo>/<path inside it>` instead.",
   "kb.check.ok": "The knowledge base is in the standard form.",

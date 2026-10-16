@@ -33,6 +33,7 @@ OBJECT_REQUIRED = ("id", "type", "card", "level")
 ID = re.compile(r"^[a-z][a-z0-9_-]*:\S+$")
 LOCAL_PATH = re.compile(r"(?i)(?:[a-z]:\\users\\|/users/[^/\s]+/|/home/[^/\s]+/|%localappdata%|%userprofile%|~[/\\])")
 TEXT_SUFFIXES = (".md", ".yaml", ".yml", ".json", ".jsonl")
+HEADING = re.compile(r"^#{2,6}\s+(.+?)\s*#*\s*$")
 CARD_MAX_LINES = 120
 ARCHITECTURE_MAX_LINES = 300
 GIT_TIMEOUT = 30
@@ -62,12 +63,13 @@ def read_index(path: Path) -> Tuple[List[Dict[str, Any]], List[str]]:
 
 
 def anchors(path: Path) -> Dict[str, int]:
-    """{the text of each `##` heading: how many lines its section has}."""
+    """{the text of each heading below the title (`##` to `######`): how many lines its section has}."""
     found: Dict[str, int] = {}
     current = ""
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        if line.startswith("## "):
-            current = line[3:].strip().strip("`")
+        heading = HEADING.match(line)
+        if heading:
+            current = heading.group(1).strip().strip("`")
             found[current] = 0
         elif current:
             found[current] += 1

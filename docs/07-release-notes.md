@@ -10,6 +10,21 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.9 (2026-10-16)
+
+Move an existing knowledge base into the standard form by code.
+
+**Testing**: the automatic tests pass on the Mac (821). **Not yet tried in Copilot on a real knowledge base**, **not run on Windows**.
+
+### Added
+
+- **`harness kb migrate --from <folder> --to <folder>`** and the skill **`/generic-kb-migrate`**: a domain of before the standard (`domain.yaml` with `scope`, `core_objects`, `dynamic_object_families`, `knowledge_files`, `unresolved_items`; `objects/indexes.json`) becomes one `domain.yaml` without object lists and an `objects/index.jsonl` with one line per object. Repeated objects go, the members of a dynamic family become one `family` line, each source gets the git sha it had at the commit the knowledge was learned from, servers and environments go to `environment.md`, and each card points at the heading that names its object. The cards themselves are not changed. It writes only inside a task's `DEV/`, and reports what it could not map (objects without a heading, sources without a sha, ids listed but never indexed). The skill has the agent add the missing `## <id>` headings and run `kb check` until it is clean, then hand over through the usual plan and write-back.
+- **`harness kb check --path <folder>`**: checks one domain folder anywhere, such as a migration in a task.
+
+### Changed
+
+- **A card may point at any heading** (`##` to `######`), not only `##`: a knowledge base of before the standard keeps its headings.
+
 ## 1.4.8 (2026-10-16)
 
 A standard form for the knowledge base, checked by code, and the agent's part in keeping it true.

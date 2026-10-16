@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.4.8",
+  "version": "1.4.9",
   "released": "2026-10-16",
   "copyright": "Smars Hu",
   "contributors": [
@@ -27,7 +27,8 @@
       ".harness/tests/test_docs.py",
       ".harness/tests/test_skillcheck.py",
       ".harness/tests/test_render.py",
-      ".harness/tests/test_kbstd.py"
+      ".harness/tests/test_kbstd.py",
+      ".harness/tests/test_kbmigrate.py"
     ]
   },
   "modules": {
@@ -63,6 +64,7 @@
         ".github/skills/generic-impact-analysis/",
         ".github/skills/generic-capture-knowledge/",
         ".github/skills/generic-kb-translate/",
+        ".github/skills/generic-kb-migrate/",
         ".github/skills/generic-workflow-design/",
         ".github/skills/generic-workflow-build/",
         ".github/skills/generic-code-standards/",

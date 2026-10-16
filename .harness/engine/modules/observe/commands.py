@@ -10,11 +10,12 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 from typing import Any, Dict
 
 from core.paths import repo_root
 
-from core import kbstd
+from core import kbmigrate, kbstd
 
 from . import kbstats, prune, stats
 
@@ -25,6 +26,13 @@ def cmd_stats(args: argparse.Namespace) -> Dict[str, Any]:
 
 def cmd_prune(args: argparse.Namespace) -> Dict[str, Any]:
     return prune.prune(repo_root(), args.days, args.dry_run)
+
+
+def cmd_migrate(args: Any) -> Dict[str, Any]:
+    try:
+        return kbmigrate.migrate(repo_root(), Path(args.source), Path(args.target))
+    except kbmigrate.MigrateError as error:
+        raise RuntimeError(str(error)) from None
 
 
 def cmd_stale(args: Any) -> Dict[str, Any]:
@@ -50,7 +58,12 @@ def register(subparsers: Any) -> None:
     # The form of the knowledge base (standard v1). Kept here because `kb` is here; the code is core/kbstd.py.
     form = kb_commands.add_parser("check", help="is each domain in the standard form? domain.yaml, objects/index.jsonl, cards and anchors, no local paths. Exit code 1 on an error")
     form.add_argument("--domain", action="append", default=None, help="only this domain (may be given more than once)")
-    form.set_defaults(handler=lambda a: kbstd.check(repo_root(), a.domain))
+    form.add_argument("--path", default="", help="check this one domain folder instead (a migration in a task's DEV/)")
+    form.set_defaults(handler=lambda a: kbmigrate.check_path(repo_root(), Path(a.path)) if a.path else kbstd.check(repo_root(), a.domain))
+    move = kb_commands.add_parser("migrate", help="a domain of before the standard (domain.yaml with object lists + objects/indexes.json) into the standard form, into a task's DEV/; prints what it could not map")
+    move.add_argument("--from", dest="source", required=True, help="the domain folder in the old form")
+    move.add_argument("--to", dest="target", required=True, help="where the new form goes: inside .workspace/sandbox/tasks/<task>/DEV/; may be the same folder as --from")
+    move.set_defaults(handler=cmd_migrate)
     old = kb_commands.add_parser("stale", help="which objects of a domain were learned from source files that changed since (git, on the base branch)")
     old.add_argument("--domain", required=True)
     old.set_defaults(handler=cmd_stale)

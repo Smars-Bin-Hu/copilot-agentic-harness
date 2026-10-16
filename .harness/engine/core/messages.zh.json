@@ -827,7 +827,7 @@
   "kb.object.repo": "`{id}` 有 sources 但没有 repo。",
   "kb.object.card_file": "`{id}`：卡片 `{card}` 指向的文件不存在。",
   "kb.object.no_anchor": "`{id}`：卡片 `{card}` 只写了文件，没写区块（`文件#{id}`）：agent 只能读整个文件。",
-  "kb.object.anchor": "`{id}`：卡片 `{card}` 指的区块不是那个文件里的 `## ` 标题。",
+  "kb.object.anchor": "`{id}`：卡片 `{card}` 指的区块不是那个文件里的标题。",
   "kb.object.card_long": "`{id}`：卡片区块有 {lines} 行（超过 {limit}）。比代码还长的卡片不值得读。",
   "kb.local_path": "{file} 里有某台电脑上的路径（`{found}`）。改写成 `<仓库>/<仓库内路径>`。",
   "kb.check.ok": "知识库符合标准格式。",

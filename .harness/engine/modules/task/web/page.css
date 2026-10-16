@@ -54,3 +54,9 @@ noscript{display:block;margin-top:16px;color:var(--bad)}
 .said{max-width:26em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help}
 .acts{white-space:nowrap}.act{font:inherit;font-size:12px;padding:2px 8px;margin:0 4px 2px 0;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
 .act:hover{border-color:var(--soft)}.act.hot{border-color:var(--approval)}
+.act.live{border-style:solid;font-weight:600}.act:disabled{opacity:.5;cursor:default}
+.pairing{margin:8px 0 0}.pairing.good{color:var(--good)}
+.shade{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9}
+.dialog{max-width:560px;width:calc(100% - 32px);margin:0}.dialog p{margin:6px 0}.dialog .bad{color:var(--bad)}
+.dialog .code{font:inherit;font-family:ui-monospace,monospace;font-size:16px;width:100%;box-sizing:border-box;padding:6px 8px;margin:8px 0;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.dialog .row{display:flex;gap:8px}

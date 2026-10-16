@@ -31,6 +31,13 @@ POLICY_SCHEMA = {
             "type": "object",
             "properties": {"max_agents": {"type": "integer", "minimum": 0}, "minutes": {"type": "integer", "minimum": 1}},
         },
+        "board": {
+            "type": "object",
+            "properties": {
+                "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
+                "actions": {"type": "array", "items": {"type": "string", "enum": ["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on"]}},
+            },
+        },
         "snapshots": {
             "type": "object",
             "properties": {"keep_days": {"type": "number", "minimum": 0}, "max_file_mb": {"type": "number", "minimum": 0}},

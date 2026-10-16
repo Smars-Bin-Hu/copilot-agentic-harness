@@ -72,3 +72,18 @@ def state_dir(root: Path, surface: str) -> Path:
 
 def logs_dir(root: Path) -> Path:
     return runtime_dir(root) / "logs"
+
+
+def board_serve_file(root: Path) -> Path:
+    """Written by `task board --serve` while it runs (its port); read by the gate."""
+    return runtime_dir(root) / "board-serve.json"
+
+
+def board_serve_port(root: Path) -> int:
+    """The port of the board server of this copy, or 0 when none runs. Never fails."""
+    try:
+        import json
+
+        return int(json.loads(board_serve_file(root).read_text(encoding="utf-8"))["port"])
+    except Exception:  # noqa: BLE001 - no file or a broken one: nothing to guard
+        return 0

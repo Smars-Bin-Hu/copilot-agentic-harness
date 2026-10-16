@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.4.3",
+  "version": "1.4.4",
   "released": "2026-10-16",
   "copyright": "Smars Hu",
   "contributors": [
@@ -73,6 +73,7 @@
         ".harness/tests/test_task.py",
         ".harness/tests/test_tasklife.py",
         ".harness/tests/test_taskboard.py",
+        ".harness/tests/test_boardserve.py",
         ".harness/tests/test_taskreview.py",
         ".harness/tests/test_taskrules.py",
         ".harness/tests/test_targets.py",

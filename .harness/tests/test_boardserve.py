@@ -1,0 +1,176 @@
+"""`task board --serve` (M15-4, M15-5): the board on 127.0.0.1 with buttons that act, and the gate around it."""
+
+from __future__ import annotations
+
+import http.client
+import json
+import socket
+import threading
+from typing import Any, Dict, Optional, Tuple
+
+from support import pre_tool
+from taskcase import SESSION, TASK, TaskCase
+
+from core import tasks
+from core.paths import board_serve_file
+from modules.task import boardserve
+from modules.task.common import CommandError
+
+
+def free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+class ServeCase(TaskCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.new()
+        self.write_plan()
+        self.port = free_port()
+        self.links: list = []
+        started = threading.Event()
+        holder: Dict[str, Any] = {}
+
+        def ready(server: Any) -> None:
+            holder["server"] = server
+            started.set()
+
+        self.thread = threading.Thread(
+            target=boardserve.serve, kwargs={"root": self.root, "port": self.port, "interactive": True, "out": open(self.root / "serve.log", "w", encoding="utf-8"), "opener": self.links.append, "ready": ready},
+            daemon=True,
+        )
+        self.thread.start()
+        self.assertTrue(started.wait(10))
+        self.server = holder["server"]
+        self.addCleanup(self.stop)
+
+    def stop(self) -> None:
+        self.server.shutdown()
+        self.thread.join(10)
+
+    def request(self, method: str, path: str, body: Optional[Dict[str, Any]] = None, cookie: str = "", header: bool = True, host: str = "", origin: str = "") -> Tuple[int, Dict[str, Any], Dict[str, str]]:
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        headers = {"Host": host or f"127.0.0.1:{self.port}", "Content-Type": "application/json"}
+        if header:
+            headers[boardserve.HEADER] = "1"
+        if cookie:
+            headers["Cookie"] = cookie
+        if origin:
+            headers["Origin"] = origin
+        connection.request(method, path, body=json.dumps(body or {}) if method == "POST" else None, headers=headers)
+        response = connection.getresponse()
+        raw = response.read()
+        connection.close()
+        try:
+            data = json.loads(raw.decode("utf-8")) if response.getheader("Content-Type", "").startswith("application/json") else {"text": raw.decode("utf-8")}
+        except ValueError:
+            data = {}
+        return response.status, data, dict(response.getheaders())
+
+    def code(self) -> str:
+        return self.links[0].split("#pair=", 1)[1]
+
+    def pair(self) -> str:
+        status, _data, headers = self.request("POST", "/api/pair", {"code": self.code()})
+        self.assertEqual(status, 200)
+        return headers["Set-Cookie"].split(";")[0]
+
+
+class ServeTests(ServeCase):
+    def test_the_page_comes_only_to_this_address(self) -> None:
+        status, data, _ = self.request("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn('"serve"', data["text"])
+        self.assertEqual(self.request("GET", "/", host="evil.example:80")[0], 403)
+        self.assertEqual(self.request("GET", "/../../.harness/policies/gate.json")[0], 404)
+        self.assertEqual(json.loads(board_serve_file(self.root).read_text(encoding="utf-8"))["port"], self.port)
+
+    def test_a_post_needs_the_header_and_this_origin(self) -> None:
+        self.assertEqual(self.request("POST", "/api/act", {"action": "pause", "task": TASK}, header=False)[0], 403)
+        self.assertEqual(self.request("POST", "/api/act", {"action": "pause", "task": TASK}, origin="https://evil.example")[0], 403)
+        self.assertFalse(self.data().get("paused"))
+
+    def test_pause_and_resume_need_no_pairing(self) -> None:
+        status, data, _ = self.request("POST", "/api/act", {"action": "pause", "task": TASK})
+        self.assertEqual(status, 200, data)
+        self.assertTrue(self.data()["paused"])
+        self.assertEqual(self.request("POST", "/api/act", {"action": "resume", "task": TASK})[0], 200)
+        self.assertFalse(self.data()["paused"])
+        self.assertIn("board", [event["what"] for event in self.data()["events"]])
+
+    def test_an_approval_needs_the_paired_browser_and_the_typed_code(self) -> None:
+        body = {"action": "approve-plan", "task": TASK}
+        status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"})
+        self.assertEqual(status, 403)
+        self.assertEqual(self.request("POST", "/api/pair", {"code": "wrong"})[0], 403)
+        cookie = self.pair()
+        self.assertEqual(self.request("POST", "/api/pair", {"code": self.code()})[0], 403)  # the code works once
+        self.assertTrue(self.request("POST", "/api/status", {}, cookie=cookie)[1]["paired"])
+        status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"}, cookie=cookie)
+        self.assertEqual(status, 200, data)
+        code = tasks.plan_digest(self.root, TASK)[:8]
+        self.assertIn(code, data["result"]["ask"])
+        self.assertTrue(data["result"]["screen"])
+        self.assertFalse(tasks.plan_approved(self.root, TASK, self.data()))  # a preview approves nothing
+        self.assertEqual(self.request("POST", "/api/act", {**body, "code": "00000000"}, cookie=cookie)[0], 409)
+        status, data, _ = self.request("POST", "/api/act", {**body, "code": code}, cookie=cookie)
+        self.assertEqual(status, 200, data)
+        self.assertTrue(tasks.plan_approved(self.root, TASK, self.data()))
+
+    def test_an_action_that_is_not_switched_on_is_refused(self) -> None:
+        cookie = self.pair()
+        status, data, _ = self.request("POST", "/api/act", {"action": "review waive", "task": TASK, "step": "preview"}, cookie=cookie)
+        self.assertEqual(status, 409)
+        self.assertIn("review waive", data["error"])
+        self.assertEqual(self.request("POST", "/api/act", {"action": "recover", "task": TASK}, cookie=cookie)[0], 409)
+
+
+class ServeLifeTests(TaskCase):
+    def test_only_a_person_starts_it(self) -> None:
+        with self.assertRaises(CommandError):
+            boardserve.serve(self.root, port=free_port(), interactive=False, opener=lambda _link: True)
+        self.assertFalse(board_serve_file(self.root).exists())
+
+    def test_the_port_file_goes_when_it_stops(self) -> None:
+        started = threading.Event()
+        holder: Dict[str, Any] = {}
+
+        def ready(server: Any) -> None:
+            holder["server"] = server
+            started.set()
+
+        thread = threading.Thread(target=boardserve.serve, kwargs={"root": self.root, "port": free_port(), "interactive": True, "out": open(self.root / "serve.log", "w", encoding="utf-8"), "opener": lambda _link: True, "ready": ready}, daemon=True)
+        thread.start()
+        self.assertTrue(started.wait(10))
+        self.assertTrue(board_serve_file(self.root).exists())
+        holder["server"].shutdown()
+        thread.join(10)
+        self.assertFalse(board_serve_file(self.root).exists())
+
+
+class GateTests(TaskCase):
+    def terminal(self, command: str) -> Dict[str, Any]:
+        data = pre_tool(SESSION, "run_in_terminal", {"command": command})
+        data["cwd"] = str(self.root)
+        return self.hook(data)
+
+    def test_an_agent_cannot_start_the_server(self) -> None:
+        self.assertEqual(self.decision(self.terminal("harness task board --serve")), "deny")
+        self.assertEqual(self.decision(self.terminal("harness task board --all --serve --port 9001")), "deny")
+        self.assertNotEqual(self.decision(self.terminal("harness task board --once")), "deny")
+
+    def test_an_agent_cannot_call_the_running_server(self) -> None:
+        board_serve_file(self.root).parent.mkdir(parents=True, exist_ok=True)
+        board_serve_file(self.root).write_text(json.dumps({"port": 8799}), encoding="utf-8")
+        for command in ("curl -X POST http://127.0.0.1:8799/api/act", "Invoke-WebRequest -Uri http://localhost:8799/api/pair -Method Post"):
+            output = self.terminal(command)
+            self.assertEqual(self.decision(output), "deny", command)
+            self.assertIn("8799", self.reason(output))
+        self.assertNotEqual(self.decision(self.terminal("curl http://127.0.0.1:3000/health")), "deny")
+        web = pre_tool(SESSION, "fetch_webpage", {"urls": ["http://127.0.0.1:8799/"]})
+        web["cwd"] = str(self.root)
+        self.assertEqual(self.decision(self.hook(web)), "deny")
+        board_serve_file(self.root).unlink()
+        self.assertNotEqual(self.decision(self.terminal("curl -X POST http://127.0.0.1:8799/api/act")), "deny")

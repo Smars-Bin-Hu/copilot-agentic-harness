@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.4 (2026-10-16)
+
+The board can act: pause, resume and approve from the page.
+
+**Testing**: the automatic tests pass on the Mac (792), with a real browser for the pairing. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **`task board --serve`**: the board served on `127.0.0.1` (port 8765, `--port` changes it) until Ctrl+C. You start it in a terminal; it opens your browser already paired. Buttons in bold act from the page: pause and resume at once; approve the plan or the write-back after you type the code the page shows, as in the terminal. The other buttons copy their command. The page loads again every 10 seconds. Press Enter in its terminal for a pairing link for another browser.
+- **Safety around it**: only you start it (terminal only; the gate refuses an agent); it answers only to its own address and pages; the pairing code is never printed and works once; approvals need the paired browser and the typed code; the task's audit trail says when an action came from the page; while it runs, the gate refuses any agent tool call that names its address.
+- **`board` in `task.json`**: `port`, and `actions`, the buttons that act from the page. `review extend`, `review waive` and `autorun on` are built but off; add them to `actions` to switch them on. `recover` stays in the terminal.
+
 ## 1.4.3 (2026-10-16)
 
 The board tells you what to run, and the task page shows more of each prompt.

@@ -502,8 +502,14 @@ class PageTests(BoardCase):
     def test_the_scripts_draw_with_text_nodes_only(self) -> None:
         for path in sorted(taskhtml.WEB.glob("*.js")):
             source = path.read_text(encoding="utf-8")
-            for banned in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "fetch(", "XMLHttpRequest", "import("):
+            # serve.js talks to the board server it came from; it is never in a page written to disk
+            banned_here = [word for word in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "fetch(", "XMLHttpRequest", "import(") if not (path.name == "serve.js" and word == "fetch(")]
+            for banned in banned_here:
                 self.assertNotIn(banned, source.split("\n", 3)[-1] if path.name == "common.js" else source, f"{path.name}: {banned}")
+
+    def test_a_board_on_disk_never_carries_the_server_script(self) -> None:
+        self.assertNotIn("fetch(", taskhtml.board_page([], "2026-01-01T00:00:00+00:00"))
+        self.assertIn("fetch(", taskhtml.board_page([], "2026-01-01T00:00:00+00:00", serve={"actions": ["pause"], "refresh": 10}))
 
     def test_a_skeleton_without_a_mark_is_an_error_not_a_broken_page(self) -> None:
         with mock.patch.object(taskhtml, "read", lambda name: "<html></html>" if name.endswith(".html") else ""):

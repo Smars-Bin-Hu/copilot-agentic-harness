@@ -347,6 +347,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
             "waiting": waiting_text(data, found["why"]), "waiting_why": found["why"], "waiting_since": found["since"],
             "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
             "depends_on": list(data.get("depends_on") or []), "paused_since": aside,
+            "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",
         })
     rows.sort(key=lambda row: row["updated_at"], reverse=True)
     rows.sort(key=lambda row: (not row["waiting"], row["status"] != "open", bool(row.get("paused_since")), -(row["waited_s"] or 0)))

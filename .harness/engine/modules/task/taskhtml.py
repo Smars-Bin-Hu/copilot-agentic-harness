@@ -73,6 +73,8 @@ def task_page(info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, An
     return build("task.html", ["common.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now}, refresh)
 
 
-def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0) -> str:
-    """rows: what `task list` gives, each with `brief` (taskinsight.brief or None) and `report` (the file name of its page or '')."""
-    return build("board.html", ["common.js", "board.js"], say("board.title"), {"rows": rows, "as_of": as_of, "refresh": int(refresh)}, refresh)
+def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: Optional[Dict[str, Any]] = None) -> str:
+    """rows: what `task list` gives, each with `brief` (taskinsight.brief or None) and `report` (the file name of its page or '').
+    serve: set when the board server sends the page: the actions it runs, and how often the page loads again."""
+    scripts = ["common.js", "serve.js", "board.js"] if serve else ["common.js", "board.js"]  # a file on disk never calls out
+    return build("board.html", scripts, say("board.title"), {"rows": rows, "as_of": as_of, "refresh": int(refresh), "serve": serve}, refresh)

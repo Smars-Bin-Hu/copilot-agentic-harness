@@ -2,6 +2,7 @@
 // `brief` (a few numbers of the task, or null) and `report` (the path of its page from the board's folder, or "").
 // `actions`: what the person can do about the task, each with the command to paste in a terminal.
 // DATA.refresh: the seconds between two boards while `task board --refresh` runs, or 0.
+// DATA.serve: set when `task board --serve` sends the page, with serve.js (SERVE) before this script.
 "use strict";
 
 (function () {
@@ -15,7 +16,8 @@
   document.querySelector("main").classList.add("wide");
   app.replaceChildren(
     h("h1", null, t("board.title")),
-    h("div", {class: "sub"}, t(DATA.refresh ? "board.subtitle.fresh" : "board.subtitle", {as_of: when(DATA.as_of, 0, 19), seconds: DATA.refresh})),
+    h("div", {class: "sub"}, DATA.serve ? t("board.subtitle.served", {as_of: when(DATA.as_of, 0, 19), seconds: DATA.serve.refresh})
+      : t(DATA.refresh ? "board.subtitle.fresh" : "board.subtitle", {as_of: when(DATA.as_of, 0, 19), seconds: DATA.refresh})),
     h("div", {class: "kpis"},
       kpi(rows.filter((row) => row.status === "open").length, t("board.kpi.open")),
       kpi(waiting.length, t("board.kpi.waiting")),
@@ -51,8 +53,9 @@
   function actionCell(row) {
     const buttons = (row.actions || []).map((item) => {
       const label = t("board.action." + item.action.replace(" ", "-"));
-      const button = h("button", {class: "act" + (row.waiting && item.action !== "pause" ? " hot" : ""), type: "button", title: item.command, "data-label": label}, label);
-      button.addEventListener("click", () => copy(button, item.command));
+      const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page
+      const button = h("button", {class: "act" + (row.waiting && item.action !== "pause" ? " hot" : "") + (live ? " live" : ""), type: "button", title: live ? "" : item.command, "data-label": label}, label);
+      button.addEventListener("click", () => (live ? SERVE.act(button, row, item) : copy(button, item.command)));
       return button;
     });
     return h("td", {class: "acts"}, buttons.length ? buttons : "-");
@@ -82,5 +85,7 @@
   });
   app.append(
     h("div", {class: "card"}, table(head, lines), legend([["work", t("report.active"), ""], ["wait", t("report.waiting"), ""]])),
-    h("footer", null, t("board.footer"), " ", t("board.copy.hint")));
+    h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint")));
+
+  if (typeof SERVE !== "undefined") SERVE.start(app);
 })();

@@ -68,6 +68,10 @@ def terminal_denied(why: str) -> str:
     return say("gate.terminal.denied", why=why)
 
 
+def board_request(port: int) -> str:
+    return say("gate.board.request", port=port)
+
+
 def terminal_ask(why: str) -> str:
     return say("gate.terminal.ask", why=why)
 

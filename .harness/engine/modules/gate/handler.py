@@ -16,7 +16,11 @@ from __future__ import annotations
 
 from typing import Optional
 
+import json
+import re
+
 from core import repo_paths, targets, tasks
+from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent
 
@@ -99,6 +103,9 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     verdict = terminal.check(event.command, compiled)
     if verdict is not None and verdict[0] == "deny":
         return Decision(permission="deny", reason=rules.terminal_denied(verdict[1]))
+    port = asks_board(ctx, event.command)
+    if port:
+        return Decision(permission="deny", reason=rules.board_request(port))
     if git.kind == gitcmd.APPROVE:
         minutes = approvals.minutes(policy)
         if approvals.consume(ctx.root, event.session_id, event.command, minutes):
@@ -112,6 +119,14 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     return Decision(permission=permission, reason=reason)
 
 
+def asks_board(ctx: Context, text: str) -> int:
+    """The port, when `text` sends a request to the board server that runs from this copy: its buttons are the person's."""
+    port = board_serve_port(ctx.root)
+    if port and re.search(rf"(?:127\.0\.0\.1|localhost|\[::1\]|0\.0\.0\.0)\s*:\s*{port}\b", text, re.IGNORECASE):
+        return port
+    return 0
+
+
 def load_targets(ctx: Context) -> Optional[targets.Targets]:
     """The target repositories. A broken target.json gives None: the `.git` floor still holds, and doctor reports it."""
     try:
@@ -121,6 +136,11 @@ def load_targets(ctx: Context) -> Optional[targets.Targets]:
 
 
 def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    if event.event == "PreToolUse" and event.tool_kind != "terminal":
+        # A web fetch, a browser or an MCP tool, whatever its name: its input names the address of the board server.
+        port = asks_board(ctx, json.dumps(event.raw, ensure_ascii=False, default=str))
+        if port:
+            return Decision(permission="deny", reason=rules.board_request(port))
     if event.event != "PreToolUse" or event.tool_kind not in WRITE_KINDS + ("terminal",):
         return None
     policy = ctx.policy(POLICY_NAME)

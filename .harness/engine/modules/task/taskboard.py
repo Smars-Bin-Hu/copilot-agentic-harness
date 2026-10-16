@@ -100,23 +100,27 @@ def write_task_page(root: Path, task: str, info: Dict[str, Any], refresh: int = 
 ACTIONS_BY_WAIT = {"plan": ("approve-plan",), "promote": ("approve-promote",), "recover": ("recover",), "review": ("review extend", "review waive")}
 
 
-def actions(row: Dict[str, Any]) -> List[Dict[str, str]]:
+def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str, str]]:
     """What the person can do about an open task from the board: the action and the command to run in a terminal.
-    What it waits for comes first; then pause, or resume when it is paused."""
+    What it waits for comes first; then pause, or resume when it is paused. `served`: the actions the board server
+    runs from the page; `autorun on` is offered only when it is one of them."""
     if row.get("status") != "open":
         return []
     found = list(ACTIONS_BY_WAIT.get(row.get("waiting_why") or "", ()))
+    if "autorun on" in served and not row.get("autorun") and not row.get("paused_since"):
+        found.append("autorun on")
     found.append("resume" if row.get("paused_since") else "pause")
     return [{"action": action, "command": f"{cli_command()} task {action} --task {row['name']}"} for action in found]
 
 
-def board(root: Path, everything: bool = False, refresh: int = 0) -> Dict[str, Any]:
-    """Write the board and the page of every task on it, over the ones of before. A task whose numbers cannot be worked out is listed without them."""
+def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = ()) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
+    """The rows of the board, each with its numbers, the page of the task (written over the one of before) and its actions.
+    A task whose numbers cannot be worked out is listed without them."""
     result = tasklife.list_tasks(root, everything)
     use_events = taskinsight.events_allowed(root)
     problems = []
     for row in result["tasks"]:
-        row["brief"], row["report"], row["actions"] = None, "", actions(row)
+        row["brief"], row["report"], row["actions"] = None, "", actions(row, tuple(served))
         if row["status"] == "new":
             continue
         try:
@@ -125,6 +129,12 @@ def board(root: Path, everything: bool = False, refresh: int = 0) -> Dict[str, A
             row["report"] = write_task_page(root, row["task"], info, refresh, now).relative_to(root / common.REPORTS_DIR).as_posix()
         except Exception as error:  # noqa: BLE001 - one bad task must not take the board away
             problems.append({"task": row["task"], "error": f"{type(error).__name__}: {error}"})
+    return result, problems
+
+
+def board(root: Path, everything: bool = False, refresh: int = 0) -> Dict[str, Any]:
+    """Write the board and the page of every task on it, over the ones of before."""
+    result, problems = board_rows(root, everything, refresh)
     path = root / common.REPORTS_DIR / BOARD_NAME
     common.replace_text(path, taskhtml.board_page(result["tasks"], utc_now(), refresh))
     out: Dict[str, Any] = {"board": path.relative_to(root).as_posix(), "tasks": len(result["tasks"]), "open": result["open"], "waiting": result["waiting"]}

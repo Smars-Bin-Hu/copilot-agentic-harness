@@ -15,7 +15,7 @@ The harness records "what happened", not "what you said". The logs, the statisti
 | Knowledge base reading record | Which knowledge base files are read, by which tasks, and which nobody reads | `harness kb reads` |
 | Task report | What this task did, and who approved | Written by `task close`; written again by `task report` |
 | Task analysis page | Where the time and usage of this task went | The same; the file is `tasks/<task name>/report.html` |
-| Task board | Which task waits for you, and for how long | `task list`, `task board` (run in your own terminal it updates the page by itself every 10 seconds; `--refresh N` changes that, `--once` writes it once) |
+| Task board | Which task waits for you, and for how long | `task list`, `task board` (run in your own terminal it updates the page by itself every 10 seconds; `--refresh N` changes that, `--once` writes it once). `task board --serve` serves it on this computer with buttons that act; why that is safe is in the next paragraph |
 | Self-check | Whether the harness is set up right, and whether the hook runs | `harness doctor` |
 | Fixed scenarios | Whether the behaviour changed after the harness was changed | `harness eval list`, `show`, `check` |
 
@@ -73,3 +73,15 @@ When the hook fails it lets the call through and writes to `.harness/runtime/log
 
 - **"Why is the prompt content not recorded?"** It may hold code or sensitive information; the log only has to answer "what happened".
 - **"How do I know whether the hook runs?"** `doctor` looks at when it was last called.
+
+### The board with buttons (`task board --serve`)
+
+An approval must come from you, not from the agent. In the terminal that rests on three things: the gate refuses the agent the command, the command needs a real terminal, and you type a code. A web page could undo that: any program on the computer, the agent too, can send a request to a local server. So the server:
+
+- is started only by you in a terminal (the gate refuses the agent), and listens on `127.0.0.1` only;
+- answers only to pages of its own address (other web sites cannot use it);
+- pairs your browser with a code that is never printed: it opens the browser with the code in the address, the page trades it for a cookie and removes it. The code works once and dies with the server;
+- runs pause and resume for anyone who asks from the page (they guard nothing), but an approval only for the paired browser, and only after you type the code the page shows, as in the terminal;
+- is named in a runtime file while it runs, and the gate refuses any agent tool call that names its address.
+
+What is left: the agent could read the terminal of the server after you pressed Enter for a new code, or write a script the gate does not recognise. The terminal approval has the same kind of gaps.

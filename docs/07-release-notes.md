@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.8 (2026-10-16)
+
+A standard form for the knowledge base, checked by code, and the agent's part in keeping it true.
+
+**Testing**: the automatic tests pass on the Mac (817). **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **The knowledge base standard v1** (`.harness/contracts/kb/README.md`, with templates): per domain, `domain.yaml` (scope, sources with the commit, entry points, boundaries, open questions; no object lists), `architecture.md` (fixed sections, at most 300 lines), `objects/index.jsonl` (one line per object: a stable id, the repository and the path inside it, the git sha of each source, the card as `file#section`, one level of `verified`, `supported`, `inferred`, `unknown`, `conflict`), cards as `## <id>` sections, `environment.md`, `tasks/`, `discovery/`, `skills/`, `exam.md`. Many objects made from one pattern are one `family` line.
+- **`harness kb check [--domain <d>]`**: checks the form by code: the fields, one line per object, unique ids, the card files and sections, the levels, entry points that exist, size limits, and no path of one computer (`C:\Users\...`, `/Users/...`, `%LOCALAPPDATA%`). `doctor` shows the result.
+- **`harness kb stale --domain <d>`**: which objects were learned from source files that changed since, by the sha of each source against the base branch (one `git ls-tree` per repository): `changed`, `gone`, `unstamped`.
+- **The agent keeps the knowledge base true**: for a task of a domain it reads `architecture.md` and `domain.yaml` first, then one card, then only the code that card names, and runs `kb stale` before relying on cards. Knowledge the code shows to be wrong, stale or missing is noted in `LOG.md`; at the next stop the agent asks you whether to update it, and does it in a `kb` task on a yes (`knowledgebase.instructions.md`, and a short rule in `copilot-instructions.md`).
+- **Docs**: why a fixed form read by scripts beats asking the model, and why reading the knowledge base must cost less than reading the code (`docs/06-cost-optimization.md`, `harness-wondering` 15.8).
+
 ## 1.4.7 (2026-10-16)
 
 A skill for turning a Chinese knowledge base into English.

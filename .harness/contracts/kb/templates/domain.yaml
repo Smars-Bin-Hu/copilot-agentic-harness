@@ -1,0 +1,16 @@
+schema_version: 1
+domain: <domain>
+description: <what the domain does, end to end, in one or two sentences>
+updated: <YYYY-MM-DD>
+generated_by: <skill and harness version>
+sources:
+  - repo: <repository folder name>
+    branch: main
+    commit: <sha>
+entry_points: []
+boundaries: []
+shared: []
+excluded: []
+files:
+  architecture: architecture.md
+open_questions: []

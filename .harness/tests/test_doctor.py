@@ -567,6 +567,7 @@ class DoctorTests(unittest.TestCase):
     def test_instructions_that_only_apply_inside_the_knowledge_base_are_a_warning(self) -> None:
         self.kb({"README.md": "# KB\n", "a.md": "text\n"})
         self.kb_instructions("---\napplyTo: 'knowledge-base/**'\n---\n按知识库索引读。\n")
+        (self.root / ".github" / "copilot-instructions.md").write_text("# Copilot instructions\n", encoding="utf-8")  # the shipped one links it
         result = self.doctor()
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("没有让 Copilot 加载它的条件", result.stdout)

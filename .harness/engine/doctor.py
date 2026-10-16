@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import config, messages, output, render, skillcheck, standards, targets, tasks, user
+from core import config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -464,6 +464,7 @@ def check_knowledge_base(report: Report, root: Path) -> None:
         report.warn(say("doctor.kb.not_git", kb=KB_DIR))
     if kb_git_ignored(root):
         report.warn(say("doctor.kb.ignored", kb=KB_DIR))
+    check_kb_form(report, root)
     files = kb_instruction_files(root)
     if not files:
         report.warn(say("doctor.kb.no_instructions"))
@@ -474,6 +475,22 @@ def check_knowledge_base(report: Report, root: Path) -> None:
             report.ok(say("doctor.kb.instructions.loaded", file=path.name, reason=reason))
         else:
             report.warn(say("doctor.kb.instructions.not_loaded", file=path.name))
+
+
+def check_kb_form(report: Report, root: Path) -> None:
+    """The domains in the standard form (`kb check`). Warns only: a knowledge base of before the standard still works."""
+    try:
+        result = kbstd.check(root)
+    except Exception as error:  # noqa: BLE001 - doctor reports, it does not stop
+        report.warn(say("doctor.kb.form.failed", error=error))
+        return
+    if not result["domains"]:
+        return
+    if result["errors"]:
+        names = ", ".join(item["domain"] for item in result["problems"] if item["errors"])
+        report.warn(say("doctor.kb.form.errors", count=result["errors"], domains=names))
+    else:
+        report.ok(say("doctor.kb.form.ok", count=result["domains"], warnings=result["warnings"]))
 
 
 def check_skills(report: Report, root: Path) -> None:

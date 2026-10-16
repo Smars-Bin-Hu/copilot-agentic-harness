@@ -40,7 +40,11 @@ The output format of the hook is the format of this kind of session; a Local ses
 
 The engine's texts are code-like: a table per language, with the same names and placeholders, and a test that fails when they differ. That can be kept right. Documents, rules and skills are prose: a second copy drifts from the first, a check can only compare structure, and nobody tests the copy. So prose exists once, in English, and what changes with the user is the output: what the CLI and the hooks print, the task file templates, and the language the agent is told to answer in.
 
-### 15.8 What is not done (and when to reconsider)
+### 15.8 Why the knowledge base has a fixed form
+
+A knowledge base is worth having only if reading it costs less than reading the code and gives a better answer. Two things break that over time: the same fact kept in several places, so they drift apart; and cards that no longer match the code, which nobody notices. Both are questions with one right answer, so they are answered by code, not by a model: every domain has the same files and fields ([the standard](../../../../.harness/contracts/kb/README.md)), each object is listed once with the sha of the source it was learned from, `kb check` checks the form, and `kb stale` asks git what changed. The model keeps the part that needs judgment: what to write in a card, and what a change means. Keeping it true is also the agent's job while it works: knowledge that the code shows to be wrong, stale or missing is noted, and the user is asked whether to update it in a `kb` task.
+
+### 15.9 What is not done (and when to reconsider)
 
 | Not done | Why | When to reconsider |
 | --- | --- | --- |
@@ -63,7 +67,7 @@ The engine's texts are code-like: a table per language, with the same names and 
 | Business knowledge in the repository | `knowledge-base/` must be empty when shipped | — |
 | A second copy of the rules, skills or docs in another language | The copy drifts and nobody tests it | A team needs to read the docs in that language; then that copy is shipped and tested |
 
-### 15.9 What is most likely to change after a model upgrade
+### 15.10 What is most likely to change after a model upgrade
 
 | Part | Why it would change | How far the change goes |
 | --- | --- | --- |

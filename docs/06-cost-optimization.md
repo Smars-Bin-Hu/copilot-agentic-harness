@@ -11,6 +11,8 @@ One thing first: the harness's own log records no token counts, only the numbers
 - **The task board is a command**: `task list` reads the state files, so seeing what every task waits for, and for how long, costs no tokens. `task board` writes it as a page.
 - **Fixed scenarios are scored by code**: `eval check` judges from the log and the files left behind whether a run went right; no model gives the score.
 
+- **The knowledge base has a fixed form, so code can read it.** Every domain has the same files and fields ([the standard](../.harness/contracts/kb/README.md)). Checking it (`kb check`: ids, links to cards, no paths of one computer, no object listed twice) and finding what went stale (`kb stale`: one `git ls-tree` per repository against the sha each card was written from) are scripts. An agent asked "is this knowledge still right?" would read every card and every source file, guess, and guess differently next time; the script reads nothing into a model, answers the same every time, and is exact. The rule behind it: **where a question has one right answer that a program can compute, put the data in a fixed schema and let a program compute it.** The model is kept for what needs judgment: what a change means, what to write in a card.
+
 ## 2. Pick the way by the task
 
 - **Tasks have three tiers.** Q&A has just a `TASK.md`, or no task at all; an RCA or a design has a few more files; only a task that changes a target repository has `DEV/`, a plan approval and a write-back. A small task does not go through the heavy flow.
@@ -20,7 +22,9 @@ One thing first: the harness's own log records no token counts, only the numbers
 
 ## 3. Read less: let the model read only what it needs
 
-- **Step-by-step disclosure.** [AGENTS.md](../AGENTS.md) holds only the core rules; the README is just an index; of a skill only the name and the description show at first, and the whole text is read when needed; rules by topic use `applyTo` and are loaded only when a matching file is met. The knowledge base likewise: the index first, then further.
+- **Step-by-step disclosure.** [AGENTS.md](../AGENTS.md) holds only the core rules; the README is just an index; of a skill only the name and the description show at first, and the whole text is read when needed; rules by topic use `applyTo` and are loaded only when a matching file is met. The knowledge base likewise: `architecture.md` and `domain.yaml` first, then one card through `objects/index.jsonl`, then only the source files that card names.
+- **Reading the knowledge base must beat reading the code.** That is the only reason it exists: a task that starts from a short, true map of the domain needs fewer prompts, fewer files read and fewer wrong turns than one that searches the code. So the standard sets limits (`architecture.md` at most 300 lines, a card at most 120; `kb check` warns past them), lists each object once, and points at sections, not files. A card that is longer than its code, or out of date, costs more than it saves: `kb check` and `kb stale` find those.
+- **The knowledge base grows from tasks.** When an agent meets knowledge that is wrong, stale or missing, it notes it and asks you at the next stop whether to update; the update is a small `kb` task. The next task of that domain starts from the better map instead of rediscovering it.
 - **Only a short piece of rules is injected with every prompt**: three or four lines without a task; with a task, how far this task is. Not the whole set of rules.
 - **A new session reads only `TASK.md`.** It is kept within one screen and points to the other files. The whole task folder need not be read, and you need not explain the background again.
 - **Only the files to change are fetched from a target repository.** `task fetch` reads single files from the local main and does not copy the whole repository; the number of files in one fetch has a limit (`fetch.max_files`).

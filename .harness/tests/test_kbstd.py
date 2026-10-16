@@ -1,0 +1,146 @@
+"""The knowledge base standard v1 (M15-10a): the YAML reader, `kb check` and `kb stale`."""
+
+from __future__ import annotations
+
+import json
+import unittest
+from pathlib import Path
+
+from support import HarnessTestCase
+from test_targets import GIT, make_repo, run_git
+
+from core import kbstd, miniyaml
+
+DOMAIN = """schema_version: 1
+domain: orders
+description: Loads orders every night and publishes a summary.
+updated: 2026-10-16
+sources:
+  - repo: shop_repo
+    branch: main
+    commit: {commit}
+entry_points:
+  - job:Nightly_Orders
+boundaries:
+  - name: upstream
+    note: The feed that fills stg.orders is another domain.
+files:
+  architecture: architecture.md
+open_questions: []
+"""
+
+CARDS = """# Jobs
+
+## job:Nightly_Orders
+
+- What: runs the load every night.
+"""
+
+SP_CARDS = """# Stored procedures
+
+## sp:Shop.dbo.usp_load_orders
+
+- What: merges stg.orders into dbo.orders.
+"""
+
+
+class MiniYamlTests(unittest.TestCase):
+    def test_round_trip(self) -> None:
+        data = {"a": "x: y", "b": [{"c": 1, "d": ["p", "q"]}, "plain"], "e": [], "f": {"g": True, "h": None}, "i": "job:Name"}
+        self.assertEqual(miniyaml.loads(miniyaml.dumps(data)), data)
+
+    def test_comments_flow_lists_and_quotes(self) -> None:
+        self.assertEqual(miniyaml.loads("a: [x, 'y z', 3]  # note\nb: \"#not a comment\"\n"), {"a": ["x", "y z", 3], "b": "#not a comment"})
+
+    def test_a_bad_indent_names_its_line(self) -> None:
+        with self.assertRaises(miniyaml.YamlError) as caught:
+            miniyaml.loads("a:\n  b: 1\n    c: 2\n")
+        self.assertIn("line 3", str(caught.exception))
+
+
+class CheckCase(HarnessTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.folder = self.root / "knowledge-base" / "domains" / "orders"
+        (self.folder / "objects").mkdir(parents=True)
+        self.write_domain("abc1234")
+        (self.folder / "architecture.md").write_text("# orders\n", encoding="utf-8")
+        (self.folder / "objects" / "jobs.md").write_text(CARDS, encoding="utf-8")
+        (self.folder / "objects" / "sp.md").write_text(SP_CARDS, encoding="utf-8")
+        self.rows = [
+            {"id": "job:Nightly_Orders", "type": "sql-agent-job", "repo": "shop_repo", "sources": [{"path": "jobs/nightly.sql", "sha": ""}], "card": "objects/jobs.md#job:Nightly_Orders", "level": "verified"},
+            {"id": "sp:Shop.dbo.usp_load_orders", "type": "stored-procedure", "repo": "shop_repo", "sources": [{"path": "db/usp_load_orders.sql", "sha": ""}], "card": "objects/sp.md#sp:Shop.dbo.usp_load_orders", "level": "supported"},
+        ]
+        self.write_index()
+
+    def write_domain(self, commit: str, extra: str = "") -> None:
+        (self.folder / "domain.yaml").write_text(DOMAIN.format(commit=commit) + extra, encoding="utf-8")
+
+    def write_index(self) -> None:
+        (self.folder / "objects" / "index.jsonl").write_text("".join(json.dumps(row) + "\n" for row in self.rows), encoding="utf-8")
+
+    def result(self) -> dict:
+        return kbstd.check_domain(self.root, self.folder)
+
+
+class CheckTests(CheckCase):
+    def test_a_domain_in_the_form_has_no_error(self) -> None:
+        result = self.result()
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["objects"], 2)
+        self.assertEqual(kbstd.check(self.root)["exit_code"], 0)
+
+    def test_objects_listed_in_domain_yaml_are_a_warning(self) -> None:
+        self.write_domain("abc1234", "core_objects:\n  jobs:\n    - job:Nightly_Orders\n")
+        self.assertTrue(any("core_objects" in item for item in self.result()["warnings"]))
+
+    def test_the_errors_it_finds(self) -> None:
+        self.rows.append(dict(self.rows[0]))  # the same id twice
+        self.rows[1] = {**self.rows[1], "level": "partial", "card": "objects/sp.md#sp:Shop.dbo.nope"}
+        self.write_index()
+        (self.folder / "architecture.md").write_text("Source: C:\\Users\\someone\\repos\\shop\n", encoding="utf-8")
+        self.write_domain("abc1234", "")
+        errors = " ".join(self.result()["errors"])
+        for expected in ("job:Nightly_Orders", "partial", "sp:Shop.dbo.nope", "C:\\Users\\"):
+            self.assertIn(expected, errors)
+
+    def test_an_entry_point_must_be_in_the_index(self) -> None:
+        self.rows.pop(0)
+        self.write_index()
+        self.assertTrue(any("job:Nightly_Orders" in item for item in self.result()["errors"]))
+
+    def test_a_card_without_a_section_is_a_warning(self) -> None:
+        self.rows[1]["card"] = "objects/sp.md"
+        self.write_index()
+        result = self.result()
+        self.assertEqual(result["errors"], [])
+        self.assertTrue(result["warnings"])
+
+
+@unittest.skipUnless(GIT, "git is not installed")
+class StaleTests(CheckCase):
+    def setUp(self) -> None:
+        super().setUp()
+        repos = self.root / "source" / "repos"
+        self.repo = make_repo(repos / "shop_repo", {"jobs/nightly.sql": "exec job;\n", "db/usp_load_orders.sql": "merge 1;\n"})
+        (self.root / ".harness" / "policies" / "target.override.json").write_text(json.dumps({"repos_root": str(repos)}), encoding="utf-8")
+        shas = kbstd.blob_shas(self.repo, "main", ["jobs/nightly.sql", "db/usp_load_orders.sql"])
+        for row in self.rows:
+            row["sources"][0]["sha"] = shas[row["sources"][0]["path"]][:12]
+        self.write_index()
+
+    def test_fresh_then_changed_then_gone(self) -> None:
+        result = kbstd.stale(self.root, "orders")
+        self.assertEqual((result["changed"], result["gone"]), ([], []))
+        (self.repo / "db" / "usp_load_orders.sql").write_text("merge 2;\n", encoding="utf-8")
+        run_git(self.repo, "commit", "-qam", "change")
+        result = kbstd.stale(self.root, "orders")
+        self.assertEqual([item["id"] for item in result["changed"]], ["sp:Shop.dbo.usp_load_orders"])
+        self.assertEqual(result["changed"][0]["card"], "objects/sp.md#sp:Shop.dbo.usp_load_orders")
+        run_git(self.repo, "rm", "-q", "jobs/nightly.sql")
+        run_git(self.repo, "commit", "-qm", "drop")
+        self.assertEqual([item["id"] for item in kbstd.stale(self.root, "orders")["gone"]], ["job:Nightly_Orders"])
+
+    def test_cards_of_finds_the_objects_of_fetched_files(self) -> None:
+        hits = kbstd.cards_of(self.root, "shop_repo", ["db/usp_load_orders.sql", "other.sql"])
+        self.assertEqual([hit["id"] for hit in hits], ["sp:Shop.dbo.usp_load_orders"])

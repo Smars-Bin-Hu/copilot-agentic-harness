@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.4.7",
+  "version": "1.4.8",
   "released": "2026-10-16",
   "copyright": "Smars Hu",
   "contributors": [
@@ -12,6 +12,7 @@
       ".harness/engine/cli.py",
       ".harness/engine/doctor.py",
       ".harness/engine/core/",
+      ".harness/contracts/kb/",
       ".harness/engine/adapters/copilot_vscode.py",
       ".harness/engine/adapters/tool_kinds.json",
       ".github/hooks/harness.json",
@@ -25,7 +26,8 @@
       ".harness/tests/test_breaker.py",
       ".harness/tests/test_docs.py",
       ".harness/tests/test_skillcheck.py",
-      ".harness/tests/test_render.py"
+      ".harness/tests/test_render.py",
+      ".harness/tests/test_kbstd.py"
     ]
   },
   "modules": {

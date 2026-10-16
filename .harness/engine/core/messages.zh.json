@@ -776,5 +776,21 @@
   "board.serve.cancel": "取消",
   "board.serve.code": "输入确认码以批准",
   "board.serve.working": "处理中…",
-  "board.serve.stopped": "看板服务没有响应。用 `task board --serve` 重新启动。"
+  "board.serve.stopped": "看板服务没有响应。用 `task board --serve` 重新启动。",
+  "archive.why.new": "从没开始过（没有任务状态）",
+  "archive.why.open": "还没关闭：先运行 `task close`",
+  "archive.why.partial": "它的 promote 中途停了：先恢复",
+  "archive.why.autorun": "autorun 开着",
+  "archive.to.missing": "归档到哪个文件夹？给 `--to <绝对路径>`（不存在会新建）。加 `--remember` 下次默认用它。",
+  "archive.to.relative": "`{to}` 不是绝对路径。请给归档文件夹的完整路径。",
+  "archive.to.inside": "`{to}` 在任务文件夹里面。请选 `.workspace/sandbox/tasks/` 之外的文件夹，一般在仓库外面。",
+  "archive.to.file": "`{to}` 是一个文件，不是文件夹。",
+  "archive.unknown": "没有这个任务：{names}。运行 `task archive` 看任务名。",
+  "archive.refused": "什么都没搬。不能归档：{refused}。{to} 里已经有：{taken}。",
+  "archive.next.list": "问用户归档哪些（一个、几个，或用 --all 全部）、放到哪里。然后先不带 --apply 运行，把要搬的给用户看，用户说可以才带 --apply 运行。归档是单向的。",
+  "archive.next.none": "没有可以归档的已关闭任务。",
+  "archive.next.dry": "会搬走 {count} 个任务；现在还没搬。把这些给用户看。用户说可以之后，才用同一条命令加 --apply。",
+  "archive.next.done": "已搬走。归档清单：{index}。",
+  "archive.index.head": "# 已归档的任务",
+  "archive.index.columns": "| 任务 | 类型 | 档位 | 关闭时间 | 归档时间 | 原位置 |"
 }

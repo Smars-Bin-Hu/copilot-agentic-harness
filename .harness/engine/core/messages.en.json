@@ -776,5 +776,21 @@
   "board.serve.cancel": "Cancel",
   "board.serve.code": "Type the code to approve",
   "board.serve.working": "working…",
-  "board.serve.stopped": "The board server does not answer. Start it again with `task board --serve`."
+  "board.serve.stopped": "The board server does not answer. Start it again with `task board --serve`.",
+  "archive.why.new": "never started (no task state)",
+  "archive.why.open": "not closed: run `task close` first",
+  "archive.why.partial": "its promote stopped halfway: recover it first",
+  "archive.why.autorun": "autorun is on",
+  "archive.to.missing": "Which folder? Give `--to <absolute path>` (it is made when missing). Add `--remember` to keep it for next time.",
+  "archive.to.relative": "`{to}` is not an absolute path. Give the full path of the archive folder.",
+  "archive.to.inside": "`{to}` is inside the task folder. Pick a folder outside `.workspace/sandbox/tasks/`, usually outside the repository.",
+  "archive.to.file": "`{to}` is a file, not a folder.",
+  "archive.unknown": "No such task: {names}. Run `task archive` to see the names.",
+  "archive.refused": "Nothing was moved. Cannot archive: {refused}. Already in {to}: {taken}.",
+  "archive.next.list": "Ask the user which to archive (one, several, or all of them with --all) and where to. Then run it without --apply, show the user what would move, and run it with --apply only after they say yes. It is one way.",
+  "archive.next.none": "No closed task can be archived.",
+  "archive.next.dry": "{count} task(s) would move; nothing moved yet. Show this to the user. Only after they say yes: run the same command with --apply.",
+  "archive.next.done": "Moved. The list of what was archived: {index}.",
+  "archive.index.head": "# Archived tasks",
+  "archive.index.columns": "| Task | Kind | Tier | Closed | Archived | From |"
 }

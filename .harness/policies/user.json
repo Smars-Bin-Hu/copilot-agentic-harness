@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
-  "description": "Who uses this copy of the harness, and in which language it speaks. name: what an agent writes when a file needs the author's name (a change note at the top of a file); empty: `git config user.name` is used. language: `en` or `zh`: the language of what the CLI and the hooks print, of the task file templates, and of what the agent is told to answer and write in. Set both in user.override.json; that file is yours and is not committed.",
+  "description": "Who uses this copy of the harness, and in which language it speaks. name: what an agent writes when a file needs the author's name (a change note at the top of a file); empty: `git config user.name` is used. language: `en` or `zh`: the language of what the CLI and the hooks print, of the task file templates, and of what the agent is told to answer and write in. Set both in user.override.json; that file is yours and is not committed. archive_to: the folder `task archive` moved closed tasks to last time (it writes it with --remember); a path on this computer, usually outside the repository.",
   "name": "",
-  "language": "en"
+  "language": "en",
+  "archive_to": ""
 }

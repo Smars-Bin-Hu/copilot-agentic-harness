@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.5 (2026-10-16)
+
+Closed tasks can be moved out of the task folder.
+
+**Testing**: the automatic tests pass on the Mac (798). **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **`harness task archive`** and the skill **`/harness-task-archive`**. Moves closed tasks out of `.workspace/sandbox/tasks/` into a folder you choose, usually outside the repository: one task, several, or all closed ones (`--all`). Each task folder moves whole, with its report folder as `_report/`; `ARCHIVE.md` and `archive.json` in the archive folder list every task archived (name, kind, tier, when it closed, when it was archived, where it was). Nothing moves without `--apply`, and all tasks are checked before the first one moves: an open task, a promote halfway, autorun on, or a name already in the archive stops all of it. `--remember` keeps the folder for next time. **One way**: no command brings a task back. The skill asks you which tasks and where, shows what would move, and runs it only after your yes.
+- **`archive_to` in `user.json`**: the folder kept by `--remember`; set it in `user.override.json`, which git does not keep.
+
 ## 1.4.4 (2026-10-16)
 
 The board can act: pause, resume and approve from the page.

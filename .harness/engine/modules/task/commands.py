@@ -22,7 +22,7 @@ from typing import Any, Dict
 from core import approval, messages, render, targets, tasks
 from core.paths import cli_command, repo_root
 
-from . import autorun, boardserve, kbsetup, refs, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
+from . import autorun, boardserve, kbsetup, taskarchive, refs, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
 from .common import CommandError
 
 
@@ -120,6 +120,13 @@ def register_task(subparsers: Any) -> None:
     board.add_argument("--serve", action="store_true", help="serve the board on 127.0.0.1 with buttons that act (pause, resume, approvals), until Ctrl+C. Terminal only: the browser it opens is paired with a code no one sees")
     board.add_argument("--port", type=int, default=None, help="with --serve: the port (default: board.port in task.json)")
     board.set_defaults(handler=cmd_board)
+    shelf = commands.add_parser("archive", help="move closed tasks out of .workspace/sandbox/tasks/ into a folder you choose, usually outside the repository; one way. Without --apply it only says what would move")
+    shelf.add_argument("names", nargs="*", help="task names; none and no --all: list what can be archived")
+    shelf.add_argument("--all", action="store_true", help="every closed task that can be archived")
+    shelf.add_argument("--to", default="", help="the folder (an absolute path; made when missing). Left out: archive_to in user.override.json")
+    shelf.add_argument("--apply", action="store_true", help="move them. Without it nothing moves")
+    shelf.add_argument("--remember", action="store_true", help="with --apply: keep --to as archive_to in user.override.json (this computer only)")
+    shelf.set_defaults(handler=lambda a: taskarchive.archive(repo_root(), a.names, a.all, a.to, a.apply, a.remember))
     review = commands.add_parser("review", help="independent checks of a task ([review]=n): start a check, see the count; extend and waive are the person's")
     review_commands = review.add_subparsers(dest="review_command", required=True)
 

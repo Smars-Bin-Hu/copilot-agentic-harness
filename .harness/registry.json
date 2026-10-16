@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.4.4",
+  "version": "1.4.5",
   "released": "2026-10-16",
   "copyright": "Smars Hu",
   "contributors": [
@@ -56,6 +56,7 @@
         ".harness/contracts/templates/task/",
         ".github/skills/harness-my-task/",
         ".github/skills/harness-task-report/",
+        ".github/skills/harness-task-archive/",
         ".github/skills/harness-quick-start/",
         ".github/skills/generic-impact-analysis/",
         ".github/skills/generic-capture-knowledge/",
@@ -74,6 +75,7 @@
         ".harness/tests/test_tasklife.py",
         ".harness/tests/test_taskboard.py",
         ".harness/tests/test_boardserve.py",
+        ".harness/tests/test_taskarchive.py",
         ".harness/tests/test_taskreview.py",
         ".harness/tests/test_taskrules.py",
         ".harness/tests/test_targets.py",

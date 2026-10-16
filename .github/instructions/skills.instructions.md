@@ -21,6 +21,7 @@ The folder name of a skill and its `name` field must be the same, and use one of
   - A flow for using the harness itself: it matches no module, and the name says what it does (`harness-get-me-ready`).
 - `generic-<skill-name>`: a general skill for any domain. Maintained upstream.
 - `domain-<domain name>-<skill-name>`: a skill for one business domain. Maintained by the team; upstream makes none.
+  It lives in the knowledge base, not here: `<knowledge base>/domains/<domain>/skills/<skill>/SKILL.md`, same form. Copilot does not see it, so it is not in the `/` menu and costs no context in other domains. The harness shows it instead: once a task names its domains (`harness task set-domain`), every prompt lists their skills; `harness skill list --domain <d>` says when each is used. To use one, read its `SKILL.md` and follow it, within the task's limits.
 
 
 # Who starts a skill

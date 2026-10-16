@@ -98,6 +98,11 @@ def task_text(ctx: Context, data: Dict[str, Any]) -> str:
         info = taskreview.summary(ctx.root, name, data)
         lines.append(say("review.inject", n=info["n"], passes=info["passes"], used=info["checks_used"], limit=info["checks_limit"], agent=taskreview.AGENT))
     lines.append(say("task.inject.scope", task=name))
+    from . import tasklife  # imported late, as task_ops above
+
+    hint = tasklife.domain_hint(ctx.root, data)
+    if hint:
+        lines.append(hint)
     run = data.get("autorun") if isinstance(data.get("autorun"), dict) else {}
     if run.get("state") == "on":
         lines.append(say("autorun.inject", step=run.get("steps", 0), limit=run.get("max_steps", 0), task=name))

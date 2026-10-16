@@ -792,5 +792,13 @@
   "archive.next.dry": "会搬走 {count} 个任务；现在还没搬。把这些给用户看。用户说可以之后，才用同一条命令加 --apply。",
   "archive.next.done": "已搬走。归档清单：{index}。",
   "archive.index.head": "# 已归档的任务",
-  "archive.index.columns": "| 任务 | 类型 | 档位 | 关闭时间 | 归档时间 | 原位置 |"
+  "archive.index.columns": "| 任务 | 类型 | 档位 | 关闭时间 | 归档时间 | 原位置 |",
+  "domain.unknown": "没有这个 domain：{names}。domain 是 <知识库>/domains/ 下的文件夹：{known}。",
+  "domain.next.name": " 知识库里有这些 domain：{domains}。需求涉及其中一个或几个时，运行 `{command} task set-domain <domain>...`：之后每条提示都会列出它们的技能。",
+  "domain.next": "这些是任务所属 domain 的技能。某一步合适时（看它的描述里说何时用），读它的 SKILL.md 并照做，不越过任务的限制。标了 user-only 的：告诉用户有这个技能，不要自己照做。",
+  "domain.next.none": "这些 domain 没有技能（没有 <知识库>/domains/<domain>/skills/）。照常用它们的知识。",
+  "domain.inject": "本任务的 domain：{domains}。它们的技能：{names}。某一步合适时，运行 `{command} skill list --domain <domain>` 看每个何时用，读它的 SKILL.md 并照做。",
+  "domain.list.next": "用一个技能 = 读它的 SKILL.md（path）并照做，不越过任务的限制。用 `task set-domain` 登记任务的 domain，每条提示都会提到这些技能。",
+  "domain.list.none": "没有 domain 技能。它们放在 <知识库>/domains/<domain>/skills/<技能>/SKILL.md。",
+  "event.domain": "登记了 domain"
 }

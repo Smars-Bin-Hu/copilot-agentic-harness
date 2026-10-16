@@ -51,6 +51,17 @@ def cmd_list(args: argparse.Namespace) -> Dict[str, Any]:
     return {"_text": taskboard.table(result)} if args.text else result
 
 
+def cmd_new(args: argparse.Namespace) -> Dict[str, Any]:
+    if args.domain:
+        tasklife.known_domains(repo_root(), args.domain)  # a wrong name stops it before the task is made
+    result = tasklife.new(repo_root(), args.name, args.kind, args.tier, args.session_id, args.surface)
+    if args.domain:
+        named = tasklife.set_domains(repo_root(), result["task"], args.domain)
+        result.update(domains=named["domains"], domain_skills=named["skills"])
+        result["next"] = f"{result.get('next', '')} {named['next']}".strip()
+    return result
+
+
 def list_text(result: Dict[str, Any]) -> str:
     """`task list` on a terminal: the table of `--text`."""
     return taskboard.table(result) if "tasks" in result else render.render(result)
@@ -96,12 +107,15 @@ def register_task(subparsers: Any) -> None:
     new.add_argument("--tier", default="", choices=["", *tasks.TIERS], help="light: TASK.md only; medium: + REQ.md, REQ/, REF/, LOG.md; full: + TODO.md, DEV/, TEST/. Default: by kind")
     new.add_argument("--session-id", required=True, help="the session id written at the top of the prompt rules")
     new.add_argument("--surface", default="vscode", choices=["vscode"])
-    new.set_defaults(handler=lambda a: tasklife.new(repo_root(), a.name, a.kind, a.tier, a.session_id, a.surface))
+    new.add_argument("--domain", action="append", default=None, help="a business domain of the task (may be given more than once); the same as `task set-domain` after it")
+    new.set_defaults(handler=cmd_new)
     open_parser = commands.add_parser("open", help="this session picks up a task that exists; a closed task is opened again")
     open_parser.add_argument("name", help="the task name, or its folder")
     open_parser.add_argument("--session-id", required=True, help="the session id written at the top of the prompt rules")
     open_parser.add_argument("--surface", default="vscode", choices=["vscode"])
     open_parser.set_defaults(handler=lambda a: tasklife.open_task(repo_root(), a.name, a.session_id, a.surface))
+    domain = add("set-domain", "the business domains the task is about (folders under <knowledge base>/domains/); the agent is then told their skills", lambda a: tasklife.set_domains(repo_root(), a.task, a.domains))
+    domain.add_argument("domains", nargs="+", help="domain names")
     upgrade = add("upgrade", "give the task a higher tier: missing files are added, existing ones are left alone", lambda a: tasklife.upgrade(repo_root(), a.task, a.tier))
     upgrade.add_argument("--tier", required=True, choices=list(tasks.TIERS))
     listing = commands.add_parser("list", help="every open task: kind, tier, what it waits for; --all adds the closed ones")

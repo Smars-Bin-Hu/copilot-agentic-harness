@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import messages, tasks
+from core import domainskills, messages, tasks
 from core.paths import cli_command, repo_root, utc_now
 from core.state import admin_on, atomic_write, session, state_lock, state_path
 
@@ -124,6 +124,10 @@ def next_text(root: Path, task: str, data: Dict[str, Any], left: str) -> str:
         text += task_ops.next_step(root, task, data)
     if left:
         text += say("task.next.switched", other=left, other_name=task_ops.name_of(left))
+    if not data.get("domains"):
+        known = domainskills.domains(root)
+        if known:  # the knowledge base has domains: the agent names the task's, so their skills reach it
+            text += say("domain.next.name", domains=", ".join(known))
     return text
 
 
@@ -179,6 +183,40 @@ def upgrade(root: Path, raw_task: str, tier: str) -> Dict[str, Any]:
         data["tier"] = tier
         task_ops.note(data, "upgrade", f"{current or '-'} -> {tier}")
     return {"task": task, "tier": tier, "from": current, "made": made, "next": say("task.upgrade.done", task=task, tier=label("tier", tier)) + next_text(root, task, data, "")}
+
+
+def set_domains(root: Path, raw_task: str, names: List[str]) -> Dict[str, Any]:
+    """The business domains the task is about. From then on the agent is told the skills of these domains."""
+    task = task_ops.resolve(root, raw_task)
+    wanted = known_domains(root, names)
+    with task_ops.locked(root, task) as data:
+        if data["status"] != "open":
+            raise CommandError(say("task.closed", task=task, name=task_ops.name_of(task)))
+        data["domains"] = wanted
+        task_ops.note(data, "domain", ", ".join(wanted) or "-")
+    found = domainskills.skills(root, wanted)
+    return {"task": task, "domains": wanted, "skills": found, "next": say("domain.next" if found else "domain.next.none")}
+
+
+def known_domains(root: Path, names: List[str]) -> List[str]:
+    """The names, without repeats; an error naming the ones no knowledge base has."""
+    known = domainskills.domains(root)
+    wanted = list(dict.fromkeys(name.strip() for name in names if name.strip()))
+    unknown = [name for name in wanted if name not in known]
+    if unknown:
+        raise CommandError(say("domain.unknown", names=", ".join(unknown), known=", ".join(known) or "-"))
+    return wanted
+
+
+def domain_hint(root: Path, data: Dict[str, Any]) -> str:
+    """One line for every prompt of a task with domains: the names of their skills, so the agent knows they exist."""
+    wanted = [name for name in data.get("domains") or [] if isinstance(name, str)]
+    if not wanted:
+        return ""
+    found = domainskills.skills(root, wanted)
+    if not found:
+        return ""
+    return say("domain.inject", domains=", ".join(wanted), names=", ".join(item["name"] for item in found))
 
 
 def last_event(data: Dict[str, Any], *names: str) -> str:

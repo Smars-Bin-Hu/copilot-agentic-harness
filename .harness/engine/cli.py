@@ -5,7 +5,8 @@
   user                         the name of the person using this copy (for a change note that needs an author)
   task ...                     tasks: new, open, upgrade, list, fetch, diff, promote, review, snapshot, close (task module)
   target list|show|refs|init-kb  the target repositories; refs: where names are used; init-kb: make the knowledge base a git repository (task module)
-  skill check [name|path ...]  is a skill well formed? (all skills when none is named)
+  skill check [name|path ...]  is a skill well formed? (all skills when none is named, the domain skills too)
+  skill list [--domain D]      the skills of business domains, kept in the knowledge base
   approve-command              a person approves a git command the gate refused (gate module)
   admin on|off|status          a person switches admin mode on for one session: it may then change guardrail files (gate module)
   stats, logs prune            numbers from the session logs; delete old logs (observe module)
@@ -25,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from core import messages, output, render, skillcheck, user  # noqa: E402
+from core import domainskills, messages, output, render, skillcheck, user  # noqa: E402
 from core.paths import repo_root  # noqa: E402
 from core.registry import harness_version, version_banner  # noqa: E402
 import doctor  # noqa: E402
@@ -71,6 +72,11 @@ def check_skills(only):
     }
 
 
+def list_domain_skills(only):
+    found = domainskills.skills(repo_root(), only)
+    return {"domains": sorted(domainskills.domains(repo_root())), "skills": found, "next": messages.text("domain.list.next" if found else "domain.list.none")}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="harness", description="Harness CLI")
     parser.add_argument("--version", action=ShowVersion)
@@ -85,6 +91,9 @@ def build_parser() -> argparse.ArgumentParser:
     skill_check = skill_commands.add_parser("check", help="is a skill well formed? name, description, size, links, files nobody points at. Exit code 1 when there is an error")
     skill_check.add_argument("skills", nargs="*", help="a skill folder name under .github/skills/, or a path; none means every skill")
     skill_check.set_defaults(handler=lambda a: check_skills(a.skills))
+    skill_list = skill_commands.add_parser("list", help="the skills of business domains, kept in the knowledge base (<knowledge base>/domains/<domain>/skills/): name, when to use it, path")
+    skill_list.add_argument("--domain", action="append", default=None, help="only this domain (may be given more than once)")
+    skill_list.set_defaults(handler=lambda a: list_domain_skills(a.domain))
     task_commands.register(commands)
     gate_commands.register(commands)
     observe_commands.register(commands)

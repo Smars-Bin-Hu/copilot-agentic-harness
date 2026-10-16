@@ -167,5 +167,8 @@ def check_all(root: Path, only: List[str] | None = None) -> List[Dict[str, Any]]
             path = Path(item)
             folders.append(path if path.is_dir() or path.is_absolute() else base / item)
     else:
+        from . import domainskills  # it reads frontmatter with this module
+
         folders = [item for item in sorted(base.iterdir()) if item.is_dir()] if base.is_dir() else []
+        folders += domainskills.folders(root)  # the skills of the domains, in the knowledge base
     return [check(folder) for folder in folders]

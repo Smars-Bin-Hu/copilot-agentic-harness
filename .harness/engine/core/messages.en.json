@@ -792,5 +792,13 @@
   "archive.next.dry": "{count} task(s) would move; nothing moved yet. Show this to the user. Only after they say yes: run the same command with --apply.",
   "archive.next.done": "Moved. The list of what was archived: {index}.",
   "archive.index.head": "# Archived tasks",
-  "archive.index.columns": "| Task | Kind | Tier | Closed | Archived | From |"
+  "archive.index.columns": "| Task | Kind | Tier | Closed | Archived | From |",
+  "domain.unknown": "No such domain: {names}. Domains are the folders under <knowledge base>/domains/: {known}.",
+  "domain.next.name": " The knowledge base has the domains {domains}. When the request is about one or more of them, run `{command} task set-domain <domain>...`: every prompt then lists their skills.",
+  "domain.next": "These are the skills of the task's domains. When one fits a step (its description says when), read its SKILL.md and follow it, within the limits of the task. A skill marked user-only: tell the user it exists, do not follow it yourself.",
+  "domain.next.none": "These domains have no skills (no <knowledge base>/domains/<domain>/skills/). Use their knowledge as usual.",
+  "domain.inject": "Domains of this task: {domains}. Their skills: {names}. When one fits a step, run `{command} skill list --domain <domain>` for when to use each, read its SKILL.md and follow it.",
+  "domain.list.next": "A skill is used by reading its SKILL.md (path) and following it, within the limits of the task. Name the domains of a task with `task set-domain` to have them shown on every prompt.",
+  "domain.list.none": "No domain skills. They go in <knowledge base>/domains/<domain>/skills/<skill>/SKILL.md.",
+  "event.domain": "domains named"
 }

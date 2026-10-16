@@ -35,7 +35,7 @@ If the line says "not yet", or you cannot tell, stop: tell the user the design i
 6. **Write the orchestration skill** by [orchestration.md](./references/orchestration.md): defaults and conditions, not a fixed script. It keeps the approvals of the harness.
 7. **Run the replay** from the test plan: pretend example B is not there, follow the orchestration skill (D scripts for real, S by the model), and compare with the real B file by file. Write [replay-report.md](./templates/replay-report.md) at the root of the task folder. Say plainly what differed and why.
 8. **Check the form**: `harness skill check SKILLS/<name>` for each, fix every error. Then test that the descriptions trigger, by [test_your_skill.md](../generic-build-new-skill/references/test_your_skill.md) once installed.
-9. **Hand over.** Tell the user: what was built, the replay result, and what is left. Installing is theirs: copy `SKILLS/*` into `.github/skills/` (or have the admin agent do it), run `harness skill check`, and run `harness doctor`. You do not install them.
+9. **Hand over.** Tell the user: what was built, the replay result, and what is left. Installing is theirs: copy `SKILLS/*` into `<knowledge base>/domains/<domain>/skills/` (a `kb` task does it with the usual approvals), run `harness skill check`, and run `harness doctor`. You do not install them.
 
 ## Gotchas
 
@@ -44,7 +44,7 @@ If the line says "not yet", or you cannot tell, stop: tell the user the design i
 - **Test with real examples, not invented ones.** A test that compares with a file you made up proves nothing.
 - **Do not copy values, names or secrets from the examples into the skills or tests** beyond what a test needs to compare; keep example data in the task folder, not in the shipped skill, when it is real.
 - **Do not make the orchestration skill rigid.** If it reads like a script, the next case that differs will break it. Give conditions and let the model decide inside them.
-- **Do not install.** Writing into `.github/skills/` is outside the task folder, and the gate refuses it.
+- **Do not install.** Writing into the knowledge base or `.github/skills/` is outside the task folder.
 - **The skills you build may be called by an agent later.** Give each a "who starts it" line (auto, offer or user-only) by `skills.instructions.md`; a skill that spends a lot is offer.
 
 ## Troubleshooting

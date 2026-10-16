@@ -37,9 +37,19 @@ Suggested body: when to use it, prerequisites, steps, **Gotchas** (warnings ahea
 | --- | --- | --- |
 | `harness-*` | Upstream | `harness-my-task`, `harness-quick-start`, `harness-wondering` |
 | `generic-*` | Upstream, general for any domain | `generic-goal-driven`, `generic-build-new-skill` |
-| `domain-*` | The company; upstream makes none | Your own business skills |
+| `domain-*` | The company; upstream makes none | Your own business skills. They live in the knowledge base (`<knowledge base>/domains/<domain>/skills/`), not in `.github/skills/`: see below |
 
 Why they are maintained apart: when a company runs `git pull` for upstream updates on a company computer, nothing conflicts.
+
+### Domain skills live in the knowledge base
+
+Copilot reads the name and description of every skill in `.github/skills/` into every prompt, and lists them all under `/`. With many domains that is a long menu and wasted context. Copilot cannot be told to look in another folder (the setting for that is not read by Copilot (SDK) sessions). So the harness does the finding itself:
+
+- A domain skill sits at `<knowledge base>/domains/<domain>/skills/<name>/SKILL.md`, in the same form.
+- The agent names the domains of a task (`harness task set-domain <d>`, or `task new --domain <d>`) after reading the request.
+- From then on every prompt of that task lists the skills of those domains, and only those. `harness skill list --domain <d>` gives the description of each. The agent reads the `SKILL.md` that fits and follows it.
+
+The idea: a skill is the agent's ability, not a script a person must remember. People turn a workflow into a skill once; the agent picks it up when a task of that domain comes in.
 
 ### 3.4 A skill is not enforced
 

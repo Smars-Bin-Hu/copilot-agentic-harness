@@ -31,6 +31,8 @@ Build a skill from the template, check its form and test that it loads.
 
 ## Gotchas
 
+- **A `domain-*` skill goes into the knowledge base**, at `<knowledge base>/domains/<domain>/skills/<name>/`, not into `.github/skills/` (see [skills.instructions.md](../../instructions/skills.instructions.md)). Check it with `harness skill check <path to its folder>`. A skill built in a task folder is moved there by the user.
+
 - **Write only what the model would get wrong or miss.** What it already knows (common practice, standard syntax) is a cost, not a help. A skill with no such line is short.
 - **The description is all Copilot sees when it picks a skill.** Put in the words a user would say. A skill that is never picked is not a skill.
 - **A skill serves a task and obeys its limits.** It cannot write outside the task folder, cannot change a target repository or the knowledge base directly, and cannot switch on what only the user may switch on. Do not write a step that needs this.

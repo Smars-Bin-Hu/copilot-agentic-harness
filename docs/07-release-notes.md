@@ -10,6 +10,22 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.6 (2026-10-16)
+
+Domain skills move into the knowledge base, and reach the agent only for tasks of their domain. **Take note of "Changed"** if you keep `domain-*` skills in `.github/skills/`.
+
+**Testing**: the automatic tests pass on the Mac (803). **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **Domain skills in the knowledge base**: `<knowledge base>/domains/<domain>/skills/<skill>/SKILL.md`, the same form as any skill. Copilot does not see them, so they are not in the `/` menu and cost no context in tasks of other domains.
+- **`harness task set-domain --task <t> <domain>...`** and **`task new --domain <d>`**: the domains a task is about. From then on every prompt of the task names their skills; the agent reads the `SKILL.md` that fits and follows it. When the knowledge base has domains and the task named none, `task new` and `task open` say so in `next`.
+- **`harness skill list [--domain <d>]`**: the domain skills with their description, who starts them and their path. `skill check` (and so `doctor`) checks them too.
+
+### Changed
+
+- **Where a `domain-*` skill goes**: the knowledge base, not `.github/skills/`. `/harness-get-me-ready`, `generic-build-new-skill` and `generic-workflow-build` say so. A domain skill left in `.github/skills/` still works as before; move it to drop it from the `/` menu.
+
 ## 1.4.5 (2026-10-16)
 
 Closed tasks can be moved out of the task folder.

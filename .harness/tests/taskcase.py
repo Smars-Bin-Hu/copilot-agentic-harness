@@ -20,7 +20,7 @@ from test_targets import GIT, make_repo, run_git
 SESSION = "sess-main"
 NAME = "job1"
 TASK = f"{tasks.TASKS_DIR}/{NAME}"
-PLAN = "# 计划\n\n给 a.sql 加一列。只改 bdtt_repo/src/a.sql。\n"
+PLAN = "# 计划\n\n给 a.sql 加一列。只改 repo_b/src/a.sql。\n"
 
 
 class SessionCase(HarnessTestCase):
@@ -68,13 +68,13 @@ class SessionCase(HarnessTestCase):
 
 @unittest.skipUnless(GIT, "git is not installed")
 class TargetCase(SessionCase):
-    """Two target repositories: bdtt_repo (src/a.sql, src/b.sql, docs/x.md) and b9td_repo (a.sql)."""
+    """Two target repositories: repo_b (src/a.sql, src/b.sql, docs/x.md) and repo_a (a.sql)."""
 
     def setUp(self) -> None:
         super().setUp()
         self.repos = self.root / "source" / "repos"
-        self.bdtt = make_repo(self.repos / "bdtt_repo", {"src/a.sql": "select 1;\n", "src/b.sql": "select 2;\n", "docs/x.md": "doc\n"})
-        self.b9td = make_repo(self.repos / "b9td_repo", {"a.sql": "select 9;\n"})
+        self.repo_b = make_repo(self.repos / "repo_b", {"src/a.sql": "select 1;\n", "src/b.sql": "select 2;\n", "docs/x.md": "doc\n"})
+        self.repo_a = make_repo(self.repos / "repo_a", {"a.sql": "select 9;\n"})
         self.override({"repos_root": str(self.repos)})
 
     def override(self, data: dict) -> None:
@@ -135,8 +135,8 @@ class TaskCase(TargetCase):
     def promoted(self) -> Dict[str, Any]:
         """A task with one changed file, promoted for real."""
         self.ready()
-        self.fetch("bdtt_repo/src/a.sql")
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")
+        self.fetch("repo_b/src/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
         self.run_cli("task", "promote", "--dry-run")
         self.approve_promote()
         return self.run_cli("task", "promote")

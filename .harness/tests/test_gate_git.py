@@ -38,8 +38,8 @@ class GateGitTests(HarnessTestCase):
         super().setUp()
         self.base = str(self.root.resolve())
         self.repos = self.root.resolve() / "source" / "repos"
-        make_repo(self.repos / "bdtt_repo", {"src/a.sql": "select 1;\n", ".github/workflows/ci.yml": "x\n"})
-        make_repo(self.repos / "b9td_repo", {"a.sql": "select 9;\n"})
+        make_repo(self.repos / "repo_b", {"src/a.sql": "select 1;\n", ".github/workflows/ci.yml": "x\n"})
+        make_repo(self.repos / "repo_a", {"a.sql": "select 9;\n"})
         self.override({"repos_root": str(self.repos)})
 
     def override(self, data: dict) -> None:
@@ -70,9 +70,9 @@ class GateGitTests(HarnessTestCase):
 
     def test_an_edit_tool_cannot_write_in_a_target_git_folder(self) -> None:
         for path in (
-            f"{self.repos}/bdtt_repo/.git/config", f"{self.repos}/bdtt_repo/.git/hooks/pre-commit", f"{self.repos}/b9td_repo/.git/HEAD",
-            f"{self.repos}/bdtt_repo/.GIT/config", f"{self.repos}/bdtt_repo/.git./config", f"{self.repos}/bdtt_repo/GIT~1/config",
-            f"{self.repos}/bdtt_repo/.git::$INDEX_ALLOCATION/config", f"{self.repos}/bdtt_repo/src/../.git/config",
+            f"{self.repos}/repo_b/.git/config", f"{self.repos}/repo_b/.git/hooks/pre-commit", f"{self.repos}/repo_a/.git/HEAD",
+            f"{self.repos}/repo_b/.GIT/config", f"{self.repos}/repo_b/.git./config", f"{self.repos}/repo_b/GIT~1/config",
+            f"{self.repos}/repo_b/.git::$INDEX_ALLOCATION/config", f"{self.repos}/repo_b/src/../.git/config",
         ):
             with self.subTest(path):
                 output = self.edit(path)
@@ -80,13 +80,13 @@ class GateGitTests(HarnessTestCase):
                 self.assertIn(".git", self.reason(output))
 
     def test_a_relative_path_is_read_against_the_cwd(self) -> None:
-        self.assertEqual(self.decision(self.edit(".git/config", cwd=f"{self.repos}/bdtt_repo")), "deny")
-        self.assertEqual(self.decision(self.edit("hooks/pre-commit", cwd=f"{self.repos}/bdtt_repo/.git")), "deny")
+        self.assertEqual(self.decision(self.edit(".git/config", cwd=f"{self.repos}/repo_b")), "deny")
+        self.assertEqual(self.decision(self.edit("hooks/pre-commit", cwd=f"{self.repos}/repo_b/.git")), "deny")
 
     def test_a_session_with_a_task_gets_the_same_reason(self) -> None:
-        self.assertEqual(self.decision(self.edit(f"{self.repos}/bdtt_repo/.git/config")), "deny")
+        self.assertEqual(self.decision(self.edit(f"{self.repos}/repo_b/.git/config")), "deny")
         self.enter_task()
-        output = self.edit(f"{self.repos}/bdtt_repo/.git/config")
+        output = self.edit(f"{self.repos}/repo_b/.git/config")
         self.assertEqual(self.decision(output), "deny")
         self.assertIn("`.git` 文件夹", self.reason(output))  # the specific reason, not the one about the task folder
 
@@ -97,26 +97,26 @@ class GateGitTests(HarnessTestCase):
 
     def test_a_broken_target_policy_does_not_open_the_floor_or_break_the_gate(self) -> None:
         (self.root / ".harness" / "policies" / "target.override.json").write_text("{ not json", encoding="utf-8")
-        self.assertEqual(self.decision(self.edit(f"{self.repos}/bdtt_repo/.git/config")), "deny")
-        self.assertEqual(self.edit(f"{self.repos}/bdtt_repo/src/a.sql"), {})
+        self.assertEqual(self.decision(self.edit(f"{self.repos}/repo_b/.git/config")), "deny")
+        self.assertEqual(self.edit(f"{self.repos}/repo_b/src/a.sql"), {})
 
     def test_the_working_tree_of_a_target_repository_is_written_by_promote_only(self) -> None:
         """A file of a target repository is never edited directly. The reason names the way that works."""
         for path in (
-            f"{self.repos}/bdtt_repo/src/a.sql", f"{self.repos}/bdtt_repo/.gitignore", f"{self.repos}/bdtt_repo/.github/workflows/ci.yml",
-            f"{self.repos}/bdtt_repo/.gitattributes", f"{self.repos}/bdtt_repo/x.git/y", f"{self.repos}/BDTT_REPO/new/file.sql",
+            f"{self.repos}/repo_b/src/a.sql", f"{self.repos}/repo_b/.gitignore", f"{self.repos}/repo_b/.github/workflows/ci.yml",
+            f"{self.repos}/repo_b/.gitattributes", f"{self.repos}/repo_b/x.git/y", f"{self.repos}/REPO_B/new/file.sql",
         ):
             with self.subTest(path):
                 output = self.edit(path)
                 self.assertEqual(self.decision(output), "deny")
                 self.assertIn("只能由 promote 写", self.reason(output))
-        self.assertIn("task fetch", self.reason(self.edit(f"{self.repos}/bdtt_repo/src/a.sql")))
-        self.assertEqual(self.pre("read_file", {"filePath": f"{self.repos}/bdtt_repo/src/a.sql"}), {})  # reading stays free
+        self.assertIn("task fetch", self.reason(self.edit(f"{self.repos}/repo_b/src/a.sql")))
+        self.assertEqual(self.pre("read_file", {"filePath": f"{self.repos}/repo_b/src/a.sql"}), {})  # reading stays free
         self.assertEqual(self.edit(f"{self.repos}/not_a_repo.txt"), {})  # beside the repositories, not in one
-        self.assertIn("harness-my-task", self.reason(self.edit(f"{self.repos}/bdtt_repo/src/a.sql")))
+        self.assertIn("harness-my-task", self.reason(self.edit(f"{self.repos}/repo_b/src/a.sql")))
 
     def test_terminal_writes_into_a_target_working_tree_are_denied(self) -> None:
-        repo = f"{self.repos}/bdtt_repo"
+        repo = f"{self.repos}/repo_b"
         for command in (
             f"echo x > {repo}/.gitignore", f"cp a {repo}/.github/x.yml", f"rm {repo}/src/a.sql.bak", f"sed -i '' 's/1/2/' {repo}/src/a.sql",
             f"mv {repo}/src/a.sql {repo}/src/b.sql", f"mkdir -p {repo}/new", f"printf x | tee {repo}/src/a.sql",
@@ -128,30 +128,30 @@ class GateGitTests(HarnessTestCase):
                 self.assertIn("只能由 promote 写", self.reason(output))
 
     def test_reads_of_a_git_folder_are_not_blocked(self) -> None:
-        self.assertEqual(self.pre("read_file", {"filePath": f"{self.repos}/bdtt_repo/.git/config"}), {})
+        self.assertEqual(self.pre("read_file", {"filePath": f"{self.repos}/repo_b/.git/config"}), {})
 
     # --- refused_paths --------------------------------------------------------------------------
 
     def test_refused_paths_of_a_repository_are_denied_for_an_edit_tool(self) -> None:
-        self.override({"repos_root": str(self.repos), "repos": {"bdtt_repo": {"refused_paths": [".git/**", ".github/workflows/**", "*.pem"]}}})
-        output = self.edit(f"{self.repos}/bdtt_repo/.github/workflows/ci.yml")
+        self.override({"repos_root": str(self.repos), "repos": {"repo_b": {"refused_paths": [".git/**", ".github/workflows/**", "*.pem"]}}})
+        output = self.edit(f"{self.repos}/repo_b/.github/workflows/ci.yml")
         self.assertEqual(self.decision(output), "deny")
-        self.assertIn("bdtt_repo/.github/workflows/ci.yml", self.reason(output))
+        self.assertIn("repo_b/.github/workflows/ci.yml", self.reason(output))
         self.assertIn("refused_paths", self.reason(output))
-        self.assertEqual(self.decision(self.edit(f"{self.repos}/bdtt_repo/key.pem")), "deny")
-        self.assertEqual(self.decision(self.edit(f"{self.repos}/BDTT_REPO/.GITHUB/Workflows/ci.yml")), "deny")
+        self.assertEqual(self.decision(self.edit(f"{self.repos}/repo_b/key.pem")), "deny")
+        self.assertEqual(self.decision(self.edit(f"{self.repos}/REPO_B/.GITHUB/Workflows/ci.yml")), "deny")
         # another repository keeps its own list: there the path is refused as any other file of a working tree
-        self.assertNotIn("refused_paths", self.reason(self.edit(f"{self.repos}/b9td_repo/.github/workflows/ci.yml")))
+        self.assertNotIn("refused_paths", self.reason(self.edit(f"{self.repos}/repo_a/.github/workflows/ci.yml")))
 
     def test_a_root_wide_refused_path_applies_to_every_repository(self) -> None:
         self.override({"repos_root": str(self.repos), "refused_paths": [".git/**", "secrets/**"]})
-        for name in ("bdtt_repo", "b9td_repo"):
+        for name in ("repo_b", "repo_a"):
             self.assertEqual(self.decision(self.edit(f"{self.repos}/{name}/secrets/a.txt")), "deny", name)
 
     # --- terminal -------------------------------------------------------------------------------
 
     def test_terminal_writes_into_a_git_folder_are_denied(self) -> None:
-        repo = f"{self.repos}/bdtt_repo"
+        repo = f"{self.repos}/repo_b"
         for command in (
             f"rm -rf {repo}/.git", f"rm {repo}/.git/index.lock", f"echo x > {repo}/.git/config", f"echo x >> .git/hooks/pre-commit",
             f"cp /tmp/hook {repo}/.git/hooks/pre-commit", f"mv {repo}/.git /tmp/g", f"sed -i 's/a/b/' {repo}/.git/config",
@@ -165,7 +165,7 @@ class GateGitTests(HarnessTestCase):
                 self.assertIn(".git", self.reason(output))
 
     def test_terminal_reads_and_normal_git_commands_are_not_this_rules_business(self) -> None:
-        repo = f"{self.repos}/bdtt_repo"
+        repo = f"{self.repos}/repo_b"
         for command in (
             f"cat {repo}/.git/config", f"ls {repo}/.git", f"git -C {repo} status", f"git -C {repo} log --oneline", f"git -C {repo} diff",
             f"cp {repo}/.git/config /tmp/c", f"cp {repo}/src/a.sql /tmp/a.sql", f"cat {repo}/src/a.sql", f"grep -rn select {repo}/src",
@@ -175,16 +175,16 @@ class GateGitTests(HarnessTestCase):
                 self.assertNotEqual(self.decision(self.term(command)), "deny")
 
     def test_terminal_writes_to_a_refused_path_are_denied(self) -> None:
-        self.override({"repos_root": str(self.repos), "repos": {"bdtt_repo": {"refused_paths": [".git/**", ".github/workflows/**"]}}})
-        repo = f"{self.repos}/bdtt_repo"
+        self.override({"repos_root": str(self.repos), "repos": {"repo_b": {"refused_paths": [".git/**", ".github/workflows/**"]}}})
+        repo = f"{self.repos}/repo_b"
         self.assertEqual(self.decision(self.term(f"echo x > {repo}/.github/workflows/ci.yml")), "deny")
         self.assertEqual(self.decision(self.term(f"rm {repo}/.github/workflows/ci.yml")), "deny")
         self.assertIn("不许写的路径", self.reason(self.term(f"echo x > {repo}/.github/workflows/ci.yml")))
         self.assertNotEqual(self.decision(self.term(f"cat {repo}/.github/workflows/ci.yml")), "deny")
 
     def test_windows_spelling_of_a_target_path_in_a_command(self) -> None:
-        self.assertEqual(self.decision(self.term("del C:\\repos\\bdtt_repo\\.git\\index")), "deny")
-        self.assertEqual(self.decision(self.term("echo x > C:\\repos\\bdtt_repo\\.GIT\\config")), "deny")
+        self.assertEqual(self.decision(self.term("del C:\\repos\\repo_b\\.git\\index")), "deny")
+        self.assertEqual(self.decision(self.term("echo x > C:\\repos\\repo_b\\.GIT\\config")), "deny")
 
 
 if __name__ == "__main__":

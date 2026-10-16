@@ -34,10 +34,10 @@ class RefsCase(TargetCase):
     def setUp(self) -> None:
         super().setUp()
         for key, value in (("user.name", "t"), ("user.email", "t@example.com")):
-            run_git(self.bdtt, "config", key, value)
-        self.write_in(self.bdtt, "src/delay.sql", "select * from dbo.Order_Delay;\n-- orderDelay is the old name\nselect 1;\n")
-        self.write_in(self.bdtt, "src/hist.sql", "insert into order_delay_hist select 1;\ninsert into x select * from order_delay;\n")
-        self.write_in(self.b9td, "jobs/load.py", "TABLE = 'order-delay'\n")
+            run_git(self.repo_b, "config", key, value)
+        self.write_in(self.repo_b, "src/delay.sql", "select * from dbo.Order_Delay;\n-- orderDelay is the old name\nselect 1;\n")
+        self.write_in(self.repo_b, "src/hist.sql", "insert into order_delay_hist select 1;\ninsert into x select * from order_delay;\n")
+        self.write_in(self.repo_a, "jobs/load.py", "TABLE = 'order-delay'\n")
         if (self.root / KB).exists():
             shutil.rmtree(self.root / KB)
 
@@ -53,21 +53,21 @@ class RefsCase(TargetCase):
 
     def test_it_finds_the_name_in_every_repository_in_every_spelling(self) -> None:
         result = self.refs("order_delay")
-        self.assertEqual(sorted(result["repos"]), ["b9td_repo", "bdtt_repo"])
-        bdtt = result["repos"]["bdtt_repo"]
-        self.assertEqual([item["path"] for item in bdtt["files"]], ["src/delay.sql", "src/hist.sql"])
-        self.assertEqual(result["repos"]["b9td_repo"]["files"][0]["path"], "jobs/load.py")
+        self.assertEqual(sorted(result["repos"]), ["repo_a", "repo_b"])
+        repo_b = result["repos"]["repo_b"]
+        self.assertEqual([item["path"] for item in repo_b["files"]], ["src/delay.sql", "src/hist.sql"])
+        self.assertEqual(result["repos"]["repo_a"]["files"][0]["path"], "jobs/load.py")
         term = result["terms"][0]
         self.assertEqual((term["hits"], term["files"]), (5, 3))
-        self.assertEqual(sorted(term["found_in"]), ["b9td_repo", "bdtt_repo"])
+        self.assertEqual(sorted(term["found_in"]), ["repo_a", "repo_b"])
 
     def test_a_hit_inside_a_longer_name_is_told_from_a_whole_word(self) -> None:
-        result = self.refs("order_delay", "--repo", "bdtt_repo")
+        result = self.refs("order_delay", "--repo", "repo_b")
         term = result["terms"][0]
         self.assertGreater(term["hits"], term["whole_word_hits"])
-        exact = self.refs("order_delay", "--repo", "bdtt_repo", "--exact")
+        exact = self.refs("order_delay", "--repo", "repo_b", "--exact")
         self.assertEqual(exact["terms"][0]["hits"], exact["terms"][0]["whole_word_hits"])
-        hist = [item for item in exact["repos"]["bdtt_repo"]["files"] if item["path"] == "src/hist.sql"]
+        hist = [item for item in exact["repos"]["repo_b"]["files"] if item["path"] == "src/hist.sql"]
         self.assertEqual(hist[0]["hits"], 1)  # the line with `order_delay_hist` only is out; `from order_delay` stays
 
     def test_a_name_nothing_uses_is_listed_and_the_others_are_still_found(self) -> None:
@@ -76,20 +76,20 @@ class RefsCase(TargetCase):
         self.assertIn("ghost_table", result["next"])
 
     def test_the_samples_are_short_and_limited(self) -> None:
-        self.write_in(self.bdtt, "src/long.sql", "-- order_delay " + "x" * 400 + "\n" + "select order_delay;\n" * 5)
-        result = self.refs("order_delay", "--repo", "bdtt_repo", "--lines", "1")
-        entry = [item for item in result["repos"]["bdtt_repo"]["files"] if item["path"] == "src/long.sql"][0]
+        self.write_in(self.repo_b, "src/long.sql", "-- order_delay " + "x" * 400 + "\n" + "select order_delay;\n" * 5)
+        result = self.refs("order_delay", "--repo", "repo_b", "--lines", "1")
+        entry = [item for item in result["repos"]["repo_b"]["files"] if item["path"] == "src/long.sql"][0]
         self.assertEqual(len(entry["lines"]), 1)
         self.assertLessEqual(len(entry["lines"][0]["text"]), refs.SAMPLE_WIDTH)
         self.assertEqual(entry["hits"], 6)
 
     def test_files_over_the_limit_are_counted_not_listed(self) -> None:
-        result = self.refs("order_delay", "--repo", "bdtt_repo", "--max-files", "1")
-        self.assertEqual(len(result["repos"]["bdtt_repo"]["files"]), 1)
-        self.assertEqual(result["repos"]["bdtt_repo"]["files_not_shown"], 1)
+        result = self.refs("order_delay", "--repo", "repo_b", "--max-files", "1")
+        self.assertEqual(len(result["repos"]["repo_b"]["files"]), 1)
+        self.assertEqual(result["repos"]["repo_b"]["files_not_shown"], 1)
 
     def test_only_the_committed_base_branch_is_read(self) -> None:
-        (self.bdtt / "src" / "new.sql").write_text("select * from fresh_table;\n", encoding="utf-8")
+        (self.repo_b / "src" / "new.sql").write_text("select * from fresh_table;\n", encoding="utf-8")
         result = self.refs("fresh_table")
         self.assertEqual(result["no_hits"], ["fresh_table"])
         self.assertTrue(any("已提交" in note for note in result["notes"]))

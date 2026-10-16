@@ -59,7 +59,7 @@ class HintTests(TaskCase):
         self.new(kind="dev")
         self.write_plan()
         self.approve_plan()
-        self.fetch("bdtt_repo/src/a.sql")
+        self.fetch("repo_b/src/a.sql")
         self.assertNotIn("generic-code-standards", self.run_cli("task", "status")["next"])
         write(self.root, RULE)
         self.assertIn("generic-code-standards", self.run_cli("task", "status")["next"])

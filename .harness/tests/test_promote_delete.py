@@ -18,7 +18,7 @@ from test_targets import run_git
 class DeleteCase(PromoteCase):
     def delete_flow(self, deletes: List[str], outputs: Any = None, branch: str = BRANCH) -> str:
         """A task that deletes `deletes` (`<repo>/<path>`, fetched first) and writes `outputs`. Returns the task folder."""
-        fetched = list(deletes) + [key for key in (outputs or {}) if key in ("bdtt_repo/src/a.sql",)]
+        fetched = list(deletes) + [key for key in (outputs or {}) if key in ("repo_b/src/a.sql",)]
         task = self.flow(outputs or {}, fetched=fetched, branch=branch)
         self.run_cli("task", "delete", "--task", task, *deletes)
         return task
@@ -26,15 +26,15 @@ class DeleteCase(PromoteCase):
 
 class PlanAndRunTests(DeleteCase):
     def test_the_plan_lists_the_delete(self) -> None:
-        request_id = self.delete_flow(["bdtt_repo/src/b.sql"])
+        request_id = self.delete_flow(["repo_b/src/b.sql"])
         result = self.dry_run(request_id)
-        self.assertEqual([(f["path"], f["action"]) for f in result["files"]], [("bdtt_repo/src/b.sql", "delete")])
+        self.assertEqual([(f["path"], f["action"]) for f in result["files"]], [("repo_b/src/b.sql", "delete")])
         self.assertEqual((result["files"][0]["added"], result["files"][0]["removed"]), (0, 1))
         self.assertNotIn("diff", result["files"][0])
         self.assertEqual(self.request(request_id)["promote"]["state"], "dry_run")
 
     def test_the_approval_screen_says_which_files_are_deleted(self) -> None:
-        request_id = self.delete_flow(["bdtt_repo/src/b.sql"])
+        request_id = self.delete_flow(["repo_b/src/b.sql"])
         self.dry_run(request_id)
         screen = io.StringIO()
         plan = self.request(request_id)["promote"]["plan_sha256"]
@@ -48,69 +48,69 @@ class PlanAndRunTests(DeleteCase):
         self.assertIn("PROMOTE-PLAN.diff", text)
 
     def test_the_file_is_deleted_on_the_new_branch_and_nothing_is_committed(self) -> None:
-        request_id = self.delete_flow(["bdtt_repo/src/b.sql"])
-        main = self.main_commit(self.bdtt)
+        request_id = self.delete_flow(["repo_b/src/b.sql"])
+        main = self.main_commit(self.repo_b)
         self.dry_run(request_id)
         self.approve(request_id)
         self.promote_now(request_id)
-        self.assertEqual(git_text(self.bdtt, "symbolic-ref", "--short", "HEAD"), BRANCH)
-        self.assertEqual(git_text(self.bdtt, "rev-parse", "HEAD"), main)
-        self.assertEqual(porcelain(self.bdtt), [" D src/b.sql"])
-        self.assertFalse((self.bdtt / "src" / "b.sql").exists())
-        self.assertEqual(git_text(self.bdtt, "show", "main:src/b.sql"), "select 2;")
+        self.assertEqual(git_text(self.repo_b, "symbolic-ref", "--short", "HEAD"), BRANCH)
+        self.assertEqual(git_text(self.repo_b, "rev-parse", "HEAD"), main)
+        self.assertEqual(porcelain(self.repo_b), [" D src/b.sql"])
+        self.assertFalse((self.repo_b / "src" / "b.sql").exists())
+        self.assertEqual(git_text(self.repo_b, "show", "main:src/b.sql"), "select 2;")
         self.assertEqual(self.request(request_id)["promote"]["files"][0]["action"], "delete")
 
     def test_a_folder_that_lost_its_last_file_goes_too(self) -> None:
-        request_id = self.delete_flow(["bdtt_repo/docs/x.md"])
+        request_id = self.delete_flow(["repo_b/docs/x.md"])
         self.dry_run(request_id)
         self.approve(request_id)
         self.promote_now(request_id)
-        self.assertFalse((self.bdtt / "docs").exists())
-        self.assertTrue((self.bdtt / "src").is_dir())
+        self.assertFalse((self.repo_b / "docs").exists())
+        self.assertTrue((self.repo_b / "src").is_dir())
 
     def test_a_rename_is_a_create_and_a_delete(self) -> None:
-        request_id = self.delete_flow(["bdtt_repo/src/b.sql"], outputs={"bdtt_repo/src/c.sql": "select 2;\n"})
+        request_id = self.delete_flow(["repo_b/src/b.sql"], outputs={"repo_b/src/c.sql": "select 2;\n"})
         result = self.dry_run(request_id)
-        self.assertEqual(sorted((f["path"], f["action"]) for f in result["files"]), [("bdtt_repo/src/b.sql", "delete"), ("bdtt_repo/src/c.sql", "create")])
+        self.assertEqual(sorted((f["path"], f["action"]) for f in result["files"]), [("repo_b/src/b.sql", "delete"), ("repo_b/src/c.sql", "create")])
         self.approve(request_id)
         self.promote_now(request_id)
-        self.assertEqual(porcelain(self.bdtt), [" D src/b.sql", "?? src/c.sql"])
-        self.assertEqual((self.bdtt / "src" / "c.sql").read_text(encoding="utf-8"), "select 2;\n")
+        self.assertEqual(porcelain(self.repo_b), [" D src/b.sql", "?? src/c.sql"])
+        self.assertEqual((self.repo_b / "src" / "c.sql").read_text(encoding="utf-8"), "select 2;\n")
 
     def test_the_deleted_file_and_the_patch_are_saved_in_dev(self) -> None:
-        request_id = self.delete_flow(["bdtt_repo/src/b.sql"])
+        request_id = self.delete_flow(["repo_b/src/b.sql"])
         self.dry_run(request_id)
         self.approve(request_id)
         self.promote_now(request_id)
         dev = self.root / request_id / "DEV"
-        self.assertEqual((dev / "_deleted" / "bdtt_repo" / "src" / "b.sql").read_text(encoding="utf-8"), "select 2;\n")
+        self.assertEqual((dev / "_deleted" / "repo_b" / "src" / "b.sql").read_text(encoding="utf-8"), "select 2;\n")
         patch = (dev / f"{task_ops.name_of(request_id)}.patch").read_text(encoding="utf-8")
-        for needle in ("diff --git a/bdtt_repo/src/b.sql", "deleted file", "+++ /dev/null", "-select 2;"):
+        for needle in ("diff --git a/repo_b/src/b.sql", "deleted file", "+++ /dev/null", "-select 2;"):
             self.assertIn(needle, patch)
 
     def test_main_changed_after_the_file_was_fetched(self) -> None:
-        request_id = self.delete_flow(["bdtt_repo/src/b.sql"])
-        (self.bdtt / "src" / "b.sql").write_text("select 22;\n", encoding="utf-8")
-        run_git(self.bdtt, "commit", "-aqm", "change b")
+        request_id = self.delete_flow(["repo_b/src/b.sql"])
+        (self.repo_b / "src" / "b.sql").write_text("select 22;\n", encoding="utf-8")
+        run_git(self.repo_b, "commit", "-aqm", "change b")
         self.assertIn("变了", self.refused("task", "promote", "--task", request_id, "--dry-run"))
 
     def test_main_lost_the_file_after_it_was_fetched(self) -> None:
-        request_id = self.delete_flow(["bdtt_repo/src/b.sql"])
-        run_git(self.bdtt, "rm", "-q", "src/b.sql")
-        run_git(self.bdtt, "commit", "-qm", "remove b")
+        request_id = self.delete_flow(["repo_b/src/b.sql"])
+        run_git(self.repo_b, "rm", "-q", "src/b.sql")
+        run_git(self.repo_b, "commit", "-qm", "remove b")
         self.assertIn("没有了", self.refused("task", "promote", "--task", request_id, "--dry-run"))
 
     def test_the_plan_digest_changes_when_a_delete_is_added(self) -> None:
-        first = self.delete_flow(["bdtt_repo/src/b.sql"])
+        first = self.delete_flow(["repo_b/src/b.sql"])
         one = self.dry_run(first)["plan_sha256"]
         self.end(first)
-        two = self.dry_run(self.delete_flow(["bdtt_repo/src/b.sql"], outputs={"bdtt_repo/src/c.sql": "select 2;\n"}, branch="feature/other"))["plan_sha256"]
+        two = self.dry_run(self.delete_flow(["repo_b/src/b.sql"], outputs={"repo_b/src/c.sql": "select 2;\n"}, branch="feature/other"))["plan_sha256"]
         self.assertNotEqual(one, two)
 
 
 class RecoveryTests(DeleteCase):
     def test_a_deleted_file_is_put_back_with_restore(self) -> None:
-        repo = {"path": "/x/bdtt_repo", "base_ref": "main", "current_branch": "main"}
+        repo = {"path": "/x/repo_b", "base_ref": "main", "current_branch": "main"}
         written = [
             {"relative": "src/b.sql", "action": "delete"},
             {"relative": "src/a.sql", "action": "modify"},
@@ -121,21 +121,21 @@ class RecoveryTests(DeleteCase):
         self.assertEqual(steps[1]["git"], ["clean", "-f", "--", "src/new.sql"])
 
     def test_recover_brings_a_deleted_file_back(self) -> None:
-        request_id = self.delete_flow(["bdtt_repo/src/b.sql"])
+        request_id = self.delete_flow(["repo_b/src/b.sql"])
         self.dry_run(request_id)
         self.approve(request_id)
         # a failure after the delete: the same record `partial` would hold
         found = promote_target.common.load_targets(self.root)
         item = {"relative": "src/b.sql", "action": "delete"}
-        repo = {"path": str(self.bdtt), "base_ref": "main", "current_branch": "main", "name": "bdtt_repo"}
-        run_git(self.bdtt, "switch", "-c", BRANCH, "main")
-        (self.bdtt / "src" / "b.sql").unlink()
-        self.assertEqual(porcelain(self.bdtt), [" D src/b.sql"])
+        repo = {"path": str(self.repo_b), "base_ref": "main", "current_branch": "main", "name": "repo_b"}
+        run_git(self.repo_b, "switch", "-c", BRANCH, "main")
+        (self.repo_b / "src" / "b.sql").unlink()
+        self.assertEqual(porcelain(self.repo_b), [" D src/b.sql"])
         steps = promote_target.recovery_steps(repo, BRANCH, True, [item])
         results = promote_target.run_recovery(steps, BRANCH, found.timeout)
         self.assertTrue(all(r["status"] in ("done", "skipped") for r in results), results)
-        self.assertEqual((self.bdtt / "src" / "b.sql").read_text(encoding="utf-8"), "select 2;\n")
-        self.assertEqual(self.branches(self.bdtt), ["main"])
+        self.assertEqual((self.repo_b / "src" / "b.sql").read_text(encoding="utf-8"), "select 2;\n")
+        self.assertEqual(self.branches(self.repo_b), ["main"])
 
 
 if __name__ == "__main__":

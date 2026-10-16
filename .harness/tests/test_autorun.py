@@ -119,8 +119,8 @@ class PushTests(AutorunCase):
 
     def test_all_ticked_but_not_checked_it_is_sent_to_the_check_then_to_the_promote_plan_then_it_is_done(self) -> None:
         self.prepare()
-        self.fetch("bdtt_repo/src/a.sql")
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")
+        self.fetch("repo_b/src/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
         self.on()
         self.tick(2)
         pushed = self.stop()

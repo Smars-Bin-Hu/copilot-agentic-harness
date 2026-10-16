@@ -433,8 +433,8 @@ class PromoteGateTests(TaskCase):
 
     def changed(self) -> None:
         self.ready()
-        self.run_cli("task", "fetch", "bdtt_repo/src/a.sql")
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")
+        self.run_cli("task", "fetch", "repo_b/src/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
 
     def want(self, number: int) -> None:
         self.prompt(f"[review]={number} 继续")
@@ -470,10 +470,10 @@ class PromoteGateTests(TaskCase):
         started = self.check(FAIL)
         package = (self.root / started["package"]).read_text(encoding="utf-8")
         self.assertIn(f"{TASK}/CHANGES.diff", package)
-        self.assertIn(f"| {TASK}/DEV/bdtt_repo/src/a.sql |", package)
+        self.assertIn(f"| {TASK}/DEV/repo_b/src/a.sql |", package)
         self.assertIn("select 1, 2;", (self.root / TASK / "CHANGES.diff").read_text(encoding="utf-8"))
         self.assertIn("现在是 0 次", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2, 3;\n")
+        self.dev("repo_b/src/a.sql", "select 1, 2, 3;\n")
         self.check(PASS)
         self.assertTrue(self.run_cli("task", "promote", "--dry-run")["dry_run"])
 
@@ -481,7 +481,7 @@ class PromoteGateTests(TaskCase):
         self.changed()
         self.want(1)
         self.check(PASS)
-        self.dev("bdtt_repo/src/a.sql", "select 9;\n")
+        self.dev("repo_b/src/a.sql", "select 9;\n")
         self.assertIn("现在是 0 次", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
 
     def test_the_person_may_waive_this_version_and_only_this_version(self) -> None:
@@ -494,7 +494,7 @@ class PromoteGateTests(TaskCase):
         self.assertTrue(result["waived"])
         self.assertIn("要连续通过 2 次，现在通过了 0 次", out.getvalue())
         self.assertTrue(self.run_cli("task", "promote", "--dry-run")["dry_run"])
-        self.dev("bdtt_repo/src/a.sql", "select 7;\n")
+        self.dev("repo_b/src/a.sql", "select 7;\n")
         self.assertIn("现在是 0 次", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
 
     def test_the_report_names_the_checks(self) -> None:

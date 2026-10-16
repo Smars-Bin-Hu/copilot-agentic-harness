@@ -28,7 +28,7 @@ class PickUpTests(TaskCase):
         result = self.new()
         self.assertEqual((result["task"], result["round"], result["resumed"], result["plan_approved"]), (TASK, 1, False, False))
         self.assertEqual(result["branch"], "feature/job1")
-        self.assertEqual(result["target_repos"], ["b9td_repo", "bdtt_repo"])
+        self.assertEqual(result["target_repos"], ["repo_a", "repo_b"])
         self.assertIn("PLAN.md", result["next"])
         self.assertIn("task approve-plan", result["next"])
         self.assertTrue((self.task / "DEV").is_dir())
@@ -87,7 +87,7 @@ class PickUpTests(TaskCase):
         shown = self.run_cli("task", "diff")
         self.assertEqual([(f["path"], f["action"]) for f in shown["files"]], [("notes/design.md", "create")])
         self.assertIn("没有配置目标仓库", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
-        self.assertIn("没有配置目标仓库", self.run_cli("task", "fetch", "bdtt_repo/src/a.sql", ok=False)["stderr"])
+        self.assertIn("没有配置目标仓库", self.run_cli("task", "fetch", "repo_b/src/a.sql", ok=False)["stderr"])
         self.assertEqual(self.run_cli("task", "close")["status"], "closed")
 
 
@@ -97,7 +97,7 @@ class PlanApprovalTests(TaskCase):
         for path in (f"{TASK}/PLAN.md", f"{TASK}/RCA.md", f"{TASK}/notes/draft.md", str(self.task.resolve() / "DESIGN.md")):
             with self.subTest(path):
                 self.assertEqual(self.edit(path), {})  # a result that stays in the task needs no plan (M9-0)
-        for path in (f"{TASK}/DEV/bdtt_repo/src/a.sql", f"{TASK}/DEV/x.sql", f"{TASK}/dev/x.sql"):
+        for path in (f"{TASK}/DEV/repo_b/src/a.sql", f"{TASK}/DEV/x.sql", f"{TASK}/dev/x.sql"):
             with self.subTest(path):
                 output = self.edit(path)
                 self.assertEqual(self.decision(output), "deny")
@@ -111,15 +111,15 @@ class PlanApprovalTests(TaskCase):
                 self.assertEqual(self.decision(output), "deny")
                 self.assertIn("只能在任务目录", self.reason(output))
                 self.assertNotIn("task fetch", self.reason(output))
-        self.assertIn("把计划写到", self.run_cli("task", "fetch", "bdtt_repo/src/a.sql", ok=False)["stderr"])
+        self.assertIn("把计划写到", self.run_cli("task", "fetch", "repo_b/src/a.sql", ok=False)["stderr"])
         self.write_plan()
         self.assertIn("还没有经用户批准", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
-        self.assertIn("还没有经用户批准", self.run_cli("task", "delete", "bdtt_repo/src/a.sql", ok=False)["stderr"])
+        self.assertIn("还没有经用户批准", self.run_cli("task", "delete", "repo_b/src/a.sql", ok=False)["stderr"])
 
     def test_after_the_approval_the_whole_task_folder_is_written_but_not_the_persons_material(self) -> None:
         self.ready()
         for path in (
-            f"{TASK}/DEV/bdtt_repo/src/a.sql", f"{TASK}/DEV/new/deep/file.sql", f"{TASK}/PLAN.md", str(self.task.resolve() / "DEV" / "x.sql"),
+            f"{TASK}/DEV/repo_b/src/a.sql", f"{TASK}/DEV/new/deep/file.sql", f"{TASK}/PLAN.md", str(self.task.resolve() / "DEV" / "x.sql"),
             f"{TASK}/RCA.md", f"{TASK}/DEV2/x", f"{TASK}/TEST/case1.md",
         ):
             with self.subTest(path):
@@ -138,7 +138,7 @@ class PlanApprovalTests(TaskCase):
         # files only the CLI writes, and the target repository itself, stay closed
         self.assertEqual(self.decision(self.edit(f"{TASK}/.task/task.json")), "deny")
         self.assertEqual(self.decision(self.edit(f"{TASK}/PROMOTE-PLAN.diff")), "deny")
-        self.assertIn("只能由 promote 写", self.reason(self.edit(str(self.bdtt / "src" / "a.sql"))))
+        self.assertIn("只能由 promote 写", self.reason(self.edit(str(self.repo_b / "src" / "a.sql"))))
 
     def test_the_code_is_bound_to_the_plan_and_the_screen_only_names_the_file(self) -> None:
         self.new()
@@ -181,52 +181,52 @@ class PlanApprovalTests(TaskCase):
 class FetchDiffTests(TaskCase):
     def test_fetch_copies_the_main_version_into_dev_with_the_repository_layout(self) -> None:
         self.ready()
-        result = self.run_cli("task", "fetch", "bdtt_repo/src/a.sql", "b9td_repo/a.sql")
-        self.assertEqual(result["fetched"], [f"{TASK}/DEV/b9td_repo/a.sql", f"{TASK}/DEV/bdtt_repo/src/a.sql"])
-        self.assertEqual(self.dev("bdtt_repo/src/a.sql").read_text(encoding="utf-8"), "select 1;\n")
-        self.assertEqual((self.task / ".task" / "base" / "bdtt_repo" / "src" / "a.sql").read_text(encoding="utf-8"), "select 1;\n")
+        result = self.run_cli("task", "fetch", "repo_b/src/a.sql", "repo_a/a.sql")
+        self.assertEqual(result["fetched"], [f"{TASK}/DEV/repo_a/a.sql", f"{TASK}/DEV/repo_b/src/a.sql"])
+        self.assertEqual(self.dev("repo_b/src/a.sql").read_text(encoding="utf-8"), "select 1;\n")
+        self.assertEqual((self.task / ".task" / "base" / "repo_b" / "src" / "a.sql").read_text(encoding="utf-8"), "select 1;\n")
         data = self.data()
-        self.assertEqual(data["target_files"]["bdtt_repo/src/a.sql"]["blob"], self.blob(self.bdtt, "src/a.sql"))
-        self.assertEqual(data["targets"]["bdtt_repo"]["base_commit"], self.main_commit(self.bdtt))
+        self.assertEqual(data["target_files"]["repo_b/src/a.sql"]["blob"], self.blob(self.repo_b, "src/a.sql"))
+        self.assertEqual(data["targets"]["repo_b"]["base_commit"], self.main_commit(self.repo_b))
         self.assert_clean()
 
     def assert_clean(self) -> None:
-        self.assertEqual(porcelain(self.bdtt), [])
-        self.assertEqual(git_text(self.bdtt, "symbolic-ref", "--short", "HEAD"), "main")
+        self.assertEqual(porcelain(self.repo_b), [])
+        self.assertEqual(git_text(self.repo_b, "symbolic-ref", "--short", "HEAD"), "main")
 
     def test_a_folder_is_fetched_whole_and_a_wrong_name_is_refused(self) -> None:
         self.ready()
-        self.assertEqual(len(self.run_cli("task", "fetch", "bdtt_repo/src")["fetched"]), 2)
-        self.assertIn("没有", self.run_cli("task", "fetch", "bdtt_repo/src/none.sql", ok=False)["stderr"])
+        self.assertEqual(len(self.run_cli("task", "fetch", "repo_b/src")["fetched"]), 2)
+        self.assertIn("没有", self.run_cli("task", "fetch", "repo_b/src/none.sql", ok=False)["stderr"])
         self.assertIn("没有叫", self.run_cli("task", "fetch", "nope_repo/a.sql", ok=False)["stderr"])
 
     def test_a_refused_path_is_not_fetched_for_editing(self) -> None:
         self.override({"repos_root": str(self.repos), "refused_paths": [".git/**", "docs/**"]})
         self.ready()
-        self.assertIn("不能回写", self.run_cli("task", "fetch", "bdtt_repo/docs/x.md", ok=False)["stderr"])
+        self.assertIn("不能回写", self.run_cli("task", "fetch", "repo_b/docs/x.md", ok=False)["stderr"])
 
     def test_fetching_again_keeps_the_edits_unless_overwrite(self) -> None:
         self.ready()
-        self.run_cli("task", "fetch", "bdtt_repo/src/a.sql")
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")
-        result = self.run_cli("task", "fetch", "bdtt_repo/src/a.sql")
-        self.assertEqual((result["fetched"], result["kept"]), ([], ["bdtt_repo/src/a.sql"]))
-        self.assertEqual(self.dev("bdtt_repo/src/a.sql").read_text(encoding="utf-8"), "select 1, 2;\n")
-        self.run_cli("task", "fetch", "--overwrite", "bdtt_repo/src/a.sql")
-        self.assertEqual(self.dev("bdtt_repo/src/a.sql").read_text(encoding="utf-8"), "select 1;\n")
+        self.run_cli("task", "fetch", "repo_b/src/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
+        result = self.run_cli("task", "fetch", "repo_b/src/a.sql")
+        self.assertEqual((result["fetched"], result["kept"]), ([], ["repo_b/src/a.sql"]))
+        self.assertEqual(self.dev("repo_b/src/a.sql").read_text(encoding="utf-8"), "select 1, 2;\n")
+        self.run_cli("task", "fetch", "--overwrite", "repo_b/src/a.sql")
+        self.assertEqual(self.dev("repo_b/src/a.sql").read_text(encoding="utf-8"), "select 1;\n")
 
     def test_a_large_file_and_crlf_arrive_byte_for_byte_and_the_diff_holds_only_the_change(self) -> None:
-        (self.bdtt / "big.sql").write_bytes(BIG.encode("utf-8"))
-        (self.bdtt / "crlf.sql").write_bytes(b"select 1;\r\nselect 2;\r\n")
-        git_text(self.bdtt, "-c", "core.autocrlf=false", "add", "-A")  # with autocrlf=true, git would store this CRLF file as LF
-        git_text(self.bdtt, "-c", "core.autocrlf=false", "commit", "-q", "-m", "big")
+        (self.repo_b / "big.sql").write_bytes(BIG.encode("utf-8"))
+        (self.repo_b / "crlf.sql").write_bytes(b"select 1;\r\nselect 2;\r\n")
+        git_text(self.repo_b, "-c", "core.autocrlf=false", "add", "-A")  # with autocrlf=true, git would store this CRLF file as LF
+        git_text(self.repo_b, "-c", "core.autocrlf=false", "commit", "-q", "-m", "big")
         self.ready()
-        self.run_cli("task", "fetch", "bdtt_repo/big.sql", "bdtt_repo/crlf.sql")
-        self.assertEqual(self.dev("bdtt_repo/big.sql").read_bytes(), BIG.encode("utf-8"))
-        self.assertEqual(self.dev("bdtt_repo/crlf.sql").read_bytes(), b"select 1;\r\nselect 2;\r\n")
-        self.dev("bdtt_repo/big.sql", BIG.replace("select 60000 as c;", "select 60000 as changed;"))
+        self.run_cli("task", "fetch", "repo_b/big.sql", "repo_b/crlf.sql")
+        self.assertEqual(self.dev("repo_b/big.sql").read_bytes(), BIG.encode("utf-8"))
+        self.assertEqual(self.dev("repo_b/crlf.sql").read_bytes(), b"select 1;\r\nselect 2;\r\n")
+        self.dev("repo_b/big.sql", BIG.replace("select 60000 as c;", "select 60000 as changed;"))
         shown = self.run_cli("task", "diff")
-        self.assertEqual(shown["files"], [{"path": "bdtt_repo/big.sql", "action": "modify", "added": 1, "removed": 1}])
+        self.assertEqual(shown["files"], [{"path": "repo_b/big.sql", "action": "modify", "added": 1, "removed": 1}])
         self.assertEqual(shown["unchanged"], 1)
         text = (self.task / "CHANGES.diff").read_text(encoding="utf-8")
         self.assertEqual(shown["diff_file"], f"{TASK}/CHANGES.diff")
@@ -235,14 +235,14 @@ class FetchDiffTests(TaskCase):
 
     def test_diff_shows_new_changed_and_deleted_files(self) -> None:
         self.ready()
-        self.run_cli("task", "fetch", "bdtt_repo/src")
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")
-        self.dev("bdtt_repo/src/new.sql", "select 3;\n")
-        self.run_cli("task", "delete", "bdtt_repo/src/b.sql")
-        self.assertFalse(self.dev("bdtt_repo/src/b.sql").exists())
+        self.run_cli("task", "fetch", "repo_b/src")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
+        self.dev("repo_b/src/new.sql", "select 3;\n")
+        self.run_cli("task", "delete", "repo_b/src/b.sql")
+        self.assertFalse(self.dev("repo_b/src/b.sql").exists())
         shown = self.run_cli("task", "diff")
         self.assertEqual(sorted((f["path"], f["action"]) for f in shown["files"]), [
-            ("bdtt_repo/src/a.sql", "modify"), ("bdtt_repo/src/b.sql", "delete"), ("bdtt_repo/src/new.sql", "create"),
+            ("repo_b/src/a.sql", "modify"), ("repo_b/src/b.sql", "delete"), ("repo_b/src/new.sql", "create"),
         ])
         text = (self.task / "CHANGES.diff").read_text(encoding="utf-8")
         for needle in ("-select 1;", "+select 1, 2;", "+select 3;", "deleted file", "-select 2;"):
@@ -250,35 +250,35 @@ class FetchDiffTests(TaskCase):
 
     def test_delete_needs_a_fetched_file_and_fetching_it_again_takes_the_delete_back(self) -> None:
         self.ready()
-        self.assertIn("不是这个任务从 main 取过的文件", self.run_cli("task", "delete", "bdtt_repo/src/b.sql", ok=False)["stderr"])
-        self.run_cli("task", "fetch", "bdtt_repo/src/b.sql")
-        self.assertEqual(self.run_cli("task", "delete", "bdtt_repo/src/b.sql")["deletes"], ["bdtt_repo/src/b.sql"])
-        self.run_cli("task", "fetch", "bdtt_repo/src/b.sql")
+        self.assertIn("不是这个任务从 main 取过的文件", self.run_cli("task", "delete", "repo_b/src/b.sql", ok=False)["stderr"])
+        self.run_cli("task", "fetch", "repo_b/src/b.sql")
+        self.assertEqual(self.run_cli("task", "delete", "repo_b/src/b.sql")["deletes"], ["repo_b/src/b.sql"])
+        self.run_cli("task", "fetch", "repo_b/src/b.sql")
         self.assertEqual(self.data()["deletes"], [])
-        self.assertTrue(self.dev("bdtt_repo/src/b.sql").is_file())
+        self.assertTrue(self.dev("repo_b/src/b.sql").is_file())
 
 
 class PromoteTests(TaskCase):
     def test_dry_run_writes_the_review_file_and_changes_nothing(self) -> None:
         self.ready()
-        self.run_cli("task", "fetch", "bdtt_repo/src/a.sql")
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")
+        self.run_cli("task", "fetch", "repo_b/src/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
         result = self.run_cli("task", "promote", "--dry-run")
         self.assertEqual((result["dry_run"], result["branch"], result["approved"]), (True, "feature/job1", False))
-        self.assertEqual([(f["path"], f["action"], f["added"], f["removed"]) for f in result["files"]], [("bdtt_repo/src/a.sql", "modify", 1, 1)])
+        self.assertEqual([(f["path"], f["action"], f["added"], f["removed"]) for f in result["files"]], [("repo_b/src/a.sql", "modify", 1, 1)])
         self.assertNotIn("source", result["files"][0])
         self.assertEqual(result["review_file"], f"{TASK}/PROMOTE-PLAN.diff")
         self.assertIn("task approve-promote", result["next"])
         review = (self.task / "PROMOTE-PLAN.diff").read_text(encoding="utf-8")
         self.assertIn("+select 1, 2;", review)
-        self.assertIn("# repository bdtt_repo: main at", review)
-        self.assertEqual(porcelain(self.bdtt), [])
+        self.assertIn("# repository repo_b: main at", review)
+        self.assertEqual(porcelain(self.repo_b), [])
         self.assertEqual(self.data()["promote"]["state"], "dry_run")
 
     def test_the_real_run_needs_the_persons_approval_of_that_plan(self) -> None:
         self.ready()
-        self.run_cli("task", "fetch", "bdtt_repo/src/a.sql")
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")
+        self.run_cli("task", "fetch", "repo_b/src/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
         self.assertIn("还没有对应的 --dry-run", self.run_cli("task", "promote", ok=False)["stderr"])
         self.run_cli("task", "promote", "--dry-run")
         self.assertIn("还没有批准", self.run_cli("task", "promote", ok=False)["stderr"])
@@ -286,82 +286,82 @@ class PromoteTests(TaskCase):
         with self.assertRaises(CommandError):
             self.approve_promote(code="no", out=screen)
         self.approve_promote(out=screen)
-        self.assertIn("modify    bdtt_repo/src/a.sql  (+1 -1)", screen.getvalue())
+        self.assertIn("modify    repo_b/src/a.sql  (+1 -1)", screen.getvalue())
         self.assertIn(f"{TASK}/PROMOTE-PLAN.diff", screen.getvalue())
         self.assertNotIn("+select 1, 2;", screen.getvalue())
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2, 3;\n")  # changed after the approval
+        self.dev("repo_b/src/a.sql", "select 1, 2, 3;\n")  # changed after the approval
         self.assertIn("变了", self.run_cli("task", "promote", ok=False)["stderr"])
-        self.assertEqual(porcelain(self.bdtt), [])
+        self.assertEqual(porcelain(self.repo_b), [])
 
     def test_promote_writes_a_new_branch_and_commits_nothing(self) -> None:
         self.ready()
-        self.run_cli("task", "fetch", "bdtt_repo/src")
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")
-        self.dev("bdtt_repo/src/new/c.sql", "select 3;\n")
-        self.run_cli("task", "delete", "bdtt_repo/src/b.sql")
+        self.run_cli("task", "fetch", "repo_b/src")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
+        self.dev("repo_b/src/new/c.sql", "select 3;\n")
+        self.run_cli("task", "delete", "repo_b/src/b.sql")
         self.run_cli("task", "promote", "--dry-run")
         screen = io.StringIO()
         self.approve_promote(out=screen)
         self.assertIn("会被删除", screen.getvalue())
         result = self.run_cli("task", "promote")
         self.assertEqual(result["dry_run"], False)
-        self.assertEqual(git_text(self.bdtt, "symbolic-ref", "--short", "HEAD"), "feature/job1")
-        self.assertEqual(porcelain(self.bdtt), [" D src/b.sql", " M src/a.sql", "?? src/new/"])
-        self.assertEqual(git_text(self.bdtt, "rev-parse", "HEAD"), self.main_commit(self.bdtt))  # no commit
-        self.assertEqual((self.bdtt / "src" / "a.sql").read_text(encoding="utf-8"), "select 1, 2;\n")
-        self.assertEqual(porcelain(self.b9td), [])
+        self.assertEqual(git_text(self.repo_b, "symbolic-ref", "--short", "HEAD"), "feature/job1")
+        self.assertEqual(porcelain(self.repo_b), [" D src/b.sql", " M src/a.sql", "?? src/new/"])
+        self.assertEqual(git_text(self.repo_b, "rev-parse", "HEAD"), self.main_commit(self.repo_b))  # no commit
+        self.assertEqual((self.repo_b / "src" / "a.sql").read_text(encoding="utf-8"), "select 1, 2;\n")
+        self.assertEqual(porcelain(self.repo_a), [])
         data = self.data()
         self.assertEqual(data["promote"]["state"], "done")
         patch = (self.root / data["promote"]["patch"]).read_text(encoding="utf-8")
         self.assertEqual(data["promote"]["patch"], f"{TASK}/DEV/job1.patch")
         self.assertIn("+select 1, 2;", patch)
-        self.assertEqual((self.task / "DEV" / "_deleted" / "bdtt_repo" / "src" / "b.sql").read_text(encoding="utf-8"), "select 2;\n")
+        self.assertEqual((self.task / "DEV" / "_deleted" / "repo_b" / "src" / "b.sql").read_text(encoding="utf-8"), "select 2;\n")
         self.assertIn("已经 promote 过", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
         # the backups promote left in DEV/ are not results
-        self.assertEqual(sorted(key for key, _path in task_ops.dev_files(self.root, TASK)), ["bdtt_repo/src/a.sql", "bdtt_repo/src/new/c.sql"])
+        self.assertEqual(sorted(key for key, _path in task_ops.dev_files(self.root, TASK)), ["repo_b/src/a.sql", "repo_b/src/new/c.sql"])
 
     def test_a_repository_that_converts_line_endings_shows_only_the_results(self) -> None:
         """`core.autocrlf=true` is the git default on Windows: main holds LF, the working tree may hold CRLF."""
-        git_text(self.bdtt, "config", "core.autocrlf", "true")
-        (self.bdtt / "src" / "b.sql").write_bytes(b"select 2;\r\n")  # what a Windows checkout leaves in the working tree
-        git_text(self.bdtt, "add", "src/b.sql")  # same blob (git converts it back); the index now knows the file's size
-        self.assertEqual(porcelain(self.bdtt), [])
+        git_text(self.repo_b, "config", "core.autocrlf", "true")
+        (self.repo_b / "src" / "b.sql").write_bytes(b"select 2;\r\n")  # what a Windows checkout leaves in the working tree
+        git_text(self.repo_b, "add", "src/b.sql")  # same blob (git converts it back); the index now knows the file's size
+        self.assertEqual(porcelain(self.repo_b), [])
         self.ready()
-        self.run_cli("task", "fetch", "bdtt_repo/src/a.sql")
-        self.assertEqual(self.dev("bdtt_repo/src/a.sql").read_bytes(), b"select 1;\n")  # the main version, byte for byte
-        self.dev("bdtt_repo/src/a.sql").write_bytes(b"select 1, 2;\n")
+        self.run_cli("task", "fetch", "repo_b/src/a.sql")
+        self.assertEqual(self.dev("repo_b/src/a.sql").read_bytes(), b"select 1;\n")  # the main version, byte for byte
+        self.dev("repo_b/src/a.sql").write_bytes(b"select 1, 2;\n")
         self.run_cli("task", "promote", "--dry-run")
         self.approve_promote()
         self.run_cli("task", "promote")
-        self.assertEqual(porcelain(self.bdtt), [" M src/a.sql"])
-        self.assertEqual((self.bdtt / "src" / "a.sql").read_bytes(), b"select 1, 2;\n")
-        self.assertEqual((self.bdtt / "src" / "b.sql").read_bytes(), b"select 2;\r\n")
+        self.assertEqual(porcelain(self.repo_b), [" M src/a.sql"])
+        self.assertEqual((self.repo_b / "src" / "a.sql").read_bytes(), b"select 1, 2;\n")
+        self.assertEqual((self.repo_b / "src" / "b.sql").read_bytes(), b"select 2;\r\n")
 
     def test_the_checks_of_the_l3_promote_apply(self) -> None:
         self.ready()
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")  # written without a fetch
-        self.assertIn("task fetch bdtt_repo/src/a.sql", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
-        self.assertEqual(self.run_cli("task", "fetch", "bdtt_repo/src/a.sql")["kept"], ["bdtt_repo/src/a.sql"])  # the edit stays
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")  # written without a fetch
+        self.assertIn("task fetch repo_b/src/a.sql", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
+        self.assertEqual(self.run_cli("task", "fetch", "repo_b/src/a.sql")["kept"], ["repo_b/src/a.sql"])  # the edit stays
         self.assertEqual(self.run_cli("task", "promote", "--dry-run")["files"][0]["action"], "modify")
-        self.run_cli("task", "fetch", "--overwrite", "bdtt_repo/src/a.sql")
+        self.run_cli("task", "fetch", "--overwrite", "repo_b/src/a.sql")
         self.assertIn("完全一样", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
         self.dev("notes/x.md", "n\n")
         message = self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"]
         self.assertIn("不是已配置的目标仓库", message)  # a folder that is no repository may be a misspelt name: still refused
         self.assertIn("移到任务目录根下", message)
         self.dev("notes/x.md").unlink()
-        (self.bdtt / "dirty.txt").write_text("x\n", encoding="utf-8")
+        (self.repo_b / "dirty.txt").write_text("x\n", encoding="utf-8")
         self.assertIn("工作区不干净", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
-        (self.bdtt / "dirty.txt").unlink()
-        git_text(self.bdtt, "branch", "feature/job1")
+        (self.repo_b / "dirty.txt").unlink()
+        git_text(self.repo_b, "branch", "feature/job1")
         message = self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"]
         self.assertIn("已经存在", message)
         self.assertIn("task set-branch", message)
         self.assertEqual(self.run_cli("task", "set-branch", "--branch", "feature/job1_b")["branch"], "feature/job1_b")
         self.assertEqual(self.run_cli("task", "promote", "--dry-run")["branch"], "feature/job1_b")
-        (self.bdtt / "src" / "a.sql").write_text("select 0;\n", encoding="utf-8")  # main moves under the task
-        git_text(self.bdtt, "commit", "-qam", "moved")
+        (self.repo_b / "src" / "a.sql").write_text("select 0;\n", encoding="utf-8")  # main moves under the task
+        git_text(self.repo_b, "commit", "-qam", "moved")
         self.assertIn("在 main 上变了", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
 
     def test_a_file_directly_in_dev_is_not_written_back_and_does_not_stop_the_promote(self) -> None:
@@ -372,32 +372,32 @@ class PromoteTests(TaskCase):
         message = self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"]
         self.assertIn("没有要回写的成果", message)
         self.assertIn("upsert.sql、verify.sql", message)
-        self.run_cli("task", "fetch", "bdtt_repo/src/a.sql")
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")
-        self.dev("bdtt_repo/src/new/c.sql", "select 3;\n")  # a new file under the repository's path was always fine
+        self.run_cli("task", "fetch", "repo_b/src/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
+        self.dev("repo_b/src/new/c.sql", "select 3;\n")  # a new file under the repository's path was always fine
         plan = self.run_cli("task", "promote", "--dry-run")
-        self.assertEqual([(item["path"], item["action"]) for item in plan["files"]], [("bdtt_repo/src/a.sql", "modify"), ("bdtt_repo/src/new/c.sql", "create")])
+        self.assertEqual([(item["path"], item["action"]) for item in plan["files"]], [("repo_b/src/a.sql", "modify"), ("repo_b/src/new/c.sql", "create")])
         self.assertEqual(plan["not_promoted"], ["upsert.sql", "verify.sql"])
         self.assertIn("不会回写", plan["not_promoted_note"])
         screen = io.StringIO()
         self.approve_promote(out=screen)
         self.assertIn("不回写（直接放在 DEV/ 根目录，不属于任何仓库）：upsert.sql、verify.sql", screen.getvalue())
         self.run_cli("task", "promote")
-        self.assertEqual(sorted(porcelain(self.bdtt)), [" M src/a.sql", "?? src/new/"])
-        self.assertFalse((self.bdtt / "upsert.sql").exists())
+        self.assertEqual(sorted(porcelain(self.repo_b)), [" M src/a.sql", "?? src/new/"])
+        self.assertFalse((self.repo_b / "upsert.sql").exists())
         self.assertTrue(self.dev("upsert.sql").is_file())  # it stays where the agent put it
 
     def test_a_promote_that_stops_halfway_is_recovered_by_the_person(self) -> None:
         self.ready()
-        self.run_cli("task", "fetch", "bdtt_repo/src/a.sql", "b9td_repo/a.sql")
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2;\n")
-        self.dev("b9td_repo/a.sql", "select 9, 9;\n")
+        self.run_cli("task", "fetch", "repo_b/src/a.sql", "repo_a/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 2;\n")
+        self.dev("repo_a/a.sql", "select 9, 9;\n")
         self.run_cli("task", "promote", "--dry-run")
         self.approve_promote()
         real = promote_target.write_repo
 
         def failing(root: Path, found: Any, repo: Dict[str, Any], branch: str, written: List[Dict[str, Any]]) -> bool:
-            if repo["name"] == "bdtt_repo":
+            if repo["name"] == "repo_b":
                 real(root, found, repo, branch, written)
                 raise OSError("disk full")
             return real(root, found, repo, branch, written)
@@ -414,7 +414,7 @@ class PromoteTests(TaskCase):
         result = task_ops.recover(self.root, TASK, reader=lambda _p: code, interactive=True, out=screen)
         self.assertTrue(result["recovered"])
         self.assertIn("restore", screen.getvalue())
-        for repo in (self.bdtt, self.b9td):
+        for repo in (self.repo_b, self.repo_a):
             self.assertEqual(porcelain(repo), [])
             self.assertEqual(git_text(repo, "symbolic-ref", "--short", "HEAD"), "main")
         self.assertEqual(self.data()["promote"]["state"], "none")
@@ -425,11 +425,11 @@ class RoundAndReportTests(TaskCase):
     def test_after_a_promote_starting_again_opens_a_new_round_with_a_new_plan(self) -> None:
         self.promoted()
         self.run_cli("task", "close")
-        git_text(self.bdtt, "commit", "-qam", "the person commits")
-        git_text(self.bdtt, "switch", "-q", "main")
+        git_text(self.repo_b, "commit", "-qam", "the person commits")
+        git_text(self.repo_b, "switch", "-q", "main")
         result = self.open()
         self.assertEqual((result["round"], result["new_round"], result["plan_approved"], result["branch"]), (2, True, False, "feature/job1_r2"))
-        self.assertTrue((self.task / "DEV_r1" / "bdtt_repo" / "src" / "a.sql").is_file())
+        self.assertTrue((self.task / "DEV_r1" / "repo_b" / "src" / "a.sql").is_file())
         self.assertEqual(list((self.task / "DEV").iterdir()), [])
         self.assertEqual((self.task / "PLAN_r1.md").read_text(encoding="utf-8"), PLAN)  # the old plan cannot be approved again
         self.assertFalse((self.task / "PLAN.md").exists())
@@ -440,8 +440,8 @@ class RoundAndReportTests(TaskCase):
         self.assertEqual(self.decision(self.edit(f"{TASK}/DEV/x.sql")), "deny")  # the old approval does not carry over
         self.write_plan(PLAN + "第二轮。\n")
         self.approve_plan()
-        self.run_cli("task", "fetch", "bdtt_repo/src/a.sql")
-        self.dev("bdtt_repo/src/a.sql", "select 1, 2, 3;\n")
+        self.run_cli("task", "fetch", "repo_b/src/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 2, 3;\n")
         self.assertEqual(self.run_cli("task", "promote", "--dry-run")["branch"], "feature/job1_r2")
 
     def test_close_releases_the_session_and_writes_the_report(self) -> None:
@@ -451,12 +451,12 @@ class RoundAndReportTests(TaskCase):
         self.assertIsNone(self.session_state(SESSION)["active_task"])
         text = (self.root / result["report"]).read_text(encoding="utf-8")
         for needle in (
-            "# 任务报告：job1", "计划：由人批准于", "已回写到目标仓库的新分支", "回写由人批准于", "modify bdtt_repo/src/a.sql", "| bdtt_repo/src/a.sql | modify | 1 | 1 |",
+            "# 任务报告：job1", "计划：由人批准于", "已回写到目标仓库的新分支", "回写由人批准于", "modify repo_b/src/a.sql", "| repo_b/src/a.sql | modify | 1 | 1 |",
             "> 给 a.sql 加一列", "人批准计划", "人批准回写", "回写到新分支", "关闭", "## hook 日志", "独立检查：没有开启", f"{TASK}/DEV/job1.patch",
         ):
             self.assertIn(needle, text)
-        self.assertIn("任务已经关闭", self.run_cli("task", "fetch", "--task", TASK, "bdtt_repo/src/a.sql", ok=False)["stderr"])
-        self.assertIn("没有进行中的任务", self.run_cli("task", "fetch", "bdtt_repo/src/a.sql", ok=False)["stderr"])
+        self.assertIn("任务已经关闭", self.run_cli("task", "fetch", "--task", TASK, "repo_b/src/a.sql", ok=False)["stderr"])
+        self.assertIn("没有进行中的任务", self.run_cli("task", "fetch", "repo_b/src/a.sql", ok=False)["stderr"])
         self.assertEqual(self.run_cli("task", "report")["report"], ".workspace/reports/tasks/job1/report.md")
         denied = self.edit(".workspace/reports/tasks/job1/report.md")
         self.assertEqual(self.decision(denied), "deny")
@@ -466,9 +466,9 @@ class RoundAndReportTests(TaskCase):
         shown = self.run_cli("task", "status")
         self.assertEqual((shown["plan_written"], shown["plan_approved"], shown["promote"]), (False, False, "none"))
         self.ready()
-        self.run_cli("task", "fetch", "bdtt_repo/src/a.sql")
+        self.run_cli("task", "fetch", "repo_b/src/a.sql")
         shown = self.run_cli("task", "status")
-        self.assertEqual((shown["plan_approved"], shown["fetched"]), (True, ["bdtt_repo/src/a.sql"]))
+        self.assertEqual((shown["plan_approved"], shown["fetched"]), (True, ["repo_b/src/a.sql"]))
         self.assertIn("task promote --dry-run", shown["next"])
 
 

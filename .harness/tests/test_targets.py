@@ -89,8 +89,8 @@ class LoadTests(HarnessTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.repos = self.root / "source" / "repos"
-        make_repo(self.repos / "bdtt_repo")
-        make_repo(self.repos / "b9td_repo")
+        make_repo(self.repos / "repo_b")
+        make_repo(self.repos / "repo_a")
         (self.repos / "not_a_repo").mkdir()
         (self.repos / "notes.txt").write_text("x", encoding="utf-8")
 
@@ -106,27 +106,27 @@ class LoadTests(HarnessTestCase):
         self.override({"repos_root": str(self.repos)})
         found = targets.load(self.root)
         self.assertTrue(found.configured)
-        self.assertEqual(found.names(), ["b9td_repo", "bdtt_repo"])
-        self.assertEqual(found.get("bdtt_repo").path, self.repos / "bdtt_repo")
-        self.assertEqual(found.get("bdtt_repo").base_ref, "main")
+        self.assertEqual(found.names(), ["repo_a", "repo_b"])
+        self.assertEqual(found.get("repo_b").path, self.repos / "repo_b")
+        self.assertEqual(found.get("repo_b").base_ref, "main")
         self.assertEqual(found.problems, [])
 
     def test_a_repository_elsewhere_is_added_by_name(self) -> None:
         other = make_repo(self.root / "elsewhere" / "extra")
-        self.override({"repos_root": str(self.repos), "repos": {"extra_repo": {"path": str(other)}}})
-        self.assertEqual(targets.load(self.root).names(), ["b9td_repo", "bdtt_repo", "extra_repo"])
+        self.override({"repos_root": str(self.repos), "repos": {"repo_c": {"path": str(other)}}})
+        self.assertEqual(targets.load(self.root).names(), ["repo_a", "repo_b", "repo_c"])
 
     def test_settings_for_a_found_repository_change_only_that_one(self) -> None:
-        self.override({"repos_root": str(self.repos), "repos": {"bdtt_repo": {"base_ref": "develop", "refused_paths": ["docs/**"]}}})
+        self.override({"repos_root": str(self.repos), "repos": {"repo_b": {"base_ref": "develop", "refused_paths": ["docs/**"]}}})
         found = targets.load(self.root)
-        self.assertEqual(found.get("bdtt_repo").base_ref, "develop")
-        self.assertEqual(found.get("bdtt_repo").refused_paths, ["docs/**"])
-        self.assertEqual(found.get("b9td_repo").base_ref, "main")
-        self.assertEqual(found.get("b9td_repo").refused_paths, [".git/**"])
+        self.assertEqual(found.get("repo_b").base_ref, "develop")
+        self.assertEqual(found.get("repo_b").refused_paths, ["docs/**"])
+        self.assertEqual(found.get("repo_a").base_ref, "main")
+        self.assertEqual(found.get("repo_a").refused_paths, [".git/**"])
 
     def test_refused_paths_can_be_appended_for_every_repository(self) -> None:
         self.override({"repos_root": str(self.repos), "refused_paths+": [".github/workflows/**"]})
-        self.assertEqual(targets.load(self.root).get("bdtt_repo").refused_paths, [".git/**", ".github/workflows/**"])
+        self.assertEqual(targets.load(self.root).get("repo_b").refused_paths, [".git/**", ".github/workflows/**"])
 
     def test_problems_are_listed_not_raised(self) -> None:
         self.override({
@@ -144,14 +144,14 @@ class LoadTests(HarnessTestCase):
         self.override({"repos_root": str(self.repos)})
         with self.assertRaises(targets.TargetError) as caught:
             targets.load(self.root).get("nope")
-        self.assertIn("b9td_repo", str(caught.exception))
-        self.assertIn("bdtt_repo", str(caught.exception))
+        self.assertIn("repo_a", str(caught.exception))
+        self.assertIn("repo_b", str(caught.exception))
 
     def test_a_home_folder_and_an_environment_variable_in_the_path_are_expanded(self) -> None:
         self.override({"repos_root": "%HARNESS_TEST_REPOS%" if os.name == "nt" else "$HARNESS_TEST_REPOS"})
         os.environ["HARNESS_TEST_REPOS"] = str(self.repos)
         self.addCleanup(os.environ.pop, "HARNESS_TEST_REPOS", None)
-        self.assertEqual(targets.load(self.root).names(), ["b9td_repo", "bdtt_repo"])
+        self.assertEqual(targets.load(self.root).names(), ["repo_a", "repo_b"])
 
 
 @unittest.skipUnless(GIT, "git is not installed")
@@ -218,17 +218,17 @@ class CommandTests(HarnessTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.repos = self.root / "source" / "repos"
-        make_repo(self.repos / "bdtt_repo", {"a.sql": "select 1\n"})
-        make_repo(self.repos / "b9td_repo")
+        make_repo(self.repos / "repo_b", {"a.sql": "select 1\n"})
+        make_repo(self.repos / "repo_a")
         (self.root / ".harness" / "policies" / "target.override.json").write_text(json.dumps({"repos_root": str(self.repos)}), encoding="utf-8")
 
     def test_target_list(self) -> None:
         result = self.cli_json("target", "list")
         self.assertTrue(result["configured"])
-        self.assertEqual([item["name"] for item in result["repos"]], ["b9td_repo", "bdtt_repo"])
+        self.assertEqual([item["name"] for item in result["repos"]], ["repo_a", "repo_b"])
         item = result["repos"][1]
-        self.assertEqual(item["path"], str(self.repos / "bdtt_repo"))
-        self.assertEqual(item["base_commit"], run_git(self.repos / "bdtt_repo", "rev-parse", "main")[:12])
+        self.assertEqual(item["path"], str(self.repos / "repo_b"))
+        self.assertEqual(item["base_commit"], run_git(self.repos / "repo_b", "rev-parse", "main")[:12])
         self.assertTrue(item["clean"])
         self.assertEqual(item["current_branch"], "main")
         self.assertEqual(result["problems"], [])
@@ -239,13 +239,13 @@ class CommandTests(HarnessTestCase):
         self.assertEqual((result["configured"], result["repos"]), (False, []))
 
     def test_target_show_one_and_an_unknown_one(self) -> None:
-        self.assertEqual(self.cli_json("target", "show", "--repo", "bdtt_repo")["name"], "bdtt_repo")
+        self.assertEqual(self.cli_json("target", "show", "--repo", "repo_b")["name"], "repo_b")
         done = self.cli("target", "show", "--repo", "nope")
         self.assertNotEqual(done.returncode, 0)
-        self.assertIn("bdtt_repo", done.stderr)
+        self.assertIn("repo_b", done.stderr)
 
     def test_dirty_shows_in_the_list(self) -> None:
-        (self.repos / "bdtt_repo" / "a.sql").write_text("select 2\n", encoding="utf-8")
+        (self.repos / "repo_b" / "a.sql").write_text("select 2\n", encoding="utf-8")
         item = self.cli_json("target", "list")["repos"][1]
         self.assertFalse(item["clean"])
         self.assertEqual(item["uncommitted_files"], 1)
@@ -260,7 +260,7 @@ class DoctorTests(HarnessTestCase):
         (self.root / ".workspace").mkdir(exist_ok=True)
         shutil.copy(REPO / ".workspace" / "README.md", self.root / ".workspace" / "README.md")
         self.repos = self.root / "source" / "repos"
-        make_repo(self.repos / "bdtt_repo")
+        make_repo(self.repos / "repo_b")
 
     def override(self, data: dict) -> None:
         (self.root / ".harness" / "policies" / "target.override.json").write_text(json.dumps(data), encoding="utf-8")
@@ -277,12 +277,12 @@ class DoctorTests(HarnessTestCase):
         self.override({"repos_root": str(self.repos)})
         result = self.doctor()
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("目标仓库 bdtt_repo：main 在", result.stdout)
+        self.assertIn("目标仓库 repo_b：main 在", result.stdout)
         self.assertIn("工作区干净", result.stdout)
 
     def test_uncommitted_files_are_said_but_are_not_an_error(self) -> None:
         self.override({"repos_root": str(self.repos)})
-        (self.repos / "bdtt_repo" / "x.txt").write_text("x", encoding="utf-8")
+        (self.repos / "repo_b" / "x.txt").write_text("x", encoding="utf-8")
         result = self.doctor()
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("1 个未提交的文件", result.stdout)

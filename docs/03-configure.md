@@ -72,7 +72,7 @@ Create `.harness/policies/target.override.json`:
 {
   "repos_root": "/Users/you/repos",
   "repos": {
-    "bdtt_repo": { "refused_paths": [".git/**", ".github/workflows/**"] },
+    "repo_b": { "refused_paths": [".git/**", ".github/workflows/**"] },
     "other_repo": { "path": "/elsewhere/other_repo", "base_ref": "develop" }
   }
 }

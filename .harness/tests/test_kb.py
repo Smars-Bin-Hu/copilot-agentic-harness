@@ -67,7 +67,7 @@ class RegisterTests(KbCase):
         self.assertEqual(found.problems, [])
         self.assertTrue(found.repos["kb"].knowledge_base)
         self.assertEqual(found.repos["kb"].path.resolve(), self.kb.resolve())
-        self.assertFalse(found.repos["bdtt_repo"].knowledge_base)
+        self.assertFalse(found.repos["repo_b"].knowledge_base)
         self.assertTrue(self.run_cli("target", "show", "--repo", "kb")["knowledge_base"])
 
     def test_the_agent_cannot_write_into_it_directly(self) -> None:
@@ -93,14 +93,14 @@ class PromoteTests(KbCase):
         self.assertNotIn("新分支", result["next"])
 
     def test_with_another_repository_the_other_gets_its_branch_and_the_knowledge_base_its_commit(self) -> None:
-        self.kb_task({"kb/orders/delay.md": "new\n", "bdtt_repo/src/a.sql": "select 1, 2;\n"}, ["kb/orders/delay.md", "bdtt_repo/src/a.sql"])
-        main = self.main_commit(self.bdtt)
+        self.kb_task({"kb/orders/delay.md": "new\n", "repo_b/src/a.sql": "select 1, 2;\n"}, ["kb/orders/delay.md", "repo_b/src/a.sql"])
+        main = self.main_commit(self.repo_b)
         plan = self.run_cli("task", "promote", "--dry-run")
-        self.assertEqual([repo["name"] for repo in plan["repos"]], ["bdtt_repo", "kb"])  # the knowledge base last
+        self.assertEqual([repo["name"] for repo in plan["repos"]], ["repo_b", "kb"])  # the knowledge base last
         self.approve_promote()
         result = self.run_cli("task", "promote")
-        self.assertEqual(run_git(self.bdtt, "rev-parse", "HEAD"), main)
-        self.assertEqual(run_git(self.bdtt, "symbolic-ref", "--short", "HEAD"), "feature/job1")
+        self.assertEqual(run_git(self.repo_b, "rev-parse", "HEAD"), main)
+        self.assertEqual(run_git(self.repo_b, "symbolic-ref", "--short", "HEAD"), "feature/job1")
         self.assertEqual(run_git(self.kb, "symbolic-ref", "--short", "HEAD"), "main")
         self.assertEqual(run_git(self.kb, "show", "HEAD:orders/delay.md"), "new")
         self.assertIn("新分支", result["next"])

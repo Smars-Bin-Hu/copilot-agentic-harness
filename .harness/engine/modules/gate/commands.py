@@ -133,7 +133,7 @@ def admin_sessions(root: Path) -> List[Dict[str, Any]]:
 
 def register(subparsers: Any) -> None:
     parser = subparsers.add_parser("approve-command", help="the person approves a git command the gate refused (terminal only)")
-    parser.set_defaults(handler=cmd_approve_command)
+    parser.set_defaults(handler=cmd_approve_command, person_only=True)
 
     admin = subparsers.add_parser("admin", help="admin mode of a session: it may change guardrail files")
     commands = admin.add_subparsers(dest="admin_command", required=True)
@@ -142,7 +142,7 @@ def register(subparsers: Any) -> None:
     for item in (on, off):
         item.add_argument("--surface", default="vscode", choices=list(SURFACES))
         item.add_argument("--session-id", required=True)
-    on.set_defaults(handler=lambda args: admin_switch_on(repo_root(), args.session_id, args.surface))
+    on.set_defaults(handler=lambda args: admin_switch_on(repo_root(), args.session_id, args.surface), person_only=True)
     off.set_defaults(handler=lambda args: admin_switch_off(repo_root(), args.session_id, args.surface))
     status = commands.add_parser("status", help="the sessions that are in admin mode")
     status.set_defaults(handler=lambda args: {"admin_sessions": admin_sessions(repo_root())})

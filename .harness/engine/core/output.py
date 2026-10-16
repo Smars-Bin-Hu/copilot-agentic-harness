@@ -15,6 +15,9 @@ AUTO = "auto"
 UTF8 = "utf-8"
 NATIVE = "native"
 CHOICES = (AUTO, UTF8, NATIVE)
+JSON = "json"
+TEXT = "text"
+FORMATS = (AUTO, JSON, TEXT)
 SAMPLE = "中文样例：成果已写入"
 REPLACED: Dict[str, str] = {}  # stream name -> the encoding `auto` replaced with UTF-8 in this process; doctor reports it
 
@@ -26,6 +29,31 @@ def setting(root: Optional[Path] = None) -> str:
     except Exception:  # noqa: BLE001 - printing must work with a broken policy; doctor reports it
         return AUTO
     return value if value in CHOICES else AUTO
+
+
+def format_setting(root: Optional[Path] = None) -> str:
+    """`auto`, `json` or `text`, as `output.format` of the policy says. Anything else, or a broken policy, is `auto`."""
+    try:
+        value = config.load_policy(root or repo_root(), POLICY_NAME)["output"].get("format", AUTO)
+    except Exception:  # noqa: BLE001 - printing must work with a broken policy; doctor reports it
+        return AUTO
+    return value if value in FORMATS else AUTO
+
+
+def as_text(stream: Any, forced_json: bool, person_only: bool, root: Optional[Path] = None) -> bool:
+    """Print a result as text, not JSON? `--json` always wins. A command only a person may run is text. Else the
+    policy: `auto` is text on a terminal and JSON on a pipe (an agent's script, a test, a redirect)."""
+    if forced_json:
+        return False
+    if person_only:
+        return True
+    value = format_setting(root)
+    if value != AUTO:
+        return value == TEXT
+    try:
+        return bool(stream.isatty())
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def encoding_for(stream: Any, root: Optional[Path] = None) -> str:

@@ -4,6 +4,8 @@ Written from the code. For all the arguments of a command use `--help`. The `har
 
 ## Commands
 
+What a command prints: text on a terminal, JSON on a pipe (a script, a redirect). `--json`, anywhere on the line, always prints JSON. The commands only a person may run (`task pause`, `task approve-plan` and the like) always print text. `output.format` in `cli.json` changes the default.
+
 ### For people
 
 | Command | What it does |
@@ -91,6 +93,7 @@ The defaults are in `.harness/policies/<file>`; overrides go in the `.override.j
 | user.json | `name` | Your name. The agent uses it where a name is to be signed (a change note at the top of a file, say). When empty, `git config user.name` is used |
 | user.json | `language` | The language the harness speaks: `en` (the default) or `zh`. It covers what the CLI and the hooks print, the templates of the task files, and the language the agent answers and writes in. Change it in `user.override.json`; the environment variable `HARNESS_LANGUAGE` wins over the file |
 | cli.json | `output.encoding` | The encoding of what the CLI prints. `auto` (the default): a terminal is left alone; when the encoding of a pipe cannot write Chinese (cp1252 on Windows), UTF-8 is printed. `utf-8`: always UTF-8. `native`: never changed, and a character that cannot be written shows as `\uXXXX` |
+| cli.json | `output.format` | Text or JSON. `auto` (the default): text on a terminal, JSON on a pipe. `json` or `text`: always. `--json` on a command line wins over it |
 | agents.json | `series` | The model series |
 | agents.json | `different_series` | The groups of roles that must use different series |
 | agents.json | `any_series` | The agents whose fallback list may span series (admin, reviewer, mapper) |

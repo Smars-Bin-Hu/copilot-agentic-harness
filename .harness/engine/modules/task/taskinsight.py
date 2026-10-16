@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import copilot_events, messages, tasks
+from core import copilot_events, messages, render, tasks
 from core.logs import read_session
 from core.paths import utc_now
 
@@ -45,18 +45,7 @@ def say(key: str, /, **values: Any) -> str:
     return messages.text(key, **values)
 
 
-def clock(seconds: Optional[float]) -> str:
-    """A length of time in words: 45 秒, 3 分 20 秒, 2 小时 5 分, 3 天 4 小时."""
-    if seconds is None:
-        return "-"
-    total = int(max(0.0, seconds) + 0.5)  # half goes up, as Math.round does on the page: the sentences and the cards must agree
-    if total < 60:
-        return say("unit.seconds", s=total)
-    if total < 3600:
-        return say("unit.minutes", m=total // 60, s=total % 60)
-    if total < 86400:
-        return say("unit.hours", h=total // 3600, m=total % 3600 // 60)
-    return say("unit.days", d=total // 86400, h=total % 86400 // 3600)
+clock = render.duration  # a length of time in words; the sentences and the cards must agree
 
 
 def share(part: Optional[float], whole: Optional[float]) -> float:

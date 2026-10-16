@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.2 (2026-10-16)
+
+Commands print text you can read. **Take note of "Changed"**: in a terminal, a command now prints aligned lines instead of JSON.
+
+**Testing**: the automatic tests pass on the Mac (780). **Not yet tried in Copilot**, **not run on Windows**.
+
+### Changed
+
+- **Text in a terminal, JSON on a pipe.** In a terminal, a command prints aligned `name  value` lines, lists as tables, long sentences broken to fit the window (a command in backticks is never cut in two), times in your local time, and `Next:` at the bottom. On a pipe (a script, a redirect, a test) it prints JSON as before. `--json`, anywhere on the line, always prints JSON. The commands only you may run (`task pause`, `task resume`, `task approve-plan`, `task approve-promote`, `task recover`, `task review extend|waive`, `task autorun on`, `approve-command`, `admin on`) always print text. `task list` in a terminal prints the table of `--text`. New setting `output.format` in `cli.json`: `auto` (the default), `json` or `text`.
+- **`eval show`** in a terminal prints the prompt on its own, not wrapped, ready to paste.
+- **`doctor`** in a terminal breaks a long line under its text, not under `[OK]`.
+- **An error** in a terminal is broken to fit the window too.
+
 ## 1.4.1 (2026-10-15)
 
 More skills for the work around a task: finding what a change touches, keeping what a task taught, designing a workflow from a repeated routine, checking code against the company's standards, and checking and repairing skills. The harness has a license now. **No existing behaviour was removed.** Take note of "Changed" for the new hints in `task` output and the new check in `doctor`.

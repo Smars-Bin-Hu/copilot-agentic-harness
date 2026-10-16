@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from typing import Any, Dict
 
+from core import messages, render
 from core.paths import cli_command, repo_root
 
 from . import checks, scenario
@@ -34,6 +35,17 @@ def cmd_show(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def show_text(result: Dict[str, Any]) -> str:
+    """`eval show` on a terminal. The prompt is printed as it is, not wrapped, so that it is pasted as it was written."""
+    size = render.columns()
+    lines = [result["title"], "", messages.text("eval.show.before")]
+    lines += [line for part in result["before"].splitlines() for line in render.wrap(part, size, "  ")]
+    lines += ["", messages.text("eval.show.prompt"), "", result["prompt"], "", messages.text("eval.show.checks")]
+    lines += [line for item in result["manual_checks"] for line in render.wrap("- " + item, size, "  ")]
+    lines += ["", messages.text("eval.show.then") + " `" + result["then"] + "`"]
+    return "\n".join(lines)
+
+
 def cmd_check(args: argparse.Namespace) -> Dict[str, Any]:
     root = repo_root()
     result = checks.run(root, scenario.load(root, args.scenario), args.surface, args.session_id)
@@ -48,7 +60,7 @@ def register(subparsers: Any) -> None:
     commands.add_parser("list", help="list the scenarios").set_defaults(handler=cmd_list)
     show = commands.add_parser("show", help="print the prompt of a scenario, ready to paste, and what to do before and after")
     show.add_argument("scenario")
-    show.set_defaults(handler=cmd_show)
+    show.set_defaults(handler=cmd_show, render=show_text)
     check = commands.add_parser("check", help="judge one finished run against a scenario")
     check.add_argument("scenario")
     check.add_argument("--session-id", default="", help="the session of the run; left out, the newest main session is used")

@@ -63,9 +63,9 @@ When an agent runs these, the gate refuses; a pipe or a script does not work eit
 | `user` | Where your name comes from |
 | `--version` | The version |
 
-### 13.5 The output is JSON
+### 13.5 Text for you, JSON for scripts
 
-Most commands print JSON, and in it there is a `next`: what to do next. The agent decides by it how to go on. For a person, reading `next` is enough. The texts in it come in the language of the setting (`language` in `user.json`).
+A command prints aligned lines of text when you run it in a terminal, and JSON when its output goes to a pipe or a script. Add `--json` to see the JSON. The commands only you may run (`task pause`, `task approve-plan` ...) always print text. Either way there is a `next` (`Next:` at the bottom of the text): what to do next. The agent decides by it how to go on; for you, reading it is enough. The texts come in the language of the setting (`language` in `user.json`).
 
 ### 13.6 Differences on Windows
 

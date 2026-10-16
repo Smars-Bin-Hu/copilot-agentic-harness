@@ -32,7 +32,7 @@ One thing first: the harness's own log records no token counts, only the numbers
 - **The call message for the reviewer is one sentence**: "Check the review package <path>".
 - **The reviewer's answer has a line limit**, one line per finding. From the 2nd check on it reports only what affects correctness.
 - **What `task promote --dry-run` gives the agent is only the list of files and the lines added and removed**, without the diff. The whole diff is written to `PROMOTE-PLAN.diff`, which you read in the editor.
-- **Command output is short JSON with a `next` field** that tells the agent what to do next, so it need not guess.
+- **Command output is short, with a `next` field** that tells the agent what to do next, so it need not guess. It is JSON on a pipe and aligned text in a terminal; both hold the same fields.
 - **The log records no tool arguments and no prompt content**; only for a refused call are the path and the command recorded.
 
 ## 5. Redo less: fail early, and be able to go on

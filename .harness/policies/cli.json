@@ -1,5 +1,8 @@
 {
   "schema_version": 1,
-  "description": "How the CLI prints. output.encoding: `auto` leaves a terminal to Python, and prints UTF-8 on a pipe whose encoding cannot write Chinese (cp1252 on Windows); `utf-8` always prints UTF-8; `native` never changes the encoding (a character it cannot show is printed as \\uXXXX, never an error). Set `native` in cli.override.json when Chinese text shows as garbage; `doctor` prints a sample line so you can see which one reads right.",
-  "output": { "encoding": "auto" }
+  "description": "How the CLI prints. output.encoding: `auto` leaves a terminal to Python, and prints UTF-8 on a pipe whose encoding cannot write Chinese (cp1252 on Windows); `utf-8` always prints UTF-8; `native` never changes the encoding (a character it cannot show is printed as \\uXXXX, never an error). Set `native` in cli.override.json when Chinese text shows as garbage; `doctor` prints a sample line so you can see which one reads right. output.format: `auto` prints text on a terminal and JSON on a pipe (an agent's script, a redirect); `json` or `text` always. `--json` on a command line always prints JSON; the commands only a person may run always print text.",
+  "output": {
+    "encoding": "auto",
+    "format": "auto"
+  }
 }

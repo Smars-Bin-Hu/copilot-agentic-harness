@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import config, messages, output, skillcheck, standards, targets, tasks, user
+from core import config, messages, output, render, skillcheck, standards, targets, tasks, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -291,12 +291,16 @@ def check_logs(report: Report, root: Path, registry: Dict[str, Any]) -> None:
 def check_output(report: Report, root: Path) -> bool:
     """How the CLI prints Chinese here. Returns True when the raw UTF-8 sample line should be printed too."""
     try:
-        raw = config.load_policy(root, output.POLICY_NAME)["output"]["encoding"]
+        section = config.load_policy(root, output.POLICY_NAME)["output"]
+        raw = section["encoding"]
+        shape = section.get("format", output.AUTO)
     except Exception as error:
         report.error(say("doctor.output.unreadable", error=error))
         return False
     if raw not in output.CHOICES:
         report.error(say("doctor.output.bad_choice", raw=raw, choices=messages.joined(output.CHOICES)))
+    if shape not in output.FORMATS:
+        report.error(say("doctor.output.bad_format", raw=shape, choices=messages.joined(output.FORMATS)))
     facts = output.facts()
     pages = facts["code_pages"]
     where = say("doctor.output.terminal") if facts["terminal"] else say("doctor.output.pipe")
@@ -630,6 +634,22 @@ def check_old_tasks(report: Report, root: Path) -> None:
         report.warn(say("doctor.old_tasks", old=tasks.OLD_TASKS_DIR, count=len(names), shown=shown, tasks_dir=tasks.TASKS_DIR))
 
 
+def shown(lines: List[str]) -> str:
+    """On a terminal, a long line goes on under its text, not under `[OK]`. On a pipe, one line per check, as before."""
+    try:
+        if not sys.stdout.isatty():
+            return "\n".join(lines)
+        size = render.columns()
+    except Exception:  # noqa: BLE001 - the report must always come out
+        return "\n".join(lines)
+    out: List[str] = []
+    for line in lines:
+        body = line[8:]
+        indent = " " * (8 + len(body) - len(body.lstrip(" ")))
+        out += render.wrap(line, size, indent)
+    return "\n".join(out)
+
+
 def run(root: Path) -> int:
     report = Report()
     check_python(report)
@@ -639,7 +659,7 @@ def run(root: Path) -> int:
         registry = load_registry(root)
     except Exception as error:
         report.error(say("doctor.registry.unreadable", error=error))
-        print("\n".join(report.lines))
+        print(shown(report.lines))
         return 1
     report.ok(say("doctor.registry.ok"))
     check_files(report, root, "engine", registry["engine"]["files"])
@@ -659,7 +679,7 @@ def run(root: Path) -> int:
     check_old_tasks(report, root)
     for name, entry in registry["modules"].items():
         check_module(report, root, name, entry)
-    print("\n".join(report.lines))
+    print(shown(report.lines))
     if sample:
         print_utf8_sample()
     print(json.dumps({"errors": report.errors}))

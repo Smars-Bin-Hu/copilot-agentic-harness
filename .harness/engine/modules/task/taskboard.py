@@ -12,14 +12,13 @@ mark the Stop hook leaves when the agent of the task's session stops.
 from __future__ import annotations
 
 import os
-from datetime import datetime
 import sys
 import time
-import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TextIO, Tuple
 
 from core import messages
+from core.render import local_time, pad, width  # noqa: F401 - the page and the tests use them from here too
 from core.paths import utc_now
 
 from . import common, task as task_ops, taskhtml, taskinsight, tasklife
@@ -31,23 +30,6 @@ DEFAULT_REFRESH = 10  # seconds, for a person at a terminal who gave no --refres
 
 def say(key: str, /, **values: Any) -> str:
     return messages.text(key, **values)
-
-
-def width(text: str) -> int:
-    """How many terminal columns a text takes: a Chinese character takes two."""
-    return sum(2 if unicodedata.east_asian_width(char) in ("W", "F") else 1 for char in text)
-
-
-def pad(text: str, size: int) -> str:
-    return text + " " * max(0, size - width(text))
-
-
-def local_time(stamp: str) -> str:
-    """A UTC stamp as "YYYY-MM-DD HH:MM:SS" in the time of this machine. What cannot be read is given back as it is."""
-    try:
-        return datetime.fromisoformat(stamp).astimezone().strftime("%Y-%m-%d %H:%M:%S")
-    except (TypeError, ValueError):
-        return str(stamp or "").replace("T", " ")
 
 
 def table(result: Dict[str, Any]) -> str:

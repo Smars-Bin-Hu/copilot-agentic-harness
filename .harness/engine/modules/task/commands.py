@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 from typing import Any, Dict
 
-from core import approval, messages, targets, tasks
+from core import approval, messages, render, targets, tasks
 from core.paths import cli_command, repo_root
 
 from . import autorun, kbsetup, refs, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
@@ -49,6 +49,11 @@ def cmd_list(args: argparse.Namespace) -> Dict[str, Any]:
         return taskboard.watch(repo_root(), args.all, args.interval)
     result = tasklife.list_tasks(repo_root(), args.all)
     return {"_text": taskboard.table(result)} if args.text else result
+
+
+def list_text(result: Dict[str, Any]) -> str:
+    """`task list` on a terminal: the table of `--text`."""
+    return taskboard.table(result) if "tasks" in result else render.render(result)
 
 
 def cmd_board(args: argparse.Namespace) -> Dict[str, Any]:
@@ -102,7 +107,7 @@ def register_task(subparsers: Any) -> None:
     listing.add_argument("--text", action="store_true", help="a table for a person to read, not JSON")
     listing.add_argument("--watch", action="store_true", help="the table, drawn again every --interval seconds until Ctrl+C")
     listing.add_argument("--interval", type=float, default=5.0)
-    listing.set_defaults(handler=cmd_list)
+    listing.set_defaults(handler=cmd_list, render=list_text)
     line = commands.add_parser("queue", help="the promote queue: per target repository, whose files wait for a commit and which tasks are in line")
     line.set_defaults(handler=lambda a: taskqueue.queue(repo_root()))
     board = commands.add_parser("board", help="write .workspace/reports/board.html: every task, what it waits for, its time and usage")
@@ -123,8 +128,9 @@ def register_task(subparsers: Any) -> None:
     add_review("start", "snapshot the result, write REVIEW/round-NNN/package.md and open the check; then call the reviewer", lambda a: taskreview.start(repo_root(), a.task))
     add_review("status", "n, the passes that count now, the checks used and what comes next", lambda a: taskreview.status(repo_root(), a.task))
     extend = add_review("extend", "the person allows more checks after the limit (terminal only)", lambda a: taskreview.extend(repo_root(), a.task, a.checks))
+    extend.set_defaults(person_only=True)
     extend.add_argument("--checks", type=int, default=2, choices=range(1, 10), metavar="1-9")
-    add_review("waive", "the person lets this version of the result be promoted without the passes (terminal only)", lambda a: taskreview.waive(repo_root(), a.task))
+    add_review("waive", "the person lets this version of the result be promoted without the passes (terminal only)", lambda a: taskreview.waive(repo_root(), a.task)).set_defaults(person_only=True)
     snapshot = commands.add_parser("snapshot", help="the copies of a task's result made at its gates (plan approval, each check, promote dry-run)")
     snapshot_commands = snapshot.add_subparsers(dest="snapshot_command", required=True)
     snapshot_list = snapshot_commands.add_parser("list", help="every snapshot of the task: gate, time, files")
@@ -136,7 +142,7 @@ def register_task(subparsers: Any) -> None:
     snapshot_prune.add_argument("--dry-run", action="store_true")
     snapshot_prune.set_defaults(handler=lambda a: {"removed": tasksnap.prune(repo_root(), task.resolve(repo_root(), a.task), a.days if a.days is not None else tasksnap.settings(repo_root())["keep_days"], dry_run=a.dry_run), "dry_run": a.dry_run})
     add("status", "where the task stands and what comes next", lambda a: task.status(repo_root(), a.task))
-    add("approve-plan", "the person approves PLAN.md (terminal only)", lambda a: task.approve_plan(repo_root(), a.task))
+    add("approve-plan", "the person approves PLAN.md (terminal only)", lambda a: task.approve_plan(repo_root(), a.task)).set_defaults(person_only=True)
     fetch = add("fetch", "copy files of a target repository's base branch into DEV/<repo>/<path>", lambda a: task.fetch(repo_root(), a.task, a.paths, a.overwrite))
     fetch.add_argument("paths", nargs="+", help="<repo>/<path>: a file or a folder")
     fetch.add_argument("--overwrite", action="store_true", help="take the base version again over a file already changed in DEV/")
@@ -147,10 +153,10 @@ def register_task(subparsers: Any) -> None:
     branch.add_argument("--branch", required=True)
     promote_parser = add("promote", "write DEV/ onto a new branch of each target repository", lambda a: task.run_promote(repo_root(), a.task, a.dry_run))
     promote_parser.add_argument("--dry-run", action="store_true")
-    add("approve-promote", "the person approves the plan of the last task promote --dry-run (terminal only)", lambda a: task.approve_promote(repo_root(), a.task))
-    add("recover", "the person puts the repositories back after a task promote stopped halfway (terminal only)", lambda a: task.recover(repo_root(), a.task))
-    add("pause", "the person puts the task aside: the board stops saying it waits, the time aside is not counted as waiting (terminal only)", lambda a: tasklife.pause(repo_root(), a.task))
-    add("resume", "the person takes a task back that was put aside (terminal only); a prompt in the task's session does the same", lambda a: tasklife.resume(repo_root(), a.task))
+    add("approve-promote", "the person approves the plan of the last task promote --dry-run (terminal only)", lambda a: task.approve_promote(repo_root(), a.task)).set_defaults(person_only=True)
+    add("recover", "the person puts the repositories back after a task promote stopped halfway (terminal only)", lambda a: task.recover(repo_root(), a.task)).set_defaults(person_only=True)
+    add("pause", "the person puts the task aside: the board stops saying it waits, the time aside is not counted as waiting (terminal only)", lambda a: tasklife.pause(repo_root(), a.task)).set_defaults(person_only=True)
+    add("resume", "the person takes a task back that was put aside (terminal only); a prompt in the task's session does the same", lambda a: tasklife.resume(repo_root(), a.task)).set_defaults(person_only=True)
     auto = commands.add_parser("autorun", help="autorun (beta): the agent goes down TODO.md by itself and stops where a person is needed")
     auto_commands = auto.add_subparsers(dest="autorun_command", required=True)
 
@@ -160,7 +166,7 @@ def register_task(subparsers: Any) -> None:
         item.set_defaults(handler=handler)
         return item
 
-    add_auto("on", "the person turns autorun on for the task (terminal only, a typed code)", lambda a: autorun.turn_on(repo_root(), a.task))
+    add_auto("on", "the person turns autorun on for the task (terminal only, a typed code)", lambda a: autorun.turn_on(repo_root(), a.task)).set_defaults(person_only=True)
     off = add_auto("off", "turn autorun off: the person at a terminal, or the agent with --reason when it cannot go on", lambda a: autorun.turn_off(repo_root(), a.task, a.reason))
     off.add_argument("--reason", default="")
     add_auto("status", "on or off, the steps done, how often it was pushed on, why it stopped", lambda a: autorun.status(repo_root(), a.task))

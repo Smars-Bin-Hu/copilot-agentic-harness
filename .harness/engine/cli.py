@@ -11,6 +11,9 @@
   stats, logs prune            numbers from the session logs; delete old logs (observe module)
   eval list|show|check         fixed scenarios, judged from a finished run (evalcheck module)
   --version [--short]          the harness release, date and authors (from .harness/registry.json); --short prints one line
+
+A result is text on a terminal and JSON on a pipe (`output.format` in the cli policy). `--json`, anywhere on the line,
+always prints JSON. The commands only a person may run always print text.
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from core import messages, output, skillcheck, user  # noqa: E402
+from core import messages, output, render, skillcheck, user  # noqa: E402
 from core.paths import repo_root  # noqa: E402
 from core.registry import harness_version, version_banner  # noqa: E402
 import doctor  # noqa: E402
@@ -33,6 +36,7 @@ from modules.task import commands as task_commands  # noqa: E402
 
 
 SHORT_FLAG = "--short"
+JSON_FLAG = "--json"
 ARGV = None  # the arguments main() was called with, when it was not the command line
 
 
@@ -112,7 +116,9 @@ def main(argv=None) -> int:
     global ARGV
     ARGV = argv
     safe_streams()
-    args = build_parser().parse_args(argv)
+    words = list(sys.argv[1:] if argv is None else argv)
+    forced_json = JSON_FLAG in words
+    args = build_parser().parse_args([word for word in words if word != JSON_FLAG])
     if args.command == "doctor":
         return doctor.run(repo_root())
     try:
@@ -123,10 +129,20 @@ def main(argv=None) -> int:
                 print(result["_text"])
             return code
         compact = isinstance(result, dict) and result.pop("_compact", False)  # a result an agent reads in bulk: no indentation
+        if output.as_text(sys.stdout, forced_json, getattr(args, "person_only", False)):
+            shown = getattr(args, "render", None)  # a command's own text (the task list as a table), else the generic one
+            print(shown(result) if shown else render.render(result))
+            return code
         print(json.dumps(result, indent=None if compact else 2, separators=(",", ":") if compact else None, sort_keys=True, ensure_ascii=False))
         return code
     except Exception as error:
-        print(f"harness: {error}", file=sys.stderr)
+        said = f"harness: {error}"
+        try:
+            if sys.stderr.isatty():  # a person reads it: lines that fit, with commands kept whole
+                said = "\n".join(render.wrap(said, render.columns(), "  "))
+        except Exception:  # noqa: BLE001 - the error itself must always come out
+            pass
+        print(said, file=sys.stderr)
         return 1
 
 

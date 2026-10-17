@@ -307,10 +307,6 @@ def recovery_steps(repo: Dict[str, Any], branch: str, switched: bool, written: L
     return steps
 
 
-def recovery_commands(repo: Dict[str, Any], branch: str, switched: bool, written: List[Dict[str, Any]]) -> List[str]:
-    return [render(step) for step in recovery_steps(repo, branch, switched, written)]
-
-
 def run_recovery(steps: List[Dict[str, Any]], branch: str, timeout: int) -> List[Dict[str, Any]]:
     """Run the steps of a `partial` record, repository by repository. Returns one result per step: command, status, message.
 

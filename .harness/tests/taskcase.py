@@ -15,7 +15,7 @@ from support import HarnessTestCase, payload, pre_tool
 
 from core import tasks
 from modules.task import task as task_ops
-from test_targets import GIT, make_repo, run_git
+from support import GIT, make_repo, run_git
 
 SESSION = "sess-main"
 NAME = "job1"

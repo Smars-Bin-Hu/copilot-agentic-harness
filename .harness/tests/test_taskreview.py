@@ -18,7 +18,7 @@ from core import approval, tasks
 from modules.task import task as task_ops
 from modules.task import taskreview, tasksnap
 from modules.task.common import CommandError
-from test_targets import GIT
+from support import GIT
 
 JOB = f"{BASE}/job"
 AGENT = {"name": "reviewer", "agent_type": "reviewer", "prompt": "检查评审包", "description": "check"}

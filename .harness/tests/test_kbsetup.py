@@ -8,7 +8,7 @@ import unittest
 
 import support  # noqa: F401  (puts the engine on sys.path)
 from taskcase import SessionCase
-from test_targets import GIT, run_git
+from support import GIT, run_git
 
 KB = "knowledge-base"
 FILES = {"README.md": "# index\n- [orders](orders/delay.md)\n", "orders/delay.md": "old\n"}

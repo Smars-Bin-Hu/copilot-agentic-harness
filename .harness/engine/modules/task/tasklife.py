@@ -260,11 +260,6 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     return {"why": "", "since": ""}
 
 
-def waiting_for(root: Path, task: str, data: Dict[str, Any]) -> str:
-    why = waiting(root, task, data)["why"]
-    return messages.text(f"task.waiting.{why}") if why else ""
-
-
 def seconds_since(stamp: str) -> Optional[float]:
     try:
         return max(0.0, (datetime.now(timezone.utc) - datetime.fromisoformat(stamp)).total_seconds())

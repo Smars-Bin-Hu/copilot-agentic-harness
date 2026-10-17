@@ -88,7 +88,6 @@ Add one entry when a step passes, the newest on top. Write only changes that are
 
 - A redo step gets an entry too, saying which step is redone.
 - Entries that are written are not changed. If one is wrong, add a correction.
-- When the whole goal is done, the user may have `LOG.md` put into the format of the skill `generic-populate-development-log`; the user decides.
 
 ## Keep NOW.md short
 

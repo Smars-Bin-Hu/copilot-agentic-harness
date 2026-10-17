@@ -158,3 +158,28 @@ class HarnessTestCase(unittest.TestCase):
         for path in sorted(base.glob("*/*.jsonl")):
             rows.extend(json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
         return sorted(rows, key=lambda row: row["at"])
+
+
+# --- git repositories for tests ---------------------------------------------------------------------
+
+GIT = shutil.which("git")
+IDENTITY = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com"}
+
+
+def run_git(path: Path, *arguments: str) -> str:
+    done = subprocess.run(["git", "-C", str(path), *arguments], capture_output=True, text=True, env={**os.environ, **IDENTITY}, check=True)
+    return done.stdout.strip()
+
+
+def make_repo(path: Path, files: Optional[Dict[str, str]] = None, branch: str = "main") -> Path:
+    """A git repository with one commit on `branch`."""
+    path.mkdir(parents=True)
+    run_git(path, "init", "-q")
+    run_git(path, "symbolic-ref", "HEAD", f"refs/heads/{branch}")
+    for name, body in (files or {"README.md": "x\n"}).items():
+        target = path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(body.encode("utf-8"))  # the text as written: Windows must not turn \n into \r\n
+    run_git(path, "add", "-A")
+    run_git(path, "commit", "-q", "-m", "first")
+    return path

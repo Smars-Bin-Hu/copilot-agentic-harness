@@ -12,7 +12,7 @@ from typing import Optional
 from support import HarnessTestCase, payload, pre_tool
 
 from core import repo_paths
-from test_targets import GIT, make_repo
+from support import GIT, make_repo
 
 
 class FolderNameTests(unittest.TestCase):

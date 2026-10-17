@@ -45,7 +45,6 @@ The simplest way: write it as a script in the `scripts/` of a skill, and the age
 
 - Open `.harness/engine/adapters/tool_kinds.json` and see how tool names are sorted.
 - Run `harness --help` and look at the list of commands.
-- Read [tools.instructions.md](../../../instructions/tools.instructions.md).
 
 ## Where to look
 

@@ -17,7 +17,7 @@ from core.events import HookEvent
 from modules.observe import kbstats
 from support import post_tool
 from taskcase import SESSION, TaskCase
-from test_targets import GIT, make_repo, run_git
+from support import GIT, make_repo, run_git
 
 KB = "knowledge-base"
 

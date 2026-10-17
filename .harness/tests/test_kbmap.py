@@ -8,11 +8,11 @@ import unittest
 from unittest import mock
 
 from support import REPO, HarnessTestCase
-from test_targets import GIT, make_repo, run_git
+from support import GIT, make_repo, run_git
 
-from core import kbextract, kbmap
+from core import kbextract, kbgraph, kbmap
 
-EXAMPLE = REPO / ".harness" / "contracts" / "kb" / "toolkit-example-sqlserver"
+EXAMPLE = REPO / ".harness" / "examples" / "kb-toolkits" / "sqlserver"
 SQL = EXAMPLE / "extract_sqlserver.py"
 
 LOAD_ORDERS = """SET ANSI_NULLS ON
@@ -181,7 +181,7 @@ class SpringSampleTests(unittest.TestCase):
     """The second sample toolkit, a backend service: it shows the method is not tied to SQL."""
 
     def setUp(self) -> None:
-        self.java = kbextract.load(REPO / ".harness" / "contracts" / "kb" / "toolkit-example-spring" / "extract_spring.py", "java")
+        self.java = kbextract.load(REPO / ".harness" / "examples" / "kb-toolkits" / "spring" / "extract_spring.py", "java")
 
     def test_a_controller_its_endpoints_and_views(self) -> None:
         found = {item["id"]: item for item in self.java(CONTROLLER, {"path": "PetController.java"})}
@@ -204,10 +204,10 @@ class SpringSampleTests(unittest.TestCase):
 
 class HarnessPartTests(unittest.TestCase):
     def test_a_glob_with_two_stars_matches_no_folder_too(self) -> None:
-        self.assertTrue(kbmap.matches("**/*.sql", "a.sql"))
-        self.assertTrue(kbmap.matches("templates/**/*.html", "templates/welcome.html"))
-        self.assertTrue(kbmap.matches("templates/**/*.html", "templates/a/b.html"))
-        self.assertFalse(kbmap.matches("templates/**/*.html", "other/welcome.html"))
+        self.assertTrue(kbgraph.matches("**/*.sql", "a.sql"))
+        self.assertTrue(kbgraph.matches("templates/**/*.html", "templates/welcome.html"))
+        self.assertTrue(kbgraph.matches("templates/**/*.html", "templates/a/b.html"))
+        self.assertFalse(kbgraph.matches("templates/**/*.html", "other/welcome.html"))
 
     def test_the_rules_extractor_with_many_objects_in_one_file(self) -> None:
         rule = {"node": {"type": "table", "pattern": r"CREATE TABLE (\w+)", "many": True}}
@@ -215,7 +215,7 @@ class HarnessPartTests(unittest.TestCase):
         self.assertEqual([(item["id"], item["line"]) for item in found], [("table:a", 1), ("table:b", 2)])
 
     def test_plain_names_prefer_the_same_case(self) -> None:
-        graph = kbmap.Graph()
+        graph = kbgraph.Graph()
         graph.nodes = {
             "class:Vets": {"id": "class:Vets", "type": "class", "name": "Vets"},
             "table:vets": {"id": "table:vets", "type": "table", "name": "vets"},
@@ -274,24 +274,24 @@ class MapTests(HarnessTestCase):
 
     def test_near_walks_both_ways_across_the_job_the_package_and_the_procedure(self) -> None:
         self.build()
-        result = kbmap.near(self.root, "summary", depth=3, direction="up")
+        result = kbgraph.near(self.root, "summary", depth=3, direction="up")
         self.assertEqual(result["id"], "table:Shop.dbo.summary")
         found = {(row["id"], row["how"]) for row in result["used_by"]}
         self.assertIn(("sp:Shop.dbo.usp_publish_summary", "writes"), found)
         self.assertIn(("package:ShopEtl/Publish", "reads"), found)
         self.assertIn(("job:Shop_Orders", "runs"), found)
-        down = kbmap.near(self.root, "job:Shop_Orders", depth=1, direction="down")
+        down = kbgraph.near(self.root, "job:Shop_Orders", depth=1, direction="down")
         self.assertEqual({row["id"] for row in down["uses"]}, {"sp:Shop.dbo.usp_load_orders", "package:ShopEtl/Publish"})
 
     def test_near_with_a_name_that_fits_several(self) -> None:
         self.build()
-        self.assertGreater(len(kbmap.near(self.root, "usp_load")["matches"]), 1)
+        self.assertGreater(len(kbgraph.near(self.root, "usp_load")["matches"]), 1)
         with self.assertRaises(kbmap.MapError):
-            kbmap.near(self.root, "nothing_like_it")
+            kbgraph.near(self.root, "nothing_like_it")
 
     def test_split_takes_out_what_every_job_uses_then_cuts_by_entry_point(self) -> None:
         self.build()
-        result = kbmap.split(self.root)
+        result = kbgraph.split(self.root)
         self.assertEqual({item["id"] for item in result["shared"]}, {"sp:Shop.dbo.usp_log", "table:Shop.dbo.log", "table:Shop.dbo.calendar"})
         groups = {tuple(item["entry_points"]): item for item in result["domains"]}
         self.assertEqual(set(groups), {("job:Shop_Orders",), ("job:Shop_Customers",), ("job:Shop_Audit",)})
@@ -302,7 +302,7 @@ class MapTests(HarnessTestCase):
 
     def test_a_high_bar_for_shared_joins_everything(self) -> None:
         self.build()
-        result = kbmap.split(self.root, shared_min=9)
+        result = kbgraph.split(self.root, shared_min=9)
         self.assertEqual(len(result["domains"]), 1)
         self.assertIn("note", result)
 
@@ -349,7 +349,7 @@ class MapTests(HarnessTestCase):
         run_git(self.repo, "rm", "-q", "Shop/dbo/Stored Procedures/usp_log.sql")
         run_git(self.repo, "commit", "-qm", "drop the log procedure")
         self.build()
-        result = kbmap.gaps(self.root)
+        result = kbgraph.gaps(self.root)
         found = {item["name"]: item for item in result["missing"]}
         self.assertIn("Shop.dbo.usp_log", found)
         self.assertIn("job:Shop_Audit", found["Shop.dbo.usp_log"]["used_by"])
@@ -364,7 +364,7 @@ class MapTests(HarnessTestCase):
         self.build()
         listing = self.root / "prod.csv"
         listing.write_text("server,id\nP1,job:Shop_Orders\nP1,job:Shop_Ghost\nP1,sp:Shop.dbo.usp_load_orders\nP1,sp:Shop.dbo.usp_log\n", encoding="utf-8")
-        result = kbmap.gaps(self.root, listing)
+        result = kbgraph.gaps(self.root, listing)
         only_prod = {item["id"]: item for item in result["in_production_not_in_repos"]}
         self.assertEqual(sorted(only_prod), ["job:Shop_Ghost", "sp:Shop.dbo.usp_log"])
         self.assertIn("job:Shop_Audit", only_prod["sp:Shop.dbo.usp_log"]["used_by"])
@@ -377,7 +377,7 @@ class MapTests(HarnessTestCase):
         listing = self.root / "prod.txt"
         listing.write_text("nothing here\n", encoding="utf-8")
         with self.assertRaises(kbmap.MapError):
-            kbmap.gaps(self.root, listing)
+            kbgraph.gaps(self.root, listing)
 
     def test_survey_needs_no_toolkit(self) -> None:
         shutil.rmtree(self.kit)
@@ -408,7 +408,7 @@ class MapTests(HarnessTestCase):
 
     def test_no_map_yet(self) -> None:
         with self.assertRaises(kbmap.MapError):
-            kbmap.split(self.root)
+            kbgraph.split(self.root)
 
 
 if __name__ == "__main__":

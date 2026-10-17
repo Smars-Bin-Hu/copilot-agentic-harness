@@ -9,9 +9,9 @@ from unittest import mock
 from pathlib import Path
 
 from support import HarnessTestCase
-from test_targets import GIT, make_repo, run_git
+from support import GIT, make_repo, run_git
 
-from core import gitread, kbmigrate, kbstd, miniyaml, tasks
+from core import gitread, kbstd, miniyaml, tasks
 
 DOMAIN = """schema_version: 1
 domain: orders
@@ -174,13 +174,13 @@ class StaleTests(CheckCase):
         run_git(self.repo, "commit", "-qam", "change")
         dev = self.root / tasks.TASKS_DIR / "kb-fix" / "DEV" / "kb" / "domains" / "orders"
         shutil.copytree(self.folder, dev)
-        with self.assertRaises(kbmigrate.MigrateError):
-            kbmigrate.stamp(self.root, self.folder)  # never the knowledge base itself
-        with self.assertRaises(kbmigrate.MigrateError):
-            kbmigrate.stamp(self.root, dev, ["sp:nope"])
-        result = kbmigrate.stamp(self.root, dev, ["sp:Shop.dbo.usp_load_orders"])
+        with self.assertRaises(kbstd.KbError):
+            kbstd.stamp(self.root, self.folder)  # never the knowledge base itself
+        with self.assertRaises(kbstd.KbError):
+            kbstd.stamp(self.root, dev, ["sp:nope"])
+        result = kbstd.stamp(self.root, dev, ["sp:Shop.dbo.usp_load_orders"])
         self.assertEqual((result["stamped"], result["unchanged"]), (["sp:Shop.dbo.usp_load_orders"], 0))
-        self.assertEqual(kbmigrate.stamp(self.root, dev)["stamped"], [])
+        self.assertEqual(kbstd.stamp(self.root, dev)["stamped"], [])
         self.assertNotIn("_line", (dev / kbstd.INDEX_FILE).read_text(encoding="utf-8"))
         shutil.copy(dev / kbstd.INDEX_FILE, self.folder / kbstd.INDEX_FILE)
         self.assertEqual(kbstd.stale(self.root, "orders")["changed"], [])
@@ -193,8 +193,8 @@ class StaleTests(CheckCase):
         self.assertEqual(result["unreadable_repos"][0]["repo"], "shop_repo")
         dev = self.root / tasks.TASKS_DIR / "kb-fix" / "DEV" / "kb" / "domains" / "orders"
         shutil.copytree(self.folder, dev)
-        with self.assertRaises(kbmigrate.MigrateError):
-            kbmigrate.stamp(self.root, dev)
+        with self.assertRaises(kbstd.KbError):
+            kbstd.stamp(self.root, dev)
 
     def test_many_paths_are_asked_in_chunks(self) -> None:
         with mock.patch.object(gitread, "PATHS_PER_CALL", 1):

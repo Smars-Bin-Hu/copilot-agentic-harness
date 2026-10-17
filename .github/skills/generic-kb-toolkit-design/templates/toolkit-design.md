@@ -32,7 +32,7 @@ Names: `sql` | `plain`, because <why>.
 
 | Glob | Extractor | Why |
 | --- | --- | --- |
-| `**/*.sql` | `extract_<x>.py` `<function>` (from the sample `toolkit-example-sqlserver`, changed: <what>) | <why not the built-in regex> |
+| `**/*.sql` | `extract_<x>.py` `<function>` (from the sample `.harness/examples/kb-toolkits/sqlserver`, changed: <what>) | <why not the built-in regex> |
 
 ## Facts (from the user)
 

@@ -49,11 +49,8 @@ def say(key: str, /, **values: Any) -> str:
 
 
 def settings(root: Path) -> Dict[str, int]:
-    try:
-        found = config.load_policy(root, POLICY_NAME).get("review") or {}
-    except Exception:  # noqa: BLE001 - a broken policy must not open or close a gate by accident: the defaults hold
-        found = {}
-    return {key: found[key] if isinstance(found.get(key), int) and not isinstance(found.get(key), bool) and found[key] >= 0 else value for key, value in DEFAULTS.items()}
+    found = config.policy_or_empty(root, POLICY_NAME).get("review") or {}  # a broken policy must not open or close a gate by accident
+    return {key: found[key] if config.whole(found.get(key), -1) >= 0 else value for key, value in DEFAULTS.items()}
 
 
 def marker(prompt: str) -> Optional[int]:

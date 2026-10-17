@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, user
+from core import config, kbstd, messages, output, render, skillcheck, standards, targets, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -642,15 +642,6 @@ def check_agents(report: Report, root: Path) -> None:
     report.ok(say("doctor.agents.ok", count=len(chosen)))
 
 
-def check_old_tasks(report: Report, root: Path) -> None:
-    """Task folders of before 1.1.0 are not read any more. Say so, so nobody waits for a task that cannot be opened."""
-    old = root / tasks.OLD_TASKS_DIR
-    names = sorted(path.name for path in old.iterdir() if path.is_dir()) if old.is_dir() else []
-    if names:
-        shown = messages.joined(names[:5]) + (say("rules.task.open_more") if len(names) > 5 else "")
-        report.warn(say("doctor.old_tasks", old=tasks.OLD_TASKS_DIR, count=len(names), shown=shown, tasks_dir=tasks.TASKS_DIR))
-
-
 def shown(lines: List[str]) -> str:
     """On a terminal, a long line goes on under its text, not under `[OK]`. On a pipe, one line per check, as before."""
     try:
@@ -693,7 +684,6 @@ def run(root: Path) -> int:
     check_knowledge_base(report, root)
     check_skills(report, root)
     check_standards(report, root)
-    check_old_tasks(report, root)
     for name, entry in registry["modules"].items():
         check_module(report, root, name, entry)
     print(shown(report.lines))

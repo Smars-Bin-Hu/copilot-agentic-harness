@@ -13,7 +13,7 @@ The map lists every object of the target repositories and every use between them
   DESIGN.md           the design the user approved
 ```
 
-Two samples: [toolkit-example-sqlserver/](toolkit-example-sqlserver/) (procedures, SQL Agent jobs, SSIS packages) and [toolkit-example-spring/](toolkit-example-spring/) (a Spring Boot service, built on spring-petclinic; its `DESIGN.md` shows how it was built). The harness ships no toolkit: without one, `kb map` says so.
+Two samples, in `.harness/examples/kb-toolkits/`: [sqlserver/](../../examples/kb-toolkits/sqlserver/) (procedures, SQL Agent jobs, SSIS packages) and [spring/](../../examples/kb-toolkits/spring/) (a Spring Boot service, built on spring-petclinic; its `DESIGN.md` shows how it was built). The harness ships no toolkit: without one, `kb map` says so.
 
 `kb map` runs code from the knowledge base. The knowledge base changes only through a write-back a person approves, so a person has read that code.
 

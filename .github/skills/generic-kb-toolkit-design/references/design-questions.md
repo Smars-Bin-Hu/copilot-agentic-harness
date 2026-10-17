@@ -22,7 +22,7 @@ Answer each from sample files; write the answer and the file it came from into `
 
 Entry points: what a scheduler, a user or another system starts (`job`, an endpoint, a message listener, a route). They become `entry_types`. With none, objects nothing uses but that use something count as entry points.
 
-**Pick the unit that owns the starts**, not each start: a controller, not each of its endpoints; a job, not each step. `kb split` takes out what many entry points reach as shared; when many entry points share one owner, the owner is taken out and the cut falls apart (seen on spring-petclinic, see `toolkit-example-spring/DESIGN.md`).
+**Pick the unit that owns the starts**, not each start: a controller, not each of its endpoints; a job, not each step. `kb split` takes out what many entry points reach as shared; when many entry points share one owner, the owner is taken out and the cut falls apart (seen on spring-petclinic, see `.harness/examples/kb-toolkits/spring/DESIGN.md`).
 
 ## Blind spots
 

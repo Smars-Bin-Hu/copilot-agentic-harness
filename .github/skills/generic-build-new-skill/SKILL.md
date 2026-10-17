@@ -1,6 +1,6 @@
 ---
 name: generic-build-new-skill
-description: 'Build a new skill from the template, then check and test it. Use when the user asks to create, write or scaffold a skill (a domain-* skill of the company included), or to check or test a skill. Keywords: new skill, SKILL.md, domain skill, skill check, skill trigger.'
+description: 'Build a new skill from the template, then check and test it; or repair the form of an existing skill without changing what it says. Use when the user asks to create, write or scaffold a skill (a domain-* skill of the company included), to check or test a skill, or to repair a skill or bring it to the template. Keywords: new skill, SKILL.md, domain skill, skill check, skill trigger, repair skill.'
 type: unit
 specificTo: generic
 ---
@@ -13,6 +13,7 @@ Build a skill from the template, check its form and test that it loads.
 
 - The user asks to create a new skill, or a `domain-*` skill for a company.
 - The user asks to check or test a skill that exists.
+- The user asks to repair a skill, or to bring it to the template: follow [repair.md](./references/repair.md) instead of the steps below.
 
 **Who starts it: auto**, when the user asks for a new skill or for a check of one.
 

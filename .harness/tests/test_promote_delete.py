@@ -11,8 +11,8 @@ from typing import Any, List
 
 import support  # noqa: F401  (puts the engine on sys.path)
 from modules.task import promote_target, task as task_ops
-from test_promote import BRANCH, PromoteCase, git_text, porcelain
-from test_targets import run_git
+from test_promote import BRANCH, PromoteCase, porcelain
+from support import run_git
 
 
 class DeleteCase(PromoteCase):
@@ -53,11 +53,11 @@ class PlanAndRunTests(DeleteCase):
         self.dry_run(request_id)
         self.approve(request_id)
         self.promote_now(request_id)
-        self.assertEqual(git_text(self.repo_b, "symbolic-ref", "--short", "HEAD"), BRANCH)
-        self.assertEqual(git_text(self.repo_b, "rev-parse", "HEAD"), main)
+        self.assertEqual(run_git(self.repo_b, "symbolic-ref", "--short", "HEAD"), BRANCH)
+        self.assertEqual(run_git(self.repo_b, "rev-parse", "HEAD"), main)
         self.assertEqual(porcelain(self.repo_b), [" D src/b.sql"])
         self.assertFalse((self.repo_b / "src" / "b.sql").exists())
-        self.assertEqual(git_text(self.repo_b, "show", "main:src/b.sql"), "select 2;")
+        self.assertEqual(run_git(self.repo_b, "show", "main:src/b.sql"), "select 2;")
         self.assertEqual(self.request(request_id)["promote"]["files"][0]["action"], "delete")
 
     def test_a_folder_that_lost_its_last_file_goes_too(self) -> None:

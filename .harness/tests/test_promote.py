@@ -21,13 +21,9 @@ from core import tasks
 from modules.task import promote_target, task as task_ops
 from modules.task.common import CommandError
 from taskcase import SESSION, TaskCase
-from test_targets import GIT, run_git
+from support import GIT, run_git
 
 BRANCH = "feature/add_column"
-
-
-def git_text(path: Path, *arguments: str) -> str:
-    return run_git(path, *arguments)
 
 
 @contextlib.contextmanager
@@ -99,8 +95,8 @@ class PromoteCase(TaskCase):
 
     def assert_untouched(self, repo: Path) -> None:
         self.assertEqual(self.branches(repo), ["main"])
-        self.assertEqual(git_text(repo, "symbolic-ref", "--short", "HEAD"), "main")
-        self.assertEqual(git_text(repo, "status", "--porcelain"), "")
+        self.assertEqual(run_git(repo, "symbolic-ref", "--short", "HEAD"), "main")
+        self.assertEqual(run_git(repo, "status", "--porcelain"), "")
 
 
 class PlanTests(PromoteCase):
@@ -177,7 +173,7 @@ class CheckTests(PromoteCase):
         self.assertEqual(result["repos"][0]["base_commit"], self.main_commit(self.repo_b))
         self.approve(request_id)
         self.promote_now(request_id)
-        self.assertEqual(git_text(self.repo_b, "rev-parse", f"{BRANCH}~0"), self.main_commit(self.repo_b))
+        self.assertEqual(run_git(self.repo_b, "rev-parse", f"{BRANCH}~0"), self.main_commit(self.repo_b))
 
     def test_the_main_that_moved_after_the_dry_run_needs_a_new_dry_run(self) -> None:
         request_id = self.flow({"repo_b/src/a.sql": "select 1, 2;\n"})
@@ -234,12 +230,12 @@ class RunTests(PromoteCase):
         self.approve(request_id)
         result = self.promote_now(request_id)
         self.assertIn(BRANCH, result["next"])
-        self.assertEqual(git_text(self.repo_b, "symbolic-ref", "--short", "HEAD"), BRANCH)
-        self.assertEqual(git_text(self.repo_b, "rev-parse", "HEAD"), main)  # no commit
+        self.assertEqual(run_git(self.repo_b, "symbolic-ref", "--short", "HEAD"), BRANCH)
+        self.assertEqual(run_git(self.repo_b, "rev-parse", "HEAD"), main)  # no commit
         self.assertEqual(self.main_commit(self.repo_b), main)
         self.assertEqual(porcelain(self.repo_b), [" M src/a.sql", "?? src/new.sql"])
         self.assertEqual((self.repo_b / "src" / "a.sql").read_text(encoding="utf-8"), "select 1, 2;\n")
-        self.assertEqual(git_text(self.repo_b, "show", "main:src/a.sql"), "select 1;")
+        self.assertEqual(run_git(self.repo_b, "show", "main:src/a.sql"), "select 1;")
         self.assert_untouched(self.repo_a)
         record = self.request(request_id)["promote"]
         self.assertEqual((record["state"], record["branch"]), ("done", BRANCH))
@@ -252,7 +248,7 @@ class RunTests(PromoteCase):
         self.approve(request_id)
         self.promote_now(request_id)
         for repo, name in ((self.repo_b, "src/a.sql"), (self.repo_a, "a.sql")):
-            self.assertEqual(git_text(repo, "symbolic-ref", "--short", "HEAD"), BRANCH)
+            self.assertEqual(run_git(repo, "symbolic-ref", "--short", "HEAD"), BRANCH)
             self.assertEqual(porcelain(repo), [f" M {name}"])
 
     def test_the_bytes_are_written_as_they_are(self) -> None:
@@ -377,8 +373,8 @@ class FailureTests(FailureBase):
         record = self.request(request_id)["promote"]
         self.assertEqual((record["state"], record["repos_done"], record["repo_failed"], record["repos_untouched"]), ("partial", ["repo_a"], "repo_b", []))
         self.assertTrue((self.root / request_id / "DEV" / f"{task_ops.name_of(request_id)}.patch").is_file())  # the patch was saved before any write
-        self.assertEqual(git_text(self.repo_a, "symbolic-ref", "--short", "HEAD"), BRANCH)
-        self.assertEqual(git_text(self.repo_b, "symbolic-ref", "--short", "HEAD"), BRANCH)  # switched, then the write failed
+        self.assertEqual(run_git(self.repo_a, "symbolic-ref", "--short", "HEAD"), BRANCH)
+        self.assertEqual(run_git(self.repo_b, "symbolic-ref", "--short", "HEAD"), BRANCH)  # switched, then the write failed
         for line in record["recovery"]:
             self.assertIn(" -C ", line)
             self.assertIn(line, message)
@@ -439,14 +435,14 @@ class FailureTests(FailureBase):
 
     def test_the_recovery_commands_quote_paths_with_spaces(self) -> None:
         repo = {"path": "/tmp/my repos/a", "current_branch": "main", "base_ref": "main"}
-        commands = promote_target.recovery_commands(repo, BRANCH, True, [{"action": "modify", "relative": "src/a b.sql"}, {"action": "create", "relative": "n.sql"}])
+        commands = [promote_target.render(step) for step in promote_target.recovery_steps(repo, BRANCH, True, [{"action": "modify", "relative": "src/a b.sql"}, {"action": "create", "relative": "n.sql"}])]
         self.assertEqual(commands, [
             'git -C "/tmp/my repos/a" restore -- "src/a b.sql"',
             'git -C "/tmp/my repos/a" clean -f -- "n.sql"',
             'git -C "/tmp/my repos/a" switch "main"',
             f'git -C "/tmp/my repos/a" branch -d "{BRANCH}"',
         ])
-        detached = promote_target.recovery_commands({**repo, "current_branch": "(detached)"}, BRANCH, True, [])
+        detached = [promote_target.render(step) for step in promote_target.recovery_steps({**repo, "current_branch": "(detached)"}, BRANCH, True, [])]
         self.assertEqual(detached[0], 'git -C "/tmp/my repos/a" switch "main"')
 
 
@@ -501,14 +497,14 @@ class RecoverTests(FailureBase):
     def test_only_a_person_at_a_terminal_can_recover(self) -> None:
         request_id = self.partial_request()
         self.assertIn("只能由用户在自己的终端", self.refused("task", "recover", "--task", request_id))
-        self.assertEqual(git_text(self.repo_a, "symbolic-ref", "--short", "HEAD"), BRANCH)  # nothing was done
+        self.assertEqual(run_git(self.repo_a, "symbolic-ref", "--short", "HEAD"), BRANCH)  # nothing was done
 
     def test_a_wrong_code_does_nothing(self) -> None:
         request_id = self.partial_request()
         with self.assertRaises(CommandError) as raised:
             self.recover(request_id, code="nope")
         self.assertIn("什么都没有做", str(raised.exception))
-        self.assertEqual(git_text(self.repo_a, "symbolic-ref", "--short", "HEAD"), BRANCH)
+        self.assertEqual(run_git(self.repo_a, "symbolic-ref", "--short", "HEAD"), BRANCH)
         self.assertEqual(self.request(request_id)["promote"]["state"], "partial")
 
     def test_it_is_for_a_promote_that_stopped_halfway(self) -> None:
@@ -529,7 +525,7 @@ class RecoverTests(FailureBase):
             self.assertIn("没有成功", str(raised.exception))
             self.assertIn("[failed]", self.shown.getvalue())
             self.assert_untouched(self.repo_a)  # the other repository is back
-            self.assertEqual(git_text(self.repo_b, "symbolic-ref", "--short", "HEAD"), BRANCH)  # this one stopped at its first step
+            self.assertEqual(run_git(self.repo_b, "symbolic-ref", "--short", "HEAD"), BRANCH)  # this one stopped at its first step
             self.assertEqual(self.request(request_id)["promote"]["state"], "partial")
         self.recover(request_id)  # the finished repository's steps are skipped, the rest runs
         self.assertIn("[skipped]", self.shown.getvalue())

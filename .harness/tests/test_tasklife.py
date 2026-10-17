@@ -182,31 +182,6 @@ class OpenTests(LifeCase):
         self.assertEqual(self.data("first")["status"], "open")
         self.assertEqual(self.open("first")["left_open"], f"{BASE}/second")
 
-    def test_a_task_moved_from_the_old_place_keeps_its_state_and_gets_its_new_path(self) -> None:
-        old = self.root / tasks.OLD_TASKS_DIR / "moved"
-        (old / ".task").mkdir(parents=True)
-        (old / "PLAN.md").write_text("# plan\n", encoding="utf-8")
-        before = {
-            "schema_version": 1, "task": f"{tasks.OLD_TASKS_DIR}/moved", "name": "moved", "session_id": "gone", "surface": "vscode", "status": "closed",
-            "created_at": "2026-10-01T00:00:00+00:00", "updated_at": "2026-10-01T00:00:00+00:00", "round": 1, "round_started_at": "2026-10-01T00:00:00+00:00",
-            "target_mode": False, "branch": "", "targets": {}, "target_files": {}, "deletes": [], "plan": {}, "promote": {"state": "none"}, "rounds": [], "events": [], "verify": "on",
-        }
-        (old / ".task" / "task.json").write_text(json.dumps(before), encoding="utf-8")
-        (self.root / BASE).mkdir(parents=True, exist_ok=True)
-        old.rename(self.root / BASE / "moved")
-        result = self.open("moved")
-        self.assertEqual((result["task"], result["reopened"]), (f"{BASE}/moved", True))
-        self.assertEqual(self.data("moved")["task"], f"{BASE}/moved")
-        context = self.hook(payload("UserPromptSubmit", S1, prompt="继续"))["additionalContext"]
-        self.assertIn(f"任务：{BASE}/moved，第 1 轮", context)
-        self.assertNotIn(tasks.OLD_TASKS_DIR, context)
-        self.assertEqual(self.write(f"{BASE}/moved/notes.md"), {})
-
-    def test_a_task_folder_of_before_1_1_is_not_found(self) -> None:
-        (self.root / tasks.OLD_TASKS_DIR / "old").mkdir(parents=True)
-        self.assertIn("没有任务 `old`", self.refused("task", "open", "old", "--session-id", S1))
-        self.assertEqual(self.listed()["tasks"], [])
-
 
 class WriteScopeTests(LifeCase):
     def test_the_gate_follows_the_task_the_session_holds(self) -> None:

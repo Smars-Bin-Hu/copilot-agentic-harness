@@ -25,10 +25,7 @@ def git_name(root: Path) -> str:
 
 def who(root: Path) -> Dict[str, str]:
     """The name and where it comes from: `user.override.json`, `git` or `none`."""
-    try:
-        name = config.load_policy(root, POLICY_NAME).get("name", "")
-    except Exception:  # noqa: BLE001 - a broken policy is doctor's to report
-        name = ""
+    name = config.policy_or_empty(root, POLICY_NAME).get("name", "")  # a broken policy is doctor's to report
     if isinstance(name, str) and name.strip():
         return {"name": name.strip(), "source": f"{POLICY_NAME}{config.OVERRIDE_SUFFIX}"}
     name = git_name(root)

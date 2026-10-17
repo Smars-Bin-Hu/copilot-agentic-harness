@@ -24,19 +24,13 @@ REPLACED: Dict[str, str] = {}  # stream name -> the encoding `auto` replaced wit
 
 def setting(root: Optional[Path] = None) -> str:
     """`auto`, `utf-8` or `native`, as the policy says. Anything else, or a policy that cannot be read, is `auto`."""
-    try:
-        value = config.load_policy(root or repo_root(), POLICY_NAME)["output"]["encoding"]
-    except Exception:  # noqa: BLE001 - printing must work with a broken policy; doctor reports it
-        return AUTO
+    value = (config.policy_or_empty(root or repo_root(), POLICY_NAME).get("output") or {}).get("encoding")  # doctor reports a broken policy
     return value if value in CHOICES else AUTO
 
 
 def format_setting(root: Optional[Path] = None) -> str:
     """`auto`, `json` or `text`, as `output.format` of the policy says. Anything else, or a broken policy, is `auto`."""
-    try:
-        value = config.load_policy(root or repo_root(), POLICY_NAME)["output"].get("format", AUTO)
-    except Exception:  # noqa: BLE001 - printing must work with a broken policy; doctor reports it
-        return AUTO
+    value = (config.policy_or_empty(root or repo_root(), POLICY_NAME).get("output") or {}).get("format", AUTO)
     return value if value in FORMATS else AUTO
 
 

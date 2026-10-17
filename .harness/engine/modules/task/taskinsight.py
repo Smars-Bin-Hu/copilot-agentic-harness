@@ -186,11 +186,8 @@ def from_hook_log(rows: List[Dict[str, Any]], hook_prompts: List[Dict[str, Any]]
 
 def prompt_chars(root: Path) -> int:
     """Policy task.json `report.prompt_chars`: how much of what the user typed the page shows for a prompt. 0: nothing."""
-    try:
-        value = (common.config.load_policy(root, common.POLICY_NAME).get("report") or {}).get("prompt_chars", PROMPT_CHARS)
-        return max(0, int(value))
-    except Exception:  # noqa: BLE001
-        return PROMPT_CHARS
+    value = (common.config.policy_or_empty(root, common.POLICY_NAME).get("report") or {}).get("prompt_chars")
+    return max(0, common.config.whole(value, PROMPT_CHARS))
 
 
 def session_prompts(root: Path, task: str, session_id: str, surface: str, picked_up: List[float], closed: List[float], use_events: bool) -> Dict[str, Any]:
@@ -562,8 +559,4 @@ def of_task(root: Path, task: str, use_events: Optional[bool] = None) -> Dict[st
 
 def events_allowed(root: Path) -> bool:
     """Policy task.json `report.copilot_events`. A policy that cannot be read does not stop a report: the default is used."""
-    try:
-        policy = common.config.load_policy(root, common.POLICY_NAME)
-        return bool((policy.get("report") or {}).get("copilot_events", True))
-    except Exception:  # noqa: BLE001
-        return True
+    return bool((common.config.policy_or_empty(root, common.POLICY_NAME).get("report") or {}).get("copilot_events", True))

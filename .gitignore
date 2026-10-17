@@ -18,8 +18,6 @@ __pycache__/
 !.workspace/sandbox/tasks/
 .workspace/sandbox/tasks/*
 !.workspace/sandbox/tasks/.gitkeep
-# Task folders of before 1.1.0. Not read any more; kept out of git.
-.workspace/current_tasks/
 .workspace/reports/*
 !.workspace/reports/.gitkeep
 .workspace/goals/*
@@ -40,3 +38,4 @@ node_modules/
 
 # Local Claude Code development notes (not shipped to Copilot users)
 /CLAUDE.md
+/.claude/

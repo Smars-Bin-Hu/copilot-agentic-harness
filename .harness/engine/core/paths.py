@@ -8,11 +8,6 @@ from pathlib import Path
 from typing import Optional
 
 
-
-
-CLI_PATH = ".harness/engine/cli.py"
-
-
 def is_windows(windows: Optional[bool] = None) -> bool:
     return os.name == "nt" if windows is None else windows
 
@@ -33,11 +28,6 @@ def cli_command(windows: Optional[bool] = None) -> str:
     return SHORT_COMMAND
 
 
-def mkdir_command(windows: Optional[bool] = None) -> str:
-    """Make a folder and its parents: `mkdir` does it on Windows (PowerShell and cmd), `mkdir -p` elsewhere."""
-    return "mkdir" if is_windows(windows) else "mkdir -p"
-
-
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -48,10 +38,6 @@ def repo_root() -> Path:
         return Path(override).resolve()
     # .harness/engine/core/paths.py -> repository root
     return Path(__file__).resolve().parents[3]
-
-
-def harness_dir(root: Path) -> Path:
-    return root / ".harness"
 
 
 def policies_dir(root: Path) -> Path:

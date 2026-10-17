@@ -83,7 +83,6 @@ The link: [Quick start](../../../docs/01-quickstart.md) (it has what to say day 
 - **Do not write `[review]=1` yourself.** The user must send that message: the hook goes by the user's own words only.
 - **The task folder is ignored by git, and search tools do not find it.** Give the user links by path, and let them click it open in the file tree on the left.
 - **The language.** The harness speaks English by default and can speak Chinese: `language` in `.harness/policies/user.override.json` (`en` or `zh`). When the user would rather have Chinese, say so; the skill `harness-get-me-ready` sets it. Teach this lesson in the language the rules at the top of the prompt name.
-- **A user of an old version** will ask about `/l2` and `task start`. The answer: there are no Levels any more, nothing to write for them; `task start` became `task new` and `task open`; old task folders have to move to `.workspace/sandbox/tasks/`.
 
 ## Troubleshooting
 

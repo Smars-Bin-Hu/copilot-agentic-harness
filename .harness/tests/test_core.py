@@ -52,8 +52,6 @@ class CommandNameTests(unittest.TestCase):
 
         self.assertEqual(paths.cli_command(windows=True), "harness")  # the short command on every system (M9-5)
         self.assertEqual(paths.cli_command(windows=False), "harness")
-        self.assertEqual(paths.mkdir_command(windows=True), "mkdir")
-        self.assertEqual(paths.mkdir_command(windows=False), "mkdir -p")
 
     def test_the_default_follows_the_system(self) -> None:
         import os

@@ -104,6 +104,5 @@ The messages below are the English ones; with `language` set to `zh` they come i
 | `There is no session <id>` | The session id was copied wrongly. Use the one in the rules at the top of this prompt, as written |
 | `Task ... exists already` | A task of that name exists. Use `task open`, or pick another name |
 | `There is no task <name>` | Run `harness task list --all` first to see the names |
-| `task start` says it was removed | From 1.1.0 on, use `task new` and `task open` |
 | `This session is in admin mode` | An admin session does no tasks. Ask the user to open another conversation |
 | `A tier only goes up, never down` | No need to go down. The extra files do no harm |

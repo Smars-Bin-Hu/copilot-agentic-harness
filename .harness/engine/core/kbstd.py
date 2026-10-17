@@ -16,11 +16,10 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import domainskills, gitread, messages, miniyaml, targets
+from . import domainskills, gitread, messages, miniyaml, targets, tasks
 
 SCHEMA_VERSION = 1
 DOMAIN_FILE = "domain.yaml"
@@ -38,6 +37,10 @@ CARD_MAX_LINES = 120
 ARCHITECTURE_MAX_LINES = 300
 GIT_TIMEOUT = 30
 DIFF_LINES = 120  # per source: longer is cut, and the source is read instead
+
+
+class KbError(ValueError):
+    """A knowledge base command cannot do what was asked; the message says why."""
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -283,3 +286,68 @@ def knowledge_for(root: Path, keys: List[str]) -> List[Dict[str, Any]]:
         return out
     except Exception:  # noqa: BLE001
         return []
+
+
+# --- writing, in a task only ------------------------------------------------------------------------
+
+
+def check_path(root: Path, folder: Optional[Path]) -> Dict[str, Any]:
+    """`kb check --path`: one domain folder anywhere (a migration in a task's DEV/)."""
+    result = check_domain(root, folder.resolve()) if folder else {}
+    result["exit_code"] = 1 if result.get("errors") else 0
+    return result
+
+
+def stamp(root: Path, folder: Path, ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """`kb stamp`: after the cards were checked against the code, set the `sha` of their sources to the base branch now,
+    so that `kb stale` counts from here. Only in a task's `DEV/`; only the objects named, or all of them."""
+    folder = folder.resolve()
+    if not tasks.in_dev(root, folder):
+        raise KbError(say("kb.stamp.not_dev", folder=folder))
+    index = folder / INDEX_FILE
+    if not index.is_file():
+        raise KbError(say("kb.index.missing", file=index))
+    rows, bad = read_index(index)
+    if bad:
+        raise KbError(" ".join(bad))
+    known = {row.get("id") for row in rows}
+    unknown = sorted(set(ids or []) - known)
+    if unknown:
+        raise KbError(say("kb.stamp.unknown_ids", ids=", ".join(unknown)))
+    wanted = set(ids or known)
+    found = targets.load(root)
+    stamped, unchanged, gone, unknown_repos = [], 0, [], set()
+    by_repo: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        if row.get("id") in wanted:
+            by_repo.setdefault(str(row.get("repo") or ""), []).append(row)
+    for name, items in by_repo.items():
+        repo = found.repos.get(name)
+        if repo is None:
+            unknown_repos.add(name)
+            continue
+        sources = [source for row in items for source in row.get("sources") or [] if isinstance(source, dict) and source.get("path")]
+        try:
+            current = gitread.blob_shas(repo.path, name, repo.base_ref, sorted({source["path"] for source in sources}))
+        except gitread.GitError as error:  # never stamp from an answer git did not give
+            raise KbError(str(error)) from None
+        for row in items:
+            changed = False
+            for source in row.get("sources") or []:
+                if not isinstance(source, dict) or not source.get("path"):
+                    continue
+                now = current.get(source["path"])
+                if now is None:
+                    gone.append(f"{row['id']}: {name}/{source['path']}")
+                elif not now.startswith(str(source.get("sha") or "-")):
+                    source["sha"], changed = now[:12], True
+            if changed:
+                stamped.append(row["id"])
+            else:
+                unchanged += 1
+    if stamped:
+        index.write_text("".join(json.dumps({key: value for key, value in row.items() if key != "_line"}, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
+    return {
+        "folder": str(folder), "stamped": stamped, "unchanged": unchanged, "gone": gone, "unknown_repos": sorted(unknown_repos),
+        "next": say("kb.stamp.next" if stamped else "kb.stamp.nothing"),
+    }

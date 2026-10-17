@@ -40,7 +40,6 @@ DEFAULTS = {"max_steps": 20, "minutes": 120, "max_denies": 2, "max_stalls": 3}
 STEP = re.compile(r"^\s*[-*]\s+\[( |x|X)\]\s*(.*)$")
 PLACEHOLDER = re.compile(r"^<[^<>]*>$")  # the line the template comes with: not a step yet
 STEP_SHOWN = 120
-STOPS = ("done", "plan", "review", "denied", "steps", "time", "stalled", "agent", "person")
 
 
 def say(key: str, /, **values: Any) -> str:

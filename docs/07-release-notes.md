@@ -10,6 +10,31 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.17 (2026-10-17)
+
+Clean-up after the independent review: fewer skills, no dead code, one place for each thing.
+
+**Testing**: the automatic tests pass on the Mac (869). **Not run on Windows.**
+
+### Changed
+
+- **`generic-build-new-skill` also repairs** the form of an existing skill (`references/repair.md`): ask the agent to repair a skill. It replaces `/generic-skill-repair`.
+- **The sample toolkits moved** to `.harness/examples/kb-toolkits/` (`sqlserver`, `spring`). `.harness/contracts/` holds only the standards and templates.
+- **The code of the repository map is in two parts**: building it (`core/kbmap.py`) and the questions on it (`core/kbgraph.py`). `kb stamp` and `kb check --path` moved next to the rest of the standard (`core/kbstd.py`). Nothing changes for a user.
+- **`fetch` after a promote** now says to open a new task; it pointed at the retired `task start`.
+- Settings with defaults are read one way everywhere (`config.policy_or_empty`): a broken policy gives the defaults, and `doctor` reports it.
+- `registry.json` lists every file the harness ships; a test fails when one is left out.
+- `.gitignore` ignores `.claude/`.
+
+### Retired
+
+- **`/generic-skill-repair`**: now part of `generic-build-new-skill`.
+- **`generic-populate-development-log`**: it wrote a development log that only the harness's own developer has.
+- **`typesafe-ai`**: a third-party skill nothing used; `NOTICE` no longer lists it.
+- **`task start`** (it only said it was removed in 1.1.0), and the `doctor` warning about task folders of before 1.1.0 (`.workspace/current_tasks/`).
+- **`.github/instructions/tools.instructions.md`**: it was empty.
+- Code nothing called: `paths.mkdir_command`, `paths.harness_dir`, `paths.CLI_PATH`, `callrecord.JUDGES`, `tasklife.waiting_for`, `autorun.STOPS`, `promote_target.recovery_commands`.
+
 ## 1.4.16 (2026-10-17)
 
 Fixes found by an independent review of the code.

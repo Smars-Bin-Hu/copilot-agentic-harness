@@ -25,7 +25,7 @@ Turn the approved design into `<knowledge base>/toolkit/`: `toolkit.json`, the e
 
 ## Step-by-Step Workflows
 
-1. **Start from what exists.** A toolkit already in the knowledge base: fetch it (`harness task fetch --task <task> <kb repo>/toolkit`). A stack like a sample: copy `.harness/contracts/kb/toolkit-example-sqlserver/` or `toolkit-example-spring/` into `DEV/<kb repo>/toolkit/`, replace its `facts.jsonl` with the design's, and change it. Otherwise start from the built-in `regex` rules, and write Python only where rules are not enough.
+1. **Start from what exists.** A toolkit already in the knowledge base: fetch it (`harness task fetch --task <task> <kb repo>/toolkit`). A stack like a sample: copy `.harness/examples/kb-toolkits/sqlserver/` or `spring/` into `DEV/<kb repo>/toolkit/`, replace its `facts.jsonl` with the design's, and change it. Otherwise start from the built-in `regex` rules, and write Python only where rules are not enough.
 2. **Write `toolkit.json`** from the design: `extractors`, `ignore`, `obsolete`, `markers`, `names`, `entry_types`, `executable_types`, `stop_words`. Then **`facts.jsonl`** from the design's facts, one per line, unchanged.
 3. **Write the extractors** following [extractor-rules.md](./references/extractor-rules.md). One file per stack, small functions.
 4. **Try it**: `harness kb map --toolkit <task>/DEV/<kb repo>/toolkit --json`. Read in this order:

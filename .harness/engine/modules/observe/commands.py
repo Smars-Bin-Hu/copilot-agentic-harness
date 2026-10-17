@@ -5,7 +5,8 @@
   kb check [--domain]  is each domain in the standard form (core/kbstd.py)
   kb stale --domain D  which objects were learned from source files that changed since (--diff: what changed)
   kb stamp --path P    after a refresh: the sources count from the base branch now (only in a task's DEV/)
-  kb survey / map / near / split / gaps  the repository map: every object and use, by script (core/kbmap.py)
+  kb survey / map      build the repository map (core/kbmap.py)
+  kb near / split / gaps  questions on the map (core/kbgraph.py): every object and use, by script (core/kbmap.py)
   logs prune           delete session logs not written to for N days (a person decides; no hook deletes anything)
 """
 
@@ -17,7 +18,7 @@ from typing import Any, Dict
 
 from core.paths import repo_root
 
-from core import kbmap, kbmigrate, kbstd
+from core import kbgraph, kbmap, kbmigrate, kbstd
 
 from . import kbstats, prune, stats
 
@@ -39,8 +40,8 @@ def cmd_migrate(args: Any) -> Dict[str, Any]:
 
 def cmd_stamp(args: Any) -> Dict[str, Any]:
     try:
-        return kbmigrate.stamp(repo_root(), Path(args.path), args.id)
-    except kbmigrate.MigrateError as error:
+        return kbstd.stamp(repo_root(), Path(args.path), args.id)
+    except kbstd.KbError as error:
         raise RuntimeError(str(error)) from None
 
 
@@ -77,7 +78,7 @@ def register(subparsers: Any) -> None:
     form = kb_commands.add_parser("check", help="is each domain in the standard form? domain.yaml, objects/index.jsonl, cards and anchors, no local paths. Exit code 1 on an error")
     form.add_argument("--domain", action="append", default=None, help="only this domain (may be given more than once)")
     form.add_argument("--path", default="", help="check this one domain folder instead (a migration in a task's DEV/)")
-    form.set_defaults(handler=lambda a: kbmigrate.check_path(repo_root(), Path(a.path)) if a.path else kbstd.check(repo_root(), a.domain))
+    form.set_defaults(handler=lambda a: kbstd.check_path(repo_root(), Path(a.path)) if a.path else kbstd.check(repo_root(), a.domain))
     move = kb_commands.add_parser("migrate", help="a domain of before the standard (domain.yaml with object lists + objects/indexes.json) into the standard form, into a task's DEV/; prints what it could not map")
     move.add_argument("--from", dest="source", required=True, help="the domain folder in the old form")
     move.add_argument("--to", dest="target", required=True, help="where the new form goes: inside .workspace/sandbox/tasks/<task>/DEV/; may be the same folder as --from")
@@ -106,13 +107,13 @@ def register(subparsers: Any) -> None:
     side = close.add_mutually_exclusive_group()
     side.add_argument("--up", dest="direction", action="store_const", const="up", help="only what uses it")
     side.add_argument("--down", dest="direction", action="store_const", const="down", help="only what it uses")
-    close.set_defaults(handler=mapped(lambda a: kbmap.near(repo_root(), a.object, a.depth, a.direction or "both")), direction=None)
+    close.set_defaults(handler=mapped(lambda a: kbgraph.near(repo_root(), a.object, a.depth, a.direction or "both")), direction=None)
     cut = kb_commands.add_parser("split", help="a first cut of the domains from the map: entry points and what they reach; objects reached from many entry points are shared")
     cut.add_argument("--shared-min", type=int, default=None, help="reached from this many entry points makes an object shared (default: from the profile, 3)")
-    cut.set_defaults(handler=mapped(lambda a: kbmap.split(repo_root(), a.shared_min)))
+    cut.set_defaults(handler=mapped(lambda a: kbgraph.split(repo_root(), a.shared_min)))
     hole = kb_commands.add_parser("gaps", help="what runs or is used but has no code in the repositories: missing names, retired code in use, files deleted in git; with --inventory, also what production runs that no repository holds")
     hole.add_argument("--inventory", default="", help="a list of production objects a person exported (ids, one per line, or CSV with an id column)")
-    hole.set_defaults(handler=mapped(lambda a: kbmap.gaps(repo_root(), Path(a.inventory) if a.inventory else None)))
+    hole.set_defaults(handler=mapped(lambda a: kbgraph.gaps(repo_root(), Path(a.inventory) if a.inventory else None)))
 
     logs = subparsers.add_parser("logs", help="the session logs")
     commands = logs.add_subparsers(dest="logs_command", required=True)

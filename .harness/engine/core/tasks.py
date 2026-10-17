@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 TASKS_DIR = ".workspace/sandbox/tasks"
-OLD_TASKS_DIR = ".workspace/current_tasks"  # before 1.1.0; not read any more, doctor says so when it still holds folders
 # What kind of work a task is (it decides what "done" means) and how many files it gets.
 KINDS = ("qa", "rca", "design", "dev", "test", "kb", "other")  # other: fits none of the six; its standard of done is agreed with the person
 TIERS = ("light", "medium", "full")
@@ -104,3 +103,12 @@ def plan_approved(root: Path, task: str, data: Optional[Dict[str, Any]] = None) 
     data = data if data is not None else read(root, task)
     current = plan_digest(root, task)
     return bool(data and current) and (data.get("plan") or {}).get("approved_sha256") == current
+
+
+def in_dev(root: Path, folder: Path) -> bool:
+    """Is the folder inside the DEV/ of a task (any task)? Where the knowledge base commands that write are allowed to."""
+    try:
+        parts = folder.resolve().relative_to((root / TASKS_DIR).resolve()).parts
+    except ValueError:
+        return False
+    return len(parts) >= 2 and parts[1] == DEV_NAME

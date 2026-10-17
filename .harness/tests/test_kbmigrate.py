@@ -6,7 +6,7 @@ import json
 import unittest
 
 from support import HarnessTestCase
-from test_targets import GIT, make_repo, run_git
+from support import GIT, make_repo, run_git
 
 from core import kbmigrate, kbstd, miniyaml, tasks
 

@@ -16,9 +16,9 @@ import support  # noqa: F401  (puts the engine on sys.path)
 from core import tasks
 from modules.task import promote_target, task as task_ops
 from modules.task.common import CommandError
-from support import payload, post_tool, pre_tool, subagent_start
+from support import payload, post_tool, pre_tool, run_git, subagent_start
 from taskcase import NAME, PLAN, SESSION, TASK, TaskCase
-from test_promote import git_text, porcelain
+from test_promote import porcelain
 
 BIG = "".join(f"select {number} as c;\n" for number in range(120000))  # about 2 MB
 
@@ -41,16 +41,10 @@ class PickUpTests(TaskCase):
         self.assertEqual(self.open(str(self.task))["resumed"], True)
         self.assertEqual(self.run_cli("task", "status", "--task", NAME)["task"], TASK)
 
-    def test_start_is_gone_and_says_what_to_use(self) -> None:
-        text = self.refused("task", "start", "--task", TASK, "--session-id", SESSION)
-        self.assertIn("task new", text)
-        self.assertIn("task open", text)
-        self.assertFalse(self.task.exists())
-
     def test_a_folder_outside_the_task_directory_is_not_a_task(self) -> None:
-        (self.root / tasks.OLD_TASKS_DIR / "old").mkdir(parents=True)
+        (self.root / ".workspace" / "elsewhere" / "old").mkdir(parents=True)
         self.assertIn("没有任务", self.refused("task", "open", "old", "--session-id", SESSION))
-        self.assertIn("任务目录", self.refused("task", "status", "--task", f"{tasks.OLD_TASKS_DIR}/old"))
+        self.assertIn("任务目录", self.refused("task", "status", "--task", ".workspace/elsewhere/old"))
 
     def test_picking_it_up_again_keeps_the_approval(self) -> None:
         self.ready()
@@ -192,7 +186,7 @@ class FetchDiffTests(TaskCase):
 
     def assert_clean(self) -> None:
         self.assertEqual(porcelain(self.repo_b), [])
-        self.assertEqual(git_text(self.repo_b, "symbolic-ref", "--short", "HEAD"), "main")
+        self.assertEqual(run_git(self.repo_b, "symbolic-ref", "--short", "HEAD"), "main")
 
     def test_a_folder_is_fetched_whole_and_a_wrong_name_is_refused(self) -> None:
         self.ready()
@@ -218,8 +212,8 @@ class FetchDiffTests(TaskCase):
     def test_a_large_file_and_crlf_arrive_byte_for_byte_and_the_diff_holds_only_the_change(self) -> None:
         (self.repo_b / "big.sql").write_bytes(BIG.encode("utf-8"))
         (self.repo_b / "crlf.sql").write_bytes(b"select 1;\r\nselect 2;\r\n")
-        git_text(self.repo_b, "-c", "core.autocrlf=false", "add", "-A")  # with autocrlf=true, git would store this CRLF file as LF
-        git_text(self.repo_b, "-c", "core.autocrlf=false", "commit", "-q", "-m", "big")
+        run_git(self.repo_b, "-c", "core.autocrlf=false", "add", "-A")  # with autocrlf=true, git would store this CRLF file as LF
+        run_git(self.repo_b, "-c", "core.autocrlf=false", "commit", "-q", "-m", "big")
         self.ready()
         self.run_cli("task", "fetch", "repo_b/big.sql", "repo_b/crlf.sql")
         self.assertEqual(self.dev("repo_b/big.sql").read_bytes(), BIG.encode("utf-8"))
@@ -305,9 +299,9 @@ class PromoteTests(TaskCase):
         self.assertIn("会被删除", screen.getvalue())
         result = self.run_cli("task", "promote")
         self.assertEqual(result["dry_run"], False)
-        self.assertEqual(git_text(self.repo_b, "symbolic-ref", "--short", "HEAD"), "feature/job1")
+        self.assertEqual(run_git(self.repo_b, "symbolic-ref", "--short", "HEAD"), "feature/job1")
         self.assertEqual(porcelain(self.repo_b), [" D src/b.sql", " M src/a.sql", "?? src/new/"])
-        self.assertEqual(git_text(self.repo_b, "rev-parse", "HEAD"), self.main_commit(self.repo_b))  # no commit
+        self.assertEqual(run_git(self.repo_b, "rev-parse", "HEAD"), self.main_commit(self.repo_b))  # no commit
         self.assertEqual((self.repo_b / "src" / "a.sql").read_text(encoding="utf-8"), "select 1, 2;\n")
         self.assertEqual(porcelain(self.repo_a), [])
         data = self.data()
@@ -322,9 +316,9 @@ class PromoteTests(TaskCase):
 
     def test_a_repository_that_converts_line_endings_shows_only_the_results(self) -> None:
         """`core.autocrlf=true` is the git default on Windows: main holds LF, the working tree may hold CRLF."""
-        git_text(self.repo_b, "config", "core.autocrlf", "true")
+        run_git(self.repo_b, "config", "core.autocrlf", "true")
         (self.repo_b / "src" / "b.sql").write_bytes(b"select 2;\r\n")  # what a Windows checkout leaves in the working tree
-        git_text(self.repo_b, "add", "src/b.sql")  # same blob (git converts it back); the index now knows the file's size
+        run_git(self.repo_b, "add", "src/b.sql")  # same blob (git converts it back); the index now knows the file's size
         self.assertEqual(porcelain(self.repo_b), [])
         self.ready()
         self.run_cli("task", "fetch", "repo_b/src/a.sql")
@@ -354,14 +348,14 @@ class PromoteTests(TaskCase):
         (self.repo_b / "dirty.txt").write_text("x\n", encoding="utf-8")
         self.assertIn("工作区不干净", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
         (self.repo_b / "dirty.txt").unlink()
-        git_text(self.repo_b, "branch", "feature/job1")
+        run_git(self.repo_b, "branch", "feature/job1")
         message = self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"]
         self.assertIn("已经存在", message)
         self.assertIn("task set-branch", message)
         self.assertEqual(self.run_cli("task", "set-branch", "--branch", "feature/job1_b")["branch"], "feature/job1_b")
         self.assertEqual(self.run_cli("task", "promote", "--dry-run")["branch"], "feature/job1_b")
         (self.repo_b / "src" / "a.sql").write_text("select 0;\n", encoding="utf-8")  # main moves under the task
-        git_text(self.repo_b, "commit", "-qam", "moved")
+        run_git(self.repo_b, "commit", "-qam", "moved")
         self.assertIn("在 main 上变了", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
 
     def test_a_file_directly_in_dev_is_not_written_back_and_does_not_stop_the_promote(self) -> None:
@@ -416,7 +410,7 @@ class PromoteTests(TaskCase):
         self.assertIn("restore", screen.getvalue())
         for repo in (self.repo_b, self.repo_a):
             self.assertEqual(porcelain(repo), [])
-            self.assertEqual(git_text(repo, "symbolic-ref", "--short", "HEAD"), "main")
+            self.assertEqual(run_git(repo, "symbolic-ref", "--short", "HEAD"), "main")
         self.assertEqual(self.data()["promote"]["state"], "none")
         self.assertEqual(self.run_cli("task", "promote", "--dry-run")["dry_run"], True)
 
@@ -425,8 +419,8 @@ class RoundAndReportTests(TaskCase):
     def test_after_a_promote_starting_again_opens_a_new_round_with_a_new_plan(self) -> None:
         self.promoted()
         self.run_cli("task", "close")
-        git_text(self.repo_b, "commit", "-qam", "the person commits")
-        git_text(self.repo_b, "switch", "-q", "main")
+        run_git(self.repo_b, "commit", "-qam", "the person commits")
+        run_git(self.repo_b, "switch", "-q", "main")
         result = self.open()
         self.assertEqual((result["round"], result["new_round"], result["plan_approved"], result["branch"]), (2, True, False, "feature/job1_r2"))
         self.assertTrue((self.task / "DEV_r1" / "repo_b" / "src" / "a.sql").is_file())

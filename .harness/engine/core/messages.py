@@ -40,10 +40,7 @@ def configured(root: Optional[Path] = None) -> Any:
     """What `user.json` (with its override) says, as written. None when it cannot be read: that is doctor's to report."""
     from . import config, paths  # here, not at the top: every module imports this one
 
-    try:
-        return config.load_policy(root or paths.repo_root(), POLICY_NAME).get("language")
-    except Exception:  # noqa: BLE001
-        return None
+    return config.policy_or_empty(root or paths.repo_root(), POLICY_NAME).get("language")
 
 
 def language(root: Optional[Path] = None) -> str:

@@ -84,5 +84,4 @@ A command prints aligned lines of text when you run it in a terminal, and JSON w
 
 ## Common questions
 
-- **"Where did `task start` go?"** It was removed, and replaced with `task new` and `task open`.
 - **"The command is not found?"** Go back to `/harness-get-me-ready` and set up the short command.

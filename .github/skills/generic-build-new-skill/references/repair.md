@@ -1,28 +1,13 @@
----
-name: generic-skill-repair
-description: 'Repair a skill so that it follows the form of generic-build-new-skill: name, frontmatter, description, sections, size, links, folder layout. Changes the form, not what the skill says. Use only when the user types /generic-skill-repair with the skill to repair; an agent must not start it. Keywords: repair skill, fix skill form, skill check errors, bring a skill to the template.'
-argument-hint: 'The skill folder name, for example domain-sales-orders'
-disable-model-invocation: true
-type: unit
-specificTo: generic
----
+# Repair the form of a skill
 
-# Repair a skill
+Bring one skill to the form of this skill's templates without changing what it says. Only when the user asks for it by name or asks to repair, fix or bring a skill to the template: it edits files under `.github/skills/`.
 
-Bring one skill to the form of `generic-build-new-skill` without changing what it says. The check is `harness skill check`; the form is in the templates and references of `generic-build-new-skill`.
-
-**Who starts it: user-only.** It edits files under `.github/skills/`.
-
-## When to Use This Skill
-
-- The user names a skill and wants it to follow the template: `skill check` reports problems, or the skill was written by hand or by another tool.
-
-## Prerequisites
+## Before you start
 
 - **No task is open in this session.** A session with a task can write the task folder only, and the skill is outside it. If a task is open, tell the user to start a new chat.
 - Git is how the user will see and undo what you change. Look at `git status --short .github/skills/<name>`: if the folder has uncommitted changes, or the repository is not under git, tell the user that there will be no clean `git diff`, and ask them to commit first or to say go on.
 
-## Step-by-Step Workflows
+## Steps
 
 1. **Check first.** Run `harness skill check <name>` and read the list. Read the skill's `SKILL.md` and the file layout.
 2. **Plan the repair in the open**: a short list of what you will change, in these groups:
@@ -34,7 +19,7 @@ Bring one skill to the form of `generic-build-new-skill` without changing what i
 5. **Run `harness skill check <name>` again.** Repeat until there is no error. Warnings: fix those that are mechanical, report the rest.
 6. **Report**: what you changed, in groups; what you wrote yourself (the description); what you left and why. Tell the user to read the change with `git diff .github/skills/<name>`, and that `git restore` undoes it.
 
-## Gotchas
+## Traps
 
 - **Form only.** If a repair would change what the skill tells the agent to do, stop and ask. A tidier text that means something else is a different skill.
 - **Never rename the folder or the `name` on your own.** Other files and the user's habits point at it. Ask which one is right.
@@ -43,7 +28,7 @@ Bring one skill to the form of `generic-build-new-skill` without changing what i
 - **Do not touch a third-party skill's content** (a skill with no prefix and its own license). Report the problems; repair only if the user says it is theirs.
 - **A skill that is fine needs nothing.** If `skill check` shows no error or warning, say so and stop.
 
-## Troubleshooting
+## When it goes wrong
 
 | Issue | Solution |
 |-------|----------|

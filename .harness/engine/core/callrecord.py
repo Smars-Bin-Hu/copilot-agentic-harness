@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Optional
 from .events import Decision, HookEvent
 
 # Who decided. `model` is reserved: a hook cannot see what the main model decided.
-JUDGES = ("rule", "reviewer", "human", "model")
 MAX_PATHS = 5
 
 

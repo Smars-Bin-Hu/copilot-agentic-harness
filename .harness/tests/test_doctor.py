@@ -517,16 +517,6 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("needs an array", result.stdout)
 
-    def test_task_folders_left_in_the_old_place_are_a_warning_that_says_what_to_do(self) -> None:
-        self.assertNotIn("旧任务目录", self.doctor().stdout)
-        (self.root / ".workspace" / "current_tasks" / "job-a").mkdir(parents=True)
-        result = self.doctor()
-        self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("[WARN]  .workspace/current_tasks/ 下还有 1 个旧任务目录（job-a）", result.stdout)
-        self.assertIn("task open", result.stdout)
-
-    # --- knowledge base ---------------------------------------------------------------------
-
     def kb(self, files: dict) -> None:
         for name, text in files.items():
             path = self.root / "knowledge-base" / name
@@ -656,9 +646,18 @@ class DoctorTests(unittest.TestCase):
 
 class LayoutTests(unittest.TestCase):
     def test_engine_code_parses_as_python_39(self) -> None:
-        for path in sorted(ENGINE.rglob("*.py")):
+        for path in sorted([*ENGINE.rglob("*.py"), *(REPO / ".harness" / "examples").rglob("*.py")]):
             with self.subTest(path.relative_to(REPO).as_posix()):
                 ast.parse(path.read_text(encoding="utf-8"), filename=str(path), feature_version=(3, 9))
+
+    @unittest.skipUnless(shutil.which("git") and (REPO / ".git").exists(), "needs the git checkout of the harness")
+    def test_every_shipped_file_belongs_to_a_registry_list(self) -> None:
+        """A file the registry does not list is checked by no doctor run and owned by no module: new skills get forgotten."""
+        registry = json.loads((REPO / ".harness" / "registry.json").read_text(encoding="utf-8"))
+        entries = list(registry["engine"]["files"]) + [item for module in registry["modules"].values() for item in module["files"]]
+        tracked = subprocess.run(["git", "-C", str(REPO), "ls-files", ".github", ".harness"], capture_output=True, text=True, check=True).stdout.split()
+        loose = [path for path in tracked if not any(path == item or (item.endswith("/") and path.startswith(item)) for item in entries)]
+        self.assertEqual(loose, [])
 
     def test_engine_code_uses_only_the_standard_library(self) -> None:
         local = {"core", "adapters", "modules", "doctor", "hook", "cli"}
@@ -703,7 +702,7 @@ class LayoutTests(unittest.TestCase):
             name = next(line.split(":", 1)[1].strip() for line in text.splitlines() if line.startswith("name:"))
             with self.subTest(skill.parent.name):
                 self.assertEqual(name, skill.parent.name)
-                self.assertTrue(name.startswith(("harness-", "generic-", "domain-")) or name in LEVEL_ENTRY_SKILLS or name == "typesafe-ai", name)
+                self.assertTrue(name.startswith(("harness-", "generic-", "domain-")) or name in LEVEL_ENTRY_SKILLS, name)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ import unittest
 import support  # noqa: F401  (puts the engine on sys.path)
 from modules.task import refs
 from taskcase import TargetCase
-from test_targets import GIT, make_repo, run_git
+from support import GIT, make_repo, run_git
 
 KB = "knowledge-base"
 

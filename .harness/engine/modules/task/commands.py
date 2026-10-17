@@ -19,15 +19,10 @@ from __future__ import annotations
 import argparse
 from typing import Any, Dict
 
-from core import approval, messages, render, targets, tasks
-from core.paths import cli_command, repo_root
+from core import approval, render, targets, tasks
+from core.paths import repo_root
 
 from . import autorun, boardserve, kbsetup, taskarchive, refs, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
-from .common import CommandError
-
-
-def gone(_args: argparse.Namespace) -> Dict[str, Any]:
-    raise CommandError(messages.text("task.start.gone", command=cli_command()))
 
 
 def cmd_target_list(args: argparse.Namespace) -> Dict[str, Any]:
@@ -96,11 +91,6 @@ def register_task(subparsers: Any) -> None:
         item.set_defaults(handler=handler)
         return item
 
-    start = commands.add_parser("start", help="removed in 1.1.0: use `task new` or `task open`")
-    for old in ("--task", "--session-id", "--surface", "--branch"):  # what the old command took, so the answer is the pointer and not a usage error
-        start.add_argument(old, default="")
-    start.add_argument("rest", nargs="*")
-    start.set_defaults(handler=gone)
     new = commands.add_parser("new", help="make a task under .workspace/sandbox/tasks/ with the files of its tier; this session picks it up")
     new.add_argument("name", help="the task name: the folder name, no slashes")
     new.add_argument("--kind", required=True, choices=list(tasks.KINDS), help="qa, rca, design (a design or a plan), dev, test, kb (a knowledge base update), other (a broad question or a case that fits none of these; the standard of done is agreed with the person and written in REQ.md)")

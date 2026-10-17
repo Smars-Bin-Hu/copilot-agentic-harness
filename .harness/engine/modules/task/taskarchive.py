@@ -37,10 +37,7 @@ def say(key: str, /, **values: Any) -> str:
 
 
 def remembered(root: Path) -> str:
-    try:
-        value = config.load_policy(root, "user").get(SETTING, "")
-    except Exception:  # noqa: BLE001 - a broken policy is doctor's to report
-        return ""
+    value = config.policy_or_empty(root, "user").get(SETTING, "")  # a broken policy is doctor's to report
     return value if isinstance(value, str) else ""
 
 

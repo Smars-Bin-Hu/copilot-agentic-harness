@@ -13,6 +13,10 @@
 
 [Get started](#get-started) · [What it does](#what-it-does) · [What you must plug in](#what-you-must-plug-in) · [Docs](#docs) · [Release notes](docs/07-release-notes.md)
 
+![Every task, what it waits for and since when; a click opens the task's plan, TODO, changes and approvals](docs/images/board.png)
+
+**New here? Read the [overview](docs/00-overview.md) first**: the problem, the way of working, what you see in the browser, and how it is built, with pictures.
+
 ---
 
 ## What it is
@@ -77,11 +81,11 @@ The harness is designed for the git repositories of data engineering teams: no e
 
 ## Docs
 
-If you'd rather not read docs, the three commands above are enough. The docs are currently written in Chinese.
+If you'd rather not read docs, the three commands above are enough.
 
 | Doc | What you will find |
 | --- | --- |
-| [00 Overview](docs/00-overview.md) | **Read this first.** The problem it solves, what each of the four parts is responsible for, and how far the harness governs each kind of target |
+| [00 Overview](docs/00-overview.md) | **Read this first.** The problem, the task way of working, the board and the task pages in pictures, how it is built, and what is not solved yet |
 | [01 Quickstart](docs/01-quickstart.md) | **Run it by hand.** Requirements, setting up the `harness` short command, the `doctor` self-check, a first task, and what to say day to day |
 | [02 Features](docs/02-features.md) | **What it can do.** Tasks, the gate, the two approvals, independent checks with `[review]=n`, logs and reports |
 | [03 Configuration](docs/03-configure.md) | **Plug in your own material.** Overrides, target repositories, the knowledge base, domain skills, choosing a model |

@@ -19,7 +19,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, messages, tasks
+from core import config, messages, state, tasks
 from core.paths import utc_now
 from core.registry import harness_version
 
@@ -49,9 +49,12 @@ def remember(root: Path, folder: Path) -> None:
     path = root / ".harness" / "policies" / f"user{config.OVERRIDE_SUFFIX}"
     data: Dict[str, Any] = {}
     if path.exists():
-        data = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except ValueError as error:
+            raise CommandError(say("archive.override_broken", file=str(path), error=error)) from None
     data[SETTING] = str(folder)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    state.atomic_write(path, data)
 
 
 def closed_at(data: Dict[str, Any]) -> str:
@@ -126,6 +129,7 @@ def archive(root: Path, names: List[str], everything: bool = False, to: str = ""
     plan = [{"name": row["name"], "from": row["task"], "to": str(folder / row["name"]), "report": (root / common.TASK_REPORTS_DIR / row["name"]).is_dir()} for row in chosen]
     if not apply:
         return {"to": str(folder), "folder_exists": folder.is_dir(), "would_move": plan, "next": say("archive.next.dry", count=len(plan))}
+    known = read_index(folder)  # before anything moves: a broken index stops the run, it is never overwritten
     folder.mkdir(parents=True, exist_ok=True)
     entries = []
     for row, step in zip(chosen, plan):
@@ -134,28 +138,34 @@ def archive(root: Path, names: List[str], everything: bool = False, to: str = ""
         shutil.move(str(source), step["to"])
         if report.is_dir():
             shutil.move(str(report), str(Path(step["to"]) / REPORT_FOLDER))
-        entries.append({
+        entry = {
             "name": row["name"], "kind": data.get("kind", ""), "tier": data.get("tier", ""), "closed_at": closed_at(data), "archived_at": utc_now(),
             "from": row["task"], "harness": harness_version(root),
-        })
-    write_index(folder, entries)
+        }
+        entries.append(entry)
+        write_index(folder, known + entries, [entry])  # after each move: a later failure leaves no task out of the index
     if keep:
         remember(root, folder)
     return {"archived": [entry["name"] for entry in entries], "to": str(folder), "remembered": keep, "next": say("archive.next.done", index=str(folder / INDEX_MD))}
 
 
-def write_index(folder: Path, entries: List[Dict[str, Any]]) -> None:
-    """Add the entries to archive.json and ARCHIVE.md. The files of other archive runs stay as they are."""
+def read_index(folder: Path) -> List[Dict[str, Any]]:
+    """The tasks archive.json already lists. A file that is not readable stops the archive: its entries must not be lost."""
     path = folder / INDEX_JSON
-    known: List[Dict[str, Any]] = []
-    if path.exists():
-        try:
-            known = json.loads(path.read_text(encoding="utf-8")).get("tasks", [])
-        except (ValueError, AttributeError):
-            known = []
-    path.write_text(json.dumps({"tasks": known + entries}, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if not path.exists():
+        return []
+    try:
+        known = json.loads(path.read_text(encoding="utf-8")).get("tasks", [])
+    except (ValueError, AttributeError) as error:
+        raise CommandError(say("archive.index_broken", file=str(path), error=error)) from None
+    return known if isinstance(known, list) else []
+
+
+def write_index(folder: Path, everything: List[Dict[str, Any]], new: List[Dict[str, Any]]) -> None:
+    """archive.json with every entry; ARCHIVE.md with the new ones added. The entries of other archive runs stay."""
+    state.atomic_write(folder / INDEX_JSON, {"tasks": everything})
     page = folder / INDEX_MD
     lines = [] if page.exists() else [say("archive.index.head"), "", say("archive.index.columns"), "| --- | --- | --- | --- | --- | --- |"]
-    lines += [f"| {entry['name']} | {entry['kind']} | {entry['tier']} | {entry['closed_at'][:19].replace('T', ' ')} | {entry['archived_at'][:19].replace('T', ' ')} | {entry['from']} |" for entry in entries]
+    lines += [f"| {entry['name']} | {entry['kind']} | {entry['tier']} | {entry['closed_at'][:19].replace('T', ' ')} | {entry['archived_at'][:19].replace('T', ' ')} | {entry['from']} |" for entry in new]
     with page.open("a", encoding="utf-8") as out:
         out.write("\n".join(lines) + "\n")

@@ -10,6 +10,23 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.16 (2026-10-17)
+
+Fixes found by an independent review of the code.
+
+**Testing**: the automatic tests pass on the Mac (868). **Not run on Windows.**
+
+### Changed
+
+- **git failures are no longer read as answers.** When git cannot read a repository (a wrong base branch, a missing folder, a timeout), `kb stale` lists it under `unreadable_repos` instead of reporting every card `gone`; `kb stamp` stops instead of stamping nothing; `task fetch` says nothing about cards it cannot judge instead of calling them all stale; `kb map` notes the repository and maps the others.
+- **`kb map` never caches a file git did not return**: it is counted under `failed` (`unread`) and read again next time. Before, one failed read left the file empty in the map until `--fresh`.
+- **Long lists of files are asked of git in chunks**, so a big domain stays under the Windows command line limit.
+- **All git calls go through one place** (`core/gitread.py`): the same environment (no password prompt, English messages), timeout and errors.
+- **`task archive`**: each task is written into `archive.json` and `ARCHIVE.md` right after it moves, so a failure halfway leaves no moved task out of the index. An `archive.json` that cannot be read stops the run before anything moves, instead of being overwritten. A broken `user.override.json` gives a clear message with `--remember`.
+- **Settings that should be numbers** (`autorun`, `mapreduce`, the board's `port`) fall back to their defaults when they are not, instead of stopping the command.
+- **The board server** refuses a request with a negative `Content-Length`.
+- The map's cache, `archive.json`, `user.override.json` written by `--remember`: written so that a reader never sees half a file.
+
 ## 1.4.15 (2026-10-17)
 
 The agent makes the toolkit for the team's own code, and the method was tried outside data engineering, on an open-source backend.

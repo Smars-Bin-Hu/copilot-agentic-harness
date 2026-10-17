@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import config, messages, repo_paths, schema
+from . import config, gitread, messages, repo_paths, schema
 
 POLICY_NAME = "target"
 REPO_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -52,8 +52,7 @@ POLICY_SCHEMA = {
 }
 
 
-class TargetError(ValueError):
-    """A target repository cannot be found or read."""
+TargetError = gitread.GitError  # a target repository cannot be found or read
 
 
 @dataclass
@@ -192,26 +191,13 @@ def knowledge_bases(root: Path) -> List[Tuple[str, Path]]:
 
 def git(repo: Repo, *arguments: str, timeout: int = DEFAULT_GIT_TIMEOUT, allow_failure: bool = False) -> bytes:
     """Run `git -C <repo> ...` and return its stdout as bytes. Raises TargetError on failure unless `allow_failure`."""
-    command = ["git", "-C", str(repo.path), "-c", "core.quotepath=off", *arguments]
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"}
-    try:
-        done = subprocess.run(command, capture_output=True, timeout=timeout, env=env, check=False)
-    except (FileNotFoundError, PermissionError) as error:  # PermissionError: PATH is empty and the folder holds a directory called `git`
-        raise TargetError(messages.text("target.git.missing")) from error
-    except subprocess.TimeoutExpired as error:
-        raise TargetError(messages.text("target.git.timeout", arguments=" ".join(arguments), timeout=timeout, repo=repo.name)) from error
-    if done.returncode != 0 and not allow_failure:
-        message = done.stderr.decode("utf-8", errors="replace").strip()
-        raise TargetError(messages.text("target.git.failed", arguments=" ".join(arguments), repo=repo.name, message=message))
-    return done.stdout if done.returncode == 0 else b""
+    return gitread.run(repo.path, repo.name, *arguments, timeout=timeout, allow_failure=allow_failure)
 
 
 def run_step(path: Path, arguments: List[str], timeout: int = DEFAULT_GIT_TIMEOUT) -> Tuple[int, str]:
     """`git -C <path> <arguments>` as one step of something a person asked for: (exit code, what git said). Never raises."""
-    command = ["git", "-C", str(path), "-c", "core.quotepath=off", *arguments]
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"}
     try:
-        done = subprocess.run(command, capture_output=True, timeout=timeout, env=env, check=False)
+        done = subprocess.run(gitread.command(path, arguments), capture_output=True, timeout=timeout, env=gitread.env(), check=False)
     except (FileNotFoundError, PermissionError):
         return 127, messages.text("target.git.missing")
     except subprocess.TimeoutExpired:

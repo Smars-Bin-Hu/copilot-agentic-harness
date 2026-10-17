@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import unittest
+from unittest import mock
 
 from support import REPO, HarnessTestCase
 from test_targets import GIT, make_repo, run_git
@@ -257,6 +258,19 @@ class MapTests(HarnessTestCase):
         run_git(self.repo, "commit", "-qam", "change")
         self.assertEqual(self.build()["mapped"][0]["read"], 1)
         self.assertEqual(self.build(fresh=True)["mapped"][0]["read"], 17)
+
+    def test_a_file_git_did_not_return_is_not_cached(self) -> None:
+        real = kbmap.gitread.blobs
+
+        def lossy(path, name, shas, timeout=300):
+            found = real(path, name, shas, timeout)
+            found.pop(sorted(found)[0], None)
+            return found
+
+        with mock.patch.object(kbmap.gitread, "blobs", side_effect=lossy):
+            row = self.build()["mapped"][0]
+        self.assertEqual((row["read"], row["failed"], len(row["unread"])), (16, 1, 1))
+        self.assertEqual(self.build()["mapped"][0]["read"], 1)  # read again, not kept empty
 
     def test_near_walks_both_ways_across_the_job_the_package_and_the_procedure(self) -> None:
         self.build()

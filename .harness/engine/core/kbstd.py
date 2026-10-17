@@ -20,7 +20,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import domainskills, messages, miniyaml, targets
+from . import domainskills, gitread, messages, miniyaml, targets
 
 SCHEMA_VERSION = 1
 DOMAIN_FILE = "domain.yaml"
@@ -189,35 +189,6 @@ def check(root: Path, only: Optional[List[str]] = None) -> Dict[str, Any]:
     }
 
 
-def blob_shas(repo: Path, ref: str, paths: List[str]) -> Dict[str, str]:
-    """{path: the git blob sha on `ref`} for the paths that exist there. One git call for all of them."""
-    if not paths:
-        return {}
-    done = subprocess.run(
-        ["git", "-C", str(repo), "ls-tree", "-r", "--full-tree", ref, "--", *paths], capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=GIT_TIMEOUT, check=False,
-    )
-    found = {}
-    for line in done.stdout.splitlines():
-        meta, _, path = line.partition("\t")
-        parts = meta.split()
-        if len(parts) == 3 and parts[1] == "blob":
-            found[path] = parts[2]
-    return found
-
-
-def blob_diff(repo: Path, old: str, new: str, limit: int = DIFF_LINES) -> Tuple[str, bool]:
-    """(the unified diff between two blobs, was it cut). Empty when git no longer has the old blob."""
-    done = subprocess.run(
-        ["git", "-C", str(repo), "diff", "--no-color", "--no-ext-diff", "-U2", old, new], capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=GIT_TIMEOUT, check=False,
-    )
-    if done.returncode not in (0, 1) or not done.stdout:
-        return "", False
-    lines = done.stdout.splitlines()[2:]  # not the `--- a/<sha>` and `+++ b/<sha>` lines
-    return "\n".join(lines[:limit]), len(lines) > limit
-
-
 def stale(root: Path, domain: str, diff: bool = False) -> Dict[str, Any]:
     """Which objects of the domain were written from a source that has changed since, on the base branch.
     With `diff`: what changed in each source, so that the card can be checked against the change, not the whole file."""
@@ -231,13 +202,17 @@ def stale(root: Path, domain: str, diff: bool = False) -> Dict[str, Any]:
         for source in row.get("sources") or []:
             if isinstance(source, dict) and source.get("path"):
                 by_repo.setdefault(str(row.get("repo") or ""), []).append((row, source))
-    changed, gone, unstamped, unknown_repos = [], [], [], []
+    changed, gone, unstamped, unknown_repos, unreadable = [], [], [], [], []
     for name, items in by_repo.items():
         repo = found.repos.get(name)
         if repo is None:
             unknown_repos.append(name)
             continue
-        current = blob_shas(repo.path, repo.base_ref, sorted({source["path"] for _row, source in items}))
+        try:
+            current = gitread.blob_shas(repo.path, name, repo.base_ref, sorted({source["path"] for _row, source in items}))
+        except gitread.GitError as error:  # a wrong base branch must not read as "every source is gone"
+            unreadable.append({"repo": name, "error": str(error)})
+            continue
         for row, source in items:
             path = source["path"]
             entry = {"id": row["id"], "path": f"{name}/{path}", "card": row.get("card", "")}
@@ -247,7 +222,7 @@ def stale(root: Path, domain: str, diff: bool = False) -> Dict[str, Any]:
                 unstamped.append(entry)
             elif not current[path].startswith(str(source["sha"])):
                 if diff:
-                    entry["diff"], cut = blob_diff(repo.path, str(source["sha"]), current[path])
+                    entry["diff"], cut = gitread.blob_diff(repo.path, name, str(source["sha"]), current[path], DIFF_LINES)
                     if cut:
                         entry["diff_cut"] = True
                     if not entry["diff"]:
@@ -255,7 +230,8 @@ def stale(root: Path, domain: str, diff: bool = False) -> Dict[str, Any]:
                 changed.append(entry)
     return {
         "domain": domain, "objects": len(rows), "changed": changed, "gone": gone, "unstamped": unstamped, "unknown_repos": unknown_repos,
-        "next": say("kb.stale.next" if changed or gone else "kb.stale.fresh"),
+        **({"unreadable_repos": unreadable} if unreadable else {}),
+        "next": say("kb.stale.unreadable" if unreadable else "kb.stale.next" if changed or gone else "kb.stale.fresh"),
     }
 
 
@@ -297,7 +273,10 @@ def knowledge_for(root: Path, keys: List[str]) -> List[Dict[str, Any]]:
             if not hits:
                 continue
             repo = found.repos[name]
-            current = blob_shas(repo.path, repo.base_ref, sorted({hit["path"] for hit in hits}))
+            try:
+                current = gitread.blob_shas(repo.path, name, repo.base_ref, sorted({hit["path"] for hit in hits}))
+            except gitread.GitError:  # cannot tell: say nothing rather than call every card stale
+                continue
             for hit in hits:
                 now = current.get(hit["path"], "")
                 out.append({"id": hit["id"], "card": hit["card"], "file": f"{name}/{hit['path']}", "stale": bool(hit["sha"]) and not now.startswith(hit["sha"])})

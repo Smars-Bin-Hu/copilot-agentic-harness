@@ -237,3 +237,15 @@ if __name__ == "__main__":
     import unittest
 
     unittest.main()
+
+
+class BadSettingTests(AutorunCase):
+    """A setting that is not a whole number falls back to its default instead of stopping a command or a hook."""
+
+    def test_words_where_numbers_belong(self) -> None:
+        from modules.task import boardserve
+
+        override = self.root / ".harness" / "policies" / "task.override.json"
+        override.write_text(json.dumps({"autorun": {key: "abc" for key in autorun.DEFAULTS}, "board": {"port": "abc"}}), encoding="utf-8")
+        self.assertEqual(autorun.settings(self.root), autorun.DEFAULTS)
+        self.assertEqual(boardserve.settings(self.root)["port"], 8765)

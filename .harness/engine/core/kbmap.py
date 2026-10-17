@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -25,14 +24,13 @@ from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-from . import kbextract, messages, paths, repo_paths, targets, tasks
+from . import gitread, kbextract, messages, paths, repo_paths, state, targets, tasks
 
 SCHEMA_VERSION = 2
 TOOLKIT_DIR = "toolkit"
 TOOLKIT_FILE = "toolkit.json"
 FACTS_FILE = "facts.jsonl"
 MAX_FILE_BYTES = 5_000_000  # a bigger file is listed under `skipped`, not read
-BATCH = 400  # blobs per `git cat-file --batch` call
 GIT_TIMEOUT = 300
 SAMPLE = 10
 NEAR_LIMIT = 200
@@ -198,40 +196,6 @@ def sql_name(raw: str, db: str = "") -> str:
 # --- reading a repository ---------------------------------------------------------------------------------
 
 
-def listing(repo: targets.Repo, commit: str) -> List[Tuple[str, int, str]]:
-    """(blob sha, size, path) of every file of the commit."""
-    raw = targets.git(repo, "ls-tree", "-r", "-l", "-z", "--full-tree", commit, timeout=GIT_TIMEOUT).decode("utf-8", errors="replace")
-    found = []
-    for line in raw.split("\0"):
-        meta, _, path = line.partition("\t")
-        bits = meta.split()
-        if len(bits) == 4 and bits[1] == "blob":
-            found.append((bits[2], int(bits[3]) if bits[3].isdigit() else 0, path))
-    return found
-
-
-def blobs(repo: targets.Repo, shas: List[str]) -> Dict[str, bytes]:
-    """sha -> bytes, a few hundred per git call."""
-    out: Dict[str, bytes] = {}
-    for start in range(0, len(shas), BATCH):
-        chunk = shas[start:start + BATCH]
-        done = subprocess.run(
-            ["git", "-C", str(repo.path), "cat-file", "--batch"], input=("\n".join(chunk) + "\n").encode("ascii"),
-            capture_output=True, timeout=GIT_TIMEOUT, check=False,
-        )
-        data, index = done.stdout, 0
-        while index < len(data):
-            end = data.index(b"\n", index)
-            header = data[index:end].split()
-            index = end + 1
-            if len(header) != 3:  # "<sha> missing"
-                continue
-            size = int(header[2])
-            out[header[0].decode("ascii")] = data[index:index + size]
-            index += size + 1
-    return out
-
-
 def nearest(path: str, markers: Dict[str, str]) -> str:
     """The stem of the nearest marker file (`markers` in toolkit.json) in a folder above the file, or an empty string."""
     folder = PurePosixPath(path).parent
@@ -272,7 +236,7 @@ def build_one(root: Path, repo: targets.Repo, kit: Optional[Toolkit], fresh: boo
     commit = targets.ref_commit(repo)
     if not commit:
         return {"repo": repo.name, "toolkit": kit.name, "note": say("kbmap.no_branch", branch=repo.base_ref)}
-    files = listing(repo, commit)
+    files = gitread.listing(repo.path, repo.name, commit, timeout=GIT_TIMEOUT)
     old = {} if fresh else read_cache(root, repo.name)
     kept = old.get("files", {}) if old.get("signature") == kit.signature else {}
     all_paths = [path for _sha, _size, path in files]
@@ -285,8 +249,10 @@ def build_one(root: Path, repo: targets.Repo, kit: Optional[Toolkit], fresh: boo
     todo = [path for path, (sha, _size, _rule) in chosen.items() if kept.get(path, {}).get("sha") != sha]
     skipped = sorted(path for path in todo if chosen[path][1] > MAX_FILE_BYTES)
     todo = [path for path in todo if path not in skipped]
-    data = blobs(repo, sorted({chosen[path][0] for path in todo}))
+    data = gitread.blobs(repo.path, repo.name, sorted({chosen[path][0] for path in todo}), timeout=GIT_TIMEOUT)
     result: Dict[str, Any] = {path: kept[path] for path in chosen if path not in todo and path in kept}
+    unread = sorted(path for path in todo if chosen[path][0] not in data)  # not cached: read again next time
+    todo = [path for path in todo if path not in unread]
     for path in todo:
         sha, _size, rule = chosen[path]
         pure = PurePosixPath(path)
@@ -298,14 +264,13 @@ def build_one(root: Path, repo: targets.Repo, kit: Optional[Toolkit], fresh: boo
         "folder": str(kit.folder), "rules": {key: kit.data.get(key) for key in ("names", "entry_types", "executable_types", "stop_words", "shared_min", "obsolete")},
         "built": datetime.now(timezone.utc).isoformat(timespec="seconds"), "skipped": skipped, "files": result,
     }
-    target = cache_file(root, repo.name)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+    state.atomic_write(cache_file(root, repo.name), record, compact=True)
     return {
         "repo": repo.name, "toolkit": kit.name, "commit": commit[:12], "files": len(chosen), "read": len(todo),
         "objects": sum(len(item["objects"]) for item in result.values()),
         "empty": sum(1 for item in result.values() if not item["objects"] and not item.get("error")),
-        "failed": sum(1 for item in result.values() if item.get("error")), "skipped": len(skipped),
+        "failed": sum(1 for item in result.values() if item.get("error")) + len(unread), "skipped": len(skipped),
+        **({"unread": unread[:SAMPLE]} if unread else {}),
     }
 
 
@@ -328,7 +293,12 @@ def build(root: Path, names: Optional[List[str]] = None, fresh: bool = False, tr
     repos = chosen_repos(root, names)
     if not repos:
         raise MapError(say("kbmap.no_repos"))
-    rows = [build_one(root, repo, toolkit_for(choices, repo.name), fresh) for repo in repos]
+    rows = []
+    for repo in repos:
+        try:
+            rows.append(build_one(root, repo, toolkit_for(choices, repo.name), fresh))
+        except gitread.GitError as error:  # one repository git cannot read: say so, map the others
+            rows.append({"repo": repo.name, "toolkit": "-", "note": str(error)})
     graph = Graph.load(root, [repo.name for repo in repos])
     facts = graph.check_facts([fact for kit in choices for fact in kit.facts()])
     result = {"mapped": rows, **graph.summary(), "facts": facts}
@@ -778,7 +748,7 @@ def survey_one(repo: targets.Repo, samples: int) -> Dict[str, Any]:
     commit = targets.ref_commit(repo)
     if not commit:
         return {"repo": repo.name, "note": say("kbmap.no_branch", branch=repo.base_ref)}
-    files = listing(repo, commit)
+    files = gitread.listing(repo.path, repo.name, commit, timeout=GIT_TIMEOUT)
     by_suffix: Dict[str, List[Tuple[int, str]]] = defaultdict(list)
     for _sha, size, path in files:
         by_suffix[PurePosixPath(path).suffix.lower() or PurePosixPath(path).name].append((size, path))

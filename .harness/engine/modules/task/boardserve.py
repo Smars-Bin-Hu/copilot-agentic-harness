@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
-from core import messages
+from core import config, messages
 from core.paths import board_serve_file, utc_now
 
 from . import autorun, common, task as task_ops, taskboard, taskhtml, tasklife, taskreview
@@ -49,8 +49,9 @@ def say(key: str, /, **values: Any) -> str:
 
 
 def settings(root: Path) -> Dict[str, Any]:
-    found = common.policy(root).get("board") or {}
-    return {"port": int(found.get("port", 8765)), "actions": list(found.get("actions", ["pause", "resume", "approve-plan", "approve-promote"]))}
+    found = config.policy_or_empty(root, "task").get("board") or {}
+    actions = found.get("actions")
+    return {"port": config.whole(found.get("port"), 8765), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "approve-plan", "approve-promote"]}
 
 
 class Preview(Exception):
@@ -197,7 +198,7 @@ def handler_for(board: Board) -> type:
                 return self.answer(403, {"error": say("serve.refused.request")})
             try:
                 size = int(self.headers.get("Content-Length", "0"))
-                data = json.loads(self.rfile.read(min(size, MAX_BODY)).decode("utf-8") or "{}") if size <= MAX_BODY else None
+                data = json.loads(self.rfile.read(min(size, MAX_BODY)).decode("utf-8") or "{}") if 0 <= size <= MAX_BODY else None
             except (ValueError, UnicodeDecodeError):
                 data = None
             if not isinstance(data, dict):

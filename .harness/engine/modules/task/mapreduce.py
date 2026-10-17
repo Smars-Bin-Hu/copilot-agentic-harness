@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
-from core import messages
+from core import config, messages
 from core.context import Context
 from core.events import Decision
 from core.paths import cli_command
@@ -45,7 +45,7 @@ def settings(ctx: Context) -> Dict[str, int]:
         found = ctx.policy("task").get("mapreduce") or {}
     except Exception:  # noqa: BLE001 - a broken policy: the defaults
         found = {}
-    return {key: int(found.get(key, value)) for key, value in DEFAULTS.items()}
+    return {key: config.whole(found.get(key), value) for key, value in DEFAULTS.items()}
 
 
 def now() -> datetime:

@@ -48,11 +48,8 @@ def say(key: str, /, **values: Any) -> str:
 
 
 def settings(root: Path) -> Dict[str, int]:
-    try:
-        found = config.load_policy(root, "task").get("autorun") or {}
-    except Exception:  # noqa: BLE001 - a broken policy: the defaults
-        found = {}
-    return {key: int(found.get(key, value)) for key, value in DEFAULTS.items()}
+    found = config.policy_or_empty(root, "task").get("autorun") or {}
+    return {key: config.whole(found.get(key), value) for key, value in DEFAULTS.items()}
 
 
 def steps_of(root: Path, task: str) -> List[Dict[str, Any]]:

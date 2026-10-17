@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import shutil
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from support import HarnessTestCase
 from test_targets import GIT, make_repo, run_git
 
-from core import kbmigrate, kbstd, miniyaml, tasks
+from core import gitread, kbmigrate, kbstd, miniyaml, tasks
 
 DOMAIN = """schema_version: 1
 domain: orders
@@ -136,7 +137,7 @@ class StaleTests(CheckCase):
         repos = self.root / "source" / "repos"
         self.repo = make_repo(repos / "shop_repo", {"jobs/nightly.sql": "exec job;\n", "db/usp_load_orders.sql": "merge 1;\n"})
         (self.root / ".harness" / "policies" / "target.override.json").write_text(json.dumps({"repos_root": str(repos)}), encoding="utf-8")
-        shas = kbstd.blob_shas(self.repo, "main", ["jobs/nightly.sql", "db/usp_load_orders.sql"])
+        shas = gitread.blob_shas(self.repo, "repo", "main", ["jobs/nightly.sql", "db/usp_load_orders.sql"])
         for row in self.rows:
             row["sources"][0]["sha"] = shas[row["sources"][0]["path"]][:12]
         self.write_index()
@@ -184,6 +185,22 @@ class StaleTests(CheckCase):
         shutil.copy(dev / kbstd.INDEX_FILE, self.folder / kbstd.INDEX_FILE)
         self.assertEqual(kbstd.stale(self.root, "orders")["changed"], [])
 
+    def test_a_repository_git_cannot_read_is_not_all_gone(self) -> None:
+        override = self.root / ".harness" / "policies" / "target.override.json"
+        override.write_text(json.dumps({**json.loads(override.read_text(encoding="utf-8")), "repos": {"shop_repo": {"base_ref": "no_such_branch"}}}), encoding="utf-8")
+        result = kbstd.stale(self.root, "orders")
+        self.assertEqual(result["gone"], [])
+        self.assertEqual(result["unreadable_repos"][0]["repo"], "shop_repo")
+        dev = self.root / tasks.TASKS_DIR / "kb-fix" / "DEV" / "kb" / "domains" / "orders"
+        shutil.copytree(self.folder, dev)
+        with self.assertRaises(kbmigrate.MigrateError):
+            kbmigrate.stamp(self.root, dev)
+
+    def test_many_paths_are_asked_in_chunks(self) -> None:
+        with mock.patch.object(gitread, "PATHS_PER_CALL", 1):
+            found = gitread.blob_shas(self.repo, "shop_repo", "main", ["jobs/nightly.sql", "db/usp_load_orders.sql", "nope.sql"])
+        self.assertEqual(sorted(found), ["db/usp_load_orders.sql", "jobs/nightly.sql"])
+
     def test_the_commands(self) -> None:
         self.assertEqual(self.cli_json("kb", "stale", "--domain", "orders", "--diff", "--json")["changed"], [])
         self.assertNotEqual(self.cli("kb", "stamp", "--path", str(self.folder)).returncode, 0)
@@ -204,7 +221,7 @@ class FetchKnowledgeTests(TaskCase):
         folder = self.root / "knowledge-base" / "domains" / "orders"
         (folder / "objects").mkdir(parents=True)
         (folder / "objects" / "sp.md").write_text("# SP\n\n## sp:a\n\ntext\n", encoding="utf-8")
-        sha = kbstd.blob_shas(self.repo_b, "main", ["src/a.sql"])["src/a.sql"][:12]
+        sha = gitread.blob_shas(self.repo_b, "repo_b", "main", ["src/a.sql"])["src/a.sql"][:12]
         self.index = folder / "objects" / "index.jsonl"
         self.row = {"id": "sp:a", "type": "stored-procedure", "repo": "repo_b", "sources": [{"path": "src/a.sql", "sha": sha}], "card": "objects/sp.md#sp:a", "level": "verified"}
         self.index.write_text(json.dumps(self.row) + "\n", encoding="utf-8")

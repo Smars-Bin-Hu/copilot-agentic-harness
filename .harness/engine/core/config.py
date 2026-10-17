@@ -79,3 +79,17 @@ def load_policy(root: Path, name: str) -> Dict[str, Any]:
     if path.exists():
         return deep_merge(base, read_json(path))
     return base
+
+
+def policy_or_empty(root: Path, name: str) -> Dict[str, Any]:
+    """The policy, or {} when it is missing or broken. For a hook or a setting with defaults: `doctor` reports the break."""
+    try:
+        found = load_policy(root, name)
+    except Exception:  # noqa: BLE001 - fail open: the caller has defaults
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def whole(value: Any, default: int) -> int:
+    """A setting that must be a whole number: the value when it is one, else the default (never raises)."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else default

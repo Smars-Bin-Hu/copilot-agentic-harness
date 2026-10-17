@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from taskcase import TASK, TaskCase
 
@@ -68,6 +70,30 @@ class ArchiveTests(TaskCase):
         for bad in ("archive", str(self.root / tasks.TASKS_DIR / "x"), ""):
             with self.assertRaises(CommandError):
                 taskarchive.archive(self.root, ["done1"], to=bad)
+
+    def test_a_broken_index_stops_before_anything_moves(self) -> None:
+        self.shelf.mkdir(parents=True)
+        (self.shelf / taskarchive.INDEX_JSON).write_text("{not json", encoding="utf-8")
+        with self.assertRaises(CommandError):
+            taskarchive.archive(self.root, ["done1"], to=str(self.shelf), apply=True)
+        self.assertTrue((self.root / tasks.TASKS_DIR / "done1").is_dir())
+        self.assertEqual((self.shelf / taskarchive.INDEX_JSON).read_text(encoding="utf-8"), "{not json")
+
+    def test_a_failure_halfway_leaves_the_moved_tasks_in_the_index(self) -> None:
+        real = shutil.move
+        calls = []
+
+        def move(source, target):
+            calls.append(source)
+            if "done2" in str(source):
+                raise OSError("in use")
+            return real(source, target)
+
+        with mock.patch.object(taskarchive.shutil, "move", side_effect=move):
+            with self.assertRaises(OSError):
+                taskarchive.archive(self.root, ["done1", "done2"], to=str(self.shelf), apply=True)
+        listed = json.loads((self.shelf / taskarchive.INDEX_JSON).read_text(encoding="utf-8"))["tasks"]
+        self.assertEqual([entry["name"] for entry in listed], ["done1"])
 
     def test_the_cli_lists_by_itself(self) -> None:
         result = self.run_cli("task", "archive")

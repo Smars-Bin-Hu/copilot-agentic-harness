@@ -119,10 +119,14 @@ def upgrade(state: Any) -> None:
     state["schema_version"] = SCHEMA_VERSION
 
 
-def atomic_write(path: Path, value: Any) -> None:
+def atomic_write(path: Path, value: Any, compact: bool = False) -> None:
+    """Write JSON so that a reader never sees half a file. `compact`: one line, for big caches nobody reads by eye."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=str(path.parent), delete=False) as handle:
-        json.dump(value, handle, indent=2, sort_keys=True, ensure_ascii=False)
+        if compact:
+            json.dump(value, handle, ensure_ascii=False, separators=(",", ":"))
+        else:
+            json.dump(value, handle, indent=2, sort_keys=True, ensure_ascii=False)
         handle.write("\n")
         temporary = handle.name
     try:

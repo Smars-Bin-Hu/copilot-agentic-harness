@@ -7,13 +7,12 @@ names and their spellings at once. What comes back is short: per repository the 
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from core import messages, targets
+from core import gitread, messages, targets
 
 from .common import CommandError, say
 
@@ -120,7 +119,7 @@ def grep_repo(repo: targets.Repo, commit: str, search: Search, tally: Tally, tim
         command += ["-e", literal]
     command += [commit, "--"]
     try:
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "LC_ALL": "C"})
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=gitread.env())
     except (FileNotFoundError, PermissionError) as error:
         raise CommandError(say("target.git.missing")) from error
     prefix = commit + ":"

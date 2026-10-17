@@ -21,7 +21,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import kbstd, miniyaml, targets, tasks
+from . import gitread, kbstd, miniyaml, targets, tasks
 from .registry import harness_version
 
 LEVEL_OF = {"confirmed": "verified", "verified": "verified", "partial": "supported", "supported": "supported", "inferred": "inferred", "unknown": "unknown", "conflict": "conflict"}
@@ -95,8 +95,8 @@ def shas_at(root: Path, repo_name: str, commit: str, paths: List[str]) -> Dict[s
     if repo is None:
         return {}
     try:
-        return kbstd.blob_shas(repo.path, commit, paths)
-    except Exception:  # noqa: BLE001
+        return gitread.blob_shas(repo.path, repo_name, commit, paths)
+    except gitread.GitError:  # the old commit is not here (a shallow clone, another remote): the report lists the sources as unstamped
         return {}
 
 
@@ -290,7 +290,10 @@ def stamp(root: Path, folder: Path, ids: Optional[List[str]] = None) -> Dict[str
             unknown_repos.add(name)
             continue
         sources = [source for row in items for source in row.get("sources") or [] if isinstance(source, dict) and source.get("path")]
-        current = kbstd.blob_shas(repo.path, repo.base_ref, sorted({source["path"] for source in sources}))
+        try:
+            current = gitread.blob_shas(repo.path, name, repo.base_ref, sorted({source["path"] for source in sources}))
+        except gitread.GitError as error:  # never stamp from an answer git did not give
+            raise MigrateError(str(error)) from None
         for row in items:
             changed = False
             for source in row.get("sources") or []:

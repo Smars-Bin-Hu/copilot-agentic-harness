@@ -837,5 +837,17 @@
   "kb.check.none": "<知识库>/domains/ 下没有 domain。",
   "kb.stale.no_domain": "没有 domain `{domain}`。已有：{known}。",
   "kb.stale.next": "`changed` 和 `gone` 里的卡片，所依据的源码之后改过。用之前先读源码；告诉用户哪些卡片过期了，并提议开一个 `kb` 任务更新。",
-  "kb.stale.fresh": "这个 domain 学完之后源码没有变化（没有 sha 的对象判断不了：见 `unstamped`）。"
+  "kb.stale.fresh": "这个 domain 学完之后源码没有变化（没有 sha 的对象判断不了：见 `unstamped`）。",
+  "kbmap.no_branch": "它没有 `{branch}` 分支：没有可建图的内容。",
+  "kbmap.no_profile": "没有适合它的技术栈 profile（已有：{known}）。没有地图时，按目录读来学；团队可以在 <知识库>/profiles/ 加 profile。",
+  "kbmap.unknown_profile": "没有叫 `{name}` 的技术栈 profile。已有：{known}。",
+  "kbmap.no_repos": "还没有配置目标仓库。运行 `target list`。",
+  "kbmap.next": "用 `kb near <id>` 看一个对象用了谁、谁用了它；用 `kb split` 出 domain 的初步划分。`dynamic` 的对象运行时才知道执行什么 SQL：依赖它们的关系之前，先读代码或问用户。",
+  "kbmap.empty": "地图里没有找到对象。对照仓库的文件检查 profile（`--profile`）。",
+  "kbmap.none": "还没有地图。先运行 `kb map`。",
+  "kbmap.near.none": "地图里没有叫 `{query}` 的对象。代码改过的话，再运行一次 `kb map`。",
+  "kbmap.near.many": "有多个对象符合。用下面的某个 id 再查一次。",
+  "kbmap.near.dynamic": "这个对象运行时才知道执行什么 SQL：列出的关系可能不全。",
+  "kbmap.split.next": "这是脚本做的初步划分：入口和它们用到的对象连成一组。`shared` 的对象被很多入口用到，放进 shared/。把提议写给用户，名字用用户会用的叫法；domain 由用户确认一次。",
+  "kbmap.split.one_big": "有一个 domain 有 {size} 个对象：还有被到处用到的对象把它们连在一起。试试调低 `--shared-min`（现在是 {limit}）。"
 }

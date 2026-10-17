@@ -837,5 +837,17 @@
   "kb.check.none": "No domain found under <knowledge base>/domains/.",
   "kb.stale.no_domain": "No domain `{domain}`. Domains: {known}.",
   "kb.stale.next": "The cards of `changed` and `gone` were written from source that changed since. Before relying on one, read its source; tell the user which cards are out of date, and offer a `kb` task to update them.",
-  "kb.stale.fresh": "No source of this domain changed since it was learned (objects without a sha cannot be told: see `unstamped`)."
+  "kb.stale.fresh": "No source of this domain changed since it was learned (objects without a sha cannot be told: see `unstamped`).",
+  "kbmap.no_branch": "It has no branch `{branch}`: nothing to map.",
+  "kbmap.no_profile": "No stack profile fits its files (profiles: {known}). Without a map, learn it by reading its folders; a team can add a profile in <knowledge base>/profiles/.",
+  "kbmap.unknown_profile": "No stack profile `{name}`. Profiles: {known}.",
+  "kbmap.no_repos": "No target repository is set up. Run `target list`.",
+  "kbmap.next": "Use `kb near <id>` for what one object uses and what uses it, and `kb split` for a first cut of the domains. `dynamic` objects run SQL known only at run time: read them, or ask the user, before you rely on their uses.",
+  "kbmap.empty": "The map found no object. Check the profile against the files of the repository (`--profile`).",
+  "kbmap.none": "There is no map yet. Run `kb map` first.",
+  "kbmap.near.none": "No object in the map is called `{query}`. Run `kb map` again if the code changed.",
+  "kbmap.near.many": "More than one object fits. Ask again with one of these ids.",
+  "kbmap.near.dynamic": "This object runs SQL known only at run time: the uses listed may be incomplete.",
+  "kbmap.split.next": "A first cut, by script: entry points joined by what they use. `shared` objects are used from many entry points and belong in shared/. Write the proposal for the user, with names they would use; the user confirms the domains once.",
+  "kbmap.split.one_big": "One domain holds {size} objects: something used everywhere still joins them. Try a lower `--shared-min` (now {limit})."
 }

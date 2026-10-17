@@ -10,6 +10,25 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.11 (2026-10-17)
+
+Learning a code base starts with a map made by script, not with a model reading files.
+
+**Testing**: the automatic tests pass on the Mac (843). **Not yet tried in Copilot**, **not run on Windows**, **not run on a real SQL Server repository**: the job and SSIS formats follow the public documentation and may need one fix against real files.
+
+### Added
+
+- **`harness kb map`**: every object (procedure, view, function, table, trigger, SQL Agent job, SSIS package) and every use (`calls`, `runs`, `reads`, `writes`) of the target repositories, read from the base branch by script. Names are resolved across repositories. It is a cache in `.harness/runtime/kbmap/<repo>.json`: a file whose git blob did not change is not read again. The result sums up the objects, the entry points, what nothing uses, the objects that run SQL known only at run time (`dynamic`), the names outside the map (`external`) and the most used objects.
+- **`harness kb near <id or name>`**: what one object uses and what uses it, up to five steps out (`--up`, `--down`, `--depth`). The impact of a change across domains, from structure rather than from text.
+- **`harness kb split`**: a first cut of the domains. Each entry point with what it reaches; objects reached from many entry points (`--shared-min`, 3 by default) are taken out as shared first, or they would join everything into one domain.
+- **Stack profiles** in `.harness/profiles/`: `sqlserver` (`.sql`, SQL Agent job scripts, `.dtsx`; scripts saved as UTF-16 are read too) and `example-java`, which shows the rules for a stack without its own extractor. A team's own profiles go in `<knowledge base>/profiles/` and win on the same name.
+- **`/generic-kb-domains`** (the agent asks first): maps, cuts, and writes `DOMAINS.md` in a `kb` task for the user to confirm once; the confirmed list goes into the knowledge base's `README.md`.
+
+### Changed
+
+- **`/generic-impact-analysis`** uses `kb near` next to `target refs` when the repositories are mapped: `refs` finds text, `near` finds uses.
+- **`knowledgebase.instructions.md`**: who else uses an object is answered from the map, not from other domains' pages.
+
 ## 1.4.10 (2026-10-16)
 
 The agent meets the knowledge base where it works: the files it fetches.

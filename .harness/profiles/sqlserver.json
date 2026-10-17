@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "name": "sqlserver",
+  "description": "SQL Server: database projects and scripts (.sql), SQL Agent job scripts, SSIS packages (.dtsx).",
+  "detect": [".sql", ".dtsx"],
+  "files": [
+    {"glob": "**/*.sql", "extractor": "tsql"},
+    {"glob": "**/*.dtsx", "extractor": "ssis"}
+  ],
+  "ignore": ["**/bin/**", "**/obj/**", "**/*.publish.sql"],
+  "entry_types": ["job"],
+  "shared_min": 3
+}

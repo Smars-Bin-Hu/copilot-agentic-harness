@@ -15,7 +15,8 @@ The form is [the standard](../../.harness/contracts/kb/README.md); `harness kb c
 2. Read `domains/<d>/architecture.md` and `domain.yaml`. Stop when they answer the question or let you write the plan.
 3. Need an object: find its line in `objects/index.jsonl` by id or name, and read only its card (`card` is `file#section`). Never read a whole `objects/` folder, `discovery/`, or every RCA.
 4. Need the code: open only the `sources` of that object (`<repo>/<path>`), with `task fetch` in a task. Code is evidence for DEV only; it says nothing certain about IST, QAT or PROD.
-5. Each step deeper: write one line in the task's `LOG.md`: what was unknown, what you read, why the step before was not enough.
+5. Who else uses an object, in this domain or another: `harness kb near <id or name> --up --depth 2` answers from the repository map (`harness kb map`), not from other domains' pages.
+6. Each step deeper: write one line in the task's `LOG.md`: what was unknown, what you read, why the step before was not enough.
 
 Run `harness kb stale --domain <d>` once at the start of a task that will change code or relies on cards for an answer. A card in `changed` or `gone` is history, not fact: check its source before you rely on it.
 

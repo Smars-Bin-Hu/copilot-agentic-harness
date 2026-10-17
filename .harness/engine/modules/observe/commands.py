@@ -4,6 +4,7 @@
   kb reads             which knowledge base files the tasks read, and which nobody read
   kb check [--domain]  is each domain in the standard form (core/kbstd.py)
   kb stale --domain D  which objects were learned from source files that changed since
+  kb map / near / split  the repository map: every object and use, by script (core/kbmap.py)
   logs prune           delete session logs not written to for N days (a person decides; no hook deletes anything)
 """
 
@@ -15,7 +16,7 @@ from typing import Any, Dict
 
 from core.paths import repo_root
 
-from core import kbmigrate, kbstd
+from core import kbmap, kbmigrate, kbstd
 
 from . import kbstats, prune, stats
 
@@ -40,6 +41,15 @@ def cmd_stale(args: Any) -> Dict[str, Any]:
         return kbstd.stale(repo_root(), args.domain)
     except ValueError as error:
         raise RuntimeError(str(error)) from None
+
+
+def mapped(work: Any) -> Any:
+    def run(args: Any) -> Dict[str, Any]:
+        try:
+            return work(args)
+        except kbmap.MapError as error:
+            raise RuntimeError(str(error)) from None
+    return run
 
 
 def register(subparsers: Any) -> None:
@@ -67,6 +77,22 @@ def register(subparsers: Any) -> None:
     old = kb_commands.add_parser("stale", help="which objects of a domain were learned from source files that changed since (git, on the base branch)")
     old.add_argument("--domain", required=True)
     old.set_defaults(handler=cmd_stale)
+    # The repository map (layer one of learning a code base): core/kbmap.py, extractors in core/kbextract.py.
+    build = kb_commands.add_parser("map", help="map the target repositories by script: every object (procedure, table, job, package ...) and every use (calls, runs, reads, writes). Only changed files are read again")
+    build.add_argument("--repo", action="append", default=None, help="only this repository (may be given more than once); default: all but the knowledge base")
+    build.add_argument("--profile", default="", help="the stack profile to use (.harness/profiles/, <knowledge base>/profiles/); default: found from the files")
+    build.add_argument("--fresh", action="store_true", help="read every file again")
+    build.set_defaults(handler=mapped(lambda a: kbmap.build(repo_root(), a.repo, a.profile, a.fresh)))
+    close = kb_commands.add_parser("near", help="what one object uses and what uses it, from the map")
+    close.add_argument("object", help="an id (sp:Db.dbo.usp_x) or a name (usp_x)")
+    close.add_argument("--depth", type=int, default=1, choices=range(1, 6), help="how many steps out (1 to 5)")
+    side = close.add_mutually_exclusive_group()
+    side.add_argument("--up", dest="direction", action="store_const", const="up", help="only what uses it")
+    side.add_argument("--down", dest="direction", action="store_const", const="down", help="only what it uses")
+    close.set_defaults(handler=mapped(lambda a: kbmap.near(repo_root(), a.object, a.depth, a.direction or "both")), direction=None)
+    cut = kb_commands.add_parser("split", help="a first cut of the domains from the map: entry points and what they reach; objects reached from many entry points are shared")
+    cut.add_argument("--shared-min", type=int, default=None, help="reached from this many entry points makes an object shared (default: from the profile, 3)")
+    cut.set_defaults(handler=mapped(lambda a: kbmap.split(repo_root(), a.shared_min)))
 
     logs = subparsers.add_parser("logs", help="the session logs")
     commands = logs.add_subparsers(dest="logs_command", required=True)

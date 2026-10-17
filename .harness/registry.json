@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.4.10",
-  "released": "2026-10-16",
+  "version": "1.4.11",
+  "released": "2026-10-17",
   "copyright": "Smars Hu",
   "contributors": [
     "Claude Code"
@@ -13,6 +13,7 @@
       ".harness/engine/doctor.py",
       ".harness/engine/core/",
       ".harness/contracts/kb/",
+      ".harness/profiles/",
       ".harness/engine/adapters/copilot_vscode.py",
       ".harness/engine/adapters/tool_kinds.json",
       ".github/hooks/harness.json",
@@ -28,7 +29,8 @@
       ".harness/tests/test_skillcheck.py",
       ".harness/tests/test_render.py",
       ".harness/tests/test_kbstd.py",
-      ".harness/tests/test_kbmigrate.py"
+      ".harness/tests/test_kbmigrate.py",
+      ".harness/tests/test_kbmap.py"
     ]
   },
   "modules": {

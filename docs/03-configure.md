@@ -146,6 +146,21 @@ harness kb reads --task <task name> # what one task read
 - What can be recorded: the paths the read and search tools name, and paths written out in a terminal command (`cat knowledge-base/x.md`). What cannot: for a search over a folder, only the folder is known, not which files in it were read.
 - To switch it off: write `{ "knowledge_base_reads": false }` in `observe.override.json`.
 
+### Starting a knowledge base from the code: the repository map
+
+When there is no knowledge base yet, or a repository nobody has learned, ask the agent to propose the domains (`/generic-kb-domains`). It starts with a map made by script, not by reading:
+
+```bash
+harness kb map                       # every object and every use, from the base branch of each target repository
+harness kb near usp_load_orders      # what one object uses, and what uses it (--up, --down, --depth 3)
+harness kb split                     # a first cut of the domains; objects used from many entry points are "shared"
+```
+
+- **What the map knows depends on the stack profile** (`.harness/profiles/`). `sqlserver` ships: `.sql` (procedures, views, functions, tables, triggers), SQL Agent job scripts as SSMS writes them, and SSIS packages (`.dtsx`). A database is named after the `.sqlproj` above the file. For another stack, copy `example-java.json` into `<knowledge base>/profiles/` and change its rules; a profile there wins over a shipped one of the same name.
+- **It is a cache**, in `.harness/runtime/kbmap/`, never in the knowledge base. The first run reads every file; later runs read only the files that changed.
+- **What it cannot see**: SQL built at run time (`EXEC(@sql)`, `sp_executesql`): such objects are marked `dynamic`. Objects with no file in the repositories (another database, a linked server) are listed as `external`. A job or a process outside the repositories is not seen at all.
+- You decide the cut once: the agent writes `DOMAINS.md` in a `kb` task, you change it until it is right, and the list goes into the knowledge base's `README.md`.
+
 ## Code standards
 
 `.harness/standards/code-standards.md` is where the company writes its code standards. It ships without a rule. Write one rule under each `###` heading, with `Applies to`, `Rule`, `Check`, `Fix` and `Severity`; the file explains each field and shows an example. Group the rules under a heading per language.

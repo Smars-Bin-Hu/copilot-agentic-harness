@@ -48,8 +48,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/hooks/harness.json` | The one hook configuration; every event goes to the same entry |
 | `.harness/registry.json` | The version; the module registry: switches, the events each module listens to, file lists |
 | `.harness/policies/` | Policies: `task`, `gate`, `observe`, `agents`, `target`, `cli`, `user` (the user's name and the language). An override goes in the `.override.json` of the same name |
-| `.harness/contracts/` | The templates of the task files: `TASK.md`, `REQ.md`, `TODO.md`, `LOG.md` under `templates/task/<language>/` (`en`, `zh`). `kb/`: the knowledge base standard (README) and its templates |
-| `.harness/profiles/` | Stack profiles for `harness kb map`: which files go to which extractor. `sqlserver` (.sql, SQL Agent job scripts, .dtsx); `example-java` shows rules for a stack without its own extractor. A team's own go in `<knowledge base>/profiles/` |
+| `.harness/contracts/` | The templates of the task files: `TASK.md`, `REQ.md`, `TODO.md`, `LOG.md` under `templates/task/<language>/` (`en`, `zh`). `kb/`: the knowledge base standard (README) and its templates; `map.md`, the contract of the repository map and of a team's toolkit; `toolkit-example-sqlserver/`, a sample toolkit |
 | `.harness/engine/` | `hook.py` (the hook entry), `cli.py` (the command entry), `modules/` (task, gate, observe, evalcheck), `adapters/` (runtime differences), `core/messages.<language>.json` (every text the engine prints) |
 | `.harness/bin/` | The launchers of the short command: `harness` (macOS/Linux), `harness.cmd` (Windows) |
 | `.harness/eval/` | Fixed scenarios (`scenarios/`) and recorded samples of real hook input (`fixtures/`) |

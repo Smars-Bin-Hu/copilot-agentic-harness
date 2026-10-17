@@ -148,7 +148,7 @@ harness kb reads --task <task name> # what one task read
 
 ### Starting a knowledge base from the code: the repository map
 
-When there is no knowledge base yet, or a repository nobody has learned, ask the agent to propose the domains (`/generic-kb-domains`). It starts with a map made by script, not by reading:
+When there is no knowledge base yet, or a repository nobody has learned, the agent starts from a map made by script, not by reading:
 
 ```bash
 harness kb map                       # every object and every use, from the base branch of each target repository
@@ -156,10 +156,11 @@ harness kb near usp_load_orders      # what one object uses, and what uses it (-
 harness kb split                     # a first cut of the domains; objects used from many entry points are "shared"
 ```
 
-- **What the map knows depends on the stack profile** (`.harness/profiles/`). `sqlserver` ships: `.sql` (procedures, views, functions, tables, triggers), SQL Agent job scripts as SSMS writes them, and SSIS packages (`.dtsx`). A database is named after the `.sqlproj` above the file. For another stack, copy `example-java.json` into `<knowledge base>/profiles/` and change its rules; a profile there wins over a shipped one of the same name.
+- **The map needs your toolkit.** What a procedure, a job or a class looks like in a file depends on your stack, so the harness ships none. The agent makes one for your code: `/generic-kb-toolkit-design` looks at your repositories and asks you for 5 to 10 uses you know ("job X runs procedure Y"); you approve the design; `/generic-kb-toolkit-build` writes the extractors into `<knowledge base>/toolkit/` through a write-back you approve. Every `kb map` checks those known uses again. The contract is `.harness/contracts/kb/map.md`; a sample for SQL Server (`.sql`, SQL Agent job scripts, SSIS packages) is next to it.
+- **`kb map` runs the toolkit's code.** It is code from your knowledge base, which changes only through a write-back a person approves.
 - **It is a cache**, in `.harness/runtime/kbmap/`, never in the knowledge base. The first run reads every file; later runs read only the files that changed.
-- **What it cannot see**: SQL built at run time (`EXEC(@sql)`, `sp_executesql`): such objects are marked `dynamic`. Objects with no file in the repositories (another database, a linked server) are listed as `external`. A job or a process outside the repositories is not seen at all.
-- You decide the cut once: the agent writes `DOMAINS.md` in a `kb` task, you change it until it is right, and the list goes into the knowledge base's `README.md`.
+- **What it shows besides the uses**: `missing` (names used but defined in no file: deleted, retired or never committed), `obsolete_used` (retired code still in use), `dynamic` (code known only at run time), `external` (other systems).
+- You decide the domains once: `/generic-kb-domains` writes `DOMAINS.md` in a `kb` task, you change it until it is right, and the list goes into the knowledge base's `README.md`.
 
 ## Code standards
 

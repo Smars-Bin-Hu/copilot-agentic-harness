@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.4.12",
+  "version": "1.4.13",
   "released": "2026-10-17",
   "copyright": "Smars Hu",
   "contributors": [
@@ -13,7 +13,6 @@
       ".harness/engine/doctor.py",
       ".harness/engine/core/",
       ".harness/contracts/kb/",
-      ".harness/profiles/",
       ".harness/engine/adapters/copilot_vscode.py",
       ".harness/engine/adapters/tool_kinds.json",
       ".github/hooks/harness.json",

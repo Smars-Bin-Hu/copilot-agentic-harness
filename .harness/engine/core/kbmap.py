@@ -1,16 +1,16 @@
 """The repository map (M15-10d, layer one of learning a code base): every object and every use, by script.
 
-  kb map    read the base branch of each target repository with the extractors its stack profile names; keep the
-            result per file, by git blob sha, in .harness/runtime/kbmap/<repo>.json. A file that did not change is
-            not read again. The map is a cache: it can be built again at any time, so it is not knowledge and does
-            not go into the knowledge base
+  kb map    read the base branch of each target repository with the extractors of the team's toolkit
+            (`<knowledge base>/toolkit/`, contract in .harness/contracts/kb/map.md); keep the result per file, by git
+            blob sha, in .harness/runtime/kbmap/<repo>.json. A file that did not change is not read again. The map is
+            a cache: it can be built again at any time, so it is not knowledge and does not go into the knowledge base.
+            Each run checks the toolkit against the uses a person knows (`facts.jsonl`)
   kb near   what one object uses and what uses it, a few steps out: the impact of a change across domains
   kb split  a first cut of the domains: from each entry point, what it reaches; objects reached from many entry points
             are shared (a log procedure, a calendar table) and are taken out first, or everything joins into one domain
 
-A stack profile (`.harness/profiles/<name>.json`; a team's own in `<knowledge base>/profiles/`, which wins on the same
-name) says which files go to which extractor (core/kbextract.py), which object types are entry points, and how many
-entry points make an object shared. No model reads anything here.
+The harness ships no toolkit: what a procedure or a class looks like in a file depends on the stack and is made by each
+team with /generic-kb-toolkit-design and /generic-kb-toolkit-build. No model reads anything here.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ import json
 import re
 import subprocess
 from collections import Counter, defaultdict, deque
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
@@ -26,15 +27,16 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from . import kbextract, messages, paths, repo_paths, targets
 
-SCHEMA_VERSION = 1
-PROFILES = ".harness/profiles"
+SCHEMA_VERSION = 2
+TOOLKIT_DIR = "toolkit"
+TOOLKIT_FILE = "toolkit.json"
+FACTS_FILE = "facts.jsonl"
 MAX_FILE_BYTES = 5_000_000  # a bigger file is listed under `skipped`, not read
 BATCH = 400  # blobs per `git cat-file --batch` call
 GIT_TIMEOUT = 300
 SAMPLE = 10
 NEAR_LIMIT = 200
-EXECUTABLE = ("sp", "package", "fn", "view", "trigger")
-STOP_WORDS = {"dbo", "job", "jobs", "sp", "usp", "etl", "daily", "nightly", "weekly", "monthly", "load", "run", "main", "the", "and", "of", "to"}
+NAME_STYLES = ("sql", "plain")
 
 
 class MapError(ValueError):
@@ -45,36 +47,96 @@ def say(key: str, /, **values: Any) -> str:
     return messages.text(key, **values)
 
 
-# --- profiles -----------------------------------------------------------------------------------------
+# --- toolkits -----------------------------------------------------------------------------------------
 
 
-def profiles(root: Path) -> Dict[str, Dict[str, Any]]:
-    """name -> profile. The shipped ones, then those of each knowledge base (`profiles/*.json`), which win."""
-    folders = [root / PROFILES] + [folder / "profiles" for _name, folder in targets.knowledge_bases(root)]
-    found: Dict[str, Dict[str, Any]] = {}
-    for folder in folders:
-        if not folder.is_dir():
-            continue
-        for file in sorted(folder.glob("*.json")):
+@dataclass
+class Toolkit:
+    name: str
+    folder: Path
+    data: Dict[str, Any]
+    signature: str
+    extractors: Dict[Tuple[str, str], kbextract.Extractor] = field(default_factory=dict)
+
+    def rule_for(self, path: str) -> Optional[Dict[str, Any]]:
+        if any(matches(pattern, path) for pattern in self.data.get("ignore") or []):
+            return None
+        return next((rule for rule in self.data["extractors"] if matches(rule["glob"], path)), None)
+
+    def extractor(self, rule: Dict[str, Any]) -> kbextract.Extractor:
+        if rule.get("builtin"):
+            return kbextract.BUILTIN[rule["builtin"]]
+        key = (rule["file"], rule.get("function", "extract"))
+        if key not in self.extractors:
             try:
-                data = json.loads(file.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                continue
-            if valid(data):
-                data["_file"] = str(file)
-                found[data["name"]] = data
+                self.extractors[key] = kbextract.load(self.folder / key[0], key[1])
+            except kbextract.ToolkitError as error:
+                raise MapError(say("kbmap.toolkit_bad", folder=self.folder, problem=error)) from None
+        return self.extractors[key]
+
+    def facts(self) -> List[Dict[str, str]]:
+        file = self.folder / FACTS_FILE
+        if not file.is_file():
+            return []
+        found = []
+        for line in file.read_text(encoding="utf-8").splitlines():
+            try:
+                fact = json.loads(line) if line.strip() else None
+            except ValueError:
+                fact = None
+            if isinstance(fact, dict) and fact.get("from") and fact.get("to"):
+                found.append({"from": str(fact["from"]), "kind": str(fact.get("kind") or ""), "to": str(fact["to"])})
+        return found
+
+
+def problems_of(data: Any) -> List[str]:
+    """What is wrong with a toolkit.json, in the words of map.md."""
+    if not isinstance(data, dict):
+        return ["not a JSON object"]
+    found = [f"no `{key}`" for key in ("schema_version", "name", "extractors") if key not in data]
+    for number, rule in enumerate(data.get("extractors") or [], 1):
+        if not isinstance(rule, dict) or not rule.get("glob"):
+            found.append(f"extractors[{number}] has no glob")
+        elif rule.get("builtin"):
+            if rule["builtin"] not in kbextract.BUILTIN:
+                found.append(f"extractors[{number}]: no builtin `{rule['builtin']}` ({', '.join(kbextract.BUILTIN)})")
+        elif not rule.get("file"):
+            found.append(f"extractors[{number}] names no file")
+        elif Path(rule["file"]).is_absolute() or ".." in Path(rule["file"]).parts:
+            found.append(f"extractors[{number}]: the file must be inside the toolkit folder")
+    if data.get("names", "sql") not in NAME_STYLES:
+        found.append(f"`names` is one of {', '.join(NAME_STYLES)}")
     return found
 
 
-def valid(data: Any) -> bool:
-    if not isinstance(data, dict) or not isinstance(data.get("name"), str) or not isinstance(data.get("files"), list):
-        return False
-    return all(isinstance(rule, dict) and rule.get("extractor") in kbextract.EXTRACTORS and rule.get("glob") for rule in data["files"])
+def toolkits(root: Path) -> List[Toolkit]:
+    """The toolkit of each knowledge base that has one. A broken one stops the map: its owner must know."""
+    found = []
+    for _name, folder in targets.knowledge_bases(root):
+        file = folder / TOOLKIT_DIR / TOOLKIT_FILE
+        if not file.is_file():
+            continue
+        try:
+            data = json.loads(file.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise MapError(say("kbmap.toolkit_bad", folder=file.parent, problem=error)) from None
+        problems = problems_of(data)
+        if problems:
+            raise MapError(say("kbmap.toolkit_bad", folder=file.parent, problem="; ".join(problems)))
+        code = sorted({rule["file"] for rule in data["extractors"] if rule.get("file")})
+        digest = sha256(file.read_bytes())
+        for name in code:
+            target = file.parent / name
+            digest.update(target.read_bytes() if target.is_file() else b"-")
+        found.append(Toolkit(str(data["name"]), file.parent, data, digest.hexdigest()[:16]))
+    return found
 
 
-def signature(profile: Dict[str, Any]) -> str:
-    body = {key: value for key, value in profile.items() if not key.startswith("_")}
-    return sha256(json.dumps([kbextract.VERSION, body], sort_keys=True).encode("utf-8")).hexdigest()[:16]
+def toolkit_for(choices: List[Toolkit], repo: str) -> Optional[Toolkit]:
+    named = [kit for kit in choices if repo in (kit.data.get("repos") or [])]
+    if named:
+        return named[0]
+    return next((kit for kit in choices if not kit.data.get("repos")), None)
 
 
 def matches(pattern: str, path: str) -> bool:
@@ -84,15 +146,41 @@ def matches(pattern: str, path: str) -> bool:
     return pattern.startswith("**/") and bool(repo_paths.glob_regex(pattern[3:]).match(path))
 
 
-def detect(choices: Dict[str, Dict[str, Any]], listing: Iterable[str]) -> Optional[str]:
-    """The profile whose file kinds (`detect`: suffixes) are most of the repository. None when no file is of any kind."""
-    counts: Counter = Counter(PurePosixPath(path).suffix.lower() for path in listing)
-    best, score = None, 0
-    for name, profile in sorted(choices.items()):
-        found = sum(counts[suffix.lower()] for suffix in profile.get("detect") or [])
-        if found > score:
-            best, score = name, found
-    return best
+# --- SQL names ------------------------------------------------------------------------------------------
+
+
+def parts(raw: str) -> List[str]:
+    """`[Db].dbo.[My Table]` -> ["Db", "dbo", "My Table"]. `Db..t` keeps the empty schema."""
+    found, current, index = [], "", 0
+    while index < len(raw):
+        char = raw[index]
+        if char in "[\"":
+            close = "]" if char == "[" else "\""
+            end = raw.find(close, index + 1)
+            end = len(raw) if end < 0 else end
+            current += raw[index + 1:end]
+            index = end + 1
+            continue
+        if char == ".":
+            found.append(current.strip())
+            current = ""
+        elif not char.isspace():
+            current += char
+        index += 1
+    found.append(current.strip())
+    return found
+
+
+def sql_name(raw: str, db: str = "") -> str:
+    """`db.schema.name` when the database is known, `schema.name` when not; `dbo` for a missing schema; no server part."""
+    pieces = parts(raw)[-3:]
+    if len(pieces) == 1:
+        pieces = ["dbo"] + pieces
+    if len(pieces) == 3 and not pieces[1]:
+        pieces[1] = "dbo"
+    if len(pieces) == 2 and db:
+        pieces = [db] + pieces
+    return ".".join(pieces)
 
 
 # --- reading a repository ---------------------------------------------------------------------------------
@@ -132,8 +220,8 @@ def blobs(repo: targets.Repo, shas: List[str]) -> Dict[str, bytes]:
     return out
 
 
-def project_of(path: str, markers: Dict[str, str]) -> str:
-    """The stem of the nearest `.sqlproj` / `.dtproj` in a folder above the file, or an empty string."""
+def nearest(path: str, markers: Dict[str, str]) -> str:
+    """The stem of the nearest marker file (`markers` in toolkit.json) in a folder above the file, or an empty string."""
     folder = PurePosixPath(path).parent
     while True:
         key = str(folder)
@@ -165,26 +253,21 @@ def read_cache(root: Path, name: str) -> Dict[str, Any]:
         return {}
 
 
-def build_one(root: Path, repo: targets.Repo, choices: Dict[str, Dict[str, Any]], wanted: str, fresh: bool) -> Dict[str, Any]:
+def build_one(root: Path, repo: targets.Repo, kit: Optional[Toolkit], fresh: bool) -> Dict[str, Any]:
     """Map one repository. Reads only the files whose blob changed since the last map."""
+    if kit is None:
+        return {"repo": repo.name, "toolkit": "-", "note": say("kbmap.no_toolkit")}
     commit = targets.ref_commit(repo)
     if not commit:
-        return {"repo": repo.name, "profile": "-", "note": say("kbmap.no_branch", branch=repo.base_ref)}
+        return {"repo": repo.name, "toolkit": kit.name, "note": say("kbmap.no_branch", branch=repo.base_ref)}
     files = listing(repo, commit)
     old = {} if fresh else read_cache(root, repo.name)
-    name = wanted or old.get("profile") or detect(choices, [path for _sha, _size, path in files])
-    if not name or name not in choices:
-        return {"repo": repo.name, "profile": "-", "note": say("kbmap.no_profile", known=messages.joined(sorted(choices)) or "-")}
-    profile = choices[name]
-    sig = signature(profile)
-    kept = old.get("files", {}) if old.get("signature") == sig else {}
+    kept = old.get("files", {}) if old.get("signature") == kit.signature else {}
     all_paths = [path for _sha, _size, path in files]
-    databases, projects = markers(all_paths, ".sqlproj"), markers(all_paths, ".dtproj")
+    marks = {key: markers(all_paths, str(suffix).lower()) for key, suffix in (kit.data.get("markers") or {}).items()}
     chosen: Dict[str, Tuple[str, int, Dict[str, Any]]] = {}
     for sha, size, path in files:
-        if any(matches(pattern, path) for pattern in profile.get("ignore") or []):
-            continue
-        rule = next((rule for rule in profile["files"] if matches(rule["glob"], path)), None)
+        rule = kit.rule_for(path)
         if rule:
             chosen[path] = (sha, size, rule)
     todo = [path for path, (sha, _size, _rule) in chosen.items() if kept.get(path, {}).get("sha") != sha]
@@ -195,18 +278,23 @@ def build_one(root: Path, repo: targets.Repo, choices: Dict[str, Dict[str, Any]]
     for path in todo:
         sha, _size, rule = chosen[path]
         pure = PurePosixPath(path)
-        context = {"path": path, "stem": pure.stem, "db": project_of(path, databases), "project": project_of(path, projects) or pure.parent.name, "rule": rule}
-        result[path] = {"sha": sha, "objects": kbextract.extract(rule["extractor"], data.get(sha, b""), context)}
+        context = {"path": path, "stem": pure.stem, "folder": pure.parent.name, "repo": repo.name, "rule": rule, **{key: nearest(path, found) for key, found in marks.items()}}
+        objects, error = kbextract.run(kit.extractor(rule), data.get(sha, b""), context)
+        result[path] = {"sha": sha, "objects": objects, **({"error": error} if error else {})}
     record = {
-        "schema_version": SCHEMA_VERSION, "repo": repo.name, "ref": repo.base_ref, "commit": commit, "profile": name, "signature": sig,
-        "entry_types": profile.get("entry_types") or [], "shared_min": profile.get("shared_min", 3),
+        "schema_version": SCHEMA_VERSION, "repo": repo.name, "ref": repo.base_ref, "commit": commit, "toolkit": kit.name, "signature": kit.signature,
+        "folder": str(kit.folder), "rules": {key: kit.data.get(key) for key in ("names", "entry_types", "executable_types", "stop_words", "shared_min", "obsolete")},
         "built": datetime.now(timezone.utc).isoformat(timespec="seconds"), "skipped": skipped, "files": result,
     }
     target = cache_file(root, repo.name)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
-    objects = sum(len(item["objects"]) for item in result.values())
-    return {"repo": repo.name, "profile": name, "commit": commit[:12], "files": len(chosen), "read": len(todo), "objects": objects, "skipped": len(skipped)}
+    return {
+        "repo": repo.name, "toolkit": kit.name, "commit": commit[:12], "files": len(chosen), "read": len(todo),
+        "objects": sum(len(item["objects"]) for item in result.values()),
+        "empty": sum(1 for item in result.values() if not item["objects"] and not item.get("error")),
+        "failed": sum(1 for item in result.values() if item.get("error")), "skipped": len(skipped),
+    }
 
 
 def chosen_repos(root: Path, names: Optional[List[str]]) -> List[targets.Repo]:
@@ -219,24 +307,32 @@ def chosen_repos(root: Path, names: Optional[List[str]]) -> List[targets.Repo]:
     return [repo for name, repo in sorted(found.repos.items()) if not repo.knowledge_base]
 
 
-def build(root: Path, names: Optional[List[str]] = None, profile: str = "", fresh: bool = False) -> Dict[str, Any]:
+def build(root: Path, names: Optional[List[str]] = None, fresh: bool = False) -> Dict[str, Any]:
     """`kb map`: map the repositories (all target repositories but the knowledge base, or the ones named), then sum up."""
-    choices = profiles(root)
-    if profile and profile not in choices:
-        raise MapError(say("kbmap.unknown_profile", name=profile, known=messages.joined(sorted(choices)) or "-"))
+    choices = toolkits(root)
+    if not choices:
+        raise MapError(say("kbmap.no_toolkit"))
     repos = chosen_repos(root, names)
     if not repos:
         raise MapError(say("kbmap.no_repos"))
-    rows = [build_one(root, repo, choices, profile, fresh) for repo in repos]
+    rows = [build_one(root, repo, toolkit_for(choices, repo.name), fresh) for repo in repos]
     graph = Graph.load(root, [repo.name for repo in repos])
-    return {"mapped": rows, **graph.summary(), "next": say("kbmap.next" if graph.nodes else "kbmap.empty")}
+    facts = graph.check_facts([fact for kit in choices for fact in kit.facts()])
+    result = {"mapped": rows, **graph.summary(), "facts": facts}
+    if not graph.nodes:
+        result["next"] = say("kbmap.empty")
+    elif facts.get("missing") or not facts.get("checked"):
+        result["next"] = say("kbmap.next.facts")
+    else:
+        result["next"] = say("kbmap.next")
+    return result
 
 
 # --- the graph -----------------------------------------------------------------------------------------
 
 
 def keys_of(name: str) -> List[str]:
-    """The names an object can be called by: `Db.dbo.t`, `dbo.t`, `t`; a package also by its stem."""
+    """The names an object can be called by: `Db.dbo.t`, `dbo.t`, `t`; `Project/Load` also `Load`."""
     low = name.lower()
     dotted = low.split(".")
     found = [low, ".".join(dotted[-2:]), dotted[-1]]
@@ -246,15 +342,25 @@ def keys_of(name: str) -> List[str]:
 
 
 class Graph:
-    """The objects and uses of the mapped repositories, with the names resolved across all of them."""
+    """The objects and uses of the mapped repositories, with the names resolved across all of them.
+
+    A use that resolves to no object is `missing` when its name looks like one of this system (no database, or a
+    database the map knows): a file may have been deleted or never committed. It is `external` when it names another
+    system (a database the map has no object of): a boundary, not a gap.
+    """
 
     def __init__(self) -> None:
         self.nodes: Dict[str, Dict[str, Any]] = {}
         self.out: Dict[str, List[Tuple[str, str]]] = defaultdict(list)
         self.into: Dict[str, List[Tuple[str, str]]] = defaultdict(list)
+        self.missing: Dict[str, Set[str]] = defaultdict(set)
         self.external: Dict[str, Set[str]] = defaultdict(set)
         self.duplicates: List[str] = []
+        self.failed: List[Dict[str, str]] = []
+        self.empty: List[str] = []
         self.entry_types: Set[str] = set()
+        self.executable_types: Set[str] = set()
+        self.stop_words: Set[str] = set()
         self.shared_min = 3
 
     @classmethod
@@ -263,37 +369,48 @@ class Graph:
         folder = paths.runtime_dir(root) / "kbmap"
         files = [cache_file(root, name) for name in names] if names else sorted(folder.glob("*.json")) if folder.is_dir() else []
         records = [record for record in (read_cache(root, file.stem) for file in files) if record]
-        for record in records:
-            graph.entry_types.update(record.get("entry_types") or [])
-        graph.shared_min = max([int(record.get("shared_min", 3)) for record in records] or [3])
         pending = []
         for record in records:
+            rules = record.get("rules") or {}
+            graph.entry_types.update(rules.get("entry_types") or [])
+            graph.executable_types.update(rules.get("executable_types") or [])
+            graph.stop_words.update(word.lower() for word in rules.get("stop_words") or [])
+            obsolete = rules.get("obsolete") or []
+            style = rules.get("names") or "sql"
             for path, item in sorted(record["files"].items()):
+                if item.get("error"):
+                    graph.failed.append({"path": f"{record['repo']}/{path}", "error": item["error"]})
+                elif not item["objects"]:
+                    graph.empty.append(f"{record['repo']}/{path}")
+                retired = any(matches(pattern, path) for pattern in obsolete)
                 for obj in item["objects"]:
                     if obj["id"] in graph.nodes:
                         graph.duplicates.append(obj["id"])
                         continue
                     graph.nodes[obj["id"]] = {
                         "id": obj["id"], "type": obj["type"], "name": obj["name"], "repo": record["repo"], "path": path,
-                        "line": obj.get("line", 1), "dynamic": bool(obj.get("dynamic")), **({"scheduled": True} if obj.get("scheduled") else {}),
+                        "line": obj.get("line", 1), "dynamic": bool(obj.get("dynamic")),
+                        **({"obsolete": True} if retired else {}), **({"scheduled": True} if obj.get("scheduled") else {}),
                     }
-                    pending.append((obj["id"], obj.get("refs") or []))
+                    pending.append((obj["id"], obj.get("refs") or [], style))
+        graph.shared_min = max([int((record.get("rules") or {}).get("shared_min") or 3) for record in records] or [3])
         graph.resolve(pending)
         return graph
 
-    def resolve(self, pending: List[Tuple[str, List[Dict[str, Any]]]]) -> None:
+    def resolve(self, pending: List[Tuple[str, List[Dict[str, Any]], str]]) -> None:
         index: Dict[str, List[str]] = defaultdict(list)
         for node in self.nodes.values():
             for key in keys_of(node["name"]):
                 index[key].append(node["id"])
-        for source, refs in pending:
+        databases = {item["name"].split(".")[0].lower() for item in self.nodes.values() if item["name"].count(".") == 2}
+        for source, refs, style in pending:
             seen = set()
             for ref in refs:
-                target = self.find(index, ref)
+                target = self.find(index, ref, style, databases)
                 if target is None:
                     continue
-                if target.startswith("?"):
-                    self.external[target[1:]].add(source)
+                if target[0] in "?!":
+                    (self.missing if target[0] == "?" else self.external)[target[1:]].add(source)
                     continue
                 if target == source or (ref["kind"], target) in seen:
                     continue
@@ -301,46 +418,53 @@ class Graph:
                 self.out[source].append((target, ref["kind"]))
                 self.into[target].append((source, ref["kind"]))
 
-    def find(self, index: Dict[str, List[str]], ref: Dict[str, Any]) -> Optional[str]:
-        """The id a use points at; `?<name>` when it names something outside the map; None for a bare name nothing has (an alias)."""
-        raw, kind_hint = ref["name"], ref.get("as", "")
-        sql = kind_hint == "" and ref["kind"] in ("calls", "reads", "writes")
-        wanted = kbextract.sql_name(raw, ref.get("db", "")) if sql else raw
-        pieces = kbextract.parts(raw) if sql else [raw]
+    def find(self, index: Dict[str, List[str]], ref: Dict[str, Any], style: str, databases: Set[str]) -> Optional[str]:
+        """The id a use points at; `?<name>` when it is missing; `!<name>` when it is outside the system; None for a
+        bare name nothing has (an alias, a local name)."""
+        raw, wanted_type = str(ref["name"]), ref.get("as", "")
+        sql = style == "sql" and not wanted_type
 
         def pick(candidates: List[str]) -> Optional[str]:
-            if kind_hint:
-                candidates = [item for item in candidates if self.nodes[item]["type"] == kind_hint]
+            if wanted_type:
+                candidates = [item for item in candidates if self.nodes[item]["type"] == wanted_type]
             return candidates[0] if len(candidates) == 1 else None
 
-        low = wanted.lower()
-        for key in (low, *([low.rsplit("/", 1)[-1]] if "/" in low else [])):
-            hit = pick(index.get(key, []))
-            if hit:
-                return hit
-        if sql:
-            dotted = low.split(".")
-            near = index.get(".".join(dotted[-2:]), [])
-            if len(dotted) == 3:  # a database was named or known: an object of another database is not it
-                near = [item for item in near if len(self.nodes[item]["name"].split(".")) < 3 or self.nodes[item]["name"].lower() == low]
-            hit = pick(near)
-            if hit:
-                return hit
-            if len(pieces) == 1:
-                hit = pick(index.get(dotted[-1], []))
+        if not sql:
+            low = raw.lower()
+            for key in dict.fromkeys([low, low.rsplit("/", 1)[-1], low.split(".")[-1]]):
+                hit = pick(index.get(key, []))
                 if hit:
                     return hit
-            return f"?{wanted}" if len(pieces) > 1 else None
-        hit = pick(index.get(low.split(".")[-1], []))
-        return hit or (f"?{wanted}" if kind_hint or "." in raw or "/" in raw else None)
+            if wanted_type:
+                return f"?{raw}"
+            return f"!{raw}" if "." in raw or "/" in raw else None
+        pieces = parts(raw)
+        wanted = sql_name(raw, str(ref.get("db") or ""))
+        low = wanted.lower()
+        dotted = low.split(".")
+        hit = pick(index.get(low, []))
+        if hit:
+            return hit
+        near = index.get(".".join(dotted[-2:]), [])
+        if len(dotted) == 3:  # a database was named or known: an object of another database is not it
+            near = [item for item in near if self.nodes[item]["name"].count(".") < 2 or self.nodes[item]["name"].lower() == low]
+        hit = pick(near)
+        if hit:
+            return hit
+        if len(pieces) == 1:
+            return pick(index.get(dotted[-1], []))
+        if len(pieces) >= 3 and pieces[-3].lower() not in databases:
+            return f"!{wanted}"
+        return f"?{wanted}"
 
     # --- questions ---
 
     def entries(self) -> List[str]:
-        typed = sorted(node for node, item in self.nodes.items() if item["type"] in self.entry_types)
-        if typed:
+        live = {node: item for node, item in self.nodes.items() if not item.get("obsolete")}
+        typed = sorted(node for node, item in live.items() if item["type"] in self.entry_types)
+        if typed or self.entry_types:
             return typed
-        return sorted(node for node in self.nodes if not self.into.get(node) and self.out.get(node))
+        return sorted(node for node in live if not self.into.get(node) and self.out.get(node))
 
     def reach(self, start: str) -> Set[str]:
         seen, queue = {start}, deque([start])
@@ -351,19 +475,49 @@ class Graph:
                     queue.append(target)
         return seen
 
+    def obsolete_used(self) -> Dict[str, List[str]]:
+        """Obsolete objects that a live object still uses: id -> the live users."""
+        found: Dict[str, List[str]] = {}
+        for node, item in self.nodes.items():
+            if item.get("obsolete"):
+                users = sorted({source for source, _kind in self.into.get(node, []) if not self.nodes[source].get("obsolete")})
+                if users:
+                    found[node] = users
+        return found
+
+    def check_facts(self, facts: List[Dict[str, str]]) -> Dict[str, Any]:
+        missing = []
+        for fact in facts:
+            links = self.out.get(fact["from"], [])
+            if not any(target == fact["to"] and (not fact["kind"] or kind == fact["kind"]) for target, kind in links):
+                missing.append(f"{fact['from']} -{fact['kind'] or 'any'}-> {fact['to']}")
+        return {"checked": len(facts), "found": len(facts) - len(missing), "missing": missing}
+
+    @staticmethod
+    def ranked(found: Dict[str, Set[str]]) -> List[Dict[str, Any]]:
+        return [{"name": name, "used_by": len(users)} for name, users in sorted(found.items(), key=lambda item: (-len(item[1]), item[0]))]
+
     def summary(self) -> Dict[str, Any]:
         entries = self.entries()
-        unused = sorted(node for node, item in self.nodes.items() if item["type"] in EXECUTABLE and not self.into.get(node) and node not in entries)
+        unused = sorted(
+            node for node, item in self.nodes.items()
+            if item["type"] in self.executable_types and not self.into.get(node) and node not in entries and not item.get("obsolete")
+        )
         dynamic = sorted(node for node, item in self.nodes.items() if item["dynamic"])
         used = sorted(self.nodes, key=lambda node: (-len(self.into.get(node, [])), node))
+        retired = self.obsolete_used()
         return {
             "objects": dict(sorted(Counter(item["type"] for item in self.nodes.values()).items())),
             "uses": dict(sorted(Counter(kind for links in self.out.values() for _target, kind in links).items())),
             "entry_points": len(entries), "entry_sample": entries[:SAMPLE],
             "unused": len(unused), "unused_sample": unused[:SAMPLE],
             "dynamic": len(dynamic), "dynamic_sample": dynamic[:SAMPLE],
-            "external": [{"name": name, "used_by": len(users)} for name, users in sorted(self.external.items(), key=lambda item: (-len(item[1]), item[0]))[:SAMPLE]],
+            "missing": len(self.missing), "missing_sample": self.ranked(self.missing)[:SAMPLE],
+            "obsolete_used": len(retired), "obsolete_used_sample": sorted(retired)[:SAMPLE],
+            "external": len(self.external), "external_sample": self.ranked(self.external)[:SAMPLE],
             "most_used": [{"id": node, "used_by": len(self.into.get(node, []))} for node in used[:SAMPLE] if self.into.get(node)],
+            "empty_files": len(self.empty), "empty_sample": self.empty[:SAMPLE],
+            "failed_files": len(self.failed), "failed_sample": self.failed[:SAMPLE],
             "duplicates": sorted(set(self.duplicates))[:SAMPLE],
         }
 
@@ -411,9 +565,12 @@ def near(root: Path, query: str, depth: int = 1, direction: str = "both") -> Dic
         result["used_by"] = graph.walk(node["id"], graph.into, depth)
     if direction in ("both", "down"):
         result["uses"] = graph.walk(node["id"], graph.out, depth)
-    external = sorted(name for name, users in graph.external.items() if node["id"] in users)
-    if external:
-        result["uses_outside_map"] = external
+    for key, found in (("uses_missing", graph.missing), ("uses_outside", graph.external)):
+        names = sorted(name for name, users in found.items() if node["id"] in users)
+        if names:
+            result[key] = names
+    if node.get("obsolete"):
+        result["obsolete"] = True
     if node["dynamic"]:
         result["note"] = say("kbmap.near.dynamic")
     return result
@@ -422,12 +579,12 @@ def near(root: Path, query: str, depth: int = 1, direction: str = "both") -> Dic
 # --- domains ---------------------------------------------------------------------------------------------
 
 
-def words(text: str) -> List[str]:
+def words(text: str, stop: Set[str]) -> List[str]:
     found = []
     for piece in text.replace("/", " ").replace(".", " ").replace("-", " ").replace("_", " ").split():
         for word in re.findall(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+", piece):
             low = word.lower()
-            if len(low) > 2 and low not in STOP_WORDS and not low.isdigit():
+            if len(low) > 2 and low not in stop and not low.isdigit():
                 found.append(low)
     return found
 
@@ -462,11 +619,11 @@ def split(root: Path, shared_min: Optional[int] = None) -> Dict[str, Any]:
                     queue.append(other)
         seen |= group
         groups.append(group)
-    everywhere = Counter(word for entry in entries for word in set(words(graph.nodes[entry]["name"])))
+    everywhere = Counter(word for entry in entries for word in set(words(graph.nodes[entry]["name"], graph.stop_words)))
     domains = []
     for group in sorted(groups, key=lambda item: (-len(item), min(item))):
         starts = sorted(node for node in group if node in entries)
-        local = Counter(word for entry in starts for word in set(words(graph.nodes[entry]["name"])))
+        local = Counter(word for entry in starts for word in set(words(graph.nodes[entry]["name"], graph.stop_words)))
         common = {word for word, count in everywhere.items() if len(entries) > 1 and count == len(entries)}
         hint = sorted((word for word in local if word not in common), key=lambda word: (-local[word] * local[word] / everywhere[word], word))[:2]
         folders = Counter("/".join(PurePosixPath(graph.nodes[node]["path"]).parent.parts[:2]) or "." for node in group)

@@ -1,0 +1,4 @@
+{"from": "job:Shop_Orders", "kind": "calls", "to": "sp:Shop.dbo.usp_load_orders"}
+{"from": "job:Shop_Orders", "kind": "runs", "to": "package:ShopEtl/Publish"}
+{"from": "sp:Shop.dbo.usp_load_orders", "kind": "writes", "to": "table:Shop.dbo.orders"}
+{"from": "package:ShopEtl/Publish", "kind": "reads", "to": "table:Shop.dbo.summary"}

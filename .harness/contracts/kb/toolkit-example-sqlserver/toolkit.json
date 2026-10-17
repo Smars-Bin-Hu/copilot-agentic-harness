@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "name": "sqlserver",
+  "description": "SQL Server: database projects and scripts (.sql), SQL Agent job scripts, SSIS packages (.dtsx).",
+  "extractors": [
+    {"glob": "**/*.sql", "file": "extract_sqlserver.py", "function": "tsql"},
+    {"glob": "**/*.dtsx", "file": "extract_sqlserver.py", "function": "ssis"}
+  ],
+  "ignore": ["**/bin/**", "**/obj/**", "**/*.publish.sql"],
+  "obsolete": ["**/obsolete/**", "**/archive/**"],
+  "markers": {"db": ".sqlproj", "project": ".dtproj"},
+  "names": "sql",
+  "entry_types": ["job"],
+  "executable_types": ["sp", "package", "fn", "view", "trigger"],
+  "stop_words": ["dbo", "job", "jobs", "sp", "usp", "etl", "daily", "nightly", "weekly", "monthly", "load", "run", "main"],
+  "shared_min": 3
+}

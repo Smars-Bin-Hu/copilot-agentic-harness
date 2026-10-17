@@ -1,14 +1,18 @@
-"""The repository map (M15-10d): the extractors, `kb map`, `kb near` and `kb split` on a made-up SQL Server repository."""
+"""The repository map (M15-10d): the sample SQL Server toolkit, `kb map`, `kb near` and `kb split` on a made-up repository."""
 
 from __future__ import annotations
 
 import json
+import shutil
 import unittest
 
-from support import HarnessTestCase
+from support import REPO, HarnessTestCase
 from test_targets import GIT, make_repo, run_git
 
 from core import kbextract, kbmap
+
+EXAMPLE = REPO / ".harness" / "contracts" / "kb" / "toolkit-example-sqlserver"
+SQL = EXAMPLE / "extract_sqlserver.py"
 
 LOAD_ORDERS = """SET ANSI_NULLS ON
 GO
@@ -87,8 +91,14 @@ FILES = {
 
 
 class ExtractTests(unittest.TestCase):
+    """The sample extractors, loaded the way `kb map` loads a team's toolkit."""
+
+    def setUp(self) -> None:
+        self.tsql = kbextract.load(SQL, "tsql")
+        self.ssis = kbextract.load(SQL, "ssis")
+
     def objects(self, text: str, db: str = "Shop") -> dict:
-        return {item["id"]: item for item in kbextract.tsql(text, {"db": db, "path": "a.sql"})}
+        return {item["id"]: item for item in self.tsql(text, {"db": db, "path": "a.sql"})}
 
     def uses(self, item: dict) -> set:
         return {(ref["kind"], ref["name"]) for ref in item["refs"]}
@@ -117,27 +127,29 @@ class ExtractTests(unittest.TestCase):
 
     def test_a_script_saved_as_utf16(self) -> None:
         data = b"\xff\xfe" + table("t").encode("utf-16-le")
-        self.assertEqual([item["id"] for item in kbextract.extract("tsql", data, {"db": "", "path": "t.sql"})], ["table:dbo.t"])
+        self.assertEqual([item["id"] for item in kbextract.run(self.tsql, data, {"db": "", "path": "t.sql"})[0]], ["table:dbo.t"])
 
     def test_a_job_script_runs_a_procedure_and_a_package(self) -> None:
-        found = kbextract.tsql(FILES["jobs/Shop_Orders.sql"], {"db": "", "path": "j.sql"})
+        found = self.tsql(FILES["jobs/Shop_Orders.sql"], {"db": "", "path": "j.sql"})
         self.assertEqual([item["id"] for item in found], ["job:Shop_Orders"])
         self.assertTrue(found[0]["scheduled"])
         self.assertEqual(self.uses(found[0]), {("calls", "dbo.usp_load_orders"), ("runs", "ShopEtl/Publish")})
         self.assertEqual(found[0]["refs"][0]["db"], "Shop")
 
     def test_a_package(self) -> None:
-        found = kbextract.ssis(PACKAGE, {"stem": "Publish", "project": "ShopEtl", "path": "p.dtsx"})
+        found = self.ssis(PACKAGE, {"stem": "Publish", "project": "ShopEtl", "path": "p.dtsx"})
         self.assertEqual(found[0]["id"], "package:ShopEtl/Publish")
         self.assertEqual(self.uses(found[0]), {
             ("calls", "dbo.usp_publish_summary"), ("reads", "[dbo].[summary]"), ("writes", "[dbo].[export_summary]"), ("runs", "Child"),
         })
 
     def test_a_broken_file_gives_nothing_and_does_not_stop(self) -> None:
-        self.assertEqual(kbextract.extract("ssis", b"<not xml", {"stem": "x", "project": "", "path": "x.dtsx"})[0]["dynamic"], True)
-        self.assertEqual(kbextract.extract("tsql", b"\x00\x01garbage", {"db": "", "path": "x.sql"}), [])
+        self.assertTrue(kbextract.run(self.ssis, b"<not xml", {"stem": "x", "project": "", "path": "x.dtsx"})[0][0]["dynamic"])
+        objects, error = kbextract.run(lambda text, context: 1 / 0, b"x", {})
+        self.assertEqual(objects, [])
+        self.assertIn("ZeroDivisionError", error)
 
-    def test_rules_of_a_profile(self) -> None:
+    def test_rules_of_a_toolkit(self) -> None:
         rule = {"node": {"type": "class", "pattern": r"class\s+(\w+)"}, "edges": [{"kind": "uses", "pattern": r"^import\s+[\w.]*\.(\w+);", "as": "class"}]}
         found = kbextract.regex("import a.b.Repo;\npublic class Service {}\n", {"path": "S.java", "rule": rule})
         self.assertEqual(found[0]["id"], "class:Service")
@@ -151,18 +163,23 @@ class MapTests(HarnessTestCase):
         repos = self.root / "source" / "repos"
         self.repo = make_repo(repos / "repo_a", FILES)
         (self.root / ".harness" / "policies" / "target.override.json").write_text(json.dumps({"repos_root": str(repos)}), encoding="utf-8")
+        self.kit = self.root / "knowledge-base" / "toolkit"
+        shutil.copytree(EXAMPLE, self.kit)
 
     def build(self, **options) -> dict:
         return kbmap.build(self.root, **options)
 
     def test_the_map_finds_the_objects_and_their_uses(self) -> None:
         result = self.build()
-        self.assertEqual(result["mapped"][0]["profile"], "sqlserver")
+        self.assertEqual(result["mapped"][0]["toolkit"], "sqlserver")
+        self.assertEqual(result["facts"], {"checked": 4, "found": 4, "missing": []})
+        self.assertEqual((result["empty_files"], result["failed_files"]), (0, 0))
         self.assertEqual(result["objects"], {"job": 3, "package": 2, "sp": 5, "table": 7})
         self.assertEqual(result["entry_points"], 3)
         self.assertEqual(result["unused_sample"], ["sp:Shop.dbo.usp_unused"])
         self.assertEqual(result["dynamic_sample"], ["sp:Shop.dbo.usp_publish_summary"])
-        self.assertEqual({item["name"] for item in result["external"]}, {"Other.dbo.rates", "dbo.export_summary"})
+        self.assertEqual([item["name"] for item in result["external_sample"]], ["Other.dbo.rates"])
+        self.assertEqual([item["name"] for item in result["missing_sample"]], ["dbo.export_summary"])
         self.assertEqual(result["most_used"][0]["id"], "sp:Shop.dbo.usp_log")
 
     def test_only_changed_files_are_read_again(self) -> None:
@@ -207,11 +224,44 @@ class MapTests(HarnessTestCase):
         self.assertEqual(len(result["domains"]), 1)
         self.assertIn("note", result)
 
-    def test_no_profile_fits(self) -> None:
+    def test_without_a_toolkit(self) -> None:
+        shutil.rmtree(self.kit)
+        with self.assertRaises(kbmap.MapError):
+            self.build()
+
+    def test_a_toolkit_for_named_repositories_only(self) -> None:
         make_repo(self.root / "source" / "repos" / "repo_b", {"notes.txt": "hello\n"})
+        config = json.loads((self.kit / "toolkit.json").read_text(encoding="utf-8"))
+        (self.kit / "toolkit.json").write_text(json.dumps({**config, "repos": ["repo_a"]}), encoding="utf-8")
         rows = {row["repo"]: row for row in self.build()["mapped"]}
-        self.assertEqual(rows["repo_b"]["profile"], "-")
+        self.assertEqual(rows["repo_b"]["toolkit"], "-")
         self.assertIn("note", rows["repo_b"])
+
+    def test_a_broken_toolkit_says_what_is_wrong(self) -> None:
+        (self.kit / "toolkit.json").write_text(json.dumps({"schema_version": 1, "name": "x", "extractors": [{"glob": "*.sql", "file": "../evil.py"}]}), encoding="utf-8")
+        with self.assertRaises(kbmap.MapError) as caught:
+            self.build()
+        self.assertIn("inside the toolkit folder", str(caught.exception))
+
+    def test_a_fact_the_toolkit_does_not_find(self) -> None:
+        with (self.kit / "facts.jsonl").open("a", encoding="utf-8") as file:
+            file.write(json.dumps({"from": "job:Shop_Audit", "kind": "calls", "to": "sp:Shop.dbo.usp_load_orders"}) + "\n")
+        result = self.build()
+        self.assertEqual(result["facts"]["missing"], ["job:Shop_Audit -calls-> sp:Shop.dbo.usp_load_orders"])
+        self.assertIn("facts", result["next"])
+
+    def test_changing_the_toolkit_reads_every_file_again(self) -> None:
+        self.build()
+        with (self.kit / "extract_sqlserver.py").open("a", encoding="utf-8") as file:
+            file.write("\n# changed\n")
+        self.assertEqual(self.build()["mapped"][0]["read"], 17)
+
+    def test_obsolete_code_still_in_use(self) -> None:
+        (self.repo / "obsolete").mkdir()
+        run_git(self.repo, "mv", "Shop/dbo/Stored Procedures/usp_load_customers.sql", "obsolete/usp_load_customers.sql")
+        run_git(self.repo, "commit", "-qm", "retire")
+        result = self.build()
+        self.assertEqual(result["obsolete_used_sample"], ["sp:dbo.usp_load_customers"])
 
     def test_the_commands(self) -> None:
         self.assertEqual(self.cli_json("kb", "map", "--json")["entry_points"], 3)
@@ -225,14 +275,6 @@ class MapTests(HarnessTestCase):
     def test_no_map_yet(self) -> None:
         with self.assertRaises(kbmap.MapError):
             kbmap.split(self.root)
-
-    def test_a_team_profile_in_the_knowledge_base_wins(self) -> None:
-        folder = self.root / "knowledge-base" / "profiles"
-        folder.mkdir(parents=True)
-        mine = json.loads((self.root / kbmap.PROFILES / "sqlserver.json").read_text(encoding="utf-8"))
-        mine["ignore"] = ["jobs/**"]
-        (folder / "sqlserver.json").write_text(json.dumps(mine), encoding="utf-8")
-        self.assertNotIn("job", self.build()["objects"])
 
 
 if __name__ == "__main__":

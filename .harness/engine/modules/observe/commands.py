@@ -91,11 +91,10 @@ def register(subparsers: Any) -> None:
     mark.add_argument("--id", action="append", default=None, help="only this object (may be given more than once); default: all")
     mark.set_defaults(handler=cmd_stamp)
     # The repository map (layer one of learning a code base): core/kbmap.py, extractors in core/kbextract.py.
-    build = kb_commands.add_parser("map", help="map the target repositories by script: every object (procedure, table, job, package ...) and every use (calls, runs, reads, writes). Only changed files are read again")
+    build = kb_commands.add_parser("map", help="map the target repositories with the toolkit of the knowledge base (<knowledge base>/toolkit/): every object and every use. Only changed files are read again; the known facts of the toolkit are checked")
     build.add_argument("--repo", action="append", default=None, help="only this repository (may be given more than once); default: all but the knowledge base")
-    build.add_argument("--profile", default="", help="the stack profile to use (.harness/profiles/, <knowledge base>/profiles/); default: found from the files")
     build.add_argument("--fresh", action="store_true", help="read every file again")
-    build.set_defaults(handler=mapped(lambda a: kbmap.build(repo_root(), a.repo, a.profile, a.fresh)))
+    build.set_defaults(handler=mapped(lambda a: kbmap.build(repo_root(), a.repo, a.fresh)))
     close = kb_commands.add_parser("near", help="what one object uses and what uses it, from the map")
     close.add_argument("object", help="an id (sp:Db.dbo.usp_x) or a name (usp_x)")
     close.add_argument("--depth", type=int, default=1, choices=range(1, 6), help="how many steps out (1 to 5)")

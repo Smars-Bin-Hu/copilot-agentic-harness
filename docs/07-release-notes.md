@@ -10,6 +10,28 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.13 (2026-10-17)
+
+The harness ships the method and the generic tools of the repository map, not the extractors of one stack. Each team makes its own toolkit for its own code.
+
+**Testing**: the automatic tests pass on the Mac (851). **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **Toolkits**: the extractors of the map live in `<knowledge base>/toolkit/` (`toolkit.json`, `extract_*.py`, `facts.jsonl`). The contract is `.harness/contracts/kb/map.md`; a sample for SQL Server is in `.harness/contracts/kb/toolkit-example-sqlserver/`. Until the skills that make a toolkit arrive (1.4.15), copy the sample and change it.
+- **`kb map` checks the toolkit every time**: the uses a person knows (`facts.jsonl`) must be found; files an extractor found nothing in (`empty_files`) and files it failed on (`failed_files`) are listed. A failing extractor never stops the map.
+- **`missing`**: names that are used but defined in no file and look like this system's (deleted, retired, never committed), apart from `external` (another database or system). **`obsolete_used`**: objects in the toolkit's `obsolete` folders that live code still uses.
+
+### Changed
+
+- **`kb map`** reads the toolkit of the knowledge base; without one it stops and says how to get one. `--profile` is gone. A changed toolkit makes every file be read again.
+- `toolkit.json` holds what was fixed in the code before: the object types that are entry points and that run, the words left out of domain names, how names are resolved (`sql` or `plain`).
+- `kb near` lists `uses_missing` and `uses_outside` apart, and marks `obsolete` objects.
+
+### Retired
+
+- **`.harness/profiles/`** (`sqlserver.json`, `example-java.json`) and the SQL Server extractors in the engine: they worked for one stack and looked like they worked for all. The SQL Server extractors are now the sample toolkit.
+
 ## 1.4.12 (2026-10-17)
 
 Refreshing a stale card reads what changed, not the whole file again.

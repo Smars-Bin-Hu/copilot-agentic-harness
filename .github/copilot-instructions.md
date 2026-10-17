@@ -1,17 +1,9 @@
 # Copilot instructions
 
-The core rules are in [AGENTS.md](../AGENTS.md). This file adds four rules for running.
-
-## Tasks
+The core rules are in [AGENTS.md](../AGENTS.md). This file adds what applies while you run.
 
 - At the top of every user prompt a hook injects the current session id and the rules. Do as they say.
-- When the user asks you to produce or change files, or mentions an existing task, first open or pick up the task with the skill `harness-my-task`.
-- Independent checks are off by default. They are on only when the user writes `[review]=n` in a prompt (n is how many times in a row the work must pass). Do not switch them on yourself.
-
-## Knowledge base
-
-- For a task of a domain, read the knowledge base before the code: `architecture.md` and `domain.yaml` of the domain, then only the cards the index points at, then only the code those cards name. Details: [knowledgebase.instructions.md](instructions/knowledgebase.instructions.md).
-- Watch for knowledge that the code or a run shows to be wrong, stale or missing. Note it in `LOG.md` with the evidence; at the next stop, ask the user whether to update the knowledge base. On a yes, do it in a `kb` task.
+- For a task of a domain, read the knowledge base before the code, and note knowledge the code shows to be wrong, stale or missing: [knowledgebase.instructions.md](instructions/knowledgebase.instructions.md). The instructions there apply to every read of the knowledge base, not only to edits of its files.
 
 ## After a hook refuses
 

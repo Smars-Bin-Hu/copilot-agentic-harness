@@ -49,7 +49,17 @@ When an agent runs these, the gate refuses; a pipe or a script does not work eit
 | `task set-branch` | Changes the name of the feature branch |
 | `task close` | Lets go of the task and writes the report |
 
-### 13.4 For looking things up
+### 13.4 The knowledge base
+
+| Command | What it does |
+| --- | --- |
+| `kb check` / `kb stale [--diff]` | Is each domain in the standard form; which cards were written from code that changed since, and what changed |
+| `kb survey` / `kb map` | What the repositories hold; every object and every use, by the team's toolkit |
+| `kb near <name>` | What one object uses and what uses it, across domains |
+| `kb split` / `kb gaps` | A first cut of the domains; what runs but has no code |
+| `kb stamp` / `kb migrate` | Written in a task only: a card checked against the code now; an old domain into the standard form |
+
+### 13.5 For looking things up
 
 | Command | What it does |
 | --- | --- |
@@ -63,11 +73,11 @@ When an agent runs these, the gate refuses; a pipe or a script does not work eit
 | `user` | Where your name comes from |
 | `--version` | The version |
 
-### 13.5 Text for you, JSON for scripts
+### 13.6 Text for you, JSON for scripts
 
 A command prints aligned lines of text when you run it in a terminal, and JSON when its output goes to a pipe or a script. Add `--json` to see the JSON. The commands only you may run (`task pause`, `task approve-plan` ...) always print text. Either way there is a `next` (`Next:` at the bottom of the text): what to do next. The agent decides by it how to go on; for you, reading it is enough. The texts come in the language of the setting (`language` in `user.json`).
 
-### 13.6 Differences on Windows
+### 13.7 Differences on Windows
 
 - The short command is `harness.cmd`.
 - What the terminal tool is called (`bash`, `PowerShell`, `powershell`) was registered by guessing, and still has to be measured on Windows.

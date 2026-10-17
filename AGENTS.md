@@ -44,11 +44,10 @@ To find a file, read [.harness/INDEX.md](.harness/INDEX.md) (the path index). Do
 - Keep the changes the user already made. Do not touch unrelated files.
 - Work is done in tasks: one task, one folder, under `.workspace/sandbox/tasks/<task>/`.
   When the user asks you to produce or change files, or mentions an existing task, first open or pick up the task with the skill `harness-my-task`. Plain questions need no task.
-- With a task, write only inside the task folder. A new session reads `TASK.md` first and updates it before stopping.
-  The requirement is in `REQ.md`; when it changes, change that file first. `REQ/` and `REF/` are read only.
+- With a task, write only inside the task folder. Files in a target repository cannot be changed directly: they are written only by a promote the user approves,
+  and the task's `DEV/` can be written only after the user approves the plan (`PLAN.md`) in the terminal.
+  How a task folder is used (`TASK.md`, `REQ.md`, `DEV/`, what not to write): [workspace.instructions.md](.github/instructions/workspace.instructions.md).
   Only the user may change the confirmation line of `REQ.md`, under autorun too. Do not fill it in when it is empty: the review package tells the reviewer to treat the requirement as "to be confirmed", and that is not a problem.
-- Files in a target repository cannot be changed directly. They are written only by a promote the user approves.
-  Work to write back goes in the task's `DEV/`, which can be written only after the user approves the plan (`PLAN.md`) in the terminal; work that is not written back goes at the root of the task folder and needs no approval.
 - Only the user can switch independent checks on: the user writes `[review]=n` in a prompt. You cannot switch them on, approve for the user, or waive them.
   There are two subagents only: the reviewer, used only in a task with checks on; and the mapper (read only), which needs no task and is used only after the user types `/generic-mapreduce`, up to a limit. You cannot switch it on yourself.
 - Only the user can switch autorun on, in the terminal (autorun: working down `TODO.md` without stopping). While it is on: do not ask the user, do not promote, write decisions into `LOG.md`; when you cannot go on, run `harness task autorun off --reason "<why>"`, then stop.
@@ -58,4 +57,3 @@ To find a file, read [.harness/INDEX.md](.harness/INDEX.md) (the path index). Do
   [.harness/policies/gate.json](.harness/policies/gate.json). When one must change, tell the user.
   The one exception is a session the user switched to admin mode in the terminal, for the admin agent to extend the harness: see
   [admin.agent.md](.github/agents/admin.agent.md). You cannot switch it on yourself.
-- The folder layout is in [workspace.instructions.md](.github/instructions/workspace.instructions.md).

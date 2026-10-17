@@ -180,6 +180,41 @@ With a target repository set up, when the agent runs git in the terminal:
 - **Writes** (`add`, `commit`, `switch`, `merge` ...): are refused, and the reason has the whole command and a code. You run `approve-command`, read the command as written, and type the code. The same command is let through once in the same session within `git.approval_minutes` minutes of `gate.json`.
 - **Can never be approved**: `push`, `gh pr`, `reset --hard`, `clean`, `branch -D`, any force option (`--force`, `-f`) and the like. The agent has to stop and tell you, and you run them yourself.
 
+## The knowledge base: built from the code, kept true
+
+Reading the knowledge base must cost less than reading the code, and give a better answer. Three things keep it that way:
+
+- **A fixed form** (`.harness/contracts/kb/README.md`): every domain has the same files, each object is listed once with the git sha of the file it was learned from. `kb check` checks the form; `kb stale` asks git which cards are out of date, and `/generic-kb-refresh` fixes them from the diff.
+- **A map made by script, not by reading**: `kb map` lists every object and every use of your repositories with a small toolkit made for your stack (`/generic-kb-toolkit-design`, then `/generic-kb-toolkit-build`; samples in `.harness/examples/kb-toolkits/`). From the map: `kb near` (who uses what, across domains), `kb split` (a first cut of the domains, `/generic-kb-domains`), `kb gaps` (what runs but has no code in any repository).
+- **The agent keeps it true while it works**: `task fetch` names the cards of the files it fetched and marks the stale ones; knowledge the code shows to be wrong or missing is noted and, at the next stop, offered as a `kb` task.
+
+How to set it up: [Configure and customise](03-configure.md). All the commands: [Reference](04-reference.md).
+
+## Skills you can ask for
+
+Ask in your own words; the agent picks the skill (it asks first for the ones marked *asks first*). The ones marked *you start it* run only when you type their name.
+
+| You want to | Skill |
+| --- | --- |
+| Get something done, or go on with a task | `harness-my-task` |
+| Know what a change touches before the plan | `generic-impact-analysis` |
+| Be asked every question first, until nothing is unclear | `generic-grill-me` |
+| Keep what a task taught for the next time | `generic-capture-knowledge` (asks first) |
+| Check code against your company's standards | `generic-code-standards` (asks first) |
+| Read a lot in parallel | `/generic-mapreduce` (you start it) |
+| Work a long goal over many sessions | `/generic-goal-driven` (you start it) |
+| Let the agent work down a list unattended (beta) | `/harness-autorun` (you start it) |
+| Turn a routine you repeat into skills | `generic-workflow-design` (asks first), then `/generic-workflow-build` (you start it) |
+| Make, check or repair a skill | `generic-build-new-skill` |
+| Make the toolkit for the repository map | `generic-kb-toolkit-design` (asks first), then `/generic-kb-toolkit-build` (you start it) |
+| Cut a code base into knowledge base domains | `generic-kb-domains` (asks first) |
+| Fix stale cards of the knowledge base | `generic-kb-refresh` (asks first) |
+| Move an old knowledge base into the standard form | `generic-kb-migrate` (asks first) |
+| Translate a Chinese knowledge base into English | `generic-kb-translate` (asks first) |
+| See the task board, or where a task's time went | `/harness-task-report` (you start it) |
+| Move closed tasks out to an archive | `harness-task-archive` (asks first) |
+| Learn the harness | `/harness-quick-start`, `/harness-wondering`; setup: `/harness-get-me-ready` |
+
 ## Observability: logs, statistics, reports, scenario checks
 
 - One log file per session: `.harness/runtime/logs/<surface>/`. No tool arguments and no prompt content are recorded; only for a refused call are the path and the command recorded (the length limit is in [observe.json](../.harness/policies/observe.json)).

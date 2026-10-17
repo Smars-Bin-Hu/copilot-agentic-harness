@@ -72,6 +72,8 @@ Wrap up in three sentences, then give the link:
 2. To get files produced, or a repository changed: say what you want done; the agent asks you the rest.
 3. Back after a few days: say "go on with task so-and-so".
 
+Then show what else they can ask for: the table "Skills you can ask for" in [Features](../../../docs/02-features.md#skills-you-can-ask-for). Point at two rows that fit what the user said about their work; do not read the whole table.
+
 The link: [Quick start](../../../docs/01-quickstart.md) (it has what to say day to day). Last, ask the user which part was not clear. Note it and tell them the lesson can be changed.
 
 ## Gotchas

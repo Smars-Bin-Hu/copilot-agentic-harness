@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.18 (2026-10-17)
+
+The guided material catches up with the knowledge base work, and each rule has one home.
+
+**Testing**: the automatic tests pass on the Mac (869).
+
+### Changed
+
+- **Features** (`docs/02`) has two new parts: "The knowledge base: built from the code, kept true", and "Skills you can ask for", a table from what you want to the skill that does it and who starts it. `/harness-quick-start` ends by pointing at that table; `/harness-wondering` lists the `kb` commands.
+- **Rules in one place**: `AGENTS.md` keeps the safety limits of a task folder in two lines and links to `workspace.instructions.md` for how a task folder is used; `copilot-instructions.md` no longer repeats `AGENTS.md` (opening a task, `[review]=n`) or `knowledgebase.instructions.md`.
+
 ## 1.4.17 (2026-10-17)
 
 Clean-up after the independent review: fewer skills, no dead code, one place for each thing.

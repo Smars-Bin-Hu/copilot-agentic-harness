@@ -35,7 +35,7 @@ POLICY_SCHEMA = {
             "type": "object",
             "properties": {
                 "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
-                "actions": {"type": "array", "items": {"type": "string", "enum": ["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on"]}},
+                "actions": {"type": "array", "items": {"type": "string", "enum": ["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover"]}},
             },
         },
         "snapshots": {

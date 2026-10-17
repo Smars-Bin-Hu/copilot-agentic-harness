@@ -17,5 +17,5 @@ The folder layout, and what the gate can and cannot guard, are in [.workspace/RE
 - Do not write these directly: `.task/`, `REVIEW/`, `SNAPSHOT/`, `CHANGES.diff` and `PROMOTE-PLAN.diff` in a task folder, and `reports/`. The CLI writes them, and a hook refuses.
 - A task folder is ignored by git, so search tools do not find the files in it. Read them by path, or use `ls` in the terminal.
 - A parent folder must exist before you create a file in it. Make it in the terminal: `mkdir -p` on macOS/Linux, `mkdir` on Windows.
-- When you need the user's approval, give the link to the file (`PLAN.md`, `PROMOTE-PLAN.diff`) so the user reads it in the editor. Do not paste the whole text into the conversation.
+- When you need the user's approval, give the link to the file (`PLAN.md`, `PROMOTE-PLAN.diff`) so the user reads it in the editor. Do not paste the whole text into the conversation. Write the link with the path from the repository root, `[PLAN.md](.workspace/sandbox/tasks/<task>/PLAN.md)`: a path from the task folder does not open. When the prompt names the task's page on the board, give that address too.
 - `goals/<id>/` is the record of a long task; it exists only after the user starts `/generic-goal-driven`. With a task it cannot be written: write it after `task close`.

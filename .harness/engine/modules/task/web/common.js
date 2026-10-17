@@ -80,3 +80,30 @@ const num = (text) => h("td", {class: "num"}, text);
 const tag = (text, kind) => h("span", {class: "tag" + (kind ? " " + kind : "")}, text);
 const card = (title, ...children) => h("div", {class: "card"}, title ? h("h2", null, title) : null, children);
 const reviewsText = (checks, fails) => t("report.kpi.reviews.value", {checks, fails});
+
+// A click copies the command; the person pastes it in a terminal. Nothing runs from a page on disk.
+function copyCommand(button, command) {
+  const done = () => {
+    button.textContent = t("board.copied");
+    setTimeout(() => { button.textContent = button.dataset.label; }, 1500);
+  };
+  const fallback = () => {
+    const area = h("textarea", {style: "position:fixed;opacity:0"}, command);
+    document.body.append(area);
+    area.select();
+    try { document.execCommand("copy"); done(); } catch (error) { window.prompt(t("board.copy.manual"), command); }
+    area.remove();
+  };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(command).then(done, fallback);
+  else fallback();
+}
+
+// The button of one action ({action, command}) of a task row: it acts when the board server runs that action, else it copies the command.
+function actionButton(row, item, extra) {
+  const label = t("board.action." + item.action.replace(" ", "-"));
+  const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page
+  const hot = row.waiting && item.action !== "pause" && item.action !== "autorun on";
+  const button = h("button", {class: "act" + (hot ? " hot" : "") + (live ? " live" : "") + (extra ? " " + extra : ""), type: "button", title: live ? "" : item.command, "data-label": label}, label);
+  button.addEventListener("click", () => (live ? SERVE.act(button, row, item) : copyCommand(button, item.command)));
+  return button;
+}

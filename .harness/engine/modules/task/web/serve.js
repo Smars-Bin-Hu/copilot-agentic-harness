@@ -55,17 +55,36 @@ const SERVE = (function () {
     }, failed);
   }
 
-  function start(app) {
-    const banner = h("div", {class: "sub pairing"});
-    const kpis = app.querySelector(".kpis");
-    if (kpis) kpis.after(banner);
-    const show = (paired) => { banner.textContent = t(paired ? "board.serve.paired" : "board.serve.unpaired"); banner.classList.toggle("good", paired); };
+  // Once per page: trade the pairing code of the address for a cookie, and ask whether this browser is paired.
+  let paired = null;
+  const banners = [];
+  function showPaired() {
+    for (const node of banners) {
+      node.textContent = paired === null ? "" : t(paired ? "board.serve.paired" : "board.serve.unpaired");
+      node.classList.toggle("good", paired === true);
+    }
+  }
+  const ready = (function () {
     const code = location.hash.startsWith("#pair=") ? decodeURIComponent(location.hash.slice(6)) : "";
     if (code) history.replaceState(null, "", location.pathname);  // the code leaves the address bar and the history
-    (code ? post("/api/pair", {code}).catch(failed) : Promise.resolve())
-      .then(() => post("/api/status", {})).then((data) => show(data.paired), () => show(false));
+    return (code ? post("/api/pair", {code}).catch(failed) : Promise.resolve())
+      .then(() => post("/api/status", {})).then((data) => { paired = data.paired; showPaired(); }, () => { paired = false; showPaired(); });
+  })();
+
+  // A line that says whether this browser may approve; it stays right when the page is drawn again.
+  function banner() {
+    const node = h("div", {class: "sub pairing"});
+    banners.splice(0, banners.length, ...banners.filter((item) => item.isConnected), node);
+    showPaired();
+    return node;
+  }
+
+  // The board: the line under the numbers, and the whole page again every few seconds when nothing is open.
+  function start(app) {
+    const kpis = app.querySelector(".kpis");
+    if (kpis) kpis.after(banner());
     if (serve.refresh) setInterval(() => { if (!busy) location.reload(); }, serve.refresh * 1000);
   }
 
-  return {runs: (action) => serve.actions.includes(action), act, start};
+  return {runs: (action) => serve.actions.includes(action), act, start, banner, post, ready, busy: () => busy};
 })();

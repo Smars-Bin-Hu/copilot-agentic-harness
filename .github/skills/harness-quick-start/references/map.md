@@ -33,8 +33,8 @@ Remind the user: this folder is ignored by git, and the VS Code search does not 
 | --- | --- |
 | `harness task list` | To see which tasks there are and which waits for you |
 | `harness task list --watch` | The board in the terminal, refreshed every few seconds: which task waits for you, and for how long |
-| `harness task board --serve` | The board with buttons that act: pause, resume, and approvals after you type the code. It opens your browser already paired; Ctrl+C stops it |
-| `harness task board --open` | The board as a web page that keeps itself up to date (Ctrl+C stops it); click a task name for its analysis page; a button in the Do column copies the command for what the task waits for |
+| `harness task board` | The board, served on this computer: a click on a task opens its page (plan, TODO, log, changes), with buttons that act: pause, resume, and approvals after you type the code. It opens your browser already paired; Ctrl+C stops it |
+| `harness task board --no-serve --open` | The board as a page on disk that keeps itself up to date (Ctrl+C stops it), without buttons that act: a button copies the command instead |
 | `harness skill list --domain <d>` | The skills of one business domain, kept in the knowledge base. You do not call them: the agent is shown them once a task names its domain |
 | `harness task archive` | Which closed tasks can be moved out of the task folder; `/harness-task-archive` has the agent ask you which and where, and move them after your yes |
 | `harness task report --open` | Where the time and usage of one task went (a web page). To have the agent explain it, type `/harness-task-report` |

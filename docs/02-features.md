@@ -215,6 +215,10 @@ Ask in your own words; the agent picks the skill (it asks first for the ones mar
 | Move closed tasks out to an archive | `harness-task-archive` (asks first) |
 | Learn the harness | `/harness-quick-start`, `/harness-wondering`; setup: `/harness-get-me-ready` |
 
+## The task page in the browser
+
+With `task board --serve` running, a click on a task opens its page: what waits for you (each button with a line on when to press it), the plan, the TODO with its progress, the log, the history, the files the task changes and their diff. The documents are drawn as pages, not shown as raw markdown. You can follow and approve a task there, and talk to the agent and check the code in VS Code. What an agent writes is drawn as text only: nothing in a task file can run on the page or send anything elsewhere.
+
 ## Observability: logs, statistics, reports, scenario checks
 
 - One log file per session: `.harness/runtime/logs/<surface>/`. No tool arguments and no prompt content are recorded; only for a refused call are the path and the command recorded (the length limit is in [observe.json](../.harness/policies/observe.json)).

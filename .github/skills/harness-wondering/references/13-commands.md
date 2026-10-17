@@ -11,7 +11,7 @@
 | Command | When |
 | --- | --- |
 | `harness task list` | To see which tasks there are, which waits for you, and for how long. `--all` lists closed ones too; `--watch` refreshes by itself |
-| `harness task board` | Writes the board as an HTML page. In your own terminal it keeps the page up to date until Ctrl+C; `--once` writes it once |
+| `harness task board` | The board of every task. In your own terminal it serves it (with a page per task: plan, TODO, log, changes, approvals) until Ctrl+C; `--no-serve` keeps a page on disk fresh instead; `--once` writes it once |
 | `harness task report` | Writes the task report and the analysis page: where the time and usage went |
 | `harness doctor` | Whether the setup has problems; whether the hook runs; which language is in effect |
 | `harness task status` | How far the current task is |

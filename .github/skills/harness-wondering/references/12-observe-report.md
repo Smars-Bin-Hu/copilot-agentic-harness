@@ -15,7 +15,7 @@ The harness records "what happened", not "what you said". The logs, the statisti
 | Knowledge base reading record | Which knowledge base files are read, by which tasks, and which nobody reads | `harness kb reads` |
 | Task report | What this task did, and who approved | Written by `task close`; written again by `task report` |
 | Task analysis page | Where the time and usage of this task went | The same; the file is `tasks/<task name>/report.html` |
-| Task board | Which task waits for you, and for how long | `task list`, `task board` (run in your own terminal it updates the page by itself every 10 seconds; `--refresh N` changes that, `--once` writes it once). `task board --serve` serves it on this computer with buttons that act; why that is safe is in the next paragraph |
+| Task board | Which task waits for you, and for how long; each task's plan, TODO, log, changes, and the buttons to approve or pause it | `task list`, `task board` (run in your own terminal it serves the board and a page per task on this computer until Ctrl+C; `--no-serve` writes a page that refreshes itself instead, `--once` writes it once) |
 | Self-check | Whether the harness is set up right, and whether the hook runs | `harness doctor` |
 | Fixed scenarios | Whether the behaviour changed after the harness was changed | `harness eval list`, `show`, `check` |
 

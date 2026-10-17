@@ -120,11 +120,10 @@ class ServeTests(ServeCase):
         self.assertTrue(tasks.plan_approved(self.root, TASK, self.data()))
 
     def test_an_action_that_is_not_switched_on_is_refused(self) -> None:
-        cookie = self.pair()
-        status, data, _ = self.request("POST", "/api/act", {"action": "review waive", "task": TASK, "step": "preview"}, cookie=cookie)
-        self.assertEqual(status, 409)
-        self.assertIn("review waive", data["error"])
-        self.assertEqual(self.request("POST", "/api/act", {"action": "recover", "task": TASK}, cookie=cookie)[0], 409)
+        board = boardserve.Board(self.root, False, self.port, ["pause", "resume"])  # as task.json `board.actions` can narrow it
+        with self.assertRaises(CommandError) as caught:
+            board.act("review waive", TASK, "preview")
+        self.assertIn("review waive", str(caught.exception))
 
 
 class ServeLifeTests(TaskCase):
@@ -160,6 +159,10 @@ class GateTests(TaskCase):
         self.assertEqual(self.decision(self.terminal("harness task board --serve")), "deny")
         self.assertEqual(self.decision(self.terminal("harness task board --all --serve --port 9001")), "deny")
         self.assertNotEqual(self.decision(self.terminal("harness task board --once")), "deny")
+        self.assertNotEqual(self.decision(self.terminal("harness task board --all --once")), "deny")
+        # a person's terminal serves it by default: from an agent, plain `task board` is refused too
+        self.assertEqual(self.decision(self.terminal("harness task board")), "deny")
+        self.assertEqual(self.decision(self.terminal("harness task board --all && echo done")), "deny")
 
     def test_an_agent_cannot_call_the_running_server(self) -> None:
         board_serve_file(self.root).parent.mkdir(parents=True, exist_ok=True)

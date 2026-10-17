@@ -33,7 +33,11 @@
       "pause",
       "resume",
       "approve-plan",
-      "approve-promote"
+      "approve-promote",
+      "review extend",
+      "review waive",
+      "autorun on",
+      "recover"
     ]
   }
 }

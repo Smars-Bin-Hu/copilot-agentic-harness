@@ -34,7 +34,7 @@ from urllib.parse import unquote, urlparse
 from core import config, messages
 from core.paths import board_serve_file, utc_now
 
-from . import autorun, common, task as task_ops, taskboard, taskhtml, tasklife, taskreview
+from . import autorun, common, task as task_ops, taskboard, taskdesk, taskhtml, tasklife, taskreview
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -42,6 +42,10 @@ COOKIE = "harness_board"
 MAX_BODY = 4096
 FREE = ("pause", "resume")  # no pairing: they guard nothing
 REFRESH = 10  # seconds between two boards in the browser
+# The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
+# or send anything elsewhere, even if it ever got past the drawing (which uses textContent only).
+CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
+       "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -51,7 +55,7 @@ def say(key: str, /, **values: Any) -> str:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "approve-plan", "approve-promote"]}
+    return {"port": config.whole(found.get("port"), 8765), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover"]}
 
 
 class Preview(Exception):
@@ -70,6 +74,7 @@ def runner(root: Path, action: str, task: str) -> Callable[..., Dict[str, Any]]:
         "review extend": lambda **kw: taskreview.extend(root, task, 2, **kw),
         "review waive": lambda **kw: taskreview.waive(root, task, **kw),
         "autorun on": lambda **kw: autorun.turn_on(root, task, **kw),
+        "recover": lambda **kw: task_ops.recover(root, task, **kw),
     }
     return table[action]
 
@@ -108,6 +113,12 @@ class Board:
     def page(self) -> str:
         result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.actions)
         return taskhtml.board_page(result["tasks"], utc_now(), 0, serve={"actions": self.actions, "refresh": REFRESH})
+
+    def desk(self, name: str) -> Dict[str, Any]:
+        return taskdesk.desk(self.root, name, self.actions)
+
+    def desk_page(self, name: str) -> str:
+        return taskhtml.desk_page(self.desk(name), {"actions": self.actions, "refresh": REFRESH})
 
     def act(self, action: str, task: str, step: str, code: str = "") -> Dict[str, Any]:
         """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once."""
@@ -160,6 +171,8 @@ def handler_for(board: Board) -> type:
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
+            if kind.startswith("text/html"):
+                self.send_header("Content-Security-Policy", CSP)
             for name, value in (extra or {}).items():
                 self.send_header(name, value)
             self.end_headers()
@@ -182,9 +195,12 @@ def handler_for(board: Board) -> type:
             if not self.host_ok():
                 return self.send(403, b"", "text/plain")
             path = unquote(urlparse(self.path).path)
-            if path in ("/", "/board.html"):
+            if path in ("/", "/board.html") or path.startswith("/task/"):
                 try:
-                    return self.send(200, board.page().encode("utf-8"), "text/html; charset=utf-8")
+                    page = board.page() if not path.startswith("/task/") else board.desk_page(path[len("/task/"):].strip("/"))
+                    return self.send(200, page.encode("utf-8"), "text/html; charset=utf-8")
+                except CommandError as error:  # a task the board does not list
+                    return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead page
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
             target = (reports / path.lstrip("/")).resolve()
@@ -212,6 +228,11 @@ def handler_for(board: Board) -> type:
                 return self.answer(200, {"paired": True}, {"Set-Cookie": cookie})
             if path == "/api/status":
                 return self.answer(200, {"paired": board.paired(self.token())})
+            if path == "/api/desk":
+                try:
+                    return self.answer(200, {"desk": board.desk(str(data.get("task", "")))})
+                except Exception as error:  # noqa: BLE001 - the page keeps what it shows
+                    return self.answer(404, {"error": str(error)})
             if path != "/api/act":
                 return self.answer(404, {"error": say("serve.refused.request")})
             action, task, step = str(data.get("action", "")), str(data.get("task", "")), str(data.get("step", "act"))

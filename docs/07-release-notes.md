@@ -10,6 +10,34 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.19 (2026-10-17)
+
+Follow a task in the browser: its plan, TODO, log, history and changes, drawn as pages, with the buttons to approve it next to them.
+
+**Testing**: the automatic tests pass on the Mac (879), and the pages were checked in Chrome. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **A page per task** (`/task/<name>` on the board server; a click on a task on the board opens it):
+  - what waits for you, each button with a line on when to press it and what happens; what you may do any time (pause, resume, autorun) apart from it;
+  - the documents of the task drawn as pages, in tabs: overview (TASK and REQ), plan, TODO with its progress, log, and any other `.md` of the task; a link between them opens the other tab;
+  - the history of the task, newest first;
+  - the files it changes, the diff, and the write-back the last dry run prepared.
+  The page follows the task by itself and keeps the open tab and the scroll.
+- **Every action can be done from the page**: `review extend`, `review waive`, `autorun on` and `recover` join pause, resume and the two approvals. Each asks for its code, as in the terminal.
+- **The agent is told the address of the task's page** while the board runs, and gives it next to a file's path.
+
+### Changed
+
+- **`task board` in your own terminal serves the board** (what `--serve` did). `--no-serve` keeps the old page on disk that refreshes itself; `--once` writes it once. The gate refuses an agent's `task board` without `--once`, so an agent cannot start the server.
+- **Links to task files**: the agent writes them with the path from the repository root, so they open in VS Code.
+- **`.vscode/settings.json` opens `.md` files as rendered previews.** To edit one, use "Open With" or the button at the top right of the preview.
+- The button for `autorun on` had no label; `recover` is called "recover the repository" so it is not mixed up with resuming a task.
+
+### Safety
+
+What an agent writes is never markup on the page: markdown is read into a tree by Python and drawn with text nodes only; a link is kept only when it is http(s), mailto, an anchor or a path. The pages carry a Content-Security-Policy that lets them talk to this server only.
+
 ## 1.4.18 (2026-10-17)
 
 The guided material catches up with the knowledge base work, and each rule has one home.

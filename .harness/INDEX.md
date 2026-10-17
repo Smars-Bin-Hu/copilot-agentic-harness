@@ -52,7 +52,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.harness/contracts/` | The templates of the task files: `TASK.md`, `REQ.md`, `TODO.md`, `LOG.md` under `templates/task/<language>/` (`en`, `zh`). `kb/`: the knowledge base standard (README) and its templates; `map.md`, the contract of the repository map and of a team's toolkit |
 | `.harness/examples/kb-toolkits/` | Sample toolkits for `kb map`: `sqlserver` (procedures, SQL Agent jobs, SSIS packages) and `spring` (a Spring Boot service). A team copies one into `<knowledge base>/toolkit/` and changes it |
 | `.harness/engine/` | `hook.py` (the hook entry), `cli.py` (the command entry), `modules/` (task, gate, observe, evalcheck), `adapters/` (runtime differences), `core/messages.<language>.json` (every text the engine prints) |
-| `.vscode/` | `settings.json` (turns on hooks, `AGENTS.md` and instruction files in Copilot Chat) and `mcp.json` (MCP servers; none shipped) |
+| `.vscode/` | `settings.json` (turns on hooks, `AGENTS.md` and instruction files in Copilot Chat; opens `.md` files as rendered previews) and `mcp.json` (MCP servers; none shipped) |
 | `.harness/bin/` | The launchers of the short command: `harness` (macOS/Linux), `harness.cmd` (Windows) |
 | `.harness/eval/` | Fixed scenarios (`scenarios/`) and recorded samples of real hook input (`fixtures/`) |
 | `.harness/tests/` | All the tests: `python -m unittest discover -s .harness/tests` (`python3` on macOS/Linux) |

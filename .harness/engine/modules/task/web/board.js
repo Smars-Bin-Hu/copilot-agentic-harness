@@ -33,31 +33,8 @@
   const head = [th(t("board.col.task")), th(t("board.col.kind")), th(t("board.col.waiting")), th(t("board.col.waited"), true), th(t("board.col.time")), th("", true),
     th("AIU", true), th(t("board.col.prompts"), true), th(t("board.col.reviews"), true), th(t("board.col.updated")), th(t("board.col.actions"))];
 
-  // A click copies the command; the person pastes it in a terminal. Nothing runs from the page.
-  function copy(button, command) {
-    const done = () => {
-      button.textContent = t("board.copied");
-      setTimeout(() => { button.textContent = button.dataset.label; }, 1500);
-    };
-    const fallback = () => {
-      const area = h("textarea", {style: "position:fixed;opacity:0"}, command);
-      document.body.append(area);
-      area.select();
-      try { document.execCommand("copy"); done(); } catch (error) { window.prompt(t("board.copy.manual"), command); }
-      area.remove();
-    };
-    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(command).then(done, fallback);
-    else fallback();
-  }
-
   function actionCell(row) {
-    const buttons = (row.actions || []).map((item) => {
-      const label = t("board.action." + item.action.replace(" ", "-"));
-      const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page
-      const button = h("button", {class: "act" + (row.waiting && item.action !== "pause" ? " hot" : "") + (live ? " live" : ""), type: "button", title: live ? "" : item.command, "data-label": label}, label);
-      button.addEventListener("click", () => (live ? SERVE.act(button, row, item) : copy(button, item.command)));
-      return button;
-    });
+    const buttons = (row.actions || []).map((item) => actionButton(row, item));
     return h("td", {class: "acts"}, buttons.length ? buttons : "-");
   }
 
@@ -71,7 +48,8 @@
     const brief = row.brief;
     const kind = row.status === "new" ? "-" : t("task.kind." + (row.kind || "none")) + " · " + t("task.tier." + (row.tier || "none"));
     return h("tr", null,
-      h("td", {class: "name"}, row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : row.name,
+      h("td", {class: "name"}, DATA.serve && row.status !== "new" ? h("a", {href: "/task/" + encodeURIComponent(row.name)}, row.name)
+        : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : row.name,
         row.depends_on && row.depends_on.length ? h("div", {class: "sub"}, t("board.depends", {names: row.depends_on.join("、")})) : null),
       h("td", {class: "kind"}, kind), h("td", {class: "state"}, state(row)),
       num(row.waiting && row.waited_s !== null ? clock(row.waited_s) : "-"),

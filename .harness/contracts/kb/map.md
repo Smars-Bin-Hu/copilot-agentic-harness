@@ -13,7 +13,7 @@ The map lists every object of the target repositories and every use between them
   DESIGN.md           the design the user approved
 ```
 
-A sample for SQL Server is in [toolkit-example-sqlserver/](toolkit-example-sqlserver/). The harness ships no toolkit: without one, `kb map` says so.
+Two samples: [toolkit-example-sqlserver/](toolkit-example-sqlserver/) (procedures, SQL Agent jobs, SSIS packages) and [toolkit-example-spring/](toolkit-example-spring/) (a Spring Boot service, built on spring-petclinic; its `DESIGN.md` shows how it was built). The harness ships no toolkit: without one, `kb map` says so.
 
 `kb map` runs code from the knowledge base. The knowledge base changes only through a write-back a person approves, so a person has read that code.
 
@@ -22,12 +22,12 @@ A sample for SQL Server is in [toolkit-example-sqlserver/](toolkit-example-sqlse
 | Field | Rule |
 | --- | --- |
 | `schema_version`, `name` | Required. `1`; a short name |
-| `extractors` | Required. `[{"glob": "**/*.sql", "file": "extract_x.py", "function": "name"}]`, the first match wins. Or `{"glob", "builtin": "regex", "node": {"type", "pattern"}, "edges": [{"kind", "pattern", "as"}]}`: rules only, for a simple stack (one group in each pattern: the name) |
+| `extractors` | Required. `[{"glob": "**/*.sql", "file": "extract_x.py", "function": "name"}]`, the first match wins. Or `{"glob", "builtin": "regex", "node": {"type", "pattern", "many"}, "edges": [{"kind", "pattern", "as"}]}`: rules only, for a simple stack (one group in each pattern: the name). The first match of `node.pattern` is the object of the file, and the edges are its uses; with `"many": true` every match is an object, without edges (a schema file of many tables) |
 | `repos` | The repositories it is for. Default: every target repository but the knowledge base |
 | `ignore` | Globs of files never read |
 | `obsolete` | Globs of folders where retired code is kept. Their objects are marked `obsolete`; a live object that uses one is a gap |
 | `markers` | `{"db": ".sqlproj"}`: for each file, the stem of the nearest file with that suffix in a folder above it goes into `context["db"]` |
-| `names` | `sql`: `db.schema.name`, a missing part filled from the context (`dbo`, the `db` of the use). `plain`: names as written |
+| `names` | `sql`: `db.schema.name`, a missing part filled from the context (`dbo`, the `db` of the use). `plain`: the name as written first (case and all), then ignoring case, then its last part after `/` or `.` |
 | `entry_types` | Object types where work starts (`job`). None: objects nothing uses but that use something |
 | `executable_types` | Object types that run (`sp`, `package`): an executable nothing uses is listed as `unused` |
 | `stop_words` | Words left out of the names `kb split` suggests |

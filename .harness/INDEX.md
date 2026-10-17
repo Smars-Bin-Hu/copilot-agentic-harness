@@ -37,6 +37,8 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/skills/generic-capture-knowledge/` | After a task: picks what a future agent would get wrong, drafts it as knowledge base entries or skill gotchas (`KB-DRAFT.md`) for the user to approve; writes nothing into the knowledge base |
 | `.github/skills/generic-kb-translate/` | Translate knowledge base pages from Simplified Chinese to English in a `kb` task: glossary first, then a script checks every file against its original. The agent asks first |
 | `.github/skills/generic-kb-migrate/` | Move a knowledge base domain of before the standard into the standard form with `harness kb migrate`, in a `kb` task, until `kb check` passes. The agent asks first |
+| `.github/skills/generic-kb-toolkit-design/` | Design the toolkit that lets `kb map` read the team's own code: `kb survey`, sample files, uses the user knows; writes `TOOLKIT-DESIGN.md` for approval. The agent asks first |
+| `.github/skills/generic-kb-toolkit-build/` | Build the approved toolkit into the knowledge base, tried with `kb map --toolkit` until every known fact is found. Started only by the user, with `/generic-kb-toolkit-build` |
 | `.github/skills/generic-kb-domains/` | Map the target repositories by script (`kb map`) and propose the domains (`kb split`); writes `DOMAINS.md` in a `kb` task for the user to confirm once. The agent asks first |
 | `.github/skills/generic-kb-refresh/` | Bring stale cards of a domain back in line with the code: reads only the diff of each changed source (`kb stale --diff`), fixes the lines it touches, stamps the checked cards (`kb stamp`), in a `kb` task. The agent asks first |
 | `.github/agents/` | `reviewer` (the independent checker), `mapper` (the read-only chunk reader), `admin` (extends and debugs the harness; the user must switch admin mode on in the terminal first) |
@@ -48,7 +50,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/hooks/harness.json` | The one hook configuration; every event goes to the same entry |
 | `.harness/registry.json` | The version; the module registry: switches, the events each module listens to, file lists |
 | `.harness/policies/` | Policies: `task`, `gate`, `observe`, `agents`, `target`, `cli`, `user` (the user's name and the language). An override goes in the `.override.json` of the same name |
-| `.harness/contracts/` | The templates of the task files: `TASK.md`, `REQ.md`, `TODO.md`, `LOG.md` under `templates/task/<language>/` (`en`, `zh`). `kb/`: the knowledge base standard (README) and its templates; `map.md`, the contract of the repository map and of a team's toolkit; `toolkit-example-sqlserver/`, a sample toolkit |
+| `.harness/contracts/` | The templates of the task files: `TASK.md`, `REQ.md`, `TODO.md`, `LOG.md` under `templates/task/<language>/` (`en`, `zh`). `kb/`: the knowledge base standard (README) and its templates; `map.md`, the contract of the repository map and of a team's toolkit; `toolkit-example-sqlserver/` and `toolkit-example-spring/`, sample toolkits |
 | `.harness/engine/` | `hook.py` (the hook entry), `cli.py` (the command entry), `modules/` (task, gate, observe, evalcheck), `adapters/` (runtime differences), `core/messages.<language>.json` (every text the engine prints) |
 | `.harness/bin/` | The launchers of the short command: `harness` (macOS/Linux), `harness.cmd` (Windows) |
 | `.harness/eval/` | Fixed scenarios (`scenarios/`) and recorded samples of real hook input (`fixtures/`) |

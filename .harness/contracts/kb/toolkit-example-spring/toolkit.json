@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "name": "spring",
+  "description": "A Spring Boot service: classes by role, HTTP endpoints, JPA tables, Thymeleaf views. Built on spring-petclinic as a sample.",
+  "extractors": [
+    {
+      "glob": "src/main/java/**/*.java",
+      "file": "extract_spring.py",
+      "function": "java"
+    },
+    {
+      "glob": "src/main/resources/templates/**/*.html",
+      "file": "extract_spring.py",
+      "function": "template"
+    },
+    {
+      "glob": "src/main/resources/db/h2/schema.sql",
+      "builtin": "regex",
+      "node": {
+        "type": "table",
+        "pattern": "CREATE TABLE (?:IF NOT EXISTS )?(\\w+)",
+        "many": true
+      }
+    }
+  ],
+  "ignore": [
+    "**/package-info.java",
+    "src/main/resources/templates/fragments/**"
+  ],
+  "names": "plain",
+  "entry_types": [
+    "controller"
+  ],
+  "executable_types": [
+    "controller",
+    "service",
+    "repository",
+    "component"
+  ],
+  "stop_words": [
+    "get",
+    "post",
+    "put",
+    "delete",
+    "new",
+    "edit",
+    "html",
+    "api",
+    "controller"
+  ],
+  "shared_min": 4
+}

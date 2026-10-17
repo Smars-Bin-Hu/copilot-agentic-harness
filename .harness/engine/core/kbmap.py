@@ -25,7 +25,7 @@ from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-from . import kbextract, messages, paths, repo_paths, targets
+from . import kbextract, messages, paths, repo_paths, targets, tasks
 
 SCHEMA_VERSION = 2
 TOOLKIT_DIR = "toolkit"
@@ -37,6 +37,8 @@ GIT_TIMEOUT = 300
 SAMPLE = 10
 NEAR_LIMIT = 200
 NAME_STYLES = ("sql", "plain")
+SURVEY_KINDS = 15  # kinds of file shown per repository
+SURVEY_FOLDERS = 15
 
 
 class MapError(ValueError):
@@ -109,27 +111,33 @@ def problems_of(data: Any) -> List[str]:
     return found
 
 
-def toolkits(root: Path) -> List[Toolkit]:
-    """The toolkit of each knowledge base that has one. A broken one stops the map: its owner must know."""
-    found = []
-    for _name, folder in targets.knowledge_bases(root):
-        file = folder / TOOLKIT_DIR / TOOLKIT_FILE
-        if not file.is_file():
-            continue
+def load_toolkit(folder: Path) -> Toolkit:
+    """The toolkit in `folder`. A broken one stops the map: its owner must know what is wrong."""
+    file = folder / TOOLKIT_FILE
+    try:
+        data = json.loads(file.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise MapError(say("kbmap.toolkit_bad", folder=folder, problem=error)) from None
+    problems = problems_of(data)
+    if problems:
+        raise MapError(say("kbmap.toolkit_bad", folder=folder, problem="; ".join(problems)))
+    digest = sha256(file.read_bytes())
+    for name in sorted({rule["file"] for rule in data["extractors"] if rule.get("file")}):
+        target = folder / name
+        digest.update(target.read_bytes() if target.is_file() else b"-")
+    return Toolkit(str(data["name"]), folder, data, digest.hexdigest()[:16])
+
+
+def toolkits(root: Path, trial: Optional[Path] = None) -> List[Toolkit]:
+    """The toolkit of each knowledge base that has one; or only `trial`, a toolkit being built inside a task."""
+    if trial is not None:
+        folder = trial.resolve()
         try:
-            data = json.loads(file.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as error:
-            raise MapError(say("kbmap.toolkit_bad", folder=file.parent, problem=error)) from None
-        problems = problems_of(data)
-        if problems:
-            raise MapError(say("kbmap.toolkit_bad", folder=file.parent, problem="; ".join(problems)))
-        code = sorted({rule["file"] for rule in data["extractors"] if rule.get("file")})
-        digest = sha256(file.read_bytes())
-        for name in code:
-            target = file.parent / name
-            digest.update(target.read_bytes() if target.is_file() else b"-")
-        found.append(Toolkit(str(data["name"]), file.parent, data, digest.hexdigest()[:16]))
-    return found
+            folder.relative_to((root / tasks.TASKS_DIR).resolve())
+        except ValueError:
+            raise MapError(say("kbmap.trial_outside", folder=folder)) from None
+        return [load_toolkit(folder)]
+    return [load_toolkit(folder / TOOLKIT_DIR) for _name, folder in targets.knowledge_bases(root) if (folder / TOOLKIT_DIR / TOOLKIT_FILE).is_file()]
 
 
 def toolkit_for(choices: List[Toolkit], repo: str) -> Optional[Toolkit]:
@@ -140,10 +148,14 @@ def toolkit_for(choices: List[Toolkit], repo: str) -> Optional[Toolkit]:
 
 
 def matches(pattern: str, path: str) -> bool:
-    """`**/*.sql` also matches `a.sql` at the top of the repository."""
+    """A glob of toolkit.json. `**/` also stands for no folder: `**/*.sql` matches `a.sql`, `templates/**/*.html`
+    matches `templates/welcome.html`."""
     if repo_paths.glob_regex(pattern).match(path):
         return True
-    return pattern.startswith("**/") and bool(repo_paths.glob_regex(pattern[3:]).match(path))
+    if "**/" not in pattern:
+        return False
+    shorter = re.sub(r"(^|/)\*\*/", r"\1", pattern)
+    return bool(repo_paths.glob_regex(shorter).match(path))
 
 
 # --- SQL names ------------------------------------------------------------------------------------------
@@ -307,9 +319,10 @@ def chosen_repos(root: Path, names: Optional[List[str]]) -> List[targets.Repo]:
     return [repo for name, repo in sorted(found.repos.items()) if not repo.knowledge_base]
 
 
-def build(root: Path, names: Optional[List[str]] = None, fresh: bool = False) -> Dict[str, Any]:
-    """`kb map`: map the repositories (all target repositories but the knowledge base, or the ones named), then sum up."""
-    choices = toolkits(root)
+def build(root: Path, names: Optional[List[str]] = None, fresh: bool = False, trial: Optional[Path] = None) -> Dict[str, Any]:
+    """`kb map`: map the repositories (all target repositories but the knowledge base, or the ones named), then sum up.
+    `trial`: use the toolkit being built in a task instead of the knowledge base's (its map replaces the cached one)."""
+    choices = toolkits(root, trial)
     if not choices:
         raise MapError(say("kbmap.no_toolkit"))
     repos = chosen_repos(root, names)
@@ -400,6 +413,7 @@ class Graph:
     def resolve(self, pending: List[Tuple[str, List[Dict[str, Any]], str]]) -> None:
         index: Dict[str, List[str]] = defaultdict(list)
         for node in self.nodes.values():
+            index["=" + node["name"]].append(node["id"])  # the name as written, case and all: `Vets` the class, not `vets` the table
             for key in keys_of(node["name"]):
                 index[key].append(node["id"])
         databases = {item["name"].split(".")[0].lower() for item in self.nodes.values() if item["name"].count(".") == 2}
@@ -431,7 +445,7 @@ class Graph:
 
         if not sql:
             low = raw.lower()
-            for key in dict.fromkeys([low, low.rsplit("/", 1)[-1], low.split(".")[-1]]):
+            for key in dict.fromkeys(["=" + raw, low, low.rsplit("/", 1)[-1], low.split(".")[-1]]):
                 hit = pick(index.get(key, []))
                 if hit:
                     return hit
@@ -755,3 +769,37 @@ def gaps(root: Path, inventory: Optional[Path] = None) -> Dict[str, Any]:
         )
     result["next"] = say("kbmap.gaps.next" if inventory is not None else "kbmap.gaps.next_no_inventory")
     return result
+
+
+# --- survey: what a repository holds, before there is a toolkit ------------------------------------------------
+
+
+def survey_one(repo: targets.Repo, samples: int) -> Dict[str, Any]:
+    commit = targets.ref_commit(repo)
+    if not commit:
+        return {"repo": repo.name, "note": say("kbmap.no_branch", branch=repo.base_ref)}
+    files = listing(repo, commit)
+    by_suffix: Dict[str, List[Tuple[int, str]]] = defaultdict(list)
+    for _sha, size, path in files:
+        by_suffix[PurePosixPath(path).suffix.lower() or PurePosixPath(path).name].append((size, path))
+    folders = Counter("/".join(PurePosixPath(path).parent.parts[:2]) or "." for _sha, _size, path in files)
+    kinds = []
+    for suffix, items in sorted(by_suffix.items(), key=lambda item: (-len(item[1]), item[0]))[:SURVEY_KINDS]:
+        ordered = sorted(items)
+        spread = [ordered[(len(ordered) - 1) * step // max(samples - 1, 1)][1] for step in range(samples)] if ordered else []
+        kinds.append({"kind": suffix, "files": len(items), "bytes": sum(size for size, _path in items), "samples": list(dict.fromkeys(spread))})
+    return {
+        "repo": repo.name, "commit": commit[:12], "files": len(files),
+        "top_level": sorted({PurePosixPath(path).parts[0] + ("/" if len(PurePosixPath(path).parts) > 1 else "") for _sha, _size, path in files})[:40],
+        "folders": [{"folder": name, "files": count} for name, count in folders.most_common(SURVEY_FOLDERS)],
+        "kinds": kinds,
+    }
+
+
+def survey(root: Path, names: Optional[List[str]] = None, samples: int = 3) -> Dict[str, Any]:
+    """`kb survey`: per repository, the kinds of files, the folders, and a few sample files of each kind (small, middle,
+    large), from the base branch. The first step of designing a toolkit; needs none."""
+    repos = chosen_repos(root, names)
+    if not repos:
+        raise MapError(say("kbmap.no_repos"))
+    return {"repos": [survey_one(repo, max(1, min(samples, 10))) for repo in repos], "next": say("kbmap.survey.next")}

@@ -849,6 +849,8 @@
   "kbmap.no_repos": "No target repository is set up. Run `target list`.",
   "kbmap.no_toolkit": "No toolkit: the knowledge base has no toolkit/toolkit.json for this repository. A toolkit is made for your own code with /generic-kb-toolkit-design and /generic-kb-toolkit-build (contract: .harness/contracts/kb/map.md). Until then, learn the repository by reading its folders.",
   "kbmap.toolkit_bad": "The toolkit in {folder} cannot be used: {problem}",
+  "kbmap.trial_outside": "--toolkit must be a folder inside a task (.workspace/sandbox/tasks/<task>/...): {folder}. A toolkit in use is in the knowledge base's toolkit/.",
+  "kbmap.survey.next": "Read a few `samples` of each kind that holds code (`task fetch` in a task), then design the toolkit: which files define which objects, what a use looks like, where work starts. Ask the user for uses they know. /generic-kb-toolkit-design leads it.",
   "kbmap.next": "Use `kb near <id>` for what one object uses and what uses it, and `kb split` for a first cut of the domains. `missing`: names used but defined nowhere in the repositories (deleted, or never committed); `obsolete_used`: retired code still in use. `dynamic` objects run code known only at run time: read them, or ask the user, before you rely on their uses.",
   "kbmap.next.facts": "Check `facts` first: the toolkit does not yet find every use the person knows (or there is no facts.jsonl). Look also at `empty_files` and `failed_files`. Until they are right, the map misses uses: fix the toolkit (/generic-kb-toolkit-build).",
   "kbmap.empty": "The map found no object. Check the globs of toolkit.json against the files of the repository.",

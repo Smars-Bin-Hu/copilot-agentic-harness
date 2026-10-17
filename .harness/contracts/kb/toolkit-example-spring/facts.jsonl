@@ -1,0 +1,11 @@
+{"from": "endpoint:GET /owners/{ownerId}", "kind": "handled_by", "to": "controller:OwnerController"}
+{"from": "endpoint:GET /owners/{ownerId}", "kind": "renders", "to": "view:owners/ownerDetails"}
+{"from": "endpoint:POST /owners/{ownerId}/pets/new", "kind": "handled_by", "to": "controller:PetController"}
+{"from": "controller:PetController", "kind": "uses", "to": "repository:PetTypeRepository"}
+{"from": "controller:VetController", "kind": "uses", "to": "repository:VetRepository"}
+{"from": "repository:OwnerRepository", "kind": "reads", "to": "entity:Owner"}
+{"from": "entity:Owner", "kind": "maps", "to": "table:owners"}
+{"from": "entity:Pet", "kind": "uses", "to": "entity:Visit"}
+{"from": "entity:Vet", "kind": "maps", "to": "table:vets"}
+{"from": "endpoint:GET /vets.html", "kind": "renders", "to": "view:vets/vetList"}
+{"from": "endpoint:GET /owners/new", "kind": "renders", "to": "view:owners/createOrUpdateOwnerForm"}

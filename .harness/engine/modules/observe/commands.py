@@ -5,7 +5,7 @@
   kb check [--domain]  is each domain in the standard form (core/kbstd.py)
   kb stale --domain D  which objects were learned from source files that changed since (--diff: what changed)
   kb stamp --path P    after a refresh: the sources count from the base branch now (only in a task's DEV/)
-  kb map / near / split / gaps  the repository map: every object and use, by script (core/kbmap.py)
+  kb survey / map / near / split / gaps  the repository map: every object and use, by script (core/kbmap.py)
   logs prune           delete session logs not written to for N days (a person decides; no hook deletes anything)
 """
 
@@ -94,7 +94,12 @@ def register(subparsers: Any) -> None:
     build = kb_commands.add_parser("map", help="map the target repositories with the toolkit of the knowledge base (<knowledge base>/toolkit/): every object and every use. Only changed files are read again; the known facts of the toolkit are checked")
     build.add_argument("--repo", action="append", default=None, help="only this repository (may be given more than once); default: all but the knowledge base")
     build.add_argument("--fresh", action="store_true", help="read every file again")
-    build.set_defaults(handler=mapped(lambda a: kbmap.build(repo_root(), a.repo, a.fresh)))
+    build.add_argument("--toolkit", default="", help="try a toolkit being built in a task (a folder inside .workspace/sandbox/tasks/) instead of the knowledge base's")
+    build.set_defaults(handler=mapped(lambda a: kbmap.build(repo_root(), a.repo, a.fresh, Path(a.toolkit) if a.toolkit else None)))
+    look = kb_commands.add_parser("survey", help="what each target repository holds, before there is a toolkit: kinds of files, folders, a few sample files of each kind")
+    look.add_argument("--repo", action="append", default=None, help="only this repository (may be given more than once)")
+    look.add_argument("--samples", type=int, default=3, help="sample files per kind (1 to 10)")
+    look.set_defaults(handler=mapped(lambda a: kbmap.survey(repo_root(), a.repo, a.samples)))
     close = kb_commands.add_parser("near", help="what one object uses and what uses it, from the map")
     close.add_argument("object", help="an id (sp:Db.dbo.usp_x) or a name (usp_x)")
     close.add_argument("--depth", type=int, default=1, choices=range(1, 6), help="how many steps out (1 to 5)")

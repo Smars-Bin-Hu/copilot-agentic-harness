@@ -75,10 +75,16 @@ def line_at(text: str, position: int) -> int:
 
 def regex(text: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
     """The extractor written as rules in toolkit.json: `node` {type, pattern with one group for the name} (no pattern: the
-    file is the object, named by its path), `edges` [{kind, pattern with one group for the name used, as}]."""
+    file is the object, named by its path), `edges` [{kind, pattern with one group for the name used, as}].
+    `node.many`: every match of the pattern is an object (a schema file of many tables); such objects have no edges."""
     rule = context.get("rule") or {}
     node = rule.get("node") or {}
     kind = str(node.get("type") or "file")
+    if node.get("many") and node.get("pattern"):
+        return [
+            {"id": f"{kind}:{match.group(1)}", "type": kind, "name": match.group(1), "line": line_at(text, match.start(1)), "dynamic": False, "refs": []}
+            for match in re.finditer(node["pattern"], text, re.MULTILINE)
+        ]
     name, line = context["path"], 1
     if node.get("pattern"):
         match = re.search(node["pattern"], text, re.MULTILINE)

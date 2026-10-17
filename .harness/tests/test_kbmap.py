@@ -156,6 +156,74 @@ class ExtractTests(unittest.TestCase):
         self.assertEqual(found[0]["refs"][0]["name"], "Repo")
 
 
+CONTROLLER = """package x;
+// @GetMapping("/not/this")
+@Controller
+@RequestMapping("/owners/{ownerId}")
+class PetController {
+	private static final String FORM = "pets/form";
+	private final OwnerRepository owners;
+	public PetController(OwnerRepository owners, PetTypeRepository types) {}
+	@GetMapping("/pets/new")
+	public String initCreationForm() {
+		return FORM;
+	}
+	@PostMapping({"/pets/new", "/pets/add"})
+	public ModelAndView process() {
+		return new ModelAndView("pets/done");
+	}
+}
+"""
+
+
+class SpringSampleTests(unittest.TestCase):
+    """The second sample toolkit, a backend service: it shows the method is not tied to SQL."""
+
+    def setUp(self) -> None:
+        self.java = kbextract.load(REPO / ".harness" / "contracts" / "kb" / "toolkit-example-spring" / "extract_spring.py", "java")
+
+    def test_a_controller_its_endpoints_and_views(self) -> None:
+        found = {item["id"]: item for item in self.java(CONTROLLER, {"path": "PetController.java"})}
+        self.assertEqual(sorted(found), [
+            "controller:PetController", "endpoint:GET /owners/{ownerId}/pets/new",
+            "endpoint:POST /owners/{ownerId}/pets/add", "endpoint:POST /owners/{ownerId}/pets/new",
+        ])
+        uses = {(ref["kind"], ref["name"]) for ref in found["controller:PetController"]["refs"]}
+        self.assertEqual(uses, {("uses", "OwnerRepository"), ("uses", "PetTypeRepository")})
+        self.assertIn(("renders", "pets/form"), {(ref["kind"], ref["name"]) for ref in found["endpoint:GET /owners/{ownerId}/pets/new"]["refs"]})
+        self.assertIn(("renders", "pets/done"), {(ref["kind"], ref["name"]) for ref in found["endpoint:POST /owners/{ownerId}/pets/add"]["refs"]})
+
+    def test_an_entity_and_a_repository(self) -> None:
+        entity = self.java('@Entity\n@Table(name = "pets")\npublic class Pet extends NamedEntity {\n\tprivate PetType type;\n\tprivate Set<Visit> visits;\n}\n', {"path": "Pet.java"})[0]
+        self.assertEqual(entity["id"], "entity:Pet")
+        self.assertEqual({(ref["kind"], ref["name"]) for ref in entity["refs"]}, {("maps", "pets"), ("extends", "NamedEntity"), ("uses", "PetType"), ("uses", "Visit")})
+        repository = self.java("public interface OwnerRepository extends JpaRepository<Owner, Integer> {}\n", {"path": "R.java"})[0]
+        self.assertEqual((repository["id"], repository["refs"][0]["name"]), ("repository:OwnerRepository", "Owner"))
+
+
+class HarnessPartTests(unittest.TestCase):
+    def test_a_glob_with_two_stars_matches_no_folder_too(self) -> None:
+        self.assertTrue(kbmap.matches("**/*.sql", "a.sql"))
+        self.assertTrue(kbmap.matches("templates/**/*.html", "templates/welcome.html"))
+        self.assertTrue(kbmap.matches("templates/**/*.html", "templates/a/b.html"))
+        self.assertFalse(kbmap.matches("templates/**/*.html", "other/welcome.html"))
+
+    def test_the_rules_extractor_with_many_objects_in_one_file(self) -> None:
+        rule = {"node": {"type": "table", "pattern": r"CREATE TABLE (\w+)", "many": True}}
+        found = kbextract.regex("CREATE TABLE a (x int);\nCREATE TABLE b (y int);\n", {"path": "schema.sql", "rule": rule})
+        self.assertEqual([(item["id"], item["line"]) for item in found], [("table:a", 1), ("table:b", 2)])
+
+    def test_plain_names_prefer_the_same_case(self) -> None:
+        graph = kbmap.Graph()
+        graph.nodes = {
+            "class:Vets": {"id": "class:Vets", "type": "class", "name": "Vets"},
+            "table:vets": {"id": "table:vets", "type": "table", "name": "vets"},
+            "controller:A": {"id": "controller:A", "type": "controller", "name": "A"},
+        }
+        graph.resolve([("controller:A", [{"kind": "uses", "name": "Vets"}], "plain")])
+        self.assertEqual(graph.out["controller:A"], [("class:Vets", "uses")])
+
+
 @unittest.skipUnless(GIT, "git is not installed")
 class MapTests(HarnessTestCase):
     def setUp(self) -> None:
@@ -296,6 +364,23 @@ class MapTests(HarnessTestCase):
         listing.write_text("nothing here\n", encoding="utf-8")
         with self.assertRaises(kbmap.MapError):
             kbmap.gaps(self.root, listing)
+
+    def test_survey_needs_no_toolkit(self) -> None:
+        shutil.rmtree(self.kit)
+        result = kbmap.survey(self.root, samples=2)
+        repo = result["repos"][0]
+        kinds = {item["kind"]: item for item in repo["kinds"]}
+        self.assertEqual(kinds[".sql"]["files"], 15)
+        self.assertEqual(len(kinds[".sql"]["samples"]), 2)
+        self.assertIn("Shop/", repo["top_level"])
+
+    def test_a_toolkit_being_built_in_a_task(self) -> None:
+        trial = self.root / ".workspace" / "sandbox" / "tasks" / "kit" / "DEV" / "kb" / "toolkit"
+        shutil.copytree(self.kit, trial)
+        shutil.rmtree(self.kit)
+        self.assertEqual(self.build(trial=trial)["facts"]["found"], 4)
+        with self.assertRaises(kbmap.MapError):
+            self.build(trial=self.root / "elsewhere")
 
     def test_the_commands(self) -> None:
         self.assertEqual(self.cli_json("kb", "map", "--json")["entry_points"], 3)

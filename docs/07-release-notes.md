@@ -10,6 +10,26 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.15 (2026-10-17)
+
+The agent makes the toolkit for the team's own code, and the method was tried outside data engineering, on an open-source backend.
+
+**Testing**: the automatic tests pass on the Mac (862). The two skills were followed by hand on spring-petclinic (Java, Spring Boot); **not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **`harness kb survey`**: what each repository holds before there is a toolkit: files at the top level, folders, kinds of file with counts and sample files.
+- **`harness kb map --toolkit <folder>`**: try a toolkit being built inside a task.
+- **`/generic-kb-toolkit-design`** (the agent asks first): survey, sample files, the objects and uses that matter, 5 to 10 uses the user knows, the production list; writes `TOOLKIT-DESIGN.md` for approval.
+- **`/generic-kb-toolkit-build`** (only the user starts it): writes the toolkit in a `kb` task, tries it with `kb map --toolkit` until every known fact is found, nothing fails and every empty file is explained, then hands it over through the write-back.
+- **A second sample toolkit, `toolkit-example-spring/`**: a Spring Boot service (endpoints, controllers, repositories, entities, tables, Thymeleaf views), built by following the two skills on spring-petclinic. Its `DESIGN.md` keeps the rounds: 9 of 10 known facts, then 10, then 11 of 11.
+
+### Changed
+
+- **Globs of a toolkit**: `**/` stands for no folder too (`templates/**/*.html` matches `templates/welcome.html`). Found by a known fact on spring-petclinic.
+- **`names: plain`** tries the name with its case first: the class `Vets` and the table `vets` are no longer one ambiguous name.
+- **The built-in `regex` extractor** takes `"many": true`: every match is an object (a schema file that creates many tables).
+
 ## 1.4.14 (2026-10-17)
 
 Find what runs but has no code: a job that production still runs after its script was deleted or retired from the repository.

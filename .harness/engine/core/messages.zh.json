@@ -849,6 +849,8 @@
   "kbmap.no_repos": "还没有配置目标仓库。运行 `target list`。",
   "kbmap.no_toolkit": "没有工具包：知识库里没有适用于这个仓库的 toolkit/toolkit.json。工具包要按你们自己的代码来做：/generic-kb-toolkit-design 和 /generic-kb-toolkit-build（契约见 .harness/contracts/kb/map.md）。在那之前，按目录读来学这个仓库。",
   "kbmap.toolkit_bad": "{folder} 里的工具包用不了：{problem}",
+  "kbmap.trial_outside": "--toolkit 必须是任务里的目录（.workspace/sandbox/tasks/<任务>/...）：{folder}。正在用的工具包在知识库的 toolkit/ 里。",
+  "kbmap.survey.next": "每种放代码的文件读几个 `samples`（在任务里用 `task fetch`），再设计工具包：哪些文件定义哪些对象、一次引用长什么样、工作从哪开始。向用户要他们知道的关系。/generic-kb-toolkit-design 带你做。",
   "kbmap.next": "用 `kb near <id>` 看一个对象用了谁、谁用了它；用 `kb split` 出 domain 的初步划分。`missing`：用到了但仓库里哪里都没有定义（被删了，或从没提交）；`obsolete_used`：已退役的代码还在被用。`dynamic` 的对象运行时才知道执行什么：依赖它们的关系之前，先读代码或问用户。",
   "kbmap.next.facts": "先看 `facts`：工具包还没找全人知道的关系（或者没有 facts.jsonl）。也看 `empty_files` 和 `failed_files`。这些没对之前，地图会漏关系：修工具包（/generic-kb-toolkit-build）。",
   "kbmap.empty": "地图里没有找到对象。对照仓库的文件检查 toolkit.json 的 glob。",

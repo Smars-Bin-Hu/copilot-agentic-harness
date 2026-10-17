@@ -9,7 +9,7 @@ From cloning the repository to a first finished task. To have the agent take you
 - Python 3.9 or later. `python3` on macOS/Linux, `python` on Windows.
 - The standard library only; no `pip install` needed.
 - git. Required when you use target repositories.
-- VS Code and GitHub Copilot Chat. Pick **Copilot** as the Session Target of the chat box. The harness supports only this kind of session: see the part of [Design](05-design.md) about supporting only Copilot sessions.
+- VS Code and GitHub Copilot Chat. Pick **Copilot** as the Session Target of the chat box (from VS Code 1.142 the chat title starts with the name of the harness: check that it says Copilot). The harness supports only this kind of session: see the part of [Design](05-design.md) about supporting only Copilot sessions.
 
 There are two ways to get the harness, both fine: `git clone`, or downloading the zip from the GitHub page and unpacking it. The unpacked one has no `.git`, which does no harm. On Windows put it on a short path, for example `C:\dev\harness`: `doctor` warns when the path is too long.
 

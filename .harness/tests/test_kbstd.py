@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import shutil
 import unittest
 from pathlib import Path
 
 from support import HarnessTestCase
 from test_targets import GIT, make_repo, run_git
 
-from core import kbstd, miniyaml
+from core import kbmigrate, kbstd, miniyaml, tasks
 
 DOMAIN = """schema_version: 1
 domain: orders
@@ -140,6 +141,41 @@ class StaleTests(CheckCase):
         run_git(self.repo, "rm", "-q", "jobs/nightly.sql")
         run_git(self.repo, "commit", "-qm", "drop")
         self.assertEqual([item["id"] for item in kbstd.stale(self.root, "orders")["gone"]], ["job:Nightly_Orders"])
+
+    def test_diff_shows_what_changed_since_the_card(self) -> None:
+        (self.repo / "db" / "usp_load_orders.sql").write_text("merge 2;\n", encoding="utf-8")
+        run_git(self.repo, "commit", "-qam", "change")
+        entry = kbstd.stale(self.root, "orders", diff=True)["changed"][0]
+        self.assertIn("-merge 1;", entry["diff"])
+        self.assertIn("+merge 2;", entry["diff"])
+        self.assertNotIn("diff", kbstd.stale(self.root, "orders")["changed"][0])
+
+    def test_diff_when_git_lost_the_old_version(self) -> None:
+        self.rows[1]["sources"][0]["sha"] = "0123456789ab"
+        self.write_index()
+        entry = kbstd.stale(self.root, "orders", diff=True)["changed"][0]
+        self.assertEqual(entry["diff"], "")
+        self.assertIn("diff_note", entry)
+
+    def test_stamp_in_a_task_then_stale_is_fresh(self) -> None:
+        (self.repo / "db" / "usp_load_orders.sql").write_text("merge 2;\n", encoding="utf-8")
+        run_git(self.repo, "commit", "-qam", "change")
+        dev = self.root / tasks.TASKS_DIR / "kb-fix" / "DEV" / "kb" / "domains" / "orders"
+        shutil.copytree(self.folder, dev)
+        with self.assertRaises(kbmigrate.MigrateError):
+            kbmigrate.stamp(self.root, self.folder)  # never the knowledge base itself
+        with self.assertRaises(kbmigrate.MigrateError):
+            kbmigrate.stamp(self.root, dev, ["sp:nope"])
+        result = kbmigrate.stamp(self.root, dev, ["sp:Shop.dbo.usp_load_orders"])
+        self.assertEqual((result["stamped"], result["unchanged"]), (["sp:Shop.dbo.usp_load_orders"], 0))
+        self.assertEqual(kbmigrate.stamp(self.root, dev)["stamped"], [])
+        self.assertNotIn("_line", (dev / kbstd.INDEX_FILE).read_text(encoding="utf-8"))
+        shutil.copy(dev / kbstd.INDEX_FILE, self.folder / kbstd.INDEX_FILE)
+        self.assertEqual(kbstd.stale(self.root, "orders")["changed"], [])
+
+    def test_the_commands(self) -> None:
+        self.assertEqual(self.cli_json("kb", "stale", "--domain", "orders", "--diff", "--json")["changed"], [])
+        self.assertNotEqual(self.cli("kb", "stamp", "--path", str(self.folder)).returncode, 0)
 
     def test_cards_of_finds_the_objects_of_fetched_files(self) -> None:
         hits = kbstd.cards_of(self.root, "shop_repo", ["db/usp_load_orders.sql", "other.sql"])

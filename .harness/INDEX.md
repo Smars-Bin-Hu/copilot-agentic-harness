@@ -38,6 +38,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/skills/generic-kb-translate/` | Translate knowledge base pages from Simplified Chinese to English in a `kb` task: glossary first, then a script checks every file against its original. The agent asks first |
 | `.github/skills/generic-kb-migrate/` | Move a knowledge base domain of before the standard into the standard form with `harness kb migrate`, in a `kb` task, until `kb check` passes. The agent asks first |
 | `.github/skills/generic-kb-domains/` | Map the target repositories by script (`kb map`) and propose the domains (`kb split`); writes `DOMAINS.md` in a `kb` task for the user to confirm once. The agent asks first |
+| `.github/skills/generic-kb-refresh/` | Bring stale cards of a domain back in line with the code: reads only the diff of each changed source (`kb stale --diff`), fixes the lines it touches, stamps the checked cards (`kb stamp`), in a `kb` task. The agent asks first |
 | `.github/agents/` | `reviewer` (the independent checker), `mapper` (the read-only chunk reader), `admin` (extends and debugs the harness; the user must switch admin mode on in the terminal first) |
 
 ## Engine and policies

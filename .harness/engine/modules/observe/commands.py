@@ -3,7 +3,8 @@
   stats                numbers from the session logs: prompts, refusals, review verdicts, hook time
   kb reads             which knowledge base files the tasks read, and which nobody read
   kb check [--domain]  is each domain in the standard form (core/kbstd.py)
-  kb stale --domain D  which objects were learned from source files that changed since
+  kb stale --domain D  which objects were learned from source files that changed since (--diff: what changed)
+  kb stamp --path P    after a refresh: the sources count from the base branch now (only in a task's DEV/)
   kb map / near / split  the repository map: every object and use, by script (core/kbmap.py)
   logs prune           delete session logs not written to for N days (a person decides; no hook deletes anything)
 """
@@ -36,9 +37,16 @@ def cmd_migrate(args: Any) -> Dict[str, Any]:
         raise RuntimeError(str(error)) from None
 
 
+def cmd_stamp(args: Any) -> Dict[str, Any]:
+    try:
+        return kbmigrate.stamp(repo_root(), Path(args.path), args.id)
+    except kbmigrate.MigrateError as error:
+        raise RuntimeError(str(error)) from None
+
+
 def cmd_stale(args: Any) -> Dict[str, Any]:
     try:
-        return kbstd.stale(repo_root(), args.domain)
+        return kbstd.stale(repo_root(), args.domain, args.diff)
     except ValueError as error:
         raise RuntimeError(str(error)) from None
 
@@ -76,7 +84,12 @@ def register(subparsers: Any) -> None:
     move.set_defaults(handler=cmd_migrate)
     old = kb_commands.add_parser("stale", help="which objects of a domain were learned from source files that changed since (git, on the base branch)")
     old.add_argument("--domain", required=True)
+    old.add_argument("--diff", action="store_true", help="with what changed in each source since its card was written (cut after 120 lines)")
     old.set_defaults(handler=cmd_stale)
+    mark = kb_commands.add_parser("stamp", help="after checking cards against the code: set the sha of their sources to the base branch now. Only in a task's DEV/")
+    mark.add_argument("--path", required=True, help="the domain folder inside .workspace/sandbox/tasks/<task>/DEV/")
+    mark.add_argument("--id", action="append", default=None, help="only this object (may be given more than once); default: all")
+    mark.set_defaults(handler=cmd_stamp)
     # The repository map (layer one of learning a code base): core/kbmap.py, extractors in core/kbextract.py.
     build = kb_commands.add_parser("map", help="map the target repositories by script: every object (procedure, table, job, package ...) and every use (calls, runs, reads, writes). Only changed files are read again")
     build.add_argument("--repo", action="append", default=None, help="only this repository (may be given more than once); default: all but the knowledge base")

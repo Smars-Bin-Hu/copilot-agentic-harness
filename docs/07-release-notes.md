@@ -10,6 +10,23 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.12 (2026-10-17)
+
+Refreshing a stale card reads what changed, not the whole file again.
+
+**Testing**: the automatic tests pass on the Mac (847). **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **`harness kb stale --domain <d> --diff`**: with each changed source, the diff since its card was written (cut after 120 lines). When git no longer has that version, `diff_note` says to read the source as it is.
+- **`harness kb stamp --path <folder> [--id <id>]`**: after a card was checked against the code, its sources count from the base branch now. Only inside a task's `DEV/`.
+- **`/generic-kb-refresh`** (the agent asks first): in a `kb` task, reads the diff of each stale card, changes only the lines the change touches, asks the user before dropping an object whose source is gone, stamps only the cards it checked, and hands over through the write-back.
+
+### Changed
+
+- **`kb stale`** points at `--diff` and at `/generic-kb-refresh`; `knowledgebase.instructions.md` names the skill for stale cards.
+- **Quickstart**: from VS Code 1.142 the chat title starts with the name of the harness; check that it says Copilot.
+
 ## 1.4.11 (2026-10-17)
 
 Learning a code base starts with a map made by script, not with a model reading files.

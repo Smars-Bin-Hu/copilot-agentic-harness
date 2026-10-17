@@ -30,7 +30,7 @@ While you work, watch for knowledge that is **wrong** (the code or a run shows o
 
 - Note each one when you meet it, in the task's `LOG.md`, with the id and the evidence (`<repo>/<path>`, a line, a result). Do not stop the task for it.
 - At the next natural stop (the end of the task, a plan, a hand-over), ask the user in two or three lines: what is wrong or missing, and whether to update the knowledge base.
-- On a yes: draft it with `generic-capture-knowledge` (it writes `KB-DRAFT.md`), and write it into the knowledge base through a task of kind `kb`, with the usual plan approval and write-back. Never edit the knowledge base from another task.
+- On a yes: draft it with `generic-capture-knowledge` (it writes `KB-DRAFT.md`), and write it into the knowledge base through a task of kind `kb`, with the usual plan approval and write-back. Stale cards only: `generic-kb-refresh` does it from the diffs. Never edit the knowledge base from another task.
 - On a no, or no answer: leave it in `LOG.md`. Do not ask again in the same task.
 
 ## Writing it

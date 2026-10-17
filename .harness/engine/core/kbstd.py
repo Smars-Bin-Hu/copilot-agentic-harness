@@ -133,7 +133,13 @@ def check_domain(root: Path, folder: Path) -> Dict[str, Any]:
         seen.setdefault(row["id"], line)
         if row["level"] not in LEVELS:
             errors.append(say("kb.object.level", id=row["id"], level=row["level"], levels=", ".join(LEVELS)))
-        if row["type"] != "family":
+        gap = row.get("source_missing")
+        if gap is not None:
+            if not isinstance(gap, dict) or not gap.get("seen_in"):
+                errors.append(say("kb.object.source_missing", id=row["id"]))
+            elif row.get("level") not in ("unknown", "conflict"):
+                warnings.append(say("kb.object.gap_level", id=row["id"]))
+        elif row["type"] != "family":
             sources = row.get("sources")
             if not isinstance(sources, list) or not all(isinstance(item, dict) and item.get("path") for item in sources):
                 warnings.append(say("kb.object.sources", id=row["id"]))

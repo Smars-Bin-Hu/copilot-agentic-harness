@@ -5,7 +5,7 @@
   kb check [--domain]  is each domain in the standard form (core/kbstd.py)
   kb stale --domain D  which objects were learned from source files that changed since (--diff: what changed)
   kb stamp --path P    after a refresh: the sources count from the base branch now (only in a task's DEV/)
-  kb map / near / split  the repository map: every object and use, by script (core/kbmap.py)
+  kb map / near / split / gaps  the repository map: every object and use, by script (core/kbmap.py)
   logs prune           delete session logs not written to for N days (a person decides; no hook deletes anything)
 """
 
@@ -105,6 +105,9 @@ def register(subparsers: Any) -> None:
     cut = kb_commands.add_parser("split", help="a first cut of the domains from the map: entry points and what they reach; objects reached from many entry points are shared")
     cut.add_argument("--shared-min", type=int, default=None, help="reached from this many entry points makes an object shared (default: from the profile, 3)")
     cut.set_defaults(handler=mapped(lambda a: kbmap.split(repo_root(), a.shared_min)))
+    hole = kb_commands.add_parser("gaps", help="what runs or is used but has no code in the repositories: missing names, retired code in use, files deleted in git; with --inventory, also what production runs that no repository holds")
+    hole.add_argument("--inventory", default="", help="a list of production objects a person exported (ids, one per line, or CSV with an id column)")
+    hole.set_defaults(handler=mapped(lambda a: kbmap.gaps(repo_root(), Path(a.inventory) if a.inventory else None)))
 
     logs = subparsers.add_parser("logs", help="the session logs")
     commands = logs.add_subparsers(dest="logs_command", required=True)

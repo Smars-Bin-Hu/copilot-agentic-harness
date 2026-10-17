@@ -827,6 +827,8 @@
   "kb.object.level": "`{id}`：level `{level}` 不在 {levels} 之中。",
   "kb.object.sources": "`{id}` 没有 sources [{{path, sha}}]：`kb stale` 判断不了它什么时候过期。",
   "kb.object.repo": "`{id}` 有 sources 但没有 repo。",
+  "kb.object.source_missing": "`{id}`：`source_missing` 必须是带 `seen_in`（在哪看到它在跑）的对象。",
+  "kb.object.gap_level": "`{id}` 没有源码：等级应该是 `unknown`（或 `conflict`）。",
   "kb.object.card_file": "`{id}`：卡片 `{card}` 指向的文件不存在。",
   "kb.object.no_anchor": "`{id}`：卡片 `{card}` 只写了文件，没写区块（`文件#{id}`）：agent 只能读整个文件。",
   "kb.object.anchor": "`{id}`：卡片 `{card}` 指的区块不是那个文件里的标题。",
@@ -855,5 +857,9 @@
   "kbmap.near.many": "有多个对象符合。用下面的某个 id 再查一次。",
   "kbmap.near.dynamic": "这个对象运行时才知道执行什么 SQL：列出的关系可能不全。",
   "kbmap.split.next": "这是脚本做的初步划分：入口和它们用到的对象连成一组。`shared` 的对象被很多入口用到，放进 shared/。把提议写给用户，名字用用户会用的叫法；domain 由用户确认一次。",
-  "kbmap.split.one_big": "有一个 domain 有 {size} 个对象：还有被到处用到的对象把它们连在一起。试试调低 `--shared-min`（现在是 {limit}）。"
+  "kbmap.split.one_big": "有一个 domain 有 {size} 个对象：还有被到处用到的对象把它们连在一起。试试调低 `--shared-min`（现在是 {limit}）。",
+  "kbmap.gaps.inventory": "读不了 prod 清单 {file}：{problem}",
+  "kbmap.gaps.no_ids": "里面没有 id（`类型:名字`，一行一个；或带 `id` 列的 CSV）",
+  "kbmap.gaps.next": "`in_production_not_in_repos`：prod 在跑，但哪个仓库都没有代码。问用户谁能拿到代码（从 prod 导出，或 `deleted` 里 git 的最后一个版本）。每个都记进知识库：`source_missing`，等级 `unknown`。`in_repos_not_in_production`：没部署，或退役了但没挪进 obsolete 目录：说它没用之前先问。",
+  "kbmap.gaps.next_no_inventory": "这些只来自仓库：`missing` 是被用到但哪个文件都没定义的名字；`deleted` 给出 git 里曾经在哪、怎么拿最后一个版本。prod 在跑但没人引用的看不到：请用户用工具包的清单查询导出 prod 对象清单，再运行 `kb gaps --inventory <文件>`。"
 }

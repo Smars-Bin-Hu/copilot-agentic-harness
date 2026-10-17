@@ -61,6 +61,10 @@ An extractor that raises is counted under `failed`, and the file is left out; th
 
 One use per line: `{"from": "<id>", "kind": "<kind>", "to": "<id>"}`. 5 to 10 that a person knows from the work, chosen to cover each kind of file. `kb map` checks them every time and lists those not found. A toolkit is ready when all are found and `empty_files` (files an extractor was given but found nothing in) holds only files that really define nothing.
 
+## Gaps
+
+`harness kb gaps` lists what runs, or is used, but has no code in any repository: names used but defined nowhere (`missing`), retired code still used (`obsolete_used`), with where git last had a file of that name. What production runs that nothing uses is seen only against a list of production objects: the toolkit's `inventory/` holds the read-only query a person runs (names only, never rows or code); `kb gaps --inventory <file>` compares. The harness never connects to production. An object found this way goes into the knowledge base with `source_missing` ([README](README.md)).
+
 ## The cache
 
 `.harness/runtime/kbmap/<repo>.json`, never in git or the knowledge base: the map can be made again from the code at any time. A file is read again only when its git blob changes, or when the toolkit changes.

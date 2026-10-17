@@ -10,6 +10,22 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.14 (2026-10-17)
+
+Find what runs but has no code: a job that production still runs after its script was deleted or retired from the repository.
+
+**Testing**: the automatic tests pass on the Mac (855). **Not yet tried in Copilot**, **not run on Windows**, **not run against a real production list**.
+
+### Added
+
+- **`harness kb gaps`**: from the map, names used but defined in no file (`missing`), each with its users and, from git history, the file of that name that was deleted and the command to see its last version; retired code still in use (`obsolete_used`).
+- **`harness kb gaps --inventory <file>`**: compares with a list of production objects a person exported: what production runs that no repository holds, what production runs from an obsolete folder, what the repositories hold that production does not. The harness never connects to production. The sample toolkit has the read-only queries for SQL Server (`inventory/`: objects, SQL Agent jobs, SSIS packages; names only).
+- **`source_missing`** in `objects/index.jsonl`: an object whose code is in no repository, with where it was seen (`seen_in`) and where git last had it. `kb check` accepts it without sources and asks for level `unknown`.
+
+### Changed
+
+- `knowledgebase.instructions.md`: code that is missing is one more thing the agent watches for and asks the user about.
+
 ## 1.4.13 (2026-10-17)
 
 The harness ships the method and the generic tools of the repository map, not the extractors of one stack. Each team makes its own toolkit for its own code.

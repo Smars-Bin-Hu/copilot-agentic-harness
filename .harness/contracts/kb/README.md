@@ -76,6 +76,7 @@ One JSON object per line, sorted by id. Written by scripts; a person or an agent
 | `repo` + `sources[].path` | The repository folder name and the path inside it. Never a path of one computer (`C:\Users\...`, `/Users/...`): `kb check` refuses it |
 | `sources[].sha` | The git blob of that file when the card was written (`git ls-tree`). `kb stale` compares it with the base branch now |
 | `card` | `objects/<type>.md#<id>`: the file and the `## <id>` heading. Without the anchor an agent reads the whole file |
+| `source_missing` | An object that runs (seen in production, or used by other code) but whose source is in no repository: `{"seen_in": "<where it was seen: a production list of <date>, the uses in the map>", "last_in_git": "<repo>/<path>@<commit>, if git had it once"}`, `level: unknown`, `sources: []`. Its card says what is known and that the code is missing. `harness kb gaps` finds such objects |
 | `family` lines | Many objects made from one pattern (`dbo.usp_run_rule_<n>`) are one line: `"type": "family"`, `"pattern"`, `"member_type"`, `"members"` (how many). Do not list the members |
 
 ## architecture.md

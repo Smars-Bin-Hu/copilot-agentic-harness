@@ -263,12 +263,47 @@ class MapTests(HarnessTestCase):
         result = self.build()
         self.assertEqual(result["obsolete_used_sample"], ["sp:dbo.usp_load_customers"])
 
+    def test_gaps_from_the_repositories_and_git_history(self) -> None:
+        run_git(self.repo, "rm", "-q", "Shop/dbo/Stored Procedures/usp_log.sql")
+        run_git(self.repo, "commit", "-qm", "drop the log procedure")
+        self.build()
+        result = kbmap.gaps(self.root)
+        found = {item["name"]: item for item in result["missing"]}
+        self.assertIn("Shop.dbo.usp_log", found)
+        self.assertIn("job:Shop_Audit", found["Shop.dbo.usp_log"]["used_by"])
+        deleted = found["Shop.dbo.usp_log"]["deleted"][0]
+        self.assertEqual(deleted["path"], "Shop/dbo/Stored Procedures/usp_log.sql")
+        self.assertIn("^:", deleted["last_version"])
+        self.assertNotIn("in_production_not_in_repos", result)
+
+    def test_gaps_against_a_production_list(self) -> None:
+        run_git(self.repo, "rm", "-q", "Shop/dbo/Stored Procedures/usp_log.sql")
+        run_git(self.repo, "commit", "-qm", "drop the log procedure")
+        self.build()
+        listing = self.root / "prod.csv"
+        listing.write_text("server,id\nP1,job:Shop_Orders\nP1,job:Shop_Ghost\nP1,sp:Shop.dbo.usp_load_orders\nP1,sp:Shop.dbo.usp_log\n", encoding="utf-8")
+        result = kbmap.gaps(self.root, listing)
+        only_prod = {item["id"]: item for item in result["in_production_not_in_repos"]}
+        self.assertEqual(sorted(only_prod), ["job:Shop_Ghost", "sp:Shop.dbo.usp_log"])
+        self.assertIn("job:Shop_Audit", only_prod["sp:Shop.dbo.usp_log"]["used_by"])
+        self.assertTrue(only_prod["sp:Shop.dbo.usp_log"]["deleted"])
+        self.assertIn("sp:Shop.dbo.usp_unused", result["in_repos_not_in_production"])
+        self.assertNotIn("table:Shop.dbo.orders", result["in_repos_not_in_production"])  # tables were not in the list
+
+    def test_a_production_list_without_ids(self) -> None:
+        self.build()
+        listing = self.root / "prod.txt"
+        listing.write_text("nothing here\n", encoding="utf-8")
+        with self.assertRaises(kbmap.MapError):
+            kbmap.gaps(self.root, listing)
+
     def test_the_commands(self) -> None:
         self.assertEqual(self.cli_json("kb", "map", "--json")["entry_points"], 3)
         near = self.cli_json("kb", "near", "usp_log", "--up", "--json")
         self.assertEqual(near["id"], "sp:Shop.dbo.usp_log")
         self.assertNotIn("uses", near)
         self.assertEqual(len(self.cli_json("kb", "split", "--json")["domains"]), 3)
+        self.assertIn("missing", self.cli_json("kb", "gaps", "--json"))
         done = self.cli("kb", "near", "nothing_like_it")
         self.assertNotEqual(done.returncode, 0)
 

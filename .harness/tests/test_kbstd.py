@@ -110,6 +110,17 @@ class CheckTests(CheckCase):
         self.write_index()
         self.assertTrue(any("job:Nightly_Orders" in item for item in self.result()["errors"]))
 
+    def test_an_object_whose_code_is_missing(self) -> None:
+        gap = {"id": "job:Old_Feed", "type": "sql-agent-job", "repo": "", "sources": [], "card": "objects/jobs.md#job:Nightly_Orders", "level": "unknown", "source_missing": {"seen_in": "production list 2026-10-17"}}
+        self.rows.append(gap)
+        self.write_index()
+        result = self.result()
+        self.assertEqual(result["errors"], [])
+        self.assertFalse(any("Old_Feed" in item for item in result["warnings"]))
+        self.rows[-1] = {**gap, "level": "verified", "source_missing": {}}
+        self.write_index()
+        self.assertTrue(any("Old_Feed" in item for item in self.result()["errors"]))
+
     def test_a_card_without_a_section_is_a_warning(self) -> None:
         self.rows[1]["card"] = "objects/sp.md"
         self.write_index()

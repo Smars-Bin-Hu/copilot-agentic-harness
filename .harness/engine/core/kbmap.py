@@ -646,3 +646,112 @@ def split(root: Path, shared_min: Optional[int] = None) -> Dict[str, Any]:
     if domains and graph.nodes and domains[0]["objects"] > 0.6 * len(graph.nodes) and len(entries) > 1:
         result["note"] = say("kbmap.split.one_big", size=domains[0]["objects"], limit=limit)
     return result
+
+
+# --- gaps: what runs but has no code in the repositories --------------------------------------------------
+
+
+def stem_key(path: str) -> str:
+    """`db/dbo.usp_x.sql` -> `usp_x`: the name a file of a deleted object most likely had."""
+    return PurePosixPath(path).stem.lower().split(".")[-1]
+
+
+def deleted_files(root: Path, repos: List[str]) -> Dict[str, List[Dict[str, str]]]:
+    """name -> the files of that name deleted on the base branch, newest first: `git log --diff-filter=D`, one call per
+    repository. The last version is `git show <commit>^:<path>`."""
+    found: Dict[str, List[Dict[str, str]]] = defaultdict(list)
+    configured = targets.load(root)
+    for name in repos:
+        repo = configured.repos.get(name)
+        if repo is None:
+            continue
+        raw = targets.git(repo, "log", repo.base_ref, "--diff-filter=D", "--name-only", "--format=@%H", timeout=GIT_TIMEOUT, allow_failure=True)
+        commit = ""
+        for line in raw.decode("utf-8", errors="replace").splitlines():
+            if line.startswith("@"):
+                commit = line[1:]
+            elif line.strip():
+                found[stem_key(line)].append({"repo": name, "path": line, "deleted_in": commit[:12], "last_version": f"git -C <{name}> show {commit[:12]}^:\"{line}\""})
+    return found
+
+
+def read_inventory(file: Path) -> List[str]:
+    """Ids, one per line: plain `type:name`, a JSON object with `id`, or CSV with an `id` column. `#` starts a comment."""
+    try:
+        lines = file.read_text(encoding="utf-8-sig").splitlines()
+    except OSError as error:
+        raise MapError(say("kbmap.gaps.inventory", file=file, problem=error)) from None
+    column = -1
+    ids = []
+    for number, line in enumerate(lines):
+        text = line.strip()
+        if not text or text.startswith("#"):
+            continue
+        if text.startswith("{"):
+            try:
+                text = str(json.loads(text).get("id") or "")
+            except (ValueError, AttributeError):
+                continue
+        elif "," in text:
+            cells = [cell.strip().strip('"') for cell in text.split(",")]
+            if number == 0 or column < 0:
+                if "id" in [cell.lower() for cell in cells]:
+                    column = [cell.lower() for cell in cells].index("id")
+                    continue
+            text = cells[column] if 0 <= column < len(cells) else cells[0]
+        if ":" in text:
+            ids.append(text)
+    if not ids:
+        raise MapError(say("kbmap.gaps.inventory", file=file, problem=say("kbmap.gaps.no_ids")))
+    return sorted(set(ids))
+
+
+def match(graph: Graph, wanted: str) -> Optional[str]:
+    """The node an id of a production list names: the same type, and the same name or the same `schema.name`."""
+    if wanted in graph.nodes:
+        return wanted
+    kind, _, name = wanted.partition(":")
+    low = name.lower()
+    tail = ".".join(low.split(".")[-2:])
+    same = [node for node, item in graph.nodes.items() if item["type"] == kind]
+    exact = [node for node in same if graph.nodes[node]["name"].lower() == low]
+    if exact:
+        return exact[0]
+    near = [node for node in same if tail in keys_of(graph.nodes[node]["name"]) and graph.nodes[node]["name"].count(".") < low.count(".")]
+    return near[0] if len(near) == 1 else None
+
+
+def gaps(root: Path, inventory: Optional[Path] = None) -> Dict[str, Any]:
+    """`kb gaps`: what runs, or is used, but has no code in the repositories. From the map and git history; with a
+    list of production objects a person exported, also what production runs that no repository holds."""
+    graph = need_map(root)
+    repos = sorted({item["repo"] for item in graph.nodes.values()})
+    history = deleted_files(root, repos)
+
+    def where(name: str) -> List[Dict[str, str]]:
+        return history.get(name.lower().split(".")[-1].rsplit("/", 1)[-1], [])[:3]
+
+    def users(name: str) -> List[str]:
+        tail = ".".join(name.lower().split(".")[-2:])
+        return sorted({user for missing, found in graph.missing.items() if ".".join(missing.lower().split(".")[-2:]) == tail for user in found})[:SAMPLE]
+
+    result: Dict[str, Any] = {
+        "missing": [{"name": name, "used_by": sorted(users)[:SAMPLE], "deleted": where(name)} for name, users in sorted(graph.missing.items())],
+        "obsolete_used": [{"id": node, "path": f"{graph.nodes[node]['repo']}/{graph.nodes[node]['path']}", "used_by": users[:SAMPLE]} for node, users in sorted(graph.obsolete_used().items())],
+    }
+    if inventory is not None:
+        ids = read_inventory(inventory)
+        kinds = {item.partition(":")[0] for item in ids}
+        matched: Dict[str, Optional[str]] = {item: match(graph, item) for item in ids}
+        found = {node for node in matched.values() if node}
+        result["inventory"] = {"file": str(inventory), "objects": len(ids), "types": sorted(kinds)}
+        result["in_production_not_in_repos"] = [
+            {"id": item, "used_by": users(item.partition(":")[2]), "deleted": where(item.partition(":")[2])}
+            for item, node in matched.items() if node is None
+        ]
+        result["in_production_but_obsolete"] = sorted(node for node in found if graph.nodes[node].get("obsolete"))
+        result["in_repos_not_in_production"] = sorted(
+            node for node, item in graph.nodes.items() if item["type"] in kinds and node not in found and not item.get("obsolete")
+        )
+    result["next"] = say("kbmap.gaps.next" if inventory is not None else "kbmap.gaps.next_no_inventory")
+    return result

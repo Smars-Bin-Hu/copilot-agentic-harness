@@ -827,6 +827,8 @@
   "kb.object.level": "`{id}`: level `{level}` is not one of {levels}.",
   "kb.object.sources": "`{id}` has no sources [{{path, sha}}]: `kb stale` cannot tell when it goes out of date.",
   "kb.object.repo": "`{id}` has sources but no repo.",
+  "kb.object.source_missing": "`{id}`: `source_missing` must be an object with `seen_in` (where the object was seen running).",
+  "kb.object.gap_level": "`{id}` has no source: its level should be `unknown` (or `conflict`).",
   "kb.object.card_file": "`{id}`: card `{card}` points at a file that is not there.",
   "kb.object.no_anchor": "`{id}`: card `{card}` names a file but no section (`file#{id}`): an agent must read the whole file.",
   "kb.object.anchor": "`{id}`: card `{card}` names a section that is not a heading of that file.",
@@ -855,5 +857,9 @@
   "kbmap.near.many": "More than one object fits. Ask again with one of these ids.",
   "kbmap.near.dynamic": "This object runs SQL known only at run time: the uses listed may be incomplete.",
   "kbmap.split.next": "A first cut, by script: entry points joined by what they use. `shared` objects are used from many entry points and belong in shared/. Write the proposal for the user, with names they would use; the user confirms the domains once.",
-  "kbmap.split.one_big": "One domain holds {size} objects: something used everywhere still joins them. Try a lower `--shared-min` (now {limit})."
+  "kbmap.split.one_big": "One domain holds {size} objects: something used everywhere still joins them. Try a lower `--shared-min` (now {limit}).",
+  "kbmap.gaps.inventory": "The production list {file} cannot be read: {problem}",
+  "kbmap.gaps.no_ids": "it holds no id (`type:name`, one per line, or a CSV with an `id` column)",
+  "kbmap.gaps.next": "`in_production_not_in_repos`: production runs them but no repository has their code. Ask the user who can get the code (scripted from production, or the last version in git under `deleted`). Record each in the knowledge base with `source_missing` and level `unknown`. `in_repos_not_in_production`: not deployed, or retired without being moved to an obsolete folder: ask before calling them dead.",
+  "kbmap.gaps.next_no_inventory": "These come from the repositories only: `missing` names are used but defined in no file; `deleted` shows where git had them and how to get the last version. What production runs that nothing uses is not seen here: ask the user to export the list of production objects with the toolkit's inventory query, then run `kb gaps --inventory <file>`."
 }

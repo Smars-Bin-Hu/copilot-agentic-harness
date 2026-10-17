@@ -26,7 +26,7 @@ Say how sure a fact is, with the same words as the index: `verified`, `supported
 
 ## Keeping it true: your part
 
-While you work, watch for knowledge that is **wrong** (the code or a run shows otherwise), **stale** (`kb stale`, or the code changed under a card), or **missing** (you had to read code the knowledge base should have told you about).
+While you work, watch for knowledge that is **wrong** (the code or a run shows otherwise), **stale** (`kb stale`, or the code changed under a card), or **missing** (you had to read code the knowledge base should have told you about). Also watch for **code that is missing**: an object that runs or is used, but no repository has its source (`harness kb gaps`). Ask the user who can get the code; in the knowledge base it gets `source_missing` and level `unknown`.
 
 - Note each one when you meet it, in the task's `LOG.md`, with the id and the evidence (`<repo>/<path>`, a line, a result). Do not stop the task for it.
 - At the next natural stop (the end of the task, a plan, a hand-over), ask the user in two or three lines: what is wrong or missing, and whether to update the knowledge base.

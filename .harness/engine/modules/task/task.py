@@ -337,10 +337,12 @@ def approve_plan(
     if not current or not plan.read_text(encoding="utf-8", errors="replace").strip():
         raise CommandError(say("plan.missing", plan=f"{task}/{tasks.PLAN_NAME}"))
     lines = len(plan.read_text(encoding="utf-8", errors="replace").splitlines())
+    unconfirmed = req_state(root, task) in ("open", "changed")  # a reminder only: the plan can be approved without it
     approval.say(
         out,
         say("plan.screen.head", task=task, round=data["round"]),
         say("plan.screen.file", lines=lines, plan=f"{task}/{tasks.PLAN_NAME}"),
+        *([say("plan.screen.req", req=f"{task}/{tasks.REQ_FILE}")] if unconfirmed else []),
         say("plan.screen.after", dev=f"{task}/{tasks.DEV_NAME}"),
     )
     typed(say("plan.question"), current, say("plan.refused"), reader)

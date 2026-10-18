@@ -512,6 +512,7 @@
   "plan.missing": "There is no plan file {plan} yet, or it is empty. Let the agent write the plan first.",
   "plan.screen.head": "Task {task} (round {round})",
   "plan.screen.file": "The plan is in this file ({lines} lines); open it in the editor first: {plan}",
+  "plan.screen.req": "The requirement ({req}) is not confirmed yet, or changed since you confirmed it. You can approve the plan anyway; to confirm it, press confirm requirement on the task's page (or run task confirm-req).",
   "plan.screen.after": "The agent can write under {dev}/ only after the approval. If the plan changes, it needs a new approval.",
   "plan.question": "To approve this plan",
   "plan.refused": "Not approved. The agent cannot start yet.",

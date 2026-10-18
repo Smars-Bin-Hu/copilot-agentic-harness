@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.32 (2026-10-18)
+
+### Changed
+
+- **The approve-plan dialog reminds you when the requirement is not confirmed**, or changed since you confirmed it. It is a reminder only: the plan can be approved anyway.
+
 ## 1.4.31 (2026-10-18)
 
 ### Changed

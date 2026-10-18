@@ -91,6 +91,21 @@ class BindingTests(TaskCase):
         with self.assertRaises(task_ops.CommandError):
             task_ops.approve_promote(self.root, TASK, reader=lambda _p: "x", interactive=True, out=io.StringIO())
 
+    def test_the_plan_dialog_reminds_that_the_requirement_is_not_confirmed(self) -> None:
+        import hashlib
+
+        def screen() -> str:
+            out = io.StringIO()
+            try:
+                task_ops.approve_plan(self.root, TASK, reader=lambda _p: "00000000", interactive=True, out=out)
+            except task_ops.CommandError:
+                pass  # a wrong code: only the screen is wanted
+            return out.getvalue()
+
+        self.assertIn(f"{TASK}/REQ.md", screen())  # not confirmed: the reminder is there
+        task_ops.confirm_req(self.root, TASK, reader=lambda _p: hashlib.sha256(self.req.read_bytes()).hexdigest()[:8], interactive=True, out=io.StringIO())
+        self.assertNotIn(f"{TASK}/REQ.md", screen())
+
     def test_an_approval_from_before_the_requirement_was_kept_stays_approved(self) -> None:
         self.approve_plan()
         with task_ops.locked(self.root, TASK) as data:

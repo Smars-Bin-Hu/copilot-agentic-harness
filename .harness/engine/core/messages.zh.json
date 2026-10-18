@@ -512,6 +512,7 @@
   "plan.missing": "还没有计划文件 {plan}，或者它是空的。先让 agent 写好计划。",
   "plan.screen.head": "任务 {task}（第 {round} 轮）",
   "plan.screen.file": "计划在这个文件里（{lines} 行），先在编辑器里打开看：{plan}",
+  "plan.screen.req": "需求（{req}）还没确认，或者在你确认之后改过了。不确认也可以批准计划；要确认，在任务页上点 confirm requirement（或运行 task confirm-req）。",
   "plan.screen.after": "批准后 agent 才能在 {dev}/ 下写文件。计划再改，要重新批准。",
   "plan.question": "确认按这份计划做",
   "plan.refused": "没有批准。agent 还不能开工。",

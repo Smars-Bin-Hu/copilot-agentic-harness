@@ -689,6 +689,7 @@ def approve_promote(
     require_open(data)
     if data["promote"]["state"] != "dry_run":
         raise CommandError(say("promote.approve.none"))
+    require_plan(root, task, data)  # a write-back stands on an approved plan: not on one that changed, or whose requirement did
     result = make_plan(root, task, data)
     if result["plan_sha256"] != data["promote"]["plan_sha256"]:
         raise CommandError(say("promote.approve.changed"))

@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.31 (2026-10-18)
+
+### Changed
+
+- **A plan that lapsed comes before a write-back that waits.** A task whose plan was changed (or whose requirement changed) after a dry run still said "the write-back waits for your approval", which hid the plan. The board and the task page now ask for the plan first, then the write-back. `task approve-promote` also refuses while the plan is not approved.
+- The new tests of 1.4.30 are listed in the registry (1.4.30 shipped without that line).
+
 ## 1.4.30 (2026-10-18)
 
 An approval is for a version of the requirement.

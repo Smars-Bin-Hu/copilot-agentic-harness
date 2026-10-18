@@ -229,21 +229,21 @@ GO_MARKS = ("go-plan", "go-promote", "go-recover", "go-review")  # an approval w
 def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     """What the task waits on the person for and since when, told from facts. `why` is empty when it waits for nothing.
 
-    The order is by how much it blocks: a broken promote, an approval, checks that ran out, and last the mark the
+    The order is by how much it blocks: a broken promote, the plan (a write-back stands on an approved plan, so a plan that lapsed comes before it), the write-back, checks that ran out, and last the mark the
     Stop hook left (the agent of the task's session stopped: the next move is the person's) or an approval left (`go-*`).
     """
     state = (data.get("promote") or {}).get("state", "none")
     updated = data.get("updated_at", "")
     if state == "partial":
         return {"why": "recover", "since": last_event(data, "promote-partial") or updated}
-    if state == "dry_run" and "approved_plan_sha256" not in (data.get("promote") or {}):
-        return {"why": "promote", "since": last_event(data, "promote-dry-run") or updated}
     if tasks.plan_digest(root, task) and not tasks.plan_approved(root, task, data):
         try:
             changed = datetime.fromtimestamp(tasks.plan_file(root, task).stat().st_mtime, timezone.utc).isoformat()
         except OSError:
             changed = updated
         return {"why": "plan", "since": changed}
+    if state == "dry_run" and "approved_plan_sha256" not in (data.get("promote") or {}):
+        return {"why": "promote", "since": last_event(data, "promote-dry-run") or updated}
     try:
         from . import taskreview  # it needs this module
 

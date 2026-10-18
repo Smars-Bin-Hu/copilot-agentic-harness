@@ -79,6 +79,18 @@ class BindingTests(TaskCase):
         self.assertTrue(self.approved())
         self.assertEqual(self.decision(self.edit(f"{TASK}/DEV/repo/a.sql")), "")
 
+    def test_a_plan_that_lapsed_comes_before_a_write_back_that_waits(self) -> None:
+        self.approve_plan()
+        with task_ops.locked(self.root, TASK) as data:
+            data["promote"] = {"state": "dry_run", "plan_sha256": "x" * 64}
+        from modules.task import tasklife
+
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "promote")
+        self.req.write_text(self.req.read_text(encoding="utf-8").replace("latest", "oldest"), encoding="utf-8")
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "plan")  # the plan first
+        with self.assertRaises(task_ops.CommandError):
+            task_ops.approve_promote(self.root, TASK, reader=lambda _p: "x", interactive=True, out=io.StringIO())
+
     def test_an_approval_from_before_the_requirement_was_kept_stays_approved(self) -> None:
         self.approve_plan()
         with task_ops.locked(self.root, TASK) as data:

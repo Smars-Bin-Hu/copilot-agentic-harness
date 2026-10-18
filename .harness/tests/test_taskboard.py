@@ -528,19 +528,27 @@ class PageTests(BoardCase):
         self.stop(S1)
         self.cli_json("task", "close", "--task", "beta")
         result = self.cli_json("task", "board")
-        self.assertEqual(result, {"board": ".workspace/reports/board.html", "tasks": 2, "open": 1, "waiting": 1})
+        self.assertEqual(result, {"board": ".workspace/reports/board.html", "tasks": 3, "open": 1, "waiting": 1})  # the closed task is on the board too
         text = (self.root / result["board"]).read_text(encoding="utf-8")
         rows = {item["name"]: item for item in page_data(text)["rows"]}
         self.assertEqual((rows["alpha"]["report"], rows["alpha"]["waiting"], rows["hand"]["status"], rows["hand"]["report"]), ("tasks/alpha/report.html", "agent 停下了，等你", "new", ""))
         self.assertTrue((self.root / ".workspace/reports" / rows["alpha"]["report"]).is_file())
-        self.assertNotIn("beta", rows)
+        self.assertEqual((rows["beta"]["status"], rows["beta"]["report"]), ("closed", "tasks/beta/report.html"))
         self.assertIsInstance(rows["alpha"]["brief"]["active_s"], float)
         self.assertNotIn("http-equiv", text)
         self.assertEqual(page_data(text)["refresh"], 0)
-        everything = self.cli_json("task", "board", "--all")
-        self.assertEqual(everything["tasks"], 3)
-        text = (self.root / result["board"]).read_text(encoding="utf-8")
-        self.assertEqual([item["report"] for item in page_data(text)["rows"] if item["name"] == "beta"], ["tasks/beta/report.html"])
+        self.assertEqual(page_data(text)["hidden"], 0)
+
+    def test_only_the_newest_closed_tasks_are_listed_and_the_page_says_how_many_are_left_out(self) -> None:
+        for number, session in enumerate(("c1", "c2", "c3")):
+            self.prompt(session)
+            self.new(f"old{number}", "qa", session=session)
+            self.cli_json("task", "close", "--task", f"old{number}")
+        (self.root / ".harness/policies/task.override.json").write_text(json.dumps({"board": {"closed_shown": 2}}), encoding="utf-8")
+        result, _problems = taskboard.board_rows(self.root, True)
+        self.assertEqual((len([row for row in result["tasks"] if row["status"] == "closed"]), result["closed_hidden"]), (2, 1))
+        again, _problems = taskboard.board_rows(self.root, True)  # a closed task's numbers are kept, not worked out again
+        self.assertEqual([row["brief"] for row in again["tasks"]], [row["brief"] for row in result["tasks"]])
 
     def test_refresh_writes_the_board_again_over_the_same_files_until_it_is_stopped(self) -> None:
         self.new("alpha")

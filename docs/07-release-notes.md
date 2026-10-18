@@ -10,6 +10,23 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.23 (2026-10-18)
+
+Look back at closed tasks on the board, and filter and sort the board.
+
+**Testing**: the automatic tests pass on the Mac; the page was tried in Chrome (filters, search, sorting, refresh). **Not run on Windows**.
+
+### Added
+
+- **Closed tasks on the board.** They used to vanish from it. The board now lists the newest 50 closed tasks (`board.closed_shown` in `task.json`), dimmed, each with its page and numbers. When older ones are left out, the page says how many; `task archive` moves them out of the way.
+- **Filter, search and sort.** Buttons for all, waiting for you, running, paused and closed (each with its count), a menu of task kinds, a search box, and a click on a column head to sort (again to reverse, a third time to go back). The page keeps your choice in the browser.
+
+### Changed
+
+- **The served board no longer reloads the whole page every 10 seconds.** It asks the server for the rows and draws them again, so what you typed in the search box stays.
+- **`task board` has no `--all`**: closed tasks are always on the board. `task list --all` is as before.
+- **The hint to name a task's domains gives the whole command** (`task set-domain --task <task> <domain>...`). An agent had to try three times.
+
 ## 1.4.22 (2026-10-18)
 
 Found while trying the task page with a real Copilot session: the agent did not know the page's address, and the Markdown preview setting was not wanted.

@@ -127,7 +127,7 @@ def next_text(root: Path, task: str, data: Dict[str, Any], left: str) -> str:
     if not data.get("domains"):
         known = domainskills.domains(root)
         if known:  # the knowledge base has domains: the agent names the task's, so their skills reach it
-            text += say("domain.next.name", domains=", ".join(known))
+            text += say("domain.next.name", domains=", ".join(known), task=task_ops.name_of(task))
     return text
 
 

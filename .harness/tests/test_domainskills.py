@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from taskcase import SESSION, TASK, TaskCase
+from taskcase import NAME, SESSION, TASK, TaskCase
 
 from core import domainskills, skillcheck
 from modules.task import tasklife
@@ -56,6 +56,10 @@ class DomainSkillTests(TaskCase):
         said = self.context(self.prompt("go on"))
         self.assertIn("domain-sales-load-check", said)
         self.assertNotIn("domain-hr-backfill", said)
+
+    def test_a_task_that_names_no_domain_is_told_the_whole_command(self) -> None:
+        result = self.new(kind="qa")
+        self.assertIn(f"task set-domain --task {NAME} <domain>...", result["next"])
 
     def test_a_task_without_domains_hears_nothing_of_them(self) -> None:
         self.new(kind="qa")

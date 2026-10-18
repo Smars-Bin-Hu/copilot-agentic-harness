@@ -1,37 +1,89 @@
 // The board: every task, what it waits for, its time and usage. DATA.rows is what `task list` gives, each row with
 // `brief` (a few numbers of the task, or null) and `report` (the path of its page from the board's folder, or "").
 // `actions`: what the person can do about the task, each with the command to paste in a terminal.
+// DATA.hidden: how many older closed tasks are not in the rows.
+// The person filters by state and kind, searches by name, and sorts by a column; the choice is kept in this browser.
 // DATA.refresh: the seconds between two boards while `task board --refresh` runs, or 0.
-// DATA.serve: set when `task board --serve` sends the page, with serve.js (SERVE) before this script.
+// DATA.serve: set when `task board` serves the page, with serve.js (SERVE) before this script. The page then asks the server
+// for the rows every few seconds and draws them again, keeping what the person typed.
 "use strict";
 
 (function () {
-  const rows = DATA.rows;
+  let rows = DATA.rows;
+  let hidden = DATA.hidden || 0;
+  let asOf = DATA.as_of;
+  let shown = JSON.stringify([rows, hidden]);
   const app = document.getElementById("app");
-  const waiting = rows.filter((row) => row.waiting);
-  const briefs = rows.filter((row) => row.brief).map((row) => row.brief);
-  const usage = briefs.filter((brief) => brief.aiu !== null).map((brief) => brief.aiu);
   const sum = (values) => values.reduce((total, value) => total + value, 0);
 
-  document.querySelector("main").classList.add("wide");
-  app.replaceChildren(
-    h("h1", null, t("board.brand")),
-    h("div", {class: "sub"}, h("b", null, t("board.title")), " · ", DATA.serve ? t("board.subtitle.served", {as_of: when(DATA.as_of, 0, 19), seconds: DATA.serve.refresh})
-      : t(DATA.refresh ? "board.subtitle.fresh" : "board.subtitle", {as_of: when(DATA.as_of, 0, 19), seconds: DATA.refresh})),
-    h("div", {class: "kpis"},
-      kpi(rows.filter((row) => row.status === "open").length, t("board.kpi.open")),
-      kpi(waiting.length, t("board.kpi.waiting")),
-      kpi(waiting.length ? clock(Math.max(...waiting.map((row) => row.waited_s || 0))) : "-", t("board.kpi.longest")),
-      kpi(clock(sum(briefs.map((brief) => brief.active_s))), t("board.kpi.active")),
-      kpi(usage.length ? amount(sum(usage)) : "-", t("board.kpi.aiu"))));
-  if (!rows.length) {
-    app.append(h("div", {class: "card empty"}, t("board.empty")));
-    return;
+  // What the person chose stays in this browser; where that is not allowed, it stays until the page closes.
+  const memory = {};
+  const keep = {
+    get(name, fallback) { try { const value = localStorage.getItem("harness.board." + name); return value === null ? fallback : value; } catch (error) { return name in memory ? memory[name] : fallback; } },
+    set(name, value) { memory[name] = value; try { localStorage.setItem("harness.board." + name, value); } catch (error) { /* kept in memory only */ } },
+  };
+  const FILTERS = ["all", "waiting", "running", "paused", "closed"];
+  const view = {filter: keep.get("filter", "all"), kind: keep.get("kind", ""), query: keep.get("query", ""), key: keep.get("sort", ""), dir: Number(keep.get("dir", "1")) || 1};
+  if (!FILTERS.includes(view.filter)) view.filter = "all";
+
+  const matches = {
+    all: () => true,
+    waiting: (row) => !!row.waiting,
+    running: (row) => row.status === "open" && !row.paused_since && !row.waiting,
+    paused: (row) => row.status === "open" && !!row.paused_since,
+    closed: (row) => row.status === "closed",
+  };
+  const rank = (row) => (row.waiting ? 0 : row.status === "open" ? (row.paused_since ? 2 : 1) : row.status === "closed" ? 3 : 4);
+  const kindText = (row) => (row.status === "new" ? "-" : t("task.kind." + (row.kind || "none")));
+  // The columns that sort: the value of a row, and whether a bigger number comes first on the first click.
+  const COLUMNS = {
+    task: {label: () => t("board.col.task"), value: (row) => row.name.toLowerCase()},
+    kind: {label: () => t("board.col.kind"), value: (row) => kindText(row).toLowerCase()},
+    waiting: {label: () => t("board.col.waiting"), value: rank},
+    waited: {label: () => t("board.col.waited"), value: (row) => (row.waiting ? row.waited_s : null), numeric: true},
+    time: {label: () => t("board.col.time"), value: (row) => (row.brief ? row.brief.active_s + row.brief.waiting_s : null), numeric: true},
+    aiu: {label: () => "AIU", value: (row) => (row.brief ? row.brief.aiu : null), numeric: true},
+    prompts: {label: () => t("board.col.prompts"), value: (row) => (row.brief ? row.brief.prompts : null), numeric: true},
+    reviews: {label: () => t("board.col.reviews"), value: (row) => (row.brief ? row.brief.reviews : null), numeric: true},
+    updated: {label: () => t("board.col.updated"), value: (row) => row.updated_at || null},
+  };
+
+  function listed() {
+    const query = view.query.trim().toLowerCase();
+    let found = rows.filter((row) => matches[view.filter](row) && (!view.kind || row.kind === view.kind)
+      && (!query || (row.name + " " + kindText(row)).toLowerCase().includes(query)));
+    const column = COLUMNS[view.key];
+    if (column) {
+      found = found.map((row, index) => ({row, index, value: column.value(row)}));
+      found.sort((a, b) => {
+        if (a.value === null || a.value === undefined) return b.value === null || b.value === undefined ? a.index - b.index : 1;  // no value: last, either way
+        if (b.value === null || b.value === undefined) return -1;
+        const order = a.value < b.value ? -1 : a.value > b.value ? 1 : 0;
+        return order * view.dir || a.index - b.index;
+      });
+      found = found.map((item) => item.row);
+    }
+    return found;
   }
 
-  const longest = Math.max(0, ...briefs.map((brief) => brief.active_s + brief.waiting_s)) || 1;
-  const head = [th(t("board.col.task")), th(t("board.col.kind")), th(t("board.col.waiting")), th(t("board.col.waited"), true), th(t("board.col.time")), th("", true),
-    th("AIU", true), th(t("board.col.prompts"), true), th(t("board.col.reviews"), true), th(t("board.col.updated")), th(t("board.col.actions"))];
+  function sortBy(key) {
+    const column = COLUMNS[key];
+    if (view.key !== key) { view.key = key; view.dir = column.numeric ? -1 : 1; }  // numbers: the biggest first
+    else if (view.dir === (column.numeric ? -1 : 1)) view.dir = -view.dir;
+    else view.key = "";  // a third click goes back to the order the server gave
+    keep.set("sort", view.key);
+    keep.set("dir", String(view.dir));
+    drawTable();
+  }
+
+  function header(key, numeric) {
+    const column = COLUMNS[key];
+    const on = view.key === key;
+    const mark = on ? (view.dir === 1 ? " \u25b2" : " \u25bc") : "";
+    const cell = h("th", {class: "sortable" + (numeric ? " num" : "") + (on ? " on" : ""), title: t("board.sort.hint"), "aria-sort": on ? (view.dir === 1 ? "ascending" : "descending") : "none"}, column.label() + mark);
+    cell.addEventListener("click", () => sortBy(key));
+    return cell;
+  }
 
   function actionCell(row) {
     const buttons = (row.actions || []).map((item) => actionButton(row, item));
@@ -44,13 +96,13 @@
     return row.waiting ? tag(row.waiting, "hot long") : tag(t("board.state.running"), "good");
   }
 
-  const lines = rows.map((row) => {
+  function line(row, longest) {
     const brief = row.brief;
-    const kind = row.status === "new" ? "-" : t("task.kind." + (row.kind || "none")) + " · " + t("task.tier." + (row.tier || "none"));
-    return h("tr", null,
+    const kind = row.status === "new" ? "-" : t("task.kind." + (row.kind || "none")) + " \u00b7 " + t("task.tier." + (row.tier || "none"));
+    return h("tr", {class: row.status === "closed" ? "closed" : null},
       h("td", {class: "name"}, DATA.serve && row.status !== "new" ? h("a", {href: "/task/" + encodeURIComponent(row.name)}, row.name)
         : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : row.name,
-        row.depends_on && row.depends_on.length ? h("div", {class: "sub"}, t("board.depends", {names: row.depends_on.join("、")})) : null),
+        row.depends_on && row.depends_on.length ? h("div", {class: "sub"}, t("board.depends", {names: row.depends_on.join("\u3001")})) : null),
       h("td", {class: "kind"}, kind), h("td", {class: "state"}, state(row)),
       num(row.waiting && row.waited_s !== null ? clock(row.waited_s) : "-"),
       brief
@@ -60,10 +112,96 @@
           num(clock(brief.active_s)), num(amount(brief.aiu)), num(brief.prompts), num(brief.reviews ? reviewsText(brief.reviews, brief.review_fails) : "-")]
         : [h("td"), num("-"), num("-"), num("-"), num("-")],
       h("td", {class: "sub when"}, when(row.updated_at, 5, 16)), actionCell(row));
-  });
-  app.append(
-    h("div", {class: "card"}, table(head, lines), legend([["work", t("report.active"), ""], ["wait", t("report.waiting"), ""]])),
-    h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint")), copyright());
+  }
 
-  if (typeof SERVE !== "undefined") SERVE.start(app);
+  // --- the page: drawn once, then its parts are drawn again when the rows change ----------------------------------
+  const kpis = h("div", {class: "kpis"});
+  const chips = h("div", {class: "chips"});
+  const kinds = h("select", {class: "kinds", title: t("board.filter.kind")});
+  const search = h("input", {type: "search", class: "search", placeholder: t("board.search"), autocomplete: "off", spellcheck: "false", value: view.query});
+  const tableBox = h("div", {class: "card"});
+  const more = h("p", {class: "sub"});
+  const stamp = h("span");
+  document.querySelector("main").classList.add("wide");
+
+  const subtitle = () => (DATA.serve ? t("board.subtitle.served", {as_of: when(asOf, 0, 19), seconds: DATA.serve.refresh})
+    : t(DATA.refresh ? "board.subtitle.fresh" : "board.subtitle", {as_of: when(asOf, 0, 19), seconds: DATA.refresh}));
+
+  function drawNumbers() {
+    const waiting = rows.filter((row) => row.waiting);
+    const briefs = rows.filter((row) => row.brief).map((row) => row.brief);
+    const usage = briefs.filter((brief) => brief.aiu !== null).map((brief) => brief.aiu);
+    kpis.replaceChildren(
+      kpi(rows.filter((row) => row.status === "open").length, t("board.kpi.open")),
+      kpi(waiting.length, t("board.kpi.waiting")),
+      kpi(waiting.length ? clock(Math.max(...waiting.map((row) => row.waited_s || 0))) : "-", t("board.kpi.longest")),
+      kpi(clock(sum(briefs.map((brief) => brief.active_s))), t("board.kpi.active")),
+      kpi(usage.length ? amount(sum(usage)) : "-", t("board.kpi.aiu")));
+  }
+
+  function drawControls() {
+    chips.replaceChildren(...FILTERS.map((name) => {
+      const count = rows.filter(matches[name]).length;
+      const chip = h("button", {type: "button", class: "chip" + (view.filter === name ? " on" : "")}, t("board.filter." + name) + " " + count);
+      chip.addEventListener("click", () => { view.filter = name; keep.set("filter", name); drawControls(); drawTable(); });
+      return chip;
+    }));
+    const found = [...new Set(rows.filter((row) => row.status !== "new" && row.kind).map((row) => row.kind))].sort();
+    if (view.kind && !found.includes(view.kind)) view.kind = "";
+    const options = ["", ...found];
+    if (Array.from(kinds.options).map((option) => option.value).join("|") !== options.join("|")) {  // not while the person has it open
+      kinds.replaceChildren(...options.map((kind) => h("option", {value: kind}, kind ? t("task.kind." + kind) : t("board.filter.kind"))));
+    }
+    kinds.value = view.kind;
+  }
+
+  function drawTable() {
+    stamp.textContent = subtitle();
+    more.textContent = hidden ? t("board.closed.more", {count: hidden}) : "";
+    if (!rows.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.empty"))); return; }
+    const shownRows = listed();
+    const briefs = rows.filter((row) => row.brief).map((row) => row.brief);
+    const longest = Math.max(0, ...briefs.map((brief) => brief.active_s + brief.waiting_s)) || 1;
+    if (!shownRows.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.filter.none"))); return; }
+    tableBox.replaceChildren(
+      table([header("task"), header("kind"), header("waiting"), header("waited", true), header("time"), th("", true), header("aiu", true), header("prompts", true), header("reviews", true), header("updated"), th(t("board.col.actions"))],
+        shownRows.map((row) => line(row, longest))),
+      legend([["work", t("report.active"), ""], ["wait", t("report.waiting"), ""]]));
+  }
+
+  function draw() { drawNumbers(); drawControls(); drawTable(); }
+
+  search.addEventListener("input", () => { view.query = search.value; keep.set("query", search.value); drawTable(); });
+  kinds.addEventListener("change", () => { view.kind = kinds.value; keep.set("kind", view.kind); drawTable(); });
+  const clear = h("button", {type: "button", class: "chip"}, t("board.filter.clear"));
+  clear.addEventListener("click", () => {
+    Object.assign(view, {filter: "all", kind: "", query: "", key: "", dir: 1});
+    for (const name of ["filter", "kind", "query", "sort", "dir"]) keep.set(name, "");
+    search.value = "";
+    drawControls();
+    drawTable();
+  });
+
+  app.replaceChildren(
+    h("h1", null, t("board.brand")),
+    h("div", {class: "sub"}, h("b", null, t("board.title")), " \u00b7 ", stamp),
+    kpis,
+    h("div", {class: "controls"}, chips, kinds, search, clear),
+    tableBox, more,
+    h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint")), copyright());
+  draw();
+
+  if (typeof SERVE !== "undefined") {
+    SERVE.start(app);
+    if (DATA.serve.refresh) {
+      setInterval(() => {
+        if (SERVE.busy()) return;
+        SERVE.post("/api/board", {}).then((data) => {
+          asOf = data.as_of;
+          const text = JSON.stringify([data.rows, data.hidden]);
+          if (text !== shown) { rows = data.rows; hidden = data.hidden; shown = text; draw(); } else stamp.textContent = subtitle();
+        }, () => {});
+      }, DATA.serve.refresh * 1000);
+    }
+  }
 })();

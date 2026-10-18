@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TextIO, Tuple
 
-from core import messages
+from core import config, messages
 from core.render import local_time, pad, width  # noqa: F401 - the page and the tests use them from here too
 from core.paths import cli_command, utc_now
 
@@ -113,20 +113,43 @@ def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str,
     return [{"action": action, "command": f"{cli_command()} task {action} --task {row['name']}"} for action in found]
 
 
+CLOSED_SHOWN = 50  # how many closed tasks the board lists (the newest); `board.closed_shown` in task.json
+_closed: Dict[Tuple[str, str], Tuple[str, Any, str]] = {}  # a closed task does not change: its numbers and page are made once
+
+
+def closed_shown(root: Path) -> int:
+    return config.whole((config.policy_or_empty(root, "task").get("board") or {}).get("closed_shown"), CLOSED_SHOWN)
+
+
 def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = ()) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
     """The rows of the board, each with its numbers, the page of the task (written over the one of before) and its actions.
-    A task whose numbers cannot be worked out is listed without them."""
+    A task whose numbers cannot be worked out is listed without them. With `everything`, the newest closed tasks come
+    too (`closed_shown`): the page filters and sorts them; `closed_hidden` counts the older ones that are not listed."""
     result = tasklife.list_tasks(root, everything)
+    limit = closed_shown(root)
+    closed = [row for row in result["tasks"] if row["status"] == "closed"]
+    hidden = closed[limit:]  # the list is newest first within each kind of row
+    result["closed_hidden"] = len(hidden)
+    if hidden:
+        gone = {id(row) for row in hidden}
+        result["tasks"] = [row for row in result["tasks"] if id(row) not in gone]
     use_events = taskinsight.events_allowed(root)
     problems = []
     for row in result["tasks"]:
         row["brief"], row["report"], row["actions"] = None, "", actions(row, tuple(served))
         if row["status"] == "new":
             continue
+        key = (str(root), row["task"])
+        kept = _closed.get(key) if row["status"] == "closed" else None
+        if kept and kept[0] == row["updated_at"] and (root / common.REPORTS_DIR / kept[2]).is_file():
+            row["brief"], row["report"] = kept[1], kept[2]
+            continue
         try:
             info, now = insight(root, row["task"], use_events)
             row["brief"] = taskinsight.brief(info)
             row["report"] = write_task_page(root, row["task"], info, refresh, now).relative_to(root / common.REPORTS_DIR).as_posix()
+            if row["status"] == "closed":
+                _closed[key] = (row["updated_at"], row["brief"], row["report"])
         except Exception as error:  # noqa: BLE001 - one bad task must not take the board away
             problems.append({"task": row["task"], "error": f"{type(error).__name__}: {error}"})
     return result, problems
@@ -136,7 +159,7 @@ def board(root: Path, everything: bool = False, refresh: int = 0) -> Dict[str, A
     """Write the board and the page of every task on it, over the ones of before."""
     result, problems = board_rows(root, everything, refresh)
     path = root / common.REPORTS_DIR / BOARD_NAME
-    common.replace_text(path, taskhtml.board_page(result["tasks"], utc_now(), refresh))
+    common.replace_text(path, taskhtml.board_page(result["tasks"], utc_now(), refresh, hidden=result["closed_hidden"]))
     out: Dict[str, Any] = {"board": path.relative_to(root).as_posix(), "tasks": len(result["tasks"]), "open": result["open"], "waiting": result["waiting"]}
     if problems:
         out["problems"] = problems

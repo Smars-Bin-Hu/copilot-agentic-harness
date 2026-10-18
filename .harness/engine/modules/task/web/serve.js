@@ -97,11 +97,10 @@ const SERVE = (function () {
     return node;
   }
 
-  // The board: the line under the numbers, and the whole page again every few seconds when nothing is open.
+  // The board: the line under the numbers. The board asks for its rows itself (board.js) and keeps what the person typed.
   function start(app) {
     const kpis = app.querySelector(".kpis");
     if (kpis) kpis.after(banner());
-    if (serve.refresh) setInterval(() => { if (!busy) location.reload(); }, serve.refresh * 1000);
   }
 
   return {runs: (action) => serve.actions.includes(action), act, start, banner, post, ready, busy: () => busy};

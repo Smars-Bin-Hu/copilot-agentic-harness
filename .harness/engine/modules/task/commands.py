@@ -65,11 +65,11 @@ def list_text(result: Dict[str, Any]) -> str:
 def cmd_board(args: argparse.Namespace) -> Dict[str, Any]:
     person = approval.is_person()
     if args.serve or (person and not args.once and args.refresh is None and not args.no_serve):  # a person gets the server by default
-        return boardserve.serve(repo_root(), args.all, args.port)
+        return boardserve.serve(repo_root(), True, args.port)
     refresh = taskboard.refresh_seconds(args.refresh, args.once, person)
     if refresh > 0:
-        return taskboard.keep_fresh(repo_root(), args.all, refresh, (lambda board: taskboard.open_in_browser(repo_root(), board)) if args.open else None)
-    result = taskboard.board(repo_root(), args.all)
+        return taskboard.keep_fresh(repo_root(), True, refresh, (lambda board: taskboard.open_in_browser(repo_root(), board)) if args.open else None)
+    result = taskboard.board(repo_root(), True)
     if args.open:
         result["opened"] = taskboard.open_in_browser(repo_root(), result["board"])
     return result
@@ -117,8 +117,7 @@ def register_task(subparsers: Any) -> None:
     listing.set_defaults(handler=cmd_list, render=list_text)
     line = commands.add_parser("queue", help="the promote queue: per target repository, whose files wait for a commit and which tasks are in line")
     line.set_defaults(handler=lambda a: taskqueue.queue(repo_root()))
-    board = commands.add_parser("board", help="the board of every task: what it waits for, its time and usage. A person at a terminal gets it served with the task pages and buttons that act; --once writes .workspace/reports/board.html and returns")
-    board.add_argument("--all", action="store_true", help="the closed tasks too")
+    board = commands.add_parser("board", help="the board of every task, the newest closed ones too: what it waits for, its time and usage. A person at a terminal gets it served with the task pages and buttons that act; --once writes .workspace/reports/board.html and returns")
     board.add_argument("--refresh", type=int, default=None, help=f"keep the board fresh: write it again every N seconds until Ctrl+C, and the pages load themselves again. For a person at a terminal this is on by itself, every {taskboard.DEFAULT_REFRESH} seconds; 0 is the same as --once")
     board.add_argument("--open", action="store_true", help="open the page in the browser (a person at a terminal)")
     how = board.add_mutually_exclusive_group()

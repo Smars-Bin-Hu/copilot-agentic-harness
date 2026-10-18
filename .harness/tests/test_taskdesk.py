@@ -77,6 +77,17 @@ class DeskTests(ServeCase):
         self.assertEqual(data["desk"]["name"], "job1")
         self.assertEqual(self.request("POST", "/api/desk", {"task": "nope"})[0], 404)
 
+    def test_the_board_asks_for_its_rows_and_they_hold_the_closed_tasks_too(self) -> None:
+        self.prompt("hello", session="s-done")
+        self.new(name="done_one", kind="qa", session="s-done")
+        task_ops.close(self.root, "done_one")
+        status, data, _headers = self.request("POST", "/api/board", {})
+        self.assertEqual(status, 200)
+        rows = {row["name"]: row for row in data["rows"]}
+        self.assertEqual((rows["job1"]["status"], rows["done_one"]["status"], data["hidden"]), ("open", "closed", 0))
+        self.assertIsNotNone(rows["done_one"]["brief"])
+        self.assertEqual(self.request("POST", "/api/board", {}, header=False)[0], 403)  # as every other request: the header is needed
+
     def test_the_agent_is_told_the_address_of_the_page_while_the_board_runs(self) -> None:
         context = self.context(self.prompt("go on"))
         self.assertIn(f"http://127.0.0.1:{self.port}/task/job1", context)

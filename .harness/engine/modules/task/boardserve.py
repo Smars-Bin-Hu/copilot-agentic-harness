@@ -110,9 +110,14 @@ class Board:
         with self.lock:
             return bool(token) and token in self.sessions
 
-    def page(self) -> str:
+    def rows(self) -> Dict[str, Any]:
+        """The rows of the board as the page draws them, and how many older closed tasks are left out."""
         result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.actions)
-        return taskhtml.board_page(result["tasks"], utc_now(), 0, serve={"actions": self.actions, "refresh": REFRESH})
+        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now()}
+
+    def page(self) -> str:
+        found = self.rows()
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve={"actions": self.actions, "refresh": REFRESH}, hidden=found["hidden"])
 
     def desk(self, name: str) -> Dict[str, Any]:
         return taskdesk.desk(self.root, name, self.actions)
@@ -228,6 +233,11 @@ def handler_for(board: Board) -> type:
                 return self.answer(200, {"paired": True}, {"Set-Cookie": cookie})
             if path == "/api/status":
                 return self.answer(200, {"paired": board.paired(self.token())})
+            if path == "/api/board":
+                try:
+                    return self.answer(200, board.rows())
+                except Exception as error:  # noqa: BLE001 - the page keeps what it shows
+                    return self.answer(500, {"error": str(error)})
             if path == "/api/desk":
                 try:
                     return self.answer(200, {"desk": board.desk(str(data.get("task", "")))})
@@ -248,7 +258,7 @@ def handler_for(board: Board) -> type:
     return Handler
 
 
-def serve(root: Path, everything: bool = False, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, opener: Callable[[str], Any] = webbrowser.open, ready: Optional[Callable[[Any], None]] = None) -> Dict[str, Any]:
+def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, opener: Callable[[str], Any] = webbrowser.open, ready: Optional[Callable[[Any], None]] = None) -> Dict[str, Any]:
     """Run until Ctrl+C. `opener` and `ready` exist for the tests: `ready` gets the server once it listens."""
     task_ops.person("task board --serve", interactive, typed=False)
     out = out or sys.stdout

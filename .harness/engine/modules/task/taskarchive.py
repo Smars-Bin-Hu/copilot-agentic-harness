@@ -129,6 +129,8 @@ def archive(root: Path, names: List[str], everything: bool = False, to: str = ""
         return {"to": str(folder), "folder_exists": folder.is_dir(), "would_move": plan, "next": say("archive.next.dry", count=len(plan)),
                 "_next_person": say("archive.person.dry", count=len(plan))}
     known = read_index(folder)  # before anything moves: a broken index stops the run, it is never overwritten
+    again = {row["name"] for row in chosen}
+    known = [item for item in known if item.get("name") not in again]  # a task moved back by hand and archived again: one entry, where it is now
     folder.mkdir(parents=True, exist_ok=True)
     entries = []
     for row, step in zip(chosen, plan):
@@ -161,7 +163,8 @@ def read_index(folder: Path) -> List[Dict[str, Any]]:
 
 
 def write_index(folder: Path, everything: List[Dict[str, Any]], new: List[Dict[str, Any]]) -> None:
-    """archive.json with every entry; ARCHIVE.md with the new ones added. The entries of other archive runs stay."""
+    """archive.json with every entry; ARCHIVE.md with the new ones added. The entries of other archive runs stay in both:
+    ARCHIVE.md is a log, so a task archived twice has two rows there."""
     state.atomic_write(folder / INDEX_JSON, {"tasks": everything})
     page = folder / INDEX_MD
     lines = [] if page.exists() else [say("archive.index.head"), "", say("archive.index.columns"), "| --- | --- | --- | --- | --- | --- |"]

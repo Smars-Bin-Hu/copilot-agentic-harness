@@ -101,9 +101,11 @@ ACTIONS_BY_WAIT = {"plan": ("approve-plan",), "promote": ("approve-promote",), "
 
 
 def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str, str]]:
-    """What the person can do about an open task from the board: the action and the command to run in a terminal.
+    """What the person can do about a task from the board (a closed one: archive it): the action and the command to run in a terminal.
     What it waits for comes first; then pause, or resume when it is paused. `served`: the actions the board server
     runs from the page; `autorun on` is offered only when it is one of them."""
+    if row.get("status") == "closed":
+        return [{"action": "archive", "command": f"{cli_command()} task archive {row['name']} --apply"}] if "archive" in served else []
     if row.get("status") != "open":
         return []
     found = list(ACTIONS_BY_WAIT.get(row.get("waiting_why") or "", ()))

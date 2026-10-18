@@ -47,7 +47,41 @@ const SERVE = (function () {
     close.addEventListener("click", view.close);
   }
 
+  // Archive closed tasks: the folder (the one kept, or a path to type), what would move, then the move. One way: the dialog says so.
+  function archive(names, keptFolder) {
+    const to = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("board.archive.to"), value: keptFolder || ""});
+    const remember = h("input", {type: "checkbox"});
+    remember.checked = !keptFolder;
+    const said = h("div", {class: "bad"});
+    const plan = h("div", {class: "plan"});
+    const check = h("button", {class: "act", type: "button"}, t("board.archive.check"));
+    const go = h("button", {class: "act hot", type: "button", disabled: "disabled"}, t("board.archive.go", {count: names.length}));
+    const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
+    const view = dialog([h("h2", null, t("board.archive.title", {count: names.length})), h("p", null, t("board.archive.warn")),
+      h("p", {class: "sub"}, names.join(", ")), to, h("label", {class: "sub remember"}, remember, " " + t("board.archive.remember")), plan,
+      h("div", {class: "row"}, check, go, no), said]);
+    const body = (step) => ({tasks: names, to: to.value.trim(), remember: remember.checked, step});
+    to.addEventListener("input", () => { go.disabled = true; plan.replaceChildren(); });  // a new folder needs a new look
+    no.addEventListener("click", view.close);
+    check.addEventListener("click", () => {
+      said.replaceChildren();
+      post("/api/archive", body("preview")).then((data) => {
+        const found = data.result;
+        plan.replaceChildren(h("p", null, t("board.archive.folder", {to: found.to}) + (found.folder_exists ? "" : " " + t("board.archive.new"))),
+          h("ul", {class: "reasons"}, found.would_move.map((item) => h("li", null, item.name + " \u2192 " + item.to))));
+        go.disabled = false;
+      }, (error) => { plan.replaceChildren(); go.disabled = true; said.replaceChildren(...reasons(error.message)); });
+    });
+    go.addEventListener("click", () => {
+      go.disabled = true;
+      post("/api/archive", body("act")).then(() => { view.close(); location.reload(); },
+        (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; });
+    });
+    to.focus();
+  }
+
   function act(button, row, item) {
+    if (item.action === "archive") return archive([row.name], serve.archive_to);
     const body = {action: item.action, task: row.name};
     if (free(item.action)) {
       button.textContent = t("board.serve.working");
@@ -103,5 +137,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner());
   }
 
-  return {runs: (action) => serve.actions.includes(action), act, start, banner, post, ready, busy: () => busy};
+  return {runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, ready, busy: () => busy};
 })();

@@ -115,4 +115,7 @@ ol.timeline .when{display:inline-block;min-width:8.5em}ol.timeline .tag{margin-l
 .controls input.search{min-width:200px}
 th.sortable{cursor:pointer;user-select:none}th.sortable:hover,th.sortable.on{color:var(--ink)}
 tr.closed td{opacity:.72}
+.pick{display:flex;gap:10px;align-items:center;margin:0 0 10px}.pick:empty{display:none}
+td.tick,th.tick{width:28px;padding-right:0}
+.dialog .remember{display:block;margin:6px 0}.dialog .plan{margin:8px 0}
 

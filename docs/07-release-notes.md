@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.24 (2026-10-18)
+
+Archive closed tasks from the board.
+
+**Testing**: the automatic tests pass on the Mac; the page was tried in Chrome (tick, look, archive, the kept folder). **Not run on Windows**.
+
+### Added
+
+- **An archive button on every closed task, and ticks to archive several.** The dialog asks for the folder (the one you kept with `--remember` is filled in; else type an absolute path and say whether to keep it), shows what would move, and moves it only when you confirm. It needs the paired browser; no code is typed. `archive` is one of `board.actions` (on by default).
+
+### Changed
+
+- **A task you moved back into `.workspace/sandbox/tasks/` by hand is on the board again** (checked: its numbers and page are made again). Archived again, it has one entry in `archive.json`, where it is now; `ARCHIVE.md` is a log and keeps a row for each run.
+
 ## 1.4.23 (2026-10-18)
 
 Look back at closed tasks on the board, and filter and sort the board.

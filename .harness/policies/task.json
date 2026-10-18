@@ -38,7 +38,8 @@
       "review extend",
       "review waive",
       "autorun on",
-      "recover"
+      "recover",
+      "archive"
     ]
   }
 }

@@ -82,6 +82,23 @@ class ArchiveTests(TaskCase):
         self.assertEqual(json.loads(piped.getvalue())["next"], listed["next"])
         self.assertNotIn("_next_person", piped.getvalue())
 
+    def test_a_task_moved_back_by_hand_is_on_the_board_again_and_archives_once_more_with_one_entry(self) -> None:
+        from modules.task import taskboard
+
+        taskboard.board_rows(self.root, True)  # makes the report page, which goes with the task
+        taskarchive.archive(self.root, ["done1"], to=str(self.shelf), apply=True)
+        self.assertNotIn("done1", [row["name"] for row in taskboard.board_rows(self.root, True)[0]["tasks"]])
+        shutil.move(str(self.shelf / "done1"), str(self.root / tasks.TASKS_DIR / "done1"))
+        rows, problems = taskboard.board_rows(self.root, True)
+        back = {row["name"]: row for row in rows["tasks"]}["done1"]
+        self.assertEqual((back["status"], problems), ("closed", []))
+        self.assertIsNotNone(back["brief"])
+        self.assertTrue((self.root / ".workspace" / "reports" / "tasks" / "done1" / "report.html").is_file())
+        taskarchive.archive(self.root, ["done1"], to=str(self.shelf), apply=True)
+        index = json.loads((self.shelf / "archive.json").read_text(encoding="utf-8"))["tasks"]
+        self.assertEqual([row["name"] for row in index], ["done1"])
+        self.assertEqual((self.shelf / "ARCHIVE.md").read_text(encoding="utf-8").count("| done1 |"), 2)  # the log has both runs
+
     def test_an_open_task_or_a_name_taken_stops_all_of_it(self) -> None:
         with self.assertRaises(CommandError):
             taskarchive.archive(self.root, ["done1", "busy"], to=str(self.shelf), apply=True)

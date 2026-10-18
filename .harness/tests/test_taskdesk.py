@@ -88,6 +88,31 @@ class DeskTests(ServeCase):
         self.assertIsNotNone(rows["done_one"]["brief"])
         self.assertEqual(self.request("POST", "/api/board", {}, header=False)[0], 403)  # as every other request: the header is needed
 
+    def test_a_paired_browser_archives_closed_tasks_from_the_page_and_nothing_else_does(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        self.prompt("hello", session="s-arch")
+        self.new(name="to_shelf", kind="qa", session="s-arch")
+        task_ops.close(self.root, "to_shelf")
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        shelf = Path(holder.name) / "shelf"
+        asked = {"tasks": ["to_shelf"], "to": str(shelf), "step": "preview"}
+        self.assertEqual(self.request("POST", "/api/archive", asked)[0], 403)  # not paired
+        cookie = self.pair()
+        status, data, _headers = self.request("POST", "/api/archive", asked, cookie=cookie)
+        self.assertEqual((status, [item["name"] for item in data["result"]["would_move"]]), (200, ["to_shelf"]))
+        self.assertFalse(shelf.exists())  # a look moves nothing
+        self.assertEqual(self.request("POST", "/api/archive", {"tasks": ["job1"], "to": str(shelf), "step": "act"}, cookie=cookie)[0], 409)  # an open task stays
+        self.assertEqual(self.request("POST", "/api/archive", {"tasks": [], "to": str(shelf)}, cookie=cookie)[0], 409)
+        status, data, _headers = self.request("POST", "/api/archive", {**asked, "step": "act", "remember": True}, cookie=cookie)
+        self.assertEqual((status, data["result"]["archived"]), (200, ["to_shelf"]))
+        self.assertTrue((shelf / "to_shelf" / ".task").is_dir())
+        rows = {row["name"] for row in self.request("POST", "/api/board", {})[1]["rows"]}
+        self.assertNotIn("to_shelf", rows)
+        self.assertEqual(self.request("POST", "/api/board", {})[1]["archive_to"], str(shelf.resolve()))
+
     def test_the_agent_is_told_the_address_of_the_page_while_the_board_runs(self) -> None:
         context = self.context(self.prompt("go on"))
         self.assertIn(f"http://127.0.0.1:{self.port}/task/job1", context)
@@ -100,7 +125,7 @@ class DeskTests(ServeCase):
         self.assertNotIn("/task/job1", self.run_cli("task", "status", "--task", TASK)["next"])
 
     def test_every_action_is_on_the_page_by_default(self) -> None:
-        self.assertEqual(sorted(boardserve_actions(self.root)), sorted(["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover"]))
+        self.assertEqual(sorted(boardserve_actions(self.root)), sorted(["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive"]))
 
 
     def test_a_page_action_is_one_line_with_a_tag_and_the_session_note_follows_the_language(self) -> None:

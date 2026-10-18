@@ -11,7 +11,10 @@
 (function () {
   let rows = DATA.rows;
   let hidden = DATA.hidden || 0;
+  let archiveTo = DATA.serve ? DATA.serve.archive_to || "" : "";
   let asOf = DATA.as_of;
+  const canArchive = typeof SERVE !== "undefined" && SERVE.runs("archive");
+  const selected = new Set();  // closed tasks the person ticked, to archive together
   let shown = JSON.stringify([rows, hidden]);
   const app = document.getElementById("app");
   const sum = (values) => values.reduce((total, value) => total + value, 0);
@@ -85,6 +88,16 @@
     return cell;
   }
 
+  // The box in the head ticks every closed task that is listed now, or none.
+  function headerTick(shownRows) {
+    const closed = shownRows.filter((row) => row.status === "closed").map((row) => row.name);
+    if (!closed.length) return h("th", {class: "tick"});
+    const box = h("input", {type: "checkbox", "aria-label": t("board.select.all")});
+    box.checked = closed.every((name) => selected.has(name));
+    box.addEventListener("change", () => { for (const name of closed) { box.checked ? selected.add(name) : selected.delete(name); } drawTable(); });
+    return h("th", {class: "tick"}, box);
+  }
+
   function actionCell(row) {
     const buttons = (row.actions || []).map((item) => actionButton(row, item));
     return h("td", {class: "acts"}, buttons.length ? buttons : "-");
@@ -96,10 +109,19 @@
     return row.waiting ? tag(row.waiting, "hot long") : tag(t("board.state.running"), "good");
   }
 
+  function tickCell(row) {
+    if (row.status !== "closed") return h("td", {class: "tick"});
+    const box = h("input", {type: "checkbox", "aria-label": row.name});
+    box.checked = selected.has(row.name);
+    box.addEventListener("change", () => { box.checked ? selected.add(row.name) : selected.delete(row.name); drawSelection(); });
+    return h("td", {class: "tick"}, box);
+  }
+
   function line(row, longest) {
     const brief = row.brief;
     const kind = row.status === "new" ? "-" : t("task.kind." + (row.kind || "none")) + " \u00b7 " + t("task.tier." + (row.tier || "none"));
     return h("tr", {class: row.status === "closed" ? "closed" : null},
+      canArchive ? tickCell(row) : null,
       h("td", {class: "name"}, DATA.serve && row.status !== "new" ? h("a", {href: "/task/" + encodeURIComponent(row.name)}, row.name)
         : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : row.name,
         row.depends_on && row.depends_on.length ? h("div", {class: "sub"}, t("board.depends", {names: row.depends_on.join("\u3001")})) : null),
@@ -119,6 +141,7 @@
   const chips = h("div", {class: "chips"});
   const kinds = h("select", {class: "kinds", title: t("board.filter.kind")});
   const search = h("input", {type: "search", class: "search", placeholder: t("board.search"), autocomplete: "off", spellcheck: "false", value: view.query});
+  const pick = h("div", {class: "pick"});
   const tableBox = h("div", {class: "card"});
   const more = h("p", {class: "sub"});
   const stamp = h("span");
@@ -156,6 +179,7 @@
   }
 
   function drawTable() {
+    if (canArchive) DATA.serve.archive_to = archiveTo;  // the single-row button reads it
     stamp.textContent = subtitle();
     more.textContent = hidden ? t("board.closed.more", {count: hidden}) : "";
     if (!rows.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.empty"))); return; }
@@ -164,12 +188,23 @@
     const longest = Math.max(0, ...briefs.map((brief) => brief.active_s + brief.waiting_s)) || 1;
     if (!shownRows.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.filter.none"))); return; }
     tableBox.replaceChildren(
-      table([header("task"), header("kind"), header("waiting"), header("waited", true), header("time"), th("", true), header("aiu", true), header("prompts", true), header("reviews", true), header("updated"), th(t("board.col.actions"))],
+      table([canArchive ? headerTick(shownRows) : null, header("task"), header("kind"), header("waiting"), header("waited", true), header("time"), th("", true), header("aiu", true), header("prompts", true), header("reviews", true), header("updated"), th(t("board.col.actions"))],
         shownRows.map((row) => line(row, longest))),
       legend([["work", t("report.active"), ""], ["wait", t("report.waiting"), ""]]));
   }
 
-  function draw() { drawNumbers(); drawControls(); drawTable(); }
+  // "N ticked": archive them together, or let go of them.
+  function drawSelection() {
+    for (const name of Array.from(selected)) { if (!rows.some((row) => row.name === name && row.status === "closed")) selected.delete(name); }
+    if (!selected.size) { pick.replaceChildren(); return; }
+    const go = h("button", {type: "button", class: "act hot"}, t("board.select.archive", {count: selected.size}));
+    go.addEventListener("click", () => SERVE.archive(Array.from(selected), archiveTo));
+    const none = h("button", {type: "button", class: "act"}, t("board.select.clear"));
+    none.addEventListener("click", () => { selected.clear(); drawSelection(); drawTable(); });
+    pick.replaceChildren(h("span", {class: "sub"}, t("board.select.count", {count: selected.size}) + " "), go, none);
+  }
+
+  function draw() { drawNumbers(); drawControls(); drawTable(); drawSelection(); }
 
   search.addEventListener("input", () => { view.query = search.value; keep.set("query", search.value); drawTable(); });
   kinds.addEventListener("change", () => { view.kind = kinds.value; keep.set("kind", view.kind); drawTable(); });
@@ -187,7 +222,7 @@
     h("div", {class: "sub"}, h("b", null, t("board.title")), " \u00b7 ", stamp),
     kpis,
     h("div", {class: "controls"}, chips, kinds, search, clear),
-    tableBox, more,
+    pick, tableBox, more,
     h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint")), copyright());
   draw();
 
@@ -198,6 +233,7 @@
         if (SERVE.busy()) return;
         SERVE.post("/api/board", {}).then((data) => {
           asOf = data.as_of;
+          archiveTo = data.archive_to || "";
           const text = JSON.stringify([data.rows, data.hidden]);
           if (text !== shown) { rows = data.rows; hidden = data.hidden; shown = text; draw(); } else stamp.textContent = subtitle();
         }, () => {});

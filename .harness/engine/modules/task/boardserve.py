@@ -34,12 +34,13 @@ from urllib.parse import unquote, urlparse
 from core import config, messages
 from core.paths import board_serve_file, utc_now
 
-from . import autorun, common, task as task_ops, taskboard, taskdesk, taskhtml, tasklife, taskreview
+from . import autorun, common, task as task_ops, taskarchive, taskboard, taskdesk, taskhtml, tasklife, taskreview
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
 COOKIE = "harness_board"
 MAX_BODY = 4096
+MAX_ARCHIVE = 200  # tasks in one request
 FREE = ("pause", "resume")  # no pairing: they guard nothing
 REFRESH = 10  # seconds between two boards in the browser
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
@@ -55,7 +56,7 @@ def say(key: str, /, **values: Any) -> str:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover"]}
+    return {"port": config.whole(found.get("port"), 8765), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive"]}
 
 
 class Preview(Exception):
@@ -113,17 +114,31 @@ class Board:
     def rows(self) -> Dict[str, Any]:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
         result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.actions)
-        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now()}
+        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "archive_to": taskarchive.remembered(self.root)}
 
     def page(self) -> str:
         found = self.rows()
-        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve={"actions": self.actions, "refresh": REFRESH}, hidden=found["hidden"])
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve={"actions": self.actions, "refresh": REFRESH, "archive_to": found["archive_to"]}, hidden=found["hidden"])
 
     def desk(self, name: str) -> Dict[str, Any]:
         return taskdesk.desk(self.root, name, self.actions)
 
     def desk_page(self, name: str) -> str:
         return taskhtml.desk_page(self.desk(name), {"actions": self.actions, "refresh": REFRESH})
+
+    def archive(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Move closed tasks out of the repository (`task archive`). `step`: `preview` says what would move; `act` moves them.
+        The browser must be paired; no code is typed, for it changes no repository and an agent may do it with the person's yes."""
+        if "archive" not in self.actions:
+            raise CommandError(say("serve.action.off", action="archive"))
+        names = data.get("tasks")
+        if not isinstance(names, list) or not names or len(names) > MAX_ARCHIVE or not all(isinstance(name, str) and name for name in names):
+            raise CommandError(say("serve.refused.request"))
+        apply = str(data.get("step", "preview")) == "act"
+        result = taskarchive.archive(self.root, names, False, str(data.get("to", "")).strip(), apply, bool(data.get("remember")) and apply)
+        if apply:
+            print(say("serve.did", action="archive", task=", ".join(result["archived"])), flush=True)
+        return result
 
     def act(self, action: str, task: str, step: str, code: str = "") -> Dict[str, Any]:
         """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once."""
@@ -238,6 +253,13 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, board.rows())
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
                     return self.answer(500, {"error": str(error)})
+            if path == "/api/archive":
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed")})
+                try:
+                    return self.answer(200, {"result": board.archive(data)})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
+                    return self.answer(409, {"error": str(error)})
             if path == "/api/desk":
                 try:
                     return self.answer(200, {"desk": board.desk(str(data.get("task", "")))})

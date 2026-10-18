@@ -348,7 +348,7 @@ def approve_plan(
         require_open(again)
         if tasks.plan_digest(root, task) != current:
             raise CommandError(say("plan.changed"))
-        again["plan"] = {"approved_sha256": current, "approved_at": utc_now()}
+        again["plan"] = {"approved_sha256": current, "approved_at": utc_now(), "req_sha256": tasks.req_digest(root, task)}  # for this requirement
         note(again, "approve-plan", current[:12])
         again["waiting"] = {"since": utc_now(), "why": "go-plan"}  # nobody told the agent: the board says so until the next prompt
     from . import tasksnap  # it needs this module
@@ -364,7 +364,8 @@ _REQ_UNWRITTEN = ("<One or two paragraphs", "<一两段")  # the template's own 
 
 
 def req_state(root: Path, task: str) -> str:
-    """`none`: no REQ.md or no confirmation line. `unwritten`: the template is still empty. `open`: written, not confirmed. `confirmed`."""
+    """`none`: no REQ.md or no confirmation line. `unwritten`: the template is still empty. `open`: written, not confirmed.
+    `changed`: confirmed, and what it asks for is different now. `confirmed`."""
     from . import taskreview
 
     confirmed = taskreview.req_confirmed(root, task)
@@ -372,6 +373,8 @@ def req_state(root: Path, task: str) -> str:
         return "none"
     if confirmed:
         return "confirmed"
+    if taskreview.req_changed(root, task):
+        return "changed"
     try:
         text = (tasks.task_dir(root, task) / tasks.REQ_FILE).read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -385,7 +388,7 @@ def confirm_req(
     """The person confirms REQ.md as it is now: the harness fills the confirmation line, which the agent never does.
     The code to type belongs to this version of the file: a change after the person read it needs a new look."""
     person("confirm-req", interactive)
-    task = resolve(root, raw_task, lambda item: req_state(root, item["task"]) == "open", "req")
+    task = resolve(root, raw_task, lambda item: req_state(root, item["task"]) in ("open", "changed"), "req")
     data = read(root, task)
     require_open(data)
     state = req_state(root, task)
@@ -412,6 +415,7 @@ def confirm_req(
                 lines[number] = f"{found.group(1)}{word} {datetime.now().strftime('%Y-%m-%d')}{found.group(3)}"
                 break
         path.write_text("".join(lines), encoding="utf-8")
+        again["req"] = {"confirmed_sha256": tasks.req_digest(root, task), "confirmed_at": utc_now()}  # what the person read: a later change is seen
         note(again, "confirm-req", digest[:12])
     return {"confirmed": True, "task": task, "req": req, "next": say("req.next")}
 

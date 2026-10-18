@@ -56,6 +56,10 @@ def task_plan_first(relative: str, task: str) -> str:
     return say("gate.task.plan_first", relative=relative, task=task)
 
 
+def task_plan_req(relative: str, task: str) -> str:
+    return say("gate.task.plan_req", relative=relative, task=task)
+
+
 def task_outside(relative: str, task: str) -> str:
     return say("gate.task.outside", relative=relative, task=task)
 

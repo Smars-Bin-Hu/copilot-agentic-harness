@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 TASKS_DIR = ".workspace/sandbox/tasks"
 # What kind of work a task is (it decides what "done" means) and how many files it gets.
@@ -98,11 +99,49 @@ def plan_digest(root: Path, task: str) -> str:
         return ""
 
 
+_REQ_ASKS = ("what to do", "what not to do", "done when", "要做什么", "不做什么", "做完的标准")  # the sections of REQ.md that say what is wanted
+_HEADING = re.compile(r"^#{1,6}\s*(.*?)\s*$")
+_CONFIRM_WORDS = re.compile(r"用户确认|user confirmed", re.IGNORECASE)
+
+
+def req_digest(root: Path, task: str) -> str:
+    """sha256 of what REQ.md asks for: its sections "What to do", "What not to do" and "Done when" (in either language),
+    with blanks and line breaks ignored. The confirmation line, the sources, the open questions and the change record do not count: a line
+    added there must not undo an approval. A file with none of those sections counts as a whole, but for the confirmation
+    line. An empty string when there is no REQ.md."""
+    try:
+        text = (task_dir(root, task) / REQ_FILE).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    kept: List[str] = []
+    inside = False
+    found = False
+    for line in text.splitlines():
+        heading = _HEADING.match(line)
+        if heading:
+            inside = heading.group(1).strip("*_ ").lower() in _REQ_ASKS
+            found = found or inside
+            continue
+        if inside and line.strip():
+            kept.append(" ".join(line.split()))
+    if not found:
+        kept = [" ".join(line.split()) for line in text.splitlines() if line.strip() and not _CONFIRM_WORDS.search(line)]
+    return hashlib.sha256(" ".join(kept).encode("utf-8")).hexdigest()  # a paragraph wrapped in another way is the same
+
+
+def plan_req_changed(root: Path, task: str, data: Optional[Dict[str, Any]] = None) -> bool:
+    """The plan was approved for a requirement, and the requirement is another one now."""
+    data = data if data is not None else read(root, task)
+    kept = ((data or {}).get("plan") or {}).get("req_sha256")
+    return bool(kept) and kept != req_digest(root, task)
+
+
 def plan_approved(root: Path, task: str, data: Optional[Dict[str, Any]] = None) -> bool:
-    """The person approved PLAN.md as it is now. A plan changed after the approval is not approved."""
+    """The person approved PLAN.md as it is now, for the requirement as it is now. A plan changed after the approval is
+    not approved, and neither is a plan whose requirement changed (approvals from before this was kept do not have it)."""
     data = data if data is not None else read(root, task)
     current = plan_digest(root, task)
-    return bool(data and current) and (data.get("plan") or {}).get("approved_sha256") == current
+    return bool(data and current) and (data.get("plan") or {}).get("approved_sha256") == current and not plan_req_changed(root, task, data)
 
 
 def in_dev(root: Path, folder: Path) -> bool:

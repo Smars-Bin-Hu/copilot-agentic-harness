@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.30 (2026-10-18)
+
+An approval is for a version of the requirement.
+
+**Testing**: the automatic tests pass on the Mac. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Changed
+
+- **A plan is approved for the requirement it was approved against.** When what `REQ.md` asks for changes after you approved the plan, the approval lapses: `DEV/` is closed again, the task page offers **approve plan** again, and the agent is told why (the requirement changed: check the plan, ask you to read both and approve again). Before, only a change of `PLAN.md` itself did that, so an agent could change the requirement and keep the plan.
+- **A confirmation is of a version, too.** When what the requirement asks for changes after you confirmed it, the task page says so and the **confirm requirement** button comes back; an independent check is told the requirement is to be confirmed.
+- **What counts as "the requirement"**: the sections "What to do", "What not to do" and "Done when", in either language; blanks and line breaks are ignored. The confirmation line, the sources, the open questions and the change record do not count, so a note in the change record does not undo an approval. A `REQ.md` without these sections counts as a whole, but for the confirmation line.
+- **Approvals and confirmations made before this version stay valid** until the next one is made.
+
 ## 1.4.29 (2026-10-18)
 
 ### Changed

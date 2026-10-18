@@ -93,8 +93,15 @@ def req_confirmed(root: Path, task: str) -> Optional[bool]:
         found = _CONFIRM_LABEL.search(line)
         if found:
             value = line[found.end():].lower()
-            return bool(_CONFIRMED.search(value)) and not _NOT_CONFIRMED.search(value)  # the template has both on the line
+            filled = bool(_CONFIRMED.search(value)) and not _NOT_CONFIRMED.search(value)  # the template has both on the line
+            return filled and not req_changed(root, task)
     return None
+
+
+def req_changed(root: Path, task: str) -> bool:
+    """The person confirmed a version of REQ.md (the harness kept what it asks for), and it asks for something else now."""
+    kept = ((tasks.read(root, task) or {}).get("req") or {}).get("confirmed_sha256")
+    return bool(kept) and kept != tasks.req_digest(root, task)
 
 
 # --- state ---------------------------------------------------------------------------------------

@@ -25,6 +25,7 @@ SESSION = "sess-language"
 # Chinese that stays in the code on purpose: the sample line doctor prints, and the labels a task made in Chinese has.
 CHINESE_ALLOWED = {
     "core/output.py": ("SAMPLE = ",),
+    "core/tasks.py": ("_REQ_ASKS = ", "_CONFIRM_WORDS = "),  # the section names and the label of REQ.md, found in the language the file has
     "modules/task/taskinsight.py": ("SESSION_IN_DETAIL = ",),
     "modules/task/task.py": ("_CONFIRM_LINE = ", "_REQ_UNWRITTEN = ", "word = "),  # the labels of REQ.md, found and written in the language the file has
     "modules/task/taskreview.py": ("_CONFIRM_LABEL = ", "_CONFIRMED = ", "_NOT_CONFIRMED = ", "_VERDICT = "),

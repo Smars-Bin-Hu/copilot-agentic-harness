@@ -124,6 +124,7 @@
     return h("section", {class: "card actions"},
       h("h2", null, idle ? idle.title : t("desk.actions.title")),
       desk.waited_s !== null && (items.length || desk.waiting) ? h("p", {class: "sub"}, t("desk.waited", {time: clock(desk.waited_s)})) : null,
+      desk.req_changed ? h("p", {class: "hint bad"}, t("desk.req.changed")) : null,
       idle ? [h("p", {class: "hint"}, idle.hint), idle.prompt ? promptLine(idle.prompt) : null] : h("div", {class: "action-list"}, items.map(entry)),
       rest.length ? h("div", {class: "action-more"}, h("div", {class: "sub label"}, t("desk.actions.more")), rest.map(line)) : null,
       typeof SERVE === "undefined" ? h("p", {class: "sub"}, t("board.copy.hint")) : SERVE.banner());

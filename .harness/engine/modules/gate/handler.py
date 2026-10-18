@@ -71,7 +71,8 @@ def check_task_write(event: HookEvent, ctx: Context) -> Optional[Decision]:
                 return Decision(permission="deny", reason=rules.task_outside(shown, task), facts={"kind": "task-scope"})
             if _within(relative, dev):
                 if not approved:
-                    return Decision(permission="deny", reason=rules.task_plan_first(shown, task), facts={"kind": "task-plan"})
+                    again = tasks.plan_req_changed(ctx.root, task, data)  # approved before, for a requirement that is another one now
+                    return Decision(permission="deny", reason=(rules.task_plan_req if again else rules.task_plan_first)(shown, task), facts={"kind": "task-plan-req" if again else "task-plan"})
                 continue
             top = relative[len(task) :].strip("/").split("/", 1)[0]
             if top.lower() in tasks.PERSON_DIRS:

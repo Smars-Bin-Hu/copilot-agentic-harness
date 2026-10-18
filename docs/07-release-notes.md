@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.25 (2026-10-18)
+
+### Changed
+
+- **Ticking the box in the head of the board's table shows the "Archive N" bar at once.** It waited for the next refresh, up to 10 seconds.
+
 ## 1.4.24 (2026-10-18)
 
 Archive closed tasks from the board.

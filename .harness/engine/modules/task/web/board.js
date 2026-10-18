@@ -94,7 +94,7 @@
     if (!closed.length) return h("th", {class: "tick"});
     const box = h("input", {type: "checkbox", "aria-label": t("board.select.all")});
     box.checked = closed.every((name) => selected.has(name));
-    box.addEventListener("change", () => { for (const name of closed) { box.checked ? selected.add(name) : selected.delete(name); } drawTable(); });
+    box.addEventListener("change", () => { for (const name of closed) { box.checked ? selected.add(name) : selected.delete(name); } drawSelection(); drawTable(); });
     return h("th", {class: "tick"}, box);
   }
 

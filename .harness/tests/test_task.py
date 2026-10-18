@@ -160,7 +160,8 @@ class PlanApprovalTests(TaskCase):
         self.new()
         self.write_plan()
         self.assertIn("只能由用户在自己的终端里手动运行", self.run_cli("task", "approve-plan", ok=False)["stderr"])
-        for command in ("python3 .harness/engine/cli.py task approve-plan", f"harness task approve-promote --task {TASK}", "python .harness/engine/cli.py task recover"):
+        self.assertIn("只能由用户在自己的终端里手动运行", self.run_cli("task", "confirm-req", ok=False)["stderr"])
+        for command in ("harness task confirm-req --task x", "python3 .harness/engine/cli.py task approve-plan", f"harness task approve-promote --task {TASK}", "python .harness/engine/cli.py task recover"):
             data = pre_tool(SESSION, "run_in_terminal", {"command": command})
             self.assertEqual(self.decision(self.hook(data)), "deny", command)
 

@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.27 (2026-10-18)
+
+Confirm the requirement from the task page.
+
+**Testing**: the automatic tests pass on the Mac. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **`task confirm-req`, and a "confirm requirement" button on the task page.** Once the agent has written `REQ.md`, you read it on the page (tab Overview) and confirm it with a typed code, as with a plan. The harness fills the confirmation line (`confirmed <date>`); before, you opened the file and changed the line by hand, and the agent was told never to. The code belongs to the version you read: if the agent changes the file meanwhile, it is not confirmed. A terminal-only command for a person: the gate refuses it from an agent. `confirm-req` is one of `board.actions` (on by default).
+
+### Changed
+
+- The skill `harness-my-task` tells the agent to point you at the button when the requirement is written.
+
 ## 1.4.26 (2026-10-18)
 
 ### Changed

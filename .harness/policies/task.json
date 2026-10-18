@@ -33,6 +33,7 @@
     "actions": [
       "pause",
       "resume",
+      "confirm-req",
       "approve-plan",
       "approve-promote",
       "review extend",

@@ -113,6 +113,49 @@ class DeskTests(ServeCase):
         self.assertNotIn("to_shelf", rows)
         self.assertEqual(self.request("POST", "/api/board", {})[1]["archive_to"], str(shelf.resolve()))
 
+    def test_the_person_confirms_the_requirement_on_the_page_and_the_harness_fills_the_line(self) -> None:
+        import hashlib
+
+        from modules.task import taskreview
+
+        names = lambda: [item["action"] for item in taskdesk.desk(self.root, "job1", ("confirm-req", "pause"))["actions"]]
+        req = self.task / "REQ.md"
+        self.assertEqual(task_ops.req_state(self.root, TASK), "unwritten")
+        self.assertNotIn("confirm-req", names())  # the template is still empty: nothing to confirm
+        req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Stop the nightly load from failing.").replace("<一两段。用户的原意，不加你自己的设想>", "别让夜间加载失败。"), encoding="utf-8")
+        self.assertEqual(task_ops.req_state(self.root, TASK), "open")
+        self.assertEqual(names()[0], "confirm-req")
+        body = {"action": "confirm-req", "task": TASK}
+        self.assertEqual(self.request("POST", "/api/act", {**body, "step": "preview"})[0], 403)  # not paired
+        cookie = self.pair()
+        status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"}, cookie=cookie)
+        self.assertEqual(status, 200, data)
+        code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
+        self.assertIn(code, data["result"]["ask"])
+        self.assertEqual(task_ops.req_state(self.root, TASK), "open")  # a look confirms nothing
+        self.assertEqual(self.request("POST", "/api/act", {**body, "code": "00000000"}, cookie=cookie)[0], 409)
+        self.assertEqual(self.request("POST", "/api/act", {**body, "code": code}, cookie=cookie)[0], 200)
+        self.assertTrue(taskreview.req_confirmed(self.root, TASK))
+        self.assertRegex(req.read_text(encoding="utf-8"), r"(confirmed|已确认) \d{4}-\d{2}-\d{2}")
+        self.assertNotIn("confirm-req", names())
+        self.assertIn("confirm-req", [event["what"] for event in self.data()["events"]])
+
+    def test_a_requirement_changed_while_the_person_confirms_is_not_confirmed(self) -> None:
+        req = self.task / "REQ.md"
+        req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "A.").replace("<一两段。用户的原意，不加你自己的设想>", "甲。"), encoding="utf-8")
+
+        def reader(_asked: str) -> str:  # the person types the right code of the version they read; then the agent edits the file
+            import hashlib
+
+            code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
+            req.write_text(req.read_text(encoding="utf-8") + "\nMore.\n", encoding="utf-8")
+            return code
+
+        with self.assertRaises(CommandError) as raised:
+            task_ops.confirm_req(self.root, TASK, reader=reader, interactive=True, out=io.StringIO())
+        self.assertEqual(str(raised.exception), messages.text("req.changed"))
+        self.assertEqual(task_ops.req_state(self.root, TASK), "open")
+
     def test_the_agent_is_told_the_address_of_the_page_while_the_board_runs(self) -> None:
         context = self.context(self.prompt("go on"))
         self.assertIn(f"http://127.0.0.1:{self.port}/task/job1", context)
@@ -125,7 +168,7 @@ class DeskTests(ServeCase):
         self.assertNotIn("/task/job1", self.run_cli("task", "status", "--task", TASK)["next"])
 
     def test_every_action_is_on_the_page_by_default(self) -> None:
-        self.assertEqual(sorted(boardserve_actions(self.root)), sorted(["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive"]))
+        self.assertEqual(sorted(boardserve_actions(self.root)), sorted(["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive", "confirm-req"]))
 
 
     def test_a_page_action_is_one_line_with_a_tag_and_the_session_note_follows_the_language(self) -> None:

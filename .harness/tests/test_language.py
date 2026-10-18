@@ -26,6 +26,7 @@ SESSION = "sess-language"
 CHINESE_ALLOWED = {
     "core/output.py": ("SAMPLE = ",),
     "modules/task/taskinsight.py": ("SESSION_IN_DETAIL = ",),
+    "modules/task/task.py": ("_CONFIRM_LINE = ", "_REQ_UNWRITTEN = ", "word = "),  # the labels of REQ.md, found and written in the language the file has
     "modules/task/taskreview.py": ("_CONFIRM_LABEL = ", "_CONFIRMED = ", "_NOT_CONFIRMED = ", "_VERDICT = "),
 }
 

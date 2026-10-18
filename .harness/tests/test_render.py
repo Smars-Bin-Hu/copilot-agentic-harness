@@ -99,7 +99,7 @@ class FormatTests(unittest.TestCase):
 
     def test_person_only_commands_are_marked(self) -> None:
         parser = cli.build_parser()
-        for words in (["task", "pause", "--task", "x"], ["task", "approve-plan", "--task", "x"], ["task", "review", "extend", "--task", "x"], ["task", "autorun", "on", "--task", "x"], ["approve-command"]):
+        for words in (["task", "pause", "--task", "x"], ["task", "approve-plan", "--task", "x"], ["task", "confirm-req", "--task", "x"], ["task", "review", "extend", "--task", "x"], ["task", "autorun", "on", "--task", "x"], ["approve-command"]):
             self.assertTrue(getattr(parser.parse_args(words), "person_only", False), words)
         self.assertFalse(getattr(parser.parse_args(["task", "status", "--task", "x"]), "person_only", False))
 

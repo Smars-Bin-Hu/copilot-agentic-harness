@@ -4,7 +4,7 @@ Written from the code. For all the arguments of a command use `--help`. The `har
 
 ## Commands
 
-What a command prints: text on a terminal, JSON on a pipe (a script, a redirect). `--json`, anywhere on the line, always prints JSON. The commands only a person may run (`task pause`, `task approve-plan` and the like) always print text. `output.format` in `cli.json` changes the default.
+What a command prints: text on a terminal, JSON on a pipe (a script, a redirect). `--json`, anywhere on the line, always prints JSON. The commands only a person may run (`task pause`, `task confirm-req`, `task approve-plan` and the like) always print text. `output.format` in `cli.json` changes the default.
 
 ### For people
 
@@ -28,6 +28,7 @@ What a command prints: text on a terminal, JSON on a pipe (a script, a redirect)
 | `kb near <id or name> [--depth 1-5] [--up \| --down]` | From the map: what the object uses and what uses it, step by step, with the path of each. A name that fits several objects lists them |
 | `kb split [--shared-min <n>]` | From the map: a first cut of the domains. Objects reached from at least n entry points (default from the profile, 3) are `shared` and taken out first; then each entry point with what it reaches. Lists what no entry point reaches |
 | `kb gaps [--inventory <file>]` | From the map and git history: names used but defined in no file (`missing`, with the users, and where git had a file of that name before it was deleted, with the command for its last version), and retired code still in use (`obsolete_used`). With a list of production objects a person exported (ids one per line, JSON lines with `id`, or CSV with an `id` column): `in_production_not_in_repos`, `in_production_but_obsolete`, `in_repos_not_in_production` (only of the types the list holds). It never connects to production |
+| `task confirm-req` | Confirms the `REQ.md` of a task: you have read it and it says what you meant. The harness fills the confirmation line. Terminal only, with a typed code (the page has a button for it) |
 | `task approve-plan` | Approves the `PLAN.md` of a task. Terminal only, with a typed code |
 | `task approve-promote` | Approves the plan of the last `task promote --dry-run`. Terminal only, with a typed code |
 | `task recover` | After a promote failed partway, puts the repositories back as they were. Terminal only, with a typed code |
@@ -98,7 +99,7 @@ The defaults are in `.harness/policies/<file>`; overrides go in the `.override.j
 | task.json | `mapreduce.max_agents` | After the user types `/generic-mapreduce` once, how many times the mapper can be called at most. `0` switches it off |
 | task.json | `mapreduce.minutes` | Within how many minutes these calls are valid |
 | task.json | `report.prompt_chars` | On the task analysis page, how many characters from the start of what you typed are kept for each prompt (on the page only, not given to the agent). The default is 300. The row shows one line; the mouse over it shows all that is kept. `0` shows none |
-| task.json | `board` | `task board --serve`: `port` (default 8765), `closed_shown` (how many of the newest closed tasks the board lists; default 50; the page notes how many older ones are left out) and `actions`, the buttons that act from the page (default all: `pause`, `resume`, `approve-plan`, `approve-promote`, `review extend`, `review waive`, `autorun on`, `recover`, `archive`). Every one but pause, resume and archive asks for its code, as in the terminal; archive needs the paired browser and a confirm, not a code. Leave one out and its button copies the command instead |
+| task.json | `board` | `task board --serve`: `port` (default 8765), `closed_shown` (how many of the newest closed tasks the board lists; default 50; the page notes how many older ones are left out) and `actions`, the buttons that act from the page (default all: `pause`, `resume`, `confirm-req`, `approve-plan`, `approve-promote`, `review extend`, `review waive`, `autorun on`, `recover`, `archive`). Every one but pause, resume and archive asks for its code, as in the terminal; archive needs the paired browser and a confirm, not a code. Leave one out and its button copies the command instead |
 | task.json | `report.copilot_events` | Whether the task analysis and the board read Copilot's own session record (`~/.copilot/session-state/`). There is usage only when it is read; only numbers are taken. With `false` only the hook log is used |
 | observe.json | `max_text_chars` | The largest length of each piece of text in the log |
 | observe.json | `capture.enabled` | Saves the raw input and output of hooks |

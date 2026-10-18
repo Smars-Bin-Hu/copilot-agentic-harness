@@ -56,7 +56,7 @@ def say(key: str, /, **values: Any) -> str:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive"]}
+    return {"port": config.whole(found.get("port"), 8765), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive"]}
 
 
 class Preview(Exception):
@@ -71,6 +71,7 @@ def runner(root: Path, action: str, task: str) -> Callable[..., Dict[str, Any]]:
     """The function of the terminal command, ready to be called with reader/interactive/out."""
     table: Dict[str, Callable[..., Dict[str, Any]]] = {
         "approve-plan": lambda **kw: task_ops.approve_plan(root, task, **kw),
+        "confirm-req": lambda **kw: task_ops.confirm_req(root, task, **kw),
         "approve-promote": lambda **kw: task_ops.approve_promote(root, task, **kw),
         "review extend": lambda **kw: taskreview.extend(root, task, 2, **kw),
         "review waive": lambda **kw: taskreview.waive(root, task, **kw),

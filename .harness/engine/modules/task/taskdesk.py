@@ -8,10 +8,10 @@ passed on as markup). Nothing here writes.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from core import messages, tasks
-from core.paths import utc_now
+from core.paths import cli_command, utc_now
 
 from . import common, mdtree, task as task_ops, taskboard, taskinsight, tasklife
 
@@ -80,6 +80,14 @@ def changed(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def offered(root: Path, row: Dict[str, Any], task: str, served: Tuple[str, ...]) -> List[Dict[str, str]]:
+    """What the person can do about the task: the board's actions, and on its page also: confirm the requirement once the agent wrote it."""
+    found = taskboard.actions(row, served)
+    if row.get("status") == "open" and "confirm-req" in served and task_ops.req_state(root, task) == "open":
+        found.insert(0, {"action": "confirm-req", "command": f"{cli_command()} task confirm-req --task {row['name']}"})
+    return found
+
+
 def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
     """Everything the task page shows."""
     row = row_of(root, name)
@@ -99,6 +107,6 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "created_at": data.get("created_at", ""), "updated_at": data.get("updated_at", ""),
         "todo": {"done": done, "total": total},
         "docs": docs, "history": history(data), "changes": changed(root, task, data),
-        "actions": taskboard.actions(row, tuple(served)),
+        "actions": offered(root, row, task, tuple(served)),
         "report": "/" + report.relative_to(root / common.REPORTS_DIR).as_posix() if report.is_file() else "",
     }

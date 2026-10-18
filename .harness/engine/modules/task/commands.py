@@ -6,7 +6,7 @@
   task status|fetch|delete|diff|set-branch|promote|close|report      the work on a task (task.py)
   task autorun on|off|status                 autorun, beta: down TODO.md without a person; on is a person at a terminal (autorun.py)
   task pause|resume                          a person puts a task aside and takes it back (tasklife.py)
-  task approve-plan|approve-promote|recover  a person at a terminal
+  task approve-plan|confirm-req|approve-promote|recover  a person at a terminal
   task review start|status                   independent checks, `[review]=n` (taskreview.py); extend|waive: a person at a terminal
   task snapshot list|prune                   the copies made at the gates (tasksnap.py)
   target list|show                           the target repositories (policy target.json): where they are, what their base branch is
@@ -160,6 +160,7 @@ def register_task(subparsers: Any) -> None:
     snapshot_prune.set_defaults(handler=lambda a: {"removed": tasksnap.prune(repo_root(), task.resolve(repo_root(), a.task), a.days if a.days is not None else tasksnap.settings(repo_root())["keep_days"], dry_run=a.dry_run), "dry_run": a.dry_run})
     add("status", "where the task stands and what comes next", lambda a: task.status(repo_root(), a.task))
     add("approve-plan", "the person approves PLAN.md (terminal only)", lambda a: task.approve_plan(repo_root(), a.task)).set_defaults(person_only=True)
+    add("confirm-req", "the person confirms REQ.md says what they meant (terminal only); the harness fills the confirmation line", lambda a: task.confirm_req(repo_root(), a.task)).set_defaults(person_only=True)
     fetch = add("fetch", "copy files of a target repository's base branch into DEV/<repo>/<path>", lambda a: task.fetch(repo_root(), a.task, a.paths, a.overwrite))
     fetch.add_argument("paths", nargs="+", help="<repo>/<path>: a file or a folder")
     fetch.add_argument("--overwrite", action="store_true", help="take the base version again over a file already changed in DEV/")

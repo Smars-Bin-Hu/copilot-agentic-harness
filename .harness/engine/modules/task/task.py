@@ -17,7 +17,9 @@ The state is `<task>/.task/task.json`; only the CLI writes it.
 from __future__ import annotations
 
 import difflib
+import hashlib
 import os
+from datetime import datetime
 import re
 import shutil
 from contextlib import contextmanager
@@ -353,6 +355,65 @@ def approve_plan(
 
     snapshot = tasksnap.take(root, task, "plan")["snapshot"]
     return {"approved": True, "task": task, "snapshot": snapshot, "plan": f"{task}/{tasks.PLAN_NAME}", "next": say("plan.next")}
+
+
+# --- the requirement: the person confirms what REQ.md says ----------------------------------------
+
+_CONFIRM_LINE = re.compile(r"^(\s*[-*]\s*\*{0,2}(?:用户确认|user confirmed)\*{0,2}\s*[:：]\s*)(.*?)(\r?\n?)$", re.IGNORECASE)
+_REQ_UNWRITTEN = ("<One or two paragraphs", "<一两段")  # the template's own first words: the agent has not written the requirement yet
+
+
+def req_state(root: Path, task: str) -> str:
+    """`none`: no REQ.md or no confirmation line. `unwritten`: the template is still empty. `open`: written, not confirmed. `confirmed`."""
+    from . import taskreview
+
+    confirmed = taskreview.req_confirmed(root, task)
+    if confirmed is None:
+        return "none"
+    if confirmed:
+        return "confirmed"
+    try:
+        text = (tasks.task_dir(root, task) / tasks.REQ_FILE).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "none"
+    return "unwritten" if any(mark in text for mark in _REQ_UNWRITTEN) else "open"
+
+
+def confirm_req(
+    root: Path, raw_task: str = "", reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None,
+) -> Dict[str, Any]:
+    """The person confirms REQ.md as it is now: the harness fills the confirmation line, which the agent never does.
+    The code to type belongs to this version of the file: a change after the person read it needs a new look."""
+    person("confirm-req", interactive)
+    task = resolve(root, raw_task, lambda item: req_state(root, item["task"]) == "open", "req")
+    data = read(root, task)
+    require_open(data)
+    state = req_state(root, task)
+    req = f"{task}/{tasks.REQ_FILE}"
+    if state in ("none", "unwritten"):
+        raise CommandError(say("req.missing", req=req))
+    if state == "confirmed":
+        raise CommandError(say("req.done", req=req))
+    path = tasks.task_dir(root, task) / tasks.REQ_FILE
+    text = path.read_text(encoding="utf-8", errors="replace")
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    approval.say(out, say("req.screen.head", task=task, round=data["round"]), say("req.screen.file", lines=len(text.splitlines()), req=req), say("req.screen.after"))
+    typed(say("req.question"), digest, say("req.refused"), reader)
+    with locked(root, task) as again:
+        require_open(again)
+        now = path.read_text(encoding="utf-8", errors="replace")
+        if hashlib.sha256(now.encode("utf-8")).hexdigest() != digest:
+            raise CommandError(say("req.changed"))
+        lines = now.splitlines(keepends=True)
+        for number, line in enumerate(lines):
+            found = _CONFIRM_LINE.match(line)
+            if found:
+                word = "已确认" if "确认" in found.group(1) else "confirmed"
+                lines[number] = f"{found.group(1)}{word} {datetime.now().strftime('%Y-%m-%d')}{found.group(3)}"
+                break
+        path.write_text("".join(lines), encoding="utf-8")
+        note(again, "confirm-req", digest[:12])
+    return {"confirmed": True, "task": task, "req": req, "next": say("req.next")}
 
 
 # --- fetch, delete, diff -------------------------------------------------------------------------

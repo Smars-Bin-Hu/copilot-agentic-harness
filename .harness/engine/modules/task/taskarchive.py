@@ -19,7 +19,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, messages, state, tasks
+from core import config, messages, render, state, tasks
 from core.paths import utc_now
 from core.registry import harness_version
 
@@ -107,6 +107,7 @@ def archive(root: Path, names: List[str], everything: bool = False, to: str = ""
             "cannot": [{"name": row["name"], "why": row["why_not"]} for row in rows if row["why_not"]],
             "archive_to": remembered(root),
             "next": say("archive.next.list" if ready else "archive.next.none"),
+            "_next_person": say("archive.person.list" if ready else "archive.next.none"),
         }
     folder = target_folder(root, to)
     by_name = {row["name"]: row for row in rows}
@@ -125,7 +126,8 @@ def archive(root: Path, names: List[str], everything: bool = False, to: str = ""
         raise CommandError(say("archive.next.none"))
     plan = [{"name": row["name"], "from": row["task"], "to": str(folder / row["name"]), "report": (root / common.TASK_REPORTS_DIR / row["name"]).is_dir()} for row in chosen]
     if not apply:
-        return {"to": str(folder), "folder_exists": folder.is_dir(), "would_move": plan, "next": say("archive.next.dry", count=len(plan))}
+        return {"to": str(folder), "folder_exists": folder.is_dir(), "would_move": plan, "next": say("archive.next.dry", count=len(plan)),
+                "_next_person": say("archive.person.dry", count=len(plan))}
     known = read_index(folder)  # before anything moves: a broken index stops the run, it is never overwritten
     folder.mkdir(parents=True, exist_ok=True)
     entries = []
@@ -163,6 +165,6 @@ def write_index(folder: Path, everything: List[Dict[str, Any]], new: List[Dict[s
     state.atomic_write(folder / INDEX_JSON, {"tasks": everything})
     page = folder / INDEX_MD
     lines = [] if page.exists() else [say("archive.index.head"), "", say("archive.index.columns"), "| --- | --- | --- | --- | --- | --- |"]
-    lines += [f"| {entry['name']} | {entry['kind']} | {entry['tier']} | {entry['closed_at'][:19].replace('T', ' ')} | {entry['archived_at'][:19].replace('T', ' ')} | {entry['from']} |" for entry in new]
+    lines += [f"| {entry['name']} | {entry['kind']} | {entry['tier']} | {render.local_time(entry['closed_at'])} | {render.local_time(entry['archived_at'])} | {entry['from']} |" for entry in new]
     with page.open("a", encoding="utf-8") as out:
         out.write("\n".join(lines) + "\n")

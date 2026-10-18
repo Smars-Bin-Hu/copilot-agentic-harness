@@ -805,6 +805,8 @@
   "archive.unknown": "No such task: {names}. Run `task archive` to see the names.",
   "archive.refused": "Nothing was moved. Cannot archive: {refused}. Already in {to}: {taken}.",
   "archive.next.list": "Ask the user which to archive (one, several, or all of them with --all) and where to. Then run it without --apply, show the user what would move, and run it with --apply only after they say yes. It is one way.",
+  "archive.person.list": "To archive: `harness task archive <name>... --to <folder>`, or `--all` for every one above. Without `--apply` it only shows what would move. Archiving is one way.",
+  "archive.person.dry": "{count} task(s) would move; nothing moved yet. To move them, run the same command with `--apply`.",
   "archive.next.none": "No closed task can be archived.",
   "archive.next.dry": "{count} task(s) would move; nothing moved yet. Show this to the user. Only after they say yes: run the same command with --apply.",
   "archive.next.done": "Moved. The list of what was archived: {index}.",

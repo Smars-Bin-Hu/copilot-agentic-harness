@@ -805,6 +805,8 @@
   "archive.unknown": "没有这个任务：{names}。运行 `task archive` 看任务名。",
   "archive.refused": "什么都没搬。不能归档：{refused}。{to} 里已经有：{taken}。",
   "archive.next.list": "问用户归档哪些（一个、几个，或用 --all 全部）、放到哪里。然后先不带 --apply 运行，把要搬的给用户看，用户说可以才带 --apply 运行。归档是单向的。",
+  "archive.person.list": "要归档：`harness task archive <任务名>... --to <文件夹>`，或用 `--all` 归档上面全部。不加 `--apply` 只显示会搬什么。归档是单向的。",
+  "archive.person.dry": "会搬走 {count} 个任务；现在还没搬。要搬，用同一条命令加 `--apply`。",
   "archive.next.none": "没有可以归档的已关闭任务。",
   "archive.next.dry": "会搬走 {count} 个任务；现在还没搬。把这些给用户看。用户说可以之后，才用同一条命令加 --apply。",
   "archive.next.done": "已搬走。归档清单：{index}。",

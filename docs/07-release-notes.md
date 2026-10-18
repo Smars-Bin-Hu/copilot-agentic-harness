@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.21 (2026-10-18)
+
+Two small fixes found while testing `task archive` by hand.
+
+**Testing**: the automatic tests pass on the Mac; `task archive` was tried by hand at a terminal. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Changed
+
+- **`task archive` talks to the person at a terminal.** Its last line told the agent what to ask the user, which a person at a terminal could not use. A person now sees the command to run (and that `--apply` is what moves things); the agent and a pipe get the same text as before.
+- **`ARCHIVE.md` shows local time**, as the terminal does. It showed UTC, so the same moment read four hours apart. `archive.json` keeps UTC.
+
 ## 1.4.20 (2026-10-18)
 
 Fixes from the first hands-on test of the task page, and one gap closed: after you approve something on the page, the board now says the agent has not been told.

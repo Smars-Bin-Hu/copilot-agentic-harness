@@ -138,7 +138,10 @@ def main(argv=None) -> int:
                 print(result["_text"])
             return code
         compact = isinstance(result, dict) and result.pop("_compact", False)  # a result an agent reads in bulk: no indentation
+        person_next = result.pop("_next_person", None) if isinstance(result, dict) else None  # a command an agent and a person both run: what to tell each
         if output.as_text(sys.stdout, forced_json, getattr(args, "person_only", False)):
+            if person_next:
+                result["next"] = person_next
             shown = getattr(args, "render", None)  # a command's own text (the task list as a table), else the generic one
             print(shown(result) if shown else render.render(result))
             return code

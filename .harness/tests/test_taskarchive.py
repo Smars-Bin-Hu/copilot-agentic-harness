@@ -57,6 +57,31 @@ class ArchiveTests(TaskCase):
         self.assertEqual([row["name"] for row in json.loads((self.shelf / "archive.json").read_text(encoding="utf-8"))["tasks"]], ["done1", "done2"])
         self.assertEqual((self.shelf / "ARCHIVE.md").read_text(encoding="utf-8").count("# "), 1)
 
+    def test_the_index_file_shows_local_time_like_the_terminal_does(self) -> None:
+        from core import render
+
+        taskarchive.archive(self.root, ["done1"], to=str(self.shelf), apply=True)
+        entry = json.loads((self.shelf / "archive.json").read_text(encoding="utf-8"))["tasks"][0]
+        self.assertIn(f"| {render.local_time(entry['closed_at'])} | {render.local_time(entry['archived_at'])} |", (self.shelf / "ARCHIVE.md").read_text(encoding="utf-8"))
+
+    def test_a_person_at_a_terminal_is_told_what_to_do_and_the_agent_what_to_ask(self) -> None:
+        import io
+        from contextlib import redirect_stdout
+        import cli
+
+        listed = taskarchive.archive(self.root, [])
+        self.assertNotEqual(listed["next"], listed["_next_person"])
+        out = io.StringIO()
+        with mock.patch.dict("os.environ", {"HARNESS_ROOT": str(self.root)}), mock.patch("cli.output.as_text", return_value=True), redirect_stdout(out):
+            cli.main(["task", "archive"])
+        self.assertNotIn(listed["next"][:8], out.getvalue())  # what is meant for the agent is not shown to the person
+        self.assertIn("--apply", out.getvalue())
+        piped = io.StringIO()
+        with mock.patch.dict("os.environ", {"HARNESS_ROOT": str(self.root)}), mock.patch("cli.output.as_text", return_value=False), redirect_stdout(piped):
+            cli.main(["task", "archive"])
+        self.assertEqual(json.loads(piped.getvalue())["next"], listed["next"])
+        self.assertNotIn("_next_person", piped.getvalue())
+
     def test_an_open_task_or_a_name_taken_stops_all_of_it(self) -> None:
         with self.assertRaises(CommandError):
             taskarchive.archive(self.root, ["done1", "busy"], to=str(self.shelf), apply=True)

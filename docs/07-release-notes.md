@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.26 (2026-10-18)
+
+### Changed
+
+- **The archive dialog does not ask for a folder in terminal words.** With no folder typed, "Show what moves" is greyed out and a line says to type an absolute path; before, it showed the terminal's message about `--to` and `--remember`.
+
 ## 1.4.25 (2026-10-18)
 
 ### Changed

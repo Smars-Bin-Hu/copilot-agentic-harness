@@ -242,6 +242,7 @@
   "board.archive.warn": "Moves each task's folder and its report out of the repository, into the folder below. One way: there is no restore.",
   "board.archive.to": "Folder (an absolute path)",
   "board.archive.remember": "Remember this folder for next time",
+  "board.archive.need": "Type the folder to move them into, as an absolute path (it is made when missing).",
   "board.archive.check": "Show what moves",
   "board.archive.go": "Archive {count}",
   "board.archive.folder": "Into {to}",

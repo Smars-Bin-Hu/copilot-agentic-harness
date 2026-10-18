@@ -242,6 +242,7 @@
   "board.archive.warn": "把每个任务的文件夹和报告从仓库里搬到下面的文件夹。单向：没有恢复。",
   "board.archive.to": "文件夹（绝对路径）",
   "board.archive.remember": "记住这个文件夹，下次用",
+  "board.archive.need": "在上面填要搬进去的文件夹，用绝对路径（不存在会新建）。",
   "board.archive.check": "看会搬什么",
   "board.archive.go": "归档 {count} 个",
   "board.archive.folder": "搬到 {to}",

@@ -61,10 +61,13 @@ const SERVE = (function () {
       h("p", {class: "sub"}, names.join(", ")), to, h("label", {class: "sub remember"}, remember, " " + t("board.archive.remember")), plan,
       h("div", {class: "row"}, check, go, no), said]);
     const body = (step) => ({tasks: names, to: to.value.trim(), remember: remember.checked, step});
-    to.addEventListener("input", () => { go.disabled = true; plan.replaceChildren(); });  // a new folder needs a new look
+    const sync = () => { check.disabled = !to.value.trim(); };  // nothing to look at before a folder is typed
+    sync();
+    to.addEventListener("input", () => { sync(); go.disabled = true; plan.replaceChildren(); said.replaceChildren(); });  // a new folder needs a new look
     no.addEventListener("click", view.close);
     check.addEventListener("click", () => {
       said.replaceChildren();
+      if (!to.value.trim()) { said.replaceChildren(h("p", null, t("board.archive.need"))); return; }
       post("/api/archive", body("preview")).then((data) => {
         const found = data.result;
         plan.replaceChildren(h("p", null, t("board.archive.folder", {to: found.to}) + (found.folder_exists ? "" : " " + t("board.archive.new"))),
@@ -78,6 +81,7 @@ const SERVE = (function () {
         (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; });
     });
     to.focus();
+    if (!to.value.trim()) said.replaceChildren(h("p", {class: "sub"}, t("board.archive.need")));
   }
 
   function act(button, row, item) {

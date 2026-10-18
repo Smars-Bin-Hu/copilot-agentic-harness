@@ -145,8 +145,8 @@ class RequirementConfirmedTests(unittest.TestCase):
     def test_no_file_tells_the_agent_to_fill_it_in(self) -> None:
         self.assertIn("Only the user may change the confirmation line of `REQ.md`", text(REPO / "AGENTS.md"))
         walk = text(REPO / ".github" / "skills" / "harness-quick-start" / "references" / "walkthrough.md")
-        self.assertIn("ask the user to change the confirmation line themselves", walk)
-        self.assertIn("you do not fill it in for them", walk)
+        self.assertIn("press **confirm requirement** on the page and type the code", walk)
+        self.assertIn("the harness fills the confirmation line, and you never do", walk)
 
     def test_the_reviewer_does_not_fail_a_task_over_it(self) -> None:
         self.assertIn("An empty confirmation line in `REQ.md` is not a finding", text(REPO / ".github" / "agents" / "reviewer.agent.md"))

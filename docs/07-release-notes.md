@@ -10,6 +10,21 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.28 (2026-10-18)
+
+The first lesson, `/harness-quick-start`, is rewritten for the way of working now: the Chat window and the board.
+
+**Testing**: the automatic tests pass on the Mac. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Changed
+
+- **The lesson has five parts**: a story from a request to a branch; what the harness gives you (six groups, each with something you can say); where you work (the Chat window and the board; you start the board once); a practice task done on the board; and how to use it every day. Before: concepts, three places (chat, task folder, terminal), a table of fourteen terminal commands, and a practice task in the terminal.
+- **The practice task is done on the task's page**: read the requirement, confirm it, look at the history, close the task, find it under Closed. The terminal is mentioned for `harness --help` and the reference only.
+
+### Retired
+
+- The reference files `concepts.md` and `map.md` of the skill. `story.md`, `capabilities.md` and `workplace.md` replace them.
+
 ## 1.4.27 (2026-10-18)
 
 Confirm the requirement from the task page.

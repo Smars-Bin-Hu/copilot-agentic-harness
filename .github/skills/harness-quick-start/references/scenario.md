@@ -13,4 +13,3 @@ The scenario must be a task that **changes no repository** (kind `design`, `rca`
 | Name of the result file | `DESIGN.md`, a three-line outline |
 | Example of a change of mind (step 5) | Add one thing: send an email when the delay is over 2 hours |
 | The prompt for the independent check (step 6, sent by the user) | `[review]=1 Please do one independent check of the design.` |
-| The example for "what you gain" (concepts.md) | "Find out why the orders table was late" |

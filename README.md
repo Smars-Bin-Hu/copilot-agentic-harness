@@ -1,7 +1,7 @@
 # GitHub Copilot Agentic Harness on VS Code
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.4.27-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.4.28-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
@@ -47,7 +47,7 @@ Clone this repository, or download the zip from GitHub and extract it (git is op
 | Step | Type | What it walks you through |
 | --- | --- | --- |
 | 1 | `/harness-get-me-ready` | **Setup**: the short command, knowledge base, company skills and target repositories, then a self-check |
-| 2 | `/harness-quick-start` | **Introductory lesson**: what the harness is for, how to read the directories, and one simulated task. About 20 minutes |
+| 2 | `/harness-quick-start` | **Introductory lesson**: a story from a request to a branch, what the harness gives you, the two places you work in (the Chat window and the board), and one practice task. About 20 minutes |
 | 3 | `/harness-wondering` | **Understand it first**: an interactive explanation of the principles and implementation, 15 topics, ask anything |
 
 The agent leads all three steps, so you don't need to read the docs first. To do it by hand, see the [quickstart](docs/01-quickstart.md).
@@ -143,4 +143,4 @@ Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENS
 
 ---
 
-Version 1.4.27 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.4.28 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

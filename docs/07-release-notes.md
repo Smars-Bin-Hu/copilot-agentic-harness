@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.29 (2026-10-18)
+
+### Changed
+
+- **The quick start (`docs/01-quickstart.md`) follows the board.** Step 3 now starts the board and says what it is for; the first task (step 5) confirms the requirement, approves the plan and approves the write-back with buttons on the task's page; step 6 describes the board's filter, search, sort, closed tasks and archive. The terminal commands are kept as "without the board" lines and in the common cases.
+
 ## 1.4.28 (2026-10-18)
 
 The first lesson, `/harness-quick-start`, is rewritten for the way of working now: the Chat window and the board.

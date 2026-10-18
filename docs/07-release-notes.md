@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.34 (2026-10-18)
+
+Small fixes to two skills, found by trying them.
+
+### Changed
+
+- **`generic-kb-refresh`: a card kept for a deleted source is marked as such.** When you choose to keep it, its index line becomes `sources: []`, `level: unknown` and `source_missing` (what still runs or uses it, and the last commit that had the file); the card starts with "Source gone". `kb stale` then stops listing it, and `kb gaps` lists it. Before, only a line was added to the card, so it stayed `verified` and `kb stale` reported it for good.
+- **`generic-kb-refresh`: the `Level: verified (read in <repo> at …)` line gets the commit of the base branch**, not the sha of the file.
+- **`generic-kb-toolkit-build`: `DESIGN.md` says what the extractor really recognises.** Where the code does more or less than a rule of the design, the line is changed to match, and `LOG.md` says so.
+
 ## 1.4.33 (2026-10-18)
 
 When a task is done, and how to close it.

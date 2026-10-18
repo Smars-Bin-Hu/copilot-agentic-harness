@@ -154,6 +154,17 @@ class StaleTests(CheckCase):
         run_git(self.repo, "commit", "-qm", "drop")
         self.assertEqual([item["id"] for item in kbstd.stale(self.root, "orders")["gone"]], ["job:Nightly_Orders"])
 
+    def test_a_card_kept_for_a_deleted_source_is_marked_source_missing_and_stale_leaves_it_be(self) -> None:
+        run_git(self.repo, "rm", "-q", "jobs/nightly.sql")
+        run_git(self.repo, "commit", "-qm", "drop")
+        self.assertEqual([item["id"] for item in kbstd.stale(self.root, "orders")["gone"]], ["job:Nightly_Orders"])  # before: listed for good
+        for row in self.rows:
+            if row["id"] == "job:Nightly_Orders":
+                row.update({"sources": [], "level": "unknown", "source_missing": {"seen_in": "its config still exists", "last_in_git": "shop_repo/jobs/nightly.sql@abc"}})
+        self.write_index()
+        result = kbstd.stale(self.root, "orders")
+        self.assertEqual((result["gone"], result["changed"], result["unstamped"]), ([], [], []))
+
     def test_diff_shows_what_changed_since_the_card(self) -> None:
         (self.repo / "db" / "usp_load_orders.sql").write_text("merge 2;\n", encoding="utf-8")
         run_git(self.repo, "commit", "-qam", "change")

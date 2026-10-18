@@ -35,7 +35,7 @@ Turn the approved design into `<knowledge base>/toolkit/`: `toolkit.json`, the e
    - `missing_sample` and `external_sample`: a long `missing` list with names that are surely in the repositories means names are resolved wrong (`names`, `markers`).
    Repeat until all facts are found, nothing fails, and every empty file is explained. Write each round in `LOG.md` in one line (facts found, failed, empty).
 5. **The production list**: write the read-only query or export of the design into `inventory/`, with one comment line on who runs it and that it returns names only. Never run it yourself.
-6. **Copy the design** into the toolkit as `DESIGN.md` (with the results of the last round), so the next person knows why it is built so.
+6. **Copy the design** into the toolkit as `DESIGN.md` (with the results of the last round), so the next person knows why it is built so. Where the extractor does something other than the design says (it recognises more or less than a rule of the design: for example the design names one base type and the extractor reads a wider pattern), change that line of `DESIGN.md` to what the toolkit really does, and say so in `LOG.md`. The file must describe the code.
 7. **Hand over**: `harness task diff`, `harness task promote --dry-run`; the write-back waits for `harness task approve-promote` in the user's terminal. After it, `harness kb map` (without `--toolkit`) builds the map the domains are cut from.
 
 ## Gotchas

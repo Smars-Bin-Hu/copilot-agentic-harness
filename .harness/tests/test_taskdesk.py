@@ -83,6 +83,11 @@ class DeskTests(ServeCase):
         self.stop()
         self.assertNotIn("/task/job1", self.context(self.prompt("go on")))
 
+    def test_the_next_step_of_a_task_that_waits_for_its_plan_names_the_page(self) -> None:
+        self.assertIn(f"http://127.0.0.1:{self.port}/task/job1", self.run_cli("task", "status", "--task", TASK)["next"])
+        self.stop()
+        self.assertNotIn("/task/job1", self.run_cli("task", "status", "--task", TASK)["next"])
+
     def test_every_action_is_on_the_page_by_default(self) -> None:
         self.assertEqual(sorted(boardserve_actions(self.root)), sorted(["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover"]))
 

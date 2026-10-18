@@ -20,12 +20,11 @@ Hook failures are fail-open: hook.py rolls back this module's state changes and 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from urllib.parse import quote
 
 from core import guardrails, messages, repo_paths, tasks
 from core.context import Context
 from core.events import Decision, HookEvent
-from core.paths import board_serve_port, cli_command
+from core.paths import cli_command
 
 from . import mapreduce
 from .policy import POLICY_NAME, validate_policy
@@ -99,9 +98,9 @@ def task_text(ctx: Context, data: Dict[str, Any]) -> str:
         info = taskreview.summary(ctx.root, name, data)
         lines.append(say("review.inject", n=info["n"], passes=info["passes"], used=info["checks_used"], limit=info["checks_limit"], agent=taskreview.AGENT))
     lines.append(say("task.inject.scope", task=name))
-    port = board_serve_port(ctx.root)
-    if port:  # the person follows the task on its page: links to task files can point there
-        lines.append(say("task.inject.board", url=f"http://127.0.0.1:{port}/task/{quote(task_ops.name_of(name))}"))
+    page = task_ops.page_url(ctx.root, name)
+    if page:  # the person follows the task on its page: links to task files can point there
+        lines.append(say("task.inject.board", url=page))
     from . import tasklife  # imported late, as task_ops above
 
     hint = tasklife.domain_hint(ctx.root, data)

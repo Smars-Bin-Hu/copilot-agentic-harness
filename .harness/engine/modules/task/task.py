@@ -23,9 +23,10 @@ import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from urllib.parse import quote
 
 from core import approval, messages, standards, tasks
-from core.paths import cli_command, utc_now
+from core.paths import board_serve_port, cli_command, utc_now
 from core.state import admin_on, atomic_write, session, state_lock, state_path
 
 from . import common, promote_target
@@ -224,12 +225,19 @@ def archive_round(root: Path, task: str, data: Dict[str, Any]) -> None:
     data.update(round=number + 1, round_started_at=utc_now(), targets={}, target_files={}, deletes=[], plan={}, promote={"state": "none"}, branch="")
 
 
+def page_url(root: Path, task: str) -> str:
+    """The address of the task's page while the board runs, else an empty string."""
+    port = board_serve_port(root)
+    return f"http://127.0.0.1:{port}/task/{quote(name_of(task))}" if port else ""
+
+
 def next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
     plan, dev = f"{task}/{tasks.PLAN_NAME}", f"{task}/{tasks.DEV_NAME}"
+    page = say("task.step.page", url=page_url(root, task)) if page_url(root, task) else ""  # where the user reads the plan
     if not tasks.plan_digest(root, task):
-        return say("task.step.plan", plan=plan, dev=dev, task=task)
+        return say("task.step.plan", plan=plan, dev=dev, task=task) + page
     if not tasks.plan_approved(root, task, data):
-        return say("task.step.approve", plan=plan, dev=dev, task=task)
+        return say("task.step.approve", plan=plan, dev=dev, task=task) + page
     text = say("task.step.approved", dev=dev, task=task)
     if data.get("target_mode"):
         text += say("task.step.fetch")

@@ -2,8 +2,5 @@
   "chat.useHooks": true,
   "chat.useAgentsMdFile": true,
   "chat.includeApplyingInstructions": true,
-  "github.copilot.chat.codeGeneration.useInstructionFiles": true,
-  "workbench.editorAssociations": {
-    "*.md": "vscode.markdown.preview.editor"
-  }
+  "github.copilot.chat.codeGeneration.useInstructionFiles": true
 }

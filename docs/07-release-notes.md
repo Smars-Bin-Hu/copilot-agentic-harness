@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.22 (2026-10-18)
+
+Found while trying the task page with a real Copilot session: the agent did not know the page's address, and the Markdown preview setting was not wanted.
+
+**Testing**: the automatic tests pass on the Mac; tried in Copilot (VS Code) by hand: the agent now gives the page address. **Not run on Windows**.
+
+### Changed
+
+- **The agent knows the address of the task's page.** While the board runs, `task new`, `task open` and `task status` name the page in their next step, so the agent has it when it first writes the plan. The line injected with every prompt now says that this is the task's URL and when to give it; before, an agent asked for the URL looked for one in the task's files.
+
+### Retired
+
+- **`.vscode/settings.json` no longer opens `.md` files as rendered previews** (added in 1.4.19). The task page shows them rendered; in VS Code they open as text again.
+
 ## 1.4.21 (2026-10-18)
 
 Two small fixes found while testing `task archive` by hand.

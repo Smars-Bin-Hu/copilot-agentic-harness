@@ -56,7 +56,7 @@ def say(key: str, /, **values: Any) -> str:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive"]}
+    return {"port": config.whole(found.get("port"), 8765), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive", "close"]}
 
 
 class Preview(Exception):
@@ -139,6 +139,15 @@ class Board:
         result = taskarchive.archive(self.root, names, False, str(data.get("to", "")).strip(), apply, bool(data.get("remember")) and apply)
         if apply:
             print(say("serve.did", action="archive", task=", ".join(result["archived"])), flush=True)
+        return result
+
+    def close(self, name: str) -> Dict[str, Any]:
+        """Close a task (`task close`): the report is written, the session lets go. The folder stays; `task open` opens it again.
+        The browser must be paired; no code is typed, for it undoes nothing that cannot be undone."""
+        if "close" not in self.actions:
+            raise CommandError(say("serve.action.off", action="close"))
+        result = task_ops.close(self.root, name, say("serve.close.reason"))
+        print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
     def act(self, action: str, task: str, step: str, code: str = "") -> Dict[str, Any]:
@@ -254,6 +263,13 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, board.rows())
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
                     return self.answer(500, {"error": str(error)})
+            if path == "/api/close":
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed")})
+                try:
+                    return self.answer(200, {"result": board.close(str(data.get("task", "")))})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
+                    return self.answer(409, {"error": str(error)})
             if path == "/api/archive":
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed")})

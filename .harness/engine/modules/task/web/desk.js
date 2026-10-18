@@ -113,7 +113,7 @@
 
   function actions() {
     if (desk.status !== "open") return h("section", {class: "card actions quiet"}, h("p", {class: "sub"}, t("desk.actions.closed")));
-    const optional = ["confirm-req", "pause", "resume", "autorun on"];  // the person may do these any time; the rest is what the task waits for
+    const optional = ["confirm-req", "pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
     const items = desk.actions.filter((item) => !optional.includes(item.action));
     const rest = desk.actions.filter((item) => optional.includes(item.action));
     const row = {name: desk.name, waiting: desk.waiting};

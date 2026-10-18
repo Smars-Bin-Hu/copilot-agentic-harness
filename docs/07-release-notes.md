@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.33 (2026-10-18)
+
+When a task is done, and how to close it.
+
+**Testing**: the automatic tests pass on the Mac. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **A close button** on every open task, on the board and on the task's page. It asks you once (it writes the report and lets the session go; the task can be opened again), and needs the paired browser, no code. `close` is one of `board.actions` (on by default).
+
+### Changed
+
+- **The agent asks before it closes** a task that changes no repository (a question, an RCA, a design). Nothing told it when such a task was done, so these stayed open until you said so. Now, once the result is written and the "Done when" of `REQ.md` are met, it asks "close it?" and runs `task close` only after you say yes. A task that is written back is closed by the agent when everything is done, as before.
+
 ## 1.4.32 (2026-10-18)
 
 ### Changed

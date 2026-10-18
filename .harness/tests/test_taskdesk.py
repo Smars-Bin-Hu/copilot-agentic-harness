@@ -156,6 +156,26 @@ class DeskTests(ServeCase):
         self.assertEqual(str(raised.exception), messages.text("req.changed"))
         self.assertEqual(task_ops.req_state(self.root, TASK), "open")
 
+    def test_a_paired_browser_closes_a_task_from_the_page_and_the_agent_is_told_to_ask_first(self) -> None:
+        self.assertEqual(self.request("POST", "/api/close", {"task": "job1"})[0], 403)  # not paired
+        self.assertIn("close", [item["action"] for item in taskdesk.desk(self.root, "job1", ("close", "pause"))["actions"]])
+        cookie = self.pair()
+        self.assertEqual(self.request("POST", "/api/close", {"task": "nope"}, cookie=cookie)[0], 409)
+        status, data, _headers = self.request("POST", "/api/close", {"task": "job1"}, cookie=cookie)
+        self.assertEqual((status, data["result"]["status"]), (200, "closed"))
+        self.assertEqual(self.data()["status"], "closed")
+        self.assertEqual(self.data()["events"][-1]["detail"], messages.text("serve.close.reason"))
+        self.assertNotIn("close", [item["action"] for item in taskdesk.desk(self.root, "job1", ("close",))["actions"]])  # a closed task offers none
+        self.assertTrue(any(row["name"] == "job1" and row["status"] == "closed" for row in self.request("POST", "/api/board", {})[1]["rows"]))
+
+    def test_the_step_of_a_task_without_a_plan_says_to_ask_the_user_before_closing(self) -> None:
+        with task_ops.locked(self.root, TASK) as data:
+            data["plan"] = {}
+        (self.task / "PLAN.md").unlink()
+        said = task_ops.next_step(self.root, TASK, self.data())
+        self.assertIn("task close", said)
+        self.assertTrue("whether to close" in said or "要不要关闭" in said)
+
     def test_the_agent_is_told_the_address_of_the_page_while_the_board_runs(self) -> None:
         context = self.context(self.prompt("go on"))
         self.assertIn(f"http://127.0.0.1:{self.port}/task/job1", context)
@@ -168,7 +188,7 @@ class DeskTests(ServeCase):
         self.assertNotIn("/task/job1", self.run_cli("task", "status", "--task", TASK)["next"])
 
     def test_every_action_is_on_the_page_by_default(self) -> None:
-        self.assertEqual(sorted(boardserve_actions(self.root)), sorted(["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive", "confirm-req"]))
+        self.assertEqual(sorted(boardserve_actions(self.root)), sorted(["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive", "close", "confirm-req"]))
 
 
     def test_a_page_action_is_one_line_with_a_tag_and_the_session_note_follows_the_language(self) -> None:

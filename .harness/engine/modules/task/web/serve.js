@@ -84,7 +84,22 @@ const SERVE = (function () {
     if (!to.value.trim()) said.replaceChildren(h("p", {class: "sub"}, t("board.archive.need")));
   }
 
+  // Close a task: one confirm. It writes the report and lets the session go; the folder stays, and `task open` opens it again.
+  function close(row) {
+    const said = h("div", {class: "bad"});
+    const go = h("button", {class: "act hot", type: "button"}, t("board.close.go"));
+    const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
+    const view = dialog([h("h2", null, t("board.close.title", {name: row.name})), h("p", null, t("board.close.warn")), h("div", {class: "row"}, go, no), said]);
+    no.addEventListener("click", view.close);
+    go.addEventListener("click", () => {
+      go.disabled = true;
+      post("/api/close", {task: row.name}).then(() => { view.close(); location.reload(); },
+        (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; });
+    });
+  }
+
   function act(button, row, item) {
+    if (item.action === "close") return close(row);
     if (item.action === "archive") return archive([row.name], serve.archive_to);
     const body = {action: item.action, task: row.name};
     if (free(item.action)) {

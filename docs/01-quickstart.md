@@ -119,7 +119,7 @@ One agent; you confirm the requirement, you approve the plan, and you approve th
 7. With independent checks on, the agent runs `task review start`, then calls the reviewer. When it does not pass, the agent fixes things itself and checks again; it can go on only with enough passes. The verdicts are under `REVIEW/`.
 8. The agent runs `task promote --dry-run`. The **Changes** tab shows the whole diff of the write-back. If you agree, press **approve write-back** and type the code, then tell the agent.
 9. The agent runs `task promote`: in every target repository it makes a new branch `feature/<task name>` from main and writes the files into it, **without committing**.
-10. You read the diff, commit and open the PR yourself. After the task is closed, the report is at `.workspace/reports/tasks/<task name>/report.md`, and the **Time and usage** page of the task shows where the time went.
+10. You read the diff, commit and open the PR yourself. When the work is done, the agent closes the task (or, for a task that changes no repository, asks you; you can also press **close** on the task's page). After the task is closed, the report is at `.workspace/reports/tasks/<task name>/report.md`, and the **Time and usage** page of the task shows where the time went.
 
 Without the board, the same decisions are commands you run in **your own terminal**: `harness task confirm-req`, `harness task approve-plan` and `harness task approve-promote`, each with the code shown on the screen.
 

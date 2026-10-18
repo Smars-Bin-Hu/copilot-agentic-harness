@@ -40,7 +40,8 @@
       "review waive",
       "autorun on",
       "recover",
-      "archive"
+      "archive",
+      "close"
     ]
   }
 }

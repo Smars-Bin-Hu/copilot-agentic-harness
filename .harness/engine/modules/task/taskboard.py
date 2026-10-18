@@ -112,6 +112,8 @@ def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str,
     if "autorun on" in served and not row.get("autorun") and not row.get("paused_since"):
         found.append("autorun on")
     found.append("resume" if row.get("paused_since") else "pause")
+    if "close" in served:
+        found.append("close")
     return [{"action": action, "command": f"{cli_command()} task {action} --task {row['name']}"} for action in found]
 
 

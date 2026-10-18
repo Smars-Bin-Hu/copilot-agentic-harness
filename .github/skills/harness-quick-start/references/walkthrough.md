@@ -71,7 +71,7 @@ Say it in three sentences: the agent never changes the real repository directly;
 
 ### 9. Wrapping up
 
-Run `harness task close`. On the board the task is now closed: set the filter to **Closed** to see it. Give the user the link to the report ("Time and usage" on the task's page). Tell them: the folder is still there, `task open` opens it again, and when they want it out of the way they can archive it from the board (a button on every closed task). Ask whether they want this practice task archived.
+The work is done. Ask the user whether to close the task, and tell them what closing does: it writes the report and lets the session go, and the task can be opened again. Close it only after they say yes: run `harness task close`, or the user presses **close** on the task's page. On the board the task is now closed: set the filter to **Closed** to see it. Give the user the link to the report ("Time and usage" on the task's page). Tell them: the folder is still there, `task open` opens it again, and when they want it out of the way they can archive it from the board (a button on every closed task). Ask whether they want this practice task archived.
 
 Last, use this table to tell them which other features start only when they type something themselves (all of them cost usage, so the agent does not use them by itself):
 

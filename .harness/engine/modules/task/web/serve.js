@@ -23,9 +23,27 @@ const SERVE = (function () {
     return {box, close: () => { shade.remove(); busy = false; }};
   }
 
+  // A refusal may list reasons, one "- reason" a line: the lines are drawn as lines, not run together.
+  function reasons(text) {
+    const out = [];
+    let list = null;
+    for (const line of String(text).split("\n")) {
+      if (!line.trim()) continue;
+      const item = line.match(/^\s*[-\u2013\u2022]\s+(.*)$/);
+      if (item) {
+        if (!list) { list = h("ul", {class: "reasons"}); out.push(list); }
+        list.append(h("li", null, item[1]));
+      } else {
+        list = null;
+        out.push(h("p", null, line.trim()));
+      }
+    }
+    return out;
+  }
+
   function failed(error) {
     const close = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
-    const view = dialog([h("p", {class: "bad"}, String(error.message || error)), close]);
+    const view = dialog([h("div", {class: "bad"}, reasons(error.message || error)), close]);
     close.addEventListener("click", view.close);
   }
 
@@ -40,14 +58,14 @@ const SERVE = (function () {
       const input = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("board.serve.code")});
       const yes = h("button", {class: "act hot", type: "button"}, t("board.serve.confirm"));
       const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
-      const said = h("p", {class: "bad"});
+      const said = h("div", {class: "bad"});
       const view = dialog([h("h2", null, button.dataset.label + " · " + row.name), ...data.result.screen.map((line) => h("p", {class: "sub"}, line)),
         h("p", null, data.result.ask), input, h("div", {class: "row"}, yes, no), said]);
       no.addEventListener("click", view.close);
       const send = () => {
         yes.disabled = true;
         post("/api/act", {...body, step: "act", code: input.value.trim()}).then(() => { view.close(); location.reload(); },
-          (error) => { said.textContent = error.message; yes.disabled = false; });
+          (error) => { said.replaceChildren(...reasons(error.message)); yes.disabled = false; });
       };
       yes.addEventListener("click", send);
       input.addEventListener("keydown", (event) => { if (event.key === "Enter") send(); });

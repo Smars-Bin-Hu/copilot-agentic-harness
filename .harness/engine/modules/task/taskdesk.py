@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from core import messages, tasks
 from core.paths import utc_now
 
-from . import common, mdtree, task as task_ops, taskboard, tasklife
+from . import common, mdtree, task as task_ops, taskboard, taskinsight, tasklife
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
 MAX_DOC_BYTES = 400_000  # a bigger document is shown cut, with a note
@@ -43,12 +43,18 @@ def documents(root: Path, task: str) -> List[Dict[str, Any]]:
 
 
 def history(data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """The audit trail, newest first, each line in words."""
-    out = []
-    for event in reversed(data.get("events") or []):
+    """The audit trail, newest first, each line in words. The line `board` (the action came from the page) is folded into
+    the line the action wrote just before it, as `via`. A session's note is told again in the language set now."""
+    out: List[Dict[str, Any]] = []
+    for event in data.get("events") or []:
         what = str(event.get("what", ""))
+        if what == "board" and out:
+            out[-1]["via"] = "board"
+            continue
         label = say(f"event.{what}") if f"event.{what}" in messages.table(messages.language()) else what
-        out.append({"at": event.get("at", ""), "round": event.get("round", 1), "what": what, "label": label, "detail": str(event.get("detail", ""))})
+        detail = taskinsight.SESSION_IN_DETAIL.sub(lambda found: say("task.note.session", session_id=found.group(1)), str(event.get("detail", "")))
+        out.append({"at": event.get("at", ""), "round": event.get("round", 1), "what": what, "label": label, "detail": detail, "via": ""})
+    out.reverse()
     return out
 
 

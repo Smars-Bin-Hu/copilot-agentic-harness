@@ -107,3 +107,13 @@ function actionButton(row, item, extra) {
   button.addEventListener("click", () => (live ? SERVE.act(button, row, item) : copyCommand(button, item.command)));
   return button;
 }
+
+// The name of the workspace above a page, and the notice at its foot (the NOTICE file asks for it to be kept).
+function brand() {
+  const served = /^https?:$/.test(location.protocol);
+  return h("div", {class: "brand"}, served ? h("a", {href: "/"}, t("board.brand")) : t("board.brand"));
+}
+
+function copyright() {
+  return h("p", {class: "copyright"}, t("board.copyright"));
+}

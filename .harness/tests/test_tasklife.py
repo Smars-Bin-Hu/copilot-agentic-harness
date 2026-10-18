@@ -280,7 +280,9 @@ class ListTests(LifeCase):
         self.assertEqual(result["waiting"], 1)
         digest = tasks.plan_digest(self.root, f"{BASE}/first")
         task_ops.approve_plan(self.root, f"{BASE}/first", reader=lambda _prompt: digest[:8], interactive=True, out=io.StringIO())
-        self.assertEqual(self.listed()["waiting"], 0)
+        found = self.listed()["tasks"][0]  # nobody told the agent: the task now waits for the person to say so
+        self.assertEqual((found["waiting_why"], found["waiting"]), ("go-plan", "计划批准了：告诉 agent 可以开始"))
+        self.assertEqual(self.listed()["waiting"], 1)
 
     def test_a_dry_run_and_a_broken_promote_are_named(self) -> None:
         self.new("job", "dev")
@@ -486,7 +488,7 @@ class MessageTests(unittest.TestCase):
     def test_no_message_is_left_unused(self) -> None:
         source = "\n".join(path.read_text(encoding="utf-8") for path in [*ENGINE.rglob("*.py"), *(ENGINE / "modules" / "task" / "web").glob("*.js")])
         dynamic = (
-            "task.kind.", "task.tier.", "task.next.light", "task.next.medium", "task.next.full", "task.waiting.", "desk.hint.", "desk.tab.", "desk.changes.", "desk.missing.",
+            "task.kind.", "task.tier.", "task.next.light", "task.next.medium", "task.next.full", "task.waiting.", "desk.hint.", "desk.wait.", "desk.go.", "desk.via.", "desk.tab.", "desk.changes.", "desk.missing.",
             "insight.stage.", "insight.part.", "insight.wait.", "insight.finding.", "report.source.", "report.status.", "board.state.", "board.queue.", "board.action.", "autorun.why.", "unit.",
             "gate.git.why.", "promote.hint.", "task.resolve.", "log.count.", "path.what", "delete.what", "approval.person_only", "event.", "mdreport.promote.", "doctor.language.source.", "doctor.override.how.", "doctor.target.kind.", "doctor.output.sample",
         )

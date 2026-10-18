@@ -217,7 +217,9 @@ Ask in your own words; the agent picks the skill (it asks first for the ones mar
 
 ## The task page in the browser
 
-With `task board --serve` running, a click on a task opens its page: what waits for you (each button with a line on when to press it), the plan, the TODO with its progress, the log, the history, the files the task changes and their diff. The documents are drawn as pages, not shown as raw markdown. You can follow and approve a task there, and talk to the agent and check the code in VS Code. What an agent writes is drawn as text only: nothing in a task file can run on the page or send anything elsewhere.
+With `task board` running in your terminal, a click on a task opens its page: what waits for you (each button with a line on when to press it), the plan, the TODO with its progress, the log, the history, the files the task changes and their diff. The documents are drawn as pages, not shown as raw markdown. You can follow and approve a task there, and talk to the agent and check the code in VS Code. What an agent writes is drawn as text only: nothing in a task file can run on the page or send anything elsewhere.
+
+The board says a task waits for you when the plan or the write-back waits for approval, a write-back failed halfway, the checks are used up, the agent stopped, or autorun ended. When you approve something on the page the agent is not told, so the task keeps waiting for you until your next message to it: the page says so and gives a message to copy into VS Code.
 
 ## Observability: logs, statistics, reports, scenario checks
 

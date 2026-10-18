@@ -84,12 +84,31 @@
     const state = desk.status !== "open" ? tag(t("board.state." + (desk.status === "new" ? "new" : "closed")))
       : desk.paused_since ? tag(t("board.state.paused")) : desk.waiting ? tag(desk.waiting, "hot long") : tag(t("board.state.running"), "good");
     return [
+      brand(),
       h("div", {class: "crumbs sub"}, h("a", {href: "/"}, "← " + t("desk.back")),
         desk.report ? [" · ", h("a", {href: desk.report.split("/").map(encodeURIComponent).join("/")}, t("desk.report"))] : null),
       h("div", {class: "title-row"}, h("h1", null, desk.name), state),
       h("div", {class: "sub"}, t("desk.subtitle", {kind, round: desk.round, created: when(desk.created_at, 0, 16), updated: when(desk.updated_at, 0, 16)}),
         desk.domains.length ? " · " + t("desk.domains", {names: desk.domains.join(", ")}) : "", desk.autorun ? [" · ", tag(t("desk.autorun"), "good")] : null),
     ];
+  }
+
+  // What the card says when no button is the point: put aside, waiting for a word in VS Code, or really nothing.
+  function quiet() {
+    if (desk.paused_since) return {title: t("desk.actions.paused"), hint: t("desk.actions.paused.hint")};
+    const why = desk.waiting_why;
+    if (desk.waiting && (["stopped", "autorun"].includes(why) || why.startsWith("go-"))) {
+      return {title: desk.waiting.charAt(0).toUpperCase() + desk.waiting.slice(1), hint: t("desk.wait." + why),
+        prompt: why.startsWith("go-") ? t("desk.go." + why.slice(3)) : ""};
+    }
+    return {title: t("desk.actions.none"), hint: t("desk.actions.none.hint")};
+  }
+
+  // A message the person sends to the agent in VS Code: one click copies it.
+  function promptLine(text) {
+    const button = h("button", {type: "button", class: "act", "data-label": t("desk.go.copy")}, t("desk.go.copy"));
+    button.addEventListener("click", () => copyCommand(button, text));
+    return h("div", {class: "prompt-line"}, h("code", null, text), button);
   }
 
   function actions() {
@@ -101,10 +120,11 @@
     const hint = (item) => t("desk.hint." + item.action.replace(" ", "-"));
     const entry = (item) => h("div", {class: "action"}, actionButton(row, item, "big"), h("p", {class: "hint"}, hint(item)));
     const line = (item) => h("div", {class: "action-line"}, actionButton(row, item), h("span", {class: "hint"}, hint(item)));
+    const idle = items.length ? null : quiet();
     return h("section", {class: "card actions"},
-      h("h2", null, items.length ? t("desk.actions.title") : t("desk.actions.none")),
-      items.length && desk.waited_s !== null ? h("p", {class: "sub"}, t("desk.waited", {time: clock(desk.waited_s)})) : null,
-      items.length ? h("div", {class: "action-list"}, items.map(entry)) : h("p", {class: "hint"}, t("desk.actions.none.hint")),
+      h("h2", null, idle ? idle.title : t("desk.actions.title")),
+      desk.waited_s !== null && (items.length || desk.waiting) ? h("p", {class: "sub"}, t("desk.waited", {time: clock(desk.waited_s)})) : null,
+      idle ? [h("p", {class: "hint"}, idle.hint), idle.prompt ? promptLine(idle.prompt) : null] : h("div", {class: "action-list"}, items.map(entry)),
       rest.length ? h("div", {class: "action-more"}, h("div", {class: "sub label"}, t("desk.actions.more")), rest.map(line)) : null,
       typeof SERVE === "undefined" ? h("p", {class: "sub"}, t("board.copy.hint")) : SERVE.banner());
   }
@@ -157,7 +177,7 @@
     if (!desk.history.length) return h("div", {class: "empty-state"}, h("b", null, t("desk.history.none")));
     return h("ol", {class: "timeline"}, desk.history.map((event) => h("li", {class: "ev-" + event.what},
       h("span", {class: "when sub"}, when(event.at, 5, 16)), h("b", null, event.label),
-      event.detail ? h("span", {class: "sub"}, " · " + event.detail) : null, event.round > 1 ? h("span", {class: "tag"}, t("desk.round", {round: event.round})) : null)));
+      event.detail ? h("span", {class: "sub"}, " · " + event.detail) : null, event.via ? h("span", {class: "tag"}, t("desk.via." + event.via)) : null, event.round > 1 ? h("span", {class: "tag"}, t("desk.round", {round: event.round})) : null)));
   }
 
   function openDoc(name) {
@@ -190,7 +210,7 @@
   function draw(keepScroll) {
     const y = window.scrollY;
     app.replaceChildren(...header(), actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
-      h("footer", null, t("desk.footer", {as_of: when(desk.as_of, 0, 19)})));
+      h("footer", null, t("desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright()));
     if (keepScroll) window.scrollTo(0, y);
   }
 

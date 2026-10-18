@@ -10,6 +10,27 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.20 (2026-10-18)
+
+Fixes from the first hands-on test of the task page, and one gap closed: after you approve something on the page, the board now says the agent has not been told.
+
+**Testing**: the automatic tests pass on the Mac, and the pages were tried in Chrome by hand. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **"Tell the agent" state.** When you approve a plan or a write-back, recover a failed write-back, or decide on the independent checks (more checks, or waive them), nothing tells the agent. The board used to say "Nothing waits for you", which looked as if the task had gone on by itself. Now the task waits for you until your next message in its session, the board says so ("the plan is approved: tell the agent to go on"), and the task page gives a message you can copy into VS Code.
+- **A name and a notice on every page.** The home page is the *Harness Workspace*; every page has the name on top (a link home when served) and the copyright notice at the foot.
+- **Way back from "Time and usage".** The page has links to the board and to the task page when the board serves it.
+
+### Changed
+
+- **The task page says what the state is.** A task put aside says so (it used to say "the agent is working"). The text for "nothing waits for you" now says that the agent has not stopped since your last message.
+- **The history is shorter.** An action done on the page is the same line as the action, with a small tag; before, it was two lines. The note of a session follows the language setting.
+- **Refusals list their reasons** one to a line, and long paths in a dialog wrap.
+- **The Do column of the board wraps** its buttons instead of running out of the card.
+- **`recover` says so when the promote record is incomplete**, instead of showing a field name.
+- **Texts no longer tell you to start `task board --serve`**: run in your own terminal, `task board` serves.
+
 ## 1.4.19 (2026-10-17)
 
 Follow a task in the browser: its plan, TODO, log, history and changes, drawn as pages, with the buttons to approve it next to them.

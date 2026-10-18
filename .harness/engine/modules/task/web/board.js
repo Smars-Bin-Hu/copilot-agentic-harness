@@ -15,8 +15,8 @@
 
   document.querySelector("main").classList.add("wide");
   app.replaceChildren(
-    h("h1", null, t("board.title")),
-    h("div", {class: "sub"}, DATA.serve ? t("board.subtitle.served", {as_of: when(DATA.as_of, 0, 19), seconds: DATA.serve.refresh})
+    h("h1", null, t("board.brand")),
+    h("div", {class: "sub"}, h("b", null, t("board.title")), " · ", DATA.serve ? t("board.subtitle.served", {as_of: when(DATA.as_of, 0, 19), seconds: DATA.serve.refresh})
       : t(DATA.refresh ? "board.subtitle.fresh" : "board.subtitle", {as_of: when(DATA.as_of, 0, 19), seconds: DATA.refresh})),
     h("div", {class: "kpis"},
       kpi(rows.filter((row) => row.status === "open").length, t("board.kpi.open")),
@@ -63,7 +63,7 @@
   });
   app.append(
     h("div", {class: "card"}, table(head, lines), legend([["work", t("report.active"), ""], ["wait", t("report.waiting"), ""]])),
-    h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint")));
+    h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint")), copyright());
 
   if (typeof SERVE !== "undefined") SERVE.start(app);
 })();

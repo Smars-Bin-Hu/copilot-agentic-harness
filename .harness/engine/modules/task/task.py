@@ -340,6 +340,7 @@ def approve_plan(
             raise CommandError(say("plan.changed"))
         again["plan"] = {"approved_sha256": current, "approved_at": utc_now()}
         note(again, "approve-plan", current[:12])
+        again["waiting"] = {"since": utc_now(), "why": "go-plan"}  # nobody told the agent: the board says so until the next prompt
     from . import tasksnap  # it needs this module
 
     snapshot = tasksnap.take(root, task, "plan")["snapshot"]
@@ -641,6 +642,7 @@ def approve_promote(
         again["promote"]["approved_plan_sha256"] = result["plan_sha256"]
         again["promote"]["approved_at"] = utc_now()
         note(again, "approve-promote", result["plan_sha256"][:12])
+        again["waiting"] = {"since": utc_now(), "why": "go-promote"}
     return {"approved": True, "task": task, "files": len(result["files"]), "review_file": review, "next": say("promote.next")}
 
 
@@ -654,6 +656,8 @@ def recover(
     record = data["promote"]
     if record["state"] != "partial":
         raise CommandError(say("recover.not_needed"))
+    if not all(record.get(key) for key in ("plan_sha256", "branch")) or "recovery_steps" not in record:
+        raise CommandError(say("recover.broken", task=task))  # the record is not the one a promote writes: nothing to replay
     lines = [say("recover.screen.head", task=task, repo=record.get("repo_failed", ""), error=record.get("error", ""))]
     lines += [f"  {command}" for command in record.get("recovery", [])] or [say("recover.screen.none")]
     approval.say(out, *lines)
@@ -667,5 +671,6 @@ def recover(
     with locked(root, task) as again:
         again["promote"] = {"state": "none", "recovered_at": utc_now()}
         note(again, "recover")
+        again["waiting"] = {"since": utc_now(), "why": "go-recover"}
     counts = {name: sum(1 for item in results if item["status"] == name) for name in ("done", "skipped")}
     return {"recovered": True, "task": task, **counts, "next": say("recover.next")}

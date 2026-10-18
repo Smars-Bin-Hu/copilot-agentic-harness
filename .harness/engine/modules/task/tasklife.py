@@ -223,11 +223,14 @@ def last_event(data: Dict[str, Any], *names: str) -> str:
     return next((event.get("at", "") for event in reversed(data.get("events") or []) if event.get("what") in names), "")
 
 
+GO_MARKS = ("go-plan", "go-promote", "go-recover", "go-review")  # an approval was given and the agent has not been told (the next prompt takes the mark away)
+
+
 def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     """What the task waits on the person for and since when, told from facts. `why` is empty when it waits for nothing.
 
     The order is by how much it blocks: a broken promote, an approval, checks that ran out, and last the mark the
-    Stop hook left (the agent of the task's session stopped: the next move is the person's).
+    Stop hook left (the agent of the task's session stopped: the next move is the person's) or an approval left (`go-*`).
     """
     state = (data.get("promote") or {}).get("state", "none")
     updated = data.get("updated_at", "")
@@ -252,6 +255,8 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
         pass
     mark = data.get("waiting")
     if isinstance(mark, dict) and mark.get("since"):
+        if mark.get("why") in GO_MARKS:
+            return {"why": str(mark["why"]), "since": str(mark["since"])}  # approved on a page or in a terminal; the agent is not told yet
         run = data.get("autorun") if isinstance(data.get("autorun"), dict) else {}
         ended = run.get("stopped") if run.get("state") == "off" else None
         if isinstance(ended, dict) and str(ended.get("at", "")) <= str(mark["since"]) and ended.get("why") not in ("person",):

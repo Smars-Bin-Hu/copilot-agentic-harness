@@ -304,6 +304,7 @@ def extend(root: Path, raw_task: str, checks: int, reader: Optional[Callable[[st
     with task_ops.locked(root, task) as again:
         state_of(again)["extra"] += checks
         task_ops.note(again, "review-extend", f"+{checks}")
+        again["waiting"] = {"since": utc_now(), "why": "go-review"}  # the agent is not told: the board says so until the next prompt
         new_limit = limit(root, again)
     return {"task": task, "checks_limit": new_limit, "next": say("review.extend.next")}
 
@@ -323,6 +324,7 @@ def waive(root: Path, raw_task: str, reader: Optional[Callable[[str], str]] = No
             raise CommandError(say("review.waive.changed"))
         state_of(again)["waived"] = {"digest": info["digest"], "at": utc_now(), "task_round": again["round"]}
         task_ops.note(again, "review-waive", info["digest"][:12])
+        again["waiting"] = {"since": utc_now(), "why": "go-review"}
     return {"task": task, "waived": True, "next": say("review.waive.next")}
 
 

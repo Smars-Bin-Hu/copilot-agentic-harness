@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import io
 import json
 import unittest
 
 import support  # noqa: F401  (puts the engine on sys.path)
 from test_boardserve import ServeCase
 
-from modules.task import mdtree, taskdesk
+from taskcase import TASK
+
+from core import messages, tasks
+from modules.task.common import CommandError
+from modules.task import mdtree, task as task_ops, taskdesk
 
 
 def kinds(spans):
@@ -80,6 +85,48 @@ class DeskTests(ServeCase):
 
     def test_every_action_is_on_the_page_by_default(self) -> None:
         self.assertEqual(sorted(boardserve_actions(self.root)), sorted(["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover"]))
+
+
+    def test_a_page_action_is_one_line_with_a_tag_and_the_session_note_follows_the_language(self) -> None:
+        with task_ops.locked(self.root, TASK) as data:
+            task_ops.note(data, "pause")
+            task_ops.note(data, "board", "pause")
+            task_ops.note(data, "start", "会话 abc-123")
+        found = taskdesk.desk(self.root, "job1", ())["history"]
+        self.assertEqual([item["what"] for item in found[:2]], ["start", "pause"])
+        self.assertEqual(found[1]["via"], "board")
+        self.assertEqual(found[0]["detail"], "会话 abc-123" if messages.language() == "zh" else "session abc-123")
+        self.assertNotIn("board", [item["what"] for item in found])
+
+    def test_a_promote_record_that_is_not_complete_is_refused_in_words(self) -> None:
+        with task_ops.locked(self.root, TASK) as data:
+            data["promote"] = {"state": "partial"}
+        with self.assertRaises(CommandError) as raised:
+            task_ops.recover(self.root, TASK, reader=lambda _prompt: "x", interactive=True, out=io.StringIO())
+        self.assertIn("job1", str(raised.exception))
+        self.assertNotIn("plan_sha256", str(raised.exception))
+
+    def test_a_decision_on_the_checks_and_a_recovery_leave_the_same_mark(self) -> None:
+        from modules.task import taskreview, tasksnap
+
+        code = (tasksnap.results_digest(self.root, TASK) or "0" * 64)[:8]
+        taskreview.extend(self.root, TASK, 2, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
+        self.assertEqual(self.data()["waiting"]["why"], "go-review")  # the plan of this case is not approved: it would be named first
+        self.prompt("go on")
+        with task_ops.locked(self.root, TASK) as data:
+            data["promote"] = {"state": "partial", "plan_sha256": "ab" * 32, "branch": "feature/job1", "recovery": [], "recovery_steps": []}
+        task_ops.recover(self.root, TASK, reader=lambda _prompt: "abababab", interactive=True, out=io.StringIO())
+        self.assertEqual(self.data()["waiting"]["why"], "go-recover")
+
+    def test_an_approval_leaves_a_mark_until_the_next_prompt_and_the_page_says_what_to_tell_the_agent(self) -> None:
+        digest = tasks.plan_digest(self.root, TASK)
+        task_ops.approve_plan(self.root, TASK, reader=lambda _prompt: digest[:8], interactive=True, out=io.StringIO())
+        desk = taskdesk.desk(self.root, "job1", ())
+        self.assertEqual((desk["waiting_why"], [item["action"] for item in desk["actions"]]), ("go-plan", ["pause"]))  # no button is the point: the word is to the agent
+        self.assertEqual(self.data()["waiting"]["why"], "go-plan")
+        self.prompt("go on")  # the person told the agent: the mark goes
+        self.assertIsNone(self.data()["waiting"])
+        self.assertEqual(taskdesk.desk(self.root, "job1", ())["waiting_why"], "")
 
 
 def boardserve_actions(root):

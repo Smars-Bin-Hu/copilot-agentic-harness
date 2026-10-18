@@ -77,7 +77,7 @@ def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: 
     """rows: what `task list` gives, each with `brief` (taskinsight.brief or None) and `report` (the file name of its page or '').
     serve: set when the board server sends the page: the actions it runs, and how often the page loads again."""
     scripts = ["common.js", "serve.js", "board.js"] if serve else ["common.js", "board.js"]  # a file on disk never calls out
-    return build("board.html", scripts, say("board.title"), {"rows": rows, "as_of": as_of, "refresh": int(refresh), "serve": serve}, refresh)
+    return build("board.html", scripts, say("board.brand"), {"rows": rows, "as_of": as_of, "refresh": int(refresh), "serve": serve}, refresh)
 
 
 def desk_page(desk: Dict[str, Any], serve: Dict[str, Any]) -> str:

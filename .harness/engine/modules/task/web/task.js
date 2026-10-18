@@ -16,8 +16,17 @@
     return PARTS.map((name) => [name, entry[name + "_s"] || 0, partLabel(name) + " " + clock(entry[name + "_s"])]);
   }
 
+  // Served by the board: the way back to the task page and to the board. A file on disk has no server to go back to.
+  function crumbs() {
+    if (!/^https?:$/.test(location.protocol)) return null;
+    return h("div", {class: "crumbs sub"}, h("a", {href: "/"}, "\u2190 " + t("desk.back")), " \u00b7 ",
+      h("a", {href: "/task/" + encodeURIComponent(info.name)}, t("report.back")));
+  }
+
   function header() {
     return [
+      brand(),
+      crumbs(),
       h("h1", null, t("report.title", {name: info.name})),
       h("div", {class: "sub"}, t("report.subtitle", {
         kind: t("task.kind." + (info.kind || "none")), tier: t("task.tier." + (info.tier || "none")),
@@ -37,7 +46,7 @@
 
   function footer(note) {
     const line = t("report.footer", {source: t("report.source." + info.source.replace("-", "_"))});
-    return h("footer", null, line, note ? [h("br"), t("report.footer.note")] : null);
+    return h("footer", null, line, note ? [h("br"), t("report.footer.note")] : null, copyright());
   }
 
   function findings() {

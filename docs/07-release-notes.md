@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.35 (2026-10-18)
+
+### Changed
+
+- **The browser the board opens is paired more reliably** (found on a Windows company computer, where the page said "the pairing code is wrong or used up" every time).
+  - An **Enter that arrives in the first two seconds is ignored**. The terminal thread that gives a new code on Enter could read a line left in the input by the launcher and change the code at once, so the link the browser had been opened with was already wrong.
+  - A browser that **already has the cookie of a pairing does not trade the code again**: a second tab, or a tab the browser restores or loads twice, no longer finds the code used up. Another browser still needs its own code (Enter in the terminal of the board).
+
 ## 1.4.34 (2026-10-18)
 
 Small fixes to two skills, found by trying them.

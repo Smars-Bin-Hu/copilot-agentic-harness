@@ -88,7 +88,7 @@ It opens your browser on the board, already paired with the program (Ctrl+C stop
 
 The board lists every task, what waits for you, and since when. A click on a task opens its page: the requirement, the plan, the TODO, the log, the history and the changes, drawn as pages, and the buttons for what you decide. The agent gives you the address of the page in its messages. More in [the overview](00-overview.md#4-follow-and-steer-it-in-the-browser).
 
-A browser you open by hand is not paired: it can pause and resume a task, but an approval is refused. Press Enter in the terminal of the board for a new pairing link.
+If the page says the pairing code is wrong or used up, press Enter in the terminal of the board (not in its first seconds) and open the new link it prints. A browser you open by hand is not paired: it can pause and resume a task, but an approval is refused. Press Enter in the terminal of the board for a new pairing link.
 
 ## 4. Set up the target repositories
 

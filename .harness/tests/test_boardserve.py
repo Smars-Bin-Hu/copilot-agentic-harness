@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import http.client
+import io
 import json
 import socket
 import threading
+import unittest
+from unittest import mock
 from typing import Any, Dict, Optional, Tuple
 
 from support import pre_tool
@@ -177,3 +180,32 @@ class GateTests(TaskCase):
         self.assertEqual(self.decision(self.hook(web)), "deny")
         board_serve_file(self.root).unlink()
         self.assertNotEqual(self.decision(self.terminal("curl -X POST http://127.0.0.1:8799/api/act")), "deny")
+
+
+class PairingKeyTests(unittest.TestCase):
+    """The Enter that asks for a new pairing code is the person's: one that arrives at the start is not."""
+
+    class Board:
+        def __init__(self) -> None:
+            self.code, self.made = "first", 0
+
+        def new_code(self) -> str:
+            self.made += 1
+            self.code = f"code{self.made}"
+            return self.code
+
+    def run_with(self, lines: str, early: float) -> tuple:
+        board, out = self.Board(), io.StringIO()
+        with mock.patch("sys.stdin", io.StringIO(lines)):
+            boardserve.wait_for_enter(board, "http://127.0.0.1:1/", out, early=early)
+        return board, out.getvalue()
+
+    def test_a_line_left_in_the_input_at_the_start_does_not_take_the_code_away(self) -> None:
+        board, said = self.run_with("\n", early=60)
+        self.assertEqual((board.code, board.made, said), ("first", 0, ""))
+
+    def test_a_later_enter_gives_a_new_code_and_the_link(self) -> None:
+        board, said = self.run_with("\n\n", early=0)
+        self.assertEqual((board.made, board.code), (2, "code2"))
+        self.assertIn("code2", said)
+

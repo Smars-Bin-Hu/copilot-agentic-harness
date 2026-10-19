@@ -138,7 +138,10 @@ const SERVE = (function () {
   const ready = (function () {
     const code = location.hash.startsWith("#pair=") ? decodeURIComponent(location.hash.slice(6)) : "";
     if (code) history.replaceState(null, "", location.pathname);  // the code leaves the address bar and the history
-    return (code ? post("/api/pair", {code}).catch(failed) : Promise.resolve())
+    // A browser that has the cookie of an earlier pairing does not need the code again: a second tab, a tab the browser restored
+    // or loaded twice would otherwise find the code used up and say so.
+    const already = post("/api/status", {}).then((data) => data.paired, () => false);
+    return already.then((yes) => (code && !yes ? post("/api/pair", {code}).catch(failed) : null))
       .then(() => post("/api/status", {})).then((data) => { paired = data.paired; showPaired(); }, () => { paired = false; showPaired(); });
   })();
 

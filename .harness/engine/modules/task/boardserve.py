@@ -26,6 +26,7 @@ import os
 import secrets
 import sys
 import threading
+import time
 import webbrowser
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -41,6 +42,7 @@ HEADER = "X-Harness-Board"
 COOKIE = "harness_board"
 MAX_BODY = 4096
 MAX_ARCHIVE = 200  # tasks in one request
+EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
 FREE = ("pause", "resume")  # no pairing: they guard nothing
 REFRESH = 10  # seconds between two boards in the browser
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
@@ -335,8 +337,11 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     return {"served": address, "stopped": True}
 
 
-def wait_for_enter(board: Board, address: str, out: Any) -> None:
-    """Enter in the server's terminal: a new pairing code for a browser that was not paired. The old one stops working."""
+def wait_for_enter(board: Board, address: str, out: Any, early: float = EARLY_ENTER) -> None:
+    """Enter in the server's terminal: a new pairing code for a browser that was not paired. The old one stops working.
+    An Enter that arrives at once is not the person's: a launcher on Windows can leave a line in the input, and it would
+    take the code away from the browser that was just opened with it. It is ignored."""
+    begun = time.monotonic()
     while True:
         try:
             line = sys.stdin.readline()
@@ -344,4 +349,6 @@ def wait_for_enter(board: Board, address: str, out: Any) -> None:
             return
         if not line:
             return
+        if time.monotonic() - begun < early:
+            continue
         print(say("serve.code", address=address, code=board.new_code()), file=out, flush=True)

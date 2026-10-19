@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import domainskills, messages, tasks
+from core import copilot_events, domainskills, messages, tasks
 from core.paths import cli_command, repo_root, utc_now
 from core.state import admin_on, atomic_write, session, state_lock, state_path
 
@@ -267,7 +267,23 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
         if isinstance(ended, dict) and str(ended.get("at", "")) <= str(mark["since"]) and ended.get("why") not in ("person",):
             return {"why": "autorun", "since": str(ended.get("at") or mark["since"])}  # the run ended and nobody has answered yet
         return {"why": "stopped", "since": str(mark["since"])}
+    cancelled = cancelled_at(data)
+    if cancelled:
+        return {"why": "cancelled", "since": cancelled}
     return {"why": "", "since": ""}
+
+
+def cancelled_at(data: Dict[str, Any]) -> str:
+    """The person cancelled the newest prompt in the task's session (Copilot's own record says so). Empty when not."""
+    try:
+        path = copilot_events.events_path(str(data.get("session_id") or ""))
+        found = copilot_events.cancelled_at(path) if path is not None else None
+    except Exception:  # noqa: BLE001 - Copilot's file is not ours; a list must not fail over it
+        return ""
+    if not found:
+        return ""
+    stamp = copilot_events.seconds(found)
+    return datetime.fromtimestamp(stamp, timezone.utc).isoformat() if stamp is not None else ""
 
 
 def seconds_since(stamp: str) -> Optional[float]:

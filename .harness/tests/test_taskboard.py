@@ -217,6 +217,33 @@ class WaitingMarkTests(BoardCase):
         self.assertIsNone(data["waiting"])
         self.assertEqual([item["session_id"] for item in data["sessions"]], [S1, S2])
 
+    def test_a_cancelled_prompt_waits_for_the_person_until_a_new_turn(self) -> None:
+        self.new()
+        self.prompt()  # takes away any mark: a cancel fires no Stop hook
+        record = [
+            {"type": "user.message", "data": {}, "timestamp": "2026-10-19T10:00:00.000Z"},
+            {"type": "assistant.turn_start", "data": {}, "timestamp": "2026-10-19T10:00:01.000Z"},
+            {"type": "abort", "data": {"reason": "user_initiated"}, "agentId": "sub", "timestamp": "2026-10-19T10:00:02.000Z"},
+        ]
+        self.copilot_record(S1, record)
+        self.assertEqual(self.listed()["waiting"], 0)  # a subagent's abort is not the person's
+        record += [
+            {"type": "abort", "data": {"reason": "user_initiated"}, "timestamp": "2026-10-19T10:00:03.000Z"},
+            {"type": "assistant.turn_end", "data": {}, "timestamp": "2026-10-19T10:00:03.100Z"},
+            {"type": "session.shutdown", "data": {}, "timestamp": "2026-10-19T10:00:04.000Z"},
+        ]
+        self.copilot_record(S1, record)
+        found = self.listed()
+        row = found["tasks"][0]
+        self.assertEqual((found["waiting"], row["waiting_why"], row["waiting"]), (1, "cancelled", "你取消了 agent，等你"))
+        self.assertEqual(datetime.fromisoformat(row["waiting_since"]), datetime(2026, 10, 19, 10, 0, 3, tzinfo=timezone.utc))
+        now = tasklife.waiting_now(self.root, f"{BASE}/job", self.data())
+        report = taskinsight.add_open_wait({"totals": {"waiting_s": 0.0}, "waits": [], "prompts": [], "findings": []}, now)
+        self.assertEqual(report["waits"][0]["reason"], "cancelled")
+        for kind in ("assistant.turn_start", "user.message"):
+            self.copilot_record(S1, record + [{"type": kind, "data": {}, "timestamp": "2026-10-19T10:01:00.000Z"}])
+            self.assertEqual(self.listed()["waiting"], 0, kind)
+
     def test_the_log_names_the_task_of_a_prompt(self) -> None:
         self.new()
         self.prompt()

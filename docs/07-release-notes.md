@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.5 (2026-10-19)
+
+### Fixed
+
+- **A prompt you cancel in VS Code now shows as "waiting for you".** A cancel fires no Stop hook, so the board said "not waiting for you" until your next message. The board, the task's page and the report's open wait now read the cancel from Copilot's own session record (`abort` after your newest message) and say "you cancelled the agent".
+
 ## 1.5.4 (2026-10-19)
 
 ### Changed

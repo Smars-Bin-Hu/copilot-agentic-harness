@@ -418,7 +418,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
 
 
 # What the task waits for now (tasklife.waiting) -> the reason of a wait (insight.wait.*). Anything else: the agent stopped.
-WAIT_OF_NOW = {"plan": "plan", "promote": "promote", "review": "review", "recover": "recover"}
+WAIT_OF_NOW = {"plan": "plan", "promote": "promote", "review": "review", "recover": "recover", "cancelled": "cancelled"}
 
 
 def add_open_wait(result: Dict[str, Any], now: Optional[Dict[str, Any]]) -> Dict[str, Any]:

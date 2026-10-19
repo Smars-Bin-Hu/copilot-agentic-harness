@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 FILE_NAME = "events.jsonl"
 HOME_ENV = "COPILOT_HOME"  # Copilot's own variable for its folder; ~/.copilot when it is not set
 MAX_BYTES = 300 * 1024 * 1024
+TAIL_BYTES = 1024 * 1024  # `cancelled_at` reads only the end of the file: the board asks for every open task
 NANO = 1e9
 HOST_DECISION = "host_policy"  # a permission the host answered by itself; anything else waited for a person
 
@@ -218,3 +219,31 @@ def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
     if not prompts:
         return None
     return {"path": str(path), "model": model, "copilot_version": version, "prompts": prompts}
+
+
+def cancelled_at(path: Path) -> Optional[str]:
+    """When the person cancelled the newest prompt of the session (an `abort` with no new turn after it), or None.
+
+    A cancel fires no Stop hook, so the board's mark is never set: this is how the board still knows the person is next.
+    """
+    try:
+        with path.open("rb") as handle:
+            size = handle.seek(0, os.SEEK_END)
+            handle.seek(max(0, size - TAIL_BYTES))
+            lines = handle.read().decode("utf-8", errors="replace").splitlines()[1 if size > TAIL_BYTES else 0:]
+    except OSError:
+        return None
+    found: Optional[str] = None
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict) or row.get("agentId"):
+            continue
+        kind = row.get("type")
+        if kind in ("user.message", "assistant.turn_start"):
+            found = None
+        elif kind == "abort" and seconds(row.get("timestamp")) is not None:
+            found = str(row["timestamp"])
+    return found

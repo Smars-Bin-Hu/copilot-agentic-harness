@@ -490,7 +490,7 @@ class MessageTests(unittest.TestCase):
         dynamic = (
             "task.kind.", "task.tier.", "task.next.light", "task.next.medium", "task.next.full", "task.waiting.", "desk.hint.", "desk.wait.", "desk.go.", "desk.via.", "board.filter.", "board.archive.", "board.select.", "board.close.", "desk.tab.", "desk.changes.", "desk.missing.",
             "insight.stage.", "insight.part.", "insight.wait.", "insight.finding.", "report.source.", "report.status.", "board.state.", "board.queue.", "board.action.", "autorun.why.", "unit.",
-            "gate.git.why.", "promote.hint.", "task.resolve.", "log.count.", "path.what", "delete.what", "approval.person_only", "event.", "mdreport.promote.", "doctor.language.source.", "doctor.override.how.", "doctor.target.kind.", "doctor.output.sample", "kbstatus.next.",
+            "gate.git.why.", "promote.hint.", "task.resolve.", "log.count.", "path.what", "delete.what", "approval.person_only", "event.", "mdreport.promote.", "doctor.language.source.", "doctor.override.how.", "doctor.target.kind.", "doctor.output.sample", "kbstatus.next.", "rules.reply.",
         )
         source = source.replace('messages.text(\n            "', 'messages.text("')
         unused = [name for name in messages.table("zh") if f'"{name}"' not in source and not name.startswith(dynamic)]
@@ -499,3 +499,4 @@ class MessageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

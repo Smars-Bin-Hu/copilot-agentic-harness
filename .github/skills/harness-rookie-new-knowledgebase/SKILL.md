@@ -27,7 +27,10 @@ The user does not need to read a document. You lead: `harness kb status` says, f
 ### Opening (every time)
 
 1. Run `harness kb status --json`.
-2. First time (`stage` is `toolkit`): tell the user, in at most five sentences, what they get and what it costs: see [the road](./references/road.md), "Say it like this". Then where they are, and what the next step needs from them.
+2. First time (`stage` is `toolkit`):
+   - Look for earlier work first: `harness task list` (a `kb` task, a toolkit built before in another knowledge base). Tell the user what you found before you ask anything.
+   - Tell the user, in at most five sentences, what they get and what it costs: see [the road](./references/road.md), "Say it like this".
+   - Then where they are, the steps still ahead in one line (their plain names, no detail), and what the next step needs from them.
 3. Coming back: one sentence on what is done since (the steps marked done, the domains and how much is left), then the next step.
 
 ### Each step
@@ -36,12 +39,15 @@ Follow the row of `stage` in [the road](./references/road.md):
 
 1. Say in two sentences what the step is for and what the user will give or approve.
 2. Ask for what only the user knows, before the work starts: known uses for the toolkit, the domain and its entry points, a research note or runbook, what is out of scope. Never fill these in yourself.
-3. Do the step with its skill, in a task of kind `kb` of its own (`harness-my-task`). The skills that only the user may start (`/generic-kb-toolkit-build`, `/generic-kb-learn-batch`) you do not start: tell the user exactly what to type, and that a new chat for each batch keeps it sharp.
-4. After the write-back: `harness kb status` again; say what changed in one line, and offer the next step. The user may stop here.
+3. Do the step with its skill, in a task of kind `kb` of its own (`harness-my-task`). The map is the exception: run `harness kb map` yourself, with no task (nothing is written back). The skills that only the user may start (`/generic-kb-toolkit-build`, `/generic-kb-learn-batch`) you do not start: tell the user to open a new chat and type the command there, word for word.
+4. After the write-back: offer to close the task (an open task makes the next step ask which task to use). Then `harness kb status` again, even when you think you know the answer: the user may have run something in between. Say what changed in one line, and offer the next step. The user may stop here.
 
 ### The end
 
-When `stage` is `maintain`, or the user stops after a first domain is learned, teach daily care in three sentences (see [the road](./references/road.md), "Keeping it true"), and tell them: at a stop of a task the agent offers the next step of the knowledge base once per session, until it is built.
+When `stage` is `maintain`, or the user stops after a first domain is learned:
+- Teach daily care in three sentences (see [the road](./references/road.md), "Keeping it true"). The user needs no command for it: the agent offers each one when it comes up, and the user says yes.
+- Name the domains still not learned (`not_started` of step `domains`): they are learned when the team wants, with "learn the domain X".
+- Until a first domain is learned, the agent offers the next step once per session at a stop of a task.
 
 ## Gotchas
 
@@ -50,6 +56,7 @@ When `stage` is `maintain`, or the user stops after a first domain is learned, t
 - **Do not skip the audit quietly.** The user may skip it; then say that the plan will say "map not audited", and why it matters (the batches trust the map).
 - **Speak plainly.** "A map" is "a list, made by a script, of everything in your code and who uses what". Bring in a word (toolkit, audit, batch) only when its step comes.
 - **Do not teach the whole road at once.** Where they are, the next step, what it needs. The rest when it comes.
+- **A defect of the harness or of the toolkit is not knowledge of the code.** Tell the user about it; do not offer to capture it into the knowledge base.
 - **`kb status` is the truth.** If what the user says differs from it (they think the map is done), trust the files and show them the line.
 
 ## Troubleshooting

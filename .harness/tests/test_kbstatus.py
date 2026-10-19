@@ -69,6 +69,36 @@ class StatusTests(TaskCase):
         self.assertEqual(result["stage"], "audit")
         self.assertEqual(result["steps"][3]["no_toolkit"], ["repo_a", "repo_b"])
 
+    def test_a_repository_the_toolkit_reads_nothing_in_is_named(self) -> None:
+        from support import make_repo
+
+        self.kb()
+        make_repo(self.repos / "notes", {"notes.txt": "nothing a toolkit reads\n"})
+        shutil.copytree(EXAMPLE, self.kb_path / "toolkit")
+        kbmap.build(self.root)
+        step = kbstatus.status(self.root)["steps"][3]
+        self.assertIn("notes", step["empty"])  # repo_a and repo_b of the test bed hold no SQL either
+        self.assertNotIn("shop", step["empty"])
+        self.assertIn("`notes`", step["note"])
+
+    def test_the_domains_the_readme_lists_count_before_their_folders_exist(self) -> None:
+        readme = self.root / "README.md"
+        readme.write_text(
+            "# Knowledge base\n\n| Domain | What it does | Entry points | Status |\n| --- | --- | --- | --- |\n"
+            "| orders | Takes orders | `job:A` | not learned yet |\n| `billing` | Bills | `job:B` | learned |\n\n"
+            "| Domain | Owner |\n| --- | --- |\n| other | a team |\n", encoding="utf-8")
+        self.assertEqual(kbstatus.listed_domains(readme), ["orders", "billing"])
+        self.kb()
+        shutil.copytree(EXAMPLE, self.kb_path / "toolkit")
+        kbmap.build(self.root)
+        kit = kbmap.load_toolkit(self.kb_path / "toolkit")
+        (self.kb_path / "toolkit" / "audit.md").write_text(f"Toolkit: sqlserver (signature {kit.signature})\n\nResult: **pass**\n", encoding="utf-8")
+        shutil.copy(readme, self.kb_path / "README.md")
+        result = kbstatus.status(self.root)
+        self.assertEqual((result["stage"], result["steps"][5]["not_started"]), ("learn", ["orders", "billing"]))
+        self.assertIn("generic-kb-learn-plan", result["next"])
+        self.assertIn("`orders`", result["next"])
+
     def test_a_map_of_an_older_version_is_no_map(self) -> None:
         from core import kbgraph
 
@@ -122,6 +152,16 @@ class StatusTests(TaskCase):
         self.prompt("next")
         self.assertNotEqual(self.stop().get("decision"), "block")
 
+    def test_no_offer_once_a_first_domain_is_learned(self) -> None:
+        self.kb()
+        (self.kb_path / "README.md").write_text("| Domain | Entry points | Status |\n| --- | --- | --- |\n| later | `job:X` | not learned yet |\n", encoding="utf-8")
+        domain = self.kb_path / "domains" / "d"
+        (domain / "discovery").mkdir(parents=True)
+        (domain / "discovery" / "learn-plan.md").write_text(PLAN, encoding="utf-8")
+        (domain / "architecture.md").write_text("# d\n\n## Flows\n\n`job:A` → `sp:B`\n", encoding="utf-8")
+        self.new()
+        self.assertNotEqual(self.stop().get("decision"), "block")
+
     def test_no_offer_in_a_kb_task(self) -> None:
         self.kb()
         self.new(kind="kb")
@@ -132,3 +172,23 @@ class StatusTests(TaskCase):
         (self.root / ".harness" / "policies" / "task.override.json").write_text(json.dumps({"kb_offer": False}), encoding="utf-8")
         self.new()
         self.assertNotEqual(self.stop().get("decision"), "block")
+
+
+class PushHintTests(TaskCase):
+    def test_a_knowledge_base_with_no_remote_is_not_told_to_push(self) -> None:
+        import subprocess
+
+        from support import make_repo
+
+        from modules.task import task as task_ops
+
+        path = make_repo(self.repos / "kb", {"README.md": "kb\n"})
+        result = {"repos": [{"name": "kb", "path": str(path), "base_ref": "main", "commit": "abc", "direct": True}], "branch": "b"}
+        from core import messages
+
+        local = messages.text("promote.done.kb.local", name="kb", base_ref="main", commit="abc")
+        self.assertIn(local, task_ops.promoted_text(result, {"patch": "p"}))
+        subprocess.run(["git", "-C", str(path), "remote", "add", "origin", "https://example.invalid/kb.git"], check=True)
+        self.assertNotIn(local, task_ops.promoted_text(result, {"patch": "p"}))
+        self.assertIn(messages.text("promote.done.kb", name="kb", base_ref="main", commit="abc"), task_ops.promoted_text(result, {"patch": "p"}))
+

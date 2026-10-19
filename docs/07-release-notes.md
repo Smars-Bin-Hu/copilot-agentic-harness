@@ -10,6 +10,26 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.3 (2026-10-19)
+
+From the first full run of `/harness-rookie-new-knowledgebase` in Copilot, from an empty knowledge base to a learned domain (spring-petclinic, domain `vets`).
+
+### Added
+
+- **`[ZH]` and `[EN]` in a prompt**: from then on, in that chat only, the agent replies in that language. The files it writes (task files, the knowledge base, comments) keep the `language` setting. For a team whose files are in English and a person who likes to talk in Chinese.
+
+### Changed
+
+- **`kb status` counts the domains listed in the knowledge base's `README.md`.** `generic-kb-domains` writes them as a table (`| Domain | What it does | Entry points | Status |`); a domain listed there with no folder yet is "not started". Before, the domains step stayed open after the cut was confirmed, and the knowledge base read as built when only one of the domains was learned.
+- **`kb status` names a repository the toolkit found nothing in** (`empty`, with a note): code of another kind, which needs `repos` in `toolkit.json` or a toolkit of its own.
+- **The offer at a stop of a task ends once a first domain is learned.** The other domains are learned when the team wants.
+- **A promote leaves out a repository whose files in `DEV/` are all unchanged** (code only read, for its line numbers). Before, it blocked the whole write-back.
+- **No "push it yourself" for a knowledge base with no remote.**
+- **The wizard**: it looks for earlier work before it asks; it names the steps ahead in one line; it runs `harness kb map` with no task; after each write-back it offers to close the task and runs `kb status` again; it says "open a new chat and type ..." for the commands only you may start; at the end it names the domains not learned yet, and says that daily care needs no command from you.
+- **The learning skills**: a batch fetches the whole domain folder; the learn plan writes your decisions into `LOG.md`; the architecture sets the domain's status in `README.md`, and says who uses a domain only when the code shows it.
+- **A defect of the harness or of a toolkit is not knowledge of the code**: the agent tells you about it and does not offer to capture it.
+- The `spring` sample toolkit's `DESIGN.md` now says what `uses` really covers (locals and generic arguments too) and which repository bases it knows.
+
 ## 1.5.2 (2026-10-19)
 
 ### Changed

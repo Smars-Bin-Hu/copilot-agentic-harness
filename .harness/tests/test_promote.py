@@ -128,6 +128,13 @@ class PlanTests(PromoteCase):
         alone = self.flow({"repo_b/src/a.sql": "select 1;\n"}, branch="feature/other")
         self.assertIn("完全一样", self.refused("task", "promote", "--task", alone, "--dry-run"))
 
+    def test_a_repository_only_read_is_left_out_and_holds_nothing_back(self) -> None:
+        request_id = self.flow({"repo_b/src/a.sql": "select 1, 2;\n"}, fetched=["repo_b/src/a.sql", "repo_a/a.sql"])
+        (self.repo_a / "untracked.txt").write_text("a dirty tree\n", encoding="utf-8")  # would block a repository written to
+        result = self.dry_run(request_id)
+        self.assertEqual([repo["name"] for repo in result["repos"]], ["repo_b"])
+        self.assertEqual([f["path"] for f in result["files"]], ["repo_b/src/a.sql"])
+
     def test_the_plan_digest_follows_the_content_the_branch_and_main(self) -> None:
         first = self.flow({"repo_b/src/a.sql": "select 1, 2;\n"})
         one = self.dry_run(first)["plan_sha256"]

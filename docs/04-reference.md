@@ -113,7 +113,7 @@ The defaults are in `.harness/policies/<file>`; overrides go in the `.override.j
 | observe.json | `warn_session_files` | When there are more session log files than this, `doctor` reminds you |
 | observe.json | `knowledge_base_reads` | Whether to record which knowledge base files every call read (file names only). `kb reads` relies on it |
 | user.json | `name` | Your name. The agent uses it where a name is to be signed (a change note at the top of a file, say). When empty, `git config user.name` is used |
-| user.json | `language` | The language the harness speaks: `en` (the default) or `zh`. It covers what the CLI and the hooks print, the templates of the task files, and the language the agent answers and writes in. Change it in `user.override.json`; the environment variable `HARNESS_LANGUAGE` wins over the file |
+| user.json | `language` | The language the harness speaks: `en` (the default) or `zh`. It covers what the CLI and the hooks print, the templates of the task files, and the language the agent answers and writes in (`[ZH]` or `[EN]` in a prompt changes only the replies of that session). Change it in `user.override.json`; the environment variable `HARNESS_LANGUAGE` wins over the file |
 | user.json | `archive_to` | The folder `task archive` moves closed tasks to when `--to` is left out. `task archive --apply --remember` writes it into `user.override.json`. A path on this computer only |
 | cli.json | `output.encoding` | The encoding of what the CLI prints. `auto` (the default): a terminal is left alone; when the encoding of a pipe cannot write Chinese (cp1252 on Windows), UTF-8 is printed. `utf-8`: always UTF-8. `native`: never changed, and a character that cannot be written shows as `\uXXXX` |
 | cli.json | `output.format` | Text or JSON. `auto` (the default): text on a terminal, JSON on a pipe. `json` or `text`: always. `--json` on a command line wins over it |
@@ -147,7 +147,7 @@ They are set in [.github/hooks/harness.json](../.github/hooks/harness.json), and
 
 | Event | Who handles it |
 | --- | --- |
-| `SessionStart`, `UserPromptSubmit` | task (injects the session id, the rules and the language; with a task, injects how far the task is; reads `[review]=n`) |
+| `SessionStart`, `UserPromptSubmit` | task (injects the session id, the rules and the language; with a task, injects how far the task is; reads `[review]=n`, and `[ZH]` or `[EN]` for the language of the replies of the session) |
 | `PreToolUse` | task (subagents: with a task and checks on, lets the reviewer through; after the user types `/generic-mapreduce`, lets the mapper through and counts the calls), gate (guardrails, the write scope of a task, target repositories, dangerous commands) |
 | `PostToolUse` | task (notes the writes in a task; after the reviewer answers, writes the verdict to disk) |
 | `PostToolUseFailure` | observe (when a tool call fails there is only this event, no `PostToolUse`; the log records the tool name and the error the platform gives) |

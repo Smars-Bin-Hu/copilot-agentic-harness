@@ -21,6 +21,7 @@ STEPS = ("targets", "kb_repo", "toolkit", "map", "audit", "domains", "learn", "m
 AUDIT_FILE = "audit.md"
 PASSED = re.compile(r"^Result:\s*\**\s*pass\b", re.I | re.M)
 ORDER = re.compile(r"harness kb order[^\n`]*")
+FOLDER = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -108,6 +109,26 @@ def domain_state(root: Path, folder: Path, deep: bool) -> Dict[str, Any]:
     return state
 
 
+def listed_domains(readme: Path) -> List[str]:
+    """The domains the knowledge base's README lists as cut (`generic-kb-domains`): the first column of a table whose
+    header starts with `Domain` and has a `Status` column. A README in another form lists none."""
+    try:
+        rows = [line.strip() for line in readme.read_text(encoding="utf-8", errors="replace").splitlines()]
+    except OSError:
+        return []
+    found: List[str] = []
+    inside = False
+    for row in rows:
+        cells = [cell.strip().strip("`").strip() for cell in row.strip("|").split("|")] if row.startswith("|") else []
+        if not cells:
+            inside = False
+        elif cells[0].lower() == "domain" and any(cell.lower() == "status" for cell in cells):
+            inside = True
+        elif inside and FOLDER.match(cells[0]) and cells[0] not in found:
+            found.append(cells[0])
+    return found
+
+
 def cards(folder: Path) -> int:
     try:
         return sum(1 for line in (folder / "objects" / "index.jsonl").read_text(encoding="utf-8", errors="replace").splitlines() if line.strip())
@@ -136,10 +157,14 @@ def status(root: Path, deep: bool = True) -> Dict[str, Any]:
         steps["map"].update(done=bool(covered) and len(cached) == len(covered), mapped=cached,
                             **({"no_toolkit": sorted(set(repo.name for repo in code) - set(covered))} if kit is not None and len(covered) < len(code) else {}))
         if deep and kit is not None and cached:
-            facts = kbgraph.Graph.load(root, cached).check_facts(kit.facts())
+            graph = kbgraph.Graph.load(root, cached)
+            facts = graph.check_facts(kit.facts())
             steps["map"].update(facts=f"{facts['found']}/{facts['checked']}")
             if facts["missing"] or not facts["checked"]:
                 steps["map"]["done"] = False
+            empty = sorted(set(cached) - {node["repo"] for node in graph.nodes.values()})
+            if empty:  # the toolkit read nothing there: a repository of another kind of code
+                steps["map"].update(empty=empty, note=say("kbstatus.map.empty", repos=messages.joined(f"`{name}`" for name in empty)))
         audit = kit_folder / AUDIT_FILE
         try:
             text = audit.read_text(encoding="utf-8", errors="replace")
@@ -152,8 +177,9 @@ def status(root: Path, deep: bool = True) -> Dict[str, Any]:
             names = sorted(item for item in folder.iterdir() if item.is_dir()) if folder.is_dir() else []
         except OSError:
             names = []
-        domains = [domain_state(root, item, deep) for item in names]
-        steps["domains"].update(done=bool(domains), count=len(domains))
+        listed = [name for name in listed_domains(kb.path / "README.md") if not (folder / name).is_dir()]
+        domains = [domain_state(root, item, deep) for item in names] + [dict(domain_state(root, folder / name, False), listed=True) for name in listed]
+        steps["domains"].update(done=bool(domains), count=len(domains), **({"not_started": listed} if listed else {}))
         steps["learn"].update(done=bool(domains) and all(item["done"] for item in domains))
     steps["maintain"]["done"] = all(steps[name]["done"] for name in STEPS[:-1])
     current = next(name for name in STEPS if not steps[name]["done"]) if not steps["maintain"]["done"] else "maintain"

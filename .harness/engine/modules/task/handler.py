@@ -20,6 +20,8 @@ Hook failures are fail-open: hook.py rolls back this module's state changes and 
 
 from __future__ import annotations
 
+import re
+
 from typing import Any, Dict, List, Optional
 
 from core import guardrails, messages, repo_paths, tasks
@@ -129,11 +131,28 @@ def open_tasks_text(ctx: Context) -> str:
     return say("rules.task.open_list", count=len(names), names=shown)
 
 
+REPLY = re.compile(r"\[(ZH|EN)\]", re.IGNORECASE)
+
+
+def reply_marker(prompt: str) -> Optional[str]:
+    """`zh` or `en` when the user wrote `[ZH]` or `[EN]`: the language of the replies of this session (the last one wins)."""
+    found = REPLY.findall(prompt or "")
+    return found[-1].lower() if found else None
+
+
+def language_text(ctx: Context) -> str:
+    """The language rule, and the language of the replies when the user chose one for this session that differs."""
+    reply = ctx.module_state(NAME).get("reply")
+    if reply in messages.LANGUAGES and reply != messages.language():
+        return say("rules.language") + "\n" + say(f"rules.reply.{reply}")
+    return say("rules.language")
+
+
 def prompt_text(ctx: Context, asked: Optional[int] = None) -> str:
     """Injected at session start and with every user prompt. `asked`: the `[review]=n` of this prompt, if any."""
     if ctx.admin:
-        return admin_rules(ctx) + "\n" + say("rules.language")
-    lines = [say("rules.session", session_id=ctx.state["session_id"]), say("rules.language")]
+        return admin_rules(ctx) + "\n" + language_text(ctx)
+    lines = [say("rules.session", session_id=ctx.state["session_id"]), language_text(ctx)]
     data = open_task(ctx)
     if data is not None:
         lines.append(task_text(ctx, keep_review(ctx, data, asked)))
@@ -155,6 +174,9 @@ def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
     state = ctx.module_state(NAME)
     state["relay"] = {"wrote": False, "task_file": False, "reminded": False}  # a new prompt, a new count
     state["review_n"] = asked  # for a task this prompt goes on to make or open
+    reply = reply_marker(event.prompt)
+    if reply:
+        state["reply"] = reply  # `[ZH]` or `[EN]`: the replies of this session; the files keep the language setting
     if not ctx.admin and mapreduce.asked(event.prompt):
         mapreduce.grant(ctx)  # the user typed /generic-mapreduce: this session may call mappers, up to the limit
     data = open_task(ctx) if not ctx.admin else None
@@ -280,7 +302,7 @@ def kb_offer_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
     """The knowledge base is not built yet (M28): once per session, at a stop of a task that is not itself about the
     knowledge base, the agent offers the next step in one line. Only where the code repositories and a knowledge base
     are set up (a team that registered none has not chosen to build one; doctor says so), never in autorun (nobody is
-    there to answer). `kb_offer: false` in task.json turns it off. Looks only at which files exist."""
+    there to answer), and no longer once a first domain is learned. `kb_offer: false` in task.json turns it off. Looks only at which files exist."""
     if not ctx.policy(POLICY_NAME).get("kb_offer", True) or data.get("kind") == "kb" or data.get("autorun"):
         return None
     state = ctx.module_state(NAME)
@@ -293,6 +315,8 @@ def kb_offer_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
     except Exception:  # noqa: BLE001 - an offer is not worth a failed Stop
         return None
     if found["stage"] in ("targets", "kb_repo", "maintain"):
+        return None
+    if any(item["done"] for item in found["domains"]):  # a first domain is learned: the rest are learned when the team wants
         return None
     state["kb_offered"] = True
     return Decision(block=True, reason=say("kbstatus.stop", step=found["step"], of=found["of"], next=found["next"]), facts={"kind": "kb_offer"})

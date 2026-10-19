@@ -40,6 +40,7 @@ The harness speaks English by default and can speak Chinese. Create `.harness/po
 
 - The setting covers: refusal reasons, the rules injected with every prompt, command output, the task report, the analysis page and the board; the templates `TASK.md`, `REQ.md`, `TODO.md`, `LOG.md`; and one injected line that tells the agent which language to answer and write in.
 - The agent's own language is a request to the model. When you clearly ask for another language in a prompt, the agent follows you.
+- **Only the replies in another language**: write `[ZH]` (or `[EN]`) in a prompt. From then on, in that chat only, the agent answers in that language; the files it writes (task files, the knowledge base, comments) keep the setting. Handy when the team's files are in English and you like to talk in Chinese. The other marker switches back; a new chat starts from the setting.
 - The environment variable `HARNESS_LANGUAGE` wins over the file (handy for one command: `HARNESS_LANGUAGE=zh harness doctor`).
 - `harness doctor` shows the language in effect and where it comes from. A value other than `en` or `zh` is an error, and English is used.
 - The docs, rules and skills of the repository are in English only. A task made in one language is still read after the setting changes.

@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import quote
 
-from core import approval, messages, standards, tasks
+from core import approval, messages, standards, targets, tasks
 from core.paths import board_serve_port, cli_command, utc_now
 from core.state import admin_on, atomic_write, session, state_lock, state_path
 
@@ -678,8 +678,17 @@ def promoted_text(result: Dict[str, Any], record: Dict[str, Any]) -> str:
     if others:
         parts.append(say("promote.done.branch", repos=messages.joined(repo["name"] for repo in others), branch=result["branch"]))
     for repo in direct:
-        parts.append(say("promote.done.kb", name=repo["name"], base_ref=repo["base_ref"], commit=str(repo.get("commit", ""))[:12]))
+        key = "promote.done.kb" if has_remote(repo["path"]) else "promote.done.kb.local"  # nothing to push to: say nothing of a push
+        parts.append(say(key, name=repo["name"], base_ref=repo["base_ref"], commit=str(repo.get("commit", ""))[:12]))
     return "".join(parts) + say("promote.done.patch", patch=record["patch"])
+
+
+def has_remote(path: str) -> bool:
+    try:
+        code, out = targets.run_step(Path(path), ["remote"])
+    except Exception:  # noqa: BLE001 - when git cannot say, tell the person to push, as before
+        return True
+    return code != 0 or bool(out.strip())
 
 
 def approve_promote(

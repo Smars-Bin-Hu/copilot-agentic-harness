@@ -83,7 +83,7 @@ The links: [Overview](../../../docs/00-overview.md) (the whole picture, with scr
 - **Do not touch a target repository.** The practice task is of kind `design` and has no `DEV/`.
 - **Do not write `[review]=1` yourself.** The user must send that message: the hook goes by the user's own words only.
 - **The task folder is ignored by git, and search tools do not find it.** Point at the board page; give a path only for a file the user must open itself.
-- **The language.** The harness speaks English by default and can speak Chinese: `language` in `.harness/policies/user.override.json` (`en` or `zh`). When the user would rather have Chinese, say so; the skill `harness-rookie-get-me-ready` sets it. Teach this lesson in the language the rules at the top of the prompt name.
+- **The language.** The harness speaks English by default and can speak Chinese: `language` in `.harness/policies/user.override.json` (`en` or `zh`). When the user would rather have Chinese, say so; the skill `harness-rookie-get-me-ready` sets it. To talk in Chinese while the files stay English, the user writes `[ZH]` in a prompt: it holds for that chat (`[EN]` switches back). Teach this lesson in the language the rules at the top of the prompt name.
 
 ## Troubleshooting
 

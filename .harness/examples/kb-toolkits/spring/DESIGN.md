@@ -6,14 +6,14 @@ Built by following `/generic-kb-toolkit-design` and `/generic-kb-toolkit-build` 
 
 | Type | Defined in | Recognised by |
 | --- | --- | --- |
-| controller, service, repository, entity, component, class | `src/main/java/**/*.java` | the annotation before the type (`@Controller`, `@Entity` ...); `extends JpaRepository<X, ...>` makes a repository |
+| controller, service, repository, entity, component, class | `src/main/java/**/*.java` | the annotation before the type (`@Controller`, `@Entity` ...); `extends Repository<X, ...>` (also `Jpa`, `Crud`, `PagingAndSorting`, `ListCrud`) makes a repository |
 | endpoint | a controller | `@GetMapping("/x")` and the like, under the class's `@RequestMapping` prefix: `endpoint:GET /owners/{ownerId}` |
 | view | `src/main/resources/templates/**/*.html` | the path under `templates/` without `.html`: what a controller returns |
 | table | `src/main/resources/db/h2/schema.sql` | `CREATE TABLE` (built-in `regex`, `many`) |
 
 ## Uses
 
-`handled_by` (endpoint → controller), `renders` (endpoint → view, from `return "x"`, `new ModelAndView("x")` or a `static final String` constant), `uses` (a field or constructor parameter of another type), `reads` (repository → entity), `maps` (entity → table, `@Table(name = ...)`), `extends`. Names: `plain`.
+`handled_by` (endpoint → controller), `renders` (endpoint → view, from `return "x"`, `new ModelAndView("x")` or a `static final String` constant), `uses` (another type of the project named in the class body: the type of a field or of a local variable, `Type name;` or `Type name = ...`, with the types inside its `<...>`, or of a constructor parameter), `reads` (repository → entity), `maps` (entity → table, `@Table(name = ...)`), `extends`. Names: `plain`.
 
 ## Entry points
 

@@ -137,6 +137,7 @@ def plan_files(
         name, _, relative = item["key"].partition("/")
         by_repo.setdefault(name, []).append({**item, "relative": relative})
     repos: List[Dict[str, Any]] = []
+    same: List[str] = []  # repositories whose files in DEV/ are all as on the base: only read, nothing to write there
     files: List[Dict[str, Any]] = []
     for name in sorted(by_repo):
         if name not in found.repos or not by_repo[name][0]["relative"]:
@@ -196,8 +197,9 @@ def plan_files(
             else:
                 entry.update(action="modify", base_blob=blob, **_diff(old_bytes, new_bytes, key))
             entries.append(entry)
-        if not mine and all(item["action"] == "unchanged" for item in entries):
-            mine.append(say("promote.repo.same", base_ref=repo.base_ref))
+        if entries and all(item["action"] == "unchanged" for item in entries):
+            same.append(messages.text("note.detail", what=name, detail=say("promote.repo.same", base_ref=repo.base_ref)))
+            continue  # nothing is written there, so nothing about it (a dirty tree, a branch) holds the others back
         problems += [messages.text("note.detail", what=name, detail=text) for text in mine]
         if not mine:
             repos.append({
@@ -207,6 +209,8 @@ def plan_files(
     repos.sort(key=lambda item: bool(item.get("direct")))  # a knowledge base is committed: it goes last, when the others are through
     for item in repos:
         files += item["files"]
+    if not repos and not problems:
+        problems = same  # nothing to write back anywhere
     if problems:
         raise CommandError(say("promote.blocked", problems="\n".join(f"- {text}" for text in problems)))
     return repos, files

@@ -40,6 +40,7 @@ A knowledge base that only takes things in goes stale, and one that takes everyt
 
 - **This skill obeys the task's limits.** It writes `KB-DRAFT.md` in the task folder and nothing else. It cannot write into `knowledge-base/` or into a skill, and it does not switch anything on for the user.
 - **Never copy values, names of customers or people, or secrets from logs or data.** Describe the pattern ("the load fails when the file has no header row"), not the row.
+- **A defect of the harness or of the toolkit is not knowledge of the code** (a command that failed, a map that misread a file). Tell the user, so it is fixed where it is; do not capture it.
 - **Your own guess is not knowledge.** If the task holds no evidence, leave it out, or mark it "unverified" and let the user decide.
 - **One fact per entry, with its source.** Long write-ups are not read.
 - **Do not restate the code, or what any engineer knows.** The same rule as for every instruction: write only what would be missed.

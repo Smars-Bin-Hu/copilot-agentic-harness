@@ -8,7 +8,7 @@ The form every domain of a knowledge base takes, so that code can check it and f
 
 ```
 <knowledge base>/
-  README.md                  the map: the domains, shared/, the glossary
+  README.md                  the map: the domains (a table `| Domain | What it does | Entry points | Status |`, which `kb status` reads), shared/, the glossary
   glossary.md                one English term per business term (generic-kb-translate uses it)
   shared/                    what several domains use (a framework, shared tables), written once
   domains/<domain>/

@@ -43,13 +43,13 @@ The aim is a **base**, not a perfect knowledge base: every card says which commi
    - More than about 15 batches: ask whether to cut the domain smaller (fewer entry points, or a `--stop`).
 4. **Research note (when there is one).** Keep it as it came, in `discovery/research.md`: it is a lead, never a fact. Optionally take its claims one by one ("job X loads table Y") and look for each in the map (`kb near`): found, not found, or against the map. One against the map goes into `open_questions` of `domain.yaml` with level `conflict`.
 5. **Write `LEARN-PLAN.md`** at the root of the task folder from [learn-plan.md](./templates/learn-plan.md). The `kb order` command goes in exactly as run: every batch task runs it again.
-6. **Ask the user to approve `LEARN-PLAN.md`.** Change it until they say yes.
+6. **Ask the user to approve `LEARN-PLAN.md`.** Change it until they say yes. Write each decision the user makes (what is shared, a boundary, the size of batches) into `LOG.md` and into the plan's "Decided" section.
 7. **After the yes, the empty domain**, through this task's plan and write-back, in `DEV/<kb repo>/domains/<domain>/`, from the templates in `.harness/contracts/kb/templates/`:
    - `domain.yaml`: `sources` with the base commit of each repository (`harness target list`), `entry_points: []` (the entry points are learned last; synthesize fills it in), `boundaries`, `excluded`, `open_questions`.
    - `objects/index.jsonl` empty, `architecture.md` with its empty sections, `environment.md` and `requests.md` from their templates, the requests of step 3 as rows with status `open`.
    - `discovery/learn-plan.md` (the approved plan) and `discovery/research.md` (when there is one).
    - `harness kb check --path <that folder>` until no error; then `harness task diff`, `harness task promote --dry-run`, and the user's `approve-promote`.
-8. **Tell the user the next step**: `/generic-kb-learn-batch <domain>` in a new task, one batch per task. After the write-back, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
+8. **Tell the user the next step**: open a new chat and type `/generic-kb-learn-batch <domain>`, once per batch. Offer to close this task first. After the write-back, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
 
 ## Gotchas
 

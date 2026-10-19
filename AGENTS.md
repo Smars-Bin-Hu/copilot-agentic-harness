@@ -19,6 +19,7 @@ To find a file, read [.harness/INDEX.md](.harness/INDEX.md) (the path index). Do
 - The files this repository ships (rules, skills, docs) are in English only. Write and change them in English.
 - What you say to the user, and the files you write for a task, follow the language setting: `language` in
   `.harness/policies/user.json` (`en` or `zh`). A hook tells you the language at the top of every prompt. Do as it says.
+  When the user writes `[ZH]` or `[EN]`, the hook tells you to reply in that language for the rest of the session; the files keep the setting.
 - Code, commands, paths and product names stay as they are in either language.
 
 ## Writing

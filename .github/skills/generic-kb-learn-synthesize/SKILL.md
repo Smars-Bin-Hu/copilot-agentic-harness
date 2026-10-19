@@ -23,18 +23,20 @@ specificTo: generic
 
 ## Step-by-Step Workflows
 
-1. **Fetch** the whole domain folder into the task.
+1. **Fetch** the whole domain folder into the task, and the knowledge base's `README.md`.
 2. **Paths**: `harness kb flows --entry <id> ... --json` with the entry points of `discovery/learn-plan.md`.
 3. **Plan** (`PLAN.md`): the flows you will write (one per entry point, or per group of entry points that do one thing), and the files you change. The user approves it in their terminal.
 4. **Write `architecture.md`**, the fixed sections of the standard, at most 300 lines; see [architecture.md](./references/architecture.md).
-5. **`domain.yaml`**: `entry_points` (now that they have cards), `description`, `sources` with the base commits the cards were read at, `updated`, `generated_by`, the `boundaries` and `open_questions` that came up in the batches.
-6. **Check**: `harness kb cardcheck --path <domain folder in DEV>` until no error (it checks each flow line); `harness kb check --path <same>` until no error.
-7. **Hand over**: `harness task diff`, `harness task promote --dry-run`, the user's `approve-promote`. Then tell the user, in three lines, the state of the base: cards, open requests, unknowns; and that what tasks find from now on is added with `generic-capture-knowledge`. After the write-back, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
+5. **`README.md`**: in its table of domains, set the domain's `Status` to `learned <date>`.
+6. **`domain.yaml`**: `entry_points` (now that they have cards), `description`, `sources` with the base commits the cards were read at, `updated`, `generated_by`, the `boundaries` and `open_questions` that came up in the batches.
+7. **Check**: `harness kb cardcheck --path <domain folder in DEV>` until no error (it checks each flow line); `harness kb check --path <same>` until no error.
+8. **Hand over**: `harness task diff`, `harness task promote --dry-run`, the user's `approve-promote`. Then tell the user, in three lines, the state of the base: cards, open requests, unknowns; and that what tasks find from now on is added with `generic-capture-knowledge`. After the write-back, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
 
 ## Gotchas
 
 - **Never write a step that is not a path of `kb flows`.** A runbook or note may say a step exists; when the map has no such path, it goes into Limits as "said in <note>, not found in the code", not into Flows.
 - **Traps come from the cards, not from imagination.** A domain just learned from code has few. Write "none known yet; RCAs and tasks add them" rather than general advice.
+- **Who uses the domain is said only when the code shows it** (an endpoint, a job, a caller in the map). Anything else, such as which team or system calls it, goes into Limits as unknown.
 - **Limits are counted, not felt.** The numbers come from the files: `level` of the index lines, rows of `requests.md` with `open`, `source_missing` lines, boundaries.
 - **The architecture is not the place for detail.** One line per step, the id, and the card holds the rest.
 

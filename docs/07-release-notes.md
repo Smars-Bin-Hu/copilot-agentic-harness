@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.1 (2026-10-18)
+
+### Changed
+
+- **`kb status` counts a migrated domain as built**: one with cards and an `architecture.md` but no learn plan (it was learned before learn plans). Before, it stayed "not learned" for good, and the agent offered the next step at every stop.
+
 ## 1.5.0 (2026-10-18)
 
 **The knowledge base, standard and beginner-friendly.** Until now the harness left the knowledge base to the team and only plugged it in. From 1.5.0 it builds one with you, from your own code, in a standard form, and you do not need to read the documents first: the agent leads.

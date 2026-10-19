@@ -67,6 +67,15 @@ class StatusTests(TaskCase):
         self.assertEqual(result["stage"], "audit")
         self.assertIn("note", result["steps"][4])
 
+    def test_a_migrated_domain_with_cards_and_an_architecture_is_built(self) -> None:
+        domain = self.root / "d"
+        (domain / "objects").mkdir(parents=True)
+        (domain / "objects" / "index.jsonl").write_text('{"id": "sp:x"}\n', encoding="utf-8")
+        self.assertFalse(kbstatus.domain_state(self.root, domain, deep=True)["done"])  # cards, no architecture: not yet
+        (domain / "architecture.md").write_text("# d\n\n## Flows\n\nThe job loads orders.\n", encoding="utf-8")
+        state = kbstatus.domain_state(self.root, domain, deep=True)
+        self.assertTrue(state["done"] and state["migrated"])
+
     def test_a_learned_domain_with_its_architecture_is_done(self) -> None:
         domain = self.root / "d"
         (domain / "discovery").mkdir(parents=True)

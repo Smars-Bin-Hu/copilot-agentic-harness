@@ -91,7 +91,16 @@ def domain_state(root: Path, folder: Path, deep: bool) -> Dict[str, Any]:
         except MapError as error:
             state["problem"] = str(error)
     state["done"] = state["plan"] and state["architecture"] and not state.get("to_learn")
+    if not plan and cards(folder) and (folder / "architecture.md").is_file():
+        state.update(done=True, migrated=True)  # learned before learn plans (a migration): built; refresh keeps it true
     return state
+
+
+def cards(folder: Path) -> int:
+    try:
+        return sum(1 for line in (folder / "objects" / "index.jsonl").read_text(encoding="utf-8", errors="replace").splitlines() if line.strip())
+    except OSError:
+        return 0
 
 
 def status(root: Path, deep: bool = True) -> Dict[str, Any]:

@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.39 (2026-10-18)
+
+How far the map can be trusted, measured.
+
+**Testing**: the automatic tests pass on the Mac; the new skill passes `skill check`. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **`kb audit`** and the skill **`generic-kb-toolkit-audit`** (asks first). The script picks a sample of every type, spread from short to long; the agent reads their code blind and writes down every use with its line; the script scores the map per type: recall (uses in the code that the map has) and precision (uses in the map that the code has), with every difference. Each difference is checked again at its line before the score counts. The result is kept as `toolkit/audit.md`. `generic-kb-learn-plan` asks for a passed audit first (you may go on without it, and the plan says so).
+- **`kb map` counts the names it could not place** (`unresolved`): aliases, or a form of use the toolkit misreads. Before, they were dropped without a word.
+
 ## 1.4.38 (2026-10-18)
 
 Learning long code with care, and rules you can check.

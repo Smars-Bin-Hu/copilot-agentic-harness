@@ -22,6 +22,7 @@ The aim is a **base**, not a perfect knowledge base: every card says which commi
 ## Prerequisites
 
 - A map whose toolkit finds all its `facts` (`harness kb map --json`: `facts.missing` empty, few `empty_files`). A wrong map gives a wrong plan and wrong cards. No toolkit: `/generic-kb-toolkit-design` first.
+- The map passed its audit: the knowledge base has `toolkit/audit.md` with **pass**, newer than the last change of the toolkit. None, or older: offer `generic-kb-toolkit-audit` first; the user may go on without it, and the plan then says so in its first line.
 - A task of kind `kb` (`harness-my-task`).
 
 ## Step-by-Step Workflows

@@ -18,7 +18,7 @@ from typing import Any, Dict
 
 from core.paths import repo_root
 
-from core import kbgraph, kblearn, kbmap, kbmigrate, kbstd
+from core import kbaudit, kbgraph, kblearn, kbmap, kbmigrate, kbstd
 
 from . import kbstats, prune, stats
 
@@ -114,6 +114,13 @@ def register(subparsers: Any) -> None:
     hole = kb_commands.add_parser("gaps", help="what runs or is used but has no code in the repositories: missing names, retired code in use, files deleted in git; with --inventory, also what production runs that no repository holds")
     hole.add_argument("--inventory", default="", help="a list of production objects a person exported (ids, one per line, or CSV with an id column)")
     hole.set_defaults(handler=mapped(lambda a: kbgraph.gaps(repo_root(), Path(a.inventory) if a.inventory else None)))
+    check = kb_commands.add_parser("audit", help="how right the map is: a sample of objects of each type to read blind; with --answers, the readings against the map per type (recall, precision, every difference). Exit code 1 below the bar")
+    check.add_argument("--per-type", type=int, default=kbaudit.PER_TYPE, help=f"objects per type in the sample (default {kbaudit.PER_TYPE})")
+    check.add_argument("--type", action="append", default=None, help="only this type (may be given more than once); default: the types that use something")
+    check.add_argument("--seed", type=int, default=1, help="another seed gives another sample")
+    check.add_argument("--answers", default="", help="the readings: JSON lines {from, to, kind, line}; {from, none: true} for an object that uses nothing")
+    check.add_argument("--min", type=float, default=kbaudit.MIN_SCORE, help=f"the bar for recall and precision of each type (default {kbaudit.MIN_SCORE})")
+    check.set_defaults(handler=mapped(lambda a: kbaudit.score(repo_root(), Path(a.answers), a.min) if a.answers else kbaudit.sample(repo_root(), a.per_type, a.type, a.seed)))
     # Learning a domain from the map (M27): core/kblearn.py.
     plan = kb_commands.add_parser("order", help="what the entry points reach and the order to learn it in: bottom up, in batches of one type; what is shared, stopped at, missing or known only at run time")
     plan.add_argument("--entry", action="append", required=True, help="an entry point, id or name (may be given more than once)")

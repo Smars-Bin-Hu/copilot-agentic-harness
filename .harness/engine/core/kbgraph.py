@@ -134,6 +134,7 @@ class Graph:
         self.into: Dict[str, List[Tuple[str, str]]] = defaultdict(list)
         self.missing: Dict[str, Set[str]] = defaultdict(set)
         self.external: Dict[str, Set[str]] = defaultdict(set)
+        self.unresolved: Dict[str, Set[str]] = defaultdict(set)  # bare names that fit no object: an alias, or a use the toolkit misreads
         self.duplicates: List[str] = []
         self.failed: List[Dict[str, str]] = []
         self.empty: List[str] = []
@@ -189,6 +190,7 @@ class Graph:
             for ref in refs:
                 target = self.find(index, ref, style, databases)
                 if target is None:
+                    self.unresolved[str(ref["name"])].add(source)
                     continue
                 if target[0] in "?!":
                     (self.missing if target[0] == "?" else self.external)[target[1:]].add(source)
@@ -296,6 +298,7 @@ class Graph:
             "missing": len(self.missing), "missing_sample": self.ranked(self.missing)[:SAMPLE],
             "obsolete_used": len(retired), "obsolete_used_sample": sorted(retired)[:SAMPLE],
             "external": len(self.external), "external_sample": self.ranked(self.external)[:SAMPLE],
+            "unresolved": len(self.unresolved), "unresolved_sample": self.ranked(self.unresolved)[:SAMPLE],
             "most_used": [{"id": node, "used_by": len(self.into.get(node, []))} for node in used[:SAMPLE] if self.into.get(node)],
             "empty_files": len(self.empty), "empty_sample": self.empty[:SAMPLE],
             "failed_files": len(self.failed), "failed_sample": self.failed[:SAMPLE],

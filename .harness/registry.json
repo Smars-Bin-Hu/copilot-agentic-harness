@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.4.38",
+  "version": "1.4.39",
   "released": "2026-10-17",
   "copyright": "Smars Hu",
   "contributors": [
@@ -30,6 +30,7 @@
       ".harness/tests/test_kbmigrate.py",
       ".harness/tests/test_kbmap.py",
       ".harness/tests/test_kblearn.py",
+      ".harness/tests/test_kbaudit.py",
       ".harness/INDEX.md",
       ".harness/registry.json",
       ".github/copilot-instructions.md",
@@ -53,6 +54,7 @@
       ".github/skills/generic-kb-learn-synthesize/",
       ".github/skills/generic-kb-toolkit-design/",
       ".github/skills/generic-kb-toolkit-build/",
+      ".github/skills/generic-kb-toolkit-audit/",
       ".harness/tests/support.py",
       ".harness/tests/taskcase.py",
       ".harness/tests/test_adapters.py",

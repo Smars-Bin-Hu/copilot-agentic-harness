@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.40 (2026-10-18)
+
+### Added
+
+- **A guide to the knowledge base**: [08 Knowledge base](08-knowledge-base.md). The idea (scripts for structure, the model for meaning; a base that is honest about its gaps), the road from toolkit to architecture with what you say at each step, how you know the map is right, what the code cannot tell, versions, what you can change for your own code, an example on spring-petclinic, and common questions.
+- **`/harness-wondering` has a topic 16** on the knowledge base built from code.
+
+### Changed
+
+- The section of [Configuration](03-configure.md) on starting a knowledge base from the code is now a short pointer to the guide.
+
 ## 1.4.39 (2026-10-18)
 
 How far the map can be trusted, measured.

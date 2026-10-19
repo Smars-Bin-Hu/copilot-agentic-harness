@@ -1,7 +1,7 @@
 # GitHub Copilot Agentic Harness on VS Code
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.4.39-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.4.40-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
@@ -93,6 +93,7 @@ If you'd rather not read docs, the three commands above are enough.
 | [05 Design](docs/05-design.md) | **Why it is built this way.** The layers, and which work goes to code and which to the model |
 | [06 Cost](docs/06-cost-optimization.md) | **How it saves time and money**, and where it is still expensive |
 | [07 Release notes](docs/07-release-notes.md) | **What changed in each version.** Additions, changes and retirements |
+| [08 Knowledge base](docs/08-knowledge-base.md) | **Build it from your code and keep it true.** The idea, the steps, how you know the map is right, what you can change |
 
 ## Directory layout
 
@@ -143,4 +144,4 @@ Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENS
 
 ---
 
-Version 1.4.39 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.4.40 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

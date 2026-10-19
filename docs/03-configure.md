@@ -146,24 +146,9 @@ harness kb reads --task <task name> # what one task read
 - What can be recorded: the paths the read and search tools name, and paths written out in a terminal command (`cat knowledge-base/x.md`). What cannot: for a search over a folder, only the folder is known, not which files in it were read.
 - To switch it off: write `{ "knowledge_base_reads": false }` in `observe.override.json`.
 
-### Starting a knowledge base from the code: the repository map
+### Starting a knowledge base from the code
 
-When there is no knowledge base yet, or a repository nobody has learned, the agent starts from a map made by script, not by reading:
-
-```bash
-harness kb map                       # every object and every use, from the base branch of each target repository
-harness kb near usp_load_orders      # what one object uses, and what uses it (--up, --down, --depth 3)
-harness kb split                     # a first cut of the domains; objects used from many entry points are "shared"
-```
-
-- **The map needs your toolkit.** What a procedure, a job or a class looks like in a file depends on your stack, so the harness ships none. The agent makes one for your code: `/generic-kb-toolkit-design` looks at your repositories and asks you for 5 to 10 uses you know ("job X runs procedure Y"); you approve the design; `/generic-kb-toolkit-build` writes the extractors into `<knowledge base>/toolkit/` through a write-back you approve. Every `kb map` checks those known uses again. The contract is `.harness/contracts/kb/map.md`; two samples are in `.harness/examples/kb-toolkits/`: SQL Server (`.sql`, SQL Agent job scripts, SSIS packages) and a Spring Boot service (endpoints, controllers, entities, tables, views), the second built by following the two skills on the open-source spring-petclinic.
-- **`kb map` runs the toolkit's code.** It is code from your knowledge base, which changes only through a write-back a person approves.
-- **It is a cache**, in `.harness/runtime/kbmap/`, never in the knowledge base. The first run reads every file; later runs read only the files that changed.
-- **What it shows besides the uses**: `missing` (names used but defined in no file: deleted, retired or never committed), `obsolete_used` (retired code still in use), `dynamic` (code known only at run time), `external` (other systems).
-- **Measure the map before you learn from it**: `generic-kb-toolkit-audit` has the agent read a sample of every type blind, and `kb audit` scores the map against it, per type: recall (uses in the code the map has) and precision (uses in the map the code has), with every difference and its line. Below 0.95, the toolkit is fixed with those examples. The result is kept as `toolkit/audit.md`. No map is complete: code built at run time is out of its reach, and is listed instead.
-- You decide the domains once: `/generic-kb-domains` writes `DOMAINS.md` in a `kb` task, you change it until it is right, and the list goes into the knowledge base's `README.md`.
-- Then each domain is learned in steps: `generic-kb-learn-plan` (you approve `LEARN-PLAN.md`), `/generic-kb-learn-batch` once per batch, `generic-kb-learn-synthesize` at the end. Each step is a `kb` task with its own write-back. A research note or runbook you have (for example from a search over your team's pages) is kept in `discovery/` as a lead; only the code makes a card `verified`.
-- What the agent cannot get from the code, it writes into the domain's `requests.md` (a read-only query to run, a file to find in git) and asks you at its next stop. You answer, or decline once and it is not asked again. Facts of an environment go into `environment.md`, with the date and the code they were seen against.
+No knowledge base yet, or a repository nobody has learned: the agent builds one from the code, in steps you approve. A map made by script (with a toolkit made for your stack), an audit of how right the map is, the domains, then each domain learned in batches. The whole road, how to check it, and what you can change: [The knowledge base](08-knowledge-base.md).
 
 ## Code standards
 

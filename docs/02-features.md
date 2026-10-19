@@ -189,7 +189,7 @@ Reading the knowledge base must cost less than reading the code, and give a bett
 - **A domain learned from zero, in steps you can check**: `generic-kb-learn-plan` names the entry points and lets `kb order` work out every object they reach, bottom up, in batches of one type; you approve the plan. Each batch is a task of its own (`/generic-kb-learn-batch`): a card per object, read from its code, with the commit it was read at, and `kb cardcheck` refuses a relation the map does not have. Last, `generic-kb-learn-synthesize` writes `architecture.md` from the paths `kb flows` takes through the map. What the code cannot tell (values known only at run time, code in no repository) goes into the domain's `requests.md`, for a person to give.
 - **The agent keeps it true while it works**: `task fetch` names the cards of the files it fetched and marks the stale ones; knowledge the code shows to be wrong or missing is noted and, at the next stop, offered as a `kb` task.
 
-How to set it up: [Configure and customise](03-configure.md). All the commands: [Reference](04-reference.md).
+How it is built from your code, step by step: [The knowledge base](08-knowledge-base.md). How to plug it in: [Configure and customise](03-configure.md). All the commands: [Reference](04-reference.md).
 
 ## Skills you can ask for
 

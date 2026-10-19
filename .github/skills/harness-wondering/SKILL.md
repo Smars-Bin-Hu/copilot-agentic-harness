@@ -1,6 +1,6 @@
 ---
 name: harness-wondering
-description: 'The deep course: an interactive explanation of how coding agents and this harness work and how they are built. Topics: how an agent works, instructions, skills, agents, tools, hooks, guardrails, permissions, tasks, subagents, independent checks, observe and report, commands, internals, design choices. Use when the user wants to go deep, asks "why is it designed this way", "how does the hook work", "how is it built", or types /harness-wondering. A beginner new to the harness uses harness-quick-start first. Keywords: wondering, how it works, deep dive, internals, architecture, tutorial.'
+description: 'The deep course: an interactive explanation of how coding agents and this harness work and how they are built. Topics: the agent loop, instructions, skills, agents, tools, hooks, guardrails, permissions, tasks, subagents, checks, observe, commands, internals, design choices, the knowledge base from code. Use when the user wants to go deep, asks "why is it designed this way", "how does the hook work", "how is it built", or types /harness-wondering. A beginner new to the harness uses harness-quick-start first. Keywords: wondering, how it works, deep dive, internals, architecture, tutorial.'
 type: workflow
 specificTo: generic
 ---
@@ -48,8 +48,9 @@ How it divides the work with `harness-quick-start`: quick-start takes a beginner
 | 13 | Common commands | Those for people, those for agents, when to use which | [13-commands.md](references/13-commands.md) |
 | 14 | Internals | The path of one hook call, modules, state, policies, adapters | [14-internals.md](references/14-internals.md) |
 | 15 | Design choices | Why there are no Levels, what is left undone on purpose | [15-design-choices.md](references/15-design-choices.md) |
+| 16 | The knowledge base from code | Why scripts do the structure, the toolkit and the map, the audit, learning in batches, the checks on cards | [16-knowledge-base.md](references/16-knowledge-base.md) |
 
-The topics have an order: 1 to 6 are the building blocks, 7 and 8 are safety, 9 to 12 are the way of working, 13 to 15 are for looking things up and for the principles. When the user has no idea, suggest starting at 1 or 6.
+The topics have an order: 1 to 6 are the building blocks, 7 and 8 are safety, 9 to 12 are the way of working, 13 to 15 are for looking things up and for the principles, 16 is the knowledge base. When the user has no idea, suggest starting at 1 or 6.
 
 ### How to teach a topic
 

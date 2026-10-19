@@ -38,7 +38,7 @@ One page lists every task, which one waits for you and since when. You filter, s
 
 You say: "Map our repositories." / "Which jobs run in production but have no code in git?" / "Who uses this table?"
 
-Your knowledge base gets a fixed form and is kept true: a map made by script from your repositories, a finder for objects that production runs but git does not hold, a refresh when code changes, and translation into English. General skills for impact analysis (what breaks if I rename this), for turning what the agent learned into knowledge, for designing and building your own workflows, and for building and repairing your own skills.
+Your knowledge base gets a fixed form and is kept true: a map made by script from your repositories (and a measure of how right it is), a domain learned from the code in batches you approve, a finder for objects that production runs but git does not hold, a refresh when code changes, and translation into English. The whole road: [The knowledge base](../../../../docs/08-knowledge-base.md). General skills for impact analysis (what breaks if I rename this), for turning what the agent learned into knowledge, for designing and building your own workflows, and for building and repairing your own skills.
 
 ## Under all of it
 

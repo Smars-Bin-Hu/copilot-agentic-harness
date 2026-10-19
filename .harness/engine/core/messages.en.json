@@ -954,6 +954,7 @@
   "kbaudit.answers.line": "line {line}: not a reading (needs `from`, and `to` or `none`)",
   "kbaudit.score.pass": "Every type is at or above the bar. Still look at `map_misses` and `map_only`: each is a use the map gets wrong. Write AUDIT.md and keep it with the toolkit.",
   "kbaudit.score.fail": "Below the bar, or lines not read. Check every difference at its line first: a reading that was wrong is fixed in the answers (say so in AUDIT.md), then score again. What is left is the map's: `map_misses` (the toolkit does not see a use) and `map_only` (the toolkit sees one that is not there). Fix the toolkit with /generic-kb-toolkit-build, with these as examples.",
+  "kbaudit.score.ambiguous": "A reading names a short name that fits several objects (`ambiguous`: the same `schema.name` in two databases, say): it is not scored, and neither is the map's use of it. Look at the line, write the name in full as the code resolves it (the database of the file, or its `USE`), and score again.",
   "kblearn.none": "No object in the map is called `{query}`. Run `kb map` again if the code changed.",
   "kblearn.many": "More than one object is called `{query}`: {ids}. Give the id.",
   "kblearn.order.next": "The plan, by script. Write LEARN-PLAN.md from it for the user to approve: the batches in this order (each is learned in a task of its own; what a batch uses is in an earlier batch or earlier in the same one), `shared` for shared/, `stopped_at` and `outside` as boundaries, `missing` as requests for code, `dynamic` as requests for run-time values.",

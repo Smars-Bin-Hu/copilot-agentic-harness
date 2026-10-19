@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import unittest
+from unittest import mock
 
 from support import GIT, HarnessTestCase, make_repo
 
@@ -70,6 +71,25 @@ class AuditTests(HarnessTestCase):
         self.assertEqual(result["map_misses"], [])
         self.assertEqual(result["map_only"], [])
         self.assertEqual(len(result["kind_differs"]), 1)
+
+    def test_a_short_name_in_two_databases_is_listed_not_matched_to_the_maps_choice(self) -> None:
+        graph = kbgraph.Graph()
+        for node in ("sp:A.dbo.p", "table:A.dbo.t", "table:B.dbo.t", "table:A.dbo.u"):
+            kind, name = node.split(":", 1)
+            graph.nodes[node] = {"name": name, "type": kind, "path": "repo_a/p.sql"}
+        graph.out["sp:A.dbo.p"] = [("table:B.dbo.t", "reads"), ("table:A.dbo.u", "writes")]  # the map took the wrong database
+        self.write({"from": "sp:A.dbo.p", "to": "dbo.t", "line": 3}, {"from": "sp:A.dbo.p", "to": "dbo.u", "line": 4})
+        with mock.patch.object(kbgraph, "need_map", return_value=graph):
+            result = kbaudit.score(self.root, self.answers)
+            self.assertFalse(result["pass"])
+            self.assertEqual([(item["uses"], item["line"], item["fits"], item["map"]) for item in result["ambiguous"]],
+                             [("dbo.t", 3, ["table:A.dbo.t", "table:B.dbo.t"], ["table:B.dbo.t"])])
+            self.assertEqual((result["types"][0]["read"], result["types"][0]["map"], result["types"][0]["both"]), (1, 1, 1))
+            self.assertEqual(result["next"], kbaudit.say("kbaudit.score.ambiguous"))
+            self.write({"from": "sp:A.dbo.p", "to": "A.dbo.t", "line": 3}, {"from": "sp:A.dbo.p", "to": "dbo.u", "line": 4})
+            result = kbaudit.score(self.root, self.answers)  # written in full, the wrong database shows
+        self.assertEqual((result["ambiguous"], [item["uses"] for item in result["map_misses"]], [item["uses"] for item in result["map_only"]]),
+                         ([], ["table:A.dbo.t"], ["table:B.dbo.t"]))
 
     def test_bad_lines_and_objects_not_in_the_map(self) -> None:
         self.answers.write_text("not json\n" + json.dumps({"from": "sp:nowhere", "to": "x"}) + "\n", encoding="utf-8")

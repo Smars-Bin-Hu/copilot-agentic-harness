@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.6 (2026-10-19)
+
+### Fixed
+
+- **`kb audit` no longer matches a short name to the database the map chose.** When the same `schema.name` is in several databases, a reading of `dbo.t` used to count as right for whichever one the map had, so a map that picked the wrong database still passed. Such a reading is now listed under `ambiguous` and not scored, and the audit does not pass until it is written in full. `generic-kb-toolkit-audit` says to write these names with the database the code resolves them to.
+
 ## 1.5.5 (2026-10-19)
 
 ### Fixed

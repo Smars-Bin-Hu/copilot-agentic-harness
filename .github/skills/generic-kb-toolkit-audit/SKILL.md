@@ -29,7 +29,8 @@ specificTo: generic
 2. **Read blind.** For each object: `harness task fetch` its file, read its lines, and write one JSON line per use into `audit-answers.jsonl` in the task: `{"from": "<id>", "to": "<name as the code writes it>", "kind": "<one of kinds>", "line": <line>}`; `{"from": "<id>", "none": true}` when it uses nothing. **Do not run `kb near`, `kb order` or look at the map or a card for these objects before you have written their lines.**
    - What counts as a use is what the toolkit's `DESIGN.md` says the map should hold (for example a call, a table read or written). Names in comments, strings that are not run, temporary tables and aliases are not uses.
    - A name built at run time: write what is fixed in the code and add `"dynamic": true`; it is not scored against the map.
-3. **Score**: `harness kb audit --answers <task>/audit-answers.jsonl --json`.
+   - A short name that can mean several objects (the same `schema.name` in two databases): write it in full, with the database the code resolves it to (the database of the file, or its `USE`). The score lists a short name that fits several objects under `ambiguous` and does not count it, so the audit cannot see whether the map picked the right database.
+3. **Score**: `harness kb audit --answers <task>/audit-answers.jsonl --json`. Anything under `ambiguous`: go back to its line, write the name in full, and score again. The audit does not pass while one is left.
 4. **Check every difference at its line**, before you trust the score:
    - In `map_misses` (you read a use the map does not have): look at the line again. Your reading was wrong: correct `audit-answers.jsonl` and note it. The use is there: it is the map's miss.
    - In `map_only` (the map has a use you did not read): look for it in the file. Found: you missed it; add it and note it. Not there: the map's false use.
@@ -51,5 +52,6 @@ specificTo: generic
 |-------|----------|
 | `not_in_map` | An id with a typo: use the ids of `AUDIT-SAMPLE.json` |
 | `bad_lines` | A line that is not JSON, or has no `from`, or neither `to` nor `none` |
+| `ambiguous` | A short name fits several objects: write it in full, as the code resolves it |
 | `kind_differs` | The use is found but named another kind: check `DESIGN.md`; a wrong kind puts it under the wrong field of every card |
 | Every type passes but the user still doubts one area | Audit that area: `--type <t>` with a higher `--per-type`, or another `--seed` |

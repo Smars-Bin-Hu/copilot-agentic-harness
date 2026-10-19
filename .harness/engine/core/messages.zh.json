@@ -954,6 +954,7 @@
   "kbaudit.answers.line": "第 {line} 行：不是一条读到的关系（要有 `from`，以及 `to` 或 `none`）",
   "kbaudit.score.pass": "每种类型都达标了。还是要看 `map_misses` 和 `map_only`：每一条都是地图弄错的关系。写 AUDIT.md，和工具包放在一起。",
   "kbaudit.score.fail": "没达标，或有行读不了。先到每条差异的行号处再核对：读错的，改答案（在 AUDIT.md 里写明），再算一次。剩下的就是地图的问题：`map_misses`（工具包没认出的关系）和 `map_only`（工具包认出了不存在的关系）。拿这些当例子，用 /generic-kb-toolkit-build 改工具包。",
+  "kbaudit.score.ambiguous": "有读出的名字对得上好几个对象（`ambiguous`，比如同一个 `schema.name` 在两个库里都有）：它不计分，map 那边对应的 use 也不计分。回到那一行，按代码实际指向的写全名（文件所在的库，或它的 `USE`），再评分。",
   "kblearn.none": "地图里没有叫 `{query}` 的对象。代码改过的话，再运行一次 `kb map`。",
   "kblearn.many": "有多个对象叫 `{query}`：{ids}。请给 id。",
   "kblearn.order.next": "这是脚本给的计划。据此写 LEARN-PLAN.md 给用户批准：批次按这个顺序（每批一个任务；一批用到的对象在更早的批次里，或在同一批的更前面），`shared` 放进 shared/，`stopped_at` 和 `outside` 是边界，`missing` 进请求台账（要代码），`dynamic` 进请求台账（要运行时的值）。",

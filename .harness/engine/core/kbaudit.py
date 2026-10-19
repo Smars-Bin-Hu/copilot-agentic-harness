@@ -23,6 +23,7 @@ from .kbgraph import Graph, MapError, keys_of
 PER_TYPE = 5
 MIN_SCORE = 0.95
 SHOWN = 100
+AMBIGUOUS = "~"  # the key of a reading whose name fits several objects
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -84,20 +85,30 @@ def read_answers(path: Path) -> Tuple[Dict[str, List[Dict[str, Any]]], List[str]
     return found, bad
 
 
-def target(graph: Graph, name: str, names: Dict[str, str], mapped: Set[str]) -> str:
-    """The key a reading's `to` is compared by: an id when one object fits (or one of those that fit is a use the map
-    has); else the missing or outside name of the map that it names; else the name itself, lower case."""
+def plain(name: str) -> str:
+    """`[dbo].[t]` as the code writes it -> `dbo.t`."""
+    return ".".join(kbgraph.parts(name)) if "[" in name or '"' in name else name
+
+
+def fits(graph: Graph, name: str) -> List[str]:
+    """The objects a reading's `to` can name: its id, or every object it is one of the names of."""
     if name in graph.nodes:
-        return name
-    if "[" in name or '"' in name:
-        name = ".".join(kbgraph.parts(name))  # `[dbo].[t]` as the code writes it -> `dbo.t`
-    low = name.lower()
-    fits = [node for node, item in graph.nodes.items() if low in keys_of(item["name"]) or node.lower() == low]
-    if len(fits) > 1:
-        fits = [node for node in fits if node in mapped] or fits
-    if len(fits) == 1:
-        return fits[0]
-    for key in keys_of(name):
+        return [name]
+    low = plain(name).lower()
+    return [node for node, item in graph.nodes.items() if low in keys_of(item["name"]) or node.lower() == low]
+
+
+def target(graph: Graph, name: str, names: Dict[str, str]) -> str:
+    """The key a reading's `to` is compared by: an id when one object fits; `~name` when several do (`dbo.t` in two
+    databases: the reading does not say which, so it is not scored); else the missing or outside name of the map that
+    it names; else the name itself, lower case."""
+    found = fits(graph, name)
+    if len(found) == 1:
+        return found[0]
+    low = plain(name).lower()
+    if found:
+        return AMBIGUOUS + low
+    for key in keys_of(low):
         if key in names:
             return names[key]
     return "?" + low
@@ -109,7 +120,7 @@ def score(root: Path, answers: Path, least: float = MIN_SCORE) -> Dict[str, Any]
     readings, bad = read_answers(answers)
     unknown = sorted(node for node in readings if node not in graph.nodes)
     per: Dict[str, Dict[str, int]] = defaultdict(lambda: {"objects": 0, "read": 0, "map": 0, "both": 0})
-    left_out, extra, kinds = [], [], []
+    left_out, extra, kinds, unsure = [], [], [], []
     for node, rows in sorted(readings.items()):
         if node not in graph.nodes:
             continue
@@ -121,10 +132,21 @@ def score(root: Path, answers: Path, least: float = MIN_SCORE) -> Dict[str, Any]
         for value in outside.values():
             mapped[value].add("")
         read: Dict[str, Dict[str, Any]] = {}
+        open_ones: List[Dict[str, Any]] = []
         for row in rows:
             if row.get("dynamic"):
                 continue  # built at run time: out of reach of any map, not scored
-            read.setdefault(target(graph, str(row["to"]), names, set(mapped)), row)
+            key = target(graph, str(row["to"]), names)
+            if key.startswith(AMBIGUOUS):
+                open_ones.append(row)
+            else:
+                read.setdefault(key, row)
+        for row in open_ones:
+            candidates = fits(graph, str(row["to"]))
+            chosen = [other for other in candidates if other in mapped and other not in read]
+            for other in chosen:
+                mapped.pop(other)  # the map's side of a name the reading leaves open is not scored either
+            unsure.append({"object": node, "uses": str(row["to"]), "line": row.get("line"), "fits": candidates, "map": chosen, "path": graph.nodes[node]["path"]})
         stats = per[graph.nodes[node]["type"]]
         stats["objects"] += 1
         stats["read"] += len(read)
@@ -145,12 +167,13 @@ def score(root: Path, answers: Path, least: float = MIN_SCORE) -> Dict[str, Any]
         recall = stats["both"] / stats["read"] if stats["read"] else 1.0
         precision = stats["both"] / stats["map"] if stats["map"] else 1.0
         types.append({"type": kind, **stats, "recall": round(recall, 3), "precision": round(precision, 3), "pass": recall >= least and precision >= least})
-    passed = bool(types) and all(item["pass"] for item in types) and not bad
+    passed = bool(types) and all(item["pass"] for item in types) and not bad and not unsure
     return {
         "types": types, "min": least, "pass": passed,
         "map_misses": left_out[:SHOWN], "map_misses_count": len(left_out),
         "map_only": extra[:SHOWN], "map_only_count": len(extra),
         "kind_differs": kinds[:SHOWN], "not_in_map": unknown, "bad_lines": bad,
-        "next": say("kbaudit.score.pass" if passed else "kbaudit.score.fail"),
+        "ambiguous": unsure[:SHOWN], "ambiguous_count": len(unsure),
+        "next": say("kbaudit.score.ambiguous") if unsure else say("kbaudit.score.pass" if passed else "kbaudit.score.fail"),
         "exit_code": 0 if passed else 1,
     }

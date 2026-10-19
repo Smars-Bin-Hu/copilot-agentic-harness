@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.4 (2026-10-19)
+
+### Changed
+
+- **A domain is learned in one task.** `generic-kb-learn-plan` opens the task `learn-<domain>`: its plan lists every batch and you approve it once; its `TODO.md` has one step per batch. The agent learns a batch, checks it (`kb cardcheck`), ticks it, and goes on. Change chats as often as you like: "continue learn-<domain>" picks the task up. When every batch is ticked, the architecture is written and the whole domain is written back once. Before, every batch was a task of its own, with a plan and a write-back to approve each time.
+- **`generic-kb-learn-batch` is no longer started only by you**: inside an approved learn task the agent goes on with the next batch.
+- **A `kb` task may name a domain the knowledge base does not have yet** (`task new --domain`), the one it learns.
+- **`kb status` follows an open learn task**: "in the task learn-X, n batches left", the plan that waits for your approval, or the write-back that is next. A domain learned in a task counts only after its write-back.
+
+### Fixed
+
+- 1.5.3 left its new test file out of the registry, so one layout test failed.
+
 ## 1.5.3 (2026-10-19)
 
 From the first full run of `/harness-rookie-new-knowledgebase` in Copilot, from an empty knowledge base to a learned domain (spring-petclinic, domain `vets`).

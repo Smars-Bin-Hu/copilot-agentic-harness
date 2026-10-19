@@ -20,7 +20,7 @@ Three checks run on every map: the uses a person knew (`facts.jsonl`), the files
 
 ### 16.4 Learning in batches
 
-`kb order` walks the map from the entry points a person chose, cuts off what other domains share, and orders the rest bottom up: what an object uses is learned before it, so its card can point at the cards below instead of the code. A batch is one type, at most 20 objects and about 1500 lines, one task, one review. A long object is a batch of its own and read in parts.
+`kb order` walks the map from the entry points a person chose, cuts off what other domains share, and orders the rest bottom up: what an object uses is learned before it, so its card can point at the cards below instead of the code. A batch is one type, at most 20 objects and about 1500 lines. The whole domain is one task: its plan lists every batch and is approved once, its `TODO.md` has one step per batch, and the domain is written back once at the end. Chats come and go ("continue learn-<domain>"); the task keeps the state. A long object is a batch of its own and read in parts.
 
 ### 16.5 Checks on what the model writes
 
@@ -28,7 +28,7 @@ The model writes each card. Two of its parts are checked by script: the relation
 
 ### 16.6 Where it stands, from the files
 
-`kb status` works out from the files which step is done: the toolkit, the map and its facts, the audit (of this toolkit), the domains, and in each domain the plan, what is left to learn and the flows. A wizard (`/harness-rookie-new-knowledgebase`), a stop of a task (the offer once per session) and a person back after a week all read the same answer, so nothing depends on what an agent remembers.
+`kb status` works out from the files which step is done: the toolkit, the map and its facts, the audit (of this toolkit), the domains, and in each domain the plan, what is left to learn and the flows (in the open learn task while a domain is learned). A wizard (`/harness-rookie-new-knowledgebase`), a stop of a task (the offer once per session) and a person back after a week all read the same answer, so nothing depends on what an agent remembers.
 
 ### 16.7 A base, with its versions and its gaps
 
@@ -50,5 +50,5 @@ Every card holds the git sha of its source and the commit it was read at, so `kb
 ## Common questions
 
 - **"Can the map be 100% right?"** No. It can be measured (`kb audit`), and what it cannot see is listed, not guessed.
-- **"Why not one big prompt that learns the domain?"** One context gets worse towards its end, and one review of hundreds of cards is not a review. Batches keep both small.
+- **"Why not one big prompt that learns the domain?"** One context gets worse towards its end: so one batch at a time, and a new chat every two or three batches. What is reviewed is held by scripts (`kb cardcheck` on every card, `kb check`), and the person approves the plan and the one write-back.
 - **"Does the model still matter?"** Yes: every word of meaning in a card is the model's. The scripts only make sure it reads the right things, in the right order, and does not make up structure.

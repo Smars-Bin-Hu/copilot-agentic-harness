@@ -16,9 +16,9 @@
 | `map` | The script lists everything in the code and who uses what | nothing | `harness kb map`, no task (fix the toolkit if `facts` are missing; a repository in `empty` holds code of another kind: say so) | every repository mapped, all facts found |
 | `audit` | Measure how right that list is, on a sample | approve the result | `generic-kb-toolkit-audit` | `toolkit/audit.md` says pass |
 | `domains` | Cut the code into areas a team works on | confirm the cut, the names | `generic-kb-domains`, or straight to a learn plan when they know the domain | a domain folder exists |
-| `learn` (no plan) | Plan what to learn in one domain, in what order | entry points (where work starts), scope, a research note or runbook if any | `generic-kb-learn-plan` | `discovery/learn-plan.md` exists |
-| `learn` (objects left) | Learn the domain, a batch at a time | approve each batch | the user opens a new chat and types `/generic-kb-learn-batch <domain>`, once per batch | nothing left to learn |
-| `learn` (no flows) | Write the overview of the domain | approve it | `generic-kb-learn-synthesize` | `architecture.md` has its flows |
+| `learn` (no plan) | Plan what to learn in one domain, in what order, in one task for the whole domain | entry points (where work starts), scope, a research note or runbook if any; then approve the plan once | `generic-kb-learn-plan` | the plan is approved and the empty domain is in the task |
+| `learn` (objects left) | Learn the domain, a batch at a time, in the same task | nothing; a new chat every two or three batches ("continue learn-<domain>") | `generic-kb-learn-batch` | every batch ticked |
+| `learn` (no flows) | Write the overview of the domain, then write the whole domain back once | approve the write-back | `generic-kb-learn-synthesize` | the domain is in the knowledge base |
 | `maintain` | Built | | | |
 
 ## Keeping it true

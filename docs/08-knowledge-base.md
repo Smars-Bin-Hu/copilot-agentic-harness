@@ -48,12 +48,12 @@ flowchart LR
 | 2. Map (before each use) | none: the agent runs it | `kb map`: every object and every use; only changed files read again | none | none | a cache in `.harness/runtime/kbmap/` |
 | 3. Audit | "can I trust the map?" | `kb audit`: a sample, then the score | reads the sample blind | the write-back | `toolkit/audit.md`: recall and precision per type |
 | 4. Domains (once) | "which domains does our code have?" | `kb split` | names the groups, merges what is one piece of work | `DOMAINS.md` | the domains in `README.md` |
-| 5. Learn plan | "learn the domain X from zero; the entry points are ..." | `kb order`: what the entry points reach, bottom up, in batches | checks the entry points, reads a research note as leads | `LEARN-PLAN.md`, then the empty domain | `discovery/learn-plan.md`, `requests.md` |
-| 6. Batches | `/generic-kb-learn-batch X`, once per batch | `kb index`, `kb cardcheck` | reads each object's code, writes its card | the plan and the write-back of each batch | cards |
-| 7. Architecture | "write the architecture of X" | `kb flows`, `kb cardcheck` | puts the paths into words | the write-back | `architecture.md`, the entry points of `domain.yaml` |
+| 5. Learn plan | "learn the domain X from zero; the entry points are ..." | `kb order`: what the entry points reach, bottom up, in batches | opens one task for the domain; checks the entry points, reads a research note as leads | the plan, once (it lists every batch) | a task `learn-X` with one `TODO.md` step per batch |
+| 6. Batches | "continue learn-X" (a new chat every two or three batches) | `kb index`, `kb cardcheck` | reads each object's code, writes its card, ticks the batch | nothing | cards, in the task |
+| 7. Architecture and write-back | "continue learn-X" | `kb flows`, `kb cardcheck` | puts the paths into words | the write-back of the whole domain, once | the domain in the knowledge base |
 | 8. Keep it true | none: the agent offers it (and, while the knowledge base is not built, the next step once per session at a stop of a task) | `kb stale`, `kb gaps` | fixes the cards a change touched; drafts what a task taught | each write-back | cards in line with the code |
 
-The skills behind the steps: `generic-kb-toolkit-design`, `/generic-kb-toolkit-build`, `generic-kb-toolkit-audit`, `generic-kb-domains`, `generic-kb-learn-plan`, `/generic-kb-learn-batch`, `generic-kb-learn-synthesize`, `generic-kb-refresh`, `generic-capture-knowledge`. You do not need their names; say what you want, and the agent offers the right one. The two with a `/` run only when you type them.
+The skills behind the steps: `generic-kb-toolkit-design`, `/generic-kb-toolkit-build`, `generic-kb-toolkit-audit`, `generic-kb-domains`, `generic-kb-learn-plan`, `generic-kb-learn-batch`, `generic-kb-learn-synthesize`, `generic-kb-refresh`, `generic-capture-knowledge`. You do not need their names; say what you want, and the agent offers the right one. The one with a `/` runs only when you type it.
 
 **Already have a knowledge base?** `generic-kb-migrate` moves a domain into the standard form (`kb migrate`). The shas are set at the commit the old index was written at, so `kb stale` then lists honestly what changed since. From there, step 8.
 
@@ -62,7 +62,7 @@ The skills behind the steps: `generic-kb-toolkit-design`, `/generic-kb-toolkit-b
 - **The toolkit decides what the map can see.** It is code your team owns, in the knowledge base. The harness ships none, only two samples: `.harness/examples/kb-toolkits/sqlserver/` (procedures, SQL Agent jobs, SSIS packages) and `spring/` (a Spring Boot service).
 - **You decide the entry points and the boundaries.** `kb split` and a research note propose; the agent asks.
 - **The script decides the order.** What an object uses is learned before it, so its card can point at the cards below it instead of reading their code again.
-- **One batch per task**: objects of one type, at most 20 and about 1500 lines of code. An object longer than that is a batch of its own and is read in parts.
+- **One task per domain, one batch at a time**: a batch is objects of one type, at most 20 and about 1500 lines of code in all (`--batch`, `--lines` of `kb order`). An object longer than that is a batch of its own and is read in parts. The cards stay in the task until the whole domain is written back, so the knowledge base never holds half a domain.
 - **The model decides the words, under checks.** A card's relations line must equal the map's uses (`kb cardcheck`). Each rule cites the lines it is in (`L120-L145`), and the check makes sure they fall inside that object's code.
 
 ## How you know the map is right
@@ -136,7 +136,7 @@ The tables are learned before the entities that map them, and the controllers la
 
 **We have a research note (from a search over our runbooks).** Give it to `generic-kb-learn-plan`. It is kept as it came, in `discovery/`, and used for leads: entry points to check, claims to look for in the map. Only the code makes a card `verified`.
 
-**Learning stopped halfway.** Start `/generic-kb-learn-batch` again in a new task. The next batch is the first one `kb order` gives once what is learned is left out.
+**Learning stopped halfway.** Say "continue learn-X" in a new chat: the task keeps its plan and its approval, and the next batch is the first one `kb order` gives once what is learned is left out. `harness kb status` names the task and how many batches are left.
 
 **A long procedure (thousands of lines).** It is a batch of its own. The agent reads it in parts, cites lines for every rule, and its card may be longer (one line per 10 of code).
 

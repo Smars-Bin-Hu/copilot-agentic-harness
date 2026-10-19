@@ -48,7 +48,7 @@ def cmd_list(args: argparse.Namespace) -> Dict[str, Any]:
 
 def cmd_new(args: argparse.Namespace) -> Dict[str, Any]:
     if args.domain:
-        tasklife.known_domains(repo_root(), args.domain)  # a wrong name stops it before the task is made
+        tasklife.known_domains(repo_root(), args.domain, new_ok=args.kind == "kb")  # a wrong name stops it before the task is made
     result = tasklife.new(repo_root(), args.name, args.kind, args.tier, args.session_id, args.surface)
     if args.domain:
         named = tasklife.set_domains(repo_root(), result["task"], args.domain)

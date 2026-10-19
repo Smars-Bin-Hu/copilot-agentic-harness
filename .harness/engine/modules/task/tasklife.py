@@ -15,6 +15,7 @@ What a task writes back and the two approvals are in `task.py`.
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -188,7 +189,7 @@ def upgrade(root: Path, raw_task: str, tier: str) -> Dict[str, Any]:
 def set_domains(root: Path, raw_task: str, names: List[str]) -> Dict[str, Any]:
     """The business domains the task is about. From then on the agent is told the skills of these domains."""
     task = task_ops.resolve(root, raw_task)
-    wanted = known_domains(root, names)
+    wanted = known_domains(root, names, new_ok=(tasks.read(root, task) or {}).get("kind") == "kb")
     with task_ops.locked(root, task) as data:
         if data["status"] != "open":
             raise CommandError(say("task.closed", task=task, name=task_ops.name_of(task)))
@@ -198,11 +199,15 @@ def set_domains(root: Path, raw_task: str, names: List[str]) -> Dict[str, Any]:
     return {"task": task, "domains": wanted, "skills": found, "next": say("domain.next" if found else "domain.next.none")}
 
 
-def known_domains(root: Path, names: List[str]) -> List[str]:
-    """The names, without repeats; an error naming the ones no knowledge base has."""
+NEW_DOMAIN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+
+
+def known_domains(root: Path, names: List[str], new_ok: bool = False) -> List[str]:
+    """The names, without repeats; an error naming the ones no knowledge base has. `new_ok`: a `kb` task may name a
+    domain it is about to learn, which is in the knowledge base only after its write-back (a folder name all the same)."""
     known = domainskills.domains(root)
     wanted = list(dict.fromkeys(name.strip() for name in names if name.strip()))
-    unknown = [name for name in wanted if name not in known]
+    unknown = [name for name in wanted if name not in known and not (new_ok and NEW_DOMAIN.match(name))]
     if unknown:
         raise CommandError(say("domain.unknown", names=", ".join(unknown), known=", ".join(known) or "-"))
     return wanted

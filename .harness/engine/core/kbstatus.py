@@ -14,7 +14,7 @@ import shlex
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import kbgraph, kblearn, kbmap, messages, targets
+from . import kbgraph, kblearn, kbmap, messages, targets, tasks
 from .kbgraph import MapError
 
 STEPS = ("targets", "kb_repo", "toolkit", "map", "audit", "domains", "learn", "maintain")
@@ -129,6 +129,24 @@ def listed_domains(readme: Path) -> List[str]:
     return found
 
 
+def learning_tasks(root: Path, kb_name: str) -> Dict[str, Dict[str, Any]]:
+    """domain -> the open `kb` task that learns it: its name, and its domain folder in `DEV/` once the plan is approved
+    and the empty domain is made (a domain is learned in one task and written back once at the end)."""
+    found: Dict[str, Dict[str, Any]] = {}
+    try:
+        names = tasks.folders(root)
+    except OSError:
+        return found
+    for task in names:
+        data = tasks.read(root, task) or {}
+        if data.get("status") != "open" or data.get("kind") != "kb":
+            continue
+        for domain in [name for name in data.get("domains") or [] if isinstance(name, str)]:
+            folder = tasks.task_dir(root, task) / "DEV" / kb_name / "domains" / domain
+            found.setdefault(domain, {"task": task.rsplit("/", 1)[-1], "folder": folder if folder.is_dir() else None})
+    return found
+
+
 def cards(folder: Path) -> int:
     try:
         return sum(1 for line in (folder / "objects" / "index.jsonl").read_text(encoding="utf-8", errors="replace").splitlines() if line.strip())
@@ -177,8 +195,10 @@ def status(root: Path, deep: bool = True) -> Dict[str, Any]:
             names = sorted(item for item in folder.iterdir() if item.is_dir()) if folder.is_dir() else []
         except OSError:
             names = []
+        learning = learning_tasks(root, kb.name)
         listed = [name for name in listed_domains(kb.path / "README.md") if not (folder / name).is_dir()]
-        domains = [domain_state(root, item, deep) for item in names] + [dict(domain_state(root, folder / name, False), listed=True) for name in listed]
+        listed += [name for name in sorted(learning) if name not in listed and not (folder / name).is_dir()]
+        domains = [in_task(root, learning, item.name, item, deep) for item in names] + [in_task(root, learning, name, folder / name, deep, listed=True) for name in listed]
         steps["domains"].update(done=bool(domains), count=len(domains), **({"not_started": listed} if listed else {}))
         steps["learn"].update(done=bool(domains) and all(item["done"] for item in domains))
     steps["maintain"]["done"] = all(steps[name]["done"] for name in STEPS[:-1])
@@ -192,11 +212,35 @@ def status(root: Path, deep: bool = True) -> Dict[str, Any]:
     }
 
 
+def in_task(root: Path, learning: Dict[str, Dict[str, Any]], name: str, folder: Path, deep: bool, listed: bool = False) -> Dict[str, Any]:
+    """The state of a domain; while a task learns it, the state of its copy in that task's `DEV/`, which is not done
+    until it is written back."""
+    task = learning.get(name)
+    if task is None:
+        return dict(domain_state(root, folder, deep and not listed), **({"listed": True} if listed else {}))
+    if task["folder"]:
+        state = domain_state(root, task["folder"], deep)
+        state.pop("migrated", None)
+    else:  # the plan is not approved yet: nothing in DEV/
+        state = {"plan": False, "architecture": False, "requests_open": 0}
+    state.update(domain=name, task=task["task"], done=False, **({"listed": True} if listed else {}))
+    return state
+
+
 def learn_next(item: Optional[Dict[str, Any]]) -> str:
     if item is None:
         return say("kbstatus.next.maintain")
+    task = item.get("task")
+    if task and not item["plan"]:
+        return say("kbstatus.next.task_plan", domain=item["domain"], task=task)
     if not item["plan"]:
         return say("kbstatus.next.plan", domain=item["domain"])
     if item.get("to_learn"):
+        if task:
+            return say("kbstatus.next.task_batch", domain=item["domain"], left=item["to_learn"], batches=item.get("batches_left", 0), task=task)
         return say("kbstatus.next.batch", domain=item["domain"], left=item["to_learn"], batches=item.get("batches_left", 0))
+    if task and item["architecture"]:
+        return say("kbstatus.next.task_writeback", domain=item["domain"], task=task)
+    if task:
+        return say("kbstatus.next.task_architecture", domain=item["domain"], task=task)
     return say("kbstatus.next.architecture", domain=item["domain"])

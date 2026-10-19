@@ -1,50 +1,51 @@
 ---
 name: generic-kb-learn-batch
-description: 'Learn one batch of an approved learn plan: read the code of each object bottom up, write its card (interface, logic, traps, the relations of the map, the commit it was read at), add its index line with kb index, and pass kb cardcheck before the write-back. One batch per kb task. Use only when the user types /generic-kb-learn-batch; an agent must not start it. Keywords: learn batch, write cards, kb cardcheck, kb index, learn domain.'
-argument-hint: 'The domain (the next batch is taken), or the domain and the ids of one batch'
-disable-model-invocation: true
+description: 'Learn the next batch of a domain in its learn task (plan approved): read the code of each object bottom up, write its card (interface, logic, traps, the relations of the map, the commit it was read at), index it with kb index, pass kb cardcheck, and tick the batch in TODO.md. Use when the user says to continue learning a domain or its learn task, or the next unticked step of a learn task is a batch. Keywords: learn batch, continue learning, write cards, kb cardcheck, kb index, learn domain.'
+argument-hint: 'The domain or its learn task; nothing to take the next batch'
 type: workflow
 specificTo: generic
 ---
 
-# Learn one batch
+# Learn the next batch
 
-One task learns one batch of the plan that `generic-kb-learn-plan` wrote: objects of one type, at most 20 and about 1500 lines of code, used only by what comes later. An object longer than that is a batch of its own. The map says which objects and how they are linked; you read each one's code and write what the map cannot: what it is for, its interface, its logic, its traps. `harness kb cardcheck` then checks every relation a card names against the map, so a relation made up or left out does not reach the knowledge base.
+A batch is one step of a domain's learn task: objects of one type, at most 20 and about 1500 lines of code, used only by what comes later. An object longer than that is a batch of its own. The map says which objects and how they are linked; you read each one's code and write what the map cannot: what it is for, its interface, its logic, its traps. `harness kb cardcheck` then checks every relation a card names against the map, so a relation made up or left out does not reach the knowledge base. The cards stay in the task's `DEV/` until the whole domain is written back once.
 
 ## When to Use This Skill
 
-- The user approved the learn plan of a domain and typed `/generic-kb-learn-batch`.
+- A learn task is open (`harness kb status` names it), its plan is approved, and the next unticked step of its `TODO.md` is a batch.
+- The user says "continue the domain X", "continue learn-X", or names the learn task.
 
-**Who starts it: user-only.** It reads a lot of code and writes many cards.
+**Who starts it: auto**, inside an approved learn task. No learn task for the domain yet: `generic-kb-learn-plan` first.
 
 ## Prerequisites
 
-- The domain exists in the knowledge base with `discovery/learn-plan.md` (written by `generic-kb-learn-plan`).
-- A new task of kind `kb` for this batch (`harness-my-task`), and the map is fresh (`harness kb map`).
+- The learn task, picked up with `harness-my-task` (a new chat opens it again with `task open`; its approvals stay).
+- The empty domain is in the task's `DEV/<kb repo>/domains/<d>/` (the first step of its `TODO.md`).
+- The map is fresh (`harness kb map`).
 
 ## Step-by-Step Workflows
 
-1. **Fetch** the whole domain folder (`harness task fetch --task <task> <kb repo>/domains/<d>`): `kb check` needs `architecture.md` and `environment.md` too.
-2. **Which batch**: run the command of the plan with `--path <task>/DEV/<kb repo>/domains/<d>` added. Its first batch is the next one (learned objects are left out). When the user named ids, take those. When the batches differ from the plan (the code changed), say how, and go on only after the user agrees.
-3. **Plan** (`PLAN.md`): the ids in order, the card file (`objects/<type>.md`), the requests you expect to add. The user approves it in their terminal.
-4. **For each object, in the order given** (what it uses comes first):
-   - `harness kb near <id> --depth 1`: where its code is (repository, path, line) and its uses. Fetch that file: its lines are those of the base, which the map read. Do not change it; a repository only read is left out of the write-back.
+1. **Which batch**: run the command of `discovery/learn-plan.md` with `--path <task>/DEV/<kb repo>/domains/<d>` added. Its first batch is the next one (learned objects are left out). Compare it with the next unticked batch of `TODO.md`. When they differ (the code changed), change that line of `TODO.md`, write why in `LOG.md`, and tell the user in one line.
+2. **For each object, in the order given** (what it uses comes first):
+   - `harness kb near <id> --depth 1`: where its code is (repository, path, line) and its uses. Fetch that file (`harness task fetch`): its lines are those of the base, which the map read. Do not change it; a repository only read is left out of the write-back.
    - Write its card section in `objects/<type>.md` in the form of the standard, see [card.md](./references/card.md). The relations line is the map's uses; the card's text is what you read. **Every rule cites its lines** (`L120-L145`, lines of the file as fetched).
    - **A long object** (in `large` of `kb order`, 400 lines or more): read it in parts, one block of the code at a time (a step, a branch, a `MERGE`), and write each part's rules with their lines before reading the next. Do not summarise the whole from its first part. Its card may be longer: one line per 10 of code.
    - An object it uses that already has a card: name its id and say "see its card"; do not read that code again.
    - Something the code cannot tell (a value known only at run time, a table in no repository): write it as not known in the card, and add a row to `requests.md` (kind, why, a read-only query or command, which environment). One row per object and kind.
-5. **Index**: `harness kb index --path <domain folder in DEV> --id <id> --id <id> ...` for the cards you wrote. It adds their lines from the map and stamps them with the sha of the base branch now. Use `--level` for a card that is not `verified`.
-6. **Check**: `harness kb cardcheck --path <same folder>` until no error, then `harness kb check --path <same folder>` until no error. What cardcheck reports:
+3. **Index**: `harness kb index --path <domain folder in DEV> --id <id> --id <id> ...` for the cards you wrote. It adds their lines from the map and stamps them with the sha of the base branch now. Use `--level` for a card that is not `verified`.
+4. **Check**: `harness kb cardcheck --path <same folder>` until no error, then `harness kb check --path <same folder>` until no error. What cardcheck reports:
    - "names X, but the map has no such use": take it out, or move it to the field the map says.
    - "leaves out X": add it. A caller left out is only a warning; keep `Called by` short for an object used everywhere.
    - "... not in its code": a cited line is outside the object. Look the rule up again in the file and cite where it is; a rule you cannot find is taken out.
    - "no line cited": add the lines of each rule.
-   - The code clearly shows a use the map does not have: the toolkit misses it. Do not add it by hand. Note it in `LOG.md` with the file and line, and tell the user at the end: `/generic-kb-toolkit-build` fixes it for every object at once.
-7. **Hand over**: `harness task diff`, `harness task promote --dry-run`, the user's `approve-promote`. Then offer to close the task (an open one makes the next batch ask which task to use), and say what is next: for the next batch, the user opens a new chat and types `/generic-kb-learn-batch <d>`; when `kb order --path` has nothing left (`to_learn` 0), `generic-kb-learn-synthesize`. At the stop, list the new `open` requests in two lines and ask whether the user can answer one now. After the write-back, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
+   - The code clearly shows a use the map does not have: the toolkit misses it. Do not add it by hand. Note it in `LOG.md` with the file and line, and tell the user: `/generic-kb-toolkit-build` fixes it for every object at once.
+5. **Tick the batch** in `TODO.md`, add one line to `LOG.md` (the ids, the requests added, any toolkit gap), and update `TASK.md`. Tell the user in three lines: what this batch learned, the cardcheck result, and how many batches are left. List new `open` requests in one line and ask whether the user can answer one now.
+6. **Next**: go on with the next batch in this chat, unless the user asked for one at a time. After two or three batches in one chat, stop and suggest a new chat: "continue learn-<d>" picks the task up where it is. When `kb order --path` has nothing left (`to_learn` 0), the next step is the architecture: `generic-kb-learn-synthesize`, in this task.
 
 ## Gotchas
 
-- **One batch per task.** Many cards in one context get worse towards the end, and one review of 20 cards is what a person can read.
+- **One batch at a time.** Finish, check and tick a batch before the next one is read. Many cards in one chat get worse towards the end: that is why a new chat every two or three batches.
+- **No write-back per batch.** The domain is written back once, after its architecture. Do not run `task promote` here.
 - **Never stamp or index a card you did not write from the code.** `kb index` says "this card was checked against the code at this commit".
 - **The `Level` line names the commit of the base branch** (`harness target list`), not the sha of a file: `Level: verified (read in <repo> at <commit>)`.
 - **Write the interface before the logic.** The next agent needs what goes in, what comes out, what changes, and what happens on a second run or an error, more than a retelling of the code.

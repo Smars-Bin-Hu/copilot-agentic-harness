@@ -39,7 +39,7 @@ Follow the row of `stage` in [the road](./references/road.md):
 
 1. Say in two sentences what the step is for and what the user will give or approve.
 2. Ask for what only the user knows, before the work starts: known uses for the toolkit, the domain and its entry points, a research note or runbook, what is out of scope. Never fill these in yourself.
-3. Do the step with its skill, in a task of kind `kb` of its own (`harness-my-task`). The map is the exception: run `harness kb map` yourself, with no task (nothing is written back). The skills that only the user may start (`/generic-kb-toolkit-build`, `/generic-kb-learn-batch`) you do not start: tell the user to open a new chat and type the command there, word for word.
+3. Do the step with its skill, in a task of kind `kb` of its own (`harness-my-task`). The map is the exception: run `harness kb map` yourself, with no task (nothing is written back). The skill that only the user may start (`/generic-kb-toolkit-build`) you do not start: tell the user to open a new chat and type the command there, word for word. A domain is learned in one task, from its plan to one write-back: its batches go on in that task, and the user says "continue learn-<domain>" in a new chat every two or three batches.
 4. After the write-back: offer to close the task (an open task makes the next step ask which task to use). Then `harness kb status` again, even when you think you know the answer: the user may have run something in between. Say what changed in one line, and offer the next step. The user may stop here.
 
 ### The end

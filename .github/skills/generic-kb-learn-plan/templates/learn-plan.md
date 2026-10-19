@@ -4,7 +4,7 @@ Status: proposal | approved by the user on <date>
 
 Made from the map at: <repo>@<short commit>, ... (`harness target list`)
 
-The command (every batch task runs it again, with `--path <domain folder>`):
+The command (each batch runs it again, with `--path <the domain folder in this task's DEV/>`):
 
 ```bash
 harness kb order --entry <id> --entry <id> [--stop <id>] [--shared-min <n>]
@@ -23,7 +23,7 @@ harness kb order --entry <id> --entry <id> [--stop <id>] [--shared-min <n>]
 
 Long objects (400 lines or more, read in parts): <ids with lines, or none>
 
-Objects in all: <n>. Tasks: <number of batches>, then one for the synthesis.
+Objects in all: <n>. In this one task: <number of batches> batches, then the architecture, then one write-back of the whole domain.
 
 ## Shared (learned once, in shared/)
 
@@ -47,3 +47,7 @@ Objects in all: <n>. Tasks: <number of batches>, then one for the synthesis.
 ## Questions for the user
 
 - <one line each>
+
+## Decided (the user, with the date)
+
+- <one line each, or "nothing yet">

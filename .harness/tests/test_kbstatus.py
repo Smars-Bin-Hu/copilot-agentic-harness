@@ -54,7 +54,7 @@ class StatusTests(TaskCase):
         (domain / "objects" / "index.jsonl").write_text("", encoding="utf-8")
         result = kbstatus.status(self.root)
         self.assertGreater(result["domains"][0]["to_learn"], 0)
-        self.assertIn("/generic-kb-learn-batch orders", result["next"])
+        self.assertIn("generic-kb-learn-plan", result["next"])  # a plan and objects left, but no task learns it
         (domain / "requests.md").write_text("| Id | Object | Kind | Why | How | Status |\n| --- | --- | --- | --- | --- | --- |\n| req-1 | x | code | y | z | open |\n| req-2 | x | code | y | z | declined 2026-10-18: no |\n", encoding="utf-8")
         self.assertEqual(kbstatus.status(self.root)["requests_open"], 1)
 
@@ -98,6 +98,32 @@ class StatusTests(TaskCase):
         self.assertEqual((result["stage"], result["steps"][5]["not_started"]), ("learn", ["orders", "billing"]))
         self.assertIn("generic-kb-learn-plan", result["next"])
         self.assertIn("`orders`", result["next"])
+
+    def test_a_domain_is_learned_in_one_task_and_counts_only_when_written_back(self) -> None:
+        from core import tasks
+
+        self.kb()
+        shutil.copytree(EXAMPLE, self.kb_path / "toolkit")
+        kbmap.build(self.root)
+        kit = kbmap.load_toolkit(self.kb_path / "toolkit")
+        (self.kb_path / "toolkit" / "audit.md").write_text(f"Toolkit: sqlserver (signature {kit.signature})\n\nResult: **pass**\n", encoding="utf-8")
+        self.new("--domain", "orders", name="other-work", kind="dev", ok=False)  # only a kb task names a domain not there yet
+        self.new("--domain", "orders", name="learn-orders", kind="kb")
+        result = kbstatus.status(self.root)
+        self.assertEqual((result["stage"], result["domains"][0]["task"]), ("learn", "learn-orders"))
+        self.assertIn("PLAN.md", result["next"])  # the plan waits for the user
+        domain = tasks.task_dir(self.root, f"{tasks.TASKS_DIR}/learn-orders") / "DEV" / "kb" / "domains" / "orders"
+        (domain / "discovery").mkdir(parents=True)
+        (domain / "discovery" / "learn-plan.md").write_text(PLAN, encoding="utf-8")
+        (domain / "objects").mkdir()
+        (domain / "objects" / "index.jsonl").write_text("", encoding="utf-8")
+        result = kbstatus.status(self.root)
+        self.assertGreater(result["domains"][0]["to_learn"], 0)
+        self.assertIn("learn-orders", result["next"])
+        (domain / "architecture.md").write_text("# orders\n\n## Flows\n\n`job:A` → `sp:B`\n", encoding="utf-8")
+        result = kbstatus.status(self.root, deep=False)
+        self.assertFalse(result["domains"][0]["done"])  # learned in the task, not written back: not built
+        self.assertNotEqual(result["stage"], "maintain")
 
     def test_a_map_of_an_older_version_is_no_map(self) -> None:
         from core import kbgraph

@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.36 (2026-10-18)
+
+Three script commands for learning a domain from the map: the first part of learning from zero. The skills that use them come next.
+
+**Testing**: the automatic tests pass on the Mac. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **`kb order`**: from the entry points you name, everything they reach, and the order to learn it in. Bottom up (a table before the procedure that writes it, a procedure before the job that runs it), in batches of one type of at most 20. Objects used by other domains too are left for `shared/`; `--stop` sets a boundary; objects whose SQL is known only at run time get batches of their own. Names used but defined nowhere, and names of other systems, are listed. With `--path`, what a domain already has is left out, so the learning can go on where it stopped.
+- **`kb flows`**: every use each entry point reaches, one line each, on its shortest path. The Flows of `architecture.md` are written from these lines, not from memory.
+- **`kb cardcheck`**: the Reads, Writes, Calls and Called by of every card, and the flow lines of `architecture.md`, against the map. A relation the map does not have, or one left out, is an error. This is the check that catches a relation the model made up.
+
 ## 1.4.35 (2026-10-18)
 
 ### Changed

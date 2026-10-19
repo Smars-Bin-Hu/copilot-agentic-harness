@@ -18,7 +18,7 @@ from typing import Any, Dict
 
 from core.paths import repo_root
 
-from core import kbgraph, kbmap, kbmigrate, kbstd
+from core import kbgraph, kblearn, kbmap, kbmigrate, kbstd
 
 from . import kbstats, prune, stats
 
@@ -114,6 +114,23 @@ def register(subparsers: Any) -> None:
     hole = kb_commands.add_parser("gaps", help="what runs or is used but has no code in the repositories: missing names, retired code in use, files deleted in git; with --inventory, also what production runs that no repository holds")
     hole.add_argument("--inventory", default="", help="a list of production objects a person exported (ids, one per line, or CSV with an id column)")
     hole.set_defaults(handler=mapped(lambda a: kbgraph.gaps(repo_root(), Path(a.inventory) if a.inventory else None)))
+    # Learning a domain from the map (M27): core/kblearn.py.
+    plan = kb_commands.add_parser("order", help="what the entry points reach and the order to learn it in: bottom up, in batches of one type; what is shared, stopped at, missing or known only at run time")
+    plan.add_argument("--entry", action="append", required=True, help="an entry point, id or name (may be given more than once)")
+    plan.add_argument("--stop", action="append", default=None, help="do not learn this object or what is past it: a boundary (may be given more than once)")
+    plan.add_argument("--batch", type=int, default=kblearn.BATCH, help=f"objects per batch (default {kblearn.BATCH})")
+    plan.add_argument("--shared-min", type=int, default=None, help="reached from this many entry points, one of them not given, makes an object shared (default: from the profile, 3)")
+    plan.add_argument("--path", default="", help="a domain folder: objects already in its index are learned and left out")
+    plan.set_defaults(handler=mapped(lambda a: kblearn.order(repo_root(), a.entry, a.stop, a.batch, a.shared_min, Path(a.path) if a.path else None)))
+    ways = kb_commands.add_parser("flows", help="the paths from each entry point through the map, for the Flows of architecture.md")
+    ways.add_argument("--entry", action="append", required=True, help="an entry point, id or name (may be given more than once)")
+    ways.add_argument("--depth", type=int, default=kblearn.FLOW_DEPTH, choices=range(1, 13), help=f"steps at most (default {kblearn.FLOW_DEPTH})")
+    ways.add_argument("--stop", action="append", default=None, help="end paths at this object (may be given more than once)")
+    ways.add_argument("--shared-min", type=int, default=None, help="as for kb order")
+    ways.set_defaults(handler=mapped(lambda a: kblearn.flows(repo_root(), a.entry, a.depth, kblearn.FLOW_PATHS, a.stop, a.shared_min)))
+    tally = kb_commands.add_parser("cardcheck", help="the Reads / Writes / Calls / Called by of the cards and the Flows of architecture.md, against the map. Exit code 1 on an error")
+    tally.add_argument("--path", required=True, help="the domain folder (in the knowledge base, or in a task's DEV/)")
+    tally.set_defaults(handler=mapped(lambda a: kblearn.cardcheck(repo_root(), Path(a.path))))
 
     logs = subparsers.add_parser("logs", help="the session logs")
     commands = logs.add_subparsers(dest="logs_command", required=True)

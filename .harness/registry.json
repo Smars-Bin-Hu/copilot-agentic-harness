@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.4.35",
+  "version": "1.4.36",
   "released": "2026-10-17",
   "copyright": "Smars Hu",
   "contributors": [
@@ -29,6 +29,7 @@
       ".harness/tests/test_reqbinding.py",
       ".harness/tests/test_kbmigrate.py",
       ".harness/tests/test_kbmap.py",
+      ".harness/tests/test_kblearn.py",
       ".harness/INDEX.md",
       ".harness/registry.json",
       ".github/copilot-instructions.md",

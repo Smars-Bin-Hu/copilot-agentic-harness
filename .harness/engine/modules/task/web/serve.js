@@ -107,7 +107,13 @@ const SERVE = (function () {
       post("/api/act", {...body, step: "act"}).then(() => location.reload(), (error) => { button.textContent = button.dataset.label; failed(error); });
       return;
     }
+    // The preview works the plan out (git on every repository): it can take long. The button says so, and the page keeps still meanwhile.
+    busy = true;
+    button.disabled = true;
+    button.textContent = t("board.serve.working");
+    const back = () => { busy = false; button.disabled = false; button.textContent = button.dataset.label; };
     post("/api/act", {...body, step: "preview"}).then((data) => {
+      back();
       const input = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("board.serve.code")});
       const yes = h("button", {class: "act hot", type: "button"}, t("board.serve.confirm"));
       const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
@@ -117,13 +123,14 @@ const SERVE = (function () {
       no.addEventListener("click", view.close);
       const send = () => {
         yes.disabled = true;
+        yes.textContent = t("board.serve.working");
         post("/api/act", {...body, step: "act", code: input.value.trim()}).then(() => { view.close(); location.reload(); },
-          (error) => { said.replaceChildren(...reasons(error.message)); yes.disabled = false; });
+          (error) => { said.replaceChildren(...reasons(error.message)); yes.disabled = false; yes.textContent = t("board.serve.confirm"); });
       };
       yes.addEventListener("click", send);
       input.addEventListener("keydown", (event) => { if (event.key === "Enter") send(); });
       input.focus();
-    }, failed);
+    }).catch((error) => { back(); failed(error); });  // an error while drawing the dialog is told too, not lost
   }
 
   // Once per page: trade the pairing code of the address for a cookie, and ask whether this browser is paired.

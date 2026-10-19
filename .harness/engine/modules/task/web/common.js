@@ -72,7 +72,7 @@ function legend(items) {
 }
 
 function table(head, rows) {
-  return h("table", null, h("tr", null, head), rows);
+  return h("div", {class: "scroll"}, h("table", null, h("tr", null, head), rows));
 }
 
 const th = (text, numeric) => h("th", numeric ? {class: "num"} : null, text || "");

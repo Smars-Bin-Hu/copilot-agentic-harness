@@ -35,10 +35,11 @@ td.grow{width:42%}
 .tag.good{color:var(--good)}.tag.bad{color:var(--bad)}.tag.hot{background:var(--approval);color:#fff}
 /* A long reason (why autorun stopped) takes several lines; it must not push the table out of the card. */
 .tag.long{white-space:normal;overflow-wrap:anywhere;border-radius:10px;padding:2px 8px}
-td.name{white-space:nowrap}
+/* A long task name wraps (at a hyphen first) instead of pushing the buttons out of the card. */
+td.name{min-width:11em;overflow-wrap:anywhere}
 td.when{white-space:nowrap}
-td.state{min-width:13em}
-td.kind{min-width:8em}
+td.state{min-width:9em}
+td.kind{min-width:6em}
 main.wide{max-width:1200px}
 .kpi b.long{font-size:15px;line-height:1.87}
 .now{margin-top:12px}.now .tag{font-size:13px;padding:4px 10px}
@@ -52,7 +53,8 @@ noscript{display:block;margin-top:16px;color:var(--bad)}
 .chart .line{fill:none;stroke:var(--model);stroke-width:2;vector-effect:non-scaling-stroke}
 .dots i{position:absolute;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--model)}
 .said{max-width:26em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help}
-.acts{min-width:150px}.act{white-space:nowrap;font:inherit;font-size:12px;padding:2px 8px;margin:0 4px 2px 0;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
+/* A button whose words are longer than the cell takes two lines rather than spill out of it. */
+.acts{min-width:9em}.acts .act{white-space:normal;text-align:left;max-width:100%}.act{white-space:nowrap;font:inherit;font-size:12px;padding:2px 8px;margin:0 4px 2px 0;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
 .act:hover{border-color:var(--soft)}.act.hot{border-color:var(--approval)}
 .act.live{border-style:solid;font-weight:600}.act:disabled{opacity:.5;cursor:default}
 .pairing{margin:8px 0 0}.pairing.good{color:var(--good)}

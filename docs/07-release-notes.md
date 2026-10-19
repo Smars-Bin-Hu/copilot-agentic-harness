@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.7 (2026-10-19)
+
+### Fixed
+
+- **The board fits its card.** A long task name now wraps instead of pushing the buttons out, and a button with long words takes two lines inside its cell. In a narrow window the table scrolls sideways inside its card.
+- **An approval button on the board says it is working** while the preview runs (it runs git on every repository and can take a while), and an error while the dialog is drawn is shown, not lost.
+
 ## 1.5.6 (2026-10-19)
 
 ### Fixed

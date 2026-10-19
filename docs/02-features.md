@@ -186,6 +186,7 @@ Reading the knowledge base must cost less than reading the code, and give a bett
 
 - **A fixed form** (`.harness/contracts/kb/README.md`): every domain has the same files, each object is listed once with the git sha of the file it was learned from. `kb check` checks the form; `kb stale` asks git which cards are out of date, and `/generic-kb-refresh` fixes them from the diff.
 - **A map made by script, not by reading**: `kb map` lists every object and every use of your repositories with a small toolkit made for your stack (`/generic-kb-toolkit-design`, then `/generic-kb-toolkit-build`; samples in `.harness/examples/kb-toolkits/`). From the map: `kb near` (who uses what, across domains), `kb split` (a first cut of the domains, `/generic-kb-domains`), `kb gaps` (what runs but has no code in any repository).
+- **A domain learned from zero, in steps you can check**: `generic-kb-learn-plan` names the entry points and lets `kb order` work out every object they reach, bottom up, in batches of one type; you approve the plan. Each batch is a task of its own (`/generic-kb-learn-batch`): a card per object, read from its code, with the commit it was read at, and `kb cardcheck` refuses a relation the map does not have. Last, `generic-kb-learn-synthesize` writes `architecture.md` from the paths `kb flows` takes through the map. What the code cannot tell (values known only at run time, code in no repository) goes into the domain's `requests.md`, for a person to give.
 - **The agent keeps it true while it works**: `task fetch` names the cards of the files it fetched and marks the stale ones; knowledge the code shows to be wrong or missing is noted and, at the next stop, offered as a `kb` task.
 
 How to set it up: [Configure and customise](03-configure.md). All the commands: [Reference](04-reference.md).
@@ -208,6 +209,7 @@ Ask in your own words; the agent picks the skill (it asks first for the ones mar
 | Make, check or repair a skill | `generic-build-new-skill` |
 | Make the toolkit for the repository map | `generic-kb-toolkit-design` (asks first), then `/generic-kb-toolkit-build` (you start it) |
 | Cut a code base into knowledge base domains | `generic-kb-domains` (asks first) |
+| Learn a domain from zero | `generic-kb-learn-plan` (asks first), then `/generic-kb-learn-batch` once per batch (you start it), then `generic-kb-learn-synthesize` (asks first) |
 | Fix stale cards of the knowledge base | `generic-kb-refresh` (asks first) |
 | Move an old knowledge base into the standard form | `generic-kb-migrate` (asks first) |
 | Translate a Chinese knowledge base into English | `generic-kb-translate` (asks first) |

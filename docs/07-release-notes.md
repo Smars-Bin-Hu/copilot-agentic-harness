@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.37 (2026-10-18)
+
+Learning a domain from zero, in three skills. The knowledge base this gives is a **base**: every card says which commit it was read at, and what the code cannot tell is written down as a request, not guessed.
+
+**Testing**: the automatic tests pass on the Mac; the three skills pass `skill check`. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **`generic-kb-learn-plan`** (asks first): the entry points, checked in the map (a name from a research note that is in no code becomes a request); `kb order` gives every object they reach and the batches; you approve `LEARN-PLAN.md`; then the empty domain is written back, with `requests.md` and the plan in `discovery/`.
+- **`/generic-kb-learn-batch`** (you start it): one batch per task. A card per object, read from its code, interface first (what goes in, what comes out, what changes, a second run, an error); `kb index` adds the index lines; `kb cardcheck` must pass. A use the code shows but the map misses is a toolkit fault, noted, not added by hand.
+- **`generic-kb-learn-synthesize`** (asks first): `architecture.md` from the paths of `kb flows` and the cards; every flow line is checked against the map; the Limits are counted from the index and `requests.md`.
+- **`kb index`**: after a batch, the index lines of its cards, from the map, stamped. The index stays written by script.
+- **The standard has two new tables**: `requests.md` (what a person must give: code in no repository, a run-time value, something in git history, a decision; open, answered or declined) and `environment.md` (one fact a row, with the environment, the date, the code it was seen against, and who gave it).
+
 ## 1.4.36 (2026-10-18)
 
 Three script commands for learning a domain from the map: the first part of learning from zero. The skills that use them come next.

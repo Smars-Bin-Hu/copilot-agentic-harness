@@ -8,7 +8,7 @@ import unittest
 
 from support import GIT, HarnessTestCase, make_repo
 
-from core import kbgraph, kblearn, kbmap
+from core import kbgraph, kblearn, kbmap, tasks
 from test_kbmap import EXAMPLE, FILES
 
 ORDERS = "job:Shop_Orders"
@@ -122,6 +122,22 @@ class LearnTests(HarnessTestCase):
         self.assertIn(f"{ORDERS} -calls-> {LOAD} -reads,writes-> table:Shop.dbo.orders", paths)
         self.assertIn(f"{ORDERS} -runs-> package:ShopEtl/Publish -calls-> {PUBLISH} -writes-> table:Shop.dbo.summary", paths)  # summary is reached first by a read
         self.assertFalse(any("table:Shop.dbo.log" in path for path in paths))
+
+    def test_index_writes_the_lines_of_a_batch_from_the_map_only_in_a_task(self) -> None:
+        with self.assertRaises(kbmap.MapError):
+            kblearn.index(self.root, self.folder, [LOAD])
+        dev = self.root / tasks.TASKS_DIR / "learn-1" / "DEV" / "kb" / "domains" / "orders"
+        (dev / "objects").mkdir(parents=True)
+        (dev / "objects" / "index.jsonl").write_text(json.dumps({"id": "table:Shop.dbo.orders", "type": "table", "card": "objects/table.md#table:Shop.dbo.orders", "level": "supported"}) + "\n", encoding="utf-8")
+        result = kblearn.index(self.root, dev, [LOAD, "table:Shop.dbo.orders"])
+        self.assertEqual((result["added"], result["already"]), ([LOAD], ["table:Shop.dbo.orders"]))
+        rows = [json.loads(line) for line in (dev / "objects" / "index.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([row["id"] for row in rows], [LOAD, "table:Shop.dbo.orders"])
+        self.assertEqual(rows[0]["repo"], "repo_a")
+        self.assertEqual(rows[0]["sources"][0]["path"], "Shop/dbo/Stored Procedures/usp_load_orders.sql")
+        self.assertTrue(rows[0]["sources"][0]["sha"])
+        self.assertEqual(rows[0]["card"], f"objects/sp.md#{LOAD}")
+        self.assertEqual(rows[1]["level"], "supported")
 
     def card(self, relations: str) -> None:
         (self.folder / "objects" / "sp.md").write_text(f"# Procedures\n\n## {LOAD}\n\n- What: loads orders\n{relations}\n- Level: verified (read in repo_a at abc)\n", encoding="utf-8")

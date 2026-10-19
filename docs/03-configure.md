@@ -161,6 +161,8 @@ harness kb split                     # a first cut of the domains; objects used 
 - **It is a cache**, in `.harness/runtime/kbmap/`, never in the knowledge base. The first run reads every file; later runs read only the files that changed.
 - **What it shows besides the uses**: `missing` (names used but defined in no file: deleted, retired or never committed), `obsolete_used` (retired code still in use), `dynamic` (code known only at run time), `external` (other systems).
 - You decide the domains once: `/generic-kb-domains` writes `DOMAINS.md` in a `kb` task, you change it until it is right, and the list goes into the knowledge base's `README.md`.
+- Then each domain is learned in steps: `generic-kb-learn-plan` (you approve `LEARN-PLAN.md`), `/generic-kb-learn-batch` once per batch, `generic-kb-learn-synthesize` at the end. Each step is a `kb` task with its own write-back. A research note or runbook you have (for example from a search over your team's pages) is kept in `discovery/` as a lead; only the code makes a card `verified`.
+- What the agent cannot get from the code, it writes into the domain's `requests.md` (a read-only query to run, a file to find in git) and asks you at its next stop. You answer, or decline once and it is not asked again. Facts of an environment go into `environment.md`, with the date and the code they were seen against.
 
 ## Code standards
 

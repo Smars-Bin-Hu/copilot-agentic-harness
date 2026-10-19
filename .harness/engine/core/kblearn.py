@@ -3,20 +3,22 @@
   kb order      from the entry points a person named: every object they reach, what is shared or past a stop, and the
                 order to learn them in, bottom up (what is used before what uses it), in batches of one type
   kb flows      the paths from each entry point, for the Flows of architecture.md
+  kb index      after a batch: the index lines of its cards, from the map, stamped
   kb cardcheck  the Reads / Writes / Calls / Called by of each card against the uses in the map, and the Flows of
                 architecture.md against the map: the check that catches a relation the model made up or left out
 
-The graph is core/kbgraph.py. Nothing here writes a file.
+The graph is core/kbgraph.py. Only `kb index` writes, and only in a task's DEV/.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-from . import kbgraph, kbstd, messages
+from . import kbgraph, kbstd, messages, tasks
 from .kbgraph import Graph, MapError
 
 BATCH = 20
@@ -216,6 +218,46 @@ def flows(root: Path, entries: List[str], depth: int = FLOW_DEPTH, most: int = F
         found.append({"entry": entry, "paths": paths[:most], **({"more": len(paths) - most} if len(paths) > most else {})})
     return {"flows": found, "dynamic": sorted(node for node in graph.nodes if graph.nodes[node]["dynamic"] and any(node in item for row in found for item in row["paths"])),
             "next": say("kblearn.flows.next")}
+
+
+# --- index -----------------------------------------------------------------------------------------------
+
+
+def index(root: Path, folder: Path, ids: List[str], level: str = "verified") -> Dict[str, Any]:
+    """`kb index`: after the cards of a batch are written, their lines in `objects/index.jsonl`, from the map (type,
+    name, repository, path; the card is `objects/<type>.md#<id>`), stamped with the sha of the base branch now. Only
+    in a task's `DEV/`; an id already in the index is left as it is (`kb stamp` is for those)."""
+    folder = folder.resolve()
+    if level not in kbstd.LEVELS:
+        raise MapError(say("kb.object.level", id="-", level=level, levels=", ".join(kbstd.LEVELS)))
+    graph = kbgraph.need_map(root)
+    wanted = [pick(graph, query) for query in ids]
+    path = folder / kbstd.INDEX_FILE
+    if not tasks.in_dev(root, folder):
+        raise MapError(say("kb.stamp.not_dev", folder=folder))
+    rows: List[Dict[str, Any]] = []
+    if path.is_file():
+        rows, bad = kbstd.read_index(path)
+        if bad:
+            raise MapError(" ".join(bad))
+    known = {row.get("id") for row in rows}
+    added = []
+    for node in dict.fromkeys(wanted):
+        if node in known:
+            continue
+        item = graph.nodes[node]
+        rows.append({"id": node, "type": item["type"], "name": item["name"], "repo": item["repo"],
+                     "sources": [{"path": item["path"], "sha": ""}], "card": f"objects/{item['type']}.md#{node}", "level": level})
+        added.append(node)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows.sort(key=lambda row: str(row.get("id")))
+    path.write_text("".join(json.dumps({key: value for key, value in row.items() if key != "_line"}, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
+    try:
+        stamped = kbstd.stamp(root, folder, added) if added else {"gone": [], "unknown_repos": []}
+    except kbstd.KbError as error:
+        raise MapError(str(error)) from None
+    return {"added": added, "already": sorted(set(wanted) & known), "gone": stamped["gone"], "unknown_repos": stamped["unknown_repos"],
+            "next": say("kblearn.index.unstamped" if stamped["gone"] or stamped["unknown_repos"] else "kblearn.index.next" if added else "kblearn.index.nothing")}
 
 
 # --- cardcheck --------------------------------------------------------------------------------------------

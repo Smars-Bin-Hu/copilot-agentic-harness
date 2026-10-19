@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.4.36",
+  "version": "1.4.37",
   "released": "2026-10-17",
   "copyright": "Smars Hu",
   "contributors": [
@@ -48,6 +48,9 @@
       ".github/skills/harness-wondering/",
       ".github/skills/generic-kb-domains/",
       ".github/skills/generic-kb-refresh/",
+      ".github/skills/generic-kb-learn-plan/",
+      ".github/skills/generic-kb-learn-batch/",
+      ".github/skills/generic-kb-learn-synthesize/",
       ".github/skills/generic-kb-toolkit-design/",
       ".github/skills/generic-kb-toolkit-build/",
       ".harness/tests/support.py",

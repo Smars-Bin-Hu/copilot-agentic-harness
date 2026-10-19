@@ -39,6 +39,9 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/skills/generic-kb-toolkit-design/` | Design the toolkit that lets `kb map` read the team's own code: `kb survey`, sample files, uses the user knows; writes `TOOLKIT-DESIGN.md` for approval. The agent asks first |
 | `.github/skills/generic-kb-toolkit-build/` | Build the approved toolkit into the knowledge base, tried with `kb map --toolkit` until every known fact is found. Started only by the user, with `/generic-kb-toolkit-build` |
 | `.github/skills/generic-kb-domains/` | Map the target repositories by script (`kb map`) and propose the domains (`kb split`); writes `DOMAINS.md` in a `kb` task for the user to confirm once. The agent asks first |
+| `.github/skills/generic-kb-learn-plan/` | Plan the learning of one domain from zero: entry points checked in the map, `kb order` for the objects, the order and the batches; writes `LEARN-PLAN.md`, then the empty domain with `requests.md`. The agent asks first |
+| `.github/skills/generic-kb-learn-batch/` | Learn one batch of an approved learn plan: a card per object from its code, `kb index`, `kb cardcheck` against the map. One batch per `kb` task. Started only by the user, with `/generic-kb-learn-batch` |
+| `.github/skills/generic-kb-learn-synthesize/` | After the batches: `architecture.md` from the paths of `kb flows` and the cards, the entry points of `domain.yaml`, the gaps counted; flows checked by `kb cardcheck`. The agent asks first |
 | `.github/skills/generic-kb-refresh/` | Bring stale cards of a domain back in line with the code: reads only the diff of each changed source (`kb stale --diff`), fixes the lines it touches, stamps the checked cards (`kb stamp`), in a `kb` task. The agent asks first |
 | `.github/agents/` | `reviewer` (the independent checker), `mapper` (the read-only chunk reader), `admin` (extends and debugs the harness; the user must switch admin mode on in the terminal first) |
 

@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.2 (2026-10-19)
+
+### Changed
+
+- **The lines of an object no longer stop at an object inside it.** `kb map` now records how far each object's line is indented; an object indented further than another is inside it (an endpoint in its controller class) and does not end it. Before, a controller was "read" only up to its first endpoint, so `kb order` counted too few lines, and `kb cardcheck` refused every rule that cited a later line. Found learning the `vets` domain of spring-petclinic. A map cached by 1.5.1 is built again by the next `kb map`.
+
 ## 1.5.1 (2026-10-18)
 
 ### Changed

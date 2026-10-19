@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from . import messages, paths, repo_paths, targets
 
-SCHEMA_VERSION = 3  # of the cache: a cache of another version is built again (3: the lines of each file)
+SCHEMA_VERSION = 4  # of the cache: a cache of another version is built again (3: the lines of each file; 4: the indent of each object)
 SAMPLE = 10
 NEAR_LIMIT = 200
 GIT_TIMEOUT = 300
@@ -110,14 +110,22 @@ def keys_of(name: str) -> List[str]:
 
 
 def sizes(objects: List[Dict[str, Any]], lines: int) -> Dict[int, Tuple[int, int]]:
-    """first line of an object -> (its lines: up to the next object of the file, or to the end; the first line it may
-    own: the line after the object before it, so the comment above the first object is its own). Objects that start on
-    the same line share them. Empty when the file's lines are not known."""
+    """first line of an object -> (its lines: up to the next object of the file that is not inside it, or to the end;
+    the first line it may own: the line after the object before it, so the comment above the first object is its own).
+    An object whose line is indented further than another's is inside it (an endpoint in its controller class), and
+    does not end it. Objects that start on the same line share them. Empty when the file's lines are not known."""
     if not lines:
         return {}
-    starts = sorted({int(obj.get("line") or 1) for obj in objects})
-    ends = starts[1:] + [lines + 1]
-    return {start: (max(1, end - start), 1 if number == 0 else start) for number, (start, end) in enumerate(zip(starts, ends))}
+    indent: Dict[int, int] = {}
+    for obj in objects:
+        at = int(obj.get("line") or 1)
+        indent[at] = min(indent.get(at, 1 << 30), int(obj.get("indent") or 0))
+    starts = sorted(indent)
+    result: Dict[int, Tuple[int, int]] = {}
+    for number, start in enumerate(starts):
+        end = next((later for later in starts[number + 1:] if indent[later] <= indent[start]), lines + 1)
+        result[start] = (max(1, end - start), 1 if number == 0 else start)
+    return result
 
 
 class Graph:

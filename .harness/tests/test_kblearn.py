@@ -74,6 +74,11 @@ class OrderTests(unittest.TestCase):
         self.assertEqual(spans, {5: (15, 1), 20: (20, 20), 40: (11, 40)})
         self.assertEqual(kbgraph.sizes([{"line": 1}], 0), {})
 
+    def test_an_object_inside_another_does_not_end_it(self) -> None:
+        # a controller at line 10 with two endpoints indented inside it, and another class after it
+        found = kbgraph.sizes([{"line": 10}, {"line": 14, "indent": 4}, {"line": 20, "indent": 4}, {"line": 40}], 50)
+        self.assertEqual(found, {10: (30, 1), 14: (6, 14), 20: (20, 20), 40: (11, 40)})
+
     def test_a_card_of_long_code_may_be_longer(self) -> None:
         self.assertEqual(kbstd.card_limit({}), 120)
         self.assertEqual(kbstd.card_limit({"lines": [1, 3000]}), 300)

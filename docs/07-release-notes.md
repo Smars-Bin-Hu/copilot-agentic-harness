@@ -15,7 +15,7 @@ To see which version you have: `harness --version`.
 ### Changed
 
 - **`kb status` counts a migrated domain as built**: one with cards and an `architecture.md` but no learn plan (it was learned before learn plans). Before, it stayed "not learned" for good, and the agent offered the next step at every stop.
-- **`kb status` waits for the map only of the repositories a toolkit reads.** A repository no toolkit covers (a toolkit can name its `repos`) is listed as `no_toolkit` and no longer holds the step back.
+- **`kb status` waits for the map only of the repositories a toolkit reads.** A repository no toolkit covers (a toolkit can name its `repos`) is listed as `no_toolkit` and no longer holds the step back. A map cached by an older version counts as no map.
 
 ## 1.5.0 (2026-10-18)
 

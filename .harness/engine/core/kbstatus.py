@@ -38,6 +38,18 @@ def knowledge_base(root: Path) -> Tuple[List[targets.Repo], Optional[targets.Rep
     return code, kb
 
 
+def current_cache(root: Path, name: str) -> bool:
+    """A map cache of this version (a cache of an older version is built again by the next `kb map`). Reads its first
+    bytes only: a map of a big code base is large, and a hook asks this."""
+    try:
+        with kbgraph.cache_file(root, name).open("rb") as file:
+            head = file.read(200).decode("utf-8", errors="replace")
+    except OSError:
+        return False
+    found = re.search(r'"schema_version"\s*:\s*(\d+)', head)
+    return bool(found and int(found.group(1)) == kbgraph.SCHEMA_VERSION)
+
+
 def plan_command(path: Path) -> Optional[Dict[str, Any]]:
     """The `kb order` command a learn plan holds: its entry points, stops and shared-min. None when there is none yet."""
     try:
@@ -120,7 +132,7 @@ def status(root: Path, deep: bool = True) -> Dict[str, Any]:
             except MapError as error:
                 steps["toolkit"]["problem"] = str(error)
         covered = [repo.name for repo in code if kit is not None and kbmap.toolkit_for([kit], repo.name)]
-        cached = [name for name in covered if kbgraph.cache_file(root, name).is_file()]
+        cached = [name for name in covered if current_cache(root, name)]
         steps["map"].update(done=bool(covered) and len(cached) == len(covered), mapped=cached,
                             **({"no_toolkit": sorted(set(repo.name for repo in code) - set(covered))} if kit is not None and len(covered) < len(code) else {}))
         if deep and kit is not None and cached:

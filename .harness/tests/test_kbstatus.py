@@ -69,6 +69,16 @@ class StatusTests(TaskCase):
         self.assertEqual(result["stage"], "audit")
         self.assertEqual(result["steps"][3]["no_toolkit"], ["repo_a", "repo_b"])
 
+    def test_a_map_of_an_older_version_is_no_map(self) -> None:
+        from core import kbgraph
+
+        file = kbgraph.cache_file(self.root, "shop")
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text('{"schema_version":2,"repo":"shop"}', encoding="utf-8")
+        self.assertFalse(kbstatus.current_cache(self.root, "shop"))
+        file.write_text('{"schema_version":%d,"repo":"shop"}' % kbgraph.SCHEMA_VERSION, encoding="utf-8")
+        self.assertTrue(kbstatus.current_cache(self.root, "shop"))
+
     def test_an_audit_of_another_toolkit_does_not_count(self) -> None:
         self.kb()
         shutil.copytree(EXAMPLE, self.kb_path / "toolkit")

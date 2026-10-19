@@ -22,6 +22,9 @@ from . import kbgraph, kbstd, messages, tasks
 from .kbgraph import Graph, MapError
 
 BATCH = 20
+BUDGET = 1500  # lines of code a batch reads at most; an object longer than this is a batch of its own
+LARGE = 400  # lines: an object this long is read in parts, and its card cites lines for every rule
+CITE_FROM = 50  # lines: a card of an object this long should cite lines
 FLOW_DEPTH = 6
 FLOW_PATHS = 50
 FLOW_STEPS = 3  # two ids next to each other in a flow line may skip this many steps of the map
@@ -30,6 +33,7 @@ FIELDS = ("reads", "writes", "calls", "called by")
 FIELD = re.compile(r"(?<![A-Za-z])(Reads|Writes|Calls|Called by)\s*:\s*(.*?)(?=\s*[·|]\s*[A-Z][A-Za-z ]{1,20}:|$)")
 CARD_ID = re.compile(r"^[a-z][a-z0-9_-]*:.+$")
 TEXT_ID = re.compile(r"`([a-z][a-z0-9_-]*:[^`]+)`|(?<![\w`])([a-z][a-z0-9_-]*:[^\s,;()`*]+)")
+CITE = re.compile(r"\bL(\d+)(?:\s*[-–]\s*L?(\d+))?\b")
 NONE = {"", "-", "—", "none", "n/a", "nothing"}
 ARROW = re.compile(r"→|->")
 
@@ -127,23 +131,27 @@ def heights(graph: Graph, parts: List[List[str]], nodes: Set[str]) -> Dict[str, 
     return {node: height[owner[node]] for node in nodes}
 
 
-def batches(graph: Graph, todo: List[str], done: Set[str], size: int) -> List[Dict[str, Any]]:
+def batches(graph: Graph, todo: List[str], done: Set[str], size: int, budget: int = BUDGET) -> List[Dict[str, Any]]:
     """Each object goes into the first batch of its type (and dynamic or not) that comes no earlier than the batches of
-    what it uses and has room. `todo` is bottom up, so what an object uses is placed before it, or earlier in its batch."""
+    what it uses and has room: fewer than `size` objects, and its lines still within `budget` (an empty batch always has
+    room). `todo` is bottom up, so what an object uses is placed before it, or earlier in its batch."""
     found: List[Dict[str, Any]] = []
     where: Dict[str, int] = {}
     for node in todo:
         item = graph.nodes[node]
-        key = (item["type"], item["dynamic"])
+        key, lines = (item["type"], item["dynamic"]), int(item.get("size") or 0)
         after = max((where[t] for t, _k in graph.out.get(node, []) if t in where and t not in done), default=0)
-        spot = next((number for number in range(after, len(found)) if found[number]["key"] == key and len(found[number]["objects"]) < size), None)
+        room = lambda batch: batch["key"] == key and len(batch["objects"]) < size and (not batch["objects"] or batch["lines"] + lines <= budget)
+        spot = next((number for number in range(after, len(found)) if room(found[number])), None)
         if spot is None:
-            found.append({"key": key, "objects": []})
+            found.append({"key": key, "objects": [], "lines": 0})
             spot = len(found) - 1
         found[spot]["objects"].append(node)
+        found[spot]["lines"] += lines
         where[node] = spot
     return [
-        {"batch": number + 1, "type": batch["key"][0], "card_file": f"objects/{batch['key'][0]}.md", **({"dynamic": True} if batch["key"][1] else {}), "objects": batch["objects"]}
+        {"batch": number + 1, "type": batch["key"][0], "card_file": f"objects/{batch['key'][0]}.md", "lines": batch["lines"],
+         **({"dynamic": True} if batch["key"][1] else {}), "objects": batch["objects"]}
         for number, batch in enumerate(found)
     ]
 
@@ -159,7 +167,7 @@ def known_ids(folder: Optional[Path]) -> Set[str]:
 
 
 def order(root: Path, entries: List[str], stops: Optional[List[str]] = None, size: int = BATCH,
-          shared_min: Optional[int] = None, folder: Optional[Path] = None) -> Dict[str, Any]:
+          shared_min: Optional[int] = None, folder: Optional[Path] = None, budget: int = BUDGET) -> Dict[str, Any]:
     """`kb order`: what to learn for these entry points, and in what order."""
     graph = kbgraph.need_map(root)
     chosen = sorted({pick(graph, query) for query in entries})
@@ -173,7 +181,8 @@ def order(root: Path, entries: List[str], stops: Optional[List[str]] = None, siz
     users = lambda found: [{"name": name, "used_by": sorted(by & inside)} for name, by in sorted(found.items()) if by & inside]
     result: Dict[str, Any] = {
         "entry_points": chosen, "objects": len(inside), "already_learned": len(done), "to_learn": len(todo),
-        "batches": batches(graph, todo, done, max(1, size)),
+        "batches": batches(graph, todo, done, max(1, size), max(1, budget)), "budget": budget,
+        "large": [{"id": node, "lines": graph.nodes[node]["size"]} for node in sorted(todo, key=lambda node: -graph.nodes[node]["size"]) if graph.nodes[node]["size"] >= LARGE],
         "shared_min": limit, "shared": [{"id": node, "entry_points": shared[node]} for node in sorted(met_shared)],
         "stopped_at": sorted(met_stops),
         "cycles": [part for part in parts if len(part) > 1],
@@ -247,7 +256,8 @@ def index(root: Path, folder: Path, ids: List[str], level: str = "verified") -> 
             continue
         item = graph.nodes[node]
         rows.append({"id": node, "type": item["type"], "name": item["name"], "repo": item["repo"],
-                     "sources": [{"path": item["path"], "sha": ""}], "card": f"objects/{item['type']}.md#{node}", "level": level})
+                     "sources": [{"path": item["path"], "sha": ""}], "lines": [item["line"], item["line"] + max(item.get("size") or 1, 1) - 1],
+                     "card": f"objects/{item['type']}.md#{node}", "level": level})
         added.append(node)
     path.parent.mkdir(parents=True, exist_ok=True)
     rows.sort(key=lambda row: str(row.get("id")))
@@ -300,7 +310,29 @@ def expected(graph: Graph, node: str) -> Dict[str, Set[str]]:
     return found
 
 
-def check_cards(graph: Graph, found: Dict[str, Tuple[str, List[str]]], absent: Set[str]) -> Dict[str, Any]:
+def check_cites(graph: Graph, node: str, file: str, lines: List[str], row: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+    """The line numbers a card cites (`L120`, `L120-L145`) are lines of the object's own code, in its file on the base
+    branch. A card of a long object that cites none is flagged: its rules cannot be checked against the code."""
+    item = graph.nodes[node]
+    cites = [(int(first), int(last or first)) for line in lines for first, last in CITE.findall(line)]
+    size, start = int(item.get("size") or 0), int(item.get("line") or 1)
+    if not cites:
+        if size >= LARGE:
+            return [say("kblearn.check.no_cites", id=node, file=file, lines=size)], []
+        return [], ([say("kblearn.check.few_cites", id=node, file=file, lines=size)] if size >= CITE_FROM else [])
+    if not size:
+        return [], []
+    shas = [str(source.get("sha") or "") for source in row.get("sources") or [] if isinstance(source, dict) and source.get("path") == item["path"]]
+    if shas and shas[0] and item.get("sha") and not str(item["sha"]).startswith(shas[0]):
+        return [], [say("kblearn.check.cites_old", id=node, file=file)]  # the card is of older code: kb stale says so
+    low, high = int(item.get("from") or start), start + size - 1
+    bad = [f"L{first}" + (f"-L{last}" if last != first else "") for first, last in cites if first > last or first < low or last > high]
+    if bad:
+        return [say("kblearn.check.cite_out", id=node, file=file, cites=", ".join(bad), path=item["path"], low=low, high=high)], []
+    return [], []
+
+
+def check_cards(graph: Graph, found: Dict[str, Tuple[str, List[str]]], absent: Set[str], rows: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
     errors, warnings, outside = [], [], set()
     for node, (file, lines) in sorted(found.items()):
         if node not in graph.nodes:
@@ -322,6 +354,9 @@ def check_cards(graph: Graph, found: Dict[str, Tuple[str, List[str]]], absent: S
             for other in sorted(has[field] - wrote[field]):
                 text = say("kblearn.check.left_out", id=node, file=file, field=field.capitalize(), other=other)
                 (warnings if field == "called by" else errors).append(text)
+        bad, doubt = check_cites(graph, node, file, lines, (rows or {}).get(node, {}))
+        errors += bad
+        warnings += doubt
     return {"errors": errors, "warnings": warnings, "outside": outside}
 
 
@@ -378,7 +413,7 @@ def cardcheck(root: Path, folder: Path) -> Dict[str, Any]:
         rows, _bad = kbstd.read_index(folder / kbstd.INDEX_FILE)
     absent = {str(row.get("id")) for row in rows if row.get("source_missing")}  # known to have no code: not a surprise
     found = cards(folder)
-    result = check_cards(graph, found, absent)
+    result = check_cards(graph, found, absent, {str(row.get("id")): row for row in rows})
     flow = check_flows(graph, folder / "architecture.md", absent)
     errors = result["errors"] + flow["errors"]
     outside = sorted(result["outside"] | flow["outside"])

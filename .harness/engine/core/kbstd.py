@@ -80,6 +80,14 @@ def anchors(path: Path) -> Dict[str, int]:
     return found
 
 
+def card_limit(row: Dict[str, Any]) -> int:
+    """120 lines; a card of a long object (its `lines` in the index, from `kb index`) may have one line per 10 of code."""
+    span = row.get("lines")
+    if isinstance(span, list) and len(span) == 2 and all(isinstance(item, int) for item in span):
+        return max(CARD_MAX_LINES, (span[1] - span[0] + 1) // 10)
+    return CARD_MAX_LINES
+
+
 def check_domain(root: Path, folder: Path) -> Dict[str, Any]:
     errors: List[str] = []
     warnings: List[str] = []
@@ -159,8 +167,8 @@ def check_domain(root: Path, folder: Path) -> Dict[str, Any]:
             warnings.append(say("kb.object.no_anchor", id=row["id"], card=row["card"]))
         elif anchor not in cards[card_file]:
             errors.append(say("kb.object.anchor", id=row["id"], card=row["card"]))
-        elif cards[card_file][anchor] > CARD_MAX_LINES:
-            warnings.append(say("kb.object.card_long", id=row["id"], lines=cards[card_file][anchor], limit=CARD_MAX_LINES))
+        elif cards[card_file][anchor] > card_limit(row):
+            warnings.append(say("kb.object.card_long", id=row["id"], lines=cards[card_file][anchor], limit=card_limit(row)))
     for entry in data.get("entry_points") or [] if data else []:
         if isinstance(entry, str) and rows and entry not in seen:
             errors.append(say("kb.domain.entry", id=entry))

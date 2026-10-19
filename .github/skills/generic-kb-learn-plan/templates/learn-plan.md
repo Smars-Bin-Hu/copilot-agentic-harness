@@ -17,9 +17,11 @@ harness kb order --entry <id> --entry <id> [--stop <id>] [--shared-min <n>]
 
 ## Batches (bottom up: what a batch uses is learned before it)
 
-| Batch | Type | Card file | Objects | Ids |
-| --- | --- | --- | --- | --- |
-| 1 | <type> | objects/<type>.md | <n> | <ids> |
+| Batch | Type | Card file | Objects | Lines of code | Ids |
+| --- | --- | --- | --- | --- | --- |
+| 1 | <type> | objects/<type>.md | <n> | <n> | <ids> |
+
+Long objects (400 lines or more, read in parts): <ids with lines, or none>
 
 Objects in all: <n>. Tasks: <number of batches>, then one for the synthesis.
 

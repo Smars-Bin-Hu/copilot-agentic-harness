@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from . import messages, paths, repo_paths, targets
 
-SCHEMA_VERSION = 2  # of the cache: a cache of another version is built again
+SCHEMA_VERSION = 3  # of the cache: a cache of another version is built again (3: the lines of each file)
 SAMPLE = 10
 NEAR_LIMIT = 200
 GIT_TIMEOUT = 300
@@ -109,6 +109,17 @@ def keys_of(name: str) -> List[str]:
     return list(dict.fromkeys(found))
 
 
+def sizes(objects: List[Dict[str, Any]], lines: int) -> Dict[int, Tuple[int, int]]:
+    """first line of an object -> (its lines: up to the next object of the file, or to the end; the first line it may
+    own: the line after the object before it, so the comment above the first object is its own). Objects that start on
+    the same line share them. Empty when the file's lines are not known."""
+    if not lines:
+        return {}
+    starts = sorted({int(obj.get("line") or 1) for obj in objects})
+    ends = starts[1:] + [lines + 1]
+    return {start: (max(1, end - start), 1 if number == 0 else start) for number, (start, end) in enumerate(zip(starts, ends))}
+
+
 class Graph:
     """The objects and uses of the mapped repositories, with the names resolved across all of them.
 
@@ -151,13 +162,14 @@ class Graph:
                 elif not item["objects"]:
                     graph.empty.append(f"{record['repo']}/{path}")
                 retired = any(matches(pattern, path) for pattern in obsolete)
+                spans = sizes(item["objects"], int(item.get("lines") or 0))
                 for obj in item["objects"]:
                     if obj["id"] in graph.nodes:
                         graph.duplicates.append(obj["id"])
                         continue
                     graph.nodes[obj["id"]] = {
                         "id": obj["id"], "type": obj["type"], "name": obj["name"], "repo": record["repo"], "path": path,
-                        "line": obj.get("line", 1), "dynamic": bool(obj.get("dynamic")),
+                        "line": obj.get("line", 1), "size": spans.get(obj.get("line", 1), (0, 0))[0], "from": spans.get(obj.get("line", 1), (0, 0))[1], "sha": item.get("sha", ""), "dynamic": bool(obj.get("dynamic")),
                         **({"obsolete": True} if retired else {}), **({"scheduled": True} if obj.get("scheduled") else {}),
                     }
                     pending.append((obj["id"], obj.get("refs") or [], style))

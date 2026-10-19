@@ -190,7 +190,8 @@ def build_one(root: Path, repo: targets.Repo, kit: Optional[Toolkit], fresh: boo
         pure = PurePosixPath(path)
         context = {"path": path, "stem": pure.stem, "folder": pure.parent.name, "repo": repo.name, "rule": rule, **{key: nearest(path, found) for key, found in marks.items()}}
         objects, error = kbextract.run(kit.extractor(rule), data.get(sha, b""), context)
-        result[path] = {"sha": sha, "objects": objects, **({"error": error} if error else {})}
+        lines = len(kbextract.decode(data.get(sha, b"")).splitlines())
+        result[path] = {"sha": sha, "lines": lines, "objects": objects, **({"error": error} if error else {})}
     record = {
         "schema_version": SCHEMA_VERSION, "repo": repo.name, "ref": repo.base_ref, "commit": commit, "toolkit": kit.name, "signature": kit.signature,
         "folder": str(kit.folder), "rules": {key: kit.data.get(key) for key in ("names", "entry_types", "executable_types", "stop_words", "shared_min", "obsolete")},

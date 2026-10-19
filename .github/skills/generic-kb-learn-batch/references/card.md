@@ -10,15 +10,15 @@ The form is the standard's ([README](../../../../.harness/contracts/kb/README.md
 - Level: verified (read in repo_a at 3f1c0a9e)
 
 In: @run_date (date, default today). Out: none; rows in dbo.orders.
-Changes: MERGE into dbo.orders on id (new rows inserted, known rows updated), then sets flag = 1.
+Changes: MERGE into dbo.orders on id (L18-L26): new rows inserted, known rows updated; then sets flag = 1 (L28).
 Twice: safe; the MERGE matches on id.
 On an error: no TRY/CATCH; the error goes to the job step, nothing is logged.
 
-Logic: only rows whose date is a working day in dbo.calendar. See the card of `sp:Db.dbo.usp_log` for the log.
+Logic: only rows whose date is a working day in dbo.calendar (L12-L16). See the card of `sp:Db.dbo.usp_log` for the log.
 
 Not known: which environments run it on holidays (req-0004).
 
-Traps: a staging row with a NULL id is dropped by the MERGE, with no error.
+Traps: a staging row with a NULL id is dropped by the MERGE, with no error (L19).
 ```
 
 | Line | Where it comes from |
@@ -27,7 +27,7 @@ Traps: a staging row with a NULL id is dropped by the MERGE, with no error.
 | Relations | `harness kb near <id> --depth 1`: `reads` → Reads, `writes` → Writes, any other kind → Calls, what uses it → Called by. `none` when empty |
 | `Level` | `verified` when you read it in the code now; the base commit of `harness target list` |
 | In / Out / Changes / Twice / On an error | The interface, from the code. A line the code does not answer: "not known" |
-| Logic | Rules, conditions, edge cases. Not a copy of the code. Name the cards of what it uses instead of retelling them |
+| Logic | Rules, conditions, edge cases, each with its lines (`L12-L16`: line numbers of the source file). Not a copy of the code. Name the cards of what it uses instead of retelling them |
 | Not known | What only a run or an environment can tell, with the id of its row in `requests.md` |
 | Traps | What goes wrong that the code shows. None seen: leave the line out; do not make one up |
 

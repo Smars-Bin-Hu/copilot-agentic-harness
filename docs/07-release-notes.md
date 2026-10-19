@@ -10,6 +10,22 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.4.38 (2026-10-18)
+
+Learning long code with care, and rules you can check.
+
+**Testing**: the automatic tests pass on the Mac. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **`kb order` batches by lines of code**, not only by count: at most 1500 lines a batch (`--lines`). An object longer than that is a batch of its own; objects of 400 lines or more are listed as `large`, and `/generic-kb-learn-batch` reads them in parts.
+- **A card's rules cite their lines** (`L120-L145`). `kb cardcheck` checks that each cited line is inside the object's code on the base branch; a card of 400 lines of code or more that cites none is an error, of 50 or more a warning.
+- **A card of long code may be longer**: one line per 10 lines of code, when that is more than 120. `kb index` writes the object's `lines` into the index for it.
+
+### Changed
+
+- **The map's cache holds the lines of each file.** The first `kb map` after the upgrade reads every file again, once.
+
 ## 1.4.37 (2026-10-18)
 
 Learning a domain from zero, in three skills. The knowledge base this gives is a **base**: every card says which commit it was read at, and what the code cannot tell is written down as a request, not guessed.

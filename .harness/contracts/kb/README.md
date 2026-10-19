@@ -77,6 +77,7 @@ One JSON object per line, sorted by id. Written by scripts; a person or an agent
 | `repo` + `sources[].path` | The repository folder name and the path inside it. Never a path of one computer (`C:\Users\...`, `/Users/...`): `kb check` refuses it |
 | `sources[].sha` | The git blob of that file when the card was written (`git ls-tree`). `kb stale` compares it with the base branch now |
 | `card` | `objects/<type>.md#<id>`: the file and the `## <id>` heading. Without the anchor an agent reads the whole file |
+| `lines` | Optional, written by `kb index`: `[first, last]`, the lines of the object's code in its source when the card was written. A card may have one line per 10 of them, when that is more than 120 |
 | `source_missing` | An object that runs (seen in production, or used by other code) but whose source is in no repository: `{"seen_in": "<where it was seen: a production list of <date>, the uses in the map>", "last_in_git": "<repo>/<path>@<commit>, if git had it once"}`, `level: unknown`, `sources: []`. Its card says what is known and that the code is missing. `harness kb gaps` finds such objects |
 | `family` lines | Many objects made from one pattern (`dbo.usp_run_rule_<n>`) are one line: `"type": "family"`, `"pattern"`, `"member_type"`, `"members"` (how many). Do not list the members |
 
@@ -122,10 +123,11 @@ What a person must give for the knowledge to go on: code that is in no repositor
 - Reads: <ids> · Writes: <ids> · Called by: <ids> · Calls: <ids>
 - Level: verified (read in repo_a at <commit of the base branch>)
 
-<the logic in a few lines: the rules, the conditions, the edge cases the code shows; not a copy of the code>
+<the logic: the rules, the conditions, the edge cases the code shows, each with the lines it is in (L120-L145); not a copy of the code>
 
 Traps: <what goes wrong>
 ```
 
 - **The relations line is the map's**, not the model's: `Reads` and `Writes` are the map's uses of those kinds, `Calls` all its other uses of the object (`calls`, `runs`, `uses` ...), `Called by` what uses it. Ids, comma separated, `none` for none. `harness kb cardcheck --path <domain>` checks every card against the map: a use the map does not have, or one left out, is an error; a caller left out is a warning (an object used everywhere need not list them all). A use the code shows but the map misses is a fault of the toolkit: fix the toolkit, do not add it by hand.
+- **Rules cite their lines**: `L120` or `L120-L145`, line numbers of the source file on the base branch. `kb cardcheck` checks that they fall inside the object's code; a card of 400 lines of code or more that cites none is an error (50 or more: a warning). A cited line lets a person, a reviewer or the next agent check a rule in one look.
 - **Interface first**: what goes in (parameters, the tables it reads), what comes out, what it changes, whether running it twice is safe, what it does on an error. What the code does not show is written as not known, not guessed.

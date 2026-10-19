@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 import shutil
 import unittest
+from unittest import mock
 
 from support import GIT, HarnessTestCase, make_repo
 
-from core import kbgraph, kblearn, kbmap, tasks
+from core import kbgraph, kblearn, kbmap, kbstd, tasks
 from test_kbmap import EXAMPLE, FILES
 
 ORDERS = "job:Shop_Orders"
@@ -17,10 +18,10 @@ PUBLISH = "sp:Shop.dbo.usp_publish_summary"
 LOG = "sp:Shop.dbo.usp_log"
 
 
-def graph_of(edges: dict, types: dict, dynamic: tuple = ()) -> kbgraph.Graph:
+def graph_of(edges: dict, types: dict, dynamic: tuple = (), size: dict = None) -> kbgraph.Graph:
     graph = kbgraph.Graph()
     for node, kind in types.items():
-        graph.nodes[node] = {"id": node, "type": kind, "name": node.split(":", 1)[1], "repo": "r", "path": "p", "line": 1, "dynamic": node in dynamic}
+        graph.nodes[node] = {"id": node, "type": kind, "name": node.split(":", 1)[1], "repo": "r", "path": "p", "line": 1, "size": (size or {}).get(node, 10), "dynamic": node in dynamic}
     for source, targets in edges.items():
         for target in targets:
             graph.out[source].append((target, "calls"))
@@ -60,6 +61,22 @@ class OrderTests(unittest.TestCase):
                 self.assertLess(where[target], where[source])
         self.assertEqual([row["objects"] for row in found if row.get("dynamic")], [["sp:dyn"]])
         self.assertEqual(found[0]["card_file"], "objects/table.md")
+
+    def test_a_batch_reads_at_most_its_budget_of_lines_and_a_long_object_is_alone(self) -> None:
+        types = {f"sp:p{n}": "sp" for n in range(5)}
+        graph = graph_of({}, types, size={"sp:p0": 900, "sp:p1": 400, "sp:p2": 400, "sp:p3": 300, "sp:p4": 2000})
+        found = kblearn.batches(graph, sorted(types), set(), 20, 1000)
+        self.assertEqual([row["objects"] for row in found], [["sp:p0"], ["sp:p1", "sp:p2"], ["sp:p3"], ["sp:p4"]])
+        self.assertEqual([row["lines"] for row in found], [900, 800, 300, 2000])
+
+    def test_the_lines_of_an_object_run_to_the_next_one_and_the_first_owns_the_top(self) -> None:
+        spans = kbgraph.sizes([{"line": 5}, {"line": 20}, {"line": 20}, {"line": 40}], 50)
+        self.assertEqual(spans, {5: (15, 1), 20: (20, 20), 40: (11, 40)})
+        self.assertEqual(kbgraph.sizes([{"line": 1}], 0), {})
+
+    def test_a_card_of_long_code_may_be_longer(self) -> None:
+        self.assertEqual(kbstd.card_limit({}), 120)
+        self.assertEqual(kbstd.card_limit({"lines": [1, 3000]}), 300)
 
     def test_cards_name_ids_with_or_without_backticks(self) -> None:
         found = kblearn.said(["- Reads: `table:Db.dbo.a`, table:Db.dbo.b · Writes: none · Called by: `job:Daily Load` · Calls: sp:x, not an id",
@@ -101,6 +118,16 @@ class LearnTests(HarnessTestCase):
         self.assertEqual(result["shared"], [])
         self.assertIn(LOG, [node for row in result["batches"] for node in row["objects"]])
 
+    def test_order_counts_the_lines_of_each_batch(self) -> None:
+        graph = kbgraph.need_map(self.root)
+        self.assertEqual(graph.nodes[LOAD]["size"], len(FILES["Shop/dbo/Stored Procedures/usp_load_orders.sql"].splitlines()) - graph.nodes[LOAD]["line"] + 1)
+        whole = kblearn.order(self.root, [ORDERS])
+        self.assertTrue(all(row["lines"] > 0 for row in whole["batches"]))
+        small = kblearn.order(self.root, [ORDERS], budget=1)
+        self.assertTrue(all(len(row["objects"]) == 1 for row in small["batches"]))
+        with mock.patch.object(kblearn, "LARGE", 10):
+            self.assertIn(LOAD, [item["id"] for item in kblearn.order(self.root, [ORDERS])["large"]])
+
     def test_a_stop_and_what_is_learned_already(self) -> None:
         (self.folder / "objects" / "index.jsonl").write_text(json.dumps({"id": "table:Shop.dbo.orders", "type": "table", "card": "objects/table.md#x", "level": "verified"}) + "\n", encoding="utf-8")
         result = kblearn.order(self.root, [ORDERS], stops=["usp_publish_summary"], folder=self.folder)
@@ -138,6 +165,7 @@ class LearnTests(HarnessTestCase):
         self.assertTrue(rows[0]["sources"][0]["sha"])
         self.assertEqual(rows[0]["card"], f"objects/sp.md#{LOAD}")
         self.assertEqual(rows[1]["level"], "supported")
+        self.assertEqual(rows[0]["lines"], [3, 14])
 
     def card(self, relations: str) -> None:
         (self.folder / "objects" / "sp.md").write_text(f"# Procedures\n\n## {LOAD}\n\n- What: loads orders\n{relations}\n- Level: verified (read in repo_a at abc)\n", encoding="utf-8")
@@ -165,6 +193,22 @@ class LearnTests(HarnessTestCase):
         self.assertEqual(result["errors"], 3, joined)
         self.assertEqual(result["not_in_map"], ["sp:Shop.dbo.usp_gone"])
         self.assertEqual(result["exit_code"], 1)
+
+    def test_cardcheck_checks_the_lines_a_card_cites(self) -> None:
+        self.card("- " + self.right() + "\n\nMerges staging into orders (L7-L9); logs the run (L11).")
+        self.assertEqual(kblearn.cardcheck(self.root, self.folder)["errors"], 0)
+        self.card("- " + self.right() + "\n\nMerges staging into orders (L7-L9); logs the run (L40).")
+        result = kblearn.cardcheck(self.root, self.folder)
+        self.assertEqual(result["errors"], 1)
+        self.assertIn("L40", result["error_list"][0])
+
+    def test_cardcheck_wants_lines_cited_for_long_code(self) -> None:
+        self.card("- " + self.right())
+        with mock.patch.object(kblearn, "CITE_FROM", 5):
+            result = kblearn.cardcheck(self.root, self.folder)
+        self.assertEqual((result["errors"], result["warnings"]), (0, 1))
+        with mock.patch.object(kblearn, "LARGE", 5):
+            self.assertEqual(kblearn.cardcheck(self.root, self.folder)["errors"], 1)
 
     def test_cardcheck_follows_the_flows_of_the_architecture(self) -> None:
         self.card("- " + self.right())

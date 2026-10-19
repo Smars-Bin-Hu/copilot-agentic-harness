@@ -38,6 +38,7 @@ The aim is a **base**, not a perfect knowledge base: every card says which commi
    - `dynamic`: SQL or a call known only at run time. Each object gets one `runtime` request: what value, and a read-only query the user can run (from the toolkit's `inventory/` when it has one).
    - `obsolete`: retired code still used. Ask whether to learn it.
    - `cycles`: objects that use each other. They are learned in one batch; say so.
+   - `large`: objects of 400 lines or more. Each is a batch of its own and is read in parts; name them in the plan, they take the longest.
    - More than about 15 batches: ask whether to cut the domain smaller (fewer entry points, or a `--stop`).
 4. **Research note (when there is one).** Keep it as it came, in `discovery/research.md`: it is a lead, never a fact. Optionally take its claims one by one ("job X loads table Y") and look for each in the map (`kb near`): found, not found, or against the map. One against the map goes into `open_questions` of `domain.yaml` with level `conflict`.
 5. **Write `LEARN-PLAN.md`** at the root of the task folder from [learn-plan.md](./templates/learn-plan.md). The `kb order` command goes in exactly as run: every batch task runs it again.

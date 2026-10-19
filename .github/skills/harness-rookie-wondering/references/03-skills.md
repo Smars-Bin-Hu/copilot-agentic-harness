@@ -35,7 +35,7 @@ Suggested body: when to use it, prerequisites, steps, **Gotchas** (warnings ahea
 
 | Prefix | Who maintains it | Examples |
 | --- | --- | --- |
-| `harness-*` | Upstream | `harness-my-task`, `harness-quick-start`, `harness-wondering` |
+| `harness-*` | Upstream | `harness-my-task`, `harness-rookie-quick-start`, `harness-rookie-wondering` |
 | `generic-*` | Upstream, general for any domain | `generic-goal-driven`, `generic-build-new-skill` |
 | `domain-*` | The company; upstream makes none | Your own business skills. They live in the knowledge base (`<knowledge base>/domains/<domain>/skills/`), not in `.github/skills/`: see below |
 

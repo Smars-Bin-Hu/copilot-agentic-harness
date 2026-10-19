@@ -1,6 +1,6 @@
 ---
-name: harness-get-me-ready
-description: 'First setup after getting the harness repository: set up the short command harness, plug in the knowledge base and the company skills, set up the target repositories, the user name and the language, and check it all with doctor. Use when the user types /harness-get-me-ready, or says "get me ready", "initialize the harness", "first setup", "the harness command is not found", "doctor reports an error about the short command". Keywords: get me ready, initialize, setup, install, first use, PATH, short command, target.override.json, plug in the knowledge base, language.'
+name: harness-rookie-get-me-ready
+description: 'First setup after getting the harness repository: set up the short command harness, plug in the knowledge base and the company skills, set up the target repositories, the user name and the language, and check it all with doctor. Use when the user types /harness-rookie-get-me-ready, or says "get me ready", "initialize the harness", "first setup", "the harness command is not found", "doctor reports an error about the short command". Keywords: get me ready, initialize, setup, install, first use, PATH, short command, target.override.json, plug in the knowledge base, language.'
 type: workflow
 specificTo: generic
 ---
@@ -57,14 +57,14 @@ At the start, send the user the list below, and tick each item as it is done. Wh
      - It has one (the user copied the repository with its `.git`): leave it as it is. `harness target init-kb` does nothing to it; run it anyway to see `registered`.
      - Then add `"kb": { "path": "knowledge-base", "knowledge_base": true }` to `repos` in `target.override.json` (keep the other entries), and run `harness target show --repo kb` to check: the branch must be the base branch and the working tree clean. The `base_ref` of `kb` is the branch `init-kb` commits on; set it before you run `init-kb` when it is not `main`.
      - The details are in the part of [docs/03-configure.md](../../../docs/03-configure.md) about letting a task update the knowledge base.
-   - The user has no knowledge base yet: mark it "skipped" and tell the user what that means (see Gotchas).
+   - The user has no knowledge base yet: still make `knowledge-base/` a repository and register it, as above (it holds only its README for now), and mark the item "set up, empty". It is built from the code later, with `harness-rookie-new-knowledgebase`. When the user does not want one at all, mark it "skipped" and tell the user what that means (see Gotchas).
 6. **Company skills.** Ask the user whether there are skills of the company's own, and where. One folder per skill. A skill of one business domain goes into the knowledge base, at `<knowledge base>/domains/<domain>/skills/<name>/` (the harness shows it to tasks of that domain; it stays out of the `/` menu). Only a skill for every domain goes into `.github/skills/`. The folder name and the `name` in `SKILL.md` must be the same and use the prefix `domain-<domain>-<name>`. When a prefix is wrong, tell the user and ask before renaming; do not rename by yourself.
 7. **Other overrides (optional).** Ask the user whether any default should change. A common one: protecting a few more paths (`extra_guardrail_paths+` in `gate.override.json`). The rules are in the override part of [docs/03-configure.md](../../../docs/03-configure.md). If there is nothing, skip. Do not ask the user about Chinese text of the CLI showing wrongly: step 8 handles it.
 8. **Check.** Run `harness doctor`.
    - `[ERROR]`: fix as the message says and run it again, until `{"errors": 0}`. What you cannot fix, tell the user as written.
    - The "Output encoding" line says auto switched to UTF-8 (common on Windows): look at the sample line of Chinese below it. If you can read it, do nothing. If it is garbage, write `.harness/policies/cli.override.json` yourself: `{"output": {"encoding": "native"}}` (admin mode must be on), run `harness doctor` once more, and tell the user: on this computer Chinese text from the CLI shows as `\uXXXX`. With the language `en` this matters only for Chinese file names and content.
    - Other `[WARN]` lines: tell the user what each one affects, and the user decides whether to fix it.
-   - Last, give the user a table: for each of the eight items "set up", "skipped" or "not passed", and what each skipped one means. Remind the user to run `harness admin off --session-id <session id>` and to open a new conversation for everyday tasks.
+   - Last, give the user a table: for each of the eight items "set up", "skipped" or "not passed", and what each skipped one means. Remind the user to run `harness admin off --session-id <session id>` and to open a new conversation for everyday tasks. When the knowledge base is set up but empty and code repositories are set up, say that the agent can build it from their code, step by step: in a new conversation, "build our knowledge base" (`harness-rookie-new-knowledgebase`).
 
 ## Gotchas
 
@@ -73,7 +73,7 @@ At the start, send the user the list below, and tick each item as it is done. Wh
 - **Do not teach the user an alias or a PowerShell function.** Those work only in the user's own interactive terminal, not in the agent's, and `doctor` cannot see them.
 - **`harness` works on the repository the current folder is in.** With two copies of the harness on one computer, the one you run it in is the one it works on. So run the commands inside this repository.
 - **Write only `*.override.json`; do not change the default policy files.** A default file is overwritten by a later upgrade. `target.override.json`, `user.override.json` and `cli.override.json` hold this machine's paths, name, language and terminal settings; git ignores them, and they are not to be committed.
-- **Do not make up content for `knowledge-base/`.** If the user has no knowledge base, leave it empty. Without one, an agent working on a target repository can only guess, and plans and checks are off: tell the user this clearly.
+- **Do not make up content for `knowledge-base/`.** If the user has no knowledge base, leave it empty: it is built from the code later, never written from memory. Without one, an agent working on a target repository can only guess, and plans and checks are off: tell the user this clearly.
 - **`applyTo` of the knowledge base instructions must be `'**'`.** With only `'knowledge-base/**'` it has no effect before the agent reads a knowledge base file.
 - **Copy a large knowledge base with a terminal command** (`cp -R`; on Windows `Copy-Item -Recurse`), not by reading and writing file after file.
 - **Do not decide by yourself to skip an item.** Ask the user about every item; skip only when the user says so.

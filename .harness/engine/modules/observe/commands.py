@@ -18,7 +18,7 @@ from typing import Any, Dict
 
 from core.paths import repo_root
 
-from core import kbaudit, kbgraph, kblearn, kbmap, kbmigrate, kbstd
+from core import kbaudit, kbgraph, kblearn, kbmap, kbmigrate, kbstatus, kbstd
 
 from . import kbstats, prune, stats
 
@@ -114,6 +114,9 @@ def register(subparsers: Any) -> None:
     hole = kb_commands.add_parser("gaps", help="what runs or is used but has no code in the repositories: missing names, retired code in use, files deleted in git; with --inventory, also what production runs that no repository holds")
     hole.add_argument("--inventory", default="", help="a list of production objects a person exported (ids, one per line, or CSV with an id column)")
     hole.set_defaults(handler=mapped(lambda a: kbgraph.gaps(repo_root(), Path(a.inventory) if a.inventory else None)))
+    where = kb_commands.add_parser("status", help="how far the knowledge base is built: each step from code repositories to learned domains, done or not, and the next one")
+    where.add_argument("--quick", action="store_true", help="only look at which files exist (no map, no order)")
+    where.set_defaults(handler=mapped(lambda a: kbstatus.status(repo_root(), not a.quick)))
     check = kb_commands.add_parser("audit", help="how right the map is: a sample of objects of each type to read blind; with --answers, the readings against the map per type (recall, precision, every difference). Exit code 1 below the bar")
     check.add_argument("--per-type", type=int, default=kbaudit.PER_TYPE, help=f"objects per type in the sample (default {kbaudit.PER_TYPE})")
     check.add_argument("--type", action="append", default=None, help="only this type (may be given more than once); default: the types that use something")

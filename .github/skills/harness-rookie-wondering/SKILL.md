@@ -1,6 +1,6 @@
 ---
-name: harness-wondering
-description: 'The deep course: an interactive explanation of how coding agents and this harness work and how they are built. Topics: the agent loop, instructions, skills, agents, tools, hooks, guardrails, permissions, tasks, subagents, checks, observe, commands, internals, design choices, the knowledge base from code. Use when the user wants to go deep, asks "why is it designed this way", "how does the hook work", "how is it built", or types /harness-wondering. A beginner new to the harness uses harness-quick-start first. Keywords: wondering, how it works, deep dive, internals, architecture, tutorial.'
+name: harness-rookie-wondering
+description: 'The deep course: an interactive explanation of how coding agents and this harness work and how they are built. Topics: the agent loop, instructions, skills, agents, tools, hooks, guardrails, permissions, tasks, subagents, checks, observe, commands, internals, design choices, the knowledge base from code. Use when the user wants to go deep, asks "why is it designed this way", "how does the hook work", or types /harness-rookie-wondering. A beginner new to the harness uses harness-rookie-quick-start first. Keywords: wondering, how it works, deep dive, internals, architecture, tutorial.'
 type: workflow
 specificTo: generic
 ---
@@ -9,14 +9,14 @@ specificTo: generic
 
 For people who want to understand. Two things are taught together: what a coding agent is in itself, and how this harness does things. The user can interrupt with a question at any time.
 
-How it divides the work with `harness-quick-start`: quick-start takes a beginner through a first task; this skill gives a deep understanding. When the user is not even clear what an agent or a task is, suggest `/harness-quick-start` first.
+How it divides the work with `harness-rookie-quick-start`: quick-start takes a beginner through a first task; this skill gives a deep understanding. When the user is not even clear what an agent or a task is, suggest `/harness-rookie-quick-start` first.
 
 ## When to Use This Skill
 
 - The user wants to know what a component is, why it is designed this way, and how it is built underneath.
 - While using the harness, the user wonders "why was this refused" or "why can it not do that" and wants the root of it.
 - The user wants to change or extend the harness and has to understand it first.
-- The user types `/harness-wondering`.
+- The user types `/harness-rookie-wondering`.
 
 ## Prerequisites
 
@@ -77,7 +77,7 @@ The user's questions come first. When they ask something the reference file does
 
 | Issue | Solution |
 | --- | --- |
-| The user is lost from the start | Stop and suggest doing `/harness-quick-start` first, then coming back |
+| The user is lost from the start | Stop and suggest doing `/harness-rookie-quick-start` first, then coming back |
 | The user asks how to use it, not why | Give the links to what to say day to day in the [quick start](../../../docs/01-quickstart.md) and to the [command reference](../../../docs/04-reference.md), then teach the common commands with topic 13 |
 | The user asks about the platform itself (why Copilot behaves this way) | Teach what was measured (see topic 6), and say plainly what was not |
 | Halfway through, the user wants another topic | Switch. Note "X is still left", and mention it at the end |

@@ -25,7 +25,7 @@ Read these sections of a release page. Section names change now and then; go by 
 | Skills, instructions, `AGENTS.md`, prompt files: loading rules | `AGENTS.md`, `.github/instructions/`, `.github/skills/` | `applyTo` rules, when the full skill text loads, limits on size or count |
 | Usage, token or cost data; session logs; telemetry export | `observe` module (`retire_when`), `task report` reading `events.jsonl` | Can the harness read it per session? Did the session record move or change shape? |
 | Agent evaluation, replay, test runs | `evalcheck` module (`retire_when`) | Can it run a fixed scenario and judge it by code? |
-| Enterprise policies for hooks, agents, skills, MCP | `doctor`, `harness-get-me-ready` | Can a company switch the harness off without the user knowing? Should `doctor` check a new setting? |
+| Enterprise policies for hooks, agents, skills, MCP | `doctor`, `harness-rookie-get-me-ready` | Can a company switch the harness off without the user knowing? Should `doctor` check a new setting? |
 | Model picker, reasoning effort, model fallback | `.agent.md` `model` fields, the advice on models | New names, fallbacks, whether a subagent may use a dearer model |
 | Language or locale of chat | the `language` setting | Anything the harness does by hand that the platform now does |
 

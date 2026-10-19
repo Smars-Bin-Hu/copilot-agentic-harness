@@ -2,7 +2,7 @@
 
 On a first visit, read the [Overview](00-overview.md) first: what this is, and what each of the four parts does.
 
-From cloning the repository to a first finished task. To have the agent take you through it: type `/harness-quick-start` in a Copilot conversation.
+From cloning the repository to a first finished task. To have the agent take you through it: type `/harness-rookie-quick-start` in a Copilot conversation.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ There are two ways to get the harness, both fine: `git clone`, or downloading th
 
 Every command is written `harness <command>`: in the docs, in the rules the agent receives, and in refusal reasons. So the terminal has to know `harness` first. This is done once.
 
-To have the agent take you through it: type `/harness-get-me-ready` in a Copilot conversation. Below is how to do it by hand.
+To have the agent take you through it: type `/harness-rookie-get-me-ready` in a Copilot conversation. Below is how to do it by hand.
 
 The launchers are in `.harness/bin/`: `harness` on macOS/Linux, `harness.cmd` on Windows. There is one thing to do: get it on PATH.
 
@@ -157,6 +157,7 @@ Material such as requirement documents and logs goes into `REQ/` and `REF/` of t
 | An analysis turns into a repository change | "This task has to change <repository> now" |
 | Only checking existing work | "`[review]=1` check the work of <task name>; do not change files" |
 | Something big over many days | `/generic-goal-driven`, and after that `/generic-goal-driven continue` in every new session |
+| Building the knowledge base from your code | `/harness-rookie-new-knowledgebase`; later "continue the knowledge base" |
 
 A mark can stand anywhere in a prompt, and once per task is enough:
 

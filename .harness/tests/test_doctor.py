@@ -403,7 +403,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(missing.returncode, 1)
         self.assertIn("[ERROR] PATH 里找不到短命令 `harness`", missing.stdout)
         self.assertIn(str(self.root / ".harness" / "bin"), missing.stdout)  # the folder to add
-        self.assertIn("harness-get-me-ready", missing.stdout)
+        self.assertIn("harness-rookie-get-me-ready", missing.stdout)
 
     @unittest.skipIf(os.name == "nt", "a shell script as a stand-in launcher")
     def test_a_launcher_of_another_copy_is_a_warning(self) -> None:
@@ -663,7 +663,7 @@ class LayoutTests(unittest.TestCase):
         local = {"core", "adapters", "modules", "doctor", "hook", "cli"}
         stdlib = {
             "__future__", "argparse", "ast", "collections", "contextlib", "copy", "ctypes", "dataclasses", "datetime", "difflib", "hashlib", "html", "http", "importlib", "io", "secrets", "threading", "xml",
-            "json", "locale", "math", "os", "pathlib", "posixpath", "random", "re", "shutil", "stat", "string", "subprocess", "sys", "tempfile", "time",
+            "json", "locale", "math", "os", "pathlib", "posixpath", "random", "re", "shlex", "shutil", "stat", "string", "subprocess", "sys", "tempfile", "time",
             "traceback", "typing", "unicodedata", "urllib", "uuid", "webbrowser",
         }
         for path in sorted(ENGINE.rglob("*.py")):

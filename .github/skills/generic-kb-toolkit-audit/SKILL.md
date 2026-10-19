@@ -34,8 +34,8 @@ specificTo: generic
    - In `map_misses` (you read a use the map does not have): look at the line again. Your reading was wrong: correct `audit-answers.jsonl` and note it. The use is there: it is the map's miss.
    - In `map_only` (the map has a use you did not read): look for it in the file. Found: you missed it; add it and note it. Not there: the map's false use.
    - Then score again. Notes of your own misreadings stay in `AUDIT.md`: they show how far a reading can be trusted too.
-5. **Write `AUDIT.md`** in the task from [audit.md](./templates/audit.md): the score per type, every map miss and false use with path and line, what they have in common (one form of call, one kind of file), and `unresolved` of `kb map` (names the map could not place: the most used ones often show a form the toolkit misreads).
-6. **Pass** (every type at or above the bar, 0.95 by default): the write-back puts `AUDIT.md` into `<kb repo>/toolkit/audit.md`. **Fail**: tell the user which types and the patterns; the fix is `/generic-kb-toolkit-build` with these examples, then this audit again with another `--seed`.
+5. **Write `AUDIT.md`** in the task from [audit.md](./templates/audit.md), with the signature of the toolkit from `toolkits` of the sample (`kb status` counts the audit only for that toolkit): the score per type, every map miss and false use with path and line, what they have in common (one form of call, one kind of file), and `unresolved` of `kb map` (names the map could not place: the most used ones often show a form the toolkit misreads).
+6. **Pass** (every type at or above the bar, 0.95 by default): the write-back puts `AUDIT.md` into `<kb repo>/toolkit/audit.md`. **Fail**: tell the user which types and the patterns; the fix is `/generic-kb-toolkit-build` with these examples, then this audit again with another `--seed`. After the write-back, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
 
 ## Gotchas
 

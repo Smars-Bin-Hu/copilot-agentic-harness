@@ -19,7 +19,7 @@ Build a skill from the template, check its form and test that it loads.
 
 ## Prerequisites
 
-- The short command `harness` works (step 5 uses it). If not, run `/harness-get-me-ready`.
+- The short command `harness` works (step 5 uses it). If not, run `/harness-rookie-get-me-ready`.
 
 ## Step-by-Step Workflows
 

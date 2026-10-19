@@ -1,6 +1,6 @@
 ---
-name: harness-quick-start
-description: 'A first lesson for someone new to the harness: one true story from a request to a branch, what the harness gives you, the two places you work in (the Chat window and the board in the browser), and one practice task. Assumes the user only knows that Copilot completes code. Use when the user types /harness-quick-start, or says "how do I use the harness", "get me started", "first time", "what can it do", "teach me". Keywords: quick start, first lesson, tutorial, beginner, introduction.'
+name: harness-rookie-quick-start
+description: 'A first lesson for someone new to the harness: one true story from a request to a branch, what the harness gives you, the two places you work in (the Chat window and the board in the browser), and one practice task. Assumes the user only knows that Copilot completes code. Use when the user types /harness-rookie-quick-start, or says "how do I use the harness", "get me started", "first time", "what can it do", "teach me". Keywords: quick start, first lesson, tutorial, beginner, introduction.'
 type: workflow
 specificTo: generic
 ---
@@ -14,11 +14,11 @@ Teach a first-time user four things: what it is like to work this way (a story);
 - The user uses this harness for the first time and wants to know what it is and how to use it.
 - The user used an earlier version and wants to know how it works now.
 
-When the environment is not set up (the `harness` command is not found, no target repository is set up), use the skill `harness-get-me-ready` first. For opening tasks day to day use `harness-my-task`, not this skill.
+When the environment is not set up (the `harness` command is not found, no target repository is set up), use the skill `harness-rookie-get-me-ready` first. For opening tasks day to day use `harness-my-task`, not this skill.
 
 ## Prerequisites
 
-- `harness doctor` runs. If it does not, go to `harness-get-me-ready` first.
+- `harness doctor` runs. If it does not, go to `harness-rookie-get-me-ready` first.
 - The knowledge base, the company skills and the target repositories are taken to be set up. If they are not, the lesson still works.
 
 ## Step-by-Step Workflows
@@ -37,7 +37,7 @@ At the start, send the user the list, and tick each item as it is done:
 
 ### Opening
 
-1. Run `harness doctor`. If there is an `[ERROR]`, stop and go to `harness-get-me-ready`. Read any `[WARN]` to the user; it does not block.
+1. Run `harness doctor`. If there is an `[ERROR]`, stop and go to `harness-rookie-get-me-ready`. Read any `[WARN]` to the user; it does not block.
 2. Ask the user one question, so you know how slowly to go. Use a question tool if you have one; if not, list numbers:
    1. Only used code completion (the grey text while typing code)
    2. Asked questions in the Chat window
@@ -64,7 +64,7 @@ Go step by step from [walkthrough.md](references/walkthrough.md). The scenario i
 
 Wrap up in three sentences, then give the links:
 
-1. To ask a question: just ask.
+1. To ask a question: just ask. No knowledge base yet: `/harness-rookie-new-knowledgebase` builds one from their code, step by step.
 2. To get files produced, or a repository changed: say what you want done; the agent asks you the rest, and you follow it on the board.
 3. Back after a few days: say "go on with task so-and-so".
 
@@ -83,13 +83,13 @@ The links: [Overview](../../../docs/00-overview.md) (the whole picture, with scr
 - **Do not touch a target repository.** The practice task is of kind `design` and has no `DEV/`.
 - **Do not write `[review]=1` yourself.** The user must send that message: the hook goes by the user's own words only.
 - **The task folder is ignored by git, and search tools do not find it.** Point at the board page; give a path only for a file the user must open itself.
-- **The language.** The harness speaks English by default and can speak Chinese: `language` in `.harness/policies/user.override.json` (`en` or `zh`). When the user would rather have Chinese, say so; the skill `harness-get-me-ready` sets it. Teach this lesson in the language the rules at the top of the prompt name.
+- **The language.** The harness speaks English by default and can speak Chinese: `language` in `.harness/policies/user.override.json` (`en` or `zh`). When the user would rather have Chinese, say so; the skill `harness-rookie-get-me-ready` sets it. Teach this lesson in the language the rules at the top of the prompt name.
 
 ## Troubleshooting
 
 | Issue | Solution |
 | --- | --- |
-| `harness: command not found` | Go to step 1 of the skill `harness-get-me-ready` |
+| `harness: command not found` | Go to step 1 of the skill `harness-rookie-get-me-ready` |
 | `harness task board` says the port is in use | The board is already running: open `http://127.0.0.1:8765/` |
 | The page says "not paired" and an approval is refused | The browser was not opened by the program. Press Enter in the board's terminal and open the link it prints |
 | `Task ... exists already` | Left over from the last practice. Go on with it using `task open <task name>`, or pick another name |

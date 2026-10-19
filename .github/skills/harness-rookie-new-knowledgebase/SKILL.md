@@ -1,0 +1,62 @@
+---
+name: harness-rookie-new-knowledgebase
+description: 'Guide a user who knows nothing about knowledge bases through building one from their own code, step by step: kb status says where they stand, each step is explained in plain words and done with the right skill, and at the end they learn how it is kept true in daily work. Needs code repositories and a knowledge base repository set up. Use when the user wants to build, start, set up or continue a knowledge base, make the agent know their code, or asks what to do about the knowledge base. Keywords: build knowledge base, context engineering, continue knowledge base, kb status, learn our code.'
+argument-hint: 'Nothing, or "continue"'
+type: workflow
+specificTo: generic
+---
+
+# Build your knowledge base
+
+The user does not need to read a document. You lead: `harness kb status` says, from the files, which step is done and which is next; you explain the step in two or three plain sentences, say what only the user can give, and do it with the skill made for it. A step done, `kb status` again, the next one. The user can stop any time and come back days later with "continue the knowledge base".
+
+## When to Use This Skill
+
+- The user wants a knowledge base built from their code, or asks how to make the agent know their code.
+- The user comes back: "continue the knowledge base", "where are we with the knowledge base".
+- At a stop of a task, the user said yes to the offered next step of the knowledge base.
+
+**Who starts it: auto**, when the user asks for any of the above.
+
+## Prerequisites
+
+- `harness kb status`: steps `targets` and `kb_repo` are done. If not, say that the code repositories and the knowledge base repository are set up first, and use `harness-rookie-get-me-ready`.
+
+## Step-by-Step Workflows
+
+### Opening (every time)
+
+1. Run `harness kb status --json`.
+2. First time (`stage` is `toolkit`): tell the user, in at most five sentences, what they get and what it costs: see [the road](./references/road.md), "Say it like this". Then where they are, and what the next step needs from them.
+3. Coming back: one sentence on what is done since (the steps marked done, the domains and how much is left), then the next step.
+
+### Each step
+
+Follow the row of `stage` in [the road](./references/road.md):
+
+1. Say in two sentences what the step is for and what the user will give or approve.
+2. Ask for what only the user knows, before the work starts: known uses for the toolkit, the domain and its entry points, a research note or runbook, what is out of scope. Never fill these in yourself.
+3. Do the step with its skill, in a task of kind `kb` of its own (`harness-my-task`). The skills that only the user may start (`/generic-kb-toolkit-build`, `/generic-kb-learn-batch`) you do not start: tell the user exactly what to type, and that a new chat for each batch keeps it sharp.
+4. After the write-back: `harness kb status` again; say what changed in one line, and offer the next step. The user may stop here.
+
+### The end
+
+When `stage` is `maintain`, or the user stops after a first domain is learned, teach daily care in three sentences (see [the road](./references/road.md), "Keeping it true"), and tell them: at a stop of a task the agent offers the next step of the knowledge base once per session, until it is built.
+
+## Gotchas
+
+- **One step, one task, one write-back.** Never run the toolkit, the audit and a learn plan in one task: each has its own approval, and a person reviews one thing at a time.
+- **The user gives the facts.** Known uses, entry points and boundaries come from the user. A guess there makes the map, the audit and the plan check against the agent's own guess.
+- **Do not skip the audit quietly.** The user may skip it; then say that the plan will say "map not audited", and why it matters (the batches trust the map).
+- **Speak plainly.** "A map" is "a list, made by a script, of everything in your code and who uses what". Bring in a word (toolkit, audit, batch) only when its step comes.
+- **Do not teach the whole road at once.** Where they are, the next step, what it needs. The rest when it comes.
+- **`kb status` is the truth.** If what the user says differs from it (they think the map is done), trust the files and show them the line.
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| `kb status` says `kb_repo` | The knowledge base is not a target repository: `harness-rookie-get-me-ready` |
+| The user has no known uses to give | Ask them to open two or three files they know and say what each runs or reads; you check each in the code before it goes into `facts.jsonl` |
+| A step keeps failing (the map misses facts, the audit is below the bar) | Show the examples; the fix is `/generic-kb-toolkit-build` with them. Do not lower the bar to pass |
+| The user wants several domains at once | One learn plan per domain; they can run in parallel tasks, but finish one first to see the whole road |

@@ -49,7 +49,7 @@ The aim is a **base**, not a perfect knowledge base: every card says which commi
    - `objects/index.jsonl` empty, `architecture.md` with its empty sections, `environment.md` and `requests.md` from their templates, the requests of step 3 as rows with status `open`.
    - `discovery/learn-plan.md` (the approved plan) and `discovery/research.md` (when there is one).
    - `harness kb check --path <that folder>` until no error; then `harness task diff`, `harness task promote --dry-run`, and the user's `approve-promote`.
-8. **Tell the user the next step**: `/generic-kb-learn-batch <domain>` in a new task, one batch per task.
+8. **Tell the user the next step**: `/generic-kb-learn-batch <domain>` in a new task, one batch per task. After the write-back, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
 
 ## Gotchas
 

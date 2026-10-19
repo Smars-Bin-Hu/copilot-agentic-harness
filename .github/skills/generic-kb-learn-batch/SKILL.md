@@ -40,7 +40,7 @@ One task learns one batch of the plan that `generic-kb-learn-plan` wrote: object
    - "... not in its code": a cited line is outside the object. Look the rule up again in the file and cite where it is; a rule you cannot find is taken out.
    - "no line cited": add the lines of each rule.
    - The code clearly shows a use the map does not have: the toolkit misses it. Do not add it by hand. Note it in `LOG.md` with the file and line, and tell the user at the end: `/generic-kb-toolkit-build` fixes it for every object at once.
-7. **Hand over**: `harness task diff`, `harness task promote --dry-run`, the user's `approve-promote`. Then say what is next: the next batch, or `generic-kb-learn-synthesize` when `kb order --path` has nothing left (`to_learn` 0). At the stop, list the new `open` requests in two lines and ask whether the user can answer one now.
+7. **Hand over**: `harness task diff`, `harness task promote --dry-run`, the user's `approve-promote`. Then say what is next: the next batch, or `generic-kb-learn-synthesize` when `kb order --path` has nothing left (`to_learn` 0). At the stop, list the new `open` requests in two lines and ask whether the user can answer one now. After the write-back, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
 
 ## Gotchas
 

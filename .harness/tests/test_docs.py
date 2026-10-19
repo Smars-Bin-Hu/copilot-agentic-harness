@@ -102,7 +102,7 @@ class InitializeSkillTests(unittest.TestCase):
     """The CLI prints UTF-8 on a Windows pipe by itself. The skill only acts when that reads as garbage: it writes `native`."""
 
     def steps(self) -> Dict[str, str]:
-        skill = text(REPO / ".github" / "skills" / "harness-get-me-ready" / "SKILL.md")
+        skill = text(REPO / ".github" / "skills" / "harness-rookie-get-me-ready" / "SKILL.md")
         body = skill[skill.index("## Step-by-Step Workflows"):skill.index("## Gotchas")]
         return {number: chunk for number, chunk in re.findall(r"^(\d)\. (.+?)(?=^\d\. |\Z)", body, re.M | re.S)}
 
@@ -144,7 +144,7 @@ class RequirementConfirmedTests(unittest.TestCase):
 
     def test_no_file_tells_the_agent_to_fill_it_in(self) -> None:
         self.assertIn("Only the user may change the confirmation line of `REQ.md`", text(REPO / "AGENTS.md"))
-        walk = text(REPO / ".github" / "skills" / "harness-quick-start" / "references" / "walkthrough.md")
+        walk = text(REPO / ".github" / "skills" / "harness-rookie-quick-start" / "references" / "walkthrough.md")
         self.assertIn("press **confirm requirement** on the page and type the code", walk)
         self.assertIn("the harness fills the confirmation line, and you never do", walk)
 
@@ -159,7 +159,7 @@ class ReadmeStructureTests(unittest.TestCase):
         self.assertTrue(readme.startswith("# GitHub Copilot Agentic Harness on VS Code\n"))
         self.assertEqual(re.findall(r"^## (.+)$", readme, re.M), ["What it is", "Get started", "What it does", "What you must plug in", "Docs", "Directory layout", "License"])
         start = section(readme, "Get started")
-        for skill in ("harness-get-me-ready", "harness-quick-start", "harness-wondering"):
+        for skill in ("harness-rookie-get-me-ready", "harness-rookie-quick-start", "harness-rookie-wondering"):
             self.assertIn(f"`/{skill}`", start, skill)
             self.assertTrue((REPO / ".github" / "skills" / skill / "SKILL.md").is_file(), skill)
         self.assertIn("What the harness does", section(readme, "What it does"))

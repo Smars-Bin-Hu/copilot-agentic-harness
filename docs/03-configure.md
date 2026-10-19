@@ -95,7 +95,7 @@ Create `.harness/policies/target.override.json`:
 
 1. Put the knowledge base into `knowledge-base/`. **The entry is `knowledge-base/README.md`**: it is the index and holds only topics and relative links; the agent reads it first and then goes further as needed, not everything at once.
 2. Put the instructions that come with the knowledge base, the ones that say how to read and write it, into `.github/instructions/knowledgebase.instructions.md` (replacing the empty placeholder), with `applyTo: '**'` in the frontmatter. `applyTo: 'knowledge-base/**'` alone is not enough: it has no effect before the agent reads a knowledge base file.
-3. Make it a git repository tasks can update, and register it: see "Letting a task update the knowledge base" below. The setup skill `/harness-get-me-ready` does this for you.
+3. Make it a git repository tasks can update, and register it: see "Letting a task update the knowledge base" below. The setup skill `/harness-rookie-get-me-ready` does this for you.
 4. Run `doctor`. It checks: whether there is a README, whether every link in the README leads to a file, whether `knowledge-base/` is a git repository and registered as a target repository (a warning when not), whether `.gitignore` ignores `knowledge-base/`, and whether the instructions get loaded.
 5. The writing rules of the knowledge base have one main source: the instructions that come with the knowledge base.
 

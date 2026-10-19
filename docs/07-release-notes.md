@@ -10,6 +10,34 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.0 (2026-10-18)
+
+**The knowledge base, standard and beginner-friendly.** Until now the harness left the knowledge base to the team and only plugged it in. From 1.5.0 it builds one with you, from your own code, in a standard form, and you do not need to read the documents first: the agent leads.
+
+**Testing**: the automatic tests pass on the Mac; every skill passes `skill check`. **Not yet tried in Copilot**, **not run on Windows**.
+
+### Added
+
+- **`/harness-rookie-new-knowledgebase`**: the knowledge base wizard. It checks where you stand, explains each step in plain words, asks only for what you know (a few uses you are sure of, the entry points of a domain, a research note if you have one), and leads you through the skills: the toolkit, the map, the audit, the domains, then each domain learned in batches. It ends with how the knowledge base is kept true in daily work. Stop at any step; "continue the knowledge base" picks it up again.
+- **`kb status`**: how far the knowledge base is built, worked out from the files (never from what an agent remembers), and the next step with what to say or type.
+- **The agent offers the next step at a stop**: while a registered knowledge base is not built, once per session, at a stop of a task that is not a `kb` task and not in autorun. `kb_offer: false` in `task.json` turns it off.
+- Every knowledge base skill ends by running `kb status` and offering the next step.
+- `kb audit` names the toolkit it audited (its signature), so `kb status` knows when an audit is out of date.
+
+### Changed
+
+- **`/harness-rookie-get-me-ready`**: a user with no knowledge base still gets `knowledge-base/` made a repository and registered (with only its README), so it can be built from the code later.
+
+### Retired
+
+- **The beginner skills have new names**, all starting with `harness-rookie-`. The old names no longer work:
+
+  | Old | New |
+  | --- | --- |
+  | `/harness-get-me-ready` | `/harness-rookie-get-me-ready` |
+  | `/harness-quick-start` | `/harness-rookie-quick-start` |
+  | `/harness-wondering` | `/harness-rookie-wondering` |
+
 ## 1.4.40 (2026-10-18)
 
 ### Added

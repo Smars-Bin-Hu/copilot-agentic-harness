@@ -94,4 +94,4 @@ A command prints aligned lines of text when you run it in a terminal, and JSON w
 
 ## Common questions
 
-- **"The command is not found?"** Go back to `/harness-get-me-ready` and set up the short command.
+- **"The command is not found?"** Go back to `/harness-rookie-get-me-ready` and set up the short command.

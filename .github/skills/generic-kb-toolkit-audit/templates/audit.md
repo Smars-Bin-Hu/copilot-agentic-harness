@@ -1,6 +1,6 @@
 # Map audit
 
-Date: <YYYY-MM-DD> · Map at: <repo>@<short commit>, ... · Toolkit: <name> · Sample: `kb audit --per-type <n> --seed <s>` · Bar: <0.95>
+Date: <YYYY-MM-DD> · Map at: <repo>@<short commit>, ... · Toolkit: <name> (signature <signature from `toolkits` of kb audit>) · Sample: `kb audit --per-type <n> --seed <s>` · Bar: <0.95>
 
 Result: **pass** | **fail**
 

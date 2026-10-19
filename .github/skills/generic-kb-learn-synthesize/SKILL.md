@@ -29,7 +29,7 @@ specificTo: generic
 4. **Write `architecture.md`**, the fixed sections of the standard, at most 300 lines; see [architecture.md](./references/architecture.md).
 5. **`domain.yaml`**: `entry_points` (now that they have cards), `description`, `sources` with the base commits the cards were read at, `updated`, `generated_by`, the `boundaries` and `open_questions` that came up in the batches.
 6. **Check**: `harness kb cardcheck --path <domain folder in DEV>` until no error (it checks each flow line); `harness kb check --path <same>` until no error.
-7. **Hand over**: `harness task diff`, `harness task promote --dry-run`, the user's `approve-promote`. Then tell the user, in three lines, the state of the base: cards, open requests, unknowns; and that what tasks find from now on is added with `generic-capture-knowledge`.
+7. **Hand over**: `harness task diff`, `harness task promote --dry-run`, the user's `approve-promote`. Then tell the user, in three lines, the state of the base: cards, open requests, unknowns; and that what tasks find from now on is added with `generic-capture-knowledge`. After the write-back, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
 
 ## Gotchas
 

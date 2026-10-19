@@ -2,6 +2,8 @@
 
 For a team that wants its agent to know its code base: how the harness helps you build a knowledge base from the code, how you can tell it is right, and what you can change for your own code. How to plug a finished knowledge base in is in [Configuration](03-configure.md#knowledge-base); every command is in the [Reference](04-reference.md).
 
+**The quickest way**: type `/harness-rookie-new-knowledgebase` (or say "build our knowledge base"). The agent checks where you stand (`harness kb status`), explains each step in plain words, asks only for what you know, and leads you through the skills below. You can stop at any step and come back with "continue the knowledge base". This page is for when you want to know what happens underneath, or change it.
+
 ## The idea
 
 - **The code is the source of truth.** The knowledge base is an index and a summary of it, read first because it is cheaper. Where the two disagree, the code wins.
@@ -49,7 +51,7 @@ flowchart LR
 | 5. Learn plan | "learn the domain X from zero; the entry points are ..." | `kb order`: what the entry points reach, bottom up, in batches | checks the entry points, reads a research note as leads | `LEARN-PLAN.md`, then the empty domain | `discovery/learn-plan.md`, `requests.md` |
 | 6. Batches | `/generic-kb-learn-batch X`, once per batch | `kb index`, `kb cardcheck` | reads each object's code, writes its card | the plan and the write-back of each batch | cards |
 | 7. Architecture | "write the architecture of X" | `kb flows`, `kb cardcheck` | puts the paths into words | the write-back | `architecture.md`, the entry points of `domain.yaml` |
-| 8. Keep it true | none: the agent offers it | `kb stale`, `kb gaps` | fixes the cards a change touched; drafts what a task taught | each write-back | cards in line with the code |
+| 8. Keep it true | none: the agent offers it (and, while the knowledge base is not built, the next step once per session at a stop of a task) | `kb stale`, `kb gaps` | fixes the cards a change touched; drafts what a task taught | each write-back | cards in line with the code |
 
 The skills behind the steps: `generic-kb-toolkit-design`, `/generic-kb-toolkit-build`, `generic-kb-toolkit-audit`, `generic-kb-domains`, `generic-kb-learn-plan`, `/generic-kb-learn-batch`, `generic-kb-learn-synthesize`, `generic-kb-refresh`, `generic-capture-knowledge`. You do not need their names; say what you want, and the agent offers the right one. The two with a `/` run only when you type them.
 

@@ -208,6 +208,7 @@ Ask in your own words; the agent picks the skill (it asks first for the ones mar
 | Turn a routine you repeat into skills | `generic-workflow-design` (asks first), then `/generic-workflow-build` (you start it) |
 | Make, check or repair a skill | `generic-build-new-skill` |
 | Make the toolkit for the repository map | `generic-kb-toolkit-design` (asks first), then `/generic-kb-toolkit-build` (you start it) |
+| Build a knowledge base from your code, led step by step | `/harness-rookie-new-knowledgebase` |
 | Know how far the map can be trusted | `generic-kb-toolkit-audit` (asks first) |
 | Cut a code base into knowledge base domains | `generic-kb-domains` (asks first) |
 | Learn a domain from zero | `generic-kb-learn-plan` (asks first), then `/generic-kb-learn-batch` once per batch (you start it), then `generic-kb-learn-synthesize` (asks first) |
@@ -216,7 +217,7 @@ Ask in your own words; the agent picks the skill (it asks first for the ones mar
 | Translate a Chinese knowledge base into English | `generic-kb-translate` (asks first) |
 | See the task board, or where a task's time went | `/harness-task-report` (you start it) |
 | Move closed tasks out to an archive | `harness-task-archive` (asks first) |
-| Learn the harness | `/harness-quick-start`, `/harness-wondering`; setup: `/harness-get-me-ready` |
+| Learn the harness | `/harness-rookie-quick-start`, `/harness-rookie-wondering`; setup: `/harness-rookie-get-me-ready` |
 
 ## The task page in the browser
 

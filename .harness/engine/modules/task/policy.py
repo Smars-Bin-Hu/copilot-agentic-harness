@@ -15,6 +15,7 @@ POLICY_SCHEMA = {
         "schema_version": {"type": "integer", "enum": [1]},
         "fetch": {"type": "object", "required": ["max_files"], "properties": {"max_files": {"type": "integer", "minimum": 1}}},
         "task_file_reminder": {"type": "boolean"},
+        "kb_offer": {"type": "boolean"},
         "review": {
             "type": "object",
             "properties": {"extra_checks": {"type": "integer", "minimum": 0}, "max_n": {"type": "integer", "minimum": 0}},

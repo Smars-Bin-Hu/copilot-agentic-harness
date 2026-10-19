@@ -33,7 +33,7 @@ specificTo: generic
 3. **Read the cut, not the code.** For each group: its entry points, `folders`, `name_hint`, `types`. Use `harness kb near <id>` on an entry point when you cannot tell what a group does. Open a file only when the names say nothing.
 4. **Write `DOMAINS.md`** at the root of the task folder from [domains.md](./templates/domains.md): one row per proposed domain (a short folder name, one line of what it does, its entry points), the shared objects, what no entry point reaches, and the blind spots. Merge groups that are one piece of work under two schedules; say which you merged and why.
 5. **Ask the user to confirm**, in a few lines: the number of domains, the names, the merges, and the questions you could not answer (`dynamic` objects, objects outside the map). Change `DOMAINS.md` until they say yes. This is the one time the user decides the cut.
-6. **After the yes**: put the confirmed list in the knowledge base's `README.md` (the map of the domains) through this task's plan and write-back. Each domain is learned later, from zero: `generic-kb-learn-plan`, then one `/generic-kb-learn-batch` task per batch, then `generic-kb-learn-synthesize`.
+6. **After the yes**: put the confirmed list in the knowledge base's `README.md` (the map of the domains) through this task's plan and write-back. Each domain is learned later, from zero: `generic-kb-learn-plan`, then one `/generic-kb-learn-batch` task per batch, then `generic-kb-learn-synthesize`. After the write-back, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
 
 ## Gotchas
 

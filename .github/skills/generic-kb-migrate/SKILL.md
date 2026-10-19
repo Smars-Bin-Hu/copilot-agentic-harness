@@ -33,7 +33,7 @@ specificTo: generic
    - `report.duplicates`, `report.folded`, `report.dropped_keys`, `report.notes`: read them to the user in one short list.
 4. **Check**: `harness kb check --path <task>/DEV/<kb repo>/domains/<domain>` until it reports no error. Warnings are advice; fix the ones that are cheap.
 5. **The domain's own GOVERNANCE or rules file**, if it has one: the general rules (loading order, levels, local memory) are now in the harness (`knowledgebase.instructions.md`). Offer the user to keep only the rules special to their team; do not cut it without a yes.
-6. **Hand over**: `harness task diff`, `harness task promote --dry-run`. The write-back waits for `harness task approve-promote` in the user's terminal. Then `harness kb stale --domain <domain>` should report nothing changed.
+6. **Hand over**: `harness task diff`, `harness task promote --dry-run`. The write-back waits for `harness task approve-promote` in the user's terminal. Then `harness kb stale --domain <domain>` should report nothing changed. After the write-back, run `harness kb status` and offer the step it names next (`harness-rookie-new-knowledgebase` leads the whole road).
 
 ## Gotchas
 

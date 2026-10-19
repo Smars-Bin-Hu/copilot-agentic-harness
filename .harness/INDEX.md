@@ -21,9 +21,9 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/skills/harness-my-task/` | Open a task, go on with one, switch tasks: asks until things are clear, then runs `task new` or `task open` |
 | `.github/skills/harness-task-archive/` | Move closed tasks out to an archive folder the user picks, with an index; one way. The agent asks first |
 | `.github/skills/harness-task-report/` | The task board; where the time and usage of one task went. Started only by the user, with `/harness-task-report` |
-| `.github/skills/harness-quick-start/` | The first lesson. The user starts it with `/harness-quick-start` |
-| `.github/skills/harness-wondering/` | The deep course: how it works and how it is built. The user starts it with `/harness-wondering` |
-| `.github/skills/harness-get-me-ready/` | First setup: the short command, the knowledge base, company skills, target repositories, the user's name, the language. The user starts it with `/harness-get-me-ready` |
+| `.github/skills/harness-rookie-quick-start/` | The first lesson. The user starts it with `/harness-rookie-quick-start` |
+| `.github/skills/harness-rookie-wondering/` | The deep course: how it works and how it is built. The user starts it with `/harness-rookie-wondering` |
+| `.github/skills/harness-rookie-get-me-ready/` | First setup: the short command, the knowledge base, company skills, target repositories, the user's name, the language. The user starts it with `/harness-rookie-get-me-ready` |
 | `.github/skills/harness-vscode-updates/` | Reads the newest VS Code release notes and advises what of the harness to retire, change or add; writes to `.local/vscode-updates/`. Started only by the user, with `/harness-vscode-updates` |
 | `.github/skills/harness-autorun/` | Getting ready for autorun (beta), and the rules while it runs. Started only by the user, with `/harness-autorun` |
 | `.github/skills/generic-goal-driven/` | The goal-driven flow for long tasks. Started only by the user, with `/generic-goal-driven` |
@@ -38,6 +38,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/skills/generic-kb-migrate/` | Move a knowledge base domain of before the standard into the standard form with `harness kb migrate`, in a `kb` task, until `kb check` passes. The agent asks first |
 | `.github/skills/generic-kb-toolkit-design/` | Design the toolkit that lets `kb map` read the team's own code: `kb survey`, sample files, uses the user knows; writes `TOOLKIT-DESIGN.md` for approval. The agent asks first |
 | `.github/skills/generic-kb-toolkit-build/` | Build the approved toolkit into the knowledge base, tried with `kb map --toolkit` until every known fact is found. Started only by the user, with `/generic-kb-toolkit-build` |
+| `.github/skills/harness-rookie-new-knowledgebase/` | The knowledge base wizard for a beginner: `kb status` says which step is next; each step explained in plain words and done with its skill; ends with how it is kept true in daily work |
 | `.github/skills/generic-kb-toolkit-audit/` | Measure how right the map is: `kb audit` samples objects of every type, they are read blind, the script scores recall and precision per type and lists every difference; writes `toolkit/audit.md`. The agent asks first |
 | `.github/skills/generic-kb-domains/` | Map the target repositories by script (`kb map`) and propose the domains (`kb split`); writes `DOMAINS.md` in a `kb` task for the user to confirm once. The agent asks first |
 | `.github/skills/generic-kb-learn-plan/` | Plan the learning of one domain from zero: entry points checked in the map, `kb order` for the objects, the order and the batches; writes `LEARN-PLAN.md`, then the empty domain with `requests.md`. The agent asks first |

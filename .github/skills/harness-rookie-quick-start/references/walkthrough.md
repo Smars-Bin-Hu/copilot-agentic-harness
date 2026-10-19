@@ -82,4 +82,4 @@ Last, use this table to tell them which other features start only when they type
 | `/generic-mapreduce` | When there is a lot to read: splits it into parts and reads them in parallel. Expensive; it asks you first |
 | `/harness-autorun` | After the plan is approved, lets the agent work down the list without stopping (beta). The real switch is on the task's page, with a code |
 
-To learn how it works inside, type `/harness-wondering`.
+To learn how it works inside, type `/harness-rookie-wondering`.

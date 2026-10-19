@@ -26,7 +26,11 @@ Three checks run on every map: the uses a person knew (`facts.jsonl`), the files
 
 The model writes each card. Two of its parts are checked by script: the relations line must equal the map's uses (`kb cardcheck`), and every rule cites its lines, which must fall inside the object's code. The flows of `architecture.md` come from paths on the map (`kb flows`) and are checked the same way. What is left unchecked is whether a rule is understood right: that is the person's review, or the reviewer.
 
-### 16.6 A base, with its versions and its gaps
+### 16.6 Where it stands, from the files
+
+`kb status` works out from the files which step is done: the toolkit, the map and its facts, the audit (of this toolkit), the domains, and in each domain the plan, what is left to learn and the flows. A wizard (`/harness-rookie-new-knowledgebase`), a stop of a task (the offer once per session) and a person back after a week all read the same answer, so nothing depends on what an agent remembers.
+
+### 16.7 A base, with its versions and its gaps
 
 Every card holds the git sha of its source and the commit it was read at, so `kb stale` knows which cards the code has moved past. What the code cannot tell goes into `requests.md` (for a person to give) and `environment.md` (one fact a row, with the sha of the code that day). The knowledge base does not look complete; it says where it is not.
 

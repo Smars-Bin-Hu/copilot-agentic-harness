@@ -17,7 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from . import kbgraph, messages
+from . import kbgraph, kbmap, messages
 from .kbgraph import Graph, MapError, keys_of
 
 PER_TYPE = 5
@@ -55,7 +55,8 @@ def sample(root: Path, per_type: int = PER_TYPE, types: Optional[List[str]] = No
             item = graph.nodes[node]
             found.append({"id": node, "type": kind, "repo": item["repo"], "path": item["path"], "line": item["line"],
                           "lines": item.get("size") or 0, **({"dynamic": True} if item["dynamic"] else {})})
-    return {"objects": found, "kinds": sorted({kind for links in graph.out.values() for _t, kind in links}),
+    toolkits = [{"name": kit.name, "signature": kit.signature} for kit in kbmap.toolkits(root)]
+    return {"objects": found, "toolkits": toolkits, "kinds": sorted({kind for links in graph.out.values() for _t, kind in links}),
             "answer_form": {"from": "<id>", "to": "<name as the code writes it, or an id>", "kind": "<a kind above>", "line": 0},
             "next": say("kbaudit.sample.next")}
 

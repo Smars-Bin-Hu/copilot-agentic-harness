@@ -48,6 +48,6 @@ Your knowledge base gets a fixed form and is kept true: a map made by script fro
 
 Say it in one sentence: "It is a way to let the agent do the work, while you keep the decisions."
 
-For the depth: `/harness-wondering`. For the list of skills you can ask for: the table "Skills you can ask for" in [Features](../../../../docs/02-features.md#skills-you-can-ask-for).
+For the depth: `/harness-rookie-wondering`. For the list of skills you can ask for: the table "Skills you can ask for" in [Features](../../../../docs/02-features.md#skills-you-can-ask-for).
 
 Stop here and ask: which of the six would you use first?

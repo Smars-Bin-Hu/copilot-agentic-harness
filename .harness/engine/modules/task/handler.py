@@ -11,7 +11,8 @@
   PostToolUse                      a write inside the task is remembered; the reviewer's answer closes the open check
   Stop                             a task in autorun: the next open step, until a fact says stop (autorun.py);
                                    once per prompt: the result has not passed its checks; task files were written and
-                                   TASK.md was not. A Stop that goes through leaves a mark in the task for the board:
+                                   TASK.md was not; once per session: the knowledge base is not built yet, offer the
+                                   next step (kb_offer). A Stop that goes through leaves a mark in the task for the board:
                                    the agent stopped, the person is next. The next prompt takes the mark away
 
 Hook failures are fail-open: hook.py rolls back this module's state changes and carries on.
@@ -275,6 +276,28 @@ def task_file_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
     return Decision(block=True, reason=say("task.relay.reminder", task=data["task"]), facts={"kind": "task_file_not_updated"})
 
 
+def kb_offer_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
+    """The knowledge base is not built yet (M28): once per session, at a stop of a task that is not itself about the
+    knowledge base, the agent offers the next step in one line. Only where the code repositories and a knowledge base
+    are set up (a team that registered none has not chosen to build one; doctor says so), never in autorun (nobody is
+    there to answer). `kb_offer: false` in task.json turns it off. Looks only at which files exist."""
+    if not ctx.policy(POLICY_NAME).get("kb_offer", True) or data.get("kind") == "kb" or data.get("autorun"):
+        return None
+    state = ctx.module_state(NAME)
+    if state.get("kb_offered"):
+        return None
+    try:
+        from core import kbstatus
+
+        found = kbstatus.status(ctx.root, deep=False)
+    except Exception:  # noqa: BLE001 - an offer is not worth a failed Stop
+        return None
+    if found["stage"] in ("targets", "kb_repo", "maintain"):
+        return None
+    state["kb_offered"] = True
+    return Decision(block=True, reason=say("kbstatus.stop", step=found["step"], of=found["of"], next=found["next"]), facts={"kind": "kb_offer"})
+
+
 def mark_waiting(ctx: Context, data: Dict[str, Any], stopped: bool) -> None:
     """The board's mark (M12-1): the agent of this task stopped, so the person is next. Never in the way of the hook."""
     from core.paths import utc_now
@@ -312,6 +335,8 @@ def on_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
         mark_waiting(ctx, data, True)  # the second Stop of a block: this time the agent does stop
         return None
     blocks: List[Decision] = [item for item in (review_stop(ctx, data), task_file_stop(ctx, data)) if item is not None]
+    if not blocks:  # an offer waits until nothing else is asked of the agent
+        blocks = [item for item in (kb_offer_stop(ctx, data),) if item is not None]
     if not blocks:
         mark_waiting(ctx, data, True)
         return None

@@ -119,8 +119,10 @@ def status(root: Path, deep: bool = True) -> Dict[str, Any]:
                 steps["toolkit"].update(done=True, name=kit.name)
             except MapError as error:
                 steps["toolkit"]["problem"] = str(error)
-        cached = [repo.name for repo in code if kbgraph.cache_file(root, repo.name).is_file()]
-        steps["map"].update(done=bool(code) and len(cached) == len(code), mapped=cached)
+        covered = [repo.name for repo in code if kit is not None and kbmap.toolkit_for([kit], repo.name)]
+        cached = [name for name in covered if kbgraph.cache_file(root, name).is_file()]
+        steps["map"].update(done=bool(covered) and len(cached) == len(covered), mapped=cached,
+                            **({"no_toolkit": sorted(set(repo.name for repo in code) - set(covered))} if kit is not None and len(covered) < len(code) else {}))
         if deep and kit is not None and cached:
             facts = kbgraph.Graph.load(root, cached).check_facts(kit.facts())
             steps["map"].update(facts=f"{facts['found']}/{facts['checked']}")

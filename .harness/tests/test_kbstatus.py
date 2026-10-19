@@ -58,6 +58,17 @@ class StatusTests(TaskCase):
         (domain / "requests.md").write_text("| Id | Object | Kind | Why | How | Status |\n| --- | --- | --- | --- | --- | --- |\n| req-1 | x | code | y | z | open |\n| req-2 | x | code | y | z | declined 2026-10-18: no |\n", encoding="utf-8")
         self.assertEqual(kbstatus.status(self.root)["requests_open"], 1)
 
+    def test_a_repository_no_toolkit_reads_does_not_hold_the_map_back(self) -> None:
+        self.kb()
+        shutil.copytree(EXAMPLE, self.kb_path / "toolkit")
+        data = json.loads((self.kb_path / "toolkit" / "toolkit.json").read_text(encoding="utf-8"))
+        data["repos"] = ["shop"]
+        (self.kb_path / "toolkit" / "toolkit.json").write_text(json.dumps(data), encoding="utf-8")
+        kbmap.build(self.root, ["shop"])
+        result = kbstatus.status(self.root)
+        self.assertEqual(result["stage"], "audit")
+        self.assertEqual(result["steps"][3]["no_toolkit"], ["repo_a", "repo_b"])
+
     def test_an_audit_of_another_toolkit_does_not_count(self) -> None:
         self.kb()
         shutil.copytree(EXAMPLE, self.kb_path / "toolkit")

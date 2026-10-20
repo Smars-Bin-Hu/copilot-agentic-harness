@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
+import time
 import unittest
 from pathlib import Path
 from typing import Any, Dict
@@ -299,6 +301,20 @@ class ListTests(LifeCase):
             path.write_text(json.dumps(data), encoding="utf-8")
         names = [row["name"] for row in self.listed()["tasks"]]
         self.assertEqual(names, ["waits", "fresh", "old", "aside"])
+
+    def test_only_a_task_whose_session_made_a_hook_call_lately_is_active(self) -> None:
+        """`active` is what lets the board move a tag for work that is going on (and keep it still for one nobody works on)."""
+        self.new("job", "qa")
+        log = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{S1}.jsonl"
+        self.assertTrue(log.is_file(), "the session has made hook calls")
+        self.assertTrue(self.listed()["tasks"][0]["active"])
+        old = time.time() - 3600
+        os.utime(log, (old, old))
+        self.assertFalse(self.listed()["tasks"][0]["active"])
+        os.utime(log, None)
+        with task_ops.locked(self.root, f"{BASE}/job") as data:
+            data["paused"] = {"since": "2026-10-20T00:00:00+00:00"}
+        self.assertFalse(self.listed()["tasks"][0]["active"], "a task put aside is not at work")
 
     def test_a_dry_run_and_a_broken_promote_are_named(self) -> None:
         self.new("job", "dev")

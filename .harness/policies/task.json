@@ -31,6 +31,7 @@
   "board": {
     "port": 8765,
     "closed_shown": 50,
+    "active_seconds": 300,
     "actions": [
       "pause",
       "resume",

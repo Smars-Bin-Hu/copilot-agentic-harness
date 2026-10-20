@@ -127,6 +127,8 @@ td.tick,th.tick{width:28px;padding-right:0}
 @keyframes glow{from{background:rgba(79,124,240,.2)}to{background:transparent}}
 .tag.run{position:relative;padding-left:20px;background-image:linear-gradient(100deg,transparent 30%,rgba(31,157,99,.3) 50%,transparent 70%);background-size:60% 100%;background-repeat:no-repeat;animation:scan 2.4s linear infinite;animation-delay:calc(var(--t,0ms) * -1)}
 .tag.run::before{content:"";position:absolute;left:8px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:var(--good);animation:ping 2.4s ease-out infinite;animation-delay:calc(var(--t,0ms) * -1)}
+.tag.idle{position:relative;padding-left:20px}
+.tag.idle::before{content:"";position:absolute;left:8px;top:50%;width:6px;height:6px;margin-top:-3px;border-radius:50%;background:var(--soft);opacity:.55}
 td.state .tag.hot{animation:beat 2.4s ease-in-out infinite;animation-delay:calc(var(--t,0ms) * -1)}
 tr.touched td{animation:glow 1.8s ease-out}
 @media (prefers-reduced-motion:reduce){.tag.run,.tag.run::before,td.state .tag.hot,tr.touched td{animation:none}}

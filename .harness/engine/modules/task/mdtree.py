@@ -280,6 +280,7 @@ def blocks(lines: List[str]) -> List[Block]:
 
 def parse(text: str) -> Dict[str, Any]:
     """{"blocks": [...], "cut": True when the text was longer than MAX_LINES (the rest is not shown)}."""
+    text = text[1:] if text.startswith("\ufeff") else text  # a file written by Windows PowerShell or Notepad starts with a BOM: it would hide the first heading
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     cut = len(lines) > MAX_LINES
     return {"blocks": blocks(lines[:MAX_LINES]), "cut": cut}

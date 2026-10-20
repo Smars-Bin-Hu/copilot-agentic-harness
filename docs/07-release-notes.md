@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.10 (2026-10-20)
+
+### Changed
+
+- **The board moves a tag only for work that is going on.** In 1.5.9 every open task that did not wait for you had the green dot and the sweeping light, also one that nobody had touched for a day (its chat was closed). Now the tag moves, and says "working", only when the session of the task made a hook call (a tool call, a prompt) in the last 5 minutes (`board.active_seconds` in `task.json`, at least 10) and the page is kept fresh (served, or `task board` running). Any other open task that does not wait for you shows a still grey dot and "not waiting for you". A page written once (`--once`) moves nothing: it says nothing about now. `task list --json` has a new field `active` for each row.
+
+### Fixed
+
+- **The first heading of a task file showed as plain `# text` on the task page (Windows).** A file written by Windows PowerShell or Notepad starts with a byte order mark (BOM), and the page took the first line for text, not a heading. The BOM is now ignored. (The TODO tab showed it most, since its first line is the heading.)
+
+**Testing**: the automatic tests pass on the Mac; the BOM case is a test. **Not yet tried in Copilot**, **not run on Windows**: open a task whose TODO.md was written by PowerShell (`Set-Content -Encoding UTF8`) and see the heading.
+
+**Introductory material**: none changed.
+
 ## 1.5.9 (2026-10-20)
 
 ### Added

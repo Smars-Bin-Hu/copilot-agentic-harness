@@ -37,6 +37,7 @@ POLICY_SCHEMA = {
             "properties": {
                 "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
                 "closed_shown": {"type": "integer", "minimum": 0},
+                "active_seconds": {"type": "integer", "minimum": 10},
                 "actions": {"type": "array", "items": {"type": "string", "enum": ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive", "close"]}},
             },
         },

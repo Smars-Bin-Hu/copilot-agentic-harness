@@ -16,11 +16,13 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import copilot_events, domainskills, messages, tasks
+from core import config, copilot_events, domainskills, messages, tasks
+from core.logs import session_log_path
 from core.paths import cli_command, repo_root, utc_now
 from core.state import admin_on, atomic_write, session, state_lock, state_path
 
@@ -384,6 +386,20 @@ def promote_queue(root: Path) -> List[Dict[str, Any]]:
         return []
 
 
+ACTIVE_SECONDS = 300  # `board.active_seconds` in task.json
+
+
+def active_now(root: Path, data: Dict[str, Any]) -> bool:
+    """Did the session of this task make a hook call lately (a tool call, a prompt)? The board moves a tag for work only then.
+    The mtime of the session log is read, not the log: no hook call, no change. A task nobody works on any more stays "open"."""
+    try:
+        limit = config.whole((config.policy_or_empty(root, "task").get("board") or {}).get("active_seconds"), ACTIVE_SECONDS)
+        path = session_log_path(root, str(data.get("surface") or "vscode"), str(data.get("session_id") or ""))
+        return time.time() - path.stat().st_mtime <= limit
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
     """Tasks that wait for the person first, the one that waited longest on top; then the one touched last. A folder that was never started is listed as `new`."""
     rows = []
@@ -407,6 +423,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
             "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
             "depends_on": list(data.get("depends_on") or []), "paused_since": aside,
             "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",
+            "active": data.get("status") == "open" and not aside and not found["why"] and active_now(root, data),
         })
     rows.sort(key=lambda row: row["updated_at"], reverse=True)
     rows.sort(key=lambda row: (not row["waiting"], row["status"] != "open", bool(row.get("paused_since")), -(row["waited_s"] or 0)))

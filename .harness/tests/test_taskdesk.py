@@ -29,6 +29,11 @@ class MarkdownTests(unittest.TestCase):
         self.assertEqual(tree["blocks"][2]["rows"][0][1], [{"t": "text", "v": "x | y"}])
         self.assertEqual(tree["blocks"][3], {"t": "code", "lang": "sql", "text": "select 1;"})
 
+    def test_a_file_from_windows_keeps_its_first_heading(self) -> None:
+        """Windows PowerShell and Notepad write a BOM and CRLF; the BOM used to turn `# TODO` into a paragraph."""
+        for text in ("# TODO\n\n- [ ] a\n", "\ufeff# TODO\n\n- [ ] a\n", "# TODO\r\n\r\n- [ ] a\r\n", "\ufeff# TODO\r\n\r\n- [ ] a\r\n"):
+            self.assertEqual([block["t"] for block in mdtree.parse(text)["blocks"]], ["h", "ul"], repr(text))
+
     def test_nested_checklists_and_their_progress(self) -> None:
         tree = mdtree.parse("- [x] one\n- [ ] two\n  - [x] two a\n  - [ ] two b\n- plain\n\n3. three\n4. four\n")
         items = tree["blocks"][0]["items"]

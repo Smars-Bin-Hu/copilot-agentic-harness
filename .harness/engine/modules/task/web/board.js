@@ -106,8 +106,12 @@
   function state(row) {
     if (row.status !== "open") return tag(t("board.state." + (row.status === "new" ? "new" : "closed")));
     if (row.paused_since) return tag(t("board.state.paused"));
-    return inPhase(row.waiting ? tag(row.waiting, "hot long") : tag(t("board.state.running"), "good run"));
+    if (row.waiting) return inPhase(tag(row.waiting, "hot long"));
+    // It moves only for work that is going on: the session made a hook call lately (`active`, from the server), and the page
+    // is kept fresh (served, or `task board` running). A page written once says nothing about now; an open task nobody works on is still.
+    return live && row.active ? inPhase(tag(t("board.state.working"), "good run")) : tag(t("board.state.running"), "idle");
   }
+  const live = Boolean(DATA.serve || DATA.refresh);
 
   // The motion of the state tags (page.css) has one period. A tag that is drawn again starts where the clock says it is,
   // not from the beginning, so a redraw does not make every tag flinch.

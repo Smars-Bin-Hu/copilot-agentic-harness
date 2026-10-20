@@ -285,6 +285,7 @@
   "board.copy.manual": "复制这条命令，到终端里运行：",
   "board.copy.hint": "“操作”一栏的按钮会复制命令：贴到终端里运行。",
   "board.state.running": "不在等你",
+  "board.state.working": "在干活",
   "board.state.paused": "搁置",
   "board.state.closed": "已关闭",
   "board.state.new": "还没开始",

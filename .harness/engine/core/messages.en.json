@@ -285,6 +285,7 @@
   "board.copy.manual": "Copy this command and run it in a terminal:",
   "board.copy.hint": "A button in the Do column copies its command: paste it in a terminal to run it.",
   "board.state.running": "not waiting for you",
+  "board.state.working": "working",
   "board.state.paused": "paused",
   "board.state.closed": "closed",
   "board.state.new": "not started",

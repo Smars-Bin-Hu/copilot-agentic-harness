@@ -284,6 +284,22 @@ class ListTests(LifeCase):
         self.assertEqual((found["waiting_why"], found["waiting"]), ("go-plan", "计划批准了：告诉 agent 可以开始"))
         self.assertEqual(self.listed()["waiting"], 1)
 
+    def test_running_tasks_come_after_the_waiting_ones_newest_update_first(self) -> None:
+        """The board shows the list in this order and re-sorts nothing until the person picks a column (board.js)."""
+        for name in ("old", "fresh", "waits", "aside"):
+            self.new(name, "qa")
+        for name, at in (("old", "2026-10-01T00:00:00+00:00"), ("fresh", "2026-10-02T00:00:00+00:00"), ("waits", "2026-09-01T00:00:00+00:00"), ("aside", "2026-10-03T00:00:00+00:00")):
+            path = self.root / f"{BASE}/{name}" / ".task" / "task.json"
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["updated_at"] = at
+            if name == "waits":
+                data["waiting"] = {"why": "stopped", "since": "2026-09-01T00:00:00+00:00"}
+            if name == "aside":
+                data["paused"] = {"since": at}
+            path.write_text(json.dumps(data), encoding="utf-8")
+        names = [row["name"] for row in self.listed()["tasks"]]
+        self.assertEqual(names, ["waits", "fresh", "old", "aside"])
+
     def test_a_dry_run_and_a_broken_promote_are_named(self) -> None:
         self.new("job", "dev")
         for state, text in (("dry_run", "回写等你批准"), ("partial", "promote 中途出错，等你恢复")):

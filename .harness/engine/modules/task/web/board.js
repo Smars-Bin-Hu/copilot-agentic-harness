@@ -106,8 +106,14 @@
   function state(row) {
     if (row.status !== "open") return tag(t("board.state." + (row.status === "new" ? "new" : "closed")));
     if (row.paused_since) return tag(t("board.state.paused"));
-    return row.waiting ? tag(row.waiting, "hot long") : tag(t("board.state.running"), "good");
+    return inPhase(row.waiting ? tag(row.waiting, "hot long") : tag(t("board.state.running"), "good run"));
   }
+
+  // The motion of the state tags (page.css) has one period. A tag that is drawn again starts where the clock says it is,
+  // not from the beginning, so a redraw does not make every tag flinch.
+  const PERIOD_MS = 2400;
+  const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function inPhase(node) { node.style.setProperty("--t", (Date.now() % PERIOD_MS) + "ms"); return node; }
 
   function tickCell(row) {
     if (row.status !== "closed") return h("td", {class: "tick"});
@@ -120,7 +126,7 @@
   function line(row, longest) {
     const brief = row.brief;
     const kind = row.status === "new" ? "-" : t("task.kind." + (row.kind || "none")) + " \u00b7 " + t("task.tier." + (row.tier || "none"));
-    return h("tr", {class: row.status === "closed" ? "closed" : null},
+    return h("tr", {class: [row.status === "closed" ? "closed" : "", touched.has(row.name) ? "touched" : ""].join(" ").trim() || null, "data-name": row.name},
       canArchive ? tickCell(row) : null,
       h("td", {class: "name"}, DATA.serve && row.status !== "new" ? h("a", {href: "/task/" + encodeURIComponent(row.name)}, row.name)
         : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : row.name,
@@ -184,6 +190,9 @@
     more.textContent = hidden ? t("board.closed.more", {count: hidden}) : "";
     if (!rows.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.empty"))); return; }
     const shownRows = listed();
+    const before = rowTops();
+    touched = new Set(rows.filter((row) => row.status === "open" && seen.has(row.name) && seen.get(row.name) !== row.updated_at).map((row) => row.name));
+    seen = new Map(rows.map((row) => [row.name, row.updated_at]));
     const briefs = rows.filter((row) => row.brief).map((row) => row.brief);
     const longest = Math.max(0, ...briefs.map((brief) => brief.active_s + brief.waiting_s)) || 1;
     if (!shownRows.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.filter.none"))); return; }
@@ -191,6 +200,24 @@
       table([canArchive ? headerTick(shownRows) : null, header("task"), header("kind"), header("waiting"), header("waited", true), header("time"), th("", true), header("aiu", true), header("prompts", true), header("reviews", true), header("updated"), th(t("board.col.actions"))],
         shownRows.map((row) => line(row, longest))),
       legend([["work", t("report.active"), ""], ["wait", t("report.waiting"), ""]]));
+    slide(before);
+  }
+
+  // A task whose file was just written lights up once, and a row that moves slides to its new place instead of jumping.
+  // `seen`: the updated_at of each task at the last draw (the first draw lights nothing).
+  let seen = new Map(), touched = new Set();
+  function rowTops() {
+    const tops = new Map();
+    for (const node of tableBox.querySelectorAll("tr[data-name]")) tops.set(node.getAttribute("data-name"), node.getBoundingClientRect().top);
+    return tops;
+  }
+  function slide(before) {
+    if (still || !before.size) return;
+    for (const node of tableBox.querySelectorAll("tr[data-name]")) {
+      const was = before.get(node.getAttribute("data-name"));
+      const moved = was === undefined ? 0 : was - node.getBoundingClientRect().top;
+      if (Math.abs(moved) > 1 && node.animate) node.animate([{transform: "translateY(" + moved + "px)"}, {transform: "none"}], {duration: 450, easing: "cubic-bezier(.2,.8,.2,1)"});
+    }
   }
 
   // "N ticked": archive them together, or let go of them.

@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.9 (2026-10-20)
+
+### Added
+
+- **The board's state tags move.** A running task has a green dot that pings and a soft light that sweeps across its tag; a task that waits for you beats slowly in orange; a paused or closed one stays still. When a task's file is written, its row lights up once. When the order changes, a row slides to its new place instead of jumping. It is all CSS and a little script in the page (`page.css`, `board.js`); no Python changed. A system set to reduce motion shows none of it. The list order was already what you would want and is now covered by a test: the tasks that wait for you first, then the running ones with the newest update on top, then the paused ones; it changes only when you pick a column to sort by.
+
+**Testing**: the automatic tests pass on the Mac; the page was drawn in Chrome and the tags checked in a screenshot. The motion itself was not watched by a person yet. **Not yet tried in Copilot's browser**, **not run on Windows**.
+
+**Introductory material**: none changed. It is how the board looks, not a new ability.
+
 ## 1.5.8 (2026-10-20)
 
 ### Added

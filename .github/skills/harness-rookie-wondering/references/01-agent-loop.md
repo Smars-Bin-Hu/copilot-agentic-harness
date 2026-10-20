@@ -48,9 +48,18 @@ Reading, searching, writing, running commands, calling a subagent, looking up we
 
 What the harness does falls into two kinds: **what can be judged right or wrong is stopped by code** (topics 6 and 7); **what cannot be judged is checked from another point of view** (topics 10 and 11).
 
-### 1.5 Choosing a model
+### 1.5 Choosing a model, and what to try when the result is wrong
 
 A strong model suits thinking and planning; a fast model suits doing and quick answers. The harness cannot change the model in the middle of a session, and cannot set the reasoning effort. The user picks the model in the drop-down; a subagent's model is written in its `.agent.md` (topic 4).
+
+A bigger model is the last thing to try. Look at what went wrong first:
+
+| What went wrong | Try first |
+| --- | --- |
+| It did not know a rule, a name or how the team does it | Put it in the knowledge base or an instruction (topics 2 and 16). A bigger model does not know it either |
+| It said "done" and it was not | Switch checks on: `[review]=n` (topic 11) |
+| It lost the thread in a long session | Start a new session and go on from the task files (topic 9) |
+| It knew everything, still reasoned badly | Now pick a stronger model in the drop-down |
 
 ## Hands on
 

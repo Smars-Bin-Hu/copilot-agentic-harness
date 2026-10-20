@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.5.7",
-  "released": "2026-10-17",
+  "version": "1.5.8",
+  "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
     "Claude Code"
@@ -58,6 +58,7 @@
       ".github/skills/generic-kb-toolkit-build/",
       ".github/skills/generic-kb-toolkit-audit/",
       ".github/skills/harness-rookie-new-knowledgebase/",
+      ".github/skills/harness-reinstall/",
       ".harness/tests/support.py",
       ".harness/tests/taskcase.py",
       ".harness/tests/test_adapters.py",
@@ -66,7 +67,8 @@
       ".harness/tests/test_doctor.py",
       ".harness/tests/test_language.py",
       ".harness/tests/test_replay.py",
-      ".harness/tests/test_kbextract.py"
+      ".harness/tests/test_kbextract.py",
+      ".harness/tests/test_reinstall.py"
     ]
   },
   "modules": {

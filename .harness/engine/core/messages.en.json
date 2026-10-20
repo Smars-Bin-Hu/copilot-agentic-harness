@@ -1044,5 +1044,20 @@
   "desk.path.hint": "A file of the repository ({path}): open it in VS Code.",
   "desk.cut": "Too long to show in full: open the file in VS Code for the rest.",
   "desk.footer": "As of {as_of}. The page follows the task by itself while the board runs.",
-  "desk.actions.more": "Any time"
+  "desk.actions.more": "Any time",
+  "reinstall.from.relative": "--from must be the full path of the old copy of the harness. Got: \"{path}\".",
+  "reinstall.from.not_harness": "{path} is not a copy of the harness: it has no .harness/registry.json.",
+  "reinstall.from.same": "{path} is this copy, or holds it, or is inside it. Give the path of the OLD copy, a different folder.",
+  "reinstall.from.newer": "The old copy is version {old}, newer than this one ({new}). Copying back to an older harness is not supported: update this copy first.",
+  "reinstall.nothing": "Nothing to copy from {path}: it has no tasks, runtime, overrides or knowledge base of its own.",
+  "reinstall.why.exists": "already in this copy; not overwritten",
+  "reinstall.why.files_exist": "{count} file(s) already in this copy; not overwritten",
+  "reinstall.why.kb_has_content": "this copy's knowledge base already has content; not merged. Empty it first if the old one should replace it",
+  "reinstall.why.not_git": "cannot tell whether the company changed it: the old copy is not a git repository",
+  "reinstall.why.both_changed": "changed in the old copy and in this one; compare them by hand",
+  "reinstall.runtime.files": "{folder}: {count} file(s)",
+  "reinstall.next.dry": "Nothing was copied. Show this to the user: what would be copied, what is skipped and why, and the files changed in the old copy that are not carried. Then ask the user to close the VS Code windows of the old copy and run the same command with --apply in their own terminal.",
+  "reinstall.person.dry": "Nothing was copied. Close the VS Code windows of the old copy, then run the same command with --apply.",
+  "reinstall.next.done": "Copied; the old copy is not changed. Check `checked`: every doctor [ERROR] must be fixed. When doctor warns that the short command points at another copy, redo step 1 of /harness-rookie-get-me-ready. A new chat is a new session: it must run `task open <name>` to go on with a task; only an old chat finds its task by itself. Delete the old copy only when the user has seen that all works.",
+  "reinstall.next.failed": "Some items could not be copied (see `failed`). Fix the cause, then run the same command again: what was copied is skipped, the rest goes over."
 }

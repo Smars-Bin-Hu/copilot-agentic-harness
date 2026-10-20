@@ -5,6 +5,7 @@
   user                         the name of the person using this copy (for a change note that needs an author)
   task ...                     tasks: new, open, upgrade, list, fetch, diff, promote, review, snapshot, close (task module)
   target list|show|refs|init-kb  the target repositories; refs: where names are used; init-kb: make the knowledge base a git repository (task module)
+  reinstall --from <old copy> [--apply]  carry the tasks, runtime, overrides and knowledge base of an older copy over to this one; --apply: a person only
   skill check [name|path ...]  is a skill well formed? (all skills when none is named, the domain skills too)
   skill list [--domain D]      the skills of business domains, kept in the knowledge base
   approve-command              a person approves a git command the gate refused (gate module)
@@ -20,13 +21,15 @@ always prints JSON. The commands only a person may run always print text.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from core import domainskills, messages, output, render, skillcheck, user  # noqa: E402
+from core import domainskills, messages, output, reinstall, render, skillcheck, user  # noqa: E402
 from core.paths import repo_root  # noqa: E402
 from core.registry import harness_version, version_banner  # noqa: E402
 import doctor  # noqa: E402
@@ -77,6 +80,17 @@ def list_domain_skills(only):
     return {"domains": sorted(domainskills.domains(repo_root())), "skills": found, "next": messages.text("domain.list.next" if found else "domain.list.none")}
 
 
+def check_after_reinstall(names):
+    """After the copy: doctor (short command, user, targets, knowledge base) and the state of every task that came over."""
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        code = doctor.run(repo_root())
+    lines = [line for line in buffer.getvalue().splitlines() if line.startswith(("[ERROR]", "[WARN]"))]
+    found = reinstall.check_tasks(repo_root(), names)
+    found.update(doctor_errors=sum(line.startswith("[ERROR]") for line in lines), doctor_exit_code=code, doctor_problems=lines)
+    return found
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="harness", description="Harness CLI")
     parser.add_argument("--version", action=ShowVersion)
@@ -94,6 +108,10 @@ def build_parser() -> argparse.ArgumentParser:
     skill_list = skill_commands.add_parser("list", help="the skills of business domains, kept in the knowledge base (<knowledge base>/domains/<domain>/skills/): name, when to use it, path")
     skill_list.add_argument("--domain", action="append", default=None, help="only this domain (may be given more than once)")
     skill_list.set_defaults(handler=lambda a: list_domain_skills(a.domain))
+    again = commands.add_parser("reinstall", help="carry the tasks, reports, goals, runtime, *.override.json and knowledge base of an older copy of the harness over to this one. Without --apply it only says what would be copied")
+    again.add_argument("--from", dest="source", required=True, help="the old copy: an absolute path")
+    again.add_argument("--apply", action="store_true", help="copy. A person at a terminal only. Never overwrites: what is here already is skipped and listed")
+    again.set_defaults(handler=lambda a: reinstall.run(repo_root(), a.source, a.apply, check=check_after_reinstall))
     task_commands.register(commands)
     gate_commands.register(commands)
     observe_commands.register(commands)

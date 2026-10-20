@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.8 (2026-10-20)
+
+### Added
+
+- **`harness reinstall --from <old copy>` and the skill `/harness-reinstall`.** A new copy of the harness (an upgrade, a fresh clone) has the shipped files only. What git does not keep stays in the old folder, and copying part of it by hand loses things: with `.harness/runtime/` left out, a chat can no longer find its task, and the board shows nothing for work an agent did. The command carries over the tasks, the reports, the goals, `.harness/runtime/` (the sessions, the logs the reports read, the repository map cache), the `*.override.json` policies and the knowledge base with its own `.git`; and the changes the company made to the code standards, the knowledge base instructions and `domain-*` skills, when git in the old copy says they were changed. Left out: `runtime/capture/`, `runtime/board-serve.json`, the target repositories and the short command (`doctor` checks those). **Nothing is overwritten**: what is in the new copy already is skipped and listed, so a run can be repeated. Without `--apply` it only lists (an agent may run that); `--apply` is for a person at a terminal, and ends with `doctor` and a check that every copied task reads. The old copy is not changed. The skill asks for the one thing it needs, the path of the old copy, shows the list, and hands the copy to you.
+
+### Changed
+
+- **`harness-rookie-wondering`, topic 1.5**, now also says what to try when the result is wrong, before a bigger model: missing knowledge goes into the knowledge base, a false "done" gets `[review]=n`, a lost thread gets a new session from the task files; a stronger model comes last.
+
+**Testing**: the automatic tests pass on the Mac. **Not yet tried in Copilot**, **not run on Windows**.
+
+**Introductory material**: `docs/01-quickstart.md`, `docs/02-features.md`, `docs/04-reference.md` and the command table of `harness-rookie-wondering` (topic 13) got one line each, and topic 1.5 of `harness-rookie-wondering` the table above. `harness-rookie-quick-start` was not changed: moving to a new copy is not part of the first lesson.
+
 ## 1.5.7 (2026-10-19)
 
 ### Fixed

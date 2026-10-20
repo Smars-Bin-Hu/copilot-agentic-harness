@@ -1044,5 +1044,20 @@
   "desk.path.hint": "仓库里的文件（{path}）：在 VS Code 里打开。",
   "desk.cut": "太长没有全部显示：其余内容在 VS Code 里打开文件看。",
   "desk.footer": "截至 {as_of}。看板开着时，这一页会自己跟着任务更新。",
-  "desk.actions.more": "随时可以"
+  "desk.actions.more": "随时可以",
+  "reinstall.from.relative": "--from 要写旧 harness 的完整路径。收到：\"{path}\"。",
+  "reinstall.from.not_harness": "{path} 不是 harness：里面没有 .harness/registry.json。",
+  "reinstall.from.same": "{path} 就是当前这份，或包着它，或在它里面。请给**旧**那份的路径，要是另一个文件夹。",
+  "reinstall.from.newer": "旧的是 {old} 版，比当前这份（{new}）新。不支持往旧版本搬：请先把当前这份升上去。",
+  "reinstall.nothing": "{path} 里没有可搬的东西：没有它自己的任务、runtime、override 或知识库。",
+  "reinstall.why.exists": "这份里已经有了，没有覆盖",
+  "reinstall.why.files_exist": "这份里已有 {count} 个文件，没有覆盖",
+  "reinstall.why.kb_has_content": "这份的知识库已有内容，没有合并。要用旧的换掉它，请先清空这份的",
+  "reinstall.why.not_git": "判断不了公司有没有改过：旧的那份不是 git 仓库",
+  "reinstall.why.both_changed": "旧的和这份都改过，请人对比后手工处理",
+  "reinstall.runtime.files": "{folder}：{count} 个文件",
+  "reinstall.next.dry": "什么都没有复制。把这个给用户看：会复制什么、跳过什么和原因、旧的那份里改过但不会搬的文件。然后请用户先关掉旧那份的 VS Code 窗口，再在自己的终端用同一条命令加 --apply 运行。",
+  "reinstall.person.dry": "什么都没有复制。先关掉旧那份的 VS Code 窗口，再用同一条命令加 --apply 运行。",
+  "reinstall.next.done": "已复制；旧的那份没有改动。看 `checked`：doctor 的每个 [ERROR] 都要处理。doctor 提示短命令指向另一份时，重做 /harness-rookie-get-me-ready 的第 1 步。新开的对话是新会话，要接着做任务得 `task open <名字>`；只有旧对话会自己认出任务。用户确认一切正常后，才删旧的那份。",
+  "reinstall.next.failed": "有几项没复制成功（见 `failed`）。排除原因后再运行同一条命令：已经复制的会跳过，其余的接着搬。"
 }

@@ -14,6 +14,7 @@
 | `harness task board` | The board of every task. In your own terminal it serves it (with a page per task: plan, TODO, log, changes, approvals) until Ctrl+C; `--no-serve` keeps a page on disk fresh instead; `--once` writes it once |
 | `harness task report` | Writes the task report and the analysis page: where the time and usage went |
 | `harness doctor` | Whether the setup has problems; whether the hook runs; which language is in effect |
+| `harness reinstall --from <old copy>` | After a new copy of the harness: carries the tasks, `.harness/runtime`, overrides and the knowledge base over. Without `--apply` it only lists; `--apply` is yours, in a terminal |
 | `harness task status` | How far the current task is |
 | `harness stats` | A summary of the logs |
 | `harness kb reads` | Which knowledge base files are read, and which nobody reads |

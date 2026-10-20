@@ -217,6 +217,7 @@ Ask in your own words; the agent picks the skill (it asks first for the ones mar
 | Translate a Chinese knowledge base into English | `generic-kb-translate` (asks first) |
 | See the task board, or where a task's time went | `/harness-task-report` (you start it) |
 | Move closed tasks out to an archive | `harness-task-archive` (asks first) |
+| Carry your tasks, runtime and knowledge base to a new copy of the harness | `/harness-reinstall` (you run the copy in your terminal) |
 | Learn the harness | `/harness-rookie-quick-start`, `/harness-rookie-wondering`; setup: `/harness-rookie-get-me-ready` |
 
 ## The task page in the browser

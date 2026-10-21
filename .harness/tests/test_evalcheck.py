@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, List
 
-from support import REPO, payload, pre_tool
+from support import confirm_requirement, REPO, payload, pre_tool
 
 from modules.evalcheck import checks, scenario
 from taskcase import SESSION, SessionCase
@@ -183,6 +183,7 @@ class TaskScenarioTests(EvalCase):
             early = self.hook(pre_tool("t1-session", "create_file", {"filePath": target, "content": "hi"}))
             self.assertEqual(early["permissionDecision"], "deny")
         (self.root / name / "PLAN.md").write_text("# 计划\n\n写 hello.txt。\n", encoding="utf-8")
+        confirm_requirement(self.root, name)
         code = tasks.plan_digest(self.root, name)[:8]
         task_ops.approve_plan(self.root, name, reader=lambda _p: code, interactive=True, out=io.StringIO())
         self.assertEqual(self.hook(pre_tool("t1-session", "create_file", {"filePath": target, "content": "hi"})), {})

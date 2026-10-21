@@ -513,7 +513,7 @@
   "plan.missing": "还没有计划文件 {plan}，或者它是空的。先让 agent 写好计划。",
   "plan.screen.head": "任务 {task}（第 {round} 轮）",
   "plan.screen.file": "计划在这个文件里（{lines} 行），先在编辑器里打开看：{plan}",
-  "plan.screen.req": "需求（{req}）还没确认，或者在你确认之后改过了。不确认也可以批准计划；要确认，在任务页上点 confirm requirement（或运行 task confirm-req）。",
+  "plan.screen.req": "这个验证码同时确认需求（{lines} 行）——它还没有确认，或者确认后又改了；请先读：{req}",
   "plan.screen.after": "批准后 agent 才能在 {dev}/ 下写文件。计划再改，要重新批准。",
   "plan.question": "确认按这份计划做",
   "plan.refused": "没有批准。agent 还不能开工。",
@@ -1177,5 +1177,13 @@
   "desk.commit.warn.subject_long": "标题超过 72 个字符",
   "desk.commit.warn.no_blank": "标题后面没有空行",
   "board.close.todo": "TODO.md 里还有 {count} 步没勾。已经提醒过 agent 去勾；你也可以直接关闭。",
-  "desk.commit.noauthor": "没有贡献者那一行：任务策略里的 `commit.coauthor` 是空的。"
+  "desk.commit.noauthor": "没有贡献者那一行：任务策略里的 `commit.coauthor` 是空的。",
+  "plan.req.unconfirmed": "需求（{req}）还没有确认，或者确认后又改了：计划不能建立在它上面批准。先读一遍，再用一个验证码同时确认需求和批准计划：`{command} task approve-plan --task {task} --with-req`（任务页上点“批准计划”也一样）。或者先确认需求：`{command} task confirm-req --task {task}`。",
+  "plan.req.unwritten": "需求（{req}）还没有写：写好之前不能批准计划。让 agent 先写需求。",
+  "plan.question.req": "确认需求并批准这个计划",
+  "task.waiting.req": "需求等你确认",
+  "board.plan.req.title": "需求还没有确认",
+  "board.plan.req": "计划要建立在确认过的需求上，所以不能单独批准计划。先读 REQ.md（Overview 页签）和 PLAN.md，然后用一个验证码同时确认需求、批准计划。",
+  "board.plan.req.go": "确认需求并批准计划",
+  "task.step.approve_req": "用户还没有确认需求，所以计划不能单独批准。给用户 [REQ.md]({req}) 和 [PLAN.md]({plan}) 两个链接，请用户两个都读一遍，用一个验证码同时确认：在他自己的终端运行 `{command} task approve-plan --with-req --task {name}`，或者在任务页点“批准计划”（会问同样的码）。不要让用户运行不带 `--with-req` 的 `task approve-plan`：它会被拒绝。在那之前 {dev} 不能写；不写回的工作可以先放在 {task}/ 根目录。"
 }

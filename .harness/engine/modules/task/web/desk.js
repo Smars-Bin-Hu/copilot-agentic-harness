@@ -116,10 +116,10 @@
 
   function actions() {
     if (desk.status !== "open") return h("section", {class: "card actions quiet"}, h("p", {class: "sub"}, t("desk.actions.closed")));
-    const optional = ["confirm-req", "pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
+    const optional = [...(desk.waiting_why === "req" ? [] : ["confirm-req"]), "pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
     const items = desk.actions.filter((item) => !optional.includes(item.action));
     const rest = desk.actions.filter((item) => optional.includes(item.action));
-    const row = {name: desk.name, waiting: desk.waiting, state: desk.state, todo_left: desk.todo_left};
+    const row = {name: desk.name, waiting: desk.waiting, state: desk.state, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed};
     const hint = (item) => t("desk.hint." + item.action.replace(" ", "-"));
     const entry = (item) => h("div", {class: "action"}, actionButton(row, item, "big"), h("p", {class: "hint"}, hint(item)));
     const line = (item) => h("div", {class: "action-line"}, actionButton(row, item), h("span", {class: "hint"}, hint(item)));

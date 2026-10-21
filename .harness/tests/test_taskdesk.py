@@ -7,6 +7,7 @@ import json
 import unittest
 
 import support  # noqa: F401  (puts the engine on sys.path)
+from support import confirm_requirement
 from test_boardserve import ServeCase
 
 from taskcase import TASK
@@ -258,6 +259,7 @@ class DeskTests(ServeCase):
         self.assertEqual(self.data()["waiting"]["why"], "go-recover")
 
     def test_an_approval_leaves_a_mark_until_the_next_prompt_and_the_page_says_what_to_tell_the_agent(self) -> None:
+        confirm_requirement(self.root, TASK)
         digest = tasks.plan_digest(self.root, TASK)
         task_ops.approve_plan(self.root, TASK, reader=lambda _prompt: digest[:8], interactive=True, out=io.StringIO())
         desk = taskdesk.desk(self.root, "job1", ())

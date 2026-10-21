@@ -239,6 +239,8 @@ def next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
     if not tasks.plan_digest(root, task):
         return say("task.step.plan", plan=plan, dev=dev, task=task) + page
     if not tasks.plan_approved(root, task, data):
+        if req_state(root, task) in ("open", "changed"):  # one ask, not two that say different things: both files, one code
+            return say("task.step.approve_req", plan=plan, req=f"{task}/{tasks.REQ_FILE}", dev=dev, task=task, name=name_of(task)) + page
         return say("task.step.approve", plan=plan, dev=dev, task=task) + page
     text = say("task.step.approved", dev=dev, task=task)
     if data.get("target_mode"):
@@ -339,10 +341,17 @@ def typed(question: str, digest: str, refusal: str, reader: Optional[Callable[[s
         raise CommandError(str(error)) from error
 
 
+def plan_digest_with(req_text: str, plan_digest: str) -> str:
+    """What the one code of "confirm the requirement and approve the plan" belongs to: both files as they are now."""
+    return hashlib.sha256((hashlib.sha256(req_text.encode("utf-8")).hexdigest() + plan_digest).encode("ascii")).hexdigest()
+
+
 def approve_plan(
-    root: Path, raw_task: str = "", reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None,
+    root: Path, raw_task: str = "", reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None, with_req: bool = False,
 ) -> Dict[str, Any]:
-    """The person approves PLAN.md as it is now. The screen names the file; the person reads it in the editor."""
+    """The person approves PLAN.md as it is now. The screen names the file; the person reads it in the editor.
+    A plan stands on a confirmed requirement (1.5.30): while REQ.md is written but not confirmed, or changed since, the plan alone is refused.
+    `with_req`: the person confirms REQ.md and approves PLAN.md with one code, the code of both files as they are now."""
     person("approve-plan", interactive)
     task = resolve(root, raw_task, lambda item: bool(tasks.plan_digest(root, item["task"])) and not tasks.plan_approved(root, item["task"], item), "plan")
     data = read(root, task)
@@ -352,19 +361,32 @@ def approve_plan(
     if not current or not plan.read_text(encoding="utf-8", errors="replace").strip():
         raise CommandError(say("plan.missing", plan=f"{task}/{tasks.PLAN_NAME}"))
     lines = len(plan.read_text(encoding="utf-8", errors="replace").splitlines())
-    unconfirmed = req_state(root, task) in ("open", "changed")  # a reminder only: the plan can be approved without it
+    req, req_path = f"{task}/{tasks.REQ_FILE}", tasks.task_dir(root, task) / tasks.REQ_FILE
+    state = req_state(root, task)
+    if state == "unwritten":
+        raise CommandError(say("plan.req.unwritten", req=req))
+    unconfirmed = state in ("open", "changed")
+    if unconfirmed and not with_req:
+        raise CommandError(say("plan.req.unconfirmed", req=req, task=name_of(task)))
+    req_text = req_path.read_text(encoding="utf-8", errors="replace") if unconfirmed else ""
+    code = plan_digest_with(req_text, current) if unconfirmed else current
     approval.say(
         out,
         say("plan.screen.head", task=task, round=data["round"]),
+        *([say("plan.screen.req", lines=len(req_text.splitlines()), req=req)] if unconfirmed else []),
         say("plan.screen.file", lines=lines, plan=f"{task}/{tasks.PLAN_NAME}"),
-        *([say("plan.screen.req", req=f"{task}/{tasks.REQ_FILE}")] if unconfirmed else []),
         say("plan.screen.after", dev=f"{task}/{tasks.DEV_NAME}"),
     )
-    typed(say("plan.question"), current, say("plan.refused"), reader)
+    typed(say("plan.question.req" if unconfirmed else "plan.question"), code, say("plan.refused"), reader)
     with locked(root, task) as again:
         require_open(again)
         if tasks.plan_digest(root, task) != current:
             raise CommandError(say("plan.changed"))
+        if unconfirmed:
+            now = req_path.read_text(encoding="utf-8", errors="replace")
+            if now != req_text:
+                raise CommandError(say("req.changed"))
+            fill_confirmation(root, task, req_path, now, again, hashlib.sha256(now.encode("utf-8")).hexdigest())
         again["plan"] = {"approved_sha256": current, "approved_at": utc_now(), "req_sha256": tasks.req_digest(root, task)}  # for this requirement
         note(again, "approve-plan", current[:12])
         again["waiting"] = {"since": utc_now(), "why": "go-plan"}  # nobody told the agent: the board says so until the next prompt
@@ -424,17 +446,22 @@ def confirm_req(
         now = path.read_text(encoding="utf-8", errors="replace")
         if hashlib.sha256(now.encode("utf-8")).hexdigest() != digest:
             raise CommandError(say("req.changed"))
-        lines = now.splitlines(keepends=True)
-        for number, line in enumerate(lines):
-            found = _CONFIRM_LINE.match(line)
-            if found:
-                word = "已确认" if "确认" in found.group(1) else "confirmed"
-                lines[number] = f"{found.group(1)}{word} {datetime.now().strftime('%Y-%m-%d')}{found.group(3)}"
-                break
-        path.write_text("".join(lines), encoding="utf-8")
-        again["req"] = {"confirmed_sha256": tasks.req_digest(root, task), "confirmed_at": utc_now()}  # what the person read: a later change is seen
-        note(again, "confirm-req", digest[:12])
+        fill_confirmation(root, task, path, now, again, digest)
     return {"confirmed": True, "task": task, "req": req, "next": say("req.next")}
+
+
+def fill_confirmation(root: Path, task: str, path: Path, text: str, data: Dict[str, Any], digest: str) -> None:
+    """The harness fills the confirmation line of REQ.md and keeps what the person read (a later change is seen). Called under the task's lock."""
+    lines = text.splitlines(keepends=True)
+    for number, line in enumerate(lines):
+        found = _CONFIRM_LINE.match(line)
+        if found:
+            word = "已确认" if "确认" in found.group(1) else "confirmed"
+            lines[number] = f"{found.group(1)}{word} {datetime.now().strftime('%Y-%m-%d')}{found.group(3)}"
+            break
+    path.write_text("".join(lines), encoding="utf-8")
+    data["req"] = {"confirmed_sha256": tasks.req_digest(root, task), "confirmed_at": utc_now()}
+    note(data, "confirm-req", digest[:12])
 
 
 # --- fetch, delete, diff -------------------------------------------------------------------------

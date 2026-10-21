@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict
 from unittest import mock
 
-from support import ENGINE, HarnessTestCase, payload, subagent_start
+from support import ENGINE, HarnessTestCase, confirm_requirement, payload, subagent_start
 
 from core import messages, tasks
 from core.state import update_state
@@ -284,6 +284,7 @@ class ListTests(LifeCase):
         self.assertEqual([row["name"] for row in result["tasks"]], ["first", "second"])
         self.assertEqual(result["tasks"][0]["waiting"], "计划等你批准")
         self.assertEqual(result["waiting"], 1)
+        confirm_requirement(self.root, f"{BASE}/first")
         digest = tasks.plan_digest(self.root, f"{BASE}/first")
         task_ops.approve_plan(self.root, f"{BASE}/first", reader=lambda _prompt: digest[:8], interactive=True, out=io.StringIO())
         found = self.listed()["tasks"][0]  # nobody told the agent: the task now waits for the person to say so

@@ -102,10 +102,19 @@ const SERVE = (function () {
     });
   }
 
-  function act(button, row, item) {
+  function act(button, row, item, withReq) {
     if (item.action === "close") return close(row);
     if (item.action === "archive") return archive([row.name], serve.archive_to);
-    const body = {action: item.action, task: row.name};
+    // A plan stands on a confirmed requirement: the plan alone is refused, and one code can confirm the requirement and approve the plan.
+    if (item.action === "approve-plan" && row.req_unconfirmed && !withReq) {
+      const go = h("button", {class: "act hot", type: "button"}, t("board.plan.req.go"));
+      const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
+      const view = dialog([h("h2", null, t("board.plan.req.title")), h("p", null, t("board.plan.req")), h("div", {class: "row"}, go, no)]);
+      no.addEventListener("click", view.close);
+      go.addEventListener("click", () => { view.close(); act(button, row, item, true); });
+      return;
+    }
+    const body = {action: item.action, task: row.name, ...(withReq ? {with_req: true} : {})};
     if (free(item.action)) {
       button.textContent = t("board.serve.working");
       post("/api/act", {...body, step: "act"}).then(done, (error) => { button.textContent = button.dataset.label; failed(error); });

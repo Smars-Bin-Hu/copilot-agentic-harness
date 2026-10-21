@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.30 (2026-10-21)
+
+### Changed
+
+- **A plan can be approved only on a confirmed requirement.** Before, confirming `REQ.md` was a reminder on the plan's screen: you could skip it and approve the plan, and the page moved on as if the requirement were settled. Now `task approve-plan` refuses the plan alone while `REQ.md` is not written, not confirmed, or changed since you confirmed it, and says why. **One code does both**: `task approve-plan --with-req` shows both files and asks for the code of both; it fills the confirmation line of `REQ.md` and approves the plan (two lines in the history). On the task page and the board, *approve plan* first opens a dialog saying the requirement is not confirmed, with a button *Confirm the requirement and approve the plan*; a stale page is refused by the server with the same message.
+- The agent may still draft `PLAN.md` while you settle the requirement; it cannot write `DEV/` before both are approved, as before.
+- **The board says "the requirement waits for your confirmation"** when a task with a plan to come (tier full) has `REQ.md` written and not confirmed, with the *confirm requirement* button; a written plan waiting for approval comes first (its button asks for both). The stage *requirement* turns done only when it is confirmed (a plan approved before this release stands for it).
+- **The requirement changes on the way**: change it in the same task before the write-back (the plan's approval lapses; confirm and approve again with one code; `DEV/` stays and is checked again); after the write-back, the same goal is a new round, another goal a new task.
+- Tasks without a plan (a question, an RCA, a design) are not held up by their requirement. Plans approved before this release stay approved.
+
+**Introductory material**: `docs/02-features.md`, `docs/04-reference.md`, `harness-rookie-wondering` topic 9, the skill `harness-my-task`.
+
 ## 1.5.29 (2026-10-21)
 
 Found on a company computer, on a task that was written back and closed: the page said **Review 0/1** with an empty ring, and TODO 16/18.

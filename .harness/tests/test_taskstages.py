@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import unittest
 
+from support import confirm_requirement
 from test_tasklife import BASE, LifeCase
 
 from core import tasks
@@ -100,6 +101,8 @@ class WriteBack(StageCase):
         self.assertEqual(shown(self.stages())[0], ("requirement", "now"), "the template is still empty")
         req = self.folder() / "REQ.md"
         req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Stop the load failing.").replace("<一两段。用户的原意，不加你自己的设想>", "别让加载失败。"), encoding="utf-8")
+        self.assertEqual(shown(self.stages())[0], ("requirement", "now"), "written, not confirmed: a plan cannot stand on it yet")
+        confirm_requirement(self.root, f"{BASE}/job", "")
         self.assertEqual(shown(self.stages())[:2], [("requirement", "done"), ("plan", "now")])
         (self.folder() / "PLAN.md").write_text("# plan\n", encoding="utf-8")
         self.assertEqual(shown(self.stages())[1], ("plan", "now"), "written, not approved")
@@ -119,6 +122,7 @@ class WriteBack(StageCase):
         self.new("job", "kb")
         req = self.folder() / "REQ.md"
         req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Learn it.").replace("<一两段。用户的原意，不加你自己的设想>", "学它。"), encoding="utf-8")
+        confirm_requirement(self.root, f"{BASE}/job", "")
         (self.folder() / "PLAN.md").write_text("# plan\n", encoding="utf-8")
         self.change(plan={"approved_sha256": tasks.plan_digest(self.root, f"{BASE}/job")}, promote={"state": "done", "approved_plan_sha256": "abc"})
         self.assertEqual(shown(self.stages())[-1], ("done", "done"))

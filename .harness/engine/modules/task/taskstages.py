@@ -25,7 +25,6 @@ DEFAULT_ENVS = ("DEV", "IST", "UAT")
 GUIDE = "TEST-GUIDE.md"
 ENV_HEADING = re.compile(r"^##\s+([A-Za-z][A-Za-z0-9_-]{0,11})\s*$", re.MULTILINE)  # `## DEV`; the template's `## <DEV>` is not one
 VERDICT = re.compile(r"Verdict for[^:\n]*:\s*\**\s*(PASS|FAIL|NEEDS MORE)", re.IGNORECASE)
-WRITTEN = ("open", "confirmed", "changed")  # of tasks.req_state: REQ.md has more than the template
 
 
 def read(path: Path) -> str:
@@ -51,7 +50,8 @@ def write_back(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     promote = data.get("promote") or {}
     done = promote.get("state") == "done"
     approved = done or "approved_plan_sha256" in promote
-    finished = [task_ops.req_state(root, task) in WRITTEN, tasks.plan_approved(root, task, data), approved, done, done]
+    planned = tasks.plan_approved(root, task, data)
+    finished = [task_ops.req_state(root, task) == "confirmed" or planned or approved, planned, approved, done, done]
     flags = {3: "partial"} if promote.get("state") == "partial" else {}
     return steps_of([{"id": name} for name in ("requirement", "plan", "developing", "writeback", "done")], finished, flags)
 

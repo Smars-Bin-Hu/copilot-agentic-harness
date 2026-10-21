@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 from typing import Any, Dict, Optional, Tuple
 
-from support import pre_tool
+from support import confirm_requirement, pre_tool
 from taskcase import SESSION, TASK, TaskCase
 
 from core import messages, tasks
@@ -131,7 +131,27 @@ class ServeTests(ServeCase):
         self.assertFalse(self.data()["paused"])
         self.assertIn("board", [event["what"] for event in self.data()["events"]])
 
+    def test_an_unconfirmed_requirement_refuses_the_plan_alone_and_one_code_does_both(self) -> None:
+        """1.5.30: the page asks first (a dialog), the server refuses the plan alone, and `with_req` approves both with the code of both files."""
+        cookie = self.pair()
+        req = self.root / TASK / "REQ.md"
+        req.write_text(req.read_text(encoding="utf-8").replace("<一两段", "给 a.sql 加一列。 ").replace("<One or two paragraphs", "Add a column. "), encoding="utf-8")
+        body = {"action": "approve-plan", "task": TASK}
+        status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"}, cookie=cookie)
+        self.assertEqual(status, 409)
+        self.assertIn("--with-req", data["error"])
+        status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview", "with_req": True}, cookie=cookie)
+        self.assertEqual(status, 200, data)
+        self.assertTrue(any("REQ.md" in line for line in data["result"]["screen"]))
+        code = task_ops.plan_digest_with(req.read_text(encoding="utf-8"), tasks.plan_digest(self.root, TASK))[:8]
+        status, data, _ = self.request("POST", "/api/act", {**body, "step": "act", "code": code, "with_req": True}, cookie=cookie)
+        self.assertEqual(status, 200, data)
+        self.assertTrue(self.data()["plan"]["approved_sha256"])
+        self.assertIn("confirm-req", [event["what"] for event in self.data()["events"]])
+        self.assertTrue(self.data()["req"]["confirmed_sha256"])
+
     def test_an_approval_needs_the_paired_browser_and_the_typed_code(self) -> None:
+        confirm_requirement(self.root, TASK)
         body = {"action": "approve-plan", "task": TASK}
         status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"})
         self.assertEqual(status, 403)

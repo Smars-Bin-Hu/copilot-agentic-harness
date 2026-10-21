@@ -97,7 +97,7 @@ def write_task_page(root: Path, task: str, info: Dict[str, Any], refresh: int = 
     return path
 
 
-ACTIONS_BY_WAIT = {"plan": ("approve-plan",), "promote": ("approve-promote",), "recover": ("recover",), "review": ("review extend", "review waive")}
+ACTIONS_BY_WAIT = {"req": ("confirm-req",), "plan": ("approve-plan",), "promote": ("approve-promote",), "recover": ("recover",), "review": ("review extend", "review waive")}
 
 
 def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str, str]]:
@@ -145,6 +145,7 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = ())
             continue
         row["stages"] = taskstages.of(root, row["task"])
         row["todo_left"] = len(task_ops.todo_left(root, row["task"])) if row["status"] == "open" else 0
+        row["req_unconfirmed"] = row["status"] == "open" and task_ops.req_state(root, row["task"]) in ("open", "changed")
         key = (str(root), row["task"])
         kept = _closed.get(key) if row["status"] == "closed" else None
         if kept and kept[0] == row["updated_at"] and (root / common.REPORTS_DIR / kept[2]).is_file():

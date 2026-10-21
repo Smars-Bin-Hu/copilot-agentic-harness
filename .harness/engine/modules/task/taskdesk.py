@@ -183,7 +183,7 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "created_at": data.get("created_at", ""), "updated_at": data.get("updated_at", ""),
         "todo": {"done": done, "total": total},
         "docs": docs, "history": history(data), "changes": changed(root, task, data),
-        "review": reviews(root, task, data), "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
+        "review": reviews(root, task, data), "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_unconfirmed": row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served)),
         "req_changed": row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),

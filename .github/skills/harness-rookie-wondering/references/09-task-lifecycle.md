@@ -64,6 +64,8 @@ The board gives a task one state, the first that holds:
 - When the requirement changes, the agent changes `REQ.md` first, then touches the work, and adds a line to the change record.
 - When a direct instruction of yours conflicts with `REQ.md`, a hook reminds the agent to bring them in line first.
 - Your own documents (a BRD, emails) go in `REQ/`; the agent only reads them.
+- **A plan stands on a confirmed requirement.** `task approve-plan` refuses the plan alone while `REQ.md` is not confirmed (or changed since). One code confirms both: `task approve-plan --with-req`, or *approve plan* on the page, which asks first. The agent may draft the plan meanwhile; it cannot write `DEV/` until both are settled.
+- The requirement changes before the write-back: change it in the same task, confirm it and approve the plan again; what is in `DEV/` stays and is checked again. After the write-back: the same goal is a new round, another goal a new task.
 
 ### 9.5 Changing a target repository: two approvals
 

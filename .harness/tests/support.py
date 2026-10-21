@@ -183,3 +183,20 @@ def make_repo(path: Path, files: Optional[Dict[str, str]] = None, branch: str = 
     run_git(path, "add", "-A")
     run_git(path, "commit", "-q", "-m", "first")
     return path
+
+
+def confirm_requirement(root: Path, task: str, text: str = "给 a.sql 加一列。") -> None:
+    """REQ.md written (the template's placeholder replaced) and confirmed by the person, as `task confirm-req` does: a plan can then be approved alone (1.5.30)."""
+    import hashlib
+    import io
+
+    from modules.task import task as task_ops
+
+    path = root / task / "REQ.md"
+    body = path.read_text(encoding="utf-8")
+    for mark in ("<One or two paragraphs", "<一两段"):
+        body = body.replace(mark, text + " ")
+    path.write_text(body, encoding="utf-8")
+    code = hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()[:8]
+    task_ops.confirm_req(root, task, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
+

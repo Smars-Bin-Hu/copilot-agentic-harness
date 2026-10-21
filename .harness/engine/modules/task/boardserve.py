@@ -159,7 +159,7 @@ class Board:
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
-    def act(self, action: str, task: str, step: str, code: str = "") -> Dict[str, Any]:
+    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False) -> Dict[str, Any]:
         """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once."""
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
@@ -169,6 +169,9 @@ class Board:
             noted(self.root, result.get("task") or task, action)
             return result
         call = runner(self.root, action, task)
+        if action == "approve-plan" and with_req:
+            plain = call
+            call = lambda **kw: plain(with_req=True, **kw)  # noqa: E731 - the requirement and the plan, one code
         out = io.StringIO()
         if step == "preview":
             def stop(asked: str) -> str:
@@ -298,7 +301,7 @@ def handler_for(board: Board) -> type:
             if action not in FREE and not board.paired(self.token()):
                 return self.answer(403, {"error": say("serve.pair.needed")})
             try:
-                result = board.act(action, task, step, str(data.get("code", "")))
+                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")))
             except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                 return self.answer(409, {"error": str(error)})
             print(say("serve.did", action=action, task=task_ops.name_of(task) if task else "-"), flush=True)

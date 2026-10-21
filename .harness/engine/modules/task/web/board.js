@@ -235,7 +235,7 @@
     pick.replaceChildren(h("span", {class: "sub"}, t("board.select.count", {count: selected.size}) + " "), go, none);
   }
 
-  function draw() { drawNumbers(); drawControls(); drawTable(); drawSelection(); }
+  function draw() { drawNumbers(); drawControls(); drawTable(); drawSelection(); lobby.update(rows, live); }
 
   search.addEventListener("input", () => { view.query = search.value; keep.set("query", search.value); drawTable(); });
   kinds.addEventListener("change", () => { view.kind = kinds.value; keep.set("kind", view.kind); drawTable(); });
@@ -248,14 +248,32 @@
     drawTable();
   });
 
+  // Two ways to look at the same rows: the lobby (the first screen) and the list. The choice stays in this browser.
+  const lobby = Lobby.create({href: (row) => (DATA.serve && row.status !== "new" ? "/task/" + encodeURIComponent(row.name)
+    : row.report ? row.report.split("/").map(encodeURIComponent).join("/") : "")});
+  let mode = keep.get("mode", "lobby") === "list" ? "list" : "lobby";
+  const controls = h("div", {class: "controls"}, chips, kinds, search, clear);
+  const modeButtons = {};
+  const seg = h("div", {class: "lb-seg", role: "group"}, ["lobby", "list"].map((name) => {
+    const button = h("button", {type: "button"}, t(name === "lobby" ? "board.mode.lobby" : "board.mode.list"));
+    button.addEventListener("click", () => { mode = name; keep.set("mode", name); drawMode(); });
+    modeButtons[name] = button;
+    return button;
+  }));
+  function drawMode() {
+    for (const name of Object.keys(modeButtons)) modeButtons[name].classList.toggle("on", name === mode);
+    const asList = mode === "list";
+    for (const part of [kpis, controls, pick, tableBox, more]) part.hidden = !asList;
+    lobby.node.hidden = asList;
+  }
+
   app.replaceChildren(
-    h("h1", null, t("board.brand")),
-    h("div", {class: "sub"}, h("b", null, t("board.title")), " \u00b7 ", stamp),
-    kpis,
-    h("div", {class: "controls"}, chips, kinds, search, clear),
+    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: "sub"}, h("b", null, t("board.title")), " \u00b7 ", stamp)), seg),
+    kpis, controls, lobby.node,
     pick, tableBox, more,
     h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint")), copyright());
   draw();
+  drawMode();
 
   if (typeof SERVE !== "undefined") {
     SERVE.start(app);

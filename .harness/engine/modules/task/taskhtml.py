@@ -49,14 +49,14 @@ def read(name: str) -> str:
     return (WEB / name).read_text(encoding="utf-8")
 
 
-def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], refresh: int = 0) -> str:
+def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], refresh: int = 0, styles: Optional[List[str]] = None) -> str:
     """One file: the skeleton with the style, the scripts and the data in it."""
     data = dict(data, text=page_text())
     parts = {
         "<!--REFRESH-->": f'<meta http-equiv="refresh" content="{int(refresh)}">' if refresh else "",
         "<!--TITLE-->": escape(title),
         "<!--NOSCRIPT-->": escape(say("report.noscript")),
-        "/*CSS*/": read("page.css"),
+        "/*CSS*/": "\n".join(read(name) for name in (styles or ["page.css"])),
         "<!--DATA-->": as_json(data),
         "/*JS*/": "\n".join(read(name) for name in scripts),
     }
@@ -77,8 +77,8 @@ def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: 
     """rows: what `task list` gives, each with `brief` (taskinsight.brief or None) and `report` (the file name of its page or '').
     serve: set when the board server sends the page: the actions it runs, and how often the page asks again.
     hidden: how many older closed tasks are not in the rows."""
-    scripts = ["common.js", "serve.js", "board.js"] if serve else ["common.js", "board.js"]  # a file on disk never calls out
-    return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve}, refresh)
+    scripts = ["common.js", "serve.js", "lobby.js", "board.js"] if serve else ["common.js", "lobby.js", "board.js"]  # a file on disk never calls out
+    return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve}, refresh, ["page.css", "lobby.css"])
 
 
 def desk_page(desk: Dict[str, Any], serve: Dict[str, Any]) -> str:

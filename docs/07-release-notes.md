@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.15 (2026-10-20)
+
+### Added
+
+- **The board opens as a lobby.** A dark floor with a slowly drifting grid; every task that is not closed is a small robot, in the zone of what it is doing: *at work*, *waiting for you*, *resting*. The pose says the state: typing and a glowing core (at work), waving with an orange "!" bubble (waiting for you), holding a test tube with a "?" (waiting for your test results), asleep with floating z's (idle), sitting still with dim eyes (put aside). What it holds says the kind of task: a wrench for development, a magnifier for a root cause analysis, a pencil for a design, a test tube for testing, a book for the knowledge base, a speech bubble for a question. The eyes follow the mouse; over a robot it hops and a card shows the task, its kind and tier, what it waits for and for how long, the stages of its kind with the one it is at, the round, and how many checks have passed; a click (or Enter) opens the task page. When no task is open, the lab is empty and one robot rests.
+- **A switch, top right: Lobby / List.** The list is the table as it was. The choice stays in the browser.
+- Robots are kept between two draws: the board asks the server every few seconds, and a robot changes its pose only when its task changed state, so nothing starts over. A robot is at work only when the session of its task made a hook call lately and the page is live (the rule of 1.5.10). With the system set to reduce motion, the poses stay and nothing moves. Pure SVG and CSS in two new files, `lobby.js` and `lobby.css`; no Python changed except the page builder, which now takes a second stylesheet. Each board row carries `stages` (the ribbon of 1.5.14).
+
+**Testing**: the automatic tests pass on the Mac; the board with real tasks was drawn in Chrome in both modes. The motion was not watched by a person. **Not run on Windows**, **not seen in Copilot's browser**.
+
+**Introductory material**: `harness-rookie-quick-start` (what you get, part 5) and `docs/02-features.md` got a paragraph each.
+
 ## 1.5.14 (2026-10-20)
 
 ### Added

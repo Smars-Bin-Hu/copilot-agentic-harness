@@ -535,7 +535,12 @@ class PageTests(BoardCase):
         self.assertNotIn("<b>", text)
         self.assertEqual(page_data(text)["info"]["name"], name)
 
-    def test_the_scripts_draw_with_text_nodes_only(self) -> None:
+    def test_the_board_page_has_the_lobby_and_its_own_style(self) -> None:
+        page = taskhtml.board_page([], "2026-10-20T00:00:00+00:00", 5)
+        for mark in ("const Lobby = (function", ".lb-scene{", "board.mode.lobby", ".rb-ribbon{"):
+            self.assertIn(mark, page)
+
+
         for path in sorted(taskhtml.WEB.glob("*.js")):
             source = path.read_text(encoding="utf-8")
             # serve.js talks to the board server it came from; it is never in a page written to disk

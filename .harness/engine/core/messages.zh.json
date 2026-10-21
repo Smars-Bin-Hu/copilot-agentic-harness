@@ -1101,5 +1101,16 @@
   "stage.again": "上一轮已写回，或需求变了：计划要再批准一次。",
   "stage.reviewer": "检查员 · 连续 {n} 次检查",
   "stage.reviewer.off": "检查员 · 现在没有要求检查",
-  "stage.reviewed": "已检查 ×{n}"
+  "stage.reviewed": "已检查 ×{n}",
+  "board.mode.lobby": "大厅",
+  "board.mode.list": "列表",
+  "board.lobby.zone.work": "在干活",
+  "board.lobby.zone.you": "等你",
+  "board.lobby.zone.rest": "休息",
+  "board.lobby.state.work": "在干活",
+  "board.lobby.state.idle": "空闲：有一阵子没动静了",
+  "board.lobby.count": "场上有 {count} 个 agent",
+  "board.lobby.none": "场上没有 agent",
+  "board.lobby.quiet": "实验室很安静，所有任务都关闭了。在 VS Code 里说你想做什么。",
+  "board.lobby.reviewed": "已检查 {passes}/{n}"
 }

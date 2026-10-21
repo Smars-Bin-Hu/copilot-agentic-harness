@@ -1101,5 +1101,16 @@
   "stage.again": "The last round was written back, or the requirement changed: the plan is asked for again.",
   "stage.reviewer": "reviewer · {n} check(s) in a row",
   "stage.reviewer.off": "reviewer · checks are off now",
-  "stage.reviewed": "REVIEWED ×{n}"
+  "stage.reviewed": "REVIEWED ×{n}",
+  "board.mode.lobby": "Lobby",
+  "board.mode.list": "List",
+  "board.lobby.zone.work": "At work",
+  "board.lobby.zone.you": "Waiting for you",
+  "board.lobby.zone.rest": "Resting",
+  "board.lobby.state.work": "working",
+  "board.lobby.state.idle": "idle: nothing for a while",
+  "board.lobby.count": "{count} agent(s) on the floor",
+  "board.lobby.none": "no agent on the floor",
+  "board.lobby.quiet": "The lab is quiet. Every task is closed. Say what you want done in VS Code.",
+  "board.lobby.reviewed": "reviewed {passes}/{n}"
 }

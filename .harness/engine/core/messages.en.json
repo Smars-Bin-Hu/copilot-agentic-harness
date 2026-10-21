@@ -1069,5 +1069,7 @@
   "task.handoff.cleared": "The mark is gone. Save the results as the user gave them, judge them against the pass criteria, then update the task files.",
   "promote.done.test_offer": "The next step is testing in the environments (DEV, IST, QAT). Offer the user a test task with the skill `generic-test-guide` (it asks first). ",
   "desk.wait.tests": "Run the tests in TEST-GUIDE.md (the docs tab) in the environment named, then bring the results back to the agent in VS Code. A message such as:",
-  "desk.tests.prompt": "Here are the test results: (paste the output, numbers and anything unexpected)."
+  "desk.tests.prompt": "Here are the test results: (paste the output, numbers and anything unexpected).",
+  "task.name.shell": "The task name `{name}` has {chars}: a terminal reads it as a command, a quote, a variable or a wildcard, and the task name is typed in every command. Use letters, digits, `-`, `_` and `.`, and do not start with `-`. For example: `{example}`.",
+  "doctor.task_names": "A task folder has characters in its name that a terminal reads as commands: {names}. It still opens, but its commands need quotes, and on Windows cmd `&` and `^` break them. Rename the folder, or make the task again under a safe name."
 }

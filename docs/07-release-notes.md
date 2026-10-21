@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.12 (2026-10-20)
+
+### Changed
+
+- **A task name that a terminal would read as a command is refused.** A name with `&` broke the short command and `python cli.py` in `cmd` and PowerShell on Windows, and the agent had to work around it. The task name is the folder name and is typed in every command, so `task new` now accepts only letters (Chinese too), digits, `-`, `_`, `.`, `+` and `@`. A space and `& ^ % ! ( ) ; , = ' " ` $ | < > ? * : { } [ ] ~ #` are refused, on every system, not only Windows, so a task moves between computers as it is. The message names the characters and gives a name to use instead (`sales&load` gives `sales-load`). A name may not start with `-` or `.`. `harness-my-task` tells the agent to make names of that kind.
+- **`doctor` warns about task folders that already have such a name.** They still open; their commands need quotes (and `&` and `^` break them in `cmd`). Rename the folder, or make the task again.
+
+**Testing**: the automatic tests pass on the Mac. **Not run on Windows**: make a task named `a&b` in `cmd` and see the message.
+
+**Introductory material**: none changed.
+
 ## 1.5.11 (2026-10-20)
 
 ### Added

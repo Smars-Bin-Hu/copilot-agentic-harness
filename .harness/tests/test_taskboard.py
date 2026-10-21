@@ -509,9 +509,18 @@ class PageTests(BoardCase):
         self.assertEqual(result["insight"]["source"], "none")
         self.assertEqual(page_data((self.root / result["analysis"]).read_text(encoding="utf-8"))["info"]["prompts"], [])
 
+    def new_under_a_name_the_command_refuses(self, name: str) -> None:
+        """`task new` no longer takes these names (a terminal would read them), but a folder can come from an older copy: the page must still hold."""
+        self.new("plain")
+        (self.root / BASE / "plain").rename(self.root / BASE / name)
+        path = self.root / BASE / name / ".task" / "task.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data.update(task=f"{BASE}/{name}", name=name)
+        path.write_text(json.dumps(data), encoding="utf-8")
+
     def test_an_ampersand_in_a_name_is_escaped(self) -> None:
         name = "a&amp;c&lt;b"  # the one markup character every file system takes in a folder name
-        self.new(name)
+        self.new_under_a_name_the_command_refuses(name)
         text = (self.root / self.cli_json("task", "report")["analysis"]).read_text(encoding="utf-8")
         self.assertIn("<title>任务分析：a&amp;amp;c&amp;lt;b</title>", text)
         self.assertEqual(page_data(text)["info"]["name"], name)
@@ -519,7 +528,7 @@ class PageTests(BoardCase):
     @unittest.skipIf(os.name == "nt", "Windows takes no < or > in a folder name, so a task with such a name cannot exist there")
     def test_a_name_cannot_become_markup(self) -> None:
         name = "a<script><b>&c<!--"
-        self.new(name)
+        self.new_under_a_name_the_command_refuses(name)
         text = (self.root / self.cli_json("task", "report")["analysis"]).read_text(encoding="utf-8")
         self.assertIn("<title>任务分析：a&lt;script&gt;&lt;b&gt;&amp;c&lt;!--</title>", text)
         self.assertEqual((text.count("<script"), text.count("</script>")), (2, 2))

@@ -32,6 +32,9 @@ from .common import CommandError
 NAME_LIMIT = 80
 ON_WINDOWS = os.name == "nt"
 WINDOWS_BAD = set('<>:"|?*')  # what Windows takes in no folder name (`/` and `\` are refused everywhere)
+# What cmd, PowerShell, bash or zsh read as a command, a quote, a variable or a wildcard when the name is typed in a command. A name
+# with one of them breaks `harness task open <name>` unless the agent quotes it right in the shell of the day. Refused when a task is made, on every system.
+SHELL_BAD = set('&^%!();,=\'"`$|<>?*:{}[]~#') | set(" \t")
 TEMPLATES = Path(".harness") / "contracts" / "templates" / "task"
 # What each tier adds to the one below it. A name that ends in `/` is a folder.
 TIER_FILES = {
@@ -58,7 +61,17 @@ def clean_name(raw: str) -> str:
         raise CommandError(say("task.name.bad", name=name, limit=NAME_LIMIT))
     if ON_WINDOWS and (set(name) & WINDOWS_BAD or name.endswith(".") or any(ord(char) < 32 for char in name)):
         raise CommandError(say("task.name.windows", name=name))  # the name is the folder name: say so before Windows answers with WinError 123
+    risky = sorted(set(name) & SHELL_BAD, key=name.index)
+    if risky or name.startswith("-"):
+        shown = ["space" if char == " " else "tab" if char == "\t" else char for char in risky] or ["-"]
+        raise CommandError(say("task.name.shell", name=name, chars=" ".join(f"`{char}`" for char in shown), example=safe_example(name)))
     return name
+
+
+def safe_example(name: str) -> str:
+    """The name with every risky character turned into a hyphen: a name to suggest, not to take without asking."""
+    text = re.sub("-+", "-", "".join("-" if char in SHELL_BAD else char for char in name)).strip("-")
+    return text or "task"
 
 
 def files_of(tier: str) -> List[str]:

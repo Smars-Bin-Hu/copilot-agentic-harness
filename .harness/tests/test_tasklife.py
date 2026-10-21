@@ -123,9 +123,11 @@ class NewTests(LifeCase):
                 with self.subTest(name), self.assertRaises(CommandError) as caught:
                     tasklife.clean_name(name)
                 self.assertIn("在 Windows 上不能用", str(caught.exception))
-            self.assertEqual(tasklife.clean_name("查订单-a&b (1)"), "查订单-a&b (1)")
+            self.assertEqual(tasklife.clean_name("查订单-a_b.1"), "查订单-a_b.1")
         with mock.patch.object(tasklife, "ON_WINDOWS", False):
-            self.assertEqual(tasklife.clean_name("a<b"), "a<b")  # elsewhere the file system takes it
+            with self.assertRaises(CommandError) as caught:
+                tasklife.clean_name("a<b")  # the file system takes it elsewhere, but a terminal reads `<` as a redirect: refused everywhere
+            self.assertIn("终端会把它当成命令", str(caught.exception))
 
     def test_a_refused_new_leaves_no_folder(self) -> None:
         self.assertIn("没有会话", self.refused("task", "new", "job", "--kind", "qa", "--session-id", "nobody"))
@@ -339,6 +341,22 @@ class ListTests(LifeCase):
         with task_ops.locked(self.root, f"{BASE}/job") as data:
             data["paused"] = {"since": "2026-10-20T00:00:00+00:00"}
         self.assertEqual(self.listed()["tasks"][0]["waiting"], "", "a task put aside waits for nobody")
+
+    def test_a_task_name_a_terminal_would_read_as_a_command_is_refused_with_a_name_to_use(self) -> None:
+        for bad in ("sales&load", "a b", "fix(1)", "x^y", "100%", "a;b", "$HOME", "it's", "a=b", "a:b", "he said \"x\"", "a,b", "a`b"):
+            said = self.refused("task", "new", bad, "--kind", "qa", "--session-id", S1)
+            self.assertIn("任务名", said, bad)
+        self.assertIn("`sales-load`", self.refused("task", "new", "sales&load", "--kind", "qa", "--session-id", S1))
+        self.assertIn("`a-b`", self.refused("task", "new", "a b", "--kind", "qa", "--session-id", S1))
+        self.assertEqual(self.listed("--all")["tasks"], [], "nothing was made")
+        for good in ("sales-daily_load.v2", "销售日报-慢", "A1.b-c_d", "x+y@z"):
+            self.new(good, "qa")
+
+    def test_doctor_warns_about_a_task_folder_that_has_such_a_name_already(self) -> None:
+        (self.root / BASE / "old&name").mkdir(parents=True)
+        done = self.cli("doctor")
+        self.assertIn("old&name", done.stdout)
+        self.assertIn("[WARN]", done.stdout.split("old&name")[0].splitlines()[-1])
 
     def test_a_dry_run_and_a_broken_promote_are_named(self) -> None:
         self.new("job", "dev")

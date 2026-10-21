@@ -49,7 +49,7 @@ Do not ask again what the user has already made clear. If you have a question to
 
 3. **Does a target repository have to change?** (Ask for kinds 1, 2, 3, 7.) If so, use the full tier: add `--tier full`.
 
-Do not ask for the task name: make up a short English one (lower case, hyphens) and tell the user what it is after opening. It is the folder name: no `/`, no `.` at the start. The branch name defaults to it.
+Do not ask for the task name: make up a short English one (lower case, hyphens) and tell the user what it is after opening. It is the folder name, and it is typed in every command: only letters, digits, `-`, `_` and `.` (no `&`, space, `^`, `%`, `(`, `)`, quotes or `$`; the command refuses them, and `cmd` breaks on them), no `.` or `-` at the start. The branch name defaults to it.
 
 ### 3. Run the command
 

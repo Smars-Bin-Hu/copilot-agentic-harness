@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import config, kbstd, messages, output, render, skillcheck, standards, targets, user
+from core import config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -506,6 +506,15 @@ def check_skills(report: Report, root: Path) -> None:
         report.ok(say("skill.doctor.ok", count=len(results)))
 
 
+def check_task_names(report: Report, root: Path) -> None:
+    """A task folder whose name a terminal would take for commands. It still opens; only the agent's commands need quotes."""
+    from modules.task import tasklife
+
+    risky = [path.name for path in sorted((root / tasks.TASKS_DIR).glob("*")) if path.is_dir() and (set(path.name) & tasklife.SHELL_BAD)] if (root / tasks.TASKS_DIR).is_dir() else []
+    if risky:
+        report.warn(say("doctor.task_names", names=", ".join(risky[:5]) + (" ..." if len(risky) > 5 else "")))
+
+
 def check_standards(report: Report, root: Path) -> None:
     """Are the code standards plugged in, and does each rule have the fields the check needs? Warns only."""
     found = standards.rules(root)
@@ -684,6 +693,7 @@ def run(root: Path) -> int:
     check_knowledge_base(report, root)
     check_skills(report, root)
     check_standards(report, root)
+    check_task_names(report, root)
     for name, entry in registry["modules"].items():
         check_module(report, root, name, entry)
     print(shown(report.lines))

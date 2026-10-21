@@ -96,8 +96,8 @@ const Lobby = (function () {
 
     function show(entry) {
       const {row, pose} = entry;
-      const state = row.waiting || t(STATE_TEXT[pose]);
-      const lines = [h("b", null, row.name), h("div", {class: "lb-k"}, t("task.kind." + (row.kind || "none")) + " · " + t("task.tier." + (row.tier || "none")) + " · " + state + (row.waiting && row.waited_s ? " · " + clock(row.waited_s) : ""))];
+      const state = pose === "you" || pose === "tests" ? row.waiting : t(STATE_TEXT[pose]);  // a task at work that already has a plan to approve is at work
+      const lines = [h("b", null, row.name), h("div", {class: "lb-k"}, t("task.kind." + (row.kind || "none")) + " · " + t("task.tier." + (row.tier || "none")) + " · " + state + (state === row.waiting && row.waited_s ? " · " + clock(row.waited_s) : ""))];
       const s = row.stages;
       if (s && s.steps && s.steps.length) {
         const dots = [];

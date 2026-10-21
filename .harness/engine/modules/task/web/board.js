@@ -152,7 +152,7 @@
     : t(DATA.refresh ? "board.subtitle.fresh" : "board.subtitle", {as_of: when(asOf, 0, 19), seconds: DATA.refresh}));
 
   function drawNumbers() {
-    const waiting = rows.filter((row) => row.waiting);
+    const waiting = rows.filter((row) => stateOf(row, live) === "waiting");  // what the chip "Waiting for you" counts too
     const briefs = rows.filter((row) => row.brief).map((row) => row.brief);
     const usage = briefs.filter((brief) => brief.aiu !== null).map((brief) => brief.aiu);
     kpis.replaceChildren(

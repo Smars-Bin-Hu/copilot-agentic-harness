@@ -117,7 +117,7 @@ function actionButton(row, item, extra) {
   const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page
   const hot = row.waiting && !CONTROLS.includes(item.action);  // what the task waits for, not what the person may do any time
   // pause, resume, close and autorun change the course of the task: the agent in the middle of a turn must stop first (stop it in VS Code)
-  const locked = typeof SERVE !== "undefined" && row.busy && CONTROLS.includes(item.action);
+  const locked = typeof SERVE !== "undefined" && row.state === "working" && CONTROLS.includes(item.action);
   const button = h("button", {class: "act" + (hot ? " hot" : "") + (live ? " live" : "") + (locked ? " locked" : "") + (extra ? " " + extra : ""), type: "button", title: locked ? t("board.action.busy") : live ? "" : item.command, "data-label": label}, label);
   if (locked) button.disabled = true;
   button.addEventListener("click", () => (locked ? null : live ? SERVE.act(button, row, item) : copyCommand(button, item.command)));

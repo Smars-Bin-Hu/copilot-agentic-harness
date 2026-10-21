@@ -52,8 +52,8 @@ The board gives a task one state, the first that holds:
 | --- | --- | --- |
 | closed / not started | Closed, or a folder no one has opened yet | Nothing |
 | paused | You put it aside | `task resume`, or just talk to its session |
-| waiting for you | A plan, a write-back, a decision on checks, test results or a word after a stop is yours | Do it (the reason is on the tag) |
-| working | A session holds it and made a hook call in the last 5 minutes | Nothing |
+| working | A session holds it, made a hook call in the last 5 minutes and has not stopped (even if the plan it just wrote already waits for you) | Nothing; the approvals are offered, pause, close and autorun are grey |
+| waiting for you | A plan, a write-back, a decision on checks, test results or a word after a stop is yours, and the agent has stopped | Do it (the reason is on the tag) |
 | quiet | A session holds it, but 5 minutes with no call and no stop | Look at the VS Code window; if it is closed, open a session and name the task |
 | no session | Nothing waits for you and nothing holds it | Open a session and name the task, or close it |
 

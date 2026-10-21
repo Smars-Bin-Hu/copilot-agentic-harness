@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.21 (2026-10-21)
+
+### Changed
+
+- **One idea instead of two: "working" is the agent being in the middle of a turn.** 1.5.20 had *working* (the agent is at work and nothing waits for you) and a second fact for the buttons (the agent is at work). They differed in one short moment only: the agent had written a plan, which waits for approval, and had not finished its turn. *Working* now means what the buttons used to ask: a session holds the task, made a hook call in the last 5 minutes and has not stopped since. The grey buttons, the server's refusal and the terminal's refusal all use it; `task list` rows no longer have `busy`.
+- **A plan (or a write-back, a recover, a check decision) that waits for you shows as *working* until the agent stops**, and as *waiting for you* from then on. The approval button is on the row all the time (it is bound to the version you saw). The "Waiting for you" chip and the number on top count the tasks in that state; before they counted every task that had something to approve.
+- The order of the list: waiting for you (the longest wait first), working, quiet, no session, paused, closed.
+
+**Introductory material**: `docs/02-features.md` and `harness-rookie-wondering` topic 9 (the table of the states).
+
 ## 1.5.20 (2026-10-21)
 
 ### Changed

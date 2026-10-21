@@ -119,7 +119,7 @@
     const optional = ["confirm-req", "pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
     const items = desk.actions.filter((item) => !optional.includes(item.action));
     const rest = desk.actions.filter((item) => optional.includes(item.action));
-    const row = {name: desk.name, waiting: desk.waiting, busy: desk.busy};
+    const row = {name: desk.name, waiting: desk.waiting, state: desk.state};
     const hint = (item) => t("desk.hint." + item.action.replace(" ", "-"));
     const entry = (item) => h("div", {class: "action"}, actionButton(row, item, "big"), h("p", {class: "hint"}, hint(item)));
     const line = (item) => h("div", {class: "action-line"}, actionButton(row, item), h("span", {class: "hint"}, hint(item)));
@@ -130,7 +130,7 @@
       desk.req_changed ? h("p", {class: "hint bad"}, t("desk.req.changed")) : null,
       desk.state === "waiting" && !desk.held ? h("p", {class: "hint"}, t("desk.unheld.note")) : null,
       idle ? [h("p", {class: "hint"}, idle.hint), idle.prompt ? promptLine(idle.prompt) : null] : h("div", {class: "action-list"}, items.map(entry)),
-      rest.length ? h("div", {class: "action-more"}, h("div", {class: "sub label"}, t("desk.actions.more")), desk.busy && served() ? h("p", {class: "hint"}, t("desk.busy.note")) : null, rest.map(line)) : null,
+      rest.length ? h("div", {class: "action-more"}, h("div", {class: "sub label"}, t("desk.actions.more")), desk.state === "working" && served() ? h("p", {class: "hint"}, t("desk.busy.note")) : null, rest.map(line)) : null,
       typeof SERVE === "undefined" ? h("p", {class: "sub"}, t("board.copy.hint")) : SERVE.banner());
   }
 

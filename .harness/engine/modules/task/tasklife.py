@@ -452,9 +452,9 @@ def active_now(root: Path, data: Dict[str, Any]) -> bool:
 CONTROLS = ("pause", "resume", "close", "autorun on")  # what changes the course of a task; the person may do them only when the agent is not in the middle of a turn
 
 
-def busy(root: Path, data: Dict[str, Any], why: Optional[str] = None) -> bool:
+def at_work(root: Path, data: Dict[str, Any], why: Optional[str] = None) -> bool:
     """Is the agent in the middle of a turn? A session holds the task, made a hook call lately, and has not stopped since (the Stop hook leaves a mark,
-    and a new prompt takes it away); an agent the person cancelled has stopped too. `why`: the waiting reason, when the caller has it already.
+    and a new prompt takes it away); an agent the person cancelled has stopped too. This is the state *working*. `why`: the waiting reason, when the caller has it already.
     Pause, close and autorun would change the task under the agent's hands; the approvals do not (each is bound to the digest of what the person saw)."""
     if data.get("status") != "open" or paused_since(data) or data.get("waiting") or data.get("handoff"):
         return False
@@ -467,7 +467,7 @@ def busy(root: Path, data: Dict[str, Any], why: Optional[str] = None) -> bool:
 
 def require_idle(root: Path, data: Dict[str, Any], command: str, force: bool = False) -> None:
     """Refuse a command that changes the course of a task while the agent is in the middle of a turn. `force`: the person says go on."""
-    if not force and busy(root, data):
+    if not force and at_work(root, data):
         raise CommandError(messages.text("task.busy", command=command, minutes=ACTIVE_SECONDS // 60))
 
 
@@ -486,18 +486,19 @@ def held(root: Path, data: Dict[str, Any]) -> bool:
 
 
 def state_of(status: str, paused: str, why: str, is_held: bool, is_active: bool) -> str:
-    """The one state of a task, from the facts, first that holds (design 1.5.16): closed, new, paused, waiting, working, quiet, unheld."""
+    """The one state of a task, from the facts, first that holds (design 1.5.16, changed in 1.5.21): closed, new, paused, working (the agent is in the middle of
+    a turn, even when a plan already waits for the person), waiting, no session, quiet."""
     if status == "new":
         return "new"
     if status != "open":
         return "closed"
     if paused:
         return "paused"
+    if is_active:
+        return "working"
     if why:
         return "waiting"
-    if not is_held:
-        return "unheld"
-    return "working" if is_active else "quiet"
+    return "quiet" if is_held else "unheld"
 
 
 def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
@@ -510,7 +511,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
             rows.append({
                 "task": task, "name": task_ops.name_of(task), "status": "new", "kind": "", "tier": "", "updated_at": "", "waiting": "",
                 "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "depends_on": [], "paused_since": "",
-                "state": "new", "held": False, "active": False, "busy": False,
+                "state": "new", "held": False, "active": False,
             })
             continue
         if data.get("status") != "open" and not everything:
@@ -520,7 +521,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
         waited = seconds_since(found["since"]) if found["why"] else None
         is_open = data.get("status") == "open"
         is_held = is_open and held(root, data)
-        working = is_held and not aside and not found["why"] and active_now(root, data)
+        working = is_open and not aside and at_work(root, data, found["why"])
         rows.append({
             "task": task, "name": data.get("name") or task_ops.name_of(task), "status": data.get("status", ""),
             "kind": data.get("kind", ""), "tier": data.get("tier", ""), "updated_at": data.get("updated_at", ""),
@@ -528,7 +529,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
             "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
             "depends_on": list(data.get("depends_on") or []), "paused_since": aside,
             "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",
-            "held": is_held, "active": working, "busy": is_open and not aside and busy(root, data, found["why"]),
+            "held": is_held, "active": working,
             "state": state_of(data.get("status", ""), aside, found["why"], is_held, working),
         })
         if rows[-1]["state"] == "unheld":

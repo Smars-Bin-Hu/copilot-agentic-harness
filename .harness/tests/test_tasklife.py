@@ -279,6 +279,7 @@ class ListTests(LifeCase):
         self.new("first", "dev")
         self.new("second", "dev", session=S2)
         (self.folder("first") / "PLAN.md").write_text("# plan\n", encoding="utf-8")
+        self.stopped("first")  # the agent wrote the plan and stopped; while it is still at work the task shows as working
         result = self.listed()
         self.assertEqual([row["name"] for row in result["tasks"]], ["first", "second"])
         self.assertEqual(result["tasks"][0]["waiting"], "计划等你批准")
@@ -378,7 +379,8 @@ class ListTests(LifeCase):
         self.assertEqual(states, sorted(states, key=("waiting", "working", "quiet", "unheld", "paused").index), order)
 
     def busy(self, name: str = "job") -> bool:
-        return next(row for row in self.listed()["tasks"] if row["name"] == name)["busy"]
+        """Is the agent in the middle of a turn: the state is *working*."""
+        return next(row for row in self.listed()["tasks"] if row["name"] == name)["state"] == "working"
 
     def stopped(self, name: str = "job") -> None:
         with task_ops.locked(self.root, f"{BASE}/{name}") as data:
@@ -396,6 +398,16 @@ class ListTests(LifeCase):
         old = time.time() - 3600
         os.utime(log, (old, old))
         self.assertFalse(self.busy(), "no call for an hour: quiet, not at work")
+
+    def test_a_plan_that_waits_for_the_person_is_still_at_work_until_the_agent_stops(self) -> None:
+        """Working is the agent being in the middle of a turn. A plan written in that turn waits for approval, and shows as waiting when the agent has stopped."""
+        self.new("job", "dev", "--tier", "full")
+        (self.folder("job") / "PLAN.md").write_text("# Plan\n\n1. x\n", encoding="utf-8")
+        row = self.listed()["tasks"][0]
+        self.assertEqual((row["state"], row["waiting_why"]), ("working", "plan"))
+        self.stopped()
+        row = self.listed()["tasks"][0]
+        self.assertEqual((row["state"], row["waiting_why"]), ("waiting", "plan"))
 
     def test_a_task_nobody_holds_or_put_aside_or_handed_over_is_not_busy(self) -> None:
         self.new("first", "qa")

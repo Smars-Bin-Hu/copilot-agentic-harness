@@ -108,7 +108,7 @@ class ServeTests(ServeCase):
         """The page may be ten seconds old: the server looks again, and a button on a stale page does not change the task under the agent."""
         self.agent_at_work()
         rows = self.request("POST", "/api/board", {})[1]["rows"]
-        self.assertTrue(next(row for row in rows if row["name"] == "job1")["busy"])
+        self.assertEqual(next(row for row in rows if row["name"] == "job1")["state"], "working")
         status, data, _ = self.request("POST", "/api/act", {"action": "pause", "task": TASK})
         self.assertEqual(status, 409)
         self.assertIn(messages.text("serve.busy"), json.dumps(data, ensure_ascii=False))

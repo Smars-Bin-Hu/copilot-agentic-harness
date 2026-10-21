@@ -148,7 +148,7 @@ class Board:
         if action not in tasklife.CONTROLS:
             return
         data = tasks.read(self.root, task_ops.resolve(self.root, task))
-        if data is not None and tasklife.busy(self.root, data):
+        if data is not None and tasklife.at_work(self.root, data):
             raise CommandError(say("serve.busy"))
 
     def close(self, name: str) -> Dict[str, Any]:

@@ -65,7 +65,13 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-SKIP_NAMES = {".git", "__pycache__", "node_modules", ".DS_Store"}
+SKIP_NAMES = {".git", "__pycache__", "node_modules", ".DS_Store", "Thumbs.db", "desktop.ini"}  # the tools and the file manager make these; not work, not results
+
+
+def is_promote_backup(parts: List[str]) -> bool:
+    """`parts`: a path inside DEV/. What promote writes there itself, `_deleted/` and `*.patch` at the top of DEV/, is not a result: it is not written to the
+    repository, and it must not change what a check looked at (one list for promote and for the checks: task.dev_files and tasksnap.is_result)."""
+    return bool(parts) and (parts[0] == "_deleted" or (len(parts) == 1 and parts[0].endswith(".patch")))
 
 
 def policy(root: Path) -> Dict[str, Any]:

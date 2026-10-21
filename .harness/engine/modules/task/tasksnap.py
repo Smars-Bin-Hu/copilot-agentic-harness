@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Tuple
 from core import config, tasks
 from core.paths import utc_now
 
+from . import common
 from .policy import POLICY_NAME
 
 SNAPSHOT_DIR = "SNAPSHOT"
@@ -39,9 +40,12 @@ def settings(root: Path) -> Dict[str, Any]:
 
 
 def is_result(relative: str) -> bool:
-    """`relative` is a path inside the task folder. Earlier rounds (`DEV_r1/`, `PLAN_r1.md`) are not this round's result."""
+    """`relative` is a path inside the task folder. Earlier rounds (`DEV_r1/`, `PLAN_r1.md`) are not this round's result, nor is what promote writes
+    into DEV/ itself (the patch and the backups of deleted files), nor what a tool or a file manager makes (`.DS_Store`, `Thumbs.db`)."""
     parts = relative.split("/")
     top = parts[0].lower()
+    if any(part in common.SKIP_NAMES for part in parts) or (top == tasks.DEV_NAME.lower() and common.is_promote_backup(parts[1:])):
+        return False
     if top in SKIP_TOP or top.startswith("dev_r") or (len(parts) == 1 and (top in SKIP_FILES or top.startswith("plan_r"))):
         return False
     return True

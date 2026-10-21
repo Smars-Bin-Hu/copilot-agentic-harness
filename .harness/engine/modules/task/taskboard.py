@@ -144,6 +144,7 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = ())
         if row["status"] == "new":
             continue
         row["stages"] = taskstages.of(root, row["task"])
+        row["todo_left"] = len(task_ops.todo_left(root, row["task"])) if row["status"] == "open" else 0
         key = (str(root), row["task"])
         kept = _closed.get(key) if row["status"] == "closed" else None
         if kept and kept[0] == row["updated_at"] and (root / common.REPORTS_DIR / kept[2]).is_file():

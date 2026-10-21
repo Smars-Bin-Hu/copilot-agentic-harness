@@ -103,7 +103,7 @@ def close_task(args: argparse.Namespace) -> Dict[str, Any]:
         data = tasks.read(root, folder)
         if data is not None:
             tasklife.require_idle(root, data, "task close")
-    return task.close(repo_root(), args.task, args.reason)
+    return task.close(repo_root(), args.task, args.reason, getattr(args, "todo_open", ""))
 
 
 def cmd_report(args: argparse.Namespace) -> Dict[str, Any]:
@@ -250,8 +250,9 @@ def register_task(subparsers: Any) -> None:
     off = add_auto("off", "turn autorun off: the person at a terminal, or the agent with --reason when it cannot go on", lambda a: autorun.turn_off(repo_root(), a.task, a.reason))
     off.add_argument("--reason", default="")
     add_auto("status", "on or off, the steps done, how often it was pushed on, why it stopped", lambda a: autorun.status(repo_root(), a.task))
-    close = add("close", "the session lets go of the task and the report is written; the folder stays where it is (a person at a terminal is refused while the agent is at work)", lambda a: close_task(a))
+    close = add("close", "the session lets go of the task and the report is written; the folder stays where it is (refused while steps of TODO.md are not ticked, unless --todo-open says why; a person at a terminal is refused while the agent is at work)", lambda a: close_task(a))
     close.add_argument("--reason", default="")
+    close.add_argument("--todo-open", default="", help="why steps of TODO.md stay unticked (tick the ones that are done first)")
     close.add_argument("--force", action="store_true", help="even while the agent is in the middle of a turn (a person at a terminal)")
     report = add("report", "write .workspace/reports/tasks/<name>/report.md (what was done) and report.html (where the time and usage went)", cmd_report)
     report.add_argument("--open", action="store_true", help="open the HTML page in the browser (a person at a terminal)")

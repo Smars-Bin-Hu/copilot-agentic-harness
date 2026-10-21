@@ -29,7 +29,7 @@ from core.context import Context
 from core.events import Decision, HookEvent
 from core.paths import cli_command
 
-from . import mapreduce
+from . import commitmsg, mapreduce
 from .policy import POLICY_NAME, validate_policy
 
 NAME = "task"
@@ -298,6 +298,30 @@ def task_file_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
     return Decision(block=True, reason=say("task.relay.reminder", task=data["task"]), facts={"kind": "task_file_not_updated"})
 
 
+def write_back_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
+    """The write-back is done and the task still has loose ends the agent leaves behind: steps of TODO.md not ticked, no COMMIT-MESSAGE.md for the person to copy.
+    Said once in a session (never in autorun, which pushes the steps itself). Only the facts of the files are looked at."""
+    if (data.get("promote") or {}).get("state") != "done" or data.get("autorun"):
+        return None
+    state = ctx.module_state(NAME)
+    if state.get("done_reminded"):
+        return None
+    from . import task as task_ops  # it needs this module
+
+    left = task_ops.todo_left(ctx.root, data["task"])
+    path = tasks.task_dir(ctx.root, data["task"]) / commitmsg.FILE
+    no_message = bool(commitmsg.to_commit(data)) and not (path.is_file() and path.read_text(encoding="utf-8-sig", errors="replace").strip())
+    if not left and not no_message:
+        return None
+    state["done_reminded"] = True
+    parts = []
+    if left:
+        parts.append(say("task.done.todo", count=len(left), steps="; ".join(text[:80] for text in left[:3]), task=data["task"]))
+    if no_message:
+        parts.append(say("task.done.commit", file=commitmsg.FILE))
+    return Decision(block=True, reason=" ".join(parts), facts={"kind": "write_back_open"})
+
+
 def kb_offer_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
     """The knowledge base is not built yet (M28): once per session, at a stop of a task that is not itself about the
     knowledge base, the agent offers the next step in one line. Only where the code repositories and a knowledge base
@@ -358,7 +382,7 @@ def on_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.stop_hook_active:
         mark_waiting(ctx, data, True)  # the second Stop of a block: this time the agent does stop
         return None
-    blocks: List[Decision] = [item for item in (review_stop(ctx, data), task_file_stop(ctx, data)) if item is not None]
+    blocks: List[Decision] = [item for item in (review_stop(ctx, data), task_file_stop(ctx, data), write_back_stop(ctx, data)) if item is not None]
     if not blocks:  # an offer waits until nothing else is asked of the agent
         blocks = [item for item in (kb_offer_stop(ctx, data),) if item is not None]
     if not blocks:

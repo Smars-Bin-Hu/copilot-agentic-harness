@@ -155,7 +155,7 @@ class Board:
         if "close" not in self.actions:
             raise CommandError(say("serve.action.off", action="close"))
         self.idle("close", name)
-        result = task_ops.close(self.root, name, say("serve.close.reason"))
+        result = task_ops.close(self.root, name, say("serve.close.reason"), check_todo=False)
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 

@@ -177,3 +177,6 @@ tr.touched td{animation:glow 1.8s ease-out}
 @keyframes rbstamp{from{transform:rotate(-4deg) scale(2);opacity:0}to{transform:rotate(-4deg) scale(1);opacity:1}}
 @media (max-width:640px){.rb-step{width:64px}.rb-name{font-size:11.5px}}
 @media (prefers-reduced-motion:reduce){.rb-step.is-work .rb-node,.rb-step.is-you .rb-node,.rb-link.is-flow::after,.rb-check.run::before,.rb-check.pass,.rb-stamp{animation:none}}
+
+/* the commit message of a write-back, to copy */
+pre.commit{margin:8px 0 0;padding:12px 14px;border-radius:8px;background:var(--track);color:var(--ink);font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}

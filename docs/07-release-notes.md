@@ -10,6 +10,22 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.29 (2026-10-21)
+
+Found on a company computer, on a task that was written back and closed: the page said **Review 0/1** with an empty ring, and TODO 16/18.
+
+### Fixed
+
+- **A write-back undid its own checks.** Two lists said what a result file is: promote's (`DEV/*.patch` and `DEV/_deleted/` are not results) and the checks' (they were). So the patch promote writes changed the fingerprint of the work, and the passes read 0 right after the write-back; a second promote dry-run (after a recover, or with a new branch name) was refused with "0 passes", though nothing had changed. Both now use one list, which also leaves out `.DS_Store`, `Thumbs.db` and `desktop.ini` (a file manager makes them). A test makes sure the two lists cannot drift apart again.
+- **A task written back or closed shows its checks as they stood.** The page compared the checks with the files as they are now, so a draft written after the close (`KB-DRAFT.md`) took the pass away. A task whose write-back is done, or that is closed, now shows the passes in a row on the last version checked (and a waiver). The Review tab, the ring under the stages and `task review status` use it; the gate before a write-back still counts on the files as they are, and an open task whose work changed still goes back to 0. The company task shows 1/1 once the page is opened again; nothing in its files changes.
+- **Steps of TODO.md left unticked.** Only `TASK.md` was asked for; nothing looked at `TODO.md`. `task close` is refused while steps are not ticked (tick them, or `--todo-open "<why>"`, which goes into the history), and the Stop after a write-back reminds the agent once (not in autorun). The board page still lets you close, and says how many steps are left.
+
+### Added
+
+- **A Commit tab after a write-back.** For a code repository the write-back puts the files on a branch and does not commit. The agent now writes `COMMIT-MESSAGE.md` (a subject of at most 72 characters, a blank line, the body; one `## <repository>` section for each repository if there are several); the page shows it with `Co-authored-by: GitHub Copilot Coding Agents` added by the harness itself (so the agent cannot forget or misspell it), and a button copies it. A long subject or a missing blank line is marked. The name is the setting `commit.coauthor` in `task.json` (a name alone, no address; `Name <address>` also works; an empty string leaves the line out); change it in `task.override.json`. The message the write-back tells the agent, and the Stop after it, ask for the file.
+
+**Introductory material**: `docs/02-features.md`, `docs/04-reference.md`, `harness-rookie-wondering` topic 11, the skill `harness-my-task`.
+
 ## 1.5.28 (2026-10-21)
 
 ### Added

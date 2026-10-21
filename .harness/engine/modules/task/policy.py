@@ -1,4 +1,4 @@
-"""task.json: how many files a fetch may copy, the TASK.md reminder, the checks of `[review]=n`, the snapshots, what the report reads, how many mappers `/generic-mapreduce` may call."""
+"""task.json: how many files a fetch may copy, the contributor line of the commit message, the TASK.md reminder, the checks of `[review]=n`, the snapshots, what the report reads, how many mappers `/generic-mapreduce` may call."""
 
 from __future__ import annotations
 
@@ -41,6 +41,7 @@ POLICY_SCHEMA = {
                 "actions": {"type": "array", "items": {"type": "string", "enum": ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive", "close"]}},
             },
         },
+        "commit": {"type": "object", "properties": {"coauthor": {"type": "string"}}},
         "snapshots": {
             "type": "object",
             "properties": {"keep_days": {"type": "number", "minimum": 0}, "max_file_mb": {"type": "number", "minimum": 0}},

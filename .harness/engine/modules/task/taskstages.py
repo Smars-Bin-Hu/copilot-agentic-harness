@@ -133,7 +133,7 @@ def reviewer(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, 
     review = taskreview.state_of(data)
     if not review["n"] and not review["rounds"]:
         return None
-    info = taskreview.summary(root, task, data)
+    info = taskreview.summary(root, task, data, settled=True)
     n = info["n"]
     states = ["pass"] * info["passes"]
     total = max(n, len(states))

@@ -278,13 +278,26 @@ def set_branch(root: Path, raw_task: str, branch: str) -> Dict[str, Any]:
     return {"task": task, "branch": name, "promote_plan_reset": reset}
 
 
-def close(root: Path, raw_task: str = "", reason: str = "") -> Dict[str, Any]:
+def todo_left(root: Path, task: str) -> List[str]:
+    """The steps of TODO.md that are not ticked (a task without a TODO.md has none)."""
+    from . import autorun  # it needs this module
+
+    return [step["text"] for step in autorun.steps_of(root, task) if not step["done"]]
+
+
+def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "", check_todo: bool = True) -> Dict[str, Any]:
+    """Close the task. Steps of TODO.md not ticked stop it (`check_todo`) unless `todo_open` says why they stay: tick what is done, or say why not.
+    The person closing on the board page decides for themselves: the page shows how many are left, and passes `check_todo=False`."""
     task = resolve(root, raw_task)
+    left = todo_left(root, task)
+    if check_todo and left and not todo_open.strip():
+        shown = "\n".join(f"- {text[:100]}" for text in left[:5]) + (f"\n- ... (+{len(left) - 5})" if len(left) > 5 else "")
+        raise CommandError(say("task.close.todo", count=len(left), steps=shown, task=task))
     with locked(root, task) as data:
         if data["promote"]["state"] == "partial":
             raise CommandError(say("task.promote.partial.open", task=task))
         data["status"] = "closed"
-        note(data, "close", reason.strip())
+        note(data, "close", reason.strip() + (f" ({len(left)} TODO step(s) not ticked: {todo_open.strip()})" if left else ""))
         surface, session_id = data.get("surface", "vscode"), data["session_id"]
     released = False
     if state_path(root, surface, session_id).exists():
@@ -293,6 +306,8 @@ def close(root: Path, raw_task: str = "", reason: str = "") -> Dict[str, Any]:
                 state["active_task"] = None
                 released = True
     result: Dict[str, Any] = {"task": task, "status": "closed", "session_released": released}
+    if left:
+        result["todo_not_ticked"] = len(left)
     try:
         from . import task_report  # it needs this module
 
@@ -681,6 +696,7 @@ def promoted_text(result: Dict[str, Any], record: Dict[str, Any]) -> str:
         key = "promote.done.kb" if has_remote(repo["path"]) else "promote.done.kb.local"  # nothing to push to: say nothing of a push
         parts.append(say(key, name=repo["name"], base_ref=repo["base_ref"], commit=str(repo.get("commit", ""))[:12]))
     if others:
+        parts.append(say("promote.done.commit_message", file="COMMIT-MESSAGE.md"))
         parts.append(say("promote.done.test_offer"))
     return "".join(parts) + say("promote.done.patch", patch=record["patch"])
 

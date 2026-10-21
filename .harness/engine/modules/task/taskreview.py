@@ -153,15 +153,41 @@ def has_something(root: Path, task: str, data: Dict[str, Any]) -> bool:
     return any(name.lower() != tasks.REQ_FILE.lower() for name in names)
 
 
-def summary(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    review = state_of(data)
-    digest = tasksnap.results_digest(root, task)
+def is_settled(data: Dict[str, Any]) -> bool:
+    """The write-back is done, or the task is closed: its checks are history, no longer a gate."""
+    return data.get("status") == "closed" or (data.get("promote") or {}).get("state") == "done"
+
+
+def streak(data: Dict[str, Any]) -> int:
+    """The passes in a row at the end of the checks of this round, all on the version the last check looked at. From the records alone."""
     done = [item for item in rounds_now(data) if item.get("verdict")]
-    waived = bool(review["waived"]) and review["waived"].get("digest") == digest and review["waived"].get("task_round") == data["round"]
+    if not done:
+        return 0
+    last, count = done[-1].get("digest"), 0
+    for item in reversed(done):
+        if item["verdict"] != "PASS" or item.get("digest") != last:
+            break
+        count += 1
+    return count
+
+
+def summary(root: Path, task: str, data: Dict[str, Any], settled: bool = False) -> Dict[str, Any]:
+    """The checks of the task now. For a gate (`require`, autorun, the Stop check) the passes are counted on the files as they are now. `settled` is for what is
+    shown: a task whose write-back is done, or that is closed, shows the checks as they stood (the last version checked), not compared again with files that
+    changed afterwards (the patch promote writes, a draft written after the close)."""
+    review = state_of(data)
+    done = [item for item in rounds_now(data) if item.get("verdict")]
+    if settled and is_settled(data):
+        waived = bool(review["waived"]) and review["waived"].get("task_round") == data["round"]
+        found = {"passes": streak(data), "waived": waived, "digest": done[-1].get("digest", "") if done else ""}
+    else:
+        digest = tasksnap.results_digest(root, task)
+        waived = bool(review["waived"]) and review["waived"].get("digest") == digest and review["waived"].get("task_round") == data["round"]
+        found = {"passes": passes(data, digest), "waived": waived, "digest": digest}
     return {
-        "n": review["n"], "passes": passes(data, digest), "checks_used": used(data), "checks_limit": limit(root, data),
+        "n": review["n"], "passes": found["passes"], "checks_used": used(data), "checks_limit": limit(root, data),
         "pending_round": (pending(data) or {}).get("number"), "last_verdict": done[-1]["verdict"] if done else "",
-        "waived": waived, "digest": digest,
+        "waived": found["waived"], "digest": found["digest"],
     }
 
 
@@ -269,7 +295,7 @@ def record(root: Path, task: str, answer: str) -> Optional[Dict[str, Any]]:
 def status(root: Path, raw_task: str = "") -> Dict[str, Any]:
     task = task_ops.resolve(root, raw_task)
     data = task_ops.read(root, task)
-    info = summary(root, task, data)
+    info = summary(root, task, data, settled=True)
     info.pop("digest")
     info["task"] = task
     info["next"] = next_text(root, task, data)

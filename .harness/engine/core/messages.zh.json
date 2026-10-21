@@ -1162,5 +1162,20 @@
   "task.test.next.fail": "把每个缺陷写进 TEST/defects.md：`## D<n> [open] {env}: <标题>`（永远是 [open]），然后运行 `{command} task defects sync`。更新 TASK.md 和 TODO.md。告诉用户重新打开开发任务（新的一轮），并给出 defects.md 的路径。不要交接别的环境。",
   "task.test.next.more": "写清楚缺什么、怎么拿到。更新 TASK.md 和 TODO.md。把同一个环境再交接一次：`{command} task handoff tests --env {env}`。",
   "desk.test.runs": "每次运行：{runs}",
-  "desk.test.ignored": "没有计入：{files}（算最后写的那个文件）"
+  "desk.test.ignored": "没有计入：{files}（算最后写的那个文件）",
+  "task.close.todo": "TODO.md 里还有 {count} 步没勾：\n{steps}\n把做完的勾上（{task} 的 TODO.md）。如果有的步骤因为某个原因留着，用 `--todo-open \"<原因>\"` 再关闭一次：原因会记进历史。",
+  "task.done.todo": "回写已经完成，但 TODO.md 里还有 {count} 步没勾（{steps}）。把做完的勾上，或者在 LOG.md 里说明某一步为什么留着。",
+  "task.done.commit": "回写已经完成，需要用户自己提交：在任务文件夹里写 {file}。第一行是不超过 72 个字符的标题，空一行，然后是正文，每行短一点：改了什么、为什么。不要写 Co-authored-by 那一行：页面会加。有多个仓库时，每个仓库一节 `## <仓库名>`。",
+  "promote.done.commit_message": " 文件在分支上，还没有提交：在任务文件夹里写 {file}（第一行是不超过 72 个字符的标题，空一行，正文写改了什么、为什么；有多个仓库时每个仓库一节 `## <仓库名>`）。任务页会带上贡献者那一行显示它，用户把它复制进自己的提交。不要自己写 Co-authored-by 那一行。",
+  "desk.tab.commit": "提交",
+  "desk.commit.hint": "agent 为回写放到分支上的文件写的提交信息，贡献者那一行由 harness 加。复制到你的提交里。",
+  "desk.commit.copy": "复制提交信息",
+  "desk.commit.none": "agent 还没有写 COMMIT-MESSAGE.md。在 VS Code 里让它写。",
+  "desk.commit.repo": "给 {repo}",
+  "desk.commit.author": "贡献者一行，由 harness 加：{author}",
+  "desk.commit.warn.empty": "是空的",
+  "desk.commit.warn.subject_long": "标题超过 72 个字符",
+  "desk.commit.warn.no_blank": "标题后面没有空行",
+  "board.close.todo": "TODO.md 里还有 {count} 步没勾。已经提醒过 agent 去勾；你也可以直接关闭。",
+  "desk.commit.noauthor": "没有贡献者那一行：任务策略里的 `commit.coauthor` 是空的。"
 }

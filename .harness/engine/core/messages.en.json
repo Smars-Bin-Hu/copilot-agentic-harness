@@ -1162,5 +1162,20 @@
   "task.test.next.fail": "Add each defect to TEST/defects.md as `## D<n> [open] {env}: <title>` (always [open]), then run `{command} task defects sync`. Update TASK.md and TODO.md. Tell the user to open the development task again (a new round) and give the path of defects.md. Do not hand over another environment.",
   "task.test.next.more": "List exactly what is missing and how to get it. Update TASK.md and TODO.md. Hand the same environment over again: `{command} task handoff tests --env {env}`.",
   "desk.test.runs": "runs: {runs}",
-  "desk.test.ignored": "not counted: {files} (the file written last counts)"
+  "desk.test.ignored": "not counted: {files} (the file written last counts)",
+  "task.close.todo": "{count} step(s) of TODO.md are not ticked:\n{steps}\nTick the ones that are done (TODO.md of {task}). If some stay open for a reason, close again with `--todo-open \"<why>\"`: the reason goes into the history.",
+  "task.done.todo": "The write-back is done, but TODO.md still has {count} step(s) not ticked ({steps}). Tick the ones that are done, or say in LOG.md why a step stays open.",
+  "task.done.commit": "The write-back is done and the person has to commit it: write {file} in the task folder. A subject line of at most 72 characters, a blank line, then the body in short lines: what changed and why. Do not write the Co-authored-by line: the page adds it. With more than one repository, one section `## <repository>` for each.",
+  "promote.done.commit_message": " The files are on the branch and not committed: write {file} in the task folder (a subject line of at most 72 characters, a blank line, the body: what changed and why; one `## <repository>` section for each repository if there are several). The task page shows it with the contributor line, and the person copies it into their commit. Do not write the Co-authored-by line yourself.",
+  "desk.tab.commit": "Commit",
+  "desk.commit.hint": "The commit message the agent wrote for the files the write-back put on the branch, with the contributor line added by the harness. Copy it into your commit.",
+  "desk.commit.copy": "Copy commit message",
+  "desk.commit.none": "The agent has not written COMMIT-MESSAGE.md yet. Ask it to, in VS Code.",
+  "desk.commit.repo": "For {repo}",
+  "desk.commit.author": "Contributor line, added by the harness: {author}",
+  "desk.commit.warn.empty": "empty",
+  "desk.commit.warn.subject_long": "the subject is longer than 72 characters",
+  "desk.commit.warn.no_blank": "no blank line after the subject",
+  "board.close.todo": "TODO.md still has {count} step(s) that are not ticked. The agent was asked to tick them; you may close anyway.",
+  "desk.commit.noauthor": "No contributor line: `commit.coauthor` in the task policy is empty."
 }

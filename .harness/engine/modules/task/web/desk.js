@@ -10,13 +10,13 @@
   let desk = DATA.desk;
   let shown = JSON.stringify(desk);
   const same = (a, b) => a.replace(/"as_of":"[^"]*"/, "") === b.replace(/"as_of":"[^"]*"/, "");  // the time of asking is not a change
-  const tabs = ["overview", "test", "plan", "todo", "log", "changes", "review", "history", "docs"];
+  const tabs = ["overview", "test", "plan", "todo", "log", "changes", "commit", "review", "history", "docs"];
   const FILES = {overview: "TASK.md", req: "REQ.md", plan: "PLAN.md", todo: "TODO.md", log: "LOG.md"};
   let current = tabs.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
   let other = "";  // the document open in the "docs" tab
 
   const doc = (name) => desk.docs.find((item) => item.name === name);
-  const extra = () => desk.docs.filter((item) => !Object.values(FILES).includes(item.name) && !(desk.test && item.name === "TEST-GUIDE.md"));  // the guide has its own tab on a test task
+  const extra = () => desk.docs.filter((item) => !Object.values(FILES).includes(item.name) && !(desk.test && item.name === "TEST-GUIDE.md") && !(desk.commit && item.name === "COMMIT-MESSAGE.md"));  // these have a tab of their own
 
   // --- markdown -------------------------------------------------------------------------------------------
 
@@ -119,7 +119,7 @@
     const optional = ["confirm-req", "pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
     const items = desk.actions.filter((item) => !optional.includes(item.action));
     const rest = desk.actions.filter((item) => optional.includes(item.action));
-    const row = {name: desk.name, waiting: desk.waiting, state: desk.state};
+    const row = {name: desk.name, waiting: desk.waiting, state: desk.state, todo_left: desk.todo_left};
     const hint = (item) => t("desk.hint." + item.action.replace(" ", "-"));
     const entry = (item) => h("div", {class: "action"}, actionButton(row, item, "big"), h("p", {class: "hint"}, hint(item)));
     const line = (item) => h("div", {class: "action-line"}, actionButton(row, item), h("span", {class: "hint"}, hint(item)));
@@ -171,13 +171,14 @@
     const label = (tab) => {
       if (tab === "todo" && desk.todo.total) return t("desk.tab.todo") + " " + desk.todo.done + "/" + desk.todo.total;
       if (tab === "changes" && desk.changes.files.length) return t("desk.tab.changes") + " " + desk.changes.files.length;
+      if (tab === "commit") return t("desk.tab.commit") + (desk.commit.written ? "" : " !");
       if (tab === "test") return t("desk.tab.test") + " " + desk.test.passed + "/" + desk.test.total;
       if (tab === "review") return t("desk.tab.review") + (desk.review.n ? " " + desk.review.passes + "/" + desk.review.n : " " + desk.review.rounds.length);
       if (tab === "history") return t("desk.tab.history") + " " + desk.history.length;
       if (tab === "docs") return t("desk.tab.docs") + " " + extra().length;
       return t("desk.tab." + tab);
     };
-    return h("nav", {class: "tabs"}, tabs.filter((tab) => (tab !== "docs" || extra().length) && (tab !== "review" || hasReview()) && (tab !== "test" || desk.test)).map((tab) => {
+    return h("nav", {class: "tabs"}, tabs.filter((tab) => (tab !== "docs" || extra().length) && (tab !== "review" || hasReview()) && (tab !== "test" || desk.test) && (tab !== "commit" || desk.commit)).map((tab) => {
       const button = h("button", {type: "button", class: "tab" + (tab === current ? " on" : "")}, label(tab));
       button.addEventListener("click", () => { current = tab; history.replaceState(null, "", "#" + tab); draw(false); });
       return button;
@@ -220,6 +221,24 @@
     if (d.fixed.length) parts.push(h("details", null, h("summary", {class: "sub"}, t("desk.test.defects.fixed") + " " + d.fixed.length), ...d.fixed.map((item) => one(item, "pass"))));
     for (const part of d.other) parts.push(h("h4", null, part.title), part.doc ? h("article", {class: "md"}, blocks(part.doc.blocks)) : null);
     if (d.odd.length) parts.push(h("p", {class: "hint bad"}, t("desk.test.defects.odd") + " " + d.odd.join(" · ")));
+    return parts;
+  }
+
+  // The commit message of the write-back: what the agent wrote, with the contributor line the harness adds, to copy into the commit.
+  const COMMIT_WARNINGS = {empty: "desk.commit.warn.empty", subject_long: "desk.commit.warn.subject_long", no_blank: "desk.commit.warn.no_blank"};
+  function commit() {
+    const x = desk.commit;
+    const parts = [h("p", {class: "hint top"}, t("desk.commit.hint"))];
+    if (!x.messages.length) return [...parts, h("div", {class: "empty-state"}, h("b", null, t("desk.commit.none")), h("p", {class: "sub"}, x.file))];
+    for (const item of x.messages) {
+      const button = h("button", {type: "button", class: "act", "data-label": t("desk.commit.copy")}, t("desk.commit.copy"));
+      button.addEventListener("click", () => copyCommand(button, item.text));
+      parts.push(h("section", {class: "round"},
+        h("div", {class: "round-head"}, item.repo ? h("strong", null, t("desk.commit.repo", {repo: item.repo})) : h("strong", null, x.repos.join(", ")), " ", button,
+          item.warnings.map((code) => [" ", tag(t(COMMIT_WARNINGS[code]), "hot")])),
+        h("pre", {class: "commit"}, item.text)));
+    }
+    parts.push(h("p", {class: "sub"}, x.coauthor ? t("desk.commit.author", {author: x.coauthor}) : t("desk.commit.noauthor")));
     return parts;
   }
 
@@ -301,6 +320,7 @@
     if (current === "changes") return changes();
     if (current === "review") return review();
     if (current === "test" && desk.test) return testing();
+    if (current === "commit" && desk.commit) return commit();
     if (current === "history") return [h("p", {class: "hint top"}, t("desk.history.hint")), timeline()];
     const docs = extra();
     const name = docs.some((item) => item.name === other) ? other : (docs[0] || {}).name;

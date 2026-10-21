@@ -45,5 +45,8 @@
       "archive",
       "close"
     ]
+  },
+  "commit": {
+    "coauthor": "GitHub Copilot Coding Agents"
   }
 }

@@ -25,7 +25,8 @@ Someone who checks their own work has the same blind spots. A target repository 
 `passes` = counting back from the latest check, the PASSes in a row whose **checked version is exactly the work as it is now**.
 
 - "Exactly" rests on sha256: the result files, `REQ.md` and `PLAN.md` make up the fingerprint together.
-- Not counted in: `TASK.md`, `TODO.md`, `LOG.md`, `.task`, `REQ/`, `REF/`, `REVIEW`, `SNAPSHOT`, the `.diff` files. Updating the progress does not undo a pass.
+- Not counted in: `TASK.md`, `TODO.md`, `LOG.md`, `.task`, `REQ/`, `REF/`, `REVIEW`, `SNAPSHOT`, the `.diff` files, and what promote writes into `DEV/` itself (`*.patch`, `_deleted/`), and what a tool makes (`.DS_Store`, `Thumbs.db`). Updating the progress, or a write-back, does not undo a pass.
+- **After a write-back, or when the task is closed**, the page shows the checks as they stood (the passes in a row on the last version checked), not compared again with files that change afterwards (a draft written after the close, say). The gate that lets a write-back through always counts on the files as they are.
 - Once the work, the requirement or the plan changes, the earlier passes no longer count.
 
 ### 11.4 The limit on checks

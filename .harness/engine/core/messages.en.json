@@ -1145,5 +1145,22 @@
   "desk.test.defects.fixed": "Fixed defects",
   "desk.test.defects.none": "No defects.",
   "desk.test.defects.stale": "marked open, but {env} passed: `task defects sync` marks it fixed",
-  "desk.test.defects.odd": "Not in the form (its status cannot be told):"
+  "desk.test.defects.odd": "Not in the form (its status cannot be told):",
+  "task.test.kind": "{name} is not a test task. `task test record` is for tasks of kind test.",
+  "task.test.env": "`{env}` is not an environment of this test guide. They are: {envs}.",
+  "task.test.rows": "Give one `--row \"criterion::evidence::PASS|FAIL|NEEDS MORE\"` for each criterion of the environment (at least one).",
+  "task.test.row": "A row is `criterion::evidence::PASS|FAIL|NEEDS MORE`, three parts with `::` between and a criterion that is not empty: {row}",
+  "task.test.row_verdict": "The verdict of a row is one of {allowed}: {row}",
+  "task.test.evidence": "The criterion `{criterion}` is PASS but has no evidence. Give the quote or the number from the user's results, or mark the row NEEDS MORE.",
+  "task.test.given_missing": "The file of the user's results was not found: {path}. Save what the user gave back in a file and pass its path with --given-file.",
+  "task.test.given_big": "The file of the user's results is bigger than {kb} KB: {path}. Put the part that matters in a smaller file, and name the big file in it.",
+  "task.test.given_empty": "The file of the user's results is empty: {path}.",
+  "task.test.order": "{env} is recorded, but {earlier}, which comes before it in the guide, has no PASS yet.",
+  "task.test.other_handoff": "The task is handed over for {handed}, not {env}: that handoff stays.",
+  "task.test.next.pass_next": "Update TASK.md and TODO.md. Then hand over the next environment: `{command} task handoff tests --env {env}`. Tell the user and stop.",
+  "task.test.next.pass_done": "Every environment has passed. Update TASK.md and TODO.md, say so, and ask the user whether to close the task (their decision). Offer `generic-capture-knowledge` when the runs taught something about an environment.",
+  "task.test.next.fail": "Add each defect to TEST/defects.md as `## D<n> [open] {env}: <title>` (always [open]), then run `{command} task defects sync`. Update TASK.md and TODO.md. Tell the user to open the development task again (a new round) and give the path of defects.md. Do not hand over another environment.",
+  "task.test.next.more": "List exactly what is missing and how to get it. Update TASK.md and TODO.md. Hand the same environment over again: `{command} task handoff tests --env {env}`.",
+  "desk.test.runs": "runs: {runs}",
+  "desk.test.ignored": "not counted: {files} (the file written last counts)"
 }

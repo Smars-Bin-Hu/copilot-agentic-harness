@@ -103,11 +103,14 @@ def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, A
         guide, envs, results = taskstages.test_results(root, task)
         handed = str((data.get("handoff") or {}).get("env") or "").upper()
         out, at = [], False
+        files = taskstages.env_files(root, task, envs)
         for env in envs:
             verdict, path = results.get(env.upper(), ("", None))
             state = "done" if verdict == "PASS" else "failed" if verdict == "FAIL" else "now" if not at else "todo"
             at = at or state == "now"
-            out.append({"name": env, "verdict": verdict, "state": state, "file": path.name if path else "", "results": read_doc(path) if path else None, "waits": bool(handed) and env.upper() == handed})
+            out.append({"name": env, "verdict": verdict, "state": state, "file": path.name if path else "", "results": read_doc(path) if path else None, "waits": bool(handed) and env.upper() == handed,
+                        "runs": taskstages.verdicts_in(taskstages.read(path)) if path else [],  # every verdict line of the file, in order
+                        "ignored": [other.name for other in files.get(env.upper(), []) if path and other != path]})  # other files of the environment: older, not counted
         folder = tasks.task_dir(root, task)
         return {"guide": read_doc(folder / taskstages.GUIDE), "envs": out, "passed": sum(1 for item in out if item["state"] == "done"), "total": len(out),
                 "defects": defects_of(root, task)}

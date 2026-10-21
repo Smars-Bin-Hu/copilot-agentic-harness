@@ -23,7 +23,7 @@ from typing import Any, Dict
 from core import approval, render, targets, tasks
 from core.paths import repo_root
 
-from . import autorun, boardserve, kbsetup, taskarchive, refs, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap, testdefects
+from . import autorun, boardserve, kbsetup, taskarchive, refs, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
 
 
 def cmd_target_list(args: argparse.Namespace) -> Dict[str, Any]:
@@ -216,6 +216,16 @@ def register_task(subparsers: Any) -> None:
     defects_sync = defects_commands.add_parser("sync", help="mark `[open]` defects `[fixed]` where the verdict of their environment is PASS; the only way a defect is marked fixed")
     defects_sync.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
     defects_sync.set_defaults(handler=lambda a: testdefects.sync(repo_root(), task.resolve(repo_root(), a.task)))
+    test = commands.add_parser("test", help="a test task: record the results of an environment (the script writes the file, the verdict and the status files)")
+    test_commands = test.add_subparsers(dest="test_command", required=True)
+    record = test_commands.add_parser("record", help="add a run to TEST/results-<environment>.md from what the user gave back and one row for each criterion; the verdict is worked out from the rows")
+    record.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+    record.add_argument("--env", required=True, help="the environment, as the test guide names it")
+    record.add_argument("--given-file", required=True, help="a file with the user's results as they gave them (it is copied in whole)")
+    record.add_argument("--row", action="append", default=[], help="`criterion::evidence::PASS|FAIL|NEEDS MORE`, one for each criterion of the environment; PASS needs its evidence")
+    record.add_argument("--run-by", default="", help="who ran it and when, as the user said")
+    record.add_argument("--follow-up", default="", help="one line: what comes next")
+    record.set_defaults(handler=lambda a: testrecord.record(repo_root(), a.task, a.env, a.given_file, a.row, a.run_by, a.follow_up))
     hand = commands.add_parser("handoff", help="the agent hands work to the person that only they can do outside the harness (tests in an environment); the board says it waits for it")
     hand_commands = hand.add_subparsers(dest="handoff_command", required=True)
     hand_tests = hand_commands.add_parser("tests", help="the person is to run the tests of TEST-GUIDE.md in an environment and bring the results back")

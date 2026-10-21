@@ -238,7 +238,9 @@
       const body = env.results ? h("article", {class: "md"}, blocks(env.results.blocks), env.results.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)
         : h("p", {class: "sub"}, env.waits ? t("desk.test.waiting", {env: env.name}) : t("desk.test.noresult"));
       parts.push(h("section", {class: "round " + (env.state === "failed" ? "fail" : env.state === "done" ? "pass" : "")},
-        h("div", {class: "round-head"}, h("strong", null, env.name), " ", verdict, env.file ? [" ", h("span", {class: "sub"}, "TEST/" + env.file)] : null), body));
+        h("div", {class: "round-head"}, h("strong", null, env.name), " ", verdict, env.file ? [" ", h("span", {class: "sub"}, "TEST/" + env.file)] : null,
+          env.runs.length > 1 ? [" ", h("span", {class: "sub"}, t("desk.test.runs", {runs: env.runs.join(" → ")}))] : null,
+          env.ignored.length ? [" ", tag(t("desk.test.ignored", {files: env.ignored.join(", ")}), "hot")] : null), body));
     }
     if (x.defects) parts.push(...defects(x.defects));
     return parts;

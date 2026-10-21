@@ -56,6 +56,24 @@ def write_back(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     return steps_of([{"id": name} for name in ("requirement", "plan", "developing", "writeback", "done")], finished, flags)
 
 
+def verdicts_in(text: str) -> List[str]:
+    """Every `Verdict for <environment>: X` line of a results file, in order, outside code blocks: what the user pasted (it is in a code block) cannot say it."""
+    kept: List[str] = []
+    fence = ""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if fence:
+            if stripped.startswith(fence) and not stripped.strip("`"):
+                fence = ""
+            continue
+        opening = re.match(r"^(`{3,})", stripped)
+        if opening:
+            fence = opening.group(1)
+            continue
+        kept.append(line)
+    return [word.upper() for word in VERDICT.findall("\n".join(kept))]
+
+
 def env_of(stem: str, envs: List[str]) -> str:
     """The environment a results file belongs to: `results-IST.md` is IST's; `results-IST-run2.md` is IST's too, unless the guide has an environment `IST-RUN2`."""
     name = stem[len("results-"):].upper()
@@ -76,14 +94,25 @@ def test_results(root: Path, task: str) -> tuple:
     found: Dict[str, tuple] = {}
     newest: Dict[str, float] = {}
     for path in sorted((folder / "TEST").glob("results-*.md")) if (folder / "TEST").is_dir() else []:
-        verdicts = VERDICT.findall(read(path))
+        verdicts = verdicts_in(read(path))
         env = env_of(path.stem, envs)
         if not verdicts or not env:
             continue
         stamp = path.stat().st_mtime
         if env not in found or stamp >= newest[env]:
-            found[env], newest[env] = (verdicts[-1].upper(), path), stamp
+            found[env], newest[env] = (verdicts[-1], path), stamp
     return guide, envs, found
+
+
+def env_files(root: Path, task: str, envs: List[str]) -> Dict[str, List[Path]]:
+    """Every results file of each environment, `{ENV: [paths]}` (a file with no verdict line is listed too)."""
+    folder = tasks.task_dir(root, task) / "TEST"
+    out: Dict[str, List[Path]] = {}
+    for path in sorted(folder.glob("results-*.md")) if folder.is_dir() else []:
+        env = env_of(path.stem, envs)
+        if env:
+            out.setdefault(env, []).append(path)
+    return out
 
 
 def tests(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:

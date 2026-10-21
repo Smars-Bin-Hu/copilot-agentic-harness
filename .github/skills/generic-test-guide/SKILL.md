@@ -25,18 +25,18 @@ The agent cannot run anything in DEV, IST or QAT. The user does. This skill writ
 4. **Write `REQ.md` and `TODO.md`.** REQ: what is tested (from the development task's requirement), the environments and their order, "done" = the pass criteria of every environment met. TODO: per environment four items: guide written, results received, results judged, files updated. Do not fill the confirmation line of `REQ.md`.
 5. **Write `TEST-GUIDE.md`** at the root of the task folder, from [the template](./templates/TEST-GUIDE.md). The user reads it on the task page (Test tab), so it must be complete without you. Every step is one action with its exact command or job name taken from the diff. Every check has an expected result with a number or a query. Pass criteria are written now, not after the results.
 6. **Hand over one environment at a time**, DEV first: `harness task handoff tests --env DEV`. The board then says the task waits for the user's test results. Give the user the link to the task page, say what to send back, and stop.
-7. **When the user brings results**, follow [Handling the results](./references/results.md).
+7. **When the user brings results**, follow [Handling the results](./references/results.md): you judge each criterion, and `harness task test record` writes the results file, the verdict and the status files.
 
 ## Gotchas
 
 - **Never say a test passed without the user's results.** You cannot run it, and a guide is not a result. Nothing but what the user gave counts as evidence.
 - **Do not invent environment facts.** An unknown host in a guide sends the user to a wrong system. Write UNKNOWN and ask.
 - **Hand over one environment at a time.** IST starts after DEV passes. A guide for all three may be written at once; the handoff is one by one.
-- **Run `harness task handoff clear` before you work on the results.** The board keeps saying "waits for your test results" until you do.
+- **The board says "waits for your test results" until `harness task test record` runs** (it clears the handoff of that environment). If you must ask the user something first, run `harness task handoff clear` yourself.
 - **A defect's status is not yours to set.** You write it `[open]`; `harness task defects sync` marks it `[fixed]` when the results of its environment say PASS (the handoff runs it too). A heading not in the form `## D<n> [open] <environment>: <title>` has no status the board can read.
 - **This task writes no repository.** A failed test is not fixed here: write `TEST/defects.md` (from [the template](./templates/defects.md)) and tell the user to open the development task again (a new round there). Do not copy code into this task.
 - **Facts learned about an environment go to the knowledge base only through a `kb` task.** Offer `generic-capture-knowledge`; do not write `environment.md` here.
-- **Files of the user's results are theirs.** Keep them as given. Your judgement goes beside them, not over them.
+- **The user's results are theirs.** `given.txt` holds them as given; the script copies them whole into the results file. Your judgement is the rows, beside them, not over them. Never write `results-*.md` or `summary.md` by hand.
 
 ## Troubleshooting
 

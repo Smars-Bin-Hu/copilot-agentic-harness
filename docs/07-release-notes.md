@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.28 (2026-10-21)
+
+### Added
+
+- **`harness task test record`: the results of a test environment are written by a script.** The agent used to write `TEST/results-<environment>.md` by hand, and where it put a retest decided whether the board saw it. Now it saves what you gave back in a file, judges each criterion (`--row "criterion::evidence::PASS|FAIL|NEEDS MORE"`), and runs the command. The script adds `## Run N` at the **end** of the file (a retest is a new run in the same file, numbered by the script), works out the **verdict** from the rows (any FAIL: FAIL; else any NEEDS MORE: NEEDS MORE; else PASS), and refuses a PASS row without evidence. It puts your words in as you gave them, in a code block, so nothing you pasted is read as markdown or as a verdict; updates the row of the environment in `TEST/summary.md`, adds one line to `LOG.md` (the agent adds the reason), takes the handoff mark of that environment away, and syncs the defects. It warns when an environment before this one has not passed, or when the task is handed over for another one, and says what the agent does next. What stays the agent's is what is judgement in words: `TASK.md`, `TODO.md`, the defects, the reason in the log.
+- **The Test tab shows the runs** ("runs: FAIL → PASS") and says when another results file of the environment is not counted.
+
+### Changed
+
+- The board reads a verdict only outside code blocks, so a line of your pasted results that says `Verdict for IST: PASS` cannot change it.
+- The skill `generic-test-guide`: the template `templates/results.md` is gone (the script writes the file; it is the one source), and `references/results.md` tells the agent to save your results in `TEST/given.txt`, give the rows and run the script.
+
+**Introductory material**: `docs/02-features.md`, `docs/04-reference.md`, the skill `generic-test-guide`.
+
 ## 1.5.27 (2026-10-21)
 
 ### Added

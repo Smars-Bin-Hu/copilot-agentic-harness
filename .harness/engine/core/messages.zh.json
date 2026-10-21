@@ -1145,5 +1145,22 @@
   "desk.test.defects.fixed": "已修复的缺陷",
   "desk.test.defects.none": "没有缺陷。",
   "desk.test.defects.stale": "标的是 open，但 {env} 已经通过：`task defects sync` 会把它标成 fixed",
-  "desk.test.defects.odd": "格式不对（看不出状态）："
+  "desk.test.defects.odd": "格式不对（看不出状态）：",
+  "task.test.kind": "{name} 不是测试任务。`task test record` 只用于 kind 为 test 的任务。",
+  "task.test.env": "`{env}` 不是这份测试指南里的环境。有：{envs}。",
+  "task.test.rows": "这个环境的每条标准给一个 `--row \"标准::证据::PASS|FAIL|NEEDS MORE\"`（至少一条）。",
+  "task.test.row": "一行是 `标准::证据::PASS|FAIL|NEEDS MORE`，三段用 `::` 隔开，标准不能为空：{row}",
+  "task.test.row_verdict": "一行的结论是 {allowed} 之一：{row}",
+  "task.test.evidence": "标准 `{criterion}` 写了 PASS，但没有证据。给出用户结果里的原话或数字，或者把这一行标成 NEEDS MORE。",
+  "task.test.given_missing": "没找到用户结果的文件：{path}。把用户带回来的内容存成一个文件，用 --given-file 传路径。",
+  "task.test.given_big": "用户结果的文件超过 {kb} KB：{path}。把要紧的部分放进一个小文件，大文件的名字写在里面。",
+  "task.test.given_empty": "用户结果的文件是空的：{path}。",
+  "task.test.order": "{env} 记下了，但指南里排在它前面的 {earlier} 还没有 PASS。",
+  "task.test.other_handoff": "任务现在交接的是 {handed}，不是 {env}：这个交接保留。",
+  "task.test.next.pass_next": "更新 TASK.md 和 TODO.md。然后交接下一个环境：`{command} task handoff tests --env {env}`。告诉用户，然后停下。",
+  "task.test.next.pass_done": "所有环境都通过了。更新 TASK.md 和 TODO.md，说明这一点，问用户要不要关闭任务（他们决定）。如果这几次运行让人了解了某个环境，提议用 `generic-capture-knowledge`。",
+  "task.test.next.fail": "把每个缺陷写进 TEST/defects.md：`## D<n> [open] {env}: <标题>`（永远是 [open]），然后运行 `{command} task defects sync`。更新 TASK.md 和 TODO.md。告诉用户重新打开开发任务（新的一轮），并给出 defects.md 的路径。不要交接别的环境。",
+  "task.test.next.more": "写清楚缺什么、怎么拿到。更新 TASK.md 和 TODO.md。把同一个环境再交接一次：`{command} task handoff tests --env {env}`。",
+  "desk.test.runs": "每次运行：{runs}",
+  "desk.test.ignored": "没有计入：{files}（算最后写的那个文件）"
 }

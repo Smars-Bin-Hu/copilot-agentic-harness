@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.23 (2026-10-21)
+
+### Added
+
+- **The card of a robot in the lobby has the buttons of the list.** Point at a robot: the card shows the task as before, and under it the same buttons as the row of the list (approve plan, autorun on, pause, close, and the rest), drawn by the same code, so they are grey while the agent is at work, copy their command on a page that is not served, and act on a served one. The card stays while the mouse is on it (a short delay lets the mouse cross from the robot to the card). It is drawn again every time the board asks the server, unless the mouse is on it; when its robot changes state, it goes away.
+- Keyboard: Enter on a robot opens the task page, where the buttons are too; the buttons of the card are for the mouse.
+
+**Introductory material**: `docs/02-features.md` and `harness-rookie-quick-start` (what you get, part 5) got a clause.
+
 ## 1.5.22 (2026-10-21)
 
 ### Changed

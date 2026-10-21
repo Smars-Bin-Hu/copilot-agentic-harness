@@ -97,8 +97,13 @@
 @keyframes lbhop{0%{transform:translateY(0)}45%{transform:translateY(-12px)}100%{transform:translateY(0)}}
 .lb-slot:hover .lb-body,.lb-slot:focus .lb-body{stroke:var(--c)}
 .lb-slot:hover .lb-nm,.lb-slot:focus .lb-nm{color:#fff}
-.lb-card{position:absolute;z-index:5;width:250px;background:#10172e;border:1px solid #2c3b6b;border-radius:12px;padding:11px 13px;color:#dbe4ff;font-size:12.5px;box-shadow:0 10px 30px rgba(0,0,0,.5);pointer-events:none;opacity:0;transform:translateY(6px);transition:opacity .15s,transform .15s}
-.lb-card.on{opacity:1;transform:none}
+.lb-card{position:absolute;z-index:5;width:250px;background:#10172e;border:1px solid #2c3b6b;border-radius:12px;padding:11px 13px;color:#dbe4ff;font-size:12.5px;box-shadow:0 10px 30px rgba(0,0,0,.5);opacity:0;transform:translateY(6px);transition:opacity .15s,transform .15s}
+.lb-card{pointer-events:none}
+.lb-card.on{opacity:1;transform:none;pointer-events:auto}
+.lb-card::after{content:"";position:absolute;left:0;right:0;bottom:-12px;height:12px}.lb-card.below::after{bottom:auto;top:-12px}
+.lb-acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;padding-top:8px;border-top:1px solid #223055}
+.lb-card .act{margin:0;background:#161f3d;color:#dbe4ff;border-color:#2c3b6b;font-size:12px}
+.lb-card .act:hover{border-color:#8fa0c8}.lb-card .act.hot{border-color:#f0a02e}.lb-card .act.locked:hover{border-color:#2c3b6b}
 .lb-card b{display:block;font-size:13.5px;color:#fff;margin-bottom:2px;overflow-wrap:anywhere}
 .lb-k{color:#8fa0c8}
 .lb-mini{display:flex;align-items:center;margin-top:8px}

@@ -110,15 +110,27 @@ const Lobby = (function () {
         lines.push(h("div", {class: "lb-mini"}, dots), h("div", {class: "lb-mini-names"}, h("span", null, here.label || t("stage." + here.id)),
           h("span", null, [s.round > 1 ? t("stage.round", {round: s.round}) : "", reviewed].filter(Boolean).join(" · "))));
       }
+      // The buttons of the list, on the card: the same ones, grey while the agent is at work. The card stays while the mouse is on it.
+      if (row.actions && row.actions.length) lines.push(h("div", {class: "lb-acts"}, row.actions.map((item) => actionButton(row, item))));
       card.replaceChildren(...lines);
+      clearTimeout(leaveTimer);
+      current = entry;
       const sceneBox = scene.getBoundingClientRect(), at = entry.slot.getBoundingClientRect();
       let x = at.left - sceneBox.left + at.width / 2 - 125, y = at.top - sceneBox.top - card.offsetHeight - 6;
-      if (y < 6) y = at.bottom - sceneBox.top + 4;
+      const below = y < 6;
+      if (below) y = at.bottom - sceneBox.top + 4;
+      card.classList.toggle("below", below);
       card.style.left = Math.max(8, Math.min(sceneBox.width - 258, x)) + "px";
       card.style.top = y + "px";
       card.classList.add("on");
     }
-    const hide = () => card.classList.remove("on");
+    let leaveTimer = 0, current = null;
+    const hide = () => { clearTimeout(leaveTimer); card.classList.remove("on"); current = null; };
+    const later = () => { clearTimeout(leaveTimer); leaveTimer = setTimeout(hide, 220); };  // time to cross from the robot to its card
+    card.addEventListener("mouseenter", () => clearTimeout(leaveTimer));
+    card.addEventListener("mouseleave", later);
+    card.addEventListener("focusin", () => clearTimeout(leaveTimer));
+    card.addEventListener("focusout", later);
 
     function place(entry, zone) {
       if (entry.zone !== zone) { rowsOf[zone].append(entry.slot); entry.zone = zone; }
@@ -190,8 +202,8 @@ const Lobby = (function () {
             entry = {slot, bot, row, pose, zone: "", label};
             slot.addEventListener("mouseenter", () => show(entry));
             slot.addEventListener("focus", () => show(entry));
-            slot.addEventListener("mouseleave", hide);
-            slot.addEventListener("blur", hide);
+            slot.addEventListener("mouseleave", later);
+            slot.addEventListener("blur", later);
             const open = () => { const href = options.href(entry.row); if (href) window.location.href = href; };
             slot.addEventListener("click", open);
             slot.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); });
@@ -211,6 +223,11 @@ const Lobby = (function () {
       });
       if (!still) { changed.forEach(pulse); came.forEach(enter); }
       gone.forEach(leave);
+      // The card shows what the task is now: draw it again (unless the mouse is on it, which would take a click away), or take it away when its robot moves.
+      if (current && card.classList.contains("on") && !card.matches(":hover")) {
+        const same = slots.get(current.row.name);
+        if (same && !changed.includes(same)) show(same); else hide();
+      }
       ready = true;
       count.textContent = agents.length ? t("board.lobby.count", {count: agents.length}) : t("board.lobby.none");
       if (!agents.length && !empty.firstChild) {

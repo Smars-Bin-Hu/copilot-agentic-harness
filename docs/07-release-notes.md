@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.19 (2026-10-20)
+
+### Added
+
+- **A robot comes in and goes out.** A task that is opened (or opened again) drops in from above, springs, and a ring spreads from it. A task that is closed lifts, shrinks and fades (0.5 s); then the others slide to close the gap. Before, a robot appeared and disappeared at once and the others jumped. The first draw of the page, a page that is not kept fresh, and the system setting to reduce motion show none of this.
+
+**Testing**: the automatic tests pass on the Mac. A real Chrome was driven through a copy of the harness: one task opened and closed again, a frame taken in the middle of each (the ring and the drop; the robot half faded with the count already one less), no error logged. Not watched on Windows.
+
+**Introductory material**: none changed.
+
 ## 1.5.18 (2026-10-20)
 
 ### Added

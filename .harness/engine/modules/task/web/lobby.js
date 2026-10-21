@@ -135,53 +135,83 @@ const Lobby = (function () {
       entry.bot.animate([{transform: "scale(.86,1.1)"}, {transform: "scale(1.08,.94)", offset: 0.4}, {transform: "none"}], {duration: 600, easing: "cubic-bezier(.3,1.5,.5,1)"});
     }
 
-    function update(rows, live) {
-      const before = new Map();
-      if (!still) for (const [name, entry] of slots) before.set(name, entry.slot.getBoundingClientRect());
-      const changed = [];
-      const agents = rows.filter((row) => row.status === "open");
-      const names = new Set(agents.map((row) => row.name));
-      for (const [name, entry] of slots) if (!names.has(name)) { entry.slot.remove(); slots.delete(name); }
-      agents.forEach((row, index) => {
-        const pose = poseOf(row, live);
-        let entry = slots.get(row.name);
-        if (!entry) {
-          const bot = robot(pose, row.kind, ((index * 0.37) % 3).toFixed(2));
-          const label = h("div", {class: "lb-nm"}, row.name);
-          const slot = h("div", {class: "lb-slot", tabindex: "0", role: "link", "aria-label": row.name}, bot, label);
-          entry = {slot, bot, row, pose, zone: "", label};
-          slot.addEventListener("mouseenter", () => show(entry));
-          slot.addEventListener("focus", () => show(entry));
-          slot.addEventListener("mouseleave", hide);
-          slot.addEventListener("blur", hide);
-          const open = () => { const href = options.href(entry.row); if (href) window.location.href = href; };
-          slot.addEventListener("click", open);
-          slot.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); });
-          slots.set(row.name, entry);
-        }
-        entry.row = row;
-        if (entry.pose !== pose) {
-          if (entry.pose) changed.push(entry);
-          entry.bot.setAttribute("class", "lb-bot lb-pose-" + pose);
-          entry.bot._mark.textContent = pose === "tests" ? "?" : "!";
-          entry.pose = pose;
-        }
-        place(entry, ZONE_OF[pose]);
-      });
+    // The robots slide to where they now are, whatever changed the layout (a robot that came, went or changed zone).
+    function flip(change) {
+      const was = new Map();
+      if (!still) for (const [name, entry] of slots) was.set(name, entry.slot.getBoundingClientRect());
+      change();
+      if (still) return;
+      for (const [name, entry] of slots) {
+        const before = was.get(name);
+        if (!before || !entry.slot.animate) continue;
+        const now = entry.slot.getBoundingClientRect(), dx = before.left - now.left, dy = before.top - now.top;
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) entry.slot.animate([{transform: "translate(" + dx + "px," + dy + "px)"}, {transform: "none"}], {duration: 700, easing: "cubic-bezier(.2,.8,.2,1)"});
+      }
+    }
+
+    function zones() {
       for (const [id] of ZONES) {
         const here = [...slots.values()].filter((entry) => entry.zone === id).length;
-        zoneBox[id].box.hidden = !here;
-        zoneBox[id].name.textContent = t(zoneBox[id].label) + " · " + here;
+        zoneBox[id].box.hidden = !rowsOf[id].childElementCount;  // a robot on its way out still holds its zone open
+        zoneBox[id].name.textContent = t(zoneBox[id].label) + " \u00b7 " + here;
       }
-      if (!still) {
-        for (const [name, entry] of slots) {
-          const was = before.get(name);
-          if (!was || !entry.slot.animate) continue;
-          const now = entry.slot.getBoundingClientRect(), dx = was.left - now.left, dy = was.top - now.top;
-          if (Math.abs(dx) > 2 || Math.abs(dy) > 2) entry.slot.animate([{transform: "translate(" + dx + "px," + dy + "px)"}, {transform: "none"}], {duration: 700, easing: "cubic-bezier(.2,.8,.2,1)"});
-        }
-        changed.forEach(pulse);
-      }
+    }
+
+    // A robot that comes drops in from above and springs; one that goes lifts, shrinks and fades, and then the others close the gap.
+    function enter(entry) {
+      if (!entry.slot.animate) return;
+      entry.slot.animate([{opacity: 0, transform: "translateY(-38px) scale(.5)"}, {opacity: 1, transform: "translateY(4px) scale(1.06)", offset: 0.7}, {opacity: 1, transform: "none"}], {duration: 650, easing: "cubic-bezier(.2,.8,.3,1)"});
+      pulse(entry);
+    }
+
+    function leave(entry) {
+      hide();
+      const slot = entry.slot;
+      if (still || !slot.animate) { flip(() => { slot.remove(); zones(); }); return; }
+      slot.style.pointerEvents = "none";
+      slot.animate([{opacity: 1, transform: "none"}, {opacity: 0, transform: "translateY(-30px) scale(.6)"}], {duration: 500, easing: "ease-in", fill: "forwards"}).onfinish = () => flip(() => { slot.remove(); zones(); });
+    }
+
+    let ready = false;  // the first draw shows the robots where they are; it does not bring them in
+
+    function update(rows, live) {
+      const changed = [], came = [], gone = [];
+      const agents = rows.filter((row) => row.status === "open");
+      const names = new Set(agents.map((row) => row.name));
+      flip(() => {
+        for (const [name, entry] of slots) if (!names.has(name)) { gone.push(entry); slots.delete(name); }
+        agents.forEach((row, index) => {
+          const pose = poseOf(row, live);
+          let entry = slots.get(row.name);
+          if (!entry) {
+            const bot = robot(pose, row.kind, ((index * 0.37) % 3).toFixed(2));
+            const label = h("div", {class: "lb-nm"}, row.name);
+            const slot = h("div", {class: "lb-slot", tabindex: "0", role: "link", "aria-label": row.name}, bot, label);
+            entry = {slot, bot, row, pose, zone: "", label};
+            slot.addEventListener("mouseenter", () => show(entry));
+            slot.addEventListener("focus", () => show(entry));
+            slot.addEventListener("mouseleave", hide);
+            slot.addEventListener("blur", hide);
+            const open = () => { const href = options.href(entry.row); if (href) window.location.href = href; };
+            slot.addEventListener("click", open);
+            slot.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); });
+            slots.set(row.name, entry);
+            if (ready) came.push(entry);
+          }
+          entry.row = row;
+          if (entry.pose !== pose) {
+            changed.push(entry);
+            entry.bot.setAttribute("class", "lb-bot lb-pose-" + pose);
+            entry.bot._mark.textContent = pose === "tests" ? "?" : "!";
+            entry.pose = pose;
+          }
+          place(entry, ZONE_OF[pose]);
+        });
+        zones();
+      });
+      if (!still) { changed.forEach(pulse); came.forEach(enter); }
+      gone.forEach(leave);
+      ready = true;
       count.textContent = agents.length ? t("board.lobby.count", {count: agents.length}) : t("board.lobby.none");
       if (!agents.length && !empty.firstChild) {
         const idle = robot("idle", "other", 0);

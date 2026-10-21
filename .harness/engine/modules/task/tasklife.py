@@ -230,6 +230,8 @@ def last_event(data: Dict[str, Any], *names: str) -> str:
     return next((event.get("at", "") for event in reversed(data.get("events") or []) if event.get("what") in names), "")
 
 
+HANDOFFS = ("tests",)  # work for the person outside the harness; `task handoff` sets the mark, `task handoff clear` takes it away
+ENV_LENGTH = 40
 GO_MARKS = ("go-plan", "go-promote", "go-recover", "go-review")  # an approval was given and the agent has not been told (the next prompt takes the mark away)
 
 
@@ -260,6 +262,9 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
                 return {"why": "review", "since": last_event(data, "review") or updated}
     except Exception:  # noqa: BLE001 - a list must not fail over one task's checks
         pass
+    handed = data.get("handoff")
+    if isinstance(handed, dict) and handed.get("what") in HANDOFFS and handed.get("since"):
+        return {"why": str(handed["what"]), "since": str(handed["since"])}  # the agent handed work to the person that only they can do: it stays until the agent clears it
     mark = data.get("waiting")
     if isinstance(mark, dict) and mark.get("since"):
         if mark.get("why") in GO_MARKS:
@@ -310,11 +315,40 @@ def waiting_text(data: Dict[str, Any], why: str) -> str:
     if not why:
         return ""
     text = messages.text(f"task.waiting.{why}")
+    if why in HANDOFFS and (data.get("handoff") or {}).get("env"):
+        text += say("note.brackets", text=data["handoff"]["env"])
     if why == "autorun":
         ended = (data.get("autorun") or {}).get("stopped") or {}
         why = messages.text(f"autorun.why.{ended.get('why') or 'done'}")
         text += say("note.brackets", text=say("note.detail", what=why, detail=ended["detail"]) if ended.get("detail") else why)
     return text
+
+
+def handoff(root: Path, raw_task: str, what: str, env: str) -> Dict[str, Any]:
+    """The agent hands work to the person that only they can do outside the harness (tests in an environment): the board says so until `handoff_clear`."""
+    env = " ".join(str(env or "").split())
+    if what not in HANDOFFS:
+        raise CommandError(say("task.handoff.what", what=what, allowed=", ".join(HANDOFFS)))
+    if not env or len(env) > ENV_LENGTH:
+        raise CommandError(say("task.handoff.env", limit=ENV_LENGTH))
+    task = task_ops.resolve(root, raw_task)
+    with task_ops.locked(root, task) as data:
+        task_ops.require_open(data)
+        data["handoff"] = {"what": what, "env": env, "since": utc_now()}
+        task_ops.note(data, "handoff", f"{what} {env}")
+    return {"task": task, "handoff": what, "env": env, "next": say("task.handoff.next")}
+
+
+def handoff_clear(root: Path, raw_task: str) -> Dict[str, Any]:
+    """The person came back with the result: the agent takes the mark away before it works on it."""
+    task = task_ops.resolve(root, raw_task)
+    with task_ops.locked(root, task) as data:
+        task_ops.require_open(data)
+        found = data.pop("handoff", None)
+        if not found:
+            raise CommandError(say("task.handoff.none", name=task_ops.name_of(task)))
+        task_ops.note(data, "handoff-clear", f"{found.get('what', '')} {found.get('env', '')}".strip())
+    return {"task": task, "cleared": True, "next": say("task.handoff.cleared")}
 
 
 def paused_since(data: Dict[str, Any]) -> str:

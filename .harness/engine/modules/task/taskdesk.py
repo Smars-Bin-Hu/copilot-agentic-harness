@@ -15,7 +15,7 @@ from core.paths import cli_command, utc_now
 
 from . import common, mdtree, task as task_ops, taskboard, taskinsight, tasklife, taskreview
 
-FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
+FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
 MAX_DOC_BYTES = 400_000  # a bigger document is shown cut, with a note
 MAX_DIFF_LINES = 3000
 

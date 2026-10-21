@@ -1060,5 +1060,14 @@
   "reinstall.next.dry": "什么都没有复制。把这个给用户看：会复制什么、跳过什么和原因、旧的那份里改过但不会搬的文件。然后请用户先关掉旧那份的 VS Code 窗口，再在自己的终端用同一条命令加 --apply 运行。",
   "reinstall.person.dry": "什么都没有复制。先关掉旧那份的 VS Code 窗口，再用同一条命令加 --apply 运行。",
   "reinstall.next.done": "已复制；旧的那份没有改动。看 `checked`：doctor 的每个 [ERROR] 都要处理。doctor 提示短命令指向另一份时，重做 /harness-rookie-get-me-ready 的第 1 步。新开的对话是新会话，要接着做任务得 `task open <名字>`；只有旧对话会自己认出任务。用户确认一切正常后，才删旧的那份。",
-  "reinstall.next.failed": "有几项没复制成功（见 `failed`）。排除原因后再运行同一条命令：已经复制的会跳过，其余的接着搬。"
+  "reinstall.next.failed": "有几项没复制成功（见 `failed`）。排除原因后再运行同一条命令：已经复制的会跳过，其余的接着搬。",
+  "task.waiting.tests": "等你的测试结果",
+  "task.handoff.what": "不认识的交接 `{what}`。可以用：{allowed}。",
+  "task.handoff.env": "用 --env 给出环境：一个短名字，比如 DEV，最多 {limit} 个字符。",
+  "task.handoff.next": "看板现在会说任务在等用户的测试结果。告诉用户：在任务页的 docs 页签里打开 TEST-GUIDE.md，照着跑测试，把结果带回这里。然后停下。用户带结果回来时，先运行 `{command} task handoff clear`。",
+  "task.handoff.none": "任务 {name} 没有要清除的交接。",
+  "task.handoff.cleared": "标记已清除。按用户给的原样保存结果，对照通过标准判断，再更新任务文件。",
+  "promote.done.test_offer": "下一步是在各环境（DEV、IST、QAT）测试。用技能 `generic-test-guide` 向用户推荐开一个测试任务（它会先问）。",
+  "desk.wait.tests": "在所写的环境里照 TEST-GUIDE.md（docs 页签）跑测试，再到 VS Code 里把结果带回给 agent。比如这样说：",
+  "desk.tests.prompt": "这是测试结果：（贴输出、数字和任何意外）。"
 }

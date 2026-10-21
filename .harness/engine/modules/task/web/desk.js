@@ -97,9 +97,9 @@
   function quiet() {
     if (desk.paused_since) return {title: t("desk.actions.paused"), hint: t("desk.actions.paused.hint")};
     const why = desk.waiting_why;
-    if (desk.waiting && (["stopped", "cancelled", "autorun"].includes(why) || why.startsWith("go-"))) {
+    if (desk.waiting && (["stopped", "cancelled", "autorun", "tests"].includes(why) || why.startsWith("go-"))) {
       return {title: desk.waiting.charAt(0).toUpperCase() + desk.waiting.slice(1), hint: t("desk.wait." + why),
-        prompt: why.startsWith("go-") ? t("desk.go." + why.slice(3)) : ""};
+        prompt: why.startsWith("go-") ? t("desk.go." + why.slice(3)) : why === "tests" ? t("desk.tests.prompt") : ""};
     }
     return {title: t("desk.actions.none"), hint: t("desk.actions.none.hint")};
   }

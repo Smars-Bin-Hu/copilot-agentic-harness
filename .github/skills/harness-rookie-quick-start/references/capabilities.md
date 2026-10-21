@@ -14,7 +14,7 @@ You get an answer with its sources, a root cause with a chain of evidence, or a 
 
 You say: "In the orders repository, keep the latest row per id."
 
-A plan you approve, changes in a safe copy, a dry run you read in full, then a new branch you commit. Several tasks can write to the same repository in turn. If a write-back fails halfway, one command puts the repository back.
+A plan you approve, changes in a safe copy, a dry run you read in full, then a new branch you commit. Several tasks can write to the same repository in turn. If a write-back fails halfway, one command puts the repository back. After the PR, the agent writes a test guide for DEV, IST and QAT (you read it on the board), you run it and bring the results back, and the board says the task waits for them.
 
 ## 3. Check the work
 

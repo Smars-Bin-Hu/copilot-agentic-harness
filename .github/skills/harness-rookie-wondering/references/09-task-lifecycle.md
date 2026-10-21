@@ -74,6 +74,8 @@ Key points:
 
 A `task open` after a write-back starts a new round: the work of the last round moves to `DEV_r<n>/`, the plan to `PLAN_r<n>.md`, and a new plan and a new approval are needed.
 
+Testing in DEV, IST and QAT is **not** another round. It is a new task of kind `test` (`generic-test-guide`): nothing in it is written back, the agent cannot run anything in those environments, and what it waits for is you. It writes `TEST-GUIDE.md`, calls `task handoff tests --env DEV` so the board says "waits for your test results", and judges what you bring. A failed test goes back to the development task as a new round.
+
 ### 9.7 Snapshots at the gates
 
 When the plan is approved, before every check and before the dry run of a write-back, a copy of the work is saved to `SNAPSHOT/` by itself. When something is broken, the version of that moment can be found again. They are kept 14 days by default.

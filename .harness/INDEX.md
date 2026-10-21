@@ -30,6 +30,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/skills/generic-goal-driven/` | The goal-driven flow for long tasks. Started only by the user, with `/generic-goal-driven` |
 | `.github/skills/generic-mapreduce/` | Reading in parallel chunks, handed to read-only mappers. Started only by the user, with `/generic-mapreduce` |
 | `.github/skills/generic-build-new-skill/` | The scaffold for a new skill, and how to check (`skill check`) and test it; repairing the form of an existing skill (`references/repair.md`) |
+| `.github/skills/generic-test-guide/` | After a write-back: opens a `test` task, writes `TEST-GUIDE.md` for DEV, IST and QAT (expected results, what to send back), hands one environment at a time to the user (`task handoff tests`), then judges the results and records them in `TEST/`, `LOG.md`, `TASK.md`, `TODO.md`. The agent asks first |
 | `.github/skills/generic-impact-analysis/` | Before a plan: where the names a change touches are used, in every target repository and the knowledge base (`target refs`); writes `IMPACT.md` in the task folder |
 | `.github/skills/generic-workflow-design/` | Designs an agentic workflow from a repeated manual routine and 2-3 finished examples; writes `WORKFLOW-DESIGN.md` for the user to approve; builds nothing. Asks the user first |
 | `.github/skills/generic-workflow-build/` | Builds the skills of an approved design: unit skills, an orchestration skill, scripts with tests, a replay test. Started only by the user, with `/generic-workflow-build` |

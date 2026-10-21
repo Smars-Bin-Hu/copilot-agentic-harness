@@ -6,6 +6,7 @@
   task status|fetch|delete|diff|set-branch|promote|close|report      the work on a task (task.py)
   task autorun on|off|status                 autorun, beta: down TODO.md without a person; on is a person at a terminal (autorun.py)
   task pause|resume                          a person puts a task aside and takes it back (tasklife.py)
+  task handoff tests --env E | clear         the agent hands the tests of an environment to the person; the board says it waits (tasklife.py)
   task approve-plan|confirm-req|approve-promote|recover  a person at a terminal
   task review start|status                   independent checks, `[review]=n` (taskreview.py); extend|waive: a person at a terminal
   task snapshot list|prune                   the copies made at the gates (tasksnap.py)
@@ -175,6 +176,15 @@ def register_task(subparsers: Any) -> None:
     add("recover", "the person puts the repositories back after a task promote stopped halfway (terminal only)", lambda a: task.recover(repo_root(), a.task)).set_defaults(person_only=True)
     add("pause", "the person puts the task aside: the board stops saying it waits, the time aside is not counted as waiting (terminal only)", lambda a: tasklife.pause(repo_root(), a.task)).set_defaults(person_only=True)
     add("resume", "the person takes a task back that was put aside (terminal only); a prompt in the task's session does the same", lambda a: tasklife.resume(repo_root(), a.task)).set_defaults(person_only=True)
+    hand = commands.add_parser("handoff", help="the agent hands work to the person that only they can do outside the harness (tests in an environment); the board says it waits for it")
+    hand_commands = hand.add_subparsers(dest="handoff_command", required=True)
+    hand_tests = hand_commands.add_parser("tests", help="the person is to run the tests of TEST-GUIDE.md in an environment and bring the results back")
+    hand_tests.add_argument("--env", required=True, help="the environment, for example DEV")
+    hand_tests.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+    hand_tests.set_defaults(handler=lambda a: tasklife.handoff(repo_root(), a.task, "tests", a.env))
+    hand_clear = hand_commands.add_parser("clear", help="the results are back: take the mark away, then work on them")
+    hand_clear.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+    hand_clear.set_defaults(handler=lambda a: tasklife.handoff_clear(repo_root(), a.task))
     auto = commands.add_parser("autorun", help="autorun (beta): the agent goes down TODO.md by itself and stops where a person is needed")
     auto_commands = auto.add_subparsers(dest="autorun_command", required=True)
 

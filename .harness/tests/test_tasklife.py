@@ -316,6 +316,30 @@ class ListTests(LifeCase):
             data["paused"] = {"since": "2026-10-20T00:00:00+00:00"}
         self.assertFalse(self.listed()["tasks"][0]["active"], "a task put aside is not at work")
 
+    def test_a_handoff_of_tests_is_what_the_board_says_until_it_is_cleared(self) -> None:
+        self.new("job", "test")
+        found = self.cli_json("task", "handoff", "tests", "--env", "DEV", "--task", "job")
+        self.assertEqual((found["handoff"], found["env"]), ("tests", "DEV"))
+        row = self.listed()["tasks"][0]
+        self.assertEqual((row["waiting_why"], row["waiting"]), ("tests", "等你的测试结果（DEV）"))
+        self.assertEqual(self.listed()["waiting"], 1)
+        with task_ops.locked(self.root, f"{BASE}/job") as data:  # the agent stops: that must not hide what the person is to do
+            data["waiting"] = {"since": "2026-10-20T00:00:00+00:00", "why": "stopped"}
+        self.assertEqual(self.listed()["tasks"][0]["waiting_why"], "tests")
+        self.cli_json("task", "handoff", "clear", "--task", "job")
+        self.assertEqual(self.listed()["tasks"][0]["waiting_why"], "stopped", "what is left is the plain stop of the agent")
+        self.assertEqual([item["what"] for item in self.data("job")["events"] if item["what"].startswith("handoff")], ["handoff", "handoff-clear"])
+
+    def test_a_handoff_asks_for_an_environment_and_is_cleared_only_when_there_is_one(self) -> None:
+        self.new("job", "test")
+        self.refused("task", "handoff", "tests", "--env", " ", "--task", "job")
+        self.refused("task", "handoff", "tests", "--env", "x" * 41, "--task", "job")
+        self.refused("task", "handoff", "clear", "--task", "job")
+        self.cli_json("task", "handoff", "tests", "--env", "QAT", "--task", "job")
+        with task_ops.locked(self.root, f"{BASE}/job") as data:
+            data["paused"] = {"since": "2026-10-20T00:00:00+00:00"}
+        self.assertEqual(self.listed()["tasks"][0]["waiting"], "", "a task put aside waits for nobody")
+
     def test_a_dry_run_and_a_broken_promote_are_named(self) -> None:
         self.new("job", "dev")
         for state, text in (("dry_run", "回写等你批准"), ("partial", "promote 中途出错，等你恢复")):

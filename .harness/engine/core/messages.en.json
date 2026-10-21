@@ -1060,5 +1060,14 @@
   "reinstall.next.dry": "Nothing was copied. Show this to the user: what would be copied, what is skipped and why, and the files changed in the old copy that are not carried. Then ask the user to close the VS Code windows of the old copy and run the same command with --apply in their own terminal.",
   "reinstall.person.dry": "Nothing was copied. Close the VS Code windows of the old copy, then run the same command with --apply.",
   "reinstall.next.done": "Copied; the old copy is not changed. Check `checked`: every doctor [ERROR] must be fixed. When doctor warns that the short command points at another copy, redo step 1 of /harness-rookie-get-me-ready. A new chat is a new session: it must run `task open <name>` to go on with a task; only an old chat finds its task by itself. Delete the old copy only when the user has seen that all works.",
-  "reinstall.next.failed": "Some items could not be copied (see `failed`). Fix the cause, then run the same command again: what was copied is skipped, the rest goes over."
+  "reinstall.next.failed": "Some items could not be copied (see `failed`). Fix the cause, then run the same command again: what was copied is skipped, the rest goes over.",
+  "task.waiting.tests": "waits for your test results",
+  "task.handoff.what": "Unknown handoff `{what}`. Allowed: {allowed}.",
+  "task.handoff.env": "Give the environment with --env: a short name such as DEV, up to {limit} characters.",
+  "task.handoff.next": "The board now says the task waits for the user's test results. Tell the user to open TEST-GUIDE.md on the task's page (the docs tab), run the tests, and bring the results back here. Then stop. When they do, run `{command} task handoff clear` first.",
+  "task.handoff.none": "Task {name} has no handoff to clear.",
+  "task.handoff.cleared": "The mark is gone. Save the results as the user gave them, judge them against the pass criteria, then update the task files.",
+  "promote.done.test_offer": "The next step is testing in the environments (DEV, IST, QAT). Offer the user a test task with the skill `generic-test-guide` (it asks first). ",
+  "desk.wait.tests": "Run the tests in TEST-GUIDE.md (the docs tab) in the environment named, then bring the results back to the agent in VS Code. A message such as:",
+  "desk.tests.prompt": "Here are the test results: (paste the output, numbers and anything unexpected)."
 }

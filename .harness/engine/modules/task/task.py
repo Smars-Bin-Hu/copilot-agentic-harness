@@ -680,6 +680,8 @@ def promoted_text(result: Dict[str, Any], record: Dict[str, Any]) -> str:
     for repo in direct:
         key = "promote.done.kb" if has_remote(repo["path"]) else "promote.done.kb.local"  # nothing to push to: say nothing of a push
         parts.append(say(key, name=repo["name"], base_ref=repo["base_ref"], commit=str(repo.get("commit", ""))[:12]))
+    if others:
+        parts.append(say("promote.done.test_offer"))
     return "".join(parts) + say("promote.done.patch", patch=record["patch"])
 
 

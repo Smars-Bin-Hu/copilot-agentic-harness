@@ -23,7 +23,7 @@ from typing import Any, Dict
 from core import approval, render, targets, tasks
 from core.paths import repo_root
 
-from . import autorun, boardserve, kbsetup, taskarchive, refs, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap
+from . import autorun, boardserve, kbsetup, taskarchive, refs, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap, testdefects
 
 
 def cmd_target_list(args: argparse.Namespace) -> Dict[str, Any]:
@@ -211,6 +211,11 @@ def register_task(subparsers: Any) -> None:
     pause.set_defaults(person_only=True)
     pause.add_argument("--force", action="store_true", help="even while the agent is in the middle of a turn")
     add("resume", "the person takes a task back that was put aside (terminal only); a prompt in the task's session does the same", lambda a: tasklife.resume(repo_root(), a.task)).set_defaults(person_only=True)
+    defects = commands.add_parser("defects", help="the defects of a test task (TEST/defects.md): their status follows the results")
+    defects_commands = defects.add_subparsers(dest="defects_command", required=True)
+    defects_sync = defects_commands.add_parser("sync", help="mark `[open]` defects `[fixed]` where the verdict of their environment is PASS; the only way a defect is marked fixed")
+    defects_sync.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+    defects_sync.set_defaults(handler=lambda a: testdefects.sync(repo_root(), task.resolve(repo_root(), a.task)))
     hand = commands.add_parser("handoff", help="the agent hands work to the person that only they can do outside the harness (tests in an environment); the board says it waits for it")
     hand_commands = hand.add_subparsers(dest="handoff_command", required=True)
     hand_tests = hand_commands.add_parser("tests", help="the person is to run the tests of TEST-GUIDE.md in an environment and bring the results back")

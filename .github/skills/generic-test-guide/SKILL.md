@@ -33,7 +33,8 @@ The agent cannot run anything in DEV, IST or QAT. The user does. This skill writ
 - **Do not invent environment facts.** An unknown host in a guide sends the user to a wrong system. Write UNKNOWN and ask.
 - **Hand over one environment at a time.** IST starts after DEV passes. A guide for all three may be written at once; the handoff is one by one.
 - **Run `harness task handoff clear` before you work on the results.** The board keeps saying "waits for your test results" until you do.
-- **This task writes no repository.** A failed test is not fixed here: write `TEST/defects.md` and tell the user to open the development task again (a new round there). Do not copy code into this task.
+- **A defect's status is not yours to set.** You write it `[open]`; `harness task defects sync` marks it `[fixed]` when the results of its environment say PASS (the handoff runs it too). A heading not in the form `## D<n> [open] <environment>: <title>` has no status the board can read.
+- **This task writes no repository.** A failed test is not fixed here: write `TEST/defects.md` (from [the template](./templates/defects.md)) and tell the user to open the development task again (a new round there). Do not copy code into this task.
 - **Facts learned about an environment go to the knowledge base only through a `kb` task.** Offer `generic-capture-knowledge`; do not write `environment.md` here.
 - **Files of the user's results are theirs.** Keep them as given. Your judgement goes beside them, not over them.
 

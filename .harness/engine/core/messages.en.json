@@ -1139,5 +1139,11 @@
   "desk.test.next": "next",
   "desk.test.todo": "later",
   "desk.test.waiting": "Run the tests of {env} in TEST-GUIDE.md and bring the results back to the agent in VS Code.",
-  "desk.test.defects": "Defects found"
+  "task.defects.odd": "A defect heading is not in the form `## D<n> [open] <environment>: <title>`: {line}. Its status cannot be told.",
+  "task.defects.by_hand": "{id} was marked fixed by hand, but {env} has not passed: it is open again. Only `task defects sync` marks a defect fixed, when the results of the environment say PASS.",
+  "desk.test.defects.open": "Open defects",
+  "desk.test.defects.fixed": "Fixed defects",
+  "desk.test.defects.none": "No defects.",
+  "desk.test.defects.stale": "marked open, but {env} passed: `task defects sync` marks it fixed",
+  "desk.test.defects.odd": "Not in the form (its status cannot be told):"
 }

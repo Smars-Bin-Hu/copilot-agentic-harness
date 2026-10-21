@@ -56,17 +56,33 @@ def write_back(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     return steps_of([{"id": name} for name in ("requirement", "plan", "developing", "writeback", "done")], finished, flags)
 
 
+def env_of(stem: str, envs: List[str]) -> str:
+    """The environment a results file belongs to: `results-IST.md` is IST's; `results-IST-run2.md` is IST's too, unless the guide has an environment `IST-RUN2`."""
+    name = stem[len("results-"):].upper()
+    exact = [env for env in envs if env.upper() == name]
+    if exact:
+        return exact[0].upper()
+    near = [env for env in envs if name.startswith(env.upper() + "-") or name.startswith(env.upper() + "_")]
+    return max(near, key=len).upper() if near else ""
+
+
 def test_results(root: Path, task: str) -> tuple:
     """What a test task holds: the text of TEST-GUIDE.md, its environments (the `## DEV` headings, else DEV, IST and UAT) and, for each environment
-    that has a results file with a verdict, `{ENV: (verdict, path)}`."""
+    that has a results file with a verdict, `{ENV: (verdict, path)}`. The verdict of a file is the last `Verdict for ...` line in it (a new run goes at
+    the end); of several files of one environment, the one written last counts."""
     folder = tasks.task_dir(root, task)
     guide = read(folder / GUIDE)
     envs = list(dict.fromkeys(ENV_HEADING.findall(guide))) or list(DEFAULT_ENVS)
     found: Dict[str, tuple] = {}
+    newest: Dict[str, float] = {}
     for path in sorted((folder / "TEST").glob("results-*.md")) if (folder / "TEST").is_dir() else []:
         verdicts = VERDICT.findall(read(path))
-        if verdicts:
-            found[path.stem[len("results-"):].upper()] = (verdicts[-1].upper(), path)
+        env = env_of(path.stem, envs)
+        if not verdicts or not env:
+            continue
+        stamp = path.stat().st_mtime
+        if env not in found or stamp >= newest[env]:
+            found[env], newest[env] = (verdicts[-1].upper(), path), stamp
     return guide, envs, found
 
 

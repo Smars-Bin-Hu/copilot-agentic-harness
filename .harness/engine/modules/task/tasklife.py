@@ -338,6 +338,17 @@ def waiting_text(data: Dict[str, Any], why: str) -> str:
     return text
 
 
+def defects_synced(root: Path, task: str) -> Dict[str, Any]:
+    """The status of the defects of a test task follows its results at every handoff (`task defects sync` does it; here it is not left to the agent)."""
+    try:
+        from . import testdefects  # it needs this module's neighbours
+
+        found = testdefects.sync(root, task)
+        return {"defects": found} if found["file"] else {}
+    except Exception:  # noqa: BLE001 - a handoff must not fail over a defects file
+        return {}
+
+
 def handoff(root: Path, raw_task: str, what: str, env: str) -> Dict[str, Any]:
     """The agent hands work to the person that only they can do outside the harness (tests in an environment): the board says so until `handoff_clear`."""
     env = " ".join(str(env or "").split())
@@ -350,7 +361,7 @@ def handoff(root: Path, raw_task: str, what: str, env: str) -> Dict[str, Any]:
         task_ops.require_open(data)
         data["handoff"] = {"what": what, "env": env, "since": utc_now()}
         task_ops.note(data, "handoff", f"{what} {env}")
-    return {"task": task, "handoff": what, "env": env, "next": say("task.handoff.next")}
+    return {"task": task, "handoff": what, "env": env, "next": say("task.handoff.next"), **defects_synced(root, task)}
 
 
 def handoff_clear(root: Path, raw_task: str) -> Dict[str, Any]:
@@ -362,7 +373,7 @@ def handoff_clear(root: Path, raw_task: str) -> Dict[str, Any]:
         if not found:
             raise CommandError(say("task.handoff.none", name=task_ops.name_of(task)))
         task_ops.note(data, "handoff-clear", f"{found.get('what', '')} {found.get('env', '')}".strip())
-    return {"task": task, "cleared": True, "next": say("task.handoff.cleared")}
+    return {"task": task, "cleared": True, "next": say("task.handoff.cleared"), **defects_synced(root, task)}
 
 
 def paused_since(data: Dict[str, Any]) -> str:

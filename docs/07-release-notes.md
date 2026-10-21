@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.27 (2026-10-21)
+
+### Added
+
+- **The status of a defect follows the results, by a script.** `TEST/defects.md` has one section for each defect in a fixed form, `## D1 [open] IST: what failed`. The new command `harness task defects sync` marks a defect `[fixed]` when the last verdict of its environment is PASS, writes a line saying so (`Fixed by task defects sync: date, IST is PASS in results-IST.md`), and changes nothing else. It is the only way a defect becomes fixed: a `[fixed]` written by hand is checked against the results (undone, with a warning, when the environment has not passed), and a heading not in the form is reported. It runs by itself at every `task handoff` (`tests` and `clear`), and can be run again at any time. The Test tab shows the open defects with their text, folds the fixed ones, and marks one that is still open in the file while its environment has passed ("run task defects sync").
+- The skill `generic-test-guide` has a template for the file (`templates/defects.md`) and says it: the agent writes `[open]` always, runs the script after it judged the results, and never sets a status.
+
+### Changed
+
+- **A retest is seen.** The verdict of an environment is the last `Verdict for <environment>:` line of its results file, so a new run goes at the **end** of the same file (`## Run 2`), and the skill says so. Of several files of one environment (`results-IST.md`, `results-IST-run2.md`), the one written last counts; before, a second file was not seen at all and a new run put first kept the old FAIL.
+
+**Introductory material**: `docs/02-features.md`, `docs/04-reference.md`, the skill `generic-test-guide` (SKILL.md, `references/results.md`, `templates/defects.md`).
+
 ## 1.5.26 (2026-10-21)
 
 ### Added

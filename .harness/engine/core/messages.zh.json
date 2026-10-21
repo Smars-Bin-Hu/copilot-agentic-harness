@@ -1139,5 +1139,11 @@
   "desk.test.next": "下一个",
   "desk.test.todo": "以后",
   "desk.test.waiting": "按 TEST-GUIDE.md 跑 {env} 的测试，把结果带回 VS Code 里的 agent。",
-  "desk.test.defects": "发现的缺陷"
+  "task.defects.odd": "缺陷的标题不是 `## D<n> [open] <环境>: <标题>` 的形式：{line}。看不出它的状态。",
+  "task.defects.by_hand": "{id} 被手工标成了 fixed，但 {env} 还没有通过：它重新是 open。只有 `task defects sync` 能在这个环境的结果是 PASS 时把缺陷标成 fixed。",
+  "desk.test.defects.open": "未修复的缺陷",
+  "desk.test.defects.fixed": "已修复的缺陷",
+  "desk.test.defects.none": "没有缺陷。",
+  "desk.test.defects.stale": "标的是 open，但 {env} 已经通过：`task defects sync` 会把它标成 fixed",
+  "desk.test.defects.odd": "格式不对（看不出状态）："
 }

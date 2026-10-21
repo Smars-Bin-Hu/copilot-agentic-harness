@@ -207,6 +207,22 @@
     return parts;
   }
 
+  // TEST/defects.md: the open defects first, each with its text; the fixed ones folded. The status is what `task defects sync` wrote.
+  function defects(d) {
+    const one = (item, cls) => h("section", {class: "round " + cls},
+      h("div", {class: "round-head"}, h("strong", null, item.id), " ", tag(item.env, item.status === "fixed" ? "good" : "bad"), " ", item.title,
+        item.stale ? [" ", tag(t("desk.test.defects.stale", {env: item.env}), "hot long")] : null),
+      item.doc ? h("article", {class: "md"}, blocks(item.doc.blocks), item.doc.cut ? h("p", {class: "sub"}, t("desk.cut")) : null) : null);
+    const parts = d.intro ? [h("article", {class: "md"}, blocks(d.intro.blocks))] : [];
+    parts.push(h("h3", null, t("desk.test.defects.open") + " " + d.open.length));
+    if (!d.open.length) parts.push(h("p", {class: "sub"}, t("desk.test.defects.none")));
+    parts.push(...d.open.map((item) => one(item, "fail")));
+    if (d.fixed.length) parts.push(h("details", null, h("summary", {class: "sub"}, t("desk.test.defects.fixed") + " " + d.fixed.length), ...d.fixed.map((item) => one(item, "pass"))));
+    for (const part of d.other) parts.push(h("h4", null, part.title), part.doc ? h("article", {class: "md"}, blocks(part.doc.blocks)) : null);
+    if (d.odd.length) parts.push(h("p", {class: "hint bad"}, t("desk.test.defects.odd") + " " + d.odd.join(" · ")));
+    return parts;
+  }
+
   // The Test tab of a test task: the guide the agent wrote for the person, then each environment with the results file and the verdict.
   function testing() {
     const x = desk.test;
@@ -224,7 +240,7 @@
       parts.push(h("section", {class: "round " + (env.state === "failed" ? "fail" : env.state === "done" ? "pass" : "")},
         h("div", {class: "round-head"}, h("strong", null, env.name), " ", verdict, env.file ? [" ", h("span", {class: "sub"}, "TEST/" + env.file)] : null), body));
     }
-    if (x.defects) parts.push(h("h3", null, t("desk.test.defects")), h("article", {class: "md"}, blocks(x.defects.blocks)));
+    if (x.defects) parts.push(...defects(x.defects));
     return parts;
   }
 

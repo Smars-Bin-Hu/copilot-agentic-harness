@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import messages, tasks
 from core.paths import cli_command, utc_now
 
-from . import common, mdtree, task as task_ops, taskboard, taskinsight, tasklife, taskreview, tasksnap, taskstages
+from . import common, mdtree, task as task_ops, taskboard, taskinsight, tasklife, taskreview, tasksnap, taskstages, testdefects
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
 MAX_DOC_BYTES = 400_000  # a bigger document is shown cut, with a note
@@ -72,6 +72,28 @@ def reviews(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
         return empty
 
 
+def defects_of(root: Path, task: str) -> Optional[Dict[str, Any]]:
+    """`TEST/defects.md` as the page shows it: the open ones, the fixed ones (each with its text), what else the file holds. `stale`: marked open while the
+    environment has passed (`task defects sync` has not run yet)."""
+    path = testdefects.path_of(root, task)
+    if not path.is_file():
+        return None
+    parsed = testdefects.parse(path.read_text(encoding="utf-8-sig", errors="replace"))
+    verdict = testdefects.verdicts(root, task)
+
+    def doc(text: str) -> Optional[Dict[str, Any]]:
+        if not text:
+            return None
+        tree = mdtree.parse(text[:MAX_DOC_BYTES])
+        return {"blocks": tree["blocks"], "cut": tree["cut"] or len(text) > MAX_DOC_BYTES}
+
+    intro = "\n".join(line for line in parsed["intro"].splitlines() if not line.startswith("# ")).strip()  # the title of the file is not shown again
+    items = [{"id": item["id"], "env": item["env"], "title": item["title"], "status": item["status"], "doc": doc(item["body"]),
+              "stale": item["status"] == "open" and verdict.get(item["env"].upper(), ("", ""))[0] == "PASS"} for item in parsed["items"]]
+    return {"open": [item for item in items if item["status"] == "open"], "fixed": [item for item in items if item["status"] == "fixed"],
+            "intro": doc(intro), "other": [{"title": item["title"], "doc": doc(item["body"])} for item in parsed["other"]], "odd": parsed["odd"]}
+
+
 def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The Test tab of a test task: its guide, and each environment with the results file and the verdict the agent judged. None for any other kind.
     An environment is done on PASS, failed on FAIL; the first that is neither is the one the task is at (`waits`: the agent handed it to the person)."""
@@ -88,7 +110,7 @@ def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, A
             out.append({"name": env, "verdict": verdict, "state": state, "file": path.name if path else "", "results": read_doc(path) if path else None, "waits": bool(handed) and env.upper() == handed})
         folder = tasks.task_dir(root, task)
         return {"guide": read_doc(folder / taskstages.GUIDE), "envs": out, "passed": sum(1 for item in out if item["state"] == "done"), "total": len(out),
-                "defects": read_doc(folder / "TEST" / "defects.md")}
+                "defects": defects_of(root, task)}
     except Exception:  # noqa: BLE001 - a page must not fail over the tests of one task
         return None
 

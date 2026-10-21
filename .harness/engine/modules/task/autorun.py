@@ -124,12 +124,15 @@ def code_source(root: Path, task: str, data: Dict[str, Any]) -> str:
 
 
 def turn_on(
-    root: Path, raw_task: str = "", reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None,
+    root: Path, raw_task: str = "", reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None, force: bool = False,
 ) -> Dict[str, Any]:
     task_ops.person("task autorun on", interactive)
     task = task_ops.resolve(root, raw_task)
     data = task_ops.read(root, task)
     task_ops.require_open(data)
+    from . import tasklife  # it needs this module
+
+    tasklife.require_idle(root, data, "task autorun on", force)
     problems = requirements(root, task, data)
     if problems:
         raise CommandError(say("autorun.cannot") + "\n" + "\n".join(f"- {text}" for text in problems))

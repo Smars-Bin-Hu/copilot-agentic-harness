@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
-from core import config, messages
+from core import config, messages, tasks
 from core.paths import board_serve_file, utc_now
 
 from . import autorun, common, task as task_ops, taskarchive, taskboard, taskdesk, taskhtml, tasklife, taskreview
@@ -143,11 +143,20 @@ class Board:
             print(say("serve.did", action="archive", task=", ".join(result["archived"])), flush=True)
         return result
 
+    def idle(self, action: str, task: str) -> None:
+        """The page may be ten seconds old: before pause, close or autorun, look again whether the agent is in the middle of a turn."""
+        if action not in tasklife.CONTROLS:
+            return
+        data = tasks.read(self.root, task_ops.resolve(self.root, task))
+        if data is not None and tasklife.busy(self.root, data):
+            raise CommandError(say("serve.busy"))
+
     def close(self, name: str) -> Dict[str, Any]:
         """Close a task (`task close`): the report is written, the session lets go. The folder stays; `task open` opens it again.
         The browser must be paired; no code is typed, for it undoes nothing that cannot be undone."""
         if "close" not in self.actions:
             raise CommandError(say("serve.action.off", action="close"))
+        self.idle("close", name)
         result = task_ops.close(self.root, name, say("serve.close.reason"))
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
@@ -156,6 +165,7 @@ class Board:
         """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once."""
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
+        self.idle(action, task)
         if action in FREE:
             result = (tasklife.pause if action == "pause" else tasklife.resume)(self.root, task, interactive=True)
             noted(self.root, result.get("task") or task, action)

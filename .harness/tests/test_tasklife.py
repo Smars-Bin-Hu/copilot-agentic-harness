@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import io
 import json
 import os
@@ -375,6 +376,70 @@ class ListTests(LifeCase):
         order = [(row["name"], row["state"]) for row in self.listed()["tasks"]]
         states = [state for _name, state in order]
         self.assertEqual(states, sorted(states, key=("waiting", "working", "quiet", "unheld", "paused").index), order)
+
+    def busy(self, name: str = "job") -> bool:
+        return next(row for row in self.listed()["tasks"] if row["name"] == name)["busy"]
+
+    def stopped(self, name: str = "job") -> None:
+        with task_ops.locked(self.root, f"{BASE}/{name}") as data:
+            data["waiting"] = {"since": "2026-10-20T00:00:00+00:00", "why": "stopped"}
+
+    def test_the_agent_is_busy_in_the_middle_of_a_turn_and_not_after_it_stopped(self) -> None:
+        """`busy`: a session holds the task, made a hook call lately, and has not stopped since. The Stop hook leaves a mark; a prompt takes it away."""
+        self.new("job", "qa")
+        self.assertTrue(self.busy())
+        self.stopped()
+        self.assertFalse(self.busy(), "the Stop hook left its mark")
+        self.hook(payload("UserPromptSubmit", S1, prompt="go on"))  # the person answered: the agent is at work again
+        self.assertTrue(self.busy())
+        log = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{S1}.jsonl"
+        old = time.time() - 3600
+        os.utime(log, (old, old))
+        self.assertFalse(self.busy(), "no call for an hour: quiet, not at work")
+
+    def test_a_task_nobody_holds_or_put_aside_or_handed_over_is_not_busy(self) -> None:
+        self.new("first", "qa")
+        self.new("second", "qa")
+        self.assertFalse(self.busy("first"), "no session holds it")
+        self.assertTrue(self.busy("second"))
+        with task_ops.locked(self.root, f"{BASE}/second") as data:
+            data["paused"] = {"since": "2026-10-20T00:00:00+00:00"}
+        self.assertFalse(self.busy("second"))
+
+    def test_pause_and_autorun_are_refused_while_the_agent_is_at_work_unless_forced(self) -> None:
+        from modules.task import autorun
+
+        self.new("job", "qa")
+        with self.assertRaises(CommandError) as caught:
+            tasklife.pause(self.root, "job", interactive=True)
+        self.assertIn("task pause", str(caught.exception))
+        self.assertFalse(self.data().get("paused"))
+        with self.assertRaises(CommandError):
+            autorun.turn_on(self.root, "job", reader=lambda _p: "x", interactive=True, out=io.StringIO())
+        tasklife.pause(self.root, "job", interactive=True, force=True)
+        self.assertTrue(self.data()["paused"])
+        tasklife.resume(self.root, "job", interactive=True)
+        self.stopped()
+        tasklife.pause(self.root, "job", interactive=True)  # the agent stopped: no force needed
+        self.assertTrue(self.data()["paused"])
+
+    def test_a_person_at_a_terminal_cannot_close_a_task_at_work_but_the_agent_can(self) -> None:
+        """The agent closes its own task when the person said yes (that is its turn); a person at a terminal is stopped, unless --force."""
+        from unittest import mock
+
+        from modules.task import commands
+
+        self.new("job", "qa")
+        args = argparse.Namespace(task="job", reason="", force=False)
+        with mock.patch.object(commands, "repo_root", return_value=self.root):
+            with mock.patch.object(commands.approval, "is_person", return_value=True):
+                with self.assertRaises(CommandError):
+                    commands.close_task(args)
+                self.assertEqual(self.data()["status"], "open")
+                self.assertEqual(commands.close_task(argparse.Namespace(task="job", reason="", force=True))["status"], "closed")
+            self.open("job")
+            with mock.patch.object(commands.approval, "is_person", return_value=False):
+                self.assertEqual(commands.close_task(args)["status"], "closed")
 
     def test_a_handoff_of_tests_is_what_the_board_says_until_it_is_cleared(self) -> None:
         self.new("job", "test")

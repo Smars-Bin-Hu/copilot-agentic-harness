@@ -44,6 +44,8 @@ When a task grows, use `task upgrade`: it only adds the missing files, and a tie
 - Closing only changes the state; the folder stays where it is, and `task open` opens it again.
 - Because a session holds one task, a task can be left without one: the session opened another task, or the file that says which task a session holds is gone (a reinstall without `.harness/runtime/`). Nothing then notes that the agent stopped. The board shows such a task as *no session*, with how long nobody has touched it.
 
+The board does not change a task under an agent that is at work. *Pause*, *close* and *autorun on* are grey (and refused in a terminal without `--force`) while a session holds the task, called a tool in the last 5 minutes and has not stopped. To stop it, use the stop button in VS Code; once the agent has stopped, the buttons work. The approvals are not held back: each is bound to the version you saw.
+
 The board gives a task one state, the first that holds:
 
 | State | When | What to do |

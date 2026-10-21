@@ -75,9 +75,9 @@ What a command prints: text on a terminal, JSON on a pipe (a script, a redirect)
 | `task autorun on` | Switches autorun on (beta): the agent works down `TODO.md` and stops only when a person has to decide. It needs an approved plan, unticked steps and `[review]=n`. Terminal only, with a typed code |
 | `task autorun off` | Switches autorun off. You switch it off directly in the terminal; an agent has to add `--reason` and say where it is stuck |
 | `task autorun status` | Whether it is on, how many steps were done, how many times it was pushed on, why it stopped; when it is off, what is still missing |
-| `task pause` | Puts a task aside for now: the board no longer says it waits for you, and the paused time does not count as "waiting for you". Terminal only |
+| `task pause` | Puts a task aside for now: the board no longer says it waits for you, and the paused time does not count as "waiting for you". Terminal only. Refused while the agent is in the middle of a turn (a session holds the task, made a call in the last 5 minutes and has not stopped): stop the agent in VS Code first, or add `--force` |
 | `task resume` | Goes on with a paused task. A prompt in its session resumes it by itself too. Terminal only |
-| `task close` | The session lets go of the task, and the report is written. The folder stays where it is |
+| `task close` | The session lets go of the task, and the report is written. The folder stays where it is. A person at a terminal is refused while the agent is in the middle of a turn (add `--force`); the agent itself can close its own task after you said yes |
 
 ## Policy fields
 

@@ -28,7 +28,7 @@ class AutorunCase(TaskCase):
 
     def on(self, code: Optional[str] = None, out: Any = None) -> Dict[str, Any]:
         typed = code if code is not None else autorun.code_source(self.root, TASK, self.data())[:8]
-        return autorun.turn_on(self.root, NAME, reader=lambda _prompt: typed, interactive=True, out=out or io.StringIO())
+        return autorun.turn_on(self.root, NAME, reader=lambda _prompt: typed, interactive=True, out=out or io.StringIO(), force=True)  # these tests are about autorun; whether the agent has stopped is tested in test_tasklife
 
     def stop(self, **fields: Any) -> Dict[str, Any]:
         return self.hook(payload("Stop", SESSION, **fields))

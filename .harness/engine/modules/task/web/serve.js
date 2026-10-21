@@ -89,7 +89,7 @@ const SERVE = (function () {
     const said = h("div", {class: "bad"});
     const go = h("button", {class: "act hot", type: "button"}, t("board.close.go"));
     const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
-    const view = dialog([h("h2", null, t("board.close.title", {name: row.name})), h("p", null, t("board.close.warn")), h("div", {class: "row"}, go, no), said]);
+    const view = dialog([h("h2", null, t("board.close.title", {name: row.name})), h("p", null, t("board.close.warn")), row.state === "quiet" ? h("p", {class: "bad"}, t("board.close.quiet")) : null, h("div", {class: "row"}, go, no), said]);
     no.addEventListener("click", view.close);
     go.addEventListener("click", () => {
       go.disabled = true;

@@ -111,12 +111,16 @@ function copyCommand(button, command) {
 }
 
 // The button of one action ({action, command}) of a task row: it acts when the board server runs that action, else it copies the command.
+const CONTROLS = ["pause", "resume", "close", "autorun on"];
 function actionButton(row, item, extra) {
   const label = t("board.action." + item.action.replace(" ", "-"));
   const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page
-  const hot = row.waiting && !["pause", "resume", "autorun on", "close"].includes(item.action);  // what the task waits for, not what the person may do any time
-  const button = h("button", {class: "act" + (hot ? " hot" : "") + (live ? " live" : "") + (extra ? " " + extra : ""), type: "button", title: live ? "" : item.command, "data-label": label}, label);
-  button.addEventListener("click", () => (live ? SERVE.act(button, row, item) : copyCommand(button, item.command)));
+  const hot = row.waiting && !CONTROLS.includes(item.action);  // what the task waits for, not what the person may do any time
+  // pause, resume, close and autorun change the course of the task: the agent in the middle of a turn must stop first (stop it in VS Code)
+  const locked = typeof SERVE !== "undefined" && row.busy && CONTROLS.includes(item.action);
+  const button = h("button", {class: "act" + (hot ? " hot" : "") + (live ? " live" : "") + (locked ? " locked" : "") + (extra ? " " + extra : ""), type: "button", title: locked ? t("board.action.busy") : live ? "" : item.command, "data-label": label}, label);
+  if (locked) button.disabled = true;
+  button.addEventListener("click", () => (locked ? null : live ? SERVE.act(button, row, item) : copyCommand(button, item.command)));
   return button;
 }
 

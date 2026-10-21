@@ -14,9 +14,9 @@ from typing import Any, Dict, Optional, Tuple
 from support import pre_tool
 from taskcase import SESSION, TASK, TaskCase
 
-from core import tasks
+from core import messages, tasks
 from core.paths import board_serve_file
-from modules.task import boardserve
+from modules.task import boardserve, task as task_ops
 from modules.task.common import CommandError
 
 
@@ -48,6 +48,15 @@ class ServeCase(TaskCase):
         self.assertTrue(started.wait(10))
         self.server = holder["server"]
         self.addCleanup(self.stop)
+        self.agent_stopped()  # a person clicks a button after the agent stopped; a test about the agent at work calls `agent_at_work`
+
+    def agent_stopped(self) -> None:
+        with task_ops.locked(self.root, TASK) as data:
+            data["waiting"] = {"since": "2026-10-20T00:00:00+00:00", "why": "stopped"}
+
+    def agent_at_work(self) -> None:
+        with task_ops.locked(self.root, TASK) as data:
+            data["waiting"] = None
 
     def stop(self) -> None:
         self.server.shutdown()
@@ -94,6 +103,22 @@ class ServeTests(ServeCase):
         self.assertEqual(self.request("POST", "/api/act", {"action": "pause", "task": TASK}, header=False)[0], 403)
         self.assertEqual(self.request("POST", "/api/act", {"action": "pause", "task": TASK}, origin="https://evil.example")[0], 403)
         self.assertFalse(self.data().get("paused"))
+
+    def test_pause_close_and_autorun_wait_while_the_agent_is_at_work(self) -> None:
+        """The page may be ten seconds old: the server looks again, and a button on a stale page does not change the task under the agent."""
+        self.agent_at_work()
+        rows = self.request("POST", "/api/board", {})[1]["rows"]
+        self.assertTrue(next(row for row in rows if row["name"] == "job1")["busy"])
+        status, data, _ = self.request("POST", "/api/act", {"action": "pause", "task": TASK})
+        self.assertEqual(status, 409)
+        self.assertIn(messages.text("serve.busy"), json.dumps(data, ensure_ascii=False))
+        self.assertFalse(self.data().get("paused"))
+        cookie = self.pair()
+        self.assertEqual(self.request("POST", "/api/close", {"task": "job1"}, cookie=cookie)[0], 409)
+        self.assertEqual(self.data()["status"], "open")
+        self.assertEqual(self.request("POST", "/api/act", {"action": "autorun on", "task": TASK, "step": "preview"}, cookie=cookie)[0], 409)
+        self.agent_stopped()  # the agent stopped: the same buttons work
+        self.assertEqual(self.request("POST", "/api/act", {"action": "pause", "task": TASK})[0], 200)
 
     def test_pause_and_resume_need_no_pairing(self) -> None:
         status, data, _ = self.request("POST", "/api/act", {"action": "pause", "task": TASK})

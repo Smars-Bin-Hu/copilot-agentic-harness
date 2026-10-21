@@ -76,6 +76,17 @@ def cmd_board(args: argparse.Namespace) -> Dict[str, Any]:
     return result
 
 
+def close_task(args: argparse.Namespace) -> Dict[str, Any]:
+    """`task close`: the agent closes a task it finished (that is its own turn); a person at a terminal is stopped while the agent is at work."""
+    if approval.is_person() and not args.force:
+        root = repo_root()
+        folder = task.resolve(root, args.task)
+        data = tasks.read(root, folder)
+        if data is not None:
+            tasklife.require_idle(root, data, "task close")
+    return task.close(repo_root(), args.task, args.reason)
+
+
 def cmd_report(args: argparse.Namespace) -> Dict[str, Any]:
     result = task_report.generate(repo_root(), args.task, args.detail)
     if args.open and result.get("analysis"):
@@ -174,7 +185,9 @@ def register_task(subparsers: Any) -> None:
     promote_parser.add_argument("--dry-run", action="store_true")
     add("approve-promote", "the person approves the plan of the last task promote --dry-run (terminal only)", lambda a: task.approve_promote(repo_root(), a.task)).set_defaults(person_only=True)
     add("recover", "the person puts the repositories back after a task promote stopped halfway (terminal only)", lambda a: task.recover(repo_root(), a.task)).set_defaults(person_only=True)
-    add("pause", "the person puts the task aside: the board stops saying it waits, the time aside is not counted as waiting (terminal only)", lambda a: tasklife.pause(repo_root(), a.task)).set_defaults(person_only=True)
+    pause = add("pause", "the person puts the task aside: the board stops saying it waits, the time aside is not counted as waiting (terminal only; refused while the agent is at work)", lambda a: tasklife.pause(repo_root(), a.task, force=a.force))
+    pause.set_defaults(person_only=True)
+    pause.add_argument("--force", action="store_true", help="even while the agent is in the middle of a turn")
     add("resume", "the person takes a task back that was put aside (terminal only); a prompt in the task's session does the same", lambda a: tasklife.resume(repo_root(), a.task)).set_defaults(person_only=True)
     hand = commands.add_parser("handoff", help="the agent hands work to the person that only they can do outside the harness (tests in an environment); the board says it waits for it")
     hand_commands = hand.add_subparsers(dest="handoff_command", required=True)
@@ -194,12 +207,15 @@ def register_task(subparsers: Any) -> None:
         item.set_defaults(handler=handler)
         return item
 
-    add_auto("on", "the person turns autorun on for the task (terminal only, a typed code)", lambda a: autorun.turn_on(repo_root(), a.task)).set_defaults(person_only=True)
+    auto_on = add_auto("on", "the person turns autorun on for the task (terminal only, a typed code; refused while the agent is at work)", lambda a: autorun.turn_on(repo_root(), a.task, force=a.force))
+    auto_on.set_defaults(person_only=True)
+    auto_on.add_argument("--force", action="store_true", help="even while the agent is in the middle of a turn")
     off = add_auto("off", "turn autorun off: the person at a terminal, or the agent with --reason when it cannot go on", lambda a: autorun.turn_off(repo_root(), a.task, a.reason))
     off.add_argument("--reason", default="")
     add_auto("status", "on or off, the steps done, how often it was pushed on, why it stopped", lambda a: autorun.status(repo_root(), a.task))
-    close = add("close", "the session lets go of the task and the report is written; the folder stays where it is", lambda a: task.close(repo_root(), a.task, a.reason))
+    close = add("close", "the session lets go of the task and the report is written; the folder stays where it is (a person at a terminal is refused while the agent is at work)", lambda a: close_task(a))
     close.add_argument("--reason", default="")
+    close.add_argument("--force", action="store_true", help="even while the agent is in the middle of a turn (a person at a terminal)")
     report = add("report", "write .workspace/reports/tasks/<name>/report.md (what was done) and report.html (where the time and usage went)", cmd_report)
     report.add_argument("--open", action="store_true", help="open the HTML page in the browser (a person at a terminal)")
     report.add_argument("--detail", action="store_true", help="add the slowest prompts, the tools and the checks to `insight` (more to read)")

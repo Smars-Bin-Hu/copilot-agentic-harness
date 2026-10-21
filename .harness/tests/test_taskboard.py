@@ -271,13 +271,14 @@ class PauseTests(BoardCase):
 
     def test_a_prompt_in_the_tasks_session_takes_it_back(self) -> None:
         self.new()
-        tasklife.pause(self.root, "job", interactive=True)
+        tasklife.pause(self.root, "job", interactive=True, force=True)  # the agent has not stopped in this test
         self.prompt()
         self.assertIsNone(self.data()["paused"])
         self.assertEqual(self.data()["events"][-1]["what"], "unpause")
 
     def test_pause_and_resume_are_the_persons(self) -> None:
         self.new()
+        self.stop()  # the agent has stopped: a person may act
         for command in ("pause", "resume"):
             result = self.cli("task", command, "--task", "job")
             self.assertNotEqual(result.returncode, 0)
@@ -703,7 +704,7 @@ class PageTests(BoardCase):
         css = (taskhtml.WEB / "page.css").read_text(encoding="utf-8")
         self.assertRegex(css, r"\.act-strip\{[^}]*flex-wrap:nowrap[^}]*overflow-x:auto")
         self.assertIn('class: "act-strip"', (taskhtml.WEB / "board.js").read_text(encoding="utf-8"))
-        self.assertIn('!["pause", "resume", "autorun on", "close"].includes(item.action)', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
+        self.assertIn('!CONTROLS.includes(item.action)', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
 
     def test_an_empty_board(self) -> None:
         data = page_data(taskhtml.board_page([], "2026-01-01T00:00:00+00:00"))

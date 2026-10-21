@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.20 (2026-10-21)
+
+### Changed
+
+- **The board no longer changes a task under an agent that is at work.** *Pause*, *resume*, *close* and *autorun on* used to be offered on every open task, so a click could close or pause a task in the middle of the agent's turn (the report written without the last part, the session let go, a state that said "paused" while the agent worked, autorun on with the agent not told). They now work only when the agent is **not in the middle of a turn**: a session holds the task, called a tool in the last 5 minutes and has not stopped since (the Stop hook leaves a mark; a prompt takes it away; a cancelled agent has stopped). Otherwise the buttons are grey, on the list and on the task page alike, with a tooltip and, on the page, a line: stop the agent in VS Code first. The approvals (plan, write-back, recover, checks, requirement) are not held back: each is bound to the version you saw.
+- The server looks again before it acts, so a page that is ten seconds old cannot do it either. The close dialog of a *quiet* task adds that the agent may still be running a long step.
+- **In a terminal, `task pause`, `task autorun on` and `task close` are refused the same way** when run by a person while the agent is at work; `--force` goes on. The agent closing its own task (after you said yes) is not stopped.
+- A task put aside by you is not affected. Each row of `task list` has `busy`.
+
+**Testing**: the automatic tests pass on the Mac (the tests of autorun and of pause now state that the agent has stopped, as a person would find it). Not seen on the page by a person, **not run on Windows**.
+
+**Introductory material**: `docs/02-features.md` (what you may do from the board), `docs/04-reference.md` (the three commands), `harness-rookie-wondering` topic 9.
+
 ## 1.5.19 (2026-10-20)
 
 ### Added

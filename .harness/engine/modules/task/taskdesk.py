@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import messages, tasks
 from core.paths import cli_command, utc_now
 
-from . import common, mdtree, task as task_ops, taskboard, taskinsight, tasklife, taskreview, tasksnap
+from . import common, mdtree, task as task_ops, taskboard, taskinsight, tasklife, taskreview, tasksnap, taskstages
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
 MAX_DOC_BYTES = 400_000  # a bigger document is shown cut, with a note
@@ -137,7 +137,7 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "created_at": data.get("created_at", ""), "updated_at": data.get("updated_at", ""),
         "todo": {"done": done, "total": total},
         "docs": docs, "history": history(data), "changes": changed(root, task, data),
-        "review": reviews(root, task, data),
+        "review": reviews(root, task, data), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
         "actions": offered(root, row, task, tuple(served)),
         "req_changed": row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),
         "report": "/" + report.relative_to(root / common.REPORTS_DIR).as_posix() if report.is_file() else "",

@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.14 (2026-10-20)
+
+### Added
+
+- **The task page opens with the stages of the task.** By kind: a question has none; a root cause analysis, a design and "other" have *doing* and *done* (done = the task is closed); development and knowledge base work have *requirement, plan, developing, write-back, done*, where *developing* runs from the approved plan to the approved write-back and *done* is the write-back made; a test task has *guide*, a step for each environment named by the `##` headings of `TEST-GUIDE.md` (DEV, IST and UAT when it names none; an environment is done when `TEST/results-<env>.md` says `Verdict for <env>: PASS`) and *done*. The step that is now is orange and beating when it waits for you ("waits for your results" for a test handed over), blue with a light running along the line while the agent works (the page must be live), still when nothing is going on; a failed test or a write-back stopped halfway is red. The stages are worked out from the files and the state each time and nothing is kept, so **a task that starts over falls back by itself**: a changed plan or requirement puts it back at *plan*, a new round after a write-back too, with a "round N" mark and a line saying why.
+- **The reviewer under the stages.** When you asked for checks (`[review]=n`) or one has run: the reviewer, and one mark for each check for the work as it is now: an empty ring (not yet), a spinning ring (running), a green tick (passed), a red cross (failed); and a stamp "REVIEWED ×n" when all have passed.
+
+**Testing**: the automatic tests pass on the Mac (`test_taskstages.py`); two real task pages were drawn in Chrome. The motion was not watched by a person. **Not run on Windows**.
+
+**Introductory material**: `harness-rookie-quick-start` (what you get, part 2), `docs/02-features.md` got a sentence each.
+
 ## 1.5.13 (2026-10-20)
 
 ### Added

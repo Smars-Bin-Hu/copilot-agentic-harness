@@ -1,0 +1,123 @@
+"""The stage ribbon (M32): steps by kind, worked out from the files and the state, so a task that starts over falls back."""
+
+from __future__ import annotations
+
+import json
+import unittest
+
+from test_tasklife import BASE, LifeCase
+
+from core import tasks
+from modules.task import task as task_ops, taskstages
+
+
+def shown(found):
+    return [(step.get("label") or step["id"], step["state"]) for step in found["steps"]]
+
+
+class StageCase(LifeCase):
+    def stages(self, name: str = "job"):
+        return taskstages.of(self.root, f"{BASE}/{name}")
+
+    def change(self, name: str = "job", **fields) -> None:
+        with task_ops.locked(self.root, f"{BASE}/{name}") as data:
+            for key, value in fields.items():
+                data[key] = value
+
+
+class ByKind(StageCase):
+    def test_a_question_has_no_ribbon_and_a_task_not_started_has_none(self) -> None:
+        self.new("q", "qa")
+        self.assertIsNone(self.stages("q"))
+        (self.root / BASE / "fresh").mkdir()
+        self.assertIsNone(taskstages.of(self.root, f"{BASE}/fresh"))
+
+    def test_an_investigation_or_a_design_is_doing_then_done(self) -> None:
+        for kind in ("rca", "design", "other"):
+            self.new(kind, kind)
+            self.assertEqual(shown(self.stages(kind)), [("doing", "now"), ("done", "todo")])
+            self.cli_json("task", "close", "--task", kind)
+            self.assertEqual(shown(self.stages(kind)), [("doing", "done"), ("done", "done")])
+
+    def test_a_test_task_has_the_guide_the_environments_and_done(self) -> None:
+        self.new("t", "test")
+        self.assertEqual(shown(self.stages("t")), [("guide", "now"), ("DEV", "todo"), ("IST", "todo"), ("UAT", "todo"), ("done", "todo")])
+        folder = self.folder("t")
+        (folder / "TEST-GUIDE.md").write_text("# Guide\n\n## DEV\n\n## IST\n\n## QAT\n\n## <PROD>\n", encoding="utf-8")
+        self.assertEqual(shown(self.stages("t")), [("guide", "done"), ("DEV", "now"), ("IST", "todo"), ("QAT", "todo"), ("done", "todo")], "the names come from the guide")
+        (folder / "TEST" / "results-DEV.md").write_text("**Verdict for DEV: PASS**\n", encoding="utf-8")
+        self.assertEqual(shown(self.stages("t"))[1:3], [("DEV", "done"), ("IST", "now")])
+        (folder / "TEST" / "results-IST.md").write_text("**Verdict for IST: FAIL**\n", encoding="utf-8")
+        found = self.stages("t")
+        self.assertEqual((found["steps"][2]["state"], found["steps"][2]["flag"]), ("now", "failed"))
+        (folder / "TEST" / "results-IST.md").write_text("**Verdict for IST: PASS**\n", encoding="utf-8")
+        (folder / "TEST" / "results-QAT.md").write_text("Verdict for QAT: PASS\n", encoding="utf-8")
+        self.assertEqual(shown(self.stages("t"))[-1], ("done", "done"))
+        self.cli_json("task", "handoff", "tests", "--env", "UAT", "--task", "t")
+        self.assertEqual(self.stages("t")["handoff"], "UAT")
+
+
+class WriteBack(StageCase):
+    def test_a_development_task_goes_through_its_five_steps(self) -> None:
+        self.new("job", "dev")
+        self.assertEqual(shown(self.stages())[0], ("requirement", "now"), "the template is still empty")
+        req = self.folder() / "REQ.md"
+        req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Stop the load failing.").replace("<一两段。用户的原意，不加你自己的设想>", "别让加载失败。"), encoding="utf-8")
+        self.assertEqual(shown(self.stages())[:2], [("requirement", "done"), ("plan", "now")])
+        (self.folder() / "PLAN.md").write_text("# plan\n", encoding="utf-8")
+        self.assertEqual(shown(self.stages())[1], ("plan", "now"), "written, not approved")
+        digest = tasks.plan_digest(self.root, f"{BASE}/job")
+        self.change(plan={"approved_sha256": digest})
+        self.assertEqual(shown(self.stages())[1:3], [("plan", "done"), ("developing", "now")])
+        self.change(promote={"state": "dry_run"})
+        self.assertEqual(shown(self.stages())[2], ("developing", "now"), "the write-back is not approved yet: still developing")
+        self.change(promote={"state": "dry_run", "approved_plan_sha256": "abc"})
+        self.assertEqual(shown(self.stages())[2:4], [("developing", "done"), ("writeback", "now")])
+        self.change(promote={"state": "partial", "approved_plan_sha256": "abc"})
+        self.assertEqual(self.stages()["steps"][3]["flag"], "partial")
+        self.change(promote={"state": "done", "approved_plan_sha256": "abc"})
+        self.assertEqual([state for _, state in shown(self.stages())], ["done"] * 5)
+
+    def test_a_task_that_starts_over_falls_back_to_the_plan(self) -> None:
+        self.new("job", "kb")
+        req = self.folder() / "REQ.md"
+        req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Learn it.").replace("<一两段。用户的原意，不加你自己的设想>", "学它。"), encoding="utf-8")
+        (self.folder() / "PLAN.md").write_text("# plan\n", encoding="utf-8")
+        self.change(plan={"approved_sha256": tasks.plan_digest(self.root, f"{BASE}/job")}, promote={"state": "done", "approved_plan_sha256": "abc"})
+        self.assertEqual(shown(self.stages())[-1], ("done", "done"))
+        (self.folder() / "PLAN.md").write_text("# plan\n\nA different plan.\n", encoding="utf-8")  # the plan changes after its approval
+        self.assertEqual(shown(self.stages())[1], ("plan", "now"))
+        self.assertEqual(shown(self.stages())[-1], ("done", "todo"), "what came after the plan is to be done again")
+        self.change(plan={}, promote={"state": "none"}, round=2)  # a new round after a write-back
+        found = self.stages()
+        self.assertEqual((shown(found)[1], found["round"]), (("plan", "now"), 2))
+
+
+class Reviewer(StageCase):
+    def test_one_mark_per_check_for_the_version_as_it_is_now(self) -> None:
+        from modules.task import taskreview, tasksnap
+
+        self.new("job", "dev")
+        self.assertIsNone(self.stages()["review"])
+        digest = tasksnap.results_digest(self.root, f"{BASE}/job")
+        with task_ops.locked(self.root, f"{BASE}/job") as data:
+            review = taskreview.state_of(data)
+            review["n"] = 3
+            review["rounds"].append({"number": 1, "task_round": data["round"], "verdict": "PASS", "digest": digest})
+        self.assertEqual(self.stages()["review"]["states"], ["pass", "todo", "todo"])
+        with task_ops.locked(self.root, f"{BASE}/job") as data:
+            taskreview.state_of(data)["rounds"].append({"number": 2, "task_round": data["round"], "verdict": "", "digest": digest})
+        self.assertEqual(self.stages()["review"]["states"], ["pass", "run", "todo"])
+        with task_ops.locked(self.root, f"{BASE}/job") as data:
+            rounds = taskreview.state_of(data)["rounds"]
+            rounds[1]["verdict"] = "FAIL"
+        self.assertEqual(self.stages()["review"]["states"], ["fail", "todo", "todo"], "a failure ends the row of passes")
+        with task_ops.locked(self.root, f"{BASE}/job") as data:
+            taskreview.state_of(data)["n"] = 1
+            taskreview.state_of(data)["rounds"][:] = [{"number": 1, "task_round": data["round"], "verdict": "PASS", "digest": digest}]
+        found = self.stages()["review"]
+        self.assertEqual((found["states"], found["stamp"]), (["pass"], True))
+
+
+if __name__ == "__main__":
+    unittest.main()

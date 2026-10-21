@@ -1084,5 +1084,22 @@
   "desk.review.pending": "检查员还没有答复。",
   "desk.review.current": "检查的是现在这版",
   "desk.review.earlier": "检查的是之前的版本",
-  "desk.review.given": "检查员拿到的送审包"
+  "desk.review.given": "检查员拿到的送审包",
+  "stage.requirement": "需求",
+  "stage.plan": "计划",
+  "stage.developing": "开发中",
+  "stage.writeback": "写回",
+  "stage.done": "完成",
+  "stage.doing": "进行中",
+  "stage.guide": "指南",
+  "stage.you": "等你",
+  "stage.work": "在干活",
+  "stage.tests": "等你的结果",
+  "stage.partial": "写到一半停了",
+  "stage.failed": "没通过",
+  "stage.round": "第 {round} 轮",
+  "stage.again": "上一轮已写回，或需求变了：计划要再批准一次。",
+  "stage.reviewer": "检查员 · 连续 {n} 次检查",
+  "stage.reviewer.off": "检查员 · 现在没有要求检查",
+  "stage.reviewed": "已检查 ×{n}"
 }

@@ -137,3 +137,37 @@ tr.touched td{animation:glow 1.8s ease-out}
 .round-head{margin-bottom:6px}
 .round details{margin-top:8px}.round summary{cursor:pointer}
 @media (prefers-reduced-motion:reduce){.tag.run,.tag.run::before,td.state .tag.hot,tr.touched td{animation:none}}
+
+/* The stage ribbon of the task page, and the reviewer's checks under it (desk.js). */
+.rb-round{margin-bottom:6px}
+.rb-ribbon{display:flex;align-items:flex-start;margin:6px 0 4px}
+.rb-step{display:flex;flex-direction:column;align-items:center;width:92px;flex:none;text-align:center}
+.rb-node{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);background:var(--card);display:grid;place-items:center;font-size:13px;color:var(--soft)}
+.rb-name{margin-top:6px;font-size:12.5px;color:var(--soft)}
+.rb-note{font-size:11.5px;color:var(--soft);min-height:16px}
+.rb-step.is-done .rb-node{background:var(--good);border-color:var(--good);color:#fff}
+.rb-step.is-done .rb-name{color:var(--ink)}
+.rb-step.is-now .rb-node{border-color:var(--model);color:var(--model)}
+.rb-step.is-now .rb-name{color:var(--ink);font-weight:600}
+.rb-step.is-work .rb-node{animation:rbring 2.4s ease-out infinite}
+.rb-step.is-you .rb-node{border-color:var(--approval);color:var(--approval);animation:beat 2.4s ease-in-out infinite}
+.rb-step.is-bad .rb-node{border-color:var(--bad);color:var(--bad)}
+.rb-link{flex:1;height:2px;background:var(--line);margin-top:15px;position:relative;overflow:hidden;min-width:14px}
+.rb-link.is-done{background:var(--good)}
+.rb-link.is-flow::after{content:"";position:absolute;top:0;left:0;height:100%;width:40%;background:linear-gradient(90deg,transparent,var(--model),transparent);animation:rbtravel 1.6s linear infinite}
+.rb-lane{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;padding:10px 14px;border:1px dashed var(--line);border-radius:12px}
+.rb-who{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.rb-orb{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:11px;background:var(--subagent)}
+.rb-check{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:12px;color:#fff;position:relative}
+.rb-check.run{border-color:transparent}
+.rb-check.run::before{content:"";position:absolute;inset:-2px;border-radius:50%;border:2px solid transparent;border-top-color:var(--subagent);border-right-color:var(--subagent);animation:rbspin 1s linear infinite}
+.rb-check.pass{background:var(--good);border-color:var(--good);animation:rbpop .4s cubic-bezier(.2,.9,.3,1.4)}
+.rb-check.fail{background:var(--bad);border-color:var(--bad)}
+.rb-stamp{margin-left:auto;border:2px solid var(--good);color:var(--good);border-radius:8px;padding:2px 9px;font-size:12px;font-weight:700;letter-spacing:.06em;transform:rotate(-4deg);animation:rbstamp .45s cubic-bezier(.2,.9,.3,1.3)}
+@keyframes rbring{0%{box-shadow:0 0 0 0 rgba(79,124,240,.5)}70%,100%{box-shadow:0 0 0 9px rgba(79,124,240,0)}}
+@keyframes rbtravel{from{transform:translateX(-100%)}to{transform:translateX(260%)}}
+@keyframes rbspin{to{transform:rotate(360deg)}}
+@keyframes rbpop{from{transform:scale(.3)}to{transform:scale(1)}}
+@keyframes rbstamp{from{transform:rotate(-4deg) scale(2);opacity:0}to{transform:rotate(-4deg) scale(1);opacity:1}}
+@media (max-width:640px){.rb-step{width:64px}.rb-name{font-size:11.5px}}
+@media (prefers-reduced-motion:reduce){.rb-step.is-work .rb-node,.rb-step.is-you .rb-node,.rb-link.is-flow::after,.rb-check.run::before,.rb-check.pass,.rb-stamp{animation:none}}

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.5.13",
+  "version": "1.5.14",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -132,7 +132,8 @@
         ".harness/tests/test_refs.py",
         ".harness/tests/test_standards.py",
         ".harness/tests/test_promote_delete.py",
-        ".harness/tests/test_taskdesk.py"
+        ".harness/tests/test_taskdesk.py",
+        ".harness/tests/test_taskstages.py"
       ],
       "retire_when": "Copilot itself offers task state that follows the task and can be handed over between sessions, with an approval that can hold back a delivery. Then only the gate and promote stay"
     },

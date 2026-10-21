@@ -21,7 +21,7 @@ from core import config, messages
 from core.render import local_time, pad, width  # noqa: F401 - the page and the tests use them from here too
 from core.paths import cli_command, utc_now
 
-from . import common, task as task_ops, taskhtml, taskinsight, tasklife
+from . import common, task as task_ops, taskhtml, taskinsight, tasklife, taskstages
 
 BOARD_NAME = "board.html"
 MIN_INTERVAL = 1.0
@@ -140,9 +140,10 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = ())
     use_events = taskinsight.events_allowed(root)
     problems = []
     for row in result["tasks"]:
-        row["brief"], row["report"], row["actions"] = None, "", actions(row, tuple(served))
+        row["brief"], row["report"], row["actions"], row["stages"] = None, "", actions(row, tuple(served)), None
         if row["status"] == "new":
             continue
+        row["stages"] = taskstages.of(root, row["task"])
         key = (str(root), row["task"])
         kept = _closed.get(key) if row["status"] == "closed" else None
         if kept and kept[0] == row["updated_at"] and (root / common.REPORTS_DIR / kept[2]).is_file():

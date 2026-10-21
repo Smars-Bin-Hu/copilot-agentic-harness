@@ -130,6 +130,38 @@
       typeof SERVE === "undefined" ? h("p", {class: "sub"}, t("board.copy.hint")) : SERVE.banner());
   }
 
+  // The stages of the task by its kind (taskstages.py) and the reviewer's checks. The step that is now moves: orange when the
+  // task waits for the person, blue while the agent is at work (and the page is live), still otherwise.
+  function ribbon() {
+    const s = desk.stages;
+    if (!s || desk.status === "new") return null;
+    const live = typeof SERVE !== "undefined" && DATA.serve;
+    const waits = Boolean(desk.waiting) && desk.status === "open" && !desk.paused_since;
+    const works = Boolean(live) && desk.active && !waits && desk.status === "open";
+    const again = s.steps.some((step) => step.id === "plan" && step.state === "now") && desk.history.some((event) => event.what === "approve-plan");
+    const parts = [];
+    s.steps.forEach((step, index) => {
+      const label = step.label || t("stage." + step.id);
+      const mark = step.state === "done" ? "\u2713" : step.flag ? "!" : String(index + 1);
+      const here = step.state === "now";
+      const note = here ? (step.flag === "partial" ? t("stage.partial") : step.flag === "failed" ? t("stage.failed")
+        : waits ? (desk.waiting_why === "tests" && s.handoff && s.handoff === step.label ? t("stage.tests") : t("stage.you")) : works ? t("stage.work") : "") : "";
+      parts.push(h("div", {class: "rb-step" + (step.state === "done" ? " is-done" : here ? " is-now" + (step.flag ? " is-bad" : waits ? " is-you" : works ? " is-work" : "") : "")},
+        h("div", {class: "rb-node"}, mark), h("div", {class: "rb-name"}, label), h("div", {class: "rb-note"}, note)));
+      if (index < s.steps.length - 1) parts.push(h("div", {class: "rb-link" + (step.state === "done" ? " is-done" : "") + (here && works && !waits ? " is-flow" : "")}));
+    });
+    return h("section", {class: "card"},
+      s.round > 1 || again ? h("div", {class: "rb-round sub"}, s.round > 1 ? tag(t("stage.round", {round: s.round})) : null, again ? " " + t("stage.again") : null) : null,
+      h("div", {class: "rb-ribbon"}, parts), s.review ? lane(s.review, works) : null);
+  }
+
+  // Under the ribbon: the reviewer and one mark for each check asked for: not yet, running, passed, failed.
+  function lane(r, works) {
+    const marks = r.states.map((state) => h("span", {class: "rb-check " + state}, state === "pass" ? "\u2713" : state === "fail" ? "\u00d7" : ""));
+    return h("div", {class: "rb-lane"}, h("span", {class: "rb-who"}, h("span", {class: "rb-orb"}, "R"), r.n ? t("stage.reviewer", {n: r.n}) : t("stage.reviewer.off")),
+      marks, r.waived ? tag(t("desk.review.waived"), "hot") : null, r.stamp ? h("span", {class: "rb-stamp"}, t("stage.reviewed", {n: r.n})) : null);
+  }
+
   function nav() {
     const label = (tab) => {
       if (tab === "todo" && desk.todo.total) return t("desk.tab.todo") + " " + desk.todo.done + "/" + desk.todo.total;
@@ -235,7 +267,7 @@
 
   function draw(keepScroll) {
     const y = window.scrollY;
-    app.replaceChildren(...header(), actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
+    app.replaceChildren(...header(), ribbon(), actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
       h("footer", null, t("desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright()));
     if (keepScroll) window.scrollTo(0, y);
   }

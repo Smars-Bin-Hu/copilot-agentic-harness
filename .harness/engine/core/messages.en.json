@@ -1084,5 +1084,22 @@
   "desk.review.pending": "The reviewer has not answered yet.",
   "desk.review.current": "this version of the work",
   "desk.review.earlier": "an earlier version of the work",
-  "desk.review.given": "What the reviewer was given"
+  "desk.review.given": "What the reviewer was given",
+  "stage.requirement": "Requirement",
+  "stage.plan": "Plan",
+  "stage.developing": "Developing",
+  "stage.writeback": "Write-back",
+  "stage.done": "Done",
+  "stage.doing": "Doing",
+  "stage.guide": "Guide",
+  "stage.you": "waits for you",
+  "stage.work": "working",
+  "stage.tests": "waits for your results",
+  "stage.partial": "stopped halfway",
+  "stage.failed": "failed",
+  "stage.round": "round {round}",
+  "stage.again": "The last round was written back, or the requirement changed: the plan is asked for again.",
+  "stage.reviewer": "reviewer · {n} check(s) in a row",
+  "stage.reviewer.off": "reviewer · checks are off now",
+  "stage.reviewed": "REVIEWED ×{n}"
 }

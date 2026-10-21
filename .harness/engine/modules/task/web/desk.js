@@ -10,13 +10,13 @@
   let desk = DATA.desk;
   let shown = JSON.stringify(desk);
   const same = (a, b) => a.replace(/"as_of":"[^"]*"/, "") === b.replace(/"as_of":"[^"]*"/, "");  // the time of asking is not a change
-  const tabs = ["overview", "plan", "todo", "log", "changes", "review", "history", "docs"];
+  const tabs = ["overview", "test", "plan", "todo", "log", "changes", "review", "history", "docs"];
   const FILES = {overview: "TASK.md", req: "REQ.md", plan: "PLAN.md", todo: "TODO.md", log: "LOG.md"};
   let current = tabs.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
   let other = "";  // the document open in the "docs" tab
 
   const doc = (name) => desk.docs.find((item) => item.name === name);
-  const extra = () => desk.docs.filter((item) => !Object.values(FILES).includes(item.name));
+  const extra = () => desk.docs.filter((item) => !Object.values(FILES).includes(item.name) && !(desk.test && item.name === "TEST-GUIDE.md"));  // the guide has its own tab on a test task
 
   // --- markdown -------------------------------------------------------------------------------------------
 
@@ -171,12 +171,13 @@
     const label = (tab) => {
       if (tab === "todo" && desk.todo.total) return t("desk.tab.todo") + " " + desk.todo.done + "/" + desk.todo.total;
       if (tab === "changes" && desk.changes.files.length) return t("desk.tab.changes") + " " + desk.changes.files.length;
+      if (tab === "test") return t("desk.tab.test") + " " + desk.test.passed + "/" + desk.test.total;
       if (tab === "review") return t("desk.tab.review") + (desk.review.n ? " " + desk.review.passes + "/" + desk.review.n : " " + desk.review.rounds.length);
       if (tab === "history") return t("desk.tab.history") + " " + desk.history.length;
       if (tab === "docs") return t("desk.tab.docs") + " " + extra().length;
       return t("desk.tab." + tab);
     };
-    return h("nav", {class: "tabs"}, tabs.filter((tab) => (tab !== "docs" || extra().length) && (tab !== "review" || hasReview())).map((tab) => {
+    return h("nav", {class: "tabs"}, tabs.filter((tab) => (tab !== "docs" || extra().length) && (tab !== "review" || hasReview()) && (tab !== "test" || desk.test)).map((tab) => {
       const button = h("button", {type: "button", class: "tab" + (tab === current ? " on" : "")}, label(tab));
       button.addEventListener("click", () => { current = tab; history.replaceState(null, "", "#" + tab); draw(false); });
       return button;
@@ -203,6 +204,27 @@
         h("article", {class: "md"}, answer, item.answer && item.answer.cut ? h("p", {class: "sub"}, t("desk.cut")) : null),
         item.package ? h("details", null, h("summary", {class: "sub"}, t("desk.review.given")), h("article", {class: "md"}, blocks(item.package.blocks))) : null));
     }
+    return parts;
+  }
+
+  // The Test tab of a test task: the guide the agent wrote for the person, then each environment with the results file and the verdict.
+  function testing() {
+    const x = desk.test;
+    const parts = [h("p", {class: "hint top"}, t("desk.test.hint"))];
+    parts.push(h("div", {class: "test-envs"}, x.envs.map((env) => tag(env.name + " · " + (env.verdict || (env.waits ? t("desk.test.waits") : t(env.state === "now" ? "desk.test.next" : "desk.test.todo"))),
+      env.state === "done" ? "good" : env.state === "failed" ? "bad" : env.waits ? "hot" : ""))));
+    parts.push(h("h3", null, t("desk.test.guide")));
+    parts.push(x.guide ? h("article", {class: "md"}, blocks(x.guide.blocks), x.guide.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)
+      : h("div", {class: "empty-state"}, h("b", null, t("desk.test.noguide"))));
+    parts.push(h("h3", null, t("desk.test.results")));
+    for (const env of x.envs) {
+      const verdict = env.verdict ? tag(env.verdict, env.verdict === "PASS" ? "good" : env.verdict === "FAIL" ? "bad" : "hot") : tag(env.waits ? t("desk.test.waits") : t("desk.test.noresult"), env.waits ? "hot" : "");
+      const body = env.results ? h("article", {class: "md"}, blocks(env.results.blocks), env.results.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)
+        : h("p", {class: "sub"}, env.waits ? t("desk.test.waiting", {env: env.name}) : t("desk.test.noresult"));
+      parts.push(h("section", {class: "round " + (env.state === "failed" ? "fail" : env.state === "done" ? "pass" : "")},
+        h("div", {class: "round-head"}, h("strong", null, env.name), " ", verdict, env.file ? [" ", h("span", {class: "sub"}, "TEST/" + env.file)] : null), body));
+    }
+    if (x.defects) parts.push(h("h3", null, t("desk.test.defects")), h("article", {class: "md"}, blocks(x.defects.blocks)));
     return parts;
   }
 
@@ -260,6 +282,7 @@
     if (current === "log") return [h("p", {class: "hint top"}, t("desk.log.hint")), markdown("LOG.md", t("desk.missing.log"))];
     if (current === "changes") return changes();
     if (current === "review") return review();
+    if (current === "test" && desk.test) return testing();
     if (current === "history") return [h("p", {class: "hint top"}, t("desk.history.hint")), timeline()];
     const docs = extra();
     const name = docs.some((item) => item.name === other) ? other : (docs[0] || {}).name;

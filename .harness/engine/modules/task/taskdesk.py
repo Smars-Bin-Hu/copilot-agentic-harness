@@ -72,6 +72,27 @@ def reviews(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
         return empty
 
 
+def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The Test tab of a test task: its guide, and each environment with the results file and the verdict the agent judged. None for any other kind.
+    An environment is done on PASS, failed on FAIL; the first that is neither is the one the task is at (`waits`: the agent handed it to the person)."""
+    if data.get("kind") != "test":
+        return None
+    try:
+        guide, envs, results = taskstages.test_results(root, task)
+        handed = str((data.get("handoff") or {}).get("env") or "").upper()
+        out, at = [], False
+        for env in envs:
+            verdict, path = results.get(env.upper(), ("", None))
+            state = "done" if verdict == "PASS" else "failed" if verdict == "FAIL" else "now" if not at else "todo"
+            at = at or state == "now"
+            out.append({"name": env, "verdict": verdict, "state": state, "file": path.name if path else "", "results": read_doc(path) if path else None, "waits": bool(handed) and env.upper() == handed})
+        folder = tasks.task_dir(root, task)
+        return {"guide": read_doc(folder / taskstages.GUIDE), "envs": out, "passed": sum(1 for item in out if item["state"] == "done"), "total": len(out),
+                "defects": read_doc(folder / "TEST" / "defects.md")}
+    except Exception:  # noqa: BLE001 - a page must not fail over the tests of one task
+        return None
+
+
 def history(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """The audit trail, newest first, each line in words. The line `board` (the action came from the page) is folded into
     the line the action wrote just before it, as `via`. A session's note is told again in the language set now."""
@@ -137,7 +158,7 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "created_at": data.get("created_at", ""), "updated_at": data.get("updated_at", ""),
         "todo": {"done": done, "total": total},
         "docs": docs, "history": history(data), "changes": changed(root, task, data),
-        "review": reviews(root, task, data), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
+        "review": reviews(root, task, data), "test": testing(root, task, data), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served)),
         "req_changed": row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),

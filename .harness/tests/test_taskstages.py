@@ -8,7 +8,7 @@ import unittest
 from test_tasklife import BASE, LifeCase
 
 from core import tasks
-from modules.task import task as task_ops, taskstages
+from modules.task import task as task_ops, taskdesk, taskstages
 
 
 def shown(found):
@@ -55,6 +55,43 @@ class ByKind(StageCase):
         self.assertEqual(shown(self.stages("t"))[-1], ("done", "done"))
         self.cli_json("task", "handoff", "tests", "--env", "UAT", "--task", "t")
         self.assertEqual(self.stages("t")["handoff"], "UAT")
+
+
+class TestTab(StageCase):
+    """The Test tab of a test task (taskdesk.testing): the guide, and each environment with its results and the verdict the agent judged."""
+
+    def test_a_test_task_has_the_guide_and_each_environment_with_its_verdict(self) -> None:
+        from modules.task import taskdesk
+
+        self.new("job", "test")
+        folder = self.root / BASE / "job"
+        self.assertEqual([item["name"] for item in taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))["envs"]], ["DEV", "IST", "UAT"])  # no guide: the usual three
+        (folder / "TEST-GUIDE.md").write_text("# Guide\n\n## DEV\n\nrun\n\n## IST\n\nrun\n", encoding="utf-8")
+        (folder / "TEST").mkdir(exist_ok=True)
+        (folder / "TEST" / "results-DEV.md").write_text("# Results: DEV\n\n**Verdict for DEV: PASS**\n", encoding="utf-8")
+        (folder / "TEST" / "results-IST.md").write_text("# Results: IST\n\n**Verdict for IST: FAIL**\n", encoding="utf-8")
+        (folder / "TEST" / "defects.md").write_text("# Defects\n\n1. a\n", encoding="utf-8")
+        self.cli_json("task", "handoff", "tests", "--env", "IST", "--task", "job")
+        found = taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))
+        self.assertEqual([(item["name"], item["verdict"], item["state"], item["waits"]) for item in found["envs"]], [("DEV", "PASS", "done", False), ("IST", "FAIL", "failed", True)])
+        self.assertEqual((found["passed"], found["total"]), (1, 2))
+        self.assertTrue(found["guide"] and found["defects"] and found["envs"][0]["results"])
+        self.assertEqual(taskdesk.desk(self.root, "job")["test"]["total"], 2)
+
+    def test_the_first_environment_that_is_not_done_is_the_next_one(self) -> None:
+        from modules.task import taskdesk
+
+        self.new("job", "test")
+        (self.root / BASE / "job" / "TEST-GUIDE.md").write_text("## DEV\n\n## IST\n\n## UAT\n", encoding="utf-8")
+        found = taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))
+        self.assertEqual([item["state"] for item in found["envs"]], ["now", "todo", "todo"])
+
+    def test_another_kind_has_no_test_tab(self) -> None:
+        from modules.task import taskdesk
+
+        self.new("job", "rca")
+        self.assertIsNone(taskdesk.testing(self.root, f"{BASE}/job", self.data("job")))
+        self.assertIsNone(taskdesk.desk(self.root, "job")["test"])
 
 
 class WriteBack(StageCase):

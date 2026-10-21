@@ -56,15 +56,23 @@ def write_back(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     return steps_of([{"id": name} for name in ("requirement", "plan", "developing", "writeback", "done")], finished, flags)
 
 
-def tests(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
+def test_results(root: Path, task: str) -> tuple:
+    """What a test task holds: the text of TEST-GUIDE.md, its environments (the `## DEV` headings, else DEV, IST and UAT) and, for each environment
+    that has a results file with a verdict, `{ENV: (verdict, path)}`."""
     folder = tasks.task_dir(root, task)
     guide = read(folder / GUIDE)
     envs = list(dict.fromkeys(ENV_HEADING.findall(guide))) or list(DEFAULT_ENVS)
-    verdicts: Dict[str, str] = {}
+    found: Dict[str, tuple] = {}
     for path in sorted((folder / "TEST").glob("results-*.md")) if (folder / "TEST").is_dir() else []:
-        found = VERDICT.findall(read(path))
-        if found:
-            verdicts[path.stem[len("results-"):].upper()] = found[-1].upper()
+        verdicts = VERDICT.findall(read(path))
+        if verdicts:
+            found[path.stem[len("results-"):].upper()] = (verdicts[-1].upper(), path)
+    return guide, envs, found
+
+
+def tests(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    guide, envs, results = test_results(root, task)
+    verdicts = {env: pair[0] for env, pair in results.items()}
     finished = [bool(guide)] + [verdicts.get(env.upper()) == "PASS" for env in envs]
     finished.append(bool(guide) and all(finished[1:]))
     flags = {index + 1: "failed" for index, env in enumerate(envs) if verdicts.get(env.upper()) == "FAIL"}

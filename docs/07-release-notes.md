@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.26 (2026-10-21)
+
+### Added
+
+- **A Test tab on the page of a test task.** Before, `TEST-GUIDE.md` sat in "Other files" and the results of the environments (`TEST/results-DEV.md` and the others) were not shown at all. The tab, second after Overview and with the count of environments passed ("Test 1/3"), has: a row of the environments with their verdict (green PASS, red FAIL, orange "waits for your results" for the one the agent handed over, "next", "later"), the guide, the results of each environment (the file and the verdict the agent judged, a green or red edge), and the defects (`TEST/defects.md`). The guide no longer shows twice (not in "Other files" any more on a test task).
+
+### Changed
+
+- The card that says a task waits for your test results, and the message the agent gets after `task handoff tests`, say "the Test tab" instead of "the docs tab".
+
+**Introductory material**: `docs/02-features.md` (the tabs), `harness-rookie-quick-start` (workplace), the skill `generic-test-guide` (one word).
+
 ## 1.5.25 (2026-10-21)
 
 ### Changed

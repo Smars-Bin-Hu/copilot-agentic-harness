@@ -435,6 +435,23 @@ class ListTests(LifeCase):
         tasklife.pause(self.root, "job", interactive=True)  # the agent stopped: no force needed
         self.assertTrue(self.data()["paused"])
 
+    def test_an_approval_typed_in_a_terminal_waits_while_the_agent_is_at_work(self) -> None:
+        from unittest import mock
+
+        from modules.task import commands
+
+        self.new("job", "qa")
+        calls = []
+        run = commands.guarded("task approve-plan", lambda a: calls.append(a) or {"ok": True})
+        with mock.patch.object(commands, "repo_root", return_value=self.root), mock.patch.object(commands.approval, "is_person", return_value=True):
+            with self.assertRaises(CommandError) as caught:
+                run(argparse.Namespace(task="job", force=False))
+            self.assertIn("task approve-plan", str(caught.exception))
+            self.assertEqual(calls, [])
+            self.assertEqual(run(argparse.Namespace(task="job", force=True)), {"ok": True})
+            self.stopped()  # the agent stopped: the person decides
+            self.assertEqual(run(argparse.Namespace(task="job", force=False)), {"ok": True})
+
     def test_a_person_at_a_terminal_cannot_close_a_task_at_work_but_the_agent_can(self) -> None:
         """The agent closes its own task when the person said yes (that is its turn); a person at a terminal is stopped, unless --force."""
         from unittest import mock

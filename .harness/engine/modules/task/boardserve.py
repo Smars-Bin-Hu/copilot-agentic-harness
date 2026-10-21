@@ -144,9 +144,7 @@ class Board:
         return result
 
     def idle(self, action: str, task: str) -> None:
-        """The page may be ten seconds old: before pause, close or autorun, look again whether the agent is in the middle of a turn."""
-        if action not in tasklife.CONTROLS:
-            return
+        """The page may be ten seconds old: before any action, look again whether the agent is in the middle of a turn (it may be answering a doubt)."""
         data = tasks.read(self.root, task_ops.resolve(self.root, task))
         if data is not None and tasklife.at_work(self.root, data):
             raise CommandError(say("serve.busy"))

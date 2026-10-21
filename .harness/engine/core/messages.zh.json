@@ -1124,9 +1124,9 @@
   "desk.actions.unheld.hint": "原来的会话去做别的任务了，或者已经不在。在你开一个会话、按名字叫出这个任务之前，什么都不会发生。",
   "desk.unheld.prompt": "接着做任务 {name}",
   "desk.unheld.note": "没有会话持有这个任务。你决定之后，在 VS Code 里开一个会话，按名字叫出它。",
-  "task.busy": "agent 正在这个任务的一轮中间（有会话持有它，最近 {minutes} 分钟内调用过工具，也没有停下）。`{command}` 会在它手里改任务。先在 VS Code 里停掉 agent，或者加 --force。",
-  "serve.busy": "agent 正在干这个任务。先在 VS Code 里停掉它，停下后这个按钮才能用。",
-  "board.action.busy": "agent 在干活。先在 VS Code 里停掉它。",
-  "desk.busy.note": "agent 正在干这个任务。暂停、autorun 和关闭要等它停下。要现在停它，在 VS Code 里点停止。",
+  "task.busy": "agent 正在这个任务的一轮中间（有会话持有它，最近 {minutes} 分钟内调用过工具，也没有停下）。它可能在回答你对结果的疑问，也可能还在改。`{command}` 要等它停下后才能用。在 VS Code 里停掉它，或者加 --force。",
+  "serve.busy": "agent 正在干这个任务，可能正在回答你。等它停下之后，这里才能操作，到时再决定。",
+  "board.action.busy": "agent 在干活。等它停下再决定。",
+  "desk.busy.note": "agent 正在干这个任务，可能正在回答你对结果的疑问。它停下之前这里什么都点不了：停下之后再批准，或者再问。要现在停它，在 VS Code 里点停止。",
   "board.close.quiet": "agent 已经 5 分钟没有任何调用，也没有停下。它可能还在跑一个很长的步骤。只有确定它没在跑时才关闭任务。"
 }

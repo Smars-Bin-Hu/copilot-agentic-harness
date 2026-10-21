@@ -76,6 +76,25 @@ def cmd_board(args: argparse.Namespace) -> Dict[str, Any]:
     return result
 
 
+def guarded(command: str, call: Any) -> Any:
+    """What the person decides or changes with a command: a person at a terminal is stopped while the agent is in the middle of a turn (it may be
+    answering a doubt about the result; the person decides after it has stopped). `--force` goes on."""
+    def run(args: argparse.Namespace) -> Dict[str, Any]:
+        if approval.is_person() and not getattr(args, "force", False):
+            root = repo_root()
+            data = tasks.read(root, task.resolve(root, args.task))
+            if data is not None:
+                tasklife.require_idle(root, data, command)
+        return call(args)
+
+    return run
+
+
+def with_force(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    parser.add_argument("--force", action="store_true", help="even while the agent is in the middle of a turn")
+    return parser
+
+
 def close_task(args: argparse.Namespace) -> Dict[str, Any]:
     """`task close`: the agent closes a task it finished (that is its own turn); a person at a terminal is stopped while the agent is at work."""
     if approval.is_person() and not args.force:
@@ -156,10 +175,13 @@ def register_task(subparsers: Any) -> None:
 
     add_review("start", "snapshot the result, write REVIEW/round-NNN/package.md and open the check; then call the reviewer", lambda a: taskreview.start(repo_root(), a.task))
     add_review("status", "n, the passes that count now, the checks used and what comes next", lambda a: taskreview.status(repo_root(), a.task))
-    extend = add_review("extend", "the person allows more checks after the limit (terminal only)", lambda a: taskreview.extend(repo_root(), a.task, a.checks))
+    extend = add_review("extend", "the person allows more checks after the limit (terminal only)", guarded("task review extend", lambda a: taskreview.extend(repo_root(), a.task, a.checks)))
     extend.set_defaults(person_only=True)
+    with_force(extend)
     extend.add_argument("--checks", type=int, default=2, choices=range(1, 10), metavar="1-9")
-    add_review("waive", "the person lets this version of the result be promoted without the passes (terminal only)", lambda a: taskreview.waive(repo_root(), a.task)).set_defaults(person_only=True)
+    waive = add_review("waive", "the person lets this version of the result be promoted without the passes (terminal only)", guarded("task review waive", lambda a: taskreview.waive(repo_root(), a.task)))
+    waive.set_defaults(person_only=True)
+    with_force(waive)
     snapshot = commands.add_parser("snapshot", help="the copies of a task's result made at its gates (plan approval, each check, promote dry-run)")
     snapshot_commands = snapshot.add_subparsers(dest="snapshot_command", required=True)
     snapshot_list = snapshot_commands.add_parser("list", help="every snapshot of the task: gate, time, files")
@@ -171,8 +193,8 @@ def register_task(subparsers: Any) -> None:
     snapshot_prune.add_argument("--dry-run", action="store_true")
     snapshot_prune.set_defaults(handler=lambda a: {"removed": tasksnap.prune(repo_root(), task.resolve(repo_root(), a.task), a.days if a.days is not None else tasksnap.settings(repo_root())["keep_days"], dry_run=a.dry_run), "dry_run": a.dry_run})
     add("status", "where the task stands and what comes next", lambda a: task.status(repo_root(), a.task))
-    add("approve-plan", "the person approves PLAN.md (terminal only)", lambda a: task.approve_plan(repo_root(), a.task)).set_defaults(person_only=True)
-    add("confirm-req", "the person confirms REQ.md says what they meant (terminal only); the harness fills the confirmation line", lambda a: task.confirm_req(repo_root(), a.task)).set_defaults(person_only=True)
+    with_force(add("approve-plan", "the person approves PLAN.md (terminal only; refused while the agent is at work)", guarded("task approve-plan", lambda a: task.approve_plan(repo_root(), a.task)))).set_defaults(person_only=True)
+    with_force(add("confirm-req", "the person confirms REQ.md says what they meant (terminal only); the harness fills the confirmation line", guarded("task confirm-req", lambda a: task.confirm_req(repo_root(), a.task)))).set_defaults(person_only=True)
     fetch = add("fetch", "copy files of a target repository's base branch into DEV/<repo>/<path>", lambda a: task.fetch(repo_root(), a.task, a.paths, a.overwrite))
     fetch.add_argument("paths", nargs="+", help="<repo>/<path>: a file or a folder")
     fetch.add_argument("--overwrite", action="store_true", help="take the base version again over a file already changed in DEV/")
@@ -183,8 +205,8 @@ def register_task(subparsers: Any) -> None:
     branch.add_argument("--branch", required=True)
     promote_parser = add("promote", "write DEV/ onto a new branch of each target repository", lambda a: task.run_promote(repo_root(), a.task, a.dry_run))
     promote_parser.add_argument("--dry-run", action="store_true")
-    add("approve-promote", "the person approves the plan of the last task promote --dry-run (terminal only)", lambda a: task.approve_promote(repo_root(), a.task)).set_defaults(person_only=True)
-    add("recover", "the person puts the repositories back after a task promote stopped halfway (terminal only)", lambda a: task.recover(repo_root(), a.task)).set_defaults(person_only=True)
+    with_force(add("approve-promote", "the person approves the plan of the last task promote --dry-run (terminal only; refused while the agent is at work)", guarded("task approve-promote", lambda a: task.approve_promote(repo_root(), a.task)))).set_defaults(person_only=True)
+    with_force(add("recover", "the person puts the repositories back after a task promote stopped halfway (terminal only; refused while the agent is at work)", guarded("task recover", lambda a: task.recover(repo_root(), a.task)))).set_defaults(person_only=True)
     pause = add("pause", "the person puts the task aside: the board stops saying it waits, the time aside is not counted as waiting (terminal only; refused while the agent is at work)", lambda a: tasklife.pause(repo_root(), a.task, force=a.force))
     pause.set_defaults(person_only=True)
     pause.add_argument("--force", action="store_true", help="even while the agent is in the middle of a turn")

@@ -104,7 +104,7 @@ class ServeTests(ServeCase):
         self.assertEqual(self.request("POST", "/api/act", {"action": "pause", "task": TASK}, origin="https://evil.example")[0], 403)
         self.assertFalse(self.data().get("paused"))
 
-    def test_pause_close_and_autorun_wait_while_the_agent_is_at_work(self) -> None:
+    def test_every_button_waits_while_the_agent_is_at_work(self) -> None:
         """The page may be ten seconds old: the server looks again, and a button on a stale page does not change the task under the agent."""
         self.agent_at_work()
         rows = self.request("POST", "/api/board", {})[1]["rows"]
@@ -117,6 +117,9 @@ class ServeTests(ServeCase):
         self.assertEqual(self.request("POST", "/api/close", {"task": "job1"}, cookie=cookie)[0], 409)
         self.assertEqual(self.data()["status"], "open")
         self.assertEqual(self.request("POST", "/api/act", {"action": "autorun on", "task": TASK, "step": "preview"}, cookie=cookie)[0], 409)
+        # the approvals too: a question about the result is a doubt, and the person decides when the answer is in
+        self.assertEqual(self.request("POST", "/api/act", {"action": "approve-plan", "task": TASK, "step": "preview"}, cookie=cookie)[0], 409)
+        self.assertFalse((self.data().get("plan") or {}).get("approved_sha256"))
         self.agent_stopped()  # the agent stopped: the same buttons work
         self.assertEqual(self.request("POST", "/api/act", {"action": "pause", "task": TASK})[0], 200)
 

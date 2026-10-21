@@ -1124,9 +1124,9 @@
   "desk.actions.unheld.hint": "The session that had it moved on to another task, or is gone. Nothing happens until you open a session and ask for the task by name.",
   "desk.unheld.prompt": "Continue the task {name}",
   "desk.unheld.note": "No session holds this task. When you have decided, open a session in VS Code and ask for the task by name.",
-  "task.busy": "The agent is in the middle of a turn on this task (a session holds it, called a tool in the last {minutes} min and has not stopped). `{command}` would change the task under its hands. Stop the agent in VS Code first, or add --force.",
-  "serve.busy": "The agent is at work on this task. Stop it in VS Code first; the button works once it has stopped.",
-  "board.action.busy": "The agent is at work. Stop it in VS Code first.",
-  "desk.busy.note": "The agent is at work on this task. Pause, autorun and close wait until it stops. To stop it now, use the stop button in VS Code.",
+  "task.busy": "The agent is in the middle of a turn on this task (a session holds it, called a tool in the last {minutes} min and has not stopped). It may be answering a doubt about the result, or still changing it. `{command}` waits until it has stopped. Stop it in VS Code, or add --force.",
+  "serve.busy": "The agent is at work on this task. It may be answering you. Nothing here works until it has stopped; then decide.",
+  "board.action.busy": "The agent is at work. Decide once it has stopped.",
+  "desk.busy.note": "The agent is at work on this task, and may be answering a question about the result. Nothing here can be pressed until it has stopped: then approve, or ask again. To stop it now, use the stop button in VS Code.",
   "board.close.quiet": "The agent made no call for 5 minutes and has not stopped. It may still be running a long step. Close the task only if it is not."
 }

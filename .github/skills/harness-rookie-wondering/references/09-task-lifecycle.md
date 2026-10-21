@@ -44,7 +44,7 @@ When a task grows, use `task upgrade`: it only adds the missing files, and a tie
 - Closing only changes the state; the folder stays where it is, and `task open` opens it again.
 - Because a session holds one task, a task can be left without one: the session opened another task, or the file that says which task a session holds is gone (a reinstall without `.harness/runtime/`). Nothing then notes that the agent stopped. The board shows such a task as *no session*, with how long nobody has touched it.
 
-The board does not change a task under an agent that is at work. *Pause*, *close* and *autorun on* are grey (and refused in a terminal without `--force`) while a session holds the task, called a tool in the last 5 minutes and has not stopped. To stop it, use the stop button in VS Code; once the agent has stopped, the buttons work. The approvals are not held back: each is bound to the version you saw.
+While the agent is at work, nothing on the board can be pressed, the approvals included (they are refused in a terminal too, without `--force`): a session holds the task, called a tool in the last 5 minutes and has not stopped. If you ask a question about a plan or a result, you most likely doubt it, so the approval waits until the answer is in. Once the agent has stopped (or you stop it with the stop button in VS Code), the buttons that are yours come back by themselves.
 
 The board gives a task one state, the first that holds:
 
@@ -52,7 +52,7 @@ The board gives a task one state, the first that holds:
 | --- | --- | --- |
 | closed / not started | Closed, or a folder no one has opened yet | Nothing |
 | paused | You put it aside | `task resume`, or just talk to its session |
-| working | A session holds it, made a hook call in the last 5 minutes and has not stopped (even if the plan it just wrote already waits for you) | Nothing; the approvals are offered, pause, close and autorun are grey |
+| working | A session holds it, made a hook call in the last 5 minutes and has not stopped (even if the plan it just wrote already waits for you) | Nothing; every button is grey until it stops |
 | waiting for you | A plan, a write-back, a decision on checks, test results or a word after a stop is yours, and the agent has stopped | Do it (the reason is on the tag) |
 | quiet | A session holds it, but 5 minutes with no call and no stop | Look at the VS Code window; if it is closed, open a session and name the task |
 | no session | Nothing waits for you and nothing holds it | Open a session and name the task, or close it |

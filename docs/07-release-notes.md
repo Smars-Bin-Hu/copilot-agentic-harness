@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.22 (2026-10-21)
+
+### Changed
+
+- **While the agent is at work, nothing on the board can be pressed, the approvals included.** Before, only pause, close and autorun were grey; *approve plan*, *approve write-back*, *recover*, the check decisions and *confirm requirement* stayed on. They were safe (each is bound to the version you saw), but a plan or a write-back plan that waits for you while you ask the agent a question is a case where you most likely doubt the result. The harness now takes the right to approve away until the answer is in and the result stands (or you ask again); a button of yours comes back by itself when the agent has stopped. The task page says so in one line.
+- The server refuses every action of the page while the agent is at work (HTTP 409), and a person at a terminal is refused the same way for `task approve-plan`, `confirm-req`, `approve-promote`, `recover` and `review extend|waive` (as for pause, autorun and close): stop the agent in VS Code first, or add `--force`.
+- Archiving a closed task is not affected.
+
+**Introductory material**: `docs/02-features.md` and `harness-rookie-wondering` topic 9.
+
 ## 1.5.21 (2026-10-21)
 
 ### Changed

@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.24 (2026-10-21)
+
+### Changed
+
+- **A click on the board no longer reloads the page.** After pause, resume, close, an approval or an archive, the page reloaded itself, and a page that loads draws the robots where they are, so no robot slid or sprang after the click that changed something. Now the board asks the server again in place and draws the change: the robot slides to its new zone with its ring, or flies out when the task is closed, and in the list a row slides. The card of a robot is drawn again when a click changed what it offers (even with the mouse on it), and goes away when its robot changed state. The task page still reloads.
+
+**Introductory material**: none changed.
+
 ## 1.5.23 (2026-10-21)
 
 ### Added

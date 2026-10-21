@@ -210,6 +210,7 @@ const Lobby = (function () {
             slots.set(row.name, entry);
             if (ready) came.push(entry);
           }
+          entry.actionsChanged = JSON.stringify(entry.row.actions) !== JSON.stringify(row.actions);
           entry.row = row;
           if (entry.pose !== pose) {
             changed.push(entry);
@@ -223,10 +224,12 @@ const Lobby = (function () {
       });
       if (!still) { changed.forEach(pulse); came.forEach(enter); }
       gone.forEach(leave);
-      // The card shows what the task is now: draw it again (unless the mouse is on it, which would take a click away), or take it away when its robot moves.
-      if (current && card.classList.contains("on") && !card.matches(":hover")) {
+      // The card shows what the task is now: draw it again unless the mouse is on it (that would take a click away; an action just done is the exception),
+      // and take it away when its robot is gone or changed state.
+      if (current && card.classList.contains("on")) {
         const same = slots.get(current.row.name);
-        if (same && !changed.includes(same)) show(same); else hide();
+        if (!same || changed.includes(same)) hide();
+        else if (!card.matches(":hover") || same.actionsChanged) show(same);
       }
       ready = true;
       count.textContent = agents.length ? t("board.lobby.count", {count: agents.length}) : t("board.lobby.none");

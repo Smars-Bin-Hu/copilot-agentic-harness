@@ -706,6 +706,13 @@ class PageTests(BoardCase):
         self.assertIn('class: "act-strip"', (taskhtml.WEB / "board.js").read_text(encoding="utf-8"))
         self.assertIn('!CONTROLS.includes(item.action)', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
 
+    def test_a_click_asks_the_server_again_in_place_and_does_not_reload_the_board(self) -> None:
+        """A reload draws the board from nothing, so no robot slides or springs after the very click that changed something."""
+        serve = (taskhtml.WEB / "serve.js").read_text(encoding="utf-8")
+        self.assertEqual(serve.count("location.reload()"), 1, "only the fallback of a page that has no board in it (the task page)")
+        self.assertIn("const done = () => (after ? after() : location.reload());", serve)
+        self.assertIn("SERVE.onChange(refresh)", (taskhtml.WEB / "board.js").read_text(encoding="utf-8"))
+
     def test_an_empty_board(self) -> None:
         data = page_data(taskhtml.board_page([], "2026-01-01T00:00:00+00:00"))
         self.assertEqual((data["rows"], data["text"]["board.empty"]), ([], "还没有任务。"))

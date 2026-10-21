@@ -268,16 +268,13 @@
 
   if (typeof SERVE !== "undefined") {
     SERVE.start(app);
-    if (DATA.serve.refresh) {
-      setInterval(() => {
-        if (SERVE.busy()) return;
-        SERVE.post("/api/board", {}).then((data) => {
-          asOf = data.as_of;
-          archiveTo = data.archive_to || "";
-          const text = JSON.stringify([data.rows, data.hidden]);
-          if (text !== shown) { rows = data.rows; hidden = data.hidden; shown = text; draw(); } else stamp.textContent = subtitle();
-        }, () => {});
-      }, DATA.serve.refresh * 1000);
-    }
+    const refresh = () => SERVE.post("/api/board", {}).then((data) => {
+      asOf = data.as_of;
+      archiveTo = data.archive_to || "";
+      const text = JSON.stringify([data.rows, data.hidden]);
+      if (text !== shown) { rows = data.rows; hidden = data.hidden; shown = text; draw(); } else stamp.textContent = subtitle();
+    }, () => {});
+    SERVE.onChange(refresh);  // after a click the board is asked again in place, and the robots slide (a reload draws them from nothing)
+    if (DATA.serve.refresh) setInterval(() => { if (!SERVE.busy()) refresh(); }, DATA.serve.refresh * 1000);
   }
 })();

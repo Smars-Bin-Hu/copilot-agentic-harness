@@ -8,6 +8,10 @@ const SERVE = (function () {
   const serve = DATA.serve;
   const free = (action) => action === "pause" || action === "resume";
   let busy = false;
+  // After an action the page asks the server again and draws what changed (the board registers how); a page without that reloads. A reload would draw the
+  // board from nothing, so no robot would slide or spring: an action is the very moment the person wants to see the change.
+  let after = null;
+  const done = () => (after ? after() : location.reload());
 
   function post(path, body) {
     return fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json", "X-Harness-Board": "1"}, body: JSON.stringify(body)})
@@ -77,7 +81,7 @@ const SERVE = (function () {
     });
     go.addEventListener("click", () => {
       go.disabled = true;
-      post("/api/archive", body("act")).then(() => { view.close(); location.reload(); },
+      post("/api/archive", body("act")).then(() => { view.close(); done(); },
         (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; });
     });
     to.focus();
@@ -93,7 +97,7 @@ const SERVE = (function () {
     no.addEventListener("click", view.close);
     go.addEventListener("click", () => {
       go.disabled = true;
-      post("/api/close", {task: row.name}).then(() => { view.close(); location.reload(); },
+      post("/api/close", {task: row.name}).then(() => { view.close(); done(); },
         (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; });
     });
   }
@@ -104,7 +108,7 @@ const SERVE = (function () {
     const body = {action: item.action, task: row.name};
     if (free(item.action)) {
       button.textContent = t("board.serve.working");
-      post("/api/act", {...body, step: "act"}).then(() => location.reload(), (error) => { button.textContent = button.dataset.label; failed(error); });
+      post("/api/act", {...body, step: "act"}).then(done, (error) => { button.textContent = button.dataset.label; failed(error); });
       return;
     }
     // The preview works the plan out (git on every repository): it can take long. The button says so, and the page keeps still meanwhile.
@@ -124,7 +128,7 @@ const SERVE = (function () {
       const send = () => {
         yes.disabled = true;
         yes.textContent = t("board.serve.working");
-        post("/api/act", {...body, step: "act", code: input.value.trim()}).then(() => { view.close(); location.reload(); },
+        post("/api/act", {...body, step: "act", code: input.value.trim()}).then(() => { view.close(); done(); },
           (error) => { said.replaceChildren(...reasons(error.message)); yes.disabled = false; yes.textContent = t("board.serve.confirm"); });
       };
       yes.addEventListener("click", send);
@@ -166,5 +170,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner());
   }
 
-  return {runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, ready, busy: () => busy};
+  return {runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, ready, busy: () => busy, onChange: (call) => { after = call; }};
 })();

@@ -699,6 +699,12 @@ class PageTests(BoardCase):
         self.assertRegex(css, r"\.tag\.long\{[^}]*white-space:normal[^}]*overflow-wrap:anywhere")
         self.assertIn('tag(row.waiting, "hot long")', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
 
+    def test_the_buttons_of_a_row_scroll_sideways_and_only_what_it_waits_for_is_marked(self) -> None:
+        css = (taskhtml.WEB / "page.css").read_text(encoding="utf-8")
+        self.assertRegex(css, r"\.act-strip\{[^}]*flex-wrap:nowrap[^}]*overflow-x:auto")
+        self.assertIn('class: "act-strip"', (taskhtml.WEB / "board.js").read_text(encoding="utf-8"))
+        self.assertIn('!["pause", "resume", "autorun on", "close"].includes(item.action)', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
+
     def test_an_empty_board(self) -> None:
         data = page_data(taskhtml.board_page([], "2026-01-01T00:00:00+00:00"))
         self.assertEqual((data["rows"], data["text"]["board.empty"]), ([], "还没有任务。"))

@@ -114,7 +114,7 @@ function copyCommand(button, command) {
 function actionButton(row, item, extra) {
   const label = t("board.action." + item.action.replace(" ", "-"));
   const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page
-  const hot = row.waiting && item.action !== "pause" && item.action !== "autorun on";
+  const hot = row.waiting && !["pause", "resume", "autorun on", "close"].includes(item.action);  // what the task waits for, not what the person may do any time
   const button = h("button", {class: "act" + (hot ? " hot" : "") + (live ? " live" : "") + (extra ? " " + extra : ""), type: "button", title: live ? "" : item.command, "data-label": label}, label);
   button.addEventListener("click", () => (live ? SERVE.act(button, row, item) : copyCommand(button, item.command)));
   return button;

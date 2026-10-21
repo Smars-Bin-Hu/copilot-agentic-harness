@@ -95,7 +95,7 @@
 
   function actionCell(row) {
     const buttons = (row.actions || []).map((item) => actionButton(row, item));
-    return h("td", {class: "acts"}, buttons.length ? buttons : "-");
+    return h("td", {class: "acts"}, buttons.length ? h("div", {class: "act-strip"}, buttons) : "-");  // one line that scrolls sideways, so a row stays as low as the others
   }
 
   function state(row) {

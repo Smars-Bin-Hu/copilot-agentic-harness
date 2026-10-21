@@ -56,7 +56,11 @@ noscript{display:block;margin-top:16px;color:var(--bad)}
 .dots i{position:absolute;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--model)}
 .said{max-width:26em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help}
 /* A button whose words are longer than the cell takes two lines rather than spill out of it. */
-.acts{min-width:9em}.acts .act{white-space:normal;text-align:left;max-width:100%}.act{white-space:nowrap;font:inherit;font-size:12px;padding:2px 8px;margin:0 4px 2px 0;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
+/* The buttons of a row stay on one line and scroll sideways; a soft edge shows that there is more on that side. */
+.act-strip{width:15em;display:flex;flex-wrap:nowrap;gap:4px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;padding-bottom:3px;
+ background:linear-gradient(to right,var(--card) 30%,transparent) left center/18px 100% no-repeat local,linear-gradient(to left,var(--card) 30%,transparent) right center/18px 100% no-repeat local,
+ linear-gradient(to right,rgba(128,138,160,.35),transparent) left center/8px 100% no-repeat scroll,linear-gradient(to left,rgba(128,138,160,.35),transparent) right center/8px 100% no-repeat scroll}
+.act-strip .act{flex:none;margin:0}.act{white-space:nowrap;font:inherit;font-size:12px;padding:2px 8px;margin:0 4px 2px 0;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
 .act:hover{border-color:var(--soft)}.act.hot{border-color:var(--approval)}
 .act.live{border-style:solid;font-weight:600}.act:disabled{opacity:.5;cursor:default}
 .pairing{margin:8px 0 0}.pairing.good{color:var(--good)}

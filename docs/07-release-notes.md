@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.17 (2026-10-20)
+
+### Changed
+
+- **The buttons of a row in the list stay on one line and scroll sideways.** A long button ("approve write-back", "recover the repository") used to wrap into a tall box and made the row twice as high as the others. The strip is 15 characters wide, a soft edge shows that there is more on that side, and the one the task waits for comes first.
+- **Only what the task waits for has the orange border.** "close" and "resume" had it on every row that waited for you; now it is the approval or recovery button alone ("pause", "resume", "autorun on" and "close" are things you may do any time).
+
+**Introductory material**: none changed (a style of the list).
+
 ## 1.5.16 (2026-10-20)
 
 ### Added

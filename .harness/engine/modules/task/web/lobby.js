@@ -124,7 +124,21 @@ const Lobby = (function () {
       if (entry.zone !== zone) { rowsOf[zone].append(entry.slot); entry.zone = zone; }
     }
 
+    // A robot whose task changed state slides to its new place (it does not jump), and a ring in the colour of the new state spreads from it once.
+    function pulse(entry) {
+      const ring = h("i", {class: "lb-ring"});
+      ring.style.borderColor = getComputedStyle(entry.bot).getPropertyValue("--c") || "#fff";
+      entry.slot.append(ring);
+      const gone = () => ring.remove();
+      if (!ring.animate) { gone(); return; }
+      ring.animate([{transform: "translate(-50%,-50%) scale(.3)", opacity: 0.9}, {transform: "translate(-50%,-50%) scale(1.5)", opacity: 0}], {duration: 900, easing: "ease-out"}).onfinish = gone;
+      entry.bot.animate([{transform: "scale(.86,1.1)"}, {transform: "scale(1.08,.94)", offset: 0.4}, {transform: "none"}], {duration: 600, easing: "cubic-bezier(.3,1.5,.5,1)"});
+    }
+
     function update(rows, live) {
+      const before = new Map();
+      if (!still) for (const [name, entry] of slots) before.set(name, entry.slot.getBoundingClientRect());
+      const changed = [];
       const agents = rows.filter((row) => row.status === "open");
       const names = new Set(agents.map((row) => row.name));
       for (const [name, entry] of slots) if (!names.has(name)) { entry.slot.remove(); slots.delete(name); }
@@ -147,6 +161,7 @@ const Lobby = (function () {
         }
         entry.row = row;
         if (entry.pose !== pose) {
+          if (entry.pose) changed.push(entry);
           entry.bot.setAttribute("class", "lb-bot lb-pose-" + pose);
           entry.bot._mark.textContent = pose === "tests" ? "?" : "!";
           entry.pose = pose;
@@ -157,6 +172,15 @@ const Lobby = (function () {
         const here = [...slots.values()].filter((entry) => entry.zone === id).length;
         zoneBox[id].box.hidden = !here;
         zoneBox[id].name.textContent = t(zoneBox[id].label) + " · " + here;
+      }
+      if (!still) {
+        for (const [name, entry] of slots) {
+          const was = before.get(name);
+          if (!was || !entry.slot.animate) continue;
+          const now = entry.slot.getBoundingClientRect(), dx = was.left - now.left, dy = was.top - now.top;
+          if (Math.abs(dx) > 2 || Math.abs(dy) > 2) entry.slot.animate([{transform: "translate(" + dx + "px," + dy + "px)"}, {transform: "none"}], {duration: 700, easing: "cubic-bezier(.2,.8,.2,1)"});
+        }
+        changed.forEach(pulse);
       }
       count.textContent = agents.length ? t("board.lobby.count", {count: agents.length}) : t("board.lobby.none");
       if (!agents.length && !empty.firstChild) {

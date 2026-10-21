@@ -22,6 +22,7 @@
 .lb-dot-work{background:var(--lb-work)}.lb-dot-you{background:var(--lb-you)}.lb-dot-rest{background:var(--lb-rest)}.lb-dot-left{background:var(--lb-left)}
 .lb-row{display:flex;flex-wrap:wrap;gap:6px 10px}
 .lb-slot{position:relative;width:104px;text-align:center;cursor:pointer;outline:none}
+.lb-ring{position:absolute;left:50%;top:62px;width:96px;height:96px;border:2px solid #fff;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%) scale(.3);opacity:0}
 .lb-nm{font-size:11.5px;color:#cbd6f3;margin-top:-6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4px}
 .lb-slot svg{width:104px;height:135px;display:block;overflow:visible}
 .lb-slot:focus-visible .lb-nm{outline:2px solid var(--lb-you);border-radius:4px}

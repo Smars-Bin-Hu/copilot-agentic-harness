@@ -537,7 +537,7 @@ class PageTests(BoardCase):
 
     def test_the_board_page_has_the_lobby_and_its_own_style(self) -> None:
         page = taskhtml.board_page([], "2026-10-20T00:00:00+00:00", 5)
-        for mark in ("const Lobby = (function", ".lb-scene{", "board.mode.lobby", ".rb-ribbon{", "function stateTag", "board.state.unheld", "board.lobby.zone.left", ".tag.lost{"):
+        for mark in ("const Lobby = (function", ".lb-scene{", "board.mode.lobby", ".rb-ribbon{", "function stateTag", "function pulse(entry)", "board.state.unheld", "board.lobby.zone.left", ".tag.lost{"):
             self.assertIn(mark, page)
 
 

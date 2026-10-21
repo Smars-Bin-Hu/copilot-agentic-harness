@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.18 (2026-10-20)
+
+### Added
+
+- **A robot that changes state slides to its new zone and a ring spreads from it.** Before, when a task changed state the robot jumped to its new zone and took the new pose. Now it slides there (0.7 s), squashes and springs once, and a ring in the colour of the new state (green: at work, orange: waits for you, yellow: left alone, grey: resting) spreads from it. Only a robot that changed state moves; the others stay. The first draw and a page that is not kept fresh show nothing of this, and with the system set to reduce motion there is none.
+
+**Testing**: the automatic tests pass on the Mac. A real Chrome was driven through the board in a copy of the harness with tasks in every state; the rings and the slides were seen in a frame taken in the middle of the change, and the page logged no error. Not watched on Windows.
+
+**Introductory material**: none changed (the motion of the lobby).
+
 ## 1.5.17 (2026-10-20)
 
 ### Changed

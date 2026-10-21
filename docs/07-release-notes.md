@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.13 (2026-10-20)
+
+### Added
+
+- **A Review tab on the task page**, after Changes. It shows the independent checks of the task (`[review]=n`): how many are asked, how many have passed on the work as it is now, how many are used of the limit, and whether you waived them; then every round, newest first: PASS or FAIL, when it started, whether it looked at the version of the work as it is now or an earlier one, **the reviewer's answer drawn as a page** (the findings with their file and line), and, folded, the package the reviewer was given. A round that is running is marked, and a round with no saved answer says so. The tab is there only when checks were asked for or one has run; its label shows passes over checks asked (`Review 1/2`). The page reads what the harness saved (`REVIEW/round-NNN/verdict.md` and `package.md`); the agent cannot change an answer. Nothing new is written to disk.
+
+**Testing**: the automatic tests pass on the Mac; the page was drawn in Chrome on a real task with a finished check. The running-round marker was not watched live. **Not run on Windows**.
+
+**Introductory material**: none changed.
+
 ## 1.5.12 (2026-10-20)
 
 ### Changed

@@ -10,7 +10,7 @@
   let desk = DATA.desk;
   let shown = JSON.stringify(desk);
   const same = (a, b) => a.replace(/"as_of":"[^"]*"/, "") === b.replace(/"as_of":"[^"]*"/, "");  // the time of asking is not a change
-  const tabs = ["overview", "plan", "todo", "log", "changes", "history", "docs"];
+  const tabs = ["overview", "plan", "todo", "log", "changes", "review", "history", "docs"];
   const FILES = {overview: "TASK.md", req: "REQ.md", plan: "PLAN.md", todo: "TODO.md", log: "LOG.md"};
   let current = tabs.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
   let other = "";  // the document open in the "docs" tab
@@ -134,15 +134,39 @@
     const label = (tab) => {
       if (tab === "todo" && desk.todo.total) return t("desk.tab.todo") + " " + desk.todo.done + "/" + desk.todo.total;
       if (tab === "changes" && desk.changes.files.length) return t("desk.tab.changes") + " " + desk.changes.files.length;
+      if (tab === "review") return t("desk.tab.review") + (desk.review.n ? " " + desk.review.passes + "/" + desk.review.n : " " + desk.review.rounds.length);
       if (tab === "history") return t("desk.tab.history") + " " + desk.history.length;
       if (tab === "docs") return t("desk.tab.docs") + " " + extra().length;
       return t("desk.tab." + tab);
     };
-    return h("nav", {class: "tabs"}, tabs.filter((tab) => tab !== "docs" || extra().length).map((tab) => {
+    return h("nav", {class: "tabs"}, tabs.filter((tab) => (tab !== "docs" || extra().length) && (tab !== "review" || hasReview())).map((tab) => {
       const button = h("button", {type: "button", class: "tab" + (tab === current ? " on" : "")}, label(tab));
       button.addEventListener("click", () => { current = tab; history.replaceState(null, "", "#" + tab); draw(false); });
       return button;
     }));
+  }
+
+  // The tab is there when checks were asked for ([review]=n) or one has run; a task nobody asked to check has none.
+  const hasReview = () => desk.review.n > 0 || desk.review.rounds.length > 0;
+
+  function review() {
+    const r = desk.review;
+    const parts = [h("p", {class: "hint top"}, t("desk.review.hint"))];
+    parts.push(h("div", {class: "review-sum"},
+      r.n ? t("desk.review.sum", {n: r.n, passes: r.passes, used: r.used, limit: r.limit}) : t("desk.review.off"),
+      r.waived ? [" ", tag(t("desk.review.waived"), "hot")] : null,
+      r.pending ? [" ", tag(t("desk.review.running", {number: r.pending}), "good run")] : null));
+    if (!r.rounds.length) parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.review.none"))));
+    for (const item of r.rounds) {
+      const verdict = item.verdict ? tag(item.verdict, item.verdict === "PASS" ? "good" : item.verdict === "FAIL" ? "bad" : "") : tag(t("desk.review.waiting"));
+      const answer = item.answer ? blocks(item.answer.blocks) : h("p", {class: "sub"}, item.verdict ? t("desk.review.noanswer") : t("desk.review.pending"));
+      parts.push(h("section", {class: "round " + (item.verdict === "FAIL" ? "fail" : item.verdict === "PASS" ? "pass" : "")},
+        h("div", {class: "round-head"}, h("strong", null, "round-" + String(item.number).padStart(3, "0")), " ", verdict, " ",
+          h("span", {class: "sub"}, when(item.started_at, 5, 16) + " · " + (item.current ? t("desk.review.current") : t("desk.review.earlier")))),
+        h("article", {class: "md"}, answer, item.answer && item.answer.cut ? h("p", {class: "sub"}, t("desk.cut")) : null),
+        item.package ? h("details", null, h("summary", {class: "sub"}, t("desk.review.given")), h("article", {class: "md"}, blocks(item.package.blocks))) : null));
+    }
+    return parts;
   }
 
   function progress() {
@@ -198,6 +222,7 @@
     if (current === "todo") return [progress(), markdown("TODO.md", t("desk.missing.todo"))];
     if (current === "log") return [h("p", {class: "hint top"}, t("desk.log.hint")), markdown("LOG.md", t("desk.missing.log"))];
     if (current === "changes") return changes();
+    if (current === "review") return review();
     if (current === "history") return [h("p", {class: "hint top"}, t("desk.history.hint")), timeline()];
     const docs = extra();
     const name = docs.some((item) => item.name === other) ? other : (docs[0] || {}).name;

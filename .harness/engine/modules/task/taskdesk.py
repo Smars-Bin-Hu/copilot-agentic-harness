@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import messages, tasks
 from core.paths import cli_command, utc_now
 
-from . import common, mdtree, task as task_ops, taskboard, taskinsight, tasklife, taskreview
+from . import common, mdtree, task as task_ops, taskboard, taskinsight, tasklife, taskreview, tasksnap
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
 MAX_DOC_BYTES = 400_000  # a bigger document is shown cut, with a note
@@ -40,6 +40,36 @@ def documents(root: Path, task: str) -> List[Dict[str, Any]]:
         tree = mdtree.parse(text)
         out.append({"name": name, "blocks": tree["blocks"], "cut": tree["cut"] or len(data) > MAX_DOC_BYTES})
     return out
+
+
+def read_doc(path: Path) -> Optional[Dict[str, Any]]:
+    """A markdown file of the task as blocks, or None when it is not there. A BOM and a cut are handled as for the documents."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    tree = mdtree.parse(data[:MAX_DOC_BYTES].decode("utf-8", errors="replace"))
+    return {"blocks": tree["blocks"], "cut": tree["cut"] or len(data) > MAX_DOC_BYTES}
+
+
+def reviews(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """The independent checks of the task: the counts `task review status` gives, and every round with the reviewer's answer
+    and the package it was given, newest first. `current`: the round looked at the result as it is now."""
+    empty = {"n": 0, "passes": 0, "used": 0, "limit": 0, "pending": None, "waived": False, "rounds": []}
+    try:
+        info = taskreview.summary(root, task, data)
+        rounds = []
+        for item in reversed(taskreview.state_of(data)["rounds"]):
+            number = int(item.get("number") or 0)
+            folder = tasks.task_dir(root, task) / tasksnap.REVIEW_DIR / f"round-{number:03d}"
+            rounds.append({
+                "number": number, "task_round": item.get("task_round", 1), "ordinal": item.get("ordinal"), "verdict": item.get("verdict") or "",
+                "started_at": item.get("started_at", ""), "current": bool(info["digest"]) and item.get("digest") == info["digest"] and item.get("task_round") == data.get("round"),
+                "answer": read_doc(folder / taskreview.VERDICT_FILE), "package": read_doc(folder / taskreview.PACKAGE),
+            })
+        return {"n": info["n"], "passes": info["passes"], "used": info["checks_used"], "limit": info["checks_limit"], "pending": info["pending_round"], "waived": info["waived"], "rounds": rounds}
+    except Exception:  # noqa: BLE001 - a page must not fail over the checks of one task
+        return empty
 
 
 def history(data: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -107,6 +137,7 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "created_at": data.get("created_at", ""), "updated_at": data.get("updated_at", ""),
         "todo": {"done": done, "total": total},
         "docs": docs, "history": history(data), "changes": changed(root, task, data),
+        "review": reviews(root, task, data),
         "actions": offered(root, row, task, tuple(served)),
         "req_changed": row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),
         "report": "/" + report.relative_to(root / common.REPORTS_DIR).as_posix() if report.is_file() else "",

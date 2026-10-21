@@ -1071,5 +1071,18 @@
   "desk.wait.tests": "在所写的环境里照 TEST-GUIDE.md（docs 页签）跑测试，再到 VS Code 里把结果带回给 agent。比如这样说：",
   "desk.tests.prompt": "这是测试结果：（贴输出、数字和任何意外）。",
   "task.name.shell": "任务名 `{name}` 里有 {chars}：终端会把它当成命令、引号、变量或通配符，而任务名每条命令里都要打。只用字母、数字、`-`、`_` 和 `.`，不要以 `-` 开头。比如：`{example}`。",
-  "doctor.task_names": "有任务文件夹的名字里带终端会当成命令的字符：{names}。它还能打开，但相关命令要加引号，在 Windows 的 cmd 里 `&` 和 `^` 会让命令出错。请改文件夹名，或用安全的名字重新开任务。"
+  "doctor.task_names": "有任务文件夹的名字里带终端会当成命令的字符：{names}。它还能打开，但相关命令要加引号，在 Windows 的 cmd 里 `&` 和 `^` 会让命令出错。请改文件夹名，或用安全的名字重新开任务。",
+  "desk.tab.review": "检查",
+  "desk.review.hint": "这个任务的独立检查：每位检查员拿到了什么、答了什么，都是 harness 原样存下的。agent 改不了答案。",
+  "desk.review.sum": "要求连续 {n} 次检查 · 对现在这版已通过 {passes} 次 · 已用 {used}/{limit}",
+  "desk.review.off": "现在没有要求检查；下面是之前跑过的轮次。",
+  "desk.review.waived": "你已豁免",
+  "desk.review.running": "第 {number} 轮在检查",
+  "desk.review.none": "已要求检查，但还没有跑过。",
+  "desk.review.waiting": "还没有答复",
+  "desk.review.noanswer": "答复文件不在。",
+  "desk.review.pending": "检查员还没有答复。",
+  "desk.review.current": "检查的是现在这版",
+  "desk.review.earlier": "检查的是之前的版本",
+  "desk.review.given": "检查员拿到的送审包"
 }

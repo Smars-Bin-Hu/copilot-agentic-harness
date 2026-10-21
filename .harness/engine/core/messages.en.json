@@ -1071,5 +1071,18 @@
   "desk.wait.tests": "Run the tests in TEST-GUIDE.md (the docs tab) in the environment named, then bring the results back to the agent in VS Code. A message such as:",
   "desk.tests.prompt": "Here are the test results: (paste the output, numbers and anything unexpected).",
   "task.name.shell": "The task name `{name}` has {chars}: a terminal reads it as a command, a quote, a variable or a wildcard, and the task name is typed in every command. Use letters, digits, `-`, `_` and `.`, and do not start with `-`. For example: `{example}`.",
-  "doctor.task_names": "A task folder has characters in its name that a terminal reads as commands: {names}. It still opens, but its commands need quotes, and on Windows cmd `&` and `^` break them. Rename the folder, or make the task again under a safe name."
+  "doctor.task_names": "A task folder has characters in its name that a terminal reads as commands: {names}. It still opens, but its commands need quotes, and on Windows cmd `&` and `^` break them. Rename the folder, or make the task again under a safe name.",
+  "desk.tab.review": "Review",
+  "desk.review.hint": "The independent checks of this task: what each reviewer was given, and what it answered, as saved by the harness. The agent cannot change an answer.",
+  "desk.review.sum": "{n} check(s) in a row asked · {passes} passed on the version as it is now · {used} of {limit} used",
+  "desk.review.off": "No check is asked for; the rounds below ran earlier.",
+  "desk.review.waived": "waived by you",
+  "desk.review.running": "round {number} is running",
+  "desk.review.none": "Checks are on, but none has run yet.",
+  "desk.review.waiting": "no answer yet",
+  "desk.review.noanswer": "The answer file is not there.",
+  "desk.review.pending": "The reviewer has not answered yet.",
+  "desk.review.current": "this version of the work",
+  "desk.review.earlier": "an earlier version of the work",
+  "desk.review.given": "What the reviewer was given"
 }

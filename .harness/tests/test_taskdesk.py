@@ -68,6 +68,34 @@ class DeskTests(ServeCase):
         self.assertIn("approve-plan", [item["action"] for item in desk["actions"]])
         self.assertTrue(desk["history"])
 
+    def test_the_review_tab_has_every_round_with_its_answer_newest_first(self) -> None:
+        from modules.task import taskreview, tasksnap
+
+        self.assertEqual(taskdesk.desk(self.root, "job1")["review"]["rounds"], [])
+        digest = tasksnap.results_digest(self.root, TASK)
+        folder = self.task / "REVIEW"
+        for number, text in ((1, "\ufeff# VERDICT: FAIL\n\n- `a.sql:3` wrong join\n"), (2, "VERDICT: PASS\n")):
+            (folder / f"round-{number:03d}").mkdir(parents=True)
+            (folder / f"round-{number:03d}" / "verdict.md").write_text(text, encoding="utf-8")
+        (folder / "round-002" / "package.md").write_text("# Package\n", encoding="utf-8")
+        with task_ops.locked(self.root, TASK) as data:
+            review = taskreview.state_of(data)
+            review["n"] = 1
+            review["rounds"] += [
+                {"number": 1, "task_round": data["round"], "ordinal": 1, "verdict": "FAIL", "digest": "an-older-version", "started_at": "2026-10-20T01:00:00+00:00"},
+                {"number": 2, "task_round": data["round"], "ordinal": 2, "verdict": "PASS", "digest": digest, "started_at": "2026-10-20T02:00:00+00:00"},
+                {"number": 3, "task_round": data["round"], "ordinal": 3, "verdict": "", "digest": digest, "started_at": "2026-10-20T03:00:00+00:00"},
+            ]
+        found = taskdesk.desk(self.root, "job1")["review"]
+        self.assertEqual([item["number"] for item in found["rounds"]], [3, 2, 1])
+        self.assertEqual((found["n"], found["passes"], found["pending"]), (1, 1, 3))
+        by = {item["number"]: item for item in found["rounds"]}
+        self.assertEqual((by[2]["current"], by[1]["current"]), (True, False))
+        self.assertEqual(by[1]["answer"]["blocks"][0]["t"], "h", "the first heading is a heading, a BOM or not")
+        self.assertIsNone(by[3]["answer"])
+        self.assertEqual(by[2]["package"]["blocks"][0]["t"], "h")
+        self.assertIsNone(by[1]["package"])
+
     def test_the_server_sends_it_with_a_policy_that_keeps_it_from_talking_elsewhere(self) -> None:
         status, data, headers = self.request("GET", "/task/job1")
         self.assertEqual(status, 200)

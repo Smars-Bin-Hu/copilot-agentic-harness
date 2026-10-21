@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional
 from core import config, copilot_events, domainskills, messages, tasks
 from core.logs import session_log_path
 from core.paths import cli_command, repo_root, utc_now
-from core.state import admin_on, atomic_write, session, state_lock, state_path
+from core.state import SUBAGENT_ACTIVE_TTL_SECONDS, admin_on, atomic_write, session, state_lock, state_path
 
 from . import task as task_ops
 from .common import CommandError
@@ -453,12 +453,12 @@ CONTROLS = ("pause", "resume", "close", "autorun on")  # what changes the course
 
 
 def at_work(root: Path, data: Dict[str, Any], why: Optional[str] = None) -> bool:
-    """Is the agent in the middle of a turn? A session holds the task, made a hook call lately, and has not stopped since (the Stop hook leaves a mark,
+    """Is the agent in the middle of a turn? A session holds the task, made a hook call lately (or waits for a subagent, such as the reviewer, that is running), and has not stopped since (the Stop hook leaves a mark,
     and a new prompt takes it away); an agent the person cancelled has stopped too. This is the state *working*. `why`: the waiting reason, when the caller has it already.
     Pause, close and autorun would change the task under the agent's hands; the approvals do not (each is bound to the digest of what the person saw)."""
     if data.get("status") != "open" or paused_since(data) or data.get("waiting") or data.get("handoff"):
         return False
-    if not held(root, data) or not active_now(root, data):
+    if not held(root, data) or not (active_now(root, data) or subagent_running(root, data)):
         return False
     if why is None:
         why = "cancelled" if cancelled_at(data) else ""
@@ -474,14 +474,28 @@ def require_idle(root: Path, data: Dict[str, Any], command: str, force: bool = F
 STATES = ("waiting", "working", "quiet", "unheld", "paused", "closed", "new")  # the order of the list; `state_of` picks one
 
 
+def session_state(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
+    """The state file of the session of this task, as it is on disk (never written); empty when it is gone or cannot be read."""
+    try:
+        state = json.loads(state_path(root, str(data.get("surface") or "vscode"), str(data.get("session_id") or "")).read_text(encoding="utf-8-sig"))
+        return state if isinstance(state, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
 def held(root: Path, data: Dict[str, Any]) -> bool:
     """Does the session of this task still hold it (`active_task` in the session's state file)? A session that opened another task, a session that
-    closed this one, a state file that is gone (a reinstall without `runtime/`): not held. The state file is read as it is, never written."""
+    closed this one, a state file that is gone (a reinstall without `runtime/`): not held."""
+    return session_state(root, data).get("active_task") == data.get("task")
+
+
+def subagent_running(root: Path, data: Dict[str, Any]) -> bool:
+    """Is a subagent (the reviewer, a mapper) running for the session of this task? The agent waits for it and makes no call of its own, for minutes;
+    the session's state lists it from its start until it ends or the agent stops (an entry older than the time core keeps it is not believed)."""
     try:
-        path = state_path(root, str(data.get("surface") or "vscode"), str(data.get("session_id") or ""))
-        state = json.loads(path.read_text(encoding="utf-8-sig"))
-        return isinstance(state, dict) and state.get("active_task") == data.get("task")
-    except (OSError, ValueError, TypeError):
+        now = time.time()
+        return any(now - float(entry["at"]) <= SUBAGENT_ACTIVE_TTL_SECONDS for entry in session_state(root, data)["subagents"]["active"])
+    except (KeyError, TypeError, ValueError):
         return False
 
 

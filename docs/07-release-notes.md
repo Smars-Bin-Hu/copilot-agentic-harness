@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.25 (2026-10-21)
+
+### Changed
+
+- **While the reviewer runs, the task is still *working*.** The agent calls the reviewer and waits for it; it makes no call of its own for the minutes the check takes, so after 5 minutes the task showed as *quiet* and the buttons (pause, close, autorun, approvals) were back, in the middle of a check. A task now counts as at work while a subagent runs for its session (the session state lists it from its start until it ends or the agent stops; an entry older than 30 minutes is not believed). Found by putting a reviewer round and a running reviewer in the demo board: the page showed the reviewer's ring spinning and the tag *quiet*.
+
+**Introductory material**: `docs/02-features.md` (one clause).
+
 ## 1.5.24 (2026-10-21)
 
 ### Changed

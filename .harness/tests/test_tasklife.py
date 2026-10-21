@@ -409,6 +409,20 @@ class ListTests(LifeCase):
         row = self.listed()["tasks"][0]
         self.assertEqual((row["state"], row["waiting_why"]), ("waiting", "plan"))
 
+    def test_the_agent_waiting_for_the_reviewer_is_still_at_work(self) -> None:
+        """The reviewer runs for minutes and the agent makes no call meanwhile: the log of its session goes old, but the task is not quiet."""
+        self.new("job", "qa")
+        log = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{S1}.jsonl"
+        old = time.time() - 3600
+        os.utime(log, (old, old))
+        self.assertFalse(self.busy())
+        update_state(self.root, "vscode", S1, lambda state: state["subagents"]["active"].append({"agent_id": "reviewer@1", "agent_type": "reviewer", "at": time.time(), "awaiting_child": False}))
+        self.assertTrue(self.busy(), "a subagent is running for the session")
+        update_state(self.root, "vscode", S1, lambda state: state["subagents"]["active"].clear())  # SubagentStop, or the agent stopped
+        self.assertFalse(self.busy())
+        update_state(self.root, "vscode", S1, lambda state: state["subagents"]["active"].append({"agent_id": "reviewer@1", "agent_type": "reviewer", "at": time.time() - 7200, "awaiting_child": False}))
+        self.assertFalse(self.busy(), "an entry older than core keeps it is not believed")
+
     def test_a_task_nobody_holds_or_put_aside_or_handed_over_is_not_busy(self) -> None:
         self.new("first", "qa")
         self.new("second", "qa")

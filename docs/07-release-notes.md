@@ -10,6 +10,26 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.16 (2026-10-20)
+
+### Added
+
+- **A task has one state, and one more: "no session".** The board used to say "not waiting for you" for any open task that owed you nothing, even one that nobody was working on. The state is now one of seven, the first that holds: *closed*, *not started*, *paused*, *waiting for you* (with the reason), *working* (a session holds the task and made a hook call in the last 5 minutes), *quiet* (a session holds it, but 5 minutes with no call and no stop) and *no session* (open, nothing waits for you, and no session holds it: the session that had it moved on to another task, closed it, or its state file is gone, as after a reinstall without `.harness/runtime/`). A task with no session shows how long nobody has touched it. A task that waits for you stays *waiting* with or without a session; the page adds that you open a new session and ask for the task by name.
+- **The lobby has a fourth zone, "Left alone".** A task with no session is a grey robot with a plug hanging loose, a flickering core and a spark. Its eyes do not follow the mouse.
+- **The task page tells quiet and no-session apart** and gives a message to copy for a task with no session ("Continue the task <name>").
+- `harness task list` rows have `state`, `held` (does a session hold it) and, for a task with no session, `unheld_s`.
+
+### Changed
+
+- **"Not waiting for you" and "Running" are gone.** The tag is *working* (moving), *quiet*, or *no session*. The filter chips are all, waiting for you, working, quiet, no session, paused and closed; a saved "running" filter falls back to all. The column "Waiting for" is now "State".
+- The list is ordered by state: waiting for you (the longest wait first), working, quiet, no session, paused, closed.
+- The front end no longer works the state out: the lobby, the list, the filters and the task page read `state` from the server. On a page that is not kept fresh, *working* is drawn as *quiet* (the five minutes it looked at are gone).
+- **Nothing is closed or paused for you.** A task with no session is only shown.
+
+**Testing**: the automatic tests pass on the Mac. The new zone and pose were drawn in Chrome; the motion was not watched by a person. **Not run on Windows**, **not seen in Copilot's browser**.
+
+**Introductory material**: `docs/01-quickstart.md`, `02-features.md` and `04-reference.md`; `harness-rookie-wondering` topic 9 (a table of the states and why a task can have no session); `harness-rookie-quick-start` (workplace, capabilities); `harness-task-report` (waiting reasons and the troubleshooting row).
+
 ## 1.5.15 (2026-10-20)
 
 ### Added

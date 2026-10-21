@@ -138,6 +138,7 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "todo": {"done": done, "total": total},
         "docs": docs, "history": history(data), "changes": changed(root, task, data),
         "review": reviews(root, task, data), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
+        "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served)),
         "req_changed": row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),
         "report": "/" + report.relative_to(root / common.REPORTS_DIR).as_posix() if report.is_file() else "",

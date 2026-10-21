@@ -77,12 +77,13 @@
     return h("article", {class: "md"}, blocks(found.blocks), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
   }
 
+  const served = () => typeof SERVE !== "undefined" && Boolean(DATA.serve);
+
   // --- the parts --------------------------------------------------------------------------------------------
 
   function header() {
     const kind = t("task.kind." + (desk.kind || "none")) + " · " + t("task.tier." + (desk.tier || "none"));
-    const state = desk.status !== "open" ? tag(t("board.state." + (desk.status === "new" ? "new" : "closed")))
-      : desk.paused_since ? tag(t("board.state.paused")) : desk.waiting ? tag(desk.waiting, "hot long") : tag(t("board.state.running"), "good");
+    const state = stateTag(desk, served());
     return [
       brand(),
       h("div", {class: "crumbs sub"}, h("a", {href: "/"}, "← " + t("desk.back")),
@@ -93,7 +94,7 @@
     ];
   }
 
-  // What the card says when no button is the point: put aside, waiting for a word in VS Code, or really nothing.
+  // What the card says when no button is the point: put aside, waiting for a word in VS Code, nobody on it, or really nothing.
   function quiet() {
     if (desk.paused_since) return {title: t("desk.actions.paused"), hint: t("desk.actions.paused.hint")};
     const why = desk.waiting_why;
@@ -101,6 +102,8 @@
       return {title: desk.waiting.charAt(0).toUpperCase() + desk.waiting.slice(1), hint: t("desk.wait." + why),
         prompt: why.startsWith("go-") ? t("desk.go." + why.slice(3)) : why === "tests" ? t("desk.tests.prompt") : ""};
     }
+    if (desk.state === "unheld") return {title: t("desk.actions.unheld"), hint: t("desk.actions.unheld.hint"), prompt: t("desk.unheld.prompt", {name: desk.name})};
+    if (stateOf(desk, served()) === "quiet") return {title: t("desk.actions.quiet"), hint: t("desk.actions.quiet.hint")};
     return {title: t("desk.actions.none"), hint: t("desk.actions.none.hint")};
   }
 
@@ -125,6 +128,7 @@
       h("h2", null, idle ? idle.title : t("desk.actions.title")),
       desk.waited_s !== null && (items.length || desk.waiting) ? h("p", {class: "sub"}, t("desk.waited", {time: clock(desk.waited_s)})) : null,
       desk.req_changed ? h("p", {class: "hint bad"}, t("desk.req.changed")) : null,
+      desk.state === "waiting" && !desk.held ? h("p", {class: "hint"}, t("desk.unheld.note")) : null,
       idle ? [h("p", {class: "hint"}, idle.hint), idle.prompt ? promptLine(idle.prompt) : null] : h("div", {class: "action-list"}, items.map(entry)),
       rest.length ? h("div", {class: "action-more"}, h("div", {class: "sub label"}, t("desk.actions.more")), rest.map(line)) : null,
       typeof SERVE === "undefined" ? h("p", {class: "sub"}, t("board.copy.hint")) : SERVE.banner());
@@ -135,7 +139,7 @@
   function ribbon() {
     const s = desk.stages;
     if (!s || desk.status === "new") return null;
-    const live = typeof SERVE !== "undefined" && DATA.serve;
+    const live = served();
     const waits = Boolean(desk.waiting) && desk.status === "open" && !desk.paused_since;
     const works = Boolean(live) && desk.active && !waits && desk.status === "open";
     const again = s.steps.some((step) => step.id === "plan" && step.state === "now") && desk.history.some((event) => event.what === "approve-plan");

@@ -74,4 +74,4 @@ The user wants to keep watching: tell them to run `harness task list --watch` in
 | The output has `analysis_error` | The Markdown report is written; only the page was not made. Tell the user the error as written, and suggest an admin session to look into it |
 | The usage is all empty | `source` is not `copilot-events`. For the reasons, see "When Copilot's record is not found" in [Reading the numbers](references/reading.md) |
 | There are fewer prompts than the user remembers | Only the prompts of this task count. Those in the session before the task was opened, or after switching to another task, do not |
-| The board says a task is not waiting for you, but the agent has clearly stopped | The Stop of that session did not go through the hook (the window was just closed, say). Let the user say something in that session, or go and read the task's `TASK.md` |
+| The board says a task is quiet or has no session, but the agent has clearly stopped | The Stop of that session did not go through the hook (the window was just closed), or the session no longer holds the task. Open a session and name the task, or go and read the task's `TASK.md` |

@@ -65,6 +65,8 @@ class DeskTests(ServeCase):
         self.assertIn("IMPACT.md", [doc["name"] for doc in desk["docs"]])
         self.assertEqual(desk["todo"], {"done": 1, "total": 2})
         self.assertEqual(desk["waiting_why"], "plan")
+        self.assertEqual(desk["state"], "waiting")
+        self.assertIn("held", desk)
         self.assertIn("approve-plan", [item["action"] for item in desk["actions"]])
         self.assertTrue(desk["history"])
 

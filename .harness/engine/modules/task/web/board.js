@@ -25,18 +25,13 @@
     get(name, fallback) { try { const value = localStorage.getItem("harness.board." + name); return value === null ? fallback : value; } catch (error) { return name in memory ? memory[name] : fallback; } },
     set(name, value) { memory[name] = value; try { localStorage.setItem("harness.board." + name, value); } catch (error) { /* kept in memory only */ } },
   };
-  const FILTERS = ["all", "waiting", "running", "paused", "closed"];
+  const FILTERS = ["all", "waiting", "working", "quiet", "unheld", "paused", "closed"];
   const view = {filter: keep.get("filter", "all"), kind: keep.get("kind", ""), query: keep.get("query", ""), key: keep.get("sort", ""), dir: Number(keep.get("dir", "1")) || 1};
   if (!FILTERS.includes(view.filter)) view.filter = "all";
 
-  const matches = {
-    all: () => true,
-    waiting: (row) => !!row.waiting,
-    running: (row) => row.status === "open" && !row.paused_since && !row.waiting,
-    paused: (row) => row.status === "open" && !!row.paused_since,
-    closed: (row) => row.status === "closed",
-  };
-  const rank = (row) => (row.waiting ? 0 : row.status === "open" ? (row.paused_since ? 2 : 1) : row.status === "closed" ? 3 : 4);
+  const matches = Object.fromEntries(FILTERS.map((name) => [name, name === "all" ? () => true : (row) => stateOf(row, live) === name]));
+  const ORDER = ["waiting", "working", "quiet", "unheld", "paused", "closed", "new"];
+  const rank = (row) => ORDER.indexOf(stateOf(row, live));
   const kindText = (row) => (row.status === "new" ? "-" : t("task.kind." + (row.kind || "none")));
   // The columns that sort: the value of a row, and whether a bigger number comes first on the first click.
   const COLUMNS = {
@@ -104,12 +99,8 @@
   }
 
   function state(row) {
-    if (row.status !== "open") return tag(t("board.state." + (row.status === "new" ? "new" : "closed")));
-    if (row.paused_since) return tag(t("board.state.paused"));
-    if (row.waiting) return inPhase(tag(row.waiting, "hot long"));
-    // It moves only for work that is going on: the session made a hook call lately (`active`, from the server), and the page
-    // is kept fresh (served, or `task board` running). A page written once says nothing about now; an open task nobody works on is still.
-    return live && row.active ? inPhase(tag(t("board.state.working"), "good run")) : tag(t("board.state.running"), "idle");
+    const node = stateTag(row, live);
+    return /\b(run|hot)\b/.test(node.className) ? inPhase(node) : node;  // a tag that moves starts where the clock says it is
   }
   const live = Boolean(DATA.serve || DATA.refresh);
 

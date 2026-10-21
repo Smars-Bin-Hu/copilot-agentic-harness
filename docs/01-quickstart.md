@@ -129,7 +129,7 @@ A task that changes no repository (an RCA, a design) has no steps 4 to 6, 8 and 
 
 Open the board. One line per task: the kind, what it waits for from you, and for how long. The ones waiting for you are orange and come first.
 
-- **Filter and search**: buttons for all, waiting for you, running, paused and closed (each with its count), a menu of kinds, and a search box.
+- **Filter and search**: buttons for all, waiting for you, working, quiet, no session, paused and closed (each with its count), a menu of kinds, and a search box.
 - **Sort**: click a column head; again to reverse; a third time to go back.
 - **Closed tasks** stay on the board (the newest 50), so you can look back. An **archive** button on each closed one moves it out of the repository, after you check where it goes; tick several to archive them together.
 

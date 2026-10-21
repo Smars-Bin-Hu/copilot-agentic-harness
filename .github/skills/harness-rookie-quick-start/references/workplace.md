@@ -25,7 +25,7 @@ If the user closes the browser tab and has to open the board again, a browser th
 
 Open the board with the user and show these four things, one at a time:
 
-1. **The list.** Every task, with what it waits for and since when. Orange means it waits for you. There are buttons to filter (all, waiting for you, running, paused, closed), a search box, and a click on a column head sorts.
+1. **The list.** Every task, with what it waits for and since when. Orange means it waits for you. There are buttons to filter (all, waiting for you, working, quiet, no session, paused, closed), a search box, and a click on a column head sorts.
 2. **A task's page.** Click a task name. At the top is what waits for you, each button with a line on when to press it. Below are tabs: Overview (the progress and the requirement), Plan, TODO, Log, Changes, History.
 3. **The buttons.** *Confirm requirement*, *approve plan*, *approve write-back*, *pause*, *resume*, *archive*. An approval asks for a code that the page shows; you type it, which is how it stays your decision.
 4. **Time and usage.** A link on the task's page: where the time and the usage of this task went.

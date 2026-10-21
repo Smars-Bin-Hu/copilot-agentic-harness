@@ -78,6 +78,18 @@ function table(head, rows) {
 const th = (text, numeric) => h("th", numeric ? {class: "num"} : null, text || "");
 const num = (text) => h("td", {class: "num"}, text);
 const tag = (text, kind) => h("span", {class: "tag" + (kind ? " " + kind : "")}, text);
+
+// The one state of a task is told by the server (tasklife.state_of): new, closed, paused, waiting, working, quiet, unheld.
+// A page that is not kept fresh cannot say "working" (the last five minutes it looked at are gone), so it says "quiet".
+function stateOf(row, live) { return row.state === "working" && !live ? "quiet" : row.state || "quiet"; }
+function stateTag(row, live) {
+  const state = stateOf(row, live);
+  if (state === "waiting") return tag(row.waiting, "hot long");
+  if (state === "working") return tag(t("board.state.working"), "good run");
+  if (state === "quiet") return tag(t("board.state.quiet"), "idle");
+  if (state === "unheld") return tag(t("board.state.unheld") + (row.unheld_s === null || row.unheld_s === undefined ? "" : " \u00b7 " + clock(row.unheld_s)), "lost");
+  return tag(t("board.state." + state));
+}
 const card = (title, ...children) => h("div", {class: "card"}, title ? h("h2", null, title) : null, children);
 const reviewsText = (checks, fails) => t("report.kpi.reviews.value", {checks, fails});
 

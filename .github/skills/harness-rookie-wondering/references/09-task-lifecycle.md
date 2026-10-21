@@ -42,6 +42,18 @@ When a task grows, use `task upgrade`: it only adds the missing files, and a tie
 - With a task, the edit tools can write the task folder only.
 - At the top of every prompt, a hook tells the agent how far the task is (with a task) or which tasks are not closed (without one).
 - Closing only changes the state; the folder stays where it is, and `task open` opens it again.
+- Because a session holds one task, a task can be left without one: the session opened another task, or the file that says which task a session holds is gone (a reinstall without `.harness/runtime/`). Nothing then notes that the agent stopped. The board shows such a task as *no session*, with how long nobody has touched it.
+
+The board gives a task one state, the first that holds:
+
+| State | When | What to do |
+| --- | --- | --- |
+| closed / not started | Closed, or a folder no one has opened yet | Nothing |
+| paused | You put it aside | `task resume`, or just talk to its session |
+| waiting for you | A plan, a write-back, a decision on checks, test results or a word after a stop is yours | Do it (the reason is on the tag) |
+| working | A session holds it and made a hook call in the last 5 minutes | Nothing |
+| quiet | A session holds it, but 5 minutes with no call and no stop | Look at the VS Code window; if it is closed, open a session and name the task |
+| no session | Nothing waits for you and nothing holds it | Open a session and name the task, or close it |
 
 ### 9.4 The requirement: the agent writes, you confirm
 

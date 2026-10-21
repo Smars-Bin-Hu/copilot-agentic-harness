@@ -537,7 +537,7 @@ class PageTests(BoardCase):
 
     def test_the_board_page_has_the_lobby_and_its_own_style(self) -> None:
         page = taskhtml.board_page([], "2026-10-20T00:00:00+00:00", 5)
-        for mark in ("const Lobby = (function", ".lb-scene{", "board.mode.lobby", ".rb-ribbon{"):
+        for mark in ("const Lobby = (function", ".lb-scene{", "board.mode.lobby", ".rb-ribbon{", "function stateTag", "board.state.unheld", "board.lobby.zone.left", ".tag.lost{"):
             self.assertIn(mark, page)
 
 
@@ -697,7 +697,7 @@ class PageTests(BoardCase):
     def test_a_long_reason_wraps_inside_its_cell(self) -> None:
         css = (taskhtml.WEB / "page.css").read_text(encoding="utf-8")
         self.assertRegex(css, r"\.tag\.long\{[^}]*white-space:normal[^}]*overflow-wrap:anywhere")
-        self.assertIn('tag(row.waiting, "hot long")', (taskhtml.WEB / "board.js").read_text(encoding="utf-8"))
+        self.assertIn('tag(row.waiting, "hot long")', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
 
     def test_an_empty_board(self) -> None:
         data = page_data(taskhtml.board_page([], "2026-01-01T00:00:00+00:00"))

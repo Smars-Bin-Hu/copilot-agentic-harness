@@ -318,6 +318,64 @@ class ListTests(LifeCase):
             data["paused"] = {"since": "2026-10-20T00:00:00+00:00"}
         self.assertFalse(self.listed()["tasks"][0]["active"], "a task put aside is not at work")
 
+    def state(self, name: str = "job") -> str:
+        return next(row for row in self.listed(*("--all",))["tasks"] if row["name"] == name)["state"]
+
+    def test_the_state_of_a_task_is_one_of_seven_and_the_first_that_holds(self) -> None:
+        """Design 1.5.16: closed, new, paused, waiting, working, quiet, unheld."""
+        self.new("job", "qa")
+        log = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{S1}.jsonl"
+        self.assertEqual(self.state(), "working", "held, and a hook call a moment ago")
+        old = time.time() - 3600
+        os.utime(log, (old, old))
+        self.assertEqual(self.state(), "quiet", "held, nothing for an hour, no mark")
+        with task_ops.locked(self.root, f"{BASE}/job") as data:
+            data["waiting"] = {"since": "2026-10-20T00:00:00+00:00", "why": "stopped"}
+        self.assertEqual(self.state(), "waiting")
+        with task_ops.locked(self.root, f"{BASE}/job") as data:
+            data["paused"] = {"since": "2026-10-20T00:00:00+00:00"}
+        self.assertEqual(self.state(), "paused", "put aside comes before waiting")
+        self.cli_json("task", "close", "--task", "job")
+        self.assertEqual(self.state(), "closed")
+
+    def test_a_task_that_no_session_holds_is_unheld_and_says_for_how_long(self) -> None:
+        self.new("first", "qa")
+        self.new("second", "qa")  # the session of `first` moves on
+        rows = {row["name"]: row for row in self.listed()["tasks"]}
+        self.assertEqual((rows["first"]["state"], rows["first"]["held"]), ("unheld", False))
+        self.assertIsNotNone(rows["first"]["unheld_s"])
+        self.assertEqual((rows["second"]["state"], rows["second"]["held"]), ("working", True))
+        self.assertNotIn("unheld_s", rows["second"])
+        self.open("first")  # asked for by name again: held again, and the other one is let go
+        rows = {row["name"]: row for row in self.listed()["tasks"]}
+        self.assertEqual((rows["first"]["state"], rows["second"]["state"]), ("working", "unheld"))
+
+    def test_a_state_file_that_is_gone_leaves_the_task_unheld(self) -> None:
+        """What a reinstall without `runtime/` did: the task and its session no longer meet."""
+        self.new("job", "qa")
+        state = self.root / ".harness" / "runtime" / "state" / "vscode" / f"{S1}.json"
+        state.unlink()
+        self.assertEqual(self.state(), "unheld")
+
+    def test_what_waits_for_the_person_stays_waiting_without_a_session(self) -> None:
+        self.new("job", "rca")
+        self.new("other", "qa")
+        with task_ops.locked(self.root, f"{BASE}/job") as data:
+            data["handoff"] = {"what": "tests", "since": "2026-10-20T00:00:00+00:00", "env": "DEV"}
+        row = next(item for item in self.listed()["tasks"] if item["name"] == "job")
+        self.assertEqual((row["state"], row["held"]), ("waiting", False))
+
+    def test_the_list_is_in_the_order_of_the_states(self) -> None:
+        for name in ("lost", "idle", "waits", "aside"):
+            self.new(name, "qa", session=S2) if name != "lost" else self.new(name, "qa")
+        with task_ops.locked(self.root, f"{BASE}/waits") as data:
+            data["waiting"] = {"since": "2026-10-20T00:00:00+00:00", "why": "stopped"}
+        with task_ops.locked(self.root, f"{BASE}/aside") as data:
+            data["paused"] = {"since": "2026-10-20T00:00:00+00:00"}
+        order = [(row["name"], row["state"]) for row in self.listed()["tasks"]]
+        states = [state for _name, state in order]
+        self.assertEqual(states, sorted(states, key=("waiting", "working", "quiet", "unheld", "paused").index), order)
+
     def test_a_handoff_of_tests_is_what_the_board_says_until_it_is_cleared(self) -> None:
         self.new("job", "test")
         found = self.cli_json("task", "handoff", "tests", "--env", "DEV", "--task", "job")

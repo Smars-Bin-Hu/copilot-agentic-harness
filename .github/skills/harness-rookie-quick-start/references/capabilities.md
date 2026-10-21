@@ -32,7 +32,7 @@ Every job is a folder with the requirement, the plan, the steps, the log and the
 
 You open: the board in the browser.
 
-It opens as a lobby: a small robot for each task that is not closed, at work, waiting for you or resting, with a card on hover and a switch to the list. The list shows every task, which one waits for you and since when. You filter, search and sort it, click into a task to read its plan, its steps, its history and its changes, and approve from there. Each task page opens with its stages (by the kind of task: for development, requirement, plan, developing, write-back, done), and, when you asked for independent checks, one mark for each check. Each task has a report of where the time and the usage went. Closed tasks stay on the board to look back, and you archive them from it.
+It opens as a lobby: a small robot for each task that is not closed, at work, waiting for you, left alone (no session holds the task) or resting, with a card on hover and a switch to the list. The list shows every task, which one waits for you and since when. You filter, search and sort it, click into a task to read its plan, its steps, its history and its changes, and approve from there. Each task page opens with its stages (by the kind of task: for development, requirement, plan, developing, write-back, done), and, when you asked for independent checks, one mark for each check. Each task has a report of where the time and the usage went. Closed tasks stay on the board to look back, and you archive them from it.
 
 ## 6. Know your systems
 

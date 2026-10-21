@@ -10,7 +10,9 @@ The `waiting_why` of each task in `harness task list`, and what the user should 
 | `review` | the checks are used up and wait for your decision | The independent checks did not reach enough passes, and they are used up | Read the last `REVIEW/round-NNN/verdict.md`, then pick `harness task review extend --checks 2` or `harness task review waive` |
 | `autorun` | autorun stopped and waits for you (the reason is in brackets) | The task had autorun on, and it stopped by the facts: done, a limit reached, refused, no progress, or the agent said it cannot go on | Read the reason in the brackets. If it is done, read the write-back plan; if it is stuck, go back to that session and answer it. To let it go on: `harness task autorun on` |
 | `stopped` | the agent stopped and waits for you | The agent of that session has finished speaking; it is the user's turn | Go back to that session and read what it said. If the task is done, let it run `task close` |
-| empty | not waiting for you | The agent is still running, or the task has never stopped | Nothing to do |
+| empty, `state` `working` | working | A session holds the task and made a hook call in the last 5 minutes | Nothing to do |
+| empty, `state` `quiet` | quiet | A session holds the task, but 5 minutes with no call and no stop: a long step is running, or the window was closed | If the window is closed, open a session and name the task |
+| empty, `state` `unheld` | no session | Open, nothing waits for the user, and no session holds it (the session moved on to another task, or its state file is gone) | Open a session and ask for the task by name, or close it |
 | empty, with a value in `paused_since` | paused | The user ran `task pause` and leaves it for now | Do not push. When the user wants to go on: `harness task resume --task <task name>`, or a prompt in its session |
 
 The board texts above are the English ones; with `language` set to `zh` the board shows them in Chinese.

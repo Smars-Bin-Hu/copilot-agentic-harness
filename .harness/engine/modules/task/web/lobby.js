@@ -1,5 +1,5 @@
 // The lobby: the first screen of the board. Every task that is not closed is a small robot on a floor, in the zone of what it
-// is doing: at work, waiting for the person, resting. The robot's pose says the state, the thing in its hand says the kind of
+// is doing: at work, waiting for the person, left alone (no session holds it), resting. The robot's pose says the state, the thing in its hand says the kind of
 // task. A mouse near it makes its eyes follow; over it, it hops and a card shows the task and its stages; a click opens the page.
 // Pure SVG and CSS (lobby.css), drawn with DOM nodes. Robots are kept between two draws, so a board that asks again every few
 // seconds does not make them start over; only a robot whose state changed changes its pose.
@@ -16,14 +16,18 @@ const Lobby = (function () {
   };
 
   // pose -> zone. `tests`: waiting for the results of a test the person is to run.
-  const ZONE_OF = {work: "work", you: "you", tests: "you", idle: "rest", pause: "rest"};
-  const ZONES = [["work", "board.lobby.zone.work"], ["you", "board.lobby.zone.you"], ["rest", "board.lobby.zone.rest"]];
-  const STATE_TEXT = {work: "board.lobby.state.work", idle: "board.lobby.state.idle", pause: "board.state.paused"};
+  // `lost`: no session holds the task (a plug hangs loose).
+  const ZONE_OF = {work: "work", you: "you", tests: "you", lost: "left", idle: "rest", pause: "rest"};
+  const ZONES = [["work", "board.lobby.zone.work"], ["you", "board.lobby.zone.you"], ["left", "board.lobby.zone.left"], ["rest", "board.lobby.zone.rest"]];
+  const STATE_TEXT = {work: "board.lobby.state.work", idle: "board.lobby.state.idle", pause: "board.state.paused", lost: "board.lobby.state.unheld"};
 
+  // The state is the server's (`row.state`); the pose only draws it.
   function poseOf(row, live) {
-    if (row.paused_since) return "pause";
-    if (row.waiting) return row.waiting_why === "tests" ? "tests" : "you";
-    return live && row.active ? "work" : "idle";
+    const state = stateOf(row, live);
+    if (state === "paused") return "pause";
+    if (state === "waiting") return row.waiting_why === "tests" ? "tests" : "you";
+    if (state === "unheld") return "lost";
+    return state === "working" ? "work" : "idle";
   }
 
   // What the robot holds, by the kind of task. Small drawings, drawn at the hand.
@@ -58,6 +62,7 @@ const Lobby = (function () {
     const mark = svg("text", {x: 80, y: 19, "text-anchor": "middle", "font-size": 15, "font-weight": 800, fill: "#1a1202"}, pose === "tests" ? "?" : "!");
     body.append(head, svg("g", {class: "lb-bubble"}, svg("circle", {cx: 80, cy: 14, r: 11, fill: "#f0a02e"}), svg("path", {d: "M72 21 L68 28 L77 24 Z", fill: "#f0a02e"}), mark),
       svg("text", {class: "lb-zz", x: 70, y: 22}, "z"), svg("text", {class: "lb-zz lb-b", x: 78, y: 12}, "Z"));
+    body.append(svg("g", {class: "lb-cable"}, svg("path", {d: "M70 84 C84 86 88 98 80 110"}), svg("circle", {class: "lb-spark", cx: 80, cy: 112, r: 2.6})));
     root.append(body);
     root._mark = mark;
     return root;
@@ -97,7 +102,7 @@ const Lobby = (function () {
       if (s && s.steps && s.steps.length) {
         const dots = [];
         s.steps.forEach((step, index) => {
-          dots.push(h("i", {class: "lb-d " + (step.state === "done" ? "is-done" : step.state === "now" ? "is-now is-" + (pose === "you" || pose === "tests" ? "you" : "ok") : "")}));
+          dots.push(h("i", {class: "lb-d " + (step.state === "done" ? "is-done" : step.state === "now" ? "is-now is-" + (pose === "you" || pose === "tests" ? "you" : pose === "lost" ? "left" : "ok") : "")}));
           if (index < s.steps.length - 1) dots.push(h("i", {class: "lb-l" + (step.state === "done" ? " is-done" : "")}));
         });
         const here = s.steps.find((step) => step.state === "now") || s.steps[s.steps.length - 1];

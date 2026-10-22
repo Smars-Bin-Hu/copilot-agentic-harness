@@ -24,9 +24,9 @@ A separate reviewer, which has not seen the author's reasoning, checks the resul
 
 ## 4. Never lose work
 
-You say: "Go on with the orders task." / "Put this one aside."
+You say: "Go on with the orders task." / "Put this one aside." / "The RCA is done: fork it to a development task."
 
-Every job is a folder with the requirement, the plan, the steps, the log and the results, so a new window picks it up. Pause and resume, several rounds, and archive when it is over. For long jobs: the agent can work down a list without stopping (autorun, beta), or in steps you accept one by one. For a lot of reading: it splits the reading into parts (you type `/generic-mapreduce`; it asks first).
+Every job is a folder with the requirement, the plan, the steps, the log and the results, so a new window picks it up. Pause and resume, several rounds, fork a finished task into the next one (its conclusions come along, not its approvals), and archive when it is over. For long jobs: the agent can work down a list without stopping (autorun, beta), or in steps you accept one by one. For a lot of reading: it splits the reading into parts (you type `/generic-mapreduce`; it asks first).
 
 ## 5. See and steer it all
 

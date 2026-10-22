@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.37 (2026-10-22)
+
+### Added
+
+- **Fork a task into the next one.** Say "fork this task" (RCA to development, development to test, a test with defects to development): `harness task fork <new> --from <old> --kind <kind>` makes the new task, and this session picks it up. A copy of the old task's documents (`REQ.md`, `PLAN.md`, `LOG.md`, results, `COMMIT-MESSAGE.md`), `CHANGES.diff`, `REQ/`, `REF/`, `RUNS/` and the notes of `TEST/` goes into `REF/from-<old>/`, with `FORK.md`: what came along, what did not and why, and how the old task stood (the branch it was written back to, its base commit, its checks). Its approvals, checks, snapshots and `DEV/` stay behind; the new requirement is written again and you confirm it. The old task is not changed (a copy, not a move: its report and checks still point at its files) but for a line in its history, and the two task pages link each other. New skill `harness-task-fork`: what to read first for each pair of kinds; one test task covers every environment, so development is forked to test once.
+
+**Introductory material**: `docs/02-features.md`, `docs/04-reference.md`, `harness-rookie-quick-start` (part 4) and `harness-rookie-wondering` topic 9 changed, a few lines each; `harness-my-task` points at the new skill.
+
 ## 1.5.36 (2026-10-22)
 
 ### Added

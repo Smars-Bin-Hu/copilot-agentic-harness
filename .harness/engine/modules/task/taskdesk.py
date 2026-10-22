@@ -184,6 +184,8 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "waiting": row.get("waiting") or "", "waiting_why": row.get("waiting_why") or "", "waited_s": row.get("waited_s"),
         "handoff": {key: str((data.get("handoff") or {}).get(key) or "") for key in ("what", "env", "detail")} if isinstance(data.get("handoff"), dict) else None,
         "created_at": data.get("created_at", ""), "updated_at": data.get("updated_at", ""),
+        "forked_from": task_ops.name_of(str(data.get("forked_from"))) if data.get("forked_from") else "",
+        "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
         "docs": docs, "history": history(data), "changes": changed(root, task, data),
         "review": reviews(root, task, data), "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_unconfirmed": row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),

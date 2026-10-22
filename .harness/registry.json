@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.5.36",
+  "version": "1.5.37",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -98,6 +98,7 @@
         ".harness/engine/modules/task/",
         ".harness/contracts/templates/task/",
         ".github/skills/harness-my-task/",
+        ".github/skills/harness-task-fork/",
         ".github/skills/harness-task-report/",
         ".github/skills/harness-task-archive/",
         ".github/skills/harness-rookie-quick-start/",

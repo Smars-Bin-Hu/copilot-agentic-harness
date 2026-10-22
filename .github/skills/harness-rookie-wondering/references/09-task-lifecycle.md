@@ -94,6 +94,8 @@ Testing in DEV, IST and QAT is **not** another round. It is a new task of kind `
 
 A run you must do **before** the write-back (a job in DEV whose counts the work needs) is handed over the same way inside the development task: `task handoff run --env DEV --what "..."`. The board says "waits for your run", no check can start, and what you send back is saved in `RUNS/DEV/`.
 
+A test task does not start empty: **fork** the development task to it (`task fork <test task> --from <dev task> --kind test`, skill `harness-task-fork`). A copy of the old task's documents, `CHANGES.diff` and `RUNS/` goes into `REF/from-<old>/`, with `FORK.md` saying which branch was written back. Its approvals, checks and `DEV/` stay behind: the new task earns its own. The old task is not touched, so its report and checks still stand; and it is a copy, not a move, because a closed task may later be archived out of the repository.
+
 ### 9.7 Snapshots at the gates
 
 When the plan is approved, before every check and before the dry run of a write-back, a copy of the work is saved to `SNAPSHOT/` by itself. When something is broken, the version of that moment can be found again. They are kept 14 days by default.

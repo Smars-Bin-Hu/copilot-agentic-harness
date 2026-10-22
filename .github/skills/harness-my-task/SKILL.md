@@ -1,6 +1,6 @@
 ---
 name: harness-my-task
-description: 'Open a task, go on with a task, switch tasks, raise the tier of a task. Use it first when the user wants files produced or changed (RCA, design, development plan, development, tests, knowledge base update); also when the user says "go on with task X", "switch to task X" or "this task has to change the repository now". Ask with numbered options until things are clear, then run harness task new, task open or task upgrade. Keywords: my task, new task, open task, go on, continue task, switch task, upgrade task, task folder, TASK.md, task new, task open.'
+description: 'Open a task, go on with a task, switch tasks, raise the tier of a task. Use it first when the user wants files produced or changed (RCA, design, development plan, development, tests, knowledge base update); also when the user says "go on with task X", "switch to task X" or "this task has to change the repository now". Ask with numbered options until things are clear, then run harness task new, task open or task upgrade. To fork a task, use harness-task-fork. Keywords: my task, new task, open task, go on, continue task, switch task, upgrade task, task folder, TASK.md, task new, task open.'
 type: workflow
 specificTo: generic
 ---

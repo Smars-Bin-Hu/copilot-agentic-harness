@@ -83,6 +83,8 @@
 
   // --- the parts --------------------------------------------------------------------------------------------
 
+  const taskLink = (name) => (saved ? h("b", null, name) : h("a", {href: "/task/" + encodeURIComponent(name)}, name));  // a saved page links to no board
+
   function header() {
     const kind = t("task.kind." + (desk.kind || "none")) + " · " + t("task.tier." + (desk.tier || "none"));
     const state = stateTag(desk, served());
@@ -94,6 +96,10 @@
       h("div", {class: "title-row"}, h("h1", null, desk.name), state),
       h("div", {class: "sub"}, t("desk.subtitle", {kind, round: desk.round, created: when(desk.created_at, 0, 16), updated: when(desk.updated_at, 0, 16)}),
         desk.domains.length ? " · " + t("desk.domains", {names: desk.domains.join(", ")}) : "", desk.autorun ? [" · ", tag(t("desk.autorun"), "good")] : null),
+      desk.forked_from || desk.forked_to.length ? h("div", {class: "sub"},  // the tasks this one came from and went on to (`task fork`)
+        desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null,
+        desk.forked_from && desk.forked_to.length ? " · " : null,
+        desk.forked_to.length ? [t("desk.forked.to") + " ", desk.forked_to.map((name, index) => [index ? ", " : "", taskLink(name)])] : null) : null,
     ];
   }
 

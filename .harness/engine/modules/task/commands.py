@@ -23,7 +23,7 @@ from typing import Any, Dict
 from core import approval, render, targets, tasks
 from core.paths import repo_root
 
-from . import autorun, boardserve, kbsetup, taskarchive, refs, task, task_report, taskboard, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
+from . import autorun, boardserve, kbsetup, taskarchive, refs, task, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
 
 
 def cmd_target_list(args: argparse.Namespace) -> Dict[str, Any]:
@@ -131,6 +131,14 @@ def register_task(subparsers: Any) -> None:
     new.add_argument("--surface", default="vscode", choices=["vscode"])
     new.add_argument("--domain", action="append", default=None, help="a business domain of the task (may be given more than once); the same as `task set-domain` after it")
     new.set_defaults(handler=cmd_new)
+    forked = commands.add_parser("fork", help="make a new task from a task that is done: its conclusions and materials are copied into REF/from-<old>/ (never its state, its checks or DEV/); this session picks up the new task")
+    forked.add_argument("name", help="the new task's name")
+    forked.add_argument("--from", dest="source", required=True, help="the task to start from (its name or folder); it is not changed")
+    forked.add_argument("--kind", required=True, choices=list(tasks.KINDS))
+    forked.add_argument("--tier", default="", choices=["", *tasks.TIERS], help="default: by kind")
+    forked.add_argument("--session-id", required=True, help="the session id written at the top of the prompt rules")
+    forked.add_argument("--surface", default="vscode", choices=["vscode"])
+    forked.set_defaults(handler=lambda a: taskfork.fork(repo_root(), a.name, a.source, a.kind, a.tier, a.session_id, a.surface))
     open_parser = commands.add_parser("open", help="this session picks up a task that exists; a closed task is opened again")
     open_parser.add_argument("name", help="the task name, or its folder")
     open_parser.add_argument("--session-id", required=True, help="the session id written at the top of the prompt rules")

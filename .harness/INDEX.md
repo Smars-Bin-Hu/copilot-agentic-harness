@@ -19,6 +19,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | Path | What it is for |
 | --- | --- |
 | `.github/skills/harness-my-task/` | Open a task, go on with one, switch tasks: asks until things are clear, then runs `task new` or `task open` |
+| `.github/skills/harness-task-fork/` | Start the next task from one that is done (`task fork`): the old task's context is copied into `REF/from-<old>/`, not its state; what to read first for each pair of kinds |
 | `.github/skills/harness-task-archive/` | Move closed tasks out to an archive folder the user picks, with an index; one way. The agent asks first |
 | `.github/skills/harness-task-report/` | The task board; where the time and usage of one task went. Started only by the user, with `/harness-task-report` |
 | `.github/skills/harness-rookie-quick-start/` | The first lesson. The user starts it with `/harness-rookie-quick-start` |

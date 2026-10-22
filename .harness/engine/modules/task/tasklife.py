@@ -278,7 +278,11 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     except Exception:  # noqa: BLE001 - a list must not fail over one task's checks
         pass
     if data.get("tier") == "full" and not tasks.plan_approved(root, task, data) and task_ops.req_state(root, task) in ("open", "changed"):
-        return {"why": "req", "since": last_event(data, "confirm-req") or updated}  # written, not confirmed: no plan can be approved on it (1.5.30)
+        try:
+            written = datetime.fromtimestamp((tasks.task_dir(root, task) / tasks.REQ_FILE).stat().st_mtime, timezone.utc).isoformat()
+        except OSError:
+            written = last_event(data, "confirm-req") or updated
+        return {"why": "req", "since": written}  # written, not confirmed: no plan can be approved on it (1.5.30). It waits since the agent wrote it, not since the task was opened
     handed = data.get("handoff")
     if isinstance(handed, dict) and handed.get("what") in HANDOFFS and handed.get("since"):
         return {"why": str(handed["what"]), "since": str(handed["since"])}  # the agent handed work to the person that only they can do: it stays until the agent clears it

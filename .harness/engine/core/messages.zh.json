@@ -66,7 +66,7 @@
   "review.waive.unneeded": "不用放行：这个任务没有开启检查，或者已经凑够通过次数。",
   "review.waive.changed": "你确认的时候成果变了。重新运行这条命令。",
   "review.handoff_open": "任务 {task} 交给了用户（{what} {env}）：结果还没回来，现在没有东西可查。没有用掉检查次数。用户带回结果后，存进任务（跑的结果放在 RUNS/<环境>/），运行 `{command} task handoff clear`，再运行 `{command} task review start`。",
-  "review.runs_missing": "{req} 里有要用户在写回前跑一次才能证明的条目，{folders} 里还没有结果。没有用掉检查次数。请用户去跑（`{command} task handoff run --env <环境> --what \"<跑什么>\"`），把用户发回的东西存进去，再运行 `{command} task review start`。",
+  "review.runs_missing": "{req} 里有要用户在写回前跑一次才能证明的条目，{folders} 里还没有结果。没有用掉检查次数。现在这样做：你自己运行 `{command} task handoff run --env <环境> --what \"<跑什么>\"`（这是你的命令，任务因此标成在等用户的运行），告诉用户跑什么，然后停下。用户发回结果后：存进去，运行 `{command} task handoff clear`，再运行 `{command} task review start`。",
   "review.package.items": "## 这次检查判什么\n\n{req} 的“做完的标准”有编号。`[T…]`：任务文件能证明，要查。`[R…]`：用户在写回前跑过一次，只按 {runs} 里存的结果判。`[A…]`（{after}）：写回后在各环境里验，**不要判，不算问题。** 每条问题的依据写上条目编号（`| 依据：REQ.md T2`）。依据只有 `[A…]` 的、文件和行不存在的问题，会被脚本剔掉。",
   "review.package.given_back": "## 上一次检查不算数\n\n{path} 里的问题被脚本剔掉后一条都不剩（次数已退还）。做完整检查；每条问题写存在的文件和行，并写上条目编号。",
   "review.package.dropped": "那次检查里被脚本剔掉的问题：",

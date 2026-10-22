@@ -176,6 +176,24 @@ class DeskTests(ServeCase):
         self.assertNotIn("confirm-req", names())
         self.assertIn("confirm-req", [event["what"] for event in self.data()["events"]])
 
+    def test_a_written_requirement_is_offered_once_and_waits_since_it_was_written(self) -> None:
+        import os
+        from datetime import datetime, timezone
+
+        from modules.task import tasklife
+
+        req = self.task / "REQ.md"
+        req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Stop the nightly load from failing.").replace("<一两段。用户的原意，不加你自己的设想>", "别让夜间加载失败。"), encoding="utf-8")
+        (self.task / "PLAN.md").unlink(missing_ok=True)  # no plan yet: the requirement is what it waits for
+        with task_ops.locked(self.root, TASK) as data:
+            data["tier"], data["updated_at"] = "full", "2026-01-01T00:00:00+00:00"  # the task was opened long before the agent wrote the requirement
+        os.utime(req, (1_800_000_000, 1_800_000_000))
+        found = tasklife.waiting(self.root, TASK, self.data())
+        self.assertEqual(found["why"], "req")
+        self.assertEqual(found["since"], datetime.fromtimestamp(1_800_000_000, timezone.utc).isoformat())
+        names = [item["action"] for item in taskdesk.desk(self.root, "job1", ("confirm-req", "pause"))["actions"]]
+        self.assertEqual(names.count("confirm-req"), 1)
+
     def test_a_requirement_changed_while_the_person_confirms_is_not_confirmed(self) -> None:
         req = self.task / "REQ.md"
         req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "A.").replace("<一两段。用户的原意，不加你自己的设想>", "甲。"), encoding="utf-8")

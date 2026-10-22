@@ -161,7 +161,7 @@ def changed(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
 def offered(root: Path, row: Dict[str, Any], task: str, served: Tuple[str, ...]) -> List[Dict[str, str]]:
     """What the person can do about the task: the board's actions, and on its page also: confirm the requirement once the agent wrote it."""
     found = taskboard.actions(row, served)
-    if row.get("status") == "open" and "confirm-req" in served and task_ops.req_state(root, task) in ("open", "changed"):
+    if row.get("status") == "open" and "confirm-req" in served and task_ops.req_state(root, task) in ("open", "changed") and not any(item["action"] == "confirm-req" for item in found):
         found.insert(0, {"action": "confirm-req", "command": f"{cli_command()} task confirm-req --task {row['name']}"})
     return found
 

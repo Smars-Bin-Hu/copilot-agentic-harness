@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.33 (2026-10-22)
+
+### Changed
+
+- **A requirement that waits for your confirmation is offered once.** The task page showed the button "confirm requirement" twice while the task waited on it.
+- **The wait for a requirement counts from when the agent wrote it.** It counted from when the task was opened, so a requirement written after three minutes of work already read "waited 3 min".
+
+- **The refusal of `task review start` for a missing run tells the agent to run `task handoff run` itself.** It said "ask the user to run it" with the command in brackets, and an agent passed the command on to the user, so the task never showed that it waited for the user's run.
+
 ## 1.5.32 (2026-10-21)
 
 ### Retired

@@ -81,6 +81,7 @@ What a command prints: text on a terminal, JSON on a pipe (a script, a redirect)
 | `task autorun status` | Whether it is on, how many steps were done, how many times it was pushed on, why it stopped; when it is off, what is still missing |
 | `task pause` | Puts a task aside for now: the board no longer says it waits for you, and the paused time does not count as "waiting for you". Terminal only. Refused while the agent is in the middle of a turn (a session holds the task, made a call in the last 5 minutes and has not stopped): stop the agent in VS Code first, or add `--force` |
 | `task resume` | Goes on with a paused task. A prompt in its session resumes it by itself too. Terminal only |
+| `task offwork` / `task onwork` | The person only (in a terminal or with the board's buttons Off work / Back to work): `offwork` pauses every open task that is not at work and not under autorun, all at once, and names the ones it left; `onwork` takes back only the tasks `offwork` paused (`paused.by` is `offwork`), so a task paused by hand stays paused |
 | `task close` | The session lets go of the task, and the report is written. The folder stays where it is. Refused while steps of `TODO.md` are not ticked: tick what is done, or add `--todo-open "<why>"` (the reason goes into the history). The board page does not refuse: its dialog says how many steps are left. A person at a terminal is refused while the agent is in the middle of a turn (add `--force`); the agent itself can close its own task after you said yes |
 
 ## Policy fields

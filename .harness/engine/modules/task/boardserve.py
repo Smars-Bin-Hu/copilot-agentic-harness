@@ -44,7 +44,8 @@ COOKIE = "harness_board"
 MAX_BODY = 4096
 MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
-FREE = ("pause", "resume")  # no pairing: they guard nothing
+FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
+ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
 REFRESH = 10  # seconds between two boards in the browser
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
 # or send anything elsewhere, even if it ever got past the drawing (which uses textContent only).
@@ -179,6 +180,13 @@ class Board:
 
     def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False) -> Dict[str, Any]:
         """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once."""
+        if action in ALL_AT_ONCE:
+            if "pause" not in self.actions:
+                raise CommandError(say("serve.action.off", action=action))
+            result = (tasklife.offwork if action == "offwork" else tasklife.onwork)(self.root, interactive=True)
+            for name in result.get("paused") or result.get("resumed") or []:
+                noted(self.root, name, action)
+            return result
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
         self.idle(action, task)

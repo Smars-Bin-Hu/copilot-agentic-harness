@@ -290,6 +290,40 @@ class PauseTests(BoardCase):
         with self.assertRaises(CommandError):
             tasklife.pause(self.root, "job", interactive=True)
 
+    def test_offwork_pauses_every_idle_task_and_onwork_takes_back_only_those(self) -> None:
+        """M38-2: one click at the end of the day; a task paused by hand before stays paused the next morning."""
+        self.new("a")
+        self.stop()
+        self.new("b", session=S2)
+        self.stop(S2)
+        tasklife.pause(self.root, "b", interactive=True)  # by hand, before
+        self.new("c")
+        self.stop()
+        found = tasklife.offwork(self.root, interactive=True)
+        self.assertEqual(sorted(found["paused"]), ["a", "c"])
+        self.assertEqual(self.data("a")["paused"]["by"], tasklife.OFFWORK)
+        rows = {row["name"]: row for row in self.listed()["tasks"]}
+        self.assertEqual((rows["a"]["paused_by"], rows["b"]["paused_by"]), ("offwork", ""))
+        back = tasklife.onwork(self.root, interactive=True)
+        self.assertEqual((sorted(back["resumed"]), back["still_paused"]), (["a", "c"], ["b"]))
+        self.assertFalse(self.data("a").get("paused"))
+        self.assertTrue(self.data("b")["paused"])
+
+    def test_offwork_leaves_a_task_the_agent_is_working_on(self) -> None:
+        self.new()  # in the middle of a turn: no Stop yet
+        with mock.patch.object(tasklife, "at_work", return_value=True):
+            found = tasklife.offwork(self.root, interactive=True)
+        self.assertEqual((found["paused"], found["left"]), ([], ["job"]))
+        self.assertFalse(self.data().get("paused"))
+
+    def test_offwork_and_onwork_are_the_persons(self) -> None:
+        self.new()
+        self.stop()
+        for command in ("offwork", "onwork"):
+            result = self.cli("task", command)
+            self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.data().get("paused"))
+
     def test_time_aside_is_not_counted_as_waiting(self) -> None:
         self.new()
         first = self.prompt_times()[0]

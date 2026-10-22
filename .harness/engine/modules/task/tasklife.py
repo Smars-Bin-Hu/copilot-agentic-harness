@@ -487,6 +487,46 @@ def resume(root: Path, raw_task: str = "", interactive: Optional[bool] = None) -
     return {"task": task, "paused": False}
 
 
+OFFWORK = "offwork"  # `paused.by` of the tasks the person put aside all at once; `task onwork` takes back only those
+
+
+def offwork(root: Path, interactive: Optional[bool] = None) -> Dict[str, Any]:
+    """The person leaves for the day: every open task that is not paused, not at work and not under autorun is put aside at once,
+    so the night is not counted as waiting. A task the agent is working on is left and named; so is one under autorun."""
+    task_ops.person("task offwork", interactive, typed=False)
+    paused, busy = [], []
+    for item in task_ops.open_tasks(root):
+        task = item["task"]
+        with task_ops.locked(root, task) as data:
+            if data.get("status") != "open" or paused_since(data):
+                continue
+            if at_work(root, data) or (data.get("autorun") or {}).get("state") == "on":
+                busy.append(task_ops.name_of(task))
+                continue
+            data["paused"] = {"since": utc_now(), "by": OFFWORK}
+            task_ops.note(data, "pause", OFFWORK)
+            paused.append(task_ops.name_of(task))
+    return {"paused": paused, "left": busy, "next": messages.text("task.offwork.next", count=len(paused), command=cli_command())
+            + (" " + messages.text("task.offwork.left", names=", ".join(busy)) if busy else "")}
+
+
+def onwork(root: Path, interactive: Optional[bool] = None) -> Dict[str, Any]:
+    """Back at work: the tasks `task offwork` put aside are taken back, each as it was. One the person paused by hand stays paused."""
+    task_ops.person("task onwork", interactive, typed=False)
+    resumed, kept = [], []
+    for item in task_ops.open_tasks(root):
+        task = item["task"]
+        with task_ops.locked(root, task) as data:
+            if not paused_since(data):
+                continue
+            if (data.get("paused") or {}).get("by") == OFFWORK and resume_in(data):
+                resumed.append(task_ops.name_of(task))
+            else:
+                kept.append(task_ops.name_of(task))
+    return {"resumed": resumed, "still_paused": kept, "next": messages.text("task.onwork.next", count=len(resumed))
+            + (" " + messages.text("task.onwork.kept", names=", ".join(kept)) if kept else "")}
+
+
 def resume_on_prompt(root: Path, task: str) -> None:
     """A prompt in the task's session: the person is back at it. `updated_at` is left alone."""
     path = tasks.state_file(root, task)
@@ -595,7 +635,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
         if data is None:
             rows.append({
                 "task": task, "name": task_ops.name_of(task), "status": "new", "kind": "", "tier": "", "updated_at": "", "waiting": "",
-                "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "depends_on": [], "paused_since": "",
+                "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "depends_on": [], "paused_since": "", "paused_by": "",
                 "state": "new", "held": False, "active": False,
             })
             continue
@@ -612,7 +652,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
             "kind": data.get("kind", ""), "tier": data.get("tier", ""), "updated_at": data.get("updated_at", ""),
             "waiting": waiting_text(data, found["why"]), "waiting_why": found["why"], "waiting_since": found["since"],
             "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
-            "depends_on": list(data.get("depends_on") or []), "paused_since": aside,
+            "depends_on": list(data.get("depends_on") or []), "paused_since": aside, "paused_by": str((data.get("paused") or {}).get("by") or "") if aside else "",
             "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",
             "held": is_held, "active": working, "dismiss": dismiss_of(data) if is_open and not aside else "",
             "state": state_of(data.get("status", ""), aside, found["why"], is_held, working),

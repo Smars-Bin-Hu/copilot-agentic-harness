@@ -250,6 +250,7 @@ class TerminalTests(unittest.TestCase):
             "harness approve-command",
             "harness task approve-promote --task t1",
             "harness task recover",
+            "harness task offwork", "harness task onwork",  # every task at once, like pause and resume (M38-2)
             "harness task review extend --checks 2", "harness task review waive", "python3 .harness/engine/cli.py task review  waive --task t1",
             "./harness approve-command",
             ".harness/bin/harness approve-command",

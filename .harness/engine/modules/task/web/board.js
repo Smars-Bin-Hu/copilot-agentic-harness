@@ -226,7 +226,30 @@
     pick.replaceChildren(h("span", {class: "sub"}, t("board.select.count", {count: selected.size}) + " "), go, none);
   }
 
-  function draw() { drawNumbers(); drawControls(); drawTable(); drawSelection(); lobby.update(rows, live); }
+  // Off work and back to work (M38-2): every open task that is not at work is paused at once, and later only those are taken back.
+  // Served, the buttons act (no pairing, as for pause); a page on disk copies the command instead.
+  const shift = h("div", {class: "shift"});
+  const said = h("div", {class: "sub shift-said"});
+  const canShift = typeof SERVE !== "undefined" && SERVE.runs("pause");
+  function drawShift() {
+    const off = rows.filter((row) => row.status === "open" && !row.paused_since && !row.autorun && stateOf(row, live) !== "working").length;
+    const on = rows.filter((row) => row.status === "open" && row.paused_by === "offwork").length;
+    const button = (action, count, label, hint) => {
+      const node = h("button", {type: "button", class: "act" + (count ? "" : " locked"), title: t(hint), "data-label": t(label, {count})}, t(label, {count}));
+      if (!count) node.disabled = true;
+      node.addEventListener("click", () => {
+        if (!canShift) { copyCommand(node, cli + " task " + action); return; }
+        node.disabled = true;
+        SERVE.post("/api/act", {action, task: "", step: "act"}).then((data) => { said.textContent = data.result.next || ""; return refresh(); },
+          (error) => { said.textContent = error.message || String(error); node.disabled = false; });
+      });
+      return node;
+    };
+    shift.replaceChildren(button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint"));
+  }
+  const cli = DATA.cli || "harness";
+
+  function draw() { drawNumbers(); drawControls(); drawTable(); drawSelection(); drawShift(); lobby.update(rows, live); }
 
   search.addEventListener("input", () => { view.query = search.value; keep.set("query", search.value); drawTable(); });
   kinds.addEventListener("change", () => { view.kind = kinds.value; keep.set("kind", view.kind); drawTable(); });
@@ -259,21 +282,24 @@
   }
 
   app.replaceChildren(
-    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: "sub"}, h("b", null, t("board.title")), " \u00b7 ", stamp)), seg),
+    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: "sub"}, h("b", null, t("board.title")), " \u00b7 ", stamp)), h("div", {class: "lb-right"}, shift, seg)), said,
     kpis, controls, lobby.node,
     pick, tableBox, more,
     h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint")), copyright());
   draw();
   drawMode();
 
-  if (typeof SERVE !== "undefined") {
-    SERVE.start(app);
-    const refresh = () => SERVE.post("/api/board", {}).then((data) => {
+  function refresh() {
+    if (typeof SERVE === "undefined") return Promise.resolve();
+    return SERVE.post("/api/board", {}).then((data) => {
       asOf = data.as_of;
       archiveTo = data.archive_to || "";
       const text = JSON.stringify([data.rows, data.hidden]);
       if (text !== shown) { rows = data.rows; hidden = data.hidden; shown = text; draw(); } else stamp.textContent = subtitle();
     }, () => {});
+  }
+  if (typeof SERVE !== "undefined") {
+    SERVE.start(app);
     SERVE.onChange(refresh);  // after a click the board is asked again in place, and the robots slide (a reload draws them from nothing)
     if (DATA.serve.refresh) setInterval(() => { if (!SERVE.busy()) refresh(); }, DATA.serve.refresh * 1000);
   }

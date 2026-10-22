@@ -1,6 +1,8 @@
 // The lobby: the first screen of the board. Every task that is not closed is a small robot on a floor, in the zone of what it
 // is doing: at work, waiting for the person, left alone (no session holds it), resting. The robot's pose says the state, the thing in its hand says the kind of
 // task. A mouse near it makes its eyes follow; over it, it hops and a card shows the task and its stages; a click opens the page.
+// Closed tasks that are not archived sit apart, on the dock under the floor (M38-1): a shelf they rest on in a row, eyes shut, cores
+// glowing slowly as if charging; one comes in sliding along the shelf, and the mouse lifts one off it. Their eyes do not follow the mouse.
 // Pure SVG and CSS (lobby.css), drawn with DOM nodes. Robots are kept between two draws, so a board that asks again every few
 // seconds does not make them start over; only a robot whose state changed changes its pose.
 "use strict";
@@ -19,7 +21,7 @@ const Lobby = (function () {
   // `lost`: no session holds the task (a plug hangs loose).
   const ZONE_OF = {work: "work", you: "you", tests: "you", lost: "left", idle: "rest", pause: "rest"};
   const ZONES = [["work", "board.lobby.zone.work"], ["you", "board.lobby.zone.you"], ["left", "board.lobby.zone.left"], ["rest", "board.lobby.zone.rest"]];
-  const STATE_TEXT = {work: "board.lobby.state.work", idle: "board.lobby.state.idle", pause: "board.state.paused", lost: "board.lobby.state.unheld"};
+  const STATE_TEXT = {work: "board.lobby.state.work", idle: "board.lobby.state.idle", pause: "board.state.paused", lost: "board.lobby.state.unheld", closed: "board.state.closed"};
 
   // The state is the server's (`row.state`); the pose only draws it.
   function poseOf(row, live) {
@@ -92,7 +94,38 @@ const Lobby = (function () {
       zoneBox[id] = {box: h("div", {class: "lb-zone"}, h("div", {class: "lb-label"}, dot, name), row), name, label};
       scene.append(zoneBox[id].box);
     }
-    scene.append(empty, card);
+    const docked = new Map();  // task name -> entry, for the closed tasks
+    const shelf = h("div", {class: "lb-shelf"});
+    const dockName = h("span", null);
+    const dock = h("div", {class: "lb-dock"}, h("div", {class: "lb-label"}, h("i", {class: "lb-dot lb-dot-closed"}), dockName), shelf, h("i", {class: "lb-sweep"}));
+    scene.append(empty, dock, card);
+
+    function dockUpdate(rows) {
+      const closed = rows.filter((row) => row.status === "closed");
+      const names = new Set(closed.map((row) => row.name));
+      for (const [name, entry] of docked) if (!names.has(name)) { entry.slot.remove(); docked.delete(name); }
+      closed.forEach((row, index) => {
+        let entry = docked.get(row.name);
+        if (!entry) {
+          const bot = robot("closed", row.kind, ((index * 0.61) % 4).toFixed(2));
+          const slot = h("div", {class: "lb-slot lb-docked", tabindex: "0", role: "link", "aria-label": row.name}, bot, h("div", {class: "lb-nm"}, row.name));
+          entry = {slot, bot, row, pose: "closed", zone: "dock"};
+          slot.addEventListener("mouseenter", () => show(entry));
+          slot.addEventListener("focus", () => show(entry));
+          slot.addEventListener("mouseleave", later);
+          slot.addEventListener("blur", later);
+          const open = () => { const href = options.href(entry.row); if (href) window.location.href = href; };
+          slot.addEventListener("click", open);
+          slot.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); });
+          docked.set(row.name, entry);
+          if (ready && !still && slot.animate) slot.animate([{opacity: 0, transform: "translateX(60px)"}, {opacity: 1, transform: "none"}], {duration: 900, easing: "cubic-bezier(.2,.8,.2,1)"});
+        }
+        entry.row = row;
+        shelf.append(entry.slot);  // in the order of the rows: the newest closed first
+      });
+      dock.hidden = !closed.length;
+      dockName.textContent = t("board.lobby.zone.closed") + " \u00b7 " + closed.length;
+    }
 
     function show(entry) {
       const {row, pose} = entry;
@@ -226,8 +259,9 @@ const Lobby = (function () {
       gone.forEach(leave);
       // The card shows what the task is now: draw it again unless the mouse is on it (that would take a click away; an action just done is the exception),
       // and take it away when its robot is gone or changed state.
+      dockUpdate(rows);
       if (current && card.classList.contains("on")) {
-        const same = slots.get(current.row.name);
+        const same = slots.get(current.row.name) || docked.get(current.row.name);
         if (!same || changed.includes(same)) hide();
         else if (!card.matches(":hover") || same.actionsChanged) show(same);
       }

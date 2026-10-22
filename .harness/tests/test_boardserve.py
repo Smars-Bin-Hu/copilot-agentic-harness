@@ -131,6 +131,14 @@ class ServeTests(ServeCase):
         self.assertFalse(self.data()["paused"])
         self.assertIn("board", [event["what"] for event in self.data()["events"]])
 
+    def test_off_work_and_back_need_no_pairing(self) -> None:
+        self.agent_stopped()
+        status, data, _ = self.request("POST", "/api/act", {"action": "offwork", "task": ""})
+        self.assertEqual(status, 200, data)
+        self.assertEqual(self.data()["paused"]["by"], "offwork")
+        self.assertEqual(self.request("POST", "/api/act", {"action": "onwork", "task": ""})[0], 200)
+        self.assertFalse(self.data()["paused"])
+
     def test_an_unconfirmed_requirement_refuses_the_plan_alone_and_one_code_does_both(self) -> None:
         """1.5.30: the page asks first (a dialog), the server refuses the plan alone, and `with_req` approves both with the code of both files."""
         cookie = self.pair()

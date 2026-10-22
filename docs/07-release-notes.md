@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.38 (2026-10-22)
+
+### Added
+
+- **Off work and Back to work.** Two buttons at the top of the board (lobby and list) and two commands for the person, `harness task offwork` and `harness task onwork`. Off work pauses every open task that is not at work in one go, so the night is not counted as waiting; a task the agent is working on, or one under autorun, is left and named. Back to work takes back only the tasks Off work paused: one you paused by hand stays paused. Like pause, they need no pairing, and an agent cannot run them.
+- **Closed tasks rest on the dock.** In the lobby, closed tasks that are not archived sit apart on a shelf under the floor, not in the zones: smaller, in a row, eyes shut, legs hanging over the edge, cores glowing slowly as if charging. A new one slides in along the shelf; pointing at one lifts it off with its card; a click opens its page. With reduced motion nothing moves.
+
+**Introductory material**: `docs/02-features.md` (the lobby), `docs/04-reference.md` (`task offwork`, `task onwork`) and `harness-rookie-quick-start` (part 5) changed. `harness-rookie-wondering` is not changed: pausing is already taught there, and doing it for every task at once adds nothing new to how the harness works.
+
 ## 1.5.37 (2026-10-22)
 
 ### Added

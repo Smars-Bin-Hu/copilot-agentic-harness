@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.5.37",
+  "version": "1.5.38",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -135,6 +135,7 @@
         ".harness/tests/test_standards.py",
         ".harness/tests/test_promote_delete.py",
         ".harness/tests/test_taskdesk.py",
+        ".harness/tests/test_taskfork.py",
         ".harness/tests/test_taskstages.py",
         ".harness/tests/test_testdefects.py",
         ".harness/tests/test_testrecord.py",

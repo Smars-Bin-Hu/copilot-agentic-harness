@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core import messages
+from core.paths import cli_command
 
 WEB = Path(__file__).resolve().parent / "web"
 MARKS = re.compile("|".join(re.escape(mark) for mark in ("<!--REFRESH-->", "<!--TITLE-->", "<!--NOSCRIPT-->", "/*CSS*/", "<!--DATA-->", "/*JS*/")))
@@ -78,7 +79,7 @@ def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: 
     serve: set when the board server sends the page: the actions it runs, and how often the page asks again.
     hidden: how many older closed tasks are not in the rows."""
     scripts = ["common.js", "serve.js", "lobby.js", "board.js"] if serve else ["common.js", "lobby.js", "board.js"]  # a file on disk never calls out
-    return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve}, refresh, ["page.css", "lobby.css"])
+    return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve, "cli": cli_command()}, refresh, ["page.css", "lobby.css"])
 
 
 # A saved copy opens from a disk, away from the board: it may run its own script and nothing else, and ask the network for nothing.

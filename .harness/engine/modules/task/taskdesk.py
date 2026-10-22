@@ -182,6 +182,7 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "kind": data.get("kind", ""), "tier": data.get("tier", ""), "status": row.get("status", ""), "round": data.get("round", 1),
         "domains": list(data.get("domains") or []), "autorun": bool(row.get("autorun")), "paused_since": row.get("paused_since") or "",
         "waiting": row.get("waiting") or "", "waiting_why": row.get("waiting_why") or "", "waited_s": row.get("waited_s"),
+        "handoff": {key: str((data.get("handoff") or {}).get(key) or "") for key in ("what", "env", "detail")} if isinstance(data.get("handoff"), dict) else None,
         "created_at": data.get("created_at", ""), "updated_at": data.get("updated_at", ""),
         "todo": {"done": done, "total": total},
         "docs": docs, "history": history(data), "changes": changed(root, task, data),

@@ -26,6 +26,8 @@ def event_name(payload: Dict[str, Any]) -> Any:
     name = payload.get("hook_event_name")
     if name is None and "sessionId" in payload and "agentName" in payload:
         return "SubagentStart"  # the SDK engine sends this one without an event name
+    if name is None and "sessionId" in payload and "transformedPrompt" in payload:
+        return "UserPromptTransformed"  # configured by its camelCase name: the payload has no event name either
     return name
 
 
@@ -75,6 +77,7 @@ def parse(payload: Dict[str, Any]) -> HookEvent:
     event.agent_id = common.text(payload.get("agent_id"))
     event.agent_type = common.text(payload.get("agent_type") or payload.get("agentName"))
     event.stop_hook_active = bool(payload.get("stop_hook_active"))
+    event.transformed_prompt = common.text(payload.get("transformedPrompt") or payload.get("transformed_prompt"))
     return event
 
 

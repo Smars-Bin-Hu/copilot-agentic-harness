@@ -313,5 +313,53 @@ class FailedCallsAndSkillsInTheLogTests(SdkTestCase):
         self.assertEqual(numbers["skills_loaded"], {"harness-task-level": 1})
 
 
+class DroppedRulesTests(SdkTestCase):
+    """VS Code's own prompt handler takes the one `additionalContext` place (the reminder to rename the chat), and the rules
+    of UserPromptSubmit are lost; UserPromptTransformed puts them back (recorded 2026-10-22, 1.5.34)."""
+
+    def told(self, prompt: str) -> str:
+        output, _record = self.feed({**sample("UserPromptSubmit.json"), "prompt": prompt})
+        return output["additionalContext"]
+
+    def transformed(self, **change: Any) -> tuple:
+        return self.feed({**sample("userPromptTransformed.json"), **change})
+
+    def test_the_event_is_known_by_its_payload(self) -> None:
+        self.assertEqual(ev(sample("userPromptTransformed.json")), "UserPromptTransformed")
+
+    def test_rules_the_engine_dropped_are_put_back_at_the_end(self) -> None:
+        whole = sample("userPromptTransformed.json")["transformedPrompt"]
+        rules = self.told(sample("userPromptTransformed.json")["prompt"])
+        output, record = self.transformed()
+        self.assertEqual(set(output), {"modifiedTransformedPrompt"})
+        self.assertTrue(output["modifiedTransformedPrompt"].startswith(whole.rstrip()))
+        self.assertIn("rename_chat", output["modifiedTransformedPrompt"])  # the engine's own reminder stays
+        self.assertTrue(output["modifiedTransformedPrompt"].rstrip().endswith(rules + "\n</system_reminder>"))
+        self.assertEqual(record["event"], "UserPromptTransformed")
+
+    def test_nothing_changes_when_the_rules_arrived(self) -> None:
+        prompt = sample("userPromptTransformed.json")["prompt"]
+        rules = self.told(prompt)
+        output, _record = self.transformed(transformedPrompt=f"{prompt}\n\n<system_reminder>\n{rules}\n</system_reminder>")
+        self.assertEqual(output, {})
+
+    def test_another_prompt_or_one_with_nothing_told_is_left_alone(self) -> None:
+        self.told("something else entirely")
+        self.assertEqual(self.transformed()[0], {})
+        state_file = state.state_path(self.root, "vscode", sample("userPromptTransformed.json")["sessionId"])
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        data["prompt_context"] = {"prompt": state.prompt_digest(sample("userPromptTransformed.json")["prompt"]), "text": "", "at": time.time()}
+        state_file.write_text(json.dumps(data), encoding="utf-8")
+        self.assertEqual(self.transformed()[0], {})
+
+    def test_an_old_note_is_not_used(self) -> None:
+        self.told(sample("userPromptTransformed.json")["prompt"])
+        state_file = state.state_path(self.root, "vscode", sample("userPromptTransformed.json")["sessionId"])
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+        data["prompt_context"]["at"] -= state.PROMPT_CONTEXT_TTL_SECONDS + 1
+        state_file.write_text(json.dumps(data), encoding="utf-8")
+        self.assertEqual(self.transformed()[0], {})
+
+
 if __name__ == "__main__":
     unittest.main()

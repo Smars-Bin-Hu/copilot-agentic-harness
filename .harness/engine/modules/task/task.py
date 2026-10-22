@@ -236,6 +236,9 @@ def page_url(root: Path, task: str) -> str:
 def next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
     plan, dev = f"{task}/{tasks.PLAN_NAME}", f"{task}/{tasks.DEV_NAME}"
     page = say("task.step.page", url=page_url(root, task)) if page_url(root, task) else ""  # where the user reads the plan
+    handed = data.get("handoff") if isinstance(data.get("handoff"), dict) else {}
+    if handed.get("what"):  # handed to the person: their result comes before any next step
+        return say("task.step.handoff", env=handed.get("env", ""), what=handed.get("detail") or handed.get("what", ""), task=task)
     if not tasks.plan_digest(root, task):
         return say("task.step.plan", plan=plan, dev=dev, task=task) + page
     if not tasks.plan_approved(root, task, data):
@@ -447,6 +450,8 @@ def confirm_req(
         if hashlib.sha256(now.encode("utf-8")).hexdigest() != digest:
             raise CommandError(say("req.changed"))
         fill_confirmation(root, task, path, now, again, digest)
+        if not tasks.plan_digest(root, task):
+            again["waiting"] = {"since": utc_now(), "why": "go-req"}  # no plan yet, and nobody told the agent: the page gives the message to send (1.5.34)
     return {"confirmed": True, "task": task, "req": req, "next": say("req.next")}
 
 

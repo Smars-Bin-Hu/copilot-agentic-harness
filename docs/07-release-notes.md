@@ -10,6 +10,23 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.34 (2026-10-22)
+
+### Changed
+
+- **The rules of a prompt reach the model even when VS Code drops them.** VS Code adds its own reminders to a prompt (for example, to rename the chat), and they took the one place a hook has for its words: on about a third of the prompts measured (37 of 103, mostly the 2nd to 4th of a session), the model never got the session id, the language, where the task stands, or the rules of admin mode. A new hook event, `userPromptTransformed`, sees the whole text the model gets and adds the rules back when they are missing. Nothing changes when they arrived.
+- **A run that is not back is handed to you by `task review start` itself.** When the start is refused because an R item of `REQ.md` has no result in `RUNS/<env>/`, the task is marked as waiting for your run (the environment and the words of its R items), whether or not the agent runs `task handoff run`. While a run is handed out, `task status` and `task review status` say so instead of naming the next check.
+- **After `task handoff clear` the agent checks your result against every R item** before it starts a check, and asks again for what is missing.
+- **The task page says what to run.** While a run is handed to you, the card names the environment and what to run, and gives a reply to copy. It said "Nothing waits for you".
+- **After you confirm the requirement, the page gives the message to send** when there is no plan yet: "REQ.md is confirmed. Write PLAN.md, then stop for my approval."
+- **The commit message is at the top of the Changes tab** after a write-back. The Commit tab is gone.
+- **Writing `COMMIT-MESSAGE.md` keeps the passes.** It counted as a result, so a pass was lost and the agent asked for one more check.
+- **`COUNT(*)` shows as written.** Two of them on one line made the words between them italic on the task page.
+- **History lines wrap under their own start**, not under the time.
+- **The skill `harness-admin` does not ask you whether admin mode is on**: it reads the rules, or runs `harness admin status`.
+
+**Introductory material**: `harness-rookie-wondering` topic 6, `docs/02-features.md`, `docs/04-reference.md`.
+
 ## 1.5.33 (2026-10-22)
 
 ### Changed

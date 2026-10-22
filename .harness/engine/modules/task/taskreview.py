@@ -280,15 +280,44 @@ def why_text(item: Dict[str, Any]) -> str:
     return say(keys.get(str(item.get("why")), "review.dropped.no_place"), items=", ".join(item.get("items") or []), file=item.get("file", ""), line=item.get("line", 0), lines=item.get("lines", 0))
 
 
+def mark_run(root: Path, task: str, data: Dict[str, Any]) -> str:
+    """`review start` was refused for a run that is not back: the harness hands the run to the person itself (1.5.34), so the
+    board says the task waits for it whether or not the agent runs `task handoff run`. The first environment that has no
+    result, with the words of its R items. Says what it marked, or "" (a handoff is open, or no item names an environment)."""
+    if data.get("handoff"):
+        return ""
+    items = reviewcheck.done_items(root, task)
+    envs = [folder.split("/")[1] for folder in reviewcheck.missing_runs(root, task, items) if folder.count("/") == 2]
+    if not envs:
+        return ""
+    env = envs[0]
+    what = " ".join(" ".join(items["text"].get(name, name) for name in items["R"] if items["envs"].get(name) == env).split())
+    from .tasklife import WHAT_LENGTH  # tasklife imports this module
+
+    what = what if len(what) <= WHAT_LENGTH else what[: WHAT_LENGTH - 1] + "…"
+    data["handoff"] = {"what": "run", "env": env, "since": utc_now(), "detail": what, "by": "harness"}
+    task_ops.note(data, "handoff", f"run {env}: {what}")
+    return say("review.runs_marked", env=env, what=what, folder=f"{task}/{reviewcheck.RUNS_DIR}/{env}/", req=f"{task}/{tasks.REQ_FILE}")
+
+
 def start(root: Path, raw_task: str = "") -> Dict[str, Any]:
     task = task_ops.resolve(root, raw_task)
-    with task_ops.locked(root, task) as data:
+    early = ""
+    with task_ops.locked(root, task) as data:  # what refuses before a round: no check is used; a run that is not back is handed to the person
         task_ops.require_open(data)
         review = state_of(data)
         if review["n"] == 0:
             raise CommandError(say("review.off"))
         if not has_something(root, task, data):
             raise CommandError(say("review.nothing", task=task))
+        early = not_ready(root, task, data)
+        if early and not data.get("handoff"):
+            early = mark_run(root, task, data) or early
+    if early:
+        raise CommandError(early)
+    with task_ops.locked(root, task) as data:
+        task_ops.require_open(data)
+        review = state_of(data)
         early = not_ready(root, task, data)
         if early:
             raise CommandError(early)
@@ -373,6 +402,9 @@ def next_text(root: Path, task: str, data: Dict[str, Any]) -> str:
         return say("review.start.next", agent=AGENT, package=f"{round_dir(task, info['pending_round'])}/{PACKAGE}")
     if not has_something(root, task, data):
         return say("review.nothing", task=task)
+    handed = data.get("handoff")
+    if isinstance(handed, dict) and handed.get("what"):
+        return say("review.handoff_open", what=handed.get("what", ""), env=handed.get("env", ""), task=task)  # the person's result first, whatever the last verdict said
     if info["checks_used"] >= info["checks_limit"]:
         return say("review.limit", used=info["checks_used"], limit=info["checks_limit"], task=task)
     left = info["n"] - info["passes"]

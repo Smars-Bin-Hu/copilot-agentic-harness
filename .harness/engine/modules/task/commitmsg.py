@@ -85,7 +85,7 @@ def to_commit(data: Dict[str, Any]) -> List[str]:
 
 
 def view(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """What the Commit tab shows; None when the write-back is not done or has nothing for the person to commit."""
+    """The commit message the Changes tab shows at its top; None when the write-back is not done or has nothing for the person to commit."""
     if (data.get("promote") or {}).get("state") != "done":
         return None
     names = to_commit(data)

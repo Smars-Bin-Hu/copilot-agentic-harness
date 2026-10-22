@@ -134,6 +134,8 @@ class GateTests(ReviewCase):
         row = next(row for row in self.cli_json("task", "list")["tasks"] if row["task"] == JOB)
         self.assertEqual(row["waiting_why"], "run")
         self.assertEqual(self.stop(), {})  # the Stop hook does not ask for a check that cannot start
+        self.assertIn("task handoff clear", self.status()["next"])  # what comes next is the person's result, not a check
+        self.assertIn("task handoff clear", self.cli_json("task", "status")["next"])
         self.cli_json("task", "handoff", "clear")
         self.check(PASS)
         self.assertEqual(self.status()["passes"], 1)
@@ -150,12 +152,23 @@ class GateTests(ReviewCase):
         self.job()
         self.assertIn("--what", self.refused("task", "handoff", "run", "--env", "DEV", "--what", " "))
 
-    def test_no_check_starts_before_the_run_items_have_a_result(self) -> None:
+    def test_no_check_starts_before_the_run_items_have_a_result_and_the_run_is_handed_over(self) -> None:
         self.job_with_runs()
         text = self.refused("task", "review", "start")
         self.assertIn("RUNS/DEV/", text)
         self.assertEqual(self.review_state()["rounds"], [])
+        handed = self.data()["handoff"]  # the harness marked it: the agent need not remember to
+        self.assertEqual((handed["what"], handed["env"], handed["by"]), ("run", "DEV", "harness"))
+        self.assertIn("before/after counts match PROD", handed["detail"])
+        self.assertIn("PSCM shows INBOUND", handed["detail"])
+        self.assertNotIn("[R1]", handed["detail"])
+        row = next(row for row in self.cli_json("task", "list")["tasks"] if row["task"] == JOB)
+        self.assertEqual(row["waiting_why"], "run")
+        self.assertIn("task handoff clear", self.refused("task", "review", "start"))  # asked again: the open handoff says why
+        self.assertEqual(self.data()["handoff"]["since"], handed["since"])  # and it is not marked anew
         self.result("before 162 after 162", "RUNS/DEV/counts.txt")
+        cleared = self.cli_json("task", "handoff", "clear")
+        self.assertIn("R", cleared["next"])
         self.check(PASS)
         package = (self.folder() / "REVIEW/round-001/package.md").read_text(encoding="utf-8")
         self.assertIn("A1", package)
@@ -193,6 +206,14 @@ class GateTests(ReviewCase):
         self.check("VERDICT: FAIL\n- RCA.md:99 nothing there | basis: REQ.md:8")
         self.check(PASS)
         self.assertEqual(self.status()["passes"], 2)
+
+
+class CommitMessageTests(ReviewCase):
+    def test_a_commit_message_written_after_the_check_keeps_the_pass(self) -> None:
+        self.job()
+        self.check(PASS)
+        self.result("Change the owner line\n\nOnly the header comment.", "COMMIT-MESSAGE.md")
+        self.assertEqual(self.status()["passes"], 1)  # B62: it was counted as a result and the pass was lost
 
 
 class DismissTests(ReviewCase):

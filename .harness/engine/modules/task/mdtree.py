@@ -44,6 +44,9 @@ def safe_href(raw: str) -> Optional[str]:
     return href
 
 
+CLOSERS = ")]},.;:!?"
+
+
 def closing(text: str, start: int, mark: str) -> int:
     """Where `mark` closes, after `start`, with no space right before it; -1 when it does not."""
     index = text.find(mark, start)
@@ -97,6 +100,8 @@ def spans(text: str) -> List[Span]:
             if text.startswith(mark, index) and index + len(mark) < size and not text[index + len(mark)].isspace():
                 if mark == "__" and index > 0 and text[index - 1].isalnum():
                     continue  # snake__case is a name, not bold
+                if text[index + len(mark)] in CLOSERS:
+                    continue  # `COUNT(*)`: a mark that closes a bracket at once opens nothing (B62: two of them on a line made italics)
                 end = closing(text, index + len(mark), mark)
                 if end != -1:
                     flush()

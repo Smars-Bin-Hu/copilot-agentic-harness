@@ -10,9 +10,10 @@
   let desk = DATA.desk;
   let shown = JSON.stringify(desk);
   const same = (a, b) => a.replace(/"as_of":"[^"]*"/, "") === b.replace(/"as_of":"[^"]*"/, "");  // the time of asking is not a change
-  const tabs = ["overview", "test", "plan", "todo", "log", "changes", "commit", "review", "history", "docs"];
+  const tabs = ["overview", "test", "plan", "todo", "log", "changes", "review", "history", "docs"];  // the commit message is at the top of "changes" once written back (1.5.34)
   const FILES = {overview: "TASK.md", req: "REQ.md", plan: "PLAN.md", todo: "TODO.md", log: "LOG.md"};
-  let current = tabs.includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
+  const asked = location.hash.slice(1) === "commit" ? "changes" : location.hash.slice(1);  // a link to the old Commit tab
+  let current = tabs.includes(asked) ? asked : "overview";
   let other = "";  // the document open in the "docs" tab
 
   const doc = (name) => desk.docs.find((item) => item.name === name);
@@ -98,12 +99,14 @@
   function quiet() {
     if (desk.paused_since) return {title: t("desk.actions.paused"), hint: t("desk.actions.paused.hint")};
     const why = desk.waiting_why;
-    if (desk.waiting && (["stopped", "cancelled", "autorun", "tests"].includes(why) || why.startsWith("go-"))) {
-      return {title: desk.waiting.charAt(0).toUpperCase() + desk.waiting.slice(1), hint: t("desk.wait." + why),
-        prompt: why.startsWith("go-") ? t("desk.go." + why.slice(3)) : why === "tests" ? t("desk.tests.prompt") : ""};
+    if (desk.waiting && (["stopped", "cancelled", "autorun", "tests", "run"].includes(why) || why.startsWith("go-"))) {
+      const handed = desk.handoff || {};
+      return {title: desk.waiting.charAt(0).toUpperCase() + desk.waiting.slice(1), hint: t("desk.wait." + why, {env: handed.env || "", what: handed.detail || ""}),
+        prompt: why.startsWith("go-") ? t("desk.go." + why.slice(3)) : why === "tests" ? t("desk.tests.prompt") : why === "run" ? t("desk.run.prompt", {env: handed.env || ""}) : ""};
     }
     if (desk.state === "unheld") return {title: t("desk.actions.unheld"), hint: t("desk.actions.unheld.hint"), prompt: t("desk.unheld.prompt", {name: desk.name})};
     if (stateOf(desk, served()) === "quiet") return {title: t("desk.actions.quiet"), hint: t("desk.actions.quiet.hint")};
+    if (desk.waiting) return {title: desk.waiting.charAt(0).toUpperCase() + desk.waiting.slice(1), hint: ""};  // a reason with no card of its own: never "nothing waits" (B62)
     return {title: t("desk.actions.none"), hint: t("desk.actions.none.hint")};
   }
 
@@ -170,15 +173,14 @@
   function nav() {
     const label = (tab) => {
       if (tab === "todo" && desk.todo.total) return t("desk.tab.todo") + " " + desk.todo.done + "/" + desk.todo.total;
-      if (tab === "changes" && desk.changes.files.length) return t("desk.tab.changes") + " " + desk.changes.files.length;
-      if (tab === "commit") return t("desk.tab.commit") + (desk.commit.written ? "" : " !");
+      if (tab === "changes" && desk.changes.files.length) return t("desk.tab.changes") + " " + desk.changes.files.length + (desk.commit && !desk.commit.written ? " !" : "");
       if (tab === "test") return t("desk.tab.test") + " " + desk.test.passed + "/" + desk.test.total;
       if (tab === "review") return t("desk.tab.review") + (desk.review.n ? " " + desk.review.passes + "/" + desk.review.n : " " + desk.review.rounds.length);
       if (tab === "history") return t("desk.tab.history") + " " + desk.history.length;
       if (tab === "docs") return t("desk.tab.docs") + " " + extra().length;
       return t("desk.tab." + tab);
     };
-    return h("nav", {class: "tabs"}, tabs.filter((tab) => (tab !== "docs" || extra().length) && (tab !== "review" || hasReview()) && (tab !== "test" || desk.test) && (tab !== "commit" || desk.commit)).map((tab) => {
+    return h("nav", {class: "tabs"}, tabs.filter((tab) => (tab !== "docs" || extra().length) && (tab !== "review" || hasReview()) && (tab !== "test" || desk.test)).map((tab) => {
       const button = h("button", {type: "button", class: "tab" + (tab === current ? " on" : "")}, label(tab));
       button.addEventListener("click", () => { current = tab; history.replaceState(null, "", "#" + tab); draw(false); });
       return button;
@@ -277,7 +279,7 @@
 
   function changes() {
     const c = desk.changes;
-    const parts = [];
+    const parts = desk.commit ? [h("h3", null, t("desk.changes.commit")), ...commit()] : [];  // written back: the commit is what comes next
     if (c.files.length || c.deletes.length) {
       parts.push(h("h3", null, t("desk.changes.files")), table([th(t("desk.changes.file")), th(t("desk.changes.what")), th("+", true), th("−", true)],
         c.files.map((item) => h("tr", null, h("td", null, h("code", null, item.path)), h("td", null, tag(t("desk.changes." + item.action))),
@@ -300,8 +302,9 @@
   function timeline() {
     if (!desk.history.length) return h("div", {class: "empty-state"}, h("b", null, t("desk.history.none")));
     return h("ol", {class: "timeline"}, desk.history.map((event) => h("li", {class: "ev-" + event.what},
-      h("span", {class: "when sub"}, when(event.at, 5, 16)), h("b", null, event.label),
-      event.detail ? h("span", {class: "sub"}, " · " + event.detail) : null, event.via ? h("span", {class: "tag"}, t("desk.via." + event.via)) : null, event.round > 1 ? h("span", {class: "tag"}, t("desk.round", {round: event.round})) : null)));
+      h("span", {class: "when sub"}, when(event.at, 5, 16)),
+      h("div", {class: "what"}, h("b", null, event.label),  // one block: a long line wraps under its own start, not under the time
+        event.detail ? h("span", {class: "sub"}, " · " + event.detail) : null, event.via ? h("span", {class: "tag"}, t("desk.via." + event.via)) : null, event.round > 1 ? h("span", {class: "tag"}, t("desk.round", {round: event.round})) : null))));
   }
 
   function openDoc(name) {
@@ -323,7 +326,6 @@
     if (current === "changes") return changes();
     if (current === "review") return review();
     if (current === "test" && desk.test) return testing();
-    if (current === "commit" && desk.commit) return commit();
     if (current === "history") return [h("p", {class: "hint top"}, t("desk.history.hint")), timeline()];
     const docs = extra();
     const name = docs.some((item) => item.name === other) ? other : (docs[0] || {}).name;

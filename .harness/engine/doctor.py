@@ -18,6 +18,7 @@ from core import config, kbstd, messages, output, render, skillcheck, standards,
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
+from core.events import CONFIG_KEYS
 from core.state import TRACKED_EVENTS
 
 
@@ -224,7 +225,7 @@ def check_hook_config(report: Report, root: Path, registry: Dict[str, Any]) -> N
             report.error(say("doctor.hookcfg.unparsable", name=path.name, error=error))
             continue
         for event, entries in hooks.items():
-            configured.add(event)
+            configured.add(next((name for name, key in CONFIG_KEYS.items() if key == event), event))
             for entry in entries:
                 commands = [entry[key] for key in COMMAND_KEYS if isinstance(entry.get(key), str)]
                 if not commands or any(HOOK_ENTRY not in command for command in commands):

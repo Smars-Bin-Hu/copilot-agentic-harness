@@ -20,7 +20,7 @@ Admin mode is a switch on one session, not an agent: the user runs `harness admi
 
 ## Step-by-Step Workflows
 
-1. **Admin mode on?** The rules at the top of the prompt say "Admin mode: on". If not, give the user `harness admin on --session-id <current session id from the rules>` to run in their own terminal, and wait. Work that only reads (logs, reports, explaining a rule) need not wait. A session that holds a task cannot switch it on: the user opens a new conversation.
+1. **Admin mode on?** Do not ask the user: the rules at the top of the prompt say "Admin mode: on" when it is on. When they do not say so, or you are not sure, run `harness admin status`: it lists the sessions in admin mode. If it is off, give the user `harness admin on --session-id <current session id from the rules>` to run in their own terminal, and wait. Work that only reads (logs, reports, explaining a rule) need not wait. A session that holds a task cannot switch it on: the user opens a new conversation.
 2. **Say what you will change, why, and in which files.** For a large change (a new module, a new command, a changed refusal rule) give a short plan and act when the user agrees.
 3. **Change in small steps.** After each change to `.harness/engine/`, a policy or the hook configuration, run `harness doctor` and `python -m unittest discover -s .harness/tests` (`python3` on macOS/Linux). Fix a failure before the next step. A change of behaviour needs a new or changed test.
 4. **Register what you add.** A module's files go into `files` in `.harness/registry.json`; commands, policy fields and hook events go into `docs/04-reference.md` (a test checks this); a new folder or skill into `.harness/INDEX.md`.

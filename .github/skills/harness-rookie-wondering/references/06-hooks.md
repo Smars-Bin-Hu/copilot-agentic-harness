@@ -14,6 +14,7 @@ They are set in `.github/hooks/harness.json`, and every event points at the same
 | --- | --- | --- |
 | `SessionStart` | A session starts | Injects the session id and the rules |
 | `UserPromptSubmit` | The user sends a prompt | Reads `[review]=n`; injects how far the task is |
+| `userPromptTransformed` | Just before the prompt goes to the model | Puts back what `UserPromptSubmit` injected when VS Code dropped it (below) |
 | `PreToolUse` | **Before** a tool call | **It can refuse.** Everything the gate stops is stopped here |
 | `PostToolUse` | After a tool call succeeds | Keeps records; after the reviewer answers, writes the verdict to disk |
 | `PostToolUseFailure` | After a tool call fails | Records the error (no `PostToolUse` is sent on a failure) |
@@ -59,6 +60,7 @@ A subagent runs in **its own session**, and its tool calls go through hooks all 
 
 - It cannot change the model or set the reasoning effort.
 - It cannot kill an agent that keeps retrying; it can only refuse. That is why there is a breaker (topic 7).
+- **The injection can be lost.** VS Code adds its own reminders (for example, to rename the chat) to a prompt, and they take the one `additionalContext` place: on about a third of the prompts measured in October 2026, our rules never reached the model. `userPromptTransformed` sees the whole text the model gets, so the harness checks there and adds the rules back when they are missing. Lesson: check what the model really received (`transformedContent` in `~/.copilot/session-state/<id>/events.jsonl`), not what the hook returned.
 - There are only a few ways to remind the agent: injection at the top of every prompt, the reason of a deny, the block of a Stop, and the `additionalContext` of `PostToolUse` (delivered in Copilot SDK sessions, not in the old Local sessions). The harness puts its reminders mainly in the first three.
 
 ## Hands on

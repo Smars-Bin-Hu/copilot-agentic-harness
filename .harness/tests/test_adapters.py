@@ -21,7 +21,8 @@ class ParseTests(unittest.TestCase):
             with self.subTest(path.name):
                 self.assertIs(adapters.detect(data), copilot_vscode)
                 event = copilot_vscode.parse(data)
-                self.assertEqual(event.event, data.get("hook_event_name", "SubagentStart"))
+                camel = "UserPromptTransformed" if "transformedPrompt" in data else "SubagentStart"  # the two the SDK sends with no event name
+                self.assertEqual(event.event, data.get("hook_event_name", camel))
                 self.assertEqual(event.session_id, data.get("session_id") or data["sessionId"])
                 self.assertEqual(event.surface, "vscode")
                 self.assertFalse(event.from_subagent)
@@ -38,10 +39,10 @@ class ParseTests(unittest.TestCase):
             {"Bash": "terminal", "Read": "read", "Write": "create", "Edit": "edit", "Agent": "subagent", "search_code_subagent": "search"},
         )
 
-    def test_all_nine_event_names_are_known(self) -> None:
+    def test_all_ten_event_names_are_known(self) -> None:
         self.assertEqual(
             set(EVENT_NAMES),
-            {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PreCompact", "SubagentStart", "SubagentStop", "Stop"},
+            {"SessionStart", "UserPromptSubmit", "UserPromptTransformed", "PreToolUse", "PostToolUse", "PostToolUseFailure", "PreCompact", "SubagentStart", "SubagentStop", "Stop"},
         )
 
     def test_prompt_fields(self) -> None:

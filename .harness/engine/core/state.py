@@ -40,7 +40,9 @@ CHILD_CLAIM_SECONDS = 10.0
 CHILD_SCAN_FILES = 30
 CHILD_SCAN_AGE_SECONDS = 600.0
 # Events core needs even when no module subscribes (subagent tracking). The hook config must cover them.
-TRACKED_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "SubagentStart", "SubagentStop", "Stop")
+TRACKED_EVENTS = ("SessionStart", "UserPromptSubmit", "UserPromptTransformed", "PreToolUse", "SubagentStart", "SubagentStop", "Stop")
+# UserPromptTransformed comes within moments of the UserPromptSubmit of the same prompt (recorded 2026-10-22: a few ms).
+PROMPT_CONTEXT_TTL_SECONDS = 120.0
 
 STATE_SCHEMA = {
     "type": "object",
@@ -306,6 +308,9 @@ def track_after(state: Dict[str, Any], event: HookEvent, decision: Decision) -> 
     if event.event == "Stop" and decision.block and decision.reason:
         state["continuation"] = {"prompt": decision.reason, "at": time.time()}
         return
+    if event.event == "UserPromptSubmit":
+        state["prompt_context"] = {"prompt": prompt_digest(event.prompt), "text": decision.context, "at": time.time()}  # what this prompt was told, for UserPromptTransformed; the prompt itself is not kept
+        return
     if event.event != "PreToolUse" or event.tool_kind != "subagent" or decision.permission == "deny":
         return
     if not event.subagent_prompt:
@@ -313,3 +318,26 @@ def track_after(state: Dict[str, Any], event: HookEvent, decision: Decision) -> 
     pending = state["subagents"]["pending_prompts"]
     pending.append({"prompt": event.subagent_prompt, "agent": event.subagent_target, "at": time.time()})
     del pending[:-PENDING_PROMPT_MAX]
+
+
+def prompt_digest(prompt: str) -> str:
+    return hashlib.sha256(prompt.strip().encode("utf-8")).hexdigest()[:16]
+
+
+def restored_prompt(state: Dict[str, Any], event: HookEvent) -> Decision:
+    """UserPromptTransformed: put back what UserPromptSubmit told this prompt when the engine dropped it (1.5.34).
+
+    VS Code's own prompt handler (the reminder to rename the chat) takes the one `additionalContext` place, and ours is
+    lost; recorded 2026-10-22 on about a third of the prompts. The text the model gets is handed over here whole: when ours
+    is not in it, it is added at the end, as the engine adds it. Nothing is changed when it is there, or for another prompt."""
+    told = state.get("prompt_context") or {}
+    text = str(told.get("text") or "").strip()
+    whole = event.transformed_prompt
+    if not text or not whole or time.time() - float(told.get("at") or 0) > PROMPT_CONTEXT_TTL_SECONDS:
+        return Decision()
+    if str(told.get("prompt") or "") != prompt_digest(event.prompt):
+        return Decision()  # not the prompt that was told
+    first = text.splitlines()[0].strip()
+    if first and first in whole:
+        return Decision()
+    return Decision(prompt=f"{whole.rstrip()}\n\n<system_reminder>\n{text}\n</system_reminder>", facts={"kind": "context_restored"})

@@ -30,6 +30,12 @@ class MarkdownTests(unittest.TestCase):
         self.assertEqual(tree["blocks"][2]["rows"][0][1], [{"t": "text", "v": "x | y"}])
         self.assertEqual(tree["blocks"][3], {"t": "code", "lang": "sql", "text": "select 1;"})
 
+    def test_a_star_that_closes_a_bracket_is_text(self) -> None:
+        """B62: a reviewer wrote `COUNT(*)` twice on one line and the page made the words between them italic."""
+        line = "COUNT(*) of dw equal to COUNT(*) of stg, and *this* stays italic"
+        self.assertEqual(kinds(mdtree.spans(line)), ["text", "i", "text"])
+        self.assertEqual(mdtree.spans(line)[0]["v"], "COUNT(*) of dw equal to COUNT(*) of stg, and ")
+
     def test_a_file_from_windows_keeps_its_first_heading(self) -> None:
         """Windows PowerShell and Notepad write a BOM and CRLF; the BOM used to turn `# TODO` into a paragraph."""
         for text in ("# TODO\n\n- [ ] a\n", "\ufeff# TODO\n\n- [ ] a\n", "# TODO\r\n\r\n- [ ] a\r\n", "\ufeff# TODO\r\n\r\n- [ ] a\r\n"):
@@ -193,6 +199,27 @@ class DeskTests(ServeCase):
         self.assertEqual(found["since"], datetime.fromtimestamp(1_800_000_000, timezone.utc).isoformat())
         names = [item["action"] for item in taskdesk.desk(self.root, "job1", ("confirm-req", "pause"))["actions"]]
         self.assertEqual(names.count("confirm-req"), 1)
+
+    def test_a_confirmed_requirement_with_no_plan_gives_the_message_to_send(self) -> None:
+        import hashlib
+        import io
+
+        (self.task / "PLAN.md").unlink(missing_ok=True)
+        req = self.task / "REQ.md"
+        req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Stop the nightly load from failing.").replace("<一两段。用户的原意，不加你自己的设想>", "别让夜间加载失败。"), encoding="utf-8")
+        code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
+        task_ops.confirm_req(self.root, TASK, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
+        desk = taskdesk.desk(self.root, "job1", ("confirm-req", "pause"))
+        self.assertEqual(desk["waiting_why"], "go-req")
+        self.assertNotIn("confirm-req", [item["action"] for item in desk["actions"]])
+
+    def test_a_run_handed_to_the_person_is_on_the_page(self) -> None:
+        from modules.task import tasklife
+
+        self.assertIsNone(taskdesk.desk(self.root, "job1")["handoff"])
+        tasklife.handoff(self.root, TASK, "run", "DEV", "run the job and count the rows")
+        desk = taskdesk.desk(self.root, "job1")
+        self.assertEqual(desk["handoff"], {"what": "run", "env": "DEV", "detail": "run the job and count the rows"})
 
     def test_a_requirement_changed_while_the_person_confirms_is_not_confirmed(self) -> None:
         req = self.task / "REQ.md"

@@ -32,8 +32,8 @@ MAX_SEARCH = 5000  # files of a task folder looked through for a bare file name
 
 
 def done_items(root: Path, task: str) -> Dict[str, Any]:
-    """The numbered items of the "Done when" section (either language), by group. `envs`: the environment of each R item, upper case."""
-    found: Dict[str, Any] = {"T": [], "R": [], "A": [], "envs": {}}
+    """The numbered items of the "Done when" section (either language), by group. `envs`: the environment of each R item, upper case. `text`: the words of each item."""
+    found: Dict[str, Any] = {"T": [], "R": [], "A": [], "envs": {}, "text": {}}
     try:
         text = (tasks.task_dir(root, task) / tasks.REQ_FILE).read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -55,6 +55,7 @@ def done_items(root: Path, task: str) -> Dict[str, Any]:
             name = f"{group}{int(number)}"
             if name not in found[group]:
                 found[group].append(name)
+                found["text"][name] = _ITEM.sub("", _BULLET.sub(r"\1", line), count=1).strip(" :：")
         for number, env in _RUN_ENV.findall(line):
             found["envs"][f"R{int(number)}"] = env.upper()
     return found

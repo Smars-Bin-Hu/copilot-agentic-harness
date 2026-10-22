@@ -142,6 +142,8 @@ def render(event: HookEvent, decision: Optional[Decision]) -> Dict[str, Any]:
     if event.event in ("Stop", "SubagentStop") and decision.block:
         output["decision"] = "block"
         output["reason"] = decision.reason
-    if decision.context and event.event not in ("Stop", "SubagentStop"):
+    if decision.context and event.event not in ("Stop", "SubagentStop", "UserPromptTransformed"):
         output["additionalContext"] = decision.context
+    if event.event == "UserPromptTransformed" and decision.prompt:
+        output["modifiedTransformedPrompt"] = decision.prompt
     return output

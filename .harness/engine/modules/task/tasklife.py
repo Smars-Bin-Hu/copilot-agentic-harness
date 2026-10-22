@@ -247,7 +247,7 @@ def last_event(data: Dict[str, Any], *names: str) -> str:
 HANDOFFS = ("tests", "run")  # work for the person outside the harness; `task handoff` sets the mark, `task handoff clear` takes it away. `run`: a run before the write-back (1.5.31)
 WHAT_LENGTH = 200
 ENV_LENGTH = 40
-GO_MARKS = ("go-plan", "go-promote", "go-recover", "go-review")  # an approval was given and the agent has not been told (the next prompt takes the mark away)
+GO_MARKS = ("go-req", "go-plan", "go-promote", "go-recover", "go-review")  # an approval was given and the agent has not been told (the next prompt takes the mark away)
 
 
 def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:

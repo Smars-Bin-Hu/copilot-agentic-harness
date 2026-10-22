@@ -81,6 +81,9 @@ def process(raw: str, root: Path) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         ctx = Context(root, state)
         sources, ran, facts = run_modules(root, event, ctx, names)
         decision = merge([item for _name, item in sources])
+        if event.event == "UserPromptTransformed":
+            decision = state_module.restored_prompt(state, event)  # core: the rules the engine dropped, put back
+            facts.update(decision.facts)
         denial = call_safely(root, "breaker", breaker.apply, root, state, event, decision)  # a refusal stays a refusal
         state_module.track_after(state, event, decision)
         admin = ctx.admin

@@ -85,7 +85,7 @@ def state_lines(root: Path, task: str, data: Dict[str, Any]) -> List[str]:
         for name, repo in (promote.get("repos") or {}).items():
             if isinstance(repo, dict):
                 lines.append(say("fork.md.written", repo=name, branch=promote.get("branch") or data.get("branch") or "-", base=str(repo.get("base_commit") or "-")[:12],
-                                 commit=str(repo.get("commit") or say("fork.md.not_committed"))[:12]))
+                                 commit=str(repo["commit"])[:12] if repo.get("commit") else say("fork.md.not_committed")))
     else:
         lines.append(say("fork.md.not_written", state=promote.get("state", "none")))
     try:

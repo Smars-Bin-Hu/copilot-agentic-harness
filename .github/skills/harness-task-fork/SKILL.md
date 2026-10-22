@@ -36,6 +36,7 @@ specificTo: generic
 - **One test task covers every environment.** For development to test, fork once: the test task goes through the environments of `TEST-GUIDE.md` (DEV, IST, UAT) step by step. Do not fork once per environment.
 - **What is in `REF/from-<old>/` is reference, not this task's result.** Do not edit those files and do not copy them to the root of the task: the root is the new task's own work, and the checks look at it.
 - **The old task's state does not come along**: approvals, checks, TODO and `DEV/` stay with it. The new task needs its own requirement confirmed, its own plan approved, its own checks. The code the old task wrote is on the branch named in `FORK.md`, not in `DEV/`.
+- **What was done is in `CHANGES.diff`, not in the old `REQ.md`.** The old requirement says what was asked; when the two disagree (B65: the old REQ said `de-customer-dw`, the diff shows `de-customer`), write the new requirement from the diff and `LOG.md`, and tell the user about the difference.
 - **Do not fork into a name that exists**: the command refuses and copies nothing. Pick another name, or `task open` the existing task.
 
 ## Troubleshooting

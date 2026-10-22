@@ -6,6 +6,7 @@ import unittest
 
 from test_tasklife import BASE, S1, S2, LifeCase
 
+from core import messages
 from modules.task import task as task_ops, taskdesk, taskfork
 
 
@@ -52,6 +53,7 @@ class ForkTests(LifeCase):
         text = (self.folder("test1") / "REF" / "from-dev1" / "FORK.md").read_text(encoding="utf-8")
         self.assertIn("feature/dev1", text)
         self.assertIn("abcdef123456", text)
+        self.assertIn(messages.text("fork.md.not_committed"), text)  # whole, not cut like a commit id (B65)
         self.assertIn("DEV/", text)  # listed as not copied, with why
         self.assertIn("dev -> test", text)
 

@@ -490,7 +490,8 @@ def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False) 
             name, _, rest = spec.strip().replace("\\", "/").partition("/")
             if name in found.repos and rest.strip("/"):
                 common.check_target_output(found, f"{name}/{rest.strip('/')}", "fetch")
-        entries = common.copy_from_target(root, data, specs, base, limit, "base")
+        synced: List[str] = []
+        entries = common.copy_from_target(root, data, specs, base, limit, "base", synced)
         for entry in entries:
             key = entry["source"]
             source, destination = base / key, dev / key
@@ -505,6 +506,8 @@ def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False) 
             data["promote"] = {"state": "none"} if data["promote"]["state"] == "dry_run" else data["promote"]
             note(data, "fetch", messages.joined(fetched + kept))
     result: Dict[str, Any] = {"task": task, "fetched": [f"{task}/{tasks.DEV_NAME}/{key}" for key in fetched], "total_fetched": len(data["target_files"])}
+    if synced:
+        result["base_sync"] = synced
     if kept:
         result["kept"] = kept
         result["note"] = say("fetch.kept")
@@ -641,7 +644,8 @@ def header(task: str, data: Dict[str, Any]) -> str:
     return f"# task {task}, round {data['round']}, branch {data.get('branch', '')}"
 
 
-def make_plan(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
+def make_plan(root: Path, task: str, data: Dict[str, Any], sync: bool = False) -> Dict[str, Any]:
+    """`sync` (a dry run): the base branches are first brought up to their remotes (basesync)."""
     if not data.get("target_mode"):
         raise CommandError(say("promote.no_target"))
     found = dev_files(root, task)
@@ -654,11 +658,14 @@ def make_plan(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     if not items:
         raise CommandError(say("promote.nothing") + (say("promote.nothing.loose", loose=messages.joined(loose)) if loose else ""))
     branch = data.get("branch", "")
-    repos, files = promote_target.plan_files(root, items, data["target_files"], branch, hints())
+    notes: Optional[List[str]] = [] if sync else None
+    repos, files = promote_target.plan_files(root, items, data["target_files"], branch, hints(), notes)
     result: Dict[str, Any] = {
         "task": task, "round": data["round"], "branch": branch, "repos": repos, "files": files,
         "plan_sha256": promote_target.plan_digest(branch, repos, files),
     }
+    if notes:
+        result["base_sync"] = notes
     if loose:
         result["not_promoted"] = loose
         result["not_promoted_note"] = say("promote.loose.note")
@@ -685,7 +692,7 @@ def run_promote(root: Path, raw_task: str, dry_run: bool) -> Dict[str, Any]:
 
         if dry_run:
             taskreview.require(root, task, data)
-        result = make_plan(root, task, data)
+        result = make_plan(root, task, data, sync=dry_run)
         if dry_run:
             result["snapshot"] = tasksnap.take(root, task, "promote")["snapshot"]
             new = {"state": "dry_run", "plan_sha256": result["plan_sha256"], "at": utc_now()}

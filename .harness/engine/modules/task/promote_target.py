@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import messages, repo_paths, targets
 from core.paths import cli_command, utc_now
 
-from . import common, taskqueue
+from . import basesync, common, taskqueue
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -120,9 +120,10 @@ def plan_digest(branch: str, repos: List[Dict[str, Any]], files: List[Dict[str, 
 
 
 def plan_files(
-    root: Path, items: List[Dict[str, Any]], target_files: Dict[str, Any], branch: str, hints: Dict[str, str],
+    root: Path, items: List[Dict[str, Any]], target_files: Dict[str, Any], branch: str, hints: Dict[str, str], notes: Optional[List[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Check every repository and file of a result. `items`: {key `<repo>/<path>`, source file, sha256, delete}.
+    `notes` (a dry run): each base branch is first brought up to its remote (basesync), and what that did is added to it.
 
     Returns (repos, files) when everything passes; raises CommandError listing every problem otherwise. Nothing is written.
     """
@@ -146,6 +147,12 @@ def plan_files(
         repo = found.repos[name]
         timeout = found.timeout
         mine: List[str] = []
+        if notes is not None:
+            try:
+                basesync.sync_all([repo], timeout, notes)
+            except (CommandError, targets.TargetError) as error:
+                problems.append(messages.text("note.detail", what=name, detail=error))
+                continue
         try:
             commit = targets.ref_commit(repo, timeout)
             if not commit:

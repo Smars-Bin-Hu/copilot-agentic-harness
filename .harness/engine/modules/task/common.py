@@ -141,7 +141,7 @@ def clean_task(root: Path, raw: str) -> str:
 
 
 def copy_from_target(
-    root: Path, data: Dict[str, Any], specs: List[str], target: Path, limit: int, purpose: str
+    root: Path, data: Dict[str, Any], specs: List[str], target: Path, limit: int, purpose: str, notes: Optional[List[str]] = None
 ) -> List[Dict[str, str]]:
     """Files of target repositories as `base_ref` has them (the commit is fixed at the first read), not the working tree.
 
@@ -164,6 +164,10 @@ def copy_from_target(
         relative = relative_name(rest, "path.what.in_repo")
         if name not in records:
             try:
+                if notes is not None:  # the first read of this repository in the round: its base branch is brought up to the remote first
+                    from . import basesync  # it needs this module
+
+                    basesync.sync_all([repo], found.timeout, notes)
                 commit = targets.ref_commit(repo, found.timeout)
             except targets.TargetError as error:
                 raise CommandError(str(error)) from error

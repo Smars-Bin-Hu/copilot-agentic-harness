@@ -71,16 +71,17 @@ The board gives a task one state, the first that holds:
 
 ```text
 the agent writes REQ.md and PLAN.md, and stops    -> you read it in the editor and run task approve-plan in the terminal   <- the first approval
-the agent fetches files into DEV/ with task fetch    (reads the local main with git; your working tree is left alone)
+the agent fetches files into DEV/ with task fetch    (main is first brought up to its remote, by a fast-forward only; then read with git)
 the agent makes the changes in DEV/ -> task diff (CHANGES.diff)
 (with checks on) task review start -> the reviewer checks -> n passes are reached
-task promote --dry-run -> PROMOTE-PLAN.diff -> you run task approve-promote in the terminal                               <- the second approval
+task promote --dry-run (main brought up again) -> PROMOTE-PLAN.diff -> you run task approve-promote in the terminal                               <- the second approval
 task promote: for each repository git switch -c <branch> main, files written, not committed
 task close -> the report is written
 ```
 
 Key points:
 
+- Before the first fetch and before every dry run, main is brought up to its remote, but only by a fast-forward. Two tasks, or you and a colleague, that change the same file are found here, by the harness, not later in the pull request: the dry run refuses a file that moved on main since it was fetched. When main cannot be moved safely (changes not committed on it, or it went its own way), nothing moves and the agent tells you what to do.
 - The code is bound to the sha256 of the plan; when the plan changes, the approval ends.
 - Checked before a write-back: the working tree is clean, the branch name is free, and the files to change have not changed on main. Nothing is written unless every repository passes.
 - A failure partway is not rolled back automatically: the task goes to `partial`, and you run `task recover`.

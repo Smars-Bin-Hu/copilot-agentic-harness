@@ -79,6 +79,7 @@
   }
 
   const served = () => typeof SERVE !== "undefined" && Boolean(DATA.serve);
+  const saved = Boolean(DATA.snapshot);  // a saved copy: no buttons, no way back to a board, no calls to a server
 
   // --- the parts --------------------------------------------------------------------------------------------
 
@@ -87,8 +88,9 @@
     const state = stateTag(desk, served());
     return [
       brand(),
-      h("div", {class: "crumbs sub"}, h("a", {href: "/"}, "← " + t("desk.back")),
-        desk.report ? [" · ", h("a", {href: desk.report.split("/").map(encodeURIComponent).join("/")}, t("desk.report"))] : null),
+      saved ? null : h("div", {class: "crumbs sub"}, h("a", {href: "/"}, "← " + t("desk.back")),
+        desk.report ? [" · ", h("a", {href: desk.report.split("/").map(encodeURIComponent).join("/")}, t("desk.report"))] : null,
+        served() ? [" · ", h("a", {href: "/snapshot/" + encodeURIComponent(desk.name), download: "", title: t("desk.save.hint")}, t("desk.save"))] : null),
       h("div", {class: "title-row"}, h("h1", null, desk.name), state),
       h("div", {class: "sub"}, t("desk.subtitle", {kind, round: desk.round, created: when(desk.created_at, 0, 16), updated: when(desk.updated_at, 0, 16)}),
         desk.domains.length ? " · " + t("desk.domains", {names: desk.domains.join(", ")}) : "", desk.autorun ? [" · ", tag(t("desk.autorun"), "good")] : null),
@@ -338,8 +340,8 @@
 
   function draw(keepScroll) {
     const y = window.scrollY;
-    app.replaceChildren(...header(), ribbon(), actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
-      h("footer", null, t("desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright()));
+    app.replaceChildren(...[...header(), ribbon(), saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
+      h("footer", null, t(saved ? "desk.snapshot.footer" : "desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright())].filter(Boolean));  // a null would be drawn as the word "null"
     if (keepScroll) window.scrollTo(0, y);
   }
 

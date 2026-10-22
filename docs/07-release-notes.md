@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.35 (2026-10-22)
+
+### Added
+
+- **Save a task page as HTML.** The task page has a link, *Save as HTML*, that downloads the task as one file to send to someone who cannot open your board. It is a copy of that moment: all the tabs, no buttons, no link back to the board, nothing that talks to a server.
+
+### Changed
+
+- **The task page no longer draws the word "null"** when a part of it has nothing to show (the stages of a new task, for one).
+
+**Introductory material**: `docs/02-features.md` (task page) and the board paragraph of `harness-rookie-quick-start` (`references/capabilities.md`) changed, one line each. `harness-rookie-wondering` is not changed: it teaches how the harness works, and a download link adds nothing to that.
+
 ## 1.5.34 (2026-10-22)
 
 ### Changed

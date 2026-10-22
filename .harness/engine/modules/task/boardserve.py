@@ -26,11 +26,12 @@ import os
 import secrets
 import sys
 import threading
+import re
 import time
 import webbrowser
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
-from urllib.parse import unquote, urlparse
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import quote, unquote, urlparse
 
 from core import config, messages, tasks
 from core.paths import board_serve_file, utc_now
@@ -129,6 +130,14 @@ class Board:
 
     def desk_page(self, name: str) -> str:
         return taskhtml.desk_page(self.desk(name), {"actions": self.actions, "refresh": REFRESH})
+
+    def snapshot(self, name: str) -> Tuple[str, str]:
+        """The task page as one file to keep or send (file name, page): as of now, no buttons, nothing that talks to a server.
+        The commands the buttons would copy and the link to the time-and-usage page mean nothing away from this board: they are left out."""
+        found = self.desk(name)
+        found["actions"], found["report"] = [], ""
+        stem = re.sub(r"[^\w.-]+", "-", found["name"]).strip("-.") or "task"
+        return f"{stem}-{time.strftime('%Y-%m-%d')}.html", taskhtml.desk_page(found)
 
     def archive(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Move closed tasks out of the repository (`task archive`). `step`: `preview` says what would move; `act` moves them.
@@ -239,6 +248,15 @@ def handler_for(board: Board) -> type:
             if not self.host_ok():
                 return self.send(403, b"", "text/plain")
             path = unquote(urlparse(self.path).path)
+            if path.startswith("/snapshot/"):
+                try:
+                    filename, page = board.snapshot(path[len("/snapshot/"):].strip("/"))
+                    disposition = f"attachment; filename=\"task.html\"; filename*=UTF-8''{quote(filename)}"  # the plain name is for a browser that reads only ASCII
+                    return self.send(200, page.encode("utf-8"), "text/html; charset=utf-8", {"Content-Disposition": disposition})
+                except CommandError as error:
+                    return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
+                except Exception as error:  # noqa: BLE001 - show it instead of a dead download
+                    return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
             if path in ("/", "/board.html") or path.startswith("/task/"):
                 try:
                     page = board.page() if not path.startswith("/task/") else board.desk_page(path[len("/task/"):].strip("/"))

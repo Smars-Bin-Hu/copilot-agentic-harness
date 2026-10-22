@@ -81,6 +81,14 @@ def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: 
     return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve}, refresh, ["page.css", "lobby.css"])
 
 
-def desk_page(desk: Dict[str, Any], serve: Dict[str, Any]) -> str:
-    """One task as the board server sends it (taskdesk.desk): documents, progress, history, changes, actions."""
-    return build("desk.html", ["common.js", "serve.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve})
+# A saved copy opens from a disk, away from the board: it may run its own script and nothing else, and ask the network for nothing.
+SNAPSHOT_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+
+
+def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None) -> str:
+    """One task as the board server sends it (taskdesk.desk): documents, progress, history, changes, actions.
+    Without `serve` it is a saved copy: one file with no buttons and no calls to a server, as of the time it was made."""
+    if serve is not None:
+        return build("desk.html", ["common.js", "serve.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve})
+    page = build("desk.html", ["common.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "snapshot": True})
+    return page.replace("<head>", f'<head>\n<meta http-equiv="Content-Security-Policy" content="{SNAPSHOT_CSP}">', 1)

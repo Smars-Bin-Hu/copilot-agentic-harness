@@ -113,6 +113,25 @@ class DeskTests(ServeCase):
         self.assertEqual(self.request("GET", "/task/../../etc/passwd")[0], 404)
         self.assertEqual(self.request("GET", "/task/no_such_task")[0], 404)
 
+    def test_a_saved_copy_is_one_file_with_no_buttons_and_no_way_to_talk_to_a_server(self) -> None:
+        status, data, headers = self.request("GET", "/snapshot/job1")
+        self.assertEqual(status, 200)
+        self.assertIn("attachment", headers["Content-Disposition"])
+        self.assertIn("job1-", headers["Content-Disposition"])
+        page = data["text"]
+        self.assertIn('"snapshot": true', page)
+        self.assertIn("default-src 'none'", page)
+        self.assertNotIn("connect-src", page)
+        self.assertNotIn("const SERVE", page, "the script that calls the server is not in the copy")
+        self.assertNotIn("X-Harness-Board", page)
+        self.assertNotIn("--task job1", page, "the commands the buttons would copy are left out")
+        self.assertNotIn(str(self.root), page, "no path of this computer")
+        self.assertIn("另存为 HTML", self.request("GET", "/task/job1")[1]["text"], "the live page offers the copy")
+        self.assertIn("/snapshot/", self.request("GET", "/task/job1")[1]["text"])
+        self.assertEqual(self.request("GET", "/snapshot/no_such_task")[0], 404)
+        self.assertEqual(self.request("GET", "/snapshot/..%2F..%2Fetc")[0], 404)
+        self.assertEqual(self.request("GET", "/snapshot/job1", host="evil.example")[0], 403)
+
     def test_the_page_asks_for_the_task_again(self) -> None:
         status, data, _headers = self.request("POST", "/api/desk", {"task": "job1"})
         self.assertEqual(status, 200)

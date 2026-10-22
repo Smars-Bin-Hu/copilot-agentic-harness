@@ -201,8 +201,11 @@
       const answer = item.answer ? blocks(item.answer.blocks) : h("p", {class: "sub"}, item.verdict ? t("desk.review.noanswer") : t("desk.review.pending"));
       parts.push(h("section", {class: "round " + (item.verdict === "FAIL" ? "fail" : item.verdict === "PASS" ? "pass" : "")},
         h("div", {class: "round-head"}, h("strong", null, "round-" + String(item.number).padStart(3, "0")), " ", verdict, " ",
+          item.dismissed ? [tag(t("desk.review.dismissed"), "hot"), " "] : item.invalid ? [tag(t(item.refunded ? "desk.review.given_back" : "desk.review.invalid"), "hot"), " "] : null,
           h("span", {class: "sub"}, when(item.started_at, 5, 16) + " · " + (item.current ? t("desk.review.current") : t("desk.review.earlier")))),
         h("article", {class: "md"}, answer, item.answer && item.answer.cut ? h("p", {class: "sub"}, t("desk.cut")) : null),
+        (item.dropped || []).length ? h("div", {class: "dropped"}, h("p", {class: "sub"}, t("desk.review.dropped")),
+          h("ul", null, item.dropped.map((found) => h("li", null, h("b", null, found.why), " ", found.text)))) : null,
         item.package ? h("details", null, h("summary", {class: "sub"}, t("desk.review.given")), h("article", {class: "md"}, blocks(item.package.blocks))) : null));
     }
     return parts;

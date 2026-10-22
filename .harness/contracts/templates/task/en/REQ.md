@@ -15,7 +15,19 @@
 
 ## Done when
 
-<What counts as done, as items that can be checked>
+<What counts as done, as items that can be checked. Number each item by who can show it; write "none" under a group with nothing>
+
+### Shown by the task files
+
+- [T1] <checked by the reviewer in the task files>
+
+### Shown by a run the user does before the write-back
+
+- [R1] <ENV>: <what the user runs and what the result must show; the result is saved in RUNS/<ENV>/>
+
+### Shown after the write-back
+
+- [A1] <checked in the environments after deployment (generic-test-guide); the reviewer does not judge it>
 
 ## Source
 

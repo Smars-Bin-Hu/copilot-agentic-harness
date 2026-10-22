@@ -244,7 +244,8 @@ def last_event(data: Dict[str, Any], *names: str) -> str:
     return next((event.get("at", "") for event in reversed(data.get("events") or []) if event.get("what") in names), "")
 
 
-HANDOFFS = ("tests",)  # work for the person outside the harness; `task handoff` sets the mark, `task handoff clear` takes it away
+HANDOFFS = ("tests", "run")  # work for the person outside the harness; `task handoff` sets the mark, `task handoff clear` takes it away. `run`: a run before the write-back (1.5.31)
+WHAT_LENGTH = 200
 ENV_LENGTH = 40
 GO_MARKS = ("go-plan", "go-promote", "go-recover", "go-review")  # an approval was given and the agent has not been told (the next prompt takes the mark away)
 
@@ -294,6 +295,17 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     if cancelled:
         return {"why": "cancelled", "since": cancelled}
     return {"why": "", "since": ""}
+
+
+def dismiss_of(data: Dict[str, Any]) -> str:
+    """`round-NNN`: the newest check that counts and did not pass, which the person may dismiss (`task review dismiss`). Empty when none."""
+    try:
+        from . import taskreview  # it needs this module
+
+        found = taskreview.dismissable(data)
+    except Exception:  # noqa: BLE001 - a list must not fail over one task's checks
+        return ""
+    return f"round-{int(found['number']):03d}" if found else ""
 
 
 def cancelled_at(data: Dict[str, Any]) -> str:
@@ -351,9 +363,13 @@ def defects_synced(root: Path, task: str) -> Dict[str, Any]:
         return {}
 
 
-def handoff(root: Path, raw_task: str, what: str, env: str) -> Dict[str, Any]:
-    """The agent hands work to the person that only they can do outside the harness (tests in an environment): the board says so until `handoff_clear`."""
+def handoff(root: Path, raw_task: str, what: str, env: str, detail: str = "") -> Dict[str, Any]:
+    """The agent hands work to the person that only they can do outside the harness: the tests of an environment, or a run before the write-back
+    (`run`, with what to run). The board says so, and no check can start, until `handoff_clear`."""
     env = " ".join(str(env or "").split())
+    detail = " ".join(str(detail or "").split())
+    if what == "run" and (not detail or len(detail) > WHAT_LENGTH):
+        raise CommandError(say("task.handoff.run_what", limit=WHAT_LENGTH))
     if what not in HANDOFFS:
         raise CommandError(say("task.handoff.what", what=what, allowed=", ".join(HANDOFFS)))
     if not env or len(env) > ENV_LENGTH:
@@ -361,8 +377,10 @@ def handoff(root: Path, raw_task: str, what: str, env: str) -> Dict[str, Any]:
     task = task_ops.resolve(root, raw_task)
     with task_ops.locked(root, task) as data:
         task_ops.require_open(data)
-        data["handoff"] = {"what": what, "env": env, "since": utc_now()}
-        task_ops.note(data, "handoff", f"{what} {env}")
+        data["handoff"] = {"what": what, "env": env, "since": utc_now(), **({"detail": detail} if detail else {})}
+        task_ops.note(data, "handoff", f"{what} {env}" + (f": {detail}" if detail else ""))
+    if what == "run":
+        return {"task": task, "handoff": what, "env": env, "detail": detail, "next": say("task.handoff.next.run", env=env, folder=f"{task}/RUNS/{env.upper()}/")}
     return {"task": task, "handoff": what, "env": env, "next": say("task.handoff.next"), **defects_synced(root, task)}
 
 
@@ -375,6 +393,8 @@ def handoff_clear(root: Path, raw_task: str) -> Dict[str, Any]:
         if not found:
             raise CommandError(say("task.handoff.none", name=task_ops.name_of(task)))
         task_ops.note(data, "handoff-clear", f"{found.get('what', '')} {found.get('env', '')}".strip())
+    if found.get("what") == "run":
+        return {"task": task, "cleared": True, "next": say("task.handoff.cleared.run", folder=f"{task}/RUNS/{str(found.get('env') or '').upper()}/")}
     return {"task": task, "cleared": True, "next": say("task.handoff.cleared"), **defects_synced(root, task)}
 
 
@@ -556,7 +576,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
             "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
             "depends_on": list(data.get("depends_on") or []), "paused_since": aside,
             "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",
-            "held": is_held, "active": working,
+            "held": is_held, "active": working, "dismiss": dismiss_of(data) if is_open and not aside else "",
             "state": state_of(data.get("status", ""), aside, found["why"], is_held, working),
         })
         if rows[-1]["state"] == "unheld":

@@ -201,7 +201,7 @@ class StopTests(AutorunCase):
         self.tick(2)
         for _ in range(3):  # n + 2
             self.run_cli("task", "review", "start")
-            taskreview.record(self.root, TASK, "VERDICT: FAIL\n- x\n")
+            taskreview.record(self.root, TASK, "VERDICT: FAIL\n- DEV/notes.md:1 x | basis: REQ.md\n")
         self.assertEqual(self.ended(), "review")
 
     def test_the_agent_says_it_cannot_go_on_and_must_say_why(self) -> None:

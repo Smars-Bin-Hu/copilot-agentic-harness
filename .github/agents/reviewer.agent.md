@@ -40,6 +40,8 @@ Without a review package (a session with no task), the call message must have th
 - A conclusion has no evidence, or the evidence does not match the conclusion.
 - A rule written in the knowledge base or the project rules is broken.
 
+When the items of "Done when" in `REQ.md` are numbered, the review package says which you judge and how: follow it, and name the item in the basis of each finding. A script drops a finding whose `file:line` does not exist.
+
 **When the review package says this is the 2nd check or later, report only what affects correctness.** Wording, format, naming and nicer ways to write something are not reported.
 A detail the user did not ask for (a newline at the end of a file, indentation, naming habits) is never a FAIL.
 Changes in the workspace that have nothing to do with this work are not findings.

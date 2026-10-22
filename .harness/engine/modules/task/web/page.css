@@ -141,6 +141,7 @@ tr.touched td{animation:glow 1.8s ease-out}
 .round{border:1px solid var(--line);border-left-width:4px;border-radius:10px;padding:12px 16px;margin:12px 0}
 .round.pass{border-left-color:var(--good)}.round.fail{border-left-color:var(--bad)}
 .round-head{margin-bottom:6px}
+.round .dropped{margin-top:8px;padding-top:6px;border-top:1px dashed var(--line)}.round .dropped ul{margin:4px 0 0;padding-left:18px}
 .round details{margin-top:8px}.round summary{cursor:pointer}
 @media (prefers-reduced-motion:reduce){.tag.run,.tag.run::before,td.state .tag.hot,tr.touched td{animation:none}}
 

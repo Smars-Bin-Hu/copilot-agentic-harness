@@ -66,6 +66,8 @@ def reviews(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
                 "number": number, "task_round": item.get("task_round", 1), "ordinal": item.get("ordinal"), "verdict": item.get("verdict") or "",
                 "started_at": item.get("started_at", ""), "current": bool(info["digest"]) and item.get("digest") == info["digest"] and item.get("task_round") == data.get("round"),
                 "answer": read_doc(folder / taskreview.VERDICT_FILE), "package": read_doc(folder / taskreview.PACKAGE),
+                "invalid": bool(item.get("invalid")), "refunded": bool(item.get("refunded")), "dismissed": bool(item.get("dismissed")),
+                "dropped": [{"why": taskreview.why_text(found), "text": str(found.get("text", ""))[:300]} for found in item.get("dropped") or [] if isinstance(found, dict)],
             })
         return {"n": info["n"], "passes": info["passes"], "used": info["checks_used"], "limit": info["checks_limit"], "pending": info["pending_round"], "waived": info["waived"], "rounds": rounds}
     except Exception:  # noqa: BLE001 - a page must not fail over the checks of one task

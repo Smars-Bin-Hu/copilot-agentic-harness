@@ -60,6 +60,16 @@ The Stop hook checks: when checks are on and nothing was checked, or files chang
 - The reviewer cannot run the code of a target repository; it can only read.
 - Whether a check really happened is confirmed by the `verdict.md` the hook wrote to disk, not by the agent's word.
 
+### 11.8 What a script holds the reviewer to
+
+A reviewer is a model: a sentence in its prompt makes it *likely* to do as asked, not certain. So what can be checked by a script is not left to the prompt:
+
+- **Before the check**: "Done when" in `REQ.md` numbers its items by who can show them: `[T…]` the task files, `[R…] DEV:` a run you do before the write-back, `[A…]` after the write-back. `task review start` is refused while a handoff is open, or while an `[R…]` environment has no file in `RUNS/<ENV>/`. No check is used. The reviewer never gets a package without its evidence.
+- **After the check**: a script reads each finding of a FAIL (a line with `| basis:`) and drops one with no `file:line`, one whose file or line does not exist, and one whose basis names only `[A…]` items. A FAIL with nothing left is invalid: the check is given back, 2 per round (`review.free_invalid`), and the next package says why.
+- **You**: the script checks the form, not whether a judgment is right. A wrong judgment is caught by n checks in a row (each a new reviewer), by your approval of the write-back, and by `task review dismiss`: you take a check out of the count. The board offers *dismiss check* when the agent stopped after a FAIL.
+
+The general idea: put a deterministic gate before the model (do not call it when it cannot succeed), a validator after it (reject output that breaks the format), and a person for what neither can judge.
+
 ## Hands on
 
 - Read [reviewer.agent.md](../../../agents/reviewer.agent.md).

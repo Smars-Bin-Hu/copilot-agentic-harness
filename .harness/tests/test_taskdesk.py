@@ -224,7 +224,7 @@ class DeskTests(ServeCase):
         self.assertNotIn("/task/job1", self.run_cli("task", "status", "--task", TASK)["next"])
 
     def test_every_action_is_on_the_page_by_default(self) -> None:
-        self.assertEqual(sorted(boardserve_actions(self.root)), sorted(["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive", "close", "confirm-req"]))
+        self.assertEqual(sorted(boardserve_actions(self.root)), sorted(["pause", "resume", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "autorun on", "recover", "archive", "close", "confirm-req"]))
 
 
     def test_a_page_action_is_one_line_with_a_tag_and_the_session_note_follows_the_language(self) -> None:

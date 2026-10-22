@@ -216,6 +216,8 @@ def stop_reason(root: Path, task: str, data: Dict[str, Any], info: Dict[str, Any
         return "time"
     if denies(root, data) >= int(run.get("max_denies", DEFAULTS["max_denies"])):
         return "denied"
+    if isinstance(data.get("handoff"), dict) and data["handoff"].get("what"):
+        return "handoff"  # the person is to run something outside the harness: nobody can go on before it is back
     passed = info["passes"] >= info["n"] or info["waived"]
     if not passed and not info["pending_round"] and info["checks_used"] >= info["checks_limit"]:
         return "review"

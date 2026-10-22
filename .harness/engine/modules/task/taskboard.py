@@ -109,6 +109,8 @@ def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str,
     if row.get("status") != "open":
         return []
     found = list(ACTIONS_BY_WAIT.get(row.get("waiting_why") or "", ()))
+    if row.get("waiting_why") and row.get("dismiss"):
+        found.append("review dismiss")  # the agent stopped after a check that did not pass: the person may say it judged wrong
     if "autorun on" in served and not row.get("autorun") and not row.get("paused_since"):
         found.append("autorun on")
     found.append("resume" if row.get("paused_since") else "pause")

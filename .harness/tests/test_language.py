@@ -29,6 +29,7 @@ CHINESE_ALLOWED = {
     "modules/task/taskinsight.py": ("SESSION_IN_DETAIL = ",),
     "modules/task/task.py": ("_CONFIRM_LINE = ", "_REQ_UNWRITTEN = ", "word = "),  # the labels of REQ.md, found and written in the language the file has
     "modules/task/taskreview.py": ("_CONFIRM_LABEL = ", "_CONFIRMED = ", "_NOT_CONFIRMED = ", "_VERDICT = "),
+    "modules/task/reviewcheck.py": ("_DONE_HEADINGS = ", "_BASIS = "),  # the heading of REQ.md and the word of a finding, in either language
 }
 
 

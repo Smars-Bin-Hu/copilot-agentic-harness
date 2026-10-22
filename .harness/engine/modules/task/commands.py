@@ -6,9 +6,9 @@
   task status|fetch|delete|diff|set-branch|promote|close|report      the work on a task (task.py)
   task autorun on|off|status                 autorun, beta: down TODO.md without a person; on is a person at a terminal (autorun.py)
   task pause|resume                          a person puts a task aside and takes it back (tasklife.py)
-  task handoff tests --env E | clear         the agent hands the tests of an environment to the person; the board says it waits (tasklife.py)
+  task handoff tests|run --env E | clear     the agent hands the tests of an environment, or a run before the write-back, to the person; the board says it waits (tasklife.py)
   task approve-plan|confirm-req|approve-promote|recover  a person at a terminal
-  task review start|status                   independent checks, `[review]=n` (taskreview.py); extend|waive: a person at a terminal
+  task review start|status                   independent checks, `[review]=n` (taskreview.py); extend|waive|dismiss: a person at a terminal
   task snapshot list|prune                   the copies made at the gates (tasksnap.py)
   target list|show                           the target repositories (policy target.json): where they are, what their base branch is
   target refs <name>...                      where names are used: every target repository and the knowledge base, in one search (refs.py)
@@ -182,6 +182,10 @@ def register_task(subparsers: Any) -> None:
     waive = add_review("waive", "the person lets this version of the result be promoted without the passes (terminal only)", guarded("task review waive", lambda a: taskreview.waive(repo_root(), a.task)))
     waive.set_defaults(person_only=True)
     with_force(waive)
+    dismiss = add_review("dismiss", "the person says a check judged wrong: it no longer counts, as a check used or as a FAIL (terminal only)", guarded("task review dismiss", lambda a: taskreview.dismiss(repo_root(), a.task, a.round)))
+    dismiss.set_defaults(person_only=True)
+    with_force(dismiss)
+    dismiss.add_argument("--round", type=int, default=0, help="the number of the check (round-NNN); left out, the newest that did not pass")
     snapshot = commands.add_parser("snapshot", help="the copies of a task's result made at its gates (plan approval, each check, promote dry-run)")
     snapshot_commands = snapshot.add_subparsers(dest="snapshot_command", required=True)
     snapshot_list = snapshot_commands.add_parser("list", help="every snapshot of the task: gate, time, files")
@@ -234,6 +238,11 @@ def register_task(subparsers: Any) -> None:
     hand_tests.add_argument("--env", required=True, help="the environment, for example DEV")
     hand_tests.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
     hand_tests.set_defaults(handler=lambda a: tasklife.handoff(repo_root(), a.task, "tests", a.env))
+    hand_run = hand_commands.add_parser("run", help="before the write-back, the person is to run something in an environment (a job, a query) and bring the output back; no check can start until then")
+    hand_run.add_argument("--env", required=True, help="the environment, for example DEV")
+    hand_run.add_argument("--what", required=True, help="one line: what the person is to run and send back")
+    hand_run.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+    hand_run.set_defaults(handler=lambda a: tasklife.handoff(repo_root(), a.task, "run", a.env, a.what))
     hand_clear = hand_commands.add_parser("clear", help="the results are back: take the mark away, then work on them")
     hand_clear.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
     hand_clear.set_defaults(handler=lambda a: tasklife.handoff_clear(repo_root(), a.task))

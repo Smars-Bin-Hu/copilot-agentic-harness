@@ -11,6 +11,8 @@ The folder layout, and what the gate can and cannot guard, are in [.workspace/RE
 - A session with a task writes only inside that task folder:
   - Read `TASK.md` first, then what it points to; update it before you stop.
   - The requirement is in `REQ.md`; when it changes, change that file first. `REQ/` and `REF/` hold the user's documents and are read only.
+  - Number each item of "Done when" by who can show it, as the template does: `[T…]` the task files, `[R…] <ENV>:` a run the user does before the write-back, `[A…]` after the write-back. A check judges only `[T…]`, and `[R…]` by its saved result.
+  - What only the user can run (a job or a query in DEV): `harness task handoff run --env <ENV> --what "<what to run>"`, tell the user, stop. When they bring the output: `harness task handoff clear`, save it as given under `RUNS/<ENV>/`, then go on. No check can start before.
   - Work that is not written back (RCA, design, notes, one-off scripts) goes at the root of the task folder and needs no approval.
   - Work to write back to a target repository goes in `DEV/<repository>/<path>`. The plan is in `PLAN.md`; `DEV/` can be written only after the user approves it by running `task approve-plan` in the terminal.
 - Files in a target repository cannot be changed directly. Fetch them into `DEV/` with `task fetch`, change them, then run `task promote`: `--dry-run` first, then the user approves in the terminal.

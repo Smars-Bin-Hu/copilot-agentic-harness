@@ -115,7 +115,7 @@ const CONTROLS = ["pause", "resume", "close", "autorun on"];
 function actionButton(row, item, extra) {
   const label = t("board.action." + item.action.replace(" ", "-"));
   const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page
-  const hot = row.waiting && !CONTROLS.includes(item.action);  // what the task waits for, not what the person may do any time
+  const hot = row.waiting && !CONTROLS.includes(item.action) && item.action !== "review dismiss";  // what the task waits for, not what the person may do any time (nor a check they may say judged wrong)
   // While the agent is in the middle of a turn nothing is pressed on the page: a question about the result is a doubt, and the person decides when the answer is in
   // (stop the agent in VS Code first, or wait for it to stop)
   const locked = typeof SERVE !== "undefined" && row.state === "working" && item.action !== "archive";

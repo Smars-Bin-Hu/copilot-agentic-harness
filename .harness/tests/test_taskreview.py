@@ -23,7 +23,7 @@ from support import GIT
 JOB = f"{BASE}/job"
 AGENT = {"name": "reviewer", "agent_type": "reviewer", "prompt": "检查评审包", "description": "check"}
 PASS = "VERDICT: PASS\n- RCA.md:1 根因有日志支撑 | 依据：REQ.md:8"
-FAIL = "VERDICT: FAIL\n- RCA.md:3 根因没有证据 | 依据：REQ.md:8"
+FAIL = "VERDICT: FAIL\n- RCA.md:1 根因没有证据 | 依据：REQ.md:8"
 
 
 class MarkerTests(unittest.TestCase):
@@ -238,7 +238,7 @@ class CheckTests(ReviewCase):
         self.assertIn("第 2 次检查（第 2 次及以后）", package)
         self.assertIn("只报影响正确性的问题", package)
         self.assertIn("上一次的问题", package)
-        self.assertIn("> - RCA.md:3 根因没有证据", package)
+        self.assertIn("> - RCA.md:1 根因没有证据", package)
         self.assertEqual(self.status()["passes"], 1)
 
     def test_an_answer_without_a_verdict_is_a_check_but_not_a_pass(self) -> None:

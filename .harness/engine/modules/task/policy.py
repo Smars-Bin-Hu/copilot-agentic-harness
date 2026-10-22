@@ -18,7 +18,7 @@ POLICY_SCHEMA = {
         "kb_offer": {"type": "boolean"},
         "review": {
             "type": "object",
-            "properties": {"extra_checks": {"type": "integer", "minimum": 0}, "max_n": {"type": "integer", "minimum": 0}},
+            "properties": {"extra_checks": {"type": "integer", "minimum": 0}, "max_n": {"type": "integer", "minimum": 0}, "free_invalid": {"type": "integer", "minimum": 0}},
         },
         "report": {"type": "object", "properties": {"copilot_events": {"type": "boolean"}, "prompt_chars": {"type": "integer", "minimum": 0}}},
         "autorun": {
@@ -38,7 +38,7 @@ POLICY_SCHEMA = {
                 "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
                 "closed_shown": {"type": "integer", "minimum": 0},
                 "active_seconds": {"type": "integer", "minimum": 10},
-                "actions": {"type": "array", "items": {"type": "string", "enum": ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "autorun on", "recover", "archive", "close"]}},
+                "actions": {"type": "array", "items": {"type": "string", "enum": ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "autorun on", "recover", "archive", "close"]}},
             },
         },
         "commit": {"type": "object", "properties": {"coauthor": {"type": "string"}}},

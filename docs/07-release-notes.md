@@ -10,6 +10,23 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.31 (2026-10-21)
+
+Found on a company computer: a change whose "Done when" asked for DEV counts failed two checks in a row (2 of 4 used), because the reviewer was called before anyone had run the job in DEV.
+
+### Added
+
+- **`task handoff run --env DEV --what "..."`**: before the write-back, the agent hands you a run whose output the work needs (a job, a query), in any kind of task. The board says "waits for your run"; no check can start, the Stop hook does not ask for one, and autorun stops. What you send back is saved under `RUNS/DEV/`; `task handoff clear` takes the mark away.
+- **`task review dismiss [--round N]`**: you judge a check was wrong; it no longer counts, as a check used or as a FAIL. Written in the history and `LOG.md`. The board has a *dismiss check* button when the agent stopped after a FAIL.
+- **Findings are checked by a script.** After a FAIL, a finding with no `file:line`, one whose file or line does not exist, and one whose basis names only items checked after the write-back are dropped. A FAIL with nothing left is invalid and the check is given back (2 per round, `review.free_invalid` in `task.json`). The Review tab of the task page shows what was dropped and marks invalid and dismissed checks.
+
+### Changed
+
+- **"Done when" in `REQ.md` numbers its items by who can show them**: `[T…]` the task files, `[R…] <ENV>:` a run you do before the write-back, `[A…]` after the write-back. The review package tells the reviewer to check `[T…]`, judge `[R…]` only by `RUNS/`, and leave `[A…]` alone; `generic-test-guide` takes `[A…]` as what the test task shows. A `REQ.md` without numbers is checked as before.
+- **`task review start` is refused, with no check used**, while a handoff is open, or while an `[R…]` environment has no file in `RUNS/<ENV>/`.
+
+**Introductory material**: `docs/02-features.md`, `docs/04-reference.md`, `harness-rookie-wondering` topics 9 and 11 (new 11.8: what a script holds the reviewer to), the task templates, `workspace.instructions.md`, `reviewer.agent.md`, `generic-test-guide`. `harness-rookie-quick-start` is unchanged: it does not go into checks.
+
 ## 1.5.30 (2026-10-21)
 
 ### Changed

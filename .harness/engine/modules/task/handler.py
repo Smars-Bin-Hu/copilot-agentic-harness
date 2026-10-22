@@ -271,8 +271,8 @@ def review_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
     from . import taskreview
 
     name = data["task"]
-    if taskreview.state_of(data)["n"] == 0:
-        return None
+    if taskreview.state_of(data)["n"] == 0 or data.get("handoff"):
+        return None  # off, or the person's run is not back: a check cannot start yet
     info = taskreview.summary(ctx.root, name, data)
     if info["waived"] or info["passes"] >= info["n"] or not taskreview.has_something(ctx.root, name, data):
         return None

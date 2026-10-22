@@ -158,7 +158,9 @@ class ServeTests(ServeCase):
         self.assertEqual(self.request("POST", "/api/pair", {"code": "wrong"})[0], 403)
         cookie = self.pair()
         self.assertEqual(self.request("POST", "/api/pair", {"code": self.code()})[0], 403)  # the code works once
-        self.assertTrue(self.request("POST", "/api/status", {}, cookie=cookie)[1]["paired"])
+        status_now = self.request("POST", "/api/status", {}, cookie=cookie)[1]
+        self.assertTrue(status_now["paired"])
+        self.assertEqual(status_now["started"], status_now["now"], "the board says when it runs an older release than the files (B63)")
         status, data, _ = self.request("POST", "/api/act", {**body, "step": "preview"}, cookie=cookie)
         self.assertEqual(status, 200, data)
         code = tasks.plan_digest(self.root, TASK)[:8]

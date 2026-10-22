@@ -75,7 +75,7 @@ def new_prompt(at: float) -> Dict[str, Any]:
     return {
         "at": at, "end": at, "turns": 0, "model_s": 0.0, "turn_s": 0.0, "approval_s": 0.0, "hook_s": 0.0, "subagent_s": 0.0,
         "tools": [], "subagents": [], "skills": [], "models": [], "aiu": None, "premium_requests": None, "context_tokens": None,
-        "queued": False, "text": "",
+        "input_tokens": None, "output_tokens": None, "queued": False, "text": "",
     }
 
 
@@ -205,6 +205,12 @@ def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
                     current["hook_s"] += max(0.0, at - began)
             elif kind == "skill.invoked":
                 current["skills"].append(str(data.get("name") or ""))
+            elif kind == "session.usage_record":
+                spent = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+                for key, name in (("input_tokens", "inputTokens"), ("output_tokens", "outputTokens")):
+                    value = number(spent.get(name))
+                    if value is not None:
+                        current[key] = (current[key] or 0) + int(value)  # one model call of the main agent
             elif kind == "session.usage_checkpoint":
                 total_aiu, total_premium = number(data.get("totalNanoAiu")), number(data.get("totalPremiumRequests"))
                 if total_aiu is not None:

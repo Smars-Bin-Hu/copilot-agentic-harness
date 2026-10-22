@@ -14,7 +14,7 @@ from unittest import mock
 
 from support import HarnessTestCase, payload
 
-from core import copilot_events, tasks
+from core import copilot_events, messages, tasks
 from modules.task import task as task_ops
 from modules.task import common, taskboard, taskhtml, taskinsight, tasklife
 from modules.task.common import CommandError
@@ -350,7 +350,7 @@ class InsightTests(BoardCase):
         self.assertEqual((info["source"], info["totals"]["prompts"], info["totals"]["aiu"], info["totals"]["model_s"]), ("hook-log", 2, None, None))
         self.assertEqual([tool["name"] for tool in info["tools"]], ["view"])
         self.assertIn("no_usage", [item["kind"] for item in info["findings"]])
-        self.assertEqual(info["prompts"][0]["stage"], "work")
+        self.assertEqual(info["prompts"][0]["stage"], "doing")
 
     def test_copilots_record_gives_the_split_and_the_usage(self) -> None:
         self.new()  # in the first prompt of S1
@@ -457,11 +457,48 @@ class InsightTests(BoardCase):
         path.write_text(json.dumps(policy), encoding="utf-8")
         self.assertEqual(taskinsight.of_task(self.root, f"{BASE}/job")["source"], "hook-log")
 
+    def test_the_time_aside_is_not_counted_in_a_wait_told_from_a_file(self) -> None:
+        """Company laptop: the plan waited from 18:11, the task was paused 19:04 and taken back 11:34; the page said 17 h 23 min."""
+        now = datetime.now(timezone.utc)
+        at = lambda hours: (now - timedelta(hours=hours)).isoformat()  # noqa: E731
+        data = {"events": [{"what": "pause", "at": at(16.4)}, {"what": "unpause", "at": at(0.4)}]}
+        waited = tasklife.waited_since(data, at(17.4))
+        self.assertAlmostEqual(waited / 3600, 1.4, places=2)
+        self.assertAlmostEqual(tasklife.waited_since({"events": []}, at(2)) / 3600, 2, places=2)
+        self.assertAlmostEqual(tasklife.waited_since({"events": [{"what": "pause", "at": at(20)}, {"what": "unpause", "at": at(19)}]}, at(2)) / 3600, 2, places=2, msg="a pause before the wait")
+
     def test_the_stage_follows_the_tasks_events(self) -> None:
-        events = [(10.0, "start"), (20.0, "approve-plan"), (30.0, "review-start"), (40.0, "promote-dry-run"), (50.0, "new-round")]
-        found = [taskinsight.stage_at(events, moment, True) for moment in (15, 25, 35, 45, 55)]
-        self.assertEqual(found, ["plan", "build", "review", "promote", "plan"])
-        self.assertEqual(taskinsight.stage_at(events[:1], 15, False), "work")
+        events = [(10.0, "start", ""), (15.0, "confirm-req", ""), (20.0, "approve-plan", ""), (30.0, "review-start", "round-001"), (33.0, "review", "round-001 FAIL"),
+                  (36.0, "review-start", "round-002"), (38.0, "review", "round-002 PASS"), (40.0, "promote-dry-run", ""), (50.0, "promote", "feature/x"), (60.0, "new-round", "")]
+        found = [taskinsight.stage_at(events, moment, "dev") for moment in (12, 17, 25, 31, 34, 37, 39, 45, 55, 65)]
+        self.assertEqual(found, ["requirement", "plan", "developing", "check", "developing", "check", "check", "writeback", "done", "requirement"])
+        self.assertEqual(taskinsight.stage_at(events, 25, "rca"), "doing")
+        self.assertEqual(taskinsight.stage_label("check"), messages.text("stage.check"))
+
+    def test_the_stage_table_sums_each_stage_in_the_order_reached(self) -> None:
+        prompts = [
+            {"stage": "requirement", "active_s": 10.0, "aiu": 1.0, "tool_calls": 3, "failed_tool_calls": 1, "subagents": 0, "model_s": 6.0, "subagent_s": 0.0, "input_tokens": 100, "output_tokens": 5},
+            {"stage": "check", "active_s": 20.0, "aiu": 2.0, "tool_calls": 2, "failed_tool_calls": 0, "subagents": 1, "model_s": 8.0, "subagent_s": 7.0, "input_tokens": 200, "output_tokens": 9},
+            {"stage": "requirement", "active_s": 5.0, "aiu": 0.5, "tool_calls": 1, "failed_tool_calls": 0, "subagents": 0, "model_s": None, "subagent_s": None, "input_tokens": None, "output_tokens": None},
+        ]
+        rows = taskinsight.stage_table(prompts, {"active_s": 35.0, "aiu": 3.5})
+        self.assertEqual([row["stage"] for row in rows], ["requirement", "check"])
+        first = rows[0]
+        self.assertEqual((first["prompts"], first["active_s"], first["tool_calls"], first["failed_tool_calls"], first["model_s"], first["input_tokens"]), (2, 15.0, 4, 1, 6.0, 100))
+        self.assertEqual((rows[1]["subagents"], rows[1]["subagent_s"]), (1, 7.0))
+        self.assertIsNone(taskinsight.stage_table(prompts[2:], {"active_s": 5.0, "aiu": 0.5})[0]["input_tokens"], "the hook log alone has no tokens")
+
+    def test_the_prompt_that_writes_back_is_still_the_write_back(self) -> None:
+        events = [(10.0, "promote-dry-run", ""), (20.0, "promote", "feature/x")]
+        self.assertEqual(taskinsight.prompt_stage(events, {"at": 15.0, "end": 25.0}, "dev", ()), "writeback")
+        self.assertEqual(taskinsight.prompt_stage(events, {"at": 30.0, "end": 35.0}, "dev", ()), "done")
+
+    def test_a_test_task_is_at_the_environment_it_handed_or_recorded(self) -> None:
+        events = [(10.0, "start", ""), (20.0, "handoff", "tests DEV: run the guide"), (30.0, "test-record", "DEV run 1 FAIL"), (40.0, "test-record", "DEV run 2 PASS"),
+                  (50.0, "test-record", "IST run 1 PASS"), (60.0, "close", "")]
+        found = [taskinsight.stage_at(events, moment, "test", ("DEV", "IST")) for moment in (15, 25, 35, 45, 55, 65)]
+        self.assertEqual(found, ["guide", "env:DEV", "env:DEV", "env:IST", "done", "done"])
+        self.assertEqual(taskinsight.stage_label("env:IST"), "IST")
 
     def test_lengths_of_time_are_words(self) -> None:
         self.assertEqual([taskinsight.clock(value) for value in (None, 5.4, 200, 7500, 100000)], ["-", "5 秒", "3 分 20 秒", "2 小时 5 分", "1 天 3 小时"])

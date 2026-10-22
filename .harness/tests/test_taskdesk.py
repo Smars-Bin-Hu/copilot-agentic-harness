@@ -47,7 +47,6 @@ class MarkdownTests(unittest.TestCase):
         self.assertEqual([item["check"] for item in items], [True, False, None])
         self.assertEqual([item["check"] for item in items[1]["blocks"][0]["items"]], [True, False])
         self.assertEqual(tree["blocks"][1]["start"], 3)
-        self.assertEqual(mdtree.checkboxes(tree), (2, 4))
 
     def test_nothing_an_agent_writes_becomes_markup_or_a_dangerous_link(self) -> None:
         tree = mdtree.parse('<script>alert(1)</script>\n\n[a](javascript:alert(1)) [b](data:text/html,x) [c](vbscript:x) [d](https://ok.example/a_(b)) [e](PLAN.md) [f](C:\\x\\y.sql)\n')
@@ -76,6 +75,10 @@ class DeskTests(ServeCase):
         self.assertIn("held", desk)
         self.assertIn("approve-plan", [item["action"] for item in desk["actions"]])
         self.assertTrue(desk["history"])
+
+    def test_the_templates_placeholder_step_is_not_counted(self) -> None:
+        (self.task / "TODO.md").write_text("# TODO\n\n- [ ] <step 1>\n", encoding="utf-8")
+        self.assertEqual(taskdesk.desk(self.root, "job1")["todo"], {"done": 0, "total": 0})  # as the engine counts it (B63)
 
     def test_the_review_tab_has_every_round_with_its_answer_newest_first(self) -> None:
         from modules.task import taskreview, tasksnap

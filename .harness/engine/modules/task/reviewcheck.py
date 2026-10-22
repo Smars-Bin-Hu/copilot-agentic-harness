@@ -61,6 +61,15 @@ def done_items(root: Path, task: str) -> Dict[str, Any]:
     return found
 
 
+def has_run(root: Path, task: str, env: str) -> bool:
+    """A file is under `RUNS/<env>/` (the folder in any case): the person's result of a run in that environment is saved."""
+    runs = tasks.task_dir(root, task) / RUNS_DIR
+    for folder in runs.iterdir() if runs.is_dir() else []:
+        if folder.is_dir() and folder.name.upper() == env.upper():
+            return any(path.is_file() and not path.is_symlink() for path in folder.rglob("*"))
+    return False
+
+
 def missing_runs(root: Path, task: str, items: Optional[Dict[str, Any]] = None) -> List[str]:
     """The environments named by R items that have no file under `RUNS/<env>/` (any case) yet."""
     items = items if items is not None else done_items(root, task)

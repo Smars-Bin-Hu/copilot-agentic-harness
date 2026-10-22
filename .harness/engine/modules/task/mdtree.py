@@ -289,23 +289,3 @@ def parse(text: str) -> Dict[str, Any]:
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     cut = len(lines) > MAX_LINES
     return {"blocks": blocks(lines[:MAX_LINES]), "cut": cut}
-
-
-def checkboxes(tree: Dict[str, Any]) -> Tuple[int, int]:
-    """(ticked, all) over every `[ ]` / `[x]` item: the progress of a TODO.md."""
-    done = total = 0
-
-    def walk(items: List[Block]) -> None:
-        nonlocal done, total
-        for block in items:
-            if block["t"] in ("ul", "ol"):
-                for item in block["items"]:
-                    if item["check"] is not None:
-                        total += 1
-                        done += 1 if item["check"] else 0
-                    walk(item["blocks"])
-            elif block["t"] == "quote":
-                walk(block["blocks"])
-
-    walk(tree["blocks"])
-    return done, total

@@ -212,6 +212,37 @@ class CommitMessage(Case):
         self.assertEqual(commitmsg.sections(raw, ["repo_a", "repo_b"]), {"repo_a": "Fix a\n\nBody a", "repo_b": "Fix b"})
         self.assertEqual(commitmsg.sections("Fix\n\nBody", ["repo_a"]), {})
 
+    def test_a_subject_above_the_sections_starts_each_message(self) -> None:
+        """B63: the agent wrote the subject on top and the body under `## sim_repo`; the page showed the body alone."""
+        raw = "Change the owner\n\n## repo_a\n\nThe owner line of a.sql.\n\n## repo_b\nOnly b.\n"
+        self.assertEqual(commitmsg.sections(raw, ["repo_a", "repo_b"]), {"repo_a": "Change the owner\n\nThe owner line of a.sql.", "repo_b": "Change the owner\n\nOnly b."})
+
+    def test_the_page_gives_the_commands_that_commit_it(self) -> None:
+        """M37-10: a message pasted into `git commit -m "..."` lost its backticks to the shell. The commands run nothing that is in the message."""
+        with task_ops.locked(self.root, TASK) as data:
+            data["promote"] = {"state": "done", "branch": "feature/job", "repos": {"repo_a": {"path": "/work/it's repo", "base_commit": "abc"}}}
+        (self.folder / "COMMIT-MESSAGE.md").write_text("Change the `-- owner:` line\n\nCosts $HOME.\nEOF\n'@ here\n", encoding="utf-8")
+        item = commitmsg.view(self.root, TASK, task_ops.read(self.root, TASK))["messages"][0]
+        posix, power = item["commands"]["posix"], item["commands"]["powershell"]
+        self.assertEqual(posix.splitlines()[:3], ["cd '/work/it'\\''s repo'", "git switch 'feature/job'", "git add -A && git commit -F - <<'EOF_MSG'"])
+        self.assertIn(item["text"].rstrip("\n") + "\nEOF_MSG\n", posix, "a line `EOF` in the message gets another end mark")
+        self.assertIn("Set-Location -LiteralPath '/work/it''s repo'", power)
+        self.assertTrue(power.endswith("'@ | git commit -F -\n"))
+        self.assertIn("\n '@ here\n", power, "a line that would end the here-string is moved by a space")
+        self.assertIn("UTF8Encoding", power, "Windows PowerShell would pipe the message in ASCII")
+        self.assertEqual((item["path"], item["branch"]), ("/work/it's repo", "feature/job"))
+
+    def test_after_the_write_back_the_task_waits_for_the_commit(self) -> None:
+        from modules.task import tasklife
+
+        with task_ops.locked(self.root, TASK) as data:
+            data["promote"] = {"state": "done", "branch": "feature/job", "repos": {"repo_a": {"path": "/x", "base_commit": "abc"}}}
+            data["waiting"] = {"since": "2026-10-22T10:00:00+00:00", "why": "stopped"}
+        self.assertEqual(tasklife.waiting(self.root, TASK, task_ops.read(self.root, TASK))["why"], "commit")
+        with task_ops.locked(self.root, TASK) as data:
+            data["promote"]["repos"]["repo_a"]["commit"] = "def"  # a knowledge base the write-back committed itself
+        self.assertEqual(tasklife.waiting(self.root, TASK, task_ops.read(self.root, TASK))["why"], "stopped")
+
     def test_the_page_has_the_message_once_the_write_back_is_done(self) -> None:
         with task_ops.locked(self.root, TASK) as data:
             self.assertIsNone(commitmsg.view(self.root, TASK, data), "not written back yet")

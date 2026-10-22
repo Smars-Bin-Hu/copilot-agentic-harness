@@ -136,6 +136,9 @@ class GateTests(ReviewCase):
         self.assertEqual(self.stop(), {})  # the Stop hook does not ask for a check that cannot start
         self.assertIn("task handoff clear", self.status()["next"])  # what comes next is the person's result, not a check
         self.assertIn("task handoff clear", self.cli_json("task", "status")["next"])
+        self.assertIn("RUNS/DEV/", self.refused("task", "handoff", "clear"))  # the result is saved before the mark goes
+        self.assertEqual(self.data()["handoff"]["what"], "run")
+        self.result("counts 162", "RUNS/dev/counts.txt")  # the folder in any case
         self.cli_json("task", "handoff", "clear")
         self.check(PASS)
         self.assertEqual(self.status()["passes"], 1)
@@ -162,6 +165,7 @@ class GateTests(ReviewCase):
         self.assertIn("before/after counts match PROD", handed["detail"])
         self.assertIn("PSCM shows INBOUND", handed["detail"])
         self.assertNotIn("[R1]", handed["detail"])
+        self.assertFalse(handed["detail"].upper().startswith("DEV"))  # the card names the environment once
         row = next(row for row in self.cli_json("task", "list")["tasks"] if row["task"] == JOB)
         self.assertEqual(row["waiting_why"], "run")
         self.assertIn("task handoff clear", self.refused("task", "review", "start"))  # asked again: the open handoff says why

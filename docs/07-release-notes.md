@@ -10,6 +10,29 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.36 (2026-10-22)
+
+### Added
+
+- **Commands to commit a write-back.** Under the commit message in the Changes tab are the commands that commit it, for macOS/Linux and for Windows PowerShell, each with a copy button: go to the repository, switch to the branch of the write-back, add its files, commit with the message. They pass the message so that nothing in it is run (a message with backticks pasted into `git commit -m "..."` lost its words to the shell).
+- **The Time and usage page sums every stage**: prompts, time, AIU, model thinking, tool calls (and failed ones), subagents, tokens in and out. Tokens are read from Copilot's own record, one model call at a time.
+- **The context chart tells its numbers.** Point at a dot, or move to it with Tab: the prompt, its time, the tokens and how much they grew.
+- **The board says when it runs old code.** A board started before the harness was upgraded keeps the code it loaded; the line under the buttons now says so and asks you to start it again.
+
+### Changed
+
+- **The stages of the prompts are the stages of the task page**: requirement, plan, developing, write-back, done (a test task: the guide and each environment), and the independent check as a stage of its own between developing and the write-back. A check that does not pass sends the task back to developing. Before, the page had its own five names that did not match the task page.
+- **A pause is no longer counted as waiting after you take the task back.** A wait the board tells from a file or an event (a plan or a requirement to confirm, a write-back to approve, a handoff) began before the pause and went on after it, so the whole night counted (17 h for a task paused in the evening). The time aside is taken out, on the board, the task page and the analysis page.
+- **After the write-back the task waits for you to commit and close it** (the board and the task page say so, with the branch), instead of "the agent stopped and waits for you".
+- **`task handoff clear` of a run needs the result saved first**: with no file under `RUNS/<env>/` it refuses and nothing is cleared.
+- **A commit message with the subject on top and the body under `## <repository>` keeps its subject.** The page took the section alone and dropped the subject.
+- **The TODO tab counts the steps the engine counts**: the template's `<step 1>` is not a step, so a task with no steps no longer shows `0/1`.
+- **The diff of the Changes tab colours a removed line that starts with `--`** (an SQL comment) as removed, not as a file header.
+- **A run handed to you names its environment once** (`Run this in DEV: ...`, not `DEV: DEV: ...`), and History has words for the handoff, its clearing, a dismissed check and a recorded test result.
+- **The agent no longer asks you to write `[review]=1` when you already did** (skill `harness-my-task`).
+
+**Introductory material**: `docs/02-features.md` (the analysis page, the commit commands) and `docs/04-reference.md` (`task handoff clear`) changed. `harness-rookie-quick-start` and `harness-rookie-wondering` are not changed: they do not go into the analysis page's tables or the commit step.
+
 ## 1.5.35 (2026-10-22)
 
 ### Added

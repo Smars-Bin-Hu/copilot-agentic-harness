@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 
-from core import config, messages, tasks
+from core import config, messages, registry, tasks
 from core.paths import board_serve_file, utc_now
 
 from . import autorun, common, task as task_ops, taskarchive, taskboard, taskdesk, taskhtml, tasklife, taskreview
@@ -85,6 +85,13 @@ def runner(root: Path, action: str, task: str) -> Callable[..., Dict[str, Any]]:
     return table[action]
 
 
+def disk_version(root: Path) -> str:
+    try:
+        return registry.harness_version(root)
+    except Exception:  # noqa: BLE001 - a broken registry must not stop the board (doctor reports it)
+        return ""
+
+
 class Board:
     """What one server holds: the settings, the pairing code and the sessions of paired browsers. Memory only."""
 
@@ -96,6 +103,7 @@ class Board:
         self.code = secrets.token_urlsafe(12)
         self.sessions: set = set()
         self.lock = threading.Lock()
+        self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
 
     def new_code(self) -> str:
         with self.lock:
@@ -289,7 +297,7 @@ def handler_for(board: Board) -> type:
                 cookie = f"{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/"
                 return self.answer(200, {"paired": True}, {"Set-Cookie": cookie})
             if path == "/api/status":
-                return self.answer(200, {"paired": board.paired(self.token())})
+                return self.answer(200, {"paired": board.paired(self.token()), "started": board.version, "now": disk_version(board.root)})
             if path == "/api/board":
                 try:
                     return self.answer(200, board.rows())

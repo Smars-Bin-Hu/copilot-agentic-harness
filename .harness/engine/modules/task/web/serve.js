@@ -148,13 +148,16 @@ const SERVE = (function () {
 
   // Once per page: trade the pairing code of the address for a cookie, and ask whether this browser is paired.
   let paired = null;
+  let stale = null;  // the board was started on an older release than the files now hold: it still runs the old code
   const banners = [];
   function showPaired() {
     for (const node of banners) {
-      node.textContent = paired === null ? "" : t(paired ? "board.serve.paired" : "board.serve.unpaired");
-      node.classList.toggle("good", paired === true);
+      node.replaceChildren(paired === null ? "" : t(paired ? "board.serve.paired" : "board.serve.unpaired"),
+        stale ? h("span", {class: "bad"}, " " + t("board.serve.stale", stale)) : "");
+      node.classList.toggle("good", paired === true && !stale);
     }
   }
+  const note = (data) => { stale = data.started && data.now && data.started !== data.now ? {started: data.started, now: data.now} : null; return data; };
   const ready = (function () {
     const code = location.hash.startsWith("#pair=") ? decodeURIComponent(location.hash.slice(6)) : "";
     if (code) history.replaceState(null, "", location.pathname);  // the code leaves the address bar and the history
@@ -162,7 +165,7 @@ const SERVE = (function () {
     // or loaded twice would otherwise find the code used up and say so.
     const already = post("/api/status", {}).then((data) => data.paired, () => false);
     return already.then((yes) => (code && !yes ? post("/api/pair", {code}).catch(failed) : null))
-      .then(() => post("/api/status", {})).then((data) => { paired = data.paired; showPaired(); }, () => { paired = false; showPaired(); });
+      .then(() => post("/api/status", {})).then((data) => { paired = note(data).paired; showPaired(); }, () => { paired = false; showPaired(); });
   })();
 
   // A line that says whether this browser may approve; it stays right when the page is drawn again.

@@ -23,7 +23,7 @@ from core import copilot_events, messages, render, tasks
 from core.logs import read_session
 from core.paths import utc_now
 
-from . import common
+from . import common, taskstages
 
 ATTACH_EVENTS = ("start", "resume", "new-round")
 SESSION_IN_DETAIL = re.compile(r"(?:会话|session) (\S+)")  # the note of either language (`task.note.session`)
@@ -31,11 +31,14 @@ MATCH_SECONDS = 5.0  # a user message in Copilot's record and its UserPromptSubm
 TOP = 5
 FINDINGS_KEPT = 8
 SUBAGENT_TOOLS = ("task", "runSubagent", "agent")  # the tool that starts a subagent, as the engines name it
-STAGES = ("plan", "work", "build", "review", "promote")
-# The event that moves a task into a stage. A prompt is in the stage of the last such event before its end.
+# The stages of a prompt are the steps of the task's ribbon (taskstages), and the independent check between developing and the
+# write-back. The event that moves a task that writes back into a stage; a prompt is in the stage of the last such event before its end.
+CHECK = "check"
 STAGE_OF_EVENT = {
-    "approve-plan": "build", "review-start": "review", "promote-dry-run": "promote", "approve-promote": "promote", "promote": "promote",
+    "confirm-req": "plan", "approve-plan": "developing", "review-start": CHECK, "promote-dry-run": "writeback", "approve-promote": "writeback",
+    "promote-partial": "writeback", "promote": "done", "new-round": "requirement",
 }
+ENV_STAGE = "env:"  # a test task's environment: `env:DEV`
 WAIT_OF_EVENT = {"approve-plan": "plan", "approve-promote": "promote", "review-extend": "review", "review-waive": "review", "recover": "recover"}
 SOURCE_EVENTS, SOURCE_LOG, SOURCE_NONE = "copilot-events", "hook-log", "none"
 PROMPT_CHARS = 300
@@ -128,9 +131,9 @@ def merge(into: Dict[str, Any], other: Dict[str, Any]) -> None:
     for name in other["models"]:
         if name not in into["models"]:
             into["models"].append(name)
-    for key in ("aiu", "premium_requests"):
-        if other[key] is not None:
-            into[key] = (into[key] or 0.0) + other[key]
+    for key in ("aiu", "premium_requests", "input_tokens", "output_tokens"):
+        if other.get(key) is not None:
+            into[key] = (into.get(key) or 0) + other[key]
     if other["context_tokens"] is not None:
         into["context_tokens"] = other["context_tokens"]
 
@@ -213,16 +216,62 @@ def session_prompts(root: Path, task: str, session_id: str, surface: str, picked
 # --- numbers -------------------------------------------------------------------------------------
 
 
-def stage_at(events: List[Tuple[float, str]], moment: float, planned: bool) -> str:
-    """`planned`: the task has a plan for the person to approve, so what comes before the approval is planning."""
-    stage = "plan" if planned else "work"
-    for at, what in events:
+def stage_at(events: List[Tuple[float, str, str]], moment: float, kind: str = "dev", envs: Tuple[str, ...] = ()) -> str:
+    """The stage of the task at `moment`, from its events `(at, what, detail)`. `envs`: a test task's environments, in the guide's order.
+
+    A check that does not pass sends the task back to developing (the fixes are developing). A test task is at the environment it
+    handed to the person or recorded last; a pass moves it to the next one."""
+    if kind == "test":
+        return test_stage_at(events, moment, envs)
+    if kind not in taskstages.WRITES_BACK:
+        return "doing"
+    stage = "requirement"
+    for at, what, detail in events:
         if at > moment:
             break
-        if what == "new-round":
-            stage = "plan" if planned else "work"
+        if what == "review" and detail.startswith("round-"):
+            words = detail.split()
+            if len(words) > 1 and words[1] != "PASS" and "invalid" not in words:
+                stage = "developing"
+            continue
         stage = STAGE_OF_EVENT.get(what, stage)
     return stage
+
+
+def prompt_stage(events: List[Tuple[float, str, str]], prompt: Dict[str, Any], kind: str, envs: Tuple[str, ...]) -> str:
+    """The stage at the end of the prompt; but the prompt that made the write-back (or the last test pass) is still that work, not done."""
+    found = stage_at(events, prompt["end"], kind, envs)
+    if found == "done":
+        before = stage_at(events, prompt["at"], kind, envs)
+        if before != "done":
+            return before
+    return found
+
+
+def test_stage_at(events: List[Tuple[float, str, str]], moment: float, envs: Tuple[str, ...]) -> str:
+    stage = "guide"
+    order = [env.upper() for env in envs]
+    for at, what, detail in events:
+        if at > moment:
+            break
+        words = detail.replace(":", " ").split()
+        if what == "handoff" and len(words) > 1 and words[0] == "tests":
+            stage = ENV_STAGE + words[1].upper()
+        elif what == "test-record" and len(words) > 3:
+            env = words[0].upper()
+            stage = ENV_STAGE + env
+            if words[-1].upper() == "PASS" and env in order:
+                after = order.index(env) + 1
+                stage = ENV_STAGE + order[after] if after < len(order) else "done"
+        elif what == "close":
+            stage = "done"
+    return stage
+
+
+def stage_label(stage: str) -> str:
+    if stage.startswith(ENV_STAGE):
+        return stage[len(ENV_STAGE):]
+    return say(f"stage.{stage}")
 
 
 def pauses(events: List[Tuple[float, str]]) -> List[Tuple[float, float]]:
@@ -312,11 +361,44 @@ def review_rounds(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return found
 
 
+def env_names(root: Path, task: str) -> List[str]:
+    try:
+        return list(taskstages.test_results(root, task)[1])
+    except Exception:  # noqa: BLE001 - a guide that cannot be read leaves the stages at the guide
+        return []
+
+
+def stage_table(prompts: List[Dict[str, Any]], totals: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The prompts summed by stage, in the order the task first reached each stage."""
+    order: List[str] = []
+    for entry in prompts:
+        if entry["stage"] not in order:
+            order.append(entry["stage"])
+    out = []
+    for name in order:
+        inside = [entry for entry in prompts if entry["stage"] == name]
+        time_spent = sum(entry["active_s"] for entry in inside)
+        usage = sum(entry["aiu"] for entry in inside if entry["aiu"] is not None) if totals["aiu"] is not None else None
+        row: Dict[str, Any] = {
+            "stage": name, "label": stage_label(name), "prompts": len(inside), "active_s": round(time_spent, 1),
+            "aiu": round(usage, 2) if usage is not None else None, "share_time": share(time_spent, totals["active_s"]), "share_aiu": share(usage, totals["aiu"]),
+            "tool_calls": sum(entry["tool_calls"] for entry in inside), "failed_tool_calls": sum(entry["failed_tool_calls"] for entry in inside),
+            "subagents": sum(entry["subagents"] for entry in inside),
+        }
+        for key in ("model_s", "subagent_s", "input_tokens", "output_tokens"):  # None when no prompt of the stage has it (the hook log alone)
+            values = [entry.get(key) for entry in inside if entry.get(key) is not None]
+            row[key] = (round(sum(values), 1) if key.endswith("_s") else int(sum(values))) if values else None
+        out.append(row)
+    return out
+
+
 def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) -> Dict[str, Any]:
     picked = attaches(data)
     closed = closes(data)
-    events = sorted((at, event.get("what", "")) for at, event in ((copilot_events.seconds(event.get("at")), event) for event in data.get("events") or []) if at is not None)
-    planned = bool(tasks.plan_digest(root, task)) or any(what == "approve-plan" for _at, what in events)
+    marked = sorted((at, str(event.get("what", "")), str(event.get("detail", ""))) for at, event in ((copilot_events.seconds(event.get("at")), event) for event in data.get("events") or []) if at is not None)
+    events = [(at, what) for at, what, _detail in marked]
+    kind = str(data.get("kind") or "")
+    envs = tuple(env_names(root, task)) if kind == "test" else ()
     paused = pauses(events)
     sessions: List[Dict[str, Any]] = []
     seen = set()
@@ -347,14 +429,16 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
         waited = max(0.0, following - prompt["end"] - put_aside) if following is not None else None  # time aside is not waiting
         slowest = max(prompt["tools"], key=lambda tool: tool["seconds"], default=None)
         entry = {
-            "n": number, "session_id": prompt["session_id"], "at": utc_text(prompt["at"]), "stage": stage_at(events, prompt["end"], planned),
+            "n": number, "session_id": prompt["session_id"], "at": utc_text(prompt["at"]), "stage": prompt_stage(marked, prompt, kind, envs),
             "waited_after_s": round(waited, 1) if waited is not None else None,
             "aiu": round(prompt["aiu"], 2) if prompt["aiu"] is not None else None, "premium_requests": prompt["premium_requests"], "context_tokens": prompt["context_tokens"],
             "turns": prompt["turns"], "tool_calls": len(prompt["tools"]), "failed_tool_calls": len([tool for tool in prompt["tools"] if not tool["ok"]]),
             "slowest_tool": {"name": slowest["name"], "seconds": round(slowest["seconds"], 1)} if slowest and slowest["seconds"] >= 1 else None,
+            "input_tokens": prompt.get("input_tokens"), "output_tokens": prompt.get("output_tokens"),
             "subagents": len(prompt["subagents"]), "skills": sorted(set(prompt["skills"])), "models": prompt["models"], **counted,
             "text": prompt.get("text", ""),  # for the page only: `for_agent` takes it out
         }
+        entry["stage_label"] = stage_label(entry["stage"])
         entry.update({key: round(value, 1) if value is not None else None for key, value in parts.items()})
         prompts.append(entry)
         for key, value in parts.items():
@@ -384,17 +468,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
     for item in reviews:
         item.pop("at")
 
-    stages = []
-    for name in STAGES:
-        inside = [entry for entry in prompts if entry["stage"] == name]
-        if not inside:
-            continue
-        time_spent = sum(entry["active_s"] for entry in inside)
-        usage = sum(entry["aiu"] for entry in inside if entry["aiu"] is not None) if totals["aiu"] is not None else None
-        stages.append({
-            "stage": name, "label": say(f"insight.stage.{name}"), "prompts": len(inside), "active_s": round(time_spent, 1),
-            "aiu": round(usage, 2) if usage is not None else None, "share_time": share(time_spent, totals["active_s"]), "share_aiu": share(usage, totals["aiu"]),
-        })
+    stages = stage_table(prompts, totals)
 
     for key in ("active_s", "waiting_s", "paused_s", "model_s", "tool_s", "approval_s", "subagent_s", "other_s", "aiu"):
         if totals[key] is not None:
@@ -418,7 +492,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
 
 
 # What the task waits for now (tasklife.waiting) -> the reason of a wait (insight.wait.*). Anything else: the agent stopped.
-WAIT_OF_NOW = {"plan": "plan", "promote": "promote", "review": "review", "recover": "recover", "cancelled": "cancelled"}
+WAIT_OF_NOW = {"plan": "plan", "promote": "promote", "review": "review", "recover": "recover", "cancelled": "cancelled", "commit": "commit"}
 
 
 def add_open_wait(result: Dict[str, Any], now: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -482,7 +556,7 @@ def findings(result: Dict[str, Any]) -> List[Dict[str, Any]]:
             "dear_prompt", share(dearest["aiu"], totals["aiu"]), prompt=dearest["n"], aiu=amount(dearest["aiu"]), share=percent(share(dearest["aiu"], totals["aiu"])),
             turns=dearest["turns"], context=amount(dearest["context_tokens"]),
         )
-    review = next((stage for stage in result["stages"] if stage["stage"] == "review"), None)
+    review = next((stage for stage in result["stages"] if stage["stage"] == CHECK), None)
     if totals["reviews"]:
         counted = {"checks": totals["reviews"], "fails": totals["review_fails"]}
         if review is None:

@@ -27,7 +27,7 @@ from core.logs import session_log_path
 from core.paths import cli_command, repo_root, utc_now
 from core.state import SUBAGENT_ACTIVE_TTL_SECONDS, admin_on, atomic_write, session, state_lock, state_path
 
-from . import task as task_ops
+from . import commitmsg, reviewcheck, task as task_ops
 from .common import CommandError
 
 NAME_LIMIT = 80
@@ -286,6 +286,8 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     handed = data.get("handoff")
     if isinstance(handed, dict) and handed.get("what") in HANDOFFS and handed.get("since"):
         return {"why": str(handed["what"]), "since": str(handed["since"])}  # the agent handed work to the person that only they can do: it stays until the agent clears it
+    if state == "done" and data.get("status") == "open" and commitmsg.to_commit(data):
+        return {"why": "commit", "since": last_event(data, "promote") or updated}  # written back, not committed: the person commits, then closes the task (B63)
     mark = data.get("waiting")
     if isinstance(mark, dict) and mark.get("since"):
         if mark.get("why") in GO_MARKS:
@@ -323,6 +325,34 @@ def cancelled_at(data: Dict[str, Any]) -> str:
         return ""
     stamp = copilot_events.seconds(found)
     return datetime.fromtimestamp(stamp, timezone.utc).isoformat() if stamp is not None else ""
+
+
+def waited_since(data: Dict[str, Any], stamp: str) -> Optional[float]:
+    """How long the task has waited since `stamp`, less the time the person had it put aside (`task pause` to its resume). A wait told
+    from a file or an event (a plan, a requirement, a handoff) starts before a pause and goes on after it: the time aside is not waiting."""
+    waited = seconds_since(stamp)
+    if waited is None:
+        return None
+    try:
+        start = datetime.fromisoformat(stamp).timestamp()
+    except (TypeError, ValueError):
+        return waited
+    now = datetime.now(timezone.utc).timestamp()
+    aside, began = 0.0, None
+    for event in data.get("events") or []:
+        what = event.get("what")
+        try:
+            at = datetime.fromisoformat(str(event.get("at", ""))).timestamp()
+        except ValueError:
+            continue
+        if what == "pause" and began is None:
+            began = at
+        elif what in ("unpause", "close") and began is not None:
+            aside += max(0.0, min(now, at) - max(start, began))
+            began = None
+    if began is not None:
+        aside += max(0.0, now - max(start, began))
+    return max(0.0, waited - aside)
 
 
 def seconds_since(stamp: str) -> Optional[float]:
@@ -393,9 +423,13 @@ def handoff_clear(root: Path, raw_task: str) -> Dict[str, Any]:
     task = task_ops.resolve(root, raw_task)
     with task_ops.locked(root, task) as data:
         task_ops.require_open(data)
-        found = data.pop("handoff", None)
+        found = data.get("handoff")
         if not found:
             raise CommandError(say("task.handoff.none", name=task_ops.name_of(task)))
+        env = str(found.get("env") or "")
+        if found.get("what") == "run" and env and not reviewcheck.has_run(root, task, env):  # the result is saved first, then the mark goes (B63)
+            raise CommandError(say("task.handoff.clear_no_result", folder=f"{task}/RUNS/{env.upper()}/"))
+        data.pop("handoff", None)
         task_ops.note(data, "handoff-clear", f"{found.get('what', '')} {found.get('env', '')}".strip())
     if found.get("what") == "run":
         return {"task": task, "cleared": True, "next": say("task.handoff.cleared.run", folder=f"{task}/RUNS/{str(found.get('env') or '').upper()}/")}
@@ -414,7 +448,7 @@ def waiting_now(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[st
     found = waiting(root, task, data)
     if not found["why"]:
         return None
-    waited = seconds_since(found["since"])
+    waited = waited_since(data, found["since"])
     return {"text": waiting_text(data, found["why"]), "why": found["why"], "since": found["since"], "seconds": round(waited) if waited is not None else None}
 
 
@@ -569,7 +603,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
             continue
         aside = paused_since(data) if data.get("status") == "open" else ""
         found = waiting(root, task, data) if data.get("status") == "open" and not aside else {"why": "", "since": ""}
-        waited = seconds_since(found["since"]) if found["why"] else None
+        waited = waited_since(data, found["since"]) if found["why"] else None
         is_open = data.get("status") == "open"
         is_held = is_open and held(root, data)
         working = is_open and not aside and at_work(root, data, found["why"])

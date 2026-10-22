@@ -81,7 +81,7 @@
         .filter(([, field]) => entry[field]).map(([key, field]) => [" ", tag(t(key, {n: entry[field]}), "bad")]);
       rows.push(h("tr", null,
         h("td", null, entry.n), h("td", {class: "when"}, when(entry.at, 5, 16)),
-        h("td", null, tag(t("insight.stage." + entry.stage)), notes, entry.text ? h("div", {class: "sub said", title: entry.text}, entry.text) : null),
+        h("td", null, tag(entry.stage_label || entry.stage), notes, entry.text ? h("div", {class: "sub said", title: entry.text}, entry.text) : null),
         h("td", {class: "grow"}, bar(timeParts(entry), longest)), num(clock(entry.active_s)),
         hasUsage ? [h("td", {style: "width:14%"}, bar([["usage", entry.aiu || 0, "AIU " + amount(entry.aiu)]], dearest, true)), num(amount(entry.aiu))] : null,
         num(entry.turns || "-"), num(entry.tool_calls)));
@@ -95,13 +95,20 @@
   }
 
   function stagesCard() {
-    if (!(info.stages.length > 1 || (info.stages.length && info.stages[0].stage !== "work"))) return null;
-    const head = [th(t("report.col.stage")), th(t("report.col.prompts"), true), th(t("report.col.time")), th("", true), hasUsage ? [th("AIU"), th("", true)] : null];
+    if (!(info.stages.length > 1 || (info.stages.length && info.stages[0].stage !== "doing"))) return null;
+    const has = (key) => info.stages.some((stage) => stage[key] !== null && stage[key] !== undefined);
+    const thinking = has("model_s"), tokens = has("input_tokens");
+    const head = [th(t("report.col.stage")), th(t("report.col.prompts"), true), th(t("report.col.time")), th("", true), hasUsage ? [th("AIU"), th("", true)] : null,
+      thinking ? th(t("report.col.thinking"), true) : null, th(t("report.col.calls"), true), th(t("report.col.subagents"), true), tokens ? th(t("report.col.tokens_io"), true) : null];
     const rows = info.stages.map((stage) => h("tr", null,
       h("td", null, stage.label), num(stage.prompts),
-      h("td", {style: "width:32%"}, bar([["work", stage.share_time, percent(stage.share_time)]], 1, true)),
+      h("td", {style: "width:20%"}, bar([["work", stage.share_time, percent(stage.share_time)]], 1, true)),
       num(clock(stage.active_s) + " · " + percent(stage.share_time)),
-      hasUsage ? [h("td", {style: "width:32%"}, bar([["usage", stage.share_aiu, percent(stage.share_aiu)]], 1, true)), num(amount(stage.aiu) + " · " + percent(stage.share_aiu))] : null));
+      hasUsage ? [h("td", {style: "width:20%"}, bar([["usage", stage.share_aiu, percent(stage.share_aiu)]], 1, true)), num(amount(stage.aiu) + " · " + percent(stage.share_aiu))] : null,
+      thinking ? num(clock(stage.model_s)) : null,
+      num(stage.failed_tool_calls ? t("report.stage.calls_failed", {calls: stage.tool_calls, failed: stage.failed_tool_calls}) : String(stage.tool_calls)),
+      num(stage.subagents ? stage.subagents + " · " + clock(stage.subagent_s) : "-"),
+      tokens ? num(amount(stage.input_tokens) + " / " + amount(stage.output_tokens)) : null));
     return card(t("report.stages"), table(head, rows));
   }
 
@@ -121,10 +128,30 @@
     line.setAttribute("points", spots.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" "));
     line.setAttribute("class", "line");
     svg.append(line);
-    const dots = h("div", {class: "dots"}, spots.map(([x, y], order) => h("i", {
-      style: `left:${(x / width) * 100}%;top:${(y / height) * 100}%`, title: `#${points[order][0] + 1}: ${amount(points[order][1])}`,
-    })));
-    return card(t("report.context"), h("div", {class: "chart"}, svg, dots),
+    const tip = h("div", {class: "tip", role: "tooltip", hidden: ""});
+    const words = (order) => {
+      const [index, value] = points[order];
+      const before = order ? points[order - 1][1] : null;
+      const change = before === null ? "" : t("report.context.change", {delta: (value >= before ? "+" : "-") + amount(Math.abs(value - before))});
+      return t("report.context.point", {n: index + 1, at: when(info.prompts[index].at, 5, 16), tokens: amount(value)}) + change;
+    };
+    const dots = h("div", {class: "dots"}, spots.map(([x, y], order) => {
+      const dot = h("i", {style: `left:${(x / width) * 100}%;top:${(y / height) * 100}%`, tabindex: "0", "aria-label": words(order)});
+      const show = () => {
+        tip.textContent = words(order);
+        tip.style.left = `${(x / width) * 100}%`;
+        tip.style.top = `${(y / height) * 100}%`;
+        tip.classList.toggle("left", x > width * 0.7);
+        tip.hidden = false;
+      };
+      const hide = () => { tip.hidden = true; };
+      dot.addEventListener("mouseenter", show);
+      dot.addEventListener("focus", show);
+      dot.addEventListener("mouseleave", hide);
+      dot.addEventListener("blur", hide);
+      return dot;
+    }));
+    return card(t("report.context"), h("div", {class: "chart"}, svg, dots, tip),
       h("div", {class: "sub"}, t("report.context.note", {first: amount(totals.context_tokens_first), largest: amount(totals.context_tokens_max)})));
   }
 
@@ -150,7 +177,7 @@
     return card(t("report.reviews"), table(head, rows));
   }
 
-  app.replaceChildren(...header());
+  app.replaceChildren(...header().filter(Boolean));  // a part with nothing to show is left out, not drawn as "null"
   if (!info.prompts.length) {
     app.append(h("div", {class: "card empty"}, t("report.empty")), footer(false));
     return;

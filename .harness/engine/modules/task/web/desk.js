@@ -101,9 +101,9 @@
   function quiet() {
     if (desk.paused_since) return {title: t("desk.actions.paused"), hint: t("desk.actions.paused.hint")};
     const why = desk.waiting_why;
-    if (desk.waiting && (["stopped", "cancelled", "autorun", "tests", "run"].includes(why) || why.startsWith("go-"))) {
+    if (desk.waiting && (["stopped", "cancelled", "autorun", "tests", "run", "commit"].includes(why) || why.startsWith("go-"))) {
       const handed = desk.handoff || {};
-      return {title: desk.waiting.charAt(0).toUpperCase() + desk.waiting.slice(1), hint: t("desk.wait." + why, {env: handed.env || "", what: handed.detail || ""}),
+      return {title: desk.waiting.charAt(0).toUpperCase() + desk.waiting.slice(1), hint: t("desk.wait." + why, {env: handed.env || "", what: handed.detail || "", branch: desk.branch || ""}),
         prompt: why.startsWith("go-") ? t("desk.go." + why.slice(3)) : why === "tests" ? t("desk.tests.prompt") : why === "run" ? t("desk.run.prompt", {env: handed.env || ""}) : ""};
     }
     if (desk.state === "unheld") return {title: t("desk.actions.unheld"), hint: t("desk.actions.unheld.hint"), prompt: t("desk.unheld.prompt", {name: desk.name})};
@@ -237,13 +237,21 @@
     const x = desk.commit;
     const parts = [h("p", {class: "hint top"}, t("desk.commit.hint"))];
     if (!x.messages.length) return [...parts, h("div", {class: "empty-state"}, h("b", null, t("desk.commit.none")), h("p", {class: "sub"}, x.file))];
+    const copier = (label, text) => {
+      const button = h("button", {type: "button", class: "act", "data-label": label}, label);
+      button.addEventListener("click", () => copyCommand(button, text));
+      return button;
+    };
     for (const item of x.messages) {
-      const button = h("button", {type: "button", class: "act", "data-label": t("desk.commit.copy")}, t("desk.commit.copy"));
-      button.addEventListener("click", () => copyCommand(button, item.text));
+      // The whole commit as commands to paste (M37-10): the message is never pasted into `git commit -m "..."`, where a backtick is run by the shell.
+      const shells = item.commands ? [["posix", "desk.commit.shell.posix"], ["powershell", "desk.commit.shell.powershell"]].map(([key, label]) =>
+        h("div", {class: "shell"}, h("div", {class: "round-head"}, h("strong", null, t(label)), " ", copier(t("desk.commit.copy_commands"), item.commands[key])),
+          h("pre", {class: "commit"}, item.commands[key]))) : null;
       parts.push(h("section", {class: "round"},
-        h("div", {class: "round-head"}, item.repo ? h("strong", null, t("desk.commit.repo", {repo: item.repo})) : h("strong", null, x.repos.join(", ")), " ", button,
+        h("div", {class: "round-head"}, h("strong", null, t("desk.commit.repo", {repo: item.repo})), " ", copier(t("desk.commit.copy"), item.text),
           item.warnings.map((code) => [" ", tag(t(COMMIT_WARNINGS[code]), "hot")])),
-        h("pre", {class: "commit"}, item.text)));
+        h("pre", {class: "commit"}, item.text),
+        shells ? [h("p", {class: "sub"}, t("desk.commit.commands", {branch: item.branch})), shells] : null));
     }
     parts.push(h("p", {class: "sub"}, x.coauthor ? t("desk.commit.author", {author: x.coauthor}) : t("desk.commit.noauthor")));
     return parts;
@@ -294,10 +302,30 @@
     return parts;
   }
 
+  // Inside a hunk the counts of its `@@` line say how many lines follow: a removed line that starts with `--` (an SQL comment) is not a file header.
+  function diffKinds(lines) {
+    let old = 0, added = 0;
+    return lines.map((line) => {
+      if (old > 0 || added > 0) {
+        if (line.startsWith("\\")) return "";
+        if (line.startsWith("-")) { old -= 1; return "del"; }
+        if (line.startsWith("+")) { added -= 1; return "add"; }
+        old -= 1; added -= 1;
+        return "";
+      }
+      const hunk = /^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@/.exec(line);
+      if (hunk) {
+        old = hunk[1] === undefined ? 1 : Number(hunk[1]);
+        added = hunk[2] === undefined ? 1 : Number(hunk[2]);
+        return "hunk";
+      }
+      return line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff ") ? "file" : line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : "";
+    });
+  }
+
   function diff(found) {
-    const kind = (line) => (line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff ") ? "file"
-      : line.startsWith("@@") ? "hunk" : line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : "");
-    return h("div", {class: "scroll"}, h("pre", {class: "diff"}, found.lines.map((line) => h("span", {class: kind(line)}, line + "\n"))),
+    const kinds = diffKinds(found.lines);
+    return h("div", {class: "scroll"}, h("pre", {class: "diff"}, found.lines.map((line, index) => h("span", {class: kinds[index]}, line + "\n"))),
       found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
   }
 

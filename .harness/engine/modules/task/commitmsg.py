@@ -4,7 +4,12 @@ A write-back puts the files on a branch of a code repository and does not commit
 write the message, the agent writes `COMMIT-MESSAGE.md` in the task folder: a subject line, a blank line, the body. The page adds the trailer
 `Co-authored-by: GitHub Copilot Coding Agents` itself, so the agent cannot forget it or write it wrong. The name is `commit.coauthor` of `task.json`
 (`.harness/policies/task.override.json` changes it; a name alone is enough, `Name <address>` also works, and an empty string leaves the line out).
-A task that wrote to more than one repository may have one section per repository: `## <repository name>`.
+A task that wrote to more than one repository may have one section per repository: `## <repository name>`. What comes before the first section
+(the subject line, a shared body) is the start of every repository's message (B63: a subject on top and the body in `## sim_repo` lost its subject).
+
+The page gives the person the commands to commit, for macOS/Linux and for Windows PowerShell (M37-10): go to the repository, switch to the
+branch of the write-back, `git add -A` (the write-back starts on a clean repository, so only its files are changed) and commit with the message
+read from standard input, quoted so that nothing in it (a backtick, a `$`) is run by the shell.
 """
 
 from __future__ import annotations
@@ -64,18 +69,47 @@ def warnings(raw: str) -> List[str]:
 
 
 def sections(raw: str, names: List[str]) -> Dict[str, str]:
-    """`{repository: text}` when the file has a `## <repository>` section for any of `names`; else empty (one message for every repository)."""
+    """`{repository: text}` when the file has a `## <repository>` section for any of `names`; else empty (one message for every repository).
+    The lines before the first `## ` heading start each section's text."""
     found: Dict[str, List[str]] = {}
+    head: List[str] = []
     current: Optional[str] = None
+    seen = False
     for line in raw.splitlines():
         match = re.match(r"^##\s+(.+?)\s*$", line)
         if match:  # any `## ` heading ends the section before it; one that names a repository starts the next
+            seen = True
             current = match.group(1) if match.group(1) in names else None
             if current:
                 found[current] = []
         elif current is not None:
             found[current].append(line)
-    return {name: "\n".join(body).strip() for name, body in found.items()}
+        elif not seen:
+            head.append(line)
+    start = "\n".join(head).strip()
+    out = {}
+    for name, body in found.items():
+        text = "\n".join(body).strip()
+        out[name] = f"{start}\n\n{text}" if start and text else start or text
+    return out
+
+
+def posix_commands(path: str, branch: str, text: str) -> str:
+    quote = lambda value: "'" + value.replace("'", "'\\''") + "'"  # noqa: E731 - inside single quotes nothing is run
+    mark = "EOF"
+    while any(line.strip() == mark for line in text.splitlines()):
+        mark += "_MSG"
+    return "\n".join([f"cd {quote(path)}", f"git switch {quote(branch)}", f"git add -A && git commit -F - <<'{mark}'", text.rstrip("\n"), mark]) + "\n"
+
+
+def powershell_commands(path: str, branch: str, text: str) -> str:
+    """A single-quoted here-string runs nothing that is in it. Windows PowerShell 5.1 pipes to a program in ASCII unless told: UTF-8, so non-English text stays."""
+    quote = lambda value: "'" + value.replace("'", "''") + "'"  # noqa: E731
+    body = [(" " + line) if line.startswith("'@") else line for line in text.rstrip("\n").splitlines()]  # `'@` at the start of a line would end the string
+    return "\n".join([
+        "$OutputEncoding = [System.Text.UTF8Encoding]::new($false)", f"Set-Location -LiteralPath {quote(path)}", f"git switch {quote(branch)}", "git add -A",
+        "@'", *body, "'@ | git commit -F -",
+    ]) + "\n"
 
 
 def to_commit(data: Dict[str, Any]) -> List[str]:
@@ -95,6 +129,15 @@ def view(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]
     raw = path.read_text(encoding="utf-8-sig", errors="replace") if path.is_file() else ""
     author = coauthor(root)
     parts = sections(raw, names)
-    messages = [{"repo": name, "text": compose(text, author), "warnings": warnings(text)} for name, text in parts.items() if text] if parts else (
-        [{"repo": "", "text": compose(raw, author), "warnings": warnings(raw)}] if raw.strip() else [])
+    promote = data.get("promote") or {}
+    branch = str(promote.get("branch") or data.get("branch") or "")
+    messages = []
+    for name in names:
+        text = parts.get(name, "") if parts else raw.strip()
+        if not text:
+            continue
+        message = compose(text, author)
+        path = str((promote.get("repos") or {}).get(name, {}).get("path") or "")
+        messages.append({"repo": name, "text": message, "warnings": warnings(text), "path": path, "branch": branch,
+                         "commands": {"posix": posix_commands(path, branch, message), "powershell": powershell_commands(path, branch, message)} if path and branch else None})
     return {"written": bool(raw.strip()), "repos": names, "messages": messages, "coauthor": author, "file": FILE}

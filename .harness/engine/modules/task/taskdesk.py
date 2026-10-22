@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import messages, tasks
 from core.paths import cli_command, utc_now
 
-from . import common, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskreview, tasksnap, taskstages, testdefects
+from . import autorun, common, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskreview, tasksnap, taskstages, testdefects
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
 MAX_DOC_BYTES = 400_000  # a bigger document is shown cut, with a note
@@ -174,12 +174,12 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
     task = row["task"]
     data = tasks.read(root, task) or {}
     docs = documents(root, task)
-    todo = next((doc for doc in docs if doc["name"] == tasks.TODO_FILE), None)
-    done, total = mdtree.checkboxes({"blocks": todo["blocks"]}) if todo else (0, 0)
+    steps = autorun.steps_of(root, task)  # the same steps the engine counts: the template's `<step 1>` is not one (B63)
+    done, total = sum(1 for step in steps if step["done"]), len(steps)
     report = common.task_report_file(root, name, common.REPORT_HTML)
     return {
         "name": name, "task": task, "as_of": utc_now(),
-        "kind": data.get("kind", ""), "tier": data.get("tier", ""), "status": row.get("status", ""), "round": data.get("round", 1),
+        "kind": data.get("kind", ""), "tier": data.get("tier", ""), "status": row.get("status", ""), "round": data.get("round", 1), "branch": str((data.get("promote") or {}).get("branch") or data.get("branch") or ""),
         "domains": list(data.get("domains") or []), "autorun": bool(row.get("autorun")), "paused_since": row.get("paused_since") or "",
         "waiting": row.get("waiting") or "", "waiting_why": row.get("waiting_why") or "", "waited_s": row.get("waited_s"),
         "handoff": {key: str((data.get("handoff") or {}).get(key) or "") for key in ("what", "env", "detail")} if isinstance(data.get("handoff"), dict) else None,

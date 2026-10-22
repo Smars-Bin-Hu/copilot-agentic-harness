@@ -291,7 +291,8 @@ def mark_run(root: Path, task: str, data: Dict[str, Any]) -> str:
     if not envs:
         return ""
     env = envs[0]
-    what = " ".join(" ".join(items["text"].get(name, name) for name in items["R"] if items["envs"].get(name) == env).split())
+    lead = re.compile(rf"^{re.escape(env)}\s*[:：-]\s*", re.IGNORECASE)  # `[R1] DEV: ...`: the environment is said once, by the card (B63)
+    what = " ".join(" ".join(lead.sub("", items["text"].get(name, name).strip()) for name in items["R"] if items["envs"].get(name) == env).split())
     from .tasklife import WHAT_LENGTH  # tasklife imports this module
 
     what = what if len(what) <= WHAT_LENGTH else what[: WHAT_LENGTH - 1] + "…"

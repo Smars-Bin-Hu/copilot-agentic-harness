@@ -53,7 +53,7 @@ noscript{display:block;margin-top:16px;color:var(--bad)}
 .chart{position:relative;height:120px}
 .chart svg{position:absolute;inset:0;height:100%}
 .chart .line{fill:none;stroke:var(--model);stroke-width:2;vector-effect:non-scaling-stroke}
-.dots i{position:absolute;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--model)}
+.dots i{position:absolute;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--model)}.dots i:hover,.dots i:focus{outline:2px solid var(--model);outline-offset:2px}.chart .tip{position:absolute;z-index:2;transform:translate(10px,-50%);max-width:22em;padding:4px 8px;border-radius:6px;background:var(--ink);color:var(--card);font-size:12px;white-space:nowrap;pointer-events:none}.chart .tip.left{transform:translate(calc(-100% - 10px),-50%)}.chart .tip[hidden]{display:none}
 .said{max-width:26em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help}
 /* A button whose words are longer than the cell takes two lines rather than spill out of it. */
 /* The buttons of a row stay on one line and scroll sideways; a soft edge shows that there is more on that side. */
@@ -180,4 +180,4 @@ tr.touched td{animation:glow 1.8s ease-out}
 @media (prefers-reduced-motion:reduce){.rb-step.is-work .rb-node,.rb-step.is-you .rb-node,.rb-link.is-flow::after,.rb-check.run::before,.rb-check.pass,.rb-stamp{animation:none}}
 
 /* the commit message of a write-back, to copy */
-pre.commit{margin:8px 0 0;padding:12px 14px;border-radius:8px;background:var(--track);color:var(--ink);font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.shell{margin-top:12px}pre.commit{margin:8px 0 0;padding:12px 14px;border-radius:8px;background:var(--track);color:var(--ink);font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}

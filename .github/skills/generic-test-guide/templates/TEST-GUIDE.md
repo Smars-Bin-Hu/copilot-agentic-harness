@@ -14,7 +14,12 @@ Order: DEV, then IST, then QAT. Start the next only when the one before passed. 
 
 ### Steps
 
-1. <one action; exact command, job or query>
+1. <one action, in words>
+
+   ```
+   <the exact command, job or query: copied whole from here>
+   ```
+
    - Expect: <a number, a row count, a state, a file>
 2. ...
 

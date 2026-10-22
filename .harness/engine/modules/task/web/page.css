@@ -95,6 +95,7 @@ article.md hr{border:0;border-top:1px solid var(--line);margin:1.5em 0}
 article.md blockquote{margin:.8em 0;padding:.2em 1em;border-left:3px solid var(--line);color:var(--soft)}
 pre.code,pre.diff{margin:.8em 0;padding:12px 14px;background:var(--bg);border:1px solid var(--line);border-radius:8px;overflow-x:auto;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 pre.code code{background:none;padding:0;font-size:inherit}
+.code-box{position:relative}.code-box pre.code{padding-right:76px}.code-box .copy-code{position:absolute;top:8px;right:8px;padding:2px 9px;font-size:12px}
 ul.checks{list-style:none;padding-left:.2em}ul.checks li{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
 ul.checks li>ul,ul.checks li>ol{flex-basis:100%;margin:2px 0 0 24px;padding-left:0}
 .box{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:1.5px solid var(--soft);border-radius:4px;font-size:11px;line-height:1;position:relative;top:2px}

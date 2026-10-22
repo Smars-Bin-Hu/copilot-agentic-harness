@@ -16,6 +16,8 @@ To see which version you have: `harness --version`.
 
 - **main is brought up to its remote before the work starts, and again before the write-back.** `task fetch` read the local main, and `promote --dry-run` checked the files against it: when another task's pull request had been merged on the remote, the work started from old files and the clash showed only in the pull request. Now, at the first fetch of a repository in a round and at every dry run, the harness runs `git fetch` and moves main forward, by a fast-forward only: a main that is not checked out is moved, a clean checked-out one is fast-forwarded, nothing else in the working tree changes. A file someone changed on the remote after the fetch is then refused by the dry run, as a file changed on main always was. Changes not committed on a checked-out main, or a main that went its own way, stop the command (nothing read, nothing moved) with what to do; a repository with no remote is left as it is; a remote out of reach (offline, no access) is said, and the local main is used.
 
+- **A Copy button on every code block of the task page.** A command, query or script in a fenced block of `TEST-GUIDE.md`, `PLAN.md` or any other document of the task has a Copy button, so the user pastes it into a terminal or a client without opening the task folder. The test guide skill and its template now put each command in its own fenced block.
+
 **Introductory material**: `docs/02-features.md` (fetching files), `docs/04-reference.md` (`task fetch`, `task promote`) and `harness-rookie-wondering` topic 9 changed. `harness-rookie-quick-start` is not changed: it does not go into how files are read.
 
 ## 1.5.38 (2026-10-22)

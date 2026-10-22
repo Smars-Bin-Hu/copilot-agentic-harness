@@ -1263,6 +1263,7 @@
   "desk.commit.shell.posix": "macOS / Linux (Terminal)",
   "desk.commit.shell.powershell": "Windows (PowerShell)",
   "desk.commit.copy_commands": "Copy commands",
+  "desk.code.copy": "Copy",
   "desk.commit.none": "The agent has not written COMMIT-MESSAGE.md yet. Ask it to, in VS Code.",
   "desk.commit.repo": "For {repo}",
   "desk.commit.author": "Contributor line, added by the harness: {author}",

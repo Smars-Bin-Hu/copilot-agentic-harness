@@ -1263,6 +1263,7 @@
   "desk.commit.shell.posix": "macOS / Linux（终端）",
   "desk.commit.shell.powershell": "Windows（PowerShell）",
   "desk.commit.copy_commands": "复制命令",
+  "desk.code.copy": "复制",
   "desk.commit.none": "agent 还没有写 COMMIT-MESSAGE.md。在 VS Code 里让它写。",
   "desk.commit.repo": "给 {repo}",
   "desk.commit.author": "贡献者一行，由 harness 加：{author}",

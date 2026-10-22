@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.32 (2026-10-21)
+
+### Retired
+
+- **The admin agent.** Its rights never came from the agent file: they come from admin mode, the switch on one session that you set in the terminal (`harness admin on`), since a hook cannot see which agent is talking. The default agent with admin mode on could do everything the admin agent could. What the agent file held (how to change the harness, what to register, where to look for a root cause) is now the skill **`harness-admin`**; the rules of admin mode tell the agent to read it, and `/harness-admin` starts it. The model is the one you pick in the model picker.
+
+### Changed
+
+- To extend or debug the harness: stay with the default agent, ask for the change (or type `/harness-admin`), and run `harness admin on --session-id <id>` when it asks. Nothing else about admin mode changed: what it opens, what stays closed, no task and no subagent in it.
+
+**Introductory material**: `AGENTS.md`, `docs/01-quickstart.md`, `docs/02-features.md`, `docs/03-configure.md`, `docs/05-design.md`, `harness-rookie-wondering` topics 4 and 15, `harness-rookie-get-me-ready`, `agents.instructions.md`, the path index.
+
 ## 1.5.31 (2026-10-21)
 
 Found on a company computer: a change whose "Done when" asked for DEV counts failed two checks in a row (2 of 4 used), because the reviewer was called before anyone had run the job in DEV.

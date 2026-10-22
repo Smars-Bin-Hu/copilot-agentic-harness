@@ -136,17 +136,15 @@ After the plan is approved, what is left is doing it step by step. Autorun lets 
 - **Why it is beta**: whether it or "a person watching to the end" is better has not been evaluated yet. The numbers of the limits are under `autorun` in `task.json`.
 - **It is not the same as Copilot's own Autopilot**: that one is "every tool call is agreed to automatically". The two can be used together; the stops of autorun do not rely on "asking you", so they work with Autopilot on too.
 
-## admin: extending and debugging the harness (optional)
+## Admin mode: extending and debugging the harness (optional)
 
-Pick admin in the agent drop-down. It is for changing the harness's own files, reading reports and logs, and finding the root cause when the harness goes wrong. It does no business tasks, and it cannot be called as a subagent.
-
-Picking admin is not enough: a hook cannot see which agent is the current one, so you switch the write rights on in the terminal. admin gives you this command:
+Admin mode is for changing the harness's own files, reading reports and logs, and finding the root cause when the harness goes wrong. It is a switch on one session of the default agent, not an agent you pick: a hook cannot see which agent is the current one. Ask the agent to change the harness (or type `/harness-admin`); it gives you this command to run in the terminal:
 
 ```text
 harness admin on --session-id <session id>
 ```
 
-After you type the code, this one session is in admin mode, until you run `harness admin off --session-id <session id>`. `harness admin status` lists the sessions that have it on.
+After you type the code, this one session is in admin mode, until you run `harness admin off --session-id <session id>`. `harness admin status` lists the sessions that have it on. The agent follows the skill `harness-admin`: it says what it will change, runs `doctor` and the tests after each step, and registers what it adds.
 
 | In admin mode | Notes |
 | --- | --- |

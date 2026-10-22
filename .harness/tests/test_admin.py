@@ -1,6 +1,6 @@
 """Admin mode: a person switches it on for one session at a terminal; that session may then change guardrail files.
 
-The hook cannot tell which agent is talking, so the admin agent file gives no rights. The session state does.
+The hook cannot tell which agent is talking, so no agent file gives rights. The session state does; the skill harness-admin says how to work in it.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from typing import Optional
 
 from support import REPO, HarnessTestCase, payload, pre_tool
 
-from core import guardrails
+from core import guardrails, messages
 from modules.gate import commands
 
 
@@ -226,14 +226,12 @@ class RuleTests(AdminTestCase):
 
 
 class AgentFileTests(unittest.TestCase):
-    def test_the_admin_agent_can_be_chosen_and_calls_no_subagent(self) -> None:
-        text = (REPO / ".github" / "agents" / "admin.agent.md").read_text(encoding="utf-8")
-        head = text.split("---")[1]
-        self.assertIn("name: admin", head)
-        self.assertNotIn("user-invocable: false", head)
-        self.assertIn("agents: []", head)
-        self.assertNotIn("'agent'", head)
+    def test_admin_is_a_mode_with_a_skill_not_an_agent(self) -> None:
+        self.assertFalse((REPO / ".github" / "agents" / "admin.agent.md").exists())
+        text = (REPO / ".github" / "skills" / "harness-admin" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("name: harness-admin", text.split("---")[1])
         self.assertIn("admin on", text)
+        self.assertIn("harness-admin", messages.table("en")["rules.admin"])
 
     def test_no_agent_file_lists_admin_as_a_subagent(self) -> None:
         for path in (REPO / ".github" / "agents").glob("*.agent.md"):

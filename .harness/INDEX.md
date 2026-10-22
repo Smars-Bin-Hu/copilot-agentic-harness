@@ -47,7 +47,8 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/skills/generic-kb-learn-batch/` | Learn the next batch of a domain's learn task (plan approved): a card per object from its code, `kb index`, `kb cardcheck` against the map, tick the batch. No write-back per batch |
 | `.github/skills/generic-kb-learn-synthesize/` | The last steps of a learn task: `architecture.md` from the paths of `kb flows` and the cards, the entry points of `domain.yaml`, the gaps counted, flows checked by `kb cardcheck`; then one write-back of the whole domain |
 | `.github/skills/generic-kb-refresh/` | Bring stale cards of a domain back in line with the code: reads only the diff of each changed source (`kb stale --diff`), fixes the lines it touches, stamps the checked cards (`kb stamp`), in a `kb` task. The agent asks first |
-| `.github/agents/` | `reviewer` (the independent checker), `mapper` (the read-only chunk reader), `admin` (extends and debugs the harness; the user must switch admin mode on in the terminal first) |
+| `.github/skills/harness-admin/` | Extend and debug the harness in a session the user switched to admin mode (`harness admin on`): how to change it, register what is added, find a root cause |
+| `.github/agents/` | `reviewer` (the independent checker), `mapper` (the read-only chunk reader) |
 
 ## Engine and policies
 

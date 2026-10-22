@@ -1,7 +1,7 @@
 # GitHub Copilot Agentic Harness on VS Code
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.5.31-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.5.32-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
@@ -111,7 +111,7 @@ This repository (the harness)
 │   ├── instructions/              rules by category; knowledgebase.instructions.md belongs to the company
 │   │                              knowledge base and must be plugged in (ships empty)
 │   ├── skills/                    skills: harness-*, generic-* (companies add their own domain-*)
-│   ├── agents/                    reviewer, mapper, admin
+│   ├── agents/                    reviewer, mapper
 │   └── hooks/harness.json         hook configuration
 ├── .harness/
 │   ├── INDEX.md                   path index (for the agent)
@@ -145,4 +145,4 @@ Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENS
 
 ---
 
-Version 1.5.31 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.5.32 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

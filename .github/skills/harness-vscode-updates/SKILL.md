@@ -44,7 +44,7 @@ The harness is built on the extension points of VS Code and Copilot. Every modul
    - Leave out items with no effect. List their titles in one line only.
    For every Retire, Change or Add write: the evidence (a quote of a few words and the link), the files it touches, the effort (small, medium, large), the risk, and **how to verify it in Copilot first**. Advice that has not been tried in Copilot is a guess: say so.
 6. **Write the report.** One file per run: `.local/vscode-updates/<date>-v1_<from>-v1_<to>.md` (one version: `<date>-v1_<minor>.md`), from [report.md](./templates/report.md). Write it in the language the hook names. Then add one row per version to `INDEX.md`.
-7. **Tell the user** in a few lines: the versions read, the count of each verdict, the two or three items worth acting on first, and the path of the report. Do not start any change: the user decides, and a change to the harness goes through the admin agent.
+7. **Tell the user** in a few lines: the versions read, the count of each verdict, the two or three items worth acting on first, and the path of the report. Do not start any change: the user decides, and a change to the harness is made in admin mode (`harness-admin`).
 
 ## Gotchas
 

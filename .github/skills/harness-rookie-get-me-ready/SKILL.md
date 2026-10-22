@@ -16,7 +16,7 @@ Take the user from a freshly received harness repository to one that works: the 
 - The user has a new computer, or moved the repository, and has to set it up again.
 - The user wants to add one item (plugging in the knowledge base only, say): do just that step, then the final check.
 
-Everyday tasks do not use it. To change hooks, the engine or the default policies, use the admin agent, not this skill.
+Everyday tasks do not use it. To change hooks, the engine or the default policies, use the skill `harness-admin`, not this one.
 
 ## Prerequisites
 

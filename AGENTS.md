@@ -56,5 +56,5 @@ To find a file, read [.harness/INDEX.md](.harness/INDEX.md) (the path index). Do
 - Before you delete, overwrite or do anything hard to undo, confirm the target and the scope.
 - Guardrail files cannot be changed: a hook refuses. The list is in
   [.harness/policies/gate.json](.harness/policies/gate.json). When one must change, tell the user.
-  The one exception is a session the user switched to admin mode in the terminal, for the admin agent to extend the harness: see
-  [admin.agent.md](.github/agents/admin.agent.md). You cannot switch it on yourself.
+  The one exception is a session the user switched to admin mode in the terminal, to extend the harness: see the skill
+  [harness-admin](.github/skills/harness-admin/SKILL.md). You cannot switch it on yourself.

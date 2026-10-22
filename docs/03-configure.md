@@ -168,7 +168,7 @@ A skill is `.github/skills/<name>/SKILL.md`; the rules are in [skills.instructio
 
 ## Agents and models
 
-The custom agents are in `.github/agents/`: `admin` (you pick it in the drop-down), and `reviewer` and `mapper` (subagents only). Day to day you use the default agent.
+The custom agents are in `.github/agents/`: `reviewer` and `mapper` (subagents only). You always use the default agent; to extend the harness, switch its session to admin mode (`harness admin on`, skill `harness-admin`).
 
 - Which model the main conversation uses is your pick in the drop-down. The harness cannot change the model.
 - The `model` list of every agent file falls back in order. [agents.json](../.harness/policies/agents.json) rules: a fallback stays within one series, except for the agents under `any_series` (`doctor` checks this).

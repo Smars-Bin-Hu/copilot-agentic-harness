@@ -17,9 +17,7 @@ Before adding one, answer: which failure does it prevent? Why can the default ag
 
 ## Who can be picked directly
 
-- The user picks two agents directly: the default agent and admin.
-- admin cannot be a subagent: a hook refuses. Its write rights do not come from the agent file.
-  They come from `admin on`, which the user runs in the terminal (a hook cannot see which agent is the main one).
+- The user picks one agent directly: the default agent. Extending the harness is admin mode, a switch on one session (`admin on`, which the user runs in the terminal), not an agent: a hook cannot see which agent is the main one. How to work in it: the skill `harness-admin`.
 - Every other agent is used as a subagent only and has `user-invocable: false`.
   That field only keeps it out of the drop-down list. **It does not stop it from being called as a subagent.** A hook decides whether it can be called.
 - Do not write `disable-model-invocation: true`: it does not stop a call either.
@@ -37,7 +35,6 @@ Before adding one, answer: which failure does it prevent? Why can the default ag
 
 | agent | What it is for | Who can call it |
 | --- | --- | --- |
-| admin | The administrator of the harness: extends the harness, reads reports and logs, finds root causes. It can change guardrail files only after the user switches admin mode on in the terminal | The user |
 | reviewer | The independent checker: looks only at the requirement, the work and the diff, gives PASS or FAIL, and changes no file. On only when the user writes `[review]=n` | The default agent (a hook requires `task review start` first) |
 | mapper | The read-only chunk reader: reads the part it is given and hands in a summary with sources. No edit tools, no terminal | The default agent, and only after the user types `/generic-mapreduce` (a hook counts the calls; the limit is `mapreduce.max_agents` in `task.json`) |
 
@@ -46,6 +43,6 @@ A session with no task cannot call the reviewer. A session with a task must run 
 ## Models
 
 - The reviewer and the mapper use Sonnet and fall back to Haiku: they run whether the main model is Sonnet or Opus.
-- A `model` fallback list stays within one series. admin, reviewer and mapper are the exception (`any_series` in `agents.json`): they may fall back across series when a strong model is not available.
+- A `model` fallback list stays within one series. reviewer and mapper are the exception (`any_series` in `agents.json`): they may fall back across series when a strong model is not available.
   The series are defined in `.harness/policies/agents.json`, and `harness doctor` checks them.
 - Use the display names in the Copilot drop-down list of this machine. Check them again in a new environment.

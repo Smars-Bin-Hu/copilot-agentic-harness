@@ -48,7 +48,7 @@ The orchestration skill keeps the approvals of the harness: plan approval before
 
 ## 8. Install plan
 
-The skills are built in the task folder (`SKILLS/`). The user, or the admin agent in admin mode, copies them into `.github/skills/` and runs `harness skill check`.
+The skills are built in the task folder (`SKILLS/`). The user, or the agent in a session in admin mode, copies them into `.github/skills/` and runs `harness skill check`.
 
 ## Confirmation
 

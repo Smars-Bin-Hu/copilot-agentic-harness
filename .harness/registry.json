@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.5.31",
+  "version": "1.5.32",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -163,7 +163,7 @@
         ".harness/tests/test_gate_git.py",
         ".harness/tests/test_gate_approval.py",
         ".harness/tests/test_admin.py",
-        ".github/agents/admin.agent.md",
+        ".github/skills/harness-admin/",
         ".github/instructions/workspace.instructions.md",
         ".workspace/README.md"
       ],

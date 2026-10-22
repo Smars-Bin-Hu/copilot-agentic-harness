@@ -15,7 +15,7 @@ When GitHub Copilot does complex work in a company, **the key rules are enforced
 | Rules and instructions | [AGENTS.md](../AGENTS.md), `.github/copilot-instructions.md`, `.github/instructions/` | The short rules every task must follow, and rules by topic | Adds instructions of its own |
 | Knowledge base | `knowledge-base/` plus `knowledgebase.instructions.md` | The company's domain material; the instructions teach the agent to read step by step from the index | **Must be plugged in**; empty when shipped |
 | Skills | `.github/skills/` | Flows and references loaded on demand | Adds business skills whose names start with `domain-` |
-| Agents | `.github/agents/` | reviewer (the independent checker), mapper (the read-only chunk reader), admin (extends the harness). Day to day the default agent is used | Changes models, adds roles |
+| Agents | `.github/agents/` | reviewer (the independent checker), mapper (the read-only chunk reader). Day to day, and in admin mode, the default agent is used | Changes models, adds roles |
 | Tools | Copilot's built-in tools; the command line `harness` | Reading, writing, searching, running commands; task operations with a certain result | Adds scripts or MCP servers |
 | Hooks and engine | `.github/hooks/`, `.harness/engine/` | Check before and after every tool call, and enforce the rules | Usually unchanged; tuned through policies |
 | Policies | `.harness/policies/` | "What is allowed, and how much at most" | Overrides with `*.override.json` |
@@ -181,11 +181,11 @@ Approving a plan, writing back to a repository (promote), recovering a repositor
 - A pop-up confirmation is not enough: "Allow in this Session" of VS Code switches it off, so the key approvals do not use pop-ups.
 - The code comes from the plan or the command itself; when the plan changes after the approval, it no longer holds.
 
-### admin: rights follow the session, not the agent
+### Admin mode: rights follow the session, not the agent
 
-Extending the harness means changing guardrail files. The input of a hook does not carry the name of the main agent, so "the admin agent was picked" cannot be the ground for letting things through: any other agent would pass for admin.
+Extending the harness means changing guardrail files. The input of a hook does not carry the name of the main agent, so picking an agent cannot be the ground for letting things through: any other agent would pass for it.
 The ground is the admin switch in the session state, which only you can set by typing a code in the terminal; the state file still cannot be written in admin mode.
-The admin agent file only teaches it how to work; admin mode does not mix with a task.
+How to work in it is the skill `harness-admin`, which the rules of admin mode point to. Until 1.5.32 an admin agent held that text; it gave no right the switch did not, so it was retired. Admin mode does not mix with a task.
 
 ### Target repositories: only the files to change are fetched, and the working tree is left alone
 

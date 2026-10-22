@@ -38,9 +38,8 @@ Before adding one, answer: which failure does it prevent? Why can the default ag
 | agent | What it is for | Who can use it |
 | --- | --- | --- |
 | reviewer | The independent check: looks only at the requirement, the work and the diff, gives PASS or FAIL, names "file:line" for every finding, changes no file, and does not write how to fix | Called by the default agent; on only when the user writes `[review]=n` |
-| admin | Extending the harness: changing guardrail files, reading reports and logs, finding root causes | The user picks it, after `harness admin on` in the terminal |
 
-There is one more subagent, the read-only `mapper`; topic 10 covers it.
+There is one more subagent, the read-only `mapper`; topic 10 covers it. Extending the harness is not an agent but a mode of a session (4.5).
 
 The orchestrator (dispatch), builder (doing) and verifier of 1.0 are retired. Why: the one dispatching does not understand the task, and the one working has to learn it all over again; on tasks with a clear requirement, the three-role setup used about 4.5 times the usage and about 6 times the time, and was no better than a single agent.
 
@@ -50,7 +49,7 @@ The orchestrator (dispatch), builder (doing) and verifier of 1.0 are retired. Wh
 
 ### 4.5 A hook does not know "which agent this is"
 
-The events a hook receives do not carry the name of the main agent. So "the admin agent was picked" cannot be the ground for handing over rights: any other agent could pass for admin. The rights come from the admin switch in the session state, which the user sets in the terminal by typing a code (topic 8).
+The events a hook receives do not carry the name of the main agent. So "this agent was picked" cannot be the ground for handing over rights: any other agent could pass for it. The rights come from the admin switch in the session state, which the user sets in the terminal by typing a code (topic 8). That is why there is no admin agent (retired in 1.5.32): it would have given no right the switch does not. The default agent in admin mode follows the skill `harness-admin`.
 
 ### 4.6 Limits of models
 

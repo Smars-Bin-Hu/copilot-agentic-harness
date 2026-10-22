@@ -92,4 +92,4 @@ The layers change at different speeds: text (the L1 ability) changes first; rule
 ## Common questions
 
 - **"Was all this designed from the start?"** No. 1.0 had Levels and three roles, and they were deleted after a few days of use, by what was measured. The design follows the evidence, which is also why every item of "what is not done" says when to reconsider.
-- **"I think something that is not done should be done. What now?"** See whether its "when to reconsider" holds. If it does, discuss and build it with the admin agent.
+- **"I think something that is not done should be done. What now?"** See whether its "when to reconsider" holds. If it does, discuss and build it in admin mode (`/harness-admin`).

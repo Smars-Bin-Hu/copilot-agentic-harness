@@ -126,7 +126,7 @@ The defaults are in `.harness/policies/<file>`; overrides go in the `.override.j
 | cli.json | `output.format` | Text or JSON. `auto` (the default): text on a terminal, JSON on a pipe. `json` or `text`: always. `--json` on a command line wins over it |
 | agents.json | `series` | The model series |
 | agents.json | `different_series` | The groups of roles that must use different series |
-| agents.json | `any_series` | The agents whose fallback list may span series (admin, reviewer, mapper) |
+| agents.json | `any_series` | The agents whose fallback list may span series (reviewer, mapper) |
 | target.json | `repos_root` | The parent folder of the target repositories |
 | target.json | `repos` | For a single repository: `path`, `base_ref`, `refused_paths`, `knowledge_base` (it is a knowledge base: a write-back is committed straight to `base_ref`) |
 | target.json | `base_ref` | The branch files are fetched from |

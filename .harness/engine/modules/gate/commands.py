@@ -78,7 +78,7 @@ def admin_switch_on(
     out: Any = None,
 ) -> Dict[str, Any]:
     """Admin mode for one session. Terminal only, with a typed code, like `approve-plan`: a hook cannot tell which agent
-    is talking, so choosing the admin agent in the picker cannot be what opens the guardrail files."""
+    is talking, so choosing an agent in the picker cannot be what opens the guardrail files."""
     try:
         approval.require_person("admin on", interactive)
     except approval.Refused as error:

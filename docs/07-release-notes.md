@@ -25,6 +25,7 @@ To see which version you have: `harness --version`.
 - **The Python the harness runs on can be pinned.** `python.interpreter` in `tools.override.json` names one; a `harness` command (the board too) that finds itself on another Python starts again on it, once. Without it `harness` runs on the first `python3` of each terminal's PATH, so two terminals can disagree and a package installed for one is not found by the other. A path that is not there is said, and the command goes on. The hooks are not touched. The setup skill asks for it.
 - **`.harness/policies/tools.override.json` is machine-local** and no longer tracked by git.
 - **`task intake setup` says what to install, once, and when it is done.** It prints `all_installed`, the `missing` packages, and `install_all`: one command for everything missing. The setup skill `harness-rookie-get-me-ready` now settles the packages at setup time, step by step: which Python the harness runs on, the company's install command into it, one command for all, and a check that says done only when nothing is missing and there is no warning.
+- **`generic-req-review` asks five questions at a time, and leaves no template line.** The first real run (B67) wrote 14 questions into `REQ.md` and a `<...>` line was left under "Done when".
 - **The Intake tab groups its files.** What the agent reads first (click one to trim it); the conversion reports, and the originals and pictures, folded away.
 
 ## 1.5.45 (2026-10-23)

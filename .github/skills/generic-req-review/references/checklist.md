@@ -23,5 +23,6 @@ Each finding goes into "Not clear yet" with its source. A finding with no source
 ## Before you stop
 
 - Every item of "Done when" has a source and can be checked, and says who can show it: `[T…]` the task files, `[R…] <ENV>:` a run the user does before the write-back, `[A…]` after the write-back.
+- No line of the template's `<...>` is left in `REQ.md`: each is answered, or says `none`.
 - "Not clear yet" is `none`, or holds only questions the user chose to leave.
 - The confirmation line is untouched.

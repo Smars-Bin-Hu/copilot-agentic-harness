@@ -20,7 +20,7 @@ The person has put business documents in `REQ/` (turned into Markdown and CSV by
 2. **Write `REQ.md`** from what you read, in the form of its template. Keep the business paper's own item numbers. Every item of "Done when" and every line of "What to do" says its source in "Source": the file and the section or sheet. Add nothing of your own; what is missing goes into "Not clear yet".
 3. **Check it against the knowledge base.** Read the domains of the task (`harness task set-domain` if none is set) and the cards of the objects the requirement names; run `harness target refs <name>` for where a name is used. Look for the problems in [the checklist](./references/checklist.md).
 4. **Write each problem into "Not clear yet" of `REQ.md`**: the question, why it matters (what would go wrong), and the source (file and section or sheet; quote both when two sources disagree). Most blocking first.
-5. **Ask the user in the chat**, a few questions at a time, numbered, the blocking ones first. Do not ask what the files or the knowledge base already answer.
+5. **Ask the user in the chat**: the five most blocking questions, numbered, with the others left in "Not clear yet" to ask once those are answered. Do not ask what the files or the knowledge base already answer.
 6. **Put each answer into `REQ.md`**, delete the question from "Not clear yet", and add one line to "Changes". Then go back to step 3 for what the answer touches. Stop when "Not clear yet" says `none` and the checks pass.
 7. **Do not fill the confirmation line.** Only the user does, after reading `REQ.md`. A requirement that changed after the confirmation needs it again.
 

@@ -108,6 +108,16 @@ class PerKind(StageCase):
         self.assertNotIn("confirm-req", [item["action"] for item in desk["actions"]])
         self.assertIn("confirm-req", [item["action"] for item in taskdesk.desk(self.root, "job", ("confirm-req", "pause"))["actions"]])
 
+    def test_the_page_counts_the_template_lines_the_agent_left_in_the_requirement(self) -> None:
+        self.new("job", "dev")
+        req = self.folder("job") / "REQ.md"
+        self.assertGreater(task_ops.req_placeholders(self.root, f"{BASE}/job"), 4, "the template as it is")
+        req.write_text("# REQ: job\n\n## What to do\n\nStop the load failing. Use <table> as the name.\n\n## What not to do\n\nnone\n\n## Done when\n\n- [T1] <checked by the reviewer>\n- [R1] <ENV>: <what the user runs>\n\n## Not clear yet\n\n<Questions for the user>\n", encoding="utf-8")
+        self.assertEqual(task_ops.req_placeholders(self.root, f"{BASE}/job"), 3, "real text with an angle bracket is not counted")
+        self.assertEqual(taskdesk.desk(self.root, "job")["req_placeholders"], 3)
+        req.write_text(req.read_text(encoding="utf-8").replace("- [T1] <checked by the reviewer>", "- [T1] the file has one changed line").replace("- [R1] <ENV>: <what the user runs>", "none").replace("<Questions for the user>", "none"), encoding="utf-8")
+        self.assertEqual(task_ops.req_placeholders(self.root, f"{BASE}/job"), 0)
+
     def test_a_test_task_does_not_wait_for_a_plan_it_does_not_need(self) -> None:
         from modules.task import tasklife
 

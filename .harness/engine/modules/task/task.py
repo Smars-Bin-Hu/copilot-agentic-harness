@@ -405,6 +405,19 @@ _CONFIRM_LINE = re.compile(r"^(\s*[-*]\s*\*{0,2}(?:用户确认|user confirmed)\
 _REQ_UNWRITTEN = ("<One or two paragraphs", "<一两段")  # the template's own first words: the agent has not written the requirement yet
 
 
+# A line of REQ.md that is still the template's: only `<...>` (after a list mark and an item number, like `- [R1] <ENV>: <...>`). Real text that holds an angle bracket is not the whole line.
+_PLACEHOLDER = re.compile(r"^(?:[-*]\s+)?(?:\[[TRA]\d+\]\s+)?<[^<>\n]+>(?::\s*<[^<>\n]+>)?\s*$")
+
+
+def req_placeholders(root: Path, task: str) -> int:
+    """How many lines of REQ.md are still the template's `<...>` (the agent left them instead of writing the answer, or "none"). 0 when there is no REQ.md."""
+    try:
+        text = (tasks.task_dir(root, task) / tasks.REQ_FILE).read_text(encoding="utf-8-sig", errors="replace")
+    except OSError:
+        return 0
+    return sum(1 for line in text.splitlines() if _PLACEHOLDER.match(line.strip()))
+
+
 def req_state(root: Path, task: str) -> str:
     """`none`: no REQ.md or no confirmation line. `unwritten`: the template is still empty. `open`: written, not confirmed.
     `changed`: confirmed, and what it asks for is different now. `confirmed`."""

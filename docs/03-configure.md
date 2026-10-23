@@ -106,6 +106,8 @@ An agent cannot change the knowledge base directly. To let a task update it, `kn
 
 If you copied the files in without a `.git`, run `harness target init-kb`. It runs `git init`, puts the repository on the base branch (`main` unless `base_ref` says otherwise) and makes one first commit with everything in the folder. It pushes nothing. Git must have a `user.name` and a `user.email`; if not, the command says so, and when you have set them, run it again. A knowledge base that already has a `.git` is not touched.
 
+A knowledge base that has files git does not track (a scratch folder such as `.pending/`) is a dirty working tree: promote refuses it and lists the files. Put such a folder into the repository's `.gitignore`, or stash it with `git stash -u`; do not use `git clean`, which deletes files for good.
+
 Then add an entry to `repos` in `.harness/policies/target.override.json`:
 
 ```json

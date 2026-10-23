@@ -135,6 +135,14 @@ class MigrateTests(HarnessTestCase):
         rows, _bad = kbstd.read_index(self.dev / kbstd.INDEX_FILE)
         self.assertTrue(all(source["sha"] for row in rows for source in row["sources"]))
 
+    def test_a_tab_in_domain_yaml_is_said_with_its_line_not_a_crash(self) -> None:
+        """B-kb (M25-1): the agent had to change the tabs to spaces by hand because the script died."""
+        (self.dev / "domain.yaml").write_text(OLD_DOMAIN.replace("  status: partial", "\tstatus: partial", 1), encoding="utf-8")
+        with self.assertRaises(kbmigrate.MigrateError) as caught:
+            kbmigrate.migrate(self.root, self.dev, self.dev)
+        self.assertIn("a tab in the indent", str(caught.exception))
+        self.assertIn("replace it with spaces", str(caught.exception))
+
     def test_it_writes_only_into_a_task(self) -> None:
         with self.assertRaises(kbmigrate.MigrateError):
             kbmigrate.migrate(self.root, self.dev, self.root / "knowledge-base" / "domains" / "orders")

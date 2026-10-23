@@ -15,6 +15,9 @@ To see which version you have: `harness --version`.
 ### Changed
 
 - **`task diff` and the promote dry run count a removed SQL comment.** A removed line `-- layer: dw` shows in a diff as `--- layer: dw`, which was taken for a file header and left out: a line that was replaced was reported as 1 added and 0 removed. Now the two file header lines are skipped by position and every other `+` or `-` line is counted.
+- **The page counts the template lines left in `REQ.md`.** An agent sometimes leaves `<...>` where it should write the answer or "none". Before you confirm, the card says how many such lines are left (a line that is only `<...>`, or `[R1] <ENV>: <...>`); real text with an angle bracket is not counted.
+- **`kb migrate` says it when `domain.yaml` has a tab in the indent.** It named no line and died; now it says which line and to replace the tab with spaces.
+- **A dirty knowledge base says what to do.** The promote refusal tells you to commit, stash (`git stash -u` for untracked files) or discard, to put a scratch folder such as `.pending/` into `.gitignore`, and not to use `git clean`. `docs/03-configure.md` says so too.
 - **The task report says which checks do not count.** In the *Independent checks* table, a check that was given back (invalid FAIL) or that you dismissed is marked "not counted" in its Verdict cell.
 
 ## 1.5.42 (2026-10-23)

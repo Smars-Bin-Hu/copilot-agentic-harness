@@ -98,7 +98,10 @@ def migrate(root: Path, source: Path, target: Path) -> Dict[str, Any]:
     spec = source / kbstd.DOMAIN_FILE
     if not spec.is_file():
         raise MigrateError(f"no {kbstd.DOMAIN_FILE} in {source}")
-    old = miniyaml.loads(spec.read_text(encoding="utf-8")) or {}
+    try:
+        old = miniyaml.loads(spec.read_text(encoding="utf-8")) or {}
+    except miniyaml.YamlError as error:  # a tab in the indent is the usual one: YAML does not allow it, and which width it stands for is a guess
+        raise MigrateError(f"{spec}: {error}. YAML does not allow a tab in the indent: replace it with spaces, then run the migration again") from None
     if not isinstance(old, dict):
         raise MigrateError(f"{spec} is not a mapping")
     if old.get("schema_version") == kbstd.SCHEMA_VERSION:

@@ -140,8 +140,9 @@
     const why = desk.waiting_why;
     if (desk.waiting && (["stopped", "cancelled", "autorun", "tests", "run", "commit"].includes(why) || why.startsWith("go-"))) {
       const handed = desk.handoff || {};
-      return {title: desk.waiting.charAt(0).toUpperCase() + desk.waiting.slice(1), hint: t("desk.wait." + why, {env: handed.env || "", what: handed.detail || "", branch: desk.branch || ""}),
-        prompt: why.startsWith("go-") ? t("desk.go." + why.slice(3) + (why === "go-req" ? REQ_NEXT(desk.kind) : "")) : why === "tests" ? t("desk.tests.prompt") : why === "run" ? t("desk.run.prompt", {env: handed.env || ""}) : ""};
+      const form = served() && (why === "tests" || why === "run");  // the page has the form for the results: no message to teach (the form says it)
+      return {title: desk.waiting.charAt(0).toUpperCase() + desk.waiting.slice(1), hint: t("desk.wait." + why + (form ? ".form" : ""), {env: handed.env || "", what: handed.detail || "", branch: desk.branch || ""}),
+        prompt: why.startsWith("go-") ? t("desk.go." + why.slice(3) + (why === "go-req" ? REQ_NEXT(desk.kind) : "")) : form ? "" : why === "tests" ? t("desk.tests.prompt") : why === "run" ? t("desk.run.prompt", {env: handed.env || ""}) : ""};
     }
     if (desk.state === "unheld") return {title: t("desk.actions.unheld"), hint: t("desk.actions.unheld.hint"), prompt: t("desk.unheld.prompt", {name: desk.name})};
     if (stateOf(desk, served()) === "quiet") return {title: t("desk.actions.quiet"), hint: t("desk.actions.quiet.hint")};

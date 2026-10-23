@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.5.43",
+  "version": "1.5.44",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -94,6 +94,7 @@
       "files": [
         ".harness/policies/task.json",
         ".harness/policies/target.json",
+        ".harness/policies/tools.json",
         ".harness/policies/agents.json",
         ".harness/engine/modules/task/",
         ".harness/contracts/templates/task/",
@@ -110,6 +111,7 @@
         ".github/skills/generic-workflow-build/",
         ".github/skills/generic-code-standards/",
         ".github/skills/generic-test-guide/",
+        ".github/skills/generic-req-review/",
         ".harness/standards/code-standards.md",
         ".github/agents/reviewer.agent.md",
         ".github/agents/mapper.agent.md",
@@ -118,6 +120,7 @@
         ".harness/tests/test_autorun.py",
         ".harness/tests/test_mapreduce.py",
         ".harness/tests/test_task.py",
+        ".harness/tests/test_intake.py",
         ".harness/tests/test_tasklife.py",
         ".harness/tests/test_taskboard.py",
         ".harness/tests/test_boardserve.py",

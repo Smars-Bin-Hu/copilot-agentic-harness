@@ -10,6 +10,22 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.44 (2026-10-23)
+
+### Added
+
+- **`task intake`: business documents as files the agent can read.** `task intake convert <file>...` puts a Word or Excel file into `REQ/` of a task: the original stays untouched in `REQ/originals/`, and its text is written beside it, by a program: no AI, no tokens, no install, and no number changed. Word `.docx` becomes Markdown (headings, lists, tables, footnotes, links, pictures; Word's automatic numbers such as `3.2` are written as text so the requirement ids survive; a big table goes to a CSV of its own; an Excel sheet pasted into the document is converted to CSV; tracked-change deletions and headers and footers are left out; comments go to a file of their own). Excel `.xlsx` becomes one CSV for each sheet (hidden sheets, rows and columns skipped unless `--include-hidden`; merged cells repeated; dates, percentages and true/false as a person reads them; a formula gives the value Excel last saved). A report `<name>.convert.md` says what was left out or changed. `REQ/.pristine/` keeps the converted text so an edit can be undone.
+- **`task intake paste` and `task intake init`.** `paste` saves a table or text you copied (cells copied out of Excel come as tab-separated text) as a CSV, Markdown table or text file of `REQ/`: the way out for a file too strange to convert. `init` makes `REQ/INTAKE.md` from a template: goal, scope, not to do, done when, where to look, sources, open questions.
+- **A policy for installing Python packages, set once.** Old `.xls` and PDF files need a package (`xlrd`, `pypdf`). The company's approved install command goes in `tools.override.json` (`python.install_command`, with `{package}`); `task intake setup` lists what is installed and prints the command for the rest. The harness never runs an install and never guesses a command. The setup skill `harness-rookie-get-me-ready` asks for it in a new step.
+- **The skill `generic-req-review`.** For a task whose requirement came as documents: writes `REQ.md` from `INTAKE.md` and the converted files with the source of every item, checks it against the knowledge base, lists what is unclear, conflicting or missing in "Not clear yet", and asks the user round after round until they confirm.
+- **A guide: [09 Preparing an intake](09-intake.md).**
+
+### Changed
+
+- `REQ/` and `REQ/originals/` are named in the workspace instruction: the agent reads `INTAKE.md` and the converted files, never the originals.
+
+**Introductory material**: `docs/09-intake.md` (new), `docs/02-features.md`, `docs/03-configure.md`, `docs/04-reference.md`, the README, `harness-rookie-wondering` topic 9, `harness-rookie-quick-start` (what you get), `harness-rookie-get-me-ready` (a step for the install command) changed.
+
 ## 1.5.43 (2026-10-23)
 
 ### Changed

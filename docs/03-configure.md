@@ -177,6 +177,16 @@ The custom agents are in `.github/agents/`: `reviewer` and `mapper` (subagents o
 - The reviewer is Sonnet by default and falls back to Haiku. When a subagent's model is a class above the main model, the platform may not run it, so do not make it more expensive than the main model you usually use.
 - To change a model name, change `model` in the agent file, then run `doctor`.
 
+## Python packages
+
+Word and Excel (`.xlsx`) files are read with nothing installed. Old `.xls` and PDF files need a Python package. Many companies need extra arguments to install a package. Put the approved command in `tools.override.json`, with `{package}` where the name goes:
+
+```json
+{ "python": { "install_command": "python -m pip install --index-url https://pypi.example.com/simple --trusted-host pypi.example.com {package}" } }
+```
+
+The harness never runs an install and never guesses the command (an agent cannot: the gate refuses package installs). `harness task intake setup` lists what is installed and prints the command for the rest. The setup skill `/harness-rookie-get-me-ready` asks for it. How the files are used: [09 Preparing an intake](09-intake.md).
+
 ## Task settings
 
 Change them in `task.override.json`; the fields are in the [Reference](04-reference.md):

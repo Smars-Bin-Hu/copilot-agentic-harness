@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "description": "Tools the harness may need that are not in the Python standard library. python.install_command: the command your company approves for installing a Python package, with {package} where the name goes (for example `python -m pip install --index-url https://pypi.example.com/simple --trusted-host pypi.example.com {package}`). It is empty by default: the harness never guesses an install command and never runs one; an agent cannot (the gate refuses package installs). It prints the command for you to run. Put your own in tools.override.json (the skill harness-rookie-get-me-ready asks for it). optional_packages: what `task intake convert` can read when the package is there; without it that kind of file is kept as it is and not converted. Word (.docx) and Excel (.xlsx) need nothing installed.",
+  "python": {
+    "install_command": ""
+  },
+  "optional_packages": [
+    { "module": "xlrd", "package": "xlrd", "used_for": "old Excel files (.xls)" },
+    { "module": "pypdf", "package": "pypdf", "used_for": "the text of PDF files (not scanned pages)" }
+  ]
+}

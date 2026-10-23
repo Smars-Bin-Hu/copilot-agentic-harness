@@ -23,7 +23,33 @@ from typing import Any, Dict
 from core import approval, render, targets, tasks
 from core.paths import repo_root
 
-from . import autorun, boardserve, kbsetup, taskarchive, refs, task, runrecord, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
+from . import autorun, boardserve, common, intake, kbsetup, taskarchive, refs, task, runrecord, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
+
+
+def read_text_argument(path: str) -> str:
+    import sys
+    from pathlib import Path
+
+    if path == "-":
+        return sys.stdin.read()
+    try:
+        return Path(path).expanduser().read_text(encoding="utf-8-sig")
+    except OSError as error:
+        raise common.CommandError(str(error)) from None
+
+
+def intake_convert(args: argparse.Namespace) -> Dict[str, Any]:
+    from pathlib import Path
+
+    results = []
+    for raw in args.files:
+        path = Path(raw).expanduser()
+        try:
+            data = path.read_bytes()
+        except OSError as error:
+            raise common.CommandError(f"{raw}: {error.strerror or error}") from None
+        results.append(intake.add_file(repo_root(), args.task, path.name, data, args.include_hidden))
+    return results[0] if len(results) == 1 else {"converted": results, "next": results[-1]["next"]}
 
 
 def cmd_target_list(args: argparse.Namespace) -> Dict[str, Any]:
@@ -258,6 +284,24 @@ def register_task(subparsers: Any) -> None:
     run_record.add_argument("--run-by", default="", help="who ran it and when, as the user said")
     run_record.add_argument("--follow-up", default="", help="one line: what comes next")
     run_record.set_defaults(handler=lambda a: runrecord.record(repo_root(), a.task, a.env, a.given_file, a.run_by, a.ran_file, a.evidence, a.follow_up))
+    intake_parser = commands.add_parser("intake", help="the documents a business gave (docx, xlsx, ...) as files the agent can read, in REQ/ of a task; no AI is used")
+    intake_commands = intake_parser.add_subparsers(dest="intake_command", required=True)
+    convert_parser = intake_commands.add_parser("convert", help="put files in REQ/: the original is kept in REQ/originals/, its text (Markdown, CSV) is written in REQ/, with a report of what was left out")
+    convert_parser.add_argument("files", nargs="+", help="the files to convert: .docx, .xlsx, (.xls, .pdf when their package is installed), text and picture files")
+    convert_parser.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+    convert_parser.add_argument("--include-hidden", action="store_true", help="also convert hidden sheets, rows and columns of a workbook")
+    convert_parser.set_defaults(handler=lambda a: intake_convert(a))
+    paste_parser = intake_commands.add_parser("paste", help="save a table or a text you copied (cells copied out of Excel are tab-separated) as a file of REQ/")
+    paste_parser.add_argument("--name", required=True, help="the name of the file, without its type")
+    paste_parser.add_argument("--kind", default="csv", choices=intake.PASTE_KINDS, help="csv or md for a table, txt for a text")
+    paste_parser.add_argument("--file", default="-", help="the file that holds the pasted text; - (the default) reads it from standard input")
+    paste_parser.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+    paste_parser.set_defaults(handler=lambda a: intake.paste(repo_root(), a.task, a.name, read_text_argument(a.file), a.kind))
+    init_parser = intake_commands.add_parser("init", help="make REQ/INTAKE.md from the template: the goal, the scope, what not to do, how to know it is done, where to look")
+    init_parser.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+    init_parser.set_defaults(handler=lambda a: intake.init(repo_root(), a.task))
+    setup_parser = intake_commands.add_parser("setup", help="which optional readers are installed, and the command to install the others (from the policy tools)")
+    setup_parser.set_defaults(handler=lambda a: intake.setup(repo_root()))
     hand = commands.add_parser("handoff", help="the agent hands work to the person that only they can do outside the harness (tests in an environment); the board says it waits for it")
     hand_commands = hand.add_subparsers(dest="handoff_command", required=True)
     hand_tests = hand_commands.add_parser("tests", help="the person is to run the tests of TEST-GUIDE.md in an environment and bring the results back")

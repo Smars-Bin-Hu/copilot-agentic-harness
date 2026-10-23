@@ -35,8 +35,9 @@ At the start, send the user the list below, and tick each item as it is done. Wh
 - [ ] 4. Target repositories
 - [ ] 5. The knowledge base and its instructions
 - [ ] 6. Company skills
-- [ ] 7. Other overrides (optional)
-- [ ] 8. Check
+- [ ] 7. Python packages (optional)
+- [ ] 8. Other overrides (optional)
+- [ ] 9. Check
 ```
 
 1. **The short command (required; do it first).** Run `harness --version --short`.
@@ -59,12 +60,13 @@ At the start, send the user the list below, and tick each item as it is done. Wh
      - The details are in the part of [docs/03-configure.md](../../../docs/03-configure.md) about letting a task update the knowledge base.
    - The user has no knowledge base yet: still make `knowledge-base/` a repository and register it, as above (it holds only its README for now), and mark the item "set up, empty". It is built from the code later, with `harness-rookie-new-knowledgebase`. When the user does not want one at all, mark it "skipped" and tell the user what that means (see Gotchas).
 6. **Company skills.** Ask the user whether there are skills of the company's own, and where. One folder per skill. A skill of one business domain goes into the knowledge base, at `<knowledge base>/domains/<domain>/skills/<name>/` (the harness shows it to tasks of that domain; it stays out of the `/` menu). Only a skill for every domain goes into `.github/skills/`. The folder name and the `name` in `SKILL.md` must be the same and use the prefix `domain-<domain>-<name>`. When a prefix is wrong, tell the user and ask before renaming; do not rename by yourself.
-7. **Other overrides (optional).** Ask the user whether any default should change. A common one: protecting a few more paths (`extra_guardrail_paths+` in `gate.override.json`). The rules are in the override part of [docs/03-configure.md](../../../docs/03-configure.md). If there is nothing, skip. Do not ask the user about Chinese text of the CLI showing wrongly: step 8 handles it.
-8. **Check.** Run `harness doctor`.
+7. **Python packages (optional).** Word (.docx) and Excel (.xlsx) files need nothing installed; old Excel (.xls) and PDF files need a Python package. Many companies need extra arguments to install one (an internal index, a proxy, a trusted host). Ask the user for the install command their company approves, with the package name as `{package}`, for example `python -m pip install --index-url <index> --trusted-host <host> {package}`. Write it to `.harness/policies/tools.override.json` as `{ "python": { "install_command": "<the command>" } }`. Do not invent one, and do not run it: the gate refuses package installs, and the user runs them. Then run `harness task intake setup`: it lists each optional package, whether it is installed, and the exact command for the missing ones; give those to the user. If the user does not know the command, mark the item "skipped" and say that .docx and .xlsx work without it.
+8. **Other overrides (optional).** Ask the user whether any default should change. A common one: protecting a few more paths (`extra_guardrail_paths+` in `gate.override.json`). The rules are in the override part of [docs/03-configure.md](../../../docs/03-configure.md). If there is nothing, skip. Do not ask the user about Chinese text of the CLI showing wrongly: step 8 handles it.
+9. **Check.** Run `harness doctor`.
    - `[ERROR]`: fix as the message says and run it again, until `{"errors": 0}`. What you cannot fix, tell the user as written.
    - The "Output encoding" line says auto switched to UTF-8 (common on Windows): look at the sample line of Chinese below it. If you can read it, do nothing. If it is garbage, write `.harness/policies/cli.override.json` yourself: `{"output": {"encoding": "native"}}` (admin mode must be on), run `harness doctor` once more, and tell the user: on this computer Chinese text from the CLI shows as `\uXXXX`. With the language `en` this matters only for Chinese file names and content.
    - Other `[WARN]` lines: tell the user what each one affects, and the user decides whether to fix it.
-   - Last, give the user a table: for each of the eight items "set up", "skipped" or "not passed", and what each skipped one means. Remind the user to run `harness admin off --session-id <session id>` and to open a new conversation for everyday tasks. When the knowledge base is set up but empty and code repositories are set up, say that the agent can build it from their code, step by step: in a new conversation, "build our knowledge base" (`harness-rookie-new-knowledgebase`).
+   - Last, give the user a table: for each of the nine items "set up", "skipped" or "not passed", and what each skipped one means. Remind the user to run `harness admin off --session-id <session id>` and to open a new conversation for everyday tasks. When the knowledge base is set up but empty and code repositories are set up, say that the agent can build it from their code, step by step: in a new conversation, "build our knowledge base" (`harness-rookie-new-knowledgebase`).
 
 ## Gotchas
 

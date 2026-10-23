@@ -10,6 +10,12 @@ You say: "Why was the orders table late yesterday?", "Draw up the options to mov
 
 You get an answer with its sources, a root cause with a chain of evidence, or a design with trade-offs. The agent reads your knowledge base and your code first, and writes the result into the task. Kinds of task: question, root cause analysis, design, development, testing, knowledge base update.
 
+## 1b. Give it the business paper
+
+You say: "The requirement is in this Word file and this Excel file."
+
+The files are turned into Markdown and CSV by a program (no AI, no tokens), with a report of what was left out; you trim them and write a one-page `INTAKE.md`. The agent reads those, not the originals, then checks the requirement against your knowledge base and asks about what is unclear, until you confirm it. Details: `docs/09-intake.md`.
+
 ## 2. Change code, safely
 
 You say: "In the orders repository, keep the latest row per id."

@@ -63,7 +63,7 @@ The board gives a task one state, the first that holds:
 
 - When the requirement changes, the agent changes `REQ.md` first, then touches the work, and adds a line to the change record.
 - When a direct instruction of yours conflicts with `REQ.md`, a hook reminds the agent to bring them in line first.
-- Your own documents (a BRD, emails) go in `REQ/`; the agent only reads them.
+- Your own documents (a BRD, emails) go in `REQ/`; the agent only reads them. A Word or Excel file is not given to the agent as it is: `task intake convert` turns it into Markdown and CSV with a program (no AI, no tokens), keeps the original in `REQ/originals/` and writes a report of what it left out. You trim the text and write a one-page `INTAKE.md`; the agent reads those, writes `REQ.md`, and the skill `generic-req-review` checks it against the knowledge base and asks about what is unclear until you confirm. See `docs/09-intake.md`.
 - **A plan stands on a confirmed requirement.** `task approve-plan` refuses the plan alone while `REQ.md` is not confirmed (or changed since). One code confirms both: `task approve-plan --with-req`, or *approve plan* on the page, which asks first. The agent may draft the plan meanwhile; it cannot write `DEV/` until both are settled.
 - The requirement changes before the write-back: change it in the same task, confirm it and approve the plan again; what is in `DEV/` stays and is checked again. After the write-back: the same goal is a new round, another goal a new task.
 

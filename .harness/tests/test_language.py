@@ -203,7 +203,7 @@ class TemplateTests(unittest.TestCase):
 
     def test_both_languages_have_the_same_templates_with_the_same_shape(self) -> None:
         english, chinese = self.names("en"), self.names("zh")
-        self.assertEqual(sorted(english), ["LOG.md", "REQ.md", "TASK.md", "TODO.md"])
+        self.assertEqual(sorted(english), ["INTAKE.md", "LOG.md", "REQ.md", "TASK.md", "TODO.md"])
         self.assertEqual(sorted(english), sorted(chinese))
         for name in english:
             for mark in (r"^## ", r"^- \*\*", r"^> ", r"\{[a-z]+\}"):

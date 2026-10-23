@@ -140,6 +140,13 @@ def clean_task(root: Path, raw: str) -> str:
     return relative
 
 
+def changed_lines(diff: List[str]) -> Tuple[int, int]:
+    """(added, removed) of a unified diff given as lines. The first two lines are the file headers (`---`, `+++`); every other line that starts with `+` or `-`
+    is a changed line, also a removed SQL comment (`-` + `-- layer`, which starts with `---`): it was counted as a header and left out (B66)."""
+    body = diff[2:] if len(diff) >= 2 and diff[0].startswith("---") and diff[1].startswith("+++") else diff
+    return sum(1 for line in body if line.startswith("+")), sum(1 for line in body if line.startswith("-"))
+
+
 def copy_from_target(
     root: Path, data: Dict[str, Any], specs: List[str], target: Path, limit: int, purpose: str, notes: Optional[List[str]] = None, rebase: bool = False
 ) -> List[Dict[str, str]]:

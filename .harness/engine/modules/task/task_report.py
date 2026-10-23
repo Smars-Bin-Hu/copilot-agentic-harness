@@ -83,8 +83,9 @@ def render(root: Path, task: str, data: Dict[str, Any]) -> str:
     if checks:
         no_verdict = say("mdreport.checks.no_verdict")
         lines += [say("mdreport.checks.header"), "| --- | --- | --- | --- | --- |"]
+        refunded, dismissed = say("mdreport.checks.refunded"), say("mdreport.checks.dismissed")  # a check that does not count says so in its row
         lines += [
-            f"| round-{item['number']:03d} | {str(item.get('started_at', ''))[:19]} | {item.get('verdict') or no_verdict} | {str(item.get('digest', ''))[:12]} | {task}/REVIEW/round-{item['number']:03d}/verdict.md |"
+            f"| round-{item['number']:03d} | {str(item.get('started_at', ''))[:19]} | {item.get('verdict') or no_verdict}{refunded if item.get('refunded') else dismissed if item.get('dismissed') else ''} | {str(item.get('digest', ''))[:12]} | {task}/REVIEW/round-{item['number']:03d}/verdict.md |"
             for item in checks
         ]
         waived = review.get("waived") or {}

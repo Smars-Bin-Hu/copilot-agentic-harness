@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.43 (2026-10-23)
+
+### Changed
+
+- **`task diff` and the promote dry run count a removed SQL comment.** A removed line `-- layer: dw` shows in a diff as `--- layer: dw`, which was taken for a file header and left out: a line that was replaced was reported as 1 added and 0 removed. Now the two file header lines are skipped by position and every other `+` or `-` line is counted.
+- **The task report says which checks do not count.** In the *Independent checks* table, a check that was given back (invalid FAIL) or that you dismissed is marked "not counted" in its Verdict cell.
+
 ## 1.5.42 (2026-10-23)
 
 ### Added

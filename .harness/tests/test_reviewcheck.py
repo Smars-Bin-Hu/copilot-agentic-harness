@@ -10,7 +10,7 @@ from pathlib import Path
 
 from test_taskreview import FAIL, JOB, PASS, ReviewCase
 
-from core import approval, tasks
+from core import messages, approval, tasks
 from unittest import mock
 
 from modules.task import autorun, reviewcheck, taskboard, taskreview
@@ -224,6 +224,18 @@ class DismissTests(ReviewCase):
     def dismiss(self, number: int = 0) -> dict:
         digest = next(item["digest"] for item in reversed(self.review_state()["rounds"]) if not number or item["number"] == number)
         return taskreview.dismiss(self.root, JOB, number, reader=lambda _prompt: approval.code_of(digest), interactive=True, out=io.StringIO())
+
+    def test_the_report_marks_a_check_that_does_not_count(self) -> None:
+        from modules.task import task_report
+
+        self.job()
+        self.check(FAIL)
+        self.dismiss()
+        self.check(PASS)
+        text = task_report.render(self.root, JOB, self.data())
+        row = lambda number: next(line for line in text.splitlines() if line.startswith(f"| round-{number:03d} "))
+        self.assertIn(messages.text("mdreport.checks.dismissed"), row(1))
+        self.assertNotIn(messages.text("mdreport.checks.dismissed"), row(2))
 
     def test_the_person_dismisses_a_fail_and_it_no_longer_counts(self) -> None:
         self.job()

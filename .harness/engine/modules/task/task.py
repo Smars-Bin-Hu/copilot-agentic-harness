@@ -597,11 +597,8 @@ def changes(root: Path, task: str, data: Dict[str, Any]) -> Tuple[List[Dict[str,
             continue
         lines = list(difflib.unified_diff(before, after, f"a/{key}", f"b/{key}", lineterm="", n=3))
         out += lines
-        items.append({
-            "path": key, "action": "modify",
-            "added": sum(1 for line in lines if line.startswith("+") and not line.startswith("+++")),
-            "removed": sum(1 for line in lines if line.startswith("-") and not line.startswith("---")),
-        })
+        added, removed = common.changed_lines(lines)
+        items.append({"path": key, "action": "modify", "added": added, "removed": removed})
     for key in data["deletes"]:
         old_path = base / key
         before = _text(old_path.read_bytes()) if old_path.is_file() else []

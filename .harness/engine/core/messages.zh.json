@@ -739,6 +739,8 @@
   "mdreport.checks.title": "## 独立检查",
   "mdreport.checks.header": "| 检查 | 开始 | 结论 | 成果的版本 | 结论全文 |",
   "mdreport.checks.no_verdict": "没有结论",
+  "mdreport.checks.refunded": "（无效，已退还：不计入）",
+  "mdreport.checks.dismissed": "（人已作废：不计入）",
   "mdreport.checks.waived": "\n人在 {at} 放行了版本 {digest}，没有凑够通过次数。",
   "mdreport.checks.none": "这一轮没有做过独立检查（没有开启，或还没有查）。",
   "mdreport.kb.title": "## 读过的知识库文件",

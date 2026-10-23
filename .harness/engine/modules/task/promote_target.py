@@ -47,8 +47,7 @@ def _diff(old: bytes, new: bytes, name: str) -> Dict[str, Any]:
     except UnicodeDecodeError:
         return {"added": 0, "removed": 0, "diff": [say("diff.binary")]}
     lines = list(difflib.unified_diff(before, after, f"a/{name}", f"b/{name}", lineterm="", n=1))
-    added = sum(1 for line in lines if line.startswith("+") and not line.startswith("+++"))
-    removed = sum(1 for line in lines if line.startswith("-") and not line.startswith("---"))
+    added, removed = common.changed_lines(lines)
     return {"added": added, "removed": removed, "diff": lines[:DIFF_PREVIEW_LINES]}
 
 

@@ -739,6 +739,8 @@
   "mdreport.checks.title": "## Independent checks",
   "mdreport.checks.header": "| Check | Started | Verdict | Version of the work | Full verdict |",
   "mdreport.checks.no_verdict": "no verdict",
+  "mdreport.checks.refunded": " (invalid, given back: not counted)",
+  "mdreport.checks.dismissed": " (dismissed by the person: not counted)",
   "mdreport.checks.waived": "\nThe person waived the checks for version {digest} at {at}, before enough passes.",
   "mdreport.checks.none": "No independent check was done in this round (off, or not checked yet).",
   "mdreport.kb.title": "## Knowledge base files read",

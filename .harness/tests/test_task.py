@@ -253,6 +253,20 @@ class FetchDiffTests(TaskCase):
         self.assertTrue(self.dev("repo_b/src/b.sql").is_file())
 
 
+class ChangedLinesTests(unittest.TestCase):
+    def test_a_removed_sql_comment_is_a_removed_line_not_a_file_header(self) -> None:
+        """B66: `-- layer: dw` removed shows as `--- layer: dw`; it was left out of the count (removed: 0 for a replaced line)."""
+        import difflib
+
+        from modules.task import common
+
+        lines = list(difflib.unified_diff(["-- pipeline: x", "-- layer: dw", "-- owner: a"], ["-- pipeline: x", "-- layer: dw (b66)", "-- owner: a"], "a/f.sql", "b/f.sql", lineterm="", n=1))
+        self.assertEqual(common.changed_lines(lines), (1, 1))
+        added = list(difflib.unified_diff(["a"], ["a", "++ not a header", "b"], "a/f", "b/f", lineterm="", n=0))
+        self.assertEqual(common.changed_lines(added), (2, 0))
+        self.assertEqual(common.changed_lines([]), (0, 0))
+
+
 class PromoteTests(TaskCase):
     def test_dry_run_writes_the_review_file_and_changes_nothing(self) -> None:
         self.ready()

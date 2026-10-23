@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.45 (2026-10-23)
+
+### Added
+
+- **The Intake tab of the task page.** The same as `task intake`, with no command line, for someone who does not use the agent's chat: drop Word, Excel, PDF, text or picture files in (or choose them); the page shows what was made and what was left out; each file of `REQ/` opens in a text box where you trim it and save, and goes *back to as converted* if you cut too much; paste a table or a text (cells copied out of Excel are fine) into a file; create `INTAKE.md` from the template; copy the message that tells the agent to read `INTAKE.md` and the converted files. The tab is for an open task that has a requirement. A file goes up to 28 MB.
+- Every call of the tab writes into `REQ/`, so the browser must be paired. The server checks every name and path: only inside `REQ/`, no `..`, no hidden or tool-made folder, no link on the way, text files only for an edit, an original is never edited (it can be deleted, after the page asks).
+
+### Changed
+
+- **The page no longer redraws under a person who is typing.** Every ten seconds the page asks the board for changes and redraws; it used to take the focus from a text box. It now waits while a text box has the focus. This holds for the results form too.
+
+**Introductory material**: `docs/09-intake.md`, `docs/02-features.md` changed.
+
 ## 1.5.44 (2026-10-23)
 
 ### Added

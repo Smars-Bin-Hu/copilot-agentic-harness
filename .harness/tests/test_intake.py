@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import unittest
 import zipfile
 from typing import Dict, List, Optional
 
+from test_boardserve import ServeCase
 from test_tasklife import BASE, LifeCase
+from taskcase import TASK
 
-from modules.task import intake, intakeconvert as convert
+from modules.task import intake, intakeconvert as convert, taskdesk
 from modules.task.common import CommandError
 
 W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' \
@@ -319,6 +322,70 @@ class IntakeTests(LifeCase):
         self.assertEqual(found["files"], ["REQ/brd.md"])
         self.assertIn("REQ/brd.convert.md", found["next"])
         self.assertTrue(self.refused("task", "intake", "convert", str(self.root / "missing.docx"), "--task", "job"))
+
+
+class IntakePageTests(ServeCase):
+    """1.5.45: the Intake tab. Every call writes into REQ/, so the browser is paired, and every name and path from the page is checked."""
+
+    def call(self, cookie: str, action: str, **body):
+        return self.request("POST", "/api/intake", {"task": "job1", "action": action, **body}, cookie=cookie)
+
+    def test_a_document_is_added_read_edited_put_back_and_deleted_from_the_page(self) -> None:
+        data = docx(para("Customer KYC", "Heading1") + para("body"), styles=HEADINGS)
+        self.assertEqual(self.call("", "upload", name="brd.docx", data=base64.b64encode(data).decode())[0], 403, "not paired")
+        cookie = self.pair()
+        status, found, _headers = self.call(cookie, "upload", name="brd.docx", data=base64.b64encode(data).decode())
+        self.assertEqual((status, found["result"]["files"]), (200, ["REQ/brd.md"]), found)
+        listed = {item["path"]: item for item in taskdesk.desk(self.root, "job1")["intake"]["files"]}
+        self.assertEqual(sorted(listed), ["brd.convert.md", "brd.md", "originals/brd.docx"])
+        self.assertEqual((listed["brd.md"]["editable"], listed["brd.md"]["pristine"], listed["originals/brd.docx"]["editable"]), (True, True, False))
+        read = self.call(cookie, "read", path="brd.md")[1]["result"]
+        self.assertIn("# Customer KYC", read["text"])
+        self.assertEqual(self.call(cookie, "save", path="brd.md", text="# Trimmed\n")[0], 200)
+        self.assertEqual((self.task / "REQ" / "brd.md").read_text(encoding="utf-8"), "# Trimmed\n")
+        self.assertEqual(self.call(cookie, "reset", path="brd.md")[0], 200)
+        self.assertIn("# Customer KYC", (self.task / "REQ" / "brd.md").read_text(encoding="utf-8"))
+        self.assertEqual(self.call(cookie, "delete", path="brd.md")[0], 200)
+        self.assertFalse((self.task / "REQ" / "brd.md").exists() or (self.task / "REQ" / ".pristine" / "brd.md").exists())
+
+    def test_a_page_cannot_reach_outside_req_or_write_an_original(self) -> None:
+        cookie = self.pair()
+        self.call(cookie, "upload", name="map.xlsx", data=base64.b64encode(xlsx([{"name": "S", "rows": '<row r="1"><c r="A1" t="inlineStr"><is><t>a</t></is></c></row>'}])).decode())
+        (self.task / "secret.md").write_text("no", encoding="utf-8")
+        for path in ("../secret.md", "..%2Fsecret.md", "/etc/passwd", "originals/map.xlsx", ".pristine/map--S.csv", "originals/../../secret.md", "C:/x", "", "missing.md", "map--S.csv/../../secret.md"):
+            for action in ("read", "save", "delete", "reset"):
+                if action == "delete" and path == "originals/map.xlsx":
+                    continue  # the person may delete an original (the page asks first): it is the one edit an original allows
+                status, _data, _headers = self.call(cookie, action, path=path, text="x")
+                self.assertEqual(status, 409, f"{action} {path}")
+        self.assertTrue((self.task / "secret.md").exists())
+        self.assertTrue((self.task / "REQ" / "originals" / "map.xlsx").exists(), "an original is not edited or reset")
+
+    def test_a_table_is_pasted_and_the_template_made_once(self) -> None:
+        cookie = self.pair()
+        status, found, _headers = self.call(cookie, "paste", name="rules", kind="csv", text="a\tb\n1\t2\n")
+        self.assertEqual((status, found["result"]["file"]), (200, "REQ/rules.csv"))
+        self.assertEqual(self.call(cookie, "init")[0], 200)
+        self.assertEqual(self.call(cookie, "init")[0], 409, "not written over")
+        self.assertTrue(taskdesk.desk(self.root, "job1")["intake"]["has_intake"])
+        self.assertEqual(self.call(cookie, "paste", name="x", kind="exe", text="a")[0], 409)
+        self.assertEqual(self.call(cookie, "nothing")[0], 409)
+
+    def test_a_file_that_cannot_be_read_is_refused_with_words_and_writes_nothing(self) -> None:
+        cookie = self.pair()
+        status, found, _headers = self.call(cookie, "upload", name="broken.docx", data=base64.b64encode(b"not a zip").decode())
+        self.assertEqual(status, 409)
+        self.assertIn("broken.docx", found["error"])
+        self.assertEqual(self.call(cookie, "upload", name="x.docx", data="***")[0], 409)
+        self.assertFalse((self.task / "REQ" / "originals").exists())
+
+    def test_the_tab_is_for_an_open_task_that_has_a_requirement(self) -> None:
+        self.assertIsNotNone(taskdesk.desk(self.root, "job1")["intake"])
+        from modules.task import task as task_ops
+
+        with task_ops.locked(self.root, TASK) as state:
+            state["status"] = "closed"
+        self.assertIsNone(taskdesk.desk(self.root, "job1")["intake"])
 
 
 class PackagesTests(LifeCase):

@@ -10,11 +10,14 @@
   let desk = DATA.desk;
   let shown = JSON.stringify(desk);
   const same = (a, b) => a.replace(/"as_of":"[^"]*"/, "") === b.replace(/"as_of":"[^"]*"/, "");  // the time of asking is not a change
-  const tabs = ["overview", "design", "rca", "test", "plan", "todo", "log", "changes", "review", "history", "docs", "files"];  // the commit message is at the top of "changes" once written back (1.5.34)
+  const tabs = ["overview", "intake", "design", "rca", "test", "plan", "todo", "log", "changes", "review", "history", "docs", "files"];  // the commit message is at the top of "changes" once written back (1.5.34)
   const FILES = {overview: "TASK.md", req: "REQ.md", plan: "PLAN.md", todo: "TODO.md", log: "LOG.md", design: "DESIGN.md", rca: "RCA.md"};
   const WRITES_BACK = ["dev", "kb"];  // the kinds that have a plan, a diff and a commit
   const asked = location.hash.slice(1) === "commit" ? "changes" : location.hash.slice(1);  // a link to the old Commit tab
   let other = "";  // the document open in the "docs" tab
+
+  const served = () => typeof SERVE !== "undefined" && Boolean(DATA.serve);
+  const saved = Boolean(DATA.snapshot);  // a saved copy: no buttons, no way back to a board, no calls to a server
 
   const doc = (name) => desk.docs.find((item) => item.name === name);
   // A tab is there when the kind of the task has it, or when its file is there (M40-1): a test task has no plan and no diff; a question has no log.
@@ -26,6 +29,7 @@
     if (tab === "test") return Boolean(desk.test);
     if (tab === "review") return desk.review.n > 0 || desk.review.rounds.length > 0;
     if (tab === "files") return desk.files.length > 0;
+    if (tab === "intake") return Boolean(desk.intake) && served();  // a saved copy has no server to write to
     return true;
   };
   const extra = () => desk.docs.filter((item) => !Object.keys(FILES).some((tab) => FILES[tab] === item.name && ownTab(tab)) && item.name !== "REQ.md" && !(desk.test && item.name === "TEST-GUIDE.md") && !(desk.commit && item.name === "COMMIT-MESSAGE.md"));  // these have a tab of their own
@@ -107,8 +111,6 @@
     return h("article", {class: "md"}, blocks(found.blocks), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
   }
 
-  const served = () => typeof SERVE !== "undefined" && Boolean(DATA.serve);
-  const saved = Boolean(DATA.snapshot);  // a saved copy: no buttons, no way back to a board, no calls to a server
 
   // --- the parts --------------------------------------------------------------------------------------------
 
@@ -290,6 +292,7 @@
       if (tab === "history") return t("desk.tab.history") + " " + desk.history.length;
       if (tab === "docs") return t("desk.tab.docs") + " " + extra().length;
       if (tab === "files") return t("desk.tab.files") + " " + desk.files.length;
+      if (tab === "intake") return t("desk.tab.intake") + (desk.intake.files.some((item) => !item.original && !item.report) ? " " + desk.intake.files.filter((item) => !item.original && !item.report).length : "");
       return t("desk.tab." + tab);
     };
     return h("nav", {class: "tabs"}, tabs.filter((tab) => tab === "docs" ? extra().length > 0 : ownTab(tab)).map((tab) => {
@@ -499,6 +502,136 @@
         h("div", {class: "files-view"}, h("div", {class: "round-head"}, h("strong", null, open.path), " ", h("span", {class: "sub"}, size(open.size))), fileView(open)))];
   }
 
+  // The Intake tab (1.5.45): the documents of a requirement go into REQ/ here (a program turns Word and Excel into Markdown and CSV: no AI), are trimmed in a text box, and
+  // can be put back as converted. What is typed is kept in `intake`, so a redraw of the page does not lose it.
+  const intake = {busy: false, error: "", done: [], editing: null, name: "", kind: "csv", text: "", hidden: false};
+  const UPLOAD_TYPES = ".docx,.docm,.xlsx,.xlsm,.xls,.pdf,.csv,.tsv,.txt,.md,.json,.sql,.png,.jpg,.jpeg,.gif,.webp";
+
+  function intakeCall(action, body) {
+    return SERVE.post("/api/intake", {task: desk.name, action, ...(body || {})}).then((data) => data.result);
+  }
+
+  function intakeRefresh() {
+    return SERVE.post("/api/desk", {task: desk.name}).then((data) => { desk = data.desk; shown = JSON.stringify(desk); }, () => {});
+  }
+
+  function fileBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+      reader.onerror = () => reject(new Error(t("desk.inbox.unreadable")));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function intakeAdd(list) {
+    const files = [...list];
+    if (!files.length || intake.busy) return;
+    const limit = desk.intake.limit_mb * 1048576;
+    intake.busy = true; intake.error = "";
+    draw(true);
+    files.reduce((chain, file) => chain.then(() => {
+      if (file.size > limit) { intake.error = t("desk.intake.big", {name: file.name, mb: desk.intake.limit_mb}); return null; }
+      return fileBase64(file).then((data) => intakeCall("upload", {name: file.name, data, include_hidden: intake.hidden}))
+        .then((result) => { intake.done.unshift({name: file.name, result}); }, (error) => { intake.error = file.name + ": " + error.message; });
+    }), Promise.resolve()).then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
+  }
+
+  function intakeOpen(path) {
+    intake.error = "";
+    intakeCall("read", {path}).then((found) => { intake.editing = {path, text: found.text, saved: found.text, pristine: found.pristine}; draw(true); },
+      (error) => { intake.error = error.message; draw(true); });
+  }
+
+  function intakeSave() {
+    const edit = intake.editing;
+    intake.busy = true; draw(true);
+    intakeCall("save", {path: edit.path, text: edit.text}).then(() => { edit.saved = edit.text; intake.error = ""; }, (error) => { intake.error = error.message; })
+      .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
+  }
+
+  function intakeAct(action, path, after) {
+    intake.busy = true; intake.error = ""; draw(true);
+    intakeCall(action, {path}).then(() => { if (after) after(); }, (error) => { intake.error = error.message; })
+      .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
+  }
+
+  function intakeEditor() {
+    const edit = intake.editing;
+    const area = h("textarea", {rows: 22, class: "editor", spellcheck: "false", disabled: intake.busy ? "" : null}, edit.text);
+    area.addEventListener("input", () => { edit.text = area.value; });
+    const button = (label, call, cls) => {
+      const b = h("button", {type: "button", class: "act " + (cls || ""), disabled: intake.busy ? "" : null}, label);
+      b.addEventListener("click", call);
+      return b;
+    };
+    const close = () => { if (edit.text === edit.saved || window.confirm(t("desk.intake.discard"))) { intake.editing = null; draw(true); } };
+    const reset = () => { if (window.confirm(t("desk.intake.reset.confirm"))) intakeAct("reset", edit.path, () => { intake.editing = null; intakeOpen(edit.path); }); };
+    return h("section", {class: "round editing"},
+      h("div", {class: "round-head"}, h("strong", null, "REQ/" + edit.path), " ", edit.text !== edit.saved ? tag(t("desk.intake.unsaved"), "hot") : h("span", {class: "sub"}, t("desk.intake.saved"))),
+      area,
+      h("div", {class: "inbox-save"}, button(t("desk.intake.save"), intakeSave, "hot"), " ", button(t("desk.intake.close"), close), " ", edit.pristine ? button(t("desk.intake.reset"), reset) : null));
+  }
+
+  function intakeTab() {
+    const x = desk.intake;
+    const parts = [h("p", {class: "hint top"}, t("desk.intake.hint"))];
+    const pick = h("input", {type: "file", accept: UPLOAD_TYPES, multiple: "", style: "display:none"});
+    pick.addEventListener("change", () => intakeAdd(pick.files));
+    const chooser = h("button", {type: "button", class: "act", disabled: intake.busy ? "" : null}, intake.busy ? t("desk.intake.working") : t("desk.intake.add"));
+    chooser.addEventListener("click", () => pick.click());
+    const hidden = h("input", {type: "checkbox", checked: intake.hidden ? "" : null});
+    hidden.addEventListener("change", () => { intake.hidden = hidden.checked; });
+    const zone = h("div", {class: "intake-drop"}, h("p", null, t("desk.intake.drop")), chooser, pick, h("label", {class: "sub"}, hidden, " " + t("desk.intake.hidden")));
+    zone.addEventListener("dragover", (event) => { event.preventDefault(); zone.classList.add("over"); });
+    zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+    zone.addEventListener("drop", (event) => { event.preventDefault(); zone.classList.remove("over"); intakeAdd(event.dataTransfer.files); });
+    parts.push(h("h3", null, t("desk.intake.add.title")), zone);
+    if (intake.error) parts.push(h("p", {class: "hint bad"}, intake.error));
+    for (const item of intake.done.slice(0, 5)) {
+      parts.push(h("section", {class: "round pass"},
+        h("div", {class: "round-head"}, h("strong", null, item.name), " ", h("span", {class: "sub"}, t("desk.intake.made", {n: item.result.files.length}))),
+        item.result.files.length ? h("ul", null, item.result.files.map((path) => h("li", null, h("code", null, path)))) : null,
+        item.result.notes.length ? [h("div", {class: "sub"}, t("desk.intake.notes")), h("ul", null, item.result.notes.map((note) => h("li", {class: "sub"}, note)))] : null,
+        h("p", {class: "sub"}, t("desk.intake.report", {report: item.result.report}))));
+    }
+    parts.push(h("h3", null, t("desk.intake.files")));
+    if (!x.has_intake) {
+      const make = h("button", {type: "button", class: "act hot", disabled: intake.busy ? "" : null}, t("desk.intake.init"));
+      make.addEventListener("click", () => intakeAct("init", "", () => intakeOpen("INTAKE.md")));
+      parts.push(h("p", {class: "hint"}, t("desk.intake.init.hint")), make);
+    }
+    if (!x.files.length) parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.intake.none"))));
+    const rows = x.files.map((item) => {
+      const open = item.editable ? h("button", {type: "button", class: "linkish"}, item.path) : h("span", null, item.path);
+      if (item.editable) open.addEventListener("click", () => intakeOpen(item.path));
+      const drop = h("button", {type: "button", class: "act", title: t("desk.intake.delete")}, "×");
+      drop.addEventListener("click", () => {
+        if (window.confirm(t("desk.intake.delete.confirm", {path: item.path}))) intakeAct("delete", item.path, () => { if (intake.editing && intake.editing.path === item.path) intake.editing = null; });
+      });
+      return h("tr", null, h("td", null, open, item.original ? [" ", tag(t("desk.intake.original"), "")] : null, item.report ? [" ", tag(t("desk.intake.report.tag"), "")] : null),
+        h("td", {class: "sub"}, size(item.size)), h("td", null, drop));
+    });
+    if (rows.length) parts.push(h("div", {class: "scroll"}, h("table", {class: "md intake-files"}, h("tbody", null, rows))));
+    if (intake.editing) parts.push(intakeEditor());
+    const name = h("input", {type: "text", value: intake.name, placeholder: t("desk.intake.paste.name"), class: "env-input", maxlength: 60});
+    name.addEventListener("input", () => { intake.name = name.value; });
+    const kind = h("select", null, [["csv", t("desk.intake.kind.csv")], ["md", t("desk.intake.kind.md")], ["txt", t("desk.intake.kind.txt")]].map(([value, label]) => h("option", {value, selected: intake.kind === value ? "" : null}, label)));
+    kind.addEventListener("change", () => { intake.kind = kind.value; });
+    const text = h("textarea", {rows: 7, placeholder: t("desk.intake.paste.ph"), class: "editor"}, intake.text);
+    text.addEventListener("input", () => { intake.text = text.value; });
+    const savePaste = h("button", {type: "button", class: "act hot", disabled: intake.busy ? "" : null}, t("desk.intake.paste.save"));
+    savePaste.addEventListener("click", () => {
+      intake.busy = true; intake.error = ""; draw(true);
+      intakeCall("paste", {name: intake.name || "pasted", kind: intake.kind, text: intake.text})
+        .then((found) => { intake.text = ""; intake.name = ""; intake.done.unshift({name: found.file, result: {files: [found.file], notes: [], report: found.file}}); }, (error) => { intake.error = error.message; })
+        .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
+    });
+    parts.push(h("h3", null, t("desk.intake.paste.title")), h("p", {class: "hint"}, t("desk.intake.paste.hint")), h("div", {class: "inbox-pictures"}, name, kind), text, h("div", {class: "inbox-save"}, savePaste));
+    parts.push(h("h3", null, t("desk.intake.tell")), promptLine(t("desk.intake.message")));
+    return parts;
+  }
+
   function progress() {
     const {done, total} = desk.todo;
     if (!total) return null;
@@ -578,6 +711,7 @@
     if (current === "review") return review();
     if (current === "test" && desk.test) return testing();
     if (current === "files") return filesTab();
+    if (current === "intake") return intakeTab();
     if (current === "history") return [h("p", {class: "hint top"}, t("desk.history.hint")), timeline()];
     const docs = extra();
     const name = docs.some((item) => item.name === other) ? other : (docs[0] || {}).name;
@@ -600,6 +734,7 @@
   if (typeof SERVE !== "undefined" && DATA.serve.refresh) {
     setInterval(() => {
       if (SERVE.busy()) return;
+      if (document.activeElement && ["TEXTAREA", "INPUT"].includes(document.activeElement.tagName)) return;  // a redraw would take the focus from what the person is typing
       SERVE.post("/api/desk", {task: desk.name}).then((data) => {
         const text = JSON.stringify(data.desk);
         if (same(text, shown)) return;

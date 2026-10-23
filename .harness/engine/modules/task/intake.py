@@ -321,3 +321,112 @@ def init(root: Path, raw_task: str) -> Dict[str, Any]:
     with task_ops.locked(root, task) as fresh:
         task_ops.note(fresh, "intake", "INTAKE.md")
     return {"task": task, "file": f"{REQ_DIR}/INTAKE.md", "next": say("intake.init.next")}
+
+
+# --- the task page: list, edit, undo, delete (1.5.45) ------------------------------------------------------------------------------------------------------
+
+EDIT_BYTES = 400_000  # a file larger than this is not edited in the page
+
+
+def clean_relative(relative: str) -> str:
+    """A path inside `REQ/` (without `REQ/`), or a CommandError: no `..`, no hidden or tool-made folder, no absolute path. It comes from a page: it is never trusted."""
+    text = str(relative or "").replace("\\", "/").strip("/")
+    parts = text.split("/")
+    if not text or "\x00" in text or any(part in ("", ".", "..") or part.startswith(".") for part in parts) or re.match(r"^[A-Za-z]:", text):
+        raise CommandError(say("intake.path.bad"))
+    return "/".join(parts)
+
+
+def req_file(root: Path, task: str, relative: str, must_exist: bool = True) -> Tuple[Path, str]:
+    clean = clean_relative(relative)
+    folder = req_dir(root, task)
+    target = folder / clean
+    walk = folder
+    for part in clean.split("/"):  # no link on the way
+        walk = walk / part
+        if walk.is_symlink():
+            raise CommandError(say("intake.path.bad"))
+    if must_exist and not target.is_file():
+        raise CommandError(say("intake.path.missing", path=f"{REQ_DIR}/{clean}"))
+    return target, clean
+
+
+def editable(clean: str) -> bool:
+    return not clean.startswith(ORIGINALS + "/") and Path(clean).suffix.lower() in TEXT_TYPES
+
+
+def req_files(root: Path, task: str) -> List[Dict[str, Any]]:
+    """What the Intake tab lists: every file of `REQ/` (the tool-made `.pristine` is not shown), with whether it can be edited here and undone."""
+    folder = req_dir(root, task)
+    out: List[Dict[str, Any]] = []
+    if not folder.is_dir():
+        return out
+    for path in sorted(folder.rglob("*"), key=lambda item: [part.lower() for part in item.relative_to(folder).parts]):
+        relative = path.relative_to(folder)
+        if any(part.startswith(".") for part in relative.parts) or path.is_symlink() or not path.is_file():
+            continue
+        clean = relative.as_posix()
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        out.append({"path": clean, "size": size, "editable": editable(clean) and size <= EDIT_BYTES, "pristine": (folder / PRISTINE / clean).is_file(), "original": clean.startswith(ORIGINALS + "/"),
+                    "report": clean.endswith(".convert.md")})
+        if len(out) >= 500:
+            break
+    return out
+
+
+def read_for_edit(root: Path, raw_task: str, relative: str) -> Dict[str, Any]:
+    task = task_ops.resolve(root, raw_task)
+    target, clean = req_file(root, task, relative)
+    if not editable(clean):
+        raise CommandError(say("intake.edit.not_text", path=f"{REQ_DIR}/{clean}"))
+    size = target.stat().st_size
+    if size > EDIT_BYTES:
+        raise CommandError(say("intake.edit.big", path=f"{REQ_DIR}/{clean}", kb=EDIT_BYTES // 1000))
+    return {"path": clean, "text": target.read_bytes().decode("utf-8-sig", errors="replace"), "size": size, "pristine": (req_dir(root, task) / PRISTINE / clean).is_file()}
+
+
+def save_text(root: Path, raw_task: str, relative: str, text: str) -> Dict[str, Any]:
+    """The person edited a file of `REQ/` on the page. The file must be there and a text one; an original is never written."""
+    task = task_ops.resolve(root, raw_task)
+    task_ops.require_open(tasks.read(root, task))
+    target, clean = req_file(root, task, relative)
+    if not editable(clean):
+        raise CommandError(say("intake.edit.not_text", path=f"{REQ_DIR}/{clean}"))
+    data = str(text).replace("\r\n", "\n").encode("utf-8")
+    if len(data) > MAX_PASTE_BYTES:
+        raise CommandError(say("intake.paste.big", mb=MAX_PASTE_BYTES // 1_000_000))
+    target.write_bytes(data)
+    with task_ops.locked(root, task) as fresh:
+        task_ops.note(fresh, "intake", f"edited {clean}")
+    return {"task": task, "file": f"{REQ_DIR}/{clean}", "size": len(data)}
+
+
+def reset_file(root: Path, raw_task: str, relative: str) -> Dict[str, Any]:
+    """Put a converted file back as the conversion wrote it."""
+    task = task_ops.resolve(root, raw_task)
+    task_ops.require_open(tasks.read(root, task))
+    target, clean = req_file(root, task, relative)
+    keep = req_dir(root, task) / PRISTINE / clean
+    if not keep.is_file():
+        raise CommandError(say("intake.reset.none", path=f"{REQ_DIR}/{clean}"))
+    target.write_bytes(keep.read_bytes())
+    with task_ops.locked(root, task) as fresh:
+        task_ops.note(fresh, "intake", f"restored {clean}")
+    return {"task": task, "file": f"{REQ_DIR}/{clean}"}
+
+
+def delete_file(root: Path, raw_task: str, relative: str) -> Dict[str, Any]:
+    """Delete a file of `REQ/` (and its pristine copy). An original is deleted like any file: the person decides."""
+    task = task_ops.resolve(root, raw_task)
+    task_ops.require_open(tasks.read(root, task))
+    target, clean = req_file(root, task, relative)
+    target.unlink()
+    keep = req_dir(root, task) / PRISTINE / clean
+    if keep.is_file():
+        keep.unlink()
+    with task_ops.locked(root, task) as fresh:
+        task_ops.note(fresh, "intake", f"deleted {clean}")
+    return {"task": task, "deleted": f"{REQ_DIR}/{clean}"}

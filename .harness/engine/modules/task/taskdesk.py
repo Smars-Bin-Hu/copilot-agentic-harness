@@ -162,6 +162,16 @@ def changed(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def intake_view(root: Path, task: str, data: Dict[str, Any], row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The Intake tab of an open task that has a requirement: the files of `REQ/`, and whether `INTAKE.md` is there. None for any other."""
+    from . import intake
+
+    if row.get("status") != "open" or not (tasks.task_dir(root, task) / tasks.REQ_FILE).is_file():
+        return None
+    files = intake.req_files(root, task)
+    return {"files": files, "has_intake": any(item["path"] == "INTAKE.md" for item in files), "limit_mb": 28}
+
+
 def needs_req(data: Dict[str, Any]) -> bool:
     """Only a full task stands on a requirement the person confirmed (dev, test, kb). An RCA, a design or another one-off task goes from the clues to the result in one run (M40-4)."""
     return data.get("tier") == "full"
@@ -196,7 +206,7 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "forked_from": task_ops.name_of(str(data.get("forked_from"))) if data.get("forked_from") else "",
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": taskfiles.listing(root, task), "history": history(data), "changes": changed(root, task, data),
+        "docs": docs, "files": taskfiles.listing(root, task), "intake": intake_view(root, task, data, row), "history": history(data), "changes": changed(root, task, data),
         "review": reviews(root, task, data), "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if needs_req(data) and row.get("status") == "open" else 0, "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),

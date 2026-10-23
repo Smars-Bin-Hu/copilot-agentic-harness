@@ -36,7 +36,7 @@ from urllib.parse import quote, unquote, urlparse
 from core import config, messages, registry, tasks
 from core.paths import board_serve_file, utc_now
 
-from . import autorun, common, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, taskreview
+from . import autorun, common, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, taskreview
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -178,6 +178,30 @@ class Board:
         taskdesk.embed_images(self.root, name, [found["docs"], found["test"], [item.get("doc") for item in found["files"]]])
         stem = re.sub(r"[^\w.-]+", "-", found["name"]).strip("-.") or "task"
         return f"{stem}-{time.strftime('%Y-%m-%d')}.html", taskhtml.desk_page(found)
+
+    def intake(self, action: str, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """What the Intake tab asks for. The names and the text come from a page: each call checks them."""
+        import base64
+
+        if action == "upload":
+            try:
+                raw = base64.b64decode(str(data.get("data", "")), validate=True)
+            except ValueError:
+                raise CommandError(say("inbox.image_bad", n=1)) from None
+            return intake.add_file(self.root, task, str(data.get("name", "")), raw, bool(data.get("include_hidden")))
+        if action == "paste":
+            return intake.paste(self.root, task, str(data.get("name", "")), str(data.get("text", "")), str(data.get("kind", "csv")))
+        if action == "init":
+            return intake.init(self.root, task)
+        if action == "read":
+            return intake.read_for_edit(self.root, task, str(data.get("path", "")))
+        if action == "save":
+            return intake.save_text(self.root, task, str(data.get("path", "")), str(data.get("text", "")))
+        if action == "reset":
+            return intake.reset_file(self.root, task, str(data.get("path", "")))
+        if action == "delete":
+            return intake.delete_file(self.root, task, str(data.get("path", "")))
+        raise CommandError(say("serve.refused.request"))
 
     def archive(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Move closed tasks out of the repository (`task archive`). `step`: `preview` says what would move; `act` moves them.
@@ -327,7 +351,7 @@ def handler_for(board: Board) -> type:
             origin = self.headers.get("Origin", "")
             if not self.host_ok() or (origin and origin not in allowed_origins) or self.headers.get(HEADER) != "1":
                 return self.answer(403, {"error": say("serve.refused.request")})
-            limit = MAX_INBOX_BODY if urlparse(self.path).path == "/api/inbox" else MAX_BODY
+            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_BODY
             try:
                 size = int(self.headers.get("Content-Length", "0"))
                 data = json.loads(self.rfile.read(min(size, limit)).decode("utf-8") or "{}") if 0 <= size <= limit else None
@@ -378,6 +402,20 @@ def handler_for(board: Board) -> type:
                     images = data.get("images")
                     result = taskinbox.save(board.root, row["task"], str(data.get("env", "")), str(data.get("text", "")), str(data.get("ran", "")), images if isinstance(images, list) else [])
                     print(say("serve.did", action="inbox", task=row["name"]), flush=True)
+                    return self.answer(200, {"result": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/intake":  # the person puts the documents of a requirement in REQ/ on the page, trims them and undoes: it writes files, so the browser must be paired
+                action = str(data.get("action", ""))
+                if action != "read" and not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed")})
+                try:
+                    row = taskdesk.row_of(board.root, str(data.get("task", "")))
+                    if row is None:
+                        raise CommandError(say("desk.unknown", name=str(data.get("task", ""))))
+                    result = board.intake(action, row["task"], data)
+                    if action != "read":
+                        print(say("serve.did", action="intake " + action, task=row["name"]), flush=True)
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})

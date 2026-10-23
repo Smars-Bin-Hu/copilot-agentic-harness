@@ -12,6 +12,8 @@ The short version:
 
 The agent never reads the originals. The files in `REQ/` are yours: the agent can read them and cannot write there.
 
+All of this can be done on the **Intake tab** of the task page (the board, `harness task board --serve`; the browser must be paired): drop the files in, read the report of what was left out, open any file in a text box to trim it, put it back as converted if you cut too much, paste a table, create `INTAKE.md`, and copy the message that tells the agent. No command line is needed. The commands below do the same.
+
 ## Why not give the agent the raw files
 
 - A Word paper holds a cover page, a revision history, comments, repeated disclaimers. An Excel file holds hidden sheets, helper columns, colours that mean something. The agent pays for all of it in context and may take the noise for requirements.
@@ -68,7 +70,7 @@ Do not trim the original. A trimmed file can be put back as it was converted: `R
 Business files can be odd: a sheet laid out like a form, two tables side by side, headers over three rows, columns that repeat. The converter makes a faithful flat copy; it does not understand the layout. When the result is not usable:
 
 1. Open the file in Excel or Word yourself, select only the part that matters, and copy it.
-2. Save it as a new file. On macOS: `pbpaste | harness task intake paste --name mapping --kind csv --task <task>` (cells copied out of Excel are tab-separated and come in as a CSV; `--kind md` makes a Markdown table, `--kind txt` plain text). On Windows, a pipe from the clipboard can garble non-English text: paste it on the task page (Intake tab) instead, or save the text to a UTF-8 file and give it with `--file`.
+2. Save it as a new file. On the task page: the Intake tab, *Paste a table or a text*. On the command line, on macOS: `pbpaste | harness task intake paste --name mapping --kind csv --task <task>` (cells copied out of Excel are tab-separated and come in as a CSV; `--kind md` makes a Markdown table, `--kind txt` plain text). On Windows, a pipe from the clipboard can garble non-English text: paste it on the task page (Intake tab) instead, or save the text to a UTF-8 file and give it with `--file`.
 3. Give the structure in words in `INTAKE.md`: "one row is one field; column C is the source, column F the rule".
 
 This is the fallback, and it is a normal one. The point is that the agent gets a small, clean table, however you made it.

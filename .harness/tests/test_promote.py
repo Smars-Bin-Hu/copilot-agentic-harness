@@ -603,7 +603,7 @@ class QueueTests(PromoteCase):
         task = self.flow({"repo_b/src/new.sql": "select 3;\n"})
         (self.repo_b / "mine.txt").write_text("x\n", encoding="utf-8")
         said = self.dry_run(task, ok=False)["stderr"]
-        self.assertIn("先提交、stash 或丢弃这些改动", said)
+        self.assertIn("不要用 `git clean`", said)
         self.assertNotIn("回写的", said)
         self.assertIn("不是 harness 的任务回写的", self.run_cli("task", "queue")["repos"][0]["next"])
 

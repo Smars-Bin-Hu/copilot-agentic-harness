@@ -23,7 +23,7 @@ from typing import Any, Dict
 from core import approval, render, targets, tasks
 from core.paths import repo_root
 
-from . import autorun, boardserve, kbsetup, taskarchive, refs, task, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
+from . import autorun, boardserve, kbsetup, taskarchive, refs, task, runrecord, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
 
 
 def cmd_target_list(args: argparse.Namespace) -> Dict[str, Any]:
@@ -240,13 +240,24 @@ def register_task(subparsers: Any) -> None:
     record = test_commands.add_parser("record", help="add a run to TEST/results-<environment>.md from what the user gave back and one row for each criterion; the verdict is worked out from the rows")
     record.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
     record.add_argument("--env", required=True, help="the environment, as the test guide names it")
-    record.add_argument("--given-file", required=True, help="a file with the user's results as they gave them (it is copied in whole)")
+    record.add_argument("--given-file", default="", help="a file with the user's results as they gave them (it is copied in whole); may be left out when the user gave only pictures (--evidence)")
     record.add_argument("--row", action="append", default=[], help="`criterion::evidence::PASS|FAIL|NEEDS MORE`, one for each criterion of the environment; PASS needs its evidence")
     record.add_argument("--run-by", default="", help="who ran it and when, as the user said")
     record.add_argument("--follow-up", default="", help="one line: what comes next")
     record.add_argument("--ran-file", default="", help="a file with the commands the user ran, as they ran them (shown in the run as what was run)")
     record.add_argument("--evidence", action="append", default=[], help="a picture the user gave (a screenshot): `PATH` or `PATH::what it shows`; copied into TEST/evidence/<ENV>/ and shown in the run. Repeat for each picture")
     record.set_defaults(handler=lambda a: testrecord.record(repo_root(), a.task, a.env, a.given_file, a.row, a.run_by, a.follow_up, a.ran_file, a.evidence))
+    run = commands.add_parser("run", help="a development task: record the result of a run the user did in an environment before the write-back (the script writes RUNS/<ENV>/results.md)")
+    run_commands = run.add_subparsers(dest="run_command", required=True)
+    run_record = run_commands.add_parser("record", help="add a run to RUNS/<environment>/results.md from what the user gave back (output, commands, screenshots); takes the handoff of that environment away")
+    run_record.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+    run_record.add_argument("--env", required=True, help="the environment, for example DEV")
+    run_record.add_argument("--given-file", default="", help="a file with the user's output as they gave it (it is copied in whole); may be left out when the user gave only pictures")
+    run_record.add_argument("--ran-file", default="", help="a file with the commands the user ran, as they ran them")
+    run_record.add_argument("--evidence", action="append", default=[], help="a picture the user gave: `PATH` or `PATH::what it shows`; copied into RUNS/<ENV>/evidence/. Repeat for each picture")
+    run_record.add_argument("--run-by", default="", help="who ran it and when, as the user said")
+    run_record.add_argument("--follow-up", default="", help="one line: what comes next")
+    run_record.set_defaults(handler=lambda a: runrecord.record(repo_root(), a.task, a.env, a.given_file, a.run_by, a.ran_file, a.evidence, a.follow_up))
     hand = commands.add_parser("handoff", help="the agent hands work to the person that only they can do outside the harness (tests in an environment); the board says it waits for it")
     hand_commands = hand.add_subparsers(dest="handoff_command", required=True)
     hand_tests = hand_commands.add_parser("tests", help="the person is to run the tests of TEST-GUIDE.md in an environment and bring the results back")

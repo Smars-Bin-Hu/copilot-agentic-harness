@@ -27,7 +27,7 @@ MANIFEST = "manifest.json"
 DEFAULTS = {"keep_days": 14, "max_file_mb": 5}
 # Not results: the CLI's own files, the person's material, the files that only say where the work stands.
 # COMMIT-MESSAGE.md is written after the checks, for the person's commit: a check of it would undo the passes (1.5.34).
-SKIP_TOP = (tasks.STATE_DIR, "req", "ref", SNAPSHOT_DIR.lower(), REVIEW_DIR.lower(), "_deleted")
+SKIP_TOP = (tasks.STATE_DIR, *tasks.PERSON_DIRS, SNAPSHOT_DIR.lower(), REVIEW_DIR.lower(), "_deleted")
 SKIP_FILES = (tasks.TASK_FILE.lower(), tasks.TODO_FILE.lower(), tasks.LOG_FILE.lower(), tasks.CHANGES_NAME.lower(), tasks.REVIEW_NAME.lower(), commitmsg.FILE.lower())
 
 

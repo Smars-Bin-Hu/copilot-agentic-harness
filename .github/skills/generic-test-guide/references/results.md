@@ -2,6 +2,7 @@
 
 The user came back with the results of an environment. The results file is written by a script, not by you: that way a run always goes at the end of the file, the verdict is worked out from your rows, and the status files agree.
 
+0. **Look in `INBOX/<environment>/` first.** The user may have given the results on the task page: the newest folder there holds `given.txt` (the output: use it as `--given-file`), `ran.txt` (the commands: `--ran-file`) and `image-N.png` (the screenshots: one `--evidence` each). They are the user's own words; do not change them. The folder is read only for you.
 1. **Save what the user gave back, as they gave it**, in one file: `TEST/given.txt` (write over the last one). Paste it whole: no shortening, no reformatting, no correcting. A file they gave by path stays where it is; write its path in `given.txt`.
    A run stands on three supports: **the commands that were run, the words the user gave, and the pictures**. Collect all three before you record:
    - The commands: write what the user ran, as they ran it, in `TEST/ran.txt` (write over the last one). If they ran none, say so in the file.

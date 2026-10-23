@@ -36,12 +36,13 @@ from urllib.parse import quote, unquote, urlparse
 from core import config, messages, registry, tasks
 from core.paths import board_serve_file, utc_now
 
-from . import autorun, common, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, tasklife, taskreview
+from . import autorun, common, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, taskreview
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
 COOKIE = "harness_board"
 MAX_BODY = 4096
+MAX_INBOX_BODY = 40 * 1024 * 1024  # `/api/inbox` carries pictures (base64); the other calls stay small
 MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
@@ -49,7 +50,7 @@ ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task
 REFRESH = 10  # seconds between two boards in the browser
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
 # or send anything elsewhere, even if it ever got past the drawing (which uses textContent only).
-CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
+CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; "
        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 
@@ -303,9 +304,10 @@ def handler_for(board: Board) -> type:
             origin = self.headers.get("Origin", "")
             if not self.host_ok() or (origin and origin not in allowed_origins) or self.headers.get(HEADER) != "1":
                 return self.answer(403, {"error": say("serve.refused.request")})
+            limit = MAX_INBOX_BODY if urlparse(self.path).path == "/api/inbox" else MAX_BODY
             try:
                 size = int(self.headers.get("Content-Length", "0"))
-                data = json.loads(self.rfile.read(min(size, MAX_BODY)).decode("utf-8") or "{}") if 0 <= size <= MAX_BODY else None
+                data = json.loads(self.rfile.read(min(size, limit)).decode("utf-8") or "{}") if 0 <= size <= limit else None
             except (ValueError, UnicodeDecodeError):
                 data = None
             if not isinstance(data, dict):
@@ -343,6 +345,19 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"desk": board.desk(str(data.get("task", "")))})
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
                     return self.answer(404, {"error": str(error)})
+            if path == "/api/inbox":  # the person gives the task the results of a run: written to INBOX/, so the browser must be paired
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed")})
+                try:
+                    row = taskdesk.row_of(board.root, str(data.get("task", "")))
+                    if row is None:
+                        raise CommandError(say("desk.unknown", name=str(data.get("task", ""))))
+                    images = data.get("images")
+                    result = taskinbox.save(board.root, row["task"], str(data.get("env", "")), str(data.get("text", "")), str(data.get("ran", "")), images if isinstance(images, list) else [])
+                    print(say("serve.did", action="inbox", task=row["name"]), flush=True)
+                    return self.answer(200, {"result": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
             if path == "/api/file":  # one file of the Files tab, when the person opens it
                 found = None
                 try:

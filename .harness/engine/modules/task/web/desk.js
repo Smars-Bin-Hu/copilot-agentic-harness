@@ -149,6 +149,74 @@
     return {title: t("desk.actions.none"), hint: t("desk.actions.none.hint")};
   }
 
+  // Give the results of a run here (1.5.42): the output and the commands as text, screenshots as pictures. The server saves them under INBOX/ in the task; the person
+  // then tells the agent. What is typed is kept in `form` so a redraw of the page does not lose it.
+  const form = {env: "", text: "", ran: "", images: [], busy: false, error: "", gave: null};
+  const MAX_IMAGES = 10, MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+  function addImages(files) {
+    for (const file of files) {
+      if (!/^image\//.test(file.type)) continue;
+      if (form.images.length >= MAX_IMAGES) { form.error = t("desk.inbox.too_many", {limit: MAX_IMAGES}); break; }
+      if (file.size > MAX_IMAGE_BYTES) { form.error = t("desk.inbox.too_big", {mb: MAX_IMAGE_BYTES / 1048576}); continue; }
+      form.images.push({file, url: URL.createObjectURL(file)});
+    }
+    draw(true);
+  }
+
+  function encode(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+      reader.onerror = () => reject(new Error(t("desk.inbox.unreadable")));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function saveResults(env) {
+    form.busy = true; form.error = "";
+    draw(true);
+    Promise.all(form.images.map((item) => encode(item.file).then((data) => ({data}))))
+      .then((images) => SERVE.post("/api/inbox", {task: desk.name, env, text: form.text, ran: form.ran, images}))
+      .then((data) => {
+        form.images.forEach((item) => URL.revokeObjectURL(item.url));
+        Object.assign(form, {text: "", ran: "", images: [], busy: false, gave: data.result});
+      }, (error) => { form.busy = false; form.error = error.message; })
+      .then(() => draw(true));
+  }
+
+  function resultForm() {
+    const handed = desk.handoff || {};
+    const env = form.env || handed.env || "";
+    const field = (label, node) => h("label", {class: "field"}, h("span", {class: "sub"}, label), node);
+    const text = h("textarea", {rows: 6, placeholder: t("desk.inbox.text.ph"), disabled: form.busy ? "" : null}, form.text);
+    text.addEventListener("input", () => { form.text = text.value; });
+    text.addEventListener("paste", (event) => {  // a screenshot pasted into the box becomes a picture; pasted text stays text
+      const files = [...(event.clipboardData ? event.clipboardData.files : [])].filter((file) => /^image\//.test(file.type));
+      if (files.length) { event.preventDefault(); addImages(files); }
+    });
+    const ran = h("textarea", {rows: 3, placeholder: t("desk.inbox.ran.ph"), disabled: form.busy ? "" : null}, form.ran);
+    ran.addEventListener("input", () => { form.ran = ran.value; });
+    const where = h("input", {type: "text", value: env, maxlength: 12, class: "env-input"});
+    where.addEventListener("input", () => { form.env = where.value; });
+    const pick = h("input", {type: "file", accept: "image/png,image/jpeg,image/gif,image/webp", multiple: "", style: "display:none"});
+    pick.addEventListener("change", () => addImages([...pick.files]));
+    const chooser = h("button", {type: "button", class: "act"}, t("desk.inbox.pick"));
+    chooser.addEventListener("click", () => pick.click());
+    const save = h("button", {type: "button", class: "act hot", disabled: form.busy ? "" : null}, form.busy ? t("desk.inbox.saving") : t("desk.inbox.save"));
+    save.addEventListener("click", () => saveResults(where.value.trim()));
+    const thumbs = h("div", {class: "thumbs"}, form.images.map((item, index) => {
+      const remove = h("button", {type: "button", class: "act", title: t("desk.inbox.remove")}, "×");
+      remove.addEventListener("click", () => { URL.revokeObjectURL(item.url); form.images.splice(index, 1); draw(true); });
+      return h("span", {class: "thumb"}, h("img", {src: item.url, alt: ""}), remove);
+    }));
+    return h("section", {class: "inbox"}, h("h3", null, t("desk.inbox.title")), h("p", {class: "hint"}, t("desk.inbox.hint")),
+      form.gave ? h("div", {class: "inbox-done"}, h("p", {class: "hint"}, t("desk.inbox.done", {folder: form.gave.folder})), promptLine(form.gave.message)) : null,
+      field(t("desk.inbox.env"), where), field(t("desk.inbox.text"), text), field(t("desk.inbox.ran"), ran),
+      h("div", {class: "inbox-pictures"}, chooser, pick, thumbs),
+      form.error ? h("p", {class: "hint bad"}, form.error) : null, h("div", {class: "inbox-save"}, save));
+  }
+
   // A message the person sends to the agent in VS Code: one click copies it.
   function promptLine(text) {
     const button = h("button", {type: "button", class: "act", "data-label": t("desk.go.copy")}, t("desk.go.copy"));
@@ -174,6 +242,7 @@
       desk.state === "working" && served() ? h("p", {class: "hint"}, t("desk.busy.note")) : null,
       desk.state === "waiting" && !desk.held ? h("p", {class: "hint"}, t("desk.unheld.note")) : null,
       idle ? [h("p", {class: "hint"}, idle.hint), idle.prompt ? promptLine(idle.prompt) : null] : h("div", {class: "action-list"}, items.map(entry)),
+      served() && ["tests", "run"].includes(desk.waiting_why) ? resultForm() : null,
       rest.length ? h("div", {class: "action-more"}, h("div", {class: "sub label"}, t("desk.actions.more")), rest.map(line)) : null,
       typeof SERVE === "undefined" ? h("p", {class: "sub"}, t("board.copy.hint")) : SERVE.banner());
   }
@@ -364,7 +433,7 @@
   // The Files tab: what is in REQ/, REF/, DEV/ and RUNS/ (sub-folders too). The list is in the page; a file comes when it is opened (a saved copy has the small ones in it).
   let fileOpen = "";
   const fileCache = {};
-  const ROOT_HINT = {REQ: "desk.files.root.req", REF: "desk.files.root.ref", DEV: "desk.files.root.dev", RUNS: "desk.files.root.runs"};
+  const ROOT_HINT = {REQ: "desk.files.root.req", REF: "desk.files.root.ref", INBOX: "desk.files.root.inbox", DEV: "desk.files.root.dev", RUNS: "desk.files.root.runs"};
   const size = (bytes) => bytes < 1024 ? bytes + " B" : bytes < 1048576 ? Math.round(bytes / 1024) + " KB" : (bytes / 1048576).toFixed(1) + " MB";
 
   function fileView(item) {

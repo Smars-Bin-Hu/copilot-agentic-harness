@@ -31,7 +31,7 @@ STATE_NAME = "task.json"
 BASE_NAME = "base"
 CHANGES_NAME = "CHANGES.diff"
 REVIEW_NAME = "PROMOTE-PLAN.diff"
-PERSON_DIRS = ("req", "ref")  # lower case: the gate compares without case
+PERSON_DIRS = ("req", "ref", "inbox")  # lower case: the gate compares without case. INBOX: what the person gave on the task page (1.5.42)
 
 
 def find(root: Path, name: str) -> str:

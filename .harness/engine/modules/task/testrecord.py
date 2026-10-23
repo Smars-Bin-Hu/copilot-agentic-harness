@@ -84,9 +84,10 @@ def read_text_file(raw: str) -> str:
         raise CommandError(say("task.test.ran_missing", path=raw)) from None
 
 
-def save_evidence(folder: Path, env: str, number: int, items: List[str]) -> List[Dict[str, str]]:
+def save_evidence(folder: Path, env: str, number: int, items: List[str], base: str = "TEST", sub: str = "") -> List[Dict[str, str]]:
     """Copy the pictures the person gave (`PATH` or `PATH::caption`) into `TEST/evidence/<ENV>/run<N>-<k>.<type>`, and say what each one is. The copy is the evidence:
-    the place a chat keeps a pasted picture is not the task's, and it can be cleaned away. Nothing is copied unless every item is good."""
+    the place a chat keeps a pasted picture is not the task's, and it can be cleaned away. Nothing is copied unless every item is good.
+    `base`: the folder of the results file in the task (`TEST`, or `RUNS/<ENV>` for the run of a development task); `relative` is from that folder. `sub`: the folder for the pictures in it (`evidence/<ENV>` when left out)."""
     if len(items) > MAX_EVIDENCE:
         raise CommandError(say("task.test.evidence_many", limit=MAX_EVIDENCE))
     found = []
@@ -106,10 +107,10 @@ def save_evidence(folder: Path, env: str, number: int, items: List[str]) -> List
         if size > MAX_EVIDENCE_BYTES:
             raise CommandError(say("task.test.evidence_big", path=where, mb=MAX_EVIDENCE_BYTES // (1024 * 1024)))
         digest = hashlib.sha256(source.read_bytes()).hexdigest()
-        relative = f"{EVIDENCE_DIR}/{env.upper()}/run{number}-{index}{'.jpg' if suffix == '.jpeg' else suffix}"
+        relative = f"{sub or EVIDENCE_DIR + '/' + env.upper()}/run{number}-{index}{'.jpg' if suffix == '.jpeg' else suffix}"
         found.append({"source": str(source), "relative": relative, "caption": " ".join(caption.split()) or say("task.test.evidence_caption", n=index), "sha": digest, "name": source.name})
     for item in found:
-        target = folder / "TEST" / item["relative"]
+        target = folder / base / item["relative"]
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(item["source"], target)
     return found
@@ -173,7 +174,9 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
     if not rows:
         raise CommandError(say("task.test.rows"))
     parsed = [parse_row(row) for row in rows]
-    given = read_given(root, given_file)
+    given = read_given(root, given_file) if given_file else ""
+    if not given and not evidence:
+        raise CommandError(say("task.test.given_none"))
     ran = read_text_file(ran_file) if ran_file else ""
     verdict = verdict_of(parsed)
     folder = tasks.task_dir(root, task)
@@ -188,7 +191,7 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
         "", f"## Run {number}", "",
         f"Run by: {cell(run_by) or 'the user'}. Recorded {now[:16].replace('T', ' ')} UTC.", "",
         *(["### What was run", "", *fenced(ran), ""] if ran else []),
-        "### As the user gave them", "", *fenced(given), "",
+        *(["### As the user gave them", "", *fenced(given), ""] if given else []),
         *(["### Screenshots", "", *[line for item in pictures for line in (f"![{cell(item['caption']).replace(']', ')')}]({item['relative']})", "", f"{cell(item['caption'])} (file `{item['name']}`, sha256 {item['sha'][:12]})", "")]] if pictures else []),
         "### Judgement", "", "| Criterion | Evidence | Verdict |", "| --- | --- | --- |",
         *[f"| {cell(row['criterion'])} | {cell(row['evidence']) or '-'} | {row['verdict']} |" for row in parsed], "",

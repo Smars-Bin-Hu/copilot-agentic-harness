@@ -118,7 +118,7 @@ class PlanApprovalTests(TaskCase):
         ):
             with self.subTest(path):
                 self.assertEqual(self.edit(path), {})
-        for path in (f"{TASK}/REQ/req.md", f"{TASK}/REF/spec.md", f"{TASK}/req/req.md", f"{TASK}/DEV/../REQ/a"):
+        for path in (f"{TASK}/REQ/req.md", f"{TASK}/REF/spec.md", f"{TASK}/req/req.md", f"{TASK}/DEV/../REQ/a", f"{TASK}/INBOX/DEV/20261022-100000/given.txt", f"{TASK}/inbox/x"):
             with self.subTest(path):
                 output = self.edit(path)
                 self.assertEqual(self.decision(output), "deny")

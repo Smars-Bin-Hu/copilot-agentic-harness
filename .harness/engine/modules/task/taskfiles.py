@@ -16,7 +16,7 @@ from core import tasks
 
 from . import common, mdtree
 
-FOLDERS = ("REQ", "REF", "DEV", "RUNS")  # the order of the list: what the person gave, what the agent made, what came back
+FOLDERS = ("REQ", "REF", "INBOX", "DEV", "RUNS")  # the order of the list: what the person gave, what the agent made, what came back
 MAX_LISTED = 400
 MAX_VIEW_BYTES = 400_000
 MAX_EMBED_BYTES = 150_000  # a saved copy takes a text file in up to this size each, and 2 MB in all

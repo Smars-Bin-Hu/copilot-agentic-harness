@@ -10,6 +10,21 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.42 (2026-10-23)
+
+### Added
+
+- **Give the results of a run on the task page.** When a task waits for the results of a run or a test, its page has a form, *Give the results here*: paste the output, paste a screenshot into the box (or add pictures), say what you ran, and save. The board server writes it under `INBOX/<ENV>/<time>/` in the task (`given.txt`, `ran.txt`, `image-N`) and gives you the message to send to the agent. You no longer need to open the task folder in the editor, and it does not depend on how VS Code or the Copilot SDK hands a pasted picture to the agent. Giving results in the chat works as before.
+- **`INBOX/` is yours: the agent can only read it.** Like `REQ/` and `REF/`, the agent's file tools cannot write there, so it holds what you gave. It is not in the digest a check looks at; the Files tab shows it.
+- **`task run record`.** The development-task counterpart of `task test record`: the agent records a run you did in an environment before the write-back (`--given-file`, `--ran-file`, `--evidence`); the script writes `RUNS/<ENV>/results.md` with what was run, what you gave and the screenshots (copied into `RUNS/<ENV>/evidence/`), and takes the handoff away. The agent reads the newest `INBOX/<ENV>/` folder when you gave the results on the page.
+
+### Changed
+
+- `task test record` can be given pictures only (`--given-file` may be left out when there is a `--evidence`).
+- The board server writes to the task folder for the first time, and only through this form: the browser must be paired; the server picks the names; a picture is taken by what its first bytes say (png, jpg, gif, webp), at most 10 of 8 MB; the output at most 400 KB; the environment is a short name.
+
+**Introductory material**: `docs/02-features.md`, `docs/04-reference.md` and `harness-rookie-wondering` topic 9 changed; `generic-test-guide` (results) and the workspace instruction changed.
+
 ## 1.5.41 (2026-10-22)
 
 ### Added

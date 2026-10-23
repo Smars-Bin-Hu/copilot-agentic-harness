@@ -9,18 +9,23 @@ What it does not write is judgement in words: `TASK.md`, `TODO.md`, the defects 
 
 from __future__ import annotations
 
+import hashlib
 import re
+import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from core import messages, tasks
 from core.paths import cli_command, utc_now
 
-from . import task as task_ops, taskstages, testdefects
+from . import mdtree, task as task_ops, taskstages, testdefects
 from .common import CommandError
 
 VERDICTS = ("PASS", "FAIL", "NEEDS MORE")
 MAX_GIVEN_BYTES = 400_000
+MAX_EVIDENCE = 10  # screenshots in one run
+MAX_EVIDENCE_BYTES = 8 * 1024 * 1024
+EVIDENCE_DIR = "evidence"
 LOG_MARK = "<!-- New entries go here -->"
 SUMMARY = "summary.md"
 SUMMARY_HEAD = ["| Environment | Verdict | Date | Results |", "| --- | --- | --- | --- |"]
@@ -69,6 +74,47 @@ def read_given(root: Path, raw: str) -> str:
     return text
 
 
+def read_text_file(raw: str) -> str:
+    """The commands the person ran, from a file the agent wrote, as they were."""
+    path = Path(raw).expanduser()
+    path = path if path.is_absolute() else Path.cwd() / path
+    try:
+        return path.read_bytes().decode("utf-8-sig", errors="replace").strip("\n")[:MAX_GIVEN_BYTES]
+    except OSError:
+        raise CommandError(say("task.test.ran_missing", path=raw)) from None
+
+
+def save_evidence(folder: Path, env: str, number: int, items: List[str]) -> List[Dict[str, str]]:
+    """Copy the pictures the person gave (`PATH` or `PATH::caption`) into `TEST/evidence/<ENV>/run<N>-<k>.<type>`, and say what each one is. The copy is the evidence:
+    the place a chat keeps a pasted picture is not the task's, and it can be cleaned away. Nothing is copied unless every item is good."""
+    if len(items) > MAX_EVIDENCE:
+        raise CommandError(say("task.test.evidence_many", limit=MAX_EVIDENCE))
+    found = []
+    for index, raw in enumerate(items, 1):
+        where, _, caption = str(raw).partition("::")
+        source = Path(where.strip()).expanduser()
+        source = source if source.is_absolute() else Path.cwd() / source
+        suffix = source.suffix.lower()
+        if suffix not in mdtree.IMAGE_TYPES:
+            raise CommandError(say("task.test.evidence_type", path=where, types=", ".join(sorted(mdtree.IMAGE_TYPES))))
+        try:
+            size = source.stat().st_size
+            if not source.is_file():
+                raise OSError
+        except OSError:
+            raise CommandError(say("task.test.evidence_missing", path=where)) from None
+        if size > MAX_EVIDENCE_BYTES:
+            raise CommandError(say("task.test.evidence_big", path=where, mb=MAX_EVIDENCE_BYTES // (1024 * 1024)))
+        digest = hashlib.sha256(source.read_bytes()).hexdigest()
+        relative = f"{EVIDENCE_DIR}/{env.upper()}/run{number}-{index}{'.jpg' if suffix == '.jpeg' else suffix}"
+        found.append({"source": str(source), "relative": relative, "caption": " ".join(caption.split()) or say("task.test.evidence_caption", n=index), "sha": digest, "name": source.name})
+    for item in found:
+        target = folder / "TEST" / item["relative"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(item["source"], target)
+    return found
+
+
 def fenced(text: str) -> List[str]:
     """The user's words as they were given: in a code block whose fence is longer than any run of backticks inside, so nothing in them is read as markdown."""
     longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
@@ -114,7 +160,7 @@ def log_update(folder: Path, line: str) -> str:
     return "LOG.md"
 
 
-def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str], run_by: str = "", follow_up: str = "") -> Dict[str, Any]:
+def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str], run_by: str = "", follow_up: str = "", ran_file: str = "", evidence: Optional[List[str]] = None) -> Dict[str, Any]:
     task = task_ops.resolve(root, raw_task)
     data = tasks.read(root, task)
     task_ops.require_open(data)
@@ -128,6 +174,7 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
         raise CommandError(say("task.test.rows"))
     parsed = [parse_row(row) for row in rows]
     given = read_given(root, given_file)
+    ran = read_text_file(ran_file) if ran_file else ""
     verdict = verdict_of(parsed)
     folder = tasks.task_dir(root, task)
     name = f"results-{chosen}.md"
@@ -136,10 +183,13 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
     before = path.read_text(encoding="utf-8-sig", errors="replace") if path.is_file() else f"# Results: {chosen}\n"
     number = last_run(before) + 1
     now = utc_now()
+    pictures = save_evidence(folder, chosen, number, list(evidence or []))
     section = [
         "", f"## Run {number}", "",
         f"Run by: {cell(run_by) or 'the user'}. Recorded {now[:16].replace('T', ' ')} UTC.", "",
+        *(["### What was run", "", *fenced(ran), ""] if ran else []),
         "### As the user gave them", "", *fenced(given), "",
+        *(["### Screenshots", "", *[line for item in pictures for line in (f"![{cell(item['caption']).replace(']', ')')}]({item['relative']})", "", f"{cell(item['caption'])} (file `{item['name']}`, sha256 {item['sha'][:12]})", "")]] if pictures else []),
         "### Judgement", "", "| Criterion | Evidence | Verdict |", "| --- | --- | --- |",
         *[f"| {cell(row['criterion'])} | {cell(row['evidence']) or '-'} | {row['verdict']} |" for row in parsed], "",
     ]
@@ -147,7 +197,7 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
         section += ["### Follow-up", "", f"- {cell(follow_up)}", ""]
     section.append(f"**Verdict for {chosen}: {verdict}**")  # the last line of the run: the board reads the last one of the file
     path.write_text(before.rstrip("\n") + "\n" + "\n".join(section) + "\n", encoding="utf-8")
-    warnings: List[str] = []
+    warnings: List[str] = ([] if ran else [say("task.test.missing_ran")]) + ([] if pictures else [say("task.test.missing_screenshot")])  # the run has three supports: the commands, the words, the pictures; a gap is said, not refused
     for earlier in envs[:envs.index(chosen)]:
         if found.get(earlier.upper(), ("", None))[0] != "PASS":
             warnings.append(say("task.test.order", env=chosen, earlier=earlier))
@@ -176,6 +226,6 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
         step = say("task.test.next.more", env=chosen)
     return {
         "task": task, "env": chosen, "run": number, "verdict": verdict, "criteria": {"pass": count["PASS"], "fail": count["FAIL"], "needs_more": count["NEEDS MORE"]},
-        "file": f"TEST/{name}", "summary": summary, "log": log, "handoff_cleared": cleared, "defects": defects if defects["file"] else None,
+        "file": f"TEST/{name}", "evidence": [f"TEST/{item['relative']}" for item in pictures], "summary": summary, "log": log, "handoff_cleared": cleared, "defects": defects if defects["file"] else None,
         "warnings": warnings, "next": step,
     }

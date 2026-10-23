@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import messages, tasks
 from core.paths import cli_command, utc_now
 
-from . import autorun, common, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskreview, tasksnap, taskstages, testdefects
+from . import autorun, common, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
 MAX_DOC_BYTES = 400_000  # a bigger document is shown cut, with a note
@@ -38,18 +38,20 @@ def documents(root: Path, task: str) -> List[Dict[str, Any]]:
         data = (folder / name).read_bytes()
         text = data[:MAX_DOC_BYTES].decode("utf-8", errors="replace")
         tree = mdtree.parse(text)
+        tree["blocks"] = mdtree.resolve_images(tree["blocks"], "")
         out.append({"name": name, "blocks": tree["blocks"], "cut": tree["cut"] or len(data) > MAX_DOC_BYTES})
     return out
 
 
-def read_doc(path: Path) -> Optional[Dict[str, Any]]:
-    """A markdown file of the task as blocks, or None when it is not there. A BOM and a cut are handled as for the documents."""
+def read_doc(path: Path, base: str = "") -> Optional[Dict[str, Any]]:
+    """A markdown file of the task as blocks, or None when it is not there. A BOM and a cut are handled as for the documents.
+    `base`: the folder of the file in the task folder ("TEST"), for the images in it."""
     try:
         data = path.read_bytes()
     except OSError:
         return None
     tree = mdtree.parse(data[:MAX_DOC_BYTES].decode("utf-8", errors="replace"))
-    return {"blocks": tree["blocks"], "cut": tree["cut"] or len(data) > MAX_DOC_BYTES}
+    return {"blocks": mdtree.resolve_images(tree["blocks"], base), "cut": tree["cut"] or len(data) > MAX_DOC_BYTES}
 
 
 def reviews(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -87,7 +89,7 @@ def defects_of(root: Path, task: str) -> Optional[Dict[str, Any]]:
         if not text:
             return None
         tree = mdtree.parse(text[:MAX_DOC_BYTES])
-        return {"blocks": tree["blocks"], "cut": tree["cut"] or len(text) > MAX_DOC_BYTES}
+        return {"blocks": mdtree.resolve_images(tree["blocks"], "TEST"), "cut": tree["cut"] or len(text) > MAX_DOC_BYTES}
 
     intro = "\n".join(line for line in parsed["intro"].splitlines() if not line.startswith("# ")).strip()  # the title of the file is not shown again
     items = [{"id": item["id"], "env": item["env"], "title": item["title"], "status": item["status"], "doc": doc(item["body"]),
@@ -110,7 +112,7 @@ def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, A
             verdict, path = results.get(env.upper(), ("", None))
             state = "done" if verdict == "PASS" else "failed" if verdict == "FAIL" else "now" if not at else "todo"
             at = at or state == "now"
-            out.append({"name": env, "verdict": verdict, "state": state, "file": path.name if path else "", "results": read_doc(path) if path else None, "waits": bool(handed) and env.upper() == handed,
+            out.append({"name": env, "verdict": verdict, "state": state, "file": path.name if path else "", "results": read_doc(path, "TEST") if path else None, "waits": bool(handed) and env.upper() == handed,
                         "runs": taskstages.verdicts_in(taskstages.read(path)) if path else [],  # every verdict line of the file, in order
                         "ignored": [other.name for other in files.get(env.upper(), []) if path and other != path]})  # other files of the environment: older, not counted
         folder = tasks.task_dir(root, task)
@@ -193,10 +195,58 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "forked_from": task_ops.name_of(str(data.get("forked_from"))) if data.get("forked_from") else "",
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "history": history(data), "changes": changed(root, task, data),
+        "docs": docs, "files": taskfiles.listing(root, task), "history": history(data), "changes": changed(root, task, data),
         "review": reviews(root, task, data), "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),
         "req_changed": needs_req(data) and row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),
         "report": "/" + report.relative_to(root / common.REPORTS_DIR).as_posix() if report.is_file() else "",
     }
+
+
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_EMBED_BYTES = 1_500_000  # a saved copy takes pictures in as data up to this size each, and 12 MB in all
+
+
+def image_file(root: Path, name: str, relative: str) -> Optional[Path]:
+    """The picture `relative` (from the task folder) of the task the board lists as `name`, or None: only a picture type, only inside the task folder,
+    no link, not too large. The path comes from a page: it is never trusted."""
+    row = row_of(root, name)
+    if row is None or "\x00" in relative:
+        return None
+    clean = mdtree.task_path("", relative)
+    if not clean:
+        return None
+    folder = tasks.task_dir(root, row["task"])
+    walk = folder
+    try:
+        for part in Path(clean).parts:  # no link anywhere on the way: a link could lead out of the task folder
+            walk = walk / part
+            if walk.is_symlink():
+                return None
+        resolved = walk.resolve()
+        if folder.resolve() not in resolved.parents or not resolved.is_file() or resolved.stat().st_size > MAX_IMAGE_BYTES:
+            return None
+    except (OSError, ValueError):
+        return None
+    return resolved
+
+
+def embed_images(root: Path, name: str, node: Any, budget: Optional[List[int]] = None) -> None:
+    """For a saved copy (one file, no server): each picture of the page gets its bytes as a data URI (`data`), small ones only."""
+    import base64
+
+    budget = budget if budget is not None else [12 * 1024 * 1024]
+    if isinstance(node, list):
+        for item in node:
+            embed_images(root, name, item, budget)
+    elif isinstance(node, dict):
+        if node.get("t") == "img":
+            found = image_file(root, name, str(node.get("src", "")))
+            if found is not None and found.stat().st_size <= min(MAX_EMBED_BYTES, budget[0]):
+                data = found.read_bytes()
+                budget[0] -= len(data)
+                node["data"] = f"data:{mdtree.IMAGE_TYPES[found.suffix.lower()]};base64," + base64.b64encode(data).decode("ascii")
+            return
+        for value in node.values():
+            embed_images(root, name, value, budget)

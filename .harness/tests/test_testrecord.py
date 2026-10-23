@@ -36,6 +36,56 @@ class RecordCase(LifeCase):
         return {item["name"]: item["verdict"] for item in taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))["envs"]}
 
 
+class Evidence(RecordCase):
+    """1.5.41: a run has three supports, the commands that were run, the words the user gave and the pictures; the pictures are copied into the task."""
+
+    PNG = b"\x89PNG\r\n\x1a\nnot really a picture"
+
+    def picture(self, name: str = "Pasted Image.png", data: bytes = PNG):
+        path = self.root / "chat" / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(data)
+        return path
+
+    def test_a_picture_is_copied_into_the_task_and_shown_in_the_run(self) -> None:
+        ran = self.folder() / "TEST" / "ran.txt"
+        ran.write_text("git diff main feature/x --stat\n", encoding="utf-8")
+        shot = self.picture()
+        found = self.record("DEV", "c::e::PASS", ran_file=str(ran), evidence=[f"{shot}::the diff: one line changed"])
+        copied = self.folder() / "TEST" / "evidence" / "DEV" / "run1-1.png"
+        self.assertEqual(copied.read_bytes(), self.PNG, "a copy: the chat may clean its own file away")
+        self.assertEqual(found["evidence"], ["TEST/evidence/DEV/run1-1.png"])
+        self.assertEqual(found["warnings"], [], "the commands, the words and a picture are all there")
+        text = self.results("DEV")
+        self.assertIn("### What was run", text)
+        self.assertIn("git diff main feature/x --stat", text)
+        self.assertIn("![the diff: one line changed](evidence/DEV/run1-1.png)", text)
+        self.assertIn("Pasted Image.png", text)
+
+    def test_a_second_run_does_not_write_over_the_pictures_of_the_first(self) -> None:
+        shot = self.picture()
+        self.record("DEV", "c::e::NEEDS MORE", evidence=[str(shot)])
+        self.record("DEV", "c::e::PASS", evidence=[str(shot), str(self.picture("two.jpeg"))])
+        folder = self.folder() / "TEST" / "evidence" / "DEV"
+        self.assertEqual(sorted(path.name for path in folder.iterdir()), ["run1-1.png", "run2-1.png", "run2-2.jpg"])
+
+    def test_a_run_with_no_commands_or_no_picture_says_so_and_is_still_recorded(self) -> None:
+        found = self.record("DEV", "c::e::PASS")
+        self.assertEqual(len(found["warnings"]), 2)
+        self.assertEqual(found["verdict"], "PASS")
+
+    def test_what_is_not_a_picture_is_refused_and_nothing_is_copied(self) -> None:
+        good, bad = self.picture(), self.picture("notes.txt", b"hello")
+        with self.assertRaises(CommandError):
+            self.record("DEV", "c::e::PASS", evidence=[str(good), str(bad)])
+        self.assertFalse((self.folder() / "TEST" / "evidence").exists())
+        self.assertFalse((self.folder() / "TEST" / "results-DEV.md").exists(), "no run is written either")
+        with self.assertRaises(CommandError):
+            self.record("DEV", "c::e::PASS", evidence=[str(self.root / "chat" / "missing.png")])
+        with self.assertRaises(CommandError):
+            self.record("DEV", "c::e::PASS", evidence=[str(self.picture())] * (testrecord.MAX_EVIDENCE + 1))
+
+
 class Verdict(RecordCase):
     def test_the_verdict_is_worked_out_from_the_rows(self) -> None:
         self.assertEqual(self.record("DEV", "a::x::PASS", "b::y::PASS")["verdict"], "PASS")
@@ -139,7 +189,7 @@ class Marks(RecordCase):
 
     def test_an_environment_before_it_that_has_not_passed_is_said(self) -> None:
         found = self.record("UAT", "c::e::PASS")
-        self.assertEqual(len(found["warnings"]), 2, "DEV and IST")
+        self.assertEqual(len([item for item in found["warnings"] if "DEV" in item or "IST" in item]), 2, "DEV and IST")
 
     def test_the_defects_of_the_environment_are_marked_fixed_by_it(self) -> None:
         self.folder().joinpath("TEST", "defects.md").write_text("# Defects\n\n## D1 [open] IST: rows\n\n- e\n\n## D2 [open] UAT: late\n", encoding="utf-8")

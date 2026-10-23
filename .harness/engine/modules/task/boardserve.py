@@ -36,7 +36,7 @@ from urllib.parse import quote, unquote, urlparse
 from core import config, messages, registry, tasks
 from core.paths import board_serve_file, utc_now
 
-from . import autorun, common, task as task_ops, taskarchive, taskboard, taskdesk, taskhtml, tasklife, taskreview
+from . import autorun, common, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, tasklife, taskreview
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -145,6 +145,13 @@ class Board:
         The commands the buttons would copy and the link to the time-and-usage page mean nothing away from this board: they are left out."""
         found = self.desk(name)
         found["actions"], found["report"] = [], ""
+        taskfiles.embed(self.root, found["task"], found["files"])
+        for item in found["files"]:  # a picture of the Files tab comes in as its own bytes
+            if item["kind"] == "image":
+                node = {"t": "img", "src": item["path"]}
+                taskdesk.embed_images(self.root, name, node)
+                item["data"] = node.get("data", "")
+        taskdesk.embed_images(self.root, name, [found["docs"], found["test"], [item.get("doc") for item in found["files"]]])
         stem = re.sub(r"[^\w.-]+", "-", found["name"]).strip("-.") or "task"
         return f"{stem}-{time.strftime('%Y-%m-%d')}.html", taskhtml.desk_page(found)
 
@@ -281,6 +288,12 @@ def handler_for(board: Board) -> type:
                     return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead page
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
+            if path.startswith("/file/"):  # a picture of a task page (evidence a person gave): read only, by the task's name and a path inside its folder
+                name, _, relative = path[len("/file/"):].partition("/")
+                found = taskdesk.image_file(board.root, name, relative)
+                if found is None:
+                    return self.send(404, b"", "text/plain")
+                return self.send(200, found.read_bytes(), mdtree.IMAGE_TYPES[found.suffix.lower()])
             target = (reports / path.lstrip("/")).resolve()
             if not str(target).startswith(str(reports) + os.sep) or target.suffix != ".html" or not target.is_file():
                 return self.send(404, b"", "text/plain")
@@ -330,6 +343,14 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"desk": board.desk(str(data.get("task", "")))})
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
                     return self.answer(404, {"error": str(error)})
+            if path == "/api/file":  # one file of the Files tab, when the person opens it
+                found = None
+                try:
+                    row = taskdesk.row_of(board.root, str(data.get("task", "")))
+                    found = taskfiles.view(board.root, row["task"], str(data.get("path", ""))) if row else None
+                except Exception:  # noqa: BLE001 - the page keeps what it shows
+                    found = None
+                return self.answer(200, {"file": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
             if path != "/api/act":
                 return self.answer(404, {"error": say("serve.refused.request")})
             action, task, step = str(data.get("action", "")), str(data.get("task", "")), str(data.get("step", "act"))

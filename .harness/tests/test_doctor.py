@@ -662,7 +662,7 @@ class LayoutTests(unittest.TestCase):
     def test_engine_code_uses_only_the_standard_library(self) -> None:
         local = {"core", "adapters", "modules", "doctor", "hook", "cli"}
         stdlib = {
-            "__future__", "argparse", "ast", "collections", "contextlib", "copy", "ctypes", "dataclasses", "datetime", "difflib", "hashlib", "html", "http", "importlib", "io", "secrets", "threading", "xml",
+            "__future__", "argparse", "ast", "base64", "collections", "contextlib", "copy", "ctypes", "dataclasses", "datetime", "difflib", "hashlib", "html", "http", "importlib", "io", "secrets", "threading", "xml",
             "json", "locale", "math", "os", "pathlib", "posixpath", "random", "re", "shlex", "shutil", "stat", "string", "subprocess", "sys", "tempfile", "time",
             "traceback", "typing", "unicodedata", "urllib", "uuid", "webbrowser",
         }

@@ -10,7 +10,7 @@
   let desk = DATA.desk;
   let shown = JSON.stringify(desk);
   const same = (a, b) => a.replace(/"as_of":"[^"]*"/, "") === b.replace(/"as_of":"[^"]*"/, "");  // the time of asking is not a change
-  const tabs = ["overview", "design", "rca", "test", "plan", "todo", "log", "changes", "review", "history", "docs"];  // the commit message is at the top of "changes" once written back (1.5.34)
+  const tabs = ["overview", "design", "rca", "test", "plan", "todo", "log", "changes", "review", "history", "docs", "files"];  // the commit message is at the top of "changes" once written back (1.5.34)
   const FILES = {overview: "TASK.md", req: "REQ.md", plan: "PLAN.md", todo: "TODO.md", log: "LOG.md", design: "DESIGN.md", rca: "RCA.md"};
   const WRITES_BACK = ["dev", "kb"];  // the kinds that have a plan, a diff and a commit
   const asked = location.hash.slice(1) === "commit" ? "changes" : location.hash.slice(1);  // a link to the old Commit tab
@@ -25,6 +25,7 @@
     if (tab === "todo" || tab === "log") return Boolean(doc(FILES[tab]));
     if (tab === "test") return Boolean(desk.test);
     if (tab === "review") return desk.review.n > 0 || desk.review.rounds.length > 0;
+    if (tab === "files") return desk.files.length > 0;
     return true;
   };
   const extra = () => desk.docs.filter((item) => !Object.keys(FILES).some((tab) => FILES[tab] === item.name && ownTab(tab)) && item.name !== "REQ.md" && !(desk.test && item.name === "TEST-GUIDE.md") && !(desk.commit && item.name === "COMMIT-MESSAGE.md"));  // these have a tab of their own
@@ -41,8 +42,18 @@
       if (span.t === "i") return h("em", null, inline(span.c));
       if (span.t === "s") return h("s", null, inline(span.c));
       if (span.t === "a") return link(span.href, inline(span.c));
+      if (span.t === "img") return picture(span);
       return "";
     });
+  }
+
+  // A picture of the task (the evidence a person gave): from the board server by its path in the task folder, from a saved copy by its own bytes.
+  // Click to see it whole. A saved copy that was too large to take it in shows its description.
+  function picture(span) {
+    const src = span.data || (served() ? "/file/" + encodeURIComponent(desk.name) + "/" + span.src.split("/").map(encodeURIComponent).join("/") : "");
+    if (!src) return h("span", {class: "path", title: span.src}, span.alt || span.src);
+    const image = h("img", {src, alt: span.alt, title: span.alt, loading: "lazy", class: "md-img"});
+    return span.data ? image : h("a", {href: src, target: "_blank", rel: "noopener noreferrer", class: "md-img-link"}, image);  // a browser does not open a data: address in a new tab
   }
 
   // A link to another document of the task opens its tab; http(s) and mailto open outside; a path of the repository
@@ -207,6 +218,7 @@
       if (tab === "review") return t("desk.tab.review") + (desk.review.n ? " " + desk.review.passes + "/" + desk.review.n : " " + desk.review.rounds.length);
       if (tab === "history") return t("desk.tab.history") + " " + desk.history.length;
       if (tab === "docs") return t("desk.tab.docs") + " " + extra().length;
+      if (tab === "files") return t("desk.tab.files") + " " + desk.files.length;
       return t("desk.tab." + tab);
     };
     return h("nav", {class: "tabs"}, tabs.filter((tab) => tab === "docs" ? extra().length > 0 : ownTab(tab)).map((tab) => {
@@ -349,6 +361,51 @@
         env.ignored.length ? [" ", tag(t("desk.test.ignored", {files: env.ignored.join(", ")}), "hot")] : null), body);
   }
 
+  // The Files tab: what is in REQ/, REF/, DEV/ and RUNS/ (sub-folders too). The list is in the page; a file comes when it is opened (a saved copy has the small ones in it).
+  let fileOpen = "";
+  const fileCache = {};
+  const ROOT_HINT = {REQ: "desk.files.root.req", REF: "desk.files.root.ref", DEV: "desk.files.root.dev", RUNS: "desk.files.root.runs"};
+  const size = (bytes) => bytes < 1024 ? bytes + " B" : bytes < 1048576 ? Math.round(bytes / 1024) + " KB" : (bytes / 1048576).toFixed(1) + " MB";
+
+  function fileView(item) {
+    if (item.kind === "image") {
+      return picture({src: item.path, alt: item.path.split("/").pop(), data: item.data || ""});
+    }
+    const found = fileCache[item.path] || item.doc;
+    if (!found) return h("p", {class: "sub"}, fileCache[item.path] === null ? t("desk.files.failed") : t("desk.files.loading"));
+    if (found.kind === "markdown") return h("article", {class: "md"}, blocks(found.blocks), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
+    if (found.kind === "text") return [codeBlock(found.text), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null];
+    return h("p", {class: "sub"}, t("desk.files.other", {size: size(found.size)}));
+  }
+
+  function fileLoad(item) {
+    if (item.doc || fileCache[item.path] || !served() || !["markdown", "text"].includes(item.kind)) return;
+    fileCache[item.path] = undefined;
+    SERVE.post("/api/file", {task: desk.name, path: item.path}).then((data) => { fileCache[item.path] = data.file; draw(true); }, () => { fileCache[item.path] = null; draw(true); });
+  }
+
+  function filesTab() {
+    const items = desk.files;
+    if (!items.some((item) => item.path === fileOpen)) fileOpen = items[0].path;
+    const open = items.find((item) => item.path === fileOpen);
+    fileLoad(open);
+    const list = [];
+    let folder = "", root = "";
+    for (const item of items) {
+      const parts = item.path.split("/");
+      const dir = parts.slice(0, -1).join("/");
+      if (parts[0] !== root) { root = parts[0]; list.push(h("div", {class: "files-root"}, h("strong", null, root + "/"), h("span", {class: "sub"}, " " + t(ROOT_HINT[root.toUpperCase()])))); folder = root; }
+      if (dir !== folder) { folder = dir; list.push(h("div", {class: "files-dir", style: "padding-left:" + (parts.length - 2) * 14 + "px"}, dir.split("/").pop() + "/")); }
+      const button = h("button", {type: "button", class: "file" + (item.path === fileOpen ? " on" : ""), title: item.path, style: "padding-left:" + (parts.length - 1) * 14 + "px"},
+        h("span", null, parts[parts.length - 1]), h("span", {class: "sub"}, " " + size(item.size)));
+      button.addEventListener("click", () => { fileOpen = item.path; draw(true); });
+      list.push(button);
+    }
+    return [h("p", {class: "hint top"}, t("desk.files.hint")),
+      h("div", {class: "files"}, h("nav", {class: "files-list"}, list),
+        h("div", {class: "files-view"}, h("div", {class: "round-head"}, h("strong", null, open.path), " ", h("span", {class: "sub"}, size(open.size))), fileView(open)))];
+  }
+
   function progress() {
     const {done, total} = desk.todo;
     if (!total) return null;
@@ -427,6 +484,7 @@
     if (current === "changes") return changes();
     if (current === "review") return review();
     if (current === "test" && desk.test) return testing();
+    if (current === "files") return filesTab();
     if (current === "history") return [h("p", {class: "hint top"}, t("desk.history.hint")), timeline()];
     const docs = extra();
     const name = docs.some((item) => item.name === other) ? other : (docs[0] || {}).name;

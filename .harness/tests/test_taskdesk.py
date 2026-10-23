@@ -21,6 +21,14 @@ def kinds(spans):
     return [span["t"] for span in spans]
 
 
+class ImageTests(unittest.TestCase):
+    def test_an_image_is_a_path_inside_the_task_and_a_picture_type(self) -> None:
+        tree = mdtree.parse("![shot](evidence/DEV/run1-1.png) ![up](../../x.png) ![web](https://a/b.png) ![svg](a.svg) ![win](C:\\a.png) ![abs](/etc/a.png)\n")
+        spans = mdtree.resolve_images(tree["blocks"], "TEST")[0]["spans"]
+        self.assertEqual(spans[0], {"t": "img", "alt": "shot", "src": "TEST/evidence/DEV/run1-1.png"})
+        self.assertEqual([span["t"] for span in spans if span["t"] != "text" or span["v"] != " "], ["img", "text", "text", "text", "text", "text"], "the others are their words")
+
+
 class MarkdownTests(unittest.TestCase):
     def test_what_task_files_use(self) -> None:
         tree = mdtree.parse("# Plan\n\nSee **this** and `code` and *that*.\n\n| a | b |\n| --- | ---: |\n| 1 | x \\| y |\n\n```sql\nselect 1;\n```\n\n> note\n\n---\n")
@@ -60,6 +68,33 @@ class MarkdownTests(unittest.TestCase):
 
     def test_a_very_long_file_is_cut(self) -> None:
         self.assertTrue(mdtree.parse("line\n" * (mdtree.MAX_LINES + 5))["cut"])
+
+
+class PictureServingTests(ServeCase):
+    PNG = b"\x89PNG\r\n\x1a\nbytes"
+
+    def test_a_picture_of_the_task_is_served_and_nothing_else(self) -> None:
+        shots = self.task / "TEST" / "evidence" / "DEV"
+        shots.mkdir(parents=True)
+        (shots / "run1-1.png").write_bytes(self.PNG)
+        (self.task / "secret.txt").write_text("no", encoding="utf-8")
+        (self.task / "TEST" / "evil.png").symlink_to(self.root / "outside.png")
+        (self.root / "outside.png").write_bytes(self.PNG)
+        status, _data, headers = self.request("GET", "/file/job1/TEST/evidence/DEV/run1-1.png")
+        self.assertEqual((status, headers["Content-Type"]), (200, "image/png"))
+        for path in ("/file/job1/secret.txt", "/file/job1/TEST/evil.png", "/file/job1/..%2Fjob1%2FTEST%2Fevidence%2FDEV%2Frun1-1.png",
+                     "/file/job1/TEST/evidence/DEV/missing.png", "/file/no_such_task/TEST/evidence/DEV/run1-1.png", "/file/job1/%2Fetc%2Fa.png"):
+            self.assertEqual(self.request("GET", path)[0], 404, path)
+        self.assertEqual(self.request("GET", "/file/job1/TEST/evidence/DEV/run1-1.png", host="evil.example")[0], 403)
+
+    def test_a_saved_copy_takes_the_pictures_in(self) -> None:
+        shots = self.task / "TEST" / "evidence" / "DEV"
+        shots.mkdir(parents=True)
+        (shots / "a.png").write_bytes(self.PNG)
+        (self.task / "NOTE.md").write_text("# Note\n\n![shot](TEST/evidence/DEV/a.png)\n", encoding="utf-8")
+        status, data, _headers = self.request("GET", "/snapshot/job1")
+        self.assertEqual(status, 200)
+        self.assertIn("data:image/png;base64,", data["text"])
 
 
 class DeskTests(ServeCase):

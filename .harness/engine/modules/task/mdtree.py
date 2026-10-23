@@ -87,6 +87,15 @@ def spans(text: str) -> List[Span]:
             out.append({"t": "br"})
             index += 1
             continue
+        if char == "!" and text.startswith("[", index + 1):
+            found = link_at(text, index + 1)
+            if found:  # an image: only a path (the page resolves it against the task folder); any scheme is shown as its description
+                alt, src, end = found
+                flush()
+                path = src.strip().strip("<>")
+                out.append({"t": "img", "alt": alt, "src": path} if path and not ANY_SCHEME.match(path) and not path.startswith("//") else {"t": "text", "v": alt})
+                index = end
+                continue
         if char == "[":
             found = link_at(text, index)
             if found:
@@ -289,3 +298,33 @@ def parse(text: str) -> Dict[str, Any]:
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     cut = len(lines) > MAX_LINES
     return {"blocks": blocks(lines[:MAX_LINES]), "cut": cut}
+
+
+IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}  # no svg: it can carry a script
+
+
+def task_path(base: str, src: str) -> str:
+    """`src` as written in a document of the folder `base` (relative to the task folder), as a path from the task folder; "" when it leaves the task folder
+    or is not an image of a type the page shows."""
+    import posixpath
+
+    raw = src.replace("\\", "/")
+    if raw.startswith("/") or re.match(r"^[a-zA-Z]:", raw) or "\x00" in raw:
+        return ""
+    joined = posixpath.normpath(posixpath.join(base, raw))
+    if joined.startswith("..") or joined in (".", "") or posixpath.splitext(joined)[1].lower() not in IMAGE_TYPES:
+        return ""
+    return joined
+
+
+def resolve_images(node: Any, base: str) -> Any:
+    """Every image of a parsed document with its path made relative to the task folder (`base`: the folder of the document in it, "" for the root).
+    An image that leaves the task folder, or is not a picture type, becomes its description."""
+    if isinstance(node, list):
+        return [resolve_images(item, base) for item in node]
+    if isinstance(node, dict):
+        if node.get("t") == "img":
+            path = task_path(base, str(node.get("src", "")))
+            return {"t": "img", "alt": node.get("alt", ""), "src": path} if path else {"t": "text", "v": node.get("alt", "") or node.get("src", "")}
+        return {key: resolve_images(value, base) for key, value in node.items()}
+    return node

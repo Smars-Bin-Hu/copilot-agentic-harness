@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.41 (2026-10-22)
+
+### Added
+
+- **Evidence for a test run: the commands, the words and the pictures.** `task test record` takes `--ran-file` (what the user ran, as they ran it) and `--evidence PATH::what it shows` (a screenshot, repeat it for each). Each picture is copied into `TEST/evidence/<ENV>/run<N>-<k>.<type>` and shown in the run, under *Screenshots*, next to *What was run* and *As the user gave them*. The copy is the evidence: a picture pasted into the chat is a file in the chat's own folder (its path is in the attachments the chat lists), and that folder can be cleaned. The agent does this by itself when the user gives results; the user does not call anything. A run with no commands or no picture is still recorded, and the script says what is missing.
+- **Pictures on the task page.** A Markdown image whose path is inside the task folder (png, jpg, gif, webp) is drawn; click it to see it whole. A saved copy of the page takes the pictures in. The board serves a picture only by a path inside the task folder, with no link on the way, up to 8 MB.
+- **A Files tab, last in the row.** It shows what is in `REQ/`, `REF/`, `DEV/` (the files the agent prepared to write back) and `RUNS/`, sub-folders included (for example `RUNS/DEV/`), and appears only when one of them holds a file. It is on every kind of task. A Markdown file is drawn, text and code (SQL, scripts, logs, CSV) are shown as a block with a Copy button, a picture is shown, anything else is only named. A file is read when you open it; a saved copy takes in the small ones.
+
+### Changed
+
+- The tab that was called *Other files* (the Markdown files at the root of the task) is called *Other documents*, so it is not mistaken for *Files*.
+
+**Introductory material**: `docs/02-features.md` (the task page, the test results) changed. The `generic-test-guide` skill and its template changed: the guide asks for a screenshot, and the results step passes the pictures to the script.
+
 ## 1.5.40 (2026-10-22)
 
 ### Added

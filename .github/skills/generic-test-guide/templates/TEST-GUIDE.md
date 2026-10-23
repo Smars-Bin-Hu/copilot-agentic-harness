@@ -38,7 +38,7 @@ Order: DEV, then IST, then QAT. Start the next only when the one before passed. 
 
 ### Send back
 
-- <output of step N, copied as text>
+- <output of step N, copied as text, and a screenshot of it: paste it into the chat>
 - <the numbers asked for above>
 - <anything unexpected, even if it looks harmless>
 

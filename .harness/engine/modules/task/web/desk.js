@@ -504,7 +504,7 @@
 
   // The Intake tab (1.5.45): the documents of a requirement go into REQ/ here (a program turns Word and Excel into Markdown and CSV: no AI), are trimmed in a text box, and
   // can be put back as converted. What is typed is kept in `intake`, so a redraw of the page does not lose it.
-  const intake = {busy: false, error: "", done: [], editing: null, name: "", kind: "csv", text: "", hidden: false, domains: null};
+  const intake = {busy: false, error: "", done: [], editing: null, name: "", kind: "csv", text: "", hidden: false, domains: null, open: new Set()};
   const UPLOAD_TYPES = ".docx,.docm,.xlsx,.xlsm,.xls,.pdf,.csv,.tsv,.txt,.md,.json,.sql,.png,.jpg,.jpeg,.gif,.webp";
 
   function intakeCall(action, body) {
@@ -537,9 +537,14 @@
     }), Promise.resolve()).then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
   }
 
-  function intakeOpen(path) {
+  function intakeOpen(path, item) {
     intake.error = "";
-    intakeCall("read", {path}).then((found) => { intake.editing = {path, text: found.text, saved: found.text, pristine: found.pristine}; draw(true); },
+    if (item && !item.editable) {  // an original, a picture, a file that is not text: a card to look at it (a picture is shown) and to delete it
+      intake.editing = {path, readonly: true, size: item.size, picture: /\.(png|jpe?g|gif|webp)$/i.test(path)};
+      draw(true);
+      return;
+    }
+    intakeCall("read", {path}).then((found) => { intake.editing = {path, text: found.text, saved: found.text, pristine: found.pristine, size: found.size}; draw(true); },
       (error) => { intake.error = error.message; draw(true); });
   }
 
@@ -558,19 +563,27 @@
 
   function intakeEditor() {
     const edit = intake.editing;
-    const area = h("textarea", {rows: 22, class: "editor", spellcheck: "false", disabled: intake.busy ? "" : null}, edit.text);
-    area.addEventListener("input", () => { edit.text = area.value; });
     const button = (label, call, cls) => {
       const b = h("button", {type: "button", class: "act " + (cls || ""), disabled: intake.busy ? "" : null}, label);
       b.addEventListener("click", call);
       return b;
     };
-    const close = () => { if (edit.text === edit.saved || window.confirm(t("desk.intake.discard"))) { intake.editing = null; draw(true); } };
+    const close = () => { if (edit.readonly || edit.text === edit.saved || window.confirm(t("desk.intake.discard"))) { intake.editing = null; draw(true); } };
+    const remove = () => {
+      if (window.confirm(t("desk.intake.delete.confirm", {path: edit.path}))) intakeAct("delete", edit.path, () => { intake.editing = null; });
+    };
+    const head = h("div", {class: "card-head"},
+      h("div", {class: "card-title"}, h("strong", null, "REQ/" + edit.path), " ", edit.readonly ? null : edit.text !== edit.saved ? tag(t("desk.intake.unsaved"), "hot") : h("span", {class: "sub"}, t("desk.intake.saved"))),
+      h("div", {class: "card-tools"}, h("span", {class: "sub"}, size(edit.size || 0)), button(t("desk.intake.delete"), remove, "danger"), button("×", close, "close")));
+    if (edit.readonly) {
+      const src = edit.picture ? "/file/" + encodeURIComponent(desk.name) + "/REQ/" + edit.path.split("/").map(encodeURIComponent).join("/") : "";
+      return h("section", {class: "round editing"}, head, edit.picture ? h("img", {src, alt: edit.path, class: "md-img"}) : h("p", {class: "sub"}, t("desk.intake.noview")));
+    }
+    const area = h("textarea", {rows: 22, class: "editor", spellcheck: "false", disabled: intake.busy ? "" : null}, edit.text);
+    area.addEventListener("input", () => { edit.text = area.value; });
     const reset = () => { if (window.confirm(t("desk.intake.reset.confirm"))) intakeAct("reset", edit.path, () => { intake.editing = null; intakeOpen(edit.path); }); };
-    return h("section", {class: "round editing"},
-      h("div", {class: "round-head"}, h("strong", null, "REQ/" + edit.path), " ", edit.text !== edit.saved ? tag(t("desk.intake.unsaved"), "hot") : h("span", {class: "sub"}, t("desk.intake.saved"))),
-      area,
-      h("div", {class: "inbox-save"}, button(t("desk.intake.save"), intakeSave, "hot"), " ", button(t("desk.intake.close"), close), " ", edit.pristine ? button(t("desk.intake.reset"), reset) : null));
+    return h("section", {class: "round editing"}, head, area,
+      h("div", {class: "inbox-save"}, button(t("desk.intake.save"), intakeSave, "hot"), " ", edit.pristine ? button(t("desk.intake.reset"), reset) : null));
   }
 
   function intakeTab() {
@@ -619,13 +632,9 @@
     }
     if (!x.files.length) parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.intake.none"))));
     const row = (item) => {
-      const open = item.editable ? h("button", {type: "button", class: "linkish"}, item.path) : h("span", null, item.path);
-      if (item.editable) open.addEventListener("click", () => intakeOpen(item.path));
-      const drop = h("button", {type: "button", class: "act", title: t("desk.intake.delete")}, "×");
-      drop.addEventListener("click", () => {
-        if (window.confirm(t("desk.intake.delete.confirm", {path: item.path}))) intakeAct("delete", item.path, () => { if (intake.editing && intake.editing.path === item.path) intake.editing = null; });
-      });
-      return h("tr", null, h("td", null, open), h("td", {class: "sub"}, size(item.size)), h("td", null, drop));
+      const open = h("button", {type: "button", class: "linkish"}, item.path);
+      open.addEventListener("click", () => intakeOpen(item.path, item));
+      return h("tr", null, h("td", null, open, " ", h("span", {class: "sub"}, size(item.size))));
     };
     const table = (list) => h("div", {class: "scroll"}, h("table", {class: "md intake-files"}, h("tbody", null, list.map(row))));
     // what the agent reads comes first; the reports, and the originals and pictures, are folded: they are there to look at, not to trim
@@ -633,8 +642,13 @@
     const reports = x.files.filter((item) => item.report);
     const rest = x.files.filter((item) => item.original || item.path.startsWith("media/"));
     if (reads.length) parts.push(h("p", {class: "sub"}, t("desk.intake.group.reads", {n: reads.length})), table(reads));
-    if (reports.length) parts.push(h("details", {class: "intake-group"}, h("summary", null, t("desk.intake.group.reports", {n: reports.length})), table(reports)));
-    if (rest.length) parts.push(h("details", {class: "intake-group"}, h("summary", null, t("desk.intake.group.rest", {n: rest.length})), table(rest)));
+    const group = (key, label, list) => {  // folded, and kept open or shut across a redraw
+      const box = h("details", {class: "intake-group", open: intake.open.has(key) ? "" : null}, h("summary", null, label), table(list));
+      box.addEventListener("toggle", () => { if (box.open) intake.open.add(key); else intake.open.delete(key); });
+      return box;
+    };
+    if (reports.length) parts.push(group("reports", t("desk.intake.group.reports", {n: reports.length}), reports));
+    if (rest.length) parts.push(group("rest", t("desk.intake.group.rest", {n: rest.length}), rest));
     if (intake.editing) parts.push(intakeEditor());
     const name = h("input", {type: "text", value: intake.name, placeholder: t("desk.intake.paste.name"), class: "env-input", maxlength: 60});
     name.addEventListener("input", () => { intake.name = name.value; });

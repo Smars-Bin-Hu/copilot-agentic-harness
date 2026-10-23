@@ -1,31 +1,15 @@
 # Intake: {name}
 
-> What the business asked for, in one page, written by a person. The agent reads this first, then the files beside it in `REQ/` (the text of the documents, not the originals in `REQ/originals/`). Keep it short: the agent writes `REQ.md` from it, and you confirm that.
+> Put the business documents, pictures and notes in `REQ/` (the Intake tab of the task page, or `harness task intake convert`). The agent reads this file first, then the files beside it, the converted ones, not the originals in `REQ/originals/`.
 
 ## Goal
 
-<One to three sentences: what is wanted>
+1. This is a {type} task. Read the intake files in `REQ/` and understand the requirement.
+2. Ask the human about what is unclear, and do not assume (the skill `generic-grill-me`), but do not over-ask: ask only where the documents contradict each other, are wrong, or do not match the knowledge base or the code. Do not ask the human to confirm what the documents clearly say.
+3. Human adds:
 
-## Scope
+<Write here what you want the agent to know or do, if anything>
 
-<The tables, jobs, files and repositories this touches; what is out of scope>
+## Knowledge base
 
-## Not to do
-
-<What must not change. Write "none" if there is nothing>
-
-## Done when
-
-<What shows it is done, as items that can be checked, with numbers where there are numbers. Number the items from the business paper if it has numbers>
-
-## Where to look
-
-<Which files of `REQ/` matter, and which parts: sections, sheets. Say what can be ignored>
-
-## Sources
-
-<Where each need comes from: file, section or sheet. The business owner and the date, if known>
-
-## Open questions
-
-<What the business has not said. Write "none" if there is nothing>
+{domain}

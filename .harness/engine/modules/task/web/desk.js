@@ -504,7 +504,7 @@
 
   // The Intake tab (1.5.45): the documents of a requirement go into REQ/ here (a program turns Word and Excel into Markdown and CSV: no AI), are trimmed in a text box, and
   // can be put back as converted. What is typed is kept in `intake`, so a redraw of the page does not lose it.
-  const intake = {busy: false, error: "", done: [], editing: null, name: "", kind: "csv", text: "", hidden: false};
+  const intake = {busy: false, error: "", done: [], editing: null, name: "", kind: "csv", text: "", hidden: false, domains: null};
   const UPLOAD_TYPES = ".docx,.docm,.xlsx,.xlsm,.xls,.pdf,.csv,.tsv,.txt,.md,.json,.sql,.png,.jpg,.jpeg,.gif,.webp";
 
   function intakeCall(action, body) {
@@ -597,9 +597,23 @@
     }
     parts.push(h("h3", null, t("desk.intake.files")));
     if (!x.has_intake) {
+      // which knowledge base domain is it about? The choices are the domains of the knowledge base; none is a choice. The task's own domains are ticked at first.
+      if (intake.domains === null) intake.domains = [...x.task_domains];
       const make = h("button", {type: "button", class: "act hot", disabled: intake.busy ? "" : null}, t("desk.intake.init"));
-      make.addEventListener("click", () => intakeAct("init", "", () => intakeOpen("INTAKE.md")));
-      parts.push(h("p", {class: "hint"}, t("desk.intake.init.hint")), make);
+      make.addEventListener("click", () => {
+        intake.busy = true; intake.error = ""; draw(true);
+        intakeCall("init", {domains: intake.domains.length ? intake.domains : ["none"]}).then(() => intakeOpen("INTAKE.md"), (error) => { intake.error = error.message; })
+          .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
+      });
+      const choices = x.domains.map((name) => {
+        const box = h("input", {type: "checkbox", checked: intake.domains.includes(name) ? "" : null});
+        box.addEventListener("change", () => { intake.domains = box.checked ? [...new Set([...intake.domains, name])] : intake.domains.filter((item) => item !== name); draw(true); });
+        return h("label", {class: "domain-choice"}, box, " " + name);
+      });
+      const none = h("input", {type: "checkbox", checked: intake.domains.length ? null : ""});
+      none.addEventListener("change", () => { if (none.checked) { intake.domains = []; draw(true); } });
+      parts.push(h("p", {class: "hint"}, t("desk.intake.init.hint")),
+        x.domains.length ? h("div", {class: "domain-choices"}, h("span", {class: "sub"}, t("desk.intake.domain") + " "), choices, h("label", {class: "domain-choice"}, none, " " + t("desk.intake.domain.none"))) : h("p", {class: "hint"}, t("desk.intake.domain.empty")), make);
     }
     if (!x.files.length) parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.intake.none"))));
     const row = (item) => {

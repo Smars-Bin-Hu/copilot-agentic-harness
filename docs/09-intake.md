@@ -7,7 +7,7 @@ The short version:
 1. The business files stay as they are, in the task's `REQ/originals/`.
 2. A program (no AI, so no tokens, and it changes no number) turns them into text: Word into Markdown, each Excel sheet into a CSV.
 3. You trim the text: delete what the agent does not need.
-4. You write a one-page `INTAKE.md`: the goal, the scope, what not to do, how to know it is done, where to look.
+4. You make a short `INTAKE.md`: it says what type of task this is, tells the agent to ask only about what does not fit, and names the knowledge base domain to scan. You add a line of your own if you want.
 5. The agent reads `INTAKE.md` and the trimmed files, writes `REQ.md`, and you confirm it. Then you talk: the agent checks the requirement against the knowledge base and asks about what is unclear, until it is right.
 
 The agent never reads the originals. The files in `REQ/` are yours: the agent can read them and cannot write there.
@@ -20,21 +20,32 @@ All of this can be done on the **Intake tab** of the task page (the board, `harn
 - A binary file (`.docx`, `.xlsx`) is not text: reading it takes tools and guesses. Markdown and CSV are what it reads best.
 - Your confirmation of `REQ.md` is the real check. It is much easier on a short, clean input.
 
-## Write `INTAKE.md`
+## `INTAKE.md`: a short goal, and the domain to scan
 
-`harness task intake init` makes `REQ/INTAKE.md` from a template. Fill it in, one page:
+Most of what a form would ask (the scope, what not to do, how to know it is done, where each need comes from, what is not clear) you do not want to write, and the agent can find in the documents and in the knowledge base. So `INTAKE.md` is short. `harness task intake init` makes it, or the **Create INTAKE.md** button of the Intake tab, which first asks *which knowledge base domain is this about?* (the domains of `knowledge-base/domains/`, or none / other).
 
-| Part | What goes in it |
-|---|---|
-| Goal | One to three sentences: what is wanted |
-| Scope | The tables, jobs, files, repositories it touches; what is out of scope |
-| Not to do | What must not change |
-| Done when | What shows it is done, as items that can be checked, with numbers. Use the business paper's own numbers |
-| Where to look | Which files of `REQ/` matter, and which parts (sections, sheets); what can be ignored |
-| Sources | Where each need comes from: file, section or sheet |
-| Open questions | What the business has not said |
+```
+## Goal
 
-Example of "Where to look": "`brd.md` section 3 and 5 only. The sheet `Mapping` of `mapping_orders.csv`. The rest is background."
+1. This is a <type> task. Read the intake files in REQ/ and understand the requirement.
+2. Ask the human about what is unclear, and do not assume (generic-grill-me), but do not over-ask:
+   ask only where the documents contradict each other, are wrong, or do not match the knowledge base
+   or the code. Do not ask the human to confirm what the documents clearly say.
+3. Human adds:
+
+<your own lines, if any>
+
+## Knowledge base
+
+Scan the knowledge base domain `customer` (knowledge-base/domains/customer/): ... Then write REQ.md from
+the intake files and what you found there: every item with its source, the objects and the code it
+affects, and what does not fit.
+```
+
+- `<type>` is the type of the task (RCA, development, test, design, knowledge base update, general).
+- The domain part says to scan the domain you chose. With *none / other* it says not to scan the knowledge base; with no choice it tells the agent to ask you which, naming the domains there are. A task that already has a domain (`task set-domain`) uses it.
+- Under *Human adds* you write what you want the agent to know or do, if anything: a deadline, a part to leave alone, a pointer to the important sheet. It can stay empty.
+- The agent writes the rest (what to do, what not to do, done when, sources, what is not clear) into `REQ.md`, and you confirm that.
 
 ## Convert the files
 

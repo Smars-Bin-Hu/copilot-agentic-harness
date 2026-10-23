@@ -8,6 +8,7 @@ import io
 import json
 import unittest
 import zipfile
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from test_boardserve import ServeCase
@@ -337,6 +338,45 @@ class IntakeTests(LifeCase):
         with self.assertRaises(CommandError):
             intake.init(self.root, "job")
         self.assertEqual((self.req / "INTAKE.md").read_text(encoding="utf-8"), "mine\n")
+
+    def test_the_intake_is_a_short_goal_and_names_the_knowledge_base_domain_to_scan(self) -> None:
+        """M42 (the person's design): most of what a template asks, the person does not want to write; the agent scans the knowledge base. The person writes a goal and picks a domain."""
+        from unittest import mock
+
+        from core import domainskills
+
+        with mock.patch.object(domainskills, "domains", return_value={"customer": Path("/x/customer"), "orders": Path("/x/orders")}):
+            chosen = intake.init(self.root, "job", ["customer"])
+            text = (self.req / "INTAKE.md").read_text(encoding="utf-8")
+            self.assertEqual(chosen["domains"], ["customer"])
+            self.assertNotIn("{", text, "every place of the template is filled")
+            self.assertIn("knowledge-base/domains/customer/", text)
+            self.assertIn("set-domain customer", text)
+            self.assertIn("generic-grill-me", text)
+            self.assertEqual(sum(1 for line in text.splitlines() if line.startswith("## ")), 2, "a goal and the knowledge base: the rest is for the agent to write in REQ.md")
+            self.assertNotIn("Where to look", text)
+            (self.req / "INTAKE.md").unlink()
+            intake.init(self.root, "job", ["none"])
+            none_text = (self.req / "INTAKE.md").read_text(encoding="utf-8")
+            self.assertIn(messages.text("intake.domain.none"), none_text)
+            self.assertNotIn("knowledge-base/domains/", none_text)
+            (self.req / "INTAKE.md").unlink()
+            intake.init(self.root, "job")  # none chosen, none on the task: the agent is told to ask, and which there are
+            asked = (self.req / "INTAKE.md").read_text(encoding="utf-8")
+            self.assertIn("`customer`", asked)
+            self.assertIn("`orders`", asked)
+            (self.req / "INTAKE.md").unlink()
+            with self.assertRaises(CommandError):
+                intake.init(self.root, "job", ["no_such_domain"])
+            self.assertFalse((self.req / "INTAKE.md").exists(), "a name the knowledge base does not have writes nothing")
+        with mock.patch.object(domainskills, "domains", return_value={}):
+            intake.init(self.root, "job")
+            self.assertIn(messages.text("intake.domain.none"), (self.req / "INTAKE.md").read_text(encoding="utf-8"), "a knowledge base with no domain: nothing to ask")
+
+    def test_the_type_of_the_task_is_in_the_goal(self) -> None:
+        self.new("t1", "test")
+        intake.init(self.root, "t1", ["none"])
+        self.assertIn(intake.type_name("test"), (self.folder("t1") / "REQ" / "INTAKE.md").read_text(encoding="utf-8"))
 
     def test_the_command_line_converts_a_file_and_says_what_to_do_next(self) -> None:
         path = self.root / "brd.docx"

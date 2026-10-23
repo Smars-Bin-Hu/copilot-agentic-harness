@@ -192,7 +192,8 @@ class Board:
         if action == "paste":
             return intake.paste(self.root, task, str(data.get("name", "")), str(data.get("text", "")), str(data.get("kind", "csv")))
         if action == "init":
-            return intake.init(self.root, task)
+            chosen = data.get("domains")
+            return intake.init(self.root, task, [str(item) for item in chosen] if isinstance(chosen, list) else None)
         if action == "read":
             return intake.read_for_edit(self.root, task, str(data.get("path", "")))
         if action == "save":

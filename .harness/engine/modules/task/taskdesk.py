@@ -169,7 +169,7 @@ def intake_view(root: Path, task: str, data: Dict[str, Any], row: Dict[str, Any]
     if row.get("status") != "open" or not (tasks.task_dir(root, task) / tasks.REQ_FILE).is_file():
         return None
     files = intake.req_files(root, task)
-    return {"files": files, "has_intake": any(item["path"] == "INTAKE.md" for item in files), "limit_mb": 28}
+    return {"files": files, "has_intake": any(item["path"] == "INTAKE.md" for item in files), "limit_mb": 28, "domains": intake.kb_domains(root), "task_domains": list(data.get("domains") or [])}
 
 
 def needs_req(data: Dict[str, Any]) -> bool:

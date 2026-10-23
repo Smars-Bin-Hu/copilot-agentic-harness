@@ -2,7 +2,7 @@
 
   convert   a file in: the original is kept as it is in `REQ/originals/`, its text (Markdown, CSV) is written in `REQ/`, with a report of what was left out
   paste     a table or a text the person copied (cells from Excel come as tab-separated text) into a file of `REQ/`
-  init      `REQ/INTAKE.md` from the template: the goal, the scope, what not to do, how to know it is done, where to look
+  init      `REQ/INTAKE.md` from the template: a short goal for the agent, and the knowledge base domain to scan
   setup     which optional readers are installed, and the command to install the others (from the policy `tools`; the harness never runs it)
 
 `REQ/` is the person's folder: the agent's file tools cannot write there. These commands are the person's (or the board server's, for the person); the agent
@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import config, messages, pinpython, tasks
+from core import config, domainskills, messages, pinpython, tasks
 from core.paths import cli_command, utc_now
 
 from . import intakeconvert as convert, task as task_ops
@@ -347,23 +347,55 @@ def paste(root: Path, raw_task: str, name: str, text: str, kind: str = "csv") ->
     return {"task": task, "file": f"{REQ_DIR}/{relative}", "next": say("intake.next.pasted", file=f"{REQ_DIR}/{relative}")}
 
 
-def init(root: Path, raw_task: str) -> Dict[str, Any]:
-    """`REQ/INTAKE.md` from the template, for the person to fill in. Not written over."""
+def type_name(kind: str) -> str:
+    return {"rca": say("intake.type.rca"), "dev": say("intake.type.dev"), "test": say("intake.type.test"), "design": say("intake.type.design"), "kb": say("intake.type.kb"),
+            "other": say("intake.type.other"), "qa": say("intake.type.other")}.get(kind, say("intake.type.other"))
+
+
+def domain_block(chosen: List[str], offered: List[str]) -> str:
+    """The part of INTAKE.md about the knowledge base: scan the domain the person chose, or none, or ask which."""
+    if chosen:
+        names = ", ".join(f"`{name}`" for name in chosen)
+        folders = ", ".join(f"`knowledge-base/domains/{name}/`" for name in chosen)
+        return say("intake.domain.scan", domains=names, folders=folders, first=chosen[0])
+    if offered:
+        return say("intake.domain.ask", options=", ".join(f"`{name}`" for name in offered))
+    return say("intake.domain.none")
+
+
+def kb_domains(root: Path) -> List[str]:
+    return sorted(domainskills.domains(root))
+
+
+def init(root: Path, raw_task: str, domains: Optional[List[str]] = None) -> Dict[str, Any]:
+    """`REQ/INTAKE.md` from the template, for the person to write a goal in: this is a <type> task, read the files, ask only what does not fit, and what the person adds.
+    `domains`: the knowledge base domains the person chose (`none`: none). Left out, the domains of the task, else the agent is told to ask which. Not written over."""
     task = task_ops.resolve(root, raw_task)
-    task_ops.require_open(tasks.read(root, task))
+    state = tasks.read(root, task)
+    task_ops.require_open(state)
     target = req_dir(root, task) / "INTAKE.md"
     if target.exists():
         raise CommandError(say("intake.init.exists", path=f"{REQ_DIR}/INTAKE.md"))
+    offered = kb_domains(root)
+    if domains:
+        wanted = [name for name in domains if name.strip().lower() not in ("none", "other", "")]
+        if wanted:
+            from . import tasklife  # it needs this module's neighbours
+
+            wanted = tasklife.known_domains(root, wanted, new_ok=False)  # a name the knowledge base does not have is refused, with the ones it has
+    else:
+        wanted = list((state or {}).get("domains") or [])
     language = messages.language()
     source = root / ".harness" / "contracts" / "templates" / "task" / language / "INTAKE.md"
     if not source.is_file():
         source = root / ".harness" / "contracts" / "templates" / "task" / "en" / "INTAKE.md"
-    text = source.read_text(encoding="utf-8-sig").replace("{name}", task_ops.name_of(task)) if source.is_file() else f"# Intake: {task_ops.name_of(task)}\n"
+    text = source.read_text(encoding="utf-8-sig") if source.is_file() else "# Intake: {name}\n\n## Goal\n\nThis is a {type} task.\n\n## Knowledge base\n\n{domain}\n"
+    text = text.replace("{name}", task_ops.name_of(task)).replace("{type}", type_name(str((state or {}).get("kind") or ""))).replace("{domain}", domain_block(wanted, [] if domains else offered))  # `none` chosen on purpose: nothing is asked
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")
     with task_ops.locked(root, task) as fresh:
-        task_ops.note(fresh, "intake", "INTAKE.md")
-    return {"task": task, "file": f"{REQ_DIR}/INTAKE.md", "next": say("intake.init.next")}
+        task_ops.note(fresh, "intake", "INTAKE.md" + (f" (domain {', '.join(wanted)})" if wanted else ""))
+    return {"task": task, "file": f"{REQ_DIR}/INTAKE.md", "domains": wanted, "next": say("intake.init.next")}
 
 
 # --- the task page: list, edit, undo, delete (1.5.45) ------------------------------------------------------------------------------------------------------

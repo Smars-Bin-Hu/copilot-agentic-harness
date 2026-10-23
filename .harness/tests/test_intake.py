@@ -116,6 +116,18 @@ class XlsxTests(unittest.TestCase):
         result = convert.convert_xlsx(xlsx([{"name": "N", "rows": rows}], styles=styles), "x", False, "x--")
         self.assertEqual(result["files"][0][1].decode("utf-8").strip(), "00123,1234.50,12.3%,12345,3.10,0.00,0.3", "padding zeros, decimals, percent; scientific and stored noise as they are")
 
+    def test_a_colour_a_text_block_and_a_big_sheet_are_said(self) -> None:
+        """B67 samples: a status that is only a colour was lost without a word; a text area merged over a block was repeated in every cell."""
+        styles = '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFC6EFCE"/></patternFill></fill></fills><cellXfs count="2"><xf numFmtId="0" fillId="0"/><xf numFmtId="0" fillId="2"/></cellXfs>'
+        rows = '<row r="1"><c r="A1" t="inlineStr"><is><t>text area</t></is></c></row><row r="2"><c r="A2" s="1"/><c r="B2" t="inlineStr"><is><t>x</t></is></c></row>' + "".join(
+            f'<row r="{n}"><c r="A{n}"><v>{n}</v></c></row>' for n in range(3, 260))
+        result = convert.convert_xlsx(xlsx([{"name": "S", "rows": rows, "merges": ["A1:C3"]}], styles=styles), "x", False, "x--")
+        said = " ".join(result["notes"])
+        self.assertIn("1 cell(s) have a fill colour", said)
+        self.assertIn("1 merged block(s)", said)
+        self.assertIn("259 rows: the agent should read its header and a sample", said)
+        self.assertEqual(result["files"][0][1].decode("utf-8").splitlines()[0], "text area,", "the block is in its first cell only")
+
     def test_hidden_sheets_rows_and_columns_are_left_out_and_said_unless_asked_for(self) -> None:
         rows = ('<row r="1"><c r="A1" t="inlineStr"><is><t>keep</t></is></c><c r="B1" t="inlineStr"><is><t>hidden col</t></is></c></row>'
                 '<row r="2" hidden="1"><c r="A2" t="inlineStr"><is><t>hidden row</t></is></c></row>'

@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.46 (2026-10-23)
+
+### Changed
+
+- **`task intake convert` says when a colour was lost.** A cell with a fill colour keeps no colour in a CSV; in a business sheet a colour often is the status. The report now counts the coloured cells of each sheet and says to put the meaning in words.
+- **A merged block of several rows and columns stays in its first cell.** A text area on a form was repeated in every cell it covered (24 copies of three lines). A merge of one row (a header over columns) or one column (a group label) is still repeated.
+- **A big sheet says so.** A sheet of more than 200 rows is reported with the advice to give the agent its header and a sample, not all of it.
+- An old `.xls` keeps its merged cells and leaves out hidden rows and columns.
+
 ## 1.5.45 (2026-10-23)
 
 ### Added

@@ -243,7 +243,29 @@ def cell_formats(archive: zipfile.ZipFile) -> List[Tuple[str, str]]:
     return out
 
 
-def sheet_grid(archive: zipfile.ZipFile, path: str, strings: List[str], formats: List[Tuple[str, str]], base1904: bool, include_hidden: bool) -> Dict[str, Any]:
+def coloured_styles(archive: zipfile.ZipFile) -> set:
+    """The indexes of the cell styles that have a solid fill that is not white: a colour that may carry a meaning (a status, a priority), which a csv cannot hold."""
+    root = parse(archive, "xl/styles.xml")
+    if root is None:
+        return set()
+    fills = []
+    node = root.find(tag(S, "fills"))
+    for item in (node.findall(tag(S, "fill")) if node is not None else []):
+        pattern = item.find(tag(S, "patternFill"))
+        colour = pattern.find(tag(S, "fgColor")) if pattern is not None else None
+        solid = pattern is not None and pattern.get("patternType") == "solid" and colour is not None
+        white = solid and (str(colour.get("rgb", "")).upper().endswith("FFFFFF") or colour.get("theme") == "0" or colour.get("indexed") in ("64", "9"))
+        fills.append(bool(solid and not white))
+    out = set()
+    xfs = root.find(tag(S, "cellXfs"))
+    for index, item in enumerate(xfs.findall(tag(S, "xf")) if xfs is not None else []):
+        fill = int(item.get("fillId", "0") or 0)
+        if fill < len(fills) and fills[fill]:
+            out.add(index)
+    return out
+
+
+def sheet_grid(archive: zipfile.ZipFile, path: str, strings: List[str], formats: List[Tuple[str, str]], base1904: bool, include_hidden: bool, colours: Optional[set] = None) -> Dict[str, Any]:
     """The cells of one sheet as rows of text, and what was skipped or flagged."""
     root = parse(archive, path)
     if root is None:
@@ -259,6 +281,7 @@ def sheet_grid(archive: zipfile.ZipFile, path: str, strings: List[str], formats:
     skipped_rows = set()  # hidden rows that are left out: a gap that is not a blank row
     formulas = 0
     unsaved = 0  # formulas with no saved value (a file not written by Excel)
+    coloured = 0  # cells with a fill colour: the colour is not carried over
     truncated = False
     data = root.find(tag(S, "sheetData"))
     next_row = 0
@@ -280,6 +303,8 @@ def sheet_grid(archive: zipfile.ZipFile, path: str, strings: List[str], formats:
             if column >= MAX_COLUMNS:
                 column += 1
                 continue
+            if colours and cell.get("s", "").isdigit() and int(cell.get("s", "0")) in colours:
+                coloured += 1
             kind = cell.get("t", "n")
             value_node = cell.find(tag(S, "v"))
             raw = value_node.text if value_node is not None and value_node.text is not None else ""
@@ -306,6 +331,7 @@ def sheet_grid(archive: zipfile.ZipFile, path: str, strings: List[str], formats:
                 cells[(index, column)] = text
             column += 1
     merged = 0
+    blocks = 0
     merges = root.find(tag(S, "mergeCells"))
     for item in (merges.findall(tag(S, "mergeCell")) if merges is not None else []):
         ref = item.get("ref", "")
@@ -316,13 +342,16 @@ def sheet_grid(archive: zipfile.ZipFile, path: str, strings: List[str], formats:
         bottom, right = int(re.sub(r"\D", "", last) or 1) - 1, column_index(last)
         if (top, left) not in cells or (bottom - top + 1) * (right - left + 1) > 5000:
             continue
+        if bottom > top and right > left:  # a block over several rows and columns is a text area or a title, not a header: it stays in its first cell
+            blocks += 1
+            continue
         merged += 1
         for r in range(top, bottom + 1):
             for c in range(left, right + 1):
                 cells.setdefault((r, c), cells[(top, left)])
     if not include_hidden:
         cells = {(r, c): text for (r, c), text in cells.items() if c not in hidden_columns}
-    return {"cells": cells, "skipped_rows": skipped_rows, "hidden_rows": hidden_rows, "hidden_columns": len(hidden_columns), "formulas": formulas, "unsaved": unsaved, "merged": merged, "truncated": truncated,
+    return {"cells": cells, "skipped_rows": skipped_rows, "hidden_rows": hidden_rows, "hidden_columns": len(hidden_columns), "formulas": formulas, "unsaved": unsaved, "coloured": coloured, "blocks": blocks, "merged": merged, "truncated": truncated,
             "comments": any(rel["type"] == "comments" for rel in relationships(archive, path).values()),
             "drawings": sum(1 for rel in relationships(archive, path).values() if rel["type"] in ("drawing", "chart", "image"))}
 
@@ -364,7 +393,7 @@ def convert_xlsx(data: bytes, stem: str, include_hidden: bool = False, prefix: s
     if book is None:
         raise ConvertError("not a workbook: xl/workbook.xml is not there")
     rels = relationships(archive, "xl/workbook.xml")
-    strings, formats = shared_strings(archive), cell_formats(archive)
+    strings, formats, colours = shared_strings(archive), cell_formats(archive), coloured_styles(archive)
     base1904 = False
     properties = book.find(tag(S, "workbookPr"))
     if properties is not None and properties.get("date1904") in ("1", "true"):
@@ -388,7 +417,7 @@ def convert_xlsx(data: bytes, stem: str, include_hidden: bool = False, prefix: s
             notes.append(f"sheet '{name}' is {'very hidden' if state == 'veryHidden' else 'hidden'}: not converted (ask for it with --include-hidden)")
             info["skipped"] = "hidden"
             continue
-        grid = sheet_grid(archive, target, strings, formats, base1904, include_hidden)
+        grid = sheet_grid(archive, target, strings, formats, base1904, include_hidden, colours)
         rows, cut_columns = trim_grid(grid["cells"], grid["skipped_rows"])
         info.update(rows=len(rows), columns=len(rows[0]) if rows else 0)
         extras = []
@@ -400,6 +429,12 @@ def convert_xlsx(data: bytes, stem: str, include_hidden: bool = False, prefix: s
             extras.append(f"{grid['merged']} merged range(s): the value is repeated in every cell of the range")
         if grid["formulas"]:
             extras.append(f"{grid['formulas']} formula(s): the value Excel last saved is used, not the formula")
+        if grid["blocks"]:
+            extras.append(f"{grid['blocks']} merged block(s) over several rows and columns (a text area or a title): the text is in the first cell only")
+        if grid["coloured"]:
+            extras.append(f"{grid['coloured']} cell(s) have a fill colour, and a colour is not converted: if it means something (a status, a priority), say it in words in INTAKE.md or add a column for it")
+        if len(rows) > 200:
+            extras.append(f"{len(rows)} rows: the agent should read its header and a sample, not all of it. Delete the rows it does not need, or the file when it is only a sample")
         if grid["unsaved"]:
             extras.append(f"{grid['unsaved']} formula(s) have no saved value (the file was not saved by Excel): those cells are empty")
         if cut_columns:

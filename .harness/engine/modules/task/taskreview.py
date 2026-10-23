@@ -46,7 +46,8 @@ _CONFIRMED = re.compile(r"已确认|confirmed|\d{4}-\d{2}-\d{2}")
 _NOT_CONFIRMED = re.compile(r"还没确认|not yet|not confirmed|yyyy-mm-dd")
 _VERDICT = re.compile(r"^VERDICT\s*[:：]\s*(PASS|FAIL)\b", re.IGNORECASE)
 # These kinds give back files of a target repository: before DEV/ holds something there is nothing to check yet.
-DEV_KINDS = ("dev", "test", "kb")
+DEV_KINDS = ("dev", "kb")
+RESULTS_PREFIX = "test/results-"  # a test task writes nothing back: what it has to show are the results files of its environments (M40-5)
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -161,10 +162,12 @@ def used(data: Dict[str, Any]) -> int:
 
 
 def has_something(root: Path, task: str, data: Dict[str, Any]) -> bool:
-    """Is there a result to check? A task that changes a target repository: files in DEV/. Any other: a file besides REQ.md."""
+    """Is there a result to check? A task that changes a target repository: files in DEV/. A test task: a results file. Any other: a file besides REQ.md."""
     names = [relative for relative, _ in tasksnap.result_files(root, task)]
     if data.get("kind") in DEV_KINDS:
         return any(name.lower().startswith(tasks.DEV_NAME.lower() + "/") for name in names)
+    if data.get("kind") == "test":
+        return any(name.lower().startswith(RESULTS_PREFIX) for name in names)
     return any(name.lower() != tasks.REQ_FILE.lower() for name in names)
 
 

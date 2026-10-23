@@ -10,14 +10,25 @@
   let desk = DATA.desk;
   let shown = JSON.stringify(desk);
   const same = (a, b) => a.replace(/"as_of":"[^"]*"/, "") === b.replace(/"as_of":"[^"]*"/, "");  // the time of asking is not a change
-  const tabs = ["overview", "test", "plan", "todo", "log", "changes", "review", "history", "docs"];  // the commit message is at the top of "changes" once written back (1.5.34)
-  const FILES = {overview: "TASK.md", req: "REQ.md", plan: "PLAN.md", todo: "TODO.md", log: "LOG.md"};
+  const tabs = ["overview", "design", "rca", "test", "plan", "todo", "log", "changes", "review", "history", "docs"];  // the commit message is at the top of "changes" once written back (1.5.34)
+  const FILES = {overview: "TASK.md", req: "REQ.md", plan: "PLAN.md", todo: "TODO.md", log: "LOG.md", design: "DESIGN.md", rca: "RCA.md"};
+  const WRITES_BACK = ["dev", "kb"];  // the kinds that have a plan, a diff and a commit
   const asked = location.hash.slice(1) === "commit" ? "changes" : location.hash.slice(1);  // a link to the old Commit tab
-  let current = tabs.includes(asked) ? asked : "overview";
   let other = "";  // the document open in the "docs" tab
 
   const doc = (name) => desk.docs.find((item) => item.name === name);
-  const extra = () => desk.docs.filter((item) => !Object.values(FILES).includes(item.name) && !(desk.test && item.name === "TEST-GUIDE.md") && !(desk.commit && item.name === "COMMIT-MESSAGE.md"));  // these have a tab of their own
+  // A tab is there when the kind of the task has it, or when its file is there (M40-1): a test task has no plan and no diff; a question has no log.
+  const ownTab = (tab) => {
+    if (tab === "design" || tab === "rca") return desk.kind === tab || Boolean(doc(FILES[tab]));
+    if (tab === "plan") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && Boolean(doc(FILES.plan)));
+    if (tab === "changes") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && desk.changes.files.length > 0);
+    if (tab === "todo" || tab === "log") return Boolean(doc(FILES[tab]));
+    if (tab === "test") return Boolean(desk.test);
+    if (tab === "review") return desk.review.n > 0 || desk.review.rounds.length > 0;
+    return true;
+  };
+  const extra = () => desk.docs.filter((item) => !Object.keys(FILES).some((tab) => FILES[tab] === item.name && ownTab(tab)) && item.name !== "REQ.md" && !(desk.test && item.name === "TEST-GUIDE.md") && !(desk.commit && item.name === "COMMIT-MESSAGE.md"));  // these have a tab of their own
+  let current = tabs.includes(asked) && ownTab(asked) ? asked : "overview";
 
   // --- markdown -------------------------------------------------------------------------------------------
 
@@ -148,6 +159,7 @@
       h("h2", null, idle ? idle.title : t("desk.actions.title")),
       desk.waited_s !== null && (items.length || desk.waiting) ? h("p", {class: "sub"}, t("desk.waited", {time: clock(desk.waited_s)})) : null,
       desk.req_changed ? h("p", {class: "hint bad"}, t("desk.req.changed")) : null,
+      desk.test && desk.test.reopen ? h("p", {class: "hint bad"}, t("desk.test.reopen", {dev: desk.test.reopen})) : null,
       desk.state === "working" && served() ? h("p", {class: "hint"}, t("desk.busy.note")) : null,
       desk.state === "waiting" && !desk.held ? h("p", {class: "hint"}, t("desk.unheld.note")) : null,
       idle ? [h("p", {class: "hint"}, idle.hint), idle.prompt ? promptLine(idle.prompt) : null] : h("div", {class: "action-list"}, items.map(entry)),
@@ -197,15 +209,12 @@
       if (tab === "docs") return t("desk.tab.docs") + " " + extra().length;
       return t("desk.tab." + tab);
     };
-    return h("nav", {class: "tabs"}, tabs.filter((tab) => (tab !== "docs" || extra().length) && (tab !== "review" || hasReview()) && (tab !== "test" || desk.test)).map((tab) => {
+    return h("nav", {class: "tabs"}, tabs.filter((tab) => tab === "docs" ? extra().length > 0 : ownTab(tab)).map((tab) => {
       const button = h("button", {type: "button", class: "tab" + (tab === current ? " on" : "")}, label(tab));
       button.addEventListener("click", () => { current = tab; history.replaceState(null, "", "#" + tab); draw(false); });
       return button;
     }));
   }
-
-  // The tab is there when checks were asked for ([review]=n) or one has run; a task nobody asked to check has none.
-  const hasReview = () => desk.review.n > 0 || desk.review.rounds.length > 0;
 
   function review() {
     const r = desk.review;
@@ -365,6 +374,8 @@
       return [h("p", {class: "hint top"}, t("desk.overview.hint")), markdown("TASK.md", t("desk.missing.task")),
         h("h2", {id: "req", class: "split"}, t("desk.tab.req")), markdown("REQ.md", t("desk.missing.req"))];
     }
+    if (current === "design") return [h("p", {class: "hint top"}, t("desk.design.hint")), markdown(FILES.design, t("desk.missing.design"))];
+    if (current === "rca") return [h("p", {class: "hint top"}, t("desk.rca.hint")), markdown(FILES.rca, t("desk.missing.rca"))];
     if (current === "plan") return [h("p", {class: "hint top"}, t("desk.plan.hint")), markdown("PLAN.md", t("desk.missing.plan"))];
     if (current === "todo") return [progress(), markdown("TODO.md", t("desk.missing.todo"))];
     if (current === "log") return [h("p", {class: "hint top"}, t("desk.log.hint")), markdown("LOG.md", t("desk.missing.log"))];

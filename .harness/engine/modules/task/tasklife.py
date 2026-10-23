@@ -260,7 +260,7 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     updated = data.get("updated_at", "")
     if state == "partial":
         return {"why": "recover", "since": last_event(data, "promote-partial") or updated}
-    if tasks.plan_digest(root, task) and not tasks.plan_approved(root, task, data):
+    if data.get("kind") != "test" and tasks.plan_digest(root, task) and not tasks.plan_approved(root, task, data):  # a test task writes nothing back: a plan it has is not asked for (B65)
         try:
             changed = datetime.fromtimestamp(tasks.plan_file(root, task).stat().st_mtime, timezone.utc).isoformat()
         except OSError:

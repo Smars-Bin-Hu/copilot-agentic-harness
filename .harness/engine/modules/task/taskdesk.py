@@ -115,7 +115,8 @@ def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, A
                         "ignored": [other.name for other in files.get(env.upper(), []) if path and other != path]})  # other files of the environment: older, not counted
         folder = tasks.task_dir(root, task)
         return {"guide": read_doc(folder / taskstages.GUIDE), "envs": out, "passed": sum(1 for item in out if item["state"] == "done"), "total": len(out),
-                "defects": defects_of(root, task)}
+                "defects": defects_of(root, task),
+                "reopen": task_ops.name_of(str(data["forked_from"])) if data.get("forked_from") and any(item["state"] == "failed" for item in out) else ""}  # forked from a development task and an environment failed: say where to go back to (M40-8); the person decides
     except Exception:  # noqa: BLE001 - a page must not fail over the tests of one task
         return None
 
@@ -158,10 +159,15 @@ def changed(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def offered(root: Path, row: Dict[str, Any], task: str, served: Tuple[str, ...]) -> List[Dict[str, str]]:
+def needs_req(data: Dict[str, Any]) -> bool:
+    """Only a full task stands on a requirement the person confirmed (dev, test, kb). An RCA, a design or another one-off task goes from the clues to the result in one run (M40-4)."""
+    return data.get("tier") == "full"
+
+
+def offered(root: Path, row: Dict[str, Any], task: str, served: Tuple[str, ...], data: Dict[str, Any]) -> List[Dict[str, str]]:
     """What the person can do about the task: the board's actions, and on its page also: confirm the requirement once the agent wrote it."""
     found = taskboard.actions(row, served)
-    if row.get("status") == "open" and "confirm-req" in served and task_ops.req_state(root, task) in ("open", "changed") and not any(item["action"] == "confirm-req" for item in found):
+    if needs_req(data) and row.get("status") == "open" and "confirm-req" in served and task_ops.req_state(root, task) in ("open", "changed") and not any(item["action"] == "confirm-req" for item in found):
         found.insert(0, {"action": "confirm-req", "command": f"{cli_command()} task confirm-req --task {row['name']}"})
     return found
 
@@ -188,9 +194,9 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
         "docs": docs, "history": history(data), "changes": changed(root, task, data),
-        "review": reviews(root, task, data), "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_unconfirmed": row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
+        "review": reviews(root, task, data), "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
-        "actions": offered(root, row, task, tuple(served)),
-        "req_changed": row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),
+        "actions": offered(root, row, task, tuple(served), data),
+        "req_changed": needs_req(data) and row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),
         "report": "/" + report.relative_to(root / common.REPORTS_DIR).as_posix() if report.is_file() else "",
     }

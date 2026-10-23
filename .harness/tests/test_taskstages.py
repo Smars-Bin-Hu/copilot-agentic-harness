@@ -95,6 +95,48 @@ class TestTab(StageCase):
         self.assertIsNone(taskdesk.desk(self.root, "job")["test"])
 
 
+class PerKind(StageCase):
+    """M40 (1.5.40): what a page and a task ask for depends on the kind."""
+
+    def test_only_a_full_task_asks_the_person_to_confirm_the_requirement(self) -> None:
+        for name, kind in (("one-off", "rca"), ("job", "dev")):
+            self.new(name, kind)
+            req = self.folder(name) / "REQ.md"
+            req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Why the load fails.").replace("<一两段。用户的原意，不加你自己的设想>", "为什么加载失败。"), encoding="utf-8")
+        desk = taskdesk.desk(self.root, "one-off", ("confirm-req", "pause"))
+        self.assertFalse(desk["req_unconfirmed"])
+        self.assertNotIn("confirm-req", [item["action"] for item in desk["actions"]])
+        self.assertIn("confirm-req", [item["action"] for item in taskdesk.desk(self.root, "job", ("confirm-req", "pause"))["actions"]])
+
+    def test_a_test_task_does_not_wait_for_a_plan_it_does_not_need(self) -> None:
+        from modules.task import tasklife
+
+        self.new("t", "test")
+        confirm_requirement(self.root, f"{BASE}/t", "")
+        (self.folder("t") / "PLAN.md").write_text("# plan\n", encoding="utf-8")
+        self.assertNotEqual(tasklife.waiting(self.root, f"{BASE}/t", self.data("t"))["why"], "plan")
+
+    def test_a_test_task_can_be_checked_once_it_has_results(self) -> None:
+        from modules.task import taskreview
+
+        self.new("t", "test")
+        (self.folder("t") / "TEST-GUIDE.md").write_text("# Guide\n\n## DEV\n\nrun\n", encoding="utf-8")
+        self.assertFalse(taskreview.has_something(self.root, f"{BASE}/t", self.data("t")), "a guide is not a result")
+        (self.folder("t") / "TEST" / "results-DEV.md").write_text("**Verdict for DEV: PASS**\n", encoding="utf-8")
+        self.assertTrue(taskreview.has_something(self.root, f"{BASE}/t", self.data("t")))
+
+    def test_a_failed_environment_of_a_forked_test_task_says_where_to_go_back_to(self) -> None:
+        self.new("dev1", "dev")
+        self.new("t", "test")
+        (self.folder("t") / "TEST-GUIDE.md").write_text("## DEV\n\n## IST\n", encoding="utf-8")
+        (self.folder("t") / "TEST" / "results-DEV.md").write_text("**Verdict for DEV: FAIL**\n", encoding="utf-8")
+        self.assertEqual(taskdesk.desk(self.root, "t")["test"]["reopen"], "", "not forked from a task: the person decides alone")
+        self.change("t", forked_from=f"{BASE}/dev1")
+        self.assertEqual(taskdesk.desk(self.root, "t")["test"]["reopen"], "dev1")
+        (self.folder("t") / "TEST" / "results-DEV.md").write_text("**Verdict for DEV: PASS**\n", encoding="utf-8")
+        self.assertEqual(taskdesk.desk(self.root, "t")["test"]["reopen"], "")
+
+
 class WriteBack(StageCase):
     def test_a_development_task_goes_through_its_five_steps(self) -> None:
         self.new("job", "dev")

@@ -10,6 +10,22 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.40 (2026-10-22)
+
+### Added
+
+- **A Design tab and an RCA tab.** A design task shows `DESIGN.md` in a tab of its own, an investigation shows `RCA.md`, right after Overview. Any task that has one of these files shows the tab.
+- **A hint on a forked test task whose environment failed.** The test task page says which development task it was forked from and that you can open it again (a new round with a new plan). It does not force you; a test task that was not forked from a task says nothing.
+
+### Changed
+
+- **A page shows only the tabs its kind has.** A test task has no Plan and no Changes tab; Plan and Changes are for development and knowledge base tasks (and for any task that has a plan or a diff). TODO and Log show when the file is there.
+- **A test task can be checked.** Independent checks work on every kind of task. A test task has nothing in `DEV/`, so it never had "something to check"; now its results files (`TEST/results-*.md`) count. The Review tab was never tied to a kind.
+- **Only a full task (development, test, knowledge base) asks you to confirm the requirement.** An RCA, a design or another one-off task has no *Confirm requirement* button and no "not confirmed" hint on its page: it goes from your clues to the result in one run.
+- **A test task does not wait for a plan.** A `PLAN.md` left in a test task no longer makes the board say it waits for your approval.
+
+**Introductory material**: `docs/02-features.md` (the task page) changed. The skills are not changed: they already put `DESIGN.md` and `RCA.md` at the root of the task folder.
+
 ## 1.5.39 (2026-10-22)
 
 ### Changed

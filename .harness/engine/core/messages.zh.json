@@ -1307,7 +1307,7 @@
   "task.test.next.pass_done": "所有环境都通过了。更新 TASK.md 和 TODO.md，说明这一点，问用户要不要关闭任务（他们决定）。如果这几次运行让人了解了某个环境，提议用 `generic-capture-knowledge`。",
   "task.test.next.fail": "把每个缺陷写进 TEST/defects.md：`## D<n> [open] {env}: <标题>`（永远是 [open]），然后运行 `{command} task defects sync`。更新 TASK.md 和 TODO.md。告诉用户重新打开开发任务（新的一轮），并给出 defects.md 的路径。不要交接别的环境。",
   "task.test.next.more": "写清楚缺什么、怎么拿到。更新 TASK.md 和 TODO.md。把同一个环境再交接一次：`{command} task handoff tests --env {env}`。",
-  "desk.test.runs": "每次运行：{runs}",
+  "desk.test.run": "第 {n} 次",
   "desk.test.ignored": "没有计入：{files}（算最后写的那个文件）",
   "task.close.todo": "TODO.md 里还有 {count} 步没勾：\n{steps}\n把做完的勾上（{task} 的 TODO.md）。如果有的步骤因为某个原因留着，用 `--todo-open \"<原因>\"` 再关闭一次：原因会记进历史。",
   "task.done.todo": "回写已经完成，但 TODO.md 里还有 {count} 步没勾（{steps}）。把做完的勾上，或者在 LOG.md 里说明某一步为什么留着。",

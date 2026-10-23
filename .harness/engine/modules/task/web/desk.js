@@ -421,13 +421,35 @@
     return parts;
   }
 
+  // A results file holds one `## Run N` after another. With two or more, each run is a small tab of its own and the newest is open (the verdict of each run is
+  // its last `Verdict for` line; `verdicts` has them in order, "" when not known).
+  const runPick = {};
+  function runTabs(key, list, verdicts, intro) {
+    const parts = {intro: [], runs: []};
+    for (const block of list) {
+      const found = block.t === "h" && block.level === 2 ? /^Run (\d+)$/i.exec(plain(block.spans)) : null;
+      if (found) parts.runs.push({n: Number(found[1]), blocks: []});
+      else (parts.runs.length ? parts.runs[parts.runs.length - 1].blocks : parts.intro).push(block);
+    }
+    if (parts.runs.length < 2) return null;
+    if (!parts.runs.some((run) => run.n === runPick[key])) runPick[key] = parts.runs[parts.runs.length - 1].n;
+    const shown = parts.runs.find((run) => run.n === runPick[key]);
+    const nav = h("nav", {class: "subtabs small"}, parts.runs.map((run, index) => {
+      const verdict = verdicts && verdicts.length === parts.runs.length ? verdicts[index] : "";
+      const button = h("button", {type: "button", class: "subtab" + (run.n === runPick[key] ? " on" : "") + (verdict === "PASS" ? " good" : verdict === "FAIL" ? " bad" : verdict ? " hot" : "")},
+        t("desk.test.run", {n: run.n}) + (verdict ? " · " + verdict : ""));
+      button.addEventListener("click", () => { runPick[key] = run.n; draw(true); });
+      return button;
+    }));
+    return [intro && parts.intro.length ? blocks(parts.intro) : null, nav, blocks(shown.blocks)];
+  }
+
   function envResults(env) {
     const verdict = env.verdict ? tag(env.verdict, env.verdict === "PASS" ? "good" : env.verdict === "FAIL" ? "bad" : "hot") : tag(env.waits ? t("desk.test.waits") : t("desk.test.noresult"), env.waits ? "hot" : "");
-    const body = env.results ? h("article", {class: "md"}, blocks(env.results.blocks), env.results.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)
+    const body = env.results ? h("article", {class: "md"}, runTabs("env:" + env.name, env.results.blocks, env.runs, false) || blocks(env.results.blocks), env.results.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)
       : h("p", {class: "sub"}, env.waits ? t("desk.test.waiting", {env: env.name}) : t("desk.test.noresult"));
     return h("section", {class: "round " + (env.state === "failed" ? "fail" : env.state === "done" ? "pass" : "")},
       h("div", {class: "round-head"}, h("strong", null, env.name), " ", verdict, env.file ? [" ", h("span", {class: "sub"}, "TEST/" + env.file)] : null,
-        env.runs.length > 1 ? [" ", h("span", {class: "sub"}, t("desk.test.runs", {runs: env.runs.join(" → ")}))] : null,
         env.ignored.length ? [" ", tag(t("desk.test.ignored", {files: env.ignored.join(", ")}), "hot")] : null), body);
   }
 
@@ -443,7 +465,7 @@
     }
     const found = fileCache[item.path] || item.doc;
     if (!found) return h("p", {class: "sub"}, fileCache[item.path] === null ? t("desk.files.failed") : t("desk.files.loading"));
-    if (found.kind === "markdown") return h("article", {class: "md"}, blocks(found.blocks), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
+    if (found.kind === "markdown") return h("article", {class: "md"}, runTabs("file:" + item.path, found.blocks, null, true) || blocks(found.blocks), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
     if (found.kind === "text") return [codeBlock(found.text), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null];
     return h("p", {class: "sub"}, t("desk.files.other", {size: size(found.size)}));
   }

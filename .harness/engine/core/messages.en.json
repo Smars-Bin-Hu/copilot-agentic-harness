@@ -1307,7 +1307,7 @@
   "task.test.next.pass_done": "Every environment has passed. Update TASK.md and TODO.md, say so, and ask the user whether to close the task (their decision). Offer `generic-capture-knowledge` when the runs taught something about an environment.",
   "task.test.next.fail": "Add each defect to TEST/defects.md as `## D<n> [open] {env}: <title>` (always [open]), then run `{command} task defects sync`. Update TASK.md and TODO.md. Tell the user to open the development task again (a new round) and give the path of defects.md. Do not hand over another environment.",
   "task.test.next.more": "List exactly what is missing and how to get it. Update TASK.md and TODO.md. Hand the same environment over again: `{command} task handoff tests --env {env}`.",
-  "desk.test.runs": "runs: {runs}",
+  "desk.test.run": "Run {n}",
   "desk.test.ignored": "not counted: {files} (the file written last counts)",
   "task.close.todo": "{count} step(s) of TODO.md are not ticked:\n{steps}\nTick the ones that are done (TODO.md of {task}). If some stay open for a reason, close again with `--todo-open \"<why>\"`: the reason goes into the history.",
   "task.done.todo": "The write-back is done, but TODO.md still has {count} step(s) not ticked ({steps}). Tick the ones that are done, or say in LOG.md why a step stays open.",

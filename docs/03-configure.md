@@ -188,7 +188,7 @@ Word and Excel (`.xlsx`) files are read with nothing installed. Old `.xls` and P
 On Windows behind a proxy, the same idea with the `py` launcher (the proxy address and the trusted hosts are your company's; the trusted hosts skip the certificate check):
 
 ```json
-{ "python": { "install_command": "py -m pip install {package} --proxy http://localhost:9000 --trusted-host pypi.org --trusted-host files.pythonhosted.org" } }
+{ "python": { "install_command": "py -m pip install {package} --proxy http://proxy.example.com:8080 --trusted-host pypi.example.com --trusted-host files.example.com" } }
 ```
 
 `py` can start another Python than the `python` that runs the harness. `task intake setup` asks the launcher which one it starts and warns when it is not the one the harness runs on.

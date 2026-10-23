@@ -532,7 +532,7 @@ class PackagesTests(LifeCase):
             launcher = Path(folder) / "py"
             launcher.write_text('#!/bin/sh\nprintf "%s\\n" "$FAKE_PY"\n', encoding="utf-8")
             launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR)
-            command = f"{launcher} -3 -m pip install {{package}} --proxy http://localhost:9000 --trusted-host pypi.org"
+            command = f"{launcher} -3 -m pip install {{package}} --proxy http://proxy.example.com:8080 --trusted-host pypi.example.com"
             os.environ["FAKE_PY"] = sys.executable
             try:
                 self.assertEqual(intake.other_python(command), "", "the launcher starts the same Python: nothing to say")

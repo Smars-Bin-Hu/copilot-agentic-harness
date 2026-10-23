@@ -141,9 +141,10 @@ def clean_task(root: Path, raw: str) -> str:
 
 
 def copy_from_target(
-    root: Path, data: Dict[str, Any], specs: List[str], target: Path, limit: int, purpose: str, notes: Optional[List[str]] = None
+    root: Path, data: Dict[str, Any], specs: List[str], target: Path, limit: int, purpose: str, notes: Optional[List[str]] = None, rebase: bool = False
 ) -> List[Dict[str, str]]:
     """Files of target repositories as `base_ref` has them (the commit is fixed at the first read), not the working tree.
+    `rebase`: the commit is fixed again, at what `base_ref` is now (after it was brought up to its remote): the way to take a file that changed on main since.
 
     A spec is `<repo>/<path>`: a file, or a folder (every tracked file under it). Records the repositories and the blob
     of each file in `data`, so promote can tell later whether main moved under the files it is about to write.
@@ -156,13 +157,14 @@ def copy_from_target(
     records = data.setdefault("targets", {})
     files = data.setdefault("target_files", {})
     wanted: Dict[str, Any] = {}
+    pinned = set()  # repositories whose commit was fixed in this call
     for spec in specs:
         name, _, rest = spec.strip().replace("\\", "/").partition("/")
         if not name or not rest.strip("/"):
             raise CommandError(say("fetch.spec", spec=spec))
         repo = target_repo(found, name)
         relative = relative_name(rest, "path.what.in_repo")
-        if name not in records:
+        if name not in records or (rebase and name not in pinned):
             try:
                 if notes is not None:  # the first read of this repository in the round: its base branch is brought up to the remote first
                     from . import basesync  # it needs this module
@@ -174,6 +176,7 @@ def copy_from_target(
             if not commit:
                 raise CommandError(say("fetch.no_branch", name=name, base_ref=repo.base_ref))
             records[name] = {"path": str(repo.path), "base_ref": repo.base_ref, "base_commit": commit}
+            pinned.add(name)
         commit = records[name]["base_commit"]
         try:
             listed = targets.tracked_files(repo, commit, relative, found.timeout)

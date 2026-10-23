@@ -82,6 +82,22 @@ class BaseSyncTests(TaskCase):
         self.assertIn("src/a.sql", said)
         self.assertIn(self.blob(self.repo_b, "src/a.sql")[:10], said)  # the file changed on main since the fetch: the existing check now sees the remote's change
 
+    def test_a_file_that_changed_on_main_after_the_fetch_is_taken_again_with_rebase(self) -> None:
+        """B65: `--overwrite` gave back the old version, so the way out the refusal named did not exist."""
+        self.ready()
+        self.run_cli("task", "fetch", "repo_b/src/a.sql")
+        self.dev("repo_b/src/a.sql", "select 1, 3;\n")
+        theirs = self.colleague_changes("select 1, 4;\n")
+        self.assertIn("--rebase", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
+        self.run_cli("task", "fetch", "--overwrite", "repo_b/src/a.sql")
+        self.assertEqual(self.dev("repo_b/src/a.sql").read_text(encoding="utf-8"), "select 1;\n", "the old version again")
+        self.run_cli("task", "promote", "--dry-run", ok=False)  # still refused: the base is the old one
+        self.run_cli("task", "fetch", "--rebase", "repo_b/src/a.sql")
+        self.assertEqual(self.dev("repo_b/src/a.sql").read_text(encoding="utf-8"), "select 1, 4;\n", "main as it is now")
+        self.assertEqual(self.data()["targets"]["repo_b"]["base_commit"], theirs)
+        self.dev("repo_b/src/a.sql", "select 1, 5;\n")
+        self.assertEqual(self.run_cli("task", "promote", "--dry-run")["files"][0]["action"], "modify", "the dry run passes on the new base")
+
 
 if __name__ == "__main__":
     unittest.main()

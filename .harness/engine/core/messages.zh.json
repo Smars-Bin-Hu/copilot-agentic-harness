@@ -500,7 +500,7 @@
   "note.brackets": "（{text}）",
   "list.semicolon": "；",
   "promote.hint.fetch": "先 `task fetch {key}` 取过再改。",
-  "promote.hint.refetch": "把你的改动另存，`task fetch --overwrite` 重新取文件，再改一遍。",
+  "promote.hint.refetch": "把你的改动另存，用 `task fetch <文件> --rebase` 重新取文件（它取 main 现在的版本；`--overwrite` 只会再给你旧版本），再改一遍。",
   "promote.hint.set_branch": "用 `task set-branch --branch feature/<名字>` 设一个。",
   "promote.hint.rename_branch": "换一个分支名（`task set-branch`），或先处理掉那个分支。",
   "promote.hint.drop": "把它从 DEV/ 里拿掉。",

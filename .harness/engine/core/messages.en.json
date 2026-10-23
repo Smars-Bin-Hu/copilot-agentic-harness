@@ -500,7 +500,7 @@
   "note.brackets": " ({text})",
   "list.semicolon": "; ",
   "promote.hint.fetch": "Run `task fetch {key}` first, then change it.",
-  "promote.hint.refetch": "Save your changes elsewhere, fetch the file again with `task fetch --overwrite`, and make the changes again.",
+  "promote.hint.refetch": "Save your changes elsewhere, fetch the file again with `task fetch <file> --rebase` (it takes main as it is now; `--overwrite` would only give back the old version), and make the changes again.",
   "promote.hint.set_branch": "Set one with `task set-branch --branch feature/<name>`.",
   "promote.hint.rename_branch": "Pick another branch name (`task set-branch`), or deal with that branch first.",
   "promote.hint.drop": "Take it out of DEV/.",

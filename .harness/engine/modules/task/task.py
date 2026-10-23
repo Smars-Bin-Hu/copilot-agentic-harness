@@ -472,9 +472,12 @@ def fill_confirmation(root: Path, task: str, path: Path, text: str, data: Dict[s
 # --- fetch, delete, diff -------------------------------------------------------------------------
 
 
-def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False) -> Dict[str, Any]:
+def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False, rebase: bool = False) -> Dict[str, Any]:
+    """`overwrite`: take the base version again over a file changed in DEV/. `rebase`: also fix the base again at what main is now (the file changed on main since): the version
+    is the new one, and what was changed in DEV/ is dropped, the agent makes the change again."""
     if not specs:
         raise CommandError(say("fetch.empty"))
+    overwrite = overwrite or rebase
     task = resolve(root, raw_task)
     limit = common.policy(root)["fetch"]["max_files"]
     base, dev = tasks.base_dir(root, task), tasks.dev_dir(root, task)
@@ -491,7 +494,7 @@ def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False) 
             if name in found.repos and rest.strip("/"):
                 common.check_target_output(found, f"{name}/{rest.strip('/')}", "fetch")
         synced: List[str] = []
-        entries = common.copy_from_target(root, data, specs, base, limit, "base", synced)
+        entries = common.copy_from_target(root, data, specs, base, limit, "base", synced, rebase)
         for entry in entries:
             key = entry["source"]
             source, destination = base / key, dev / key
@@ -504,7 +507,7 @@ def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False) 
                 data["deletes"].remove(key)
         if fetched or kept:
             data["promote"] = {"state": "none"} if data["promote"]["state"] == "dry_run" else data["promote"]
-            note(data, "fetch", messages.joined(fetched + kept))
+            note(data, "fetch", messages.joined(fetched + kept) + (" (rebase)" if rebase else ""))
     result: Dict[str, Any] = {"task": task, "fetched": [f"{task}/{tasks.DEV_NAME}/{key}" for key in fetched], "total_fetched": len(data["target_files"])}
     if synced:
         result["base_sync"] = synced

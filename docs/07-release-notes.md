@@ -20,6 +20,7 @@ To see which version you have: `harness --version`.
 
 ### Changed
 
+- **`task fetch --rebase`: the way out when a file changed on main after you fetched it.** Promote refused such a file and said to fetch it again with `--overwrite`, but `--overwrite` gave back the version fetched first, so the refusal could not be cleared in the round. `--rebase` takes the file as main is now (after main is brought up to its remote), fixes the base again, and drops the changes made in DEV/ to that file, so the agent makes them again. The refusal now names `--rebase`.
 - The tab that was called *Other files* (the Markdown files at the root of the task) is called *Other documents*, so it is not mistaken for *Files*.
 
 **Introductory material**: `docs/02-features.md` (the task page, the test results) changed. The `generic-test-guide` skill and its template changed: the guide asks for a screenshot, and the results step passes the pictures to the script.

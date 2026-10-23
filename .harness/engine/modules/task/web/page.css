@@ -132,7 +132,12 @@ ol.timeline li{display:grid;grid-template-columns:8.5em minmax(0,1fr);align-item
 .subtabs.small{margin:8px 0 14px}.subtabs.small .subtab{font-size:12.5px;padding:4px 12px}
 .intake-drop{border:2px dashed var(--line);border-radius:10px;padding:16px;text-align:center;margin:8px 0}.intake-drop.over{border-color:var(--model);background:var(--track)}
 .intake-drop p{margin:0 0 8px}.intake-drop label{display:block;margin-top:8px}
-.domain-choices{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;margin:8px 0}.domain-choice{font-size:13px;cursor:pointer}
+.domain-panel{max-width:460px;margin:12px 0;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.domain-title{font-weight:600;font-size:14px;margin-bottom:2px}.domain-list{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.domain-choice{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-size:13.5px;background:var(--bg)}
+.domain-choice:hover{border-color:var(--soft)}.domain-choice.on{border-color:var(--model);background:var(--track)}
+.domain-choice.name span{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.domain-choice.none{margin-top:4px;border-style:dashed}
+.domain-choice input{margin:0;width:16px;height:16px}
 .intake-group{margin:10px 0}.intake-group summary{cursor:pointer;font-size:13px;color:var(--soft);margin-bottom:6px}
 .intake-files td{vertical-align:middle}.linkish{font:inherit;background:none;border:none;padding:0;color:var(--model);cursor:pointer;text-align:left;text-decoration:underline}
 textarea.editor{box-sizing:border-box;width:100%;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);resize:vertical;margin:6px 0}

@@ -605,15 +605,17 @@
         intakeCall("init", {domains: intake.domains.length ? intake.domains : ["none"]}).then(() => intakeOpen("INTAKE.md"), (error) => { intake.error = error.message; })
           .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
       });
-      const choices = x.domains.map((name) => {
-        const box = h("input", {type: "checkbox", checked: intake.domains.includes(name) ? "" : null});
-        box.addEventListener("change", () => { intake.domains = box.checked ? [...new Set([...intake.domains, name])] : intake.domains.filter((item) => item !== name); draw(true); });
-        return h("label", {class: "domain-choice"}, box, " " + name);
-      });
-      const none = h("input", {type: "checkbox", checked: intake.domains.length ? null : ""});
-      none.addEventListener("change", () => { if (none.checked) { intake.domains = []; draw(true); } });
+      const row = (label, ticked, cls, change) => {
+        const box = h("input", {type: "checkbox", checked: ticked ? "" : null});
+        box.addEventListener("change", () => { change(box.checked); draw(true); });
+        return h("label", {class: "domain-choice " + cls + (ticked ? " on" : "")}, box, h("span", null, label));
+      };
+      const choices = x.domains.map((name) => row(name, intake.domains.includes(name), "name",
+        (on) => { intake.domains = on ? [...new Set([...intake.domains, name])] : intake.domains.filter((item) => item !== name); }));
+      const none = row(t("desk.intake.domain.none"), !intake.domains.length, "none", (on) => { if (on) intake.domains = []; });
       parts.push(h("p", {class: "hint"}, t("desk.intake.init.hint")),
-        x.domains.length ? h("div", {class: "domain-choices"}, h("span", {class: "sub"}, t("desk.intake.domain") + " "), choices, h("label", {class: "domain-choice"}, none, " " + t("desk.intake.domain.none"))) : h("p", {class: "hint"}, t("desk.intake.domain.empty")), make);
+        x.domains.length ? h("div", {class: "domain-panel"}, h("div", {class: "domain-title"}, t("desk.intake.domain.title")), h("div", {class: "sub"}, t("desk.intake.domain.hint")), h("div", {class: "domain-list"}, choices, none))
+          : h("p", {class: "hint"}, t("desk.intake.domain.empty")), make);
     }
     if (!x.files.length) parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.intake.none"))));
     const row = (item) => {

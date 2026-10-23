@@ -4,7 +4,7 @@
 
 ## Goal
 
-1. This is a {type} task. Read the intake files in `REQ/` and understand the requirement.
+1. This is {type} task. Read the intake files in `REQ/` and understand the requirement.
 2. Ask the human about what is unclear, and do not assume (the skill `generic-grill-me`), but do not over-ask: ask only where the documents contradict each other, are wrong, or do not match the knowledge base or the code. Do not ask the human to confirm what the documents clearly say.
 3. Human adds:
 

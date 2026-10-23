@@ -12,7 +12,7 @@ The short version:
 
 The agent never reads the originals. The files in `REQ/` are yours: the agent can read them and cannot write there.
 
-All of this can be done on the **Intake tab** of the task page (the board, `harness task board --serve`; the browser must be paired): drop the files in, read the report of what was left out, open any file in a text box to trim it, put it back as converted if you cut too much, paste a table, create `INTAKE.md`, and copy the message that tells the agent. No command line is needed. The commands below do the same.
+All of this can be done on the **Intake tab** of the task page (the board, `harness task board --serve`; the browser must be paired): drop the files in, read the report of what was left out, open any file to trim it (a CSV file opens as a table: search, pick rows, delete them or keep only them), put it back as converted if you cut too much, paste a table, create `INTAKE.md`, and copy the message that tells the agent. No command line is needed. The commands below do the same.
 
 ## Why not give the agent the raw files
 
@@ -73,6 +73,8 @@ For each file this does three things:
 ## Trim
 
 Open the converted files and delete what the agent does not need: background chapters, sheets of another team, columns that mean nothing for this change. Smaller is better: the agent reads all of it, every time, and you pay for it in tokens. To drop whole files, tick them in the Intake tab (or *Select all*) and press *Delete selected*.
+
+A CSV file opens as a **table**, one rule or record to a row, however many lines its cells have. Type a word in the search box to find rows (it looks in every column), *Pick the shown rows*, then *Delete picked*, or *Keep only picked* to drop everything else; tick single rows by hand too. Long tables show 200 rows at a time. Nothing is written until you press *Save*; *Undo changes* goes back to the last save. The *Text* button shows the raw file when you want to change a cell.
 
 Do not trim the original. A trimmed file can be put back as it was converted: `REQ/.pristine/` keeps the first version.
 

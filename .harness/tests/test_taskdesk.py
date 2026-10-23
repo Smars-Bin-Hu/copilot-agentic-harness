@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
+import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 
 import support  # noqa: F401  (puts the engine on sys.path)
 from support import confirm_requirement
@@ -15,6 +19,42 @@ from taskcase import TASK
 from core import messages, tasks
 from modules.task.common import CommandError
 from modules.task import mdtree, task as task_ops, taskdesk
+
+
+ENGINE_WEB = Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web"
+
+
+class CsvTableTests(unittest.TestCase):
+    """The Intake tab shows a CSV file as a table: its reader and writer (in `desk.js`) must give the file back as the converter wrote it."""
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_the_csv_reader_and_writer_keep_quotes_commas_and_line_breaks_in_a_cell(self) -> None:
+        source = (ENGINE_WEB / "desk.js").read_text(encoding="utf-8")
+        helpers = source[source.index("function parseCsv"): source.index("// The table view of a CSV")]
+        script = helpers + r"""
+const assert = require("assert");
+const sample = 'a,"b ""q"" x",c\n"line1\n- Fields containing ""X"" must",2,"x,y"\n\n3,,\n';
+const rows = parseCsv(sample);
+assert.deepStrictEqual(rows, [["a", 'b "q" x', "c"], ['line1\n- Fields containing "X" must', "2", "x,y"], ["3", "", ""]]);
+assert.strictEqual(toCsv(rows), 'a,"b ""q"" x",c\n"line1\n- Fields containing ""X"" must",2,"x,y"\n3,,\n');
+assert.deepStrictEqual(parseCsv("a,b\r\nc,d"), [["a", "b"], ["c", "d"]]);
+assert.deepStrictEqual(parseCsv(""), []);
+"""
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / "csv_check.js"
+            file.write_text(script, encoding="utf-8")
+            done = subprocess.run(["node", str(file)], capture_output=True, text=True, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_every_text_of_the_table_view_is_written_in_both_languages(self) -> None:
+        source = (ENGINE_WEB / "desk.js").read_text(encoding="utf-8")
+        import re
+
+        keys = set(re.findall(r'"(desk\.intake\.(?:csv|view)\.[a-z.]+)"', source))
+        self.assertGreaterEqual(len(keys), 9, keys)
+        for language in ("en", "zh"):
+            table = json.loads((Path(__file__).resolve().parents[1] / "engine" / "core" / f"messages.{language}.json").read_text(encoding="utf-8"))
+            self.assertEqual(sorted(key for key in keys if key not in table), [], language)
 
 
 def kinds(spans):

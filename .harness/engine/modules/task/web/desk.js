@@ -544,7 +544,11 @@
       draw(true);
       return;
     }
-    intakeCall("read", {path}).then((found) => { intake.editing = {path, text: found.text, saved: found.text, pristine: found.pristine, size: found.size}; draw(true); },
+    intakeCall("read", {path}).then((found) => {
+      const edit = {path, text: found.text, saved: found.text, pristine: found.pristine, size: found.size, view: "text"};
+      if (/\.csv$/i.test(path)) csvLoad(edit, true);
+      intake.editing = edit; draw(true);
+    },
       (error) => { intake.error = error.message; draw(true); });
   }
 
@@ -559,6 +563,93 @@
     intake.busy = true; intake.error = ""; draw(true);
     intakeCall(action, {path}).then(() => { if (after) after(); }, (error) => { intake.error = error.message; })
       .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
+  }
+
+  // A CSV file as rows of cells, the way the converter writes it: commas, a cell in quotes when it holds a comma, a quote ("" inside) or a line break. Blank lines are dropped.
+  function parseCsv(text) {
+    const rows = [];
+    let row = [], cell = "", quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (quoted) {
+        if (c !== '"') cell += c;
+        else if (text[i + 1] === '"') { cell += '"'; i++; }
+        else quoted = false;
+      } else if (c === '"' && cell === "") quoted = true;
+      else if (c === ",") { row.push(cell); cell = ""; }
+      else if (c === "\n" || c === "\r") {
+        if (c === "\r" && text[i + 1] === "\n") i++;
+        row.push(cell);
+        if (row.length > 1 || row[0] !== "") rows.push(row);
+        row = []; cell = "";
+      } else cell += c;
+    }
+    if (cell !== "" || row.length) { row.push(cell); if (row.length > 1 || row[0] !== "") rows.push(row); }
+    return rows;
+  }
+
+  function toCsv(rows) {
+    return rows.map((row) => row.map((cell) => (/[",\n\r]/.test(cell) ? '"' + cell.replace(/"/g, '""') + '"' : cell)).join(",")).join("\n") + "\n";
+  }
+
+  // The table view of a CSV file: the rows the person picks are taken out, or the only ones kept. The text follows, and is written only by Save.
+  const CSV_PAGE = 200;
+  function csvLoad(edit, first) {
+    edit.rows = parseCsv(edit.text);
+    edit.picked = new Set(); edit.q = edit.q || ""; edit.shown = CSV_PAGE;
+    if (first) edit.view = edit.rows.length > 1 && edit.rows.some((row) => row.length > 1) ? "table" : "text";  // one column or one line: it may not be a comma file; the text is shown
+  }
+
+  function csvTable(edit) {
+    const matching = () => {
+      const q = edit.q.trim().toLowerCase(), out = [];
+      for (let i = 1; i < edit.rows.length; i++) if (!q || edit.rows[i].some((cell) => cell.toLowerCase().includes(q))) out.push(i);
+      return out;
+    };
+    const tools = (label, call, cls) => {
+      const b = h("button", {type: "button", class: "act " + (cls || "")}, label);
+      b.addEventListener("click", call);
+      return b;
+    };
+    const apply = (keep) => {
+      edit.rows = edit.rows.filter((row, i) => i === 0 || edit.picked.has(i) === keep);
+      edit.text = toCsv(edit.rows);
+      edit.picked = new Set(); edit.q = ""; edit.shown = CSV_PAGE;  // the search ends too: what is left is what the person looks at next
+      draw(true);
+    };
+    const search = h("input", {type: "text", class: "env-input", value: edit.q, placeholder: t("desk.intake.csv.search")});
+    const info = h("span", {class: "sub"});
+    const del = tools("", () => apply(false), "danger");
+    const keep = tools("", () => apply(true));
+    const body = h("tbody");
+    const more = tools("", () => { edit.shown += CSV_PAGE; refresh(); });
+    const refresh = () => {
+      const hits = matching();
+      info.textContent = t("desk.intake.csv.info", {rows: edit.rows.length - 1, shown: hits.length, picked: edit.picked.size});
+      del.textContent = t("desk.intake.csv.delete", {n: edit.picked.size});
+      keep.textContent = t("desk.intake.csv.keep", {n: edit.picked.size});
+      del.disabled = keep.disabled = !edit.picked.size;
+      const cut = hits.slice(0, edit.shown);
+      body.replaceChildren(...cut.map((i) => {
+        const box = h("input", {type: "checkbox", checked: edit.picked.has(i) ? "" : null});
+        box.addEventListener("change", () => { if (box.checked) edit.picked.add(i); else edit.picked.delete(i); refresh(); });
+        return h("tr", {class: edit.picked.has(i) ? "picked" : null}, h("td", {class: "csv-pick"}, box, " ", h("span", {class: "sub"}, i)),
+          edit.rows[i].map((cell) => h("td", null, h("div", {class: "csv-cell"}, cell))));
+      }));
+      more.hidden = hits.length <= cut.length;
+      more.textContent = t("desk.intake.csv.more", {n: Math.min(CSV_PAGE, hits.length - cut.length)});
+    };
+    search.addEventListener("input", () => { edit.q = search.value; edit.shown = CSV_PAGE; refresh(); });
+    const columns = Math.max(1, ...edit.rows.map((row) => row.length)), first = edit.rows[0] || [];
+    const head = h("thead", null, h("tr", null, h("th", null, "#"), Array.from({length: columns}, (_, c) => h("th", null, first[c] || ""))));
+    refresh();
+    return h("div", {class: "csv"},
+      h("div", {class: "csv-tools"}, search,
+        tools(t("desk.intake.csv.pickshown"), () => { for (const i of matching()) edit.picked.add(i); refresh(); }),
+        tools(t("desk.intake.csv.clear"), () => { edit.picked.clear(); refresh(); }), del, keep, info),
+      h("div", {class: "csv-scroll"}, h("table", {class: "csv-table"}, head, body)),
+      h("div", {class: "inbox-save"}, more),
+      h("p", {class: "hint"}, t("desk.intake.csv.note")));
   }
 
   function intakeEditor() {
@@ -581,8 +672,10 @@
     }
     const area = h("textarea", {rows: 22, class: "editor", spellcheck: "false", disabled: intake.busy ? "" : null}, edit.text);
     area.addEventListener("input", () => { edit.text = area.value; });
+    const views = edit.rows ? h("div", {class: "inbox-save"}, ...[["table", t("desk.intake.view.table")], ["text", t("desk.intake.view.text")]].map(([view, label]) =>
+      button(label, () => { if (edit.view !== view) { edit.view = view; if (view === "table") csvLoad(edit); draw(true); } }, edit.view === view ? "hot" : "")), edit.text !== edit.saved ? button(t("desk.intake.csv.undo"), () => { edit.text = edit.saved; csvLoad(edit); draw(true); }) : null) : null;
     const reset = () => { if (window.confirm(t("desk.intake.reset.confirm"))) intakeAct("reset", edit.path, () => { intake.editing = null; intakeOpen(edit.path); }); };
-    return h("section", {class: "round editing"}, head, area,
+    return h("section", {class: "round editing"}, head, views, edit.view === "table" ? csvTable(edit) : area,
       h("div", {class: "inbox-save"}, button(t("desk.intake.save"), intakeSave, "hot"), " ", edit.pristine ? button(t("desk.intake.reset"), reset) : null));
   }
 

@@ -14,6 +14,7 @@ from test_boardserve import ServeCase
 from test_tasklife import BASE, LifeCase
 from taskcase import TASK
 
+from core import messages
 from modules.task import intake, intakeconvert as convert, taskdesk
 from modules.task.common import CommandError
 
@@ -294,6 +295,7 @@ class IntakeTests(LifeCase):
     def test_text_and_picture_files_come_in_as_they_are_and_what_cannot_be_read_is_said(self) -> None:
         intake.add_file(self.root, "job", "rules.csv", b"a,b\n1,2\n")
         self.assertEqual((self.req / "rules.csv").read_bytes(), b"a,b\n1,2\n")
+        self.assertFalse((self.req / "originals").exists() or (self.req / "rules.convert.md").exists(), "a text file is its own original: no copy, no report")
         shot = intake.add_file(self.root, "job", "screen.png", PNG)
         self.assertIn("Give the numbers as text", " ".join(shot["notes"]))
         old = intake.add_file(self.root, "job", "old.doc", b"\xd0\xcf\x11\xe0")
@@ -408,6 +410,9 @@ class PackagesTests(LifeCase):
             intake.need_package(self.root, "no_such_module_xyz", "a thing")
         self.assertIn("tools.override.json", str(caught.exception))
         self.assertNotIn("pip install", str(caught.exception))
+        self.assertNotIn("{what}", str(caught.exception), "the message is filled in, not left as it was written")
+        self.assertIn("`{package}`", str(caught.exception), "the one place that is meant to stay as written")
+        self.assertIn("`{package}`", messages.text("intake.setup.no_command"))
         state = intake.setup(self.root)
         self.assertFalse(state["install_command_set"])
         (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps(
@@ -510,6 +515,7 @@ OLD_XLS = (
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAf///////////////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP7///8A"
     "AAAAAAAAAA=="
 )
+NO_TEXT_PDF = "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA0MjAgMzAwXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCAxMDYgPj4Kc3RyZWFtCjAuOCAwLjggMC44NSByZyAyMCAyMCAzODAgMjYwIHJlIGYgMC4yIDAuMiAwLjMgcmcgNDAgMjAwIDMwMCAyMCByZSBmIDQwIDE2MCAyNjAgMjAgcmUgZiA0MCAxMjAgMzIwIDIwIHJlIGYKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBlIC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzOTggMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0NjgKJSVFT0YK"
 PAPER_PDF = (
     "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUg"
     "L1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAg"
@@ -545,6 +551,9 @@ class PdfTests(LifeCase):
         self.assertIn("## Page 1", text)
         self.assertIn("kyc_status and equal row counts", text)
         self.assertIn("order of a PDF's text", " ".join(result["notes"]))
+        scanned = intake.convert_pdf(self.root, base64.b64decode(NO_TEXT_PDF), "scan")
+        self.assertEqual(scanned["files"], [], "a page with no text writes no empty file")
+        self.assertIn("scanned pages", " ".join(scanned["notes"]))
 
 
 if __name__ == "__main__":

@@ -593,7 +593,7 @@
         h("div", {class: "round-head"}, h("strong", null, item.name), " ", h("span", {class: "sub"}, t("desk.intake.made", {n: item.result.files.length}))),
         item.result.files.length ? h("ul", null, item.result.files.map((path) => h("li", null, h("code", null, path)))) : null,
         item.result.notes.length ? [h("div", {class: "sub"}, t("desk.intake.notes")), h("ul", null, item.result.notes.map((note) => h("li", {class: "sub"}, note)))] : null,
-        h("p", {class: "sub"}, t("desk.intake.report", {report: item.result.report}))));
+        item.result.report ? h("p", {class: "sub"}, t("desk.intake.report", {report: item.result.report})) : null));
     }
     parts.push(h("h3", null, t("desk.intake.files")));
     if (!x.has_intake) {
@@ -602,17 +602,23 @@
       parts.push(h("p", {class: "hint"}, t("desk.intake.init.hint")), make);
     }
     if (!x.files.length) parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.intake.none"))));
-    const rows = x.files.map((item) => {
+    const row = (item) => {
       const open = item.editable ? h("button", {type: "button", class: "linkish"}, item.path) : h("span", null, item.path);
       if (item.editable) open.addEventListener("click", () => intakeOpen(item.path));
       const drop = h("button", {type: "button", class: "act", title: t("desk.intake.delete")}, "×");
       drop.addEventListener("click", () => {
         if (window.confirm(t("desk.intake.delete.confirm", {path: item.path}))) intakeAct("delete", item.path, () => { if (intake.editing && intake.editing.path === item.path) intake.editing = null; });
       });
-      return h("tr", null, h("td", null, open, item.original ? [" ", tag(t("desk.intake.original"), "")] : null, item.report ? [" ", tag(t("desk.intake.report.tag"), "")] : null),
-        h("td", {class: "sub"}, size(item.size)), h("td", null, drop));
-    });
-    if (rows.length) parts.push(h("div", {class: "scroll"}, h("table", {class: "md intake-files"}, h("tbody", null, rows))));
+      return h("tr", null, h("td", null, open), h("td", {class: "sub"}, size(item.size)), h("td", null, drop));
+    };
+    const table = (list) => h("div", {class: "scroll"}, h("table", {class: "md intake-files"}, h("tbody", null, list.map(row))));
+    // what the agent reads comes first; the reports, and the originals and pictures, are folded: they are there to look at, not to trim
+    const reads = x.files.filter((item) => !item.original && !item.report && !item.path.startsWith("media/"));
+    const reports = x.files.filter((item) => item.report);
+    const rest = x.files.filter((item) => item.original || item.path.startsWith("media/"));
+    if (reads.length) parts.push(h("p", {class: "sub"}, t("desk.intake.group.reads", {n: reads.length})), table(reads));
+    if (reports.length) parts.push(h("details", {class: "intake-group"}, h("summary", null, t("desk.intake.group.reports", {n: reports.length})), table(reports)));
+    if (rest.length) parts.push(h("details", {class: "intake-group"}, h("summary", null, t("desk.intake.group.rest", {n: rest.length})), table(rest)));
     if (intake.editing) parts.push(intakeEditor());
     const name = h("input", {type: "text", value: intake.name, placeholder: t("desk.intake.paste.name"), class: "env-input", maxlength: 60});
     name.addEventListener("input", () => { intake.name = name.value; });

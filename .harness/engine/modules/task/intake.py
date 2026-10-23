@@ -18,6 +18,7 @@ import importlib
 import importlib.util
 import io
 import re
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -80,7 +81,7 @@ def setup(root: Path) -> Dict[str, Any]:
     policy = config.policy_or_empty(root, "tools")
     template = str(((policy.get("python") or {}).get("install_command")) or "").strip()
     missing = [item for item in packages if not item["installed"]]
-    return {"ready": ["Word (.docx)", "Excel (.xlsx)", "text and picture files"], "optional": packages, "install_command_set": bool(template),
+    return {"ready": ["Word (.docx)", "Excel (.xlsx)", "text and picture files"], "python": sys.executable, "optional": packages, "install_command_set": bool(template),
             "next": (say("intake.setup.none_missing") if not missing else say("intake.setup.run") if template else say("intake.setup.no_command"))}
 
 
@@ -168,7 +169,8 @@ def convert_pdf(root: Path, data: bytes, stem: str) -> Dict[str, Any]:
     notes = []
     text = "\n\n".join(f"## Page {number}\n\n{page}" for number, page in enumerate(pages, 1) if page)
     if len(text) < 20 * max(1, len(pages)):
-        notes.append("almost no text was found: the PDF is probably scanned pages (pictures). It needs OCR, or the content typed or pasted in")
+        notes.append("almost no text was found: the PDF is probably scanned pages (pictures). It needs OCR, or the content typed or pasted in. No text file was written")
+        return {"files": [], "notes": notes, "sheets": []}
     notes.append("the order of a PDF's text, and tables in it, may be broken: check the text against the PDF")
     return {"files": [(f"{stem}.md", (f"# {stem}\n\n" + text + "\n").encode("utf-8"))], "notes": notes, "sheets": []}
 
@@ -238,6 +240,7 @@ def add_file(root: Path, raw_task: str, filename: str, data: bytes, include_hidd
     original = f"{stem}{suffix}"
     digest = hashlib.sha256(data).hexdigest()
     notes: List[str] = []
+    passthrough = False
     try:
         if suffix in DOCX:
             made = convert.convert_docx(data, stem)
@@ -249,10 +252,10 @@ def add_file(root: Path, raw_task: str, filename: str, data: bytes, include_hidd
             made = convert_pdf(root, data, stem)
         elif suffix in TEXT_TYPES:
             made = {"files": [(original, data)], "notes": [], "sheets": []}
-            original = f"{stem}-original{suffix}"
+            passthrough = True  # the file is its own original: no copy, no report
         elif suffix in IMAGE_TYPES:
             made = {"files": [(original, data)], "notes": [], "sheets": []}
-            original = f"{stem}-original{suffix}"
+            passthrough = True
             notes.append("a picture: the agent can look at it, but a number that is only in a picture is easily misread. Give the numbers as text")
         elif suffix in (".doc", ".ppt", ".pptx", ".rtf", ".odt", ".ods"):
             made = {"files": [], "notes": [f"a {suffix} file is not read here: open it and save it as .docx (or .xlsx for a sheet), or copy the text into a file on the Intake tab"], "sheets": []}
@@ -260,18 +263,22 @@ def add_file(root: Path, raw_task: str, filename: str, data: bytes, include_hidd
             made = {"files": [], "notes": [f"a {suffix or 'file without a type'} file is not one the harness can read: it is kept as it is"], "sheets": []}
     except convert.ConvertError as error:
         raise CommandError(f"{filename}: {error}") from None
-    write_file(folder, f"{ORIGINALS}/{original}", data, False)
+    if not passthrough:
+        write_file(folder, f"{ORIGINALS}/{original}", data, False)
     written: List[str] = []
     for relative, content in made["files"]:
         write_file(folder, relative, content, pristine=not relative.startswith(ORIGINALS + "/") and Path(relative).suffix.lower() in TEXT_TYPES)
         written.append(relative)
     all_notes = made["notes"] + notes
-    report = f"{stem}.convert.md"
-    (folder / report).write_text(report_text(original, len(data), digest, made, written, all_notes), encoding="utf-8")
+    report = "" if passthrough else f"{stem}.convert.md"
+    if report:
+        (folder / report).write_text(report_text(original, len(data), digest, made, written, all_notes), encoding="utf-8")
     with task_ops.locked(root, task) as fresh:
         task_ops.note(fresh, "intake", f"{original}: {len(written)} file(s)")
-    return {"task": task, "original": f"{REQ_DIR}/{ORIGINALS}/{original}", "files": [f"{REQ_DIR}/{name}" for name in written], "report": f"{REQ_DIR}/{report}", "notes": all_notes,
-            "sheets": [{key: value for key, value in item.items() if key != "preview"} for item in made.get("sheets", [])], "next": say("intake.next", report=f"{REQ_DIR}/{report}")}
+    return {"task": task, "original": f"{REQ_DIR}/{original}" if passthrough else f"{REQ_DIR}/{ORIGINALS}/{original}", "files": [f"{REQ_DIR}/{name}" for name in written],
+            "report": f"{REQ_DIR}/{report}" if report else "", "notes": all_notes,
+            "sheets": [{key: value for key, value in item.items() if key != "preview"} for item in made.get("sheets", [])],
+            "next": say("intake.next", report=f"{REQ_DIR}/{report}") if report else say("intake.next.pasted", file=f"{REQ_DIR}/{written[0]}")}
 
 
 def parse_pasted(text: str) -> List[List[str]]:

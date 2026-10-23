@@ -18,6 +18,10 @@ To see which version you have: `harness --version`.
 - **A merged block of several rows and columns stays in its first cell.** A text area on a form was repeated in every cell it covered (24 copies of three lines). A merge of one row (a header over columns) or one column (a group label) is still repeated.
 - **A big sheet says so.** A sheet of more than 200 rows is reported with the advice to give the agent its header and a sample, not all of it.
 - An old `.xls` keeps its merged cells and leaves out hidden rows and columns.
+- **A text or picture file is its own original.** It was copied into `REQ/originals/` and given a conversion report that said nothing; now it goes into `REQ/` as it is, with no copy and no report (a note, such as the one for a picture, is still shown).
+- **A scanned PDF writes no empty file.** With almost no text, the report says it needs OCR, and no `.md` is written.
+- **The install message was left unfilled.** The message that tells you the install command is not set showed `{what}` and `{module}` as they were written, and `{{{package}}}`. Found by running the command; fixed. `task intake setup` also prints which Python it runs on, so the `pip` you run installs into that one.
+- **The Intake tab groups its files.** What the agent reads first (click one to trim it); the conversion reports, and the originals and pictures, folded away.
 
 ## 1.5.45 (2026-10-23)
 

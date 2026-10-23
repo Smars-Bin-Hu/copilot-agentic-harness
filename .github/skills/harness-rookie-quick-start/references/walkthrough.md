@@ -22,7 +22,7 @@ Afterwards give the user the address of the task's page, from the output of that
 
 ### 3. Read the requirement and confirm it (the user does this)
 
-Write what you understood from the user's sentence into `REQ.md`. Ask the user to open the **Overview** tab of the task's page: the progress book (`TASK.md`) is on top and the requirement (`REQ.md`) below it. Say in one sentence each what they are for.
+Write what you understood from the user's sentence into `REQ.md`. Ask the user to open the **Requirement** tab of the task's page (the **Overview** tab holds the progress book, `TASK.md`). Say in one sentence each what they are for.
 
 Ask: "Did I get it right?" If the user says yes, ask them to press **confirm requirement** on the page and type the code. Only the user can do that: the harness fills the confirmation line, and you never do. If the user says no, fix `REQ.md` on the spot and ask again.
 

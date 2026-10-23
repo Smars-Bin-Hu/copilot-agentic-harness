@@ -112,7 +112,7 @@ One agent; you confirm the requirement, you approve the plan, and you approve th
 
 1. In Copilot Chat, with the default agent, say clearly what you want done and which target repository changes. Add `[review]=1` for an independent check.
 2. The agent asks you a few questions, then makes a new task, writes the requirement as it understands it into `REQ.md`, and gives you the address of the task's page. If the requirement came as documents (Word, Excel, PDF), drop them on the **Intake** tab of the page: they are turned into small Markdown and CSV files with no AI, you trim them, and the agent reads those (see [Preparing an intake](09-intake.md)). Reference code goes in `REF/`.
-3. On the page, open the **Overview** tab and read the requirement. If it says what you meant, press **confirm requirement** and type the code the page shows. If not, tell the agent what is wrong.
+3. On the page, open the **Requirement** tab and read it. If it says what you meant, press **confirm requirement** at the top of the page and type the code the page shows. If not, tell the agent what is wrong.
 4. The agent reads the knowledge base, writes the plan, then stops. The page shows it in the **Plan** tab.
 5. You read the plan. If you agree, press **approve plan** and type the code. To change the plan, tell the agent, and approve after the change. After the approval, tell the agent in the chat ("approved"): the approval itself does not tell it, and the page reminds you.
 6. The agent fetches the files to change into `DEV/<repository>/<path>` with `task fetch` and changes them there. It can write the task folder only. The **Changes** tab shows what differs.

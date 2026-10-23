@@ -10,7 +10,7 @@
   let desk = DATA.desk;
   let shown = JSON.stringify(desk);
   const same = (a, b) => a.replace(/"as_of":"[^"]*"/, "") === b.replace(/"as_of":"[^"]*"/, "");  // the time of asking is not a change
-  const tabs = ["overview", "intake", "design", "rca", "test", "plan", "todo", "log", "changes", "review", "history", "docs", "files"];  // the commit message is at the top of "changes" once written back (1.5.34)
+  const tabs = ["overview", "req", "intake", "design", "rca", "test", "plan", "todo", "log", "changes", "review", "history", "docs", "files"];  // the commit message is at the top of "changes" once written back (1.5.34)
   const FILES = {overview: "TASK.md", req: "REQ.md", plan: "PLAN.md", todo: "TODO.md", log: "LOG.md", design: "DESIGN.md", rca: "RCA.md"};
   const WRITES_BACK = ["dev", "kb"];  // the kinds that have a plan, a diff and a commit
   const asked = location.hash.slice(1) === "commit" ? "changes" : location.hash.slice(1);  // a link to the old Commit tab
@@ -25,7 +25,7 @@
     if (tab === "design" || tab === "rca") return Boolean(doc(FILES[tab])) || (desk.kind === tab && desk.status === "open");  // a closed task that never wrote it has nothing to show
     if (tab === "plan") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && Boolean(doc(FILES.plan)));
     if (tab === "changes") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && desk.changes.files.length > 0);
-    if (tab === "todo" || tab === "log") return Boolean(doc(FILES[tab]));
+    if (tab === "todo" || tab === "log" || tab === "req") return Boolean(doc(FILES[tab]));
     if (tab === "test") return Boolean(desk.test);
     if (tab === "review") return desk.review.n > 0 || desk.review.rounds.length > 0;
     if (tab === "files") return desk.files.length > 0;
@@ -229,7 +229,7 @@
 
   function actions() {
     if (desk.status !== "open") return h("section", {class: "card actions quiet"}, h("p", {class: "sub"}, t("desk.actions.closed")));
-    const optional = [...(desk.waiting_why === "req" ? [] : ["confirm-req"]), "pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
+    const optional = ["pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
     const items = desk.actions.filter((item) => !optional.includes(item.action));
     const rest = desk.actions.filter((item) => optional.includes(item.action));
     const row = {name: desk.name, waiting: desk.waiting, state: desk.state, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed};
@@ -285,6 +285,7 @@
 
   function nav() {
     const label = (tab) => {
+      if (tab === "req" && desk.req_unconfirmed) return t("desk.tab.req") + " !";  // waits for the person's confirmation
       if (tab === "todo" && desk.todo.total) return t("desk.tab.todo") + " " + desk.todo.done + "/" + desk.todo.total;
       if (tab === "changes" && desk.changes.files.length) return t("desk.tab.changes") + " " + desk.changes.files.length + (desk.commit && !desk.commit.written ? " !" : "");
       if (tab === "test") return t("desk.tab.test") + " " + desk.test.passed + "/" + desk.test.total;
@@ -486,16 +487,35 @@
     const open = items.find((item) => item.path === fileOpen);
     fileLoad(open);
     const list = [];
-    let folder = "", root = "";
+    const roots = new Map();  // root folder -> {dirs: name -> node, files: [item]}
     for (const item of items) {
       const parts = item.path.split("/");
-      const dir = parts.slice(0, -1).join("/");
-      if (parts[0] !== root) { root = parts[0]; list.push(h("div", {class: "files-root"}, h("strong", null, root + "/"), h("span", {class: "sub"}, " " + t(ROOT_HINT[root.toUpperCase()])))); folder = root; }
-      if (dir !== folder) { folder = dir; list.push(h("div", {class: "files-dir", style: "padding-left:" + (parts.length - 2) * 14 + "px"}, dir.split("/").pop() + "/")); }
-      const button = h("button", {type: "button", class: "file" + (item.path === fileOpen ? " on" : ""), title: item.path, style: "padding-left:" + (parts.length - 1) * 14 + "px"},
-        h("span", null, parts[parts.length - 1]), h("span", {class: "sub"}, " " + size(item.size)));
-      button.addEventListener("click", () => { fileOpen = item.path; draw(true); });
-      list.push(button);
+      let node = roots.get(parts[0]);
+      if (!node) roots.set(parts[0], node = {dirs: new Map(), files: []});
+      for (const name of parts.slice(1, -1)) {
+        if (!node.dirs.has(name)) node.dirs.set(name, {dirs: new Map(), files: []});
+        node = node.dirs.get(name);
+      }
+      node.files.push(item);
+    }
+    // Like the VS Code explorer: folders first, a folder that holds only one folder is joined with it (d/e/f/), one file per line.
+    const walk = (node, depth) => {
+      for (const [name, child] of node.dirs) {
+        let label = name, last = child;
+        while (!last.files.length && last.dirs.size === 1) { const [next, inner] = last.dirs.entries().next().value; label += "/" + next; last = inner; }
+        list.push(h("div", {class: "files-dir", style: "padding-left:" + depth * 14 + "px"}, label + "/"));
+        walk(last, depth + 1);
+      }
+      for (const item of node.files) {
+        const button = h("button", {type: "button", class: "file" + (item.path === fileOpen ? " on" : ""), title: item.path, style: "padding-left:" + depth * 14 + "px"},
+          h("span", null, item.path.split("/").pop()), h("span", {class: "sub"}, " " + size(item.size)));
+        button.addEventListener("click", () => { fileOpen = item.path; draw(true); });
+        list.push(button);
+      }
+    };
+    for (const [root, node] of roots) {
+      list.push(h("div", {class: "files-root"}, h("strong", null, root + "/"), h("span", {class: "sub"}, " " + t(ROOT_HINT[root.toUpperCase()]))));
+      walk(node, 1);
     }
     return [h("p", {class: "hint top"}, t("desk.files.hint")),
       h("div", {class: "files"}, h("nav", {class: "files-list"}, list),
@@ -838,17 +858,16 @@
 
   function openDoc(name) {
     const tab = Object.keys(FILES).find((key) => FILES[key] === name);
-    if (tab === "req") { current = "overview"; } else if (tab) { current = tab; } else { current = "docs"; other = name; }
+    if (tab) { current = tab; } else { current = "docs"; other = name; }
     history.replaceState(null, "", "#" + current);
     draw(false);
-    if (tab === "req") document.getElementById("req")?.scrollIntoView({behavior: "smooth"});
   }
 
   function body() {
     if (current === "overview") {
-      return [h("p", {class: "hint top"}, t("desk.overview.hint")), markdown("TASK.md", t("desk.missing.task")),
-        h("h2", {id: "req", class: "split"}, t("desk.tab.req")), markdown("REQ.md", t("desk.missing.req"))];
+      return [h("p", {class: "hint top"}, t("desk.overview.hint")), markdown("TASK.md", t("desk.missing.task"))];
     }
+    if (current === "req") return [h("p", {class: "hint top"}, t("desk.req.hint")), markdown("REQ.md", t("desk.missing.req"))];
     if (current === "design") return [h("p", {class: "hint top"}, t("desk.design.hint")), markdown(FILES.design, t("desk.missing.design"))];
     if (current === "rca") return [h("p", {class: "hint top"}, t("desk.rca.hint")), markdown(FILES.rca, t("desk.missing.rca"))];
     if (current === "plan") return [h("p", {class: "hint top"}, t("desk.plan.hint")), markdown("PLAN.md", t("desk.missing.plan"))];

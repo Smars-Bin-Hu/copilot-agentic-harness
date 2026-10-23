@@ -548,7 +548,7 @@
   "req.next": "The confirmation line of REQ.md is filled in. The agent sees it the next time it reads the file.",
   "event.confirm-req": "the person confirmed the requirement",
   "board.action.confirm-req": "confirm requirement",
-  "desk.hint.confirm-req": "The agent wrote the requirement (tab Overview). Read it, and confirm that it says what you meant. Until then a check is told it is still to be confirmed.",
+  "desk.hint.confirm-req": "The agent wrote the requirement (tab Requirement). Read it, and confirm that it says what you meant. Until then a check is told it is still to be confirmed.",
   "plan.missing": "There is no plan file {plan} yet, or it is empty. Let the agent write the plan first.",
   "plan.screen.head": "Task {task} (round {round})",
   "plan.screen.file": "The plan is in this file ({lines} lines); open it in the editor first: {plan}",
@@ -1210,7 +1210,8 @@
   "desk.files.loading": "Loading…",
   "desk.files.failed": "This file could not be read. It may have been moved: reload the page.",
   "desk.files.other": "This file ({size}) cannot be shown here. Open it in the editor.",
-  "desk.overview.hint": "Where the task stands (TASK.md), then what is asked (REQ.md). The agent keeps both up to date.",
+  "desk.overview.hint": "Where the task stands (TASK.md). What is asked (REQ.md) has its own tab.",
+  "desk.req.hint": "What the task asks for (REQ.md). Only you confirm it, with the button above. If it changes after that, you confirm again.",
   "desk.plan.hint": "What the agent will change and how it will check it. You approve it before any file is changed.",
   "desk.log.hint": "The decisions and findings of the agent, oldest first.",
   "desk.history.hint": "What happened to the task, newest first: approvals, fetches, checks, write-backs, pauses.",
@@ -1430,7 +1431,7 @@
   "plan.question.req": "To confirm the requirement and approve this plan",
   "task.waiting.req": "the requirement waits for your confirmation",
   "board.plan.req.title": "The requirement is not confirmed",
-  "board.plan.req": "A plan stands on a confirmed requirement, so the plan cannot be approved alone. Read REQ.md (tab Overview) and PLAN.md. One code then confirms the requirement and approves the plan.",
+  "board.plan.req": "A plan stands on a confirmed requirement, so the plan cannot be approved alone. Read REQ.md (tab Requirement) and PLAN.md. One code then confirms the requirement and approves the plan.",
   "board.plan.req.go": "Confirm the requirement and approve the plan",
   "task.step.approve_req": "The user has not confirmed the requirement yet, so the plan cannot be approved alone. Give the user the links [REQ.md]({req}) and [PLAN.md]({plan}), and ask the user to read both and confirm them with one code: `{command} task approve-plan --with-req --task {name}` in their own terminal, or approve plan on the task page (it asks for the same). Do not ask for `task approve-plan` without `--with-req`: it is refused. {dev} cannot be written before that; work that is not written back can go at the root of {task}/ meanwhile."
 }

@@ -262,16 +262,17 @@ The page shows the tabs its kind needs.
 
 | Tab | On | What it holds |
 | --- | --- | --- |
-| Overview | every task | `TASK.md` (where the task stands) and `REQ.md` (what is asked) |
+| Overview | every task | `TASK.md`: where the task stands |
+| Requirement | a task with `REQ.md` | `REQ.md`: what is asked. Marked `!` until you confirm it; the **confirm requirement** button is at the top of the page, like **approve plan** |
 | Intake | a task with `REQ/`, on the served page (not in a saved HTML) | Documents turned into Markdown and CSV, pasting a table, trimming, picking and deleting files, and the message that tells the agent. See [Preparing an intake](09-intake.md) |
 | Plan | development, knowledge base update | `PLAN.md`; the approval |
-| Design / RCA | a design task / an investigation | `DESIGN.md` / `RCA.md`, placed after Overview |
+| Design / RCA | a design task / an investigation | `DESIGN.md` / `RCA.md`, placed after Requirement |
 | TODO, Log | tasks with those files | The steps with their progress; what was done and decided |
 | Changes | development, knowledge base update | The files the task changes and their diff; the write-back the last dry run prepared; after a write-back, the commit message and the commands that commit it |
 | Review | any task, when you asked for independent checks or one has run | Each round with the package the reviewer was given and what it answered, newest first. While the reviewer runs the task is still *working*, and the tab says which round is out |
 | Test | a test task | The guide, then a sub-tab for each environment: its results file, a tab for each run, the verdict the agent judged, and the defects (the open ones with their text, the fixed ones folded) |
 | History | every task | What happened, newest first: documents added, approvals, fetches, checks, runs, write-backs, pauses |
-| Files | when there is something | What is in `REQ/`, `REF/`, `INBOX/`, `DEV/` and `RUNS/` (sub-folders too). Open a file to read it; a picture is shown |
+| Files | when there is something | What is in `REQ/`, `REF/`, `INBOX/`, `DEV/` and `RUNS/`, as a folder tree like the VS Code explorer: a folder that holds only one folder is joined with it (`d/e/f/`). Open a file to read it; a picture is shown |
 
 **Giving results.** When the task waits for the results of a run or a test, the page has a form, **Give the results here**: paste the output, paste or add the screenshots, say what you ran, and save. The board server, with a paired browser, writes it under `INBOX/<ENV>/<time>/` in the task, a folder only you can write. The page then gives the message that tells the agent, who records it with `task run record` (a run before the write-back) or `task test record` (a test). Giving results in the chat still works.
 

@@ -548,7 +548,7 @@
   "req.next": "REQ.md 的确认行已填好。agent 下次读这个文件时会看到。",
   "event.confirm-req": "用户确认了需求",
   "board.action.confirm-req": "确认需求",
-  "desk.hint.confirm-req": "agent 写好了需求（在“概览”页）。读一遍，确认它说的是你的原意。确认之前，检查会被告知需求还待确认。",
+  "desk.hint.confirm-req": "agent 写好了需求（在“需求”页）。读一遍，确认它说的是你的原意。确认之前，检查会被告知需求还待确认。",
   "plan.missing": "还没有计划文件 {plan}，或者它是空的。先让 agent 写好计划。",
   "plan.screen.head": "任务 {task}（第 {round} 轮）",
   "plan.screen.file": "计划在这个文件里（{lines} 行），先在编辑器里打开看：{plan}",
@@ -1210,7 +1210,8 @@
   "desk.files.loading": "正在读取…",
   "desk.files.failed": "这个文件读不出来，可能被移走了：请刷新页面。",
   "desk.files.other": "这个文件（{size}）在这里显示不了，请在编辑器里打开。",
-  "desk.overview.hint": "任务进行到哪（TASK.md），以及要做什么（REQ.md）。两个都由 agent 随时更新。",
+  "desk.overview.hint": "任务进行到哪（TASK.md）。要做什么（REQ.md）在“需求”标签页。",
+  "desk.req.hint": "任务要做什么（REQ.md）。只有你能用上面的按钮确认；确认之后它再变，要重新确认。",
   "desk.plan.hint": "agent 要改什么、怎么验证。任何文件改动之前都要你批准。",
   "desk.log.hint": "agent 的决定和发现，从旧到新。",
   "desk.history.hint": "这个任务发生过什么，从新到旧：批准、取文件、检查、写回、暂停。",
@@ -1430,7 +1431,7 @@
   "plan.question.req": "确认需求并批准这个计划",
   "task.waiting.req": "需求等你确认",
   "board.plan.req.title": "需求还没有确认",
-  "board.plan.req": "计划要建立在确认过的需求上，所以不能单独批准计划。先读 REQ.md（Overview 页签）和 PLAN.md，然后用一个验证码同时确认需求、批准计划。",
+  "board.plan.req": "计划要建立在确认过的需求上，所以不能单独批准计划。先读 REQ.md（需求页签）和 PLAN.md，然后用一个验证码同时确认需求、批准计划。",
   "board.plan.req.go": "确认需求并批准计划",
   "task.step.approve_req": "用户还没有确认需求，所以计划不能单独批准。给用户 [REQ.md]({req}) 和 [PLAN.md]({plan}) 两个链接，请用户两个都读一遍，用一个验证码同时确认：在他自己的终端运行 `{command} task approve-plan --with-req --task {name}`，或者在任务页点“批准计划”（会问同样的码）。不要让用户运行不带 `--with-req` 的 `task approve-plan`：它会被拒绝。在那之前 {dev} 不能写；不写回的工作可以先放在 {task}/ 根目录。"
 }

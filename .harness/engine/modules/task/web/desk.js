@@ -74,7 +74,7 @@
   function codeBlock(text) {
     const button = h("button", {type: "button", class: "act copy-code", "data-label": t("desk.code.copy")}, t("desk.code.copy"));
     button.addEventListener("click", () => copyCommand(button, text));
-    return h("div", {class: "code-box"}, button, h("pre", {class: "code"}, h("code", null, text)));
+    return h("div", {class: "code-box"}, h("div", {class: "code-bar"}, button), h("pre", {class: "code"}, h("code", null, text)));
   }
 
   function blocks(list) {

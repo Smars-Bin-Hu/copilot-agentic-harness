@@ -87,6 +87,7 @@ Word and Excel (`.xlsx`) files need nothing installed. Old `.xls` and PDF files 
 
   `{package}` is where the package name goes. The skill `/harness-rookie-get-me-ready` asks for it.
 - `harness task intake setup` lists each optional package, whether it is installed, and the exact command to run for the ones that are not. You run it; an agent cannot (the gate refuses package installs).
+- **Install into the Python the harness runs on.** `harness` runs on the first `python3` on your PATH, and `setup` prints which one (`python`). A package installed into another Python is not found, and `setup` warns when the command names a different one. Some Pythons, such as Homebrew's, refuse a plain `pip install` ("externally managed"): use a virtual environment, or the extra argument your company approves. Two terminals can have different PATHs, so the board and the terminal you installed from should run on the same Python.
 
 ## After the files are in: talk to the agent
 

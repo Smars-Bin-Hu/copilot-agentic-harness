@@ -1,0 +1,1 @@
+{ "python": { "install_command": "/opt/anaconda3/bin/python3 -m pip install {package}" } }

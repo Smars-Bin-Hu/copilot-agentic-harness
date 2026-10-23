@@ -185,7 +185,7 @@ Word and Excel (`.xlsx`) files are read with nothing installed. Old `.xls` and P
 { "python": { "install_command": "python -m pip install --index-url https://pypi.example.com/simple --trusted-host pypi.example.com {package}" } }
 ```
 
-The harness never runs an install and never guesses the command (an agent cannot: the gate refuses package installs). `harness task intake setup` lists what is installed and prints the command for the rest. The setup skill `/harness-rookie-get-me-ready` asks for it. How the files are used: [09 Preparing an intake](09-intake.md).
+The harness never runs an install and never guesses the command (an agent cannot: the gate refuses package installs). The command must install into the Python the harness runs on (`task intake setup` prints it and warns when the command names another). `harness task intake setup` lists what is installed and prints the command for the rest. The setup skill `/harness-rookie-get-me-ready` asks for it. How the files are used: [09 Preparing an intake](09-intake.md).
 
 ## Task settings
 

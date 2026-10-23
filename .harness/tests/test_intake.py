@@ -425,6 +425,22 @@ class PackagesTests(LifeCase):
         self.assertIn("--trusted-host pypi.example.com no-such-pkg", str(caught.exception))
         self.assertNotIn("{", str(caught.exception))  # every place of the message is filled
 
+    def test_a_command_that_installs_into_another_python_is_warned_about(self) -> None:
+        """B67: the command named anaconda, the harness ran on Homebrew's Python: the package was installed and still not found."""
+        import os
+        import sys
+
+        self.assertEqual(intake.other_python(f"{sys.executable} -m pip install {{package}}"), "", "the same Python: nothing to say")
+        self.assertEqual(intake.other_python("pip install {package}"), "", "pip belongs to some Python: it cannot be told")
+        other = "/usr/bin/python3" if os.path.realpath("/usr/bin/python3") != os.path.realpath(sys.executable) and os.path.exists("/usr/bin/python3") else ""
+        if other:
+            self.assertEqual(intake.other_python(other + " -m pip install {package}"), os.path.realpath(other))
+            (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"python": {"install_command": other + " -m pip install {package}"}}), encoding="utf-8")
+            found = intake.setup(self.root)
+            self.assertEqual(len(found["warnings"]), 1)
+            self.assertIn(sys.executable, found["warnings"][0])
+        self.assertIn(sys.executable, intake.setup(self.root)["python"])
+
     def test_a_pdf_or_an_old_xls_without_its_package_says_how_to_get_it(self) -> None:
         self.new("job", "dev")
         for name, data in (("old.xls", b"\xd0\xcf\x11\xe0"), ("paper.pdf", b"%PDF-1.4")):

@@ -21,6 +21,7 @@ To see which version you have: `harness --version`.
 - **A text or picture file is its own original.** It was copied into `REQ/originals/` and given a conversion report that said nothing; now it goes into `REQ/` as it is, with no copy and no report (a note, such as the one for a picture, is still shown).
 - **A scanned PDF writes no empty file.** With almost no text, the report says it needs OCR, and no `.md` is written.
 - **The install message was left unfilled.** The message that tells you the install command is not set showed `{what}` and `{module}` as they were written, and `{{{package}}}`. Found by running the command; fixed. `task intake setup` also prints which Python it runs on, so the `pip` you run installs into that one.
+- **`task intake setup` warns when the install command installs into another Python.** `harness` runs on the first `python3` of the terminal's PATH; a command that names a different Python installs a package the harness never finds (found on a Mac with Anaconda and Homebrew). The warning names both; the two error messages say which Python the harness runs on.
 - **The Intake tab groups its files.** What the agent reads first (click one to trim it); the conversion reports, and the originals and pictures, folded away.
 
 ## 1.5.45 (2026-10-23)

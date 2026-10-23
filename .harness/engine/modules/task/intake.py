@@ -17,7 +17,9 @@ import hashlib
 import importlib
 import importlib.util
 import io
+import os
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -72,8 +74,24 @@ def need_package(root: Path, module: str, what: str) -> Any:
     found = next((item for item in optional_packages(root) if item["module"] == module), None)
     command = found["command"] if found else ""
     if command:
-        raise CommandError(say("intake.package.missing", what=what, module=module, install=command))
-    raise CommandError(say("intake.package.no_command", what=what, module=module))
+        raise CommandError(say("intake.package.missing", what=what, module=module, install=command, python=sys.executable))
+    raise CommandError(say("intake.package.no_command", what=what, module=module, python=sys.executable))
+
+
+def install_target(command: str) -> str:
+    """The Python an install command names at its start (`/opt/anaconda3/bin/python3 -m pip ...`, or `python3 -m pip ...` looked up on PATH), resolved; "" when it names none
+    (`pip install ...`: pip belongs to some Python, which this cannot tell)."""
+    first = command.split()[0] if command.split() else ""
+    if not first or not re.match(r"(?:.*[\\/])?python[0-9.]*(?:\.exe)?$", first, re.IGNORECASE):
+        return ""
+    found = first if os.path.isabs(first) else (shutil.which(first) or "")
+    return os.path.realpath(found) if found else ""
+
+
+def other_python(command: str) -> str:
+    """The Python the install command installs into, when it is not the one the harness runs on ("" when it is, or cannot be told)."""
+    target = install_target(command)
+    return target if target and target != os.path.realpath(sys.executable) else ""
 
 
 def setup(root: Path) -> Dict[str, Any]:
@@ -81,7 +99,9 @@ def setup(root: Path) -> Dict[str, Any]:
     policy = config.policy_or_empty(root, "tools")
     template = str(((policy.get("python") or {}).get("install_command")) or "").strip()
     missing = [item for item in packages if not item["installed"]]
-    return {"ready": ["Word (.docx)", "Excel (.xlsx)", "text and picture files"], "python": sys.executable, "optional": packages, "install_command_set": bool(template),
+    wrong = other_python(template) if template else ""
+    warnings = [say("intake.setup.other_python", used=wrong, running=sys.executable)] if wrong else []
+    return {"ready": ["Word (.docx)", "Excel (.xlsx)", "text and picture files"], "python": sys.executable, "warnings": warnings, "optional": packages, "install_command_set": bool(template),
             "next": (say("intake.setup.none_missing") if not missing else say("intake.setup.run") if template else say("intake.setup.no_command"))}
 
 

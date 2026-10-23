@@ -516,6 +516,26 @@ def check_task_names(report: Report, root: Path) -> None:
         report.warn(say("doctor.task_names", names=", ".join(risky[:5]) + (" ..." if len(risky) > 5 else "")))
 
 
+def check_optional_packages(report: Report, root: Path) -> None:
+    """Are the optional readers (`xlrd` for .xls, `pypdf` for PDF) installed, into the Python the harness runs on? Warns only: nothing needs them until an old Excel or a PDF file comes in."""
+    try:
+        from modules.task import intake
+
+        state = intake.setup(root)
+    except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
+        report.warn(say("doctor.packages.unreadable", error=error))
+        return
+    if not state["optional"]:
+        return
+    for text in state["warnings"]:
+        report.warn(text)
+    if state["all_installed"]:
+        report.ok(say("doctor.packages.ok", names=", ".join(item["package"] for item in state["optional"])))
+        return
+    follow = say("doctor.packages.run", install=state["install_all"]) if state["install_all"] else say("doctor.packages.no_command")
+    report.warn(say("doctor.packages.missing", names=", ".join(state["missing"]), next=follow))
+
+
 def check_standards(report: Report, root: Path) -> None:
     """Are the code standards plugged in, and does each rule have the fields the check needs? Warns only."""
     found = standards.rules(root)
@@ -695,6 +715,7 @@ def run(root: Path) -> int:
     check_skills(report, root)
     check_standards(report, root)
     check_task_names(report, root)
+    check_optional_packages(report, root)
     for name, entry in registry["modules"].items():
         check_module(report, root, name, entry)
     print(shown(report.lines))

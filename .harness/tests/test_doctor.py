@@ -150,6 +150,31 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertNotIn("[ERROR]", result.stdout)
 
+    def test_a_missing_optional_package_is_a_warning_with_the_command_and_never_an_error(self) -> None:
+        policy = self.root / ".harness" / "policies" / "tools.override.json"
+        policy.write_text(json.dumps({"python": {"install_command": f"{sys.executable} -m pip install {{package}}"},
+                                      "optional_packages": [{"module": "no_such_a", "package": "pkg-a", "used_for": "x"}, {"module": "json", "package": "json-not-needed", "used_for": "y"}]}), encoding="utf-8")
+        result = self.doctor(HARNESS_LANGUAGE="en")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        line = next(item for item in result.stdout.splitlines() if "not installed" in item)
+        self.assertTrue(line.startswith("[WARN]"), line)
+        self.assertIn("pkg-a", line)
+        self.assertNotIn("json-not-needed", line)
+        self.assertIn(f"{sys.executable} -m pip install pkg-a", line)
+
+    def test_a_missing_optional_package_without_an_install_command_points_at_setup(self) -> None:
+        policy = self.root / ".harness" / "policies" / "tools.override.json"
+        policy.write_text(json.dumps({"optional_packages": [{"module": "no_such_a", "package": "pkg-a", "used_for": "x"}]}), encoding="utf-8")
+        line = next(item for item in self.doctor(HARNESS_LANGUAGE="en").stdout.splitlines() if "not installed" in item)
+        self.assertIn("task intake setup", line)
+        self.assertNotIn("pip install", line)
+
+    def test_installed_optional_packages_are_an_ok_line(self) -> None:
+        policy = self.root / ".harness" / "policies" / "tools.override.json"
+        policy.write_text(json.dumps({"optional_packages": [{"module": "json", "package": "json-pkg", "used_for": "x"}]}), encoding="utf-8")
+        result = self.doctor(HARNESS_LANGUAGE="en")
+        self.assertIn("[OK]    Optional readers are installed: json-pkg", result.stdout)
+
     def version(self, *flags: str) -> subprocess.CompletedProcess:
         """`--version --short`: one line, for scripts. Pass `flags=("--version",)` for the banner."""
         return subprocess.run(

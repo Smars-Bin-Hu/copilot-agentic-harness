@@ -54,7 +54,7 @@ The harness carries no business knowledge. It makes the agent safe to use and po
 
 ## Get started
 
-You need VS Code with GitHub Copilot Chat, Python 3.9 or later, and git. Nothing is required to `pip install`: Word and Excel (`.xlsx`) files are read with the standard library. Only old Excel (`.xls`) and PDF files need one optional package each, and only if you use them: see [Python packages](docs/03-configure.md#python-packages).
+You need VS Code with GitHub Copilot Chat, Python 3.9 or later, and git. Nothing is required to `pip install`: Word and Excel (`.xlsx`) files are read with the standard library. Old Excel (`.xls`) and PDF files need one small package each (`xlrd`, `pypdf`). The setup skill has you install both, and if the install fails you ask your administrator: see [Python packages](docs/03-configure.md#python-packages).
 
 Clone this repository, or download the zip from GitHub and extract it (git is optional; on Windows extract to a short path such as `C:\dev\harness`). Open it in VS Code and type these in Copilot Chat:
 

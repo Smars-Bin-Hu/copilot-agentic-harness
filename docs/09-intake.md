@@ -86,9 +86,9 @@ Business files can be odd: a sheet laid out like a form, two tables side by side
 
 This is the fallback, and it is a normal one. The point is that the agent gets a small, clean table, however you made it.
 
-## Python packages (optional)
+## Python packages
 
-Word and Excel (`.xlsx`) files need nothing installed. Old `.xls` and PDF files need a Python package. Many companies need extra arguments to install a package (an internal index, a proxy). The harness never runs an install and never guesses the command: you tell it once.
+Word and Excel (`.xlsx`) files need nothing installed. Old `.xls` and PDF files need a Python package. Many companies need extra arguments to install a package (an internal index, a proxy). The harness never runs an install and never guesses the command: you tell it once. `/harness-rookie-get-me-ready` has you install both packages (`xlrd`, `pypdf`) during setup and `harness doctor` warns while one is missing. If the install command fails, ask your administrator and send them the error.
 
 - Ask your platform team for the approved command. Put it in `.harness/policies/tools.override.json`:
 

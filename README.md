@@ -5,7 +5,7 @@
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
-  <img alt="dependencies" src="https://img.shields.io/badge/dependencies-none-brightgreen">
+  <img alt="dependencies" src="https://img.shields.io/badge/dependencies-none%20required-brightgreen">
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey">
 </p>
 
@@ -54,7 +54,7 @@ The harness carries no business knowledge. It makes the agent safe to use and po
 
 ## Get started
 
-You need VS Code with GitHub Copilot Chat, Python 3.9 or later, and git. There is nothing to `pip install`.
+You need VS Code with GitHub Copilot Chat, Python 3.9 or later, and git. Nothing is required to `pip install`: Word and Excel (`.xlsx`) files are read with the standard library. Only old Excel (`.xls`) and PDF files need one optional package each, and only if you use them: see [Python packages](docs/03-configure.md#python-packages).
 
 Clone this repository, or download the zip from GitHub and extract it (git is optional; on Windows extract to a short path such as `C:\dev\harness`). Open it in VS Code and type these in Copilot Chat:
 

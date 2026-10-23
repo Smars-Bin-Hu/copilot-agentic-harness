@@ -152,7 +152,7 @@ flowchart TB
 | Harness | This repository | Rules (`AGENTS.md`, instructions), limits (the gate, approvals, independent checks), the task way of working, general skills, logs, the board, reports |
 | Targets | Your environment | Code repositories, the knowledge base, and what the agent reaches through tools |
 
-The harness is plain files and Python with no dependency: hooks in `.github/hooks/`, rules in `AGENTS.md` and `.github/`, the engine in `.harness/`. Nothing runs outside your computer. Details: [Design](05-design.md).
+The harness is plain files and Python with no required dependency (two optional packages read old Excel and PDF files): hooks in `.github/hooks/`, rules in `AGENTS.md` and `.github/`, the engine in `.harness/`. Nothing runs outside your computer. Details: [Design](05-design.md).
 
 ## 7. The ideas behind it
 

@@ -7,7 +7,7 @@ From cloning the repository to a first finished task. To have the agent take you
 ## Requirements
 
 - Python 3.9 or later. `python3` on macOS/Linux, `python` on Windows.
-- The standard library only; no `pip install` needed.
+- The standard library only; no `pip install` needed. Two optional packages read old Excel (`.xls`) and PDF files for Intake; without them everything else works ([Python packages](03-configure.md#python-packages)).
 - git. Required when you use target repositories.
 - VS Code and GitHub Copilot Chat. Pick **Copilot** as the Session Target of the chat box (from VS Code 1.142 the chat title starts with the name of the harness: check that it says Copilot). The harness supports only this kind of session: see the part of [Design](05-design.md) about supporting only Copilot sessions.
 

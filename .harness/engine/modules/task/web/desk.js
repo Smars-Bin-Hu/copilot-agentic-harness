@@ -19,7 +19,7 @@
   const doc = (name) => desk.docs.find((item) => item.name === name);
   // A tab is there when the kind of the task has it, or when its file is there (M40-1): a test task has no plan and no diff; a question has no log.
   const ownTab = (tab) => {
-    if (tab === "design" || tab === "rca") return desk.kind === tab || Boolean(doc(FILES[tab]));
+    if (tab === "design" || tab === "rca") return Boolean(doc(FILES[tab])) || (desk.kind === tab && desk.status === "open");  // a closed task that never wrote it has nothing to show
     if (tab === "plan") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && Boolean(doc(FILES.plan)));
     if (tab === "changes") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && desk.changes.files.length > 0);
     if (tab === "todo" || tab === "log") return Boolean(doc(FILES[tab]));

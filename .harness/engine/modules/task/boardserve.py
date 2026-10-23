@@ -202,6 +202,9 @@ class Board:
             return intake.reset_file(self.root, task, str(data.get("path", "")))
         if action == "delete":
             return intake.delete_file(self.root, task, str(data.get("path", "")))
+        if action == "delete_many":
+            chosen = data.get("paths")
+            return intake.delete_files(self.root, task, [str(item) for item in chosen] if isinstance(chosen, list) else [])
         raise CommandError(say("serve.refused.request"))
 
     def archive(self, data: Dict[str, Any]) -> Dict[str, Any]:

@@ -411,6 +411,21 @@ class IntakePageTests(ServeCase):
         self.assertEqual(self.call(cookie, "delete", path="brd.md")[0], 200)
         self.assertFalse((self.task / "REQ" / "brd.md").exists() or (self.task / "REQ" / ".pristine" / "brd.md").exists())
 
+    def test_several_files_are_deleted_at_once_and_a_bad_path_deletes_none(self) -> None:
+        cookie = self.pair()
+        data = base64.b64encode(docx(para("Customer KYC", "Heading1") + para("body"), styles=HEADINGS)).decode()
+        self.call(cookie, "upload", name="brd.docx", data=data)
+        self.call(cookie, "paste", name="rules", kind="csv", text="a\tb\n1\t2\n")
+        self.assertEqual(self.call(cookie, "delete_many", paths=[])[0], 409, "nothing chosen")
+        self.assertEqual(self.call(cookie, "delete_many", paths=["brd.md", "missing.md"])[0], 409)
+        self.assertTrue((self.task / "REQ" / "brd.md").exists(), "one bad path stops the whole delete")
+        self.assertEqual(self.call(cookie, "delete_many", paths=["../x.md"])[0], 409)
+        status, found, _headers = self.call(cookie, "delete_many", paths=["brd.md", "brd.convert.md", "originals/brd.docx", "rules.csv", "rules.csv"])
+        self.assertEqual((status, len(found["result"]["deleted"])), (200, 4), found)
+        self.assertEqual(taskdesk.desk(self.root, "job1")["intake"]["files"], [])
+        self.assertFalse((self.task / "REQ" / ".pristine" / "brd.md").exists())
+        self.assertEqual(self.call("", "delete_many", paths=["x"])[0], 403, "not paired")
+
     def test_a_page_cannot_reach_outside_req_or_write_an_original(self) -> None:
         cookie = self.pair()
         self.call(cookie, "upload", name="map.xlsx", data=base64.b64encode(xlsx([{"name": "S", "rows": '<row r="1"><c r="A1" t="inlineStr"><is><t>a</t></is></c></row>'}])).decode())

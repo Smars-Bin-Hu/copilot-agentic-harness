@@ -505,3 +505,22 @@ def delete_file(root: Path, raw_task: str, relative: str) -> Dict[str, Any]:
     with task_ops.locked(root, task) as fresh:
         task_ops.note(fresh, "intake", f"deleted {clean}")
     return {"task": task, "deleted": f"{REQ_DIR}/{clean}"}
+
+
+def delete_files(root: Path, raw_task: str, paths: List[str]) -> Dict[str, Any]:
+    """Delete several files of `REQ/` at once. Every path is checked first, so a bad one deletes nothing."""
+    task = task_ops.resolve(root, raw_task)
+    task_ops.require_open(tasks.read(root, task))
+    wanted = list(dict.fromkeys(str(item) for item in paths))
+    if not wanted:
+        raise CommandError(say("intake.delete.none"))
+    checked = [req_file(root, task, item) for item in wanted]
+    folder = req_dir(root, task)
+    for target, clean in checked:
+        target.unlink()
+        keep = folder / PRISTINE / clean
+        if keep.is_file():
+            keep.unlink()
+    with task_ops.locked(root, task) as fresh:
+        task_ops.note(fresh, "intake", f"deleted {len(checked)} files")
+    return {"task": task, "deleted": [f"{REQ_DIR}/{clean}" for _, clean in checked]}

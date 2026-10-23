@@ -504,7 +504,7 @@
 
   // The Intake tab (1.5.45): the documents of a requirement go into REQ/ here (a program turns Word and Excel into Markdown and CSV: no AI), are trimmed in a text box, and
   // can be put back as converted. What is typed is kept in `intake`, so a redraw of the page does not lose it.
-  const intake = {busy: false, error: "", done: [], editing: null, name: "", kind: "csv", text: "", hidden: false, domains: null, open: new Set()};
+  const intake = {busy: false, error: "", done: [], editing: null, name: "", kind: "csv", text: "", hidden: false, domains: null, open: new Set(), picked: new Set()};
   const UPLOAD_TYPES = ".docx,.docm,.xlsx,.xlsm,.xls,.pdf,.csv,.tsv,.txt,.md,.json,.sql,.png,.jpg,.jpeg,.gif,.webp";
 
   function intakeCall(action, body) {
@@ -648,13 +648,31 @@
     const row = (item) => {
       const open = h("button", {type: "button", class: "linkish"}, item.path);
       open.addEventListener("click", () => intakeOpen(item.path, item));
-      return h("tr", null, h("td", null, open, " ", h("span", {class: "sub"}, size(item.size))));
+      const tick = h("input", {type: "checkbox", checked: intake.picked.has(item.path) ? "" : null, disabled: intake.busy ? "" : null});
+      tick.addEventListener("change", () => { if (tick.checked) intake.picked.add(item.path); else intake.picked.delete(item.path); draw(true); });
+      return h("tr", null, h("td", null, tick, " ", open, " ", h("span", {class: "sub"}, size(item.size))));
     };
     const table = (list) => h("div", {class: "scroll"}, h("table", {class: "md intake-files"}, h("tbody", null, list.map(row))));
     // what the agent reads comes first; the reports, and the originals and pictures, are folded: they are there to look at, not to trim
     const reads = x.files.filter((item) => !item.original && !item.report && !item.path.startsWith("media/"));
     const reports = x.files.filter((item) => item.report);
     const rest = x.files.filter((item) => item.original || item.path.startsWith("media/"));
+    if (x.files.length) {  // pick files (the folded groups too) and delete them together
+      for (const path of [...intake.picked]) if (!x.files.some((item) => item.path === path)) intake.picked.delete(path);
+      const all = h("input", {type: "checkbox", checked: intake.picked.size === x.files.length ? "" : null, disabled: intake.busy ? "" : null});
+      all.addEventListener("change", () => { intake.picked = new Set(all.checked ? x.files.map((item) => item.path) : []); draw(true); });
+      const many = h("button", {type: "button", class: "act danger", disabled: intake.busy || !intake.picked.size ? "" : null}, t("desk.intake.pick.delete", {n: intake.picked.size}));
+      many.addEventListener("click", () => {
+        const list = [...intake.picked];
+        const shown = list.slice(0, 12).map((path) => "REQ/" + path).join("\n") + (list.length > 12 ? "\n…" : "");
+        if (window.confirm(t("desk.intake.pick.confirm", {n: list.length, list: shown}))) {
+          intake.busy = true; intake.error = ""; draw(true);
+          intakeCall("delete_many", {paths: list}).then(() => { intake.picked = new Set(); if (intake.editing && list.includes(intake.editing.path)) intake.editing = null; }, (error) => { intake.error = error.message; })
+            .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
+        }
+      });
+      parts.push(h("div", {class: "intake-pick"}, h("label", null, all, " " + t("desk.intake.pick.all")), many));
+    }
     if (reads.length) parts.push(h("p", {class: "sub"}, t("desk.intake.group.reads", {n: reads.length})), table(reads));
     const group = (key, label, list) => {  // folded, and kept open or shut across a redraw
       const box = h("details", {class: "intake-group", open: intake.open.has(key) ? "" : null}, h("summary", null, label), table(list));

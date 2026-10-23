@@ -72,7 +72,7 @@ For each file this does three things:
 
 ## Trim
 
-Open the converted files and delete what the agent does not need: background chapters, sheets of another team, columns that mean nothing for this change. Smaller is better: the agent reads all of it, every time, and you pay for it in tokens.
+Open the converted files and delete what the agent does not need: background chapters, sheets of another team, columns that mean nothing for this change. Smaller is better: the agent reads all of it, every time, and you pay for it in tokens. To drop whole files, tick them in the Intake tab (or *Select all*) and press *Delete selected*.
 
 Do not trim the original. A trimmed file can be put back as it was converted: `REQ/.pristine/` keeps the first version.
 

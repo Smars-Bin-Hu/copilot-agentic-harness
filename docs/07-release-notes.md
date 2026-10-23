@@ -19,9 +19,10 @@ To see which version you have: `harness --version`.
 - **The domain choice is a panel, one domain to a row.** Not a row of check boxes: a card with the question, each domain on its own bordered row (the chosen one marked), and *none / other* at the end. The hint no longer asks you to choose a domain when the knowledge base has none, and the English goal says "an RCA task".
 - **The Intake tab puts the two ways of adding a file together.** Add documents (drop files) and *Or paste a table or a text* come first, then what the conversion made, then the files of `REQ/` (with the domain choice and `INTAKE.md`), then *Tell the agent*.
 - **The Intake tab: a file opens in a card with its size, Delete and × at the top right.** The list is only names, each with its size in small grey; click any file (an original or a picture too, which is shown) to open its card. Folded groups stay as you left them when the page redraws.
+- **The Intake tab: pick files and delete them together.** Each file in the list has a check box, and *Select all* (the folded groups too) sits above the list with *Delete selected (n)*. It asks once, naming the files; a bad path deletes none. The board call is `/api/intake` `delete_many`.
 - **`generic-req-review` reads the new `INTAKE.md`**: the goal, the line under *Human adds*, the domain part; and it asks only where things do not fit, never to confirm what is written.
 
-**Introductory material**: `docs/09-intake.md`, `docs/04-reference.md` changed.
+**Introductory material**: `docs/09-intake.md` (delete several files), `docs/04-reference.md` changed.
 
 ## 1.5.46 (2026-10-23)
 

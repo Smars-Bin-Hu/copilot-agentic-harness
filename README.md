@@ -133,6 +133,7 @@ If you'd rather not read docs, the four commands above are enough: the agent lea
 | [07 Release notes](docs/07-release-notes.md) | **What changed in each version.** Additions, changes and retirements |
 | [08 Knowledge base](docs/08-knowledge-base.md) | **Build it from your code and keep it true.** The idea, the steps, how you know the map is right, what you can change |
 | [09 Preparing an intake](docs/09-intake.md) | **Business documents as files the agent can read.** Word and Excel to Markdown and CSV without AI, `INTAKE.md`, trimming, pasting a table, the review of the requirement |
+| [10 Skills](docs/10-skills.md) | **Which skill is for what.** All 33 skills sorted by who uses them: the ones you start, the ones the agent picks, the knowledge base ones |
 
 ## Directory layout
 

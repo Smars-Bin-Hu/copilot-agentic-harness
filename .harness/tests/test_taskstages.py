@@ -133,6 +133,7 @@ class PerKind(StageCase):
         self.assertEqual(taskdesk.desk(self.root, "t")["test"]["reopen"], "", "not forked from a task: the person decides alone")
         self.change("t", forked_from=f"{BASE}/dev1")
         self.assertEqual(taskdesk.desk(self.root, "t")["test"]["reopen"], "dev1")
+        self.assertEqual(taskdesk.desk(self.root, "t")["test"]["failed"], ["DEV"], "the page names the environment")
         (self.folder("t") / "TEST" / "results-DEV.md").write_text("**Verdict for DEV: PASS**\n", encoding="utf-8")
         self.assertEqual(taskdesk.desk(self.root, "t")["test"]["reopen"], "")
 

@@ -1105,7 +1105,7 @@
   "desk.rca.hint": "agent 写的根因分析（RCA.md）：看到了什么、证据、原因、怎么验证的。",
   "desk.missing.design": "agent 会把设计写到任务文件夹根目录的 DESIGN.md。",
   "desk.missing.rca": "agent 会把分析写到任务文件夹根目录的 RCA.md。",
-  "desk.test.reopen": "有环境没通过。这个任务是从开发任务 {dev} fork 出来的：重新打开它（新的一轮，新的计划）来修没通过的地方。不强制，由你决定。",
+  "desk.test.reopen": "{envs} 没通过。这个任务是从开发任务 {dev} fork 出来的：重新打开它（新的一轮，新的计划）来修没通过的地方。不强制，由你决定。",
   "desk.tab.history": "历史",
   "desk.tab.docs": "其他文档",
   "desk.tab.files": "文件",

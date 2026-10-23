@@ -118,7 +118,8 @@ def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, A
         folder = tasks.task_dir(root, task)
         return {"guide": read_doc(folder / taskstages.GUIDE), "envs": out, "passed": sum(1 for item in out if item["state"] == "done"), "total": len(out),
                 "defects": defects_of(root, task),
-                "reopen": task_ops.name_of(str(data["forked_from"])) if data.get("forked_from") and any(item["state"] == "failed" for item in out) else ""}  # forked from a development task and an environment failed: say where to go back to (M40-8); the person decides
+                "reopen": task_ops.name_of(str(data["forked_from"])) if data.get("forked_from") and any(item["state"] == "failed" for item in out) else "",
+                "failed": [item["name"] for item in out if item["state"] == "failed"]}  # forked from a development task and an environment failed: say where to go back to (M40-8); the person decides
     except Exception:  # noqa: BLE001 - a page must not fail over the tests of one task
         return None
 

@@ -157,7 +157,7 @@ class ReadmeStructureTests(unittest.TestCase):
     def test_the_readme_introduces_gets_the_reader_started_and_points_at_the_docs(self) -> None:
         readme = text(REPO / "README.md")
         self.assertTrue(readme.startswith("# GitHub Copilot Agentic Harness on VS Code\n"))
-        self.assertEqual(re.findall(r"^## (.+)$", readme, re.M), ["What it is", "Get started", "What it does", "What you must plug in", "Docs", "Directory layout", "License"])
+        self.assertEqual(re.findall(r"^## (.+)$", readme, re.M), ["What you get", "What it is", "Get started", "What it does", "See it", "What you must plug in", "Docs", "Directory layout", "License"])
         start = section(readme, "Get started")
         for skill in ("harness-rookie-get-me-ready", "harness-rookie-quick-start", "harness-rookie-wondering"):
             self.assertIn(f"`/{skill}`", start, skill)

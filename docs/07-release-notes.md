@@ -22,7 +22,10 @@ To see which version you have: `harness --version`.
 - **The Intake tab: pick files and delete them together.** Each file in the list has a check box, and *Select all* (the folded groups too) sits above the list with *Delete selected (n)*. It asks once, naming the files; a bad path deletes none. The board call is `/api/intake` `delete_many`.
 - **`generic-req-review` reads the new `INTAKE.md`**: the goal, the line under *Human adds*, the domain part; and it asks only where things do not fit, never to confirm what is written.
 
-**Introductory material**: `docs/09-intake.md` (delete several files), `docs/04-reference.md` changed.
+- **The pictures of the README and the overview are new, and dark.** Taken on the real board with the latest pages, on a made-up team's tasks: the lobby (with the card of one task), the list, a task page with its stages and reviewer row, Intake, the plan and its approval, TODO, changes, a failed and then passing check, a test task with its environments and runs, the history, and the time report. The README has a new *What you get* list and a *See it* gallery; the overview shows the Intake, Review and Test pages and a lifecycle with the three approvals yours.
+- **`docs/02-features.md`: the task page section is split up.** It was one wall of text; it is now the board (lobby and list), the stages (a table), the tabs (a table), giving results, the commit message, and the states (a table). Nothing was dropped.
+
+**Introductory material**: `docs/09-intake.md` (delete several files), `docs/04-reference.md`, `README.md`, `docs/00-overview.md`, `docs/01-quickstart.md` (Intake, testing, the tabs) and `docs/02-features.md`, `docs/05-design.md` and `docs/06-cost-optimization.md` (the program that converts documents; the folders only you write) changed. `harness-rookie-quick-start` and `harness-rookie-wondering` did not change: they tell the story and the principles, not the pictures.
 
 ## 1.5.46 (2026-10-23)
 

@@ -55,46 +55,67 @@ The agent's rights are kept to the task folder. A target repository is changed o
 
 The tier decides how many files the task keeps: `light` only `TASK.md`; `medium` adds the requirement and the log; `full` adds `TODO.md` and `DEV/` for changes.
 
-The life of a development task. The two diamonds are yours; everything else is the agent's.
+The life of a development task. The three diamonds are yours; everything else is the agent's.
 
 ```mermaid
 flowchart LR
-    A([You say what you want]) --> B[Task opens<br/>TASK.md, REQ.md]
-    B --> C[Agent reads the knowledge base<br/>and the code, writes PLAN.md]
-    C --> D{You approve<br/>the plan}
-    D --> E[Agent changes files<br/>in DEV/, works down TODO.md]
-    E --> F[Independent checks<br/>when you asked for them]
-    F --> G[Dry-run write-back<br/>PROMOTE-PLAN.diff]
-    G --> H{You approve<br/>the write-back}
-    H --> I[New branch in the repository<br/>not committed]
-    I --> J([Task closes, report written])
+    A([You say what you want,<br/>and drop documents in Intake]) --> B[Task opens<br/>agent writes REQ.md]
+    B --> C{You confirm<br/>the requirement}
+    C --> D[Agent reads the knowledge base<br/>and the code, writes PLAN.md]
+    D --> E{You approve<br/>the plan}
+    E --> F[Agent changes files<br/>in DEV/, works down TODO.md]
+    F --> G[Independent checks<br/>when you asked for them]
+    G --> H[Dry-run write-back<br/>PROMOTE-PLAN.diff]
+    H --> I{You approve<br/>the write-back}
+    I --> J[New branch in the repository<br/>not committed]
+    J --> K([You commit; the task closes,<br/>the report is written])
 ```
+
+A task of another kind has fewer steps: a root cause analysis or a design ends in a document (`RCA.md`, `DESIGN.md`), with no plan and no write-back. A test task has a guide and a step for each environment: you run it, bring the results back, and the agent judges them.
 
 You can put any task aside (pause), take it up again (resume), or let the agent work down `TODO.md` without stopping to ask (autorun, beta). A closed task can be opened again, or archived out of the repository.
 
 ## 4. Follow and steer it in the browser
 
-Run `harness task board` in your own terminal. Your browser opens on the board of every task:
+Run `harness task board` in your own terminal. Your browser opens on the board of every task. It opens as a **lobby**: each open task is a small agent on the floor, in the zone of what it is doing (at work, waiting for you, resting). Point at one: a card shows the task, what it waits for, its stages and its checks, and the same buttons as the list.
 
-![The task board: every task, what it waits for, and since when](images/board.png)
+![The lobby: every open task as a small agent; the card of one shows its stage, how long it waited and its buttons](images/board.png)
 
-A click on a task opens its page. What waits for you comes first, each button with a line on when to press it. Below it, the task's files drawn as pages: the plan,
+The switch at the top right changes to the list: one line per task with what it waits for, how long, the time split, the checks, and the buttons. Filter by state or kind, search, sort by any column.
+
+![The list: what each task waits for and since when, the working time, the checks, and a button for the next move](images/board-list.png)
+
+A click on a task opens its page. The page opens with the task's **stages**, which depend on its kind (a test task has one step for each environment). Under them, what waits for you comes first, each button with a line on when to press it. A reviewer row shows the independent checks, and a stamp when all have passed.
+
+![A task page: the stages, the reviewer's checks, what waits for you, and the tabs](images/task-overview.png)
+
+**Intake.** When the requirement came as documents, the **Intake** tab takes them: drop Word, Excel (and PDF) files, or paste a table. A program turns them into Markdown and CSV with no AI and no tokens, and a report says what it left out. You trim the files in a text box, tick the ones to delete, and tell the agent. It reads the small files, never the originals. Details: [Preparing an intake](09-intake.md).
+
+![The Intake tab: drop files, paste a table, then the files the agent will read](images/task-intake.png)
+
+**The plan.** The agent writes the plan as a page: what changes, why, and how it will be checked. Nothing in a repository changes before you approve it.
 
 ![The plan of a task, drawn as a page](images/task-plan.png)
 
-the TODO with its progress,
-
-![The TODO of a task with its progress](images/task-todo.png)
-
-and the files the task changes, with the diff and the write-back the last dry run prepared:
-
-![The changes of a task and the write-back waiting for approval](images/task-changes.png)
-
-An approval works as in the terminal: the page shows what you approve and asks you to type its code.
+An approval works as in the terminal: the page shows what you approve and asks you to type its code. The agent cannot do this for you.
 
 ![Approving a plan from the page](images/approve-dialog.png)
 
-The history of the task keeps what happened, newest first: approvals, fetches, checks, write-backs, pauses.
+**Progress and changes.** The TODO shows its progress, and the Changes tab shows the files the task changes, the diff, and the write-back the last dry run prepared. The write-back goes to a new branch, uncommitted.
+
+![The TODO of a task with its progress](images/task-todo.png)
+
+![The changes of a task and the write-back waiting for approval](images/task-changes.png)
+
+**Independent checks.** With `[review]=n`, the **Review** tab keeps every round: what the reviewer was given, what it found, and its verdict. A check that fails sends the agent back to fix; the checks must pass in a row on the same version.
+
+![The Review tab: one failed check with its findings, then two passes](images/task-review.png)
+
+**Testing.** A test task has one guide with a section for each environment. You run the steps, give the output and screenshots on the page (or in the chat), and the agent records each run with a verdict for each criterion. Every run stays: what was run, your words, the pictures, the judgement.
+
+![The Test tab: a sub-tab for each environment, and a tab for each run with its commands, your words, a screenshot and the verdict](images/task-test.png)
+
+**History.** The history of the task keeps what happened, newest first: documents added, approvals, fetches, checks, runs, write-backs, pauses.
 
 ![The history of a task](images/task-history.png)
 
@@ -104,7 +125,7 @@ So the work splits cleanly: you talk to the agent and check the code in VS Code;
 
 Every task has an analysis: how long the agent worked, how long it waited for you and on what, every prompt, the stages, the tools, and the usage Copilot records (AIU, premium requests).
 
-![Task analysis: working time, waiting time, prompts and tools](images/report.png)
+![Task analysis: working time, waiting time for you, every prompt, the tools and the checks](images/report.png)
 
 The numbers come from the hook log and Copilot's own session record, not from the agent's word. Details: [Features](02-features.md#observability-logs-statistics-reports-scenario-checks).
 

@@ -191,6 +191,14 @@ How to work in it is the skill `harness-admin`, which the rules of admin mode po
 
 A company's repositories have many files, and copying one as a whole is out of the question. The target setting is a data engineering pipeline code store: no entry point, it cannot run on a local machine, and it holds a large number of mixed files by domain or function (Python, SQL, `.json`, `.sh`, PowerShell). So the reviewer checks by reading and by the diff, not by running tests; the quality of checks and plans depends on the knowledge base, which is a necessity for such a repository, not an extra. The harness reads the local main with `git` and fetches the files the plan changes into the task's `DEV/`; for a write-back it writes the files on a new branch and does not commit. Your working tree, your current branch and your existing commits are not changed, and when something goes wrong it can be put right with `task recover` or with `git` commands.
 
+### Business documents are converted by a program, not read by the model
+
+A Word or Excel file is mostly layout: styles, hidden sheets, merged cells, numbering. A model that reads it directly spends tokens on that, and may drop a part without saying so. So a program (`intakeconvert.py`, standard library only) writes Markdown and CSV, keeps the original as it is, and lists what it left out. The person, who knows which chapters matter, trims the result; the agent reads the small files and asks only what does not fit. See [Preparing an intake](09-intake.md).
+
+### Folders only the person writes
+
+`REQ/`, `REF/` and `INBOX/` hold what the person brought: documents, reference code, the results of a run. The gate refuses the agent's file tools there; the person's page and commands write them. The agent records a result through a command that judges it. Evidence the agent could edit would not be evidence.
+
 ### Long tasks: a group of tasks
 
 A task is one delivery. When a job is so big that it takes many deliveries and the plan keeps changing, `/generic-goal-driven` keeps three things as files: the central idea (`GOAL.md`), the list of steps (`TODO.md`) and the progress pointer (`NOW.md`). This is also how this repository is developed: the central idea first, then the steps, then one step at a time: do, check, let a person accept.

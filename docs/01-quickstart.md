@@ -86,7 +86,7 @@ harness task board
 
 It opens your browser on the board, already paired with the program (Ctrl+C stops it). If it says the port is in use, the board is already running: open `http://127.0.0.1:8765/`.
 
-The board lists every task, what waits for you, and since when. A click on a task opens its page: the requirement, the plan, the TODO, the log, the history and the changes, drawn as pages, and the buttons for what you decide. The agent gives you the address of the page in its messages. More in [the overview](00-overview.md#4-follow-and-steer-it-in-the-browser).
+The board lists every task, what waits for you, and since when. A click on a task opens its page: the stages, the requirement, the plan, the TODO, the log, the changes, the independent checks (Review), the test results (Test) and the history, drawn as pages, and the buttons for what you decide. The board opens as a lobby where each task is a small agent; the switch at the top right gives the list. The agent gives you the address of the page in its messages. More in [the overview](00-overview.md#4-follow-and-steer-it-in-the-browser).
 
 If the page says the pairing code is wrong or used up, press Enter in the terminal of the board (not in its first seconds) and open the new link it prints. A browser you open by hand is not paired: it can pause and resume a task, but an approval is refused. Press Enter in the terminal of the board for a new pairing link.
 
@@ -111,7 +111,7 @@ More ways to write it are in [Configure and customise](03-configure.md).
 One agent; you confirm the requirement, you approve the plan, and you approve the write-back. The board is running (step 3).
 
 1. In Copilot Chat, with the default agent, say clearly what you want done and which target repository changes. Add `[review]=1` for an independent check.
-2. The agent asks you a few questions, then makes a new task, writes the requirement as it understands it into `REQ.md`, and gives you the address of the task's page. If you have requirement documents, put them in the task's `REQ/`; reference code goes in `REF/`.
+2. The agent asks you a few questions, then makes a new task, writes the requirement as it understands it into `REQ.md`, and gives you the address of the task's page. If the requirement came as documents (Word, Excel, PDF), drop them on the **Intake** tab of the page: they are turned into small Markdown and CSV files with no AI, you trim them, and the agent reads those (see [Preparing an intake](09-intake.md)). Reference code goes in `REF/`.
 3. On the page, open the **Overview** tab and read the requirement. If it says what you meant, press **confirm requirement** and type the code the page shows. If not, tell the agent what is wrong.
 4. The agent reads the knowledge base, writes the plan, then stops. The page shows it in the **Plan** tab.
 5. You read the plan. If you agree, press **approve plan** and type the code. To change the plan, tell the agent, and approve after the change. After the approval, tell the agent in the chat ("approved"): the approval itself does not tell it, and the page reminds you.
@@ -152,6 +152,8 @@ Material such as requirement documents and logs goes into `REQ/` and `REF/` of t
 | An RCA, a design, an approach | "Find out why the orders table of <repository> was late and write an RCA" |
 | Changing a target repository | "Add a field <name> to the orders table in <repository>. Acceptance: <standard>" |
 | Going on | "Go on with <the task name, or a sentence that identifies it>" |
+| A requirement that came as documents | Open the task, then drop the files on its **Intake** tab; tell the agent "the requirement is in REQ/INTAKE.md" |
+| Testing after the PR | "Fork this task to a test task" (or `/generic-test-guide`). You get a guide for each environment, run it, and bring the output and screenshots back on the task page |
 | One more round after a write-back | "Task <task name> needs more changes: <the new request>" |
 | Changing the requirement | "The requirement changed: <the new condition>". It changes `REQ.md` first, then the work |
 | An analysis turns into a repository change | "This task has to change <repository> now" |

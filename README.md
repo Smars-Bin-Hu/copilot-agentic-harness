@@ -11,13 +11,27 @@
 
 **Make GitHub Copilot carry a task from start to finish the way your team works: it follows the rules, stays inside its boundaries, and leaves a record you can review.**
 
-[Get started](#get-started) · [What it does](#what-it-does) · [What you must plug in](#what-you-must-plug-in) · [Docs](#docs) · [Release notes](docs/07-release-notes.md)
+[What you get](#what-you-get) · [Get started](#get-started) · [See it](#see-it) · [What you must plug in](#what-you-must-plug-in) · [Docs](#docs) · [Release notes](docs/07-release-notes.md)
 
-![Every task, what it waits for and since when; a click opens the task's plan, TODO, changes and approvals](docs/images/board.png)
+<p align="center">
+  <img alt="The task board as a lobby: each open task is a small agent on the floor, at work, waiting for you, or resting. Point at one for its stages and buttons" src="docs/images/board.png" width="760">
+</p>
 
 **New here? Read the [overview](docs/00-overview.md) first**: the problem, the way of working, what you see in the browser, and how it is built, with pictures.
 
 ---
+
+## What you get
+
+- **A task, not a chat.** Every piece of work is a folder: the requirement, the plan, the steps, the log and the changes are files. A new chat reads `TASK.md` and goes on. Kinds: question, root cause analysis, design, development, testing, knowledge base update.
+- **A board you follow in the browser.** Every open task, what it waits for you for, and since when. The lobby shows each one as a small agent: at work, waiting for you, resting. A click opens the task as pages: stages, requirement, plan, TODO, changes, checks, test results, history.
+- **Approvals only you can give.** The requirement, the plan and the write-back to a repository each wait for a code you type on the page or in your terminal. The agent cannot approve for you, and `push` can never be approved.
+- **Business documents in, no tokens spent.** Drop Word or Excel files on the **Intake** tab (old Excel and PDF need one Python package): a program turns them into Markdown and CSV, and reports what it left out (hidden sheets, comments, pictures). You trim them; the agent reads the small files and asks only what does not fit.
+- **Independent checks, counted by code.** Write `[review]=2` and the work must pass two checks in a row by a reviewer that never saw the author's reasoning. Every round, its findings and its verdict are on the **Review** tab.
+- **Tests that leave evidence.** A test task has one guide with a section per environment (DEV, IST, UAT). You run it, paste the output and screenshots on the page, and the agent judges each criterion against what you brought. Run 1, Run 2: all kept.
+- **Safe write-back.** The harness writes only the files to change, to a new branch, uncommitted. It keeps a patch, a snapshot and a restore command.
+- **Time and cost in view.** Where the time went (working, waiting for you), every prompt, every tool, the usage Copilot records. Per task, from the hook log, not from the agent's word.
+- **Moves with you.** `/harness-reinstall` carries tasks, runtime settings and the knowledge base to a new copy of the harness.
 
 ## What it is
 
@@ -53,6 +67,8 @@ Clone this repository, or download the zip from GitHub and extract it (git is op
 
 The agent leads all four, so you don't need to read the docs first. To do it by hand, see the [quickstart](docs/01-quickstart.md).
 
+To move to a newer copy of the harness later, type `/harness-reinstall` in the new copy: it carries your tasks, settings and knowledge base over.
+
 After that, daily use takes one sentence: tell Copilot what you want done, and it asks until the request is clear, then opens a task. You don't write long prompts or paths. See [what to say day to day](docs/01-quickstart.md#7-what-to-say-day-to-day).
 
 ## What it does
@@ -71,6 +87,27 @@ There is more: queued write-back when several tasks target the same repository, 
 
 > The gate checks the text of a command. It **prevents mistakes; it does not stop someone who is trying to get around it**. Do not treat it as a sandbox.
 
+## See it
+
+All pictures are from a made-up team's tasks, on the real board.
+
+<table>
+<tr>
+<td width="50%"><a href="docs/images/task-overview.png"><img alt="A task page: the stages, the reviewer's checks, what waits for you and the buttons to answer it" src="docs/images/task-overview.png"></a><br><sub><b>A task page.</b> Stages, the reviewer's checks, and what waits for you with a button for each answer.</sub></td>
+<td width="50%"><a href="docs/images/task-intake.png"><img alt="The Intake tab: drop Word and Excel files, paste a table, pick the files to keep" src="docs/images/task-intake.png"></a><br><sub><b>Intake.</b> Drop Word, Excel and PDF files; paste a table; trim, pick and delete files before the agent reads them.</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/images/task-review.png"><img alt="The Review tab: one failed check with its findings, then two passes" src="docs/images/task-review.png"></a><br><sub><b>Independent checks.</b> Each round: what the reviewer was given, what it found, its verdict.</sub></td>
+<td width="50%"><a href="docs/images/task-test.png"><img alt="The Test tab: one sub-tab per environment, runs with the commands, the words you gave and screenshots" src="docs/images/task-test.png"></a><br><sub><b>Testing.</b> One sub-tab per environment, each run with its commands, your words, screenshots and the verdict.</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/images/task-changes.png"><img alt="The Changes tab: the diff and the write-back the last dry run prepared" src="docs/images/task-changes.png"></a><br><sub><b>Write-back.</b> The diff, and exactly what goes into the repository when you approve.</sub></td>
+<td width="50%"><a href="docs/images/report.png"><img alt="The task analysis: working time, waiting time, every prompt, the tools" src="docs/images/report.png"></a><br><sub><b>Where the time went.</b> Working and waiting, every prompt, the tools, the checks.</sub></td>
+</tr>
+</table>
+
+More pictures, in the order of a task's life, are in the [overview](docs/00-overview.md#4-follow-and-steer-it-in-the-browser).
+
 ## What you must plug in
 
 The harness is generic and carries no business content. **Without the two items below it cannot do your daily work.** `/harness-rookie-get-me-ready` helps you set them up.
@@ -82,11 +119,11 @@ The harness is designed for the git repositories of data engineering teams: no e
 
 ## Docs
 
-If you'd rather not read docs, the three commands above are enough.
+If you'd rather not read docs, the four commands above are enough: the agent leads you.
 
 | Doc | What you will find |
 | --- | --- |
-| [00 Overview](docs/00-overview.md) | **Read this first.** The problem, the task way of working, the board and the task pages in pictures, how it is built, and what is not solved yet |
+| [00 Overview](docs/00-overview.md) | **Read this first.** The problem, the task way of working, the board, the Intake, Test and Review pages in pictures, how it is built, and what is not solved yet |
 | [01 Quickstart](docs/01-quickstart.md) | **Run it by hand.** Requirements, setting up the `harness` short command, the `doctor` self-check, a first task, and what to say day to day |
 | [02 Features](docs/02-features.md) | **What it can do.** Tasks, the gate, the two approvals, independent checks with `[review]=n`, logs and reports |
 | [03 Configuration](docs/03-configure.md) | **Plug in your own material.** Overrides, target repositories, the knowledge base, domain skills, choosing a model |

@@ -153,6 +153,7 @@ The defaults are in `.harness/policies/<file>`; overrides go in the `.override.j
 | `REQ.md` | The requirement: the user's confirmation, what to do, what not to do, done when, source, not clear yet, changes |
 | `TODO.md` | The list of steps |
 | `LOG.md` | What was done and decided; append only |
+| `INTAKE.md` | Made by `task intake init` into `REQ/`, not at task creation: a short goal, the knowledge base domain to scan, and what the human adds |
 
 ## Messages
 

@@ -93,9 +93,9 @@ class LinkTests(unittest.TestCase):
         for doc in (REPO / "docs").glob("*.md"):
             self.assertTrue(f"docs/{doc.name}" in readme, doc.name)
 
-    def test_the_nine_docs_exist(self) -> None:
+    def test_the_ten_docs_exist(self) -> None:
         names = sorted(item.name for item in (REPO / "docs").glob("*.md"))
-        self.assertEqual(len(names), 9, names)
+        self.assertEqual(len(names), 10, names)
 
 
 class InitializeSkillTests(unittest.TestCase):
@@ -106,20 +106,20 @@ class InitializeSkillTests(unittest.TestCase):
         body = skill[skill.index("## Step-by-Step Workflows"):skill.index("## Gotchas")]
         return {number: chunk for number, chunk in re.findall(r"^(\d)\. (.+?)(?=^\d\. |\Z)", body, re.M | re.S)}
 
-    def test_step_8_does_nothing_when_the_sample_line_reads_fine_and_writes_native_when_it_is_garbage(self) -> None:
-        check = self.steps()["8"]
+    def test_step_9_does_nothing_when_the_sample_line_reads_fine_and_writes_native_when_it_is_garbage(self) -> None:
+        check = self.steps()["9"]
         self.assertIn("the sample line of Chinese", check)
         self.assertIn("If you can read it, do nothing", check)
         self.assertIn("If it is garbage, write `.harness/policies/cli.override.json` yourself", check)
         self.assertIn("run `harness doctor` once more", check)
 
-    def test_step_7_does_not_ask_the_user_about_the_encoding(self) -> None:
-        step = self.steps()["7"]
+    def test_step_8_does_not_ask_the_user_about_the_encoding(self) -> None:
+        step = self.steps()["8"]
         self.assertIn("Do not ask the user about Chinese text", step)
         self.assertNotIn("Two common ones", step)
 
     def test_the_json_the_skill_tells_the_agent_to_write_is_what_doctor_accepts(self) -> None:
-        written = json.loads(re.search(r"`(\{\"output\": \{\"encoding\": \"native\"\}\})`", self.steps()["8"]).group(1))
+        written = json.loads(re.search(r"`(\{\"output\": \{\"encoding\": \"native\"\}\})`", self.steps()["9"]).group(1))
         sys.path.insert(0, str(ENGINE))
         try:
             from core import output
@@ -298,7 +298,7 @@ class ReferenceCoverageTests(unittest.TestCase):
     def test_every_task_template_is_listed(self) -> None:
         reference = section(text(REFERENCE), "Templates (contracts)")
         templates = sorted(path.name for path in (REPO / ".harness" / "contracts" / "templates" / "task" / "en").glob("*.md"))
-        self.assertEqual(templates, ["LOG.md", "REQ.md", "TASK.md", "TODO.md"])
+        self.assertEqual(templates, ["INTAKE.md", "LOG.md", "REQ.md", "TASK.md", "TODO.md"])
         for name in templates:
             self.assertIn(f"`{name}`", reference)
 

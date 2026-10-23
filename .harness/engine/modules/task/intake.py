@@ -90,7 +90,7 @@ def setup(root: Path) -> Dict[str, Any]:
 def convert_xls(root: Path, data: bytes, stem: str, include_hidden: bool) -> Dict[str, Any]:
     xlrd = need_package(root, "xlrd", "an old Excel file (.xls)")
     try:
-        book = xlrd.open_workbook(file_contents=data)
+        book = xlrd.open_workbook(file_contents=data, formatting_info=True)  # with it, the merged cells and the hidden rows and columns are known
     except Exception as error:  # noqa: BLE001 - xlrd has its own error types
         raise convert.ConvertError(f"the .xls file cannot be read ({type(error).__name__}: {error})") from None
     files: List[Tuple[str, bytes]] = []
@@ -105,8 +105,14 @@ def convert_xls(root: Path, data: bytes, stem: str, include_hidden: bool) -> Dic
             info["skipped"] = "hidden"
             continue
         cells: Dict[Tuple[int, int], str] = {}
+        skipped_rows = {r for r in range(sheet.nrows) if getattr(sheet.rowinfo_map.get(r), "hidden", 0)} if not include_hidden else set()
+        skipped_columns = {c for c in range(sheet.ncols) if getattr(sheet.colinfo_map.get(c), "hidden", 0)} if not include_hidden else set()
         for r in range(sheet.nrows):
+            if r in skipped_rows:
+                continue
             for c in range(min(sheet.ncols, convert.MAX_COLUMNS)):
+                if c in skipped_columns:
+                    continue
                 kind, value = sheet.cell_type(r, c), sheet.cell_value(r, c)
                 if kind == xlrd.XL_CELL_DATE:
                     text = xlrd.xldate_as_datetime(value, book.datemode).isoformat(sep=" ").replace(" 00:00:00", "")
@@ -127,7 +133,8 @@ def convert_xls(root: Path, data: bytes, stem: str, include_hidden: bool) -> Dic
                 for r in range(rlo, rhi):
                     for c in range(clo, chi):
                         cells.setdefault((r, c), cells[(rlo, clo)])
-        rows, cut = convert.trim_grid(cells)
+        cells = {key: text for key, text in cells.items() if key[1] not in skipped_columns and key[0] not in skipped_rows}  # a merged range may have reached into a hidden column
+        rows, cut = convert.trim_grid(cells, skipped_rows)
         if not rows:
             notes.append(f"sheet '{sheet.name}' is empty: no file")
             info["skipped"] = "empty"
@@ -142,7 +149,8 @@ def convert_xls(root: Path, data: bytes, stem: str, include_hidden: bool) -> Dic
         info.update(file=name, rows=len(rows), columns=len(rows[0]), preview=rows[: convert.PREVIEW_ROWS], extras=[])
         if merged:
             notes.append(f"sheet '{sheet.name}': {merged} merged range(s): the value is repeated in every cell of the range")
-    notes.append("an old .xls does not say which rows or columns are hidden here: check the csv files against the workbook")
+        if skipped_rows or skipped_columns:
+            notes.append(f"sheet '{sheet.name}': {len(skipped_rows)} hidden row(s) and {len(skipped_columns)} hidden column(s) skipped")
     return {"files": files, "notes": notes, "sheets": sheets}
 
 

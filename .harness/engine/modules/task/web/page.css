@@ -140,6 +140,7 @@ ol.timeline li{display:grid;grid-template-columns:8.5em minmax(0,1fr);align-item
 .domain-choice input{margin:0;width:16px;height:16px}
 .card-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}.card-title{min-width:0;overflow-wrap:anywhere}
 .card-tools{display:flex;align-items:center;gap:8px}.card-tools .act{margin:0}.act.danger:hover{border-color:var(--bad);color:var(--bad)}.act.close{padding:2px 10px;font-size:15px;line-height:18px}
+.intake-sub{margin:18px 0 4px;font-size:14px}
 .intake-group{margin:10px 0}.intake-group summary{cursor:pointer;font-size:13px;color:var(--soft);margin-bottom:6px}
 .intake-files td{vertical-align:middle}.linkish{font:inherit;background:none;border:none;padding:0;color:var(--model);cursor:pointer;text-align:left;text-decoration:underline}
 textarea.editor{box-sizing:border-box;width:100%;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);resize:vertical;margin:6px 0}

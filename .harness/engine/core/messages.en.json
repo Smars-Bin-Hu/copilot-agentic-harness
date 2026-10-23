@@ -1173,7 +1173,7 @@
   "desk.intake.discard": "There are changes that are not saved. Close without saving?",
   "desk.intake.unsaved": "not saved",
   "desk.intake.saved": "saved",
-  "desk.intake.paste.title": "Paste a table or a text",
+  "desk.intake.paste.title": "Or paste a table or a text",
   "desk.intake.paste.hint": "A file that came out wrong, or is too strange to convert: copy only the part that matters (cells from Excel are fine) and paste it here. Describe its structure in INTAKE.md.",
   "desk.intake.paste.name": "file name",
   "desk.intake.paste.ph": "Paste the cells or the text here",

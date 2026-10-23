@@ -1173,7 +1173,7 @@
   "desk.intake.discard": "有没保存的修改。不保存就关闭吗？",
   "desk.intake.unsaved": "没保存",
   "desk.intake.saved": "已保存",
-  "desk.intake.paste.title": "粘贴表格或文字",
+  "desk.intake.paste.title": "或者粘贴表格或文字",
   "desk.intake.paste.hint": "转出来不对、或者太怪转不了的文件：只复制有用的那一块（从 Excel 复制单元格就行），粘贴到这里。结构在 INTAKE.md 里用话说明。",
   "desk.intake.paste.name": "文件名",
   "desk.intake.paste.ph": "把单元格或文字粘贴在这里",

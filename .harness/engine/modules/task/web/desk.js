@@ -600,6 +600,20 @@
     zone.addEventListener("dragleave", () => zone.classList.remove("over"));
     zone.addEventListener("drop", (event) => { event.preventDefault(); zone.classList.remove("over"); intakeAdd(event.dataTransfer.files); });
     parts.push(h("h3", null, t("desk.intake.add.title")), zone);
+    const name = h("input", {type: "text", value: intake.name, placeholder: t("desk.intake.paste.name"), class: "env-input", maxlength: 60});
+    name.addEventListener("input", () => { intake.name = name.value; });
+    const kind = h("select", null, [["csv", t("desk.intake.kind.csv")], ["md", t("desk.intake.kind.md")], ["txt", t("desk.intake.kind.txt")]].map(([value, label]) => h("option", {value, selected: intake.kind === value ? "" : null}, label)));
+    kind.addEventListener("change", () => { intake.kind = kind.value; });
+    const text = h("textarea", {rows: 7, placeholder: t("desk.intake.paste.ph"), class: "editor"}, intake.text);
+    text.addEventListener("input", () => { intake.text = text.value; });
+    const savePaste = h("button", {type: "button", class: "act hot", disabled: intake.busy ? "" : null}, t("desk.intake.paste.save"));
+    savePaste.addEventListener("click", () => {
+      intake.busy = true; intake.error = ""; draw(true);
+      intakeCall("paste", {name: intake.name || "pasted", kind: intake.kind, text: intake.text})
+        .then((found) => { intake.text = ""; intake.name = ""; intake.done.unshift({name: found.file, result: {files: [found.file], notes: [], report: found.file}}); }, (error) => { intake.error = error.message; })
+        .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
+    });
+    parts.push(h("h4", {class: "intake-sub"}, t("desk.intake.paste.title")), h("p", {class: "hint"}, t("desk.intake.paste.hint")), h("div", {class: "inbox-pictures"}, name, kind), text, h("div", {class: "inbox-save"}, savePaste));
     if (intake.error) parts.push(h("p", {class: "hint bad"}, intake.error));
     for (const item of intake.done.slice(0, 5)) {
       parts.push(h("section", {class: "round pass"},
@@ -650,20 +664,6 @@
     if (reports.length) parts.push(group("reports", t("desk.intake.group.reports", {n: reports.length}), reports));
     if (rest.length) parts.push(group("rest", t("desk.intake.group.rest", {n: rest.length}), rest));
     if (intake.editing) parts.push(intakeEditor());
-    const name = h("input", {type: "text", value: intake.name, placeholder: t("desk.intake.paste.name"), class: "env-input", maxlength: 60});
-    name.addEventListener("input", () => { intake.name = name.value; });
-    const kind = h("select", null, [["csv", t("desk.intake.kind.csv")], ["md", t("desk.intake.kind.md")], ["txt", t("desk.intake.kind.txt")]].map(([value, label]) => h("option", {value, selected: intake.kind === value ? "" : null}, label)));
-    kind.addEventListener("change", () => { intake.kind = kind.value; });
-    const text = h("textarea", {rows: 7, placeholder: t("desk.intake.paste.ph"), class: "editor"}, intake.text);
-    text.addEventListener("input", () => { intake.text = text.value; });
-    const savePaste = h("button", {type: "button", class: "act hot", disabled: intake.busy ? "" : null}, t("desk.intake.paste.save"));
-    savePaste.addEventListener("click", () => {
-      intake.busy = true; intake.error = ""; draw(true);
-      intakeCall("paste", {name: intake.name || "pasted", kind: intake.kind, text: intake.text})
-        .then((found) => { intake.text = ""; intake.name = ""; intake.done.unshift({name: found.file, result: {files: [found.file], notes: [], report: found.file}}); }, (error) => { intake.error = error.message; })
-        .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
-    });
-    parts.push(h("h3", null, t("desk.intake.paste.title")), h("p", {class: "hint"}, t("desk.intake.paste.hint")), h("div", {class: "inbox-pictures"}, name, kind), text, h("div", {class: "inbox-save"}, savePaste));
     parts.push(h("h3", null, t("desk.intake.tell")), promptLine(t("desk.intake.message")));
     return parts;
   }

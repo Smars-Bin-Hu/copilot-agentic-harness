@@ -121,6 +121,7 @@
         ".harness/tests/test_mapreduce.py",
         ".harness/tests/test_task.py",
         ".harness/tests/test_intake.py",
+        ".harness/tests/test_pinpython.py",
         ".harness/tests/test_tasklife.py",
         ".harness/tests/test_taskboard.py",
         ".harness/tests/test_boardserve.py",

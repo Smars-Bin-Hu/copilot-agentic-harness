@@ -8,6 +8,7 @@
 .harness/policies/target.override.json
 .harness/policies/user.override.json
 .harness/policies/cli.override.json
+.harness/policies/tools.override.json
 
 # Python cache
 __pycache__/

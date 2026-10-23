@@ -99,6 +99,7 @@ The defaults are in `.harness/policies/<file>`; overrides go in the `.override.j
 | gate.json | `extra_guardrail_paths` | The guardrail paths you add |
 | gate.json | `admin_locked_paths` | The guardrail paths that cannot be changed in admin mode either. `.harness/runtime/**` cannot be removed |
 | gate.json | `cli_owned_paths` | The paths only the CLI can write |
+| tools.json | `python.interpreter` | The one Python the `harness` command runs on, a full path. Left empty, it runs on the first `python3` of the PATH of the terminal that starts it. When set and the command is on another Python, it starts again on this one (once). A path that is not there is said and the command goes on |
 | tools.json | `python.install_command` | The command your company approves for installing a Python package, with `{package}` where the name goes. Empty by default: the harness never guesses one and never runs one |
 | tools.json | `optional_packages` | The packages `task intake convert` can use when they are installed: `module`, `package`, `used_for` |
 | gate.json | `terminal.guardrail_write` | The rules that recognise a terminal command writing a guardrail. The `why` of a rule is one text, or one per language (`{"en": "...", "zh": "..."}`) |

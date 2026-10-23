@@ -29,7 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from core import domainskills, messages, output, reinstall, render, skillcheck, user  # noqa: E402
+from core import domainskills, messages, output, pinpython, reinstall, render, skillcheck, user  # noqa: E402
 from core.paths import repo_root  # noqa: E402
 from core.registry import harness_version, version_banner  # noqa: E402
 import doctor  # noqa: E402
@@ -142,6 +142,8 @@ def safe_streams() -> None:
 def main(argv=None) -> int:
     global ARGV
     ARGV = argv
+    if argv is None:  # the `harness` command itself (not a test calling main): run on the Python the policy names, if one is
+        pinpython.restart_if_pinned(repo_root())
     safe_streams()
     words = list(sys.argv[1:] if argv is None else argv)
     forced_json = JSON_FLAG in words

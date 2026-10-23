@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import config, messages, tasks
+from core import config, messages, pinpython, tasks
 from core.paths import cli_command, utc_now
 
 from . import intakeconvert as convert, task as task_ops
@@ -103,7 +103,8 @@ def setup(root: Path) -> Dict[str, Any]:
     warnings = [say("intake.setup.other_python", used=wrong, running=sys.executable)] if wrong else []
     missing_names = [item["package"] for item in missing]
     everything = template.replace("{package}", " ".join(missing_names)) if template and missing_names else ""  # one command for all that is missing (pip takes several names)
-    return {"ready": ["Word (.docx)", "Excel (.xlsx)", "text and picture files"], "python": sys.executable, "warnings": warnings, "all_installed": not missing, "missing": missing_names,
+    pinned = pinpython.named(root)
+    return {"ready": ["Word (.docx)", "Excel (.xlsx)", "text and picture files"], "python": sys.executable, "pinned": pinned, "warnings": warnings, "all_installed": not missing, "missing": missing_names,
             "install_all": everything, "optional": packages, "install_command_set": bool(template),
             "next": (say("intake.setup.none_missing") if not missing else say("intake.setup.run") if template else say("intake.setup.no_command"))}
 

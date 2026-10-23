@@ -90,4 +90,4 @@ def save(root: Path, raw_task: str, env: str, text: str, ran: str, images: List[
         task_ops.note(fresh, "inbox", f"{env.upper()}: {where}")
     files = sorted(path.name for path in folder.iterdir())
     return {"task": task, "env": env.upper(), "folder": where, "files": files, "saved_at": utc_now(),
-            "message": say("inbox.message", env=env.upper(), folder=where)}
+            "message": say("inbox.message", env=env.upper(), folder=where, how="task test record" if data_now.get("kind") == "test" else "task run record")}

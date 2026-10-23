@@ -129,13 +129,13 @@ class GateTests(ReviewCase):
         found = self.cli_json("task", "handoff", "run", "--env", "DEV", "--what", "run the sync job and send the counts")
         self.assertEqual((found["handoff"], found["detail"]), ("run", "run the sync job and send the counts"))
         self.assertIn("RUNS/DEV/", found["next"])
-        self.assertIn("task handoff clear", self.refused("task", "review", "start"))
+        self.assertIn("task run record", self.refused("task", "review", "start"))
         self.assertEqual(self.review_state()["rounds"], [])  # nothing was used
         row = next(row for row in self.cli_json("task", "list")["tasks"] if row["task"] == JOB)
         self.assertEqual(row["waiting_why"], "run")
         self.assertEqual(self.stop(), {})  # the Stop hook does not ask for a check that cannot start
-        self.assertIn("task handoff clear", self.status()["next"])  # what comes next is the person's result, not a check
-        self.assertIn("task handoff clear", self.cli_json("task", "status")["next"])
+        self.assertIn("task run record", self.status()["next"])  # what comes next is the person's result, not a check
+        self.assertIn("task run record", self.cli_json("task", "status")["next"])
         self.assertIn("RUNS/DEV/", self.refused("task", "handoff", "clear"))  # the result is saved before the mark goes
         self.assertEqual(self.data()["handoff"]["what"], "run")
         self.result("counts 162", "RUNS/dev/counts.txt")  # the folder in any case
@@ -168,7 +168,7 @@ class GateTests(ReviewCase):
         self.assertFalse(handed["detail"].upper().startswith("DEV"))  # the card names the environment once
         row = next(row for row in self.cli_json("task", "list")["tasks"] if row["task"] == JOB)
         self.assertEqual(row["waiting_why"], "run")
-        self.assertIn("task handoff clear", self.refused("task", "review", "start"))  # asked again: the open handoff says why
+        self.assertIn("task run record", self.refused("task", "review", "start"))  # asked again: the open handoff says why
         self.assertEqual(self.data()["handoff"]["since"], handed["since"])  # and it is not marked anew
         self.result("before 162 after 162", "RUNS/DEV/counts.txt")
         cleared = self.cli_json("task", "handoff", "clear")

@@ -20,6 +20,7 @@ import io
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -79,13 +80,34 @@ def need_package(root: Path, module: str, what: str) -> Any:
 
 
 def install_target(command: str) -> str:
-    """The Python an install command names at its start (`/opt/anaconda3/bin/python3 -m pip ...`, or `python3 -m pip ...` looked up on PATH), resolved; "" when it names none
+    """The Python an install command names at its start (`/opt/anaconda3/bin/python3 -m pip ...`, `python3 -m pip ...` looked up on PATH, or `py -m pip ...` asked of the Windows launcher), resolved; "" when it names none
     (`pip install ...`: pip belongs to some Python, which this cannot tell)."""
-    first = command.split()[0] if command.split() else ""
+    words = command.split()
+    first = words[0] if words else ""
+    if re.match(r"(?:.*[\\/])?py(?:\.exe)?$", first, re.IGNORECASE):
+        return py_launcher_target(first, words[1:])
     if not first or not re.match(r"(?:.*[\\/])?python[0-9.]*(?:\.exe)?$", first, re.IGNORECASE):
         return ""
     found = first if os.path.isabs(first) else (shutil.which(first) or "")
     return os.path.realpath(found) if found else ""
+
+
+def py_launcher_target(launcher: str, words: List[str]) -> str:
+    """The Python the Windows launcher `py` starts for `py [-3.11] -m pip ...`, asked of the launcher itself; "" when there is no launcher or it does not answer."""
+    found = launcher if os.path.isabs(launcher) else (shutil.which(launcher) or "")
+    if not found:
+        return ""
+    selectors = []
+    for word in words:
+        if word in ("-m", "-c") or not word.startswith("-"):
+            break
+        selectors.append(word)
+    try:
+        done = subprocess.run([found, *selectors, "-c", "import sys; print(sys.executable)"], capture_output=True, text=True, timeout=15, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    lines = done.stdout.strip().splitlines()
+    return os.path.realpath(lines[-1]) if done.returncode == 0 and lines else ""
 
 
 def other_python(command: str) -> str:

@@ -518,6 +518,29 @@ class PackagesTests(LifeCase):
             self.assertIn(sys.executable, found["warnings"][0])
         self.assertIn(sys.executable, intake.setup(self.root)["python"])
 
+    def test_the_py_launcher_is_asked_which_python_it_starts(self) -> None:
+        """The company command is `py -m pip install ...`: `py` can start another Python than the one the harness runs on."""
+        import os
+        import stat
+        import sys
+        import tempfile
+
+        self.assertEqual(intake.other_python("py -m pip install {package}"), "", "no launcher on this machine: it cannot be told")
+        if os.name == "nt":
+            return
+        with tempfile.TemporaryDirectory() as folder:
+            launcher = Path(folder) / "py"
+            launcher.write_text('#!/bin/sh\nprintf "%s\\n" "$FAKE_PY"\n', encoding="utf-8")
+            launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR)
+            command = f"{launcher} -3 -m pip install {{package}} --proxy http://localhost:9000 --trusted-host pypi.org"
+            os.environ["FAKE_PY"] = sys.executable
+            try:
+                self.assertEqual(intake.other_python(command), "", "the launcher starts the same Python: nothing to say")
+                os.environ["FAKE_PY"] = "/usr/bin/some-other-python"
+                self.assertEqual(intake.other_python(command), os.path.realpath("/usr/bin/some-other-python"))
+            finally:
+                os.environ.pop("FAKE_PY", None)
+
     def test_a_pdf_or_an_old_xls_without_its_package_says_how_to_get_it(self) -> None:
         self.new("job", "dev")
         for name, data in (("old.xls", b"\xd0\xcf\x11\xe0"), ("paper.pdf", b"%PDF-1.4")):

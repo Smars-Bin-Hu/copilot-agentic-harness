@@ -15,6 +15,7 @@ To see which version you have: `harness --version`.
 ### Added
 
 - **A Design tab and an RCA tab.** A design task shows `DESIGN.md` in a tab of its own, an investigation shows `RCA.md`, right after Overview. Any task that has one of these files shows the tab.
+- **The Test tab has a small tab for each environment.** Overview (the start of the guide), then DEV, IST, UAT (each with its part of the guide and its results, marked ✓ passed, ✗ failed, ● waiting for you, ○ later), then Defects when there are any. The one the task is at opens first.
 - **A hint on a forked test task whose environment failed.** The test task page says which development task it was forked from and that you can open it again (a new round with a new plan). It does not force you; a test task that was not forked from a task says nothing.
 
 ### Changed

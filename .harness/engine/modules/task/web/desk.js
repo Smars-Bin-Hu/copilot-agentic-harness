@@ -281,27 +281,72 @@
     return parts;
   }
 
-  // The Test tab of a test task: the guide the agent wrote for the person, then each environment with the results file and the verdict.
+  // The Test tab of a test task: the guide the agent wrote for the person, one small tab for each environment (its part of the guide, then its results and
+  // verdict), an overview before them and the defects after them. The tab that is open is kept while the page redraws.
+  let testSub = "";
+  const plain = (spans) => spans.map((span) => span.v || (span.c ? plain(span.c) : "")).join("").trim();
+
+  // The guide cut at the headings that name an environment: what comes before the first one, and each environment's part (its heading left out: the tab says it).
+  function guideParts(guide, envs) {
+    const names = envs.map((env) => env.name.toUpperCase());
+    const parts = {intro: [], by: {}};
+    let at = null;
+    for (const block of guide.blocks) {
+      const name = block.t === "h" && block.level === 2 ? plain(block.spans).toUpperCase() : "";
+      if (names.includes(name)) { at = name; parts.by[at] = []; continue; }
+      (at ? parts.by[at] : parts.intro).push(block);
+    }
+    return parts;
+  }
+
   function testing() {
     const x = desk.test;
     const parts = [h("p", {class: "hint top"}, t("desk.test.hint"))];
-    parts.push(h("div", {class: "test-envs"}, x.envs.map((env) => tag(env.name + " · " + (env.verdict || (env.waits ? t("desk.test.waits") : t(env.state === "now" ? "desk.test.next" : "desk.test.todo"))),
-      env.state === "done" ? "good" : env.state === "failed" ? "bad" : env.waits ? "hot" : ""))));
-    parts.push(h("h3", null, t("desk.test.guide")));
-    parts.push(x.guide ? h("article", {class: "md"}, blocks(x.guide.blocks), x.guide.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)
-      : h("div", {class: "empty-state"}, h("b", null, t("desk.test.noguide"))));
-    parts.push(h("h3", null, t("desk.test.results")));
-    for (const env of x.envs) {
-      const verdict = env.verdict ? tag(env.verdict, env.verdict === "PASS" ? "good" : env.verdict === "FAIL" ? "bad" : "hot") : tag(env.waits ? t("desk.test.waits") : t("desk.test.noresult"), env.waits ? "hot" : "");
-      const body = env.results ? h("article", {class: "md"}, blocks(env.results.blocks), env.results.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)
-        : h("p", {class: "sub"}, env.waits ? t("desk.test.waiting", {env: env.name}) : t("desk.test.noresult"));
-      parts.push(h("section", {class: "round " + (env.state === "failed" ? "fail" : env.state === "done" ? "pass" : "")},
-        h("div", {class: "round-head"}, h("strong", null, env.name), " ", verdict, env.file ? [" ", h("span", {class: "sub"}, "TEST/" + env.file)] : null,
-          env.runs.length > 1 ? [" ", h("span", {class: "sub"}, t("desk.test.runs", {runs: env.runs.join(" → ")}))] : null,
-          env.ignored.length ? [" ", tag(t("desk.test.ignored", {files: env.ignored.join(", ")}), "hot")] : null), body));
+    const split = x.guide ? guideParts(x.guide, x.envs) : null;
+    const cut = x.guide && x.guide.cut ? h("p", {class: "sub"}, t("desk.cut")) : null;
+    const mark = (env) => env.state === "done" ? "✓" : env.state === "failed" ? "✗" : env.waits ? "●" : "○";
+    const open = x.envs.find((env) => env.state === "now" || env.state === "failed") || x.envs[0];
+    const ids = ["intro", ...x.envs.map((env) => env.name), ...(x.defects ? ["defects"] : [])];
+    if (!ids.includes(testSub)) testSub = open ? open.name : "intro";
+    const label = (id) => id === "intro" ? t("desk.test.sub.intro") : id === "defects" ? t("desk.test.sub.defects", {n: x.defects.open.length}) : (() => {
+      const env = x.envs.find((item) => item.name === id);
+      return mark(env) + " " + env.name;
+    })();
+    const klass = (id) => {
+      const env = x.envs.find((item) => item.name === id);
+      return "subtab" + (id === testSub ? " on" : "") + (env ? " " + (env.state === "done" ? "good" : env.state === "failed" ? "bad" : env.waits ? "hot" : "") : "");
+    };
+    parts.push(h("nav", {class: "subtabs"}, ids.map((id) => {
+      const button = h("button", {type: "button", class: klass(id)}, label(id));
+      button.addEventListener("click", () => { testSub = id; draw(true); });
+      return button;
+    })));
+    const guideOf = (blocksList) => blocksList && blocksList.length ? h("article", {class: "md"}, blocks(blocksList), cut) : null;
+    if (testSub === "intro") {
+      parts.push(x.guide ? guideOf(split.by && Object.keys(split.by).length ? split.intro : x.guide.blocks)
+        : h("div", {class: "empty-state"}, h("b", null, t("desk.test.noguide"))));
+      if (x.guide && !Object.keys(split.by).length) {  // a guide with no heading that names an environment: it is shown whole, and every environment's results follow
+        parts.push(h("h3", null, t("desk.test.results")));
+        x.envs.forEach((env) => parts.push(envResults(env)));
+      }
+    } else if (testSub === "defects") {
+      parts.push(...defects(x.defects));
+    } else {
+      const env = x.envs.find((item) => item.name === testSub);
+      const own = split && split.by[env.name.toUpperCase()];
+      parts.push(own ? guideOf(own) : null, h("h3", null, t("desk.test.results")), envResults(env));
     }
-    if (x.defects) parts.push(...defects(x.defects));
     return parts;
+  }
+
+  function envResults(env) {
+    const verdict = env.verdict ? tag(env.verdict, env.verdict === "PASS" ? "good" : env.verdict === "FAIL" ? "bad" : "hot") : tag(env.waits ? t("desk.test.waits") : t("desk.test.noresult"), env.waits ? "hot" : "");
+    const body = env.results ? h("article", {class: "md"}, blocks(env.results.blocks), env.results.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)
+      : h("p", {class: "sub"}, env.waits ? t("desk.test.waiting", {env: env.name}) : t("desk.test.noresult"));
+    return h("section", {class: "round " + (env.state === "failed" ? "fail" : env.state === "done" ? "pass" : "")},
+      h("div", {class: "round-head"}, h("strong", null, env.name), " ", verdict, env.file ? [" ", h("span", {class: "sub"}, "TEST/" + env.file)] : null,
+        env.runs.length > 1 ? [" ", h("span", {class: "sub"}, t("desk.test.runs", {runs: env.runs.join(" → ")}))] : null,
+        env.ignored.length ? [" ", tag(t("desk.test.ignored", {files: env.ignored.join(", ")}), "hot")] : null), body);
   }
 
   function progress() {

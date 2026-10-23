@@ -101,7 +101,10 @@ def setup(root: Path) -> Dict[str, Any]:
     missing = [item for item in packages if not item["installed"]]
     wrong = other_python(template) if template else ""
     warnings = [say("intake.setup.other_python", used=wrong, running=sys.executable)] if wrong else []
-    return {"ready": ["Word (.docx)", "Excel (.xlsx)", "text and picture files"], "python": sys.executable, "warnings": warnings, "optional": packages, "install_command_set": bool(template),
+    missing_names = [item["package"] for item in missing]
+    everything = template.replace("{package}", " ".join(missing_names)) if template and missing_names else ""  # one command for all that is missing (pip takes several names)
+    return {"ready": ["Word (.docx)", "Excel (.xlsx)", "text and picture files"], "python": sys.executable, "warnings": warnings, "all_installed": not missing, "missing": missing_names,
+            "install_all": everything, "optional": packages, "install_command_set": bool(template),
             "next": (say("intake.setup.none_missing") if not missing else say("intake.setup.run") if template else say("intake.setup.no_command"))}
 
 

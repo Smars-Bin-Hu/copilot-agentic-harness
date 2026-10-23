@@ -425,6 +425,20 @@ class PackagesTests(LifeCase):
         self.assertIn("--trusted-host pypi.example.com no-such-pkg", str(caught.exception))
         self.assertNotIn("{", str(caught.exception))  # every place of the message is filled
 
+    def test_setup_gives_one_command_for_everything_that_is_missing_and_says_when_nothing_is(self) -> None:
+        import sys
+
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({
+            "python": {"install_command": f"{sys.executable} -m pip install {{package}}"},
+            "optional_packages": [{"module": "no_such_a", "package": "pkg-a", "used_for": "x"}, {"module": "no_such_b", "package": "pkg-b", "used_for": "y"}, {"module": "json", "package": "json-not-needed", "used_for": "z"}]}), encoding="utf-8")
+        state = intake.setup(self.root)
+        self.assertEqual((state["all_installed"], state["missing"]), (False, ["pkg-a", "pkg-b"]), "an installed module is not missing")
+        self.assertEqual(state["install_all"], f"{sys.executable} -m pip install pkg-a pkg-b")
+        self.assertEqual(state["warnings"], [])
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"optional_packages": [{"module": "json", "package": "json-not-needed", "used_for": "z"}]}), encoding="utf-8")
+        done = intake.setup(self.root)
+        self.assertEqual((done["all_installed"], done["missing"], done["install_all"]), (True, [], ""))
+
     def test_a_command_that_installs_into_another_python_is_warned_about(self) -> None:
         """B67: the command named anaconda, the harness ran on Homebrew's Python: the package was installed and still not found."""
         import os

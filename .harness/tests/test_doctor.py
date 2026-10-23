@@ -200,7 +200,10 @@ class DoctorTests(unittest.TestCase):
         self.assertIn(who()["source"], ("git", "none"))  # the copy is no git repository: whatever git says for this machine
         override = self.root / ".harness" / "policies" / "user.override.json"
         override.write_text('{"name": "  胡斌  "}', encoding="utf-8")
-        self.assertEqual(who(), {"name": "胡斌", "source": "user.override.json"})
+        self.assertEqual(who(), {"name": "胡斌", "source": "user.override.json", "skill_prefix": ""})
+        override.write_text('{"name": "胡斌", "skill_prefix": "acme"}', encoding="utf-8")
+        self.assertEqual(who()["skill_prefix"], "acme")
+        override.write_text('{"name": "  胡斌  "}', encoding="utf-8")
         self.assertIn("用户名字：胡斌（来自 user.override.json）", self.doctor().stdout)
         override.write_text('{"name": 7}', encoding="utf-8")
         result = self.doctor()

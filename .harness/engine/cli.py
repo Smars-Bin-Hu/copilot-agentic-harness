@@ -2,7 +2,7 @@
 """Command line entry for agents and people: <python> .harness/engine/cli.py <command> (python on Windows, python3 elsewhere).
 
   doctor                       check that the harness files and config are consistent
-  user                         the name of the person using this copy (for a change note that needs an author)
+  user                         the name of the person using this copy (for a change note that needs an author), and the prefix of the company's skills
   task ...                     tasks: new, open, upgrade, list, fetch, diff, promote, review, snapshot, close (task module)
   target list|show|refs|init-kb  the target repositories; refs: where names are used; init-kb: make the knowledge base a git repository (task module)
   reinstall --from <old copy> [--apply]  carry the tasks, runtime, overrides and knowledge base of an older copy over to this one; --apply: a person only
@@ -98,7 +98,7 @@ def build_parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     check = commands.add_parser("doctor", help="check harness files and config")
     check.set_defaults(handler=None)
-    name = commands.add_parser("user", help="the name of the person using this copy (user.override.json, else git config user.name)")
+    name = commands.add_parser("user", help="the name of the person using this copy (user.override.json, else git config user.name), and skill_prefix: the word the company's own skills start with")
     name.set_defaults(handler=lambda _args: user.who(repo_root()))
     skill = commands.add_parser("skill", help="the skills in .github/skills/")
     skill_commands = skill.add_subparsers(dest="skill_command", required=True)

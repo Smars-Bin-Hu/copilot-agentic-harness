@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict
 
-from . import config
+from . import config, skillcheck
 
 POLICY_NAME = "user"
 GIT_TIMEOUT = 5
@@ -24,9 +24,10 @@ def git_name(root: Path) -> str:
 
 
 def who(root: Path) -> Dict[str, str]:
-    """The name and where it comes from: `user.override.json`, `git` or `none`."""
+    """The name and where it comes from (`user.override.json`, `git` or `none`), and the prefix of the company's skills ("" when there is none)."""
+    prefix = skillcheck.company_prefix(root)
     name = config.policy_or_empty(root, POLICY_NAME).get("name", "")  # a broken policy is doctor's to report
     if isinstance(name, str) and name.strip():
-        return {"name": name.strip(), "source": f"{POLICY_NAME}{config.OVERRIDE_SUFFIX}"}
+        return {"name": name.strip(), "source": f"{POLICY_NAME}{config.OVERRIDE_SUFFIX}", "skill_prefix": prefix}
     name = git_name(root)
-    return {"name": name, "source": "git" if name else "none"}
+    return {"name": name, "source": "git" if name else "none", "skill_prefix": prefix}

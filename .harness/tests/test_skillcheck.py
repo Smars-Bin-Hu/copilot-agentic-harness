@@ -70,6 +70,12 @@ class FormTests(unittest.TestCase):
         self.assertEqual(result["errors"], [])
         self.assertEqual(len(result["warnings"]), 1)
 
+    def test_the_prefix_of_the_company_is_accepted_only_when_it_is_set(self) -> None:
+        folder = make(self.tmp, "acme-jira-update")
+        self.assertEqual(len(skillcheck.check(folder)["warnings"]), 1, "not set: it is a name with no prefix")
+        self.assertEqual(skillcheck.check(folder, "acme"), {"skill": "acme-jira-update", "errors": [], "warnings": []})
+        self.assertEqual(len(skillcheck.check(make(self.tmp, "other-tool"), "acme")["warnings"]), 1)
+
     def test_the_description_is_needed_and_has_a_size(self) -> None:
         folder = make(self.tmp, "generic-d")
         head = "---\nname: generic-d\n%s\ntype: unit\nspecificTo: generic\n---\n## Gotchas\n"
@@ -138,6 +144,25 @@ class ShippedTests(unittest.TestCase):
 class CommandTests(HarnessTestCase):
     def skills(self) -> Path:
         return self.root / ".github" / "skills"
+
+    def set_prefix(self, value) -> None:
+        (self.root / ".harness" / "policies" / "user.override.json").write_text(json.dumps({"skill_prefix": value}), encoding="utf-8")
+
+    def test_a_skill_with_the_prefix_of_the_company_is_well_formed_once_the_prefix_is_set(self) -> None:
+        make(self.skills(), "acme-jira-update")
+        before = {item["skill"]: item for item in json.loads(self.cli("skill", "check", "acme-jira-update").stdout)["skills"]}
+        self.assertEqual(len(before["acme-jira-update"]["warnings"]), 1)
+        self.set_prefix("acme")
+        after = json.loads(self.cli("skill", "check", "acme-jira-update").stdout)
+        self.assertEqual((after["warnings"], after["skills"]), (0, []), "only skills with a problem are listed")
+        self.assertEqual(skillcheck.prefixes(self.root), skillcheck.PREFIXES + ("acme-",))
+
+    def test_a_prefix_that_is_not_valid_is_not_used_and_doctor_says_why(self) -> None:
+        for value in ("Acme Corp", "generic"):
+            with self.subTest(value):
+                self.set_prefix(value)
+                self.assertEqual(skillcheck.company_prefix(self.root), "")
+                self.assertIn("skill_prefix", self.cli("doctor").stdout)
 
     def test_the_command_lists_the_problems_and_the_exit_code_follows_the_errors(self) -> None:
         make(self.skills(), "domain-oops", domain="x")

@@ -499,8 +499,12 @@ def check_skills(report: Report, root: Path) -> None:
 
     A third-party skill keeps its own name and form, so only its errors count. Warns only: a bad skill must not stop the harness.
     """
+    problem = skillcheck.prefix_problem(root)
+    if problem:
+        report.warn(problem)
     results = skillcheck.check_all(root)
-    bad = [item["skill"] for item in results if item["errors"] or (item["warnings"] and item["skill"].startswith(skillcheck.PREFIXES))]
+    owned = skillcheck.prefixes(root)
+    bad = [item["skill"] for item in results if item["errors"] or (item["warnings"] and item["skill"].startswith(owned))]
     if bad:
         report.warn(say("skill.doctor.summary", count=len(bad), names=", ".join(bad)))
     elif results:

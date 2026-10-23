@@ -9,7 +9,7 @@ Without `--apply` nothing is written (an agent may run that). With it, only a pe
 Never overwritten: what the new copy already has is skipped and listed, so a run can be repeated.
 Not carried: `runtime/capture/` (debug input, large, holds code), `runtime/board-serve.json` (the old process's port),
 the target repositories (outside the harness), the short command (in PATH; `doctor` says when it points at the old copy).
-Shipped files the company changed (the code standards, the knowledge base instructions, `domain-*` skills) are carried
+Shipped files the company changed (the code standards, the knowledge base instructions, `domain-*` skills and the skills that start with the company's `skill_prefix`) are carried
 when git in the old copy says they were changed there. Any other changed file is only listed.
 """
 
@@ -21,7 +21,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from . import approval, config, messages, tasks
+from . import approval, config, messages, skillcheck, tasks
 from .paths import runtime_dir
 from .registry import harness_version
 
@@ -155,7 +155,7 @@ class Plan:
             self.copy("knowledge-base", KB_DIR, "dir", source, target, len(files_under(source)))
 
     def company(self, old: Path, root: Path, before: Optional[List[str]], now: Optional[List[str]]) -> None:
-        """Shipped files the company changed, and the `domain-*` skills it added. Carried only when git in the old copy says it changed them."""
+        """Shipped files the company changed, and the `domain-*` skills and the `<skill_prefix>-*` skills it added. Carried only when git in the old copy says it changed them."""
         for relative in COMPANY_FILES:
             source, target = old / relative, root / relative
             if not source.is_file() or (target.is_file() and source.read_bytes() == target.read_bytes()):
@@ -170,13 +170,23 @@ class Plan:
                 self.copy("company", relative, "file", source, target)
         skills = old / SKILLS_DIR
         if skills.is_dir():
-            for item in sorted(skills.glob(f"{DOMAIN_PREFIX}*")):
+            company = old_prefix(old) or skillcheck.company_prefix(root)  # the company's own skills: the old copy says which word they start with
+            names = {item for pattern in (f"{DOMAIN_PREFIX}*", f"{company}-*" if company else "") if pattern for item in skills.glob(pattern)}
+            for item in sorted(names):
                 if not item.is_dir():
                     continue
                 if (root / SKILLS_DIR / item.name).exists():
                     self.skip(f"{SKILLS_DIR}/{item.name}", say("reinstall.why.exists"))
                 else:
                     self.copy("company", f"{SKILLS_DIR}/{item.name}", "dir", item, root / SKILLS_DIR / item.name)
+
+
+def old_prefix(old: Path) -> str:
+    """The company's skill prefix as the old copy has it, read from its override file (an old copy may lack the default policy that names it)."""
+    try:
+        return skillcheck.usable(config.read_json(config.override_path(old, "user")).get("skill_prefix", ""))
+    except (OSError, ValueError, AttributeError):
+        return ""
 
 
 def left_alone(before: Optional[List[str]], plan: Plan) -> List[str]:

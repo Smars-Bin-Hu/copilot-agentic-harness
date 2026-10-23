@@ -10,10 +10,12 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from . import messages
+from . import config, messages
 
 SKILLS_DIR = ".github/skills"
 PREFIXES = ("harness-", "generic-", "domain-")
+COMPANY_FORM = re.compile(r"^[a-z0-9]+$")
+RESERVED = ("harness", "generic", "domain")
 NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 DOMAIN_NAME = re.compile(r"^domain-[a-z0-9]+-[a-z0-9]+(?:-[a-z0-9]+)*$")
 MIN_DESCRIPTION, MAX_DESCRIPTION, WIDE_DESCRIPTION = 10, 1024, 600
@@ -24,6 +26,33 @@ INLINE_CODE = re.compile(r"`[^`\n]*`")
 SECRET = re.compile(r"(?i)\b(api[_-]?key|secret|password|passwd|token)\b\s*[:=]\s*['\"]?[A-Za-z0-9/+_\-]{12,}")
 WHEN = re.compile(r"(?i)\bwhen\b|\bif the user\b|\bwhenever\b")
 RESOURCE_DIRS = ("references", "templates", "scripts", "assets")
+
+
+def company_prefix(root: Path) -> str:
+    """The first word of the company's own skills (`skill_prefix` of the policy `user`), or "" when it is not set or not valid (`doctor` says which)."""
+    return usable(config.policy_or_empty(root, "user").get("skill_prefix", ""))
+
+
+def usable(value: Any) -> str:
+    return value if isinstance(value, str) and COMPANY_FORM.match(value) and value not in RESERVED else ""
+
+
+def prefix_problem(root: Path) -> str:
+    """Why `skill_prefix` is not used, or "" when it is empty or fine."""
+    value = config.policy_or_empty(root, "user").get("skill_prefix", "")
+    if value in ("", None):
+        return ""
+    if not isinstance(value, str) or not COMPANY_FORM.match(value):
+        return say("skill.prefix.form", value=value)
+    if value in RESERVED:
+        return say("skill.prefix.reserved", value=value)
+    return ""
+
+
+def prefixes(root: Path) -> Tuple[str, ...]:
+    """The prefixes a skill of ours or of the company has: the three of the harness, and the company's when it is set."""
+    company = company_prefix(root)
+    return PREFIXES + ((company + "-",) if company else ())
 
 
 def frontmatter(text: str) -> Tuple[Dict[str, str], str]:
@@ -69,8 +98,9 @@ def say(key: str, /, **values: Any) -> str:
     return messages.text(key, **values)
 
 
-def check(folder: Path) -> Dict[str, Any]:
-    """{"skill", "errors", "warnings"} for one skill folder."""
+def check(folder: Path, company: str = "") -> Dict[str, Any]:
+    """{"skill", "errors", "warnings"} for one skill folder. `company`: the company's prefix, when it has one."""
+    owned = PREFIXES + ((company + "-",) if company else ())
     errors: List[str] = []
     warnings: List[str] = []
     result = {"skill": folder.name, "errors": errors, "warnings": warnings}
@@ -97,8 +127,8 @@ def check(folder: Path) -> Dict[str, Any]:
             errors.append(say("skill.name.form"))
         if name.startswith("domain-") and not DOMAIN_NAME.match(name):
             errors.append(say("skill.name.domain"))
-        elif not name.startswith(PREFIXES):
-            warnings.append(say("skill.name.prefix"))
+        elif not name.startswith(owned):
+            warnings.append(say("skill.name.prefix", prefixes=", ".join(owned)))
     description = fields.get("description", "")
     if not description:
         errors.append(say("skill.desc.missing"))
@@ -111,7 +141,7 @@ def check(folder: Path) -> Dict[str, Any]:
             warnings.append(say("skill.desc.wide", count=len(description), limit=WIDE_DESCRIPTION))
         if not WHEN.search(description):
             warnings.append(say("skill.desc.when"))
-    if name.startswith(PREFIXES):
+    if name.startswith(owned):
         if fields.get("type") not in ("unit", "workflow"):
             warnings.append(say("skill.type"))
         if not fields.get("specificTo"):
@@ -171,4 +201,5 @@ def check_all(root: Path, only: List[str] | None = None) -> List[Dict[str, Any]]
 
         folders = [item for item in sorted(base.iterdir()) if item.is_dir()] if base.is_dir() else []
         folders += domainskills.folders(root)  # the skills of the domains, in the knowledge base
-    return [check(folder) for folder in folders]
+    company = company_prefix(root)
+    return [check(folder, company) for folder in folders]

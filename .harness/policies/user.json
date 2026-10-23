@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
-  "description": "Who uses this copy of the harness, and in which language it speaks. name: what an agent writes when a file needs the author's name (a change note at the top of a file); empty: `git config user.name` is used. language: `en` or `zh`: the language of what the CLI and the hooks print, of the task file templates, and of what the agent is told to answer and write in. Set both in user.override.json; that file is yours and is not committed. archive_to: the folder `task archive` moved closed tasks to last time (it writes it with --remember); a path on this computer, usually outside the repository.",
+  "description": "Who uses this copy of the harness, and in which language it speaks. name: what an agent writes when a file needs the author's name (a change note at the top of a file); empty: `git config user.name` is used. language: `en` or `zh`: the language of what the CLI and the hooks print, of the task file templates, and of what the agent is told to answer and write in. Set both in user.override.json; that file is yours and is not committed. skill_prefix: the first word of the skills your company writes for every domain (lowercase letters and digits, for example `acme`): they are named `<skill_prefix>-<name>` and live in `.github/skills/`. Empty: you have none. `skill check` and `doctor` accept the prefix, and `reinstall` carries these skills over. Set it in user.override.json. archive_to: the folder `task archive` moved closed tasks to last time (it writes it with --remember); a path on this computer, usually outside the repository.",
   "name": "",
   "language": "en",
+  "skill_prefix": "",
   "archive_to": ""
 }

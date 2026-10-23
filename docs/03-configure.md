@@ -163,9 +163,10 @@ After that, when a task that changed code is about to go to `task diff`, the age
 
 A skill is `.github/skills/<name>/SKILL.md`; the rules are in [skills.instructions.md](../.github/instructions/skills.instructions.md).
 
-- The folder name and `name` must be the same, with a prefix: `harness-<name>` (comes with the harness), `generic-<name>` (general), `domain-<domain>-<name>` (your business skills).
+- The folder name and `name` must be the same, with a prefix: `harness-<name>` (comes with the harness), `generic-<name>` (general), `<skill_prefix>-<name>` (the skills your company writes for every domain, see below) and `domain-<domain>-<name>` (your business skills).
 - `description` says clearly "when to use it": it is the only ground on which the agent decides whether to read the whole text.
 - Business skills use the prefix `domain-`, apart from the ones that come with the harness, so that a later upgrade of the harness does not conflict.
+- **Your company's own skills for every domain** (a system it works with, such as the ticket tracker or a server) start with one word you choose, for example the company's short name. Write it once in `user.override.json`: `{ "skill_prefix": "<word>" }` (lowercase letters and digits; the setup skill `/harness-rookie-get-me-ready` asks for it in step 6). Such a skill is `.github/skills/<word>-<name>/`. The word tells it from the skills that come with the harness, so an upgrade does not touch it. `skill check` and `doctor` accept the word, `harness user` shows it, `generic-build-new-skill` uses it for a new one, and `/harness-reinstall` carries these skills to a new copy. The file is yours and git does not keep it: the harness itself never holds your company's word.
 - A new skill can be made with `generic-build-new-skill`. `harness skill check` tells whether a skill is well formed (name, description, size, links), and `doctor` runs it for every skill. The skill also says how to test that Copilot loads yours. To bring a skill that is off the template back to it, ask the agent to repair it (the same skill): it repairs the form and leaves what the skill says alone.
 
 ## Agents and models

@@ -32,6 +32,7 @@ Build a skill from the template, check its form and test that it loads.
 
 ## Gotchas
 
+- **Name a skill of the company by where it goes.** Read `skill_prefix` from `harness user`. A skill for every domain (a system the company works with) is `<skill_prefix>-<name>` in `.github/skills/`; if the prefix is empty, ask the user to set it first (`/harness-rookie-get-me-ready`, step 6) and do not make up a word. A skill of one business domain is `domain-<domain>-<name>` in the knowledge base. Never name a company skill `harness-` or `generic-`: those are upstream's.
 - **A `domain-*` skill goes into the knowledge base**, at `<knowledge base>/domains/<domain>/skills/<name>/`, not into `.github/skills/` (see [skills.instructions.md](../../instructions/skills.instructions.md)). Check it with `harness skill check <path to its folder>`. A skill built in a task folder is moved there by the user.
 
 - **Write only what the model would get wrong or miss.** What it already knows (common practice, standard syntax) is a cost, not a help. A skill with no such line is short.

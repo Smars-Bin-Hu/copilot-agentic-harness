@@ -14,7 +14,7 @@ applyTo: '.github/skills/**/SKILL.md'
 
 # Skill name prefixes
 
-The folder name of a skill and its `name` field must be the same, and use one of the three prefixes below. Only third-party skills have no prefix: they keep their own names.
+The folder name of a skill and its `name` field must be the same, and use one of the prefixes below. Only third-party skills have no prefix: they keep their own names.
 
 - `harness-<name>`: a skill of the harness itself. Maintained upstream. Two kinds:
   - The semantic side of a module: the name matches `.harness/engine/modules/<module>/`, with underscores in the module name written as hyphens.
@@ -22,6 +22,10 @@ The folder name of a skill and its `name` field must be the same, and use one of
 - `generic-<skill-name>`: a general skill for any domain. Maintained upstream.
 - `domain-<domain name>-<skill-name>`: a skill for one business domain. Maintained by the team; upstream makes none.
   It lives in the knowledge base, not here: `<knowledge base>/domains/<domain>/skills/<skill>/SKILL.md`, same form. Copilot does not see it, so it is not in the `/` menu and costs no context in other domains. The harness shows it instead: once a task names its domains (`harness task set-domain`), every prompt lists their skills; `harness skill list --domain <d>` says when each is used. To use one, read its `SKILL.md` and follow it, within the task's limits.
+
+
+- `<skill_prefix>-<skill-name>`: a skill the company writes for every domain (a system it works with, such as the ticket tracker or a server). Maintained by the team. The word is `skill_prefix` in `user.override.json` (lowercase letters and digits); when it is empty, there are no such skills. It lives here, in `.github/skills/`, so that the prefix tells it from the ones upstream ships. `skill check` and `doctor` accept it, `reinstall` carries these skills over, and `generic-build-new-skill` uses it for a new company skill.
+  A business domain skill stays `domain-<domain name>-<skill-name>` in the knowledge base, with no company prefix: where it lives already says whose it is.
 
 
 # Who starts a skill

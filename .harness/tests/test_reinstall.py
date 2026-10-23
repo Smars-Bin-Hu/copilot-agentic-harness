@@ -169,6 +169,20 @@ class CompanyFiles(ReinstallCase):
         self.assertNotIn(".github/skills/domain-sales-report/SKILL.md", result["changed_in_old_not_copied"])
 
 
+    def test_the_skills_that_start_with_the_prefix_of_the_company_come_over_and_nothing_else_does(self) -> None:
+        put(self.old, ".harness/policies/user.override.json", '{"language": "zh", "skill_prefix": "acme"}')
+        put(self.old, ".github/skills/acme-jira-update/SKILL.md", "skill\n")
+        put(self.old, ".github/skills/vendor-tool/SKILL.md", "skill\n")
+        self.apply()
+        self.assertTrue(self.exists(".github/skills/acme-jira-update/SKILL.md"))
+        self.assertFalse(self.exists(".github/skills/vendor-tool/SKILL.md"), "a name with no prefix of ours is not carried")
+
+    def test_without_a_prefix_only_the_domain_skills_come_over(self) -> None:
+        put(self.old, ".github/skills/acme-jira-update/SKILL.md", "skill\n")
+        self.apply()
+        self.assertFalse(self.exists(".github/skills/acme-jira-update/SKILL.md"))
+
+
 class Refusals(ReinstallCase):
     def refuses(self, raw: str, **kwargs) -> str:
         with self.assertRaises(ReinstallError) as caught:

@@ -90,6 +90,31 @@ class ServeCase(TaskCase):
         return headers["Set-Cookie"].split(";")[0]
 
 
+class CodeStampTests(unittest.TestCase):
+    def test_a_release_changed_again_is_told_from_the_one_a_board_loaded(self) -> None:
+        """B66: a board that started before the last commits of the same release showed raw message keys, and nothing said it was old."""
+        import os
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as folder:
+            engine = Path(folder) / ".harness" / "engine"
+            engine.mkdir(parents=True)
+            code = engine / "a.py"
+            code.write_text("x = 1\n", encoding="utf-8")
+            os.utime(code, (1_800_000_000, 1_800_000_000))
+            boardserve._STAMP = (0.0, "")
+            first = boardserve.code_stamp(Path(folder))
+            os.utime(code, (1_800_100_000, 1_800_100_000))
+            boardserve._STAMP = (0.0, "")
+            self.assertNotEqual(boardserve.code_stamp(Path(folder)), first)
+            (engine / "__pycache__").mkdir()
+            os.utime(engine / "__pycache__", (1_900_000_000, 1_900_000_000))
+            boardserve._STAMP = (0.0, "")
+            self.assertEqual(boardserve.code_stamp(Path(folder)), boardserve.code_stamp(Path(folder)))
+        boardserve._STAMP = (0.0, "")
+
+
 class ServeTests(ServeCase):
     def test_the_page_comes_only_to_this_address(self) -> None:
         status, data, _ = self.request("GET", "/")

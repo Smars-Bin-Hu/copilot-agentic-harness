@@ -21,6 +21,7 @@ To see which version you have: `harness --version`.
 ### Changed
 
 - **Each run of an environment is a small tab.** In the Test tab (and for any `## Run N` file in the Files tab) the runs of an environment are tabs, *Run 1 · NEEDS MORE*, *Run 2 …*, with the newest open, instead of one long page.
+- **The board says it is old when its code changed on disk, not only when the version number did.** A board started before the last commits of the same release showed raw message names (`desk.test.run`) and nothing said it was old. The version it compares now carries the time of the newest engine file.
 - With the form on the page, the waiting card no longer teaches the message to paste in the chat.
 - `task test record` can be given pictures only (`--given-file` may be left out when there is a `--evidence`).
 - The board server writes to the task folder for the first time, and only through this form: the browser must be paired; the server picks the names; a picture is taken by what its first bytes say (png, jpg, gif, webp), at most 10 of 8 MB; the output at most 400 KB; the environment is a short name.

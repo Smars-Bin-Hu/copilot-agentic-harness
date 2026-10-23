@@ -87,9 +87,32 @@ def runner(root: Path, action: str, task: str) -> Callable[..., Dict[str, Any]]:
     return table[action]
 
 
+_STAMP: Tuple[float, str] = (0.0, "")
+
+
+def code_stamp(root: Path) -> str:
+    """When the newest file of the engine (code, pages, messages) was written, as `MM-DD HH:MM`. A release that is changed again without a new number (a block in
+    progress) is still told apart from what a running board loaded. Looked at at most once in 3 seconds."""
+    global _STAMP
+    now = time.time()
+    if now - _STAMP[0] < 3 and _STAMP[1]:
+        return _STAMP[1]
+    newest = 0.0
+    try:
+        for current, folders, files in os.walk(str(root / ".harness" / "engine")):
+            folders[:] = [name for name in folders if name != "__pycache__"]
+            for name in files:
+                if name.endswith((".py", ".js", ".css", ".html", ".json")):
+                    newest = max(newest, os.stat(os.path.join(current, name)).st_mtime)
+    except OSError:
+        pass
+    _STAMP = (now, time.strftime("%m-%d %H:%M", time.localtime(newest)) if newest else "")
+    return _STAMP[1]
+
+
 def disk_version(root: Path) -> str:
     try:
-        return registry.harness_version(root)
+        return f"{registry.harness_version(root)} ({code_stamp(root)})" if code_stamp(root) else registry.harness_version(root)
     except Exception:  # noqa: BLE001 - a broken registry must not stop the board (doctor reports it)
         return ""
 

@@ -332,6 +332,8 @@ def sheet_grid(archive: zipfile.ZipFile, path: str, strings: List[str], formats:
             column += 1
     merged = 0
     blocks = 0
+    first_column = min((c for _r, c in cells), default=0)
+    last_column = max((c for _r, c in cells), default=0)  # the width the cells use: a merge across all of it is a banner, not a header over some columns
     merges = root.find(tag(S, "mergeCells"))
     for item in (merges.findall(tag(S, "mergeCell")) if merges is not None else []):
         ref = item.get("ref", "")
@@ -342,8 +344,8 @@ def sheet_grid(archive: zipfile.ZipFile, path: str, strings: List[str], formats:
         bottom, right = int(re.sub(r"\D", "", last) or 1) - 1, column_index(last)
         if (top, left) not in cells or (bottom - top + 1) * (right - left + 1) > 5000:
             continue
-        if bottom > top and right > left:  # a block over several rows and columns is a text area or a title, not a header: it stays in its first cell
-            blocks += 1
+        if (bottom > top and right > left) or (right > left and left <= first_column and right >= last_column):  # a block over several rows and columns, or a banner across the whole width, is
+            blocks += 1  # a text area or a title, not a header over some columns: it stays in its first cell
             continue
         merged += 1
         for r in range(top, bottom + 1):
@@ -430,7 +432,7 @@ def convert_xlsx(data: bytes, stem: str, include_hidden: bool = False, prefix: s
         if grid["formulas"]:
             extras.append(f"{grid['formulas']} formula(s): the value Excel last saved is used, not the formula")
         if grid["blocks"]:
-            extras.append(f"{grid['blocks']} merged block(s) over several rows and columns (a text area or a title): the text is in the first cell only")
+            extras.append(f"{grid['blocks']} merged block(s) over several rows and columns, or across the whole width (a text area or a title): the text is in the first cell only")
         if grid["coloured"]:
             extras.append(f"{grid['coloured']} cell(s) have a fill colour, and a colour is not converted: if it means something (a status, a priority), say it in words in INTAKE.md or add a column for it")
         if len(rows) > 200:

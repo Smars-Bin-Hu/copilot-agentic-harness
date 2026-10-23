@@ -129,6 +129,14 @@ class XlsxTests(unittest.TestCase):
         self.assertIn("259 rows: the agent should read its header and a sample", said)
         self.assertEqual(result["files"][0][1].decode("utf-8").splitlines()[0], "text area,", "the block is in its first cell only")
 
+    def test_a_banner_across_the_whole_width_is_not_repeated_but_a_header_over_some_columns_is(self) -> None:
+        """B67: a note merged across the four columns of a sheet came out four times."""
+        rows = ('<row r="1"><c r="A1" t="inlineStr"><is><t>group</t></is></c><c r="C1" t="inlineStr"><is><t>other</t></is></c></row>'
+                '<row r="2"><c r="A2" t="inlineStr"><is><t>a</t></is></c><c r="B2" t="inlineStr"><is><t>b</t></is></c><c r="C2" t="inlineStr"><is><t>c</t></is></c><c r="D2" t="inlineStr"><is><t>d</t></is></c></row>'
+                '<row r="3"><c r="A3" t="inlineStr"><is><t>a banner: this sheet is a sample</t></is></c></row>')
+        result = convert.convert_xlsx(xlsx([{"name": "S", "rows": rows, "merges": ["A1:B1", "A3:D3"]}]), "x", False, "x--")
+        self.assertEqual(result["files"][0][1].decode("utf-8").splitlines(), ["group,group,other,", "a,b,c,d", "a banner: this sheet is a sample,,,"])
+
     def test_hidden_sheets_rows_and_columns_are_left_out_and_said_unless_asked_for(self) -> None:
         rows = ('<row r="1"><c r="A1" t="inlineStr"><is><t>keep</t></is></c><c r="B1" t="inlineStr"><is><t>hidden col</t></is></c></row>'
                 '<row r="2" hidden="1"><c r="A2" t="inlineStr"><is><t>hidden row</t></is></c></row>'
@@ -564,9 +572,8 @@ class OldExcelTests(LifeCase):
     def test_an_old_xls_is_read_with_its_merged_cells_and_without_what_is_hidden(self) -> None:
         self.new("job", "dev")
         result = intake.convert_xls(self.root, base64.b64decode("".join(OLD_XLS)), "old", False)
-        self.assertEqual(result["files"][0][1].decode("utf-8"), "a,c\nkept,\nmerged,merged\n")
+        self.assertEqual(result["files"][0][1].decode("utf-8"), "a,c\nkept,\nmerged,\n", "a merge across the whole width is a banner: once")
         said = " ".join(result["notes"])
-        self.assertIn("1 merged range", said)
         self.assertIn("1 hidden row(s) and 1 hidden column(s)", said)
         shown = intake.convert_xls(self.root, base64.b64decode("".join(OLD_XLS)), "old", True)
         self.assertIn("hidden col", shown["files"][0][1].decode("utf-8"))

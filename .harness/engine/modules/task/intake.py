@@ -152,8 +152,12 @@ def convert_xls(root: Path, data: bytes, stem: str, include_hidden: bool) -> Dic
                 if text != "":
                     cells[(r, c)] = text
         merged = 0
+        first_column = min((c for _r, c in cells), default=0)
+        last_column = max((c for _r, c in cells), default=0)
         for rlo, rhi, clo, chi in getattr(sheet, "merged_cells", []):
             if (rlo, clo) in cells and (rhi - rlo) * (chi - clo) <= 5000:
+                if (rhi - rlo > 1 and chi - clo > 1) or (chi - clo > 1 and clo <= first_column and chi - 1 >= last_column):  # a text area or a banner across the whole width stays in its first cell
+                    continue
                 merged += 1
                 for r in range(rlo, rhi):
                     for c in range(clo, chi):

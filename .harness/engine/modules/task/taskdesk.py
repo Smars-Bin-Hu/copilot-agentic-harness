@@ -18,6 +18,8 @@ from . import autorun, common, mdtree, task as task_ops, taskboard, taskinsight,
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
 MAX_DOC_BYTES = 400_000  # a bigger document is shown cut, with a note
 MAX_DIFF_LINES = 3000
+MAX_CODE_LINES = 5000  # the new code of one changed file that is sent with the page (the code compare of the Changes tab)
+MAX_CODE_CHARS = 600_000  # ... and of all the files together; a file past a limit is shown by its changed places only
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -153,8 +155,21 @@ def changed(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
         items, text = [], ""
     lines = text.splitlines()[1:] if items else []  # the first line is the header of the file
     folder = tasks.task_dir(root, task)
+    shown = [dict(item) for item in items if item["action"] != "unchanged"]
+    budget = MAX_CODE_CHARS
+    for item in shown:  # the new code of a changed file: the compare rebuilds the lines between the hunks from it
+        if item["action"] != "modify":
+            continue
+        try:
+            code = (tasks.dev_dir(root, task) / item["path"]).read_bytes().decode("utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        size = sum(len(line) + 1 for line in code)
+        if len(code) <= MAX_CODE_LINES and size <= budget:
+            item["text"] = code
+            budget -= size
     return {
-        "files": [item for item in items if item["action"] != "unchanged"],
+        "files": shown,
         "unchanged": sum(1 for item in items if item["action"] == "unchanged"),
         "deletes": list(data.get("deletes") or []),
         "diff": {"lines": lines[:MAX_DIFF_LINES], "cut": len(lines) > MAX_DIFF_LINES},

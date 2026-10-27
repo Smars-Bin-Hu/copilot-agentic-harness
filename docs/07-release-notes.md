@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.49 (2026-10-27)
+
+### Added
+
+- **The Changes tab compares the old and the new code, as VS Code does.** Under *What changed*, pick a file (or step with the arrows) and see the old code on the left and the new code on the right, line by line; a removed line next to an added one sits side by side and the part that changed is marked. The two sides scroll together, up, down and sideways, and the line numbers stay at the left. A long run of unchanged lines is folded into one row you click to open. *One column* shows both in one list; *Diff text* is the plain diff as before. The choice is kept in the browser. A saved copy of the page has it too. A file too long to send whole (over 5000 lines) shows only its changed places.
+
+### Changed
+
+- **The red and green bars of the diff stay when you scroll it sideways.** They ended at the edge of the window and a long line lost its colour; now every bar is as wide as the longest line. This holds for the plain diff text too (*What changed* and the write-back plan).
+
 ## 1.5.48 (2026-10-23)
 
 ### Added

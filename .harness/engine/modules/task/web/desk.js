@@ -816,7 +816,7 @@
     } else {
       parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.changes.none")), h("p", null, t("desk.changes.none.hint"))));
     }
-    if (c.diff.lines.length) parts.push(h("h3", null, t("desk.changes.diff")), diff(c.diff));
+    if (c.diff.lines.length) parts.push(h("h3", null, t("desk.changes.diff")), DiffView.create(c, () => diff(c.diff)));  // old and new code side by side (diffview.js); the plain diff text is its third view
     if (c.promote_plan.lines.length) parts.push(h("h3", null, t("desk.changes.promote")), h("p", {class: "sub"}, t("desk.changes.promote.hint")), diff(c.promote_plan));
     return parts;
   }

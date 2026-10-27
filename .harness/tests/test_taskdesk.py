@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import support  # noqa: F401  (puts the engine on sys.path)
@@ -59,6 +60,84 @@ assert.deepStrictEqual(parseCsv(""), []);
 
 def kinds(spans):
     return [span["t"] for span in spans]
+
+
+class CodeCompareTests(ServeCase):
+    """The code compare of the Changes tab (`diffview.js`): the unified diff and the new code give back both files; the new code is sent with the page."""
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_the_rows_give_back_the_old_and_the_new_file(self) -> None:
+        script = r"""
+const assert = require("assert");
+const DiffView = require(process.argv[2]);
+const old = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"];
+const fresh = ["a", "b", "C", "c2", "d", "e", "f", "g", "h", "i", "j", "k"];
+const diff = ["diff --git a/x.sql b/x.sql", "--- a/x.sql", "+++ b/x.sql", "@@ -1,6 +1,7 @@", " a", " b", "-c", "+C", "+c2", " d", " e", " f", "@@ -10,3 +11,2 @@", " j", " k", "-l"];
+const [file] = DiffView.parse(diff);
+assert.strictEqual(file.status, "modify");
+const rows = DiffView.rows(file, fresh);
+const before = rows.filter((row) => row.t !== "sep" && row.t !== "add").map((row) => row.a);
+const after = rows.filter((row) => row.t !== "sep" && row.t !== "del").map((row) => row.b);
+assert.deepStrictEqual(before, old);
+assert.deepStrictEqual(after, fresh);
+assert.deepStrictEqual(rows.filter((row) => row.t === "chg").map((row) => [row.a, row.b]), [["c", "C"]]);  // a removed line next to an added one sits side by side
+assert.strictEqual(rows.find((row) => row.t === "add").b, "c2");
+const long = [...Array(10).fill({t: "ctx"}), {t: "chg"}, ...Array(10).fill({t: "ctx"})];
+assert.deepStrictEqual(DiffView.fold(long, new Set()).filter((row) => row.t === "fold").map((row) => [row.id, row.count]), [[0, 7], [11, 7]]);  // three lines stay next to the change
+assert.strictEqual(DiffView.fold(long, new Set([0])).length, long.length - 7 + 1 + 0, "an opened run is shown whole");
+assert.strictEqual(DiffView.fold(rows, new Set()).length, rows.length, "a short unchanged run is not folded");
+// without the new code only the changed places are there, with a mark where lines are left out
+const part = DiffView.rows(file, null);
+assert.deepStrictEqual(part.filter((row) => row.t === "sep").length, 2);
+// a created file and a deleted file have no @@ line; a line of the new file that starts with "+++" or "-- " is code
+const more = DiffView.parse(["# header", "diff --git a/n.sql b/n.sql", "--- /dev/null", "+++ b/n.sql", "+select 1", "+-- note", "+++ x", "diff --git a/d.sql b/d.sql", "deleted file", "--- a/d.sql", "+++ /dev/null", "-gone", "diff --git a/p.bin b/p.bin", "binary"]);
+assert.deepStrictEqual(more.map((item) => [item.path, item.status]), [["n.sql", "create"], ["d.sql", "delete"], ["p.bin", "modify"]]);
+assert.deepStrictEqual(DiffView.rows(more[0], null).map((row) => [row.t, row.n, row.b]), [["add", 1, "select 1"], ["add", 2, "-- note"], ["add", 3, "++ x"]]);
+assert.deepStrictEqual(DiffView.rows(more[1], null).map((row) => [row.t, row.o, row.a]), [["del", 1, "gone"]]);
+assert.strictEqual(more[2].note, "binary");
+// a removed line that starts with "--" (an SQL comment) is a line of the hunk, not a file header
+const comment = DiffView.parse(["diff --git a/q.sql b/q.sql", "--- a/q.sql", "+++ b/q.sql", "@@ -1,2 +1,1 @@", "--- old comment", " keep"]);
+assert.strictEqual(comment.length, 1);
+assert.deepStrictEqual(comment[0].hunks[0].lines[0], {k: "-", v: "-- old comment"});
+// the part of a line that changed
+assert.deepStrictEqual(DiffView.inline("select a from t", "select b from t"), {head: 7, tail: 7});
+"""
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / "compare_check.js"
+            file.write_text(script, encoding="utf-8")
+            done = subprocess.run(["node", str(file), str(ENGINE_WEB / "diffview.js")], capture_output=True, text=True, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_the_page_sends_the_new_code_of_a_changed_file(self) -> None:
+        task = taskdesk.row_of(self.root, "job1")["task"]
+        dev = tasks.dev_dir(self.root, task)
+        (dev / "repo").mkdir(parents=True, exist_ok=True)
+        (dev / "repo" / "a.sql").write_text("select 1\nfrom t\n", encoding="utf-8")
+        (dev / "repo" / "b.sql").write_text("new\n", encoding="utf-8")
+        (dev / "repo" / "big.sql").write_text("x\n" * (taskdesk.MAX_CODE_LINES + 1), encoding="utf-8")
+        (dev / "repo" / "c.bin").write_bytes(b"\xff\xfe\x00")
+        items = [{"path": f"repo/{name}", "action": action, "added": 1, "removed": 0} for name, action in (("a.sql", "modify"), ("b.sql", "create"), ("big.sql", "modify"), ("c.bin", "modify"), ("gone.sql", "modify"))]
+        with mock.patch.object(taskdesk.task_ops, "changes", return_value=(items, "# header\n")):
+            found = {item["path"]: item for item in taskdesk.changed(self.root, task, tasks.read(self.root, task))["files"]}
+        self.assertEqual(found["repo/a.sql"]["text"], ["select 1", "from t"])
+        for name in ("b.sql", "big.sql", "c.bin", "gone.sql"):  # a created file is in the diff whole; the others cannot or need not be sent
+            self.assertNotIn("text", found[f"repo/{name}"], name)
+
+    def test_every_text_of_the_compare_is_written_in_both_languages(self) -> None:
+        import re
+
+        keys = set(re.findall(r'"(desk\.diff\.[a-z.]+)"', (ENGINE_WEB / "diffview.js").read_text(encoding="utf-8")))
+        keys |= {"desk.diff." + name for name in ("split", "unified", "raw")}  # the modes are named by their keys
+        for language in ("en", "zh"):
+            table = json.loads((Path(__file__).resolve().parents[1] / "engine" / "core" / f"messages.{language}.json").read_text(encoding="utf-8"))
+            self.assertEqual(sorted(key for key in keys if key not in table), [], language)
+
+    def test_the_page_carries_the_compare_in_its_own_files(self) -> None:
+        from modules.task import taskhtml
+
+        page = taskhtml.desk_page(taskdesk.desk(self.root, "job1"))
+        self.assertIn("const DiffView", page)
+        self.assertIn(".dv-pane", page)
 
 
 class ImageTests(unittest.TestCase):

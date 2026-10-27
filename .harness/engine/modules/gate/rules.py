@@ -94,3 +94,15 @@ def git_never(why: str, command: str) -> str:
 
 def git_needs_approval(why: str, command: str, code: str, minutes: int) -> str:
     return say("gate.git.needs_approval", why=why, git_command=command, code=code, minutes=minutes)
+
+
+def external_denied(action: Any) -> str:
+    return say("gate.external.denied", system=action.system, env=action.env, verb=action.verb, call=action.text)
+
+
+def external_human(action: Any) -> str:
+    return say("gate.external.human", system=action.system, env=action.env, verb=action.verb, call=action.text)
+
+
+def external_task(action: Any) -> str:
+    return say("gate.external.task", system=action.system, env=action.env, verb=action.verb, call=action.text)

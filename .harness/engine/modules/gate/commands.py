@@ -4,6 +4,7 @@
   admin on           the person switches admin mode on for one session (terminal only): guardrail files open up for it
   admin off          switch it off again (anyone may: it only takes rights away)
   admin status       the sessions that are in admin mode
+  tools check        the systems listed in tools.json / tools.override.json, and what the gate decides for each of them
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from core import approval, config, guardrails, messages, tasks
 from core.paths import cli_command, repo_root, state_dir, utc_now
 from core.state import admin_on, session, state_path
 
-from . import approvals
+from . import approvals, external
 from .policy import POLICY_NAME
 
 
@@ -131,7 +132,20 @@ def admin_sessions(root: Path) -> List[Dict[str, Any]]:
     return sorted(found, key=lambda item: item["updated_at"], reverse=True)
 
 
+def tools_check(root: Path) -> Dict[str, Any]:
+    try:
+        systems = config.load_policy(root, "tools").get("systems")
+    except Exception as error:  # noqa: BLE001 - a broken file is what this command is for
+        return {"systems": [], "errors": [f"tools.json or tools.override.json cannot be read: {error}"], "warnings": [], "ok": False, "exit_code": 1}
+    return external.report(systems)
+
+
 def register(subparsers: Any) -> None:
+    tools = subparsers.add_parser("tools", help="the outside systems a company listed in tools.override.json")
+    tools_commands = tools.add_subparsers(dest="tools_command", required=True)
+    check = tools_commands.add_parser("check", help="is the list well formed, and what does the gate decide for each system and environment? Exit code 1 when there is an error")
+    check.set_defaults(handler=lambda args: tools_check(repo_root()))
+
     parser = subparsers.add_parser("approve-command", help="the person approves a git command the gate refused (terminal only)")
     parser.set_defaults(handler=cmd_approve_command, person_only=True)
 

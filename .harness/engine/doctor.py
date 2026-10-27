@@ -540,6 +540,29 @@ def check_optional_packages(report: Report, root: Path) -> None:
     report.warn(say("doctor.packages.missing", names=", ".join(state["missing"]), next=follow))
 
 
+def check_systems(report: Report, root: Path) -> None:
+    """The outside systems a company listed in tools.override.json (M43-2): is the list well formed? Nothing listed is fine: the harness ships none."""
+    try:
+        from modules.gate import external
+
+        systems = config.load_policy(root, "tools").get("systems") or {}
+        errors = external.validate(systems)
+        found = external.warnings(systems) if not errors else []
+    except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
+        report.warn(say("doctor.systems.unreadable", error=error))
+        return
+    if errors:
+        for text in errors[:5]:
+            report.error(say("doctor.systems.bad", error=text))
+        return
+    if not systems:
+        report.ok(say("doctor.systems.none"))
+        return
+    report.ok(say("doctor.systems.ok", count=len(systems), names=", ".join(systems)))
+    for text in found:
+        report.warn(say("doctor.systems.warn", text=text))
+
+
 def check_standards(report: Report, root: Path) -> None:
     """Are the code standards plugged in, and does each rule have the fields the check needs? Warns only."""
     found = standards.rules(root)
@@ -720,6 +743,7 @@ def run(root: Path) -> int:
     check_standards(report, root)
     check_task_names(report, root)
     check_optional_packages(report, root)
+    check_systems(report, root)
     for name, entry in registry["modules"].items():
         check_module(report, root, name, entry)
     print(shown(report.lines))

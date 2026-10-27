@@ -102,6 +102,7 @@ The defaults are in `.harness/policies/<file>`; overrides go in the `.override.j
 | tools.json | `python.interpreter` | The one Python the `harness` command runs on, a full path. Left empty, it runs on the first `python3` of the PATH of the terminal that starts it. When set and the command is on another Python, it starts again on this one (once). A path that is not there is said and the command goes on |
 | tools.json | `python.install_command` | The command your company approves for installing a Python package, with `{package}` where the name goes. Empty by default: the harness never guesses one and never runs one |
 | tools.json | `optional_packages` | The packages `task intake convert` can use when they are installed: `module`, `package`, `used_for` |
+| tools.json | `systems` | The outside systems an agent may reach (a cloud, a database, a ticket system). Empty: the harness ships none; a company lists its own in `tools.override.json`. One entry per system: `reach.cli`, `env` or `env_from` and `default_env`, `verbs`, `target`, `rules`. `harness tools check` says what is wrong and what the gate decides |
 | gate.json | `terminal.guardrail_write` | The rules that recognise a terminal command writing a guardrail. The `why` of a rule is one text, or one per language (`{"en": "...", "zh": "..."}`) |
 | gate.json | `terminal.deny` | The terminal commands that are refused outright |
 | gate.json | `terminal.ask` | The terminal commands you have to confirm |

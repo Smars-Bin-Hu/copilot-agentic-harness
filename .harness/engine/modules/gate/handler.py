@@ -24,7 +24,7 @@ from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent
 
-from . import approvals, gitcmd, rules, terminal
+from . import approvals, external, gitcmd, rules, terminal
 from .policy import POLICY_NAME, Compiled, validate_policy
 
 NAME = "gate"
@@ -107,6 +107,9 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     port = asks_board(ctx, event.command)
     if port:
         return Decision(permission="deny", reason=rules.board_request(port))
+    outside = check_external(event, ctx)
+    if outside:
+        return outside
     if git.kind == gitcmd.APPROVE:
         minutes = approvals.minutes(policy)
         if approvals.consume(ctx.root, event.session_id, event.command, minutes):
@@ -118,6 +121,35 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     permission, why = verdict
     reason = rules.terminal_denied(why) if permission == "deny" else rules.terminal_ask(why)
     return Decision(permission=permission, reason=reason)
+
+
+def check_external(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """A call to a system the company listed under `systems` (tools.override.json): the policy decides (external.py).
+
+    No list, or a list that does not validate, means no rule here: doctor and `tools check` report the break, and the gate
+    does not guess what a broken policy meant (a hook that fails itself must not hurt normal work).
+    """
+    try:
+        systems = ctx.policy("tools").get("systems") or {}
+        if not systems or external.validate(systems):
+            return None
+        picked = external.strictest(external.classify(event.command, systems))
+    except Exception:  # noqa: BLE001 - see above
+        return None
+    if picked is None:
+        return None
+    action, decision = picked
+    if decision == external.ALLOW:
+        return None
+    if decision == external.TASK:
+        task = ctx.state.get("active_task")
+        data = tasks.read(ctx.root, task) if task else None
+        if data and data.get("status") == "open" and tasks.plan_approved(ctx.root, task, data):
+            return None
+    facts = {"kind": "external", "decision": decision, **action.facts()}
+    # `outbox` and `human` read the same for now: the outbox (M43-4) is not built, so a write waits for the person either way.
+    reason = {external.DENY: rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action)
+    return Decision(permission="deny", reason=reason, facts=facts)
 
 
 def asks_board(ctx: Context, text: str) -> int:

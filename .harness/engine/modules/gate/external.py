@@ -13,7 +13,8 @@ Two floors, written down here so no company file can lower them by leaving somet
   - a call to a listed system that no `verbs` rule names is a write;
   - an environment that no `env` rule names is prod.
 
-Only a terminal command (`reach.cli`) is recognised for now. Like the git rules, this is a net, not a sandbox: a script that
+Only a terminal command (`reach.cli`) is recognised for now. One program may serve several systems (`az` runs a ticket board and a cloud):
+give each one a `reach.when` pattern, matched against the arguments after the program; the first system that matches owns the call. Like the git rules, this is a net, not a sandbox: a script that
 starts the program itself is not seen.
 """
 
@@ -49,7 +50,10 @@ SYSTEMS_SCHEMA = {
         "properties": {
             "reach": {
                 "type": "object",
-                "properties": {"cli": {"type": ["string", "array"], "items": {"type": "string", "minLength": 1}}},
+                "properties": {
+                    "cli": {"type": ["string", "array"], "items": {"type": "string", "minLength": 1}},
+                    "when": {"type": "string", "minLength": 1},
+                },
                 "additionalProperties": False,
             },
             "env": {"type": "string", "enum": list(ENVS)},
@@ -83,18 +87,19 @@ def validate(systems: Any) -> List[str]:
     errors = schema.validate(systems, SYSTEMS_SCHEMA, "systems")
     if errors:
         return errors
-    owner: Dict[str, str] = {}
+    owner: Dict[str, str] = {}  # a program that has no `when` yet, and who claimed it
     for name, system in systems.items():
         if not re.match(_NAME, name):
             errors.append(f"systems.{name}: a name is lower case letters, digits, - and _, and starts with a letter")
         if not clis(system):
             errors.append(f"systems.{name}.reach: give at least one program in `cli`")
-        for program in clis(system):
+        when = (system.get("reach") or {}).get("when")
+        for program in clis(system) if not when else ():
             if program in owner:
-                errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}")
+                errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}; give one of them a `when`")
             owner[program] = name
-        patterns = [("target", system.get("target") or "")] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs") for index, item in enumerate(system.get(key) or [])]
-        for where, pattern in patterns:
+        patterns = [("target", system.get("target") or ""), ("reach.when", when or "")] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs") for index, item in enumerate(system.get(key) or [])]
+        for where, pattern in (item for item in patterns if item[1]):
             try:
                 re.compile(pattern)
             except re.error as error:
@@ -166,7 +171,7 @@ def _program(token: str) -> str:
     return name
 
 
-def _start(tokens: List[str], programs: Dict[str, str]) -> Optional[int]:
+def _start(tokens: List[str], programs: Dict[str, List[str]]) -> Optional[int]:
     """Index of the program of a listed system, when only wrappers, environment settings, options and numbers stand before it."""
     for index, token in enumerate(tokens):
         if _program(token) in programs:
@@ -176,11 +181,20 @@ def _start(tokens: List[str], programs: Dict[str, str]) -> Optional[int]:
     return None
 
 
-def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, str], depth: int, found: List[Action]) -> None:
+def _owner(systems: Dict[str, Any], names: List[str], args: str) -> Optional[str]:
+    """The system a call belongs to: the first of those that use the program whose `when` pattern matches the arguments (none: always)."""
+    for name in names:
+        when = (systems[name].get("reach") or {}).get("when")
+        if not when or re.search(when, args, re.IGNORECASE):
+            return name
+    return None
+
+
+def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], depth: int, found: List[Action]) -> None:
     for tokens in split_segments(text):
         start = _start(tokens, programs)
-        if start is not None:
-            name = programs[_program(tokens[start])]
+        name = _owner(systems, programs[_program(tokens[start])], " ".join(tokens[start + 1:])) if start is not None else None
+        if name is not None:
             system = systems[name]
             line = " ".join(tokens)  # the environment settings in front of the program say something too
             target = ""
@@ -201,7 +215,10 @@ def classify(command: str, systems: Dict[str, Any]) -> List[Tuple[Action, str]]:
     """Each call to a listed system in a command line, with what the policy decides for it. Empty when there is none."""
     if not systems or not command.strip():
         return []
-    programs = {program: name for name, system in systems.items() for program in clis(system)}
+    programs: Dict[str, List[str]] = {}
+    for name, system in systems.items():
+        for program in clis(system):
+            programs.setdefault(program, []).append(name)
     found: List[Action] = []
     _scan(command, systems, programs, 0, found)
     return [(action, decide(systems[action.system], action.env, action.verb)) for action in found]

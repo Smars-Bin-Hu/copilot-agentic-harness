@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.50 (2026-10-27)
+
+### Added
+
+- **Code is coloured on the task page.** A file in the *Files* tab, and a fenced block (```` ```sql ````) in any document, is coloured by its type: SQL, Bash, PowerShell, Batch, Python, C#, JSON, YAML, XML/HTML, INI/TOML, CSS, JavaScript/TypeScript, Java, Scala, Go, C/C++, Kotlin and diff. A CSV or TSV file gets one colour for each column, with the header in bold. The language is named above the block. Markdown files are still drawn as formatted text, and plain text, logs and unknown types stay plain. It is a small scanner in the page, no library and no network, so a saved copy has it too; a file longer than 300,000 characters (120,000 for CSV) is shown plain. The *Copy* button still copies the plain text.
+- **More file types open in the Files tab:** `.cs`, `.bash`, `.zsh`, `.psm1`, `.psd1`, `.jsx`, `.tsx`, `.mjs`, `.go`, `.c`, `.h`, `.cpp`, `.hpp`, `.kt`, `.csproj`, `.jsonc`, `.htm`. They were only named as "other".
+
 ## 1.5.49 (2026-10-27)
 
 ### Added

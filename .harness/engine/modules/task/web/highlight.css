@@ -1,0 +1,12 @@
+/* The colours of code (highlight.js): light and dark. A class per kind of token. */
+:root{--tok-kw:#cf222e;--tok-str:#0a3069;--tok-com:#6e7781;--tok-num:#0550ae;--tok-fn:#8250df;--tok-var:#953800;--tok-key:#116329;--tok-type:#0a7ea4;--tok-id:#0a7ea4;--tok-builtin:#8250df;--tok-meta:#6e7781;--tok-add:#1a7f37;--tok-del:#cf222e;--tok-sep:#98a2b3;
+--tok-c0:#0550ae;--tok-c1:#116329;--tok-c2:#953800;--tok-c3:#8250df;--tok-c4:#0a7ea4;--tok-c5:#bf3989}
+@media (prefers-color-scheme:dark){:root{--tok-kw:#ff7b72;--tok-str:#a5d6ff;--tok-com:#8b949e;--tok-num:#79c0ff;--tok-fn:#d2a8ff;--tok-var:#ffa657;--tok-key:#7ee787;--tok-type:#56d4dd;--tok-id:#56d4dd;--tok-builtin:#d2a8ff;--tok-meta:#8b949e;--tok-add:#7ee787;--tok-del:#ff7b72;--tok-sep:#6b7686;
+--tok-c0:#79c0ff;--tok-c1:#7ee787;--tok-c2:#ffa657;--tok-c3:#d2a8ff;--tok-c4:#56d4dd;--tok-c5:#ff9bce}}
+.tok-kw{color:var(--tok-kw)}.tok-str{color:var(--tok-str)}.tok-com{color:var(--tok-com);font-style:italic}.tok-num{color:var(--tok-num)}.tok-fn{color:var(--tok-fn)}
+.tok-var{color:var(--tok-var)}.tok-key{color:var(--tok-key)}.tok-type{color:var(--tok-type)}.tok-id{color:var(--tok-id)}.tok-builtin{color:var(--tok-builtin)}
+.tok-meta{color:var(--tok-meta)}.tok-add{color:var(--tok-add)}.tok-del{color:var(--tok-del)}.tok-sep{color:var(--tok-sep)}
+.tok-c0{color:var(--tok-c0)}.tok-c1{color:var(--tok-c1)}.tok-c2{color:var(--tok-c2)}.tok-c3{color:var(--tok-c3)}.tok-c4{color:var(--tok-c4)}.tok-c5{color:var(--tok-c5)}
+.tok-hd{font-weight:700}
+.code-box .code-bar{justify-content:space-between;align-items:center}.code-box .code-bar .copy-code{margin-left:auto}
+.code-lang{font-size:12px;color:var(--soft);letter-spacing:.02em}

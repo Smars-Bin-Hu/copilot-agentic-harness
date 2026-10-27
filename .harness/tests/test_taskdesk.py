@@ -140,6 +140,79 @@ assert.deepStrictEqual(DiffView.inline("select a from t", "select b from t"), {h
         self.assertIn(".dv-pane", page)
 
 
+class HighlightTests(ServeCase):
+    """The colours of code in the Files tab and in fenced blocks (`highlight.js`)."""
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_the_scanner_colours_what_it_should_and_loses_no_text(self) -> None:
+        script = r"""
+const assert = require("assert");
+const Highlight = require(process.argv[2]);
+const classes = (lang, text) => Object.fromEntries(Highlight.tokens(text, lang).filter((token) => token[0]).map((token) => [token[1], token[0]]));
+const samples = {
+  sql: "-- c\nSELECT COUNT(*) FROM [dbo].[T] WHERE a = 'x''y' AND b = @p /* m */;",
+  bash: "# c\nfor f in *.sql; do echo \"$f\" | tee --append $LOG; done",
+  powershell: "function Get-A { Write-Host \"x $y\" -Force }",
+  python: "def f(x):\n    '''doc\n    more'''\n    return None  # c",
+  csharp: "public class A { string s = @\"a\"\"b\"; }",
+  json: '{"a": [1, true, null, {"b": "c"}]}',
+  yaml: "a: 1\nb: don't\n",
+  xml: '<a id="1">don\'t &amp; x</a>',
+  ini: "[s]\nk = v ; x\n",
+  csv: 'a,"b,\nc",d\n1,2,3\r\n',
+  diff: "--- a\n+++ b\n@@ -1 +1 @@\n-x\n+y\n",
+  js: "const a = `t` + 'u'; // c",
+};
+for (const [lang, text] of Object.entries(samples)) assert.strictEqual(Highlight.tokens(text, lang).map((token) => token[1]).join(""), text, lang);  // the texts, put together, are the text
+assert.deepStrictEqual(classes("sql", samples.sql), {"-- c": "com", SELECT: "kw", COUNT: "fn", FROM: "kw", "[dbo]": "id", "[T]": "id", WHERE: "kw", "'x''y'": "str", AND: "kw", "@p": "var", "/* m */": "com"});
+assert.strictEqual(classes("bash", samples.bash)["$LOG"], "var");
+assert.strictEqual(classes("bash", "echo $# # real comment")["# real comment"], "com");  // `$#` is not a comment
+assert.strictEqual(classes("bash", "a=1 # x")["# x"], "com");
+assert.strictEqual(classes("powershell", samples.powershell)["Get-A"], "fn");
+assert.strictEqual(classes("python", samples.python)["'''doc\n    more'''"], "str");
+assert.strictEqual(classes("python", samples.python)["None"], "num");
+assert.strictEqual(classes("csharp", samples.csharp)['@"a""b"'], "str");  // a doubled quote stays inside a verbatim string
+assert.deepStrictEqual(classes("json", samples.json), {'"a"': "key", "1": "num", true: "kw", null: "kw", '"b"': "key", '"c"': "str"});
+assert.strictEqual(classes("yaml", samples.yaml)["a"], "key");
+assert.ok(!Object.values(classes("yaml", samples.yaml)).includes("str"), "an apostrophe in a word does not open a string");
+assert.strictEqual(classes("xml", samples.xml)['"1"'], "str");
+assert.strictEqual(Object.values(classes("xml", samples.xml)).filter((kind) => kind === "str").length, 1);  // the apostrophe of a word in the text is not a string
+assert.strictEqual(classes("ini", samples.ini)["[s]"], "type");
+// a CSV cell with a quote holds the delimiter and the line break; the column colours go on after it
+const cells = Highlight.tokens(samples.csv, "csv").filter((token) => token[0] && token[0] !== "sep").map((token) => token[0]);
+assert.deepStrictEqual(cells, ["c0 hd", "c1 hd", "c2 hd", "c0", "c1", "c2"]);
+assert.deepStrictEqual(Object.values(classes("diff", samples.diff)).slice(-2), ["del", "add"]);
+// the name of a file or a fence says the language
+assert.deepStrictEqual(["a/b/LOAD.SQL", "sql title=x", "run.sh", "x.ps1", "m.py", "J.cs", "c#", "d.csv", "notes.txt", "README.md", "Makefile", ""].map(Highlight.language),
+  ["sql", "sql", "bash", "powershell", "python", "csharp", "csharp", "csv", "", "", "", ""]);
+// no language, or a text that is too long: plain, one piece
+assert.deepStrictEqual(Highlight.tokens("select 1", ""), [["", "select 1"]]);
+assert.strictEqual(Highlight.tokens("x".repeat(400000), "sql").length, 1);
+// an unclosed string ends at the end of the line and does not stop the scan
+assert.strictEqual(Highlight.tokens("select 'open\nselect 2", "sql").map((token) => token[1]).join(""), "select 'open\nselect 2");
+assert.strictEqual(Highlight.label("csharp"), "C#");
+"""
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / "highlight_check.js"
+            file.write_text(script, encoding="utf-8")
+            done = subprocess.run(["node", str(file), str(ENGINE_WEB / "highlight.js")], capture_output=True, text=True, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_the_files_tab_opens_the_code_files_of_a_pipeline_team_as_text(self) -> None:
+        from modules.task import taskfiles
+
+        for name in ("Job.cs", "run.sh", "deploy.ps1", "load.sql", "job.py", "cfg.yml", "x.csv", "build.bash"):
+            self.assertEqual(taskfiles.kind_of(Path(name)), "text", name)
+
+    def test_the_page_carries_the_colours_in_its_own_files(self) -> None:
+        from modules.task import taskhtml
+
+        page = taskhtml.desk_page(taskdesk.desk(self.root, "job1"))
+        self.assertIn("const Highlight", page)
+        self.assertIn(".tok-kw", page)
+        self.assertLess(page.index("const Highlight"), page.index("const DiffView"))  # the compare may use it, so it comes first
+
+
 class ImageTests(unittest.TestCase):
     def test_an_image_is_a_path_inside_the_task_and_a_picture_type(self) -> None:
         tree = mdtree.parse("![shot](evidence/DEV/run1-1.png) ![up](../../x.png) ![web](https://a/b.png) ![svg](a.svg) ![win](C:\\a.png) ![abs](/etc/a.png)\n")

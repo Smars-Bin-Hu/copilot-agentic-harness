@@ -24,7 +24,8 @@ MAX_EMBED_TOTAL = 2 * 1024 * 1024
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MARKDOWN = {".md", ".markdown"}
 TEXT = {".txt", ".log", ".sql", ".py", ".sh", ".ps1", ".bat", ".cmd", ".json", ".jsonl", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".csv", ".tsv", ".xml",
-        ".html", ".css", ".js", ".ts", ".java", ".scala", ".r", ".diff", ".patch", ".properties", ".env", ".md5", ""}  # "": a file with no type (a Makefile)
+        ".html", ".css", ".js", ".ts", ".java", ".scala", ".r", ".diff", ".patch", ".properties", ".env", ".md5",
+        ".cs", ".csx", ".csproj", ".bash", ".zsh", ".psm1", ".psd1", ".jsx", ".tsx", ".mjs", ".jsonc", ".go", ".c", ".h", ".cpp", ".hpp", ".kt", ".htm", ".xhtml", ""}  # "": a file with no type (a Makefile)
 
 
 def kind_of(path: Path) -> str:

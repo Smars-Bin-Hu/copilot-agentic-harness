@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.5.49",
+  "version": "1.5.50",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -61,10 +61,12 @@
       ".github/skills/harness-reinstall/",
       ".harness/tests/support.py",
       ".harness/tests/taskcase.py",
+      ".harness/tests/evalsynth.py",
       ".harness/tests/test_adapters.py",
       ".harness/tests/test_copilot_sdk.py",
       ".harness/tests/test_core.py",
       ".harness/tests/test_doctor.py",
+      ".harness/tests/test_evalrecord.py",
       ".harness/tests/test_language.py",
       ".harness/tests/test_replay.py",
       ".harness/tests/test_kbextract.py",

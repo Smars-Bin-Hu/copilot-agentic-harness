@@ -75,10 +75,12 @@
   }
 
   // A code block of any document has a button that copies it whole: a command or a query is pasted into a terminal or a client, not retyped.
-  function codeBlock(text) {
+  // `lang`: the type of the file or the language after the three backticks; the code is coloured when it is one highlight.js knows.
+  function codeBlock(text, lang) {
+    const kind = Highlight.language(lang);
     const button = h("button", {type: "button", class: "act copy-code", "data-label": t("desk.code.copy")}, t("desk.code.copy"));
     button.addEventListener("click", () => copyCommand(button, text));
-    return h("div", {class: "code-box"}, h("div", {class: "code-bar"}, button), h("pre", {class: "code"}, h("code", null, text)));
+    return h("div", {class: "code-box"}, h("div", {class: "code-bar"}, Highlight.label(kind) ? h("span", {class: "code-lang"}, Highlight.label(kind)) : null, button), h("pre", {class: "code"}, h("code", null, Highlight.nodes(text, kind))));
   }
 
   function blocks(list) {
@@ -86,7 +88,7 @@
       if (block.t === "h") return h("h" + Math.min(block.level + 1, 6), {class: "md-h"}, inline(block.spans));
       if (block.t === "p") return h("p", null, inline(block.spans));
       if (block.t === "hr") return h("hr");
-      if (block.t === "code") return codeBlock(block.text);
+      if (block.t === "code") return codeBlock(block.text, block.lang);
       if (block.t === "quote") return h("blockquote", null, blocks(block.blocks));
       if (block.t === "table") {
         const cell = (tag, spans, align) => h(tag, {style: align ? "text-align:" + align : null}, inline(spans));
@@ -471,7 +473,7 @@
     const found = fileCache[item.path] || item.doc;
     if (!found) return h("p", {class: "sub"}, fileCache[item.path] === null ? t("desk.files.failed") : t("desk.files.loading"));
     if (found.kind === "markdown") return h("article", {class: "md"}, runTabs("file:" + item.path, found.blocks, null, true) || blocks(found.blocks), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
-    if (found.kind === "text") return [codeBlock(found.text), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null];
+    if (found.kind === "text") return [codeBlock(found.text, item.path), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null];
     return h("p", {class: "sub"}, t("desk.files.other", {size: size(found.size)}));
   }
 

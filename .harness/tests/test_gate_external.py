@@ -93,30 +93,30 @@ class ClassifyTests(unittest.TestCase):
 
 SHARED: Dict[str, Any] = {
     "boards": {
-        "reach": {"cli": "az", "when": r"^boards\b"},
+        "reach": {"cli": "hubctl", "when": r"^boards\b"},
         "env": "none",
         "verbs": [{"pattern": r"\b(?:show|list|query)\b", "verb": "read"}],
     },
-    "azure": {"reach": {"cli": "az"}, "verbs": [{"pattern": r"\b(?:list|show)\b", "verb": "read"}, {"pattern": r"\bdelete\b", "verb": "destroy"}]},
+    "cloud2": {"reach": {"cli": "hubctl"}, "verbs": [{"pattern": r"\b(?:list|show)\b", "verb": "read"}, {"pattern": r"\bdelete\b", "verb": "destroy"}]},
 }
 
 
 class SharedProgramTests(unittest.TestCase):
-    """One program, several systems: `reach.when` picks the system from the arguments (az hosts a ticket board and the cloud)."""
+    """One program, several systems: `reach.when` picks the system from the arguments (one tool hosts a ticket board and a cloud)."""
 
     def test_the_first_system_whose_when_matches_owns_the_call(self) -> None:
-        self.assertEqual(judged("az boards work-item show --id 7", SHARED), [("boards", "none", READ, ALLOW)])
-        self.assertEqual(judged("az boards work-item update --id 7", SHARED), [("boards", "none", WRITE, OUTBOX)])
-        self.assertEqual(judged("az group list", SHARED), [("azure", "prod", READ, ALLOW)])
-        self.assertEqual(judged("az group delete -n x", SHARED), [("azure", "prod", DESTROY, DENY)])
+        self.assertEqual(judged("hubctl boards work-item show --id 7", SHARED), [("boards", "none", READ, ALLOW)])
+        self.assertEqual(judged("hubctl boards work-item update --id 7", SHARED), [("boards", "none", WRITE, OUTBOX)])
+        self.assertEqual(judged("hubctl group list", SHARED), [("cloud2", "prod", READ, ALLOW)])
+        self.assertEqual(judged("hubctl group delete -n x", SHARED), [("cloud2", "prod", DESTROY, DENY)])
 
     def test_a_call_no_system_claims_is_not_recognised(self) -> None:
         only_boards = {"boards": SHARED["boards"]}
-        self.assertEqual(judged("az group delete -n x", only_boards), [])
+        self.assertEqual(judged("hubctl group delete -n x", only_boards), [])
 
     def test_two_systems_may_share_a_program_only_if_all_but_one_have_a_when(self) -> None:
         self.assertEqual(external.validate(SHARED), [])
-        both = {"a": {"reach": {"cli": "az"}}, "b": {"reach": {"cli": "az"}}}
+        both = {"a": {"reach": {"cli": "hubctl"}}, "b": {"reach": {"cli": "hubctl"}}}
         self.assertTrue(any("also the reach" in text for text in external.validate(both)))
         bad = copy.deepcopy(SHARED)
         bad["boards"]["reach"]["when"] = "("

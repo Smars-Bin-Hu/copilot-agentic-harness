@@ -13,7 +13,7 @@ Two floors, written down here so no company file can lower them by leaving somet
   - a call to a listed system that no `verbs` rule names is a write;
   - an environment that no `env` rule names is prod.
 
-Only a terminal command (`reach.cli`) is recognised for now. One program may serve several systems (`az` runs a ticket board and a cloud):
+Only a terminal command (`reach.cli`) is recognised for now. One program may serve several systems (one command line tool can run a ticket board and a cloud):
 give each one a `reach.when` pattern, matched against the arguments after the program; the first system that matches owns the call. Like the git rules, this is a net, not a sandbox: a script that
 starts the program itself is not seen.
 """

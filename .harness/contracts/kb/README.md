@@ -26,7 +26,7 @@ The form every domain of a knowledge base takes, so that code can check it and f
 
 ## Ids and levels
 
-- **Id**: `<type>:<name as the system names it>`, for example `sp:Db.dbo.usp_load_orders`, `job:Daily_Load`, `table:Db.dbo.Orders`. Stable: the same object keeps its id across updates. Every file names an object by its id.
+- **Id**: `<type>:<name as the system names it>`, for example `sp:Db.dbo.usp_load_orders`, `job:Daily_Load`, `job:Daily Load`, `table:Db.dbo.Orders`. The name may hold spaces (a job is often named so), not at its start or end, and no tab or line break. Stable: the same object keeps its id across updates. Every file names an object by its id.
 - **Level** (one set, everywhere): `verified` (read in the current code or a run, by the agent or a person) · `supported` (several sources agree, not checked in the target environment) · `inferred` (reasoned from evidence; the card gives the reasoning) · `unknown` (no evidence; never filled in) · `conflict` (sources disagree; the card says which).
 
 ## domain.yaml

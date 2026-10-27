@@ -106,6 +106,18 @@ class CheckTests(CheckCase):
         for expected in ("job:Nightly_Orders", "partial", "sp:Shop.dbo.nope", "C:\\Users\\"):
             self.assertIn(expected, errors)
 
+    def test_an_id_may_hold_spaces_but_not_at_its_ends(self) -> None:
+        for good in ("job:Daily Load", "job:Daily  Load v2", "job:x"):
+            self.assertTrue(kbstd.ID.match(good), good)
+        for bad in ("job:", "job: Daily", "job:Daily ", "job:Daily\tLoad", "job:Daily\n", "Job:Daily", "Daily Load"):
+            self.assertFalse(kbstd.ID.match(bad), repr(bad))
+
+    def test_a_card_for_an_id_with_a_space_passes(self) -> None:
+        (self.folder / "objects" / "jobs.md").write_text(CARDS + "\n## job:Daily Load\n\nRuns at 02:00.\n", encoding="utf-8")
+        self.rows.append({"id": "job:Daily Load", "type": "sql-agent-job", "repo": "shop_repo", "sources": [{"path": "jobs/daily.sql", "sha": ""}], "card": "objects/jobs.md#job:Daily Load", "level": "verified"})
+        self.write_index()
+        self.assertEqual(self.result()["errors"], [])
+
     def test_an_entry_point_must_be_in_the_index(self) -> None:
         self.rows.pop(0)
         self.write_index()

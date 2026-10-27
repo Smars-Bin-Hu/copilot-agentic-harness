@@ -20,6 +20,7 @@ To see which version you have: `harness --version`.
 
 - **The Confirm requirement button is at the top of the page, like Approve plan.** It was in the *More* list with pause, resume and close unless the task waited for it; now it is a big button with its hint whenever the requirement waits for you.
 - **The Files tab is a folder tree like the VS Code explorer.** It showed only the last folder of a path (`a/g/4.sql` as `g/`). Now each folder is shown, a folder that holds only one folder is joined with it (`d/e/f/`), folders come before files, and each file is on its own line.
+- **A knowledge base id may hold spaces.** `kb check` refused `job:Daily Load` ("not `<type>:<name>`"). The name after the type may now hold spaces (not at its start or end, no tab or line break), because some jobs are named so. Ids without spaces are checked as before.
 
 ## 1.5.47 (2026-10-23)
 

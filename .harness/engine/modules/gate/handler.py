@@ -148,7 +148,7 @@ def check_external(event: HookEvent, ctx: Context) -> Optional[Decision]:
             return None
     facts = {"kind": "external", "decision": decision, **action.facts()}
     # `outbox` and `human` read the same for now: the outbox (M43-4) is not built, so a write waits for the person either way.
-    reason = {external.DENY: rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action)
+    reason = {external.DENY: rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, gitcmd.collapse(event.command))
     return Decision(permission="deny", reason=reason, facts=facts)
 
 

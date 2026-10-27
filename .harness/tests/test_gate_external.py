@@ -188,6 +188,11 @@ class GateExternalTests(HarnessTestCase):
         for text in ("tickets", "task handoff run", "tk comment T-1 hello"):
             self.assertIn(text, handed["permissionDecisionReason"])
 
+    def test_the_refusal_shows_the_command_as_it_was_written_quotes_included(self) -> None:
+        self.configure(SYSTEMS)
+        denied = self.term('tk comment T-1 "a b; c"')
+        self.assertIn('tk comment T-1 "a b; c"', denied["permissionDecisionReason"])
+
     def test_a_task_decision_without_a_task_points_at_the_task_skill(self) -> None:
         self.configure(SYSTEMS)
         denied = self.term("cloudctl --sub dev create --name x")

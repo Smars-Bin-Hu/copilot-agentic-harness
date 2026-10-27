@@ -101,7 +101,7 @@
         return h(block.t, {class: checks ? "checks" : null, start: block.t === "ol" && block.start !== 1 ? block.start : null},
           block.items.map((item) => h("li", {class: item.check === null ? null : item.check ? "done" : "open"},
             item.check === null ? null : h("span", {class: "box"}, item.check ? "✓" : ""),
-            h("span", null, inline(item.spans)), blocks(item.blocks))));
+            h("span", {class: "txt"}, inline(item.spans)), blocks(item.blocks))));
       }
       return null;
     });

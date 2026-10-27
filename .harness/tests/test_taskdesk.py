@@ -213,6 +213,16 @@ assert.strictEqual(Highlight.label("csharp"), "C#");
         self.assertLess(page.index("const Highlight"), page.index("const DiffView"))  # the compare may use it, so it comes first
 
 
+class ChecklistLayoutTests(unittest.TestCase):
+    """A step of a checklist with a long text (B-todo-wrap): the text sits beside its box and wraps there; it must not drop below the box."""
+
+    def test_the_text_of_a_step_takes_the_rest_of_the_line_beside_the_box(self) -> None:
+        css = (ENGINE_WEB / "page.css").read_text(encoding="utf-8")
+        self.assertIn("ul.checks li>.txt{flex:1 1 0;min-width:0", css)  # in a wrapping flex line, a text as wide as its own length goes to the next line
+        self.assertIn("ul.checks li>:not(.box):not(.txt){flex:1 1 100%", css)  # what is under the step (a nested list, a paragraph) has a line of its own
+        self.assertIn('h("span", {class: "txt"}, inline(item.spans))', (ENGINE_WEB / "desk.js").read_text(encoding="utf-8"))
+
+
 class ImageTests(unittest.TestCase):
     def test_an_image_is_a_path_inside_the_task_and_a_picture_type(self) -> None:
         tree = mdtree.parse("![shot](evidence/DEV/run1-1.png) ![up](../../x.png) ![web](https://a/b.png) ![svg](a.svg) ![win](C:\\a.png) ![abs](/etc/a.png)\n")

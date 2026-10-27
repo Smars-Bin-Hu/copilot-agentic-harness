@@ -98,7 +98,8 @@ img.md-img{display:block;max-width:100%;max-height:420px;margin:.6em 0;border:1p
 pre.code code{background:none;padding:0;font-size:inherit}
 .code-box{margin:.8em 0}.code-box .code-bar{display:flex;justify-content:flex-end;margin-bottom:-.5em}.code-box pre.code{margin-top:.4em}.code-box .copy-code{padding:2px 9px;font-size:12px;margin:0}
 ul.checks{list-style:none;padding-left:.2em}ul.checks li{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-ul.checks li>ul,ul.checks li>ol{flex-basis:100%;margin:2px 0 0 24px;padding-left:0}
+ul.checks li>.txt{flex:1 1 0;min-width:0;overflow-wrap:anywhere}  /* the text takes what is left of the line beside the box and wraps there; its own width must not decide that it goes below */
+ul.checks li>:not(.box):not(.txt){flex:1 1 100%;min-width:0;margin:2px 0 0 24px;padding-left:0}  /* a nested list or a paragraph under the step starts a line of its own, under its text */
 .box{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:1.5px solid var(--soft);border-radius:4px;font-size:11px;line-height:1;position:relative;top:2px}
 li.done>.box{background:var(--good);border-color:var(--good);color:#fff}li.done>span:not(.box){color:var(--soft);text-decoration:line-through}
 .scroll{overflow-x:auto}

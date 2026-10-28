@@ -79,6 +79,7 @@
     for (const entry of info.prompts) {
       const notes = [["report.tag.denied", "denied"], ["report.tag.blocks", "stop_blocks"], ["report.tag.failed", "failed_tool_calls"]]
         .filter(([, field]) => entry[field]).map(([key, field]) => [" ", tag(t(key, {n: entry[field]}), "bad")]);
+      if (entry.compactions && entry.compactions.length) notes.push([" ", h("span", {class: "tag", title: compactedText(entry.compactions)}, t("report.tag.compacted", {n: entry.compactions.length}))]);
       rows.push(h("tr", null,
         h("td", null, entry.n), h("td", {class: "when"}, when(entry.at, 5, 16)),
         h("td", null, tag(entry.stage_label || entry.stage), notes, entry.text ? h("div", {class: "sub said", title: entry.text}, entry.text) : null),
@@ -112,7 +113,12 @@
     return card(t("report.stages"), table(head, rows));
   }
 
-  // One line over the prompts; a prompt with no number is skipped.
+  // What Copilot did when it compacted the context during one prompt: tokens before and after, each time.
+  function compactedText(items) {
+    return items.map((item) => t("report.context.compacted", {before: amount(item.before), after: amount(item.after)})).join(" ");
+  }
+
+  // One line over the prompts; a prompt with no number is skipped. A prompt in which the context was compacted has a hollow dot.
   function contextCard() {
     const points = info.prompts.map((entry, index) => [index, entry.context_tokens]).filter(([, value]) => value !== null);
     if (points.length < 2) return null;
@@ -133,10 +139,13 @@
       const [index, value] = points[order];
       const before = order ? points[order - 1][1] : null;
       const change = before === null ? "" : t("report.context.change", {delta: (value >= before ? "+" : "-") + amount(Math.abs(value - before))});
-      return t("report.context.point", {n: index + 1, at: when(info.prompts[index].at, 5, 16), tokens: amount(value)}) + change;
+      const squeezed = info.prompts[index].compactions || [];
+      return t("report.context.point", {n: index + 1, at: when(info.prompts[index].at, 5, 16), tokens: amount(value)}) + change +
+        (squeezed.length ? " · " + compactedText(squeezed) : "");
     };
     const dots = h("div", {class: "dots"}, spots.map(([x, y], order) => {
-      const dot = h("i", {style: `left:${(x / width) * 100}%;top:${(y / height) * 100}%`, tabindex: "0", "aria-label": words(order)});
+      const squeezed = (info.prompts[points[order][0]].compactions || []).length > 0;
+      const dot = h("i", {class: squeezed ? "compacted" : null, style: `left:${(x / width) * 100}%;top:${(y / height) * 100}%`, tabindex: "0", "aria-label": words(order)});
       const show = () => {
         tip.textContent = words(order);
         tip.style.left = `${(x / width) * 100}%`;
@@ -152,7 +161,8 @@
       return dot;
     }));
     return card(t("report.context"), h("div", {class: "chart"}, svg, dots, tip),
-      h("div", {class: "sub"}, t("report.context.note", {first: amount(totals.context_tokens_first), largest: amount(totals.context_tokens_max)})));
+      h("div", {class: "sub"}, t("report.context.note", {first: amount(totals.context_tokens_first), largest: amount(totals.context_tokens_max)}),
+        totals.compactions ? " " + t("report.context.compactions", {n: totals.compactions}) : null));
   }
 
   function toolsCard() {

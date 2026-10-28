@@ -47,6 +47,7 @@ Possible reasons, the most common first:
 | `premium_requests` | The number of premium requests Copilot records |
 | `subagent_tokens` | The tokens subagents used. This and `aiu` are two different units: do not add them |
 | `context_tokens_first`, `context_tokens_max` | The size of the context at the end of the first prompt, and at its largest |
+| `compactions` | How often Copilot compacted the context: it replaced the older messages with a summary. Each prompt lists its own, with tokens before and after |
 | `tool_calls`, `failed_tool_calls` | The number of tool calls, and of failed ones |
 | `denied`, `asked`, `stop_blocks` | How often the hook refused, asked the user to confirm, and blocked a Stop |
 | `reviews`, `review_fails` | How many independent checks were done, and how many did not pass |

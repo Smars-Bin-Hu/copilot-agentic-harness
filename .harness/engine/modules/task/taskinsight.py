@@ -126,7 +126,7 @@ def merge(into: Dict[str, Any], other: Dict[str, Any]) -> None:
     into["end"] = max(into["end"], other["end"])
     for key in ("turns", "model_s", "turn_s", "approval_s", "hook_s", "subagent_s"):
         into[key] += other[key]
-    for key in ("tools", "subagents", "skills"):
+    for key in ("tools", "subagents", "skills", "compactions"):
         into[key].extend(other[key])
     for name in other["models"]:
         if name not in into["models"]:
@@ -414,7 +414,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
     totals: Dict[str, Any] = {
         "prompts": len(mine), "active_s": 0.0, "waiting_s": 0.0, "paused_s": 0.0, "model_s": None, "tool_s": None, "approval_s": None, "subagent_s": None, "other_s": None,
         "tool_calls": 0, "failed_tool_calls": 0, "denied": 0, "asked": 0, "stop_blocks": 0,
-        "aiu": None, "premium_requests": None, "subagent_tokens": None, "context_tokens_first": None, "context_tokens_max": None,
+        "aiu": None, "premium_requests": None, "subagent_tokens": None, "context_tokens_first": None, "context_tokens_max": None, "compactions": 0,
     }
     prompts: List[Dict[str, Any]] = []
     waits: List[Dict[str, Any]] = []
@@ -436,6 +436,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
             "slowest_tool": {"name": slowest["name"], "seconds": round(slowest["seconds"], 1)} if slowest and slowest["seconds"] >= 1 else None,
             "input_tokens": prompt.get("input_tokens"), "output_tokens": prompt.get("output_tokens"),
             "subagents": len(prompt["subagents"]), "skills": sorted(set(prompt["skills"])), "models": prompt["models"], **counted,
+            "compactions": [{key: value for key, value in item.items() if key != "at"} for item in prompt["compactions"]],
             "text": prompt.get("text", ""),  # for the page only: `for_agent` takes it out
         }
         entry["stage_label"] = stage_label(entry["stage"])
@@ -450,6 +451,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
         if prompt["context_tokens"] is not None:
             totals["context_tokens_first"] = totals["context_tokens_first"] or prompt["context_tokens"]
             totals["context_tokens_max"] = max(totals["context_tokens_max"] or 0, prompt["context_tokens"])
+        totals["compactions"] += len(prompt["compactions"])
         totals["paused_s"] += put_aside
         if waited is not None and waited >= 1:
             totals["waiting_s"] += waited
@@ -568,6 +570,10 @@ def findings(result: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "review", max(review["share_time"], review["share_aiu"]), time=clock(review["active_s"]), share=percent(review["share_time"]),
                 aiu_share=percent(review["share_aiu"]), tokens=amount(totals["subagent_tokens"]), **counted,
             )
+    squeezed = [entry for entry in prompts if entry["compactions"]]
+    if squeezed:
+        last = squeezed[-1]["compactions"][-1]
+        note("compacted", 0.25, times=totals["compactions"], prompts=messages.joined([str(entry["n"]) for entry in squeezed]), before=amount(last["before"]), after=amount(last["after"]))
     first, largest = totals["context_tokens_first"], totals["context_tokens_max"]
     if first and largest and largest >= first * 1.5 and largest - first >= 10000:
         note("context", 0.3, first=amount(first), largest=amount(largest), times=f"{largest / first:.1f}")

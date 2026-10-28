@@ -1,8 +1,8 @@
 """Copilot's own record of a session: `~/.copilot/session-state/<session id>/events.jsonl`.
 
 The hook log knows when a hook ran. This file knows more: how long the model took for each turn, how long each tool
-ran, how long a permission waited, what a subagent used, and the usage the session has added up so far. The task
-report reads it for time and usage.
+ran, how long a permission waited, what a subagent used, the usage the session has added up so far, and when Copilot
+compacted the context. The task report reads it for time and usage.
 
 The file is Copilot's, not ours: its format is not documented and may change, and a machine may not have it. So this
 reader never raises, takes only numbers, times and names (no tool argument, no result), and returns None when it
@@ -25,6 +25,7 @@ MAX_BYTES = 300 * 1024 * 1024
 TAIL_BYTES = 1024 * 1024  # `cancelled_at` reads only the end of the file: the board asks for every open task
 NANO = 1e9
 HOST_DECISION = "host_policy"  # a permission the host answered by itself; anything else waited for a person
+COMPACTION_TRIGGERS = ("threshold", "manual")  # `threshold`: the context was nearly full; an older file gives no trigger
 
 
 def home() -> Path:
@@ -75,12 +76,29 @@ def new_prompt(at: float) -> Dict[str, Any]:
     return {
         "at": at, "end": at, "turns": 0, "model_s": 0.0, "turn_s": 0.0, "approval_s": 0.0, "hook_s": 0.0, "subagent_s": 0.0,
         "tools": [], "subagents": [], "skills": [], "models": [], "aiu": None, "premium_requests": None, "context_tokens": None,
-        "input_tokens": None, "output_tokens": None, "queued": False, "text": "",
+        "input_tokens": None, "output_tokens": None, "queued": False, "text": "", "compactions": [],
     }
 
 
 def number(value: Any) -> Optional[float]:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def whole_number(value: Any) -> Optional[int]:
+    found = number(value)
+    return int(found) if found is not None else None
+
+
+def compaction(start: Dict[str, Any], done: Dict[str, Any], at: float) -> Dict[str, Any]:
+    """One time Copilot summed up the conversation to make room. Numbers only: `summaryContent` is never taken."""
+    before = whole_number(start.get("currentTokens"))
+    trigger = start.get("trigger")
+    return {
+        "at": at, "trigger": trigger if trigger in COMPACTION_TRIGGERS else "", "ok": done.get("success") is not False,
+        "before": before if before is not None else whole_number(done.get("preCompactionTokens")),
+        "after": whole_number(done.get("postCompactionTokens")), "limit": whole_number(start.get("tokenLimit")),
+        "messages_removed": whole_number(done.get("messagesRemoved")),
+    }
 
 
 def context_tokens(data: Dict[str, Any]) -> Optional[int]:
@@ -117,6 +135,7 @@ def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
     tools: Dict[str, Dict[str, Any]] = {}
     permissions: Dict[str, float] = {}
     hooks: Dict[str, float] = {}
+    compacting: Dict[str, Any] = {}  # the start of a compaction; its numbers go with the complete event
     usage = {"aiu": 0.0, "premium": 0.0}
     model = ""
     version = ""
@@ -205,6 +224,11 @@ def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
                     current["hook_s"] += max(0.0, at - began)
             elif kind == "skill.invoked":
                 current["skills"].append(str(data.get("name") or ""))
+            elif kind == "session.compaction_start":
+                compacting = data
+            elif kind == "session.compaction_complete":
+                current["compactions"].append(compaction(compacting, data, at))
+                compacting = {}
             elif kind == "session.usage_record":
                 spent = data.get("usage") if isinstance(data.get("usage"), dict) else {}
                 for key, name in (("input_tokens", "inputTokens"), ("output_tokens", "outputTokens")):

@@ -66,6 +66,16 @@ def one_prompt(start: datetime, usage: float, premium: int, context: int) -> Lis
     ]
 
 
+def compacted(start: datetime, seconds: float, agent: str = "") -> List[Dict[str, Any]]:
+    """A compaction as Copilot wrote it (numbers from a real session, 2026-10-12): the context was nearly full."""
+    return [
+        row("session.compaction_start", start, seconds, agent, systemTokens=13580, conversationTokens=40081, toolDefinitionsTokens=7502,
+            currentTokens=80222, tokenLimit=100000, trigger="threshold"),
+        row("session.compaction_complete", start, seconds + 20, agent, success=True, preCompactionTokens=80222, postCompactionTokens=28273,
+            preCompactionMessagesLength=98, messagesRemoved=88, tokensRemoved=32893, summaryContent="<overview>" + SECRET + "</overview>"),
+    ]
+
+
 def page_data(text: str) -> Dict[str, Any]:
     """The JSON a page carries for its scripts."""
     start = text.index('<script type="application/json" id="data">') + len('<script type="application/json" id="data">')
@@ -116,6 +126,22 @@ class EventsFileTests(unittest.TestCase):
         self.assertIsNone(copilot_events.read(self.path))
         self.write(one_prompt(self.start, 1, 1, 1), "{half a line")
         self.assertEqual(len(copilot_events.read(self.path)["prompts"]), 1)
+
+    def test_a_compaction_goes_with_its_prompt_as_numbers_only(self) -> None:
+        first = one_prompt(self.start, 1, 1, 80000)
+        self.write(first[:-1] + compacted(self.start, 61) + first[-1:] + one_prompt(self.start + timedelta(seconds=200), 2, 1, 30000))
+        before, after = copilot_events.read(self.path)["prompts"]
+        self.assertEqual([{key: value for key, value in item.items() if key != "at"} for item in before["compactions"]],
+                         [{"trigger": "threshold", "ok": True, "before": 80222, "after": 28273, "limit": 100000, "messages_removed": 88}])
+        self.assertEqual(after["compactions"], [])
+        self.assertNotIn(SECRET, json.dumps(copilot_events.read(self.path)))  # the summary is never taken
+
+    def test_an_older_compaction_has_no_trigger_and_a_subagents_is_not_the_sessions(self) -> None:
+        older = [row("session.compaction_start", self.start, 61, systemTokens=11080, currentTokens="many"),
+                 row("session.compaction_complete", self.start, 62, success=True, preCompactionTokens=2651, postCompactionTokens=678, messagesRemoved=13)]
+        self.write(one_prompt(self.start, 1, 1, 1) + older + compacted(self.start, 70, agent="a1"))
+        (found,) = copilot_events.read(self.path)["prompts"][0]["compactions"]
+        self.assertEqual((found["trigger"], found["before"], found["after"], found["limit"]), ("", 2651, 678, None))
 
     def test_the_file_is_looked_for_under_copilot_home(self) -> None:
         folder = self.path.parent / "session-state" / "abc"
@@ -406,6 +432,21 @@ class InsightTests(BoardCase):
         self.assertNotIn(SECRET, json.dumps(taskinsight.for_agent(info, detail=True), ensure_ascii=False))
         self.assertNotIn("slowest_prompts", taskinsight.for_agent(info))
         self.assertNotIn("command", json.dumps(info))  # a tool's arguments are never read
+
+    def test_a_compaction_is_counted_marked_on_its_prompt_and_told(self) -> None:
+        self.new()
+        self.prompt()
+        first, second = self.prompt_times()
+        later = one_prompt(second, 30, 2, 30000)
+        self.copilot_record(S1, one_prompt(first, 10, 1, 80000) + later[:-1] + compacted(second, 61) + later[-1:])
+        info = taskinsight.of_task(self.root, f"{BASE}/job")
+        self.assertEqual(info["totals"]["compactions"], 1)
+        self.assertEqual((info["prompts"][0]["compactions"], info["prompts"][1]["compactions"][0]["after"]), ([], 28273))
+        told = next(item["text"] for item in info["findings"] if item["kind"] == "compacted")
+        self.assertIn("80,222 → 28,273", told)
+        shown = json.dumps(taskinsight.for_agent(info, detail=True), ensure_ascii=False)
+        self.assertNotIn(SECRET, shown)
+        self.assertIn('"compactions": 1', shown)
 
     def test_the_start_of_a_prompt_is_cut_and_can_be_switched_off(self) -> None:
         self.assertEqual(copilot_events.start_of("  一句  很长的\n话 " + "长" * 60, 10), "一句 很长的 话 长…")

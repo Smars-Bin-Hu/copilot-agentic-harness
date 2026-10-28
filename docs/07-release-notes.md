@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.51 (2026-10-28)
+
+### Added
+
+- **The task report shows when Copilot compacted the context.** When the context is nearly full, Copilot replaces the older messages of the session with a summary, and details from before may be lost. The report now reads this from Copilot's own session record: a prompt in which it happened gets a *compacted* tag (hover for the tokens before and after), its dot on the context chart is hollow, and a finding names the prompt. `totals.compactions` holds the count for an agent that explains the report. Only the numbers are read, never the summary text. Without Copilot's record (another machine, `report.copilot_events` off) nothing is shown.
+
 ## 1.5.50 (2026-10-27)
 
 ### Added

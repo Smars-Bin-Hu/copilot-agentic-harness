@@ -20,6 +20,7 @@ On the left is what the numbers look like, on the right what can be said. **When
 | The numbers | The likely reason | Next time |
 | --- | --- | --- |
 | `context_tokens_max` is several times `context_tokens_first` | The session grows longer and longer, and every turn carries the whole history | When a stage is done, open a new session and say "go on with <task name>"; `TASK.md` picks it up |
+| `compactions` above 0 | The context got nearly full, so Copilot replaced the older messages with a summary. Details and the rules sent with earlier prompts may be gone after that prompt | If the agent went wrong after that prompt, this may be why. Open a new session per stage, as above |
 | A large `result_tokens` for one tool | A large file was read, or a command printed a lot | Let it read only the part it needs; filter the command's output |
 | One prompt has a very high `aiu` and many `turns` | Many turns ran within this prompt | As for "tries turn after turn" above |
 | Large `subagent_tokens`, and many `reviews` | Every independent check is a new reviewer that reads everything from the start | Use `[review]=1` or no check for tasks that do not matter much; get the work right yourself first, then check |

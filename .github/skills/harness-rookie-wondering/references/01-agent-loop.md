@@ -26,7 +26,7 @@ Key points:
 
 There is a limit to how much text the model can see at once: the context window. It holds: the rules, your words, the files it read, the results the tools returned, and what it said itself.
 
-- The longer the conversation, the fuller the window. When it is full it gets compressed (summarised), and details are lost.
+- The longer the conversation, the fuller the window. When it is full it gets compressed (summarised), and details are lost. The task report shows in which prompt this happened.
 - In a new session the window is empty: it remembers nothing from before.
 - Reading a large file puts the whole text into the window, which takes a lot of room.
 

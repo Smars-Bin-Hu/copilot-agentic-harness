@@ -25,7 +25,9 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MARKDOWN = {".md", ".markdown"}
 TEXT = {".txt", ".log", ".sql", ".py", ".sh", ".ps1", ".bat", ".cmd", ".json", ".jsonl", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".csv", ".tsv", ".xml",
         ".html", ".css", ".js", ".ts", ".java", ".scala", ".r", ".diff", ".patch", ".properties", ".env", ".md5",
-        ".cs", ".csx", ".csproj", ".bash", ".zsh", ".psm1", ".psd1", ".jsx", ".tsx", ".mjs", ".jsonc", ".go", ".c", ".h", ".cpp", ".hpp", ".kt", ".htm", ".xhtml", ""}  # "": a file with no type (a Makefile)
+        ".cs", ".csx", ".csproj", ".bash", ".zsh", ".psm1", ".psd1", ".jsx", ".tsx", ".mjs", ".jsonc", ".go", ".c", ".h", ".cpp", ".hpp", ".kt", ".htm", ".xhtml",
+        ".dtsx", ".dtproj", ".dtsconfig", ".conmgr", ".params", ".database", ".sqlproj", ".refactorlog", ".rdl", ".rds", ".rptproj",  # SQL Server, SSIS, SSRS projects: XML
+        ".config", ".props", ".targets", ".resx", ".vbproj", ".fsproj", ".nuspec", ".sln", ""}  # "": a file with no type (a Makefile)
 
 
 def kind_of(path: Path) -> str:
@@ -106,10 +108,11 @@ def view(root: Path, task: str, relative: str) -> Optional[Dict[str, Any]]:
         out["ok"] = size <= MAX_IMAGE_BYTES  # a picture too large is only named
     elif kind in ("markdown", "text"):
         data = path.read_bytes()[:MAX_VIEW_BYTES]
-        if b"\x00" in data[:4096]:  # a binary file with a text-like name
+        wide = data[:2] in (b"\xff\xfe", b"\xfe\xff")  # UTF-16 with its mark, as SSMS and Visual Studio may save a file
+        if not wide and b"\x00" in data[:4096]:  # a binary file with a text-like name
             out["kind"] = "other"
             return out
-        text = data.decode("utf-8-sig", errors="replace")
+        text = data.decode("utf-16", errors="replace") if wide else data.decode("utf-8-sig", errors="replace")
         out["cut"] = size > MAX_VIEW_BYTES
         if kind == "markdown":
             tree = mdtree.parse(text)

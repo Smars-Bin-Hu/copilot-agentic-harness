@@ -101,7 +101,7 @@ An approval works as in the terminal: the page shows what you approve and asks y
 
 ![Approving a plan from the page](images/approve-dialog.png)
 
-**Progress and changes.** The TODO shows its progress, and the Changes tab shows the files the task changes, the diff (old and new code side by side, as in VS Code, or in one column), and the write-back the last dry run prepared. The write-back goes to a new branch, uncommitted.
+**Progress and changes.** The TODO shows its progress, and the Changes tab shows the files the task changes, the diff (old and new code side by side, as in VS Code, or in one column), and the write-back the last dry run prepared, compared the same way. Click a file in the list to see it. The write-back goes to a new branch, uncommitted.
 
 ![The TODO of a task with its progress](images/task-todo.png)
 

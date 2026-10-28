@@ -78,16 +78,26 @@ const Highlight = (function () {
     ini: "ini", cfg: "ini", conf: "ini", toml: "ini", properties: "ini", env: "ini", css: "css", js: "js", javascript: "js", jsx: "js", mjs: "js", ts: "ts", tsx: "ts", typescript: "ts",
     java: "java", scala: "scala", go: "go", golang: "go", c: "c", h: "c", cpp: "cpp", "c++": "cpp", hpp: "cpp", kt: "kotlin", kotlin: "kotlin", csv: "csv", tsv: "tsv",
     diff: "diff", patch: "diff",
+    // SQL Server, SSIS and SSRS projects are XML: a package, a project, a report, a config
+    dtsx: "xml", dtproj: "xml", dtsconfig: "xml", conmgr: "xml", params: "xml", database: "xml", sqlproj: "xml", refactorlog: "xml", rdl: "xml", rds: "xml", rptproj: "xml",
+    config: "xml", props: "xml", targets: "xml", resx: "xml", vbproj: "xml", fsproj: "xml", nuspec: "xml",
   };
   const LABELS = {csv: "CSV", tsv: "TSV", diff: "Diff"};
 
-  // "DEV/x/load.SQL" -> "sql"; "```bash" -> "bash"; "```sql title=x" -> "sql"; a name that is nothing known -> "".
+  // The word after the three backticks: "bash" -> "bash"; "sql title=x" -> "sql"; "load.SQL" -> "sql"; a word that is nothing known -> "". A path: fileLanguage.
   function language(name) {
     const word = String(name || "").trim().split(/[\s{]/)[0].toLowerCase();
     const base = word.split("/").pop();
     const dot = base.lastIndexOf(".");
     const key = dot >= 0 ? base.slice(dot + 1) : base;
     return Object.prototype.hasOwnProperty.call(ALIASES, key) ? ALIASES[key] : "";
+  }
+
+  // A file's path -> its language, from the type at the end only: a folder or a name may hold spaces ("ETL/Stored Procedures/ETL.load.sql").
+  function fileLanguage(path) {
+    const base = String(path || "").split("/").pop().trim().toLowerCase();
+    const dot = base.lastIndexOf(".");
+    return dot >= 0 && Object.prototype.hasOwnProperty.call(ALIASES, base.slice(dot + 1)) ? ALIASES[base.slice(dot + 1)] : "";
   }
 
   function label(lang) { return lang && SPECS[lang] ? SPECS[lang].label : LABELS[lang] || ""; }
@@ -225,7 +235,7 @@ const Highlight = (function () {
     return tokens(text, lang).map(([cls, value]) => (cls ? h("span", {class: cls.split(" ").map((name) => "tok-" + name).join(" ")}, value) : document.createTextNode(value)));
   }
 
-  return {language, label, tokens, nodes};
+  return {language, fileLanguage, label, tokens, nodes};
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = Highlight;

@@ -99,6 +99,9 @@ assert.strictEqual(more[2].note, "binary");
 const comment = DiffView.parse(["diff --git a/q.sql b/q.sql", "--- a/q.sql", "+++ b/q.sql", "@@ -1,2 +1,1 @@", "--- old comment", " keep"]);
 assert.strictEqual(comment.length, 1);
 assert.deepStrictEqual(comment[0].hunks[0].lines[0], {k: "-", v: "-- old comment"});
+// the write-back plan has no list of files: the +/- counts are read from its hunks
+assert.deepStrictEqual(more.map(DiffView.counts).slice(0, 2), [{path: "n.sql", action: "create", added: 3, removed: 0}, {path: "d.sql", action: "delete", added: 0, removed: 1}]);
+assert.deepStrictEqual(DiffView.counts(file), {path: "x.sql", action: "modify", added: 2, removed: 2});
 // the part of a line that changed
 assert.deepStrictEqual(DiffView.inline("select a from t", "select b from t"), {head: 7, tail: 7});
 """
@@ -191,6 +194,9 @@ assert.strictEqual(Highlight.tokens("x".repeat(400000), "sql").length, 1);
 // an unclosed string ends at the end of the line and does not stop the scan
 assert.strictEqual(Highlight.tokens("select 'open\nselect 2", "sql").map((token) => token[1]).join(""), "select 'open\nselect 2");
 assert.strictEqual(Highlight.label("csharp"), "C#");
+// a path is read by the type at its end: a folder or a name with spaces does not hide it (B-sql-space)
+assert.deepStrictEqual(["DEV/repo/ETL/Stored Procedures/ETL.ap_load.sql", "REF/My Job.SQL", "DEV/p/Load Orders.dtsx", "DEV/db/GCdata.sqlproj", "REF/a b/notes.txt", "REF/Makefile"].map(Highlight.fileLanguage),
+  ["sql", "sql", "xml", "xml", "", ""]);
 """
         with tempfile.TemporaryDirectory() as folder:
             file = Path(folder) / "highlight_check.js"
@@ -201,7 +207,7 @@ assert.strictEqual(Highlight.label("csharp"), "C#");
     def test_the_files_tab_opens_the_code_files_of_a_pipeline_team_as_text(self) -> None:
         from modules.task import taskfiles
 
-        for name in ("Job.cs", "run.sh", "deploy.ps1", "load.sql", "job.py", "cfg.yml", "x.csv", "build.bash"):
+        for name in ("Job.cs", "run.sh", "deploy.ps1", "load.sql", "job.py", "cfg.yml", "x.csv", "build.bash", "Load Orders.dtsx", "GCdata.sqlproj", "Sales.rdl", "app.config", "All.sln"):
             self.assertEqual(taskfiles.kind_of(Path(name)), "text", name)
 
     def test_the_page_carries_the_colours_in_its_own_files(self) -> None:
@@ -221,6 +227,23 @@ class ChecklistLayoutTests(unittest.TestCase):
         self.assertIn("ul.checks li>.txt{flex:1 1 0;min-width:0", css)  # in a wrapping flex line, a text as wide as its own length goes to the next line
         self.assertIn("ul.checks li>:not(.box):not(.txt){flex:1 1 100%", css)  # what is under the step (a nested list, a paragraph) has a line of its own
         self.assertIn('h("span", {class: "txt"}, inline(item.spans))', (ENGINE_WEB / "desk.js").read_text(encoding="utf-8"))
+
+
+class PageScrollTests(unittest.TestCase):
+    """A click in a list that scrolls by itself (the Files tab, the files of a compare) must not send the list back to its top (B-files-scroll)."""
+
+    def test_a_redraw_puts_a_list_back_where_it_was(self) -> None:
+        desk = (ENGINE_WEB / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('querySelectorAll("[data-keep]")', desk)
+        self.assertIn('"data-keep": "files-list"', desk)
+        self.assertIn('"data-keep": "dv-files." + key', (ENGINE_WEB / "diffview.js").read_text(encoding="utf-8"))
+
+    def test_a_file_the_page_never_asks_for_is_not_loading_for_good(self) -> None:
+        desk = (ENGINE_WEB / "desk.js").read_text(encoding="utf-8")
+        start = desk.index("function fileView(item)")
+        body = desk[start:desk.index("function fileLoad(item)")]
+        self.assertLess(body.index('t("desk.files.other"'), body.index('t("desk.files.loading")'))  # an "other" file says so before "Loading…"
+        self.assertIn('t("desk.files.saved")', body)
 
 
 class ImageTests(unittest.TestCase):

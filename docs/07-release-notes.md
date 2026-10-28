@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.52 (2026-10-28)
+
+### Added
+
+- **The write-back is compared as the code is.** Under *The write-back, as the last dry run prepared it*, the Changes tab shows the plan as the old and the new code (side by side, one column, or the diff text), with its own list of files. A long file scrolls in a lower window, so one file does not fill the page.
+- **More project files open in the Files tab, coloured as XML:** SSIS packages and projects (`.dtsx`, `.dtproj`, `.conmgr`, `.params`, `.dtsconfig`), SQL Server projects (`.sqlproj`, `.refactorlog`), reports (`.rdl`, `.rds`, `.rptproj`) and `.config`, `.props`, `.targets`, `.resx`; `.sln` opens as text. A file saved as UTF-16 (as SSMS may save a `.sql`) is read too.
+
+### Changed
+
+- **Pick the file of a compare by clicking it.** The compare in the Changes tab lists its files (what was done, the path, `+` and `−`); click one to see it. The drop-down list and the arrows are gone.
+- **A click in a list that scrolls keeps its place.** In the Files tab, opening a file far down the list sent the list back to its top; it now stays where it was. The same holds for the file list of a compare, and for the code windows of a compare when the page refreshes or a fold is opened.
+- **A file the page cannot show says so.** A file of a type the Files tab does not read (a `.dtsx` was one) showed *Loading…* for good: the page never asked for it. It now says the file cannot be shown here. In a saved copy, a file too large to be taken in says that it is not in the copy.
+- **A `.sql` file in a folder with a space is coloured.** The language was read from the path cut at the first space (`ETL/Stored Procedures/…` became `ETL/Stored`), so the file stayed plain. A path is now read by the type at its end.
+
 ## 1.5.51 (2026-10-28)
 
 ### Added

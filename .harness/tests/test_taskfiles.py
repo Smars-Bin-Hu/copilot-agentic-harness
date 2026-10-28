@@ -45,6 +45,8 @@ class FilesTests(ServeCase):
         self.assertEqual(taskfiles.view(self.root, TASK, "RUNS/DEV/dump.bin")["kind"], "other")
         (self.task / "REF" / "fake.txt").write_bytes(b"\x00\x00binary")
         self.assertEqual(taskfiles.view(self.root, TASK, "REF/fake.txt")["kind"], "other", "a binary file with a text name")
+        (self.task / "REF" / "wide.sql").write_bytes("select N'ü';\n".encode("utf-16"))  # UTF-16 with its mark, as SSMS may save it
+        self.assertEqual(taskfiles.view(self.root, TASK, "REF/wide.sql")["text"], "select N'ü';\n")
 
     def test_only_what_the_tab_lists_can_be_asked_for(self) -> None:
         (self.task / "secret.md").write_text("no", encoding="utf-8")

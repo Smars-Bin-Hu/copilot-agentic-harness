@@ -75,9 +75,8 @@
   }
 
   // A code block of any document has a button that copies it whole: a command or a query is pasted into a terminal or a client, not retyped.
-  // `lang`: the type of the file or the language after the three backticks; the code is coloured when it is one highlight.js knows.
-  function codeBlock(text, lang) {
-    const kind = Highlight.language(lang);
+  // `kind`: the language from highlight.js (of the file's type or of the word after the three backticks); "" is plain text.
+  function codeBlock(text, kind) {
     const button = h("button", {type: "button", class: "act copy-code", "data-label": t("desk.code.copy")}, t("desk.code.copy"));
     button.addEventListener("click", () => copyCommand(button, text));
     return h("div", {class: "code-box"}, h("div", {class: "code-bar"}, Highlight.label(kind) ? h("span", {class: "code-lang"}, Highlight.label(kind)) : null, button), h("pre", {class: "code"}, h("code", null, Highlight.nodes(text, kind))));
@@ -88,7 +87,7 @@
       if (block.t === "h") return h("h" + Math.min(block.level + 1, 6), {class: "md-h"}, inline(block.spans));
       if (block.t === "p") return h("p", null, inline(block.spans));
       if (block.t === "hr") return h("hr");
-      if (block.t === "code") return codeBlock(block.text, block.lang);
+      if (block.t === "code") return codeBlock(block.text, Highlight.language(block.lang));
       if (block.t === "quote") return h("blockquote", null, blocks(block.blocks));
       if (block.t === "table") {
         const cell = (tag, spans, align) => h(tag, {style: align ? "text-align:" + align : null}, inline(spans));
@@ -471,9 +470,11 @@
       return picture({src: item.path, alt: item.path.split("/").pop(), data: item.data || ""});
     }
     const found = fileCache[item.path] || item.doc;
+    if (!found && !["markdown", "text"].includes(item.kind)) return h("p", {class: "sub"}, t("desk.files.other", {size: size(item.size)}));  // never asked for: it was "Loading…" for good
+    if (!found && !served()) return h("p", {class: "sub"}, t("desk.files.saved"));  // a saved copy took in only the small files
     if (!found) return h("p", {class: "sub"}, fileCache[item.path] === null ? t("desk.files.failed") : t("desk.files.loading"));
     if (found.kind === "markdown") return h("article", {class: "md"}, runTabs("file:" + item.path, found.blocks, null, true) || blocks(found.blocks), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
-    if (found.kind === "text") return [codeBlock(found.text, item.path), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null];
+    if (found.kind === "text") return [codeBlock(found.text, Highlight.fileLanguage(item.path)), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null];
     return h("p", {class: "sub"}, t("desk.files.other", {size: size(found.size)}));
   }
 
@@ -520,7 +521,7 @@
       walk(node, 1);
     }
     return [h("p", {class: "hint top"}, t("desk.files.hint")),
-      h("div", {class: "files"}, h("nav", {class: "files-list"}, list),
+      h("div", {class: "files"}, h("nav", {class: "files-list", "data-keep": "files-list"}, list),
         h("div", {class: "files-view"}, h("div", {class: "round-head"}, h("strong", null, open.path), " ", h("span", {class: "sub"}, size(open.size))), fileView(open)))];
   }
 
@@ -818,8 +819,9 @@
     } else {
       parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.changes.none")), h("p", null, t("desk.changes.none.hint"))));
     }
-    if (c.diff.lines.length) parts.push(h("h3", null, t("desk.changes.diff")), DiffView.create(c, () => diff(c.diff)));  // old and new code side by side (diffview.js); the plain diff text is its third view
-    if (c.promote_plan.lines.length) parts.push(h("h3", null, t("desk.changes.promote")), h("p", {class: "sub"}, t("desk.changes.promote.hint")), diff(c.promote_plan));
+    if (c.diff.lines.length) parts.push(h("h3", null, t("desk.changes.diff")), DiffView.create({files: c.files, lines: c.diff.lines, cut: c.diff.cut}, () => diff(c.diff), "dev"));  // old and new code side by side (diffview.js); the plain diff text is its third view
+    if (c.promote_plan.lines.length) parts.push(h("h3", null, t("desk.changes.promote")), h("p", {class: "sub"}, t("desk.changes.promote.hint")),
+      DiffView.create(c.promote_plan, () => diff(c.promote_plan), "plan", true));  // the same compare, the files read from the plan; a long file scrolls in a lower window
     return parts;
   }
 
@@ -890,11 +892,16 @@
     })), name ? markdown(name, "") : null];
   }
 
+  // A redraw makes every node again: a list or a code window that scrolls by itself (marked `data-keep`) is put back where it was.
   function draw(keepScroll) {
     const y = window.scrollY;
+    const kept = new Map([...app.querySelectorAll("[data-keep]")].map((node) => [node.dataset.keep, [node.scrollTop, node.scrollLeft]]));
     app.replaceChildren(...[...header(), ribbon(), saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
       h("footer", null, t(saved ? "desk.snapshot.footer" : "desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright())].filter(Boolean));  // a null would be drawn as the word "null"
-    if (keepScroll) window.scrollTo(0, y);
+    if (keepScroll) {
+      for (const node of app.querySelectorAll("[data-keep]")) if (kept.has(node.dataset.keep)) [node.scrollTop, node.scrollLeft] = kept.get(node.dataset.keep);
+      window.scrollTo(0, y);
+    }
   }
 
   document.querySelector("main").classList.add("wide");

@@ -188,13 +188,14 @@ const DiffView = (function () {
     return h("div", {class: "dv-pane " + kind}, h("div", {class: "dv-body"}, children, h("div", {class: "dv-end"})));
   }
 
-  // The compare of one file: `text` is its new code (or null), `mode` is "split" or "unified".
-  function compare(file, text, mode) {
+  // The compare of one file: `text` is its new code (or null), `mode` is "split" or "unified", `key` the view it is in.
+  function compare(file, text, mode, key) {
     const open = new Set();
     const box = h("div", {class: "dv " + mode});
     const draw = () => {
       const list = fold(rows(file, text), open);
       const toggle = (id) => { open.add(id); draw(); };
+      const was = [...box.querySelectorAll(".dv-pane")].map((node) => [node.scrollTop, node.scrollLeft]);  // opening a fold keeps the place
       box.replaceChildren();
       if (mode === "unified") {
         const only = pane("dv-one", unifiedRows(list));
@@ -207,31 +208,46 @@ const DiffView = (function () {
         bind(right, list, toggle);
         together(left, right);
       }
+      box.querySelectorAll(".dv-pane").forEach((node, index) => {
+        node.dataset.keep = "dv." + key + "." + mode + "." + index + "." + file.path;  // desk.js puts the place back after a redraw of the page
+        if (was[index]) [node.scrollTop, node.scrollLeft] = was[index];
+      });
     };
     draw();
     return box;
   }
 
-  // The whole view: the file to look at, the way to look, and the compare. `raw` draws the plain diff text (desk.js).
-  function create(changes, raw) {
-    const diffs = new Map(parse(changes.diff.lines).map((item) => [item.path, item]));
-    const files = changes.files.filter((item) => diffs.has(item.path));
+  // The +/- counts of a file read from its hunks (the write-back plan has no list of files beside its diff).
+  function counts(file) {
+    let added = 0, removed = 0;
+    for (const hunk of file.hunks) for (const line of hunk.lines) { if (line.k === "+") added += 1; else if (line.k === "-") removed += 1; }
+    return {path: file.path, action: file.status, added, removed};
+  }
+
+  // The whole view: a list of the files to click, the way to look, and the compare of the file picked. `source` is {lines, cut, files?}: the
+  // diff text and, for DEV/, the list of the changed files with their new code. `raw` draws the plain diff text (desk.js). `key` keeps the
+  // file picked apart for each view ("dev", "plan"); `small` makes a long file scroll in a lower window.
+  function create(source, raw, key, small) {
+    const parsed = parse(source.lines);
+    const diffs = new Map(parsed.map((item) => [item.path, item]));
+    const files = (source.files || parsed.map(counts)).filter((item) => diffs.has(item.path));
     if (!files.length) return raw();
-    const chosen = () => (files.find((item) => item.path === store("file", "")) || files[0]);
+    const chosen = () => (files.find((item) => item.path === store("file." + key, "")) || files[0]);
     const mode = () => (MODES.includes(store("mode", "split")) ? store("mode", "split") : "split");
-    const host = h("div", {class: "dv-view"});
+    const host = h("div", {class: "dv-view" + (small ? " small" : "")});
+    // The list is made once and only marked again, so a click does not scroll it back to the top.
+    const picks = files.map((item) => {
+      const button = h("button", {type: "button", class: "dv-pick", title: item.path},
+        h("span", {class: "dv-act " + item.action}, t("desk.changes." + item.action)), h("code", null, item.path),
+        h("span", {class: "dv-n add"}, "+" + item.added), h("span", {class: "dv-n del"}, "−" + item.removed));
+      button.addEventListener("click", () => { store("file." + key, "", item.path); draw(); });
+      return button;
+    });
+    const list = h("nav", {class: "dv-files", "aria-label": t("desk.diff.file"), "data-keep": "dv-files." + key}, picks);
+    const shown = h("div", {class: "dv-shown"});
     const draw = () => {
       const item = chosen(), file = diffs.get(item.path);
-      const picker = h("select", {class: "dv-file", "aria-label": t("desk.diff.file")},
-        files.map((entry) => h("option", Object.assign({value: entry.path}, entry.path === item.path ? {selected: "selected"} : {}), entry.path + "  +" + entry.added + " −" + entry.removed)));
-      picker.addEventListener("change", () => { store("file", "", picker.value); draw(); });
-      const index = files.indexOf(item);
-      const step = (by) => h("button", {type: "button", class: "dv-step", title: t(by < 0 ? "desk.diff.prev" : "desk.diff.next")}, by < 0 ? "‹" : "›");
-      const previous = step(-1), next = step(1);
-      previous.disabled = index === 0;
-      next.disabled = index === files.length - 1;
-      previous.addEventListener("click", () => { store("file", "", files[index - 1].path); draw(); });
-      next.addEventListener("click", () => { store("file", "", files[index + 1].path); draw(); });
+      picks.forEach((button, index) => button.classList.toggle("on", files[index] === item));
       const modes = h("span", {class: "dv-modes"}, MODES.map((name) => {
         const button = h("button", {type: "button", class: "dv-mode" + (name === mode() ? " on" : "")}, t("desk.diff." + name));
         button.addEventListener("click", () => { store("mode", "", name); draw(); });
@@ -239,18 +255,20 @@ const DiffView = (function () {
       }));
       const notes = [];
       if (file.note) notes.push(h("p", {class: "sub"}, file.note));
-      if (!item.text && item.action === "modify" && mode() !== "raw") notes.push(h("p", {class: "sub"}, t("desk.diff.partial")));
-      if (changes.diff.cut && mode() !== "raw") notes.push(h("p", {class: "sub"}, t("desk.cut")));
-      host.replaceChildren(
-        h("div", {class: "dv-bar"}, previous, picker, next, h("span", {class: "dv-count sub"}, (index + 1) + "/" + files.length), modes),
+      if (source.files && !item.text && item.action === "modify" && mode() !== "raw") notes.push(h("p", {class: "sub"}, t("desk.diff.partial")));
+      if (source.cut && mode() !== "raw") notes.push(h("p", {class: "sub"}, t("desk.cut")));
+      shown.replaceChildren(
+        h("div", {class: "dv-bar"}, h("code", {class: "dv-path"}, item.path), modes),
         ...notes,
-        mode() === "raw" ? raw() : compare(file, item.text || null, mode()));
+        mode() === "raw" ? raw() : compare(file, item.text || null, mode(), key));
     };
     draw();
+    if (files.length > 1) host.append(list);
+    host.append(shown);
     return host;
   }
 
-  return {parse, rows, fold, inline, create};
+  return {parse, rows, fold, inline, counts, create};
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = DiffView;

@@ -134,6 +134,7 @@ If you'd rather not read docs, the four commands above are enough: the agent lea
 | [08 Knowledge base](docs/08-knowledge-base.md) | **Build it from your code and keep it true.** The idea, the steps, how you know the map is right, what you can change |
 | [09 Preparing an intake](docs/09-intake.md) | **Business documents as files the agent can read.** Word and Excel to Markdown and CSV without AI, `INTAKE.md`, trimming, pasting a table, the review of the requirement |
 | [10 Skills](docs/10-skills.md) | **Which skill is for what.** All 33 skills sorted by who uses them: the ones you start, the ones the agent picks, the knowledge base ones |
+| [11 Tool calling check](docs/11-tool-calling-check.md) | **Before the agent reaches outside systems.** A probe folder and a list of checks for your work computer: do hooks run, can an MCP server start, do MCP, extension and terminal calls reach a hook, can a hook refuse them |
 
 ## Directory layout
 

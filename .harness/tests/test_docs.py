@@ -356,6 +356,8 @@ class LauncherTests(unittest.TestCase):
         self.assertIn("%*", content)
         self.assertIn("exit /b %errorlevel%", content)
         self.assertIn("python", content)
+        self.assertNotRegex(content, r"(?im)^\s*where\b", "every program started costs a second or more where security software checks each start")
+        self.assertIn("%%~$PATH:P", content)  # cmd finds python.exe in PATH itself
 
     @unittest.skipUnless(os.name == "nt", "harness.cmd runs on Windows only")
     def test_the_windows_launcher_runs_from_any_folder_also_one_with_a_space(self) -> None:

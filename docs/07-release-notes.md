@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.53 (2026-10-28)
+
+### Changed
+
+- **`harness` on Windows starts one program less.** `harness.cmd` ran `where python` to find Python before it ran Python itself. It now finds `python.exe` in PATH with cmd alone, so a command starts only cmd and Python. On a computer whose security software checks every program that starts, one start can cost a second or more, so each `harness` command is that much faster. Without `python.exe` in PATH it still uses the `py` launcher. **Take note:** if you copied `harness.cmd` into a folder on PATH, copy it again; `harness doctor` says so while the copy differs. The old copy still works, only slower.
+
 ## 1.5.52 (2026-10-28)
 
 ### Added

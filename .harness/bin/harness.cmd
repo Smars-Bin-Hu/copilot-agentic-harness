@@ -25,9 +25,12 @@ goto harness_run
 echo harness: not inside a harness repository. cd into one, or set HARNESS_HOME to one. 1>&2
 exit /b 1
 :harness_run
-where python >nul 2>nul && goto run_python
-py "%HARNESS_CLI%" %*
+rem Find python.exe in PATH with cmd itself, not with `where`: that is one more program to start, and where security software checks
+rem every start (a work computer) one start costs a second or more. Without python.exe, the py launcher.
+for %%P in (python.exe) do set "HARNESS_PY=%%~$PATH:P"
+if not defined HARNESS_PY goto run_py
+"%HARNESS_PY%" "%HARNESS_CLI%" %*
 exit /b %errorlevel%
-:run_python
-python "%HARNESS_CLI%" %*
+:run_py
+py "%HARNESS_CLI%" %*
 exit /b %errorlevel%

@@ -109,3 +109,16 @@ def external_human(action: Any, command: str) -> str:
 def external_task(action: Any, command: str) -> str:
     """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
     return say("gate.external.task", system=action.system, env=action.env, verb=action.verb, call=command)
+
+
+def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str) -> str:
+    where = say("gate.external.outbox_draft", draft=draft) if draft else say("gate.external.outbox_nodraft")
+    return say("gate.external.outbox", system=action.system, env=action.env, verb=action.verb, call=command, code=code, minutes=minutes, where=where)
+
+
+def external_autorun(action: Any, command: str) -> str:
+    return say("gate.external.autorun", system=action.system, env=action.env, verb=action.verb, call=command)
+
+
+def external_approved(commands: Any) -> str:
+    return say("gate.external.approved", calls="\n".join(f"- {item}" for item in commands))

@@ -54,6 +54,7 @@ What a command prints: text on a terminal, JSON on a pipe (a script, a redirect)
 | `task report` | Writes the task report again (`.md`: what was done) and the analysis page (`.html`: where the time and usage went). `--open` opens the analysis page in the browser; `--detail` adds the slowest prompts, the tools and every check to the output |
 | `task snapshot list`, `task snapshot prune` | Shows the work saved at the gates of a task; deletes expired ones |
 | `approve-command` | Approves one git command of the agent that was refused. Terminal only, with a typed code |
+| `approve-action` | **You run it, in your own terminal.** A call to an outside system the gate held in the outbox: it lists the calls waiting (system, environment, kind, the exact command, the draft in the task's `OUTBOX/`), you type the code the agent gave you, and the same command may run once, in the same session, within the time limit (`git.approval_minutes` of gate.json). A changed command needs a new approval. The agent hears of the approval at its next prompt |
 | `admin on` | Switches admin mode on for one session: it can change guardrail files. Terminal only, with a typed code |
 | `admin off`, `admin status` | Switches admin mode off for one session; lists the sessions with admin mode on |
 | `target list`, `target show` | Shows the target repositories: path, base branch, commit, whether the working tree is clean |

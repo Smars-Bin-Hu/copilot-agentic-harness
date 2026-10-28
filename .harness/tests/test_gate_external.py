@@ -183,9 +183,13 @@ class GateExternalTests(HarnessTestCase):
         self.assertEqual(denied["permissionDecision"], "deny")
         for text in ("cloud", "dev", "destroy", "cloudctl --sub dev delete x", "不要重试"):
             self.assertIn(text, denied["permissionDecisionReason"])
-        handed = self.term("tk comment T-1 hello")
+        held = self.term("tk comment T-1 hello")  # a write to a system without environments: the outbox (M43-4)
+        self.assertEqual(held["permissionDecision"], "deny")
+        for text in ("tickets", "approve-action", "tk comment T-1 hello"):
+            self.assertIn(text, held["permissionDecisionReason"])
+        handed = self.term("cloudctl --sub dev run job")  # exec: the person runs it
         self.assertEqual(handed["permissionDecision"], "deny")
-        for text in ("tickets", "task handoff run", "tk comment T-1 hello"):
+        for text in ("cloud", "task handoff run", "cloudctl --sub dev run job"):
             self.assertIn(text, handed["permissionDecisionReason"])
 
     def test_the_refusal_shows_the_command_as_it_was_written_quotes_included(self) -> None:

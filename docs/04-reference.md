@@ -183,7 +183,7 @@ All in `.harness/runtime/`, not in git, and not writable by an agent (not in adm
 | Path | What it holds |
 | --- | --- |
 | `state/<surface>/<session>.json` | For every session: which task it holds, subagents, whether it is in admin mode |
-| `logs/<surface>/<session>.jsonl` | The session log |
+| `logs/<surface>/<session>.jsonl` | The session log. A call to an outside system the company listed has an `external` field (system, environment, verb, target, the decision of the policy), whether it went through or not; never what it returned. Passwords and tokens in a logged command are replaced by `***` |
 | `logs/hook-errors.jsonl` | The hook's own errors |
 | `git-approvals.json` | The git commands waiting for approval and those approved |
 | `capture/` | The raw hook input and output while `capture.enabled` is on |

@@ -18,6 +18,7 @@ from core import config
 from core.context import Context
 from core.events import Decision, HookEvent
 from core.logs import log_call, safe_name
+from core.redact import redact
 from core.paths import runtime_dir
 
 from .policy import DEFAULTS, POLICY_NAME, validate_policy
@@ -45,13 +46,14 @@ def clip(text: Any, limit: int) -> Any:
 
 
 def clip_record(record: Dict[str, Any], limit: int) -> Dict[str, Any]:
+    """The texts of a record cut to `limit`, with the values of passwords and tokens replaced by `***` first (core/redact.py)."""
     clipped = dict(record)
     for key in ("reason", "error"):
         if key in record:
-            clipped[key] = clip(record[key], limit)
+            clipped[key] = clip(redact(record[key]), limit)
     target = record.get("target")
     if isinstance(target, dict):
-        clipped["target"] = {"paths": [clip(item, limit) for item in target.get("paths", [])], "command": clip(target.get("command", ""), limit)}
+        clipped["target"] = {"paths": [clip(item, limit) for item in target.get("paths", [])], "command": clip(redact(target.get("command", "")), limit)}
     return clipped
 
 

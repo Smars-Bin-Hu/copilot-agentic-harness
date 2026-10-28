@@ -14,7 +14,7 @@ A call with no path the gate can read is allowed: the gate only denies what it c
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, Optional, Tuple
 
 import json
 import re
@@ -85,7 +85,7 @@ def _within(relative: str, folder: str) -> bool:
     return relative == folder or relative.startswith(folder + "/")
 
 
-def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: dict, guard_git: bool) -> Optional[Decision]:
+def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: dict, guard_git: bool, judged: Optional[Tuple[Any, str, bool]] = None) -> Optional[Decision]:
     why = terminal.guardrail_write(event.command, compiled)
     if why:
         return Decision(permission="deny", reason=rules.admin_locked_terminal(why) if ctx.admin else rules.guardrail_terminal(why))
@@ -107,7 +107,7 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     port = asks_board(ctx, event.command)
     if port:
         return Decision(permission="deny", reason=rules.board_request(port))
-    outside = check_external(event, ctx)
+    outside = check_external(event, ctx, judged)
     if outside:
         return outside
     if git.kind == gitcmd.APPROVE:
@@ -123,11 +123,12 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     return Decision(permission=permission, reason=reason)
 
 
-def check_external(event: HookEvent, ctx: Context) -> Optional[Decision]:
-    """A call to a system the company listed under `systems` (tools.override.json): the policy decides (external.py).
+def judge_external(event: HookEvent, ctx: Context) -> Optional[Tuple[Any, str, bool]]:
+    """A call to a system the company listed under `systems` (tools.override.json): `(action, decision, passes)`, or None.
 
-    No list, or a list that does not validate, means no rule here: doctor and `tools check` report the break, and the gate
-    does not guess what a broken policy meant (a hook that fails itself must not hurt normal work).
+    `decision` is what the policy says (external.py); `passes` is whether the call goes through: `allow`, or `task` in a task
+    whose plan the person approved. No list, or a list that does not validate, means no rule here: doctor and `tools check`
+    report the break, and the gate does not guess what a broken policy meant (a hook that fails itself must not hurt normal work).
     """
     try:
         systems = ctx.policy("tools").get("systems") or {}
@@ -139,17 +140,29 @@ def check_external(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if picked is None:
         return None
     action, decision = picked
-    if decision == external.ALLOW:
-        return None
+    passes = decision == external.ALLOW
     if decision == external.TASK:
         task = ctx.state.get("active_task")
         data = tasks.read(ctx.root, task) if task else None
-        if data and data.get("status") == "open" and tasks.plan_approved(ctx.root, task, data):
-            return None
-    facts = {"kind": "external", "decision": decision, **action.facts()}
+        passes = bool(data and data.get("status") == "open" and tasks.plan_approved(ctx.root, task, data))
+    return action, decision, passes
+
+
+def external_facts(judged: Optional[Tuple[Any, str, bool]]) -> Dict[str, Any]:
+    """What the log keeps of an outside call: the action and what the policy decided. Never what the call returned."""
+    if not judged:
+        return {}
+    action, decision, _passes = judged
+    return {"external": {**action.facts(), "decision": decision}}
+
+
+def check_external(event: HookEvent, ctx: Context, judged: Optional[Tuple[Any, str, bool]]) -> Optional[Decision]:
+    if not judged or judged[2]:
+        return None
+    action, decision, _passes = judged
     # `outbox` and `human` read the same for now: the outbox (M43-4) is not built, so a write waits for the person either way.
     reason = {external.DENY: rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, gitcmd.collapse(event.command))
-    return Decision(permission="deny", reason=reason, facts=facts)
+    return Decision(permission="deny", reason=reason, facts={"kind": "external", **external_facts(judged)})
 
 
 def asks_board(ctx: Context, text: str) -> int:
@@ -182,5 +195,11 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     compiled = Compiled(policy, [(repo.name, repo.path, repo.refused_paths) for repo in found.repos.values()] if found else None, admin=ctx.admin)
     if event.tool_kind == "terminal":
         # Without target repositories the harness behaves as before: only the ask rules in gate.json look at git.
-        return check_terminal(event, ctx, compiled, policy, guard_git=bool(found and found.configured))
+        judged = judge_external(event, ctx)
+        decided = check_terminal(event, ctx, compiled, policy, guard_git=bool(found and found.configured), judged=judged)
+        facts = external_facts(judged)
+        if facts:  # every call to a listed system leaves its line, whatever rule decided it and also when it went through
+            decided = decided or Decision()
+            decided.facts.update(facts)
+        return decided
     return check_write(event, ctx, compiled)

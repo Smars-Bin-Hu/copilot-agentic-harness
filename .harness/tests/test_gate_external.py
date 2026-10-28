@@ -229,6 +229,65 @@ class GateExternalTests(HarnessTestCase):
         self.assertEqual(json.loads(completed.stdout)["systems"], [])
 
 
+class ExternalLogTests(HarnessTestCase):
+    """M43-3: every call to a listed system leaves its line in the session log, allowed or not; never what it returned; no secrets."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": SYSTEMS}), encoding="utf-8")
+
+    def term(self, command: str, session: str = "log") -> Dict[str, Any]:
+        data = pre_tool(session, "run_in_terminal", {"command": command, "explanation": "t", "isBackground": False})
+        data["cwd"] = str(self.root)
+        return self.hook(data)
+
+    def test_an_allowed_and_a_refused_call_both_leave_their_action(self) -> None:
+        self.term("cloudctl --sub dev list --name job-1")
+        self.term("cloudctl --sub dev delete --name job-2")
+        self.term("ls -la")
+        rows = [row for row in self.session_log("log") if row.get("event") == "PreToolUse"]
+        self.assertEqual(len(rows), 3)
+        allowed, refused, plain = rows
+        self.assertEqual(allowed["decision"], "none")
+        self.assertEqual(allowed["external"], {"system": "cloud", "env": "dev", "verb": "read", "target": "job-1", "decision": "allow"})
+        self.assertNotIn("target", allowed)  # a call that went through keeps no command
+        self.assertEqual(refused["decision"], "deny")
+        self.assertEqual(refused["kind"], "external")
+        self.assertEqual(refused["external"], {"system": "cloud", "env": "dev", "verb": "destroy", "target": "job-2", "decision": "deny"})
+        self.assertNotIn("external", plain)
+
+    def test_a_call_another_rule_refused_still_names_its_action(self) -> None:
+        self.term("cloudctl --sub dev list > .harness/registry.json")  # writes a guardrail file: refused by that rule
+        row = [row for row in self.session_log("log") if row.get("event") == "PreToolUse"][-1]
+        self.assertEqual(row["decision"], "deny")
+        self.assertEqual(row["external"]["verb"], "read")
+        self.assertNotEqual(row.get("kind"), "external")
+
+    def test_a_secret_in_a_refused_command_does_not_reach_the_log(self) -> None:
+        output = self.term('SECRET_TOKEN=abc123 cloudctl --sub dev delete x --password "p w" -P hunter2')
+        self.assertIn("abc123", output["permissionDecisionReason"])  # the agent wrote it; the reason it gets back is not cut
+        text = json.dumps(self.session_log("log"))
+        for secret in ("abc123", "hunter2", "p w"):
+            self.assertNotIn(secret, text)
+        self.assertIn("SECRET_TOKEN=***", text)
+
+
+class CountTests(unittest.TestCase):
+    def test_the_task_report_counts_outside_calls_and_refusals(self) -> None:
+        from modules.task import taskinsight
+
+        at = "2026-01-01T00:00:0{}+00:00"
+        rows = [
+            {"at": at.format(1), "event": "PreToolUse", "decision": "none", "external": {"system": "cloud"}},
+            {"at": at.format(2), "event": "PreToolUse", "decision": "deny", "external": {"system": "cloud"}},
+            {"at": at.format(3), "event": "PreToolUse", "decision": "deny"},
+            {"at": at.format(4), "event": "PostToolUse", "decision": "none", "external": {"system": "cloud"}},
+        ]
+        start = taskinsight.copilot_events.seconds(at.format(0))
+        counted = taskinsight.count_rows(rows, start, start + 60)
+        self.assertEqual((counted["external_calls"], counted["external_denied"], counted["denied"]), (2, 1, 2))
+
+
 class GateExternalTaskTests(TaskCase):
     def configure(self) -> None:
         (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": SYSTEMS}), encoding="utf-8")

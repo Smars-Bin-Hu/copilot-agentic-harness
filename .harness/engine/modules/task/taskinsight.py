@@ -314,12 +314,15 @@ def split(prompt: Dict[str, Any]) -> Dict[str, Optional[float]]:
 
 
 def count_rows(rows: List[Dict[str, Any]], start: float, end: float) -> Dict[str, int]:
-    found = {"denied": 0, "asked": 0, "stop_blocks": 0}
+    found = {"denied": 0, "asked": 0, "stop_blocks": 0, "external_calls": 0, "external_denied": 0}
     for row in rows:
         at = copilot_events.seconds(row.get("at"))
         if at is None or not start <= at < end:
             continue
         decision = row.get("decision")
+        if row.get("external") and row.get("event") == "PreToolUse":  # a call to an outside system the company listed (M43-3)
+            found["external_calls"] += 1
+            found["external_denied"] += 1 if decision == "deny" else 0
         if decision == "deny":
             found["denied"] += 1
         elif decision == "ask":
@@ -413,7 +416,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
     rows_of = {found["session_id"]: found["rows"] for found in sessions}
     totals: Dict[str, Any] = {
         "prompts": len(mine), "active_s": 0.0, "waiting_s": 0.0, "paused_s": 0.0, "model_s": None, "tool_s": None, "approval_s": None, "subagent_s": None, "other_s": None,
-        "tool_calls": 0, "failed_tool_calls": 0, "denied": 0, "asked": 0, "stop_blocks": 0,
+        "tool_calls": 0, "failed_tool_calls": 0, "denied": 0, "asked": 0, "stop_blocks": 0, "external_calls": 0, "external_denied": 0,
         "aiu": None, "premium_requests": None, "subagent_tokens": None, "context_tokens_first": None, "context_tokens_max": None,
     }
     prompts: List[Dict[str, Any]] = []
@@ -443,7 +446,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
         prompts.append(entry)
         for key, value in parts.items():
             add(totals, key, value)
-        for key in ("tool_calls", "failed_tool_calls", "denied", "asked", "stop_blocks"):
+        for key in ("tool_calls", "failed_tool_calls", "denied", "asked", "stop_blocks", "external_calls", "external_denied"):
             totals[key] += entry[key]
         add(totals, "aiu", prompt["aiu"])
         add(totals, "premium_requests", prompt["premium_requests"])

@@ -335,3 +335,33 @@ class PruneTests(ObserveCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RedactTests(unittest.TestCase):
+    """M43-3: the log keeps the command of a refused call; the values of passwords and tokens in it become ***."""
+
+    def test_common_spellings_of_a_secret_are_masked(self) -> None:
+        from core.redact import redact
+
+        cases = {
+            'sqlcmd -S dev -U sa -P "S3cr3t!" -Q "SELECT 1"': 'sqlcmd -S dev -U sa -P *** -Q "SELECT 1"',
+            "SQLCMDPASSWORD=S3cr3t sqlcmd -S dev": "SQLCMDPASSWORD=*** sqlcmd -S dev",
+            "AZURE_DEVOPS_EXT_PAT=abc123 tool query": "AZURE_DEVOPS_EXT_PAT=*** tool query",
+            "tool login --password hunter2 --username me": "tool login --password *** --username me",
+            "tool --client-secret=xyz --token abc": "tool --client-secret=*** --token ***",
+            'cmd "Server=x;User Id=sa;Password=pw123;Database=d"': 'cmd "Server=x;User Id=sa;Password=***;Database=d"',
+            "curl -H 'Authorization: Bearer eyJabc.def' https://u:pw@host/x": "curl -H 'Authorization: Bearer ***' https://u:***@host/x",
+            'echo {"token": "t0k3n", "name": "n"}': 'echo {"token": "***", "name": "n"}',
+        }
+        for text, expected in cases.items():
+            with self.subTest(text):
+                self.assertEqual(redact(text), expected)
+
+    def test_what_only_looks_like_a_secret_stays(self) -> None:
+        from core.redact import redact
+
+        for text in ("MY_PATH=/opt/x tool --path /tmp/a --port 5 -Port 6", "pwd && ls", "git log -p", "tool --patch x.diff", ""):
+            with self.subTest(text):
+                self.assertEqual(redact(text), text)
+        self.assertIsNone(redact(None))
+

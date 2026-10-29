@@ -674,6 +674,14 @@
   // can be put back as converted. What is typed is kept in `intake`, so a redraw of the page does not lose it.
   // A heading, a list, a fence or a quote at the start of a line, and no tab (cells copied out of a sheet are tab-separated).
   const looksLikeMarkdown = (text) => !text.includes("\t") && /^(#{1,6} |[-*+] |\d+\. |```|> )/m.test(text);
+  // A table has tabs (from Excel), or two lines or more with the same number of commas. Anything else is text, not a table of one column.
+  const looksLikeTable = (text) => {
+    if (text.includes("\t")) return true;
+    const lines = text.split(/\r?\n/).filter((line) => line.trim());
+    const commas = (line) => (line.match(/,/g) || []).length;
+    return lines.length > 1 && commas(lines[0]) > 0 && lines.every((line) => commas(line) === commas(lines[0]));
+  };
+  const guessKind = (text) => (looksLikeMarkdown(text) ? "doc" : looksLikeTable(text) ? "csv" : "txt");
   const intake = {busy: false, error: "", done: [], editing: null, name: "", kind: "csv", kindChosen: false, text: "", hidden: false, domains: null, open: new Set(), picked: new Set()};
   const UPLOAD_TYPES = ".docx,.docm,.xlsx,.xlsm,.xls,.pdf,.csv,.tsv,.txt,.md,.json,.sql,.png,.jpg,.jpeg,.gif,.webp";
 
@@ -894,7 +902,7 @@
     text.addEventListener("input", () => {
       intake.text = text.value;
       // Markdown pasted as a table would be cut into cells: until the person picks a kind, the text picks it. A choice the person made stays.
-      if (!intake.kindChosen) intake.kind = kind.value = looksLikeMarkdown(intake.text) ? "doc" : "csv";
+      if (!intake.kindChosen) intake.kind = kind.value = guessKind(intake.text);
     });
     const savePaste = h("button", {type: "button", class: "act hot", disabled: intake.busy ? "" : null}, t("desk.intake.paste.save"));
     savePaste.addEventListener("click", () => {

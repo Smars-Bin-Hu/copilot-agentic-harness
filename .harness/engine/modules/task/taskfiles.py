@@ -9,14 +9,16 @@ drawn, text and code are shown as a block to copy, a picture is shown, anything 
 from __future__ import annotations
 
 import posixpath
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from core import tasks
 
 from . import common, mdtree
 
 FOLDERS = ("REQ", "REF", "INBOX", "DEV", "RUNS")  # the order of the list: what the person gave, what the agent made, what came back
+ROUND_DEV = re.compile(r"DEV_R\d+$", re.IGNORECASE)  # DEV_r<n>: the result of an earlier round, read only (M44)
 MAX_LISTED = 400
 MAX_VIEW_BYTES = 400_000
 MAX_EMBED_BYTES = 150_000  # a saved copy takes a text file in up to this size each, and 2 MB in all
@@ -45,8 +47,8 @@ def folder_of(root: Path, task: str) -> Path:
     return tasks.task_dir(root, task)
 
 
-def listing(root: Path, task: str) -> List[Dict[str, Any]]:
-    """Every file under `REQ/`, `REF/`, `DEV/` and `RUNS/` as `{path, size, kind}` (path from the task folder, `/` as the separator), folders in that order and
+def listing(root: Path, task: str, folders: Tuple[str, ...] = FOLDERS) -> List[Dict[str, Any]]:
+    """Every file under `REQ/`, `REF/`, `DEV/` and `RUNS/` (`folders`: or the DEV_r<n> of an earlier round) as `{path, size, kind}` (path from the task folder, `/` as the separator), folders in that order and
     names in order inside them. A link and a hidden or tool-made name are left out. At most MAX_LISTED."""
     base = folder_of(root, task)
     out: List[Dict[str, Any]] = []
@@ -54,8 +56,8 @@ def listing(root: Path, task: str) -> List[Dict[str, Any]]:
         entries = {entry.name.upper(): entry for entry in base.iterdir() if entry.is_dir() and not entry.is_symlink()}
     except OSError:
         return out
-    for name in FOLDERS:
-        top = entries.get(name)
+    for name in folders:
+        top = entries.get(name.upper())
         if top is None:
             continue
         for path in sorted(top.rglob("*"), key=lambda item: [part.lower() for part in item.relative_to(base).parts]):
@@ -79,7 +81,7 @@ def locate(root: Path, task: str, relative: str) -> Optional[Path]:
     if not relative or "\x00" in relative or relative.startswith(("/", "\\")) or ":" in relative.split("/")[0]:
         return None
     parts = relative.replace("\\", "/").split("/")
-    if any(part in ("", ".", "..") or part.startswith(".") or part in common.SKIP_NAMES for part in parts) or parts[0].upper() not in FOLDERS:
+    if any(part in ("", ".", "..") or part.startswith(".") or part in common.SKIP_NAMES for part in parts) or (parts[0].upper() not in FOLDERS and not ROUND_DEV.match(parts[0])):
         return None
     base = folder_of(root, task)
     walk = base

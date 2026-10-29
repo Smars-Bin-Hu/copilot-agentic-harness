@@ -48,7 +48,7 @@ def why_left(path: Path) -> str:
         if name.startswith("DEV_r"):
             return "rounds"
         return "" if name in COPIED_DIRS else "other"
-    if name.startswith("PLAN_r") and name.endswith(".md"):
+    if (name.startswith("PLAN_r") and name.endswith(".md")) or (name.startswith("CHANGES_r") and name.endswith(".diff")):
         return "rounds"
     if name.endswith(".md") or name in COPIED_FILES:
         return ""

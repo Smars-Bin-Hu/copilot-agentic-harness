@@ -130,7 +130,7 @@ ol.timeline li{display:grid;grid-template-columns:8.5em minmax(0,1fr);align-item
 .inbox-pictures{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}.thumbs{display:flex;gap:8px;flex-wrap:wrap}
 .thumb{position:relative;display:inline-block}.thumb img{display:block;height:64px;border:1px solid var(--line);border-radius:6px}.thumb .act{position:absolute;top:-6px;right:-6px;margin:0;padding:0 6px;line-height:16px}
 .inbox-save{margin-top:10px}.inbox-done{margin:8px 0;padding:8px 10px;border:1px solid var(--good);border-radius:8px}
-.subtabs.small{margin:8px 0 14px}.subtabs.small .subtab{font-size:12.5px;padding:4px 12px}
+.subtabs.small{margin:8px 0 14px}.subtabs.small .subtab{font-size:12.5px;padding:4px 12px}.title-row .subtabs.round-switch{margin:0;border-bottom:none}
 .intake-drop{border:2px dashed var(--line);border-radius:10px;padding:16px;text-align:center;margin:8px 0}.intake-drop.over{border-color:var(--model);background:var(--track)}
 .intake-drop p{margin:0 0 8px}.intake-drop label{display:block;margin-top:8px}
 .domain-panel{max-width:460px;margin:12px 0;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--card)}

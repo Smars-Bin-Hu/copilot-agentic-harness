@@ -453,6 +453,51 @@ class RoundAndReportTests(TaskCase):
         self.dev("repo_b/src/a.sql", "select 1, 2, 3;\n")
         self.assertEqual(self.run_cli("task", "promote", "--dry-run")["branch"], "feature/job1_r2")
 
+    def test_a_round_keeps_its_diff_and_the_task_page_shows_the_round_read_only(self) -> None:
+        from modules.task import taskdesk, taskfiles, tasksnap
+
+        self.promoted()
+        self.run_cli("task", "close")
+        run_git(self.repo_b, "commit", "-qam", "the person commits")
+        run_git(self.repo_b, "switch", "-q", "main")
+        self.open()
+        entry = self.data()["rounds"][0]
+        self.assertEqual(entry["diff_file"], f"{TASK}/CHANGES_r1.diff")
+        kept = (self.task / "CHANGES_r1.diff").read_text(encoding="utf-8")
+        self.assertIn("+select 1, 2;", kept)
+        self.assertFalse(any(key.startswith("CHANGES_r1") for key, _path in tasksnap.result_files(self.root, TASK)))  # not a result of the new round
+        page = taskdesk.desk(self.root, NAME)
+        self.assertEqual(page["round"], 2)
+        past = page["rounds"][0]
+        self.assertEqual(past["round"], 1)
+        self.assertTrue(past["changes"]["kept"])
+        self.assertEqual([(item["path"], item["action"], item["added"]) for item in past["changes"]["files"]], [("repo_b/src/a.sql", "modify", 1)])
+        self.assertIn("+select 1, 2;", past["changes"]["diff"]["lines"])
+        self.assertEqual([item["name"] for item in past["docs"] if item["name"] == "PLAN.md"], ["PLAN.md"])
+        self.assertIn("DEV_r1/repo_b/src/a.sql", [item["path"] for item in past["files"]])
+        self.assertTrue(all(event["round"] == 1 for event in past["history"]) and past["history"])
+        self.assertEqual(past["branch"], "feature/job1")
+        self.assertEqual(past["promote"]["state"], "done")
+        self.assertEqual(page["files"], [])  # the current round's list does not carry the earlier one
+        self.assertIsNotNone(taskfiles.view(self.root, TASK, "DEV_r1/repo_b/src/a.sql"))  # served like DEV/
+        self.assertIsNone(taskfiles.view(self.root, TASK, "DEV_r1/../TASK.md"))
+
+    def test_a_round_archived_without_a_kept_diff_lists_only_its_files(self) -> None:
+        from modules.task import taskdesk
+
+        self.promoted()
+        self.run_cli("task", "close")
+        run_git(self.repo_b, "commit", "-qam", "the person commits")
+        run_git(self.repo_b, "switch", "-q", "main")
+        self.open()
+        path = self.root / TASK / ".task" / "task.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["rounds"][0].pop("diff_file")
+        path.write_text(json.dumps(data), encoding="utf-8")
+        changes = taskdesk.desk(self.root, NAME)["rounds"][0]["changes"]
+        self.assertEqual((changes["kept"], changes["diff"]["lines"]), (False, []))
+        self.assertEqual([item["path"] for item in changes["files"]], ["repo_b/src/a.sql"])
+
     def test_close_releases_the_session_and_writes_the_report(self) -> None:
         self.promoted()
         result = self.run_cli("task", "close", "--reason", "done")

@@ -167,6 +167,19 @@ class OpenTests(LifeCase):
         self.assertEqual(self.data()["status"], "open")
         self.assertEqual(sorted(str(path.relative_to(self.root)) for path in self.folder().rglob("*") if ".task" not in path.parts), before)
 
+    def test_reopening_a_closed_task_that_is_not_written_back_points_to_fork(self) -> None:
+        self.new(kind="rca")
+        self.cli_json("task", "close", "--task", "job")
+        text = self.open()["next"]
+        self.assertIn("task fork <", text)
+        self.assertIn("--from job", text)
+        self.assertEqual(self.data()["status"], "open")
+
+    def test_reopening_a_closed_dev_task_has_no_fork_hint(self) -> None:
+        self.new(kind="dev")
+        self.cli_json("task", "close", "--task", "job")
+        self.assertNotIn("task fork", self.open()["next"])
+
     def test_a_folder_the_person_made_can_be_opened(self) -> None:
         (self.root / BASE / "hand" / "REQ").mkdir(parents=True)
         result = self.open("hand")

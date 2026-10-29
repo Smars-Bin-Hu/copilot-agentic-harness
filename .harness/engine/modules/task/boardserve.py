@@ -175,6 +175,8 @@ class Board:
                 node = {"t": "img", "src": item["path"]}
                 taskdesk.embed_images(self.root, name, node)
                 item["data"] = node.get("data", "")
+        for past in found["rounds"]:
+            taskfiles.embed(self.root, found["task"], past["files"])
         taskdesk.embed_images(self.root, name, [found["docs"], found["test"], [item.get("doc") for item in found["files"]]])
         stem = re.sub(r"[^\w.-]+", "-", found["name"]).strip("-.") or "task"
         return f"{stem}-{time.strftime('%Y-%m-%d')}.html", taskhtml.desk_page(found)

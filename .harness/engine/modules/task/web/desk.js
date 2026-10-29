@@ -7,21 +7,54 @@
 
 (function () {
   const app = document.getElementById("app");
-  let desk = DATA.desk;
-  let shown = JSON.stringify(desk);
+  let full = DATA.desk;  // the task as the server gave it; `desk` is what the page draws: this, or an earlier round of it (pastView)
+  let desk = full;
+  let shown = JSON.stringify(full);
   const same = (a, b) => a.replace(/"as_of":"[^"]*"/, "") === b.replace(/"as_of":"[^"]*"/, "");  // the time of asking is not a change
   const tabs = ["overview", "req", "intake", "design", "rca", "test", "plan", "todo", "log", "changes", "review", "history", "docs", "files"];  // the commit message is at the top of "changes" once written back (1.5.34)
   const FILES = {overview: "TASK.md", req: "REQ.md", plan: "PLAN.md", todo: "TODO.md", log: "LOG.md", design: "DESIGN.md", rca: "RCA.md"};
   const WRITES_BACK = ["dev", "kb"];  // the kinds that have a plan, a diff and a commit
-  const asked = location.hash.slice(1) === "commit" ? "changes" : location.hash.slice(1);  // a link to the old Commit tab
+  const PAST_TABS = ["req", "plan", "changes", "review", "history", "files"];  // an earlier round keeps these; the others (overview, TODO, log, intake) are the task's, not one round's
+  const route = /^r(\d+)(?:\/(.*))?$/.exec(location.hash.slice(1));  // #r1/plan: a link to an earlier round
+  const wanted = route ? route[2] || "" : location.hash.slice(1);
+  const asked = wanted === "commit" ? "changes" : wanted;  // a link to the old Commit tab
   let other = "";  // the document open in the "docs" tab
 
   const served = () => typeof SERVE !== "undefined" && Boolean(DATA.serve);
   const saved = Boolean(DATA.snapshot);  // a saved copy: no buttons, no way back to a board, no calls to a server
 
   const doc = (name) => desk.docs.find((item) => item.name === name);
+
+  // An earlier round (a written back task that was opened again) as a page of its own: the same tabs, filled from what the server kept of that round. Nothing in it can be changed.
+  function pastView(task, number) {
+    const found = (task.rounds || []).find((item) => item.round === number);
+    if (!found) return task;
+    const stages = task.stages ? Object.assign({}, task.stages, {round: number, review: null, steps: task.stages.steps.map((step) => Object.assign({}, step, {state: "done", flag: ""}))}) : null;  // written back: every step is done
+    return Object.assign({}, task, {
+      past: found, round: number, status: "closed", state: "", waiting: "", waiting_why: "", waited_s: null, paused_since: "", handoff: null, held: false, autorun: false, active: false,
+      branch: found.branch, docs: found.docs, files: found.files, changes: found.changes, review: found.review, history: found.history, stages,
+      commit: null, test: null, intake: null, actions: [], todo: {done: 0, total: 0}, todo_left: 0, req_placeholders: 0, req_unconfirmed: false, req_changed: false, report: "",
+    });
+  }
+  const hashOf = (tab) => "#" + (desk.past ? "r" + desk.past.round + "/" : "") + tab;
+  const firstTab = () => tabs.find((tab) => ownTab(tab) && tab !== "docs") || "overview";
+  // The server sent the task again: draw the round that is open from the new data.
+  function setDesk(next) {
+    full = next;
+    shown = JSON.stringify(next);
+    desk = desk.past ? pastView(full, desk.past.round) : full;
+    if (!ownTab(current)) current = firstTab();
+  }
+  function showRound(number, tab) {
+    desk = number === full.round ? full : pastView(full, number);
+    current = tab && ownTab(tab) ? tab : firstTab();
+    history.replaceState(null, "", hashOf(current));
+    draw(false);
+  }
   // A tab is there when the kind of the task has it, or when its file is there (M40-1): a test task has no plan and no diff; a question has no log.
   const ownTab = (tab) => {
+    if (desk.past && !PAST_TABS.includes(tab)) return false;
+    if (desk.past && tab === "plan") return Boolean(doc(FILES.plan));
     if (tab === "design" || tab === "rca") return Boolean(doc(FILES[tab])) || (desk.kind === tab && desk.status === "open");  // a closed task that never wrote it has nothing to show
     if (tab === "plan") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && Boolean(doc(FILES.plan)));
     if (tab === "changes") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && desk.changes.files.length > 0);
@@ -33,7 +66,9 @@
     return true;
   };
   const extra = () => desk.docs.filter((item) => !Object.keys(FILES).some((tab) => FILES[tab] === item.name && ownTab(tab)) && item.name !== "REQ.md" && !(desk.test && item.name === "TEST-GUIDE.md") && !(desk.commit && item.name === "COMMIT-MESSAGE.md"));  // these have a tab of their own
-  let current = tabs.includes(asked) && ownTab(asked) ? asked : "overview";
+  let current = "overview";
+  if (route && (full.rounds || []).some((item) => item.round === Number(route[1]))) desk = pastView(full, Number(route[1]));
+  current = tabs.includes(asked) && ownTab(asked) ? asked : firstTab();
 
   // --- markdown -------------------------------------------------------------------------------------------
 
@@ -119,6 +154,25 @@
   const REQ_NEXT = (kind) => (kind === "dev" || kind === "kb" ? "" : kind === "test" ? ".test" : ".work");
   const taskLink = (name) => (saved ? h("b", null, name) : h("a", {href: "/task/" + encodeURIComponent(name)}, name));  // a saved page links to no board
 
+  // "Round 1 · Round 2 (current)": only a task that was written back and opened again has more than one.
+  function roundSwitch() {
+    if (!(full.rounds || []).length) return null;
+    const numbers = [...full.rounds.map((item) => item.round), full.round];
+    const shownRound = desk.past ? desk.past.round : full.round;
+    return h("nav", {class: "subtabs small round-switch"}, numbers.map((number) => {
+      const button = h("button", {type: "button", class: "subtab" + (number === shownRound ? " on" : "")}, t(number === full.round ? "desk.round.pick.current" : "desk.round.pick", {round: number}));
+      button.addEventListener("click", () => { if (number !== shownRound) showRound(number, current); });
+      return button;
+    }));
+  }
+
+  // On an earlier round: no button and no "what waits for you"; one line says what this is.
+  function pastNote() {
+    const back = h("button", {type: "button", class: "act"}, t("desk.round.back"));
+    back.addEventListener("click", () => showRound(full.round, current));
+    return h("section", {class: "card actions quiet"}, h("p", {class: "sub"}, t("desk.round.past", {round: desk.past.round})), back);
+  }
+
   function header() {
     const kind = t("task.kind." + (desk.kind || "none")) + " · " + t("task.tier." + (desk.tier || "none"));
     const state = stateTag(desk, served());
@@ -127,7 +181,7 @@
       saved ? null : h("div", {class: "crumbs sub"}, h("a", {href: "/"}, "← " + t("desk.back")),
         desk.report ? [" · ", h("a", {href: desk.report.split("/").map(encodeURIComponent).join("/")}, t("desk.report"))] : null,
         served() ? [" · ", h("a", {href: "/snapshot/" + encodeURIComponent(desk.name), download: "", title: t("desk.save.hint")}, t("desk.save"))] : null),
-      h("div", {class: "title-row"}, h("h1", null, desk.name), state),
+      h("div", {class: "title-row"}, h("h1", null, desk.name), roundSwitch(), state),
       h("div", {class: "sub"}, t("desk.subtitle", {kind, round: desk.round, created: when(desk.created_at, 0, 16), updated: when(desk.updated_at, 0, 16)}),
         desk.domains.length ? " · " + t("desk.domains", {names: desk.domains.join(", ")}) : "", desk.autorun ? [" · ", tag(t("desk.autorun"), "good")] : null),
       desk.forked_from || desk.forked_to.length ? h("div", {class: "sub"},  // the tasks this one came from and went on to (`task fork`)
@@ -299,7 +353,7 @@
     };
     return h("nav", {class: "tabs"}, tabs.filter((tab) => tab === "docs" ? extra().length > 0 : ownTab(tab)).map((tab) => {
       const button = h("button", {type: "button", class: "tab" + (tab === current ? " on" : "")}, label(tab));
-      button.addEventListener("click", () => { current = tab; history.replaceState(null, "", "#" + tab); draw(false); });
+      button.addEventListener("click", () => { current = tab; history.replaceState(null, "", hashOf(tab)); draw(false); });
       return button;
     }));
   }
@@ -480,6 +534,7 @@
   let fileOpen = "";
   const fileCache = {};
   const ROOT_HINT = {REQ: "desk.files.root.req", REF: "desk.files.root.ref", INBOX: "desk.files.root.inbox", DEV: "desk.files.root.dev", RUNS: "desk.files.root.runs"};
+  const rootHint = (root) => ROOT_HINT[root.toUpperCase()] || (/^DEV_R\d+$/i.test(root) ? ROOT_HINT.DEV : "desk.files.hint");  // DEV_r<n>: the files an earlier round wrote back
   const size = (bytes) => bytes < 1024 ? bytes + " B" : bytes < 1048576 ? Math.round(bytes / 1024) + " KB" : (bytes / 1048576).toFixed(1) + " MB";
 
   function fileView(item) {
@@ -534,7 +589,7 @@
       }
     };
     for (const [root, node] of roots) {
-      list.push(h("div", {class: "files-root"}, h("strong", null, root + "/"), h("span", {class: "sub"}, " " + t(ROOT_HINT[root.toUpperCase()]))));
+      list.push(h("div", {class: "files-root"}, h("strong", null, root + "/"), h("span", {class: "sub"}, " " + t(rootHint(root)))));
       walk(node, 1);
     }
     return [h("p", {class: "hint top"}, t("desk.files.hint")),
@@ -554,7 +609,7 @@
   }
 
   function intakeRefresh() {
-    return SERVE.post("/api/desk", {task: desk.name}).then((data) => { desk = data.desk; shown = JSON.stringify(desk); }, () => {});
+    return SERVE.post("/api/desk", {task: desk.name}).then((data) => setDesk(data.desk), () => {});
   }
 
   function fileBase64(file) {
@@ -852,7 +907,12 @@
   function changes() {
     const c = desk.changes;
     const parts = desk.commit ? [h("h3", null, t("desk.changes.commit")), ...commit()] : [];  // written back: the commit is what comes next
-    if (c.files.length || c.deletes.length) {
+    if (desk.past && desk.past.branch) parts.push(h("p", {class: "hint top"}, t("desk.round.written", {branch: desk.past.branch, state: desk.past.promote.state, at: when(desk.past.promote.at, 0, 16)})));
+    if (desk.past && !c.kept) parts.push(h("p", {class: "hint"}, t("desk.round.nodiff")));
+    if (desk.past && !c.kept && c.files.length) {  // no counts to show: only the names are known
+      parts.push(h("h3", null, t("desk.changes.files")), table([th(t("desk.changes.file"))], c.files.map((item) => h("tr", null, h("td", null, h("code", null, item.path))))));
+    }
+    if (c.files.length && !(desk.past && !c.kept) || c.deletes.length) {
       parts.push(h("h3", null, t("desk.changes.files")), table([th(t("desk.changes.file")), th(t("desk.changes.what")), th("+", true), th("−", true)],
         c.files.map((item) => h("tr", null, h("td", null, h("code", null, item.path)), h("td", null, tag(t("desk.changes." + item.action))),
           num(item.added), num(item.removed))).concat(c.deletes.filter((path) => !c.files.some((item) => item.path === path)).map((path) => h("tr", null, h("td", null, h("code", null, path)), h("td", null, tag(t("desk.changes.delete"), "bad")), num("-"), num("-"))))));
@@ -903,7 +963,7 @@
   function openDoc(name) {
     const tab = Object.keys(FILES).find((key) => FILES[key] === name);
     if (tab) { current = tab; } else { current = "docs"; other = name; }
-    history.replaceState(null, "", "#" + current);
+    history.replaceState(null, "", hashOf(current));
     draw(false);
   }
 
@@ -936,7 +996,7 @@
   function draw(keepScroll) {
     const y = window.scrollY;
     const kept = new Map([...app.querySelectorAll("[data-keep]")].map((node) => [node.dataset.keep, [node.scrollTop, node.scrollLeft]]));
-    app.replaceChildren(...[...header(), ribbon(), saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
+    app.replaceChildren(...[...header(), ribbon(), desk.past ? pastNote() : saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
       h("footer", null, t(saved ? "desk.snapshot.footer" : "desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright())].filter(Boolean));  // a null would be drawn as the word "null"
     if (keepScroll) {
       for (const node of app.querySelectorAll("[data-keep]")) if (kept.has(node.dataset.keep)) [node.scrollTop, node.scrollLeft] = kept.get(node.dataset.keep);
@@ -954,7 +1014,7 @@
       SERVE.post("/api/desk", {task: desk.name}).then((data) => {
         const text = JSON.stringify(data.desk);
         if (same(text, shown)) return;
-        desk = data.desk;
+        setDesk(data.desk);
         shown = text;
         draw(true);
       }, () => {});

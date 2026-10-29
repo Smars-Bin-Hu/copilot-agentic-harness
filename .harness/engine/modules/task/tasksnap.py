@@ -47,7 +47,7 @@ def is_result(relative: str) -> bool:
     top = parts[0].lower()
     if any(part in common.SKIP_NAMES for part in parts) or (top == tasks.DEV_NAME.lower() and common.is_promote_backup(parts[1:])):
         return False
-    if top in SKIP_TOP or top.startswith("dev_r") or (len(parts) == 1 and (top in SKIP_FILES or top.startswith("plan_r"))):
+    if top in SKIP_TOP or top.startswith("dev_r") or (len(parts) == 1 and (top in SKIP_FILES or top.startswith(("plan_r", "changes_r")))):
         return False
     return True
 

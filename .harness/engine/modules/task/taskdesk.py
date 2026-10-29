@@ -187,6 +187,71 @@ def changed(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def round_diff(root: Path, entry: Dict[str, Any]) -> Dict[str, Any]:
+    """The changes of an earlier round from the diff kept when it was archived (`CHANGES_r<n>.diff`): file by file, and the diff.
+    `kept` is false for a round archived before diffs were kept: then only the file names are known (`files`, `deletes` of the round)."""
+    path = root / entry["diff_file"] if entry.get("diff_file") else None
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()[1:] if path is not None and path.is_file() else []  # the first line is the header of the file
+    deletes = [str(key) for key in entry.get("deletes") or []]
+    if not lines:
+        shown = [{"path": str(key), "action": "modify", "added": 0, "removed": 0} for key in entry.get("files") or [] if key not in deletes]
+        return {"kept": False, "files": shown, "unchanged": 0, "deletes": deletes, "diff": {"lines": [], "cut": False}, "promote_plan": {"lines": [], "cut": False}}
+    items: List[Dict[str, Any]] = []
+    chunk: List[str] = []
+
+    def close() -> None:
+        if not chunk:
+            return
+        key = chunk[0][len("diff --git a/"):].rsplit(" b/", 1)[0]
+        action = "create" if len(chunk) > 1 and chunk[1] == "--- /dev/null" else "delete" if len(chunk) > 1 and chunk[1] == "deleted file" else "modify"
+        added, removed = common.changed_lines(chunk[1:]) if action == "modify" else (len(chunk) - 3, 0) if action == "create" else (0, max(len(chunk) - 4, 0))
+        items.append({"path": key, "action": action, "added": max(added, 0), "removed": removed})
+
+    for line in lines:
+        if line.startswith("diff --git a/"):
+            close()
+            chunk = [line]
+        elif chunk:
+            chunk.append(line)
+    close()
+    return {"kept": True, "files": items, "unchanged": 0, "deletes": deletes, "diff": {"lines": lines[:MAX_DIFF_LINES], "cut": len(lines) > MAX_DIFF_LINES},
+            "promote_plan": {"lines": [], "cut": False}}
+
+
+def plan_snapshot_req(root: Path, task: str, entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """REQ.md as it was when the plan of the round was approved: from the first `plan` snapshot taken at or after the approval. None when none is kept (snapshots are pruned)."""
+    approved = str((entry.get("plan") or {}).get("approved_at") or "")
+    if not approved:
+        return None
+    found = sorted((item for item in tasksnap.snapshots(root, task) if item["gate"] == "plan" and item["at"] >= approved), key=lambda item: item["at"])
+    for item in found[:1]:
+        return read_doc(tasks.task_dir(root, task) / tasksnap.SNAPSHOT_DIR / item["snapshot"].rsplit("/", 1)[-1] / "files" / tasks.REQ_FILE)
+    return None
+
+
+def past_rounds(root: Path, task: str, data: Dict[str, Any], review: Dict[str, Any], events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """One read-only bundle for each earlier round (a written back task that was opened again): what the page shows when that round is picked.
+    The files of its DEV_r<n>/ are only listed; the page asks for one when it is opened, as for DEV/."""
+    out = []
+    for entry in data.get("rounds") or []:
+        if not isinstance(entry, dict) or not isinstance(entry.get("round"), int):
+            continue
+        number = entry["round"]
+        plan_path = root / entry["plan_file"] if entry.get("plan_file") else None
+        docs = [(tasks.REQ_FILE, plan_snapshot_req(root, task, entry)), (tasks.PLAN_NAME, read_doc(plan_path) if plan_path is not None else None)]
+        promote = entry.get("promote") if isinstance(entry.get("promote"), dict) else {}
+        out.append({
+            "round": number, "started_at": entry.get("started_at", ""), "branch": str(promote.get("branch") or entry.get("branch") or ""),
+            "promote": {"state": str(promote.get("state") or ""), "at": str(promote.get("approved_at") or promote.get("at") or "")},
+            "docs": [dict(found, name=name) for name, found in docs if found],
+            "files": taskfiles.listing(root, task, (f"{tasks.DEV_NAME}_r{number}",)),
+            "changes": round_diff(root, entry),
+            "review": dict(review, n=0, passes=0, used=0, limit=0, pending=None, waived=False, rounds=[item for item in review["rounds"] if item.get("task_round") == number]),
+            "history": [event for event in events if event["round"] == number],
+        })
+    return out
+
+
 def intake_view(root: Path, task: str, data: Dict[str, Any], row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The Intake tab of an open task that has a requirement: the files of `REQ/`, and whether `INTAKE.md` is there. None for any other."""
     from . import intake
@@ -221,6 +286,7 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
     steps = autorun.steps_of(root, task)  # the same steps the engine counts: the template's `<step 1>` is not one (B63)
     done, total = sum(1 for step in steps if step["done"]), len(steps)
     report = common.task_report_file(root, name, common.REPORT_HTML)
+    review, events = reviews(root, task, data), history(data)
     return {
         "name": name, "task": task, "as_of": utc_now(),
         "kind": data.get("kind", ""), "tier": data.get("tier", ""), "status": row.get("status", ""), "round": data.get("round", 1), "branch": str((data.get("promote") or {}).get("branch") or data.get("branch") or ""),
@@ -231,8 +297,8 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "forked_from": task_ops.name_of(str(data.get("forked_from"))) if data.get("forked_from") else "",
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": taskfiles.listing(root, task), "intake": intake_view(root, task, data, row), "history": history(data), "changes": changed(root, task, data),
-        "review": reviews(root, task, data), "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if needs_req(data) and row.get("status") == "open" else 0, "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
+        "docs": docs, "files": taskfiles.listing(root, task), "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
+        "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if needs_req(data) and row.get("status") == "open" else 0, "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),
         "req_changed": needs_req(data) and row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),

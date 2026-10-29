@@ -27,7 +27,7 @@ from core.logs import session_log_path
 from core.paths import cli_command, repo_root, utc_now
 from core.state import SUBAGENT_ACTIVE_TTL_SECONDS, admin_on, atomic_write, session, state_lock, state_path
 
-from . import commitmsg, reviewcheck, task as task_ops
+from . import commitmsg, reviewcheck, task as task_ops, taskstages
 from .common import CommandError
 
 NAME_LIMIT = 80
@@ -183,6 +183,9 @@ def open_task(root: Path, raw_name: str, session_id: str, surface: str = "vscode
     before = tasks.read(root, task)
     result = attach(root, task, session_id, surface)
     result["reopened"] = bool(before and before.get("status") == "closed")
+    kind = (before or {}).get("kind")
+    if result["reopened"] and kind and kind not in taskstages.WRITES_BACK:  # no write-back, so no new round: a changed requirement is a new task (fork)
+        result["next"] += say("task.next.reopened", name=task_ops.name_of(task))
     return result
 
 

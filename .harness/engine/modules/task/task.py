@@ -208,11 +208,25 @@ def attach(root: Path, raw_task: str, session_id: str, surface: str = "vscode", 
     return result
 
 
+def keep_diff(root: Path, task: str, data: Dict[str, Any], number: int) -> str:
+    """Save what the round changed as `CHANGES_r<n>.diff` (the same diff as `task diff`); the path, or "" when there is none to keep."""
+    path = tasks.task_dir(root, task) / f"{Path(tasks.CHANGES_NAME).stem}_r{number}{Path(tasks.CHANGES_NAME).suffix}"
+    try:
+        items, text = changes(root, task, data)
+        if not any(item["action"] != "unchanged" for item in items):
+            return ""
+        common.write_text(path, text)
+        return rel(root, path)
+    except Exception:  # noqa: BLE001 - a diff that cannot be made must not stop the new round
+        return ""
+
+
 def archive_round(root: Path, task: str, data: Dict[str, Any]) -> None:
     """A promoted task that is started again begins a new round: the old result moves aside, the plan needs a new approval."""
     number = data["round"]
     dev = tasks.dev_dir(root, task)
     kept = dev.parent / f"{tasks.DEV_NAME}_r{number}"
+    diff_file = keep_diff(root, task, data, number)  # before the base goes: the round's diff cannot be made again after that
     if dev.is_dir() and any(dev.iterdir()) and not kept.exists():
         dev.rename(kept)
     shutil.rmtree(str(tasks.base_dir(root, task)), ignore_errors=True)
@@ -222,7 +236,7 @@ def archive_round(root: Path, task: str, data: Dict[str, Any]) -> None:
         plan.rename(old_plan)  # the new round starts without a plan, so the old one cannot be approved again by mistake
     data["rounds"].append({
         "round": number, "started_at": data.get("round_started_at", ""), "plan": data.get("plan", {}), "promote": data["promote"],
-        "branch": data["branch"], "dev": rel(root, kept), "plan_file": rel(root, old_plan) if old_plan.exists() else "", "files": sorted(data["target_files"]), "deletes": list(data["deletes"]),
+        "branch": data["branch"], "dev": rel(root, kept), "diff_file": diff_file, "plan_file": rel(root, old_plan) if old_plan.exists() else "", "files": sorted(data["target_files"]), "deletes": list(data["deletes"]),
     })
     data.update(round=number + 1, round_started_at=utc_now(), targets={}, target_files={}, deletes=[], plan={}, promote={"state": "none"}, branch="")
 

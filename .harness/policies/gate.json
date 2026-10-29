@@ -20,6 +20,7 @@
     ".workspace/sandbox/tasks/*/.task/**",
     ".workspace/sandbox/tasks/*/PROMOTE-PLAN.diff",
     ".workspace/sandbox/tasks/*/CHANGES.diff",
+    ".workspace/sandbox/tasks/*/CHANGES_r*.diff",
     ".workspace/sandbox/tasks/*/REVIEW/**",
     ".workspace/sandbox/tasks/*/SNAPSHOT/**",
     ".workspace/reports/**"

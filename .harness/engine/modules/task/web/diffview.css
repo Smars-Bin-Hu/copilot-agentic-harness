@@ -10,7 +10,7 @@
 .dv-n{flex:none;font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.dv-n.add{color:var(--good)}.dv-n.del{color:var(--bad)}
 .dv-path{flex:1 1 280px;min-width:0;overflow-wrap:anywhere;font-size:12.5px}
 .dv-modes{margin-left:auto;display:inline-flex}
-.dv-mode{border-radius:0;margin-left:-1px}.dv-mode:first-child{border-radius:8px 0 0 8px;margin-left:0}.dv-mode:last-child{border-radius:0 8px 8px 0}
+.dv-mode{border-radius:0;margin-left:-1px;font:inherit;font-size:12px;padding:2px 10px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}.dv-mode:first-child{border-radius:8px 0 0 8px;margin-left:0}.dv-mode:last-child{border-radius:0 8px 8px 0}
 .dv-mode.on{background:var(--model);border-color:var(--model);color:#fff;position:relative}
 .dv{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
 .dv.unified{grid-template-columns:1fr}

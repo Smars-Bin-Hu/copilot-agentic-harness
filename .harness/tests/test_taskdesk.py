@@ -298,6 +298,15 @@ class MarkdownTests(unittest.TestCase):
 class PictureServingTests(ServeCase):
     PNG = b"\x89PNG\r\n\x1a\nbytes"
 
+    def test_evidence_pictures_of_an_environment_are_listed(self) -> None:
+        shots = self.task / "TEST" / "evidence" / "DEV"
+        shots.mkdir(parents=True)
+        (shots / "run1-2.png").write_bytes(self.PNG)
+        (shots / "run1-1.png").write_bytes(self.PNG)
+        (shots / "note.txt").write_text("no", encoding="utf-8")
+        self.assertEqual(taskdesk.evidence_pictures(self.task, "dev"), ["TEST/evidence/DEV/run1-1.png", "TEST/evidence/DEV/run1-2.png"])
+        self.assertEqual(taskdesk.evidence_pictures(self.task, "UAT"), [])
+
     def test_a_picture_of_the_task_is_served_and_nothing_else(self) -> None:
         shots = self.task / "TEST" / "evidence" / "DEV"
         shots.mkdir(parents=True)

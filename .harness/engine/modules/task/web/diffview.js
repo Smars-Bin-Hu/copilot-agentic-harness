@@ -9,6 +9,7 @@ const DiffView = (function () {
   const FOLD_KEEP = 3;  // unchanged lines kept next to a change when a long unchanged run is folded
   const FOLD_MIN = 4;   // fold a run only when it hides at least this many lines
   const MODES = ["split", "unified", "raw"];
+  const MODE_LABEL = () => ({split: t("desk.diff.split"), unified: t("desk.diff.unified"), raw: t("desk.diff.raw")});  // written out, so each message key is found by a search
   const memory = {};
 
   function store(name, fallback, value) {
@@ -249,7 +250,7 @@ const DiffView = (function () {
       const item = chosen(), file = diffs.get(item.path);
       picks.forEach((button, index) => button.classList.toggle("on", files[index] === item));
       const modes = h("span", {class: "dv-modes"}, MODES.map((name) => {
-        const button = h("button", {type: "button", class: "dv-mode" + (name === mode() ? " on" : "")}, t("desk.diff." + name));
+        const button = h("button", {type: "button", class: "dv-mode" + (name === mode() ? " on" : "")}, MODE_LABEL()[name]);
         button.addEventListener("click", () => { store("mode", "", name); draw(); });
         return button;
       }));

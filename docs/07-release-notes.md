@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.56 (2026-10-29)
+
+### Fixed
+
+- The Changes tab listed a deleted file twice. It is now listed once.
+- Intake tab: a file you open (or the new `INTAKE.md`) opens its editor and the page scrolls to it, instead of leaving it far below a long list.
+- A test task's Test tab shows the evidence pictures of an environment as small pictures that open the full image. A saved copy keeps the text only.
+- Dark mode: the diff mode buttons on the Changes tab, and the file-name box and kind list on the Intake tab, follow the page colours.
+- Chinese board: the `close` and `archive` buttons are translated.
+- The board footer said a task name opens its time and usage. It opens the task page; time and usage are on its *Time and usage* link.
+- The Intake tab count is the same set as the list "What the agent reads": it no longer counts pictures in `media/`.
+- File-name links have more space under the text, so the underline no longer hides `_` in names.
+
 ## 1.5.55 (2026-10-29)
 
 ### Added

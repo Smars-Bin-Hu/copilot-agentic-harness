@@ -327,7 +327,7 @@
   "board.state.closed": "closed",
   "board.state.new": "not started",
   "board.depends": "Depends on: {names}",
-  "board.footer": "Click a task name for its time and usage. Times are the local time of this computer.",
+  "board.footer": "Click a task name to open its task page. Its time and usage are on the \"Time and usage\" link there. Times are the local time of this computer.",
   "board.text.head": "Task board  open {open}  waiting for you {waiting}  paused {paused}  ({as_of})",
   "board.text.watch": "Refreshed every {seconds} seconds. Press Ctrl+C to quit.",
   "board.text.fresh": "The board is at {board}; it is made again every {seconds} seconds, and the page reloads by itself. Press Ctrl+C to quit.",

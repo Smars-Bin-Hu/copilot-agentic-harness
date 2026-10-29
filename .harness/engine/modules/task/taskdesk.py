@@ -100,6 +100,15 @@ def defects_of(root: Path, task: str) -> Optional[Dict[str, Any]]:
             "intro": doc(intro), "other": [{"title": item["title"], "doc": doc(item["body"])} for item in parsed["other"]], "odd": parsed["odd"]}
 
 
+def evidence_pictures(folder: Path, env: str) -> List[str]:
+    """The pictures in `TEST/evidence/<ENV>/` as paths from the task folder, by name. The page shows those the results text does not show itself."""
+    where = folder / "TEST" / "evidence" / env.upper()
+    try:
+        return sorted(f"TEST/evidence/{env.upper()}/{item.name}" for item in where.iterdir() if item.suffix.lower() in mdtree.IMAGE_TYPES and item.is_file() and not item.is_symlink())
+    except OSError:
+        return []
+
+
 def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The Test tab of a test task: its guide, and each environment with the results file and the verdict the agent judged. None for any other kind.
     An environment is done on PASS, failed on FAIL; the first that is neither is the one the task is at (`waits`: the agent handed it to the person)."""
@@ -115,6 +124,7 @@ def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, A
             state = "done" if verdict == "PASS" else "failed" if verdict == "FAIL" else "now" if not at else "todo"
             at = at or state == "now"
             out.append({"name": env, "verdict": verdict, "state": state, "file": path.name if path else "", "results": read_doc(path, "TEST") if path else None, "waits": bool(handed) and env.upper() == handed,
+                        "pictures": evidence_pictures(tasks.task_dir(root, task), env),  # the evidence files of the environment, for a row of thumbnails
                         "runs": taskstages.verdicts_in(taskstages.read(path)) if path else [],  # every verdict line of the file, in order
                         "ignored": [other.name for other in files.get(env.upper(), []) if path and other != path]})  # other files of the environment: older, not counted
         folder = tasks.task_dir(root, task)

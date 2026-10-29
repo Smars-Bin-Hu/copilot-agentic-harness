@@ -180,7 +180,7 @@
     const marks = h("div", {class: "cache-row marks"}, calls.map((call) => h("i", {class: call.state === "expired" ? "ccold" : null})));
     const hits = h("div", {class: "cache-row hits"}, calls.map((call) => h("i", {style: `height:${Math.min(100, (call.read / call.input) * 100)}%`})));
     const tip = h("div", {class: "tip", role: "tooltip", hidden: ""});
-    const words = (call) => t("report.cache.point", {n: call.n, at: when(call.at, 5, 16), state: t("report.cache.state." + call.state), read: amount(call.read), write: amount(call.write), input: amount(call.input)}) +
+    const words = (call) => t("report.cache.point", {n: call.n, at: when(call.at, 5, 16), state: ({first: t("report.cache.state.first"), warm: t("report.cache.state.warm"), expired: t("report.cache.state.expired")})[call.state] || call.state, read: amount(call.read), write: amount(call.write), input: amount(call.input)}) +
       (call.gap_s !== null && call.life_s !== null ? t("report.cache.gap", {gap: clock(call.gap_s), life: clock(call.life_s)}) : "");
     const chart = h("div", {class: "chart cache"}, bars, marks, h("div", {class: "sub hits-label"}, t("report.cache.hit")), hits, tip);
     chart.addEventListener("mousemove", (event) => {

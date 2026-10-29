@@ -294,7 +294,7 @@
       if (tab === "history") return t("desk.tab.history") + " " + desk.history.length;
       if (tab === "docs") return t("desk.tab.docs") + " " + extra().length;
       if (tab === "files") return t("desk.tab.files") + " " + desk.files.length;
-      if (tab === "intake") return t("desk.tab.intake") + (desk.intake.files.some((item) => !item.original && !item.report) ? " " + desk.intake.files.filter((item) => !item.original && !item.report).length : "");
+      if (tab === "intake") { const reads = desk.intake.files.filter((item) => !item.original && !item.report && !item.path.startsWith("media/")).length; return t("desk.tab.intake") + (reads ? " " + reads : ""); }  // the same set as "What the agent reads"
       return t("desk.tab." + tab);
     };
     return h("nav", {class: "tabs"}, tabs.filter((tab) => tab === "docs" ? extra().length > 0 : ownTab(tab)).map((tab) => {
@@ -450,9 +450,26 @@
     return [intro && parts.intro.length ? blocks(parts.intro) : null, nav, blocks(shown.blocks)];
   }
 
+  // The evidence pictures of an environment that the results text does not show itself: small, each linking to the full picture. A saved copy has no server: nothing to show.
+  function evidenceThumbs(env) {
+    if (!served() || !(env.pictures || []).length) return null;
+    const shown = new Set();
+    const walk = (node) => {
+      if (Array.isArray(node)) node.forEach(walk);
+      else if (node && typeof node === "object") { if (node.t === "img") shown.add(node.src); Object.values(node).forEach(walk); }
+    };
+    walk(env.results ? env.results.blocks : []);
+    const rest = env.pictures.filter((path) => !shown.has(path));
+    if (!rest.length) return null;
+    return h("div", {class: "evidence"}, rest.map((path) => {
+      const src = "/file/" + encodeURIComponent(desk.name) + "/" + path.split("/").map(encodeURIComponent).join("/");
+      return h("a", {href: src, target: "_blank", rel: "noopener noreferrer", title: path.split("/").pop()}, h("img", {src, alt: path.split("/").pop(), loading: "lazy", class: "md-thumb"}));
+    }));
+  }
+
   function envResults(env) {
     const verdict = env.verdict ? tag(env.verdict, env.verdict === "PASS" ? "good" : env.verdict === "FAIL" ? "bad" : "hot") : tag(env.waits ? t("desk.test.waits") : t("desk.test.noresult"), env.waits ? "hot" : "");
-    const body = env.results ? h("article", {class: "md"}, runTabs("env:" + env.name, env.results.blocks, env.runs, false) || blocks(env.results.blocks), env.results.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)
+    const body = env.results ? h("article", {class: "md"}, runTabs("env:" + env.name, env.results.blocks, env.runs, false) || blocks(env.results.blocks), env.results.cut ? h("p", {class: "sub"}, t("desk.cut")) : null, evidenceThumbs(env))
       : h("p", {class: "sub"}, env.waits ? t("desk.test.waiting", {env: env.name}) : t("desk.test.noresult"));
     return h("section", {class: "round " + (env.state === "failed" ? "fail" : env.state === "done" ? "pass" : "")},
       h("div", {class: "round-head"}, h("strong", null, env.name), " ", verdict, env.file ? [" ", h("span", {class: "sub"}, "TEST/" + env.file)] : null,
@@ -562,17 +579,27 @@
     }), Promise.resolve()).then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
   }
 
+  // the editor sits below the whole list: bring it into view
+  function intakeShow() {
+    const editor = document.querySelector("section.editing");
+    if (editor && editor.scrollIntoView) editor.scrollIntoView({block: "start", behavior: "smooth"});
+    // the redraws that follow (the refreshed list, the end of "busy") put the old scroll back: draw() brings the editor into view again until this ends
+    intake.reveal = true;
+    clearTimeout(intakeShow.timer);
+    intakeShow.timer = setTimeout(() => { intake.reveal = false; }, 1500);
+  }
+
   function intakeOpen(path, item) {
     intake.error = "";
     if (item && !item.editable) {  // an original, a picture, a file that is not text: a card to look at it (a picture is shown) and to delete it
       intake.editing = {path, readonly: true, size: item.size, picture: /\.(png|jpe?g|gif|webp)$/i.test(path)};
-      draw(true);
+      draw(true); intakeShow();
       return;
     }
     intakeCall("read", {path}).then((found) => {
       const edit = {path, text: found.text, saved: found.text, pristine: found.pristine, size: found.size, view: "text"};
       if (/\.csv$/i.test(path)) csvLoad(edit, true);
-      intake.editing = edit; draw(true);
+      intake.editing = edit; draw(true); intakeShow();
     },
       (error) => { intake.error = error.message; draw(true); });
   }
@@ -828,7 +855,7 @@
     if (c.files.length || c.deletes.length) {
       parts.push(h("h3", null, t("desk.changes.files")), table([th(t("desk.changes.file")), th(t("desk.changes.what")), th("+", true), th("−", true)],
         c.files.map((item) => h("tr", null, h("td", null, h("code", null, item.path)), h("td", null, tag(t("desk.changes." + item.action))),
-          num(item.added), num(item.removed))).concat(c.deletes.map((path) => h("tr", null, h("td", null, h("code", null, path)), h("td", null, tag(t("desk.changes.delete"), "bad")), num("-"), num("-"))))));
+          num(item.added), num(item.removed))).concat(c.deletes.filter((path) => !c.files.some((item) => item.path === path)).map((path) => h("tr", null, h("td", null, h("code", null, path)), h("td", null, tag(t("desk.changes.delete"), "bad")), num("-"), num("-"))))));
     } else {
       parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.changes.none")), h("p", null, t("desk.changes.none.hint"))));
     }
@@ -914,6 +941,7 @@
     if (keepScroll) {
       for (const node of app.querySelectorAll("[data-keep]")) if (kept.has(node.dataset.keep)) [node.scrollTop, node.scrollLeft] = kept.get(node.dataset.keep);
       window.scrollTo(0, y);
+      if (intake && intake.reveal) { const editor = document.querySelector("section.editing"); if (editor) editor.scrollIntoView({block: "start"}); }
     }
   }
 

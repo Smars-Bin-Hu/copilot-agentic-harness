@@ -56,9 +56,10 @@ def tag(namespace: str, name: str) -> str:
 
 
 def safe_name(text: str, limit: int = 60) -> str:
-    """A name for a file: letters of any language, digits, `._-()`; the rest becomes `-`."""
-    cleaned = re.sub(r"[\\/:*?\"<>|\x00-\x1f]+", "-", str(text)).strip(" .-")
-    cleaned = re.sub(r"\s+", "-", cleaned)
+    """A name for a file: letters of any language, digits, `._-`. Spaces and what is awkward in a path or a shell
+    (slashes, quotes, brackets, `#%&$!;,=+@^~`) become one `-`."""
+    cleaned = re.sub(r"[\\/:*?\"<>|\x00-\x1f()\[\]{}#%&$!'`;,=+@^~\s]+", "-", str(text))
+    cleaned = re.sub(r"-{2,}", "-", cleaned).strip(" .-")
     return (cleaned[:limit].strip(" .-")) or "file"
 
 

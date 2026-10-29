@@ -5,8 +5,10 @@ from __future__ import annotations
 import http.client
 import io
 import json
+import os
 import socket
 import threading
+import time
 import unittest
 from unittest import mock
 from typing import Any, Dict, Optional, Tuple
@@ -193,6 +195,26 @@ class ServeTests(ServeCase):
         self.assertTrue(self.data()["plan"]["approved_sha256"])
         self.assertIn("confirm-req", [event["what"] for event in self.data()["events"]])
         self.assertTrue(self.data()["req"]["confirmed_sha256"])
+
+    def test_an_unpaired_refusal_says_so_for_the_page(self) -> None:
+        status, data, _ = self.request("POST", "/api/close", {"task": TASK})
+        self.assertEqual((status, data.get("unpaired")), (403, True))
+
+    def test_a_language_set_while_the_board_runs_is_served_without_a_restart(self) -> None:
+        policy = self.root / ".harness" / "policies" / "user.json"
+        written = json.loads(policy.read_text(encoding="utf-8"))
+        patch = mock.patch.dict(os.environ)  # the tests force a language by the environment: here the file speaks
+        patch.start()
+        os.environ.pop(messages.ENVIRONMENT, None)
+        os.environ["HARNESS_ROOT"] = str(self.root)
+        self.addCleanup(patch.stop)
+        self.addCleanup(messages.reset)
+        for step, wanted in enumerate(("zh", "en"), 1):
+            policy.write_text(json.dumps({**written, "language": wanted}), encoding="utf-8")
+            stamp = time.time_ns() + step * 10**9  # a different time even when two writes fall in one tick
+            os.utime(policy, ns=(stamp, stamp))
+            self.assertEqual(self.request("POST", "/api/status", {})[1]["language"], wanted)
+            self.assertIn(f'<html lang="{wanted}">', self.request("GET", "/")[1]["text"])
 
     def test_an_approval_needs_the_paired_browser_and_the_typed_code(self) -> None:
         confirm_requirement(self.root, TASK)

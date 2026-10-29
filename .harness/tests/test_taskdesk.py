@@ -126,6 +126,31 @@ assert.deepStrictEqual(DiffView.inline("select a from t", "select b from t"), {h
         for name in ("b.sql", "big.sql", "c.bin", "gone.sql"):  # a created file is in the diff whole; the others cannot or need not be sent
             self.assertNotIn("text", found[f"repo/{name}"], name)
 
+    def test_the_page_lists_the_fetched_files_left_as_they_were(self) -> None:
+        task = taskdesk.row_of(self.root, "job1")["task"]
+        items = [{"path": "repo/a.sql", "action": "modify", "added": 1, "removed": 1}, {"path": "repo/b.sql", "action": "unchanged", "added": 0, "removed": 0}]
+        with mock.patch.object(taskdesk.task_ops, "changes", return_value=(items, "# header\n")):
+            found = taskdesk.changed(self.root, task, tasks.read(self.root, task))
+        self.assertEqual([item["path"] for item in found["files"]], ["repo/a.sql"])
+        self.assertEqual(found["unchanged_files"], ["repo/b.sql"])
+        self.assertEqual(found["unchanged"], 1)
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_a_changed_part_of_a_line_is_marked(self) -> None:
+        script = r"""
+const assert = require("assert");
+const DiffView = require(process.argv[2]);
+assert.deepStrictEqual(DiffView.pieces("select a, b from t", "select a, c from t"), [["select a, ", false], ["b", true], [" from t", false]]);
+assert.deepStrictEqual(DiffView.pieces("col_030_renamed", "col_030"), [["col_030", false], ["_renamed", true]]);
+assert.deepStrictEqual(DiffView.pieces("abc", "xyz"), [["abc", false]]);  // all of it differs: no mark
+assert.deepStrictEqual(DiffView.pieces("x".repeat(700), "y"), [["x".repeat(700), false]]);  // a very long line is not compared
+"""
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / "pieces_check.js"
+            file.write_text(script, encoding="utf-8")
+            done = subprocess.run(["node", str(file), str(ENGINE_WEB / "diffview.js")], capture_output=True, text=True, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
     def test_every_text_of_the_compare_is_written_in_both_languages(self) -> None:
         import re
 

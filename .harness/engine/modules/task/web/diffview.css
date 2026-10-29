@@ -3,6 +3,7 @@
 .dv-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
 .dv-files{display:flex;flex-direction:column;max-height:168px;overflow:auto;margin-bottom:8px;border:1px solid var(--line);border-radius:8px;background:var(--card)}
 .dv-pick{display:flex;align-items:center;gap:8px;width:100%;padding:4px 10px;border:0;border-bottom:1px solid var(--line);background:none;color:var(--ink);font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
+.dv-pick.same{color:var(--soft)}
 .dv-pick:last-child{border-bottom:0}.dv-pick:hover{background:var(--bg)}
 .dv-pick.on{background:var(--bg);box-shadow:inset 3px 0 0 var(--model);font-weight:600}
 .dv-pick code{flex:1 1 0;min-width:0;overflow-wrap:anywhere}

@@ -13,9 +13,27 @@ const SERVE = (function () {
   let after = null;
   const done = () => (after ? after() : location.reload());
 
+  // One place for a refusal of an unpaired browser: a bar at the top of the page, on the board and on a task page. A click closes it.
+  function unpairedNote() {
+    if (document.querySelector(".unpaired-note")) return;
+    const bar = h("div", {class: "unpaired-note", role: "alert", title: t("board.serve.cancel")}, t("board.serve.notpaired"));
+    bar.addEventListener("click", () => bar.remove());
+    document.body.append(bar);
+  }
+
+  let reloading = false;
+
   function post(path, body) {
     return fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json", "X-Harness-Board": "1"}, body: JSON.stringify(body)})
-      .then((response) => response.json().then((data) => (response.ok ? data : Promise.reject(new Error(data.error || response.status)))),
+      .then((response) => response.json().then((data) => {
+        if (response.ok) {
+          // The language was changed while the page was open: its texts are the old ones, so the page is loaded again (once: the address is the same, the server now sends the new ones).
+          if (data.language && data.language !== document.documentElement.lang && !reloading) { reloading = true; location.reload(); }
+          return data;
+        }
+        if (data.unpaired) unpairedNote();  // the server says it: a button that does nothing would be worse
+        return Promise.reject(new Error(data.error || response.status));
+      }),
         () => Promise.reject(Object.assign(new Error(t("board.serve.stopped")), {offline: true})));  // offline: no answer at all (not a refusal); pollEvery counts these
   }
 

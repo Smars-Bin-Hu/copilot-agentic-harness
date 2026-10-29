@@ -128,7 +128,24 @@ class Board:
         self.code = secrets.token_urlsafe(12)
         self.sessions: set = set()
         self.lock = threading.Lock()
+        self.language_stamp: List[int] = []
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
+
+    def sync_language(self) -> str:
+        """The language now set in `user.json`. The process reads it once (`messages.language`), so a board that ran on
+        while the person changed it would speak the old one: when the file (or its override) changed, it is read again.
+        A stat per request is cheap."""
+        stamp = []
+        for path in (config.policies_dir(self.root) / "user.json", config.override_path(self.root, "user")):
+            try:
+                stamp.append(path.stat().st_mtime_ns)
+            except OSError:
+                stamp.append(0)
+        with self.lock:
+            if stamp != self.language_stamp:
+                self.language_stamp = stamp
+                messages.reset()
+        return messages.language()
 
     def new_code(self) -> str:
         with self.lock:
@@ -311,6 +328,8 @@ def handler_for(board: Board) -> type:
             self.wfile.write(body)
 
         def answer(self, status: int, data: Dict[str, Any], extra: Optional[Dict[str, str]] = None) -> None:
+            if status == 200:
+                data = {**data, "language": messages.language()}  # an open page reloads its texts when this differs from the one it shows
             self.send(status, json.dumps(data, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8", extra)
 
         def host_ok(self) -> bool:
@@ -324,6 +343,7 @@ def handler_for(board: Board) -> type:
             return ""
 
         def do_GET(self) -> None:  # noqa: N802 - the name is the base class's
+            board.sync_language()
             if not self.host_ok():
                 return self.send(403, b"", "text/plain")
             path = unquote(urlparse(self.path).path)
@@ -363,6 +383,7 @@ def handler_for(board: Board) -> type:
             return self.send(200, target.read_bytes(), "text/html; charset=utf-8")
 
         def do_POST(self) -> None:  # noqa: N802
+            board.sync_language()
             origin = self.headers.get("Origin", "")
             if not self.host_ok() or (origin and origin not in allowed_origins) or self.headers.get(HEADER) != "1":
                 return self.answer(403, {"error": say("serve.refused.request")})
@@ -390,14 +411,14 @@ def handler_for(board: Board) -> type:
                     return self.answer(500, {"error": str(error)})
             if path == "/api/close":
                 if not board.paired(self.token()):
-                    return self.answer(403, {"error": say("serve.pair.needed")})
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     return self.answer(200, {"result": board.close(str(data.get("task", "")), str(data.get("reason", "")))})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                     return self.answer(409, {"error": str(error)})
             if path == "/api/archive":
                 if not board.paired(self.token()):
-                    return self.answer(403, {"error": say("serve.pair.needed")})
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     return self.answer(200, {"result": board.archive(data)})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
@@ -409,7 +430,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(404, {"error": str(error)})
             if path == "/api/inbox":  # the person gives the task the results of a run: written to INBOX/, so the browser must be paired
                 if not board.paired(self.token()):
-                    return self.answer(403, {"error": say("serve.pair.needed")})
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     row = taskdesk.row_of(board.root, str(data.get("task", "")))
                     if row is None:
@@ -423,7 +444,7 @@ def handler_for(board: Board) -> type:
             if path == "/api/intake":  # the person puts the documents of a requirement in REQ/ on the page, trims them and undoes: it writes files, so the browser must be paired
                 action = str(data.get("action", ""))
                 if action != "read" and not board.paired(self.token()):
-                    return self.answer(403, {"error": say("serve.pair.needed")})
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     row = taskdesk.row_of(board.root, str(data.get("task", "")))
                     if row is None:
@@ -446,7 +467,7 @@ def handler_for(board: Board) -> type:
                 return self.answer(404, {"error": say("serve.refused.request")})
             action, task, step = str(data.get("action", "")), str(data.get("task", "")), str(data.get("step", "act"))
             if action not in FREE and not board.paired(self.token()):
-                return self.answer(403, {"error": say("serve.pair.needed")})
+                return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
             try:
                 result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")))
             except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it

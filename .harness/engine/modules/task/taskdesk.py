@@ -191,6 +191,7 @@ def changed(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "files": shown,
         "unchanged": sum(1 for item in items if item["action"] == "unchanged"),
+        "unchanged_files": [item["path"] for item in items if item["action"] == "unchanged"],  # fetched into DEV/ and left as it was: listed without a diff
         "deletes": list(data.get("deletes") or []),
         "diff": {"lines": lines[:MAX_DIFF_LINES], "cut": len(lines) > MAX_DIFF_LINES},
         "promote_plan": diff_lines(folder / tasks.REVIEW_NAME),

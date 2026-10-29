@@ -227,6 +227,13 @@ class DocxTests(unittest.TestCase):
         self.assertIn("**Ann** (2026-08-01): Is this the final rule?", result["files"][1][1].decode("utf-8"))
         self.assertNotIn("final rule", result["files"][0][1].decode("utf-8"))
 
+    def test_a_file_name_loses_brackets_and_awkward_signs_and_keeps_chinese(self) -> None:
+        self.assertEqual(convert.safe_name("loading rules (from Teams)"), "loading-rules-from-Teams")
+        self.assertEqual(convert.safe_name("rules [v2] #3, final!"), "rules-v2-3-final")
+        self.assertEqual(convert.safe_name("客户画像 (字段映射)_v2"), "客户画像-字段映射-_v2")
+        self.assertEqual(convert.safe_name("a.b_c-d"), "a.b_c-d")
+        self.assertEqual(convert.safe_name("(())"), "file")
+
     def test_a_workbook_pasted_into_the_document_is_converted_and_an_old_object_is_kept_and_said(self) -> None:
         sheet = xlsx([{"name": "Pasted", "rows": '<row r="1"><c r="A1" t="inlineStr"><is><t>x</t></is></c><c r="B1" t="inlineStr"><is><t>y</t></is></c></row>'}])
         body = ('<w:p><w:r><w:object><v:shape><v:imagedata r:id="rId9"/></v:shape><o:OLEObject ProgID="Excel.Sheet.12" r:id="rId8"/></w:object></w:r></w:p>'
@@ -274,14 +281,14 @@ class IntakeTests(LifeCase):
     def test_a_document_goes_into_req_with_its_original_a_report_and_a_pristine_copy(self) -> None:
         data = docx(para("Customer KYC", "Heading1") + para("body text"), styles=HEADINGS)
         result = intake.add_file(self.root, "job", "BRD v2 (final).docx", data)
-        self.assertEqual(result["original"], "REQ/originals/BRD-v2-(final).docx")
-        self.assertEqual((self.req / "originals" / "BRD-v2-(final).docx").read_bytes(), data, "the original is kept as it was given")
-        text = (self.req / "BRD-v2-(final).md").read_text(encoding="utf-8")
+        self.assertEqual(result["original"], "REQ/originals/BRD-v2-final.docx")
+        self.assertEqual((self.req / "originals" / "BRD-v2-final.docx").read_bytes(), data, "the original is kept as it was given")
+        text = (self.req / "BRD-v2-final.md").read_text(encoding="utf-8")
         self.assertIn("# Customer KYC", text)
-        self.assertEqual((self.req / ".pristine" / "BRD-v2-(final).md").read_text(encoding="utf-8"), text, "a copy to undo an edit")
-        report = (self.req / "BRD-v2-(final).convert.md").read_text(encoding="utf-8")
+        self.assertEqual((self.req / ".pristine" / "BRD-v2-final.md").read_text(encoding="utf-8"), text, "a copy to undo an edit")
+        report = (self.req / "BRD-v2-final.convert.md").read_text(encoding="utf-8")
         self.assertIn("No AI was used", report)
-        self.assertIn("`BRD-v2-(final).md`", report)
+        self.assertIn("`BRD-v2-final.md`", report)
         self.assertIn("intake", [event["what"] for event in self.data("job")["events"]])
 
     def test_a_workbook_gives_a_csv_for_each_sheet_and_a_report_that_lists_them(self) -> None:

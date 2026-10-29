@@ -104,6 +104,7 @@ ul.checks li>:not(.box):not(.txt){flex:1 1 100%;min-width:0;margin:2px 0 0 24px;
 li.done>.box{background:var(--good);border-color:var(--good);color:#fff}li.done>span:not(.box){color:var(--soft);text-decoration:line-through}
 .scroll{overflow-x:auto}
 table.md{margin:.8em 0;font-size:13.5px}table.md th,table.md td{padding:6px 12px 6px 0}
+table.md td.v-good{color:var(--good);font-weight:600}table.md td.v-bad{color:var(--bad);font-weight:600}table.md td.v-warn{color:var(--approval);font-weight:600}
 .path{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;color:var(--soft);border-bottom:1px dotted var(--soft);cursor:help}
 .empty-state{padding:26px 4px;color:var(--soft)}.empty-state b{color:var(--ink);font-weight:600}.empty-state p{margin:6px 0 0}
 .progress{display:flex;align-items:center;gap:14px;margin-bottom:18px}.progress .bar{flex:1;max-width:420px}
@@ -118,7 +119,9 @@ ol.timeline li{display:grid;grid-template-columns:8.5em minmax(0,1fr);align-item
 .subtab.good{color:var(--good)}.subtab.bad{color:var(--bad)}.subtab.hot{color:var(--approval)}
 .files{display:grid;grid-template-columns:minmax(200px,280px) 1fr;gap:18px;align-items:start}
 .files-list{display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--line);padding-right:12px;max-height:70vh;overflow:auto}
-.files-root{margin-top:10px;font-size:12.5px}.files-root:first-child{margin-top:0}.files-dir{font-size:12px;color:var(--soft);margin-top:6px}
+.files-root{margin-top:10px;font-size:12.5px}.files-root:first-child{margin-top:0}.files-dir{display:block;width:100%;font:inherit;font-size:12px;color:var(--soft);margin-top:6px;padding-top:2px;padding-bottom:2px;border:0;background:none;text-align:left;cursor:pointer;overflow-wrap:anywhere}.files-dir:hover{color:var(--ink)}
+.fmark{font-size:11px;padding:0 6px;margin-left:2px}.fmark.create{color:var(--good)}.fmark.delete{color:var(--bad)}.fmark.modify{color:var(--model)}
+.file.plain{color:var(--soft)}.file.ghost{color:var(--bad);text-decoration:line-through;cursor:default;padding-top:3px;padding-bottom:3px}.file.ghost .tag{text-decoration:none}
 .file{font:inherit;font-size:13px;text-align:left;padding-top:3px;padding-bottom:3px;padding-right:8px;border:1px solid transparent;border-radius:6px;background:none;color:var(--ink);cursor:pointer;overflow-wrap:anywhere}
 .file:hover{background:var(--track)}.file.on{border-color:var(--model);font-weight:600}
 .files-view{min-width:0}
@@ -236,3 +239,4 @@ details.tpl-note{margin:.4em 0 .8em;color:var(--soft);font-size:12.5px}details.t
 .board-list table{font-size:12.5px}.board-list th,.board-list td{padding-right:8px}
 /* There the buttons of a row wrap onto a second line instead of scrolling: three buttons do not fit in one line of 8em. */
 .board-list .act-strip{width:8em;flex-wrap:wrap;overflow:visible;background:none}
+.unpaired-note{position:fixed;top:0;left:0;right:0;z-index:20;padding:10px 16px;text-align:center;font-size:14px;font-weight:600;background:var(--approval);color:#fff;cursor:pointer}

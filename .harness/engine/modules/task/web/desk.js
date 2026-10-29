@@ -127,7 +127,8 @@
   function picture(span) {
     const src = span.data || (served() ? "/file/" + encodeURIComponent(desk.name) + "/" + span.src.split("/").map(encodeURIComponent).join("/") : "");
     if (!src) return h("span", {class: "path", title: span.src}, span.alt || span.src);
-    const image = h("img", {src, alt: span.alt, title: span.alt, loading: "lazy", class: "md-img"});
+    // Not `loading: "lazy"`: a picture above the screen that loads late pushes the page down by its height while the person scrolls up (a drift of a few pixels). They are local files.
+    const image = h("img", {src, alt: span.alt, title: span.alt, class: "md-img"});
     return span.data ? image : h("a", {href: src, target: "_blank", rel: "noopener noreferrer", class: "md-img-link"}, image);  // a browser does not open a data: address in a new tab
   }
 
@@ -161,7 +162,12 @@
       if (block.t === "code") return codeBlock(block.text, Highlight.language(block.lang));
       if (block.t === "quote") return h("blockquote", null, blocks(block.blocks));
       if (block.t === "table") {
-        const cell = (tag, spans, align) => h(tag, {style: align ? "text-align:" + align : null}, inline(spans));
+        const plain = (spans) => spans.map((span) => (span.v !== undefined ? span.v : span.c ? plain(span.c) : "")).join("");
+        const VERDICT_CLASS = {"PASS": "v-good", "FAIL": "v-bad", "NEEDS MORE": "v-warn"};  // a test verdict cell is coloured
+        const cell = (tag, spans, align) => {
+          const mark = tag === "td" ? VERDICT_CLASS[plain(spans).trim().toUpperCase()] : null;
+          return h(tag, {style: align ? "text-align:" + align : null, class: mark || null}, inline(spans));
+        };
         return h("div", {class: "scroll"}, h("table", {class: "md"},
           h("thead", null, h("tr", null, block.head.map((spans, i) => cell("th", spans, block.align[i])))),
           h("tbody", null, block.rows.map((row) => h("tr", null, row.map((spans, i) => cell("td", spans, block.align[i])))))));
@@ -559,7 +565,7 @@
     if (!rest.length) return null;
     return h("div", {class: "evidence"}, rest.map((path) => {
       const src = "/file/" + encodeURIComponent(desk.name) + "/" + path.split("/").map(encodeURIComponent).join("/");
-      return h("a", {href: src, target: "_blank", rel: "noopener noreferrer", title: path.split("/").pop()}, h("img", {src, alt: path.split("/").pop(), loading: "lazy", class: "md-thumb"}));
+      return h("a", {href: src, target: "_blank", rel: "noopener noreferrer", title: path.split("/").pop()}, h("img", {src, alt: path.split("/").pop(), class: "md-thumb"}));
     }));
   }
 
@@ -574,6 +580,8 @@
 
   // The Files tab: what is in REQ/, REF/, DEV/ and RUNS/ (sub-folders too). The list is in the page; a file comes when it is opened (a saved copy has the small ones in it).
   let fileOpen = "";
+  const markText = () => ({create: t("desk.files.mark.create"), modify: t("desk.files.mark.modify"), delete: t("desk.files.mark.delete"), unchanged: t("desk.files.mark.unchanged")});  // written out, so each message key is found by a search
+  const folded = new Set();  // folders folded in the tree (their full path); kept while the page is open
   const fileCache = {};
   const ROOT_HINT = {REQ: "desk.files.root.req", REF: "desk.files.root.ref", INBOX: "desk.files.root.inbox", DEV: "desk.files.root.dev", RUNS: "desk.files.root.runs"};
   const rootHint = (root) => ROOT_HINT[root.toUpperCase()] || (/^DEV_R\d+$/i.test(root) ? ROOT_HINT.DEV : "desk.files.hint");  // DEV_r<n>: the files an earlier round wrote back
@@ -617,8 +625,12 @@
     const open = items.find((item) => item.path === fileOpen);
     fileLoad(open);
     const list = [];
+    const marks = new Map();  // DEV/ file -> "create" | "modify" | "delete" | "unchanged", from the Changes tab
+    for (const item of desk.changes.files) marks.set("DEV/" + item.path, item.action);
+    for (const path of desk.changes.unchanged_files || []) marks.set("DEV/" + path, "unchanged");
+    const ghosts = [...marks].filter(([path, action]) => action === "delete" && !items.some((item) => item.path === path)).map(([path]) => ({path, size: 0, ghost: true}));
     const roots = new Map();  // root folder -> {dirs: name -> node, files: [item]}
-    for (const item of items) {
+    for (const item of [...items, ...ghosts]) {
       const parts = item.path.split("/");
       let node = roots.get(parts[0]);
       if (!node) roots.set(parts[0], node = {dirs: new Map(), files: []});
@@ -629,23 +641,29 @@
       node.files.push(item);
     }
     // Like the VS Code explorer: folders first, a folder that holds only one folder is joined with it (d/e/f/), one file per line.
-    const walk = (node, depth) => {
+    const walk = (node, depth, parent) => {
       for (const [name, child] of node.dirs) {
         let label = name, last = child;
         while (!last.files.length && last.dirs.size === 1) { const [next, inner] = last.dirs.entries().next().value; label += "/" + next; last = inner; }
-        list.push(h("div", {class: "files-dir", style: "padding-left:" + depth * 14 + "px"}, label + "/"));
-        walk(last, depth + 1);
+        const id = parent + "/" + label, shut = folded.has(id);
+        const row = h("button", {type: "button", class: "files-dir", "aria-expanded": shut ? "false" : "true", style: "padding-left:" + depth * 14 + "px"}, (shut ? "▸ " : "▾ ") + label + "/");
+        row.addEventListener("click", () => { if (folded.has(id)) folded.delete(id); else folded.add(id); draw(true); });
+        list.push(row);
+        if (!shut) walk(last, depth + 1, id);
       }
       for (const item of node.files) {
-        const button = h("button", {type: "button", class: "file" + (item.path === fileOpen ? " on" : ""), title: item.path, style: "padding-left:" + depth * 14 + "px"},
-          h("span", null, item.path.split("/").pop()), h("span", {class: "sub"}, " " + size(item.size)));
+        const mark = marks.get(item.path);
+        const name = h("span", null, item.path.split("/").pop());
+        const tail = mark ? h("span", {class: "tag fmark " + mark}, markText()[mark]) : h("span", {class: "sub"}, " " + size(item.size));
+        if (item.ghost) { list.push(h("div", {class: "file ghost", title: item.path, style: "padding-left:" + depth * 14 + "px"}, name, " ", tail)); continue; }
+        const button = h("button", {type: "button", class: "file" + (item.path === fileOpen ? " on" : "") + (mark === "unchanged" ? " plain" : ""), title: item.path, style: "padding-left:" + depth * 14 + "px"}, name, " ", tail);
         button.addEventListener("click", () => { fileOpen = item.path; draw(true); });
         list.push(button);
       }
     };
     for (const [root, node] of roots) {
       list.push(h("div", {class: "files-root"}, h("strong", null, root + "/"), h("span", {class: "sub"}, " " + t(rootHint(root)))));
-      walk(node, 1);
+      walk(node, 1, root);
     }
     return [h("p", {class: "hint top"}, t("desk.files.hint")),
       h("div", {class: "files"}, h("nav", {class: "files-list", "data-keep": "files-list"}, list),
@@ -787,7 +805,7 @@
     const more = tools("", () => { edit.shown += CSV_PAGE; refresh(); });
     const refresh = () => {
       const hits = matching();
-      info.textContent = t("desk.intake.csv.info", {rows: edit.rows.length - 1, shown: hits.length, picked: edit.picked.size});
+      info.textContent = t("desk.intake.csv.info", {rows: edit.rows.length - 1, match: hits.length, drawn: Math.min(hits.length, edit.shown), picked: edit.picked.size});
       del.textContent = t("desk.intake.csv.delete", {n: edit.picked.size});
       keep.textContent = t("desk.intake.csv.keep", {n: edit.picked.size});
       del.disabled = keep.disabled = !edit.picked.size;
@@ -974,14 +992,15 @@
     if (desk.past && !c.kept && c.files.length) {  // no counts to show: only the names are known
       parts.push(h("h3", null, t("desk.changes.files")), table([th(t("desk.changes.file"))], c.files.map((item) => h("tr", null, h("td", null, h("code", null, item.path))))));
     }
-    if (c.files.length && !(desk.past && !c.kept) || c.deletes.length) {
-      parts.push(h("h3", null, t("desk.changes.files")), table([th(t("desk.changes.file")), th(t("desk.changes.what")), th("+", true), th("−", true)],
-        c.files.map((item) => h("tr", null, h("td", null, h("code", null, item.path)), h("td", null, tag(t("desk.changes." + item.action))),
-          num(item.added), num(item.removed))).concat(c.deletes.filter((path) => !c.files.some((item) => item.path === path)).map((path) => h("tr", null, h("td", null, h("code", null, path)), h("td", null, tag(t("desk.changes.delete"), "bad")), num("-"), num("-"))))));
+    const same = c.unchanged_files || [];
+    if ((c.files.length && !(desk.past && !c.kept)) || c.deletes.length || same.length) {  // one list: the changed files, the deleted ones and the fetched ones left as they were
+      const fetched = c.files.filter((item) => item.action !== "create").length + same.length;
+      parts.push(h("h3", null, t("desk.changes.files")));
+      if (same.length) parts.push(h("p", {class: "sub"}, t("desk.changes.summary", {fetched, changed: fetched - same.length, same: same.length})));
+      parts.push(DiffView.create({files: c.files, lines: c.diff.lines, cut: c.diff.cut, same}, () => diff(c.diff), "dev"));  // old and new code side by side (diffview.js); the plain diff text is its third view
     } else {
       parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.changes.none")), h("p", null, t("desk.changes.none.hint"))));
     }
-    if (c.diff.lines.length) parts.push(h("h3", null, t("desk.changes.diff")), DiffView.create({files: c.files, lines: c.diff.lines, cut: c.diff.cut}, () => diff(c.diff), "dev"));  // old and new code side by side (diffview.js); the plain diff text is its third view
     if (c.promote_plan.lines.length) parts.push(h("h3", null, t("desk.changes.promote")), h("p", {class: "sub"}, t("desk.changes.promote.hint")),
       DiffView.create(c.promote_plan, () => diff(c.promote_plan), "plan", true));  // the same compare, the files read from the plan; a long file scrolls in a lower window
     return parts;

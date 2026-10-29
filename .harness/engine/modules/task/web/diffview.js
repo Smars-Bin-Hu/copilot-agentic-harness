@@ -129,11 +129,52 @@ const DiffView = (function () {
 
   // --- drawing -----------------------------------------------------------------------------------------------
 
-  function code(value, other, marked) {
-    if (!marked || !value || !other) return value || "​";
+  const INLINE_MAX = 600;  // a line longer than this gets no inline mark (the compare must stay cheap)
+  const TOKENS_MAX = 160;  // nor a line of more words than this: the match below is tokens x tokens
+
+  // The words of a line (a word is letters, digits and `_`; every other character stands alone) as [start, end] spans.
+  function words(value) {
+    const out = [];
+    const re = /\w+|\s+|[^\w\s]/g;
+    let found;
+    while ((found = re.exec(value))) out.push(found[0]);
+    return out;
+  }
+
+  // Which parts of `value` differ from `other`, as pieces [text, marked]. Words are matched with the longest common run of words;
+  // the words that have no match are marked. Whitespace alone is never marked. A line that differs in all of it gets no mark.
+  function pieces(value, other) {
+    if (!value || !other || value.length > INLINE_MAX || other.length > INLINE_MAX) return [[value, false]];
+    const x = words(value), y = words(other);
+    if (x.length > TOKENS_MAX || y.length > TOKENS_MAX) return [[value, false]];
+    const rows = [];
+    for (let i = 0; i <= x.length; i += 1) rows.push(new Array(y.length + 1).fill(0));
+    for (let i = x.length - 1; i >= 0; i -= 1) {
+      for (let j = y.length - 1; j >= 0; j -= 1) rows[i][j] = x[i] === y[j] ? rows[i + 1][j + 1] + 1 : Math.max(rows[i + 1][j], rows[i][j + 1]);
+    }
+    const same = new Array(x.length).fill(false);
+    for (let i = 0, j = 0; i < x.length && j < y.length;) {
+      if (x[i] === y[j]) { same[i] = true; i += 1; j += 1; } else if (rows[i + 1][j] >= rows[i][j + 1]) i += 1; else j += 1;
+    }
+    const mark = x.map((word, index) => !same[index] && word.trim() !== "");
+    mark.forEach((on, index) => { if (!on && x[index].trim() === "" && mark[index - 1] && mark[index + 1]) mark[index] = true; });  // blanks between two marked words
+    const out = [];
+    x.forEach((word, index) => {
+      const last = out[out.length - 1];
+      if (last && last[1] === mark[index]) last[0] += word; else out.push([word, mark[index]]);
+    });
+    if (out.some((piece) => piece[1]) && !out.every((piece) => piece[1] || !piece[0].trim())) return out;
+    // the whole line differs by words (one word, renamed): mark the characters that differ
     const {head, tail} = inline(value, other);
-    if (head + tail >= value.length || head + tail >= other.length) return value;
-    return [value.slice(0, head), h("mark", null, value.slice(head, value.length - tail)), value.slice(value.length - tail)];
+    if (head + tail >= value.length || head + tail === 0) return [[value, false]];
+    return [[value.slice(0, head), false], [value.slice(head, value.length - tail), true], [value.slice(value.length - tail), false]].filter((piece) => piece[0]);
+  }
+
+  function code(value, other, marked) {
+    if (!marked || !value || !other) return value || "\u200b";
+    const parts = pieces(value, other);
+    if (parts.length === 1) return value;
+    return parts.map((piece) => (piece[1] ? h("mark", null, piece[0]) : piece[0]));
   }
 
   function cell(number, kind, content) {
@@ -232,16 +273,20 @@ const DiffView = (function () {
   function create(source, raw, key, small) {
     const parsed = parse(source.lines);
     const diffs = new Map(parsed.map((item) => [item.path, item]));
-    const files = (source.files || parsed.map(counts)).filter((item) => diffs.has(item.path));
+    const listed = source.files || parsed.map(counts);
+    // A file without a diff (unchanged, or cut off the diff text) is in the list too, marked, and shows a short note in place of the compare.
+    const files = [...listed.filter((item) => diffs.has(item.path)), ...listed.filter((item) => !diffs.has(item.path)),
+      ...(source.same || []).filter((path) => !listed.some((item) => item.path === path)).map((path) => ({path, action: "unchanged", added: 0, removed: 0}))];
     if (!files.length) return raw();
     const chosen = () => (files.find((item) => item.path === store("file." + key, "")) || files[0]);
     const mode = () => (MODES.includes(store("mode", "split")) ? store("mode", "split") : "split");
     const host = h("div", {class: "dv-view" + (small ? " small" : "")});
     // The list is made once and only marked again, so a click does not scroll it back to the top.
     const picks = files.map((item) => {
-      const button = h("button", {type: "button", class: "dv-pick", title: item.path},
-        h("span", {class: "dv-act " + item.action}, t("desk.changes." + item.action)), h("code", null, item.path),
-        h("span", {class: "dv-n add"}, "+" + item.added), h("span", {class: "dv-n del"}, "−" + item.removed));
+      const plain = item.action === "unchanged";
+      const button = h("button", {type: "button", class: "dv-pick" + (plain ? " same" : ""), title: item.path},
+        h("span", {class: "dv-act " + item.action}, plain ? t("desk.changes.unchanged") : t("desk.changes." + item.action)), h("code", null, item.path),
+        plain ? null : h("span", {class: "dv-n add"}, "+" + item.added), plain ? null : h("span", {class: "dv-n del"}, "−" + item.removed));
       button.addEventListener("click", () => { store("file." + key, "", item.path); draw(); });
       return button;
     });
@@ -250,6 +295,10 @@ const DiffView = (function () {
     const draw = () => {
       const item = chosen(), file = diffs.get(item.path);
       picks.forEach((button, index) => button.classList.toggle("on", files[index] === item));
+      if (!file) {  // listed, no diff
+        shown.replaceChildren(h("div", {class: "dv-bar"}, h("code", {class: "dv-path"}, item.path)), h("p", {class: "sub"}, item.action === "unchanged" ? t("desk.diff.same") : t("desk.diff.none")));
+        return;
+      }
       const modes = h("span", {class: "dv-modes"}, MODES.map((name) => {
         const button = h("button", {type: "button", class: "dv-mode" + (name === mode() ? " on" : "")}, MODE_LABEL()[name]);
         button.addEventListener("click", () => { store("mode", "", name); draw(); });
@@ -265,7 +314,7 @@ const DiffView = (function () {
         mode() === "raw" ? raw() : compare(file, item.text || null, mode(), key));
     };
     draw();
-    if (files.length > 1) host.append(list);
+    if (files.length > 1 || files[0].action === "unchanged") host.append(list);
     host.append(shown);
     if (want[key]) {  // the view is not in the page yet: look after it is
       const line = want[key];
@@ -285,7 +334,7 @@ const DiffView = (function () {
     if (line) want[key] = {line};
   }
 
-  return {parse, rows, fold, inline, counts, create, select};
+  return {parse, rows, fold, inline, pieces, counts, create, select};
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = DiffView;

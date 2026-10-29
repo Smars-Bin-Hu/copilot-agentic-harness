@@ -865,7 +865,8 @@ class PageTests(BoardCase):
     def test_a_click_asks_the_server_again_in_place_and_does_not_reload_the_board(self) -> None:
         """A reload draws the board from nothing, so no robot slides or springs after the very click that changed something."""
         serve = (taskhtml.WEB / "serve.js").read_text(encoding="utf-8")
-        self.assertEqual(serve.count("location.reload()"), 1, "only the fallback of a page that has no board in it (the task page)")
+        self.assertEqual(serve.count("location.reload()"), 2, "the fallback of a page that has no board in it (the task page), and a language that changed")
+        self.assertIn("data.language !== document.documentElement.lang && !reloading", serve)
         self.assertIn("const done = () => (after ? after() : location.reload());", serve)
         self.assertIn("SERVE.onChange(refresh)", (taskhtml.WEB / "board.js").read_text(encoding="utf-8"))
 

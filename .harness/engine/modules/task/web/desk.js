@@ -527,7 +527,9 @@
 
   // The Intake tab (1.5.45): the documents of a requirement go into REQ/ here (a program turns Word and Excel into Markdown and CSV: no AI), are trimmed in a text box, and
   // can be put back as converted. What is typed is kept in `intake`, so a redraw of the page does not lose it.
-  const intake = {busy: false, error: "", done: [], editing: null, name: "", kind: "csv", text: "", hidden: false, domains: null, open: new Set(), picked: new Set()};
+  // A heading, a list, a fence or a quote at the start of a line, and no tab (cells copied out of a sheet are tab-separated).
+  const looksLikeMarkdown = (text) => !text.includes("\t") && /^(#{1,6} |[-*+] |\d+\. |```|> )/m.test(text);
+  const intake = {busy: false, error: "", done: [], editing: null, name: "", kind: "csv", kindChosen: false, text: "", hidden: false, domains: null, open: new Set(), picked: new Set()};
   const UPLOAD_TYPES = ".docx,.docm,.xlsx,.xlsm,.xls,.pdf,.csv,.tsv,.txt,.md,.json,.sql,.png,.jpg,.jpeg,.gif,.webp";
 
   function intakeCall(action, body) {
@@ -582,9 +584,9 @@
       .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
   }
 
-  function intakeAct(action, path, after) {
+  function intakeAct(action, path, after, more) {
     intake.busy = true; intake.error = ""; draw(true);
-    intakeCall(action, {path}).then(() => { if (after) after(); }, (error) => { intake.error = error.message; })
+    intakeCall(action, {path, ...(more || {})}).then((found) => { if (after) after(found); }, (error) => { intake.error = error.message; })
       .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
   }
 
@@ -686,9 +688,16 @@
     const remove = () => {
       if (window.confirm(t("desk.intake.delete.confirm", {path: edit.path}))) intakeAct("delete", edit.path, () => { intake.editing = null; });
     };
+    const rename = () => {
+      const now = edit.path.split("/").pop();
+      const name = window.prompt(t("desk.intake.rename.ask", {path: edit.path}), now);
+      if (name === null || !name.trim() || name.trim() === now) return;
+      if (!edit.readonly && edit.text !== edit.saved && !window.confirm(t("desk.intake.discard"))) return;
+      intakeAct("rename", edit.path, (found) => { intake.editing = null; intakeOpen(found.file.replace(/^REQ\//, "")); }, {name: name.trim()});
+    };
     const head = h("div", {class: "card-head"},
       h("div", {class: "card-title"}, h("strong", null, "REQ/" + edit.path), " ", edit.readonly ? null : edit.text !== edit.saved ? tag(t("desk.intake.unsaved"), "hot") : h("span", {class: "sub"}, t("desk.intake.saved"))),
-      h("div", {class: "card-tools"}, h("span", {class: "sub"}, size(edit.size || 0)), button(t("desk.intake.delete"), remove, "danger"), button("×", close, "close")));
+      h("div", {class: "card-tools"}, h("span", {class: "sub"}, size(edit.size || 0)), edit.path.startsWith("originals/") ? null : button(t("desk.intake.rename"), rename), button(t("desk.intake.delete"), remove, "danger"), button("×", close, "close")));
     if (edit.readonly) {
       const src = edit.picture ? "/file/" + encodeURIComponent(desk.name) + "/REQ/" + edit.path.split("/").map(encodeURIComponent).join("/") : "";
       return h("section", {class: "round editing"}, head, edit.picture ? h("img", {src, alt: edit.path, class: "md-img"}) : h("p", {class: "sub"}, t("desk.intake.noview")));
@@ -718,15 +727,19 @@
     parts.push(h("h3", null, t("desk.intake.add.title")), zone);
     const name = h("input", {type: "text", value: intake.name, placeholder: t("desk.intake.paste.name"), class: "env-input", maxlength: 60});
     name.addEventListener("input", () => { intake.name = name.value; });
-    const kind = h("select", null, [["csv", t("desk.intake.kind.csv")], ["md", t("desk.intake.kind.md")], ["txt", t("desk.intake.kind.txt")]].map(([value, label]) => h("option", {value, selected: intake.kind === value ? "" : null}, label)));
-    kind.addEventListener("change", () => { intake.kind = kind.value; });
+    const kind = h("select", null, [["csv", t("desk.intake.kind.csv")], ["md", t("desk.intake.kind.md")], ["doc", t("desk.intake.kind.doc")], ["txt", t("desk.intake.kind.txt")]].map(([value, label]) => h("option", {value, selected: intake.kind === value ? "" : null}, label)));
+    kind.addEventListener("change", () => { intake.kind = kind.value; intake.kindChosen = true; });
     const text = h("textarea", {rows: 7, placeholder: t("desk.intake.paste.ph"), class: "editor"}, intake.text);
-    text.addEventListener("input", () => { intake.text = text.value; });
+    text.addEventListener("input", () => {
+      intake.text = text.value;
+      // Markdown pasted as a table would be cut into cells: until the person picks a kind, the text picks it. A choice the person made stays.
+      if (!intake.kindChosen) intake.kind = kind.value = looksLikeMarkdown(intake.text) ? "doc" : "csv";
+    });
     const savePaste = h("button", {type: "button", class: "act hot", disabled: intake.busy ? "" : null}, t("desk.intake.paste.save"));
     savePaste.addEventListener("click", () => {
       intake.busy = true; intake.error = ""; draw(true);
       intakeCall("paste", {name: intake.name || "pasted", kind: intake.kind, text: intake.text})
-        .then((found) => { intake.text = ""; intake.name = ""; intake.done.unshift({name: found.file, result: {files: [found.file], notes: [], report: found.file}}); }, (error) => { intake.error = error.message; })
+        .then((found) => { intake.text = ""; intake.name = ""; intake.kindChosen = false; intake.done.unshift({name: found.file, result: {files: [found.file], notes: [], report: found.file}}); }, (error) => { intake.error = error.message; })
         .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
     });
     parts.push(h("h4", {class: "intake-sub"}, t("desk.intake.paste.title")), h("p", {class: "hint"}, t("desk.intake.paste.hint")), h("div", {class: "inbox-pictures"}, name, kind), text, h("div", {class: "inbox-save"}, savePaste));

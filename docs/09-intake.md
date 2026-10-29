@@ -72,7 +72,7 @@ For each file this does three things:
 
 ## Trim
 
-Open the converted files and delete what the agent does not need: background chapters, sheets of another team, columns that mean nothing for this change. Smaller is better: the agent reads all of it, every time, and you pay for it in tokens. To drop whole files, tick them in the Intake tab (or *Select all*) and press *Delete selected*.
+Open the converted files and delete what the agent does not need: background chapters, sheets of another team, columns that mean nothing for this change. Smaller is better: the agent reads all of it, every time, and you pay for it in tokens. To drop whole files, tick them in the Intake tab (or *Select all*) and press *Delete selected*. To give a file a clearer name, open it and press *Rename*: a name with no type keeps the old type, and a text file may change type (`.txt` to `.md`, so the Files tab shows it as Markdown). An original in `REQ/originals/` keeps its name, because the conversion report and the files made from it name it.
 
 A CSV file opens as a **table**, one rule or record to a row, however many lines its cells have. Type a word in the search box to find rows (it looks in every column), *Pick the shown rows*, then *Delete picked*, or *Keep only picked* to drop everything else; tick single rows by hand too. Long tables show 200 rows at a time. Nothing is written until you press *Save*; *Undo changes* goes back to the last save. The *Text* button shows the raw file when you want to change a cell.
 
@@ -83,7 +83,7 @@ Do not trim the original. A trimmed file can be put back as it was converted: `R
 Business files can be odd: a sheet laid out like a form, two tables side by side, headers over three rows, columns that repeat. The converter makes a faithful flat copy; it does not understand the layout. When the result is not usable:
 
 1. Open the file in Excel or Word yourself, select only the part that matters, and copy it.
-2. Save it as a new file. On the task page: the Intake tab, *Paste a table or a text*. On the command line, on macOS: `pbpaste | harness task intake paste --name mapping --kind csv --task <task>` (cells copied out of Excel are tab-separated and come in as a CSV; `--kind md` makes a Markdown table, `--kind txt` plain text). On Windows, a pipe from the clipboard can garble non-English text: paste it on the task page (Intake tab) instead, or save the text to a UTF-8 file and give it with `--file`.
+2. Save it as a new file. On the task page: the Intake tab, *Paste a table, a Markdown document or a text*. On the command line, on macOS: `pbpaste | harness task intake paste --name mapping --kind csv --task <task>` (cells copied out of Excel are tab-separated and come in as a CSV; `--kind md` makes a Markdown table, `--kind doc` keeps a Markdown document as it is, `--kind txt` plain text). On Windows, a pipe from the clipboard can garble non-English text: paste it on the task page (Intake tab) instead, or save the text to a UTF-8 file and give it with `--file`.
 3. Give the structure in words in `INTAKE.md`: "one row is one field; column C is the source, column F the rule".
 
 This is the fallback, and it is a normal one. The point is that the agent gets a small, clean table, however you made it.

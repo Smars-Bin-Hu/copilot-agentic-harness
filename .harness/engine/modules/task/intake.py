@@ -40,7 +40,8 @@ IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 DOCX = {".docx", ".docm"}
 XLSX = {".xlsx", ".xlsm"}
 MAX_PASTE_BYTES = 2_000_000
-PASTE_KINDS = ("csv", "md", "txt")
+PASTE_KINDS = ("csv", "md", "doc", "txt")
+PASTE_SUFFIX = {"doc": "md"}  # a Markdown document is kept as it is, in a .md file the Files tab shows as Markdown
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -343,7 +344,8 @@ def parse_pasted(text: str) -> List[List[str]]:
 
 
 def paste(root: Path, raw_task: str, name: str, text: str, kind: str = "csv") -> Dict[str, Any]:
-    """A text or a table the person copied, written as `REQ/<name>.<csv|md|txt>`. `kind` csv or md for a table (from Excel: tab-separated), txt for text."""
+    """A text or a table the person copied, written as `REQ/<name>.<csv|md|txt>`. `kind` csv or md for a table (from Excel: tab-separated),
+    doc for a Markdown document (kept as it is, in a .md file), txt for text."""
     task = task_ops.resolve(root, raw_task)
     task_ops.require_open(tasks.read(root, task))
     if kind not in PASTE_KINDS:
@@ -355,14 +357,14 @@ def paste(root: Path, raw_task: str, name: str, text: str, kind: str = "csv") ->
     folder = req_dir(root, task)
     stem = unique_stem(folder, convert.safe_name(Path(name).stem or "pasted", 60))
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    if kind == "txt":
+    if kind in ("txt", "doc"):
         body = text.strip("\n") + "\n"
     else:
         rows = parse_pasted(text)
         if not rows:
             raise CommandError(say("intake.paste.empty"))
         body = convert.csv_bytes(rows).decode("utf-8") if kind == "csv" else "\n".join(convert.table_markdown(rows)) + "\n"
-    relative = f"{stem}.{kind}"
+    relative = f"{stem}.{PASTE_SUFFIX.get(kind, kind)}"
     write_file(folder, relative, body.encode("utf-8"), True)
     with task_ops.locked(root, task) as fresh:
         task_ops.note(fresh, "intake", f"pasted {relative}")
@@ -527,6 +529,42 @@ def delete_file(root: Path, raw_task: str, relative: str) -> Dict[str, Any]:
     with task_ops.locked(root, task) as fresh:
         task_ops.note(fresh, "intake", f"deleted {clean}")
     return {"task": task, "deleted": f"{REQ_DIR}/{clean}"}
+
+
+def rename_file(root: Path, raw_task: str, relative: str, name: str) -> Dict[str, Any]:
+    """Give a file of `REQ/` a new name, in the same folder (its pristine copy goes with it). A name with no type keeps the old one;
+    a text file may become another text type (`.txt` to `.md`). An original keeps its name: the conversion report and the files made from it name it."""
+    task = task_ops.resolve(root, raw_task)
+    task_ops.require_open(tasks.read(root, task))
+    target, clean = req_file(root, task, relative)
+    if clean.startswith(ORIGINALS + "/"):
+        raise CommandError(say("intake.rename.original"))
+    given = str(name or "").replace("\\", "/").split("/")[-1].strip()
+    if not given.strip(" .-"):
+        raise CommandError(say("intake.rename.empty"))
+    old_type, new_type = target.suffix.lower(), Path(given).suffix.lower()
+    if new_type in TEXT_TYPES and new_type != old_type and old_type not in TEXT_TYPES:
+        raise CommandError(say("intake.rename.type", old=old_type or "-", new=new_type))
+    if new_type == old_type or new_type in TEXT_TYPES:
+        given = Path(given).stem
+    else:
+        new_type = old_type  # no type, or a dot that is part of the name ("v2.final")
+    renamed = "/".join(clean.split("/")[:-1] + [convert.safe_name(given, 60) + new_type])
+    if renamed == clean:
+        return {"task": task, "file": f"{REQ_DIR}/{clean}", "renamed": False}
+    new_target, renamed = req_file(root, task, renamed, must_exist=False)
+    if new_target.exists() and new_target.resolve() != target.resolve():
+        raise CommandError(say("intake.rename.taken", path=f"{REQ_DIR}/{renamed}"))
+    folder = req_dir(root, task)
+    target.rename(new_target)
+    keep = folder / PRISTINE / clean
+    if keep.is_file():
+        moved = folder / PRISTINE / renamed
+        moved.parent.mkdir(parents=True, exist_ok=True)
+        keep.rename(moved)
+    with task_ops.locked(root, task) as fresh:
+        task_ops.note(fresh, "intake", f"renamed {clean} to {renamed}")
+    return {"task": task, "file": f"{REQ_DIR}/{renamed}", "from": f"{REQ_DIR}/{clean}", "renamed": True}
 
 
 def delete_files(root: Path, raw_task: str, paths: List[str]) -> Dict[str, Any]:

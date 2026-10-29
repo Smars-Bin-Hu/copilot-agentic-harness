@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.55 (2026-10-29)
+
+### Added
+
+- **Paste a Markdown document on the Intake tab, kept as it is.** The paste box had two kinds for a table and one for plain text. Markdown pasted as a table was cut into cells, so its headings, lists and blank lines ran together; as text it was saved as `.txt` and not shown as Markdown. The new kind *a Markdown document, kept as it is* saves it unchanged as `REQ/<name>.md`, and the Files tab shows it as Markdown. Until you pick a kind yourself, the box picks it from what you paste: a heading, a list, a code fence or a quote at the start of a line, with no tab, makes it a Markdown document. On the command line: `harness task intake paste --kind doc`.
+
+- **Rename a file of `REQ/` on the Intake tab.** Open the file and press *Rename*. A name with no type keeps the old type; a text file may change type, such as `.txt` to `.md`. The copy kept for *Put back as converted* moves with it. A name already used is refused, not numbered. An original in `REQ/originals/` keeps its name, because the conversion report and the files made from it name it. A converted file that names another one (a Word file and the sheets embedded in it) still names the old name after a rename: change that line by hand if it matters.
+
+### Changed
+
+- The table kind that writes Markdown is now called *a table, as a Markdown table*, so it is not taken for a Markdown document.
+
 ## 1.5.54 (2026-10-28)
 
 ### Added

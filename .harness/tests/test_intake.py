@@ -323,12 +323,37 @@ class IntakeTests(LifeCase):
         self.assertEqual((self.req / "mapping.csv").read_text(encoding="utf-8"), 'id,rule\n1,"not null\nand unique"\n2,kept\n')
         intake.paste(self.root, "job", "mapping", pasted, "md")
         self.assertTrue((self.req / "mapping-2.md").read_text(encoding="utf-8").startswith("| id | rule |"))
+        doc = "# Rules\r\n\n- one, two\n- three\n\n| a | b |\n|---|---|\n"
+        self.assertEqual(intake.paste(self.root, "job", "rules", doc, "doc")["file"], "REQ/rules.md")
+        self.assertEqual((self.req / "rules.md").read_text(encoding="utf-8"), "# Rules\n\n- one, two\n- three\n\n| a | b |\n|---|---|\n", "a Markdown document is kept as it is")
         intake.paste(self.root, "job", "note", "free text\r\nsecond line", "txt")
         self.assertEqual((self.req / "note.txt").read_text(encoding="utf-8"), "free text\nsecond line\n")
         with self.assertRaises(CommandError):
             intake.paste(self.root, "job", "x", "   ", "csv")
         with self.assertRaises(CommandError):
             intake.paste(self.root, "job", "x", "a", "docx")
+
+    def test_a_file_is_renamed_with_its_pristine_copy_and_an_original_keeps_its_name(self) -> None:
+        intake.paste(self.root, "job", "note", "# Title\n", "txt")
+        intake.paste(self.root, "job", "rules", "a\tb\n1\t2\n", "csv")
+        (self.req / ".pristine").mkdir(exist_ok=True)
+        (self.req / ".pristine" / "rules.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+        self.assertEqual(intake.rename_file(self.root, "job", "note.txt", "note.md")["file"], "REQ/note.md", "a text file may become Markdown")
+        self.assertEqual((self.req / "note.md").read_text(encoding="utf-8"), "# Title\n")
+        self.assertFalse((self.req / "note.txt").exists())
+        self.assertEqual(intake.rename_file(self.root, "job", "rules.csv", "mapping v2")["file"], "REQ/mapping-v2.csv", "no type: the old one is kept")
+        self.assertTrue((self.req / ".pristine" / "mapping-v2.csv").is_file())
+        self.assertFalse((self.req / ".pristine" / "rules.csv").exists())
+        self.assertEqual(intake.rename_file(self.root, "job", "mapping-v2.csv", "v2.final")["file"], "REQ/v2.final.csv")
+        self.assertFalse(intake.rename_file(self.root, "job", "note.md", "note.md")["renamed"])
+        (self.req / "originals").mkdir(exist_ok=True)
+        (self.req / "originals" / "brd.docx").write_bytes(b"x")
+        (self.req / "chart.png").write_bytes(PNG)
+        for path, name in (("note.md", "v2.final.csv"), ("note.md", "  "), ("originals/brd.docx", "other.docx"), ("chart.png", "chart.md"), ("missing.md", "x"), ("../x.md", "y")):
+            with self.subTest(path=path, name=name), self.assertRaises(CommandError):
+                intake.rename_file(self.root, "job", path, name)
+        self.assertTrue((self.req / "note.md").is_file(), "a refused rename moves nothing")
+        self.assertEqual(intake.rename_file(self.root, "job", "note.md", "../../escape")["file"], "REQ/escape.md", "only the last part of a path is a name")
 
     def test_the_intake_template_is_made_once_and_not_written_over(self) -> None:
         found = intake.init(self.root, "job")
@@ -447,6 +472,9 @@ class IntakePageTests(ServeCase):
         self.assertEqual(self.call(cookie, "init")[0], 409, "not written over")
         self.assertTrue(taskdesk.desk(self.root, "job1")["intake"]["has_intake"])
         self.assertEqual(self.call(cookie, "paste", name="x", kind="exe", text="a")[0], 409)
+        status, found, _headers = self.call(cookie, "rename", path="rules.csv", name="mapping")
+        self.assertEqual((status, found["result"]["file"]), (200, "REQ/mapping.csv"))
+        self.assertEqual(self.call(cookie, "rename", path="rules.csv", name="again")[0], 409, "it is gone")
         self.assertEqual(self.call(cookie, "nothing")[0], 409)
 
     def test_a_file_that_cannot_be_read_is_refused_with_words_and_writes_nothing(self) -> None:

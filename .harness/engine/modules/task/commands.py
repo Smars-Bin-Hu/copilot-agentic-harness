@@ -293,7 +293,7 @@ def register_task(subparsers: Any) -> None:
     convert_parser.set_defaults(handler=lambda a: intake_convert(a))
     paste_parser = intake_commands.add_parser("paste", help="save a table or a text you copied (cells copied out of Excel are tab-separated) as a file of REQ/")
     paste_parser.add_argument("--name", required=True, help="the name of the file, without its type")
-    paste_parser.add_argument("--kind", default="csv", choices=intake.PASTE_KINDS, help="csv or md for a table, txt for a text")
+    paste_parser.add_argument("--kind", default="csv", choices=intake.PASTE_KINDS, help="csv or md for a table, doc for a Markdown document kept as it is, txt for a text")
     paste_parser.add_argument("--file", default="-", help="the file that holds the pasted text; - (the default) reads it from standard input")
     paste_parser.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
     paste_parser.set_defaults(handler=lambda a: intake.paste(repo_root(), a.task, a.name, read_text_argument(a.file), a.kind))

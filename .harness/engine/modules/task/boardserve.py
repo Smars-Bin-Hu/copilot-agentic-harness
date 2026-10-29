@@ -202,6 +202,8 @@ class Board:
             return intake.reset_file(self.root, task, str(data.get("path", "")))
         if action == "delete":
             return intake.delete_file(self.root, task, str(data.get("path", "")))
+        if action == "rename":
+            return intake.rename_file(self.root, task, str(data.get("path", "")), str(data.get("name", "")))
         if action == "delete_many":
             chosen = data.get("paths")
             return intake.delete_files(self.root, task, [str(item) for item in chosen] if isinstance(chosen, list) else [])

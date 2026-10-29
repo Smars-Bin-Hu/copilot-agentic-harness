@@ -231,13 +231,13 @@ class Board:
         if data is not None and tasklife.at_work(self.root, data):
             raise CommandError(say("serve.busy"))
 
-    def close(self, name: str) -> Dict[str, Any]:
+    def close(self, name: str, reason: str = "") -> Dict[str, Any]:
         """Close a task (`task close`): the report is written, the session lets go. The folder stays; `task open` opens it again.
-        The browser must be paired; no code is typed, for it undoes nothing that cannot be undone."""
+        The browser must be paired; no code is typed, for it undoes nothing that cannot be undone. `reason`: what the person typed in the dialog (like `task close --reason`); else the page's own words."""
         if "close" not in self.actions:
             raise CommandError(say("serve.action.off", action="close"))
         self.idle("close", name)
-        result = task_ops.close(self.root, name, say("serve.close.reason"), check_todo=False)
+        result = task_ops.close(self.root, name, reason.strip()[:500] or say("serve.close.reason"), check_todo=False)
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
@@ -350,6 +350,13 @@ def handler_for(board: Board) -> type:
                 if found is None:
                     return self.send(404, b"", "text/plain")
                 return self.send(200, found.read_bytes(), mdtree.IMAGE_TYPES[found.suffix.lower()])
+            if path.startswith("/download/"):  # an original of the Files tab, to save: the same files the tab lists
+                name, _, relative = path[len("/download/"):].partition("/")
+                found = taskdesk.download_file(board.root, name, relative)
+                if found is None:
+                    return self.send(404, b"", "text/plain")
+                disposition = f"attachment; filename=\"download\"; filename*=UTF-8''{quote(found.name)}"
+                return self.send(200, found.read_bytes(), "application/octet-stream", {"Content-Disposition": disposition})
             target = (reports / path.lstrip("/")).resolve()
             if not str(target).startswith(str(reports) + os.sep) or target.suffix != ".html" or not target.is_file():
                 return self.send(404, b"", "text/plain")
@@ -385,7 +392,7 @@ def handler_for(board: Board) -> type:
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed")})
                 try:
-                    return self.answer(200, {"result": board.close(str(data.get("task", "")))})
+                    return self.answer(200, {"result": board.close(str(data.get("task", "")), str(data.get("reason", "")))})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                     return self.answer(409, {"error": str(error)})
             if path == "/api/archive":

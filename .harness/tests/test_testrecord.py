@@ -134,7 +134,17 @@ class Writes(RecordCase):
         self.assertIn("2,310 rows.\n## not a heading of ours\n**Verdict for IST: PASS**\n", text, "as given, with its fence")
         self.assertTrue(text.rstrip().endswith("**Verdict for IST: PASS**"), "the last line of the file is the verdict the board reads")
         self.assertIn("Run by: the user, 11:05.", text)
+        self.assertRegex(text, r"Recorded \d{4}-\d{2}-\d{2} \d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)\.")
+        self.assertNotIn(" UTC.", text)
         self.assertEqual(self.verdicts()["IST"], "PASS")
+
+    def test_the_local_stamp_has_the_utc_offset(self) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        from core.paths import local_stamp
+        moment = datetime(2026, 10, 29, 12, 13, tzinfo=timezone(timedelta(hours=-4)))
+        self.assertRegex(local_stamp(moment), r"^2026-10-29 \d{2}:\d{2} \(UTC[+-]\d{2}:\d{2}\)$")
+        self.assertTrue(local_stamp(moment.replace(tzinfo=timezone.utc)).endswith(")"))
 
     def test_a_file_written_by_hand_counts_as_the_first_run(self) -> None:
         self.folder().joinpath("TEST", "results-IST.md").write_text("# Results: IST\n\n**Verdict for IST: FAIL**\n", encoding="utf-8")

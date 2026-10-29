@@ -345,6 +345,31 @@ class DeskTests(ServeCase):
         self.assertIn("approve-plan", [item["action"] for item in desk["actions"]])
         self.assertTrue(desk["history"])
 
+    def test_autorun_on_is_offered_only_when_a_step_is_left(self) -> None:
+        names = lambda: [item["action"] for item in taskdesk.desk(self.root, "job1", ("autorun on", "pause"))["actions"]]
+        self.assertNotIn("autorun on", names())  # no TODO.md: the engine refuses (autorun.need.todo)
+        (self.task / "TODO.md").write_text("- [x] a\n", encoding="utf-8")
+        self.assertNotIn("autorun on", names())  # every step ticked
+        (self.task / "TODO.md").write_text("- [x] a\n- [ ] b\n", encoding="utf-8")
+        self.assertIn("autorun on", names())
+
+    def test_the_intake_tab_puts_intake_md_first_and_names_the_originals_with_no_text(self) -> None:
+        files = [{"path": path, "original": path.startswith("originals/"), "report": path.endswith(".convert.md")}
+                 for path in ["a.md", "INTAKE.md", "b.csv", "originals/scan.pdf", "scan.convert.md", "originals/ok.docx", "ok.md", "ok.convert.md", "originals/sheet.xlsx", "sheet--s1.csv"]]
+        self.assertEqual(taskdesk.unread_originals(files), ["scan.pdf"])
+        self.assertEqual(taskdesk.unread_originals([]), [])
+        from modules.task import intake
+
+        folder = intake.req_dir(self.root, TASK)
+        (folder / "originals").mkdir(parents=True)
+        (folder / "originals" / "scan.pdf").write_bytes(b"x")
+        (folder / "Z.md").write_text("z", encoding="utf-8")
+        (folder / "INTAKE.md").write_text("i", encoding="utf-8")
+        (self.task / "REQ.md").touch()
+        view = taskdesk.desk(self.root, "job1")["intake"]
+        self.assertEqual(view["files"][0]["path"], "INTAKE.md")
+        self.assertEqual(view["unread"], ["scan.pdf"])
+
     def test_the_templates_placeholder_step_is_not_counted(self) -> None:
         (self.task / "TODO.md").write_text("# TODO\n\n- [ ] <step 1>\n", encoding="utf-8")
         self.assertEqual(taskdesk.desk(self.root, "job1")["todo"], {"done": 0, "total": 0})  # as the engine counts it (B63)
@@ -604,6 +629,18 @@ class DeskTests(ServeCase):
         self.prompt("go on")  # the person told the agent: the mark goes
         self.assertIsNone(self.data()["waiting"])
         self.assertEqual(taskdesk.desk(self.root, "job1", ())["waiting_why"], "")
+
+    def test_the_plan_tab_knows_when_the_plan_was_approved_and_whether_it_changed_since(self) -> None:
+        self.assertEqual(taskdesk.desk(self.root, "job1", ())["plan_approval"], {"approved": False, "at": "", "code": "", "changed": False})
+        confirm_requirement(self.root, TASK)
+        digest = tasks.plan_digest(self.root, TASK)
+        task_ops.approve_plan(self.root, TASK, reader=lambda _prompt: digest[:8], interactive=True, out=io.StringIO())
+        found = taskdesk.desk(self.root, "job1", ())["plan_approval"]
+        self.assertEqual((found["approved"], found["code"], found["changed"]), (True, digest[:8], False))
+        self.assertEqual(found["at"], self.data()["plan"]["approved_at"])
+        (self.task / "PLAN.md").write_text((self.task / "PLAN.md").read_text(encoding="utf-8") + "\nOne more step.\n", encoding="utf-8")
+        found = taskdesk.desk(self.root, "job1", ())["plan_approval"]
+        self.assertEqual((found["approved"], found["changed"]), (True, True))
 
 
 def boardserve_actions(root):

@@ -110,6 +110,22 @@ function copyCommand(button, command) {
   else fallback();
 }
 
+// Poll every `seconds`: tick() returns a promise. After 3 misses in a row (the board server gave no answer: error.offline) polling stops and a notice
+// says so, so a stopped server does not fill the console. One miss, or a refusal, changes nothing.
+function pollEvery(seconds, tick) {
+  let misses = 0;
+  const timer = setInterval(() => {
+    const run = tick();
+    if (!run) return;
+    run.then(() => { misses = 0; }, (error) => {
+      if (!error || !error.offline) { misses = 0; return; }
+      if (++misses < 3) return;
+      clearInterval(timer);
+      document.body.prepend(h("div", {class: "stopped-note", role: "alert"}, t("board.stopped")));
+    });
+  }, seconds * 1000);
+}
+
 // The button of one action ({action, command}) of a task row: it acts when the board server runs that action, else it copies the command.
 const CONTROLS = ["pause", "resume", "close", "autorun on"];
 function actionButton(row, item, extra) {

@@ -38,10 +38,10 @@ td.grow{width:42%}
 .tag.lost{background:rgba(217,180,90,.18);color:#a8761a;border:1px dashed rgba(217,180,90,.7)}
 @media (prefers-color-scheme:dark){.tag.lost{color:#e0bd6a}}
 /* A long task name wraps (at a hyphen first) instead of pushing the buttons out of the card. */
-td.name{min-width:11em;overflow-wrap:anywhere}
+td.name{white-space:nowrap}td.name .sub{white-space:normal;max-width:18em}
 td.when{white-space:nowrap}
 td.state{min-width:9em}
-td.kind{min-width:6em}
+td.kind{white-space:nowrap}
 main.wide{max-width:1200px}
 .kpi b.long{font-size:15px;line-height:1.87}
 .now{margin-top:12px}.now .tag{font-size:13px;padding:4px 10px}
@@ -57,7 +57,7 @@ noscript{display:block;margin-top:16px;color:var(--bad)}
 .said{max-width:26em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help}
 /* A button whose words are longer than the cell takes two lines rather than spill out of it. */
 /* The buttons of a row stay on one line and scroll sideways; a soft edge shows that there is more on that side. */
-.act-strip{width:15em;display:flex;flex-wrap:nowrap;gap:4px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;padding-bottom:3px;
+.act-strip{width:8em;display:flex;flex-wrap:nowrap;gap:4px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;padding-bottom:3px;
  background:linear-gradient(to right,var(--card) 30%,transparent) left center/18px 100% no-repeat local,linear-gradient(to left,var(--card) 30%,transparent) right center/18px 100% no-repeat local,
  linear-gradient(to right,rgba(128,138,160,.35),transparent) left center/8px 100% no-repeat scroll,linear-gradient(to left,rgba(128,138,160,.35),transparent) right center/8px 100% no-repeat scroll}
 .act-strip .act{flex:none;margin:0}.act{white-space:nowrap;font:inherit;font-size:12px;padding:2px 8px;margin:0 4px 2px 0;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
@@ -79,8 +79,8 @@ noscript{display:block;margin-top:16px;color:var(--bad)}
 .act.big{font-size:14px;padding:6px 14px;align-self:flex-start;margin:0}
 .act.big.hot{background:var(--approval);border-color:var(--approval);color:#fff}
 .hint{margin:0;color:var(--soft);font-size:12.5px;line-height:1.55}.hint.top{margin:0 0 14px}.hint.bad{color:var(--bad);margin:8px 0}
-.desk{padding:0;overflow:hidden}
-.tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line);overflow-x:auto;background:var(--bg)}
+.desk{padding:0;overflow:hidden;overflow:clip}  /* clip, not hidden: hidden would stop the tab bar from sticking */
+.tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line);overflow-x:auto;background:var(--bg);position:sticky;top:0;z-index:5;border-radius:12px 12px 0 0}
 .tab{font:inherit;font-size:13px;padding:8px 14px;border:0;border-bottom:2px solid transparent;background:none;color:var(--soft);cursor:pointer;white-space:nowrap}
 .tab:hover{color:var(--ink)}.tab.on{color:var(--ink);border-bottom-color:var(--model);font-weight:600}
 .pane{padding:22px 26px 26px}
@@ -228,3 +228,11 @@ tr.touched td{animation:glow 1.8s ease-out}
 .chart.cache{height:auto}.cache-row{display:flex;align-items:flex-end;gap:1px}.cache-row.tall{height:120px}.cache-col{flex:1 1 0;min-width:1px;display:flex;flex-direction:column-reverse}.cache-col b{display:block;flex:none}
 .cache-row.marks{height:4px;margin-top:2px;align-items:stretch}.cache-row.marks i{flex:1 1 0;min-width:1px}.cache-row.hits{height:36px;background:var(--track)}.cache-row.hits i{flex:1 1 0;min-width:1px;background:var(--tool)}.hits-label{margin:8px 0 2px;font-size:12px}
 .cread{background:var(--tool)}.cwrite{background:var(--approval)}.crest{background:var(--other)}.ccold{background:var(--bad)}
+.stopped-note{position:fixed;top:0;left:0;right:0;z-index:20;padding:10px 16px;text-align:center;font-size:14px;font-weight:600;background:var(--bad);color:#fff}
+
+details.tpl-note{margin:.4em 0 .8em;color:var(--soft);font-size:12.5px}details.tpl-note summary{cursor:pointer;opacity:.8}details.tpl-note blockquote{margin:.4em 0;opacity:.8}
+.plan-approval{margin:0 0 14px}
+/* The board list: one line for a task name and for its kind, and the table fits its card at 1280px. */
+.board-list table{font-size:12.5px}.board-list th,.board-list td{padding-right:8px}
+/* There the buttons of a row wrap onto a second line instead of scrolling: three buttons do not fit in one line of 8em. */
+.board-list .act-strip{width:8em;flex-wrap:wrap;overflow:visible;background:none}

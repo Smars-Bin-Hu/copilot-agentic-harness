@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core import config, domainskills, messages, pinpython, tasks
-from core.paths import cli_command, utc_now
+from core.paths import cli_command, local_stamp
 
 from . import intakeconvert as convert, task as task_ops
 from .common import CommandError
@@ -258,7 +258,7 @@ def preview_table(rows: List[List[str]]) -> List[str]:
 
 
 def report_text(original: str, size: int, digest: str, made: Dict[str, Any], files: List[str], note_lines: List[str]) -> str:
-    lines = [f"# Conversion report: {original}", "", f"Converted {utc_now()[:16].replace('T', ' ')} UTC by `task intake convert`. No AI was used: the conversion is a program, and it changes no number.", "",
+    lines = [f"# Conversion report: {original}", "", f"Converted {local_stamp()} by `task intake convert`. No AI was used: the conversion is a program, and it changes no number.", "",
              f"- Original: `{ORIGINALS}/{original}` ({size:,} bytes, sha256 {digest[:16]}), kept as it was given.",
              "- The agent reads the files below, not the original. Trim what is not needed; a file that came out wrong can be replaced by a table you paste in.", "", "## Files", ""]
     lines += [f"- `{name}`" for name in files] or ["- none"]

@@ -147,6 +147,8 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = ())
             continue
         row["stages"] = taskstages.of(root, row["task"])
         row["todo_left"] = len(task_ops.todo_left(root, row["task"])) if row["status"] == "open" else 0
+        if not row["todo_left"]:  # `autorun on` is refused with no step left to do (autorun.need.todo): it is not offered
+            row["actions"] = [item for item in row["actions"] if item["action"] != "autorun on"]
         row["req_unconfirmed"] = row["status"] == "open" and task_ops.req_state(root, row["task"]) in ("open", "changed")
         key = (str(root), row["task"])
         kept = _closed.get(key) if row["status"] == "closed" else None

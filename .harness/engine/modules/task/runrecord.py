@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core import messages, tasks
-from core.paths import cli_command, utc_now
+from core.paths import cli_command, local_stamp
 
 from . import task as task_ops
 from .common import CommandError
@@ -50,11 +50,10 @@ def record(root: Path, raw_task: str, env: str, given_file: str = "", run_by: st
     path = folder / base / RESULTS
     before = path.read_text(encoding="utf-8-sig", errors="replace") if path.is_file() else f"# Run results: {env}\n"
     number = last_run(before) + 1
-    now = utc_now()
     pictures = save_evidence(folder, env, number, list(evidence or []), base, EVIDENCE)
     section = [
         "", f"## Run {number}", "",
-        f"Run by: {cell(run_by) or 'the user'}. Recorded {now[:16].replace('T', ' ')} UTC.", "",
+        f"Run by: {cell(run_by) or 'the user'}. Recorded {local_stamp()}.", "",
         *(["### What was run", "", *fenced(ran), ""] if ran else []),
         *(["### As the user gave them", "", *fenced(given), ""] if given else []),
         *(["### Screenshots", "", *[line for item in pictures for line in (f"![{cell(item['caption']).replace(']', ')')}]({item['relative']})", "", f"{cell(item['caption'])} (file `{item['name']}`, sha256 {item['sha'][:12]})", "")]] if pictures else []),

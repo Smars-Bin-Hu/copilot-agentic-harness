@@ -16,6 +16,8 @@
   const canArchive = typeof SERVE !== "undefined" && SERVE.runs("archive");
   const selected = new Set();  // closed tasks the person ticked, to archive together
   let shown = JSON.stringify([rows, hidden]);
+  let hovering = false;  // the pointer is over the list: a refresh updates the cells but keeps the row order, so no row jumps under a click
+  let held = null;  // the order of the rows (their names) at the last drawing
   const app = document.getElementById("app");
   const sum = (values) => values.reduce((total, value) => total + value, 0);
 
@@ -64,6 +66,11 @@
       });
       found = found.map((item) => item.row);
     }
+    if (hovering && held) {  // rows seen before keep their place; a new one goes last
+      const place = (row) => { const at = held.indexOf(row.name); return at < 0 ? held.length : at; };
+      found = found.map((row, index) => ({row, index})).sort((a, b) => place(a.row) - place(b.row) || a.index - b.index).map((item) => item.row);
+    }
+    held = found.map((row) => row.name);
     return found;
   }
 
@@ -74,6 +81,7 @@
     else view.key = "";  // a third click goes back to the order the server gave
     keep.set("sort", view.key);
     keep.set("dir", String(view.dir));
+    held = null;  // a click on a head sorts at once, pointer over the list or not
     drawTable();
   }
 
@@ -132,7 +140,7 @@
       h("td", {class: "kind"}, kind), h("td", {class: "state"}, state(row)),
       num(row.waiting && row.waited_s !== null ? clock(row.waited_s) : "-"),
       brief
-        ? [h("td", {style: "width:18%"}, bar([
+        ? [h("td", {style: "width:6%"}, bar([
             ["work", brief.active_s, t("report.active") + " " + clock(brief.active_s)],
             ["wait", brief.waiting_s, t("report.waiting") + " " + clock(brief.waiting_s)]], longest, true)),
           num(clock(brief.active_s)), num(amount(brief.aiu)), num(brief.prompts), num(brief.reviews ? reviewsText(brief.reviews, brief.review_fails) : "-")]
@@ -147,7 +155,9 @@
   const search = h("input", {type: "search", class: "search", placeholder: t("board.search"), autocomplete: "off", spellcheck: "false", value: view.query});
   const pick = h("div", {class: "pick"});
   const roundBox = h("div", {class: "chips", role: "group", title: t("board.rounds.hint")});
-  const tableBox = h("div", {class: "card"});
+  const tableBox = h("div", {class: "card board-list"});
+  tableBox.addEventListener("mouseenter", () => { hovering = true; });
+  tableBox.addEventListener("mouseleave", () => { hovering = false; });
   const more = h("p", {class: "sub"});
   const stamp = h("span");
   document.querySelector("main").classList.add("wide");
@@ -300,18 +310,18 @@
   draw();
   drawMode();
 
-  function refresh() {
+  function refresh(strict) {  // strict: an unanswered request is thrown (the poll counts it); a click's refresh ignores it
     if (typeof SERVE === "undefined") return Promise.resolve();
     return SERVE.post("/api/board", {}).then((data) => {
       asOf = data.as_of;
       archiveTo = data.archive_to || "";
       const text = JSON.stringify([data.rows, data.hidden]);
       if (text !== shown) { rows = data.rows; hidden = data.hidden; shown = text; draw(); } else stamp.textContent = subtitle();
-    }, () => {});
+    }, (error) => { if (strict === true) throw error; });
   }
   if (typeof SERVE !== "undefined") {
     SERVE.start(app);
     SERVE.onChange(refresh);  // after a click the board is asked again in place, and the robots slide (a reload draws them from nothing)
-    if (DATA.serve.refresh) setInterval(() => { if (!SERVE.busy()) refresh(); }, DATA.serve.refresh * 1000);
+    if (DATA.serve.refresh) pollEvery(DATA.serve.refresh, () => (SERVE.busy() ? null : refresh(true)));
   }
 })();

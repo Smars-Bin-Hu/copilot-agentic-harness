@@ -100,6 +100,11 @@ class TaskCase(TargetCase):
     def open(self, name: str = NAME, session: str = SESSION, ok: bool = True) -> Any:
         return self.run_cli("task", "open", name, "--session-id", session, ok=ok)
 
+    def branch(self, task: str = TASK) -> str:
+        """The default branch of a task: `feature/job1` for "job1"."""
+        data = self.data(task)
+        return task_ops.default_branch(task, 1, str(data.get("kind") or ""), str(data.get("created_at") or ""))
+
     def data(self, task: str = TASK) -> Dict[str, Any]:
         return json.loads((self.root / task / ".task" / "task.json").read_text(encoding="utf-8"))
 

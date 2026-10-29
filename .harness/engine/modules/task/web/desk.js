@@ -72,8 +72,44 @@
 
   // --- markdown -------------------------------------------------------------------------------------------
 
+  // Review answers: a place in the task folder ("DEV/dir/file.sql:3", "REQ/paper.md:40") is a link to the file: its diff on the Changes tab when it is in the diff, else the Files tab.
+  // In a code span the whole text is the place (spaces and Chinese are fine); in plain text it runs to the next space.
+  let placeLinks = false;
+  const PLACE = /^((?:DEV|REQ|REF|RUNS|INBOX)\/.+?)(?::(\d+)(?:-\d+)?)?$/;
+  const PLACE_IN_TEXT = /(?:DEV|REQ|REF|RUNS|INBOX)\/[^\s,;，；。`'"()（）]+/g;
+  function placeLink(text, label) {
+    const found = PLACE.exec(text.trim());
+    if (!found) return null;
+    const path = found[1];
+    const dev = path.startsWith("DEV/") ? path.slice(4) : "";
+    const inDiff = dev && (desk.changes.files.some((item) => item.path === dev) || desk.changes.deletes.includes(dev)) && ownTab("changes");
+    if (!inDiff && !(ownTab("files") && desk.files.some((item) => item.path === path))) return null;
+    const a = h("a", {href: "#" + (inDiff ? "changes" : "files"), title: t("desk.path.open", {path})}, label);
+    a.addEventListener("click", (event) => {
+      event.preventDefault();
+      current = inDiff ? "changes" : "files";
+      if (inDiff) DiffView.select("dev", dev, found[2] ? Number(found[2]) : 0);  // the file in the Changes picker, and its line
+      else fileOpen = path;
+      history.replaceState(null, "", "#" + current);
+      draw(false);
+    });
+    return a;
+  }
+
   function inline(spans) {
     return spans.map((span) => {
+      if (placeLinks && span.t === "code") return placeLink(span.v, h("code", null, span.v)) || h("code", null, span.v);
+      if (placeLinks && span.t === "text" && /(?:DEV|REQ|REF|RUNS|INBOX)\//.test(span.v)) {
+        const out = [];
+        let from = 0;
+        for (const found of span.v.matchAll(PLACE_IN_TEXT)) {
+          const link = placeLink(found[0], found[0]);
+          if (!link) continue;
+          out.push(span.v.slice(from, found.index), link);
+          from = found.index + found[0].length;
+        }
+        return [...out, span.v.slice(from)];
+      }
       if (span.t === "text") return span.v;
       if (span.t === "br") return h("br");
       if (span.t === "code") return h("code", null, span.v);
@@ -144,7 +180,10 @@
   function markdown(name, empty) {
     const found = doc(name);
     if (!found) return h("div", {class: "empty-state"}, h("b", null, t("desk.missing", {file: name})), h("p", null, empty));
-    return h("article", {class: "md"}, blocks(found.blocks), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
+    // The template's own words under the title ("> The handover file. A new session reads this file first...") are for the agent: folded, so the page starts with the task.
+    const note = (name === "TASK.md" || name === "REQ.md") && found.blocks.length > 1 && found.blocks[0].t === "h" && found.blocks[1].t === "quote";
+    const parts = note ? [blocks(found.blocks.slice(0, 1)), h("details", {class: "tpl-note"}, h("summary", null, t("desk.template.note")), blocks(found.blocks.slice(1, 2))), blocks(found.blocks.slice(2))] : blocks(found.blocks);
+    return h("article", {class: "md"}, parts, found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
   }
 
 
@@ -287,7 +326,8 @@
     const optional = ["pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
     const items = desk.actions.filter((item) => !optional.includes(item.action));
     const rest = desk.actions.filter((item) => optional.includes(item.action));
-    const row = {name: desk.name, waiting: desk.waiting, state: desk.state, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed};
+    const row = {name: desk.name, waiting: desk.waiting, state: desk.state, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed,
+      result_missing: FILES[desk.kind] && ["design", "rca"].includes(desk.kind) && !doc(FILES[desk.kind]) ? FILES[desk.kind] : ""};  // a design or an RCA task without its result file: the close dialog warns
     const hint = (item) => t("desk.hint." + item.action.replace(" ", "-"));
     const entry = (item) => h("div", {class: "action"}, actionButton(row, item, "big"), h("p", {class: "hint"}, hint(item)));
     const line = (item) => h("div", {class: "action-line"}, actionButton(row, item), h("span", {class: "hint"}, hint(item)));
@@ -368,12 +408,14 @@
     if (!r.rounds.length) parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.review.none"))));
     for (const item of r.rounds) {
       const verdict = item.verdict ? tag(item.verdict, item.verdict === "PASS" ? "good" : item.verdict === "FAIL" ? "bad" : "") : tag(t("desk.review.waiting"));
+      placeLinks = true;
       const answer = item.answer ? blocks(item.answer.blocks) : h("p", {class: "sub"}, item.verdict ? t("desk.review.noanswer") : t("desk.review.pending"));
+      placeLinks = false;
       parts.push(h("section", {class: "round " + (item.verdict === "FAIL" ? "fail" : item.verdict === "PASS" ? "pass" : "")},
         h("div", {class: "round-head"}, h("strong", null, "round-" + String(item.number).padStart(3, "0")), " ", verdict, " ",
           item.dismissed ? [tag(t("desk.review.dismissed"), "hot"), " "] : item.invalid ? [tag(t(item.refunded ? "desk.review.given_back" : "desk.review.invalid"), "hot"), " "] : null,
           h("span", {class: "sub"}, when(item.started_at, 5, 16) + " · " + (item.current ? t("desk.review.current") : t("desk.review.earlier")))),
-        h("article", {class: "md"}, answer, item.answer && item.answer.cut ? h("p", {class: "sub"}, t("desk.cut")) : null),
+        (h("article", {class: "md"}, answer, item.answer && item.answer.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)),
         (item.dropped || []).length ? h("div", {class: "dropped"}, h("p", {class: "sub"}, t("desk.review.dropped")),
           h("ul", null, item.dropped.map((found) => h("li", null, h("b", null, found.why), " ", found.text)))) : null,
         item.package ? h("details", null, h("summary", {class: "sub"}, t("desk.review.given")), h("article", {class: "md"}, blocks(item.package.blocks))) : null));
@@ -537,12 +579,25 @@
   const rootHint = (root) => ROOT_HINT[root.toUpperCase()] || (/^DEV_R\d+$/i.test(root) ? ROOT_HINT.DEV : "desk.files.hint");  // DEV_r<n>: the files an earlier round wrote back
   const size = (bytes) => bytes < 1024 ? bytes + " B" : bytes < 1048576 ? Math.round(bytes / 1024) + " KB" : (bytes / 1048576).toFixed(1) + " MB";
 
+  // An original kept by Intake: the files made from it (they open here) and the original itself to save.
+  function originalExtras(item) {
+    if (!item.path.startsWith("REQ/originals/")) return null;
+    const made = (item.made || []).map((path) => {
+      const a = h("a", {href: "#files", title: path}, path.slice(4));
+      a.addEventListener("click", (event) => { event.preventDefault(); fileOpen = path; draw(false); });
+      return a;
+    });
+    const href = "/download/" + encodeURIComponent(desk.name) + "/" + item.path.split("/").map(encodeURIComponent).join("/");
+    return h("p", {class: "sub"}, made.length ? [t("desk.files.made") + " ", made.map((a, index) => [index ? ", " : "", a]), " · "] : null,
+      served() ? h("a", {href, download: ""}, t("desk.files.download")) : null);
+  }
+
   function fileView(item) {
     if (item.kind === "image") {
       return picture({src: item.path, alt: item.path.split("/").pop(), data: item.data || ""});
     }
     const found = fileCache[item.path] || item.doc;
-    if (!found && !["markdown", "text"].includes(item.kind)) return h("p", {class: "sub"}, t("desk.files.other", {size: size(item.size)}));  // never asked for: it was "Loading…" for good
+    if (!found && !["markdown", "text"].includes(item.kind)) return [h("p", {class: "sub"}, t("desk.files.other", {size: size(item.size)})), originalExtras(item)];  // never asked for: it was "Loading…" for good
     if (!found && !served()) return h("p", {class: "sub"}, t("desk.files.saved"));  // a saved copy took in only the small files
     if (!found) return h("p", {class: "sub"}, fileCache[item.path] === null ? t("desk.files.failed") : t("desk.files.loading"));
     if (found.kind === "markdown") return h("article", {class: "md"}, runTabs("file:" + item.path, found.blocks, null, true) || blocks(found.blocks), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
@@ -775,7 +830,13 @@
       const name = window.prompt(t("desk.intake.rename.ask", {path: edit.path}), now);
       if (name === null || !name.trim() || name.trim() === now) return;
       if (!edit.readonly && edit.text !== edit.saved && !window.confirm(t("desk.intake.discard"))) return;
-      intakeAct("rename", edit.path, (found) => { intake.editing = null; intakeOpen(found.file.replace(/^REQ\//, "")); }, {name: name.trim()});
+      intakeAct("rename", edit.path, (found) => {
+        for (const card of intake.done) {  // the "recently saved" cards name the file as it was
+          const again = (text) => (text === found.from ? found.file : text);
+          card.name = again(card.name); card.result.files = card.result.files.map(again); card.result.report = again(card.result.report);
+        }
+        intake.editing = null; intakeOpen(found.file.replace(/^REQ\//, ""));
+      }, {name: name.trim()});
     };
     const head = h("div", {class: "card-head"},
       h("div", {class: "card-title"}, h("strong", null, "REQ/" + edit.path), " ", edit.readonly ? null : edit.text !== edit.saved ? tag(t("desk.intake.unsaved"), "hot") : h("span", {class: "sub"}, t("desk.intake.saved"))),
@@ -826,6 +887,7 @@
     });
     parts.push(h("h4", {class: "intake-sub"}, t("desk.intake.paste.title")), h("p", {class: "hint"}, t("desk.intake.paste.hint")), h("div", {class: "inbox-pictures"}, name, kind), text, h("div", {class: "inbox-save"}, savePaste));
     if (intake.error) parts.push(h("p", {class: "hint bad"}, intake.error));
+    if (x.unread.length) parts.unshift(h("div", {class: "hint bad intake-unread", role: "alert"}, x.unread.map((file) => h("p", null, t("desk.intake.unread", {file})))));  // at the top of the tab
     for (const item of intake.done.slice(0, 5)) {
       parts.push(h("section", {class: "round pass"},
         h("div", {class: "round-head"}, h("strong", null, item.name), " ", h("span", {class: "sub"}, t("desk.intake.made", {n: item.result.files.length}))),
@@ -967,14 +1029,22 @@
     draw(false);
   }
 
+  // One line over the plan: when it was approved, with which code, and whether it changed since (what approve-plan stored; nothing new is kept).
+  function planApproval() {
+    const a = desk.plan_approval;
+    if (!a) return null;
+    if (!a.approved) return h("p", {class: "plan-approval"}, tag(t("desk.plan.approval.none"), "hot long"));
+    return h("p", {class: "plan-approval"}, tag(t(a.changed ? "desk.plan.approval.changed" : "desk.plan.approval.yes", {at: when(a.at, 0, 16), code: a.code}), (a.changed ? "hot" : "good") + " long"));
+  }
+
   function body() {
     if (current === "overview") {
-      return [h("p", {class: "hint top"}, t("desk.overview.hint")), markdown("TASK.md", t("desk.missing.task"))];
+      return [h("p", {class: "hint top"}, t("desk.overview.hint") + (doc("REQ.md") ? " " + t("desk.overview.req") : "")), markdown("TASK.md", t("desk.missing.task"))];
     }
     if (current === "req") return [h("p", {class: "hint top"}, t("desk.req.hint")), markdown("REQ.md", t("desk.missing.req"))];
     if (current === "design") return [h("p", {class: "hint top"}, t("desk.design.hint")), markdown(FILES.design, t("desk.missing.design"))];
     if (current === "rca") return [h("p", {class: "hint top"}, t("desk.rca.hint")), markdown(FILES.rca, t("desk.missing.rca"))];
-    if (current === "plan") return [h("p", {class: "hint top"}, t("desk.plan.hint")), markdown("PLAN.md", t("desk.missing.plan"))];
+    if (current === "plan") return [h("p", {class: "hint top"}, t("desk.plan.hint")), planApproval(), markdown("PLAN.md", t("desk.missing.plan"))];
     if (current === "todo") return [progress(), markdown("TODO.md", t("desk.missing.todo"))];
     if (current === "log") return [h("p", {class: "hint top"}, t("desk.log.hint")), markdown("LOG.md", t("desk.missing.log"))];
     if (current === "changes") return changes();
@@ -1016,16 +1086,16 @@
   document.querySelector("main").classList.add("wide");
   draw(false);
   if (typeof SERVE !== "undefined" && DATA.serve.refresh) {
-    setInterval(() => {
-      if (SERVE.busy()) return;
-      if (document.activeElement && ["TEXTAREA", "INPUT"].includes(document.activeElement.tagName)) return;  // a redraw would take the focus from what the person is typing
-      SERVE.post("/api/desk", {task: desk.name}).then((data) => {
+    pollEvery(DATA.serve.refresh, () => {
+      if (SERVE.busy()) return null;
+      if (document.activeElement && ["TEXTAREA", "INPUT"].includes(document.activeElement.tagName)) return null;  // a redraw would take the focus from what the person is typing
+      return SERVE.post("/api/desk", {task: desk.name}).then((data) => {
         const text = JSON.stringify(data.desk);
         if (same(text, shown)) return;
         setDesk(data.desk);
         shown = text;
         draw(true);
-      }, () => {});
-    }, DATA.serve.refresh * 1000);
+      }, (error) => { if (error && error.offline) throw error; });
+    });
   }
 })();

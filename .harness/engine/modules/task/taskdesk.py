@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import messages, tasks
+from core import approval, messages, tasks
 from core.paths import cli_command, utc_now
 
 from . import autorun, common, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects
@@ -152,6 +152,16 @@ def history(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
+def plan_approval(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """What the Plan tab says about the approval, from what approve-plan stored: `approved` (ever), when, the code (the start of the plan's sha256 the person
+    typed when the requirement was confirmed before; with one code for both files it is the plan's part), and `changed`: PLAN.md or the requirement is not what was approved."""
+    kept = data.get("plan") if isinstance(data.get("plan"), dict) else {}
+    digest = str(kept.get("approved_sha256") or "")
+    if not digest:
+        return {"approved": False, "at": "", "code": "", "changed": False}
+    return {"approved": True, "at": str(kept.get("approved_at") or ""), "code": approval.code_of(digest), "changed": not tasks.plan_approved(root, task, data)}
+
+
 def diff_lines(path: Path) -> Dict[str, Any]:
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines() if path.is_file() else []
     return {"lines": lines[:MAX_DIFF_LINES], "cut": len(lines) > MAX_DIFF_LINES}
@@ -258,8 +268,22 @@ def intake_view(root: Path, task: str, data: Dict[str, Any], row: Dict[str, Any]
 
     if row.get("status") != "open" or not (tasks.task_dir(root, task) / tasks.REQ_FILE).is_file():
         return None
-    files = intake.req_files(root, task)
-    return {"files": files, "has_intake": any(item["path"] == "INTAKE.md" for item in files), "limit_mb": 28, "domains": intake.kb_domains(root), "task_domains": intake.task_domains(root, data)}
+    files = sorted(intake.req_files(root, task), key=lambda item: item["path"] != "INTAKE.md")  # INTAKE.md first; the rest keep their order (stable sort)
+    return {"files": files, "unread": unread_originals(files), "has_intake": any(item["path"] == "INTAKE.md" for item in files), "limit_mb": 28, "domains": intake.kb_domains(root), "task_domains": intake.task_domains(root, data)}
+
+
+def unread_originals(files: List[Dict[str, Any]]) -> List[str]:
+    """The originals in `REQ/originals/` that gave no text file (a scanned PDF, a .doc): the agent cannot read them. A converted file is named `<stem>.<type>` or `<stem>--<sheet>.<type>`."""
+    texts = [Path(item["path"]).name for item in files if not item["original"] and not item["report"] and "/" not in item["path"]]
+    found = []
+    for item in files:
+        if not item["original"]:
+            continue
+        name = Path(item["path"]).name
+        stem = name[: -len(Path(name).suffix)] if Path(name).suffix else name
+        if not any(text.startswith(stem + ".") or text.startswith(stem + "--") for text in texts):
+            found.append(name)
+    return found
 
 
 def needs_req(data: Dict[str, Any]) -> bool:
@@ -272,6 +296,8 @@ def offered(root: Path, row: Dict[str, Any], task: str, served: Tuple[str, ...],
     found = taskboard.actions(row, served)
     if needs_req(data) and row.get("status") == "open" and "confirm-req" in served and task_ops.req_state(root, task) in ("open", "changed") and not any(item["action"] == "confirm-req" for item in found):
         found.insert(0, {"action": "confirm-req", "command": f"{cli_command()} task confirm-req --task {row['name']}"})
+    if not task_ops.todo_left(root, task):  # `autorun on` is refused with no step left to do (autorun.need.todo): it is not offered
+        found = [item for item in found if item["action"] != "autorun on"]
     return found
 
 
@@ -298,7 +324,7 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
         "docs": docs, "files": taskfiles.listing(root, task), "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
-        "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if needs_req(data) and row.get("status") == "open" else 0, "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
+        "plan_approval": plan_approval(root, task, data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if needs_req(data) and row.get("status") == "open" else 0, "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),
         "req_changed": needs_req(data) and row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),
@@ -332,6 +358,12 @@ def image_file(root: Path, name: str, relative: str) -> Optional[Path]:
     except (OSError, ValueError):
         return None
     return resolved
+
+
+def download_file(root: Path, name: str, relative: str) -> Optional[Path]:
+    """A file of the Files tab of the task the board lists as `name`, for a download link, or None. The path comes from a page."""
+    row = row_of(root, name)
+    return taskfiles.download(root, row["task"], relative) if row is not None else None
 
 
 def embed_images(root: Path, name: str, node: Any, budget: Optional[List[int]] = None) -> None:

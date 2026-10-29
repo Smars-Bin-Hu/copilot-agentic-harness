@@ -108,7 +108,7 @@ const Lobby = (function () {
         let entry = docked.get(row.name);
         if (!entry) {
           const bot = robot("closed", row.kind, ((index * 0.61) % 4).toFixed(2));
-          const slot = h("div", {class: "lb-slot lb-docked", tabindex: "0", role: "link", "aria-label": row.name}, bot, h("div", {class: "lb-nm"}, row.name));
+          const slot = h("div", {class: "lb-slot lb-docked", tabindex: "0", role: "link", "aria-label": row.name}, bot, h("div", {class: "lb-nm", title: row.name}, row.name));
           entry = {slot, bot, row, pose: "closed", zone: "dock"};
           slot.addEventListener("mouseenter", () => show(entry));
           slot.addEventListener("focus", () => show(entry));
@@ -230,7 +230,7 @@ const Lobby = (function () {
           let entry = slots.get(row.name);
           if (!entry) {
             const bot = robot(pose, row.kind, ((index * 0.37) % 3).toFixed(2));
-            const label = h("div", {class: "lb-nm"}, row.name);
+            const label = h("div", {class: "lb-nm", title: row.name}, row.name);
             const slot = h("div", {class: "lb-slot", tabindex: "0", role: "link", "aria-label": row.name}, bot, label);
             entry = {slot, bot, row, pose, zone: "", label};
             slot.addEventListener("mouseenter", () => show(entry));

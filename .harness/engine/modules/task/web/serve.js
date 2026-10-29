@@ -16,7 +16,7 @@ const SERVE = (function () {
   function post(path, body) {
     return fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json", "X-Harness-Board": "1"}, body: JSON.stringify(body)})
       .then((response) => response.json().then((data) => (response.ok ? data : Promise.reject(new Error(data.error || response.status)))),
-        () => Promise.reject(new Error(t("board.serve.stopped"))));
+        () => Promise.reject(Object.assign(new Error(t("board.serve.stopped")), {offline: true})));  // offline: no answer at all (not a refusal); pollEvery counts these
   }
 
   function dialog(children) {
@@ -91,13 +91,15 @@ const SERVE = (function () {
   // Close a task: one confirm. It writes the report and lets the session go; the folder stays, and `task open` opens it again.
   function close(row) {
     const said = h("div", {class: "bad"});
+    const reason = h("input", {type: "text", class: "code", maxlength: 500, autocomplete: "off", placeholder: t("board.close.reason.ph")});
     const go = h("button", {class: "act hot", type: "button"}, t("board.close.go"));
     const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
-    const view = dialog([h("h2", null, t("board.close.title", {name: row.name})), h("p", null, t("board.close.warn")), row.state === "quiet" ? h("p", {class: "bad"}, t("board.close.quiet")) : null, row.todo_left ? h("p", {class: "bad"}, t("board.close.todo", {count: row.todo_left})) : null, h("div", {class: "row"}, go, no), said]);
+    const view = dialog([h("h2", null, t("board.close.title", {name: row.name})), h("p", null, t("board.close.warn")), row.state === "quiet" ? h("p", {class: "bad"}, t("board.close.quiet")) : null, row.todo_left ? h("p", {class: "bad"}, t("board.close.todo", {count: row.todo_left})) : null, row.result_missing ? h("p", {class: "bad"}, t("board.close.result", {file: row.result_missing})) : null,
+      h("label", {class: "sub"}, t("board.close.reason")), reason, h("div", {class: "row"}, go, no), said]);
     no.addEventListener("click", view.close);
     go.addEventListener("click", () => {
       go.disabled = true;
-      post("/api/close", {task: row.name}).then(() => { view.close(); done(); },
+      post("/api/close", {task: row.name, reason: reason.value.trim()}).then(() => { view.close(); done(); },
         (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; });
     });
   }

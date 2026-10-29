@@ -148,6 +148,17 @@ class ServeTests(ServeCase):
         self.agent_stopped()  # the agent stopped: the same buttons work
         self.assertEqual(self.request("POST", "/api/act", {"action": "pause", "task": TASK})[0], 200)
 
+    def test_the_reason_typed_in_the_close_dialog_is_the_reason_of_the_close(self) -> None:
+        cookie = self.pair()
+        self.assertEqual(self.request("POST", "/api/close", {"task": "job1", "reason": "  merged upstream  "}, cookie=cookie)[0], 200)
+        self.assertEqual(self.data()["status"], "closed")
+        self.assertEqual([event["detail"] for event in self.data()["events"] if event["what"] == "close"], ["merged upstream"])
+
+    def test_a_close_with_no_reason_keeps_the_pages_own_words(self) -> None:
+        cookie = self.pair()
+        self.assertEqual(self.request("POST", "/api/close", {"task": "job1"}, cookie=cookie)[0], 200)
+        self.assertEqual([event["detail"] for event in self.data()["events"] if event["what"] == "close"], [messages.text("serve.close.reason")])
+
     def test_pause_and_resume_need_no_pairing(self) -> None:
         status, data, _ = self.request("POST", "/api/act", {"action": "pause", "task": TASK})
         self.assertEqual(status, 200, data)

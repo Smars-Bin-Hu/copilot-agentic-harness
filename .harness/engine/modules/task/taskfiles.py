@@ -24,6 +24,7 @@ MAX_VIEW_BYTES = 400_000
 MAX_EMBED_BYTES = 150_000  # a saved copy takes a text file in up to this size each, and 2 MB in all
 MAX_EMBED_TOTAL = 2 * 1024 * 1024
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_DOWNLOAD_BYTES = 30 * 1024 * 1024  # intake takes in 28 MB at most
 MARKDOWN = {".md", ".markdown"}
 TEXT = {".txt", ".log", ".sql", ".py", ".sh", ".ps1", ".bat", ".cmd", ".json", ".jsonl", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".csv", ".tsv", ".xml",
         ".html", ".css", ".js", ".ts", ".java", ".scala", ".r", ".diff", ".patch", ".properties", ".env", ".md5",
@@ -45,6 +46,23 @@ def kind_of(path: Path) -> str:
 
 def folder_of(root: Path, task: str) -> Path:
     return tasks.task_dir(root, task)
+
+
+def converted_from(base: Path, out: List[Dict[str, Any]]) -> None:
+    """An original kept by intake (`REQ/originals/<name>`) gets `made`: the listed files its conversion report (`REQ/<stem>.convert.md`, section "Files") names.
+    A file that was deleted or renamed since is not named."""
+    have = {item["path"] for item in out}
+    for item in out:
+        parts = item["path"].split("/")
+        if len(parts) != 3 or parts[0] != "REQ" or parts[1] != "originals":
+            continue
+        try:
+            text = (base / "REQ" / f"{Path(parts[2]).stem}.convert.md").read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        section = text.split("\n## Files", 1)[-1].split("\n## ", 1)[0] if "\n## Files" in text else ""
+        made = [f"REQ/{name}" for name in re.findall(r"^- `([^`]+)`\s*$", section, re.MULTILINE)]
+        item["made"] = [path for path in made if path in have and path != item["path"]]
 
 
 def listing(root: Path, task: str, folders: Tuple[str, ...] = FOLDERS) -> List[Dict[str, Any]]:
@@ -72,7 +90,9 @@ def listing(root: Path, task: str, folders: Tuple[str, ...] = FOLDERS) -> List[D
                 continue
             out.append({"path": relative.as_posix(), "size": size, "kind": kind_of(path)})
             if len(out) >= MAX_LISTED:
+                converted_from(base, out)
                 return out
+    converted_from(base, out)
     return out
 
 
@@ -96,6 +116,12 @@ def locate(root: Path, task: str, relative: str) -> Optional[Path]:
     except (OSError, ValueError):
         return None
     return resolved
+
+
+def download(root: Path, task: str, relative: str) -> Optional[Path]:
+    """The file `relative` for a download link, or None: the same files as `locate`, not larger than a picture may be."""
+    path = locate(root, task, relative)
+    return path if path is not None and path.stat().st_size <= MAX_DOWNLOAD_BYTES else None
 
 
 def view(root: Path, task: str, relative: str) -> Optional[Dict[str, Any]]:

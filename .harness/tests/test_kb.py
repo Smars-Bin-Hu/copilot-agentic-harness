@@ -100,7 +100,7 @@ class PromoteTests(KbCase):
         self.approve_promote()
         result = self.run_cli("task", "promote")
         self.assertEqual(run_git(self.repo_b, "rev-parse", "HEAD"), main)
-        self.assertEqual(run_git(self.repo_b, "symbolic-ref", "--short", "HEAD"), "feature/job1")
+        self.assertEqual(run_git(self.repo_b, "symbolic-ref", "--short", "HEAD"), self.branch())
         self.assertEqual(run_git(self.kb, "symbolic-ref", "--short", "HEAD"), "main")
         self.assertEqual(run_git(self.kb, "show", "HEAD:orders/delay.md"), "new")
         self.assertIn("新分支", result["next"])

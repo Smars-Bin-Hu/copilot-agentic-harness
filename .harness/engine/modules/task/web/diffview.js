@@ -11,6 +11,7 @@ const DiffView = (function () {
   const MODES = ["split", "unified", "raw"];
   const MODE_LABEL = () => ({split: t("desk.diff.split"), unified: t("desk.diff.unified"), raw: t("desk.diff.raw")});  // written out, so each message key is found by a search
   const memory = {};
+  const want = {};  // key -> a line of the new code to bring into view when the view is drawn next (a link from a review answer)
 
   function store(name, fallback, value) {
     try {
@@ -266,10 +267,25 @@ const DiffView = (function () {
     draw();
     if (files.length > 1) host.append(list);
     host.append(shown);
+    if (want[key]) {  // the view is not in the page yet: look after it is
+      const line = want[key];
+      delete want[key];
+      setTimeout(() => {
+        const cells = [...host.querySelectorAll(".dv-right .dv-no, .dv-one .dv-no:nth-child(2)")].filter((node) => node.dataset.n === String(line.line));
+        const target = cells[0] || host.querySelector(".dv-bar");
+        if (target) target.scrollIntoView({block: "center"});
+      }, 0);
+    }
     return host;
   }
 
-  return {parse, rows, fold, inline, counts, create};
+  // Show `path` (and, if given, its line of the new code) the next time the view `key` is drawn.
+  function select(key, path, line) {
+    store("file." + key, "", path);
+    if (line) want[key] = {line};
+  }
+
+  return {parse, rows, fold, inline, counts, create, select};
 })();
 
 if (typeof module !== "undefined" && module.exports) module.exports = DiffView;

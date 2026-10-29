@@ -57,8 +57,16 @@ def name_of(task: str) -> str:
     return task.rstrip("/").rsplit("/", 1)[-1]
 
 
-def default_branch(task: str, number: int) -> str:
-    text = re.sub(r"[^A-Za-z0-9_]", "_", name_of(task))[:50] or "task"
+def default_branch(task: str, number: int, kind: str = "", created: str = "") -> str:
+    """`feature/<name>` from the ASCII letters and digits of the name. A name that lost other letters (a Chinese name) and kept
+    fewer than 6, or kept none, gets `feature/<kind>_<yyyymmdd>_<4 hex>`; the hex comes from the name, so it is the same every time."""
+    name = name_of(task)
+    text = re.sub(r"_+", "_", re.sub(r"[^A-Za-z0-9_]", "_", name)).strip("_")[:50].strip("_")
+    kept = len(re.sub(r"[^A-Za-z0-9]", "", text))
+    if not kept or (kept < 6 and not name.isascii()):
+        day = re.sub(r"\D", "", created)[:8] or datetime.now().strftime("%Y%m%d")
+        label = re.sub(r"[^a-z0-9]", "", kind.lower())[:20] or "task"
+        text = f"{label}_{day}_{hashlib.sha1(name.encode('utf-8')).hexdigest()[:4]}"
     return f"feature/{text}" + (f"_r{number}" if number > 1 else "")
 
 
@@ -191,7 +199,7 @@ def attach(root: Path, raw_task: str, session_id: str, surface: str = "vscode", 
             if branch_name:
                 data["branch"] = branch_name
             elif found.configured and not data["branch"]:
-                data["branch"] = default_branch(task, data["round"])
+                data["branch"] = default_branch(task, data["round"], str(data.get("kind") or ""), str(data.get("created_at") or ""))
             if data.get("tier") == "full":
                 tasks.dev_dir(root, task).mkdir(parents=True, exist_ok=True)
             data["updated_at"] = utc_now()

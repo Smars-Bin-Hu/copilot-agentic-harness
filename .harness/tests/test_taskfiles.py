@@ -71,6 +71,23 @@ class FilesTests(ServeCase):
         self.assertIn("select 1;", page)
         self.assertIn("data:image/png;base64,", page)
 
+    def test_an_original_names_the_files_made_from_it_and_can_be_downloaded(self) -> None:
+        (self.task / "REQ" / "originals").mkdir()
+        (self.task / "REQ" / "originals" / "BRD 客户.docx").write_bytes(b"PK\x03\x04docx")
+        (self.task / "REQ" / "BRD 客户.md").write_text("# BRD\n", encoding="utf-8")
+        (self.task / "REQ" / "BRD 客户.convert.md").write_text(
+            "# Conversion report: BRD 客户.docx\n\n## Files\n\n- `BRD 客户.md`\n- `gone.csv`\n\n## Not carried over, or to check\n\n- `other.md`\n", encoding="utf-8")
+        listed = {item["path"]: item for item in taskfiles.listing(self.root, TASK)}
+        self.assertEqual(listed["REQ/originals/BRD 客户.docx"]["made"], ["REQ/BRD 客户.md"])  # a file that is gone, or named below the Files section, is not
+        self.assertNotIn("made", listed["REQ/brd.md"])
+        self.assertEqual(taskdesk.download_file(self.root, "job1", "REQ/originals/BRD 客户.docx").read_bytes(), b"PK\x03\x04docx")
+        status, _data, headers = self.request("GET", "/download/job1/REQ/originals/BRD%20%E5%AE%A2%E6%88%B7.docx")
+        self.assertEqual(status, 200)
+        self.assertIn("attachment", {key.lower(): value for key, value in headers.items()}["content-disposition"])
+        for path in ("secret.md", "REQ/../task.json", "DEV-RUN/run.sh"):
+            self.assertIsNone(taskdesk.download_file(self.root, "job1", path), path)
+        self.assertIsNone(taskdesk.download_file(self.root, "nope", "REQ/brd.md"))
+
 
 if __name__ == "__main__":
     unittest.main()

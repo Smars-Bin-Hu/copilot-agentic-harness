@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from unittest import mock
 
 import support  # noqa: F401  (puts the engine on sys.path)
-from core import tasks
+from core import targets, tasks
 from modules.task import promote_target, task as task_ops
 from modules.task.common import CommandError
 from support import payload, post_tool, pre_tool, run_git, subagent_start
@@ -27,13 +27,26 @@ class PickUpTests(TaskCase):
     def test_a_new_task_has_a_branch_and_the_session_holds_it(self) -> None:
         result = self.new()
         self.assertEqual((result["task"], result["round"], result["resumed"], result["plan_approved"]), (TASK, 1, False, False))
-        self.assertEqual(result["branch"], "feature/job1")
+        self.assertEqual(result["branch"], self.branch())
         self.assertEqual(result["target_repos"], ["repo_a", "repo_b"])
         self.assertIn("PLAN.md", result["next"])
         self.assertIn("task approve-plan", result["next"])
         self.assertTrue((self.task / "DEV").is_dir())
         self.assertEqual(self.session_state(SESSION)["active_task"], TASK)
         self.assertEqual((self.data()["status"], self.data()["promote"]["state"]), ("open", "none"))
+
+    def test_the_default_branch_of_a_plain_name_and_of_a_name_without_letters(self) -> None:
+        self.assertEqual(task_ops.default_branch("tasks/Daily__Load-x_", 1, "design"), "feature/Daily_Load_x")
+        self.assertEqual(task_ops.default_branch("tasks/Daily__Load-x_", 3), "feature/Daily_Load_x_r3")
+        short = task_ops.default_branch("tasks/客户画像-字段映射-v2", 1, "design", "2026-10-29T10:00:00+00:00")
+        self.assertRegex(short, r"^feature/design_20261029_[0-9a-f]{4}$")
+        self.assertTrue(targets.valid_branch(short))
+        self.assertEqual(short, task_ops.default_branch("tasks/客户画像-字段映射-v2", 1, "design", "2026-10-29T23:00:00+00:00"))
+        self.assertEqual(task_ops.default_branch("tasks/客户画像-字段映射-v2", 2, "design", "2026-10-29"), short + "_r2")
+        self.assertNotEqual(short, task_ops.default_branch("tasks/客户画像-字段映射-v3", 1, "design", "2026-10-29"))
+        self.assertRegex(task_ops.default_branch("tasks/客户", 1), r"^feature/task_\d{8}_[0-9a-f]{4}$")
+        self.assertEqual(task_ops.default_branch("tasks/job1", 1, "dev"), "feature/job1")
+        self.assertRegex(task_ops.default_branch("tasks/---", 1, "dev"), r"^feature/dev_\d{8}_[0-9a-f]{4}$")
 
     def test_the_task_may_be_named_by_its_name_or_its_folder(self) -> None:
         self.new()
@@ -273,7 +286,7 @@ class PromoteTests(TaskCase):
         self.run_cli("task", "fetch", "repo_b/src/a.sql")
         self.dev("repo_b/src/a.sql", "select 1, 2;\n")
         result = self.run_cli("task", "promote", "--dry-run")
-        self.assertEqual((result["dry_run"], result["branch"], result["approved"]), (True, "feature/job1", False))
+        self.assertEqual((result["dry_run"], result["branch"], result["approved"]), (True, self.branch(), False))
         self.assertEqual([(f["path"], f["action"], f["added"], f["removed"]) for f in result["files"]], [("repo_b/src/a.sql", "modify", 1, 1)])
         self.assertNotIn("source", result["files"][0])
         self.assertEqual(result["review_file"], f"{TASK}/PROMOTE-PLAN.diff")
@@ -314,7 +327,7 @@ class PromoteTests(TaskCase):
         self.assertIn("会被删除", screen.getvalue())
         result = self.run_cli("task", "promote")
         self.assertEqual(result["dry_run"], False)
-        self.assertEqual(run_git(self.repo_b, "symbolic-ref", "--short", "HEAD"), "feature/job1")
+        self.assertEqual(run_git(self.repo_b, "symbolic-ref", "--short", "HEAD"), self.branch())
         self.assertEqual(porcelain(self.repo_b), [" D src/b.sql", " M src/a.sql", "?? src/new/"])
         self.assertEqual(run_git(self.repo_b, "rev-parse", "HEAD"), self.main_commit(self.repo_b))  # no commit
         self.assertEqual((self.repo_b / "src" / "a.sql").read_text(encoding="utf-8"), "select 1, 2;\n")
@@ -363,7 +376,7 @@ class PromoteTests(TaskCase):
         (self.repo_b / "dirty.txt").write_text("x\n", encoding="utf-8")
         self.assertIn("工作区不干净", self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"])
         (self.repo_b / "dirty.txt").unlink()
-        run_git(self.repo_b, "branch", "feature/job1")
+        run_git(self.repo_b, "branch", self.branch())
         message = self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"]
         self.assertIn("已经存在", message)
         self.assertIn("task set-branch", message)
@@ -437,7 +450,7 @@ class RoundAndReportTests(TaskCase):
         run_git(self.repo_b, "commit", "-qam", "the person commits")
         run_git(self.repo_b, "switch", "-q", "main")
         result = self.open()
-        self.assertEqual((result["round"], result["new_round"], result["plan_approved"], result["branch"]), (2, True, False, "feature/job1_r2"))
+        self.assertEqual((result["round"], result["new_round"], result["plan_approved"], result["branch"]), (2, True, False, self.branch() + "_r2"))
         self.assertTrue((self.task / "DEV_r1" / "repo_b" / "src" / "a.sql").is_file())
         self.assertEqual(list((self.task / "DEV").iterdir()), [])
         self.assertEqual((self.task / "PLAN_r1.md").read_text(encoding="utf-8"), PLAN)  # the old plan cannot be approved again
@@ -451,7 +464,7 @@ class RoundAndReportTests(TaskCase):
         self.approve_plan()
         self.run_cli("task", "fetch", "repo_b/src/a.sql")
         self.dev("repo_b/src/a.sql", "select 1, 2, 3;\n")
-        self.assertEqual(self.run_cli("task", "promote", "--dry-run")["branch"], "feature/job1_r2")
+        self.assertEqual(self.run_cli("task", "promote", "--dry-run")["branch"], self.branch() + "_r2")
 
     def test_a_round_keeps_its_diff_and_the_task_page_shows_the_round_read_only(self) -> None:
         from modules.task import taskdesk, taskfiles, tasksnap

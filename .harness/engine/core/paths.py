@@ -32,6 +32,13 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def local_stamp(moment: Optional[datetime] = None) -> str:
+    """Local time with its UTC offset, for the files people read: `2026-10-29 12:13 (UTC-04:00)`."""
+    local = (moment or datetime.now(timezone.utc)).astimezone()
+    offset = local.strftime("%z") or "+0000"
+    return f"{local:%Y-%m-%d %H:%M} (UTC{offset[:3]}:{offset[3:5]})"
+
+
 def repo_root() -> Path:
     override = os.environ.get("HARNESS_ROOT")
     if override:

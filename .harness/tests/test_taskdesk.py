@@ -19,7 +19,7 @@ from taskcase import TASK
 
 from core import messages, tasks
 from modules.task.common import CommandError
-from modules.task import mdtree, task as task_ops, taskdesk
+from modules.task import mdtree, task as task_ops, taskboard, taskdesk
 
 
 ENGINE_WEB = Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web"
@@ -345,13 +345,18 @@ class DeskTests(ServeCase):
         self.assertIn("approve-plan", [item["action"] for item in desk["actions"]])
         self.assertTrue(desk["history"])
 
-    def test_autorun_on_is_offered_only_when_a_step_is_left(self) -> None:
+    def test_autorun_on_is_offered_only_when_a_step_is_left_and_the_plan_is_approved(self) -> None:
         names = lambda: [item["action"] for item in taskdesk.desk(self.root, "job1", ("autorun on", "pause"))["actions"]]
+        board = lambda: [item["action"] for row in taskboard.board_rows(self.root, False, served=("autorun on", "pause"))[0]["tasks"] for item in row["actions"]]
         self.assertNotIn("autorun on", names())  # no TODO.md: the engine refuses (autorun.need.todo)
         (self.task / "TODO.md").write_text("- [x] a\n", encoding="utf-8")
         self.assertNotIn("autorun on", names())  # every step ticked
         (self.task / "TODO.md").write_text("- [x] a\n- [ ] b\n", encoding="utf-8")
+        self.assertNotIn("autorun on", names())  # the plan waits for approval (autorun.need.approval)
+        self.assertNotIn("autorun on", board())
+        self.ready()
         self.assertIn("autorun on", names())
+        self.assertIn("autorun on", board())
 
     def test_the_intake_tab_puts_intake_md_first_and_names_the_originals_with_no_text(self) -> None:
         files = [{"path": path, "original": path.startswith("originals/"), "report": path.endswith(".convert.md")}

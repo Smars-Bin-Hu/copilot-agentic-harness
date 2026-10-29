@@ -296,7 +296,7 @@ def offered(root: Path, row: Dict[str, Any], task: str, served: Tuple[str, ...],
     found = taskboard.actions(row, served)
     if needs_req(data) and row.get("status") == "open" and "confirm-req" in served and task_ops.req_state(root, task) in ("open", "changed") and not any(item["action"] == "confirm-req" for item in found):
         found.insert(0, {"action": "confirm-req", "command": f"{cli_command()} task confirm-req --task {row['name']}"})
-    if not task_ops.todo_left(root, task):  # `autorun on` is refused with no step left to do (autorun.need.todo): it is not offered
+    if not task_ops.todo_left(root, task) or not tasks.plan_approved(root, task, data):  # `autorun on` is refused then (autorun.need.todo, need.approval): not offered
         found = [item for item in found if item["action"] != "autorun on"]
     return found
 

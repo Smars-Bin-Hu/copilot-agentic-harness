@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TextIO, Tuple
 
-from core import config, messages
+from core import config, messages, tasks
 from core.render import local_time, pad, width  # noqa: F401 - the page and the tests use them from here too
 from core.paths import cli_command, utc_now
 
@@ -147,7 +147,7 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = ())
             continue
         row["stages"] = taskstages.of(root, row["task"])
         row["todo_left"] = len(task_ops.todo_left(root, row["task"])) if row["status"] == "open" else 0
-        if not row["todo_left"]:  # `autorun on` is refused with no step left to do (autorun.need.todo): it is not offered
+        if not row["todo_left"] or not tasks.plan_approved(root, row["task"]):  # `autorun on` is refused then (autorun.need.todo, need.approval): not offered
             row["actions"] = [item for item in row["actions"] if item["action"] != "autorun on"]
         row["req_unconfirmed"] = row["status"] == "open" and task_ops.req_state(root, row["task"]) in ("open", "changed")
         key = (str(root), row["task"])

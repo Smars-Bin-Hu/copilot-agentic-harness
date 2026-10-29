@@ -131,7 +131,8 @@ const SERVE = (function () {
       const yes = h("button", {class: "act hot", type: "button"}, t("board.serve.confirm"));
       const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
       const said = h("div", {class: "bad"});
-      const view = dialog([h("h2", null, button.dataset.label + " · " + row.name), ...data.result.screen.map((line) => h("p", {class: "sub"}, line)),
+      // What the terminal would show can be long (a promote lists every file): it scrolls in its own box, so the code and the buttons stay in view.
+      const view = dialog([h("h2", null, button.dataset.label + " · " + row.name), h("div", {class: "screen"}, data.result.screen.map((line) => h("p", {class: "sub"}, line))),
         h("p", null, data.result.ask), input, h("div", {class: "row"}, yes, no), said]);
       no.addEventListener("click", view.close);
       const send = () => {

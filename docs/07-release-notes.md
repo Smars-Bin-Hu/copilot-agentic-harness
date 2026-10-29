@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.58 (2026-10-29)
+
+### Changed
+
+- The board's approval dialog fits the window. A long list (a promote of many files) scrolls in its own box, so the code field and the buttons stay in view. The archive dialog's list does the same.
+
 ## 1.5.57 (2026-10-29)
 
 ### Added

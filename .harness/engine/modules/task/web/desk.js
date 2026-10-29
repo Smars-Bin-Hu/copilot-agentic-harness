@@ -1005,6 +1005,14 @@
     }
   }
 
+  // A hash changed by hand, or the browser's back and forward: follow it. Our own writes use replaceState, which fires no event, so there is no loop.
+  window.addEventListener("hashchange", () => {
+    const at = /^r(\d+)(?:\/(.*))?$/.exec(location.hash.slice(1));
+    const number = at && (full.rounds || []).some((item) => item.round === Number(at[1])) ? Number(at[1]) : full.round;
+    const tab = at ? at[2] || "" : location.hash.slice(1);
+    showRound(number, tab === "commit" ? "changes" : tab);
+  });
+
   document.querySelector("main").classList.add("wide");
   draw(false);
   if (typeof SERVE !== "undefined" && DATA.serve.refresh) {

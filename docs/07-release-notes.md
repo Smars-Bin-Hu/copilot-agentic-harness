@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.57 (2026-10-29)
+
+### Added
+
+- A task that was written back and opened again works in rounds. Its report has a round selector: all rounds, or one round. KPIs, findings, time, prompts, stages, context, cache, tools and checks follow it, and the choice is remembered.
+- The board list has an "All rounds / Current round" toggle for time, AIU, prompts and checks.
+- The task page of a task with several rounds has a round switch. An earlier round opens read only: the requirement as approved, the plan, the changes, the checks, the history and the files.
+
+### Changed
+
+- A round keeps its diff as `CHANGES_r<n>.diff` when the next round starts. Only the CLI writes it.
+- Reopening a closed task that is not written back (rca, design, qa, test, other) reopens it as it was, and points to `task fork` to redo it on a changed requirement.
+
 ## 1.5.56 (2026-10-29)
 
 ### Fixed

@@ -1,14 +1,28 @@
 // One task: where its time and usage went. DATA.info is what taskinsight.build returns.
 // DATA.now: what the task waits for at this moment ({text, why, since, seconds}), or null. That wait is counted in the numbers of info.
+// A task with several rounds: info.by_round has the same report for each round ({"1": {...}, "2": {...}}) and info.current_round the open one.
+// The page draws one of them, or info (all rounds), as the person picks; the pick is kept per task in this browser.
 "use strict";
 
 (function () {
-  const info = DATA.info;
-  const totals = info.totals;
+  const whole = DATA.info;
+  const rounds = whole.by_round ? Object.keys(whole.by_round).sort((a, b) => a - b) : [];
+  let info, totals, active, waiting, hasSplit, hasUsage;  // the report on show: set by show()
   const app = document.getElementById("app");
   const PARTS = ["model", "tool", "subagent", "approval", "other"];
-  const active = totals.active_s, waiting = totals.waiting_s;
-  const hasSplit = totals.model_s !== null, hasUsage = totals.aiu !== null;
+  const KEY = "harness.report.rounds." + whole.task;
+  let pick = "all";
+  try { pick = localStorage.getItem(KEY) || "all"; } catch (error) { /* not allowed here: the pick lasts until the page closes */ }
+  if (pick !== "all" && !rounds.includes(pick)) pick = "all";
+
+  function show() {
+    info = pick === "all" ? whole : whole.by_round[pick];
+    totals = info.totals;
+    active = totals.active_s;
+    waiting = totals.waiting_s;
+    hasSplit = totals.model_s !== null;
+    hasUsage = totals.aiu !== null;
+  }
   const partLabel = (name) => t("insight.part." + name);
 
   function timeParts(entry) {
@@ -33,7 +47,8 @@
         status: t("report.status." + (info.status === "open" ? "open" : "closed")),
         start: when(info.span.from, 0, 16), end: when(info.span.to, 0, 16), as_of: when(info.as_of, 0, 19),
       })),
-      DATA.now ? h("div", {class: "now"}, tag(t("report.now", {text: DATA.now.text, time: clock(DATA.now.seconds)}), "hot long")) : null,
+      roundPicker(),
+      DATA.now && (pick === "all" || pick === String(whole.current_round)) ? h("div", {class: "now"}, tag(t("report.now", {text: DATA.now.text, time: clock(DATA.now.seconds)}), "hot long")) : null,
       h("div", {class: "kpis"},
         kpi(clock(active), t("report.kpi.active")),
         kpi(clock(waiting), t("report.kpi.waiting")),
@@ -43,6 +58,21 @@
         totals.cache_input_tokens ? kpi(percent(share(totals.cache_read_tokens, totals.cache_input_tokens)), t("report.kpi.cache")) : null,
         kpi(reviewsText(totals.reviews, totals.review_fails), t("report.kpi.reviews"))),
     ];
+  }
+
+  function roundPicker() {
+    if (rounds.length < 2) return null;
+    const box = h("select", {id: "rounds", "aria-label": t("report.rounds")},
+      h("option", {value: "all"}, t("report.rounds.all")),
+      rounds.map((number) => h("option", {value: number}, t(number === String(whole.current_round) ? "report.rounds.current" : "report.rounds.one", {n: number}))));
+    box.value = pick;
+    box.addEventListener("change", () => {
+      pick = box.value;
+      try { localStorage.setItem(KEY, pick); } catch (error) { /* kept until the page closes */ }
+      draw();
+      document.getElementById("rounds").focus();
+    });
+    return h("div", {class: "sub"}, t("report.rounds") + " ", box);
   }
 
   function footer(note) {
@@ -221,12 +251,17 @@
     return card(t("report.reviews"), table(head, rows));
   }
 
-  app.replaceChildren(...header().filter(Boolean));  // a part with nothing to show is left out, not drawn as "null"
-  if (!info.prompts.length) {
-    app.append(h("div", {class: "card empty"}, t("report.empty")), footer(false));
-    return;
+  function draw() {
+    show();
+    app.replaceChildren(...header().filter(Boolean));  // a part with nothing to show is left out, not drawn as "null"
+    if (!info.prompts.length) {
+      app.append(h("div", {class: "card empty"}, t("report.empty")), footer(false));
+      return;
+    }
+    for (const node of [findings(), timeCard(), promptsCard(), stagesCard(), contextCard(), cacheCard(), toolsCard(), reviewsCard(), footer(true)]) {
+      if (node) app.append(node);
+    }
   }
-  for (const node of [findings(), timeCard(), promptsCard(), stagesCard(), contextCard(), cacheCard(), toolsCard(), reviewsCard(), footer(true)]) {
-    if (node) app.append(node);
-  }
+
+  draw();
 })();

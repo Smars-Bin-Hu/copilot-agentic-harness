@@ -30,6 +30,8 @@ SESSION_IN_DETAIL = re.compile(r"(?:会话|session) (\S+)")  # the note of eithe
 MATCH_SECONDS = 5.0  # a user message in Copilot's record and its UserPromptSubmit in the hook log are the same prompt
 TOP = 5
 FINDINGS_KEPT = 8
+CACHE_CALLS_KEPT = 500  # the model calls the cache chart draws: the latest ones
+CACHE_COLD_WRITE_MIN = 20000  # tokens written again after a cache ran out: fewer is not worth a finding
 SUBAGENT_TOOLS = ("task", "runSubagent", "agent")  # the tool that starts a subagent, as the engines name it
 # The stages of a prompt are the steps of the task's ribbon (taskstages), and the independent check between developing and the
 # write-back. The event that moves a task that writes back into a stage; a prompt is in the stage of the last such event before its end.
@@ -126,7 +128,7 @@ def merge(into: Dict[str, Any], other: Dict[str, Any]) -> None:
     into["end"] = max(into["end"], other["end"])
     for key in ("turns", "model_s", "turn_s", "approval_s", "hook_s", "subagent_s"):
         into[key] += other[key]
-    for key in ("tools", "subagents", "skills", "compactions"):
+    for key in ("tools", "subagents", "skills", "compactions", "cache_calls"):
         into[key].extend(other[key])
     for name in other["models"]:
         if name not in into["models"]:
@@ -415,7 +417,9 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
         "prompts": len(mine), "active_s": 0.0, "waiting_s": 0.0, "paused_s": 0.0, "model_s": None, "tool_s": None, "approval_s": None, "subagent_s": None, "other_s": None,
         "tool_calls": 0, "failed_tool_calls": 0, "denied": 0, "asked": 0, "stop_blocks": 0,
         "aiu": None, "premium_requests": None, "subagent_tokens": None, "context_tokens_first": None, "context_tokens_max": None, "compactions": 0,
+        "cache_input_tokens": None, "cache_read_tokens": None, "cache_write_tokens": None, "cache_cold_calls": 0, "cache_cold_write_tokens": 0,
     }
+    cache_calls: List[Dict[str, Any]] = []
     prompts: List[Dict[str, Any]] = []
     waits: List[Dict[str, Any]] = []
     subagents: List[Dict[str, Any]] = []
@@ -452,6 +456,16 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
             totals["context_tokens_first"] = totals["context_tokens_first"] or prompt["context_tokens"]
             totals["context_tokens_max"] = max(totals["context_tokens_max"] or 0, prompt["context_tokens"])
         totals["compactions"] += len(prompt["compactions"])
+        for call in prompt["cache_calls"]:
+            for key, name in (("cache_input_tokens", "input"), ("cache_read_tokens", "read"), ("cache_write_tokens", "write")):
+                add(totals, key, call[name])
+            if call["state"] == "expired":
+                totals["cache_cold_calls"] += 1
+                totals["cache_cold_write_tokens"] += call["write"]
+            cache_calls.append({
+                "n": number, "at": utc_text(call["at"]), "model": call["model"], "input": call["input"], "read": call["read"], "write": call["write"],
+                "state": call["state"], "gap_s": call["gap_s"], "life_s": round(call["expires"] - call["at"]) if call["expires"] is not None else None,
+            })
         totals["paused_s"] += put_aside
         if waited is not None and waited >= 1:
             totals["waiting_s"] += waited
@@ -486,6 +500,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
         "span": {"from": utc_text(first) if first is not None else "", "to": utc_text(last) if last is not None else "", "wall_s": round(last - first, 1) if first is not None and last is not None else 0.0},
         "totals": totals, "prompts": prompts, "stages": stages, "tools": tool_table(mine), "subagents": subagents, "reviews": reviews,
         "waits": sorted(waits, key=lambda item: -item["seconds"])[:TOP],
+        "cache": {"calls": cache_calls[-CACHE_CALLS_KEPT:], "calls_total": len(cache_calls)},
     }
     result["totals"]["reviews"] = len([item for item in reviews if item["verdict"]])
     result["totals"]["review_fails"] = len([item for item in reviews if item["verdict"] and item["verdict"] != "PASS"])
@@ -574,6 +589,8 @@ def findings(result: Dict[str, Any]) -> List[Dict[str, Any]]:
     if squeezed:
         last = squeezed[-1]["compactions"][-1]
         note("compacted", 0.25, times=totals["compactions"], prompts=messages.joined([str(entry["n"]) for entry in squeezed]), before=amount(last["before"]), after=amount(last["after"]))
+    if totals["cache_cold_calls"] and totals["cache_cold_write_tokens"] >= CACHE_COLD_WRITE_MIN:
+        note("cache_expired", 0.2, calls=totals["cache_cold_calls"], tokens=amount(totals["cache_cold_write_tokens"]))
     first, largest = totals["context_tokens_first"], totals["context_tokens_max"]
     if first and largest and largest >= first * 1.5 and largest - first >= 10000:
         note("context", 0.3, first=amount(first), largest=amount(largest), times=f"{largest / first:.1f}")

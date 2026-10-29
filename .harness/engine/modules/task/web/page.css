@@ -223,3 +223,6 @@ tr.touched td{animation:glow 1.8s ease-out}
 
 /* the commit message of a write-back, to copy */
 .shell{margin-top:12px}pre.commit{margin:8px 0 0;padding:12px 14px;border-radius:8px;background:var(--track);color:var(--ink);font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.chart.cache{height:auto}.cache-row{display:flex;align-items:flex-end;gap:1px}.cache-row.tall{height:120px}.cache-col{flex:1 1 0;min-width:1px;display:flex;flex-direction:column-reverse}.cache-col b{display:block;flex:none}
+.cache-row.marks{height:4px;margin-top:2px;align-items:stretch}.cache-row.marks i{flex:1 1 0;min-width:1px}.cache-row.hits{height:36px;background:var(--track)}.cache-row.hits i{flex:1 1 0;min-width:1px;background:var(--tool)}.hits-label{margin:8px 0 2px;font-size:12px}
+.cread{background:var(--tool)}.cwrite{background:var(--approval)}.crest{background:var(--other)}.ccold{background:var(--bad)}

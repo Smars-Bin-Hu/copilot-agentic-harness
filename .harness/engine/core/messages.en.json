@@ -1445,5 +1445,19 @@
   "board.plan.req.title": "The requirement is not confirmed",
   "board.plan.req": "A plan stands on a confirmed requirement, so the plan cannot be approved alone. Read REQ.md (tab Requirement) and PLAN.md. One code then confirms the requirement and approves the plan.",
   "board.plan.req.go": "Confirm the requirement and approve the plan",
-  "task.step.approve_req": "The user has not confirmed the requirement yet, so the plan cannot be approved alone. Give the user the links [REQ.md]({req}) and [PLAN.md]({plan}), and ask the user to read both and confirm them with one code: `{command} task approve-plan --with-req --task {name}` in their own terminal, or approve plan on the task page (it asks for the same). Do not ask for `task approve-plan` without `--with-req`: it is refused. {dev} cannot be written before that; work that is not written back can go at the root of {task}/ meanwhile."
+  "task.step.approve_req": "The user has not confirmed the requirement yet, so the plan cannot be approved alone. Give the user the links [REQ.md]({req}) and [PLAN.md]({plan}), and ask the user to read both and confirm them with one code: `{command} task approve-plan --with-req --task {name}` in their own terminal, or approve plan on the task page (it asks for the same). Do not ask for `task approve-plan` without `--with-req`: it is refused. {dev} cannot be written before that; work that is not written back can go at the root of {task}/ meanwhile.",
+  "insight.finding.cache_expired": "{calls} model call(s) came after the cache of the call before had run out, and wrote {tokens} tokens into the cache again. A pause longer than the cache lives makes the next call send the whole context at full price (see the cache chart).",
+  "report.cache": "Cache of the context (tokens per model call)",
+  "report.kpi.cache": "cache read",
+  "report.cache.read": "read from the cache",
+  "report.cache.write": "written to the cache",
+  "report.cache.rest": "sent without the cache",
+  "report.cache.hit": "Share read from the cache",
+  "report.cache.point": "Prompt {n} · {at} · {state} · {read} read, {write} written, {input} sent",
+  "report.cache.state.first": "first call of this model",
+  "report.cache.state.warm": "cache alive",
+  "report.cache.state.expired": "cache had run out",
+  "report.cache.gap": " · {gap} after the call before (the cache lives {life})",
+  "report.cache.note": "Each bar is one model call of the main agent. A red mark: the cache of the call before had run out. Overall {hit} read from the cache; {cold} call(s) came after it ran out.",
+  "report.cache.more": " Only the latest {shown} of {total} calls are drawn."
 }

@@ -40,6 +40,7 @@
         kpi(totals.prompts, t("report.kpi.prompts")),
         kpi(amount(totals.aiu), t("report.kpi.aiu")),
         kpi(amount(totals.premium_requests), t("report.kpi.premium")),
+        totals.cache_input_tokens ? kpi(percent(share(totals.cache_read_tokens, totals.cache_input_tokens)), t("report.kpi.cache")) : null,
         kpi(reviewsText(totals.reviews, totals.review_fails), t("report.kpi.reviews"))),
     ];
   }
@@ -165,6 +166,39 @@
         totals.compactions ? " " + t("report.context.compactions", {n: totals.compactions}) : null));
   }
 
+  // One column per model call of the main agent, in time order. Top: the tokens sent, split into read from the cache, written to it
+  // and sent without it. Under it: a red mark where the cache of the call before had run out. Last row: the share read from the cache.
+  function cacheCard() {
+    const calls = (info.cache && info.cache.calls) || [];
+    if (calls.length < 2) return null;
+    const top = Math.max(...calls.map((call) => call.input)) || 1;
+    const bars = h("div", {class: "cache-row tall"}, calls.map((call) => {
+      const part = (kind, value) => h("b", {class: kind, style: `height:${(value / call.input) * 100}%`});
+      return h("div", {class: "cache-col", style: `height:${(call.input / top) * 100}%`},
+        part("cread", call.read), part("crest", Math.max(0, call.input - call.read - call.write)), part("cwrite", call.write));
+    }));
+    const marks = h("div", {class: "cache-row marks"}, calls.map((call) => h("i", {class: call.state === "expired" ? "ccold" : null})));
+    const hits = h("div", {class: "cache-row hits"}, calls.map((call) => h("i", {style: `height:${Math.min(100, (call.read / call.input) * 100)}%`})));
+    const tip = h("div", {class: "tip", role: "tooltip", hidden: ""});
+    const words = (call) => t("report.cache.point", {n: call.n, at: when(call.at, 5, 16), state: t("report.cache.state." + call.state), read: amount(call.read), write: amount(call.write), input: amount(call.input)}) +
+      (call.gap_s !== null && call.life_s !== null ? t("report.cache.gap", {gap: clock(call.gap_s), life: clock(call.life_s)}) : "");
+    const chart = h("div", {class: "chart cache"}, bars, marks, h("div", {class: "sub hits-label"}, t("report.cache.hit")), hits, tip);
+    chart.addEventListener("mousemove", (event) => {
+      const box = bars.getBoundingClientRect();
+      const order = Math.min(calls.length - 1, Math.max(0, Math.floor(((event.clientX - box.left) / box.width) * calls.length)));
+      tip.textContent = words(calls[order]);
+      tip.style.left = `${((order + 0.5) / calls.length) * 100}%`;
+      tip.style.top = "24px";
+      tip.classList.toggle("left", order > calls.length * 0.7);
+      tip.hidden = false;
+    });
+    chart.addEventListener("mouseleave", () => { tip.hidden = true; });
+    const more = info.cache.calls_total > calls.length ? t("report.cache.more", {shown: calls.length, total: info.cache.calls_total}) : "";
+    return card(t("report.cache"), chart,
+      legend([["cread", t("report.cache.read")], ["cwrite", t("report.cache.write")], ["crest", t("report.cache.rest")], ["ccold", t("report.cache.state.expired")]]),
+      h("div", {class: "sub"}, t("report.cache.note", {hit: percent(share(totals.cache_read_tokens, totals.cache_input_tokens)), cold: totals.cache_cold_calls}) + more));
+  }
+
   function toolsCard() {
     if (!info.tools.length) return null;
     const slowest = Math.max(...info.tools.map((tool) => tool.total_s)) || 1;
@@ -192,7 +226,7 @@
     app.append(h("div", {class: "card empty"}, t("report.empty")), footer(false));
     return;
   }
-  for (const node of [findings(), timeCard(), promptsCard(), stagesCard(), contextCard(), toolsCard(), reviewsCard(), footer(true)]) {
+  for (const node of [findings(), timeCard(), promptsCard(), stagesCard(), contextCard(), cacheCard(), toolsCard(), reviewsCard(), footer(true)]) {
     if (node) app.append(node);
   }
 })();

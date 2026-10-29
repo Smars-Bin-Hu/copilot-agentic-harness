@@ -76,6 +76,13 @@ def compacted(start: datetime, seconds: float, agent: str = "") -> List[Dict[str
     ]
 
 
+def called(start: datetime, seconds: float, sent: int, read: int, wrote: int, lives: int = 300, agent: str = "", model: str = "m1", **more: Any) -> Dict[str, Any]:
+    """One model call as Copilot wrote it (field names from a real session, 2026-10-28): the cache lives until `cacheExpiresAt`."""
+    use = {"model": model, "inputTokens": sent, "cacheReadTokens": read, "cacheWriteTokens": wrote, "outputTokens": 50,
+           "cacheExpiresAt": stamp(start, seconds + lives), **more}
+    return row("session.usage_record", start, seconds, agent, usage={key: value for key, value in use.items() if value is not None})
+
+
 def page_data(text: str) -> Dict[str, Any]:
     """The JSON a page carries for its scripts."""
     start = text.index('<script type="application/json" id="data">') + len('<script type="application/json" id="data">')
@@ -142,6 +149,19 @@ class EventsFileTests(unittest.TestCase):
         self.write(one_prompt(self.start, 1, 1, 1) + older + compacted(self.start, 70, agent="a1"))
         (found,) = copilot_events.read(self.path)["prompts"][0]["compactions"]
         self.assertEqual((found["trigger"], found["before"], found["after"], found["limit"]), ("", 2651, 678, None))
+
+    def test_a_model_call_gives_its_cache_numbers_and_whether_the_cache_before_had_run_out(self) -> None:
+        self.write(one_prompt(self.start, 1, 1, 1) + [
+            called(self.start, 10, 1000, 0, 990),                         # the first call of the model
+            called(self.start, 70, 1100, 990, 110),                       # a minute later: the cache lives
+            called(self.start, 700, 1300, 100, 1200),                     # ten minutes later: it had run out
+            called(self.start, 710, 1300, None, 5),                       # no read number: not a call to count as 0%
+            called(self.start, 720, 9999, 0, 9999, agent="a1"),           # a subagent's own call
+            called(self.start, 730, 500, 0, 500, model="m2")])            # another model has a cache of its own
+        calls = copilot_events.read(self.path)["prompts"][0]["cache_calls"]
+        self.assertEqual([(call["state"], call["input"], call["read"], call["write"], call["gap_s"]) for call in calls],
+                         [("first", 1000, 0, 990, None), ("warm", 1100, 990, 110, 60.0), ("expired", 1300, 100, 1200, 630.0), ("first", 500, 0, 500, None)])
+        self.assertEqual(round(calls[0]["expires"] - calls[0]["at"]), 300)
 
     def test_the_file_is_looked_for_under_copilot_home(self) -> None:
         folder = self.path.parent / "session-state" / "abc"
@@ -447,6 +467,29 @@ class InsightTests(BoardCase):
         shown = json.dumps(taskinsight.for_agent(info, detail=True), ensure_ascii=False)
         self.assertNotIn(SECRET, shown)
         self.assertIn('"compactions": 1', shown)
+
+    def test_the_cache_is_summed_listed_and_told_when_it_ran_out(self) -> None:
+        self.new()
+        self.prompt()
+        first, second = self.prompt_times()
+        one, two = one_prompt(first, 10, 1, 40000), one_prompt(second, 30, 2, 70000)
+        self.copilot_record(S1, one[:-1] + [called(first, 10, 30000, 0, 29000), called(first, 40, 31000, 29000, 2000, lives=20)] + one[-1:]
+                            + two[:-1] + [called(second, 100, 40000, 800, 39000)] + two[-1:])  # after the cache of the call before had run out (it lived 20 s)
+        info = taskinsight.of_task(self.root, f"{BASE}/job")
+        totals = info["totals"]
+        self.assertEqual((totals["cache_input_tokens"], totals["cache_read_tokens"], totals["cache_write_tokens"]), (101000, 29800, 70000))
+        self.assertEqual((totals["cache_cold_calls"], totals["cache_cold_write_tokens"]), (1, 39000))
+        self.assertEqual([(call["n"], call["state"], call["life_s"]) for call in info["cache"]["calls"]], [(1, "first", 300), (1, "warm", 20), (2, "expired", 300)])
+        self.assertEqual(info["cache"]["calls_total"], 3)
+        self.assertIn("cache_expired", [item["kind"] for item in info["findings"]])
+        self.assertNotIn("life_s", json.dumps(taskinsight.for_agent(info, detail=True)))  # an agent gets the totals, not every call
+
+    def test_without_cache_numbers_there_is_no_cache_total_and_no_finding(self) -> None:
+        self.new()
+        self.copilot_record(S1, one_prompt(self.prompt_times()[0], 10, 1, 40000))
+        info = taskinsight.of_task(self.root, f"{BASE}/job")
+        self.assertEqual((info["totals"]["cache_input_tokens"], info["cache"]["calls"]), (None, []))
+        self.assertNotIn("cache_expired", [item["kind"] for item in info["findings"]])
 
     def test_the_start_of_a_prompt_is_cut_and_can_be_switched_off(self) -> None:
         self.assertEqual(copilot_events.start_of("  一句  很长的\n话 " + "长" * 60, 10), "一句 很长的 话 长…")

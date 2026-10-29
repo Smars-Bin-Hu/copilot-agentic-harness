@@ -76,7 +76,7 @@ def new_prompt(at: float) -> Dict[str, Any]:
     return {
         "at": at, "end": at, "turns": 0, "model_s": 0.0, "turn_s": 0.0, "approval_s": 0.0, "hook_s": 0.0, "subagent_s": 0.0,
         "tools": [], "subagents": [], "skills": [], "models": [], "aiu": None, "premium_requests": None, "context_tokens": None,
-        "input_tokens": None, "output_tokens": None, "queued": False, "text": "", "compactions": [],
+        "input_tokens": None, "output_tokens": None, "queued": False, "text": "", "compactions": [], "cache_calls": [],
     }
 
 
@@ -113,6 +113,21 @@ def context_tokens(data: Dict[str, Any]) -> Optional[int]:
     return best
 
 
+def cache_call(spent: Dict[str, Any], at: float, before: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The cache numbers of one model call, or None when Copilot gave none (a missing number is not 0%).
+
+    `state`: `first` (no earlier call of this model in the session), `expired` (the earlier call's cache had run out when
+    this one came) or `warm`. The time a cache lives is read from the record, not assumed: it is not the same for every model."""
+    sent, read_tokens, written = number(spent.get("inputTokens")), number(spent.get("cacheReadTokens")), number(spent.get("cacheWriteTokens"))
+    if not sent or read_tokens is None or written is None:
+        return None
+    state = "first" if before is None else "expired" if before["expires"] is not None and at > before["expires"] else "warm"
+    return {
+        "at": at, "model": str(spent.get("model") or ""), "input": int(sent), "read": int(read_tokens), "write": int(written),
+        "expires": seconds(spent.get("cacheExpiresAt")), "state": state, "gap_s": round(at - before["at"], 1) if before is not None else None,
+    }
+
+
 def start_of(content: Any, limit: int) -> str:
     """The first characters of what the user typed, on one line."""
     if limit <= 0 or not isinstance(content, str):
@@ -137,6 +152,7 @@ def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
     hooks: Dict[str, float] = {}
     compacting: Dict[str, Any] = {}  # the start of a compaction; its numbers go with the complete event
     usage = {"aiu": 0.0, "premium": 0.0}
+    last_call: Dict[str, Dict[str, Any]] = {}  # the latest call of the main agent, by model: its cache is what the next call reads
     model = ""
     version = ""
     try:
@@ -235,6 +251,10 @@ def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
                     value = number(spent.get(name))
                     if value is not None:
                         current[key] = (current[key] or 0) + int(value)  # one model call of the main agent
+                call = cache_call(spent, at, last_call.get(str(spent.get("model") or "")))
+                if call is not None:
+                    current["cache_calls"].append(call)
+                    last_call[call["model"]] = call
             elif kind == "session.usage_checkpoint":
                 total_aiu, total_premium = number(data.get("totalNanoAiu")), number(data.get("totalPremiumRequests"))
                 if total_aiu is not None:

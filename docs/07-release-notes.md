@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.54 (2026-10-28)
+
+### Added
+
+- **The task report shows how well Copilot's cache was used.** Copilot keeps the start of the context in a cache for a few minutes, so a call that comes soon after the one before reads it back instead of sending it all again. The report now reads the numbers of each model call of the main agent from Copilot's own session record and draws one column per call: the tokens read from the cache, written to it and sent without it, a red mark under a call that came after the cache of the call before had run out, and the share read from the cache. Hover a column for its numbers and the pause before it. A new box at the top gives the share for the whole task, and a finding tells when a pause made calls write the context again. How long a cache lives is read from each record (5 minutes for most models, 30 for some), not assumed. A call with no cache numbers is left out, never counted as 0%. `harness task report --json` has `totals.cache_*` and `cache.calls` (the latest 500); an agent is given the totals only. Numbers only, as before.
+
 ## 1.5.53 (2026-10-28)
 
 ### Changed

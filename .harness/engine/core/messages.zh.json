@@ -1445,5 +1445,19 @@
   "board.plan.req.title": "需求还没有确认",
   "board.plan.req": "计划要建立在确认过的需求上，所以不能单独批准计划。先读 REQ.md（需求页签）和 PLAN.md，然后用一个验证码同时确认需求、批准计划。",
   "board.plan.req.go": "确认需求并批准计划",
-  "task.step.approve_req": "用户还没有确认需求，所以计划不能单独批准。给用户 [REQ.md]({req}) 和 [PLAN.md]({plan}) 两个链接，请用户两个都读一遍，用一个验证码同时确认：在他自己的终端运行 `{command} task approve-plan --with-req --task {name}`，或者在任务页点“批准计划”（会问同样的码）。不要让用户运行不带 `--with-req` 的 `task approve-plan`：它会被拒绝。在那之前 {dev} 不能写；不写回的工作可以先放在 {task}/ 根目录。"
+  "task.step.approve_req": "用户还没有确认需求，所以计划不能单独批准。给用户 [REQ.md]({req}) 和 [PLAN.md]({plan}) 两个链接，请用户两个都读一遍，用一个验证码同时确认：在他自己的终端运行 `{command} task approve-plan --with-req --task {name}`，或者在任务页点“批准计划”（会问同样的码）。不要让用户运行不带 `--with-req` 的 `task approve-plan`：它会被拒绝。在那之前 {dev} 不能写；不写回的工作可以先放在 {task}/ 根目录。",
+  "insight.finding.cache_expired": "有 {calls} 次模型调用发生在上一次调用的缓存过期之后，把 {tokens} token 重新写入了缓存。停顿超过缓存有效期，下一次调用要把整个上下文重新发送一遍（见缓存图）。",
+  "report.cache": "上下文缓存（每次模型调用的 token）",
+  "report.kpi.cache": "缓存命中",
+  "report.cache.read": "从缓存读取",
+  "report.cache.write": "写入缓存",
+  "report.cache.rest": "未走缓存",
+  "report.cache.hit": "从缓存读取的比例",
+  "report.cache.point": "第 {n} 条 · {at} · {state} · 读取 {read}，写入 {write}，发送 {input}",
+  "report.cache.state.first": "该模型的第一次调用",
+  "report.cache.state.warm": "缓存有效",
+  "report.cache.state.expired": "缓存已过期",
+  "report.cache.gap": " · 距上一次调用 {gap}（缓存有效期 {life}）",
+  "report.cache.note": "每根柱是主 agent 的一次模型调用。红色标记：上一次调用的缓存已过期。整体从缓存读取 {hit}；有 {cold} 次调用发生在缓存过期之后。",
+  "report.cache.more": " 只画最近 {shown} 次，一共 {total} 次。"
 }

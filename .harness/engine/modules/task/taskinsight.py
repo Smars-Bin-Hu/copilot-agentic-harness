@@ -413,16 +413,8 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
 
     mine: List[Dict[str, Any]] = sorted((prompt for found in sessions for prompt in found["prompts"] if prompt["mine"]), key=lambda prompt: prompt["at"])
     rows_of = {found["session_id"]: found["rows"] for found in sessions}
-    totals: Dict[str, Any] = {
-        "prompts": len(mine), "active_s": 0.0, "waiting_s": 0.0, "paused_s": 0.0, "model_s": None, "tool_s": None, "approval_s": None, "subagent_s": None, "other_s": None,
-        "tool_calls": 0, "failed_tool_calls": 0, "denied": 0, "asked": 0, "stop_blocks": 0,
-        "aiu": None, "premium_requests": None, "subagent_tokens": None, "context_tokens_first": None, "context_tokens_max": None, "compactions": 0,
-        "cache_input_tokens": None, "cache_read_tokens": None, "cache_write_tokens": None, "cache_cold_calls": 0, "cache_cold_write_tokens": 0,
-    }
-    cache_calls: List[Dict[str, Any]] = []
-    prompts: List[Dict[str, Any]] = []
-    waits: List[Dict[str, Any]] = []
-    subagents: List[Dict[str, Any]] = []
+    starts = round_starts(data)
+    items: List[Dict[str, Any]] = []
     for number, prompt in enumerate(mine, 1):
         parts = split(prompt)
         until = prompt["next_at"] if prompt["next_at"] is not None else float("inf")
@@ -445,8 +437,78 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
         }
         entry["stage_label"] = stage_label(entry["stage"])
         entry.update({key: round(value, 1) if value is not None else None for key, value in parts.items()})
+        wait = None
+        if waited is not None and waited >= 1:
+            wait = {"after_prompt": number, "from": utc_text(prompt["end"]), "seconds": round(waited, 1), "reason": wait_reason(events, prompt["end"], following)}
+        items.append({
+            "round": round_of(starts, prompt["end"]), "prompt": prompt, "entry": entry, "parts": parts, "put_aside": put_aside, "wait": wait,
+            "cache_calls": [{
+                "n": number, "at": utc_text(call["at"]), "model": call["model"], "input": call["input"], "read": call["read"], "write": call["write"],
+                "state": call["state"], "gap_s": call["gap_s"], "life_s": round(call["expires"] - call["at"]) if call["expires"] is not None else None,
+            } for call in prompt["cache_calls"]],
+            "subagents": [{"prompt": number, "agent": run["agent"], "model": run["model"], "at": run["at"], "seconds": round(run["seconds"], 1), "tokens": run["tokens"], "tool_calls": run["tool_calls"]} for run in prompt["subagents"]],
+        })
+
+    reviews = review_rounds(data)
+    for item in items:
+        for run in item["subagents"]:  # a reviewer run is the check that had started just before it
+            earlier = [check for check in reviews if check["at"] is not None and check["at"] <= run["at"] + MATCH_SECONDS]
+            if earlier and earlier[-1]["tokens"] is None and run["agent"].lower() == "reviewer":
+                earlier[-1].update(tokens=run["tokens"], model=run["model"])
+                run["review_round"], run["verdict"] = earlier[-1]["number"], earlier[-1]["verdict"]
+            run["at"] = utc_text(run["at"])
+    for check in reviews:
+        check.pop("at")
+
+    sources = {found["session_id"]: found["source"] for found in sessions}
+    created = copilot_events.seconds(data.get("created_at"))
+    result = assemble(task, data, items, reviews, sources, created)
+    result["sessions"] = [{"session_id": found["session_id"], "source": found["source"], "prompts": len([prompt for prompt in found["prompts"] if prompt["mine"]])} for found in sessions]
+    if len(starts) > 1:  # the same numbers once more for each round, from the same inputs: the page switches between them without counting
+        result["by_round"] = {}
+        for number, begin in starts:
+            result["by_round"][str(number)] = assemble(
+                task, data, [item for item in items if item["round"] == number], [check for check in reviews if (check["task_round"] or starts[0][0]) == number],
+                sources, begin if begin is not None else created)
+        result["current_round"] = starts[-1][0]
+    return result
+
+
+def round_starts(data: Dict[str, Any]) -> List[Tuple[int, Optional[float]]]:
+    """(round, start) of each round, oldest first. The first starts at None: it takes whatever came before. A single round gives one entry."""
+    found = {}
+    for item in list(data.get("rounds") or []) + [{"round": data.get("round", 1), "started_at": data.get("round_started_at")}]:
+        number = int(item.get("round") or 1)
+        found[number] = copilot_events.seconds(item.get("started_at"))
+    ordered = sorted(found.items())
+    return [(number, None if index == 0 else begin) for index, (number, begin) in enumerate(ordered) if index == 0 or begin is not None]
+
+
+def round_of(starts: List[Tuple[int, Optional[float]]], moment: float) -> int:
+    """The round a prompt belongs to, by its end: the prompt that opens a new round starts before the round does and ends in it."""
+    number = starts[0][0]
+    for each, begin in starts:
+        if begin is not None and begin <= moment:
+            number = each
+    return number
+
+
+def assemble(task: str, data: Dict[str, Any], items: List[Dict[str, Any]], reviews: List[Dict[str, Any]], sources: Dict[str, str], created: Optional[float]) -> Dict[str, Any]:
+    """The report of the given prompts: the totals, the tables and the findings. `build` calls it for all prompts and for each round."""
+    totals: Dict[str, Any] = {
+        "prompts": len(items), "active_s": 0.0, "waiting_s": 0.0, "paused_s": 0.0, "model_s": None, "tool_s": None, "approval_s": None, "subagent_s": None, "other_s": None,
+        "tool_calls": 0, "failed_tool_calls": 0, "denied": 0, "asked": 0, "stop_blocks": 0,
+        "aiu": None, "premium_requests": None, "subagent_tokens": None, "context_tokens_first": None, "context_tokens_max": None, "compactions": 0,
+        "cache_input_tokens": None, "cache_read_tokens": None, "cache_write_tokens": None, "cache_cold_calls": 0, "cache_cold_write_tokens": 0,
+    }
+    cache_calls: List[Dict[str, Any]] = []
+    prompts: List[Dict[str, Any]] = []
+    waits: List[Dict[str, Any]] = []
+    subagents: List[Dict[str, Any]] = []
+    for item in items:
+        prompt, entry = item["prompt"], item["entry"]
         prompts.append(entry)
-        for key, value in parts.items():
+        for key, value in item["parts"].items():
             add(totals, key, value)
         for key in ("tool_calls", "failed_tool_calls", "denied", "asked", "stop_blocks"):
             totals[key] += entry[key]
@@ -456,47 +518,35 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
             totals["context_tokens_first"] = totals["context_tokens_first"] or prompt["context_tokens"]
             totals["context_tokens_max"] = max(totals["context_tokens_max"] or 0, prompt["context_tokens"])
         totals["compactions"] += len(prompt["compactions"])
-        for call in prompt["cache_calls"]:
+        for call, shown in zip(prompt["cache_calls"], item["cache_calls"]):
             for key, name in (("cache_input_tokens", "input"), ("cache_read_tokens", "read"), ("cache_write_tokens", "write")):
                 add(totals, key, call[name])
             if call["state"] == "expired":
                 totals["cache_cold_calls"] += 1
                 totals["cache_cold_write_tokens"] += call["write"]
-            cache_calls.append({
-                "n": number, "at": utc_text(call["at"]), "model": call["model"], "input": call["input"], "read": call["read"], "write": call["write"],
-                "state": call["state"], "gap_s": call["gap_s"], "life_s": round(call["expires"] - call["at"]) if call["expires"] is not None else None,
-            })
-        totals["paused_s"] += put_aside
-        if waited is not None and waited >= 1:
-            totals["waiting_s"] += waited
-            waits.append({"after_prompt": number, "from": utc_text(prompt["end"]), "seconds": round(waited, 1), "reason": wait_reason(events, prompt["end"], following)})
-        for run in prompt["subagents"]:
+            cache_calls.append(shown)
+        totals["paused_s"] += item["put_aside"]
+        if item["wait"] is not None:
+            totals["waiting_s"] += item["wait"]["seconds"]
+            waits.append(item["wait"])
+        for run in item["subagents"]:
             add(totals, "subagent_tokens", run["tokens"])
-            subagents.append({"prompt": number, "agent": run["agent"], "model": run["model"], "at": run["at"], "seconds": round(run["seconds"], 1), "tokens": run["tokens"], "tool_calls": run["tool_calls"]})
-
-    reviews = review_rounds(data)
-    for run in subagents:  # a reviewer run is the check that had started just before it
-        earlier = [item for item in reviews if item["at"] is not None and item["at"] <= run["at"] + MATCH_SECONDS]
-        if earlier and earlier[-1]["tokens"] is None and run["agent"].lower() == "reviewer":
-            earlier[-1].update(tokens=run["tokens"], model=run["model"])
-            run["review_round"], run["verdict"] = earlier[-1]["number"], earlier[-1]["verdict"]
-        run["at"] = utc_text(run["at"])
-    for item in reviews:
-        item.pop("at")
+            subagents.append(run)
 
     stages = stage_table(prompts, totals)
 
     for key in ("active_s", "waiting_s", "paused_s", "model_s", "tool_s", "approval_s", "subagent_s", "other_s", "aiu"):
         if totals[key] is not None:
             totals[key] = round(totals[key], 2 if key == "aiu" else 1)
-    first = mine[0]["at"] if mine else copilot_events.seconds(data.get("created_at"))
+    mine = [item["prompt"] for item in items]
+    first = mine[0]["at"] if mine else created
     last = max((prompt["end"] for prompt in mine), default=first)
-    used = sorted({found["source"] for found in sessions if any(prompt["mine"] for prompt in found["prompts"])} or {SOURCE_NONE})
+    used = sorted({sources[prompt["session_id"]] for prompt in mine} or {SOURCE_NONE})
     result = {
         "task": task, "name": data.get("name") or task.rsplit("/", 1)[-1], "kind": data.get("kind", ""), "tier": data.get("tier", ""),
         "status": data.get("status", ""), "round": data.get("round", 1), "as_of": utc_now(),
         "source": used[0] if len(used) == 1 else "mixed",
-        "sessions": [{"session_id": found["session_id"], "source": found["source"], "prompts": len([prompt for prompt in found["prompts"] if prompt["mine"]])} for found in sessions],
+        "sessions": [],
         "span": {"from": utc_text(first) if first is not None else "", "to": utc_text(last) if last is not None else "", "wall_s": round(last - first, 1) if first is not None and last is not None else 0.0},
         "totals": totals, "prompts": prompts, "stages": stages, "tools": tool_table(mine), "subagents": subagents, "reviews": reviews,
         "waits": sorted(waits, key=lambda item: -item["seconds"])[:TOP],
@@ -521,13 +571,17 @@ def add_open_wait(result: Dict[str, Any], now: Optional[Dict[str, Any]]) -> Dict
     seconds = float((now or {}).get("seconds") or 0)
     if seconds < 1:
         return result
-    totals = result["totals"]
-    totals["waiting_s"] = round(totals["waiting_s"] + seconds, 1)
-    entry = {"after_prompt": len(result["prompts"]), "from": now.get("since") or "", "seconds": round(seconds, 1), "reason": WAIT_OF_NOW.get(now.get("why") or "", "reply"), "open": True}
-    result["waits"] = sorted(result["waits"] + [entry], key=lambda item: -item["seconds"])[:TOP]
-    if result["prompts"]:
-        result["prompts"][-1]["waited_after_s"] = round(seconds, 1)
-    result["findings"] = findings(result)
+    last = result["by_round"].get(str(result.get("current_round"))) if result.get("by_round") else None  # the wait belongs to the round that is open
+    for part in (result, last):
+        if part is None:
+            continue
+        totals = part["totals"]
+        totals["waiting_s"] = round(totals["waiting_s"] + seconds, 1)
+        entry = {"after_prompt": len(result["prompts"]), "from": now.get("since") or "", "seconds": round(seconds, 1), "reason": WAIT_OF_NOW.get(now.get("why") or "", "reply"), "open": True}
+        part["waits"] = sorted(part["waits"] + [entry], key=lambda item: -item["seconds"])[:TOP]
+        if part["prompts"]:
+            part["prompts"][-1]["waited_after_s"] = round(seconds, 1)
+        part["findings"] = findings(part)
     return result
 
 
@@ -637,12 +691,15 @@ def for_agent(result: Dict[str, Any], detail: bool = False) -> Dict[str, Any]:
 
 
 def brief(result: Dict[str, Any]) -> Dict[str, Any]:
-    """The few numbers the board shows for a task."""
+    """The few numbers the board shows for a task. A task with several rounds also has `current`: the same numbers of the round that is open."""
     totals = result["totals"]
-    return {
+    found = {
         "prompts": totals["prompts"], "active_s": totals["active_s"], "waiting_s": totals["waiting_s"], "aiu": totals["aiu"],
         "premium_requests": totals["premium_requests"], "reviews": totals["reviews"], "review_fails": totals["review_fails"], "source": result["source"],
     }
+    if result.get("by_round"):
+        found["current"] = brief(result["by_round"][str(result["current_round"])])
+    return found
 
 
 def of_task(root: Path, task: str, use_events: Optional[bool] = None) -> Dict[str, Any]:

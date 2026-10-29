@@ -13,6 +13,7 @@ from typing import Any, Dict, List
 from unittest import mock
 
 from support import HarnessTestCase, payload
+from taskcase import NAME, SESSION, TASK, TaskCase
 
 from core import copilot_events, messages, tasks
 from modules.task import task as task_ops
@@ -887,6 +888,76 @@ class PageTests(BoardCase):
         self.assertEqual([item["task"] for item in result["problems"]], [f"{BASE}/bad"])
         rows = {item["name"]: item for item in page_data((self.root / result["board"]).read_text(encoding="utf-8"))["rows"]}
         self.assertEqual((rows["good"]["report"], rows["bad"]["report"], rows["bad"]["brief"]), ("tasks/good/report.html", "", None))
+
+
+class RoundsTests(TaskCase):
+    """A task written back and opened again (round 2): the report and the board row come in a whole and in one piece per round."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        patcher = mock.patch.dict(os.environ, {"COPILOT_HOME": self.env["COPILOT_HOME"]})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.new()
+        self.promoted()  # round 1, in the prompt of the session's start
+        self.prompt("again")
+        self.open()  # round 2
+        log = self.root / ".harness" / "runtime" / "logs" / "vscode" / f"{SESSION}.jsonl"
+        rows = self.log_lines(f"vscode/{SESSION}.jsonl")
+        self.first = datetime.fromisoformat(rows[0]["at"])
+        self.second = self.first + timedelta(seconds=300)
+        later = [item for item in rows if item["event"] == "UserPromptSubmit"][1]
+        later["at"] = self.second.isoformat()
+        log.write_text("\n".join(json.dumps(item) for item in rows) + "\n", encoding="utf-8")
+        path = self.root / TASK / ".task" / "task.json"
+        data = self.data()
+        opened = (self.second + timedelta(seconds=5)).isoformat()
+        data["round_started_at"] = opened
+        data["sessions"][-1]["at"] = opened
+        for event in data["events"]:
+            if event["what"] == "new-round":
+                event["at"] = opened
+        path.write_text(json.dumps(data), encoding="utf-8")
+        folder = Path(self.env["COPILOT_HOME"]) / "session-state" / SESSION
+        folder.mkdir(parents=True, exist_ok=True)
+        records = one_prompt(self.first, 10, 1, 40000) + one_prompt(self.second, 30, 2, 70000)
+        (folder / "events.jsonl").write_text("\n".join(json.dumps(item) for item in records) + "\n", encoding="utf-8")
+
+    def test_each_round_counts_its_own_prompts_and_all_is_the_sum(self) -> None:
+        info = taskinsight.of_task(self.root, TASK)
+        self.assertEqual((info["current_round"], sorted(info["by_round"])), (2, ["1", "2"]))
+        one, two = info["by_round"]["1"], info["by_round"]["2"]
+        self.assertEqual((one["totals"]["prompts"], two["totals"]["prompts"], info["totals"]["prompts"]), (1, 1, 2))
+        self.assertEqual((one["totals"]["aiu"], two["totals"]["aiu"], info["totals"]["aiu"]), (10.0, 20.0, 30.0))  # the usage counter runs on: 30 - 10
+        for key in ("active_s", "tool_calls", "failed_tool_calls", "aiu", "premium_requests"):
+            self.assertEqual(round(one["totals"][key] + two["totals"][key], 2), round(info["totals"][key], 2), key)
+        self.assertEqual([entry["n"] for entry in two["prompts"]], [2])
+        self.assertEqual((one["span"]["from"][:19], two["span"]["from"][:19]), (self.first.isoformat()[:19], self.second.isoformat()[:19]))
+        self.assertEqual(one["totals"]["waiting_s"], info["waits"][0]["seconds"])  # the long wait before the person came back is round 1's
+        self.assertEqual(two["totals"]["waiting_s"], 0.0)
+
+    def test_the_agent_gets_all_rounds_and_no_round_tables(self) -> None:
+        found = taskinsight.for_agent(taskinsight.of_task(self.root, TASK), True)
+        self.assertNotIn("by_round", found)
+        self.assertEqual(found["totals"]["prompts"], 2)
+
+    def test_a_task_of_one_round_has_no_round_data(self) -> None:
+        info = taskinsight.build(self.root, TASK, {**self.data(), "round": 1, "rounds": []}, True)
+        self.assertNotIn("by_round", info)
+        self.assertNotIn("current", taskinsight.brief(info))
+
+    def test_the_board_row_has_the_numbers_of_the_current_round_too(self) -> None:
+        rows = {item["name"]: item for item in taskboard.board_rows(self.root, True)[0]["tasks"]}
+        brief = rows[NAME]["brief"]
+        self.assertEqual((brief["prompts"], brief["aiu"], brief["current"]["prompts"], brief["current"]["aiu"]), (2, 30.0, 1, 20.0))
+        self.assertNotIn("current", brief["current"])
+
+    def test_the_page_carries_all_rounds_and_each_round(self) -> None:
+        info, now = taskboard.insight(self.root, TASK)
+        data = page_data(taskhtml.task_page(info, 0, now))["info"]
+        self.assertEqual(sorted(data["by_round"]), ["1", "2"])
+        self.assertEqual(data["by_round"]["1"]["totals"]["prompts"], 1)
+        self.assertEqual(data["totals"]["prompts"], 2)
 
 
 if __name__ == "__main__":

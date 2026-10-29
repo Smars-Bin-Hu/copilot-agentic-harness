@@ -28,6 +28,9 @@
   const FILTERS = ["all", "waiting", "working", "quiet", "unheld", "paused", "closed"];
   const view = {filter: keep.get("filter", "all"), kind: keep.get("kind", ""), query: keep.get("query", ""), key: keep.get("sort", ""), dir: Number(keep.get("dir", "1")) || 1};
   if (!FILTERS.includes(view.filter)) view.filter = "all";
+  // Time, AIU, prompts and checks of a task that went through several rounds: all of them, or only the current one (brief.current).
+  let current = keep.get("rounds", "all") === "current";
+  const figures = (row) => (row.brief && current && row.brief.current ? row.brief.current : row.brief);
 
   const matches = Object.fromEntries(FILTERS.map((name) => [name, name === "all" ? () => true : (row) => stateOf(row, live) === name]));
   const ORDER = ["waiting", "working", "quiet", "unheld", "paused", "closed", "new"];
@@ -39,10 +42,10 @@
     kind: {label: () => t("board.col.kind"), value: (row) => kindText(row).toLowerCase()},
     waiting: {label: () => t("board.col.waiting"), value: rank},
     waited: {label: () => t("board.col.waited"), value: (row) => (row.waiting ? row.waited_s : null), numeric: true},
-    time: {label: () => t("board.col.time"), value: (row) => (row.brief ? row.brief.active_s + row.brief.waiting_s : null), numeric: true},
-    aiu: {label: () => "AIU", value: (row) => (row.brief ? row.brief.aiu : null), numeric: true},
-    prompts: {label: () => t("board.col.prompts"), value: (row) => (row.brief ? row.brief.prompts : null), numeric: true},
-    reviews: {label: () => t("board.col.reviews"), value: (row) => (row.brief ? row.brief.reviews : null), numeric: true},
+    time: {label: () => t("board.col.time"), value: (row) => (figures(row) ? figures(row).active_s + figures(row).waiting_s : null), numeric: true},
+    aiu: {label: () => "AIU", value: (row) => (figures(row) ? figures(row).aiu : null), numeric: true},
+    prompts: {label: () => t("board.col.prompts"), value: (row) => (figures(row) ? figures(row).prompts : null), numeric: true},
+    reviews: {label: () => t("board.col.reviews"), value: (row) => (figures(row) ? figures(row).reviews : null), numeric: true},
     updated: {label: () => t("board.col.updated"), value: (row) => row.updated_at || null},
   };
 
@@ -119,7 +122,7 @@
   }
 
   function line(row, longest) {
-    const brief = row.brief;
+    const brief = figures(row);
     const kind = row.status === "new" ? "-" : t("task.kind." + (row.kind || "none")) + " \u00b7 " + t("task.tier." + (row.tier || "none"));
     return h("tr", {class: [row.status === "closed" ? "closed" : "", touched.has(row.name) ? "touched" : ""].join(" ").trim() || null, "data-name": row.name},
       canArchive ? tickCell(row) : null,
@@ -143,6 +146,7 @@
   const kinds = h("select", {class: "kinds", title: t("board.filter.kind")});
   const search = h("input", {type: "search", class: "search", placeholder: t("board.search"), autocomplete: "off", spellcheck: "false", value: view.query});
   const pick = h("div", {class: "pick"});
+  const roundBox = h("div", {class: "chips", role: "group", title: t("board.rounds.hint")});
   const tableBox = h("div", {class: "card"});
   const more = h("p", {class: "sub"});
   const stamp = h("span");
@@ -153,7 +157,7 @@
 
   function drawNumbers() {
     const waiting = rows.filter((row) => stateOf(row, live) === "waiting");  // what the chip "Waiting for you" counts too
-    const briefs = rows.filter((row) => row.brief).map((row) => row.brief);
+    const briefs = rows.filter((row) => row.brief).map(figures);
     const usage = briefs.filter((brief) => brief.aiu !== null).map((brief) => brief.aiu);
     kpis.replaceChildren(
       kpi(rows.filter((row) => row.status === "open").length, t("board.kpi.open")),
@@ -168,6 +172,13 @@
       const count = rows.filter(matches[name]).length;
       const chip = h("button", {type: "button", class: "chip" + (view.filter === name ? " on" : "")}, t("board.filter." + name) + " " + count);
       chip.addEventListener("click", () => { view.filter = name; keep.set("filter", name); drawControls(); drawTable(); });
+      return chip;
+    }));
+    const several = rows.some((row) => row.brief && row.brief.current);  // the toggle is there only when some task has more than one round
+    roundBox.hidden = !several;
+    roundBox.replaceChildren(...(several ? [false, true] : []).map((only) => {
+      const chip = h("button", {type: "button", class: "chip" + (current === only ? " on" : "")}, t(only ? "board.rounds.current" : "board.rounds.all"));
+      chip.addEventListener("click", () => { current = only; keep.set("rounds", only ? "current" : "all"); drawNumbers(); drawControls(); drawTable(); });
       return chip;
     }));
     const found = [...new Set(rows.filter((row) => row.status !== "new" && row.kind).map((row) => row.kind))].sort();
@@ -188,7 +199,7 @@
     const before = rowTops();
     touched = new Set(rows.filter((row) => row.status === "open" && seen.has(row.name) && seen.get(row.name) !== row.updated_at).map((row) => row.name));
     seen = new Map(rows.map((row) => [row.name, row.updated_at]));
-    const briefs = rows.filter((row) => row.brief).map((row) => row.brief);
+    const briefs = rows.filter((row) => row.brief).map(figures);
     const longest = Math.max(0, ...briefs.map((brief) => brief.active_s + brief.waiting_s)) || 1;
     if (!shownRows.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.filter.none"))); return; }
     tableBox.replaceChildren(
@@ -266,7 +277,7 @@
   const lobby = Lobby.create({href: (row) => (DATA.serve && row.status !== "new" ? "/task/" + encodeURIComponent(row.name)
     : row.report ? row.report.split("/").map(encodeURIComponent).join("/") : "")});
   let mode = keep.get("mode", "lobby") === "list" ? "list" : "lobby";
-  const controls = h("div", {class: "controls"}, chips, kinds, search, clear);
+  const controls = h("div", {class: "controls"}, chips, roundBox, kinds, search, clear);
   const modeButtons = {};
   const seg = h("div", {class: "lb-seg", role: "group"}, ["lobby", "list"].map((name) => {
     const button = h("button", {type: "button"}, t(name === "lobby" ? "board.mode.lobby" : "board.mode.list"));

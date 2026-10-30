@@ -54,6 +54,7 @@ SCRIPT_RUNNERS = frozenset("python python3 py node perl ruby".split())
 SCRIPT_FLAGS = frozenset(["-c", "-e", "-r"])
 OPTIONS_WITH_VALUE = frozenset(["-c", "-C", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env", "--exec-path", "--attr-source"])
 CONFIG_OPTIONS = ("-c", "--config-env", "--exec-path")
+CONFIG_WRITES = frozenset(["--add", "--replace-all", "--unset", "--unset-all", "--rename-section", "--remove-section", "--edit", "-e"])
 SEPARATORS = ";&|()`\n"
 
 
@@ -159,7 +160,12 @@ def _reads(subcommand: str, arguments: List[str]) -> bool:
     if subcommand == "remote":
         return first in ("", "show", "get-url") and not any(item in ("add", "remove", "rename") for item in words)
     if subcommand == "config":
-        return any(item in ("--get", "--get-all", "--get-regexp", "--list", "-l", "--get-urlmatch", "--show-origin", "--show-scope") for item in flags)
+        if any(item in CONFIG_WRITES for item in flags):
+            return False
+        if any(item in ("--get", "--get-all", "--get-regexp", "--list", "-l", "--get-urlmatch", "--show-origin", "--show-scope") for item in flags):
+            return True
+        # A key alone reads its value; a key and a value set it. Only a key has a dot, so `git config edit` does not pass as one.
+        return first == "list" or (first == "get" and len(words) == 2) or (len(words) == 1 and "." in first)
     if subcommand == "worktree":
         return first == "list"
     if subcommand == "reflog":

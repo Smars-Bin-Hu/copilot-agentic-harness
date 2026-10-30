@@ -15,6 +15,7 @@ To see which version you have: `harness --version`.
 ### Changed
 
 - The board's approval dialog fits the window. A long list (a promote of many files) scrolls in its own box, so the code field and the buttons stay in view. The archive dialog's list does the same.
+- The gate lets a `git config` that only reads run without an approval: `git config user.name`, `git config get <key>`, `git config list`. Any `git config` that writes still needs one.
 
 ## 1.5.57 (2026-10-29)
 

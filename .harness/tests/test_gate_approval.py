@@ -19,6 +19,14 @@ class ClassifyTests(unittest.TestCase):
             with self.subTest(command):
                 self.assertEqual(gitcmd.classify(command).kind, kind, gitcmd.classify(command))
 
+    def test_a_git_config_that_only_reads_passes(self) -> None:
+        self.check(NONE, "git config user.name", "git config --global user.name", "git -C repo config user.name", "git config get user.name", "git config list")
+
+    def test_a_git_config_that_writes_needs_approval(self) -> None:
+        self.check(APPROVE, "git config core.hooksPath x", "git config --global user.name x", "git config set user.name x", "git config unset user.name",
+                   "git config --unset user.name", "git config --add user.name x", "git config --edit", "git config -e", "git config edit",
+                   "git config --get --unset user.name", "git config --remove-section user")
+
     def test_reads_pass(self) -> None:
         self.check(
             NONE, "git status", "git -C /x/y log --oneline", "git diff HEAD~1 -- a.sql", "git show HEAD:a.sql", "git branch", "git branch -a -v",

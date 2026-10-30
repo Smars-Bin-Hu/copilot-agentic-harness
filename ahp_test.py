@@ -2,7 +2,7 @@
   python ahp_test.py               read only: connect, list the 5 newest sessions
   python ahp_test.py send <id>     send one test message to that session (the id, or its first 8 characters)
 """
-import base64, datetime, json, os, socket, struct, subprocess, sys, threading, uuid
+import base64, datetime, json, os, socket, struct, subprocess, sys, threading, traceback, uuid
 
 
 def code(arguments):
@@ -34,9 +34,12 @@ class Unix:
 
 class Ahp:
     def __init__(self):
-        found = [item for item in code("endpoints")["endpoints"] if item.get("type") == "editor"]
+        items = code("endpoints")["endpoints"]
+        print("endpoints:", [item.get("type") for item in items])
+        found = [item for item in items if item.get("type") == "editor"]
         if not found:
             sys.exit("no editor endpoint: is VS Code open?")
+        print("field names:", sorted(found[0]), sorted(found[0]["endpoint"]))
         path = found[0]["endpoint"]["path"]
         print("endpoint kind:", "named pipe" if path.startswith("\\\\") else "unix socket", "| path starts:", path[:24])
         self.link = (Pipe if path.startswith("\\\\") else Unix)(path)
@@ -152,9 +155,17 @@ def send(wanted, text="This is a harness test. Reply with exactly: outside messa
 
 
 if __name__ == "__main__":
-    threading.Timer(150, lambda: (print("timed out"), os._exit(1))).start()
+    print("python", sys.version.split()[0], sys.platform, flush=True)
+    threading.Timer(150, lambda: (print("timed out", flush=True), os._exit(1))).start()
+    result = 1
     try:
         send(sys.argv[2]) if sys.argv[1:2] == ["send"] else listing()
+        result = 0
+    except SystemExit as stop:
+        print("stopped:", stop.code)
+    except BaseException:
+        traceback.print_exc(file=sys.stdout)
     finally:
+        print("finished, exit code", result)
         sys.stdout.flush()
-        os._exit(0)
+        os._exit(result)

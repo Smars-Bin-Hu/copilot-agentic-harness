@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.5.59",
+  "version": "1.5.60",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -139,6 +139,7 @@
         ".harness/tests/test_kbsetup.py",
         ".harness/tests/test_refs.py",
         ".harness/tests/test_standards.py",
+        ".harness/tests/test_company.py",
         ".harness/tests/test_promote_delete.py",
         ".harness/tests/test_taskdesk.py",
         ".harness/tests/test_taskfiles.py",

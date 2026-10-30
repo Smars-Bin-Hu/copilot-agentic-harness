@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, user
+from core import company, config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -540,17 +540,34 @@ def check_optional_packages(report: Report, root: Path) -> None:
     report.warn(say("doctor.packages.missing", names=", ".join(state["missing"]), next=follow))
 
 
+def check_company(report: Report, root: Path) -> None:
+    """Do the copies in `.github/` match the company content of the knowledge base? Warns only, and says nothing when there is none."""
+    try:
+        found = company.drift(root)
+    except Exception as error:  # noqa: BLE001 - doctor reports, it does not stop
+        report.warn(say("doctor.company.failed", error=error))
+        return
+    if found is None:
+        return
+    if found["problem"]:
+        report.warn(found["problem"])
+    elif found["stale"] or found["refused"]:
+        report.warn(say("doctor.company.stale", names=", ".join(found["stale"] + found["refused"])))
+    else:
+        report.ok(say("doctor.company.ok", version=found["version"] or "-"))
+
+
 def check_standards(report: Report, root: Path) -> None:
     """Are the code standards plugged in, and does each rule have the fields the check needs? Warns only."""
     found = standards.rules(root)
     if not found:
-        report.ok(say("doctor.standards.none", file=standards.STANDARDS_FILE))
+        report.ok(say("doctor.standards.none", file=standards.shown(root)))
         return
-    report.ok(say("doctor.standards.ok", count=len(found), file=standards.STANDARDS_FILE))
+    report.ok(say("doctor.standards.ok", count=len(found), file=standards.shown(root)))
     bad = [item for item in found if item["missing"]]
     if bad:
         fields = ", ".join(sorted({name for item in bad for name in item["missing"]}))
-        report.warn(say("doctor.standards.incomplete", file=standards.STANDARDS_FILE, fields=fields, titles=", ".join(item["title"] for item in bad[:5])))
+        report.warn(say("doctor.standards.incomplete", file=standards.shown(root), fields=fields, titles=", ".join(item["title"] for item in bad[:5])))
 
 
 def check_targets(report: Report, root: Path) -> None:
@@ -717,6 +734,7 @@ def run(root: Path) -> int:
     check_location(report, root)
     check_knowledge_base(report, root)
     check_skills(report, root)
+    check_company(report, root)
     check_standards(report, root)
     check_task_names(report, root)
     check_optional_packages(report, root)

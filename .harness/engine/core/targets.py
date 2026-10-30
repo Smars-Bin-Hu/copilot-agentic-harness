@@ -138,6 +138,7 @@ def load(root: Path) -> Targets:
 
 
 KB_DIR = "knowledge-base"  # where a team puts its knowledge base when it is not registered as a repository
+COMPANY_DIR = "company"  # in a knowledge base: the company's standards, skills and instructions (`company.py`)
 KB_IGNORED = {"README.md", ".gitkeep", ".gitignore", ".DS_Store"}  # what is no content: the shipped placeholder and housekeeping files
 
 
@@ -155,6 +156,11 @@ def kb_registered(root: Path) -> bool:
         return any(folder.resolve() == kb for name, folder in knowledge_bases(root) if name != KB_DIR)
     except OSError:
         return True  # cannot tell: do not nag
+
+
+def company_folder(root: Path) -> Optional[Path]:
+    """`company/` of the first knowledge base that has one. Reads the policy only, as `knowledge_bases` does."""
+    return next((path / COMPANY_DIR for _name, path in knowledge_bases(root) if (path / COMPANY_DIR).is_dir()), None)
 
 
 def knowledge_bases(root: Path) -> List[Tuple[str, Path]]:

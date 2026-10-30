@@ -1,6 +1,6 @@
 # Code standards check: <task name>
 
-- Date: <date> · Standards: `.harness/standards/code-standards.md` (<n> rules, <n> apply to this task)
+- Date: <date> · Standards: `<the file read>` (<n> rules, <n> apply to this task)
 - Files in scope: <list>
 
 ## Findings

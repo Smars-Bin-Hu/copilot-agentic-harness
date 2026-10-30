@@ -10,7 +10,7 @@ Never overwritten: what the new copy already has is skipped and listed, so a run
 Not carried: `runtime/capture/` (debug input, large, holds code), `runtime/board-serve.json` (the old process's port),
 the target repositories (outside the harness), the short command (in PATH; `doctor` says when it points at the old copy).
 Shipped files the company changed (the code standards, the knowledge base instructions, `domain-*` skills and the skills that start with the company's `skill_prefix`) are carried
-when git in the old copy says they were changed there. Any other changed file is only listed.
+when git in the old copy says they were changed there. Any other changed file is only listed. Then `company sync`: the copies in `.github/` come from the company content of the knowledge base.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from . import approval, config, messages, skillcheck, tasks
+from . import approval, company as company_content, config, messages, skillcheck, tasks
 from .paths import runtime_dir
 from .registry import harness_version
 
@@ -260,6 +260,9 @@ def run(root: Path, raw: str, apply: bool = False, interactive: Optional[bool] =
     result.update(copied=listed(done), skipped=plan.skipped, failed=failed, changed_in_old_not_copied=others[:LEFT_ALONE_SHOWN])
     if len(others) > LEFT_ALONE_SHOWN:
         result["changed_in_old_more"] = len(others) - LEFT_ALONE_SHOWN
+    synced = company_content.sync_after(root)
+    if synced is not None:
+        result["company_sync"] = synced
     names = [step["name"] for step in done.steps if step["group"] == "tasks"]
     if check is not None:
         result["checked"] = check(names)

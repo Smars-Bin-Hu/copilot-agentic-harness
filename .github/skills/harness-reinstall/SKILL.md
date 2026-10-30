@@ -34,6 +34,7 @@ specificTo: generic
 - **Skipped means kept, not lost.** A file that exists in both is never overwritten. To replace the new one with the old one, the user deletes the new one first and runs the command again; it is safe to run twice.
 - **Not carried, on purpose:** `runtime/capture/` (debug input, holds code), `runtime/board-serve.json` (the old server's port), the target repositories (outside the harness; `doctor` checks their paths in `target.override.json`), the short command (in PATH).
 - **A knowledge base that already has content is not merged.** Only the empty shipped one is replaced by the old one (with its own `.git`).
+- **`--apply` ends with `company sync`.** The copies in `.github/` come from the knowledge base's `company/` folder when it has one. Read `company_sync`: an `error` there is fixed by hand, then `harness company sync`; nothing else is undone.
 - **Do not copy by hand** (`cp`, `Copy-Item`, `mv`). The command skips what exists, keeps the knowledge base's `.git`, and leaves out the debug capture. A hand copy of `runtime/` over a new one mixes sessions.
 - **The repository map cache comes over with `runtime/kbmap/`.** If `kb status` still says the map is missing or old, run `kb map` again: a cache of an older version is built again by script, with no model cost.
 

@@ -11,7 +11,8 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/copilot-instructions.md` | Rules for the whole repository: tasks, what to do after a hook refuses, git commands |
 | `.github/instructions/` | Rules by topic: `agents`, `skills`, `workspace` (reading and writing in `.workspace/`), `knowledgebase` (how to read the knowledge base for a task, keep it true, and write it in the standard form) |
 | `LICENSE`, `NOTICE` | Apache License 2.0 and the copyright notice. They are guardrail files |
-| `.harness/standards/code-standards.md` | The company's code standards, written by the company; ships without a rule. Read by `generic-code-standards` |
+| `.harness/standards/code-standards.md` | The code standards when the knowledge base has none in `company/standards/`; ships without a rule. Read by `generic-code-standards` |
+| `.harness/engine/core/company.py` | The company's own content in `<knowledge base>/company/`: standards, skills, instructions (`harness company sync`, `pack`, `update`). The harness copies stay clean |
 | `.workspace/README.md` | The layout of the work area, and what the gate can and cannot guard |
 
 ## Skills and agents
@@ -36,7 +37,7 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/skills/generic-impact-analysis/` | Before a plan: where the names a change touches are used, in every target repository and the knowledge base (`target refs`); writes `IMPACT.md` in the task folder |
 | `.github/skills/generic-workflow-design/` | Designs an agentic workflow from a repeated manual routine and 2-3 finished examples; writes `WORKFLOW-DESIGN.md` for the user to approve; builds nothing. Asks the user first |
 | `.github/skills/generic-workflow-build/` | Builds the skills of an approved design: unit skills, an orchestration skill, scripts with tests, a replay test. Started only by the user, with `/generic-workflow-build` |
-| `.github/skills/generic-code-standards/` | Checks a task's code against the company's standards (`.harness/standards/code-standards.md`) and fixes what does not comply. Asks the user first |
+| `.github/skills/generic-code-standards/` | Checks a task's code against the company's standards (`<knowledge base>/company/standards/code-standards.md`, else `.harness/standards/code-standards.md`) and fixes what does not comply. Asks the user first |
 | `.github/skills/generic-capture-knowledge/` | After a task: picks what a future agent would get wrong, drafts it as knowledge base entries or skill gotchas (`KB-DRAFT.md`) for the user to approve; writes nothing into the knowledge base |
 | `.github/skills/generic-kb-translate/` | Translate knowledge base pages from Simplified Chinese to English in a `kb` task: glossary first, then a script checks every file against its original. The agent asks first |
 | `.github/skills/generic-kb-migrate/` | Move a knowledge base domain of before the standard into the standard form with `harness kb migrate`, in a `kb` task, until `kb check` passes. The agent asks first |

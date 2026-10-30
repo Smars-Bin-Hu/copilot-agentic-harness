@@ -10,6 +10,22 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.60 (2026-10-30)
+
+### Added
+
+- The company's own content can live in the knowledge base, in `company/`: `company.json`, the code standards, skills and instructions. A copy of the harness then stays clean, and can be shared as it is. See [Company content](03-configure.md#company-content).
+- `harness company sync` copies those skills and instructions to `.github/`, where Copilot finds them. It touches no other file and deletes nothing.
+- `harness company pack --out <folder>` makes a zip of what git has in the knowledge base, after checking it, for a team with no git server.
+- `harness company update --from <zip>` says what a package would change; with `--apply`, for a person in a terminal, it puts the package in place. Files changed on this computer are saved first.
+
+### Changed
+
+- The code standards are read from `<knowledge base>/company/standards/code-standards.md` when that file is there, else from `.harness/standards/code-standards.md`.
+- `harness reinstall --apply` ends with `company sync`.
+- `harness doctor` warns when a copy in `.github/` differs from the company content.
+- `/harness-rookie-get-me-ready` takes a package, and proposes the `skill_prefix` it names.
+
 ## 1.5.59 (2026-10-30)
 
 ### Changed

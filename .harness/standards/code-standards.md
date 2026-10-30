@@ -1,6 +1,6 @@
 # Code standards
 
-This file ships empty. Write your company's code standards here. The skill `generic-code-standards` reads it, checks the code of a task against it, and fixes what does not comply. The agent asks you before it runs the check.
+This file ships empty. Better, write your company's code standards in `<knowledge base>/company/standards/code-standards.md`: that file is used first, and this copy of the harness stays clean. Or write them here. The skill `generic-code-standards` reads it, checks the code of a task against it, and fixes what does not comply. The agent asks you before it runs the check.
 
 Only rules written as below are used. Anything in an HTML comment is ignored.
 

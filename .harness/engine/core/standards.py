@@ -1,4 +1,5 @@
-"""The company's code standards: `.harness/standards/code-standards.md`, written by the company, read by the skill `generic-code-standards`.
+"""The company's code standards, written by the company, read by the skill `generic-code-standards`: `<knowledge base>/company/standards/code-standards.md`
+when it is there, else `.harness/standards/code-standards.md`, so that a copy of the harness can stay clean.
 
 A rule is a `###` heading. The file ships without any, so "plugged in" means it has at least one rule outside an HTML comment.
 """
@@ -9,18 +10,28 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
-from . import messages
+from . import domainskills, messages, targets
 
 STANDARDS_FILE = ".harness/standards/code-standards.md"
+COMPANY_FILE = "standards/code-standards.md"
 COMMENT = re.compile(r"<!--.*?-->", re.S)
 FENCE = re.compile(r"^(```|~~~).*?^\1[ \t]*$", re.M | re.S)
 HEADING = re.compile(r"^###\s+(\S.*)$", re.M)
 FIELDS = ("Applies to", "Rule")
 
 
+def source(root: Path) -> Path:
+    folder = targets.company_folder(root)
+    return folder / COMPANY_FILE if folder is not None and (folder / COMPANY_FILE).is_file() else root / STANDARDS_FILE
+
+
+def shown(root: Path) -> str:
+    return domainskills.shown_path(root, source(root))
+
+
 def rules(root: Path) -> List[Dict[str, Any]]:
     """[{"title", "missing"}] for every rule of the file; `missing` names the fields (Applies to, Rule) a rule lacks. Empty when the file is missing or unreadable."""
-    path = root / STANDARDS_FILE
+    path = source(root)
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):

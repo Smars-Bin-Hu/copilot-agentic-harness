@@ -155,9 +155,36 @@ No knowledge base yet, or a repository nobody has learned: the agent builds one 
 
 ## Code standards
 
-`.harness/standards/code-standards.md` is where the company writes its code standards. It ships without a rule. Write one rule under each `###` heading, with `Applies to`, `Rule`, `Check`, `Fix` and `Severity`; the file explains each field and shows an example. Group the rules under a heading per language.
+Write your company's code standards in `<knowledge base>/company/standards/code-standards.md`, or, with no such file, in `.harness/standards/code-standards.md`, which ships without a rule. The first keeps your copy of the harness clean (see [Company content](#company-content)). Write one rule under each `###` heading, with `Applies to`, `Rule`, `Check`, `Fix` and `Severity`; the file explains each field and shows an example. Group the rules under a heading per language.
 
 After that, when a task that changed code is about to go to `task diff`, the agent asks you whether to run the skill `generic-code-standards`. On a yes it checks the files of the task against your rules (running the `Check` command of a rule, or reading the code), writes `STANDARDS-CHECK.md`, and fixes the lines that break a rule. It fixes only the lines the task changed, and only by your rules. `doctor` shows how many rules are plugged in and warns about a rule that lacks a field. The agent never changes this file.
+
+## Company content
+
+Keep what your company adds apart from the harness. A copy of the harness then stays as it came, and you can share it with anyone. In the knowledge base:
+
+```text
+knowledge-base/
+  domains/...
+  company/
+    company.json                                    { "skill_prefix": "<word>" }
+    standards/code-standards.md                     read where it is
+    skills/<word>-<name>/                           copied to .github/skills/
+    instructions/knowledgebase.instructions.md      copied to .github/instructions/
+```
+
+Copilot finds skills and instructions in `.github/` only. So `harness company sync` copies them there. It touches no other file, deletes nothing, and is safe to run again. It lists a company skill that is no longer in `company/` (`only_here`); delete that one by hand. Change the files in `company/`, never the copies: the next sync replaces them. `doctor` warns when a copy is behind.
+
+A team with no git server shares the content as a package:
+
+| Who | When | What |
+|---|---|---|
+| The owner | Changes committed in the knowledge base | `harness company pack --out <folder>` checks it (`kb check`, the skills, nothing uncommitted) and makes `<word>-kb-<date>.zip`. Put the zip where your company allows, never in a public repository |
+| A colleague | A new package | `harness company update --from <zip>` says what would change; add `--apply`, in your own terminal, to do it. Files changed on this computer are saved in `.harness/runtime/company-backup/` and replaced: send the ones to keep to the owner. Then `company sync` runs |
+| A new colleague | First setup | Give `/harness-rookie-get-me-ready` the zip |
+| Anyone | A new copy of the harness | `harness reinstall --from <old copy> --apply` carries the knowledge base and runs `company sync` |
+
+To share the harness itself, never zip your folder: it holds your tasks and overrides. Use `git clone`, or `git archive --format=zip -o harness.zip HEAD`, and do not commit company content to it. `git archive` keeps only what is committed.
 
 ## Skills
 

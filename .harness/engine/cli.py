@@ -6,6 +6,7 @@
   task ...                     tasks: new, open, upgrade, list, fetch, diff, promote, review, snapshot, close (task module)
   target list|show|refs|init-kb  the target repositories; refs: where names are used; init-kb: make the knowledge base a git repository (task module)
   reinstall --from <old copy> [--apply]  carry the tasks, runtime, overrides and knowledge base of an older copy over to this one; --apply: a person only
+  company sync|pack|update     the company's content in the knowledge base: copy it where Copilot finds it, make a package of it, put a package in place (--apply: a person only)
   skill check [name|path ...]  is a skill well formed? (all skills when none is named, the domain skills too)
   skill list [--domain D]      the skills of business domains, kept in the knowledge base
   approve-command              a person approves a git command the gate refused (gate module)
@@ -29,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from core import domainskills, messages, output, pinpython, reinstall, render, skillcheck, user  # noqa: E402
+from core import company, domainskills, messages, output, pinpython, reinstall, render, skillcheck, user  # noqa: E402
 from core.paths import repo_root  # noqa: E402
 from core.registry import harness_version, version_banner  # noqa: E402
 import doctor  # noqa: E402
@@ -112,6 +113,17 @@ def build_parser() -> argparse.ArgumentParser:
     again.add_argument("--from", dest="source", required=True, help="the old copy: an absolute path")
     again.add_argument("--apply", action="store_true", help="copy. A person at a terminal only. Never overwrites: what is here already is skipped and listed")
     again.set_defaults(handler=lambda a: reinstall.run(repo_root(), a.source, a.apply, check=check_after_reinstall))
+    group = commands.add_parser("company", help="the company's content in <knowledge base>/company/: standards, skills, instructions")
+    group_commands = group.add_subparsers(dest="company_command", required=True)
+    sync = group_commands.add_parser("sync", help="copy the company's skills and instructions to .github/, where Copilot finds them. Touches no other file, deletes nothing. Safe to run again")
+    sync.set_defaults(handler=lambda _args: company.sync(repo_root()))
+    pack = group_commands.add_parser("pack", help="the owner: make a zip of what git has in the knowledge base, after checking it. The working tree must be clean")
+    pack.add_argument("--out", required=True, help="the folder for the zip: an absolute path outside the knowledge base")
+    pack.set_defaults(handler=lambda a: company.pack(repo_root(), a.out))
+    update = group_commands.add_parser("update", help="put a package in the knowledge base. Without --apply it only says what would change")
+    update.add_argument("--from", dest="source", required=True, help="the zip: an absolute path")
+    update.add_argument("--apply", action="store_true", help="do it. A person at a terminal only. Files changed here are copied to .harness/runtime/company-backup/ first; then `company sync` runs")
+    update.set_defaults(handler=lambda a: company.update(repo_root(), a.source, a.apply))
     task_commands.register(commands)
     gate_commands.register(commands)
     observe_commands.register(commands)

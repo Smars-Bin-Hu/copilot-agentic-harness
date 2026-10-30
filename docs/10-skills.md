@@ -91,6 +91,8 @@ There are two kinds, and where a skill lives says whose it is.
 
 **For every domain** (the ticket tracker, a server, any system your company works with): `.github/skills/<prefix>-<name>/`. `<prefix>` is one word you set once, `skill_prefix` in `user.override.json` (see [03 Configure](03-configure.md#skills)); `/harness-rookie-get-me-ready` asks for it. The word tells these skills from the ones the harness ships, `doctor` accepts it, and `/harness-reinstall` carries them to a new copy.
 
+With a knowledge base that has a `company/` folder, write these skills in `company/skills/`: `harness company sync` copies them to `.github/skills/`, and your copy of the harness stays clean. See [Company content](03-configure.md#company-content).
+
 **For one business domain**: they do not go in `.github/skills/`. They go in the knowledge base, at `knowledge-base/domains/<domain>/skills/<skill>/SKILL.md`, named `domain-<domain>-<name>`, with no company word.
 
 - Make them with `generic-build-new-skill`.

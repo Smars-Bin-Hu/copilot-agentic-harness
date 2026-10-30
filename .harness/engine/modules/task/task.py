@@ -263,7 +263,7 @@ def next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
     if data.get("target_mode"):
         text += say("task.step.fetch")
         if standards.plugged_in(root):
-            text += say("task.step.standards")
+            text += say("task.step.standards", file=standards.shown(root))
     return text + say("task.step.close")
 
 

@@ -1,6 +1,6 @@
 ---
 name: generic-code-standards
-description: 'Check the code of a task against the company''s code standards and fix what does not comply. The standards are written by the company in .harness/standards/code-standards.md; this skill only reads them. Use before the promote dry-run of a task that changed code, or when the user asks to check or fix code style, naming or conventions. Keywords: code standards, coding conventions, style check, lint, naming rules, comply with the rules.'
+description: 'Check the code of a task against the company''s code standards and fix what does not comply. The standards are written by the company in <knowledge base>/company/standards/code-standards.md, else .harness/standards/code-standards.md; this skill only reads them. Use before the promote dry-run of a task that changed code, or when the user asks to check or fix code style, naming or conventions. Keywords: code standards, coding conventions, style check, lint, naming rules, comply with the rules.'
 type: workflow
 specificTo: generic
 ---
@@ -18,7 +18,7 @@ The company writes its standards once, in one file. This skill checks the code a
 
 ## Prerequisites
 
-- The standards are in `.harness/standards/code-standards.md`: one `###` heading per rule, with `Applies to`, `Rule`, `Check`, `Fix`, `Severity`. If the file has no rule, say that nothing is plugged in, name the file, and stop. Do not make rules up.
+- The standards are in `<knowledge base>/company/standards/code-standards.md`; when that file is not there, in `.harness/standards/code-standards.md`. `harness doctor` names the one in use. One `###` heading per rule, with `Applies to`, `Rule`, `Check`, `Fix`, `Severity`. If the file has no rule, say that nothing is plugged in, name the file, and stop. Do not make rules up.
 - To fix files, the plan is approved (`DEV/` is writable). Before that, only report.
 
 ## Step-by-Step Workflows
@@ -46,7 +46,7 @@ The company writes its standards once, in one file. This skill checks the code a
 
 | Issue | Solution |
 |-------|----------|
-| The file has no rule | Nothing is plugged in. Tell the user to write rules in `.harness/standards/code-standards.md`; `harness doctor` shows the state |
+| The file has no rule | Nothing is plugged in. Tell the user to write rules in `<knowledge base>/company/standards/code-standards.md`; `harness doctor` shows the state |
 | `harness doctor` says a rule lacks a field | The check needs `Applies to` and `Rule`. Tell the user which rules |
 | A check command is not found | The tool is not installed on this computer. Treat the rule as `read` and say so |
 | A rule applies to a file type the task has no files of | Skip it; list it as "not applicable" |

@@ -107,7 +107,7 @@ def check_domain(root: Path, folder: Path) -> Dict[str, Any]:
         if data.get("schema_version") != SCHEMA_VERSION:
             errors.append(say("kb.domain.version", found=data.get("schema_version"), wanted=SCHEMA_VERSION))
         errors += [say("kb.domain.field", field=field) for field in DOMAIN_REQUIRED if field not in data]
-        if data.get("domain") not in (None, folder.name):
+        if data.get("domain") is not None and str(data.get("domain")).lower() != folder.name.lower():
             errors.append(say("kb.domain.name", found=data.get("domain"), folder=folder.name))
         scope = data.get("scope") if isinstance(data.get("scope"), dict) else {}
         listed = [key for key in OBJECT_LISTS if key in data or key in scope]
@@ -188,15 +188,17 @@ def check_domain(root: Path, folder: Path) -> Dict[str, Any]:
 
 def check(root: Path, only: Optional[List[str]] = None) -> Dict[str, Any]:
     known = domainskills.domains(root)
-    wanted = [name for name in known if not only or name in only]
+    asked = {name: domainskills.find(known, name) for name in only or []}
+    wanted = [name for name in known if not only or name in asked.values()]
+    missing = [name for name, found in asked.items() if found is None]
     results = [check_domain(root, known[name]) for name in wanted]
     errors = sum(len(item["errors"]) for item in results)
     return {
         "domains": len(results), "errors": errors, "warnings": sum(len(item["warnings"]) for item in results),
         "problems": [item for item in results if item["errors"] or item["warnings"]],
-        "missing": [name for name in (only or []) if name not in known],
+        "missing": missing,
         "next": say("kb.check.errors" if errors else "kb.check.ok" if results else "kb.check.none"),
-        "exit_code": 1 if errors or (only and len(results) < len(only)) else 0,
+        "exit_code": 1 if errors or missing else 0,
     }
 
 
@@ -204,8 +206,10 @@ def stale(root: Path, domain: str, diff: bool = False) -> Dict[str, Any]:
     """Which objects of the domain were written from a source that has changed since, on the base branch.
     With `diff`: what changed in each source, so that the card can be checked against the change, not the whole file."""
     known = domainskills.domains(root)
-    if domain not in known:
+    name = domainskills.find(known, domain)
+    if name is None:
         raise ValueError(say("kb.stale.no_domain", domain=domain, known=", ".join(known) or "-"))
+    domain = name
     rows, _bad = read_index(known[domain] / INDEX_FILE)
     found = targets.load(root)
     by_repo: Dict[str, List[Tuple[Dict[str, Any], Dict[str, Any]]]] = {}

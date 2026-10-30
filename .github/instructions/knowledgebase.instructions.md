@@ -11,7 +11,7 @@ The form is [the standard](../../.harness/contracts/kb/README.md); `harness kb c
 
 ## Reading, for a task
 
-1. Name the task's domain first (`harness task set-domain`). No domain named: ask the user. Do not search several domains to guess.
+1. Name the task's domain first (`harness task set-domain`; a name matches its folder in any case). No domain named: ask the user. Do not search several domains to guess.
 2. Read `domains/<d>/architecture.md` and `domain.yaml`. Stop when they answer the question or let you write the plan.
 3. Need an object: find its line in `objects/index.jsonl` by id or name, and read only its card (`card` is `file#section`). Never read a whole `objects/` folder, `discovery/`, or every RCA.
 4. Need the code: open only the `sources` of that object (`<repo>/<path>`), with `task fetch` in a task. Code is evidence for DEV only; it says nothing certain about IST, QAT or PROD.

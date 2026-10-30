@@ -146,7 +146,7 @@ def check(folder: Path, company: str = "") -> Dict[str, Any]:
             warnings.append(say("skill.type"))
         if not fields.get("specificTo"):
             warnings.append(say("skill.specific.missing"))
-        elif DOMAIN_NAME.match(name) and fields["specificTo"] != name.split("-")[1]:
+        elif DOMAIN_NAME.match(name) and str(fields["specificTo"]).lower() != name.split("-")[1]:  # a domain name matches in any case
             warnings.append(say("skill.specific.domain", actual=fields["specificTo"], expected=name.split("-")[1]))
     lines = len(body.splitlines())
     if lines > MAX_BODY:

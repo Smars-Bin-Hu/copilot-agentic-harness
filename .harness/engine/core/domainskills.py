@@ -12,18 +12,20 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from . import skillcheck, targets
 
 DOMAINS_DIR = "domains"
 SKILLS_DIR = "skills"
-NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")  # a folder keeps its case; a name matches it in any case (`sales` is `Sales`)
 
 
 def domains(root: Path) -> Dict[str, Path]:
-    """{domain: its folder}, over every knowledge base. The first knowledge base that has a domain wins."""
+    """{domain: its folder}, over every knowledge base. The first knowledge base that has a domain wins, and of two
+    folders whose names differ only in case, the first (on a file system that tells them apart)."""
     found: Dict[str, Path] = {}
+    seen = set()
     for _name, base in targets.knowledge_bases(root):
         folder = base / DOMAINS_DIR
         try:
@@ -31,9 +33,17 @@ def domains(root: Path) -> Dict[str, Path]:
         except OSError:
             items = []
         for item in items:
-            if item.is_dir() and NAME.match(item.name) and item.name not in found:
+            if item.is_dir() and NAME.match(item.name) and item.name.lower() not in seen:
                 found[item.name] = item
+                seen.add(item.name.lower())
     return found
+
+
+def find(known: Dict[str, Path], name: str) -> Optional[str]:
+    """The domain's own name (as its folder has it) for a name in any case; None when there is no such domain."""
+    if name in known:
+        return name
+    return next((key for key in known if key.lower() == name.lower()), None)
 
 
 def shown_path(root: Path, path: Path) -> str:
@@ -47,8 +57,9 @@ def shown_path(root: Path, path: Path) -> str:
 def skills(root: Path, only: List[str] | None = None) -> List[Dict[str, Any]]:
     """The skills of the domains in `only` (all domains when None): domain, name, description, who starts it, path."""
     out: List[Dict[str, Any]] = []
+    wanted = None if only is None else {name.lower() for name in only}
     for domain, folder in domains(root).items():
-        if only is not None and domain not in only:
+        if wanted is not None and domain.lower() not in wanted:
             continue
         base = folder / SKILLS_DIR
         try:

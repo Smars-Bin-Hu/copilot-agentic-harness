@@ -99,6 +99,17 @@ class StatusTests(TaskCase):
         self.assertIn("generic-kb-learn-plan", result["next"])
         self.assertIn("`orders`", result["next"])
 
+    def test_a_readme_row_and_a_folder_match_in_any_case(self) -> None:
+        readme = self.root / "README.md"
+        readme.write_text("| Domain | Status |\n| --- | --- |\n| Orders | learned |\n| Billing | not learned yet |\n| billing | again |\n", encoding="utf-8")
+        self.assertEqual(kbstatus.listed_domains(readme), ["Orders", "Billing"])
+        self.kb()
+        shutil.copy(readme, self.kb_path / "README.md")
+        (self.kb_path / "domains" / "orders").mkdir(parents=True)
+        result = kbstatus.status(self.root, deep=False)
+        self.assertEqual([item["domain"] for item in result["domains"]], ["orders", "Billing"])  # `Orders` is the folder `orders`, on every file system
+        self.assertEqual(result["steps"][5]["not_started"], ["Billing"])
+
     def test_a_domain_is_learned_in_one_task_and_counts_only_when_written_back(self) -> None:
         from core import tasks
 

@@ -21,7 +21,7 @@ STEPS = ("targets", "kb_repo", "toolkit", "map", "audit", "domains", "learn", "m
 AUDIT_FILE = "audit.md"
 PASSED = re.compile(r"^Result:\s*\**\s*pass\b", re.I | re.M)
 ORDER = re.compile(r"harness kb order[^\n`]*")
-FOLDER = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+FOLDER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")  # as domainskills.NAME: case is kept, and ignored when names are matched
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -124,7 +124,7 @@ def listed_domains(readme: Path) -> List[str]:
             inside = False
         elif cells[0].lower() == "domain" and any(cell.lower() == "status" for cell in cells):
             inside = True
-        elif inside and FOLDER.match(cells[0]) and cells[0] not in found:
+        elif inside and FOLDER.match(cells[0]) and cells[0].lower() not in {name.lower() for name in found}:
             found.append(cells[0])
     return found
 
@@ -196,8 +196,9 @@ def status(root: Path, deep: bool = True) -> Dict[str, Any]:
         except OSError:
             names = []
         learning = learning_tasks(root, kb.name)
-        listed = [name for name in listed_domains(kb.path / "README.md") if not (folder / name).is_dir()]
-        listed += [name for name in sorted(learning) if name not in listed and not (folder / name).is_dir()]
+        have = {item.name.lower() for item in names}  # not `(folder / name).is_dir()`: that ignores case on Windows and macOS only
+        listed = [name for name in listed_domains(kb.path / "README.md") if name.lower() not in have]
+        listed += [name for name in sorted(learning) if name.lower() not in have | {item.lower() for item in listed}]
         domains = [in_task(root, learning, item.name, item, deep) for item in names] + [in_task(root, learning, name, folder / name, deep, listed=True) for name in listed]
         steps["domains"].update(done=bool(domains), count=len(domains), **({"not_started": listed} if listed else {}))
         steps["learn"].update(done=bool(domains) and all(item["done"] for item in domains))
@@ -215,7 +216,7 @@ def status(root: Path, deep: bool = True) -> Dict[str, Any]:
 def in_task(root: Path, learning: Dict[str, Dict[str, Any]], name: str, folder: Path, deep: bool, listed: bool = False) -> Dict[str, Any]:
     """The state of a domain; while a task learns it, the state of its copy in that task's `DEV/`, which is not done
     until it is written back."""
-    task = learning.get(name)
+    task = next((value for key, value in learning.items() if key.lower() == name.lower()), None)
     if task is None:
         return dict(domain_state(root, folder, deep and not listed), **({"listed": True} if listed else {}))
     if task["folder"]:

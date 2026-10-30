@@ -218,15 +218,19 @@ def set_domains(root: Path, raw_task: str, names: List[str]) -> Dict[str, Any]:
     return {"task": task, "domains": wanted, "skills": found, "next": say("domain.next" if found else "domain.next.none")}
 
 
-NEW_DOMAIN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
-
-
 def known_domains(root: Path, names: List[str], new_ok: bool = False) -> List[str]:
-    """The names, without repeats; an error naming the ones no knowledge base has. `new_ok`: a `kb` task may name a
-    domain it is about to learn, which is in the knowledge base only after its write-back (a folder name all the same)."""
+    """The names as their folders have them (a name matches in any case), without repeats; an error naming the ones no
+    knowledge base has. `new_ok`: a `kb` task may name a domain it is about to learn, which is in the knowledge base
+    only after its write-back (a folder name all the same)."""
     known = domainskills.domains(root)
-    wanted = list(dict.fromkeys(name.strip() for name in names if name.strip()))
-    unknown = [name for name in wanted if name not in known and not (new_ok and NEW_DOMAIN.match(name))]
+    wanted: List[str] = []
+    unknown: List[str] = []
+    for name in (name.strip() for name in names if name.strip()):
+        found = domainskills.find(known, name) or (name if new_ok and domainskills.NAME.match(name) else None)
+        if found is None:
+            unknown.append(name)
+        elif found.lower() not in {item.lower() for item in wanted}:
+            wanted.append(found)
     if unknown:
         raise CommandError(say("domain.unknown", names=", ".join(unknown), known=", ".join(known) or "-"))
     return wanted

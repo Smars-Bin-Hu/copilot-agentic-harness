@@ -71,6 +71,21 @@ class DomainSkillTests(TaskCase):
         self.refused("task", "new", "job3", "--kind", "qa", "--session-id", SESSION, "--domain", "nope")
         self.assertFalse((self.root / ".workspace" / "sandbox" / "tasks" / "job3").exists())
 
+    def test_a_domain_name_matches_its_folder_in_any_case(self) -> None:
+        self.skill("Billing", "domain-billing-rerun", "Rerun a billing job. Use when a billing job fails.")
+        self.assertEqual(sorted(domainskills.domains(self.root)), ["Billing", "finance", "hr", "sales"])
+        self.new(kind="qa")
+        result = tasklife.set_domains(self.root, TASK, ["billing", "SALES", "Sales"])
+        self.assertEqual(result["domains"], ["Billing", "sales"])  # stored as the folders have them, without repeats
+        self.assertEqual([item["name"] for item in result["skills"]], ["domain-billing-rerun", "domain-sales-load-check"])
+        self.assertIn("domain-billing-rerun", self.context(self.prompt("go on")))
+        self.assertEqual([item["warnings"] for item in skillcheck.check_all(self.root) if item["skill"] == "domain-billing-rerun"], [[]])  # specificTo: Billing
+        with self.assertRaises(CommandError):
+            tasklife.set_domains(self.root, TASK, ["Nope"])
+
+    def test_a_kb_task_may_name_a_new_domain_with_capitals(self) -> None:
+        self.assertEqual(tasklife.known_domains(self.root, ["Marketing", "HR"], new_ok=True), ["Marketing", "hr"])
+
     def test_skill_check_and_skill_list_cover_them(self) -> None:
         checked = {item["skill"] for item in skillcheck.check_all(self.root)}
         self.assertIn("domain-sales-load-check", checked)

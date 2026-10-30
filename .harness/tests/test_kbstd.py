@@ -92,6 +92,17 @@ class CheckTests(CheckCase):
         self.assertEqual(result["objects"], 2)
         self.assertEqual(kbstd.check(self.root)["exit_code"], 0)
 
+    def test_a_domain_name_matches_in_any_case(self) -> None:
+        self.folder.rename(self.folder.with_name("Orders"))  # domain.yaml still says `orders`
+        self.folder = self.folder.with_name("Orders")
+        self.assertEqual(self.result()["errors"], [])
+        result = kbstd.check(self.root, ["ORDERS"])
+        self.assertEqual((result["domains"], result["missing"], result["exit_code"]), (1, [], 0))
+        result = kbstd.check(self.root, ["orders", "Orders", "nope"])
+        self.assertEqual((result["domains"], result["missing"], result["exit_code"]), (1, ["nope"], 1))
+        with self.assertRaises(ValueError):
+            kbstd.stale(self.root, "nope")
+
     def test_objects_listed_in_domain_yaml_are_a_warning(self) -> None:
         self.write_domain("abc1234", "core_objects:\n  jobs:\n    - job:Nightly_Orders\n")
         self.assertTrue(any("core_objects" in item for item in self.result()["warnings"]))
@@ -165,6 +176,9 @@ class StaleTests(CheckCase):
         run_git(self.repo, "rm", "-q", "jobs/nightly.sql")
         run_git(self.repo, "commit", "-qm", "drop")
         self.assertEqual([item["id"] for item in kbstd.stale(self.root, "orders")["gone"]], ["job:Nightly_Orders"])
+
+    def test_stale_takes_the_name_in_any_case(self) -> None:
+        self.assertEqual(kbstd.stale(self.root, "ORDERS")["domain"], "orders")
 
     def test_a_card_kept_for_a_deleted_source_is_marked_source_missing_and_stale_leaves_it_be(self) -> None:
         run_git(self.repo, "rm", "-q", "jobs/nightly.sql")

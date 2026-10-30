@@ -9,7 +9,8 @@
   `.git`                a path in a `.git` folder is always denied, in a terminal command too (A4); so is a path a target
                         repository lists in refused_paths
 
-A call with no path the gate can read is allowed: the gate only denies what it can see clearly (AGENTS.md).
+A write tool with no path the gate can read is denied: the gate cannot tell what it would change. Any other call it cannot
+read is allowed (AGENTS.md). A tool or a shape never seen is kept for `doctor` (core/unseen.py), by name and shape only.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from typing import Optional
 import json
 import re
 
-from core import repo_paths, targets, tasks
+from core import repo_paths, targets, tasks, unseen
 from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent
@@ -142,6 +143,8 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
         port = asks_board(ctx, json.dumps(event.raw, ensure_ascii=False, default=str))
         if port:
             return Decision(permission="deny", reason=rules.board_request(port))
+    if event.event == "PreToolUse":
+        unseen.note_call(ctx.root, event)
     if event.event != "PreToolUse" or event.tool_kind not in WRITE_KINDS + ("terminal",):
         return None
     policy = ctx.policy(POLICY_NAME)
@@ -151,4 +154,6 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.tool_kind == "terminal":
         # Without target repositories the harness behaves as before: only the ask rules in gate.json look at git.
         return check_terminal(event, ctx, compiled, policy, guard_git=bool(found and found.configured))
+    if not event.paths:
+        return Decision(permission="deny", reason=rules.write_no_path(event.tool_name), facts={"kind": "write-no-path"})
     return check_write(event, ctx, compiled)

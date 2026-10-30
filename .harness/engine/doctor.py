@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import company, config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, user
+from core import company, config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -31,6 +31,7 @@ KB_DIR = "knowledge-base"
 BROAD_APPLY_TO = {"**", "**/*", "*", "**/**"}
 MARKDOWN_LINK = re.compile(r"\]\(([^)\s]+)\)")
 SHOWN_BROKEN_LINKS = 5
+UNSEEN_SHOWN = 10
 TOOL_KINDS = {"read", "edit", "create", "terminal", "search", "subagent", "mcp", "web", "skill", "meta"}
 INTERPRETER_SECONDS = 15
 RECENT_LOG_FILES = 20  # the hook self-check reads only the newest session logs
@@ -270,6 +271,17 @@ def check_module(report: Report, root: Path, name: str, entry: Dict[str, Any]) -
             report.ok(say("doctor.policy.ok", name=policy_name))
         except Exception as error:
             report.error(say("doctor.policy.bad", name=policy_name, error=error))
+
+
+def check_unseen(report: Report, root: Path) -> None:
+    """Tools and shapes the gate met and could not place. Newest last; the list is short because each is kept once."""
+    found = unseen.read(root)
+    if not found:
+        return
+    for surface in sorted({item.get("surface", "") for item in found}):
+        rows = [item for item in found if item.get("surface", "") == surface]
+        items = "; ".join(f"{item.get('tool')} ({item.get('kind')}: {item.get('shape')})" for item in rows[-UNSEEN_SHOWN:])
+        report.warn(say("doctor.unseen.tools", count=len(rows), surface=surface, items=items))
 
 
 def check_logs(report: Report, root: Path, registry: Dict[str, Any]) -> None:
@@ -727,6 +739,7 @@ def run(root: Path) -> int:
     check_hook_activity(report, root, registry)
     check_agents(report, root)
     check_logs(report, root, registry)
+    check_unseen(report, root)
     check_overrides(report, root)
     sample = check_output(report, root)
     check_user(report, root)

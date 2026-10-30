@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.61 (2026-10-30)
+
+### Added
+
+- `doctor` warns about tool calls the harness has not seen: an unknown tool, or a write or terminal tool it cannot read. They are kept in `.harness/runtime/logs/unseen-tools.jsonl`, names and keys only.
+
+### Changed
+
+- The gate reads a patch that arrives as plain text. A GPT model's `apply_patch` reaches the hook as `Edit` with plain text; its paths were not read, so guardrail and task rules did not apply to it. They do now.
+- A write tool with no path the gate can read is refused. Reads and other tools are not refused for this.
+
 ## 1.5.60 (2026-10-30)
 
 ### Added

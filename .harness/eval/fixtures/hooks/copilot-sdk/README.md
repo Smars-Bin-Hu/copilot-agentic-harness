@@ -3,6 +3,8 @@
 The real stdin that Copilot's `@github/copilot` 1.0.89-7 (the SDK engine) sends to a hook in VS Code 1.140.0. Recorded 2026-10-01.
 Scrubbed: the user folder and the transcript path. `session_id` is replaced with fixed names.
 
+`PreToolUse.Edit.patch-text.json` is from VS Code 1.144 (2026-10-30), model GPT-6 Luna: `apply_patch` reaches the hook as `Edit` with `tool_input` as plain text.
+
 ## Folders
 
 | Folder | What it holds |

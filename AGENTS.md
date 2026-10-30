@@ -52,7 +52,7 @@ To find a file, read [.harness/INDEX.md](.harness/INDEX.md) (the path index). Do
 - Only the user can switch independent checks on: the user writes `[review]=n` in a prompt. You cannot switch them on, approve for the user, or waive them.
   There are two subagents only: the reviewer, used only in a task with checks on; and the mapper (read only), which needs no task and is used only after the user types `/generic-mapreduce`, up to a limit. You cannot switch it on yourself.
 - Only the user can switch autorun on, in the terminal (autorun: working down `TODO.md` without stopping). While it is on: do not ask the user, do not promote, write decisions into `LOG.md`; when you cannot go on, run `harness task autorun off --reason "<why>"`, then stop.
-- A hook may stop an action only when the action clearly breaks a policy. A hook that fails itself must not hurt normal work.
+- A hook may stop an action only when the action clearly breaks a policy; a write tool whose target cannot be read counts. A hook that fails itself must not hurt normal work.
 - Before you delete, overwrite or do anything hard to undo, confirm the target and the scope.
 - Guardrail files cannot be changed: a hook refuses. The list is in
   [.harness/policies/gate.json](.harness/policies/gate.json). When one must change, tell the user.

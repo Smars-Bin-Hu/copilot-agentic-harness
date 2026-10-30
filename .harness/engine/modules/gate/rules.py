@@ -16,6 +16,10 @@ def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
 
 
+def write_no_path(tool: str) -> str:
+    return say("gate.write.no_path", tool=tool)
+
+
 def guardrail_file(relative: str, pattern: str) -> str:
     return say("gate.guardrail.file", relative=relative, pattern=pattern)
 

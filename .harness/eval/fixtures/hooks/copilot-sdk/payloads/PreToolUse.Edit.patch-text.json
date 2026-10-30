@@ -1,0 +1,8 @@
+{
+  "hook_event_name": "PreToolUse",
+  "session_id": "00000000-0000-0000-0000-000000000000",
+  "timestamp": "2026-10-30T20:25:21.601Z",
+  "cwd": "/Users/user/Developer/DE-agentic-harness",
+  "tool_name": "Edit",
+  "tool_input": "*** Begin Patch\n*** Add File: .harness/policies/spike.txt\n+test\n*** End Patch\n"
+}

@@ -42,15 +42,15 @@ def is_terminal_search(command: str) -> bool:
 
 
 def as_dict(value: Any) -> Dict[str, Any]:
-    """tool_input is an object. A JSON string is read too."""
+    """tool_input is an object. A JSON string is read too; other text is kept under "input": a GPT model's patch arrives as plain text."""
     if isinstance(value, dict):
         return value
     if isinstance(value, str):
         try:
             decoded = json.loads(value)
         except ValueError:
-            return {}
-        return decoded if isinstance(decoded, dict) else {}
+            return {"input": value} if value else {}
+        return decoded if isinstance(decoded, dict) else {"input": value}
     return {}
 
 

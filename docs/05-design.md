@@ -162,7 +162,7 @@ The chat box of VS Code has a Session Target. The harness supports only sessions
 
 ### The hook lets a call through when it fails itself
 
-The hook refuses only when a policy is clearly broken. When it fails itself (a broken setting, a parse error), it lets the call through and writes to `hook-errors.jsonl`. The hook runs before every tool call, and hurting normal work costs more than missing a stop. Finding setup problems is the job of `doctor`.
+The hook refuses only when a policy is clearly broken, or a write tool does not say which file it writes. When it fails itself (a broken setting, a parse error), it lets the call through and writes to `hook-errors.jsonl`. The hook runs before every tool call, and hurting normal work costs more than missing a stop. Finding setup problems is the job of `doctor`.
 
 There are two cases the hook itself cannot handle; the platform decides them (measured in a Copilot session on 2026-10-10):
 

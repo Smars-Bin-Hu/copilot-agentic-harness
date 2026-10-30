@@ -7,11 +7,11 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from support import ENGINE, REPO, HarnessTestCase, payload, pre_tool, subagent_start
+from support import ENGINE, REPO, HarnessTestCase, load_payload, payload, pre_tool, subagent_start
 
 from core import config
 from core.state import update_state
-from core import repo_paths
+from core import repo_paths, unseen
 from modules.gate import policy as gate_policy
 from modules.gate import terminal
 
@@ -332,7 +332,7 @@ class GateHookTests(HarnessTestCase):
     def path(self, relative: str) -> str:
         return f"{self.base}/{relative}"
 
-    def pre(self, tool: str, tool_input: dict, session: Optional[str] = None) -> dict:
+    def pre(self, tool: str, tool_input: Any, session: Optional[str] = None) -> dict:
         data = pre_tool(session or self.session, tool, tool_input)
         data["cwd"] = self.base
         return self.hook(data)
@@ -342,6 +342,38 @@ class GateHookTests(HarnessTestCase):
 
     def reason(self, output: dict) -> str:
         return output["permissionDecisionReason"]
+
+    def test_a_patch_sent_as_plain_text_is_read_and_refused_on_a_guardrail_file(self) -> None:
+        recorded = load_payload("PreToolUse.Edit.patch-text.json")
+        recorded["cwd"] = self.base
+        output = self.hook(recorded)
+        self.assertEqual(self.decision(output), "deny")
+        self.assertIn(".harness/policies/spike.txt", self.reason(output))
+
+    def test_a_patch_sent_as_plain_text_stays_inside_the_task(self) -> None:
+        self.enter_task()
+        output = self.pre("Edit", "*** Begin Patch\n*** Update File: README.md\n@@\n-a\n+b\n*** End Patch\n")
+        self.assertEqual(self.decision(output), "deny")
+
+    def test_a_write_tool_with_no_readable_path_is_refused_and_doctor_names_it(self) -> None:
+        for tool_input in ("some text", {"target": "x.txt"}):
+            with self.subTest(tool_input):
+                self.assertEqual(self.decision(self.pre("Edit", tool_input)), "deny")
+        out = self.cli("doctor").stdout
+        self.assertIn("Edit (edit: str)", out)
+        self.assertIn("Edit (edit: target)", out)
+
+    def test_a_call_that_is_not_a_write_is_not_refused_for_having_no_path(self) -> None:
+        for tool, tool_input in (("Read", "some text"), ("some-mcp_tool", {"x": 1}), ("Grep", {"pattern": "x"})):
+            with self.subTest(tool):
+                self.assertNotEqual(self.decision(self.pre(tool, tool_input)), "deny")
+
+    def test_an_unknown_tool_is_kept_once_by_name_and_shape_only(self) -> None:
+        for _ in range(2):
+            self.pre("some-mcp_tool", {"secret_key": "the value"})
+        found = unseen.read(self.root)
+        self.assertEqual([(item["tool"], item["shape"]) for item in found], [("some-mcp_tool", "secret_key")])
+        self.assertNotIn("the value", json.dumps(found))
 
     def enter_task(self, name: str = "job", session: Optional[str] = None) -> str:
         """The session picks up a new task (kind dev, so it has DEV/). Returns the task folder."""

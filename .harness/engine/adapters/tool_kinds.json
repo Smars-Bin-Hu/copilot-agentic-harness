@@ -56,7 +56,7 @@
         "PowerShell",
         "powershell"
       ],
-      "unrecorded_note": "Edit tools named in VS Code, never recorded here. The gate needs them as 'edit'; their input shapes are read generically (nested filePath, patch headers). `bash`, `PowerShell` and `powershell` are guesses for the terminal tool of a Copilot session on Windows (never recorded there; the permission dialog on macOS shows `bash`), listed so the gate reads their `command` whatever the name. Record them when seen."
+      "unrecorded_note": "Edit tools named in VS Code, never recorded here under these names (`apply_patch` reaches the hook as `Edit` with plain text). The gate needs them as 'edit'; their input shapes are read generically (nested filePath, patch headers). `bash`, `PowerShell` and `powershell` are guesses for the terminal tool of a Copilot session on Windows (never recorded there; the permission dialog on macOS shows `bash`), listed so the gate reads their `command` whatever the name. Record them when seen."
     }
   },
   "terminal_search_commands": [

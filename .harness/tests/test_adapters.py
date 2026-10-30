@@ -27,6 +27,13 @@ class ParseTests(unittest.TestCase):
                 self.assertEqual(event.surface, "vscode")
                 self.assertFalse(event.from_subagent)
 
+    def test_recorded_write_calls_of_each_model_name_their_file(self) -> None:
+        patch = copilot_vscode.parse(load_payload("PreToolUse.Edit.patch-text.json"))  # GPT: one text with the paths in its headers
+        self.assertEqual((patch.tool_kind, patch.paths), ("edit", [".harness/policies/spike.txt"]))
+        for name in ("PostToolUse.Edit.json", "PostToolUse.Write.json"):  # Claude: an object with a path
+            with self.subTest(name):
+                self.assertTrue(copilot_vscode.parse(load_payload(name)).paths)
+
     def test_every_recorded_tool_has_a_known_kind(self) -> None:
         kinds = {}
         for session in sorted((FIXTURES / "sessions").glob("*.jsonl")):

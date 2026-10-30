@@ -185,6 +185,7 @@ All in `.harness/runtime/`, not in git, and not writable by an agent (not in adm
 | `state/<surface>/<session>.json` | For every session: which task it holds, subagents, whether it is in admin mode |
 | `logs/<surface>/<session>.jsonl` | The session log |
 | `logs/hook-errors.jsonl` | The hook's own errors |
+| `logs/unseen-tools.jsonl` | Tools and input shapes the gate has not seen, each kept once: names and keys only, never a value. `doctor` warns about them |
 | `git-approvals.json` | The git commands waiting for approval and those approved |
 | `capture/` | The raw hook input and output while `capture.enabled` is on |
 

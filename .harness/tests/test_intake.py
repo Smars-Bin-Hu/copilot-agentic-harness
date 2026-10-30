@@ -398,6 +398,19 @@ class IntakeTests(LifeCase):
             intake.init(self.root, "job")
             self.assertIn(messages.text("intake.domain.none"), (self.req / "INTAKE.md").read_text(encoding="utf-8"), "a knowledge base with no domain: nothing to ask")
 
+    def test_the_domain_choices_ignore_case_and_keep_the_folder_names(self) -> None:
+        from unittest import mock
+
+        from core import domainskills
+
+        with mock.patch.object(domainskills, "domains", return_value={"Sales": Path("/x/Sales"), "Other": Path("/x/Other"), "billing": Path("/x/billing")}):
+            self.assertEqual(intake.kb_domains(self.root), ["billing", "Other", "Sales"])  # not capitals first
+            self.assertEqual(intake.task_domains(self.root, {"domains": ["sales", "SALES", "gone"]}), ["Sales", "gone"])
+            self.assertEqual(intake.init(self.root, "job", ["SALES", "Other"])["domains"], ["Sales", "Other"])  # `Other` is a folder here, not the choice
+            self.assertIn("knowledge-base/domains/Sales/", (self.req / "INTAKE.md").read_text(encoding="utf-8"))
+            (self.req / "INTAKE.md").unlink()
+            self.assertEqual(intake.init(self.root, "job", ["other"])["domains"], [])
+
     def test_the_type_of_the_task_is_in_the_goal(self) -> None:
         self.new("t1", "test")
         intake.init(self.root, "t1", ["none"])

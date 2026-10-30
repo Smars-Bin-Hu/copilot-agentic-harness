@@ -77,7 +77,7 @@ def check_skills(only):
 
 def list_domain_skills(only):
     found = domainskills.skills(repo_root(), only)
-    return {"domains": sorted(domainskills.domains(repo_root())), "skills": found, "next": messages.text("domain.list.next" if found else "domain.list.none")}
+    return {"domains": sorted(domainskills.domains(repo_root()), key=str.lower), "skills": found, "next": messages.text("domain.list.next" if found else "domain.list.none")}
 
 
 def check_after_reinstall(names):

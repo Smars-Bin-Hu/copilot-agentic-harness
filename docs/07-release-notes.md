@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.59 (2026-10-30)
+
+### Changed
+
+- A domain name may hold capitals, and it matches its folder in any case. The folder keeps its name (`Sales`); `sales` or `SALES` finds it in `task set-domain`, `kb check`, `kb stale` and `kb status`. `specificTo` and `domain:` in `domain.yaml` are compared the same way.
+- The Intake tab shows domains with capitals in its choices, sorted without regard to case (`skill list` too). A task's domain is ticked whatever its case, and a folder named `Other` or `None` is a domain you can pick.
+
 ## 1.5.58 (2026-10-29)
 
 ### Changed

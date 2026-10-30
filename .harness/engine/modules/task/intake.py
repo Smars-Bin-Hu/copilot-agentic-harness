@@ -388,7 +388,13 @@ def domain_block(chosen: List[str], offered: List[str]) -> str:
 
 
 def kb_domains(root: Path) -> List[str]:
-    return sorted(domainskills.domains(root))
+    return sorted(domainskills.domains(root), key=str.lower)
+
+
+def task_domains(root: Path, data: Optional[Dict[str, Any]]) -> List[str]:
+    """The task's domains as their folders have them, so that `sales` on a task ticks the choice `Sales`; a name no knowledge base has stays as it is."""
+    known = domainskills.domains(root)
+    return list(dict.fromkeys(domainskills.find(known, name) or name for name in (data or {}).get("domains") or []))
 
 
 def init(root: Path, raw_task: str, domains: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -402,13 +408,13 @@ def init(root: Path, raw_task: str, domains: Optional[List[str]] = None) -> Dict
         raise CommandError(say("intake.init.exists", path=f"{REQ_DIR}/INTAKE.md"))
     offered = kb_domains(root)
     if domains:
-        wanted = [name for name in domains if name.strip().lower() not in ("none", "other", "")]
+        wanted = [name for name in domains if name.strip() in offered or name.strip().lower() not in ("none", "other", "")]  # a folder `Other` is a domain, not the choice
         if wanted:
             from . import tasklife  # it needs this module's neighbours
 
             wanted = tasklife.known_domains(root, wanted, new_ok=False)  # a name the knowledge base does not have is refused, with the ones it has
     else:
-        wanted = list((state or {}).get("domains") or [])
+        wanted = task_domains(root, state)
     language = messages.language()
     source = root / ".harness" / "contracts" / "templates" / "task" / language / "INTAKE.md"
     if not source.is_file():

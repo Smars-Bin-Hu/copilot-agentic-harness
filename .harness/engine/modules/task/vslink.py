@@ -11,6 +11,9 @@
 - B73: `create` makes a chat for a task that does not exist yet (`createSession`, `isolation: folder`, mode `interactive`), sends its first message at once (the host does not list a chat
   before its first turn; the model must be on that message, `createSession.model` is not honoured), and reads back who the host says made it. The task is made later by the agent: the
   thread remembers the chat (`created`) and, when the task with that name is open, binds it (`chatlink.adopt`) and keeps the model on the task. `disposeSession` is never called.
+- B75: the session of each bound chat is subscribed too, for its `inputNeeded[]` (the host pushes `session/inputNeededSet` and `Removed`). `ask_of` gives a task's oldest tool confirmation or question
+  (`chatask`; any other kind is ignored). A person's allow, deny or answer is a job (`respond`): the thread reads the session again, refuses when the item is gone or is not what the page showed, then
+  dispatches the actions that `chatask` made.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 from core import ahp, config, tasks
 from core.paths import utc_now
 
-from . import chatlink, chatnew, chatsend, task as task_ops, tasklife, tasksub
+from . import chatask, chatlink, chatnew, chatsend, task as task_ops, tasklife, tasksub
 
 TASKS_EVERY = 3.0  # seconds between two looks at the tasks and their chats
 RELIST_EVERY = 180.0  # a whole new list of chats, in case a notification was missed
@@ -96,7 +99,7 @@ class Job:
         self.error: Optional[BaseException] = None
 
 
-NEEDS = {"send": "idle", "steer": "busy", "stop": "busy"}
+NEEDS = {"send": "idle", "steer": "busy", "stop": "busy", "confirm": "input", "answer": "input"}
 
 
 class VsLink:
@@ -121,6 +124,7 @@ class VsLink:
         self.bound: Dict[str, Dict[str, Any]] = {}  # task -> binding
         self.unbound: Dict[str, str] = {}  # task -> why
         self.chats: Dict[str, Dict[str, Any]] = {}  # chat resource -> {state, tool_at}
+        self.sess: Dict[str, Dict[str, Any]] = {}  # session resource of a bound chat -> {channel, state (trimmed: inputNeeded), seen: {item id: when first seen}}
         self.models: List[Dict[str, Any]] = []  # what a person may pick (`ahp.models_of`); empty until the host said
         self.created: List[Dict[str, Any]] = []  # chats this board made whose task does not exist yet (`chatnew.pending`); memory only
         self.listed_at = 0.0
@@ -243,6 +247,35 @@ class VsLink:
         self.wake.set()
         return "queued"
 
+    def ask_of(self, task: str) -> Optional[Dict[str, Any]]:
+        """What the chat of this task waits for a person to answer, from the cache: the oldest tool confirmation or question (`chatask.shown`, plus `count` of them and `since`). None: nothing, or the
+        task has no chat, or the item is of another kind. The page may be seconds old: `respond` reads it again."""
+        with self.lock:
+            binding = self.bound.get(task) if self.ready else None
+            held = self.sess.get(binding["session"]) if binding else None
+            if not binding or held is None:
+                return None
+            view, count = chatask.first_for(held["state"].get("inputNeeded"), binding["chat"])
+            if view is None:
+                return None
+            return dict(view, count=count, since=held["seen"].get(view["id"]) or utc_now())
+
+    def respond(self, kind: str, task: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Allow or deny a tool call (`confirm`), or answer a question (`answer`), on the thread. `payload`: {id, digest, tool_call_id | request_id, approved | answers}. Raises Refused
+        (`ask-gone`, `ask-changed`, `not-input`, `unbound`, ...) or a chatask.AnswerError. Returns when the host has been told."""
+        why = self.check(task, kind)
+        if why:
+            raise Refused(why)
+        job = Job(kind, task, "", None, payload)
+        self.jobs.put(job)
+        self.wake.set()
+        if not job.done.wait(JOB_WAIT):
+            job.cancelled = True  # a late thread must not answer what the person was told failed
+            raise Refused("timeout")
+        if job.error is not None:
+            raise job.error
+        return job.result
+
     # --- the thread ---------------------------------------------------------------------------------------------------------
 
     def _open(self) -> ahp.Connection:
@@ -285,6 +318,7 @@ class VsLink:
                 with self.lock:
                     self.ready, self.why = False, "lost"
                     self.chats.clear()
+                    self.sess.clear()
                     self.sessions.clear()
                     self.bound.clear()
                     self.unbound.clear()
@@ -370,12 +404,26 @@ class VsLink:
                 self.sessions.pop(str(params.get("session") or ""), None)
                 self.dirty = True
             elif method == "action":
-                cached = self.chats.get(str(params.get("channel") or ""))
+                channel = str(params.get("channel") or "")
+                cached = self.chats.get(channel)
                 action = params.get("action")
                 if cached is not None and isinstance(action, dict):
                     ahp.reduce_chat(cached["state"], action)
                     if action.get("type") in ("chat/toolCallStart", "chat/toolCallReady"):
                         cached["tool_at"] = utc_now()
+                held = next((item for item in self.sess.values() if item["channel"] and item["channel"] == channel), None)
+                if held is not None and isinstance(action, dict):
+                    ahp.reduce_session(held["state"], action)
+                    self._stamp(held)
+                    self.dirty = True
+
+    @staticmethod
+    def _stamp(held: Dict[str, Any]) -> None:
+        """Note when each waiting item was first seen (that is the start of the wait); forget the ones that went. The caller holds the lock."""
+        ids = [str(item.get("id")) for item in held["state"].get("inputNeeded") or []]
+        for ident in ids:
+            held["seen"].setdefault(ident, utc_now())
+        held["seen"] = {ident: when for ident, when in held["seen"].items() if ident in ids}
 
     def _recheck(self, link: ahp.Connection, task: str, kind: str) -> Dict[str, Any]:
         """The binding of `task` worked out again from a fresh list of chats (and the ids read from the chats we hold), the same as the page was shown, and the state of the chat now."""
@@ -439,6 +487,7 @@ class VsLink:
         with self.lock:
             self.created.append(made)  # before the message: a chat that was made is never lost track of
             self.chats[chat] = held
+            self.sess[resource] = {"channel": resource, "state": ahp.trimmed_session(state), "seen": {}}
         link.dispatch(chat, action)
         with self.lock:
             ahp.reduce_chat(held["state"], action)
@@ -453,6 +502,8 @@ class VsLink:
             if job.cancelled:
                 raise Refused("timeout")
             binding = self._recheck(link, job.task, job.kind)
+            if job.kind in ("confirm", "answer"):
+                return self._respond(link, job, binding)
             chat, resource = binding["chat"], binding["session"]
             with self.lock:
                 held = self.chats.get(chat)
@@ -490,6 +541,48 @@ class VsLink:
             job.error = error
         finally:
             job.done.set()
+
+    def _respond(self, link: ahp.Connection, job: Job, binding: Dict[str, Any]) -> None:
+        """Allow, deny or answer one waiting item of the chat of a task. The session is read again from the host first, and the item must be there, in this chat, and be what the page
+        showed (the same `digest`): else nothing is sent. The person confirms one `toolCallId` (or one request), never whatever is pending."""
+        plan = job.plan or {}
+        with self.lock:
+            held = self.sess.get(binding["session"])
+            channel = held["channel"] if held else ""
+        if held is None or not channel:
+            raise Refused("ask-gone")  # the session of the chat could not be read: nothing is answered blind
+        try:
+            link.unsubscribe(channel)
+        except ahp.ConnectionClosed:
+            raise
+        except ahp.AhpError:
+            pass
+        fresh = ahp.trimmed_session(link.subscribe(channel))
+        with self.lock:
+            held["state"] = fresh
+            self._stamp(held)
+        item = chatask.find(fresh["inputNeeded"], str(plan.get("id") or ""))
+        if item is None or item.get("chat") != binding["chat"]:
+            raise Refused("ask-gone")
+        view = chatask.shown(item)
+        wanted = "confirm" if job.kind == "confirm" else "question"
+        if view is None or view["kind"] != wanted or view["digest"] != plan.get("digest") or view.get("tool_call_id", view.get("request_id")) != plan.get("key"):
+            raise Refused("ask-changed")
+        if job.kind == "confirm":
+            actions, line = [chatask.confirm_action(item, bool(plan.get("approved")))], ""
+        else:
+            actions, line = chatask.answer_actions(item, plan.get("answers"))  # AnswerError: nothing has been sent yet
+        if job.cancelled:
+            raise Refused("timeout")
+        for action in actions:
+            link.dispatch(item["chat"], action)
+        with self.lock:
+            ahp.reduce_session(held["state"], {"type": "session/inputNeededRemoved", "id": item["id"]})  # the host pushes the same; the page need not show it again
+            self._stamp(held)
+            known = self.sessions.get(binding["session"])
+            self.dirty = True
+            title = str((known or {}).get("title") or binding.get("title") or "")
+        job.result = {"chat": binding["chat"], "title": title, "view": view, "line": line}
 
     def _entries(self) -> List[Dict[str, Any]]:
         out = []
@@ -605,3 +698,35 @@ class VsLink:
                 continue
             with self.lock:
                 self.chats[chat] = {"state": state, "tool_at": ""}
+        self._subscribe_sessions(link, set(wanted.values()))
+
+    def _subscribe_sessions(self, link: ahp.Connection, wanted: Set[str]) -> None:
+        """The sessions of the bound chats are subscribed, for `inputNeeded[]`; the others are let go. A session that cannot be read is noted once (no channel) and not tried again until the link is made anew:
+        its chat then shows nothing new, and a person answers in VS Code."""
+        with self.lock:
+            have = dict(self.sess)
+        for resource in set(have) - wanted:
+            if have[resource]["channel"]:
+                try:
+                    link.unsubscribe(have[resource]["channel"])
+                except ahp.ConnectionClosed:
+                    raise
+                except ahp.AhpError:
+                    pass
+            with self.lock:
+                self.sess.pop(resource, None)
+        for resource in wanted - set(have):
+            tail = resource.rsplit("/", 1)[-1]
+            held: Dict[str, Any] = {"channel": "", "state": {"inputNeeded": []}, "seen": {}}
+            for channel in dict.fromkeys([resource, "ahp-session:/" + tail]):  # the host lists a session under one address and takes the other: both are tried
+                try:
+                    held["state"] = ahp.trimmed_session(link.subscribe(channel))
+                    held["channel"] = channel
+                    break
+                except ahp.ConnectionClosed:
+                    raise
+                except ahp.AhpError:
+                    continue
+            with self.lock:
+                self.sess[resource] = held
+                self._stamp(held)

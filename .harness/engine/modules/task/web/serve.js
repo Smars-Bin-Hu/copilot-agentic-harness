@@ -124,6 +124,8 @@ const SERVE = (function () {
 
   function act(button, row, item, withReq) {
     if (item.action === "send" || item.action === "answer") return CHAT.panel(row, item.action);  // chat.js: the panel that shows the message, then sends it
+    if (item.action === "confirm") return CHAT.confirm(row);  // the chat waits for a tool to be allowed (B75)
+    if (item.action === "question") return CHAT.question(row);
     if (item.action === "steer") return CHAT.steer(row);
     if (item.action === "stop") return CHAT.stop(row);
     if (item.action === "close") return close(row);

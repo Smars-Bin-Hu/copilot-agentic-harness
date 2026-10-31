@@ -20,6 +20,9 @@ Who may do what:
   `/api/draft` appends a note to `.task/drafts.json`; `/api/setting` sets the task's model and thinking level (`chat.model`); `review set` runs through `/api/act`.
 - New task (1.6, B73): `/api/create` (paired POST only; `step` options, preview or act) makes a chat in VS Code for a task the agent opens (`chatnew` checks every field again, `vslink.create` does it). It fails
   with a clear reason when VS Code is not ready; nothing is made then.
+- Confirm and answer (1.6, B75): `/api/confirm` (allow or deny one tool call) and `/api/answer` (answer one question) are paired POSTs only. The page names the item (`id`, the `toolCallId` or request id,
+  and the `digest` of what it showed); the link's thread reads the host again and refuses when the item is gone or changed (`chatask`). Each decision goes to the history and `.task/sent.jsonl`, the command
+  redacted and cut.
 - Gate review (1.6, B76): the report page (`/tasks/<name>/report.html`) is drawn by the server, with buttons for the verdicts; `/api/verdict` and `/api/export` (paired POST only) keep a verdict in the
   task state and write the samples of the blocks judged wrong (`gatereview`). `/report-save/<name>` gives the report as one file with no buttons and no calls. The report file on disk shows the verdicts, read only.
 - VS Code (1.6): one background thread (`vslink`) keeps a connection to the chats of VS Code and a cache; a request only reads the cache. Without VS Code the
@@ -45,7 +48,7 @@ from urllib.parse import quote, unquote, urlparse
 from core import config, messages, registry, tasks
 from core.paths import board_serve_file, utc_now
 
-from . import autorun, chatnew, chatsend, common, gatereview, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
+from . import autorun, chatask, chatnew, chatsend, common, gatereview, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -57,7 +60,7 @@ MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
-BUILTIN = ("send", "answer", "steer", "stop", "create")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
+BUILTIN = ("send", "answer", "steer", "stop", "create", "confirm", "question")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
 REFRESH = 10  # seconds between two boards in the browser
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
 # or send anything elsewhere, even if it ever got past the drawing (which uses textContent only).
@@ -200,6 +203,9 @@ class Board:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
         result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served)
         self.link.overlay(result["tasks"])
+        asked = [taskboard.with_ask(row, self.link.ask_of(row["task"]), tuple(self.served)) for row in result["tasks"] if row.get("status") == "open"]
+        if any(asked):  # the chat waits for a person to allow a command or answer a question: that wait comes first in the order
+            tasklife.sort_rows(result["tasks"])
         for row in result["tasks"]:  # the agent is at work in the chat: say something to it, or stop it
             if row.get("status") == "open" and (row.get("chat") or {}).get("state") == "busy" and "steer" in self.served:
                 row["actions"] = [item for item in row["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
@@ -215,6 +221,8 @@ class Board:
         recent = chat.pop("recent", "")
         sub = chat.pop("sub", None) or tasksub.from_hooklog(self.root, tasks.read(self.root, found["task"]) or {})  # the chat's own line; else the hook log's
         found["chat"], found["sub"], found["recent"], found["vscode"] = chat, sub, recent, self.link.status()
+        if found["status"] == "open":
+            taskboard.with_ask(found, self.link.ask_of(found["task"]), tuple(self.served))
         if chat.get("state") == "busy" and found["status"] == "open" and "steer" in self.served:
             found["actions"] = [item for item in found["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
         found["settings"] = self.settings_of(found["task"])
@@ -472,6 +480,59 @@ class Board:
             pass
         return {"stopped": True, "chat": done.get("title", "")}
 
+    # --- allow, deny, answer (B75) ----------------------------------------------------------------------------------
+
+    def ask_plan(self, data: Dict[str, Any], key: str) -> Dict[str, Any]:
+        """What the page says it showed: the item (`id`), the call or request in it (`key`) and the `digest` of the text. All three, or nothing is done: never "whatever is pending"."""
+        plan = {"id": str(data.get("id", "")).strip(), "key": str(data.get(key, "")).strip(), "digest": str(data.get("digest", "")).strip()}
+        if not all(plan.values()):
+            raise CommandError(say("ask.refused.shown"))
+        return plan
+
+    def asked(self, task: str, kind: str, detail: str, entry: Dict[str, Any]) -> None:
+        """After the host was told: one line of history and one line of `.task/sent.jsonl`. A decision that went must not come back as an error because a note could not be written."""
+        try:
+            chatsend.record(self.root, task, dict(entry, at=utc_now(), task=task, kind=kind))
+            with task_ops.locked(self.root, task) as again:
+                task_ops.note(again, kind, detail)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def respond(self, kind: str, task: str, plan: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            return self.link.respond(kind, task, plan)
+        except vslink.Refused as error:
+            raise CommandError(self.refusal(error.why)) from None
+        except chatask.AnswerError as error:
+            raise CommandError(say(f"ask.refused.answer.{error.code}", question=error.title)) from None
+        except Exception as error:  # noqa: BLE001 - the host said no: the name of the error only
+            raise CommandError(ahp_scrub(error)) from None
+
+    def confirm(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Allow or deny the one tool call the page showed (`decision`: allow or deny). Read again before it is done; refused when the call is gone or changed."""
+        task, _found = self.target(data)
+        decision = str(data.get("decision", ""))
+        if decision not in ("allow", "deny"):
+            raise CommandError(say("ask.refused.decision"))
+        plan = dict(self.ask_plan(data, "tool_call_id"), approved=decision == "allow")
+        done = self.respond("confirm", task, plan)
+        view = done["view"]
+        command = chatask.one_line(view["command"], chatask.MAX_LINE)
+        self.asked(task, "confirm", f"{decision}: {view['tool'] or '-'} {command}".strip(), {"decision": decision, "tool": view["tool"], "tool_call_id": view["tool_call_id"], "command": view["command"], "chat": done["chat"]})
+        return {"decided": decision, "chat": done["title"]}
+
+    def answer(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Answer the one question the page showed (`answers`: {question id: value}). Read again before it is done; refused when the question is gone or changed."""
+        task, _found = self.target(data)
+        answers = data.get("answers")
+        if not isinstance(answers, dict):
+            raise CommandError(say("ask.refused.answer.unknown", question=""))
+        plan = dict(self.ask_plan(data, "request_id"), answers=answers)
+        done = self.respond("answer", task, plan)
+        view = done["view"]
+        self.asked(task, "question", done["line"] if (view["message"] or "-") in done["line"] else (view["message"] or "-")[:60] + ": " + done["line"], {"request_id": view["request_id"], "question": view["message"], "answer": done["line"], "chat": done["chat"]})
+        return {"answered": True, "chat": done["title"]}
+
     def create_options(self) -> Dict[str, Any]:
         """What the new-task dialog offers: the models the host lists now (policy filtered), the kinds, the tasks a fork may start from, the tool permissions, and whether VS Code is ready."""
         status = self.link.status()
@@ -489,9 +550,9 @@ class Board:
             return self.create_options()
         why = self.link.create_blocked()
         if why and step != "preview":
-            raise CommandError(say("create.refused." + why))
+            raise CommandError(say(f"create.refused.{why}"))
         if why:  # preview only (an act was refused above): nothing can be checked against a list the host has not given
-            return {"text": "", "blocked": say("create.refused." + why)}
+            return {"text": "", "blocked": say(f"create.refused.{why}")}
         plan = chatnew.validate(self.root, data, self.link.model_list(), self.link.waiting_names())
         text = chatnew.first_message(plan)
         if step == "preview":
@@ -499,7 +560,7 @@ class Board:
         try:
             done = self.link.create(plan, text)
         except vslink.Refused as error:
-            raise CommandError(say("create.refused." + error.why)) from None
+            raise CommandError(say(f"create.refused.{error.why}")) from None
         except Exception as error:  # noqa: BLE001 - the host said no: nothing more is known; the name of the error only, never its text
             raise CommandError(say("create.refused.host", error=type(error).__name__)) from None
         initiator = str(done.get("initiator") or "")
@@ -653,7 +714,7 @@ def handler_for(board: Board) -> type:
             origin = self.headers.get("Origin", "")
             if not self.host_ok() or (origin and origin not in allowed_origins) or self.headers.get(HEADER) != "1":
                 return self.answer(403, {"error": say("serve.refused.request")})
-            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_SEND_BODY if urlparse(self.path).path in ("/api/send", "/api/steer", "/api/create") else MAX_BODY
+            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_SEND_BODY if urlparse(self.path).path in ("/api/send", "/api/steer", "/api/create", "/api/answer") else MAX_BODY
             try:
                 size = int(self.headers.get("Content-Length", "0"))
                 data = json.loads(self.rfile.read(min(size, limit)).decode("utf-8") or "{}") if 0 <= size <= limit else None
@@ -687,7 +748,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown in the dialog
                     return self.answer(409, {"error": str(error)})
-            if path in ("/api/send", "/api/steer", "/api/stop", "/api/draft", "/api/setting", "/api/verdict", "/api/export"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
+            if path in ("/api/send", "/api/steer", "/api/stop", "/api/draft", "/api/setting", "/api/verdict", "/api/export", "/api/confirm", "/api/answer"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:

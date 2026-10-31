@@ -188,7 +188,7 @@ class LinkTests(LinkCase):
         asked = [message["method"] for message in self.host.seen if "method" in message]
         self.assertNotIn("disposeSession", asked)
         subscribed = [message["params"]["channel"] for message in self.host.seen if message.get("method") == "subscribe"]
-        self.assertEqual(set(subscribed), {self.chat, "ahp-root:/"})  # only the chat of this folder, no other chat; the root once, for the model list (B72), and let go of at once
+        self.assertEqual(set(subscribed), {self.chat, self.resource, "ahp-root:/"})  # only the chat of this folder and its session (for what waits for a person, B75), no other chat; the root once, for the model list (B72), and let go of at once
 
     def test_a_chat_that_has_a_different_id_leaves_the_task_unbound_and_says_why(self) -> None:
         self.states[self.chat] = chat_state("another-session")

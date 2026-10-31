@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.6.5",
+  "version": "1.6.6",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -130,6 +130,7 @@
         ".harness/tests/test_ahp.py",
         ".harness/tests/test_chatnew.py",
         ".harness/tests/test_chatsend.py",
+        ".harness/tests/test_chatask.py",
         ".harness/tests/test_gatereview.py",
         ".harness/tests/test_health.py",
         ".harness/tests/test_vslink.py",

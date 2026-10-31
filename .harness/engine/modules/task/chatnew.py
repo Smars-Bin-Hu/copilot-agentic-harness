@@ -25,7 +25,7 @@ KEEP_PENDING = 3600.0  # seconds a made chat waits for its task to appear before
 
 
 def refusal(why: str, /, **values: Any) -> CommandError:
-    return CommandError(messages.text("create.refused." + why, **values))
+    return CommandError(messages.text(f"create.refused.{why}", **values))
 
 
 def text_field(data: Dict[str, Any], key: str) -> str:

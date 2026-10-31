@@ -142,6 +142,22 @@ def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str,
     return [{"action": action, "command": "" if action in ("send", "answer") else f"{cli_command()} task {action} --task {row['name']}"} for action in found]
 
 
+def with_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], served: Tuple[str, ...] = ()) -> bool:
+    """A row (or a task page) whose chat waits for a person to allow a command or answer a question (1.6, B75): the wait is that (`tasklife.apply_ask`), `ask` carries what to show, and the one orange
+    button is "allow · deny" or "answer..." in place of the buttons of the wait that was. A question the board cannot take from a form has no button: it is answered in VS Code."""
+    if ask is None or not tasklife.apply_ask(row, ask):
+        return False
+    row["ask"] = ask
+    gone = {name for names in ACTIONS_BY_WAIT.values() for name in names} | {"send", "answer", "steer", "stop"}
+    new = []
+    if ask["kind"] == "confirm" and "confirm" in served:
+        new = [{"action": "confirm", "command": ""}]
+    elif ask["kind"] == "question" and ask.get("supported") and "question" in served:
+        new = [{"action": "question", "command": ""}]
+    row["actions"] = new + [item for item in row.get("actions") or [] if item["action"] not in gone]
+    return True
+
+
 CLOSED_SHOWN = 50  # how many closed tasks the board lists (the newest); `board.closed_shown` in task.json
 _closed: Dict[Tuple[str, str], Tuple[str, Any, str]] = {}  # a closed task does not change: its numbers and page are made once
 

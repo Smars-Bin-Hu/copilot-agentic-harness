@@ -388,7 +388,7 @@
     const optional = ["pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
     const items = desk.actions.filter((item) => !optional.includes(item.action));
     const rest = desk.actions.filter((item) => optional.includes(item.action));
-    const row = {name: desk.name, waiting: desk.waiting, state: desk.state, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed,
+    const row = {name: desk.name, waiting: desk.waiting, state: desk.state, ask: desk.ask, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed,
       result_missing: FILES[desk.kind] && ["design", "rca"].includes(desk.kind) && !doc(FILES[desk.kind]) ? FILES[desk.kind] : ""};  // a design or an RCA task without its result file: the close dialog warns
     const hint = (item) => t("desk.hint." + item.action.replace(" ", "-"));
     const entry = (item) => h("div", {class: "action"}, actionButton(row, item, "big"), h("p", {class: "hint"}, hint(item)));

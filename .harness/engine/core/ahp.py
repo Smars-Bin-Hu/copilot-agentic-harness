@@ -592,3 +592,26 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
         done = dict(active, state={"chat/turnComplete": "complete", "chat/turnCancelled": "cancelled"}.get(kind, "error"), duration=action.get("duration"))
         state["turns"] = (list(state.get("turns") or []) + [done])[-keep:]
         state["activeTurn"] = None
+
+
+# --- what waits for a person (1.6, B75) --------------------------------------------------------------------------
+
+def trimmed_session(state: Dict[str, Any]) -> Dict[str, Any]:
+    """A session snapshot cut to what the board reads of it: `inputNeeded[]` (the questions and tool confirmations that wait for a person)."""
+    items = state.get("inputNeeded")
+    return {"inputNeeded": [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []}
+
+
+def reduce_session(state: Dict[str, Any], action: Dict[str, Any]) -> None:
+    """Apply `session/inputNeededSet` (an item came, or changed: same `id`) and `session/inputNeededRemoved` to a trimmed session state."""
+    kind = str(action.get("type") or "")
+    items = state.setdefault("inputNeeded", [])
+    if kind == "session/inputNeededSet" and isinstance(action.get("request"), dict) and action["request"].get("id"):
+        new = action["request"]
+        for at, item in enumerate(items):
+            if item.get("id") == new["id"]:
+                items[at] = new
+                return
+        items.append(new)
+    elif kind == "session/inputNeededRemoved":
+        state["inputNeeded"] = [item for item in items if item.get("id") != action.get("id")]

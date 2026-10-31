@@ -207,5 +207,81 @@ const CHAT = (function () {
     name.focus();
   }
 
-  return {panel, steer, stop, create};
+  // "Allow . deny" (B75): the chat waits for a person to let a tool run. The dialog shows the one call (the command, redacted and cut, and its id) and sends the decision for that call only.
+  // The server reads the host again and refuses when the call is gone or is not what this dialog showed.
+  function confirm(row) {
+    const found = row.ask;
+    if (!found || found.kind !== "confirm") return;
+    const allow = h("button", {type: "button", class: "act hot"}, t("board.ask.allow"));
+    const deny = h("button", {type: "button", class: "act"}, t("board.ask.deny"));
+    const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const said = h("div", {class: "bad"});
+    const view = SERVE.dialog([h("h2", null, t("board.action.confirm") + " \u00b7 " + row.name), h("p", null, t("board.ask.confirm.hint")),
+      found.title ? h("p", {class: "sub"}, found.title) : null, found.intention ? h("p", null, found.intention) : null,
+      h("pre", {class: "send-preview"}, found.command || "-"),
+      h("p", {class: "sub"}, t("board.ask.call", {tool: found.tool || "-", id: found.tool_call_id})), found.count > 1 ? h("p", {class: "sub"}, t("board.ask.more", {count: found.count - 1})) : null,
+      h("div", {class: "row send-actions"}, allow, deny, no), said]);
+    const decide = (decision) => {
+      allow.disabled = deny.disabled = true;
+      ask("/api/confirm", {task: row.name, id: found.id, tool_call_id: found.tool_call_id, digest: found.digest, decision}).then(() => { view.close(); SERVE.done(); },
+        (error) => { allow.disabled = deny.disabled = false; said.replaceChildren(...SERVE.reasons(shown(error))); });
+    };
+    allow.addEventListener("click", () => decide("allow"));
+    deny.addEventListener("click", () => decide("deny"));
+    no.addEventListener("click", view.close);
+    no.focus();  // Enter does not allow anything by accident
+  }
+
+  // "Answer..." (B75): the agent asked a question. One control for each question (options, a box, yes or no, a number); the answers go for the one request this dialog showed.
+  function question(row) {
+    const found = row.ask;
+    if (!found || found.kind !== "question" || !found.supported) return;
+    const values = {};
+    const said = h("div", {class: "bad"});
+    const send = h("button", {type: "button", class: "act hot", disabled: "disabled"}, t("board.ask.send"));
+    const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const ready = () => { send.disabled = found.questions.some((item) => item.required && (values[item.id] === undefined || values[item.id] === "" || (Array.isArray(values[item.id]) && !values[item.id].length))); };
+    const control = (item) => {
+      const name = "q-" + item.id;
+      if (item.kind === "single-select" || item.kind === "boolean") {
+        const list = item.kind === "boolean" ? [{id: "yes", label: t("board.ask.yes")}, {id: "no", label: t("board.ask.no")}] : item.options;
+        return h("div", {class: "ask-options"}, list.map((option) => {
+          const box = h("input", {type: "radio", name});
+          box.addEventListener("change", () => { values[item.id] = item.kind === "boolean" ? option.id === "yes" : option.id; ready(); });
+          return h("label", {class: "ask-option"}, box, " " + option.label);
+        }));
+      }
+      if (item.kind === "multi-select") {
+        return h("div", {class: "ask-options"}, item.options.map((option) => {
+          const box = h("input", {type: "checkbox", name});
+          box.addEventListener("change", () => {
+            const now = new Set(values[item.id] || []);
+            box.checked ? now.add(option.id) : now.delete(option.id);
+            values[item.id] = Array.from(now);
+            ready();
+          });
+          return h("label", {class: "ask-option"}, box, " " + option.label);
+        }));
+      }
+      const number = item.kind === "number" || item.kind === "integer";
+      const input = number ? h("input", {type: "number", class: "send-body", step: item.kind === "integer" ? "1" : "any"}) : h("textarea", {rows: 3, class: "send-body", maxlength: 2000});
+      input.addEventListener("input", () => { values[item.id] = number ? (input.value === "" ? undefined : Number(input.value)) : input.value; ready(); });
+      return input;
+    };
+    const fields = found.questions.map((item) => h("div", {class: "ask-field"}, h("div", {class: "sub label"}, item.title + (item.required ? " *" : "")),
+      item.message && item.message !== item.title ? h("div", {class: "sub"}, item.message) : null, control(item)));
+    const view = SERVE.dialog([h("h2", null, t("board.action.question") + " \u00b7 " + row.name), found.message ? h("p", null, found.message) : null, ...fields,
+      found.count > 1 ? h("p", {class: "sub"}, t("board.ask.more", {count: found.count - 1})) : null, h("div", {class: "row send-actions"}, send, no), said]);
+    ready();
+    send.addEventListener("click", () => {
+      send.disabled = true; send.textContent = t("board.serve.working");
+      const answers = {};
+      for (const [key, value] of Object.entries(values)) if (value !== undefined) answers[key] = value;
+      ask("/api/answer", {task: row.name, id: found.id, request_id: found.request_id, digest: found.digest, answers}).then(() => { view.close(); SERVE.done(); },
+        (error) => { send.textContent = t("board.ask.send"); ready(); said.replaceChildren(...SERVE.reasons(shown(error))); });
+    });
+    no.addEventListener("click", view.close);
+  }
+
+  return {panel, steer, stop, create, confirm, question};
 })();

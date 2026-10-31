@@ -310,6 +310,35 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     return {"why": "", "since": ""}
 
 
+LIVE_WAITS = ("confirm", "question")  # what the chat in VS Code waits for right now (1.6, B75): told by the board's link to the host, not by a file; `apply_ask` puts it on a row
+WAIT_WHAT = 70  # characters of the command or the question in the state tag
+
+
+def ask_text(ask: Dict[str, Any]) -> str:
+    """The words of the state tag for a waiting item of the chat (`chatask.shown`): the command, the question, or that only VS Code can take it."""
+    if ask.get("kind") == "confirm":
+        return messages.text("task.waiting.confirm", what=" ".join(str(ask.get("command") or ask.get("tool") or "").split())[:WAIT_WHAT])
+    if not ask.get("supported"):
+        return messages.text("task.waiting.question-vs")
+    return messages.text("task.waiting.question", what=" ".join(str(ask.get("message") or "").split())[:WAIT_WHAT])
+
+
+def apply_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]]) -> bool:
+    """Say on a row of an open task that is not put aside that its chat waits for the person to allow a command or answer a question: this comes before anything else the task waits for, and the
+    agent is not "working" then. The row of a task with no such item is left alone. True when the row changed."""
+    if not ask or row.get("status") != "open" or row.get("paused_since"):
+        return False
+    waited = seconds_since(str(ask.get("since") or ""))
+    row.update({"waiting": ask_text(ask), "waiting_why": "confirm" if ask.get("kind") == "confirm" else "question", "waiting_since": ask.get("since", ""),
+                "waited_s": round(waited) if waited is not None else None, "state": "waiting", "active": False})
+    return True
+
+
+def sort_rows(rows: List[Dict[str, Any]]) -> None:
+    """The order of `list_tasks` again (state, then the longest wait first), after a row changed its state. Stable: the rest keeps its order."""
+    rows.sort(key=lambda row: (STATES.index(row["state"]), -(row["waited_s"] or 0)))
+
+
 def dismiss_of(data: Dict[str, Any]) -> str:
     """`round-NNN`: the newest check that counts and did not pass, which the person may dismiss (`task review dismiss`). Empty when none."""
     try:

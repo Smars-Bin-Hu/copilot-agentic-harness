@@ -10,6 +10,23 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.6 (2026-10-31)
+
+### Added
+
+- **Allow or deny a command from the board.** When Copilot asks in VS Code whether a command may run, the task waits for you on the board: the state says "the agent asks to run: ...", and the orange button **allow · deny** opens a dialog with the command (secrets masked, long text cut) and the id of that one call. Allow lets this call run; deny tells the agent you refused, and it goes on.
+- **Answer the agent's question from the board.** When the agent asks a question (the ask tool), the task waits with "the agent asks: ...", and **answer...** opens a form with the options, a text box, yes or no, or a number, as the question needs. A question the form cannot take is shown as "answer it in VS Code", with no button.
+- Both are paired POSTs (`/api/confirm`, `/api/answer`). The page names the call and shows a digest of what it showed; the board reads the host again and refuses if the call has gone (you answered in VS Code) or has changed. You never confirm "whatever is pending". Each decision is in the task's history and whole in `.task/sent.jsonl`, the command masked and cut. Only these two kinds of wait get buttons; any other wait for input shows nothing new.
+- A waiting item comes first in the "waiting for you" filter and order, before any other wait of the task.
+
+### Changed
+
+- The board now also reads the session of each bound chat (for what waits for a person), besides the chat itself.
+
+### Retired
+
+- Nothing.
+
 ## 1.6.5 (2026-10-31)
 
 ### Added

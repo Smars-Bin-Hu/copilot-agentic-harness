@@ -10,6 +10,23 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.8 (2026-10-31)
+
+### Added
+
+- **Context meter in the chat bar of the task page.** The percent and a thin bar; the mouse over it gives the tokens. It is the figure VS Code draws for these chats: input plus output tokens of the newest model call, over the context window of the model (`maxContextWindow` from the host's model list, or the limit the turn itself carries). It is empty, never 0, when the chat has no usage yet or the window is not known. Nothing else is mixed in.
+- **Compact button.** After one confirm, the board sends `/compact` to the chat, only when the chat is idle (paired POST `/api/compact`). It is recorded in the task's history and `.task/sent.jsonl`. It is the only place a control mark goes out, and only for that click.
+- **Health warning for a full context.** `health.context_percent` in `policies/task.json` (default 85): the warning tag shows when the chat is over that percent. No new column.
+- **Copy chat title** in the chat bar and in the VS button's error box: no link opens one chat, so the person opens the window and picks the chat by its title.
+
+### Changed
+
+- The VS button's hover now says that it opens the window only; the person then picks the chat.
+
+### Retired
+
+- Nothing.
+
 ## 1.6.7 (2026-10-31)
 
 ### Added

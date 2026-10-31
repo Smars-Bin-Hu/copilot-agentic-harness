@@ -549,6 +549,19 @@ def models_of(root_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
+def windows_of(root_state: Dict[str, Any]) -> Dict[str, int]:
+    """The context window of every model Copilot lists (`agents[].models[].maxContextWindow` of the root state), by model id, whatever its policy. A model with no such number is not in it."""
+    out: Dict[str, int] = {}
+    for agent in root_state.get("agents") or []:
+        if not isinstance(agent, dict) or agent.get("provider") != LOCAL_PROVIDER:
+            continue
+        for model in agent.get("models") or []:
+            size = model.get("maxContextWindow") if isinstance(model, dict) else None
+            if isinstance(model, dict) and model.get("id") and isinstance(size, (int, float)) and not isinstance(size, bool) and size > 0:
+                out[str(model["id"])] = int(size)
+    return out
+
+
 def trimmed(state: Dict[str, Any], keep: int = 2) -> Dict[str, Any]:
     """A chat snapshot cut to what the board shows: the last turns and the one running. A long chat is big."""
     return {"status": state.get("status"), "title": state.get("title"), "modifiedAt": state.get("modifiedAt"),

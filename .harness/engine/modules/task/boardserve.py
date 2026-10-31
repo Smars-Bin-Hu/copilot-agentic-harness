@@ -15,7 +15,7 @@ Who may do what:
   show and the code to type; `act` runs it with the code the person typed. A plan that changed between the two has
   another code, and the approval is refused, as in the terminal.
 - `.harness/runtime/board-serve.json` holds the port while it runs: the gate refuses an agent's request to it.
-- Talking to the chat (1.6, B72): `/api/send`, `/api/steer`, `/api/stop` (paired POST only) act through the link's thread, after it looked at the binding and the chat again. The code the person
+- Talking to the chat (1.6, B72): `/api/send`, `/api/steer`, `/api/stop` (paired POST only; B78: `/api/compact`, which sends `/compact` to an idle chat) act through the link's thread, after it looked at the binding and the chat again. The code the person
   typed at an approval is kept here in memory (`Board.codes`) for the message that tells the agent; it goes to no file and to no page but that message's preview.
   `/api/draft` lists, adds, edits, deletes and switches the notes of `.task/drafts.json`; `/api/setting` sets the task's model and thinking level (`chat.model`); `review set` runs through `/api/act`.
 - New task (1.6, B73): `/api/create` (paired POST only; `step` options, preview or act) makes a chat in VS Code for a task the agent opens (`chatnew` checks every field again, `vslink.create` does it). It fails
@@ -48,7 +48,7 @@ from urllib.parse import quote, unquote, urlparse
 from core import config, messages, registry, tasks
 from core.paths import board_serve_file, utc_now
 
-from . import autorun, chatask, chatnew, chatsend, common, gatereview, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
+from . import autorun, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -203,6 +203,8 @@ class Board:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
         result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served)
         self.link.overlay(result["tasks"])
+        for row in result["tasks"]:
+            health.with_context(self.root, row, row.get("chat"))
         asked = [taskboard.with_ask(row, self.link.ask_of(row["task"]), tuple(self.served)) for row in result["tasks"] if row.get("status") == "open"]
         if any(asked):  # the chat waits for a person to allow a command or answer a question: that wait comes first in the order
             tasklife.sort_rows(result["tasks"])
@@ -221,6 +223,7 @@ class Board:
         recent = chat.pop("recent", "")
         sub = chat.pop("sub", None) or tasksub.from_hooklog(self.root, tasks.read(self.root, found["task"]) or {})  # the chat's own line; else the hook log's
         found["chat"], found["sub"], found["recent"], found["vscode"] = chat, sub, recent, self.link.status()
+        health.with_context(self.root, found, chat)
         if found["status"] == "open":
             taskboard.with_ask(found, self.link.ask_of(found["task"]), tuple(self.served))
         if chat.get("state") == "busy" and found["status"] == "open" and "steer" in self.served:
@@ -479,6 +482,17 @@ class Board:
         except Exception:  # noqa: BLE001
             pass
         return {"stopped": True, "chat": done.get("title", "")}
+
+    def compact(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The compact button: `/compact` as a message, to an idle chat only, as a send is. The only control mark the board sends; nothing but this call sends it."""
+        task, found = self.target(data)
+        try:
+            done = self.link.dispatch("send", task, chatsend.COMPACT_TEXT)  # no model: the chat keeps the one it has
+        except vslink.Refused as error:
+            raise CommandError(say("compact.refused.not-idle") if error.why == "not-idle" else self.refusal(error.why)) from None
+        except Exception as error:  # noqa: BLE001
+            raise CommandError(ahp_scrub(error)) from None
+        return self.sent(task, found, "compact", chatsend.COMPACT_TEXT, done)
 
     # --- allow, deny, answer (B75) ----------------------------------------------------------------------------------
 
@@ -761,7 +775,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown in the dialog
                     return self.answer(409, {"error": str(error)})
-            if path in ("/api/send", "/api/steer", "/api/stop", "/api/draft", "/api/setting", "/api/verdict", "/api/export", "/api/confirm", "/api/answer"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
+            if path in ("/api/send", "/api/steer", "/api/stop", "/api/compact", "/api/draft", "/api/setting", "/api/verdict", "/api/export", "/api/confirm", "/api/answer"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:

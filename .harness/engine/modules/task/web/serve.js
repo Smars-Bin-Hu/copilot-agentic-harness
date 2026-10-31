@@ -63,9 +63,12 @@ const SERVE = (function () {
     return out;
   }
 
-  function failed(error) {
+  // `title`: the chat's title, given where the person has to find a chat by hand (the VS button): a button copies it.
+  function failed(error, title) {
     const close = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
-    const view = dialog([h("div", {class: "bad"}, reasons(error.message || error)), close]);
+    const copy = title ? h("button", {class: "act", type: "button", "data-label": t("desk.chat.copy")}, t("desk.chat.copy")) : null;
+    if (copy) copy.addEventListener("click", () => copyCommand(copy, title));
+    const view = dialog([h("div", {class: "bad"}, reasons(error.message || error)), title ? h("p", {class: "sub"}, t("desk.chat.copy.hint")) : null, h("div", {class: "row"}, copy, close)]);
     close.addEventListener("click", view.close);
   }
 
@@ -179,7 +182,7 @@ const SERVE = (function () {
     const button = h("button", {type: "button", class: "vs-btn", disabled: bound ? null : "disabled", title: bound ? t("board.vs.open") : t("board.vs.why." + ((chat && chat.why) || "no-chat")), "aria-label": t("board.vs.open")}, "VS");
     button.addEventListener("click", () => {
       button.disabled = true;
-      post("/api/open", {}).then(() => { setTimeout(() => { button.disabled = false; }, 1500); }, (error) => { button.disabled = false; failed(error); });
+      post("/api/open", {}).then(() => { setTimeout(() => { button.disabled = false; }, 1500); }, (error) => { button.disabled = false; failed(error, chat && chat.title); });
     });
     return button;
   }

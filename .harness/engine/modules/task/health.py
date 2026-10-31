@@ -7,6 +7,7 @@ reply, no thinking is read or kept.
   stuck     the agent is at work and has made no tool call for `stuck_minutes`
   repeat    the same command (by its hash) the last `repeat_commands` terminal calls in a row, with no file change between them
   idle      `idle_turns` model turns since the last file change (and since the user's last message)
+  context   the context of the chat is over `context_percent` of its window (B78; from the board's link, not from a file: `context_rule`)
   cost      Credits at `cost_ratio` times the median of closed tasks of the same kind; fewer than MIN_PEERS of them: no rule
 
 The board refreshes every few seconds on a slow PC. Only the tail of each file is read, and what was worked out is kept
@@ -23,13 +24,13 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import config, copilot_events
 from core.logs import read_tail, session_log_path
 
-DEFAULTS = {"stuck_minutes": 10, "repeat_commands": 3, "idle_turns": 4, "cost_ratio": 2.0}
+DEFAULTS = {"stuck_minutes": 10, "repeat_commands": 3, "idle_turns": 4, "cost_ratio": 2.0, "context_percent": 85}
 MIN_PEERS = 3  # closed tasks of the same kind with Credits, before the cost rule may fire
 HOOK_TAIL = 256 * 1024
 EVENTS_TAIL = 512 * 1024
 EDIT_KINDS = ("edit", "create")
 TOOL_EVENTS = ("PreToolUse", "PostToolUse", "PostToolUseFailure")
-RULES = ("stuck", "repeat", "idle", "cost")
+RULES = ("stuck", "repeat", "idle", "cost", "context")
 MAX_CACHED = 200
 
 _cache: Dict[str, Tuple[Tuple[int, int], Dict[str, Any]]] = {}
@@ -154,6 +155,26 @@ def cost_rule(aiu: Any, peers: List[float], ratio: float) -> Optional[Dict[str, 
     if middle > 0 and aiu >= ratio * middle:
         return {"rule": "cost", "n": round(aiu / middle, 1)}
     return None
+
+
+def context_rule(root: Path, chat: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Fires when the chat's context meter (`chatctx.meter`) is above `context_percent`. No meter, no rule. `n`: the whole percent."""
+    meter = (chat or {}).get("context") if isinstance(chat, dict) else None
+    if not isinstance(meter, dict) or not isinstance(meter.get("percent"), (int, float)):
+        return None
+    if meter["percent"] > settings(root)["context_percent"]:
+        return {"rule": "context", "n": int(meter["percent"])}
+    return None
+
+
+def with_context(root: Path, row: Dict[str, Any], chat: Optional[Dict[str, Any]]) -> None:
+    """Add the context rule to `row["warn"]` of an open task, once. The chat comes from the link, which the other rules do not need."""
+    if row.get("status") != "open":
+        return
+    if isinstance(chat, dict) and isinstance(chat.get("context"), dict):
+        chat["context"]["limit"] = settings(root)["context_percent"]  # the page colours the bar with the same limit
+    found = context_rule(root, chat)
+    row["warn"] = [item for item in row.get("warn") or [] if item.get("rule") != "context"] + ([found] if found else [])
 
 
 def check(root: Path, row: Dict[str, Any], data: Dict[str, Any], peers: Optional[List[float]] = None, now: Optional[float] = None) -> List[Dict[str, Any]]:

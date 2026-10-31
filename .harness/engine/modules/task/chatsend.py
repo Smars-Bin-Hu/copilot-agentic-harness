@@ -43,6 +43,7 @@ NO_CODE = {  # the approval was made where the board did not see the code (a ter
     "go-promote": "Write-back plan approved. Go on with the promote, then stop and report.",
 }
 PLAIN = {"go-recover": "The repositories are put back. Try the write-back again.", "go-review": "The checks are decided. Go on."}
+COMPACT_TEXT = "/compact"  # the one control mark the board sends, and only when the person pressed the compact button (`Board.compact`); no template holds it
 GO = tuple(TEMPLATES) + tuple(PLAIN)
 CODE_OF_ACTION = {"confirm-req": "go-req", "approve-plan": "go-plan", "approve-promote": "go-promote"}  # the approval that leaves each mark
 

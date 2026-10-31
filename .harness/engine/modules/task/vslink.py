@@ -30,7 +30,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 from core import ahp, config, tasks
 from core.paths import utc_now
 
-from . import chatask, chatlink, chatnew, chatsend, task as task_ops, tasklife, tasksub
+from . import chatask, chatctx, chatlink, chatnew, chatsend, task as task_ops, tasklife, tasksub
 
 TASKS_EVERY = 3.0  # seconds between two looks at the tasks and their chats
 RELIST_EVERY = 180.0  # a whole new list of chats, in case a notification was missed
@@ -125,6 +125,7 @@ class VsLink:
         self.unbound: Dict[str, str] = {}  # task -> why
         self.chats: Dict[str, Dict[str, Any]] = {}  # chat resource -> {state, tool_at}
         self.sess: Dict[str, Dict[str, Any]] = {}  # session resource of a bound chat -> {channel, state (trimmed: inputNeeded), seen: {item id: when first seen}}
+        self.windows: Dict[str, int] = {}  # model id -> maxContextWindow, every model the host lists (for the context meter)
         self.models: List[Dict[str, Any]] = []  # what a person may pick (`ahp.models_of`); empty until the host said
         self.created: List[Dict[str, Any]] = []  # chats this board made whose task does not exist yet (`chatnew.pending`); memory only
         self.listed_at = 0.0
@@ -160,6 +161,7 @@ class VsLink:
             if cached.get("state"):
                 found = tasksub.facts(cached["state"], self.root)
                 out["model"] = found["model"]
+                out["context"] = chatctx.meter(cached["state"], self.windows)  # None: unknown, shown empty
                 sub = tasksub.sub_of(found, cached.get("tool_at", "") if found["busy"] else "")
                 if sub:
                     out["sub"] = sub
@@ -351,14 +353,15 @@ class VsLink:
     def _models(self, link: ahp.Connection) -> None:
         """The models of the host, read from its root state once and then with every new list. One read, then we let go of the channel."""
         try:
-            found = ahp.models_of(link.subscribe("ahp-root:/"))
+            root_state = link.subscribe("ahp-root:/")
+            found, windows = ahp.models_of(root_state), ahp.windows_of(root_state)
             link.unsubscribe("ahp-root:/")
         except ahp.ConnectionClosed:
             raise
         except ahp.AhpError:
             return
         with self.lock:
-            self.models = found
+            self.models, self.windows = found, windows
 
     def _list(self, link: ahp.Connection) -> None:
         mine = {item["resource"]: item for item in link.sessions() if ahp.is_ours(item) and ahp.session_in(item, str(self.root)) and item.get("resource")}

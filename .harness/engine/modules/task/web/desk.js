@@ -241,6 +241,41 @@
   // The chat of VS Code behind this task (1.6): its state now, the model of its last turn, a button to its window; under it the last thing the agent did, with the first lines of its last reply to open.
   // The whole conversation is not drawn: it is in VS Code. Only a served page, and not an earlier round.
   let recentOpen = false;
+
+  // How full the context of the chat is: the percent and a thin bar; the mouse over it gives the tokens. Unknown is empty ("-" and no bar), never 0.
+  function contextMeter(chat) {
+    const meter = chat.context;
+    if (!meter || typeof meter.percent !== "number") return h("span", {class: "ctx unknown", title: t("desk.ctx.unknown")}, h("span", {class: "sub"}, t("desk.ctx.label")), " -");
+    const hot = meter.percent > (meter.limit || 85);  // the limit is `health.context_percent`
+    return h("span", {class: "ctx" + (hot ? " hot" : ""), title: t("desk.ctx.tip", {used: meter.used.toLocaleString(), window: meter.window.toLocaleString()})},
+      h("span", {class: "sub"}, t("desk.ctx.label")), " ", h("span", {class: "ctx-bar"}, h("i", {style: "width:" + Math.min(100, meter.percent) + "%"})), " ", h("b", null, meter.percent + "%"));
+  }
+
+  // Compact: one confirm, then the server sends /compact to an idle chat. The only place a control mark goes out, and only for this click.
+  function compactButton(chat) {
+    const idle = chat.state === "idle";
+    const button = h("button", {type: "button", class: "act", disabled: idle ? null : "disabled", title: t(idle ? "desk.compact.tip" : "desk.compact.busy")}, t("desk.compact.go"));
+    button.addEventListener("click", () => {
+      const said = h("div", {class: "bad"});
+      const yes = h("button", {class: "act hot", type: "button"}, t("desk.compact.confirm"));
+      const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
+      const view = SERVE.dialog([h("h2", null, t("desk.compact.title", {name: desk.name})), h("p", null, t("desk.compact.warn")), h("div", {class: "row"}, yes, no), said]);
+      no.addEventListener("click", view.close);
+      yes.addEventListener("click", () => {
+        yes.disabled = true;
+        SERVE.post("/api/compact", {task: desk.name}).then(() => { view.close(); SERVE.done(); },
+          (error) => { said.replaceChildren(...SERVE.reasons(error.message)); yes.disabled = false; });
+      });
+    });
+    return button;
+  }
+
+  function copyTitleButton(chat) {
+    const button = h("button", {type: "button", class: "act", "data-label": t("desk.chat.copy"), title: t("desk.chat.copy.hint")}, t("desk.chat.copy"));
+    button.addEventListener("click", () => copyCommand(button, chat.title));
+    return button;
+  }
+
   function chatBars() {
     if (!served() || desk.past || !desk.chat) return null;
     const chat = desk.chat;
@@ -248,10 +283,11 @@
     if (chat.bound) {
       row.push(h("span", {class: "chat-title", title: chat.title}, chat.title || "-"), tag(t("desk.chat." + (chat.state || "unknown")), chat.state === "busy" ? "good run" : chat.state === "input" || chat.state === "error" ? "hot" : ""));
       if (chat.model) row.push(h("span", {class: "sub"}, t("desk.chat.model", {model: chat.model})));
+      row.push(contextMeter(chat));
     } else {
       row.push(h("span", {class: "sub"}, t("desk.chat.unbound", {why: t("board.vs.why." + (chat.why || "no-chat"))})));
     }
-    row.push(h("span", {class: "chat-grow"}), SERVE.vsButton(chat), h("span", {class: "sub"}, t("desk.chat.window")));
+    row.push(h("span", {class: "chat-grow"}), chat.bound && SERVE.runs("send") ? compactButton(chat) : null, chat.bound && chat.title ? copyTitleButton(chat) : null, SERVE.vsButton(chat), h("span", {class: "sub"}, t("desk.chat.window")));
     const bars = [h("section", {class: "card chatbar"}, row)];
     if (desk.sub && (desk.sub.what || desk.sub.text)) {
       const more = desk.recent && desk.recent !== desk.sub.text ? h("details", {class: "recent-more", open: recentOpen ? "" : null}, h("summary", null, t("desk.recent.more")), h("pre", {class: "recent-text"}, desk.recent)) : null;

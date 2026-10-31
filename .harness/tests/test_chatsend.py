@@ -18,7 +18,7 @@ from core.paths import cli_command
 from modules.task import boardserve, chatsend, task as task_ops, taskboard, taskreview, vslink
 from modules.task.common import CommandError
 
-HAIKU = {"id": "claude-haiku-5.5", "name": "Claude Haiku 5.5", "policyState": "enabled", "_meta": {"priceCategory": "low"},
+HAIKU = {"id": "claude-haiku-5.5", "name": "Claude Haiku 5.5", "policyState": "enabled", "maxContextWindow": 200000, "_meta": {"priceCategory": "low"},
          "configSchema": {"properties": {"thinkingLevel": {"enum": ["low", "medium"], "default": "medium"}}}}
 ROOT_STATE = {"agents": [{"provider": "copilotcli", "models": [
     HAIKU, {"id": "claude-haiku-4.5", "name": "Claude Haiku 4.5", "policyState": "enabled"}, {"id": "not-allowed", "name": "No", "policyState": None},

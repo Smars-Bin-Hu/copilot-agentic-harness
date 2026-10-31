@@ -10,6 +10,24 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.0 (2026-10-31)
+
+### Added
+
+- Board list: each task has a small icon for its kind (development, testing, RCA, Q&A, knowledge base, design, other); the name of the kind shows when you point at it.
+- Board list: the checks are dots, one per check wanted. Green for each pass in a row, red where the last did not pass, hollow for those not run, turning while one runs. Point at them for the numbers.
+- Board list: a menu behind three dots holds the actions that are not what the task waits for now (pause or resume, autorun on, close, dismiss a check, copy a command).
+- The line under a task name is ready for what the agent did last (later versions fill it); until then it shows the tasks a task depends on, or nothing.
+
+### Changed
+
+- Board list columns are now: tick, task, state, checks, waited, actions, time, Credits, prompts. The actions are in the middle; the button of what the task waits for stays on the row.
+- "AIU" is called **Credits** on the board, in its totals and in the task report. In Chinese, the prompts are called 指令 (English stays Prompts).
+
+### Retired
+
+- The kind and tier column and the updated column of the board list. The kind is the icon; the tier was a back-end detail. Sorting by them is gone; the kind filter stays.
+
 ## 1.5.62 (2026-10-31)
 
 ### Added

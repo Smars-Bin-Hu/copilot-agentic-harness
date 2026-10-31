@@ -126,12 +126,15 @@ function pollEvery(seconds, tick) {
   }, seconds * 1000);
 }
 
-// The button of one action ({action, command}) of a task row: it acts when the board server runs that action, else it copies the command.
+// What the task waits for, not what the person may do any time (nor a check they may say judged wrong): such an action is "hot".
 const CONTROLS = ["pause", "resume", "close", "autorun on"];
+const isHot = (row, item) => Boolean(row.waiting) && !CONTROLS.includes(item.action) && item.action !== "review dismiss";
+
+// The button of one action ({action, command}) of a task row: it acts when the board server runs that action, else it copies the command.
 function actionButton(row, item, extra) {
   const label = t("board.action." + item.action.replace(" ", "-"));
   const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page
-  const hot = row.waiting && !CONTROLS.includes(item.action) && item.action !== "review dismiss";  // what the task waits for, not what the person may do any time (nor a check they may say judged wrong)
+  const hot = isHot(row, item);
   // While the agent is in the middle of a turn nothing is pressed on the page: a question about the result is a doubt, and the person decides when the answer is in
   // (stop the agent in VS Code first, or wait for it to stop)
   const locked = typeof SERVE !== "undefined" && row.state === "working" && item.action !== "archive";
@@ -139,6 +142,47 @@ function actionButton(row, item, extra) {
   if (locked) button.disabled = true;
   button.addEventListener("click", () => (locked ? null : live ? SERVE.act(button, row, item) : copyCommand(button, item.command)));
   return button;
+}
+
+// The kind of a task as a 16px line icon (no library). The name of the kind is the tooltip. Each icon: [tag, {attributes}] parts.
+const KIND_ICONS = {
+  dev: [["path", {d: "M3 13l6-6M8 4l3-2 3 3-2 3-1-1-5 5-2-2 5-5z"}]],  // hammer
+  test: [["path", {d: "M6 2h4M7 2v4L3 13a1 1 0 0 0 1 1.5h8A1 1 0 0 0 13 13L9 6V2M5 10h6"}]],  // flask
+  rca: [["circle", {cx: 7, cy: 7, r: 4.5}], ["path", {d: "M10.5 10.5L14 14"}]],  // magnifier
+  qa: [["circle", {cx: 8, cy: 8, r: 6}], ["path", {d: "M6 6.3a2 2 0 1 1 3 1.7c-.7.4-1 .8-1 1.5M8 11.5v.5"}]],  // question
+  kb: [["path", {d: "M3 2.5h8a2 2 0 0 1 2 2v9H5a2 2 0 0 1-2-2zM3 11.5a2 2 0 0 1 2-2h8"}]],  // book
+  design: [["path", {d: "M2 3h12v10H2zM2 6.5h12M6 6.5V13"}]],  // blueprint
+  other: [["circle", {cx: 3.5, cy: 8, r: 1}], ["circle", {cx: 8, cy: 8, r: 1}], ["circle", {cx: 12.5, cy: 8, r: 1}]],  // three dots
+};
+function kindIcon(kind, text) {
+  const wrap = h("span", {class: "kind-icon", title: text, role: "img", "aria-label": text});
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  for (const [name, value] of Object.entries({viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", "stroke-width": "1.4", "stroke-linecap": "round", "stroke-linejoin": "round"})) svg.setAttribute(name, value);
+  for (const [tagName, attrs] of KIND_ICONS[kind] || KIND_ICONS.other) {
+    const part = document.createElementNS(ns, tagName);
+    for (const [name, value] of Object.entries(attrs)) part.setAttribute(name, String(value));
+    svg.append(part);
+  }
+  wrap.append(svg);
+  return wrap;
+}
+
+// The independent checks of a row (row.checks, from taskreview.dots) as one dot per wanted check: green for each pass in a row, red where the last one did not pass,
+// turning while a check runs, hollow for the rest. No checks wanted: a dash.
+function checkDots(row) {
+  const info = row.checks;
+  if (!info || !info.n) return h("span", {class: "dots-none"}, "-");
+  const title = t("board.checks.tip", {n: info.n, passes: info.passes, total: info.total, fails: info.fails});
+  const dots = [];
+  for (let at = 0; at < info.n; at++) {
+    let kind = "";
+    if (info.waived || at < info.passes) kind = "pass";
+    else if (at === info.passes && info.pending) kind = "run";
+    else if (at === info.passes && info.last && info.last !== "PASS") kind = "fail";
+    dots.push(h("i", {class: "cdot" + (kind ? " " + kind : "")}));
+  }
+  return h("span", {class: "cdots", title, role: "img", "aria-label": title}, dots);
 }
 
 // The name of the workspace above a page, and the notice at its foot (the NOTICE file asks for it to be kept).

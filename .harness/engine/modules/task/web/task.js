@@ -104,7 +104,7 @@
     const longest = Math.max(...info.prompts.map((entry) => entry.active_s)) || 1;
     const dearest = Math.max(...info.prompts.map((entry) => entry.aiu || 0)) || 1;
     const head = [th("#"), th(t("report.col.at")), th(t("report.col.stage")), th(t("report.col.time")), th("", true),
-      hasUsage ? [th("AIU"), th("", true)] : null, th(t("report.col.turns"), true), th(t("report.col.calls"), true)];
+      hasUsage ? [th("Credits"), th("", true)] : null, th(t("report.col.turns"), true), th(t("report.col.calls"), true)];
     const columns = hasUsage ? 9 : 7;
     const rows = [];
     for (const entry of info.prompts) {
@@ -115,7 +115,7 @@
         h("td", null, entry.n), h("td", {class: "when"}, when(entry.at, 5, 16)),
         h("td", null, tag(entry.stage_label || entry.stage), notes, entry.text ? h("div", {class: "sub said", title: entry.text}, entry.text) : null),
         h("td", {class: "grow"}, bar(timeParts(entry), longest)), num(clock(entry.active_s)),
-        hasUsage ? [h("td", {style: "width:14%"}, bar([["usage", entry.aiu || 0, "AIU " + amount(entry.aiu)]], dearest, true)), num(amount(entry.aiu))] : null,
+        hasUsage ? [h("td", {style: "width:14%"}, bar([["usage", entry.aiu || 0, "Credits " + amount(entry.aiu)]], dearest, true)), num(amount(entry.aiu))] : null,
         num(entry.turns || "-"), num(entry.tool_calls)));
       if (entry.waited_after_s && entry.waited_after_s >= 60) {
         const wait = info.waits.find((item) => item.after_prompt === entry.n);
@@ -130,7 +130,7 @@
     if (!(info.stages.length > 1 || (info.stages.length && info.stages[0].stage !== "doing"))) return null;
     const has = (key) => info.stages.some((stage) => stage[key] !== null && stage[key] !== undefined);
     const thinking = has("model_s"), tokens = has("input_tokens");
-    const head = [th(t("report.col.stage")), th(t("report.col.prompts"), true), th(t("report.col.time")), th("", true), hasUsage ? [th("AIU"), th("", true)] : null,
+    const head = [th(t("report.col.stage")), th(t("report.col.prompts"), true), th(t("report.col.time")), th("", true), hasUsage ? [th("Credits"), th("", true)] : null,
       thinking ? th(t("report.col.thinking"), true) : null, th(t("report.col.calls"), true), th(t("report.col.subagents"), true), tokens ? th(t("report.col.tokens_io"), true) : null];
     const rows = info.stages.map((stage) => h("tr", null,
       h("td", null, stage.label), num(stage.prompts),

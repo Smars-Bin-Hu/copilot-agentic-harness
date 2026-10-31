@@ -189,6 +189,19 @@ def streak(data: Dict[str, Any]) -> int:
     return count
 
 
+def dots(data: Dict[str, Any]) -> Dict[str, Any]:
+    """What the board draws for the checks of a task, from its records alone: `n` (the checks wanted), `passes` (in a row, at the end),
+    `total` (finished checks that count this round), `fails` (of those, not passed), `last` (the last verdict or ""), `pending` (one is running),
+    `waived`. The board shows one dot per wanted check: green for each pass in a row, red when the last one did not pass, hollow for the rest, a turning one while a check runs."""
+    review = state_of(data)
+    done = done_now(data)
+    waived = bool(review["waived"]) and review["waived"].get("task_round") == data.get("round")
+    return {
+        "n": int(review["n"] or 0), "passes": streak(data), "total": len(done), "fails": len([item for item in done if item["verdict"] != "PASS"]),
+        "last": done[-1]["verdict"] if done else "", "pending": pending(data) is not None, "waived": waived,
+    }
+
+
 def summary(root: Path, task: str, data: Dict[str, Any], settled: bool = False) -> Dict[str, Any]:
     """The checks of the task now. For a gate (`require`, autorun, the Stop check) the passes are counted on the files as they are now. `settled` is for what is
     shown: a task whose write-back is done, or that is closed, shows the checks as they stood (the last version checked), not compared again with files that

@@ -963,3 +963,43 @@ class RoundsTests(TaskCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CheckDotsTests(BoardCase):
+    """B70: what the board draws for the independent checks of a row (`taskreview.dots`), and the page's three classes of actions."""
+
+    @staticmethod
+    def data(n: int, verdicts: List[str], pending: bool = False, waived: bool = False) -> Dict[str, Any]:
+        from modules.task import taskreview  # noqa: F401 - the module under test
+
+        rounds = [{"task_round": 1, "number": number, "verdict": verdict, "digest": "d"} for number, verdict in enumerate(verdicts, 1)]
+        if pending:
+            rounds.append({"task_round": 1, "number": len(rounds) + 1, "verdict": ""})
+        return {"round": 1, "review": {"n": n, "rounds": rounds, "extra": 0, "waived": {"task_round": 1} if waived else None}}
+
+    def test_each_state_of_the_dots(self) -> None:
+        from modules.task import taskreview
+
+        self.assertEqual(taskreview.dots(self.data(0, []))["n"], 0)
+        passed = taskreview.dots(self.data(3, ["PASS", "PASS"]))
+        self.assertEqual((passed["n"], passed["passes"], passed["total"], passed["fails"], passed["last"], passed["pending"]), (3, 2, 2, 0, "PASS", False))
+        failed = taskreview.dots(self.data(2, ["PASS", "FAIL"]))
+        self.assertEqual((failed["passes"], failed["fails"], failed["last"]), (0, 1, "FAIL"))
+        self.assertTrue(taskreview.dots(self.data(2, ["PASS"], pending=True))["pending"])
+        self.assertTrue(taskreview.dots(self.data(2, [], waived=True))["waived"])
+
+    def test_a_listed_row_has_checks_and_no_agent_can_break_the_list(self) -> None:
+        self.assertEqual(tasklife.checks_of({"round": 1}).get("n"), 0)
+        self.assertEqual(tasklife.checks_of({"review": "broken", "round": 1}), {})
+
+    def test_the_board_page_has_the_list_structure(self) -> None:
+        board = (Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web" / "board.js").read_text(encoding="utf-8")
+        for text in ("kindIcon(", "checkDots(", "act-menu", "subLine(", "board.menu.copy"):
+            self.assertIn(text, board)
+        for gone in ('header("kind")', 'header("updated")', 't("task.tier.'):
+            self.assertNotIn(gone, board)
+        for language in ("en", "zh"):
+            table = messages.table(language)
+            for key in ("board.col.credits", "board.checks.tip", "board.menu.task", "board.menu.checks", "board.menu.copy", "board.menu.more"):
+                self.assertIn(key, table)
+            self.assertNotIn("AIU", " ".join(text for name, text in table.items() if name.startswith(("board.", "report."))))

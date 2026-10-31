@@ -30,7 +30,7 @@
   const FILTERS = ["all", "waiting", "working", "quiet", "unheld", "paused", "closed"];
   const view = {filter: keep.get("filter", "all"), kind: keep.get("kind", ""), query: keep.get("query", ""), key: keep.get("sort", ""), dir: Number(keep.get("dir", "1")) || 1};
   if (!FILTERS.includes(view.filter)) view.filter = "all";
-  // Time, AIU, prompts and checks of a task that went through several rounds: all of them, or only the current one (brief.current).
+  // Time, Credits, prompts and checks of a task that went through several rounds: all of them, or only the current one (brief.current).
   let current = keep.get("rounds", "all") === "current";
   const figures = (row) => (row.brief && current && row.brief.current ? row.brief.current : row.brief);
 
@@ -41,14 +41,12 @@
   // The columns that sort: the value of a row, and whether a bigger number comes first on the first click.
   const COLUMNS = {
     task: {label: () => t("board.col.task"), value: (row) => row.name.toLowerCase()},
-    kind: {label: () => t("board.col.kind"), value: (row) => kindText(row).toLowerCase()},
     waiting: {label: () => t("board.col.waiting"), value: rank},
     waited: {label: () => t("board.col.waited"), value: (row) => (row.waiting ? row.waited_s : null), numeric: true},
     time: {label: () => t("board.col.time"), value: (row) => (figures(row) ? figures(row).active_s + figures(row).waiting_s : null), numeric: true},
-    aiu: {label: () => "AIU", value: (row) => (figures(row) ? figures(row).aiu : null), numeric: true},
+    aiu: {label: () => t("board.col.credits"), value: (row) => (figures(row) ? figures(row).aiu : null), numeric: true},
     prompts: {label: () => t("board.col.prompts"), value: (row) => (figures(row) ? figures(row).prompts : null), numeric: true},
-    reviews: {label: () => t("board.col.reviews"), value: (row) => (figures(row) ? figures(row).reviews : null), numeric: true},
-    updated: {label: () => t("board.col.updated"), value: (row) => row.updated_at || null},
+    reviews: {label: () => t("board.col.reviews"), value: (row) => (row.checks && row.checks.n ? row.checks.n : null), numeric: true},
   };
 
   function listed() {
@@ -104,9 +102,54 @@
     return h("th", {class: "tick"}, box);
   }
 
+  // The actions of a row, in three classes (the first two are in the row, the last in the menu behind the three dots):
+  // 1. what the task waits for now (orange: confirm, approve, recover...), 2. speaking to the agent at work (room is kept: a later block fills `.act-talk`),
+  // 3. the rest (pause or resume, autorun, close, the checks, copy a command). A closed task has only "archive": shown at once.
+  let openMenu = null;
+  const closeMenu = () => { if (openMenu) { openMenu.remove(); openMenu = null; } };
+  document.addEventListener("click", (event) => { if (openMenu && !openMenu.contains(event.target) && !event.target.closest(".act-more")) closeMenu(); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMenu(); });
+
+  function menuFor(row, items, more) {
+    const menu = h("div", {class: "act-menu", role: "menu"});
+    const groups = [["board.menu.task", items.filter((item) => CONTROLS.includes(item.action))], ["board.menu.checks", items.filter((item) => !CONTROLS.includes(item.action))]];
+    for (const [title, list] of groups) {
+      if (!list.length) continue;
+      menu.append(h("div", {class: "menu-title"}, t(title)), ...list.map((item) => actionButton(row, item, "item")));
+    }
+    const copy = h("div", {class: "menu-copy", hidden: true});
+    for (const item of items) {
+      const label = t("board.action." + item.action.replace(" ", "-"));
+      const line = h("button", {type: "button", class: "act item", title: item.command, "data-label": label}, label + " \u2192 " + item.command);
+      line.dataset.label = label + " \u2192 " + item.command;
+      line.addEventListener("click", () => copyCommand(line, item.command));
+      copy.append(line);
+    }
+    const toggle = h("button", {type: "button", class: "act item"}, t("board.menu.copy"));
+    toggle.addEventListener("click", () => { copy.hidden = !copy.hidden; });
+    menu.append(h("div", {class: "menu-title"}), toggle, copy);
+    return menu;
+  }
+
   function actionCell(row) {
-    const buttons = (row.actions || []).map((item) => actionButton(row, item));
-    return h("td", {class: "acts"}, buttons.length ? h("div", {class: "act-strip"}, buttons) : "-");  // one line that scrolls sideways, so a row stays as low as the others
+    const items = row.actions || [];
+    if (!items.length) return h("td", {class: "acts"}, "-");
+    const direct = items.filter((item) => item.action === "archive" || isHot(row, item));
+    const rest = items.filter((item) => !direct.includes(item));
+    const nodes = direct.map((item) => actionButton(row, item));
+    nodes.push(h("span", {class: "act-talk"}));
+    if (rest.length) {
+      const more = h("button", {type: "button", class: "act act-more", title: t("board.menu.more"), "aria-haspopup": "menu", "aria-label": t("board.menu.more")}, "\u22ef");
+      more.addEventListener("click", () => {
+        const again = openMenu && openMenu.previousElementSibling === more;
+        closeMenu();
+        if (again) return;
+        openMenu = menuFor(row, rest, more);
+        more.after(openMenu);
+      });
+      nodes.push(more);
+    }
+    return h("td", {class: "acts"}, h("div", {class: "act-strip"}, nodes));
   }
 
   function state(row) {
@@ -129,23 +172,34 @@
     return h("td", {class: "tick"}, box);
   }
 
+  // The line under a task name. `row.sub` ({at, what, text}: the last call or reply of the agent) is drawn when a later block sends it;
+  // until then the board knows only what the task depends on, or nothing.
+  function subLine(row) {
+    if (row.sub && (row.sub.what || row.sub.text)) {
+      return h("div", {class: "sub sub-line"}, row.sub.at ? h("span", {class: "sub-at"}, row.sub.at + " ") : null, row.sub.what ? h("b", null, row.sub.what + " ") : null, row.sub.text || "");
+    }
+    return row.depends_on && row.depends_on.length ? h("div", {class: "sub sub-line"}, t("board.depends", {names: row.depends_on.join("\u3001")})) : null;
+  }
+
   function line(row, longest) {
     const brief = figures(row);
-    const kind = row.status === "new" ? "-" : t("task.kind." + (row.kind || "none")) + " \u00b7 " + t("task.tier." + (row.tier || "none"));
     return h("tr", {class: [row.status === "closed" ? "closed" : "", touched.has(row.name) ? "touched" : ""].join(" ").trim() || null, "data-name": row.name},
       canArchive ? tickCell(row) : null,
-      h("td", {class: "name"}, DATA.serve && row.status !== "new" ? h("a", {href: "/task/" + encodeURIComponent(row.name)}, row.name)
-        : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : row.name,
-        row.depends_on && row.depends_on.length ? h("div", {class: "sub"}, t("board.depends", {names: row.depends_on.join("\u3001")})) : null),
-      h("td", {class: "kind"}, kind), h("td", {class: "state"}, state(row)),
+      h("td", {class: "name"},
+        h("div", {class: "name-line"}, kindIcon(row.kind || "other", row.status === "new" ? t("task.kind.none") : t("task.kind." + (row.kind || "none"))),
+          DATA.serve && row.status !== "new" ? h("a", {href: "/task/" + encodeURIComponent(row.name)}, row.name)
+            : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : h("span", null, row.name)),
+        subLine(row)),
+      h("td", {class: "state"}, state(row)),
+      h("td", {class: "checks"}, row.status === "new" ? "-" : checkDots(row)),
       num(row.waiting && row.waited_s !== null ? clock(row.waited_s) : "-"),
+      actionCell(row),
       brief
         ? [h("td", {style: "width:6%"}, bar([
             ["work", brief.active_s, t("report.active") + " " + clock(brief.active_s)],
             ["wait", brief.waiting_s, t("report.waiting") + " " + clock(brief.waiting_s)]], longest, true)),
-          num(clock(brief.active_s)), num(amount(brief.aiu)), num(brief.prompts), num(brief.reviews ? reviewsText(brief.reviews, brief.review_fails) : "-")]
-        : [h("td"), num("-"), num("-"), num("-"), num("-")],
-      h("td", {class: "sub when"}, when(row.updated_at, 5, 16)), actionCell(row));
+          num(clock(brief.active_s)), num(amount(brief.aiu)), num(brief.prompts)]
+        : [h("td"), num("-"), num("-"), num("-")]);
   }
 
   // --- the page: drawn once, then its parts are drawn again when the rows change ----------------------------------
@@ -213,7 +267,7 @@
     const longest = Math.max(0, ...briefs.map((brief) => brief.active_s + brief.waiting_s)) || 1;
     if (!shownRows.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.filter.none"))); return; }
     tableBox.replaceChildren(
-      table([canArchive ? headerTick(shownRows) : null, header("task"), header("kind"), header("waiting"), header("waited", true), header("time"), th("", true), header("aiu", true), header("prompts", true), header("reviews", true), header("updated"), th(t("board.col.actions"))],
+      table([canArchive ? headerTick(shownRows) : null, header("task"), header("waiting"), header("reviews"), header("waited", true), th(t("board.col.actions")), header("time"), th("", true), header("aiu", true), header("prompts", true)],
         shownRows.map((row) => line(row, longest))),
       legend([["work", t("report.active"), ""], ["wait", t("report.waiting"), ""]]));
     slide(before);

@@ -32,7 +32,7 @@ The harness records "what happened", not "what you said". The logs, the statisti
 
 The hook log of the harness **records no tokens**. The platform has its own data on tokens and time, and a second copy would go stale.
 
-When the task analysis page needs usage, it reads Copilot's own session record (`~/.copilot/session-state/<session>/events.jsonl`): the time of every turn, every tool and every subagent, and the running totals of AIU and premium requests. Only numbers, times and names are taken. This file is not a public format: it may change, and it may not be found; then it falls back to the hook log, with times only.
+When the task analysis page needs usage, it reads Copilot's own session record (`~/.copilot/session-state/<session>/events.jsonl`): the time of every turn, every tool and every subagent, and the running totals of Credits and premium requests. Only numbers, times and names are taken. This file is not a public format: it may change, and it may not be found; then it falls back to the hook log, with times only.
 
 How the two records are matched: the hook log notes for every prompt which task it belongs to, and the same prompt is found in Copilot's record by its time.
 

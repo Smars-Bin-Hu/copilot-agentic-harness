@@ -71,6 +71,6 @@ These three are there only with `--detail`:
 ## What these numbers do not tell
 
 - They do not tell whether the work is good.
-- AIU is not money. The unit price depends on the user's plan.
+- Credits is not money. The unit price depends on the user's plan.
 - The time split is worked out from the order of events in Copilot's record; it is off by seconds.
 - The time a hook runs before a prompt (very short) is counted in no prompt.

@@ -2,7 +2,7 @@
 
 The cost has three parts: the number of model calls, the tokens each call reads and writes, and the time people spend waiting and stepping in. What the harness does: **do things in the cheapest way that is enough, do not let the model do what code can do, and have every model call read less, write less and redo less.**
 
-One thing first: the harness's own log records no token counts, only the numbers of calls, refusals and subagent starts, and the time of hooks. How much a task really used is on the task analysis page (`harness task report`): it reads Copilot's own session record and reports AIU and premium requests, without turning them into money. Every point below is "saved by design", not a bill.
+One thing first: the harness's own log records no token counts, only the numbers of calls, refusals and subagent starts, and the time of hooks. How much a task really used is on the task analysis page (`harness task report`): it reads Copilot's own session record and reports Credits and premium requests, without turning them into money. Every point below is "saved by design", not a bill.
 
 ## 1. Use the model less: what code can do, the model does not do
 

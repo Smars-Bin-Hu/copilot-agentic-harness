@@ -51,7 +51,7 @@ The user wants to keep watching: tell them to run `harness task list --watch` in
    - `hook-log` or `mixed`: for some sessions Copilot's record was not found. That part has times only, no usage. **Tell the user this first.**
    - `none`: there is no record. Say so plainly. Do not make anything up.
 4. Explain it to the user in three parts of two or three sentences each:
-   - **Totals**: how long the agent worked, how long it waited for the user, how many prompts, how much usage (AIU, premium requests).
+   - **Totals**: how long the agent worked, how long it waited for the user, how many prompts, how much usage (Credits, premium requests).
    - **Where it went**: the two or three biggest parts. Pick from `findings`, in its order (biggest first). Give each with its number and its share.
    - **Why, and how to save next time**: against the table in [Common reasons](references/reasons.md), say only what the numbers support. What the numbers do not support, do not say.
 5. Give the link to the page: `analysis` in the output (an `.html` file). Tell the user to open it in a browser; it has a bar chart for every prompt.
@@ -60,7 +60,7 @@ The user wants to keep watching: tell them to run `harness task list --watch` in
 ## Gotchas
 
 - **Say only what the numbers support.** `findings` are sentences of fact the CLI wrote; you can quote them directly. Mark your own inference as an inference.
-- **Do not turn it into money.** AIU and premium requests are the usage Copilot records itself; report them as they are. The unit price depends on the plan: when the user asks how much money, tell them to work it out from their own plan.
+- **Do not turn it into money.** Credits and premium requests are the usage Copilot records itself; report them as they are. The unit price depends on the plan: when the user asks how much money, tell them to work it out from their own plan.
 - **"Waiting for you" is not a reproach.** It includes the time the user spends reading results, thinking, and going to the terminal to approve. Suggest something only when it clearly held things up (a plan that waited a day for approval, say).
 - **Times are UTC.** Say so when you give a point in time, or give lengths of time only.
 - **The page has neither the text of the prompts nor the arguments and results of tools.** When the user asks "what did I say in prompt 3", you cannot answer: let them find it in the conversation by the time.

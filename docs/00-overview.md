@@ -123,7 +123,7 @@ So the work splits cleanly: you talk to the agent and check the code in VS Code;
 
 ## 5. Where the time went
 
-Every task has an analysis: how long the agent worked, how long it waited for you and on what, every prompt, the stages, the tools, and the usage Copilot records (AIU, premium requests).
+Every task has an analysis: how long the agent worked, how long it waited for you and on what, every prompt, the stages, the tools, and the usage Copilot records (Credits, premium requests).
 
 ![Task analysis: working time, waiting time for you, every prompt, the tools and the checks](images/report.png)
 

@@ -321,6 +321,16 @@ def dismiss_of(data: Dict[str, Any]) -> str:
     return f"round-{int(found['number']):03d}" if found else ""
 
 
+def checks_of(data: Dict[str, Any]) -> Dict[str, Any]:
+    """The independent checks of a task as the board draws them (`taskreview.dots`); empty when they cannot be read."""
+    try:
+        from . import taskreview  # it needs this module
+
+        return taskreview.dots(data)
+    except Exception:  # noqa: BLE001 - a list must not fail over one task's checks
+        return {}
+
+
 def cancelled_at(data: Dict[str, Any]) -> str:
     """The person cancelled the newest prompt in the task's session (Copilot's own record says so). Empty when not."""
     try:
@@ -661,7 +671,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
             "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
             "depends_on": list(data.get("depends_on") or []), "paused_since": aside, "paused_by": str((data.get("paused") or {}).get("by") or "") if aside else "",
             "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",
-            "held": is_held, "active": working, "dismiss": dismiss_of(data) if is_open and not aside else "",
+            "held": is_held, "active": working, "dismiss": dismiss_of(data) if is_open and not aside else "", "checks": checks_of(data),
             "state": state_of(data.get("status", ""), aside, found["why"], is_held, working),
         })
         if rows[-1]["state"] == "unheld":

@@ -10,6 +10,31 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.5.62 (2026-10-31)
+
+### Added
+
+- Task page, Changes: one file list, with the files fetched and left as they were ("9 files fetched into DEV/: 6 changed, 3 left as they were"). A changed line marks only the words that changed.
+- Task page, Files: folders fold. A `DEV/` file is marked new, changed, deleted or unchanged. Pictures load at once.
+- Task page: the tab bar stays at the top. File places in a review answer are links (a `DEV/` one opens that file on Changes, at the line). The Plan tab says when and with which code the plan was approved, and whether it changed since. An original on Files names the files made from it and can be downloaded (`/download/<task>/<path>`).
+- Intake: `INTAKE.md` is first. A banner names the originals that gave no text (a scanned PDF). A renamed file shows its new name on the "recently saved" card.
+- A page that is not paired says so in a bar when a click is refused. After 3 failed polls in a row the board and task pages stop and say the board has stopped.
+- The board takes a changed language without a restart, and an open page loads itself again in it.
+- The close dialog takes a reason and says when `RCA.md` or `DESIGN.md` is missing.
+
+### Changed
+
+- `autorun on` is offered only when a step of `TODO.md` is left, and only once the plan is approved (the engine refuses it before: `autorun.need.approval`).
+- Intake: a paste is a table only when it looks like one (tabs, or the same commas on every line). One plain line is text.
+- A pasted or converted file name turns brackets, quotes and such signs into "-" as it does spaces, and keeps Chinese.
+- A task name that keeps fewer than 6 ASCII letters or digits gets the branch `feature/<kind>_<yyyymmdd>_<code>`.
+- Results files and the intake report write local time with its offset, e.g. 12:13 (UTC-04:00).
+- Board: the lobby robots spread out, with the full name on hover. A task name and its kind stay on one line, and the buttons of a row wrap. Rows keep their order while the mouse is over the list. The Test tab colours PASS, FAIL and NEEDS MORE. The CSV card reads "600 rows · 600 match · 200 drawn · 0 picked". Changes shows about 15 files before its list scrolls.
+
+### Retired
+
+- Nothing.
+
 ## 1.5.61 (2026-10-30)
 
 ### Added

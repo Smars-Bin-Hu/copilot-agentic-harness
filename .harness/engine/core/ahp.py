@@ -401,8 +401,11 @@ class Connection:
             left = end - time.monotonic()
             if left <= 0:
                 raise AhpError(f"{method}: no answer in {timeout:g} s")
-            for message in self.pump(left):
+            batch = self.pump(left)
+            for at, message in enumerate(batch):
                 if message.get("id") == mine and "method" not in message:
+                    for later in batch[at + 1:]:  # what came in the same read after the answer is kept, not dropped
+                        self.sort(later)
                     if "error" in message:
                         error = message["error"] if isinstance(message["error"], dict) else {}
                         raise AhpError(scrub(f"{method} failed: {error.get('message') or message['error']}", self._token))

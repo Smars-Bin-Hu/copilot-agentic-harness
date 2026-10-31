@@ -208,6 +208,18 @@ class ConnectionTests(unittest.TestCase):
         self.assertIsNone(self.link.next_notice(0.05))
         self.assertEqual(self.link.subscribe("ahp-chat:/x"), {"title": "t"})
 
+    def test_a_notice_that_comes_in_the_same_read_after_the_answer_is_not_lost(self) -> None:
+        self.link.upgrade()
+
+        def answer_then_notice(message: Dict[str, Any]) -> None:
+            reply = {"jsonrpc": "2.0", "id": message["id"], "result": {"items": []}}
+            notice = {"jsonrpc": "2.0", "method": "action", "params": {"channel": "ahp-session:/a", "action": {"type": "session/inputNeededSet"}}}
+            self.host.raw(server_frame(json.dumps(reply).encode()) + server_frame(json.dumps(notice).encode()))  # one write: one read of the client
+
+        self.host.answer = answer_then_notice  # type: ignore[method-assign]
+        self.assertEqual(self.link.sessions(), [])
+        self.assertEqual((self.link.next_notice(2) or {}).get("method"), "action")
+
     def test_an_error_of_the_host_is_raised_and_carries_no_token(self) -> None:
         self.link.upgrade()
 

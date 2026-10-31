@@ -181,7 +181,8 @@ class LinkTests(LinkCase):
         self.link.start()
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
         self.assertEqual(self.link.status(), {"ready": True, "bound": 1, "unbound": 0, "why": "ok"})
-        row = self.row()
+        row = until(lambda: (lambda r: r if r["chat"].get("model") and r.get("sub", {}).get("text") else None)(self.row()))  # bound is set before the chat is subscribed
+        self.assertTrue(row, self.row())
         self.assertEqual((row["chat"]["bound"], row["chat"]["state"], row["chat"]["model"], row["chat"]["how"]), (True, "idle", "gpt-6-luna", "sdk"))
         self.assertEqual((row["sub"]["kind"], row["sub"]["text"]), ("reply", "All done."))
         self.assertEqual(self.data()["chat"]["session"], self.resource)  # kept in the task state
@@ -206,7 +207,7 @@ class LinkTests(LinkCase):
         for action in ({"type": "chat/toolCallStart", "turnId": "t2", "toolCallId": "c1", "toolName": "edit", "displayName": "Edit"},
                        {"type": "chat/toolCallReady", "turnId": "t2", "toolCallId": "c1", "confirmed": "not-needed", "toolInput": json.dumps({"path": self.folder + "/DEV/x.sql", "command": "SECRET-COMMAND"})}):
             self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"channel": self.chat, "action": action}})
-        row = until(lambda: (lambda r: r if r.get("sub", {}).get("kind") == "tool" else None)(self.row()))
+        row = until(lambda: (lambda r: r if r.get("sub", {}).get("kind") == "tool" and r["sub"].get("text") else None)(self.row()))  # the tool, then its input
         self.assertTrue(row, self.row())
         self.assertEqual((row["chat"]["state"], row["chat"]["title"]), ("busy", "New title"))
         self.assertEqual((row["sub"]["what"], row["sub"]["text"]), ("Edit", "DEV/x.sql"))
@@ -217,7 +218,9 @@ class LinkTests(LinkCase):
                        {"type": "chat/turnComplete", "turnId": "t2", "duration": 5}):
             self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"channel": self.chat, "action": action}})
         self.host.push({"jsonrpc": "2.0", "method": "root/sessionSummaryChanged", "params": {"session": self.resource, "changes": {"status": 33}}})
-        row = until(lambda: (lambda r: r if r.get("sub", {}).get("text") == "Finished the edit." else None)(self.row()))
+        # the reply comes from the chat channel and the state from the root notice, pushed last: wait for both
+        row = until(lambda: (lambda r: r if r.get("sub", {}).get("text") == "Finished the edit." and r.get("chat", {}).get("state") == "idle" else None)(self.row()))
+        self.assertTrue(row, self.row())
         self.assertEqual((row["chat"]["state"], row["sub"]["kind"]), ("idle", "reply"))
 
     def test_a_session_added_later_is_found_and_a_removed_one_is_forgotten(self) -> None:
@@ -346,7 +349,8 @@ class BoardLinkTests(BoardCase):
 
     def test_the_task_page_gets_the_chat_the_recent_reply_and_the_state(self) -> None:
         self.assertTrue(until(lambda: self.request("POST", "/api/status", {})[1]["vscode"]["bound"] == 1))
-        desk = self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]
+        desk = until(lambda: (lambda d: d if d["chat"].get("model") else None)(self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]))  # the model list is read just after the first look
+        self.assertTrue(desk)
         self.assertEqual((desk["chat"]["bound"], desk["chat"]["state"], desk["chat"]["model"]), (True, "idle", "gpt-6-luna"))
         self.assertEqual(desk["sub"]["text"], "All done.")
         self.assertEqual(desk["recent"], "All done.\nMore text.")

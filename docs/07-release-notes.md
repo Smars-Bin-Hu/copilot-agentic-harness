@@ -17,6 +17,7 @@ To see which version you have: `harness --version`.
 ### Changed
 
 - The Chinese texts (`messages.zh.json`) were reviewed as a whole: written-style wording instead of spoken style, short state tags, labels as nouns, buttons as verbs, one word for one thing. `promote`, `skill`, `chat`, `Hook`, `reviewer` stay in English; "prompt" is always 指令, "confirmation code" is always 确认码, "pause" is 搁置, "recover" is 还原. English texts and message keys are unchanged.
+- A message the host sent in the same read as the answer to a call was dropped (the board could miss a pending confirmation or a status change). It is now kept. A chat whose status says it waits for a person, while the board holds no item for it, is read again at once.
 
 ### Retired
 

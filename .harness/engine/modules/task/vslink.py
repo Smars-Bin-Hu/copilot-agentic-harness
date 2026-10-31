@@ -41,6 +41,7 @@ SCAN_MAX = 300  # chats read at most, newest first
 NO_CLI_WAIT = 300.0  # no `code` command: look again only now and then
 JOB_WAIT = 25.0  # seconds a page request waits for the thread to send, steer or stop
 CREATE_WAIT = 45.0  # a create makes the chat, sends, then waits for the host to list it
+REREAD_AFTER_ANSWER = 10.0  # seconds after a person answered in which a session that still says "input" is not read again for a missed item
 INITIATOR_WAIT = 10.0  # seconds after the first message in which the host is asked who made the chat
 
 
@@ -598,6 +599,7 @@ class VsLink:
         with self.lock:
             ahp.reduce_session(held["state"], {"type": "session/inputNeededRemoved", "id": item["id"]})  # the host pushes the same; the page need not show it again
             self._stamp(held)
+            held["answered_at"] = time.monotonic()  # the host may still say "input" for a moment: `_reread_waiting` leaves the session alone for REREAD_AFTER_ANSWER
             known = self.sessions.get(binding["session"])
             self.dirty = True
             title = str((known or {}).get("title") or binding.get("title") or "")
@@ -718,6 +720,27 @@ class VsLink:
             with self.lock:
                 self.chats[chat] = {"state": state, "tool_at": ""}
         self._subscribe_sessions(link, set(wanted.values()))
+        self._reread_waiting(link, set(wanted.values()))
+
+    def _reread_waiting(self, link: ahp.Connection, wanted: Set[str]) -> None:
+        """A session whose status says it waits for a person, while we hold no item for it, is read again at once: an action may have come before the session was subscribed. This runs with every look
+        (a status change marks the link dirty), so a missed item is found in a turn, not at the next full list."""
+        with self.lock:
+            stale = [(resource, held["channel"]) for resource, held in self.sess.items()
+                     if resource in wanted and held["channel"] and not held["state"].get("inputNeeded")
+                     and time.monotonic() - held.get("answered_at", -REREAD_AFTER_ANSWER) >= REREAD_AFTER_ANSWER and ahp.status_name((self.sessions.get(resource) or {}).get("status")) == "input"]
+        for resource, channel in stale:
+            try:
+                state = ahp.trimmed_session(link.subscribe(channel))
+            except ahp.ConnectionClosed:
+                raise
+            except ahp.AhpError:
+                continue
+            with self.lock:
+                held = self.sess.get(resource)
+                if held is not None and state.get("inputNeeded"):
+                    held["state"] = state
+                    self._stamp(held)
 
     def _subscribe_sessions(self, link: ahp.Connection, wanted: Set[str]) -> None:
         """The sessions of the bound chats are subscribed, for `inputNeeded[]`; the others are let go. A session that cannot be read is noted once (no channel) and not tried again until the link is made anew:

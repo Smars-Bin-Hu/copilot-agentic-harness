@@ -260,7 +260,7 @@ class RowTests(AskCase):
         self.session_state["inputNeeded"].append(other)
         self.items[0]["status"] = 24
         self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"channel": SESSION_URI, "action": {"type": "session/inputNeededSet", "request": other}}})
-        self.assertTrue(until(lambda: any(item["id"] == other["id"] for item in self.vs.sess[SESSION_URI]["state"]["inputNeeded"])))
+        self.assertTrue(until(lambda: any(item["id"] == other["id"] for item in (self.vs.sess.get(SESSION_URI) or {"state": {}})["state"].get("inputNeeded") or [])))  # the session may not be subscribed yet
         row = self.shown_row()
         self.assertNotIn("ask", row)
         self.assertEqual((row["waiting_why"], row["actions"]), (before["waiting_why"], before["actions"]))
@@ -270,7 +270,7 @@ class RowTests(AskCase):
         other = dict(confirm_item(), chat="ahp-chat:/not-mine", id="toolConfirmation:other")
         self.session_state["inputNeeded"].append(other)
         self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"channel": SESSION_URI, "action": {"type": "session/inputNeededSet", "request": other}}})
-        self.assertTrue(until(lambda: any(item["id"] == other["id"] for item in self.vs.sess[SESSION_URI]["state"]["inputNeeded"])))
+        self.assertTrue(until(lambda: any(item["id"] == other["id"] for item in (self.vs.sess.get(SESSION_URI) or {"state": {}})["state"].get("inputNeeded") or [])))  # the session may not be subscribed yet
         self.assertIsNone(self.vs.ask_of(TASK))
 
     def test_the_wait_ends_when_the_host_removes_the_item(self) -> None:

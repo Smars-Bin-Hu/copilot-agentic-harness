@@ -1767,7 +1767,6 @@
   "desk.compact.title": "Compact the chat of {name}?",
   "desk.compact.warn": "This sends /compact to the chat in VS Code. The conversation is summarised to free the context. It takes a turn and cannot be undone.",
   "desk.compact.confirm": "Send /compact",
-  "desk.compact.sent": "Sent.",
   "desk.chat.copy": "Copy chat title",
   "desk.chat.copy.hint": "No link opens one chat. Open the window, then pick the chat with this title.",
   "compact.refused.not-idle": "The chat is not idle, so /compact was not sent. Wait until the agent has finished.",

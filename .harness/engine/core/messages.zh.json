@@ -1767,7 +1767,6 @@
   "desk.compact.title": "压缩 {name} 的 chat？",
   "desk.compact.warn": "这会把 /compact 发到 VS Code 里的 chat。对话会被总结以腾出上下文。这需要一轮，且不能撤销。",
   "desk.compact.confirm": "发送 /compact",
-  "desk.compact.sent": "已发送。",
   "desk.chat.copy": "复制 chat 标题",
   "desk.chat.copy.hint": "没有能直接打开某个 chat 的链接。先打开窗口，再选择这个标题的 chat。",
   "compact.refused.not-idle": "chat 不空闲，/compact 未发出。等 agent 完成后再试。",

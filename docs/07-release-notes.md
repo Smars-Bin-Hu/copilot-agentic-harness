@@ -10,6 +10,25 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.1 (2026-10-31)
+
+### Added
+
+- The board connects to VS Code. One background thread reads the agent host of VS Code (`code agent endpoints`; a socket on macOS, a named pipe on Windows), lists the chats of this folder, and finds which chat belongs to which task by the Copilot session id of the task. It is kept in the task state as `chat`. Where it is not sure (no chat has the id yet, two do, two tasks share a session) the task stays unlinked: nothing is guessed. The thread never starts `code` for a page request, never subscribes to a chat that is not linked, and never deletes a chat or its record.
+- A pill by the Off work buttons says whether VS Code is linked, and why not (not open, still starting, no `code` command found, several VS Code programs and none is the one of this folder).
+- A VS button right of a task name brings the VS Code window of this folder forward (`code <folder>`). It is grey while the task has no chat linked.
+- The line under a task name shows what the agent does now (the tool and its file, never a command) or the first line of its last reply. When the chat gives nothing, it shows the last tool call of the hook log.
+- The task page has a chat bar (idle, working or waiting; the model of the last turn; the VS button) and a Recent bar with the last reply, which opens to its first lines.
+- `doctor` says whether VS Code can be reached; never more than a warning.
+
+### Changed
+
+- `/api/status` and `/api/board` answer with `vscode: {ready, bound, unbound, why}`. Rows carry `chat`, and `sub` has a time, a kind and a text.
+
+### Retired
+
+- Nothing.
+
 ## 1.6.0 (2026-10-31)
 
 ### Added

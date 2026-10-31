@@ -744,7 +744,7 @@ class MessageTests(unittest.TestCase):
         dynamic = (
             "task.kind.", "task.tier.", "task.next.light", "task.next.medium", "task.next.full", "task.waiting.", "desk.hint.", "desk.wait.", "desk.go.", "desk.via.", "board.filter.", "board.archive.", "board.select.", "board.close.", "desk.tab.", "desk.changes.", "desk.missing.", "stage.requirement", "stage.plan", "stage.developing", "stage.writeback", "stage.done", "stage.doing", "stage.guide", "stage.check", "fork.why.",
             "insight.stage.", "insight.part.", "insight.wait.", "insight.finding.", "report.source.", "report.status.", "board.state.", "board.queue.", "board.action.", "autorun.why.", "unit.",
-            "gate.git.why.", "promote.hint.", "task.resolve.", "log.count.", "path.what", "delete.what", "approval.person_only", "event.", "mdreport.promote.", "doctor.language.source.", "doctor.override.how.", "doctor.target.kind.", "doctor.output.sample", "kbstatus.next.", "rules.reply.",
+            "gate.git.why.", "promote.hint.", "task.resolve.", "log.count.", "path.what", "delete.what", "approval.person_only", "event.", "mdreport.promote.", "doctor.language.source.", "doctor.override.how.", "doctor.target.kind.", "doctor.output.sample", "kbstatus.next.", "rules.reply.", "board.vs.why.", "desk.chat.",
         )
         source = source.replace('messages.text(\n            "', 'messages.text("')
         unused = [name for name in messages.table("zh") if f'"{name}"' not in source and not name.startswith(dynamic)]

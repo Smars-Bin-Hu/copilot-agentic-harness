@@ -167,6 +167,18 @@ const SERVE = (function () {
     }).catch((error) => { back(); failed(error); });  // an error while drawing the dialog is told too, not lost
   }
 
+  // The button that brings the VS Code window of this folder forward (the server asks the VS Code command; no link to one chat exists). Grey while the task has no chat
+  // linked, with the reason as its title. `chat` is row.chat or desk.chat.
+  function vsButton(chat) {
+    const bound = Boolean(chat && chat.bound);
+    const button = h("button", {type: "button", class: "vs-btn", disabled: bound ? null : "disabled", title: bound ? t("board.vs.open") : t("board.vs.why." + ((chat && chat.why) || "no-chat")), "aria-label": t("board.vs.open")}, "VS");
+    button.addEventListener("click", () => {
+      button.disabled = true;
+      post("/api/open", {}).then(() => { setTimeout(() => { button.disabled = false; }, 1500); }, (error) => { button.disabled = false; failed(error); });
+    });
+    return button;
+  }
+
   // Once per page: trade the pairing code of the address for a cookie, and ask whether this browser is paired.
   let paired = null;
   let stale = null;  // the board was started on an older release than the files now hold: it still runs the old code
@@ -203,5 +215,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner());
   }
 
-  return {runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, ready, busy: () => busy, onChange: (call) => { after = call; }};
+  return {runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, vsButton, ready, busy: () => busy, onChange: (call) => { after = call; }};
 })();

@@ -12,10 +12,11 @@
   let rows = DATA.rows;
   let hidden = DATA.hidden || 0;
   let archiveTo = DATA.serve ? DATA.serve.archive_to || "" : "";
+  let vscode = DATA.serve ? DATA.serve.vscode || null : null;  // {ready, bound, unbound, why}: the link to VS Code (the server's thread keeps it)
   let asOf = DATA.as_of;
   const canArchive = typeof SERVE !== "undefined" && SERVE.runs("archive");
   const selected = new Set();  // closed tasks the person ticked, to archive together
-  let shown = JSON.stringify([rows, hidden]);
+  let shown = JSON.stringify([rows, hidden, vscode]);
   let hovering = false;  // the pointer is over the list: a refresh updates the cells but keeps the row order, so no row jumps under a click
   let held = null;  // the order of the rows (their names) at the last drawing
   const app = document.getElementById("app");
@@ -172,12 +173,10 @@
     return h("td", {class: "tick"}, box);
   }
 
-  // The line under a task name. `row.sub` ({at, what, text}: the last call or reply of the agent) is drawn when a later block sends it;
-  // until then the board knows only what the task depends on, or nothing.
+  // The line under a task name. `row.sub` ({at, what, text, kind}): the tool the agent runs and its target, or the first line of its last reply (from the chat of VS Code),
+  // or the last tool call of the hook log; else the board knows only what the task depends on, or nothing.
   function subLine(row) {
-    if (row.sub && (row.sub.what || row.sub.text)) {
-      return h("div", {class: "sub sub-line"}, row.sub.at ? h("span", {class: "sub-at"}, row.sub.at + " ") : null, row.sub.what ? h("b", null, row.sub.what + " ") : null, row.sub.text || "");
-    }
+    if (row.sub && (row.sub.what || row.sub.text)) return h("div", {class: "sub sub-line", title: (row.sub.what ? row.sub.what + " " : "") + (row.sub.text || "")}, subNodes(row.sub));
     return row.depends_on && row.depends_on.length ? h("div", {class: "sub sub-line"}, t("board.depends", {names: row.depends_on.join("\u3001")})) : null;
   }
 
@@ -188,7 +187,8 @@
       h("td", {class: "name"},
         h("div", {class: "name-line"}, kindIcon(row.kind || "other", row.status === "new" ? t("task.kind.none") : t("task.kind." + (row.kind || "none"))),
           DATA.serve && row.status !== "new" ? h("a", {href: "/task/" + encodeURIComponent(row.name)}, row.name)
-            : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : h("span", null, row.name)),
+            : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : h("span", null, row.name),
+          DATA.serve && row.status === "open" ? SERVE.vsButton(row.chat) : null),
         subLine(row)),
       h("td", {class: "state"}, state(row)),
       h("td", {class: "checks"}, row.status === "new" ? "-" : checkDots(row)),
@@ -320,7 +320,14 @@
       });
       return node;
     };
-    shift.replaceChildren(button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint"));
+    shift.replaceChildren(button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint"), vsPill());
+  }
+  // Is VS Code linked: green when the board reads its chats, grey when not (not open, not found, still starting). The title says why. Without VS Code the board is what it was.
+  function vsPill() {
+    if (!DATA.serve || !vscode) return null;
+    const on = Boolean(vscode.ready);
+    return h("span", {class: "vs-pill" + (on ? " on" : ""), title: on ? t("board.vscode.tip.ready", {bound: vscode.bound, unbound: vscode.unbound}) : t("board.vs.why." + (vscode.why || "starting"))},
+      h("i"), t(on ? "board.vscode.ready" : "board.vscode.off"));
   }
   const cli = DATA.cli || "harness";
 
@@ -369,8 +376,8 @@
     return SERVE.post("/api/board", {}).then((data) => {
       asOf = data.as_of;
       archiveTo = data.archive_to || "";
-      const text = JSON.stringify([data.rows, data.hidden]);
-      if (text !== shown) { rows = data.rows; hidden = data.hidden; shown = text; draw(); } else stamp.textContent = subtitle();
+      const text = JSON.stringify([data.rows, data.hidden, data.vscode || null]);
+      if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else stamp.textContent = subtitle();
     }, (error) => { if (strict === true) throw error; });
   }
   if (typeof SERVE !== "undefined") {

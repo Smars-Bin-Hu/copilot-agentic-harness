@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
-from core import company, config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
+from core import ahp, company, config, kbstd, messages, output, render, skillcheck, standards, targets, tasks, unseen, user
 from core.logs import read_lines, session_files
 from core.paths import cli_command, policies_dir, python_command
 from core.registry import load_registry
@@ -532,6 +532,29 @@ def check_task_names(report: Report, root: Path) -> None:
         report.warn(say("doctor.task_names", names=", ".join(risky[:5]) + (" ..." if len(risky) > 5 else "")))
 
 
+def check_vscode(report: Report) -> None:
+    """Can the board reach VS Code (1.6)? A warning at most: the board works without it. One `code` process and one connection, as `doctor` is run by hand and seldom."""
+    if ahp.switched_off():
+        report.ok(say("doctor.vscode.off"))
+        return
+    code = ahp.find_code()
+    if not code:
+        report.warn(say("doctor.vscode.nocli"))
+        return
+    secret = ""
+    try:
+        found = ahp.read_endpoints(code)
+        if not found:
+            report.warn(say("doctor.vscode.none"))
+            return
+        secret = found[0].token()
+        ahp.connect(found[0]).close()
+    except (ahp.AhpError, OSError) as error:
+        report.warn(say("doctor.vscode.failed", error=ahp.scrub(error, secret)))
+        return
+    report.ok(say("doctor.vscode.ok", count=len(found)))
+
+
 def check_optional_packages(report: Report, root: Path) -> None:
     """Are the optional readers (`xlrd` for .xls, `pypdf` for PDF) installed, into the Python the harness runs on? Warns only: nothing needs them until an old Excel or a PDF file comes in."""
     try:
@@ -751,6 +774,7 @@ def run(root: Path) -> int:
     check_standards(report, root)
     check_task_names(report, root)
     check_optional_packages(report, root)
+    check_vscode(report)
     for name, entry in registry["modules"].items():
         check_module(report, root, name, entry)
     print(shown(report.lines))

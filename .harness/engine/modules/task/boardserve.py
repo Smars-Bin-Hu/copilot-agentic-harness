@@ -15,6 +15,8 @@ Who may do what:
   show and the code to type; `act` runs it with the code the person typed. A plan that changed between the two has
   another code, and the approval is refused, as in the terminal.
 - `.harness/runtime/board-serve.json` holds the port while it runs: the gate refuses an agent's request to it.
+- VS Code (1.6): one background thread (`vslink`) keeps a connection to the chats of VS Code and a cache; a request only reads the cache. Without VS Code the
+  board is what it was: `vscode.ready` is false, no error, no wait. `/api/open` (paired browser) asks the thread to bring the window of this folder forward.
 """
 
 from __future__ import annotations
@@ -36,7 +38,7 @@ from urllib.parse import quote, unquote, urlparse
 from core import config, messages, registry, tasks
 from core.paths import board_serve_file, utc_now
 
-from . import autorun, common, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, taskreview
+from . import autorun, common, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -120,8 +122,9 @@ def disk_version(root: Path) -> str:
 class Board:
     """What one server holds: the settings, the pairing code and the sessions of paired browsers. Memory only."""
 
-    def __init__(self, root: Path, everything: bool, port: int, actions: List[str]) -> None:
+    def __init__(self, root: Path, everything: bool, port: int, actions: List[str], link: Optional[vslink.VsLink] = None) -> None:
         self.root = root
+        self.link = link or vslink.VsLink(root, enabled=False)  # a board made without a link (the tests) has none
         self.everything = everything
         self.port = port
         self.actions = actions
@@ -169,14 +172,20 @@ class Board:
     def rows(self) -> Dict[str, Any]:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
         result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.actions)
-        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "archive_to": taskarchive.remembered(self.root)}
+        self.link.overlay(result["tasks"])
+        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status()}
 
     def page(self) -> str:
         found = self.rows()
-        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve={"actions": self.actions, "refresh": REFRESH, "archive_to": found["archive_to"]}, hidden=found["hidden"])
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve={"actions": self.actions, "refresh": REFRESH, "archive_to": found["archive_to"], "vscode": found["vscode"]}, hidden=found["hidden"])
 
     def desk(self, name: str) -> Dict[str, Any]:
-        return taskdesk.desk(self.root, name, self.actions)
+        found = taskdesk.desk(self.root, name, self.actions)
+        chat = self.link.chat_of(found["task"], name)
+        recent = chat.pop("recent", "")
+        sub = chat.pop("sub", None) or tasksub.from_hooklog(self.root, tasks.read(self.root, found["task"]) or {})  # the chat's own line; else the hook log's
+        found["chat"], found["sub"], found["recent"], found["vscode"] = chat, sub, recent, self.link.status()
+        return found
 
     def desk_page(self, name: str) -> str:
         return taskhtml.desk_page(self.desk(name), {"actions": self.actions, "refresh": REFRESH})
@@ -403,7 +412,14 @@ def handler_for(board: Board) -> type:
                 cookie = f"{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/"
                 return self.answer(200, {"paired": True}, {"Set-Cookie": cookie})
             if path == "/api/status":
-                return self.answer(200, {"paired": board.paired(self.token()), "started": board.version, "now": disk_version(board.root)})
+                return self.answer(200, {"paired": board.paired(self.token()), "started": board.version, "now": disk_version(board.root), "vscode": board.link.status()})
+            if path == "/api/open":  # bring the VS Code window of this folder forward: the thread of the link runs `code <folder>`; this answers at once
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                asked = board.link.open_window()
+                if asked != "queued":
+                    return self.answer(409, {"error": say("serve.open.off") if asked == "off" else say("serve.open.no-cli")})
+                return self.answer(200, {"result": {"queued": True}})
             if path == "/api/board":
                 try:
                     return self.answer(200, board.rows())
@@ -478,16 +494,19 @@ def handler_for(board: Board) -> type:
     return Handler
 
 
-def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, opener: Callable[[str], Any] = webbrowser.open, ready: Optional[Callable[[Any], None]] = None) -> Dict[str, Any]:
-    """Run until Ctrl+C. `opener` and `ready` exist for the tests: `ready` gets the server once it listens."""
+def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, opener: Callable[[str], Any] = webbrowser.open, ready: Optional[Callable[[Any], None]] = None,
+          link: Optional[vslink.VsLink] = None) -> Dict[str, Any]:
+    """Run until Ctrl+C. `opener`, `ready` and `link` exist for the tests: `ready` gets the server once it listens; `link`, a link made by hand (a fake host, or none)."""
     task_ops.person("task board --serve", interactive, typed=False)
     out = out or sys.stdout
     found = settings(root)
-    board = Board(root, everything, port or found["port"], found["actions"])
+    link = link if link is not None else vslink.VsLink(root, enabled=vslink.enabled_by_policy(root))
+    board = Board(root, everything, port or found["port"], found["actions"], link)
     try:
         server = http.server.ThreadingHTTPServer(("127.0.0.1", board.port), handler_for(board))
     except OSError as error:
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
+    link.start()  # the thread only; the board does not wait for VS Code
     path = board_serve_file(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"port": board.port, "pid": os.getpid(), "started": utc_now()}), encoding="utf-8")
@@ -508,6 +527,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     except KeyboardInterrupt:
         pass
     finally:
+        link.stop()
         server.server_close()
         try:
             path.unlink()

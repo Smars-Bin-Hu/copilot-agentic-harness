@@ -21,7 +21,7 @@ from core import config, messages, tasks
 from core.render import local_time, pad, width  # noqa: F401 - the page and the tests use them from here too
 from core.paths import cli_command, utc_now
 
-from . import common, task as task_ops, taskhtml, taskinsight, tasklife, taskstages
+from . import common, task as task_ops, taskhtml, taskinsight, tasklife, tasksub, taskstages
 
 BOARD_NAME = "board.html"
 MIN_INTERVAL = 1.0
@@ -150,6 +150,8 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = ())
         if not row["todo_left"] or not tasks.plan_approved(root, row["task"]):  # `autorun on` is refused then (autorun.need.todo, need.approval): not offered
             row["actions"] = [item for item in row["actions"] if item["action"] != "autorun on"]
         row["req_unconfirmed"] = row["status"] == "open" and task_ops.req_state(root, row["task"]) in ("open", "changed")
+        if row["status"] == "open":
+            row["sub"] = tasksub.from_hooklog(root, tasks.read(root, row["task"]) or {})  # the last tool call of the hook log; a board served with VS Code replaces it with the chat's own line
         key = (str(root), row["task"])
         kept = _closed.get(key) if row["status"] == "closed" else None
         if kept and kept[0] == row["updated_at"] and (root / common.REPORTS_DIR / kept[2]).is_file():

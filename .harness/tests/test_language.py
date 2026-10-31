@@ -52,7 +52,7 @@ class TableTests(unittest.TestCase):
         self.assertEqual([name for name, text in english.items() if HAN.search(text) or WIDE_PUNCTUATION.search(text)], [])
 
     def test_every_message_has_a_chinese_text_that_is_chinese(self) -> None:
-        plain = ("task.kind.rca", "report.kpi.premium", "log.count.item", "list.", "mdreport.fetched.more", "board.brand", "board.copyright", "board.action.archive", "board.action.close", "report.kpi.aiu", "board.col.credits")  # a product word or a pattern: the same in both
+        plain = ("task.kind.rca", "report.kpi.premium", "log.count.item", "list.", "mdreport.fetched.more", "board.brand", "board.copyright", "board.action.archive", "board.action.close", "desk.chat.label", "report.kpi.aiu", "board.col.credits")  # a product word or a pattern: the same in both
         chinese = messages.table("zh")
         self.assertEqual([name for name, text in chinese.items() if not HAN.search(text) and not WIDE_PUNCTUATION.search(text) and not name.startswith(plain)], [])
 

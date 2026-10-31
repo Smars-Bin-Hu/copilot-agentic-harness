@@ -43,7 +43,7 @@ class ServeCase(TaskCase):
             started.set()
 
         self.thread = threading.Thread(
-            target=boardserve.serve, kwargs={"root": self.root, "port": self.port, "interactive": True, "out": open(self.root / "serve.log", "w", encoding="utf-8"), "opener": self.links.append, "ready": ready},
+            target=boardserve.serve, kwargs={"root": self.root, "port": self.port, "interactive": True, "out": open(self.root / "serve.log", "w", encoding="utf-8"), "opener": self.links.append, "ready": ready, "link": self.make_link()},
             daemon=True,
         )
         self.thread.start()
@@ -51,6 +51,10 @@ class ServeCase(TaskCase):
         self.server = holder["server"]
         self.addCleanup(self.stop)
         self.agent_stopped()  # a person clicks a button after the agent stopped; a test about the agent at work calls `agent_at_work`
+
+    def make_link(self) -> Any:
+        """The link to VS Code the server gets: None means the default one (switched off by HARNESS_VSCODE_CLI=off in the tests); a test of the link gives its own."""
+        return None
 
     def agent_stopped(self) -> None:
         with task_ops.locked(self.root, TASK) as data:

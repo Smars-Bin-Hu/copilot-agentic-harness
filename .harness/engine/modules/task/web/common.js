@@ -185,6 +185,12 @@ function checkDots(row) {
   return h("span", {class: "cdots", title, role: "img", "aria-label": title}, dots);
 }
 
+// What the agent did last (`sub`: {at, what, text, kind}, from tasksub.py): "13:51 Edit DEV/a.sql", or "13:51 Reply <first line>". The time is the viewer's own.
+function subNodes(sub) {
+  const label = sub.what || (sub.kind === "reply" ? t("board.sub.reply") : "");
+  return [sub.at ? h("span", {class: "sub-at"}, when(sub.at, 11, 16) + " ") : null, label ? h("b", null, label + " ") : null, sub.text || ""];
+}
+
 // The name of the workspace above a page, and the notice at its foot (the NOTICE file asks for it to be kept).
 function brand() {
   const served = /^https?:$/.test(location.protocol);

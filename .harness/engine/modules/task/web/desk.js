@@ -236,6 +236,29 @@
     ];
   }
 
+  // The chat of VS Code behind this task (1.6): its state now, the model of its last turn, a button to its window; under it the last thing the agent did, with the first lines of its last reply to open.
+  // The whole conversation is not drawn: it is in VS Code. Only a served page, and not an earlier round.
+  let recentOpen = false;
+  function chatBars() {
+    if (!served() || desk.past || !desk.chat) return null;
+    const chat = desk.chat;
+    const row = [h("span", {class: "chat-k"}, t("desk.chat.label"))];
+    if (chat.bound) {
+      row.push(h("span", {class: "chat-title", title: chat.title}, chat.title || "-"), tag(t("desk.chat." + (chat.state || "unknown")), chat.state === "busy" ? "good run" : chat.state === "input" || chat.state === "error" ? "hot" : ""));
+      if (chat.model) row.push(h("span", {class: "sub"}, t("desk.chat.model", {model: chat.model})));
+    } else {
+      row.push(h("span", {class: "sub"}, t("desk.chat.unbound", {why: t("board.vs.why." + (chat.why || "no-chat"))})));
+    }
+    row.push(h("span", {class: "chat-grow"}), SERVE.vsButton(chat), h("span", {class: "sub"}, t("desk.chat.window")));
+    const bars = [h("section", {class: "card chatbar"}, row)];
+    if (desk.sub && (desk.sub.what || desk.sub.text)) {
+      const more = desk.recent && desk.recent !== desk.sub.text ? h("details", {class: "recent-more", open: recentOpen ? "" : null}, h("summary", null, t("desk.recent.more")), h("pre", {class: "recent-text"}, desk.recent)) : null;
+      if (more) more.addEventListener("toggle", () => { recentOpen = more.open; });
+      bars.push(h("section", {class: "card chatbar recent"}, h("span", {class: "chat-k"}, t("desk.recent.label")), h("div", {class: "recent-body"}, h("div", {class: "recent-line"}, subNodes(desk.sub)), more)));
+    }
+    return bars;
+  }
+
   // What the card says when no button is the point: put aside, waiting for a word in VS Code, nobody on it, or really nothing.
   function quiet() {
     if (desk.paused_since) return {title: t("desk.actions.paused"), hint: t("desk.actions.paused.hint")};
@@ -1093,7 +1116,7 @@
   function draw(keepScroll) {
     const y = window.scrollY;
     const kept = new Map([...app.querySelectorAll("[data-keep]")].map((node) => [node.dataset.keep, [node.scrollTop, node.scrollLeft]]));
-    app.replaceChildren(...[...header(), ribbon(), desk.past ? pastNote() : saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
+    app.replaceChildren(...[...header(), ...(chatBars() || []), ribbon(), desk.past ? pastNote() : saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
       h("footer", null, t(saved ? "desk.snapshot.footer" : "desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright())].filter(Boolean));  // a null would be drawn as the word "null"
     if (keepScroll) {
       for (const node of app.querySelectorAll("[data-keep]")) if (kept.has(node.dataset.keep)) [node.scrollTop, node.scrollLeft] = kept.get(node.dataset.keep);

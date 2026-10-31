@@ -12,6 +12,8 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
+os.environ.setdefault("HARNESS_VSCODE_CLI", "off")  # no test touches the real VS Code of the machine (core/ahp.py reads this)
+
 REPO = Path(__file__).resolve().parents[2]
 ENGINE = REPO / ".harness" / "engine"
 HOOK = ENGINE / "hook.py"

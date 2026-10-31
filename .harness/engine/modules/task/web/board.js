@@ -181,6 +181,12 @@
     return row.depends_on && row.depends_on.length ? h("div", {class: "sub sub-line"}, t("board.depends", {names: row.depends_on.join("\u3001")})) : null;
   }
 
+  // The warning tag after the state (B74): only when a health rule fired; the mouse over it says which and why.
+  function warnTag(row) {
+    if (!row.warn || !row.warn.length) return null;
+    return h("span", {class: "tag warn", title: row.warn.map((item) => t("board.warn." + item.rule, {n: item.n})).join("\n"), "aria-label": t("board.warn.label")}, "\u26a0");
+  }
+
   function line(row, longest) {
     const brief = figures(row);
     return h("tr", {class: [row.status === "closed" ? "closed" : "", touched.has(row.name) ? "touched" : ""].join(" ").trim() || null, "data-name": row.name},
@@ -191,7 +197,7 @@
             : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : h("span", null, row.name),
           DATA.serve && row.status === "open" ? SERVE.vsButton(row.chat) : null),
         subLine(row)),
-      h("td", {class: "state"}, state(row)),
+      h("td", {class: "state"}, state(row), warnTag(row) ? [" ", warnTag(row)] : null),
       h("td", {class: "checks"}, row.status === "new" ? "-" : checkDots(row)),
       num(row.waiting && row.waited_s !== null ? clock(row.waited_s) : "-"),
       actionCell(row),

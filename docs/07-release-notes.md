@@ -10,6 +10,22 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.5 (2026-10-31)
+
+### Added
+
+- **Health warning on the board.** A small ⚠ tag after the state of a task, only when a rule fires; the mouse over it says which. Four rules: **stuck** (the agent is at work and made no tool call for 10 minutes), **repeated command** (the same command 3 times in a row, with no file change between), **idle turns** (4 model turns with no file change), **cost** (Credits at 2 times the median of closed tasks of the same kind; fewer than 3 of them: the rule does not fire). The rules read the tail of the hook log and Copilot's own `events.jsonl`, never the conversation. They are kept per file until it changes, and start no process.
+- `health` in `policies/task.json`: `stuck_minutes`, `repeat_commands`, `idle_turns`, `cost_ratio`. A missing or odd value is the default.
+- **Trace tab** on the task page: a timeline of the tool calls and the gate decisions of the task's session, newest first (tool, files, time, failures, and for a block the rule, the reason and the command). No thinking and no message text. The warnings that fire are on top of it.
+
+### Changed
+
+- The hook log: a finished tool call (`PostToolUse`) now records `target.paths`, the files it touched (no command), and a terminal call records `cmd`, a ten-character hash of its command. The text of a command is still kept only for a call that was blocked or sent to you.
+
+### Retired
+
+- Nothing.
+
 ## 1.6.4 (2026-10-31)
 
 ### Added

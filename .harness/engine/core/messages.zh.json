@@ -1704,5 +1704,18 @@
   "gate.refused.unknown": "这条拦截不在这个任务的日志里。请重新打开报告。",
   "gate.refused.task": "页面没说是哪个任务。请从看板打开报告。",
   "event.gate-verdict": "你判了一条 gate 拦截",
-  "event.gate-export": "你把误拦的 gate 拦截导出成了 eval 样本"
+  "event.gate-export": "你把误拦的 gate 拦截导出成了 eval 样本",
+  "board.warn.label": "健康警告",
+  "board.warn.stuck": "可能卡住了：agent 已经 {n} 分钟没有调用工具。",
+  "board.warn.repeat": "同一条命令连续跑了 {n} 次。",
+  "board.warn.idle": "已经 {n} 轮没有改文件。",
+  "board.warn.cost": "Credits 是同类已关闭任务中位数的 {n} 倍。",
+  "desk.tab.trace": "Trace 记录",
+  "desk.trace.hint": "这个任务的会话里，每次工具调用和 gate 的决定，新的在上。读自 Hook 日志：工具、文件、时间和 gate 给的原因。没有思考内容，也没有消息正文。",
+  "desk.trace.prompt": "你发了一条消息",
+  "desk.trace.deny": "被拦",
+  "desk.trace.ask": "问了你",
+  "desk.trace.failed": "失败",
+  "desk.trace.running": "运行中",
+  "desk.trace.cut": "更早的 {count} 条没有显示。"
 }

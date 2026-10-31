@@ -11,7 +11,7 @@
   let desk = full;
   let shown = JSON.stringify(full);
   const same = (a, b) => a.replace(/"as_of":"[^"]*"/, "") === b.replace(/"as_of":"[^"]*"/, "");  // the time of asking is not a change
-  const tabs = ["overview", "req", "intake", "design", "rca", "test", "plan", "todo", "log", "changes", "review", "history", "docs", "files"];  // the commit message is at the top of "changes" once written back (1.5.34)
+  const tabs = ["overview", "req", "intake", "design", "rca", "test", "plan", "todo", "log", "changes", "review", "history", "trace", "docs", "files"];  // the commit message is at the top of "changes" once written back (1.5.34)
   const FILES = {overview: "TASK.md", req: "REQ.md", plan: "PLAN.md", todo: "TODO.md", log: "LOG.md", design: "DESIGN.md", rca: "RCA.md"};
   const WRITES_BACK = ["dev", "kb"];  // the kinds that have a plan, a diff and a commit
   const PAST_TABS = ["req", "plan", "changes", "review", "history", "files"];  // an earlier round keeps these; the others (overview, TODO, log, intake) are the task's, not one round's
@@ -62,6 +62,7 @@
     if (tab === "test") return Boolean(desk.test);
     if (tab === "review") return desk.review.n > 0 || desk.review.rounds.length > 0;
     if (tab === "files") return desk.files.length > 0;
+    if (tab === "trace") return Boolean(desk.trace && desk.trace.entries.length);
     if (tab === "intake") return Boolean(desk.intake) && served();  // a saved copy has no server to write to
     return true;
   };
@@ -447,6 +448,7 @@
       if (tab === "test") return t("desk.tab.test") + " " + desk.test.passed + "/" + desk.test.total;
       if (tab === "review") return t("desk.tab.review") + (desk.review.n ? " " + desk.review.passes + "/" + desk.review.n : " " + desk.review.rounds.length);
       if (tab === "history") return t("desk.tab.history") + " " + desk.history.length;
+      if (tab === "trace") return t("desk.tab.trace") + " " + desk.trace.entries.length + (desk.trace.cut ? "+" : "");
       if (tab === "docs") return t("desk.tab.docs") + " " + extra().length;
       if (tab === "files") return t("desk.tab.files") + " " + desk.files.length;
       if (tab === "intake") { const reads = desk.intake.files.filter((item) => !item.original && !item.report && !item.path.startsWith("media/")).length; return t("desk.tab.intake") + (reads ? " " + reads : ""); }  // the same set as "What the agent reads"
@@ -1104,6 +1106,28 @@
         event.detail ? h("span", {class: "sub"}, " · " + event.detail) : null, event.via ? h("span", {class: "tag"}, t("desk.via." + event.via)) : null, event.round > 1 ? h("span", {class: "tag"}, t("desk.round", {round: event.round})) : null))));
   }
 
+  // The Trace tab: the tool calls and the gate decisions of the session, newest first. The server sends tool names, paths, times and the gate's reasons; no thinking, no reply, no prompt text.
+  function trace() {
+    const found = desk.trace;
+    const notes = (desk.warn || []).map((item) => h("p", {class: "warn-note"}, tag("\u26a0", "warn"), " ", t("board.warn." + item.rule, {n: item.n})));
+    const rows = found.entries.slice().reverse().map((item) => {
+      if (item.kind === "prompt") return h("li", {class: "tr-prompt"}, h("span", {class: "when sub"}, when(item.at, 5, 19)), h("div", {class: "what sub"}, t("desk.trace.prompt")));
+      const gate = item.kind === "gate";
+      return h("li", {class: gate ? "tr-gate" : item.ok === false ? "tr-fail" : ""},
+        h("span", {class: "when sub"}, when(item.at, 5, 19)),
+        h("div", {class: "what"}, h("b", null, item.tool),
+          gate ? [" ", tag(t("desk.trace." + item.decision), item.decision === "deny" ? "bad" : "hot"), item.rule ? h("span", {class: "sub"}, " \u00b7 " + item.rule) : null] : null,
+          !gate && item.ok === false ? [" ", tag(t("desk.trace.failed"), "bad")] : null,
+          !gate && item.ok === null ? [" ", tag(t("desk.trace.running"), "good run")] : null,
+          item.seconds ? h("span", {class: "sub"}, " \u00b7 " + clock(item.seconds)) : null,
+          (item.paths || []).map((path) => [" ", h("span", {class: "path", title: path}, path)]),
+          item.command ? [" ", h("code", null, item.command)] : null,
+          item.reason ? h("div", {class: "sub"}, item.reason) : null,
+          item.error ? h("div", {class: "sub"}, item.error) : null));
+    });
+    return [h("p", {class: "hint top"}, t("desk.trace.hint")), notes, h("ol", {class: "timeline trace"}, rows), found.cut ? h("p", {class: "sub"}, t("desk.trace.cut", {count: found.cut})) : null];
+  }
+
   function openDoc(name) {
     const tab = Object.keys(FILES).find((key) => FILES[key] === name);
     if (tab) { current = tab; } else { current = "docs"; other = name; }
@@ -1134,6 +1158,7 @@
     if (current === "test" && desk.test) return testing();
     if (current === "files") return filesTab();
     if (current === "intake") return intakeTab();
+    if (current === "trace") return trace();
     if (current === "history") return [h("p", {class: "hint top"}, t("desk.history.hint")), timeline()];
     const docs = extra();
     const name = docs.some((item) => item.name === other) ? other : (docs[0] || {}).name;

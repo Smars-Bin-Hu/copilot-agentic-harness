@@ -1704,5 +1704,18 @@
   "gate.refused.unknown": "This block is not in the log of the task. Open the report again.",
   "gate.refused.task": "The page did not say which task. Open the report from the board.",
   "event.gate-verdict": "the person judged a gate block",
-  "event.gate-export": "the person exported wrong gate blocks as eval samples"
+  "event.gate-export": "the person exported wrong gate blocks as eval samples",
+  "board.warn.label": "Health warning",
+  "board.warn.stuck": "Stuck? The agent made no tool call for {n} minutes.",
+  "board.warn.repeat": "The same command ran {n} times in a row.",
+  "board.warn.idle": "{n} model turns with no file change.",
+  "board.warn.cost": "Credits are {n} times the median of closed tasks of the same kind.",
+  "desk.tab.trace": "Trace",
+  "desk.trace.hint": "The tool calls and the gate decisions of this task's session, newest first. Read from the hook log: tool, files, time and the gate's reason. No thinking and no message text.",
+  "desk.trace.prompt": "You sent a message",
+  "desk.trace.deny": "blocked",
+  "desk.trace.ask": "asked you",
+  "desk.trace.failed": "failed",
+  "desk.trace.running": "running",
+  "desk.trace.cut": "{count} older entries are not shown."
 }

@@ -75,6 +75,28 @@ def read_lines(path: Path) -> List[Dict[str, Any]]:
     return rows
 
 
+def read_tail(path: Path, max_bytes: int) -> List[Dict[str, Any]]:
+    """The lines of a JSONL file that parse, from its last `max_bytes` only (the first line of a cut is dropped: it is half). Never raises.
+    The board asks for every open task every few seconds: it must not read a whole log."""
+    try:
+        with path.open("rb") as handle:
+            size = handle.seek(0, 2)
+            cut = size > max_bytes
+            handle.seek(max(0, size - max_bytes))
+            lines = handle.read().decode("utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    rows: List[Dict[str, Any]] = []
+    for line in lines[1 if cut else 0:]:
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
 def read_session(root: Path, surface: str, session_id: str) -> List[Dict[str, Any]]:
     return read_lines(session_log_path(root, surface, session_id))
 

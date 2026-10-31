@@ -51,7 +51,9 @@ def clip_record(record: Dict[str, Any], limit: int) -> Dict[str, Any]:
             clipped[key] = clip(record[key], limit)
     target = record.get("target")
     if isinstance(target, dict):
-        clipped["target"] = {"paths": [clip(item, limit) for item in target.get("paths", [])], "command": clip(target.get("command", ""), limit)}
+        clipped["target"] = {"paths": [clip(item, limit) for item in target.get("paths", [])]}
+        if "command" in target:
+            clipped["target"]["command"] = clip(target.get("command", ""), limit)
     return clipped
 
 

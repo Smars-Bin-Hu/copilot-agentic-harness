@@ -3,17 +3,25 @@
 Only the facts a person needs to judge a run: what happened, at which Level, who decided, and for a refusal
 what it was about. Tool arguments are not recorded, except the paths and the command of a call that was
 denied or sent to a person (`target`), the name of a loaded skill, and the knowledge base files a call read (`kb`, names only).
-Any other call that went through leaves no trace of what it touched.
+Any other call that went through leaves no trace of what it touched, with two exceptions (1.6.5, for the board's health
+rules and Trace tab): a finished call (PostToolUse) records the paths it touched (`target.paths`, never a command), and a
+terminal call records `cmd`, a short hash of its command, so a repeated command can be told without the text being kept.
 """
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Dict, List, Optional
 
 from .events import Decision, HookEvent
 
 # Who decided. `model` is reserved: a hook cannot see what the main model decided.
 MAX_PATHS = 5
+
+
+def command_hash(command: str) -> str:
+    """Ten characters that tell one command from another; the command itself is not kept."""
+    return hashlib.sha1(" ".join(command.split()).encode("utf-8", "replace")).hexdigest()[:10]
 
 
 def outcome_of(decision: Decision) -> str:
@@ -62,6 +70,10 @@ def build(
         record["skill"] = event.skill  # which skill was loaded, to find the ones nobody uses
     if event.event == "PostToolUseFailure":
         record["error"] = event.error  # the engine's own words; clipped like a reason
+    if event.tool_kind == "terminal" and event.command and event.event in ("PostToolUse", "PostToolUseFailure"):
+        record["cmd"] = command_hash(event.command)
+    if event.event == "PostToolUse" and event.paths:
+        record["target"] = {"paths": list(event.paths[:MAX_PATHS])}  # paths only
     if admin:
         record["admin"] = True  # the call ran in admin mode: guardrail files were open to it
     if parent_session_id:

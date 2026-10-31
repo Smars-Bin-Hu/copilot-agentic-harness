@@ -126,6 +126,7 @@
         ".harness/tests/test_pinpython.py",
         ".harness/tests/test_tasklife.py",
         ".harness/tests/test_taskboard.py",
+        ".harness/tests/test_board_patch.py",
         ".harness/tests/test_boardserve.py",
         ".harness/tests/test_ahp.py",
         ".harness/tests/test_chatnew.py",

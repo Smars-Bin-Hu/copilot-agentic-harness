@@ -518,7 +518,7 @@ class RoundAndReportTests(TaskCase):
         self.assertIsNone(self.session_state(SESSION)["active_task"])
         text = (self.root / result["report"]).read_text(encoding="utf-8")
         for needle in (
-            "# 任务报告：job1", "计划：你批准于", "已 promote 到目标仓库的新分支", "promote 由你批准于", "modify repo_b/src/a.sql", "| repo_b/src/a.sql | modify | 1 | 1 |",
+            "# 任务报告：job1", "计划：你批准于", "已 promote 到目标仓库的新分支", "promote (write-back repo) 由你批准于", "modify repo_b/src/a.sql", "| repo_b/src/a.sql | modify | 1 | 1 |",
             "> 给 a.sql 加一列", "你批准了计划", "你批准了 promote", "promote 到新分支", "关闭", "## Hook 日志", "独立检查：没有开启", f"{TASK}/DEV/job1.patch",
         ):
             self.assertIn(needle, text)

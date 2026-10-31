@@ -18,6 +18,8 @@ Who may do what:
 - Talking to the chat (1.6, B72): `/api/send`, `/api/steer`, `/api/stop` (paired POST only) act through the link's thread, after it looked at the binding and the chat again. The code the person
   typed at an approval is kept here in memory (`Board.codes`) for the message that tells the agent; it goes to no file and to no page but that message's preview.
   `/api/draft` appends a note to `.task/drafts.json`; `/api/setting` sets the task's model and thinking level (`chat.model`); `review set` runs through `/api/act`.
+- New task (1.6, B73): `/api/create` (paired POST only; `step` options, preview or act) makes a chat in VS Code for a task the agent opens (`chatnew` checks every field again, `vslink.create` does it). It fails
+  with a clear reason when VS Code is not ready; nothing is made then.
 - VS Code (1.6): one background thread (`vslink`) keeps a connection to the chats of VS Code and a cache; a request only reads the cache. Without VS Code the
   board is what it was: `vscode.ready` is false, no error, no wait. `/api/open` (paired browser) asks the thread to bring the window of this folder forward.
 """
@@ -41,19 +43,19 @@ from urllib.parse import quote, unquote, urlparse
 from core import config, messages, registry, tasks
 from core.paths import board_serve_file, utc_now
 
-from . import autorun, chatsend, common, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
+from . import autorun, chatnew, chatsend, common, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
 COOKIE = "harness_board"
 MAX_BODY = 4096
-MAX_SEND_BODY = 64 * 1024  # `/api/send` and `/api/steer`: the person's own words
+MAX_SEND_BODY = 64 * 1024  # `/api/send`, `/api/steer` and `/api/create`: the person's own words
 MAX_INBOX_BODY = 40 * 1024 * 1024  # `/api/inbox` carries pictures (base64); the other calls stay small
 MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
-BUILTIN = ("send", "answer", "steer", "stop")  # the buttons that talk to the chat (1.6): always offered by a served board, not a setting; each is a POST of a paired browser
+BUILTIN = ("send", "answer", "steer", "stop", "create")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
 REFRESH = 10  # seconds between two boards in the browser
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
 # or send anything elsewhere, even if it ever got past the drawing (which uses textContent only).
@@ -432,6 +434,40 @@ class Board:
             pass
         return {"stopped": True, "chat": done.get("title", "")}
 
+    def create_options(self) -> Dict[str, Any]:
+        """What the new-task dialog offers: the models the host lists now (policy filtered), the kinds, the tasks a fork may start from, the tool permissions, and whether VS Code is ready."""
+        status = self.link.status()
+        sources = []
+        for folder in tasks.folders(self.root):
+            found = tasks.read(self.root, folder) or {}
+            sources.append({"name": task_ops.name_of(folder), "kind": str(found.get("kind") or ""), "status": str(found.get("status") or "")})
+        return {"ready": bool(status["ready"]), "why": status["why"], "models": self.link.model_list(), "kinds": list(tasks.KINDS), "sources": sources,
+                "permissions": list(chatnew.PERMISSIONS), "permission": chatnew.DEFAULT_PERMISSION, "limit": chatnew.MAX_TEXT}
+
+    def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """`step` options: what the dialog offers. `preview`: the first message, whole, and whether it can go now. `act`: make the chat in VS Code and send it. Every field is checked here again."""
+        step = str(data.get("step", "act"))
+        if step == "options":
+            return self.create_options()
+        why = self.link.create_blocked()
+        if why and step != "preview":
+            raise CommandError(say("create.refused." + why))
+        if why:  # preview only (an act was refused above): nothing can be checked against a list the host has not given
+            return {"text": "", "blocked": say("create.refused." + why)}
+        plan = chatnew.validate(self.root, data, self.link.model_list(), self.link.waiting_names())
+        text = chatnew.first_message(plan)
+        if step == "preview":
+            return {"text": text, "blocked": "", "model": plan["model"] or {}, "permission": plan["permission"]}
+        try:
+            done = self.link.create(plan, text)
+        except vslink.Refused as error:
+            raise CommandError(say("create.refused." + error.why)) from None
+        except Exception as error:  # noqa: BLE001 - the host said no: nothing more is known; the name of the error only, never its text
+            raise CommandError(say("create.refused.host", error=type(error).__name__)) from None
+        initiator = str(done.get("initiator") or "")
+        warn = say("create.warn.initiator", initiator=initiator) if initiator and initiator != "vscode" else ""
+        return {"created": True, "name": plan["name"], "initiator": initiator, "warn": warn, "unchecked": not initiator, "text": text, "model": plan["model"] or {}}
+
     def draft(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Save one note for the next send (appends to `.task/drafts.json`). The Drafts box that edits and deletes is B77."""
         task, _found = self.target(data)
@@ -562,7 +598,7 @@ def handler_for(board: Board) -> type:
             origin = self.headers.get("Origin", "")
             if not self.host_ok() or (origin and origin not in allowed_origins) or self.headers.get(HEADER) != "1":
                 return self.answer(403, {"error": say("serve.refused.request")})
-            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_SEND_BODY if urlparse(self.path).path in ("/api/send", "/api/steer") else MAX_BODY
+            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_SEND_BODY if urlparse(self.path).path in ("/api/send", "/api/steer", "/api/create") else MAX_BODY
             try:
                 size = int(self.headers.get("Content-Length", "0"))
                 data = json.loads(self.rfile.read(min(size, limit)).decode("utf-8") or "{}") if 0 <= size <= limit else None
@@ -586,6 +622,16 @@ def handler_for(board: Board) -> type:
                 if asked != "queued":
                     return self.answer(409, {"error": say("serve.open.off") if asked == "off" else say("serve.open.no-cli")})
                 return self.answer(200, {"result": {"queued": True}})
+            if path == "/api/create":  # a chat in VS Code and a task the agent opens: the paired browser, nothing else
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.create(data)
+                    if str(data.get("step", "act")) == "act":
+                        print(say("serve.did", action="create", task=str(result.get("name", ""))), flush=True)
+                    return self.answer(200, {"result": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown in the dialog
+                    return self.answer(409, {"error": str(error)})
             if path in ("/api/send", "/api/steer", "/api/stop", "/api/draft", "/api/setting"):  # talk to the chat, and its settings: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})

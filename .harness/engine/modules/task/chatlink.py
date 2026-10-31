@@ -1,7 +1,7 @@
 """Which chat of VS Code belongs to which task (1.6, B71). Never a guess: when it is not sure, the task is unbound.
 
 Two ways to bind, the first wins:
-1. The chat was made by the board for this task (B73 writes `chat.how = "board"` in the task state when it creates it). It stands while the chat exists.
+1. The chat was made by the board for this task (B73: the board remembers the chat it made, and writes `chat.how = "board"` in the task state as soon as the task exists: `adopt`). It stands while the chat exists.
 2. The id Copilot gave the session behind a chat (`sdkSessionId`, found in the chat's turns) is the `session_id` of the task. The hook calls that id `session_id`.
 
 It is not sure, so the task stays unbound, when: no chat has the id (a chat has no id until the model was called once), two chats have it, or two open tasks have the
@@ -96,3 +96,22 @@ def keep(root: Any, task: str, binding: Optional[Dict[str, Any]]) -> bool:
             data.pop("chat", None)
         atomic_write(path, data)
         return True
+
+
+def adopt(root: Any, task: str, made: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The task a chat of the board was made for now exists: write the binding `how = "board"` (first priority) and keep the model the person chose in the dialog, unless the task already has one.
+    `made`: what the board remembered at the create (`chatnew.pending`). Returns the binding written, or None when the task is gone. `updated_at` stays."""
+    path = tasks.state_file(root, task)
+    if not path.exists():
+        return None
+    with state_lock(path):
+        data = tasks.read(root, task)
+        if data is None:
+            return None
+        model = (data.get("chat") or {}).get("model") or made.get("model")
+        found: Dict[str, Any] = {"session": made["session"], "chat": made["chat"], "title": made.get("title", ""), "how": "board", "bound_at": utc_now()}
+        if model:
+            found["model"] = model
+        data["chat"] = found
+        atomic_write(path, data)
+        return found

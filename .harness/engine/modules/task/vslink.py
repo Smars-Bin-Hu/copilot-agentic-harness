@@ -8,11 +8,15 @@
 - `HARNESS_VSCODE_CLI=off`, or `board.vscode = false` in `task.override.json`, switches the whole link off.
 - B72: a person's send, steer or stop is a job for the thread (`dispatch`): only that thread talks to the host. Before it acts, the thread looks again: a fresh list of chats, the binding
   worked out again, the state of the chat now. It refuses (`Refused`) rather than guess. The model chosen on the task page goes on every message (`message.model`; it sticks in the chat).
+- B73: `create` makes a chat for a task that does not exist yet (`createSession`, `isolation: folder`, mode `interactive`), sends its first message at once (the host does not list a chat
+  before its first turn; the model must be on that message, `createSession.model` is not honoured), and reads back who the host says made it. The task is made later by the agent: the
+  thread remembers the chat (`created`) and, when the task with that name is open, binds it (`chatlink.adopt`) and keeps the model on the task. `disposeSession` is never called.
 """
 
 from __future__ import annotations
 
 import datetime
+import os
 import queue
 import threading
 import time
@@ -23,7 +27,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 from core import ahp, config, tasks
 from core.paths import utc_now
 
-from . import chatlink, task as task_ops, tasklife, tasksub
+from . import chatlink, chatnew, chatsend, task as task_ops, tasklife, tasksub
 
 TASKS_EVERY = 3.0  # seconds between two looks at the tasks and their chats
 RELIST_EVERY = 180.0  # a whole new list of chats, in case a notification was missed
@@ -31,6 +35,8 @@ SCAN_PER_TURN = 3  # chats read in one turn to find their Copilot session id
 SCAN_MAX = 300  # chats read at most, newest first
 NO_CLI_WAIT = 300.0  # no `code` command: look again only now and then
 JOB_WAIT = 25.0  # seconds a page request waits for the thread to send, steer or stop
+CREATE_WAIT = 45.0  # a create makes the chat, sends, then waits for the host to list it
+INITIATOR_WAIT = 10.0  # seconds after the first message in which the host is asked who made the chat
 
 
 def enabled_by_policy(root: Path) -> bool:
@@ -82,8 +88,8 @@ class Refused(Exception):
 class Job:
     """One thing for the thread to do to a chat. The page request waits on `done`."""
 
-    def __init__(self, kind: str, task: str, text: str = "", model: Optional[Dict[str, Any]] = None) -> None:
-        self.kind, self.task, self.text, self.model = kind, task, text, model
+    def __init__(self, kind: str, task: str, text: str = "", model: Optional[Dict[str, Any]] = None, plan: Optional[Dict[str, Any]] = None) -> None:
+        self.kind, self.task, self.text, self.model, self.plan = kind, task, text, model, plan
         self.done = threading.Event()
         self.cancelled = False
         self.result: Dict[str, Any] = {}
@@ -116,6 +122,7 @@ class VsLink:
         self.unbound: Dict[str, str] = {}  # task -> why
         self.chats: Dict[str, Dict[str, Any]] = {}  # chat resource -> {state, tool_at}
         self.models: List[Dict[str, Any]] = []  # what a person may pick (`ahp.models_of`); empty until the host said
+        self.created: List[Dict[str, Any]] = []  # chats this board made whose task does not exist yet (`chatnew.pending`); memory only
         self.listed_at = 0.0
         self.dirty = True
 
@@ -171,6 +178,31 @@ class VsLink:
     def model_list(self) -> List[Dict[str, Any]]:
         with self.lock:
             return [dict(item) for item in self.models] if self.ready else []
+
+    def waiting_names(self) -> List[str]:
+        """The names of the tasks the board made a chat for and whose task is not there yet."""
+        with self.lock:
+            return [item["name"] for item in self.created]
+
+    def create_blocked(self) -> str:
+        """Why a chat cannot be made now (`off`, `not-ready`), from the cache. Empty: it can."""
+        with self.lock:
+            return "off" if not self.enabled else "" if self.ready else "not-ready"
+
+    def create(self, plan: Dict[str, Any], text: str) -> Dict[str, Any]:
+        """Make a chat for the task of `plan` and send `text` to it, on the thread. The answer: {session, chat, initiator, title}. Raises Refused (`off`, `not-ready`, `timeout`) or the host's error."""
+        why = self.create_blocked()
+        if why:
+            raise Refused(why)
+        job = Job("create", "", text, plan["model"], plan)
+        self.jobs.put(job)
+        self.wake.set()
+        if not job.done.wait(CREATE_WAIT):
+            job.cancelled = True  # a thread that has not begun must not make a chat the person was told failed
+            raise Refused("timeout")
+        if job.error is not None:
+            raise job.error
+        return job.result
 
     def check(self, task: str, kind: str) -> str:
         """From the cache, so a page can say at once: why `kind` (send, steer, stop) cannot be done to the chat of this task now. Empty: it can. The thread looks again before it acts."""
@@ -367,8 +399,57 @@ class VsLink:
             raise Refused("not-" + NEEDS[kind])
         return binding
 
+    def _initiator(self, link: ahp.Connection, resource: str, state: Dict[str, Any]) -> str:
+        """Who the host says made the chat (`vscode` is right). The host lists a chat only after its first turn began: asked for a few seconds. Empty: not known."""
+        found = ahp.initiator_of(state.get("_meta"))
+        tail = resource.rsplit("/", 1)[-1]
+        end = time.monotonic() + INITIATOR_WAIT
+        while not found:
+            for item in link.sessions():
+                if str(item.get("resource") or "").rsplit("/", 1)[-1] == tail:
+                    found = ahp.initiator_of(item.get("_meta"))
+                    break
+            if found or time.monotonic() >= end:
+                break
+            note = link.next_notice(0.5)  # the host's notices keep coming while we wait
+            while note is not None:
+                self._notice(note)
+                note = link.next_notice(0.0)
+        return found
+
+    def _create(self, link: ahp.Connection, job: Job) -> None:
+        """The thread makes the chat, sends the first message, and keeps what it needs to bind the task when the agent has made it."""
+        plan = job.plan or {}
+        if job.cancelled:
+            raise Refused("timeout")
+        resource = "ahp-session:/" + str(uuid.uuid4())
+        link.call("createSession", {"channel": resource, "provider": ahp.LOCAL_PROVIDER, "workingDirectories": [ahp.folder_uri(self.root)],
+                                    "config": {"isolation": "folder", "mode": "interactive", "autoApprove": plan["approve"]}})  # `model` here would not be honoured: it goes on the message
+        state = link.subscribe(resource)
+        chat = str(state.get("defaultChat") or "")
+        if not chat:
+            raise ahp.AhpError("createSession: no chat in the new session")
+        held = {"state": ahp.trimmed(link.subscribe(chat)), "tool_at": ""}
+        message: Dict[str, Any] = {"text": job.text, "origin": {"kind": "user"}}
+        if job.model:
+            message["model"] = job.model
+        action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
+        made = {"name": plan["name"], "kind": plan["kind"], "source": plan["source"], "lang": plan["lang"], "permission": plan["permission"], "model": job.model, "text": job.text,
+                "session": resource, "chat": chat, "title": "", "clock": time.monotonic()}
+        with self.lock:
+            self.created.append(made)  # before the message: a chat that was made is never lost track of
+            self.chats[chat] = held
+        link.dispatch(chat, action)
+        with self.lock:
+            ahp.reduce_chat(held["state"], action)
+        initiator = self._initiator(link, resource, state)
+        self._list(link)  # the chat is in the cache at once (the host's notice may come later); marks the board dirty
+        job.result = {"session": resource, "chat": chat, "initiator": initiator, "turn": str(action["turnId"])}
+
     def _do(self, link: ahp.Connection, job: Job) -> None:
         try:
+            if job.kind == "create":
+                return self._create(link, job)
             if job.cancelled:
                 raise Refused("timeout")
             binding = self._recheck(link, job.task, job.kind)
@@ -421,6 +502,7 @@ class VsLink:
     def _look(self, link: ahp.Connection) -> None:
         """Read the tasks, read the chats that are still unknown, bind, and subscribe to the bound chats (and let go of the others)."""
         entries = self._entries()
+        self._adopt(entries)
         with self.lock:
             sessions = dict(self.sessions)
         self._scan(link, entries, sessions)
@@ -434,6 +516,44 @@ class VsLink:
                 if binding is not None or (entry.get("chat") or {}).get("how") != "board":
                     chatlink.keep(self.root, entry["task"], binding)
         self._subscribe(link)
+
+    def _adopt(self, entries: List[Dict[str, Any]]) -> None:
+        """A chat the board made is bound to its task as soon as the agent has made the task (an open task of that name): `chat.how = "board"`, and the model of the dialog on the task, so that
+        the next messages carry it. The first message goes to `.task/sent.jsonl` and the history. A chat whose task never came is let go after `chatnew.KEEP_PENDING`; the SDK binding (the
+        session id of the task, found in the chat) still works for it."""
+        with self.lock:
+            waiting = list(self.created)
+        if not waiting:
+            return
+        by_name = {str(entry.get("name") or ""): entry for entry in entries}
+        for made in waiting:
+            entry = by_name.get(made["name"])
+            if entry is None:
+                if time.monotonic() - made["clock"] > chatnew.KEEP_PENDING:
+                    self._forget(made)
+                continue
+            sdk = self.sdk.get(made["session"]) or set()
+            if entry.get("session_id") and sdk and entry["session_id"] not in sdk:
+                self._forget(made)  # a task of that name, made in another chat: not ours
+                continue
+            if not self.persist:
+                continue
+            found = chatlink.adopt(self.root, entry["task"], made)
+            if found is None:
+                continue
+            entry["chat"] = found
+            self._forget(made)
+            try:
+                chatsend.record(self.root, entry["task"], {"at": utc_now(), "task": entry["task"], "kind": "create", "chat": made["chat"], "text": made["text"], "lang": made["lang"],
+                                                           "source": made["source"], "model": made["model"] or {}, "permission": made["permission"]})
+                with task_ops.locked(self.root, entry["task"]) as data:
+                    task_ops.note(data, "create", chatsend.summary(made["text"]))
+            except Exception:  # noqa: BLE001 - the binding is made; a missing line of history must not undo it
+                pass
+
+    def _forget(self, made: Dict[str, Any]) -> None:
+        with self.lock:
+            self.created = [item for item in self.created if item is not made]
 
     def _scan(self, link: ahp.Connection, entries: List[Dict[str, Any]], sessions: Dict[str, Dict[str, Any]]) -> None:
         with self.lock:
@@ -465,6 +585,7 @@ class VsLink:
     def _subscribe(self, link: ahp.Connection) -> None:
         with self.lock:
             wanted = {binding["chat"]: binding["session"] for binding in self.bound.values() if binding.get("chat")}
+            wanted.update({item["chat"]: item["session"] for item in self.created})  # a chat the board just made stays subscribed until its task is bound
             have = set(self.chats)
         for chat in have - set(wanted):
             try:

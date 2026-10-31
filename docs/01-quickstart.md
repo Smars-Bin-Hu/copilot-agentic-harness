@@ -86,7 +86,7 @@ harness task board
 
 It opens your browser on the board, already paired with the program (Ctrl+C stops it). If it says the port is in use, the board is already running: open `http://127.0.0.1:8765/`.
 
-The board lists every task, what waits for you, and since when. A click on a task opens its page: the stages, the requirement, the plan, the TODO, the log, the changes, the independent checks (Review), the test results (Test) and the history, drawn as pages, and the buttons for what you decide. The board opens as a lobby where each task is a small agent; the switch at the top right gives the list. The agent gives you the address of the page in its messages. More in [the overview](00-overview.md#4-follow-and-steer-it-in-the-browser).
+The board lists every task, what waits for you, and since when. A click on a task opens its page: the stages, the requirement, the plan, the TODO, the log, the changes, the independent checks (Review), the test results (Test) and the history, drawn as pages, and the buttons for what you decide. The board opens as a lobby where each task is a small agent; the switch at the top right gives the list. The agent gives you the address of the page in its messages. The board also has a **New task** button that opens a chat in VS Code for you (when VS Code is linked). More in [the overview](00-overview.md#4-follow-and-steer-it-in-the-browser).
 
 If the page says the pairing code is wrong or used up, press Enter in the terminal of the board (not in its first seconds) and open the new link it prints. A browser you open by hand is not paired: it can pause and resume a task, but an approval is refused. Press Enter in the terminal of the board for a new pairing link.
 

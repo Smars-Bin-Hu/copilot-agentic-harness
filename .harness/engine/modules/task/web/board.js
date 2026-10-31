@@ -321,7 +321,14 @@
       });
       return node;
     };
-    shift.replaceChildren(button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint"), vsPill());
+    shift.replaceChildren(button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint"), newTask(), vsPill());
+  }
+  // "New task" (1.6, B73): a served board only (it makes a chat in VS Code). The dialog is in chat.js.
+  function newTask() {
+    if (typeof SERVE === "undefined" || !SERVE.runs("create")) return null;
+    const node = h("button", {type: "button", class: "act hot new-task", title: t("board.new.hint")}, t("board.new"));
+    node.addEventListener("click", () => CHAT.create());
+    return node;
   }
   // Is VS Code linked: green when the board reads its chats, grey when not (not open, not found, still starting). The title says why. Without VS Code the board is what it was.
   function vsPill() {

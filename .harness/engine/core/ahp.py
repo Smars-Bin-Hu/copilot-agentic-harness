@@ -474,6 +474,26 @@ def session_in(summary: Dict[str, Any], folder: str) -> bool:
     return any(same_folder(place, folder) for place in places)
 
 
+def folder_uri(folder: Any) -> str:
+    """The `file:///` address of a folder as the host wants it for `workingDirectories`. The path is not resolved: the host lists the chat under the address given, and `session_in` must find the folder again."""
+    path = str(folder).replace("\\", "/")
+    if not path.startswith("/"):
+        path = "/" + path  # c:/x -> /c:/x
+    return "file://" + quote(path, safe="/:")
+
+
+INITIATOR_KEY = "vscode.session.initiator"  # `_meta` of a session summary: who made the chat; `vscode` is what the Agents window of VS Code shows
+def initiator_of(meta: Any) -> str:
+    """The name in `_meta["vscode.session.initiator"]`: the host gives `{"name": "vscode"}` (checked live); a plain string is taken as it is."""
+    value = (meta or {}).get(INITIATOR_KEY) if isinstance(meta, dict) else None
+    if isinstance(value, dict):
+        value = value.get("name")
+    return str(value) if isinstance(value, str) else ""
+
+
+PERMISSIONS = ("default", "assisted", "autoApprove")  # `config.autoApprove` of a chat (from `resolveSessionConfig`); autoApprove asks for nothing, the hooks and the gate still run
+
+
 def status_name(bits: Any) -> str:
     """`input` (waits for the person), `busy`, `error` or `idle` from the status bits of a session."""
     if not isinstance(bits, int):

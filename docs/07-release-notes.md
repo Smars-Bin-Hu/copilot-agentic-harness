@@ -10,6 +10,22 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.3 (2026-10-31)
+
+### Added
+
+- **New task from the board.** A **New task** button by the Off work buttons opens a dialog: name, kind, a task to fork from (optional), what to do, model, thinking level, reply language (English by default; `[ZH]` only if you pick Chinese) and tool permissions (allow all by default, default, assisted). The board makes a chat in VS Code (this folder, no worktree, mode interactive) and sends it one message: fixed English text that tells the agent to open the task with `harness-my-task` (or `task fork` from the source), with your text last. The model and thinking level go on that message. The board asks VS Code who made the chat and warns if it is not `vscode` (the Agents window could hide it). It fails with a reason, and makes nothing, when VS Code is not linked. Every field is checked again on the server.
+- When the agent has opened the task, the board binds the chat to it (first priority) and keeps the model you chose on the task, so later sends carry it. The first message is in `.task/sent.jsonl` and the history.
+- `.vscode/settings.json`: `chat.tools.terminal.autoApprove` lets `harness task open`, `new`, `fork`, `list` and `status` run without a confirmation box, in the forms `harness`, `harness.cmd`, `./.harness/bin/harness` and `.harness\bin\harness.cmd`. The rules are plain allow rules: a chain, a redirect or a substitution (`&&`, `;`, `|`, `>`, `$(...)`) is not approved, and no other command is.
+
+### Changed
+
+- `.vscode/settings.json` (a guardrail file) holds the two rules above.
+
+### Retired
+
+- Nothing.
+
 ## 1.6.2 (2026-10-31)
 
 ### Added

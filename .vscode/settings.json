@@ -2,5 +2,9 @@
   "chat.useHooks": true,
   "chat.useAgentsMdFile": true,
   "chat.includeApplyingInstructions": true,
-  "github.copilot.chat.codeGeneration.useInstructionFiles": true
+  "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+  "chat.tools.terminal.autoApprove": {
+    "/^harness(?:\\.cmd)?\\s+task\\s+(?:open|new|fork|list|status)(?:\\s[^;&|<>`$()\\r\\n]*)?$/": true,
+    "/^(?:\\.[\\\\/])?\\.harness[\\\\/]bin[\\\\/]harness(?:\\.cmd)?\\s+task\\s+(?:open|new|fork|list|status)(?:\\s[^;&|<>`$()\\r\\n]*)?$/": true
+  }
 }

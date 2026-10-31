@@ -1,4 +1,4 @@
-// Talking to the chat of a task from a served page (1.6, B72): the send panel, "steer" and "stop". Loaded after serve.js; only a page the board server sent has it.
+// Talking to the chat of a task from a served page (1.6, B72): the send panel, "steer" and "stop"; the "New task" dialog (B73). Loaded after serve.js; only a page the board server sent has it.
 // The text of a message is made by the server (chatsend.py): this file shows it and asks for it to be sent. Every call is a POST of the paired browser.
 "use strict";
 
@@ -113,5 +113,99 @@ const CHAT = (function () {
     });
   }
 
-  return {panel, steer, stop};
+  // "New task" (B73): a chat is made in VS Code and told to open the task. The server checks every field again and makes the first message (a fixed English text, then what the person wrote);
+  // this dialog only collects the fields and shows that message. The mode (interactive) and the folder (no worktree) are fixed and not on the form.
+  function create() {
+    const state = {lang: "en", perm: "allow-all", busy: false, ready: false, timer: null, models: [], options: null};
+    const field = (label, control, extra) => h("label", {class: "new-field" + (extra ? " " + extra : "")}, h("span", {class: "sub label"}, label), control);
+    const name = h("input", {type: "text", class: "send-body", maxlength: 80, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.name.ph")});
+    const kind = h("select", {class: "send-body"});
+    const source = h("select", {class: "send-body"});
+    const text = h("textarea", {rows: 5, class: "send-body", placeholder: t("board.new.text.ph"), maxlength: 5000});
+    const model = h("select", {class: "send-body"});
+    const thinking = h("select", {class: "send-body"});
+    const preview = h("pre", {class: "send-preview"}, "...");
+    const problem = h("div", {class: "sub"});  // what is not right yet: shown quietly while the person types
+    const blocked = h("div", {class: "bad"});
+    const said = h("div", {class: "bad"});
+    const permHint = h("p", {class: "sub"});
+    const go = h("button", {type: "button", class: "act hot", disabled: "disabled"}, t("board.new.go"));
+    const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const langChips = ["en", "zh"].map((lang) => {
+      const chip = h("button", {type: "button", class: "chip" + (lang === "en" ? " on" : ""), "aria-pressed": lang === "en" ? "true" : "false"}, t("desk.send.lang." + lang));
+      chip.addEventListener("click", () => { state.lang = lang; langChips.forEach((item, at) => { const on = ["en", "zh"][at] === lang; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); }); refresh(); });
+      return chip;
+    });
+    const permChips = ["allow-all", "default", "assisted"].map((perm) => {
+      const chip = h("button", {type: "button", class: "chip" + (perm === state.perm ? " on" : ""), "aria-pressed": perm === state.perm ? "true" : "false"}, t("board.new.perm." + perm));
+      chip.addEventListener("click", () => { state.perm = perm; showPerm(); refresh(); });
+      return chip;
+    });
+    function showPerm() {
+      permChips.forEach((item, at) => { const on = ["allow-all", "default", "assisted"][at] === state.perm; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); });
+      permHint.textContent = t("board.new.perm." + state.perm + ".hint");
+    }
+    const view = SERVE.dialog([h("h2", null, t("board.new.title")), blocked,
+      h("div", {class: "new-grid"}, field(t("board.new.name"), name), field(t("board.new.kind"), kind)),
+      field(t("board.new.source"), source), h("p", {class: "sub"}, t("board.new.source.hint")),
+      field(t("board.new.text"), text),
+      h("div", {class: "new-grid three"}, field(t("board.new.model"), model), field(t("board.new.thinking"), thinking), field(t("board.new.lang"), h("div", {class: "chips"}, langChips))),
+      h("div", {class: "send-lang"}, h("span", {class: "sub"}, t("board.new.perm")), h("div", {class: "chips"}, permChips)), permHint, h("p", {class: "sub"}, t("board.new.fixed")),
+      h("div", {class: "sub label"}, t("board.new.first")), preview, problem, h("div", {class: "row send-actions"}, go, no), said]);
+    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: text.value, model: model.value, thinking: thinking.value, lang: state.lang, permission: state.perm});
+    const sync = () => { go.disabled = state.busy || !state.ready; };
+    function levels() {
+      const found = state.models.find((item) => item.id === model.value);
+      const list = (found && found.thinking && found.thinking.levels) || [];
+      thinking.replaceChildren(h("option", {value: ""}, t("board.new.thinking.default")), ...list.map((level) => h("option", {value: level}, level)));
+      thinking.disabled = !list.length;
+    }
+    function refresh() {
+      clearTimeout(state.timer);
+      state.timer = setTimeout(() => {
+        ask("/api/create", body("preview")).then((found) => {
+          preview.textContent = found.text;
+          problem.textContent = "";
+          state.ready = !found.blocked;
+          blocked.replaceChildren(...(found.blocked ? SERVE.reasons(found.blocked) : []));
+          sync();
+        }, (error) => {
+          state.ready = false;
+          preview.textContent = "...";
+          problem.replaceChildren(...SERVE.reasons(shown(error)));  // quiet: it is what is missing now, not a failure
+          sync();
+        });
+      }, 250);
+    }
+    const close = () => { clearTimeout(state.timer); view.close(); };
+    no.addEventListener("click", close);
+    for (const control of [name, text]) control.addEventListener("input", refresh);
+    for (const control of [kind, source, thinking]) control.addEventListener("change", refresh);
+    model.addEventListener("change", () => { levels(); refresh(); });
+    go.addEventListener("click", () => {
+      state.busy = true; go.textContent = t("board.new.working"); sync(); said.replaceChildren();
+      ask("/api/create", body("act")).then((found) => {
+        clearTimeout(state.timer);
+        const done = h("button", {type: "button", class: "act hot"}, t("board.new.close"));
+        done.addEventListener("click", () => { close(); SERVE.done(); });
+        view.box.replaceChildren(h("h2", null, t("board.new.title") + " \u00b7 " + found.name), h("p", null, t("board.new.done")),
+          found.warn ? h("p", {class: "bad"}, found.warn) : found.unchecked ? h("p", {class: "sub"}, t("board.new.done.unchecked")) : null, h("div", {class: "row send-actions"}, done));
+        done.focus();
+      }, (error) => { state.busy = false; go.textContent = t("board.new.go"); sync(); said.replaceChildren(...SERVE.reasons(shown(error))); });
+    });
+    ask("/api/create", {step: "options"}).then((found) => {
+      state.options = found; state.models = found.models || [];
+      kind.replaceChildren(...found.kinds.map((item) => h("option", {value: item, selected: item === "dev" ? "" : null}, t("task.kind." + item))));
+      source.replaceChildren(h("option", {value: ""}, t("board.new.source.none")), ...found.sources.map((item) => h("option", {value: item.name}, item.name + (item.kind ? " \u00b7 " + t("task.kind." + item.kind) : "") + (item.status === "closed" ? " \u00b7 " + t("board.filter.closed") : ""))));
+      model.replaceChildren(h("option", {value: ""}, t("board.new.model.chat")), ...state.models.map((item) => h("option", {value: item.id}, item.name)));
+      state.perm = found.permission || "allow-all";
+      showPerm(); levels();
+      if (!found.ready) blocked.replaceChildren(h("p", null, t("board.new.off")), h("p", {class: "sub"}, t("board.vs.why." + (found.why || "starting"))));
+      refresh();
+    }, (error) => { blocked.replaceChildren(h("p", null, t("board.new.options", {error: shown(error)}))); });
+    showPerm(); levels();
+    name.focus();
+  }
+
+  return {panel, steer, stop, create};
 })();

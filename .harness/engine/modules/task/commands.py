@@ -8,7 +8,7 @@
   task pause|resume                          a person puts a task aside and takes it back (tasklife.py)
   task handoff tests|run --env E | clear     the agent hands the tests of an environment, or a run before the write-back, to the person; the board says it waits (tasklife.py)
   task approve-plan|confirm-req|approve-promote|recover  a person at a terminal
-  task review start|status                   independent checks, `[review]=n` (taskreview.py); extend|waive|dismiss: a person at a terminal
+  task review start|status                   independent checks, `[review]=n` (taskreview.py); set|extend|waive|dismiss: a person at a terminal
   task snapshot list|prune                   the copies made at the gates (tasksnap.py)
   target list|show                           the target repositories (policy target.json): where they are, what their base branch is
   target refs <name>...                      where names are used: every target repository and the knowledge base, in one search (refs.py)
@@ -213,6 +213,10 @@ def register_task(subparsers: Any) -> None:
 
     add_review("start", "snapshot the result, write REVIEW/round-NNN/package.md and open the check; then call the reviewer", lambda a: taskreview.start(repo_root(), a.task))
     add_review("status", "n, the passes that count now, the checks used and what comes next", lambda a: taskreview.status(repo_root(), a.task))
+    set_n = add_review("set", "the person sets how many independent checks the result must pass in a row, 0 to the cap (terminal only)", guarded("task review set", lambda a: taskreview.set_by_person(repo_root(), a.task, a.n)))
+    set_n.set_defaults(person_only=True)
+    with_force(set_n)
+    set_n.add_argument("--n", type=int, required=True, help="0 switches the checks off")
     extend = add_review("extend", "the person allows more checks after the limit (terminal only)", guarded("task review extend", lambda a: taskreview.extend(repo_root(), a.task, a.checks)))
     extend.set_defaults(person_only=True)
     with_force(extend)

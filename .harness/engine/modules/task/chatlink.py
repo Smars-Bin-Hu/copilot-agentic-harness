@@ -9,6 +9,7 @@ same session id and the session does not hold exactly one of them.
 
 The result is kept in the task state as `chat: {session, chat, title, how, bound_at, sdk}` (`sdk` only for `how = "sdk"`). Writing it does not change `updated_at`:
 a binding is not something the person did, and the board lights a row whose time changed.
+`chat.model = {id, config}` is the person's (B72, the task page): a binding comes and goes around it, and is never allowed to drop it.
 """
 
 from __future__ import annotations
@@ -20,6 +21,15 @@ from core.paths import utc_now
 from core.state import atomic_write, state_lock
 
 Entry = Dict[str, Any]  # {task, name, session_id, held, chat}: an open task as the binding sees it
+
+
+def listed_as(session: str, summaries: Dict[str, Dict[str, Any]]) -> str:
+    """The resource under which the host lists a session: the one given, or the same id in the other form (`ahp-session:/<id>` and `copilotcli:/<id>` are one session). Empty when it is not listed."""
+    if session in summaries:
+        return session
+    tail = session.rsplit("/", 1)[-1]
+    found = [resource for resource in summaries if tail and resource.rsplit("/", 1)[-1] == tail]
+    return found[0] if len(found) == 1 else ""
 
 
 def decide(entries: List[Entry], summaries: Dict[str, Dict[str, Any]], sdk: Dict[str, Set[str]]) -> Dict[str, Tuple[Optional[Dict[str, Any]], str]]:
@@ -37,8 +47,9 @@ def decide(entries: List[Entry], summaries: Dict[str, Dict[str, Any]], sdk: Dict
     out: Dict[str, Tuple[Optional[Dict[str, Any]], str]] = {}
     for entry in entries:
         task, stored = entry["task"], entry.get("chat") or {}
-        if stored.get("how") == "board" and stored.get("session") in summaries:
-            out[task] = (dict(stored), "")
+        listed = listed_as(str(stored.get("session") or ""), summaries) if stored.get("how") == "board" else ""
+        if listed:
+            out[task] = (dict(stored, session=listed, chat=str(summaries[listed].get("defaultChat") or stored.get("chat") or "")), "")
             continue
         session = str(entry.get("session_id") or "")
         if not session:
@@ -58,14 +69,16 @@ def decide(entries: List[Entry], summaries: Dict[str, Dict[str, Any]], sdk: Dict
 
 
 def same(left: Optional[Dict[str, Any]], right: Optional[Dict[str, Any]]) -> bool:
-    """The same binding: the same chat found the same way (the title and the time do not make a new one)."""
+    """The same binding: the same chat found the same way (the title, the time and the person's model do not make a new one)."""
+    left = left if left and left.get("session") else None
+    right = right if right and right.get("session") else None
     if not left or not right:
         return not left and not right
     return all(left.get(key) == right.get(key) for key in ("session", "chat", "how", "sdk"))
 
 
 def keep(root: Any, task: str, binding: Optional[Dict[str, Any]]) -> bool:
-    """Write the binding into the task state (or take it out); True when the file changed. `updated_at` stays."""
+    """Write the binding into the task state (or take it out); True when the file changed. `updated_at` stays. The person's `model` stays whatever happens to the binding."""
     path = tasks.state_file(root, task)
     if not path.exists():
         return False
@@ -73,8 +86,12 @@ def keep(root: Any, task: str, binding: Optional[Dict[str, Any]]) -> bool:
         data = tasks.read(root, task)
         if data is None or same(data.get("chat"), binding):
             return False
-        if binding:
-            data["chat"] = binding
+        model = (data.get("chat") or {}).get("model")
+        found = dict(binding) if binding else {}
+        if model:
+            found["model"] = model
+        if found:
+            data["chat"] = found
         else:
             data.pop("chat", None)
         atomic_write(path, data)

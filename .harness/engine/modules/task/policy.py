@@ -38,7 +38,7 @@ POLICY_SCHEMA = {
                 "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
                 "closed_shown": {"type": "integer", "minimum": 0},
                 "active_seconds": {"type": "integer", "minimum": 10},
-                "actions": {"type": "array", "items": {"type": "string", "enum": ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "autorun on", "recover", "archive", "close"]}},
+                "actions": {"type": "array", "items": {"type": "string", "enum": ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "autorun on", "recover", "archive", "close"]}},
             },
         },
         "commit": {"type": "object", "properties": {"coauthor": {"type": "string"}}},

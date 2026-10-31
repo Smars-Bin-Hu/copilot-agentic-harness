@@ -87,7 +87,7 @@ With no target repository set up, the agent cannot change your code.
 
 ## Independent checks: `[review]=n`
 
-Nothing is checked by default. When you write `[review]=n` in a prompt of the task, the work has to **pass n independent checks in a row** before it can be written back. Once is enough, and later prompts need not repeat it; `[review]=0` switches it off.
+Nothing is checked by default. When you write `[review]=n` in a prompt of the task, the work has to **pass n independent checks in a row** before it can be written back. Once is enough, and later prompts need not repeat it; `[review]=0` switches it off. On a served board, the task page sets the same number with one click (Task settings); that is the way to use it, and the mark in a prompt keeps working.
 
 - **Who checks**: the subagent reviewer. It has not seen the author's reasoning and looks only at the requirement (`REQ.md`, `PLAN.md`), the work and the diff. It has no edit tools. It is a new reviewer every time.
 - **How it checks**: when the work is written, the agent runs `task review start` (a snapshot is saved and the review package written), then calls the reviewer. Without checks on, the call is refused.

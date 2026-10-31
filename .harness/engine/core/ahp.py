@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import collections
+import datetime
 import json
 import os
 import select
@@ -419,6 +420,11 @@ class Connection:
     def unsubscribe(self, channel: str) -> None:
         self.call("unsubscribe", {"channel": channel})
 
+    def dispatch(self, channel: str, action: Dict[str, Any]) -> None:
+        """A client action on a chat or session channel: a notification, no answer (the host pushes the state it made of it). Used for a message, a steer and a stop."""
+        self.counter += 1
+        self.send({"jsonrpc": "2.0", "method": "dispatchAction", "params": {"channel": channel, "clientSeq": self.counter, "action": action}})
+
     def sessions(self) -> List[Dict[str, Any]]:
         return list((self.call("listSessions", {}) or {}).get("items") or [])
 
@@ -500,6 +506,27 @@ def sdk_ids(state: Dict[str, Any]) -> Set[str]:
         if isinstance(value, str) and value:
             found.add(value)
     return found
+
+
+def utc_stamp() -> str:
+    return datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def models_of(root_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The models a person may pick, from the root state of the host (`agents[].models` of Copilot, checked on a real VS Code): only those the policy enables (`policyState == "enabled"`;
+    a model with no policyState is not offered: nothing says it is allowed). `thinking`: the levels of `configSchema.properties.thinkingLevel`, or None when the model has none."""
+    out: List[Dict[str, Any]] = []
+    for agent in root_state.get("agents") or []:
+        if not isinstance(agent, dict) or agent.get("provider") != LOCAL_PROVIDER:
+            continue
+        for model in agent.get("models") or []:
+            if not isinstance(model, dict) or model.get("policyState") != "enabled" or not model.get("id"):
+                continue
+            level = ((model.get("configSchema") or {}).get("properties") or {}).get("thinkingLevel") or {}
+            levels = [str(item) for item in level.get("enum") or [] if isinstance(item, str)]
+            out.append({"id": str(model["id"]), "name": str(model.get("name") or model["id"]), "price": str((model.get("_meta") or {}).get("priceCategory") or ""),
+                        "thinking": {"levels": levels, "default": level.get("default")} if levels else None})
+    return out
 
 
 def trimmed(state: Dict[str, Any], keep: int = 2) -> Dict[str, Any]:

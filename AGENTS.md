@@ -49,7 +49,7 @@ To find a file, read [.harness/INDEX.md](.harness/INDEX.md) (the path index). Do
   and the task's `DEV/` can be written only after the user approves the plan (`PLAN.md`) in the terminal.
   How a task folder is used (`TASK.md`, `REQ.md`, `DEV/`, what not to write): [workspace.instructions.md](.github/instructions/workspace.instructions.md).
   Only the user may change the confirmation line of `REQ.md`, under autorun too. Do not fill it in when it is empty: the review package tells the reviewer to treat the requirement as "to be confirmed", and that is not a problem.
-- Only the user can switch independent checks on: the user writes `[review]=n` in a prompt. You cannot switch them on, approve for the user, or waive them.
+- Only the user can switch independent checks on: the user writes `[review]=n` in a prompt or on the task page. You cannot switch them on, approve for the user, or waive them.
   There are two subagents only: the reviewer, used only in a task with checks on; and the mapper (read only), which needs no task and is used only after the user types `/generic-mapreduce`, up to a limit. You cannot switch it on yourself.
 - Only the user can switch autorun on, in the terminal (autorun: working down `TODO.md` without stopping). While it is on: do not ask the user, do not promote, write decisions into `LOG.md`; when you cannot go on, run `harness task autorun off --reason "<why>"`, then stop.
 - A hook may stop an action only when the action clearly breaks a policy; a write tool whose target cannot be read counts. A hook that fails itself must not hurt normal work.

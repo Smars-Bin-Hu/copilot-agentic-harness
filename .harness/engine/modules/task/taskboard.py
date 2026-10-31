@@ -98,17 +98,23 @@ def write_task_page(root: Path, task: str, info: Dict[str, Any], refresh: int = 
 
 
 ACTIONS_BY_WAIT = {"req": ("confirm-req",), "plan": ("approve-plan",), "promote": ("approve-promote",), "recover": ("recover",), "review": ("review extend", "review waive")}
+SEND_WAITS = ("go-req", "go-plan", "go-promote", "go-recover", "go-review")  # an approval was given and the agent has not been told: the board sends the message (1.6, B72)
 
 
 def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str, str]]:
     """What the person can do about a task from the board (a closed one: archive it): the action and the command to run in a terminal.
     What it waits for comes first; then pause, or resume when it is paused. `served`: the actions the board server
-    runs from the page; `autorun on` is offered only when it is one of them."""
+    runs from the page; `autorun on` is offered only when it is one of them; `send` and `answer` only when the page is served (they talk to the chat)."""
     if row.get("status") == "closed":
         return [{"action": "archive", "command": f"{cli_command()} task archive {row['name']} --apply"}] if "archive" in served else []
     if row.get("status") != "open":
         return []
     found = list(ACTIONS_BY_WAIT.get(row.get("waiting_why") or "", ()))
+    if "send" in served and not row.get("paused_since"):  # buttons that talk to the chat exist only on a served page; they have no command to copy
+        if row.get("waiting_why") in SEND_WAITS:
+            found.append("send")
+        elif row.get("waiting_why") == "stopped":
+            found.append("answer")
     if row.get("waiting_why") and row.get("dismiss"):
         found.append("review dismiss")  # the agent stopped after a check that did not pass: the person may say it judged wrong
     if "autorun on" in served and not row.get("autorun") and not row.get("paused_since"):
@@ -116,7 +122,7 @@ def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str,
     found.append("resume" if row.get("paused_since") else "pause")
     if "close" in served:
         found.append("close")
-    return [{"action": action, "command": f"{cli_command()} task {action} --task {row['name']}"} for action in found]
+    return [{"action": action, "command": "" if action in ("send", "answer") else f"{cli_command()} task {action} --task {row['name']}"} for action in found]
 
 
 CLOSED_SHOWN = 50  # how many closed tasks the board lists (the newest); `board.closed_shown` in task.json

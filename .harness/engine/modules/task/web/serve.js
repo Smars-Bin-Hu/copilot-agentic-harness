@@ -32,7 +32,7 @@ const SERVE = (function () {
           return data;
         }
         if (data.unpaired) unpairedNote();  // the server says it: a button that does nothing would be worse
-        return Promise.reject(new Error(data.error || response.status));
+        return Promise.reject(Object.assign(new Error(data.error || response.status), {data}));  // `data.fallback`: the text to copy when a send was refused
       }),
         () => Promise.reject(Object.assign(new Error(t("board.serve.stopped")), {offline: true})));  // offline: no answer at all (not a refusal); pollEvery counts these
   }
@@ -123,6 +123,9 @@ const SERVE = (function () {
   }
 
   function act(button, row, item, withReq) {
+    if (item.action === "send" || item.action === "answer") return CHAT.panel(row, item.action);  // chat.js: the panel that shows the message, then sends it
+    if (item.action === "steer") return CHAT.steer(row);
+    if (item.action === "stop") return CHAT.stop(row);
     if (item.action === "close") return close(row);
     if (item.action === "archive") return archive([row.name], serve.archive_to);
     // A plan stands on a confirmed requirement: the plan alone is refused, and one code can confirm the requirement and approve the plan.
@@ -215,5 +218,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner());
   }
 
-  return {runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, vsButton, ready, busy: () => busy, onChange: (call) => { after = call; }};
+  return {runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, onChange: (call) => { after = call; }};
 })();

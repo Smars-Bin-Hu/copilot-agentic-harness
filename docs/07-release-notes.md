@@ -10,6 +10,25 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.2 (2026-10-31)
+
+### Added
+
+- **Send to agent.** After you approve the requirement, the plan or the write-back (or the checks or a recover), the orange button on the board and on the task page opens a panel with the whole message: fixed English text with the code you just typed. You choose the reply language (English by default; `[ZH]` is added only when you pick Chinese), may add a note, and send it to the task's chat in VS Code. A stopped agent gets **answer...**, where you write the text. Saved drafts (`.task/drafts.json`) are added at the end after `Notes from the person:`; the panel can save a note as a draft.
+- **Steer and stop.** While the agent works, the row and the task page have **steer** (one more line, read at its next step in the same turn) and **stop** (cancels the turn; what is written stays).
+- The board sends only when the chat is linked for sure and idle (steer and stop: working), and it works the binding out again right before it sends. Otherwise it says why and lets you copy the text. A send, steer and stop is a paired POST; each one is in the task's history, and the whole text is in `.task/sent.jsonl`.
+- **Task settings** on the task page: the independent checks (0 to the cap, one click; `task review set --n N`, a person only, like `review extend` and `review waive`), and the model and thinking level of the messages the board sends (from the model list of VS Code, only the models its policy enables). The model goes on every message the board sends. VS Code keeps it for the chat, so what you type there afterwards uses it too until you change it; the page says so, and the chat bar shows the model of the last turn.
+
+### Changed
+
+- The rules every prompt gets carry the number of checks, and tell the agent when you switched them off. They no longer print the `[review]=n` mark. The mark still works in a prompt; the task page is the way to set the number now.
+- `AGENTS.md`, `gate.json` and `task.json` (guardrail files): the user sets checks "in a prompt or on the task page"; `review set` is refused to an agent like `review extend`; `review set` is a button the board may run.
+- A binding of a chat to a task keeps the model you chose (`chat.model`).
+
+### Retired
+
+- Nothing.
+
 ## 1.6.1 (2026-10-31)
 
 ### Added

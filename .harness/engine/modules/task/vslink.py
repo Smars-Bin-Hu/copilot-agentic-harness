@@ -6,13 +6,17 @@
 - Which chat belongs to which task: `chatlink`. What a task's line shows: `tasksub`.
 - The token of the host is in the connection object only.
 - `HARNESS_VSCODE_CLI=off`, or `board.vscode = false` in `task.override.json`, switches the whole link off.
+- B72: a person's send, steer or stop is a job for the thread (`dispatch`): only that thread talks to the host. Before it acts, the thread looks again: a fresh list of chats, the binding
+  worked out again, the state of the chat now. It refuses (`Refused`) rather than guess. The model chosen on the task page goes on every message (`message.model`; it sticks in the chat).
 """
 
 from __future__ import annotations
 
+import datetime
 import queue
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
@@ -26,10 +30,20 @@ RELIST_EVERY = 180.0  # a whole new list of chats, in case a notification was mi
 SCAN_PER_TURN = 3  # chats read in one turn to find their Copilot session id
 SCAN_MAX = 300  # chats read at most, newest first
 NO_CLI_WAIT = 300.0  # no `code` command: look again only now and then
+JOB_WAIT = 25.0  # seconds a page request waits for the thread to send, steer or stop
 
 
 def enabled_by_policy(root: Path) -> bool:
     return (config.policy_or_empty(root, "task").get("board") or {}).get("vscode", True) is not False
+
+
+def elapsed_ms(started: Any) -> int:
+    """Milliseconds since a turn began (`startedAt`, an ISO time); the host wants a number, and a turn whose start is not readable gets 1000."""
+    try:
+        begun = datetime.datetime.fromisoformat(str(started).replace("Z", "+00:00"))
+        return max(1, int((datetime.datetime.now(datetime.timezone.utc) - begun).total_seconds() * 1000))
+    except (ValueError, TypeError):
+        return 1000
 
 
 def choose(found: List[ahp.Endpoint], root: Path, connect: Callable[[ahp.Endpoint], ahp.Connection] = ahp.connect) -> ahp.Connection:
@@ -57,6 +71,28 @@ def choose(found: List[ahp.Endpoint], root: Path, connect: Callable[[ahp.Endpoin
     raise ahp.NotReady("many")
 
 
+class Refused(Exception):
+    """A send, steer or stop that was not done, and why (`why` is a key of `send.refused.*`): off, not-ready, unbound, unsure, changed, not-idle, not-busy, no-turn, timeout."""
+
+    def __init__(self, why: str) -> None:
+        super().__init__(why)
+        self.why = why
+
+
+class Job:
+    """One thing for the thread to do to a chat. The page request waits on `done`."""
+
+    def __init__(self, kind: str, task: str, text: str = "", model: Optional[Dict[str, Any]] = None) -> None:
+        self.kind, self.task, self.text, self.model = kind, task, text, model
+        self.done = threading.Event()
+        self.cancelled = False
+        self.result: Dict[str, Any] = {}
+        self.error: Optional[BaseException] = None
+
+
+NEEDS = {"send": "idle", "steer": "busy", "stop": "busy"}
+
+
 class VsLink:
     def __init__(self, root: Path, enabled: bool = True, opener: Optional[Callable[[], ahp.Connection]] = None, persist: bool = True,
                  turn: float = 1.0, backoff: Optional[ahp.Backoff] = None) -> None:
@@ -69,7 +105,7 @@ class VsLink:
         self.lock = threading.Lock()
         self.stop_flag = threading.Event()
         self.wake = threading.Event()
-        self.jobs: "queue.Queue[str]" = queue.Queue()
+        self.jobs: "queue.Queue[Any]" = queue.Queue()  # "open", or a Job
         self.thread: Optional[threading.Thread] = None
         self.ready = False
         self.why = "off" if not enabled else "starting"
@@ -79,6 +115,7 @@ class VsLink:
         self.bound: Dict[str, Dict[str, Any]] = {}  # task -> binding
         self.unbound: Dict[str, str] = {}  # task -> why
         self.chats: Dict[str, Dict[str, Any]] = {}  # chat resource -> {state, tool_at}
+        self.models: List[Dict[str, Any]] = []  # what a person may pick (`ahp.models_of`); empty until the host said
         self.listed_at = 0.0
         self.dirty = True
 
@@ -131,6 +168,40 @@ class VsLink:
             if sub:
                 row["sub"] = sub
 
+    def model_list(self) -> List[Dict[str, Any]]:
+        with self.lock:
+            return [dict(item) for item in self.models] if self.ready else []
+
+    def check(self, task: str, kind: str) -> str:
+        """From the cache, so a page can say at once: why `kind` (send, steer, stop) cannot be done to the chat of this task now. Empty: it can. The thread looks again before it acts."""
+        with self.lock:
+            if not self.enabled:
+                return "off"
+            if not self.ready:
+                return "not-ready"
+            binding = self.bound.get(task)
+            if not binding:
+                return "unsure" if self.unbound.get(task) == "ambiguous" else "unbound"
+            state = ahp.status_name((self.sessions.get(binding["session"]) or {}).get("status"))
+            if state != NEEDS[kind]:
+                return "not-" + NEEDS[kind]
+            return ""
+
+    def dispatch(self, kind: str, task: str, text: str = "", model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Send a message, steer, or stop the turn of the chat of `task`; the answer of the thread: {chat, turn}. Raises Refused. Returns when the host has been told, not when the agent has answered."""
+        why = self.check(task, kind)
+        if why:
+            raise Refused(why)
+        job = Job(kind, task, text, model)
+        self.jobs.put(job)
+        self.wake.set()
+        if not job.done.wait(JOB_WAIT):
+            job.cancelled = True  # a late thread must not send what the person was told failed
+            raise Refused("timeout")
+        if job.error is not None:
+            raise job.error
+        return job.result
+
     def open_window(self) -> str:
         """Ask the thread to bring the VS Code window of this folder to the front (`code <folder>`, never `-r`). Returns at once: `queued`, or why it cannot (`off`, `no-cli`)."""
         with self.lock:
@@ -161,7 +232,7 @@ class VsLink:
 
     def _run(self) -> None:
         while not self.stop_flag.is_set():
-            self._jobs()
+            self._jobs()  # no connection: a send that is waiting is refused
             try:
                 link = self._opener()
             except ahp.NotReady as error:
@@ -186,22 +257,42 @@ class VsLink:
                     self.bound.clear()
                     self.unbound.clear()
                     self.sdk.clear()
+                    self.models = []
                     self.scanned.clear()
                     self.listed_at = 0.0
             self._wait(self.backoff.next())
 
-    def _jobs(self) -> None:
+    def _jobs(self, link: Optional[ahp.Connection] = None) -> None:
         while True:
             try:
-                self.jobs.get_nowait()
+                job = self.jobs.get_nowait()
             except queue.Empty:
                 return
+            if isinstance(job, Job):
+                if link is None or job.cancelled:
+                    job.error = Refused("not-ready")
+                    job.done.set()
+                else:
+                    self._do(link, job)
+                continue
             code = ahp.find_code()
             if code:
                 try:
                     ahp.run_code(code, [str(self.root)])  # the folder, no `-r`: a window that has it is brought forward
                 except ahp.AhpError:
                     pass
+
+    def _models(self, link: ahp.Connection) -> None:
+        """The models of the host, read from its root state once and then with every new list. One read, then we let go of the channel."""
+        try:
+            found = ahp.models_of(link.subscribe("ahp-root:/"))
+            link.unsubscribe("ahp-root:/")
+        except ahp.ConnectionClosed:
+            raise
+        except ahp.AhpError:
+            return
+        with self.lock:
+            self.models = found
 
     def _list(self, link: ahp.Connection) -> None:
         mine = {item["resource"]: item for item in link.sessions() if ahp.is_ours(item) and ahp.session_in(item, str(self.root)) and item.get("resource")}
@@ -212,6 +303,7 @@ class VsLink:
 
     def _serve(self, link: ahp.Connection) -> None:
         self._list(link)
+        self._models(link)
         self._set(True, "ok")
         last = 0.0
         while not self.stop_flag.is_set():
@@ -219,10 +311,11 @@ class VsLink:
             while note is not None:
                 self._notice(note)
                 note = link.next_notice(0.0)
-            self._jobs()
+            self._jobs(link)
             now = time.monotonic()
             if now - self.listed_at >= RELIST_EVERY:
                 self._list(link)
+                self._models(link)
             if self.dirty or now - last >= TASKS_EVERY:
                 last = now
                 self.dirty = False
@@ -251,6 +344,71 @@ class VsLink:
                     ahp.reduce_chat(cached["state"], action)
                     if action.get("type") in ("chat/toolCallStart", "chat/toolCallReady"):
                         cached["tool_at"] = utc_now()
+
+    def _recheck(self, link: ahp.Connection, task: str, kind: str) -> Dict[str, Any]:
+        """The binding of `task` worked out again from a fresh list of chats (and the ids read from the chats we hold), the same as the page was shown, and the state of the chat now."""
+        self._list(link)
+        entries = self._entries()
+        with self.lock:
+            sessions = dict(self.sessions)
+            sdk = {resource: set(ids) for resource, ids in self.sdk.items()}
+            for resource, item in sessions.items():
+                held = self.chats.get(str(item.get("defaultChat") or ""))
+                if held is not None:
+                    sdk.setdefault(resource, set()).update(ahp.sdk_ids(held["state"]))
+            shown = self.bound.get(task)
+        binding, why = chatlink.decide(entries, sessions, sdk).get(task, (None, "no-session"))
+        if not binding:
+            raise Refused("unsure" if why == "ambiguous" else "unbound")
+        if not chatlink.same(shown, binding):
+            raise Refused("changed")  # the page showed another chat (or none): it is looked at again before anything is sent
+        state = ahp.status_name(sessions[binding["session"]].get("status"))
+        if state != NEEDS[kind]:
+            raise Refused("not-" + NEEDS[kind])
+        return binding
+
+    def _do(self, link: ahp.Connection, job: Job) -> None:
+        try:
+            if job.cancelled:
+                raise Refused("timeout")
+            binding = self._recheck(link, job.task, job.kind)
+            chat, resource = binding["chat"], binding["session"]
+            with self.lock:
+                held = self.chats.get(chat)
+            if held is None:
+                held = {"state": ahp.trimmed(link.subscribe(chat)), "tool_at": ""}
+                with self.lock:
+                    self.chats[chat] = held
+            if job.kind == "stop":
+                active = held["state"].get("activeTurn") if isinstance(held["state"].get("activeTurn"), dict) else None
+                if not active or not active.get("id"):
+                    raise Refused("no-turn")
+                action: Dict[str, Any] = {"type": "chat/turnCancelled", "turnId": active["id"], "duration": elapsed_ms(active.get("startedAt"))}  # without `duration` the host does nothing
+            else:
+                message: Dict[str, Any] = {"text": job.text, "origin": {"kind": "user"}}
+                if job.model:
+                    message["model"] = job.model  # on every message: the host keeps the last one, whoever sent it
+                if job.kind == "send":
+                    action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
+                else:
+                    action = {"type": "chat/pendingMessageSet", "kind": "steering", "id": str(uuid.uuid4()), "message": message}
+            link.dispatch(chat, action)
+            with self.lock:
+                known = self.sessions.get(resource)
+                if job.kind == "send":
+                    if known is not None:
+                        known["status"] = ahp.IN_PROGRESS | (int(known.get("status") or 0) & (ahp.IS_READ | ahp.ARCHIVED))  # not idle at once: a second send finds it busy
+                    ahp.reduce_chat(held["state"], action)
+                title = str((known or {}).get("title") or binding.get("title") or "")
+                self.dirty = True
+            job.result = {"chat": chat, "title": title, "turn": str(action.get("turnId") or "")}
+        except ahp.ConnectionClosed as error:
+            job.error = error
+            raise
+        except (Refused, ahp.AhpError, OSError) as error:
+            job.error = error
+        finally:
+            job.done.set()
 
     def _entries(self) -> List[Dict[str, Any]]:
         out = []

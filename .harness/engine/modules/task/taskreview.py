@@ -1,12 +1,13 @@
 """Independent checks of a task: `[review]=n` (M11-5).
 
-The user writes `[review]=n` in a prompt of the task. The result must then pass n checks in a row, each by a new
-reviewer, all of them on the result as it is at the end: a result that changed starts the count again.
+The user sets n on the task page (`task review set`, a person only; 1.6), or writes `[review]=n` in a prompt of the task (still read, no longer shown).
+The result must then pass n checks in a row, each by a new reviewer, all of them on the result as it is at the end: a result that changed starts the count again.
 
   task review start    the CLI snapshots the result, writes REVIEW/round-NNN/package.md and opens the round;
                        only then does the gate let the reviewer be called
   (hook)               the reviewer's answer is stored as REVIEW/round-NNN/verdict.md and the round is closed
   task review status   n, how many passes count now, how many checks were used
+  task review set      the person sets n (0 to max_n), as the chips of the task page do (terminal or paired board only)
   task review extend   the person allows more checks after the limit (terminal only)
   task review waive    the person lets the promote go ahead without the passes (terminal only)
   task review dismiss  the person says a check judged wrong: it is given back (terminal only, or the board)
@@ -430,8 +431,28 @@ def next_text(root: Path, task: str, data: Dict[str, Any]) -> str:
     return say("review.next.more", left=left, n=info["n"])
 
 
-def person(command: str, interactive: Optional[bool]) -> None:
-    task_ops.person(command, interactive)
+def person(command: str, interactive: Optional[bool], typed: bool = True) -> None:
+    task_ops.person(command, interactive, typed)
+
+
+def set_by_person(root: Path, raw_task: str, number: int, interactive: Optional[bool] = None) -> Dict[str, Any]:
+    """The person sets the n of the task (the chips of the task page). No code is typed: it changes nothing that cannot be changed back. The limit, the cap (`review.max_n`),
+    the count and the reset when files change are those of `[review]=n`: n moves the limit (n + extra checks + what the person allowed), nothing else.
+    The agent is told by the rules of its next prompt (`review.inject`, or `review.inject.off` once the person has set 0 after checks were on)."""
+    person("task review set", interactive, typed=False)
+    top = settings(root)["max_n"]
+    if not isinstance(number, int) or isinstance(number, bool) or number < 0 or number > top:
+        raise CommandError(say("review.set.range", max=top))
+    task = task_ops.resolve(root, raw_task)
+    with task_ops.locked(root, task) as data:
+        task_ops.require_open(data)
+        review = state_of(data)
+        before = review["n"]
+        if before != number:
+            review["n"] = number
+            review["set"] = {"n": number, "at": utc_now()}
+            task_ops.note(data, "review-set", f"{before} -> {number}")
+        return {"task": task, "n": number, "was": before, "changed": before != number, "checks_limit": limit(root, data), "next": say("review.set.next", n=number)}
 
 
 def extend(root: Path, raw_task: str, checks: int, reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None) -> Dict[str, Any]:

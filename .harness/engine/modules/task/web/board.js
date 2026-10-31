@@ -136,9 +136,10 @@
     const items = row.actions || [];
     if (!items.length) return h("td", {class: "acts"}, "-");
     const direct = items.filter((item) => item.action === "archive" || isHot(row, item));
-    const rest = items.filter((item) => !direct.includes(item));
+    const talk = items.filter((item) => TALK.includes(item.action));
+    const rest = items.filter((item) => !direct.includes(item) && !talk.includes(item));
     const nodes = direct.map((item) => actionButton(row, item));
-    nodes.push(h("span", {class: "act-talk"}));
+    nodes.push(h("span", {class: "act-talk"}, talk.map((item) => actionButton(row, item))));
     if (rest.length) {
       const more = h("button", {type: "button", class: "act act-more", title: t("board.menu.more"), "aria-haspopup": "menu", "aria-label": t("board.menu.more")}, "\u22ef");
       more.addEventListener("click", () => {

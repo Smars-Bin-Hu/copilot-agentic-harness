@@ -259,6 +259,38 @@
     return bars;
   }
 
+  // "Task settings" (1.6, B72): the independent checks (0 to the cap), the model and the thinking level of the messages the board sends. Only the person changes them, from a served page;
+  // a change is written in the history and holds from the next message. The model goes on every message the board sends and stays in the chat, also for what is typed in VS Code, until it is changed.
+  function settingsRow() {
+    const info = desk.settings;
+    if (!served() || desk.past || !info || desk.status !== "open") return null;
+    const can = SERVE.runs("review set");
+    const chips = [];
+    for (let n = 0; n <= info.max_n; n++) {
+      const chip = h("button", {type: "button", class: "chip" + (n === info.n ? " on" : ""), "aria-pressed": n === info.n ? "true" : "false", disabled: can ? null : "disabled", title: t("desk.set.checks.tip", {n})}, String(n));
+      chip.addEventListener("click", () => {
+        if (n === info.n) return;
+        chips.forEach((item) => { item.disabled = true; });
+        SERVE.post("/api/act", {action: "review set", task: desk.name, n, step: "act"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
+      });
+      chips.push(chip);
+    }
+    const models = info.models || [];
+    const pick = h("select", {"aria-label": t("desk.set.model"), disabled: info.ready && models.length ? null : "disabled", title: info.ready ? "" : t("desk.set.model.off")},
+      h("option", {value: ""}, t("desk.set.model.chat")), models.map((item) => h("option", {value: item.id, selected: item.id === info.model ? "" : null}, item.name)));
+    const chosen = models.find((item) => item.id === info.model);
+    const levels = chosen && chosen.thinking ? chosen.thinking.levels : [];
+    const think = h("select", {"aria-label": t("desk.set.thinking"), disabled: levels.length ? null : "disabled"},
+      h("option", {value: ""}, t("desk.set.thinking.default")), levels.map((level) => h("option", {value: level, selected: level === info.thinking ? "" : null}, level)));
+    const save = (id, level) => SERVE.post("/api/setting", {task: desk.name, id, thinking: level}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
+    pick.addEventListener("change", () => save(pick.value, ""));  // a new model starts at its own default level
+    think.addEventListener("change", () => save(pick.value, think.value));
+    return h("section", {class: "card chatbar settings"}, h("span", {class: "chat-k"}, t("desk.set.label")),
+      h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.model")), pick), h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.thinking")), think),
+      h("span", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.checks")), h("span", {class: "chips"}, chips)),
+      h("p", {class: "sub set-note"}, t("desk.set.note", {n: Math.max(1, info.n || 3)})));
+  }
+
   // What the card says when no button is the point: put aside, waiting for a word in VS Code, nobody on it, or really nothing.
   function quiet() {
     if (desk.paused_since) return {title: t("desk.actions.paused"), hint: t("desk.actions.paused.hint")};
@@ -1116,7 +1148,7 @@
   function draw(keepScroll) {
     const y = window.scrollY;
     const kept = new Map([...app.querySelectorAll("[data-keep]")].map((node) => [node.dataset.keep, [node.scrollTop, node.scrollLeft]]));
-    app.replaceChildren(...[...header(), ...(chatBars() || []), ribbon(), desk.past ? pastNote() : saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
+    app.replaceChildren(...[...header(), ...(chatBars() || []), settingsRow(), ribbon(), desk.past ? pastNote() : saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
       h("footer", null, t(saved ? "desk.snapshot.footer" : "desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright())].filter(Boolean));  // a null would be drawn as the word "null"
     if (keepScroll) {
       for (const node of app.querySelectorAll("[data-keep]")) if (kept.has(node.dataset.keep)) [node.scrollTop, node.scrollLeft] = kept.get(node.dataset.keep);

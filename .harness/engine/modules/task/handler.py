@@ -2,7 +2,7 @@
 
   SessionStart, UserPromptSubmit   the session id; a session that holds a task: where the task stands, its checks;
                                    a session that holds none: which tasks are open and when to open one.
-                                   `[review]=n` in the user's prompt sets the n of the task. Admin mode: the admin rules
+                                   `[review]=n` in the user's prompt, or the task page, sets the n of the task. Admin mode: the admin rules
   PreToolUse(subagent)             a session that holds a task: only the reviewer, and only with a check open
                                    (`task review start`). A session that holds none, or is in admin mode: no subagent.
                                    The one other subagent is the read-only `mapper`, and only after the user typed
@@ -100,6 +100,8 @@ def task_text(ctx: Context, data: Dict[str, Any]) -> str:
     if taskreview.state_of(data)["n"]:  # the count needs the digest of every result file: only when checks are on
         info = taskreview.summary(ctx.root, name, data)
         lines.append(say("review.inject", n=info["n"], passes=info["passes"], used=info["checks_used"], limit=info["checks_limit"], agent=taskreview.AGENT))
+    elif taskreview.state_of(data).get("set"):  # the person set it to 0 on the task page: an agent that was told n before is told it is off
+        lines.append(say("review.inject.off"))
     lines.append(say("task.inject.scope", task=name))
     page = task_ops.page_url(ctx.root, name)
     if page:  # the person follows the task on its page: links to task files can point there

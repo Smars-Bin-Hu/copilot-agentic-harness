@@ -128,6 +128,7 @@ function pollEvery(seconds, tick) {
 
 // What the task waits for, not what the person may do any time (nor a check they may say judged wrong): such an action is "hot".
 const CONTROLS = ["pause", "resume", "close", "autorun on"];
+const TALK = ["steer", "stop"];  // said to the agent while it works: the one thing a page may do then
 const isHot = (row, item) => Boolean(row.waiting) && !CONTROLS.includes(item.action) && item.action !== "review dismiss";
 
 // The button of one action ({action, command}) of a task row: it acts when the board server runs that action, else it copies the command.
@@ -137,7 +138,7 @@ function actionButton(row, item, extra) {
   const hot = isHot(row, item);
   // While the agent is in the middle of a turn nothing is pressed on the page: a question about the result is a doubt, and the person decides when the answer is in
   // (stop the agent in VS Code first, or wait for it to stop)
-  const locked = typeof SERVE !== "undefined" && row.state === "working" && item.action !== "archive";
+  const locked = typeof SERVE !== "undefined" && row.state === "working" && item.action !== "archive" && !TALK.includes(item.action);
   const button = h("button", {class: "act" + (hot ? " hot" : "") + (live ? " live" : "") + (locked ? " locked" : "") + (extra ? " " + extra : ""), type: "button", title: locked ? t("board.action.busy") : live ? "" : item.command, "data-label": label}, label);
   if (locked) button.disabled = true;
   button.addEventListener("click", () => (locked ? null : live ? SERVE.act(button, row, item) : copyCommand(button, item.command)));

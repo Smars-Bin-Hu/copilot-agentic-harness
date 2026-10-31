@@ -15,6 +15,9 @@ Who may do what:
   show and the code to type; `act` runs it with the code the person typed. A plan that changed between the two has
   another code, and the approval is refused, as in the terminal.
 - `.harness/runtime/board-serve.json` holds the port while it runs: the gate refuses an agent's request to it.
+- Talking to the chat (1.6, B72): `/api/send`, `/api/steer`, `/api/stop` (paired POST only) act through the link's thread, after it looked at the binding and the chat again. The code the person
+  typed at an approval is kept here in memory (`Board.codes`) for the message that tells the agent; it goes to no file and to no page but that message's preview.
+  `/api/draft` appends a note to `.task/drafts.json`; `/api/setting` sets the task's model and thinking level (`chat.model`); `review set` runs through `/api/act`.
 - VS Code (1.6): one background thread (`vslink`) keeps a connection to the chats of VS Code and a cache; a request only reads the cache. Without VS Code the
   board is what it was: `vscode.ready` is false, no error, no wait. `/api/open` (paired browser) asks the thread to bring the window of this folder forward.
 """
@@ -38,17 +41,19 @@ from urllib.parse import quote, unquote, urlparse
 from core import config, messages, registry, tasks
 from core.paths import board_serve_file, utc_now
 
-from . import autorun, common, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
+from . import autorun, chatsend, common, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
 COOKIE = "harness_board"
 MAX_BODY = 4096
+MAX_SEND_BODY = 64 * 1024  # `/api/send` and `/api/steer`: the person's own words
 MAX_INBOX_BODY = 40 * 1024 * 1024  # `/api/inbox` carries pictures (base64); the other calls stay small
 MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
+BUILTIN = ("send", "answer", "steer", "stop")  # the buttons that talk to the chat (1.6): always offered by a served board, not a setting; each is a POST of a paired browser
 REFRESH = 10  # seconds between two boards in the browser
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
 # or send anything elsewhere, even if it ever got past the drawing (which uses textContent only).
@@ -63,7 +68,19 @@ def say(key: str, /, **values: Any) -> str:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "autorun on", "recover", "archive", "close"]}
+    return {"port": config.whole(found.get("port"), 8765), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "autorun on", "recover", "archive", "close"]}
+
+
+class Fallback(CommandError):
+    """A send that was not done: the reason, and the text the person may copy to VS Code by hand."""
+
+    def __init__(self, reason: str, text: str) -> None:
+        super().__init__(reason)
+        self.text = text
+
+
+def ahp_scrub(error: BaseException) -> str:
+    return say("send.refused.host", error=type(error).__name__)
 
 
 class Preview(Exception):
@@ -85,7 +102,7 @@ def runner(root: Path, action: str, task: str) -> Callable[..., Dict[str, Any]]:
         "review dismiss": lambda **kw: taskreview.dismiss(root, task, **kw),
         "autorun on": lambda **kw: autorun.turn_on(root, task, **kw),
         "recover": lambda **kw: task_ops.recover(root, task, **kw),
-    }
+    }  # `review set` is not here: it asks no code (see `Board.act`)
     return table[action]
 
 
@@ -128,6 +145,7 @@ class Board:
         self.everything = everything
         self.port = port
         self.actions = actions
+        self.codes: Dict[str, Tuple[str, str]] = {}  # task -> (the `go-*` mark its approval left, the code typed); memory only
         self.code = secrets.token_urlsafe(12)
         self.sessions: set = set()
         self.lock = threading.Lock()
@@ -150,6 +168,11 @@ class Board:
                 messages.reset()
         return messages.language()
 
+    @property
+    def served(self) -> List[str]:
+        """What the page may run: the settings' actions and the ones that talk to the chat."""
+        return self.actions + [item for item in BUILTIN if item not in self.actions]
+
     def new_code(self) -> str:
         with self.lock:
             self.code = secrets.token_urlsafe(12)
@@ -171,24 +194,37 @@ class Board:
 
     def rows(self) -> Dict[str, Any]:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
-        result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.actions)
+        result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served)
         self.link.overlay(result["tasks"])
+        for row in result["tasks"]:  # the agent is at work in the chat: say something to it, or stop it
+            if row.get("status") == "open" and (row.get("chat") or {}).get("state") == "busy" and "steer" in self.served:
+                row["actions"] = [item for item in row["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
         return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status()}
 
     def page(self) -> str:
         found = self.rows()
-        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve={"actions": self.actions, "refresh": REFRESH, "archive_to": found["archive_to"], "vscode": found["vscode"]}, hidden=found["hidden"])
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve={"actions": self.served, "refresh": REFRESH, "archive_to": found["archive_to"], "vscode": found["vscode"]}, hidden=found["hidden"])
 
     def desk(self, name: str) -> Dict[str, Any]:
-        found = taskdesk.desk(self.root, name, self.actions)
+        found = taskdesk.desk(self.root, name, self.served)
         chat = self.link.chat_of(found["task"], name)
         recent = chat.pop("recent", "")
         sub = chat.pop("sub", None) or tasksub.from_hooklog(self.root, tasks.read(self.root, found["task"]) or {})  # the chat's own line; else the hook log's
         found["chat"], found["sub"], found["recent"], found["vscode"] = chat, sub, recent, self.link.status()
+        if chat.get("state") == "busy" and found["status"] == "open" and "steer" in self.served:
+            found["actions"] = [item for item in found["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
+        found["settings"] = self.settings_of(found["task"])
         return found
 
+    def settings_of(self, task: str) -> Dict[str, Any]:
+        """The row `Task settings` of the task page: the checks (0 to the cap), and the model and thinking level of the messages the board sends, from the models the host lists."""
+        data = tasks.read(self.root, task) or {}
+        model = chatsend.model_of(data) or {}
+        return {"n": taskreview.state_of(data)["n"], "max_n": taskreview.settings(self.root)["max_n"], "model": model.get("id", ""), "thinking": (model.get("config") or {}).get("thinkingLevel", ""),
+                "models": self.link.model_list(), "ready": bool(self.link.status()["ready"])}
+
     def desk_page(self, name: str) -> str:
-        return taskhtml.desk_page(self.desk(name), {"actions": self.actions, "refresh": REFRESH})
+        return taskhtml.desk_page(self.desk(name), {"actions": self.served, "refresh": REFRESH})
 
     def snapshot(self, name: str) -> Tuple[str, str]:
         """The task page as one file to keep or send (file name, page): as of now, no buttons, nothing that talks to a server.
@@ -267,7 +303,7 @@ class Board:
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
-    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False) -> Dict[str, Any]:
+    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None) -> Dict[str, Any]:
         """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once."""
         if action in ALL_AT_ONCE:
             if "pause" not in self.actions:
@@ -279,6 +315,10 @@ class Board:
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
         self.idle(action, task)
+        if action == "review set":  # one click, no code: the same function as `task review set`; the cap and the history are its own
+            result = taskreview.set_by_person(self.root, task, n if isinstance(n, int) and not isinstance(n, bool) else -1, interactive=True)
+            noted(self.root, result.get("task") or task, action)
+            return result
         if action in FREE:
             result = (tasklife.pause if action == "pause" else tasklife.resume)(self.root, task, interactive=True)
             noted(self.root, result.get("task") or task, action)
@@ -299,7 +339,133 @@ class Board:
             raise CommandError(say("serve.preview.none"))
         result = call(reader=lambda _asked: code, interactive=True, out=out)
         noted(self.root, result.get("task") or task, action)
+        mark = chatsend.CODE_OF_ACTION.get(action)
+        if mark and code:
+            self.codes[result.get("task") or task_ops.resolve(self.root, task)] = (mark, code)  # for the message that tells the agent; nowhere else
         return result
+
+    # --- talking to the chat (B72) ---------------------------------------------------------------------------------
+
+    def target(self, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+        task = task_ops.resolve(self.root, str(data.get("task", "")))
+        found = tasks.read(self.root, task) or {}
+        task_ops.require_open(found)
+        return task, found
+
+    def refusal(self, why: str) -> str:
+        return say(f"send.refused.{why}")
+
+    def message(self, task: str, found: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, Any]:
+        """The whole message of a send as the page asked for it (`kind` go or answer, `lang`, `note`, `body`). Python makes the text: the page only shows it."""
+        kind = str(data.get("kind", "go"))
+        why = tasklife.waiting(self.root, task, found)["why"] if kind == "go" else ""
+        if kind == "go" and why not in chatsend.GO:
+            raise CommandError(self.refusal("nogo"))
+        mark, code = self.codes.get(task, ("", ""))
+        try:
+            made = chatsend.prepare(self.root, task, kind, why, code if mark == why else "", str(data.get("lang", "en")), str(data.get("body", "")), str(data.get("note", "")))
+        except ValueError as error:
+            raise CommandError(self.refusal("text." + str(error))) from None
+        made["kind"], made["why"] = kind, why
+        return made
+
+    def sent(self, task: str, found: Dict[str, Any], kind: str, text: str, done: Dict[str, Any], extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """After the host was told: one line of history, the whole text in `.task/sent.jsonl`. A message that went must not come back as an error because a note could not be written."""
+        out: Dict[str, Any] = {"sent": True, "chat": done.get("title", ""), "text": text, "recorded": True}
+        try:
+            entry = {"at": utc_now(), "task": task, "kind": kind, "chat": done.get("chat", ""), "title": done.get("title", ""), "turn": done.get("turn", ""), "text": text, **(extra or {})}
+            chatsend.record(self.root, task, entry)
+            with task_ops.locked(self.root, task) as again:
+                task_ops.note(again, kind if kind != "go" else "send", (done.get("title") or "-")[:60] + ": " + chatsend.summary(text))
+        except Exception:  # noqa: BLE001
+            out["recorded"] = False
+        return out
+
+    def preview(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """What a send would say, and whether it can go now (`blocked`: the reason, or empty). Needs the paired browser: the text may hold the code of an approval."""
+        task, found = self.target(data)
+        made = self.message(task, found, data)
+        why = self.link.check(task, "send")
+        return {"text": made["text"], "kind": made["kind"], "lang": made["lang"], "notes": len(made["notes"]), "drafts": len(made["draft_ids"]), "blocked": self.refusal(why) if why else "", "model": chatsend.model_of(found) or {}}
+
+    def send(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        task, found = self.target(data)
+        made = self.message(task, found, data)
+        model = chatsend.model_of(found)
+        try:
+            done = self.link.dispatch("send", task, made["text"], model)
+        except vslink.Refused as error:
+            raise Fallback(self.refusal(error.why), made["text"]) from None
+        except Exception as error:  # noqa: BLE001 - the host said no: the person copies the text
+            raise Fallback(ahp_scrub(error), made["text"]) from None
+        if made["kind"] == "go":
+            self.codes.pop(task, None)
+        chatsend.drop_drafts(self.root, task, made["draft_ids"])
+        return self.sent(task, found, made["kind"], made["text"], done, {"why": made["why"], "lang": made["lang"], "model": model or {}, "drafts": len(made["draft_ids"])})
+
+    def steer(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        task, found = self.target(data)
+        text, problem = chatsend.steer_text(str(data.get("text", "")))
+        if problem:
+            raise CommandError(self.refusal("text." + problem))
+        model = chatsend.model_of(found)
+        try:
+            done = self.link.dispatch("steer", task, text, model)
+        except vslink.Refused as error:
+            raise Fallback(self.refusal(error.why), text) from None
+        except Exception as error:  # noqa: BLE001
+            raise Fallback(ahp_scrub(error), text) from None
+        return self.sent(task, found, "steer", text, done, {"model": model or {}})
+
+    def stop(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        task, found = self.target(data)
+        try:
+            done = self.link.dispatch("stop", task)
+        except vslink.Refused as error:
+            raise CommandError(self.refusal(error.why)) from None
+        except Exception as error:  # noqa: BLE001
+            raise CommandError(ahp_scrub(error)) from None
+        try:
+            with task_ops.locked(self.root, task) as again:
+                task_ops.note(again, "stop", (done.get("title") or "-")[:60])
+        except Exception:  # noqa: BLE001
+            pass
+        return {"stopped": True, "chat": done.get("title", "")}
+
+    def draft(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Save one note for the next send (appends to `.task/drafts.json`). The Drafts box that edits and deletes is B77."""
+        task, _found = self.target(data)
+        try:
+            entry = chatsend.add_draft(self.root, task, str(data.get("text", "")))
+        except ValueError as error:
+            raise CommandError(self.refusal("draft." + str(error))) from None
+        return {"saved": True, "count": len(chatsend.drafts(self.root, task)), "at": entry["at"]}
+
+    def setting(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The model and thinking level of the messages the board sends (`chat.model`). Only a model the host lists, only a level that model has. `id` empty: the chat keeps its own."""
+        task, _found = self.target(data)
+        wanted, level = str(data.get("id", "")).strip(), str(data.get("thinking", "")).strip()
+        model: Optional[Dict[str, Any]] = None
+        if wanted:
+            listed = {item["id"]: item for item in self.link.model_list()}
+            if wanted not in listed:
+                raise CommandError(self.refusal("model"))
+            levels = (listed[wanted]["thinking"] or {}).get("levels") or []
+            if level and level not in levels:
+                raise CommandError(self.refusal("thinking"))
+            model = {"id": wanted, **({"config": {"thinkingLevel": level}} if level else {})}
+        with task_ops.locked(self.root, task) as again:
+            kept = dict(again.get("chat") or {})
+            if model:
+                kept["model"] = model
+            else:
+                kept.pop("model", None)
+            if kept:
+                again["chat"] = kept
+            else:
+                again.pop("chat", None)
+            task_ops.note(again, "chat-model", (wanted + (" " + level if level else "")) if wanted else "-")
+        return {"model": model or {}}
 
 
 def noted(root: Path, task: str, action: str) -> None:
@@ -396,7 +562,7 @@ def handler_for(board: Board) -> type:
             origin = self.headers.get("Origin", "")
             if not self.host_ok() or (origin and origin not in allowed_origins) or self.headers.get(HEADER) != "1":
                 return self.answer(403, {"error": say("serve.refused.request")})
-            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_BODY
+            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_SEND_BODY if urlparse(self.path).path in ("/api/send", "/api/steer") else MAX_BODY
             try:
                 size = int(self.headers.get("Content-Length", "0"))
                 data = json.loads(self.rfile.read(min(size, limit)).decode("utf-8") or "{}") if 0 <= size <= limit else None
@@ -420,6 +586,21 @@ def handler_for(board: Board) -> type:
                 if asked != "queued":
                     return self.answer(409, {"error": say("serve.open.off") if asked == "off" else say("serve.open.no-cli")})
                 return self.answer(200, {"result": {"queued": True}})
+            if path in ("/api/send", "/api/steer", "/api/stop", "/api/draft", "/api/setting"):  # talk to the chat, and its settings: the paired browser, nothing else
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    if path == "/api/send":
+                        result = board.send(data) if str(data.get("step", "act")) == "act" else board.preview(data)
+                    else:
+                        result = getattr(board, path[len("/api/"):])(data)
+                    if path != "/api/send" or str(data.get("step", "act")) == "act":
+                        print(say("serve.did", action=path[len("/api/"):], task=task_ops.name_of(task_ops.resolve(board.root, str(data.get("task", ""))))), flush=True)
+                    return self.answer(200, {"result": result})
+                except Fallback as error:  # not sent: the reason, and the text to copy
+                    return self.answer(409, {"error": str(error), "fallback": error.text})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
             if path == "/api/board":
                 try:
                     return self.answer(200, board.rows())
@@ -485,7 +666,7 @@ def handler_for(board: Board) -> type:
             if action not in FREE and not board.paired(self.token()):
                 return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
             try:
-                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")))
+                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"))
             except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                 return self.answer(409, {"error": str(error)})
             print(say("serve.did", action=action, task=task_ops.name_of(task) if task else "-"), flush=True)

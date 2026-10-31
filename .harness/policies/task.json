@@ -42,6 +42,7 @@
       "review extend",
       "review waive",
       "review dismiss",
+      "review set",
       "autorun on",
       "recover",
       "archive",

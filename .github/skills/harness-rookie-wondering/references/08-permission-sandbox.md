@@ -70,6 +70,10 @@ In admin mode: guardrails can be changed, `.harness/runtime/` stays locked; no t
 
 The harness leaves your working tree, your current branch and your existing commits alone: it reads the local main with `git`, and after the changes it writes the files on a **new branch** and **does not commit**. When something goes wrong, recover with `task recover` or with git commands.
 
+### 8.8 The board can speak to the chat, and only you can press it
+
+The served board can send "go on" to a chat after an approval, steer or stop a working agent, allow a command and answer a question. Each is a request from your paired browser; no command and no agent can make it, and the gate refuses an agent that tries. The board sends only when it is sure which chat is the task's and the chat is in the right state; otherwise it says why and gives you the text to paste. A chat made from the board lets every tool run by default, so the gate is then the only brake. The gate review in the task report shows what it blocked, and you judge each block.
+
 ## Hands on
 
 - Read `terminal` and `git` in `.harness/policies/gate.json`.

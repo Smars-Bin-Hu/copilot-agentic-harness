@@ -483,13 +483,19 @@ class Board:
             pass
         return {"stopped": True, "chat": done.get("title", "")}
 
+    @staticmethod
+    def compact_refusal(why: str) -> str:
+        """Compact has its own words: the send ones tell a person to copy and paste, and there is nothing to paste here."""
+        known = ("off", "not-ready", "unbound", "unsure", "changed", "not-idle", "timeout")
+        return say(f"compact.refused.{why}" if why in known else "compact.refused.other")
+
     def compact(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """The compact button: `/compact` as a message, to an idle chat only, as a send is. The only control mark the board sends; nothing but this call sends it."""
         task, found = self.target(data)
         try:
             done = self.link.dispatch("send", task, chatsend.COMPACT_TEXT)  # no model: the chat keeps the one it has
         except vslink.Refused as error:
-            raise CommandError(say("compact.refused.not-idle") if error.why == "not-idle" else self.refusal(error.why)) from None
+            raise CommandError(self.compact_refusal(error.why)) from None
         except Exception as error:  # noqa: BLE001
             raise CommandError(ahp_scrub(error)) from None
         return self.sent(task, found, "compact", chatsend.COMPACT_TEXT, done)

@@ -89,7 +89,7 @@ With no target repository set up, the agent cannot change your code.
 
 ## Independent checks: `[review]=n`
 
-Nothing is checked by default. When you write `[review]=n` in a prompt of the task, the work has to **pass n independent checks in a row** before it can be written back. Once is enough, and later prompts need not repeat it; `[review]=0` switches it off. On a served board, the task page sets the same number with one click (Task settings); that is the way to use it, and the mark in a prompt keeps working.
+Nothing is checked by default. When you write `[review]=n` in a prompt of the task (or set the number in Task settings on the task page of the served board), the work has to **pass n independent checks in a row** before it can be written back. Once is enough, and later prompts need not repeat it; `[review]=0` switches it off. On a served board, the task page sets the same number with one click (Task settings); that is the way to use it, and the mark in a prompt keeps working.
 
 - **Who checks**: the subagent reviewer. It has not seen the author's reasoning and looks only at the requirement (`REQ.md`, `PLAN.md`), the work and the diff. It has no edit tools. It is a new reviewer every time.
 - **How it checks**: when the work is written, the agent runs `task review start` (a snapshot is saved and the review package written), then calls the reviewer. Without checks on, the call is refused.
@@ -245,6 +245,20 @@ The board opens as a **lobby**: a dark floor where every task that is not closed
 - An open task has a **close** button (after a confirm): it writes the report and lets the session go; the task stays under Closed and can be opened again. For a task that changes no repository (a question, an RCA, a design) the agent asks you whether to close it once the "Done when" of the requirement are met, and closes only after you say yes.
 - A closed task has an **archive** button, and you can tick several and archive them together: the dialog shows what would move and where, and you confirm. It is one way; to bring one back, move its folder into `.workspace/sandbox/tasks/` by hand and the board lists it again.
 
+### The board and VS Code
+
+When VS Code is open on this folder, the served board reads its chats (a pill by the Off work buttons says so; [how it connects](04-reference.md#the-board-and-vs-code)). Without VS Code the board works as before. Only you can use what follows: it is all buttons on the served page, and an agent cannot press them.
+
+- **Linked chats.** An open task whose chat is found has a **VS** button (it brings the window of this folder forward; no link opens one chat, so copy the chat title and pick it there) and a line under its name: the tool the agent runs, or the first line of its last reply. The task page has a chat bar (idle or working, the model of the last turn, the context used as a percent of the window) and a Recent bar. A task with no linked chat says why.
+- **Send after an approval.** When you approve the requirement, the plan or the write-back, the agent is not told. The button **send to agent** shows the whole message (fixed English text with the code you typed; you may choose the reply language and add a note or ticked drafts) and sends it to the chat, only when the chat is idle. A stopped agent gets **answer...**, where you write the text.
+- **While the agent works**: **steer** adds one thing to the running turn; **stop** cancels it. **Compact** (task page, after a confirm) sends `/compact` to an idle chat.
+- **Allow, deny, answer.** When Copilot asks to run a command, or the agent asks a question, the task waits for you with that text and the button **allow · deny** or **answer...**. The board reads the host again first and refuses a call that has gone or changed.
+- **New task.** The button by Off work makes a chat in VS Code that opens a task: name, kind, an optional task to fork from, what to do, model, thinking level, reply language, and tool permissions (allow all, default, assisted). The mode is interactive and no worktree is made. The first message is fixed text with yours last.
+- **Task settings** on the task page: independent checks (0 to the cap), and the model and thinking level the board puts on each message it sends. VS Code keeps the last model for the chat. The **Drafts** box keeps notes that go into the next send.
+- **Health and Gate review.** See "Observability" below: the warning tag, Trace and judging blocked calls.
+- When a send cannot be done for sure (no chat, more than one fits, the chat is not idle, VS Code is not ready) the board says why and gives the message to copy. Every message is in the history of the task, and whole in `.task/sent.jsonl`.
+
+
 ### A task page: stages, then what waits for you
 
 A task page opens with its **stages**, by the kind of task:
@@ -302,7 +316,7 @@ A task has one **state** at a time, the first that holds:
 
 Nothing closes or pauses a task for you.
 
-**What you may do from the board depends on whether the agent is at work.** **While the agent is at work (the state *working*), nothing on the board can be pressed**, the approvals and the confirmation of the requirement included. When the agent has written a plan or a write-back plan and you ask it a question, you most likely doubt the result: the harness takes the approval away until the answer is in and the result stands, or you ask again. A button works only when the agent is **not in the middle of a turn**: no session holds the task, or the agent stopped (the Stop hook leaves a mark) or you cancelled it, or it has been quiet for 5 minutes. While it is at work the buttons are grey, on the list and on the task page alike, with a line saying to wait or to stop the agent in VS Code first; the server looks again before it acts, so a page that is ten seconds old cannot do it either. For a *quiet* task the close dialog says the agent may still be running a long step. In a terminal, `task pause`, `task autorun on`, `task close`, `task approve-plan`, `task confirm-req`, `task approve-promote`, `task recover` and `task review extend|waive|dismiss` are refused the same way unless you add `--force`; the agent closing its own task is not stopped.
+**What you may do from the board depends on whether the agent is at work.** **While the agent is at work (the state *working*), nothing on the board can be pressed**, the approvals and the confirmation of the requirement included (only **steer** and **stop**, which talk to the working agent, are made for that moment). When the agent has written a plan or a write-back plan and you ask it a question, you most likely doubt the result: the harness takes the approval away until the answer is in and the result stands, or you ask again. A button works only when the agent is **not in the middle of a turn**: no session holds the task, or the agent stopped (the Stop hook leaves a mark) or you cancelled it, or it has been quiet for 5 minutes. While it is at work the buttons are grey, on the list and on the task page alike, with a line saying to wait or to stop the agent in VS Code first; the server looks again before it acts, so a page that is ten seconds old cannot do it either. For a *quiet* task the close dialog says the agent may still be running a long step. In a terminal, `task pause`, `task autorun on`, `task close`, `task approve-plan`, `task confirm-req`, `task approve-promote`, `task recover` and `task review extend|waive|dismiss` are refused the same way unless you add `--force`; the agent closing its own task is not stopped.
 
 ## Observability: logs, statistics, reports, scenario checks
 

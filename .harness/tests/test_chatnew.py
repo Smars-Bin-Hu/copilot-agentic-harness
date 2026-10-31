@@ -309,6 +309,26 @@ class CreateTests(CreateCase):
         self.assertIn("create", [item["what"] for item in self.data(fresh)["events"]])
         self.assertEqual(self.data()["chat"]["how"], "sdk")  # the other task is as it was
 
+    def test_a_chat_the_host_does_not_list_yet_is_tracked_at_once_and_asked_for_again_soon_not_after_the_full_relist(self) -> None:
+        self.listed_new = False  # the host lists a chat only once its first turn runs
+        old = vslink.EXPECT_EVERY
+        vslink.EXPECT_EVERY = 0.2
+        self.addCleanup(setattr, vslink, "EXPECT_EVERY", old)
+        oldwait = vslink.INITIATOR_WAIT
+        vslink.INITIATOR_WAIT = 0.3
+        self.addCleanup(setattr, vslink, "INITIATOR_WAIT", oldwait)
+        self.assertEqual(vslink.RELIST_EVERY, 180.0)
+        self.assertEqual(self.make()[0], 200)
+        resource = self.made[0]["channel"]
+        with self.vs.lock:
+            self.assertEqual(self.vs.sessions[resource]["defaultChat"], self.new_chat)  # in the cache before the host lists it
+        time.sleep(0.6)  # more lists happen; the stub is not dropped by a list without the chat
+        with self.vs.lock:
+            self.assertIn(resource, self.vs.sessions)
+        self.items.append(summary(resource, self.new_chat, self.folder, status=9, title="Listed now"))
+        self.assertTrue(until(lambda: self.vs.sessions.get(resource, {}).get("title") == "Listed now"), "the real entry did not come within seconds")
+        self.assertNotIn(resource, self.vs.expect)
+
     def test_a_task_of_another_name_does_not_take_the_chat(self) -> None:
         self.make()
         self.prompt("start", session="sess-x")

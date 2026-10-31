@@ -34,6 +34,8 @@ from . import chatask, chatctx, chatlink, chatnew, chatsend, task as task_ops, t
 
 TASKS_EVERY = 3.0  # seconds between two looks at the tasks and their chats
 RELIST_EVERY = 180.0  # a whole new list of chats, in case a notification was missed
+EXPECT_EVERY = 2.0  # a chat the board made that the host does not list yet: asked again this often ...
+EXPECT_FOR = 120.0  # ... for this long
 SCAN_PER_TURN = 3  # chats read in one turn to find their Copilot session id
 SCAN_MAX = 300  # chats read at most, newest first
 NO_CLI_WAIT = 300.0  # no `code` command: look again only now and then
@@ -128,6 +130,7 @@ class VsLink:
         self.windows: Dict[str, int] = {}  # model id -> maxContextWindow, every model the host lists (for the context meter)
         self.models: List[Dict[str, Any]] = []  # what a person may pick (`ahp.models_of`); empty until the host said
         self.created: List[Dict[str, Any]] = []  # chats this board made whose task does not exist yet (`chatnew.pending`); memory only
+        self.expect: Dict[str, Dict[str, Any]] = {}  # session resource of a chat this board made that the host has not listed yet -> {stub, until}; memory only
         self.listed_at = 0.0
         self.dirty = True
 
@@ -328,6 +331,7 @@ class VsLink:
                     self.models = []
                     self.scanned.clear()
                     self.listed_at = 0.0
+                    self.expect.clear()
             self._wait(self.backoff.next())
 
     def _jobs(self, link: Optional[ahp.Connection] = None) -> None:
@@ -366,6 +370,12 @@ class VsLink:
     def _list(self, link: ahp.Connection) -> None:
         mine = {item["resource"]: item for item in link.sessions() if ahp.is_ours(item) and ahp.session_in(item, str(self.root)) and item.get("resource")}
         with self.lock:
+            tails = {resource.rsplit("/", 1)[-1] for resource in mine}
+            for resource, wait in list(self.expect.items()):
+                if resource.rsplit("/", 1)[-1] in tails or time.monotonic() > wait["until"]:
+                    del self.expect[resource]  # the host lists it now (or it never will): the real entry stands
+                else:
+                    mine.setdefault(resource, dict(wait["stub"]))  # not listed yet: the chat is tracked from what we know, not lost until the next full list
             self.sessions = mine
             self.listed_at = time.monotonic()
             self.dirty = True
@@ -382,7 +392,7 @@ class VsLink:
                 note = link.next_notice(0.0)
             self._jobs(link)
             now = time.monotonic()
-            if now - self.listed_at >= RELIST_EVERY:
+            if now - self.listed_at >= (EXPECT_EVERY if self.expect else RELIST_EVERY):
                 self._list(link)
                 self._models(link)
             if self.dirty or now - last >= TASKS_EVERY:
@@ -487,15 +497,21 @@ class VsLink:
         action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
         made = {"name": plan["name"], "kind": plan["kind"], "source": plan["source"], "lang": plan["lang"], "permission": plan["permission"], "model": job.model, "text": job.text,
                 "session": resource, "chat": chat, "title": "", "clock": time.monotonic()}
+        stub = {"resource": resource, "provider": ahp.LOCAL_PROVIDER, "title": "", "status": ahp.IN_PROGRESS, "defaultChat": chat, "chats": [{"resource": chat}],
+                "workingDirectories": [ahp.folder_uri(self.root)], "modifiedAt": ahp.utc_stamp()}
         with self.lock:
             self.created.append(made)  # before the message: a chat that was made is never lost track of
+            self.expect[resource] = {"stub": stub, "until": time.monotonic() + EXPECT_FOR}  # the host lists it only once the first turn runs: until then the cache holds the stub
             self.chats[chat] = held
             self.sess[resource] = {"channel": resource, "state": ahp.trimmed_session(state), "seen": {}}
         link.dispatch(chat, action)
         with self.lock:
             ahp.reduce_chat(held["state"], action)
+        with self.lock:
+            self.sessions.setdefault(resource, dict(stub))  # tracked at once; `_list` asks again every EXPECT_EVERY seconds until the host lists it
+            self.dirty = True
         initiator = self._initiator(link, resource, state)
-        self._list(link)  # the chat is in the cache at once (the host's notice may come later); marks the board dirty
+        self._list(link)  # marks the board dirty
         job.result = {"session": resource, "chat": chat, "initiator": initiator, "turn": str(action["turnId"])}
 
     def _do(self, link: ahp.Connection, job: Job) -> None:

@@ -12,7 +12,7 @@ Someone who checks their own work has the same blind spots. A target repository 
 
 ### 11.2 How to use it
 
-1. You write `[review]=n` in a prompt of the task (once is enough; `[review]=0` switches it off). The agent cannot write it itself.
+1. You write `[review]=n` in a prompt of the task (once is enough; `[review]=0` switches it off), or set the number in Task settings on the task page of the served board. The agent can do neither.
 2. When the work is written, the agent runs `task review start`: a snapshot is saved, and the review package is written.
 3. The agent calls the reviewer (only now is it let through; without checks on, the call is refused).
 4. The reviewer answers: the first line is `VERDICT: PASS` or `FAIL`, every finding has "file:line", and it only points out findings, never how to fix them.

@@ -119,6 +119,8 @@ An approval works as in the terminal: the page shows what you approve and asks y
 
 ![The history of a task](images/task-history.png)
 
+**With VS Code.** When VS Code is open on the folder, the board also reaches its chats. After an approval it sends the "go on" message to the right chat for you, you can steer or stop a working agent, allow a command or answer a question the agent asked, and start a new task (a chat in VS Code) from a button. Only you can; the agent cannot press them. See [Features](02-features.md#the-board-and-vs-code).
+
 So the work splits cleanly: you talk to the agent and check the code in VS Code; you follow, approve and steer the tasks in the browser. What an agent writes is drawn as text only: nothing in a task file can run on the page. Details: [Features](02-features.md#the-task-page-in-the-browser).
 
 ## 5. Where the time went

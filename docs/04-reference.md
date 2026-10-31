@@ -91,6 +91,45 @@ What a command prints: text on a terminal, JSON on a pipe (a script, a redirect)
 | `task offwork` / `task onwork` | The person only (in a terminal or with the board's buttons Off work / Back to work): `offwork` pauses every open task that is not at work and not under autorun, all at once, and names the ones it left; `onwork` takes back only the tasks `offwork` paused (`paused.by` is `offwork`), so a task paused by hand stays paused |
 | `task close` | The session lets go of the task, and the report is written. The folder stays where it is. Refused while steps of `TODO.md` are not ticked: tick what is done, or add `--todo-open "<why>"` (the reason goes into the history). The board page does not refuse: its dialog says how many steps are left. A person at a terminal is refused while the agent is in the middle of a turn (add `--force`); the agent itself can close its own task after you said yes |
 
+## The board and VS Code
+
+This is how a served board (`task board --serve`) talks to the chats of VS Code. Without VS Code, or with the link off, the board works as before and none of this shows.
+
+**The link.** One background thread asks the `code` command for `code agent endpoints` and connects to the address it gives: a unix socket on macOS and Linux, a named pipe (`\\.\pipe\vscode-agent-host-...`) on Windows. The token it gets is held in memory only; it is never printed, logged, saved, or sent to a page. A page never starts `code` or touches the host. Where it cannot connect the board shows the pill "VS Code not linked" with a reason, and tries again with longer waits. Just after VS Code starts the list of endpoints is empty for up to a minute or so.
+
+| Reason on the pill | Meaning |
+| --- | --- |
+| *starting* | Connecting now |
+| *none* | VS Code is not open, or still starting |
+| *no-cli* | The `code` command was not found (it is looked for in the usual places, or in `HARNESS_VSCODE_CLI`) |
+| *cli-failed* | `code` did not answer |
+| *many* | Several VS Code programs are open and none is clearly the one of this folder; nothing is guessed |
+| *error*, *lost* | The host refused or dropped the connection; the board tries again |
+| *off* | Switched off (see below) |
+
+**Switches.** `HARNESS_VSCODE_CLI` is the full path of the `code` command, for when it is not in the usual places; `off` switches the link off. `board.vscode` in `task.json` (set `false` in `task.override.json`) does the same. Both leave the board as it was before 1.6.
+
+**Which chat belongs to which task.** A chat the board made is bound when the agent has opened the task of that name (`chat.how` is `board` in the task state). Any other chat is bound when the Copilot session id of the task (`session_id`) is found in it; a chat has that id only after its agent has answered once. Where nothing or more than one fits, the task is *unbound* and the reason is shown (`no-chat`, `ambiguous`, `no-session`). Nothing is guessed: a message to the wrong chat costs more than a paste. A chat the board has just made, which the host lists only after its first turn, is kept in the board's list from the start and asked for again every 2 seconds for up to 2 minutes.
+
+**Chat states** (from the status bits of the host): *idle*, *busy* (a turn runs), *input* (Copilot waits for a person: a command to allow, or a question), *error*. A send needs *idle*; steer and stop need *busy*; allow, deny and answer need *input*. The board reads the host again before it acts and refuses when the chat is not in the state the page showed.
+
+**What the page may ask.** Every call below is a POST that carries the pairing header and the paired browser's cookie, as `/api/act` does. No command line and no agent can make them; the gate refuses an agent that sends a request to the board. Each is recorded in the history of the task, and a message in whole in `.task/sent.jsonl`.
+
+| Call | What it does |
+| --- | --- |
+| `/api/status`, `/api/board` | Read. They carry `vscode: {ready, bound, unbound, why}` and, on rows, `chat` and `sub` |
+| `/api/open` | Brings the VS Code window of this folder forward (it cannot open one chat) |
+| `/api/send` | `step: preview` gives the whole message; `step: act` sends it. A fixed English text with the code you typed, `[ZH]` only when you chose Chinese, your note and the ticked drafts. Idle chat only |
+| `/api/steer`, `/api/stop` | Say one more thing to a working agent; cancel its turn |
+| `/api/confirm`, `/api/answer` | Allow or deny one named tool call; answer one named question. The page's digest must match what the host holds now |
+| `/api/create` | `step: options`, `preview`, `act`: makes a chat in this folder (mode interactive, no worktree) and sends the fixed first message |
+| `/api/setting` | The model and the thinking level the board puts on each message it sends; the number of independent checks (as `task review set`) |
+| `/api/draft` | Add, edit, delete, tick a note (`.task/drafts.json`; never in page data, digests, saved copies or the write-back) |
+| `/api/compact` | After a confirm, sends `/compact` to an idle chat. The only place a control mark is sent |
+| `/api/verdict`, `/api/export` | Judge a Gate block; export a block judged wrong as an eval sample |
+
+**Credits.** The usage Copilot records itself (what older text called AIU) is called **Credits** on the board, in the totals and in the task report.
+
 ## Policy fields
 
 The defaults are in `.harness/policies/<file>`; overrides go in the `.override.json` of the same name. The numbers are all in those files and are not repeated here.

@@ -1771,5 +1771,12 @@
   "desk.chat.copy": "复制 chat 标题",
   "desk.chat.copy.hint": "没有能直接打开某个 chat 的链接。先打开窗口，再选这个标题的 chat。",
   "compact.refused.not-idle": "chat 不空闲，/compact 没有发出。等 agent 干完再试。",
+  "compact.refused.off": "和 VS Code 的连接已关闭，/compact 没有发出。请在 VS Code 的 chat 里自己输入 /compact。",
+  "compact.refused.not-ready": "现在没连上 VS Code（可能还在启动），/compact 没有发出。稍后再试，或在 VS Code 的 chat 里自己输入 /compact。",
+  "compact.refused.unbound": "这个任务没有对上 VS Code 里的 chat，/compact 没有发出：它可能发到错的 chat。请在正确的 chat 里自己输入 /compact。",
+  "compact.refused.unsure": "不止一个 chat 或任务对得上，/compact 没有发出。请在正确的 chat 里自己输入 /compact。",
+  "compact.refused.changed": "这个任务对应的 chat 和页面上显示的不是同一个。/compact 没有发出，请重新看一下页面。",
+  "compact.refused.timeout": "VS Code 没有及时收下 /compact，没有发出。请再试一次。",
+  "compact.refused.other": "/compact 没有发出。再试一次，或在 VS Code 的 chat 里自己输入 /compact。",
   "event.compact": "你把 /compact 发到了 chat"
 }

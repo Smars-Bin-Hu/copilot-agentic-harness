@@ -181,6 +181,16 @@ Approving a plan, writing back to a repository (promote), recovering a repositor
 - A pop-up confirmation is not enough: "Allow in this Session" of VS Code switches it off, so the key approvals do not use pop-ups.
 - The code comes from the plan or the command itself; when the plan changes after the approval, it no longer holds.
 
+### The board reaches VS Code, and only a person can use it
+
+The board can send a message to the chat of a task, steer or stop it, allow a command, answer a question and start a chat (see [Features](02-features.md#the-board-and-vs-code)). The design keeps the rule of the section above:
+
+- **Only a person triggers it.** Every action is a POST from the paired browser with the pairing header. There is no command an agent can call, and the gate refuses an agent that sends a request to the board.
+- **Nothing is guessed.** A message goes out only when the chat is bound to the task for sure (by a chat the board made, or by the Copilot session id found in it) and is in the state the action needs. Else the board says why and gives the text to copy: a wrong chat costs more than a paste. The host is read again just before the action.
+- **The messages are fixed text.** The approval code and the options you pick are all that change. No control mark (`[review]`, `/compact`) goes out unless you pressed the button for it.
+- **Allow all makes the gate the only brake.** A chat made from the board defaults to allow all, so the gate review (judge each block, export the wrong ones as eval samples) and the health warning exist to show what the gate did.
+- **The link is read-mostly and fails soft.** One thread holds the connection and a cache; a page reads the cache. The token stays in memory. If VS Code is not there the board works as before.
+
 ### Admin mode: rights follow the session, not the agent
 
 Extending the harness means changing guardrail files. The input of a hook does not carry the name of the main agent, so picking an agent cannot be the ground for letting things through: any other agent would pass for it.

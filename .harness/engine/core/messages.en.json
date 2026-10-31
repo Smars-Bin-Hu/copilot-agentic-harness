@@ -1771,5 +1771,12 @@
   "desk.chat.copy": "Copy chat title",
   "desk.chat.copy.hint": "No link opens one chat. Open the window, then pick the chat with this title.",
   "compact.refused.not-idle": "The chat is not idle, so /compact was not sent. Wait until the agent has finished.",
+  "compact.refused.off": "The link to VS Code is switched off, so /compact was not sent. In VS Code, type /compact in the chat.",
+  "compact.refused.not-ready": "VS Code is not linked now (it may be starting), so /compact was not sent. Try again in a moment, or type /compact in the chat in VS Code.",
+  "compact.refused.unbound": "No chat of VS Code is linked to this task, so /compact was not sent: it could hit the wrong chat. Type /compact in the right chat in VS Code.",
+  "compact.refused.unsure": "More than one chat or task fits, so /compact was not sent. Type /compact in the right chat in VS Code.",
+  "compact.refused.changed": "The chat linked to this task is not the one the page showed. /compact was not sent; look at the page again.",
+  "compact.refused.timeout": "VS Code did not take /compact in time. It was not sent. Try again.",
+  "compact.refused.other": "/compact was not sent. Try again, or type /compact in the chat in VS Code.",
   "event.compact": "the person sent /compact to the chat"
 }

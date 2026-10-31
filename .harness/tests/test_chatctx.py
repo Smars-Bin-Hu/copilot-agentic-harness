@@ -189,6 +189,16 @@ class CompactTests(CompactCase):
         self.assertFalse((self.root / TASK / ".task" / "sent.jsonl").exists())
         self.assertEqual([item for item in self.data()["events"] if item["what"] == "compact"], [])
 
+    def test_every_refusal_of_compact_has_its_own_words_without_copy_and_paste(self) -> None:
+        for why in ("off", "not-ready", "unbound", "unsure", "changed", "not-idle", "timeout", "no-turn"):
+            for language in ("en", "zh"):
+                table = messages.table(language)
+                key = f"compact.refused.{why}" if why != "no-turn" else "compact.refused.other"
+                self.assertIn(key, table)
+                self.assertNotIn("paste", table[key].lower())
+                self.assertNotIn("粘贴", table[key])
+                self.assertIn("/compact", table[key])
+
     def test_without_the_header_or_the_pairing_nothing_goes_out(self) -> None:
         self.assertEqual(self.post("/api/compact", {}, header=False)[0], 403)  # another site cannot send it
         self.assertEqual(self.post("/api/compact", {}, cookie="")[0], 403)  # the header, but not the paired browser
@@ -199,7 +209,7 @@ class CompactTests(CompactCase):
         self.vs.enabled = False
         status, data, _ = self.post("/api/compact", {})
         self.assertEqual(status, 409)
-        self.assertEqual(data["error"], said("off"))
+        self.assertEqual(data["error"], messages.text("compact.refused.off"))
         self.assertEqual(self.dispatched(), [])
 
     def test_no_other_call_can_send_the_mark(self) -> None:

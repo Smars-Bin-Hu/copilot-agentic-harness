@@ -10,6 +10,21 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.9 (2026-10-31)
+
+### Added
+
+- Docs: "The board and VS Code" in the reference (how it connects, the reasons on the pill, `HARNESS_VSCODE_CLI`, `board.vscode`, chat states, every call the page may make), in Features, the overview and the design notes. The intro skills now mention the board's VS Code buttons.
+
+### Changed
+
+- A chat made from the board is tracked as soon as its first turn starts. The host lists a chat only after that turn runs, so the list asked for right after the send did not have it, and the board lost the chat until the next full list (up to 180 seconds): the meter and the binding saw nothing. The board now keeps the chat in its list from the start and asks for the list again every 2 seconds, for up to 2 minutes, until the host has it.
+- Compact has its own words when it is refused (VS Code not linked, no chat, several chats fit, chat changed, timeout), in English and Chinese. They no longer tell you to copy and paste a message.
+
+### Retired
+
+- Nothing.
+
 ## 1.6.8 (2026-10-31)
 
 ### Added

@@ -67,7 +67,7 @@ You say what to change
   -> the changes are written to a new branch, not committed. Committing is yours to do
 ```
 
-Say it in three sentences: the agent never changes the real repository directly; before the changes you approve the plan; before the write-back you approve once more. After each approval, the page tells you to say so to the agent in the chat: the approval itself does not tell it.
+Say it in three sentences: the agent never changes the real repository directly; before the changes you approve the plan; before the write-back you approve once more. After each approval the agent is not told by the approval itself. With the board linked to VS Code, press **send to agent** on the page; without it, the page gives a message to paste into the chat.
 
 ### 9. Wrapping up
 

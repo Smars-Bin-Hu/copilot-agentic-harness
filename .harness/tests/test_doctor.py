@@ -376,14 +376,14 @@ class DoctorTests(unittest.TestCase):
     def test_no_hook_call_yet_is_a_warning_that_says_how_to_check(self) -> None:
         result = self.doctor()
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("[WARN]  还没有任何 hook 调用记录", result.stdout)
+        self.assertIn("[WARN]  还没有任何 Hook 调用记录", result.stdout)
         self.assertIn("Reload Window", result.stdout)
 
     def test_a_recent_hook_call_says_when_which_session_kind_and_how_fast_the_gate_is(self) -> None:
         self.write_log([self.call(ms=20), self.call(ms=40), self.call(ms=30)])
         result = self.doctor()
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("[OK]    hook 最近一次被调用", result.stdout)
+        self.assertIn("[OK]    Hook 最近一次被调用", result.stdout)
         self.assertIn("[OK]    最近的会话是 Copilot（SDK）会话", result.stdout)
         self.assertIn("[OK]    gate 最近 3 次调用：一般 30 毫秒，最慢 40 毫秒（超时是 30 秒）", result.stdout)
 

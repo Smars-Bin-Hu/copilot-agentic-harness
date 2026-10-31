@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.10 (2026-10-31)
+
+### Added
+
+### Changed
+
+- The Chinese texts (`messages.zh.json`) were reviewed as a whole: written-style wording instead of spoken style, short state tags, labels as nouns, buttons as verbs, one word for one thing. `promote`, `skill`, `chat`, `Hook`, `reviewer` stay in English; "prompt" is always 指令, "confirmation code" is always 确认码, "pause" is 搁置, "recover" is 还原. English texts and message keys are unchanged.
+
+### Retired
+
+- None.
+
 ## 1.6.9 (2026-10-31)
 
 ### Added

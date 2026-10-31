@@ -601,7 +601,7 @@ class DeskTests(ServeCase):
         (self.task / "PLAN.md").unlink()
         said = task_ops.next_step(self.root, TASK, self.data())
         self.assertIn("task close", said)
-        self.assertTrue("whether to close" in said or "要不要关闭" in said)
+        self.assertTrue("whether to close" in said or "是否关闭" in said)
 
     def test_the_agent_is_told_the_address_of_the_page_while_the_board_runs(self) -> None:
         context = self.context(self.prompt("go on"))

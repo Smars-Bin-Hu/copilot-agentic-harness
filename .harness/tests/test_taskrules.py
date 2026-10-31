@@ -46,7 +46,7 @@ class NoTaskTests(RuleCase):
     def test_review_without_a_task_points_at_the_skill_and_the_n_is_kept_for_the_task(self) -> None:
         text = self.context(self.prompt("[review]=2 写一份设计"))
         self.assertIn("`[review]=2`", text)
-        self.assertIn("先用技能 `harness-my-task`", text)
+        self.assertIn("先用 skill `harness-my-task`", text)
         self.assertEqual(self.module_state(SESSION)["review_n"], 2)
         self.new_task("design", "design")
         data = json.loads((self.root / tasks.TASKS_DIR / "design" / ".task" / "task.json").read_text(encoding="utf-8"))

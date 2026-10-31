@@ -295,13 +295,13 @@ class ListTests(LifeCase):
         self.stopped("first")  # the agent wrote the plan and stopped; while it is still at work the task shows as working
         result = self.listed()
         self.assertEqual([row["name"] for row in result["tasks"]], ["first", "second"])
-        self.assertEqual(result["tasks"][0]["waiting"], "计划等你批准")
+        self.assertEqual(result["tasks"][0]["waiting"], "等你批准计划")
         self.assertEqual(result["waiting"], 1)
         confirm_requirement(self.root, f"{BASE}/first")
         digest = tasks.plan_digest(self.root, f"{BASE}/first")
         task_ops.approve_plan(self.root, f"{BASE}/first", reader=lambda _prompt: digest[:8], interactive=True, out=io.StringIO())
         found = self.listed()["tasks"][0]  # nobody told the agent: the task now waits for the person to say so
-        self.assertEqual((found["waiting_why"], found["waiting"]), ("go-plan", "计划批准了：告诉 agent 可以开始"))
+        self.assertEqual((found["waiting_why"], found["waiting"]), ("go-plan", "计划已批准：通知 agent 开始"))
         self.assertEqual(self.listed()["waiting"], 1)
 
     def test_running_tasks_come_after_the_waiting_ones_newest_update_first(self) -> None:
@@ -540,7 +540,7 @@ class ListTests(LifeCase):
 
     def test_a_dry_run_and_a_broken_promote_are_named(self) -> None:
         self.new("job", "dev")
-        for state, text in (("dry_run", "回写等你批准"), ("partial", "promote 中途出错，等你恢复")):
+        for state, text in (("dry_run", "等你批准 promote"), ("partial", "promote 中途出错，等你还原仓库")):
             with task_ops.locked(self.root, f"{BASE}/job") as data:
                 data["promote"] = {"state": state}
             self.assertEqual(self.listed()["tasks"][0]["waiting"], text)
@@ -549,7 +549,7 @@ class ListTests(LifeCase):
         self.new("job", "dev")
         with task_ops.locked(self.root, f"{BASE}/job") as data:
             data["promote"] = {"state": "dry_run", "approved_plan_sha256": "abc"}
-        self.assertNotEqual(self.listed()["tasks"][0]["waiting"], "回写等你批准")
+        self.assertNotEqual(self.listed()["tasks"][0]["waiting"], "等你批准 promote")
 
     def test_a_folder_that_was_never_picked_up_is_listed_as_new(self) -> None:
         (self.root / BASE / "hand").mkdir(parents=True)

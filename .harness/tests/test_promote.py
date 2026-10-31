@@ -518,7 +518,7 @@ class RecoverTests(FailureBase):
         request_id = self.two_repo_request()
         with self.assertRaises(CommandError) as raised:
             self.recover(request_id)
-        self.assertIn("不需要恢复", str(raised.exception))
+        self.assertIn("不需要还原", str(raised.exception))
         with self.assertRaises(CommandError) as raised:
             task_ops.recover(self.root, "", reader=lambda _p: "x", interactive=True, out=io.StringIO())
         self.assertIn("中途出错的任务", str(raised.exception))
@@ -587,11 +587,11 @@ class QueueTests(PromoteCase):
         second = self.flow({"repo_b/src/new.sql": "select 3;\n"}, branch="feature/two")
         said = self.dry_run(second, ok=False)["stderr"]
         self.assertIn("工作区不干净", said)
-        self.assertIn("这是任务 job1 回写的，文件还没提交", said)
+        self.assertIn("这是任务 job1 promote 的，文件还没提交", said)
         self.assertIn("task queue", said)
         repo = self.run_cli("task", "queue")["repos"][0]
         self.assertEqual((repo["name"], repo["held_by"], repo["current_branch"], repo["clean"]), ("repo_b", "job1", "feature/one", False))
-        self.assertIn("任务 job1 回写的", repo["next"])
+        self.assertIn("任务 job1 promote 的", repo["next"])
         self.assertEqual([item["name"] for item in repo["waiting"]], ["job2"])
         # the person commits: the next task goes through
         run_git(self.repo_b, "add", "-A")
@@ -605,7 +605,7 @@ class QueueTests(PromoteCase):
         said = self.dry_run(task, ok=False)["stderr"]
         self.assertIn("不要用 `git clean`", said)
         self.assertNotIn("回写的", said)
-        self.assertIn("不是 harness 的任务回写的", self.run_cli("task", "queue")["repos"][0]["next"])
+        self.assertIn("不是 harness 的任务 promote 的", self.run_cli("task", "queue")["repos"][0]["next"])
 
     def test_a_task_that_is_done_or_has_no_results_is_not_in_line(self) -> None:
         done = self.flow({"repo_b/src/a.sql": "select 1, 2;\n"})
@@ -621,4 +621,4 @@ class QueueTests(PromoteCase):
         task = self.flow({"repo_b/src/new.sql": "select 3;\n"})
         self.dry_run(task)
         text = taskboard.table(tasklife.list_tasks(self.root))
-        self.assertIn("回写排队：job1（等你批准）", text)
+        self.assertIn("promote 排队：job1（等你批准）", text)

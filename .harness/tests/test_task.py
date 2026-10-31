@@ -211,7 +211,7 @@ class FetchDiffTests(TaskCase):
     def test_a_refused_path_is_not_fetched_for_editing(self) -> None:
         self.override({"repos_root": str(self.repos), "refused_paths": [".git/**", "docs/**"]})
         self.ready()
-        self.assertIn("不能回写", self.run_cli("task", "fetch", "repo_b/docs/x.md", ok=False)["stderr"])
+        self.assertIn("不能 promote", self.run_cli("task", "fetch", "repo_b/docs/x.md", ok=False)["stderr"])
 
     def test_fetching_again_keeps_the_edits_unless_overwrite(self) -> None:
         self.ready()
@@ -392,7 +392,7 @@ class PromoteTests(TaskCase):
         self.dev("upsert.sql", "x\n")
         self.dev("verify.sql", "y\n")
         message = self.run_cli("task", "promote", "--dry-run", ok=False)["stderr"]
-        self.assertIn("没有要回写的成果", message)
+        self.assertIn("没有要 promote 的成果", message)
         self.assertIn("upsert.sql、verify.sql", message)
         self.run_cli("task", "fetch", "repo_b/src/a.sql")
         self.dev("repo_b/src/a.sql", "select 1, 2;\n")
@@ -400,10 +400,10 @@ class PromoteTests(TaskCase):
         plan = self.run_cli("task", "promote", "--dry-run")
         self.assertEqual([(item["path"], item["action"]) for item in plan["files"]], [("repo_b/src/a.sql", "modify"), ("repo_b/src/new/c.sql", "create")])
         self.assertEqual(plan["not_promoted"], ["upsert.sql", "verify.sql"])
-        self.assertIn("不会回写", plan["not_promoted_note"])
+        self.assertIn("不会 promote", plan["not_promoted_note"])
         screen = io.StringIO()
         self.approve_promote(out=screen)
-        self.assertIn("不回写（直接放在 DEV/ 根目录，不属于任何仓库）：upsert.sql、verify.sql", screen.getvalue())
+        self.assertIn("不 promote（直接放在 DEV/ 根目录，不属于任何仓库）：upsert.sql、verify.sql", screen.getvalue())
         self.run_cli("task", "promote")
         self.assertEqual(sorted(porcelain(self.repo_b)), [" M src/a.sql", "?? src/new/"])
         self.assertFalse((self.repo_b / "upsert.sql").exists())
@@ -518,8 +518,8 @@ class RoundAndReportTests(TaskCase):
         self.assertIsNone(self.session_state(SESSION)["active_task"])
         text = (self.root / result["report"]).read_text(encoding="utf-8")
         for needle in (
-            "# 任务报告：job1", "计划：由人批准于", "已回写到目标仓库的新分支", "回写由人批准于", "modify repo_b/src/a.sql", "| repo_b/src/a.sql | modify | 1 | 1 |",
-            "> 给 a.sql 加一列", "人批准计划", "人批准回写", "回写到新分支", "关闭", "## hook 日志", "独立检查：没有开启", f"{TASK}/DEV/job1.patch",
+            "# 任务报告：job1", "计划：你批准于", "已 promote 到目标仓库的新分支", "promote 由你批准于", "modify repo_b/src/a.sql", "| repo_b/src/a.sql | modify | 1 | 1 |",
+            "> 给 a.sql 加一列", "你批准了计划", "你批准了 promote", "promote 到新分支", "关闭", "## Hook 日志", "独立检查：没有开启", f"{TASK}/DEV/job1.patch",
         ):
             self.assertIn(needle, text)
         self.assertIn("任务已经关闭", self.run_cli("task", "fetch", "--task", TASK, "repo_b/src/a.sql", ok=False)["stderr"])

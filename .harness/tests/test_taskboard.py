@@ -217,7 +217,7 @@ class WaitingMarkTests(BoardCase):
         self.assertEqual(mark["why"], "stopped")
         self.assertEqual(self.data()["updated_at"], before)
         found = self.listed()
-        self.assertEqual((found["waiting"], found["tasks"][0]["waiting"], found["tasks"][0]["waiting_why"]), (1, "agent 停下了，等你", "stopped"))
+        self.assertEqual((found["waiting"], found["tasks"][0]["waiting"], found["tasks"][0]["waiting_why"]), (1, "agent 已停下，等你回复", "stopped"))
         self.assertEqual(found["tasks"][0]["waiting_since"], mark["since"])
         self.assertIsInstance(found["tasks"][0]["waited_s"], int)
         self.prompt()
@@ -282,7 +282,7 @@ class WaitingMarkTests(BoardCase):
         self.copilot_record(S1, record)
         found = self.listed()
         row = found["tasks"][0]
-        self.assertEqual((found["waiting"], row["waiting_why"], row["waiting"]), (1, "cancelled", "你取消了 agent，等你"))
+        self.assertEqual((found["waiting"], row["waiting_why"], row["waiting"]), (1, "cancelled", "你已取消 agent，等你指示"))
         self.assertEqual(datetime.fromisoformat(row["waiting_since"]), datetime(2026, 10, 19, 10, 0, 3, tzinfo=timezone.utc))
         now = tasklife.waiting_now(self.root, f"{BASE}/job", self.data())
         report = taskinsight.add_open_wait({"totals": {"waiting_s": 0.0}, "waits": [], "prompts": [], "findings": []}, now)
@@ -398,15 +398,15 @@ class TextBoardTests(BoardCase):
         completed = self.cli("task", "list", "--text")
         self.assertEqual(completed.returncode, 0, completed.stderr)
         lines = completed.stdout.splitlines()
-        self.assertIn("进行中 2  在等你 1", lines[0])
+        self.assertIn("进行中 2  等你 1", lines[0])
         self.assertTrue(lines[3].startswith("! alpha"), completed.stdout)
-        self.assertIn("agent 停下了，等你", lines[3])
+        self.assertIn("agent 已停下，等你回复", lines[3])
         self.assertTrue(lines[4].startswith("  beta"))
         with self.assertRaises(ValueError):
             json.loads(completed.stdout)
 
     def test_no_tasks(self) -> None:
-        self.assertIn("还没有任务。", self.cli("task", "list", "--text").stdout)
+        self.assertIn("暂无任务。", self.cli("task", "list", "--text").stdout)
 
     def test_columns_line_up_with_chinese_text(self) -> None:
         self.assertEqual((taskboard.width("ab"), taskboard.width("任务"), taskboard.pad("任", 4)), (2, 4, "任  "))
@@ -634,7 +634,7 @@ class PageTests(BoardCase):
         text = (self.root / result["analysis"]).read_text(encoding="utf-8")
         self.assertIn("<title>任务分析：job</title>", text)
         data = page_data(text)
-        self.assertEqual((data["info"]["name"], data["info"]["totals"]["aiu"], data["text"]["insight.part.model"]), ("job", 10.0, "模型在想"))
+        self.assertEqual((data["info"]["name"], data["info"]["totals"]["aiu"], data["text"]["insight.part.model"]), ("job", 10.0, "模型思考"))
         for banned in ("http://", "https://", " src="):  # everything is in the file; nothing is fetched
             self.assertNotIn(banned, text.replace("http://www.w3.org/2000/svg", ""))
         self.assertIn(SECRET, text)  # the page shows the person the start of each prompt
@@ -729,7 +729,7 @@ class PageTests(BoardCase):
         self.assertEqual(result, {"board": ".workspace/reports/board.html", "tasks": 3, "open": 1, "waiting": 1})  # the closed task is on the board too
         text = (self.root / result["board"]).read_text(encoding="utf-8")
         rows = {item["name"]: item for item in page_data(text)["rows"]}
-        self.assertEqual((rows["alpha"]["report"], rows["alpha"]["waiting"], rows["hand"]["status"], rows["hand"]["report"]), ("tasks/alpha/report.html", "agent 停下了，等你", "new", ""))
+        self.assertEqual((rows["alpha"]["report"], rows["alpha"]["waiting"], rows["hand"]["status"], rows["hand"]["report"]), ("tasks/alpha/report.html", "agent 已停下，等你回复", "new", ""))
         self.assertTrue((self.root / ".workspace/reports" / rows["alpha"]["report"]).is_file())
         self.assertEqual((rows["beta"]["status"], rows["beta"]["report"]), ("closed", "tasks/beta/report.html"))
         self.assertIsInstance(rows["alpha"]["brief"]["active_s"], float)
@@ -822,7 +822,7 @@ class PageTests(BoardCase):
         self.stop(S1)
         self.cli_json("task", "board")
         now = page_data(page.read_text(encoding="utf-8"))["now"]
-        self.assertEqual((now["text"], isinstance(now["seconds"], int)), ("agent 停下了，等你", True))
+        self.assertEqual((now["text"], isinstance(now["seconds"], int)), ("agent 已停下，等你回复", True))
         with mock.patch.object(tasklife, "seconds_since", lambda _stamp: 600.0):  # ten minutes later nothing happened: the line grows, and "waiting for you" with it
             taskboard.board(self.root)
             data = page_data(page.read_text(encoding="utf-8"))
@@ -872,7 +872,7 @@ class PageTests(BoardCase):
 
     def test_an_empty_board(self) -> None:
         data = page_data(taskhtml.board_page([], "2026-01-01T00:00:00+00:00"))
-        self.assertEqual((data["rows"], data["text"]["board.empty"]), ([], "还没有任务。"))
+        self.assertEqual((data["rows"], data["text"]["board.empty"]), ([], "暂无任务。"))
 
     def test_one_broken_task_does_not_take_the_board_away(self) -> None:
         self.new("good")

@@ -30,11 +30,15 @@
     return PARTS.map((name) => [name, entry[name + "_s"] || 0, partLabel(name) + " " + clock(entry[name + "_s"])]);
   }
 
-  // Served by the board: the way back to the task page and to the board. A file on disk has no server to go back to.
+  // Served by the board (its server sent this page with DATA.serve): the Gate verdicts have buttons. A file on disk, or a saved copy, shows them only.
+  const served = () => typeof SERVE !== "undefined" && Boolean(DATA.serve);
+
+  // Served by the board: the way back to the task page and to the board, and a link to save this page as one file. A file on disk has no server to go back to.
   function crumbs() {
     if (!/^https?:$/.test(location.protocol)) return null;
     return h("div", {class: "crumbs sub"}, h("a", {href: "/"}, "\u2190 " + t("desk.back")), " \u00b7 ",
-      h("a", {href: "/task/" + encodeURIComponent(info.name)}, t("report.back")));
+      h("a", {href: "/task/" + encodeURIComponent(info.name)}, t("report.back")),
+      served() ? [" \u00b7 ", h("a", {href: "/report-save/" + encodeURIComponent(info.name), download: "", title: t("report.save.hint")}, t("report.save"))] : null);
   }
 
   function header() {
@@ -56,7 +60,9 @@
         kpi(amount(totals.aiu), t("report.kpi.aiu")),
         kpi(amount(totals.premium_requests), t("report.kpi.premium")),
         totals.cache_input_tokens ? kpi(percent(share(totals.cache_read_tokens, totals.cache_input_tokens)), t("report.kpi.cache")) : null,
-        kpi(reviewsText(totals.reviews, totals.review_fails), t("report.kpi.reviews"))),
+        kpi(reviewsText(totals.reviews, totals.review_fails), t("report.kpi.reviews")),
+        whole.gate ? kpi(whole.gate.count, t("report.kpi.gate")) : null),
+      served() ? SERVE.banner() : null,
     ];
   }
 
@@ -251,14 +257,64 @@
     return card(t("report.reviews"), table(head, rows));
   }
 
+  // The Gate section: every deny of this task's log, with the person's verdict. Served: three buttons a row and the export; a file shows the verdicts.
+  const VERDICTS = ["right", "wrong", "unsure"];
+  let gateBusy = false;
+
+  function judge(item, verdict) {
+    if (gateBusy) return;
+    gateBusy = true;
+    SERVE.post("/api/verdict", {task: whole.task, id: item.id, verdict: item.verdict === verdict ? "" : verdict})  // the same button again takes the verdict back
+      .then((data) => { whole.gate = data.result.gate; }, (error) => SERVE.failed(error))
+      .then(() => { gateBusy = false; draw(); });
+  }
+
+  function exportWrong() {
+    if (gateBusy) return;
+    gateBusy = true;
+    SERVE.post("/api/export", {task: whole.task})
+      .then((data) => { whole.gate = data.result.gate; }, (error) => SERVE.failed(error))
+      .then(() => { gateBusy = false; draw(); });
+  }
+
+  function gateCard() {
+    const gate = whole.gate;
+    if (!gate) return null;
+    const can = served();
+    const title = t("report.gate", {n: gate.count});
+    if (!gate.count) return card(title, h("p", {class: "sub"}, t("report.gate.none")));
+    const head = [th(t("report.col.at")), th(t("report.gate.col.what")), th(t("report.gate.col.rule")), th(t("report.gate.col.reason")), th(t("report.gate.col.verdict"))];
+    const rows = gate.items.map((item) => h("tr", null,
+      h("td", {class: "when"}, when(item.at, 11, 16)),
+      h("td", null, h("code", {class: "gate-what", title: item.command || item.paths.join(", ")}, item.command || item.paths.join(", ") || item.tool)),
+      h("td", null, tag(item.rule)),
+      h("td", {class: "sub"}, item.reason),
+      h("td", null, can
+        ? [VERDICTS.map((name) => h("button", {type: "button", class: "act" + (item.verdict === name ? " live" : ""), disabled: gateBusy ? "" : null, "aria-pressed": item.verdict === name ? "true" : "false"}, t("report.gate.v." + name))),
+           item.exported ? [" ", tag(t("report.gate.exported"), "good")] : null]
+        : [item.verdict ? tag(t("report.gate.v." + item.verdict), item.verdict === "wrong" ? "bad" : item.verdict === "right" ? "good" : "") : h("span", {class: "sub"}, t("report.gate.unjudged")),
+           item.exported ? [" ", tag(t("report.gate.exported"), "good")] : null])));
+    if (can) {  // the buttons get their click here: `h` sets attributes only
+      rows.forEach((row, order) => row.querySelectorAll("button").forEach((button, index) => button.addEventListener("click", () => judge(gate.items[order], VERDICTS[index]))));
+    }
+    const nodes = [h("p", {class: "hint top"}, t(can ? "report.gate.hint" : "report.gate.hint.static")), table(head, rows)];
+    if (gate.count > gate.shown) nodes.push(h("p", {class: "sub"}, t("report.gate.more", {shown: gate.shown, total: gate.count})));
+    if (can) {
+      const button = h("button", {type: "button", class: "act", disabled: gate.wrong_open && !gateBusy ? null : "disabled"}, t("report.gate.export", {n: gate.wrong_open}));
+      button.addEventListener("click", exportWrong);
+      nodes.push(h("div", {class: "gate-export"}, button, h("span", {class: "sub"}, t("report.gate.export.where", {path: gate.path}))));
+    }
+    return card(title, nodes);
+  }
+
   function draw() {
     show();
     app.replaceChildren(...header().filter(Boolean));  // a part with nothing to show is left out, not drawn as "null"
     if (!info.prompts.length) {
-      app.append(h("div", {class: "card empty"}, t("report.empty")), footer(false));
+      app.append(...[h("div", {class: "card empty"}, t("report.empty")), gateCard(), footer(false)].filter(Boolean));
       return;
     }
-    for (const node of [findings(), timeCard(), promptsCard(), stagesCard(), contextCard(), cacheCard(), toolsCard(), reviewsCard(), footer(true)]) {
+    for (const node of [findings(), timeCard(), gateCard(), promptsCard(), stagesCard(), contextCard(), cacheCard(), toolsCard(), reviewsCard(), footer(true)]) {
       if (node) app.append(node);
     }
   }

@@ -10,6 +10,24 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.4 (2026-10-31)
+
+### Added
+
+- **Gate blocks in the report of a task** (the time-and-usage page, `report.html`). A new **Gate blocks** card lists every `deny` of the task from its hook log (its session and the sessions of its subagents): time, command or file, rule, reason. You give each one a verdict: **Right to block**, **Wrong block**, **Not sure**; the same button again takes it back. A new KPI cell shows how many blocks there were. The rule is the `kind` the gate reported (`task-scope`), else `gate.<tool>`; the reason says which pattern matched.
+- **Verdicts are yours only.** They are kept in the task state (`gate_verdicts`) by `POST /api/verdict` of the board server (paired browser, header, own origin, like `/api/act`). No command sets one, and the gate refuses an agent that writes `.task/`. They are kept for closed tasks too.
+- **Export wrong blocks as eval samples.** A button on the report writes `.harness/eval/fixtures/gate/<rule>/<id>.json` for each block you judged wrong (`POST /api/export`): the call the gate should have let through. A sample holds the tool, command or paths, reason and rule only: no task name, session or time, and the text goes through the new `core/redact.py` (tokens, passwords, user:password@host, keys, the home folder name).
+- **Save page on the report.** A served report has a **Save page** link: one file with the verdicts, no buttons, no calls to a server, and a CSP that allows its own script only. A report file opened from disk shows the verdicts read only. The commands in either are taken through `redact` first.
+- `registry.json` lists `test_chatnew.py` and `test_chatsend.py` (left out in 1.6.2 and 1.6.3).
+
+### Changed
+
+- The board server draws `/tasks/<name>/report.html` itself (so the verdicts are the latest and the buttons are there); `task report` and the board still write the same page to disk. A verdict or an export writes it again.
+
+### Retired
+
+- Nothing.
+
 ## 1.6.3 (2026-10-31)
 
 ### Added

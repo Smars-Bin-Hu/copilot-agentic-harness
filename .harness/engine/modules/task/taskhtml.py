@@ -69,9 +69,19 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
     return MARKS.sub(lambda found: parts[found.group(0)], skeleton_text).replace(PAGE_LANGUAGE, f'<html lang="{messages.language()}">', 1)
 
 
-def task_page(info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, Any]] = None) -> str:
-    """now: what the task waits for at this moment (tasklife.waiting_now), or None."""
+def task_page(info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, Any]] = None, serve: Optional[Dict[str, Any]] = None) -> str:
+    """now: what the task waits for at this moment (tasklife.waiting_now), or None.
+    serve: set when the board server sends the page (the Gate verdicts get buttons, and a link to save the page).
+    Without it the page is a file: it shows the verdicts and has no calls to a server."""
+    if serve is not None:
+        return build("task.html", ["common.js", "serve.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "serve": serve}, refresh)
     return build("task.html", ["common.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now}, refresh)
+
+
+def saved_report(info: Dict[str, Any], now: Optional[Dict[str, Any]] = None) -> str:
+    """The report as one file to keep or send: as of now, no buttons, no server. It may run its own script and ask the network for nothing."""
+    page = build("task.html", ["common.js", "task.js"], say("report.title", name=info["name"]), {"info": info, "now": now, "snapshot": True})
+    return page.replace("<head>", f'<head>\n<meta http-equiv="Content-Security-Policy" content="{SNAPSHOT_CSP}">', 1)
 
 
 def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: Optional[Dict[str, Any]] = None, hidden: int = 0) -> str:

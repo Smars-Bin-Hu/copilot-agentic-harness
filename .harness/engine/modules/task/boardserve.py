@@ -20,6 +20,8 @@ Who may do what:
   `/api/draft` appends a note to `.task/drafts.json`; `/api/setting` sets the task's model and thinking level (`chat.model`); `review set` runs through `/api/act`.
 - New task (1.6, B73): `/api/create` (paired POST only; `step` options, preview or act) makes a chat in VS Code for a task the agent opens (`chatnew` checks every field again, `vslink.create` does it). It fails
   with a clear reason when VS Code is not ready; nothing is made then.
+- Gate review (1.6, B76): the report page (`/tasks/<name>/report.html`) is drawn by the server, with buttons for the verdicts; `/api/verdict` and `/api/export` (paired POST only) keep a verdict in the
+  task state and write the samples of the blocks judged wrong (`gatereview`). `/report-save/<name>` gives the report as one file with no buttons and no calls. The report file on disk shows the verdicts, read only.
 - VS Code (1.6): one background thread (`vslink`) keeps a connection to the chats of VS Code and a cache; a request only reads the cache. Without VS Code the
   board is what it was: `vscode.ready` is false, no error, no wait. `/api/open` (paired browser) asks the thread to bring the window of this folder forward.
 """
@@ -43,7 +45,7 @@ from urllib.parse import quote, unquote, urlparse
 from core import config, messages, registry, tasks
 from core.paths import board_serve_file, utc_now
 
-from . import autorun, chatnew, chatsend, common, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
+from . import autorun, chatnew, chatsend, common, gatereview, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -227,6 +229,42 @@ class Board:
 
     def desk_page(self, name: str) -> str:
         return taskhtml.desk_page(self.desk(name), {"actions": self.served, "refresh": REFRESH})
+
+    def report_info(self, name: str) -> Tuple[str, Dict[str, Any], Optional[Dict[str, Any]]]:
+        task = task_ops.resolve(self.root, name)
+        info, now = taskboard.insight(self.root, task)
+        return task, taskboard.with_gate(self.root, task, info), now
+
+    def report_page(self, name: str) -> str:
+        """The time-and-usage page as the server sends it: the Gate verdicts have buttons, and the page can be saved."""
+        _task, info, now = self.report_info(name)
+        return taskhtml.task_page(info, 0, now, serve={"actions": self.served})
+
+    def saved_report(self, name: str) -> Tuple[str, str]:
+        """The same page as one file to keep or send (file name, page): as of now, verdicts shown, no buttons, no calls."""
+        _task, info, now = self.report_info(name)
+        stem = re.sub(r"[^\w.-]+", "-", info["name"]).strip("-.") or "task"
+        return f"{stem}-report-{time.strftime('%Y-%m-%d')}.html", taskhtml.saved_report(info, now)
+
+    def named(self, data: Dict[str, Any]) -> str:
+        """The task a page named: a name is needed (an empty one would pick the one open task, and a verdict must not go by luck)."""
+        if not str(data.get("task", "")).strip():
+            raise CommandError(say("gate.refused.task"))
+        return task_ops.resolve(self.root, str(data["task"]))
+
+    def verdict(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The person's verdict on one Gate block (right, wrong, unsure; empty takes it back). Any task, closed ones too: the report of a closed task is read later."""
+        task = self.named(data)
+        found = gatereview.set_verdict(self.root, task, str(data.get("id", "")), str(data.get("verdict", "")))
+        taskboard.refresh_report(self.root, task)
+        return {"gate": found}
+
+    def export(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Write a sample for each block judged wrong (`.harness/eval/fixtures/gate/<rule>/`)."""
+        task = self.named(data)
+        done = gatereview.export(self.root, task)
+        taskboard.refresh_report(self.root, task)
+        return {"files": done["files"], "gate": done["section"]}
 
     def snapshot(self, name: str) -> Tuple[str, str]:
         """The task page as one file to keep or send (file name, page): as of now, no buttons, nothing that talks to a server.
@@ -567,6 +605,23 @@ def handler_for(board: Board) -> type:
                     return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead download
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
+            if path.startswith("/report-save/"):
+                try:
+                    filename, page = board.saved_report(path[len("/report-save/"):].strip("/"))
+                    disposition = f"attachment; filename=\"report.html\"; filename*=UTF-8''{quote(filename)}"
+                    return self.send(200, page.encode("utf-8"), "text/html; charset=utf-8", {"Content-Disposition": disposition})
+                except CommandError as error:
+                    return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
+                except Exception as error:  # noqa: BLE001 - show it instead of a dead download
+                    return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
+            shown = re.fullmatch(r"/tasks/([^/]+)/report\.html", path)
+            if shown:  # the report is drawn when asked: the verdicts are the latest and the buttons are there
+                try:
+                    return self.send(200, board.report_page(shown.group(1)).encode("utf-8"), "text/html; charset=utf-8")
+                except CommandError as error:
+                    return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
+                except Exception as error:  # noqa: BLE001 - show it instead of a dead page
+                    return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
             if path in ("/", "/board.html") or path.startswith("/task/"):
                 try:
                     page = board.page() if not path.startswith("/task/") else board.desk_page(path[len("/task/"):].strip("/"))
@@ -632,7 +687,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown in the dialog
                     return self.answer(409, {"error": str(error)})
-            if path in ("/api/send", "/api/steer", "/api/stop", "/api/draft", "/api/setting"):  # talk to the chat, and its settings: the paired browser, nothing else
+            if path in ("/api/send", "/api/steer", "/api/stop", "/api/draft", "/api/setting", "/api/verdict", "/api/export"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:

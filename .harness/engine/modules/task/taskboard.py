@@ -21,7 +21,7 @@ from core import config, messages, tasks
 from core.render import local_time, pad, width  # noqa: F401 - the page and the tests use them from here too
 from core.paths import cli_command, utc_now
 
-from . import common, task as task_ops, taskhtml, taskinsight, tasklife, tasksub, taskstages
+from . import common, gatereview, task as task_ops, taskhtml, taskinsight, tasklife, tasksub, taskstages
 
 BOARD_NAME = "board.html"
 MIN_INTERVAL = 1.0
@@ -91,10 +91,27 @@ def insight(root: Path, task: str, use_events: Optional[bool] = None) -> Tuple[D
     return taskinsight.add_open_wait(taskinsight.of_task(root, task, use_events), now), now
 
 
+def with_gate(root: Path, task: str, info: Dict[str, Any]) -> Dict[str, Any]:
+    """The page's data with the Gate section (the blocks and the person's verdicts). Not part of `insight`: what an agent reads does not carry it."""
+    try:
+        return dict(info, gate=gatereview.section(root, task_ops.read(root, task)))
+    except Exception:  # noqa: BLE001 - the time and usage page must not go because of a log it cannot read
+        return dict(info, gate=None)
+
+
 def write_task_page(root: Path, task: str, info: Dict[str, Any], refresh: int = 0, now: Optional[Dict[str, Any]] = None) -> Path:
     path = common.task_report_file(root, task_ops.name_of(task), common.REPORT_HTML)
-    common.replace_text(path, taskhtml.task_page(info, refresh, now))
+    common.replace_text(path, taskhtml.task_page(with_gate(root, task, info), refresh, now))
     return path
+
+
+def refresh_report(root: Path, task: str) -> None:
+    """Write the report file again (a verdict changed): a copy opened from the disk shows it too."""
+    try:
+        info, now = insight(root, task)
+        write_task_page(root, task, info, 0, now)
+    except Exception:  # noqa: BLE001 - the verdict is kept; the file is made again on the next report
+        pass
 
 
 ACTIONS_BY_WAIT = {"req": ("confirm-req",), "plan": ("approve-plan",), "promote": ("approve-promote",), "recover": ("recover",), "review": ("review extend", "review waive")}

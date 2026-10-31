@@ -90,16 +90,16 @@ def sent_file(root: Path, task: str) -> Path:
 
 
 def drafts(root: Path, task: str) -> List[Dict[str, str]]:
-    """The saved drafts, oldest first: {id, at, text}. A file that cannot be read holds none."""
+    """The saved drafts, oldest first: {id, at, text, use}. `use` false: kept, but left out of the next message. A file that cannot be read holds none."""
     try:
         found = json.loads(drafts_file(root, task).read_text(encoding="utf-8-sig")).get("items")
     except (OSError, ValueError, AttributeError):
         return []
-    return [{"id": str(item["id"]), "at": str(item.get("at") or ""), "text": str(item["text"])} for item in found or [] if isinstance(item, dict) and item.get("id") and str(item.get("text") or "").strip()]
+    return [{"id": str(item["id"]), "at": str(item.get("at") or ""), "text": str(item["text"]), "use": item.get("use") is not False} for item in found or [] if isinstance(item, dict) and item.get("id") and str(item.get("text") or "").strip()]
 
 
 def add_draft(root: Path, task: str, text: str) -> Dict[str, str]:
-    """Append one draft (one line). The board's Drafts box (B77) edits and deletes; this block only appends."""
+    """Append one draft (one line)."""
     line = one_line(text)
     if not line:
         raise ValueError("empty")
@@ -111,6 +111,29 @@ def add_draft(root: Path, task: str, text: str) -> Dict[str, str]:
         entry = {"id": secrets.token_hex(4), "at": utc_now(), "text": line}
         atomic_write(path, {"items": items + [entry]})
     return entry
+
+
+def change_draft(root: Path, task: str, draft_id: str, text: Optional[str] = None, use: Optional[bool] = None, delete: bool = False) -> None:
+    """Edit the text of one draft, switch it in or out of the next message, or delete it. ValueError("gone") for an id that is not there, ("empty") for a text with nothing in it."""
+    line = None if text is None else one_line(text)
+    if line is not None and not line:
+        raise ValueError("empty")
+    path = drafts_file(root, task)
+    with state_lock(path):
+        items = drafts(root, task)
+        if not any(item["id"] == draft_id for item in items):
+            raise ValueError("gone")
+        out = []
+        for item in items:
+            if item["id"] == draft_id:
+                if delete:
+                    continue
+                if line is not None:
+                    item = dict(item, text=line)
+                if use is not None:
+                    item = dict(item, use=use)
+            out.append(item)
+        atomic_write(path, {"items": out})
 
 
 def drop_drafts(root: Path, task: str, ids: List[str]) -> None:
@@ -145,7 +168,7 @@ def prepare(root: Path, task: str, kind: str, why: str, code: str, lang: str, bo
             raise ValueError("empty")
     else:
         raise ValueError("kind")
-    saved = drafts(root, task) if with_drafts else []
+    saved = [item for item in drafts(root, task) if item["use"]] if with_drafts else []
     notes = [item["text"] for item in saved] + lines_of(note)
     text = compose(head, lang, notes)
     if len(text) > MAX_TEXT:

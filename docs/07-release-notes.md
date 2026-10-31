@@ -10,6 +10,21 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.7 (2026-10-31)
+
+### Added
+
+- **Drafts box on the task page.** Add a note, edit it, delete it, and tick which notes go into the next message the board sends. The send panel shows the ticked ones at the end of the message, after "Notes from the person:". A note is cleared only after a send went; a failed send keeps all of them. The notes live in `.task/drafts.json` on this computer: they are not in the page data, in a saved copy, in a digest, and are never written back. The page reads and writes them through the paired `/api/draft` POST only.
+
+### Changed
+
+- `core/redact.py` also masks short password options of known database and login tools (`sqlcmd -P x`, `bcp -P x`, `mysql -pSecret`, `mongosh -p x`, `redis-cli -a x`, `sqlplus user/pass@db`). Common flags of other tools (`grep -P`, `mkdir -p`, `ssh -p 22`, `mysql -P 3306`) are left alone. `-Password x` was already masked.
+- Test fix: the engine's standard-library check now allows `statistics` (used by the health warning).
+
+### Retired
+
+- Nothing.
+
 ## 1.6.6 (2026-10-31)
 
 ### Added

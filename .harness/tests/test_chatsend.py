@@ -82,6 +82,24 @@ class DraftTests(DraftCase):
         with self.assertRaises(ValueError):
             chatsend.add_draft(self.root, TASK, "   ")
 
+    def test_a_draft_is_edited_switched_out_of_the_message_and_deleted(self) -> None:
+        one, two = chatsend.add_draft(self.root, TASK, "first"), chatsend.add_draft(self.root, TASK, "second")
+        chatsend.change_draft(self.root, TASK, one["id"], text="  first,\n edited ")
+        chatsend.change_draft(self.root, TASK, two["id"], use=False)
+        self.assertEqual([(item["text"], item["use"]) for item in chatsend.drafts(self.root, TASK)], [("first, edited", True), ("second", False)])
+        made = chatsend.prepare(self.root, TASK, "answer", "", "", "en", "Go.", "")
+        self.assertEqual(made["text"], "Go.\n\nNotes from the person:\n- first, edited")  # the switched-out note is not in it
+        self.assertEqual(made["draft_ids"], [one["id"]])
+        chatsend.drop_drafts(self.root, TASK, made["draft_ids"])  # only what went is cleared
+        self.assertEqual([item["text"] for item in chatsend.drafts(self.root, TASK)], ["second"])
+        self.assertEqual(chatsend.prepare(self.root, TASK, "answer", "", "", "en", "Go.", "")["text"], "Go.")
+        with self.assertRaises(ValueError):
+            chatsend.change_draft(self.root, TASK, two["id"], text="  ")
+        with self.assertRaises(ValueError):
+            chatsend.change_draft(self.root, TASK, "nope", delete=True)
+        chatsend.change_draft(self.root, TASK, two["id"], delete=True)
+        self.assertEqual(chatsend.drafts(self.root, TASK), [])
+
     def test_a_message_that_cannot_be_made_says_why(self) -> None:
         for kind, why, body, wanted in (("go", "stopped", "", "kind"), ("answer", "", "  ", "empty"), ("zzz", "", "x", "kind"), ("answer", "", "x" * 30000, "long")):
             with self.assertRaises(ValueError) as caught:
@@ -298,6 +316,7 @@ class SendTests(SendCase):
 
     def test_a_chat_that_is_not_idle_gets_nothing_and_the_text_comes_back_to_copy(self) -> None:
         self.go_mark()
+        chatsend.add_draft(self.root, TASK, "keep me")
         self.busy()
         status, data, _ = self.post("/api/send", {"kind": "go", "step": "act"})
         self.assertEqual(status, 409)
@@ -305,7 +324,7 @@ class SendTests(SendCase):
         self.assertTrue(data["fallback"].startswith("Plan approved"))
         self.assertEqual(self.dispatched(), [])
         self.assertEqual(self.post("/api/send", {"kind": "go", "step": "preview"})[1]["result"]["blocked"], said("not-idle"))
-        self.assertEqual(chatsend.drafts(self.root, TASK), [])
+        self.assertEqual([item["text"] for item in chatsend.drafts(self.root, TASK)], ["keep me"])  # a send that failed clears nothing
 
     def test_an_unbound_task_gets_nothing(self) -> None:
         self.go_mark()
@@ -456,6 +475,48 @@ class SettingsTests(SendCase):
         self.assertEqual((status, data["result"]["count"]), (200, 1))
         self.assertEqual(self.post("/api/draft", {"text": "  "})[0], 409)
         self.assertEqual([item["text"] for item in chatsend.drafts(self.root, TASK)], ["remember the nulls"])
+
+    def test_the_drafts_box_lists_adds_edits_switches_and_deletes_by_paired_post(self) -> None:
+        self.assertEqual(self.post("/api/draft", {"op": "list"})[1]["result"]["items"], [])
+        first = self.post("/api/draft", {"op": "add", "text": "one"})[1]["result"]
+        self.post("/api/draft", {"text": "two"})  # no op: add
+        items = first["items"]
+        self.assertEqual((first["count"], items[0]["text"], items[0]["use"]), (1, "one", True))
+        listed = self.post("/api/draft", {"op": "list"})[1]["result"]["items"]
+        self.assertEqual([item["text"] for item in listed], ["one", "two"])
+        edited = self.post("/api/draft", {"op": "edit", "id": listed[0]["id"], "text": "one, edited"})[1]["result"]["items"]
+        self.assertEqual(edited[0]["text"], "one, edited")
+        out = self.post("/api/draft", {"op": "use", "id": listed[1]["id"], "use": False})[1]["result"]["items"]
+        self.assertEqual([item["use"] for item in out], [True, False])
+        preview = self.post("/api/send", {"kind": "answer", "body": "Hi", "step": "preview"})[1]["result"]
+        self.assertEqual((preview["text"], preview["drafts"]), ("Hi\n\nNotes from the person:\n- one, edited", 1))
+        self.assertEqual(self.post("/api/draft", {"op": "edit", "id": "zzz", "text": "x"})[0], 409)
+        self.assertEqual(self.post("/api/draft", {"op": "edit", "id": listed[0]["id"], "text": " "})[0], 409)
+        self.assertEqual(self.post("/api/draft", {"op": "bogus"})[0], 409)
+        after = self.post("/api/draft", {"op": "delete", "id": listed[0]["id"]})[1]["result"]["items"]
+        self.assertEqual([item["text"] for item in after], ["two"])
+        for body in ({"op": "list"}, {"op": "delete", "id": listed[1]["id"]}):
+            self.assertEqual(self.post("/api/draft", body, cookie="")[0], 403)
+            self.assertEqual(self.post("/api/draft", body, header=False)[0], 403)
+        self.assertEqual(self.request("GET", "/api/draft")[0] == 200, False)
+        self.assertEqual(len(chatsend.drafts(self.root, TASK)), 1)
+
+    def test_the_drafts_are_not_in_the_desk_or_the_board(self) -> None:
+        chatsend.add_draft(self.root, TASK, "private-note-xyz")
+        for path in ("/api/desk", "/api/board", "/api/status"):
+            self.assertNotIn("private-note-xyz", json.dumps(self.request("POST", path, {"task": "job1"})[1]))
+        self.assertNotIn("private-note-xyz", self.request("GET", "/")[1]["text"])
+
+    def test_a_send_that_went_clears_the_drafts_that_went_and_keeps_the_switched_out(self) -> None:
+        self.go_mark()
+        chatsend.add_draft(self.root, TASK, "goes")
+        kept = chatsend.add_draft(self.root, TASK, "stays")
+        chatsend.change_draft(self.root, TASK, kept["id"], use=False)
+        status, data, _ = self.post("/api/send", {"kind": "go", "step": "act"})
+        self.assertEqual(status, 200, data)
+        self.assertIn("- goes", data["result"]["text"])
+        self.assertNotIn("stays", data["result"]["text"])
+        self.assertEqual([item["text"] for item in chatsend.drafts(self.root, TASK)], ["stays"])
 
     def test_the_pages_have_the_script_and_the_texts(self) -> None:
         page = self.request("GET", "/")[1]["text"]

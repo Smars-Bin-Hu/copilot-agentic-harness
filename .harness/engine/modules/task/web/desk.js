@@ -41,6 +41,7 @@
   // The server sent the task again: draw the round that is open from the new data.
   function setDesk(next) {
     full = next;
+    drafts.stale = true;  // a send may have used the notes: read them again at the next draw
     shown = JSON.stringify(next);
     desk = desk.past ? pastView(full, desk.past.round) : full;
     if (!ownTab(current)) current = firstTab();
@@ -290,6 +291,70 @@
       h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.model")), pick), h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.thinking")), think),
       h("span", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.checks")), h("span", {class: "chips"}, chips)),
       h("p", {class: "sub set-note"}, t("desk.set.note", {n: Math.max(1, info.n || 3)})));
+  }
+
+  // "Drafts" (1.6, B77): the person's notes for the next message the board sends. Ticked notes go at the end of it (the send panel shows them); a note is cleared only after a send went.
+  // The notes are read and written through the paired POST /api/draft only: they are not in the page data, a saved copy or a digest. One node is kept between redraws, so a half-typed note stays.
+  const drafts = {items: null, max: 50, editing: "", text: "", add: "", error: "", busy: false, node: null, loading: false, stale: false};
+
+  function draftCall(body) {
+    drafts.busy = true; drafts.error = ""; paintDrafts();
+    return SERVE.post("/api/draft", {task: desk.name, ...body}).then((data) => {
+      drafts.busy = false;
+      drafts.items = data.result.items; drafts.max = data.result.max || drafts.max;
+      paintDrafts();
+      return true;
+    }, (error) => {
+      drafts.busy = false; drafts.error = (error && error.message) || String(error);
+      if (!error.offline && !(error.data && error.data.unpaired)) draftCall({op: "list"});  // a gone draft: read the list again, so the page shows what is there
+      else paintDrafts();
+      return false;
+    });
+  }
+
+  function paintDrafts() {
+    if (!drafts.node) return;
+    const items = drafts.items || [];
+    const used = items.filter((item) => item.use).length;
+    const input = h("input", {type: "text", class: "send-body draft-add", placeholder: t("desk.drafts.ph"), maxlength: 2000, value: drafts.add});
+    const add = h("button", {type: "button", class: "act", disabled: drafts.busy || !drafts.add.trim() || items.length >= drafts.max ? "disabled" : null}, t("desk.drafts.add"));
+    const submit = () => { if (!drafts.add.trim() || drafts.busy) return; const text = drafts.add; draftCall({op: "add", text}).then((ok) => { if (ok) { drafts.add = ""; paintDrafts(); } }); };
+    input.addEventListener("input", () => { drafts.add = input.value; add.disabled = drafts.busy || !drafts.add.trim() || items.length >= drafts.max; });
+    input.addEventListener("keydown", (event) => { if (event.key === "Enter") submit(); });
+    add.addEventListener("click", submit);
+    const rows = items.map((item) => {
+      const tick = h("input", {type: "checkbox", checked: item.use ? "" : null, disabled: drafts.busy ? "disabled" : null, title: t("desk.drafts.use.tip"), "aria-label": t("desk.drafts.use.tip")});
+      tick.checked = item.use;
+      tick.addEventListener("change", () => draftCall({op: "use", id: item.id, use: tick.checked}));
+      if (drafts.editing === item.id) {
+        const box = h("input", {type: "text", class: "send-body", maxlength: 2000, value: drafts.text});
+        const save = h("button", {type: "button", class: "act", disabled: drafts.text.trim() ? null : "disabled"}, t("desk.drafts.save"));
+        const cancel = h("button", {type: "button", class: "act"}, t("desk.drafts.cancel"));
+        box.addEventListener("input", () => { drafts.text = box.value; save.disabled = !drafts.text.trim(); });
+        const commit = () => { if (!drafts.text.trim()) return; draftCall({op: "edit", id: item.id, text: drafts.text}).then((ok) => { if (ok) { drafts.editing = ""; paintDrafts(); } }); };
+        box.addEventListener("keydown", (event) => { if (event.key === "Enter") commit(); else if (event.key === "Escape") { drafts.editing = ""; paintDrafts(); } });
+        save.addEventListener("click", commit);
+        cancel.addEventListener("click", () => { drafts.editing = ""; paintDrafts(); });
+        return h("li", {class: "draft-row editing"}, tick, box, save, cancel);
+      }
+      const edit = h("button", {type: "button", class: "act", disabled: drafts.busy ? "disabled" : null}, t("desk.drafts.edit"));
+      const drop = h("button", {type: "button", class: "act", disabled: drafts.busy ? "disabled" : null}, t("desk.drafts.delete"));
+      edit.addEventListener("click", () => { drafts.editing = item.id; drafts.text = item.text; paintDrafts(); });
+      drop.addEventListener("click", () => draftCall({op: "delete", id: item.id}));
+      return h("li", {class: "draft-row" + (item.use ? "" : " off")}, tick, h("span", {class: "draft-text"}, item.text), edit, drop);
+    });
+    drafts.node.replaceChildren(...[h("span", {class: "chat-k"}, t("desk.drafts.label")), h("p", {class: "sub set-note"}, t("desk.drafts.hint")),
+      rows.length ? h("ul", {class: "draft-list"}, rows) : h("p", {class: "sub"}, drafts.items ? t("desk.drafts.none") : "..."),
+      rows.length ? h("p", {class: "sub"}, t("desk.drafts.count", {count: items.length, used})) : null,
+      h("div", {class: "row draft-new"}, input, add), drafts.error ? h("div", {class: "bad"}, ...SERVE.reasons(drafts.error)) : null].filter(Boolean));  // replaceChildren would write a null as the word "null"
+  }
+
+  function draftsBox() {
+    if (!served() || desk.past || desk.status !== "open") return null;
+    if (!drafts.node) drafts.node = h("section", {class: "card chatbar drafts"});
+    paintDrafts();
+    if ((drafts.items === null || drafts.stale) && !drafts.loading && !drafts.busy) { drafts.stale = false; drafts.loading = true; SERVE.ready.then(() => draftCall({op: "list"})).then(() => { drafts.loading = false; }); }  // after the pairing is settled: a call before it would be refused
+    return drafts.node;
   }
 
   // What the card says when no button is the point: put aside, waiting for a word in VS Code, nobody on it, or really nothing.
@@ -1173,7 +1238,7 @@
   function draw(keepScroll) {
     const y = window.scrollY;
     const kept = new Map([...app.querySelectorAll("[data-keep]")].map((node) => [node.dataset.keep, [node.scrollTop, node.scrollLeft]]));
-    app.replaceChildren(...[...header(), ...(chatBars() || []), settingsRow(), ribbon(), desk.past ? pastNote() : saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
+    app.replaceChildren(...[...header(), ...(chatBars() || []), settingsRow(), draftsBox(), ribbon(), desk.past ? pastNote() : saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
       h("footer", null, t(saved ? "desk.snapshot.footer" : "desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright())].filter(Boolean));  // a null would be drawn as the word "null"
     if (keepScroll) {
       for (const node of app.querySelectorAll("[data-keep]")) if (kept.has(node.dataset.keep)) [node.scrollTop, node.scrollLeft] = kept.get(node.dataset.keep);

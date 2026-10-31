@@ -156,6 +156,28 @@ class ExportTests(GateCase):
         self.assertNotIn("job1", text)
         self.assertIn("az group", redact.text("az group delete -n rg1"))  # what a rule needs stays
 
+    def test_redact_masks_short_password_options_of_known_tools_only(self) -> None:
+        for command, wanted in (
+            ("sqlcmd -S srv -U sa -P secret -Q 'select 1'", "sqlcmd -S srv -U sa -P *** -Q 'select 1'"),
+            ("sqlcmd -S srv -Psecret", "sqlcmd -S srv -P ***"),
+            ("C:\\bin\\sqlcmd.exe -P pw", "C:\\bin\\sqlcmd.exe -P ***"),
+            ("bcp t out f -P pw -U u", "bcp t out f -P *** -U u"),
+            ("mysql -uroot -pSecret db", "mysql -uroot -p*** db"),
+            ("mysql -p'a b' db", "mysql -p*** db"),
+            ("mongosh -u u -p pw", "mongosh -u u -p ***"),
+            ("redis-cli -a pw ping", "redis-cli -a *** ping"),
+            ("sqlplus scott/tiger@db", "sqlplus scott/***@db"),
+            ("ssh -p 22 h && mysql -pS3 x", "ssh -p 22 h && mysql -p*** x"),
+            ("tool -Password hunter2", "tool -Password ***"),
+            ("Connect -Password:abc", "Connect -Password:***"),
+            ("mysql --password=abc", "mysql --password=***"),
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(redact.text(command), wanted)
+        for command in ("grep -P 'pat' f", "mkdir -p dir", "ssh -p 22 host", "mysql -P 3306 -h x", "mysql -p db", "sqlcmd -p x", "echo sqlcmd; ls -P a", "echo mysql | grep -pfoo", "psql -p 5432 -U u db"):
+            with self.subTest(command=command):
+                self.assertEqual(redact.text(command), command)
+
     def test_redact_takes_out_values_and_keeps_the_shape(self) -> None:
         self.assertEqual(redact.text("export API_KEY=abc12345 && run"), "export API_KEY=*** && run")
         self.assertEqual(redact.text("curl https://u:pw@h/x"), "curl https://u:***@h/x")

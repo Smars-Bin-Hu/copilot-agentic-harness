@@ -17,7 +17,7 @@ Who may do what:
 - `.harness/runtime/board-serve.json` holds the port while it runs: the gate refuses an agent's request to it.
 - Talking to the chat (1.6, B72): `/api/send`, `/api/steer`, `/api/stop` (paired POST only) act through the link's thread, after it looked at the binding and the chat again. The code the person
   typed at an approval is kept here in memory (`Board.codes`) for the message that tells the agent; it goes to no file and to no page but that message's preview.
-  `/api/draft` appends a note to `.task/drafts.json`; `/api/setting` sets the task's model and thinking level (`chat.model`); `review set` runs through `/api/act`.
+  `/api/draft` lists, adds, edits, deletes and switches the notes of `.task/drafts.json`; `/api/setting` sets the task's model and thinking level (`chat.model`); `review set` runs through `/api/act`.
 - New task (1.6, B73): `/api/create` (paired POST only; `step` options, preview or act) makes a chat in VS Code for a task the agent opens (`chatnew` checks every field again, `vslink.create` does it). It fails
   with a clear reason when VS Code is not ready; nothing is made then.
 - Confirm and answer (1.6, B75): `/api/confirm` (allow or deny one tool call) and `/api/answer` (answer one question) are paired POSTs only. The page names the item (`id`, the `toolCallId` or request id,
@@ -568,13 +568,26 @@ class Board:
         return {"created": True, "name": plan["name"], "initiator": initiator, "warn": warn, "unchecked": not initiator, "text": text, "model": plan["model"] or {}}
 
     def draft(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Save one note for the next send (appends to `.task/drafts.json`). The Drafts box that edits and deletes is B77."""
+        """The Drafts box of the task page (B77): `op` list, add, edit, delete or use (switch a draft in or out of the next send). The answer holds the drafts: they are the person's notes, so only the paired browser reads them."""
         task, _found = self.target(data)
+        op = str(data.get("op", "add"))
+        out: Dict[str, Any] = {"saved": True}
         try:
-            entry = chatsend.add_draft(self.root, task, str(data.get("text", "")))
+            if op == "add":
+                out["at"] = chatsend.add_draft(self.root, task, str(data.get("text", "")))["at"]
+            elif op == "edit":
+                chatsend.change_draft(self.root, task, str(data.get("id", "")), text=str(data.get("text", "")))
+            elif op == "delete":
+                chatsend.change_draft(self.root, task, str(data.get("id", "")), delete=True)
+            elif op == "use":
+                chatsend.change_draft(self.root, task, str(data.get("id", "")), use=bool(data.get("use")))
+            elif op != "list":
+                raise ValueError("gone")
         except ValueError as error:
             raise CommandError(self.refusal("draft." + str(error))) from None
-        return {"saved": True, "count": len(chatsend.drafts(self.root, task)), "at": entry["at"]}
+        items = chatsend.drafts(self.root, task)
+        out.update({"items": items, "count": len(items), "max": chatsend.MAX_DRAFTS})
+        return out
 
     def setting(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """The model and thinking level of the messages the board sends (`chat.model`). Only a model the host lists, only a level that model has. `id` empty: the chat keeps its own."""

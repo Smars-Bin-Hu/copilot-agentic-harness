@@ -287,7 +287,7 @@
     } else {
       row.push(h("span", {class: "sub"}, t("desk.chat.unbound", {why: t("board.vs.why." + (chat.why || "no-chat"))})));
     }
-    row.push(h("span", {class: "chat-grow"}), chat.bound && SERVE.runs("send") ? compactButton(chat) : null, chat.bound && chat.title ? copyTitleButton(chat) : null, SERVE.vsButton(chat), h("span", {class: "sub"}, t("desk.chat.window")));
+    row.push(h("span", {class: "chat-grow"}), chat.bound && SERVE.runs("send") ? compactButton(chat) : null, chat.bound && chat.title ? copyTitleButton(chat) : null, SERVE.vsButton(chat));
     const bars = [h("section", {class: "card chatbar"}, row)];
     if (desk.sub && (desk.sub.what || desk.sub.text)) {
       const more = desk.recent && desk.recent !== desk.sub.text ? h("details", {class: "recent-more", open: recentOpen ? "" : null}, h("summary", null, t("desk.recent.more")), h("pre", {class: "recent-text"}, desk.recent)) : null;
@@ -1216,7 +1216,7 @@
       const gate = item.kind === "gate";
       return h("li", {class: gate ? "tr-gate" : item.ok === false ? "tr-fail" : ""},
         h("span", {class: "when sub"}, when(item.at, 5, 19)),
-        h("div", {class: "what"}, h("b", null, item.tool),
+        h("div", {class: "what"}, h("b", null, item.tool), item.source ? [" ", h("span", {class: "tag", title: t("desk.trace.source", {name: item.source})}, item.source)] : null,
           gate ? [" ", tag(t("desk.trace." + item.decision), item.decision === "deny" ? "bad" : "hot"), item.rule ? h("span", {class: "sub"}, " \u00b7 " + item.rule) : null] : null,
           !gate && item.ok === false ? [" ", tag(t("desk.trace.failed"), "bad")] : null,
           !gate && item.ok === null ? [" ", tag(t("desk.trace.running"), "good run")] : null,

@@ -15,8 +15,8 @@ Who may do what:
   show and the code to type; `act` runs it with the code the person typed. A plan that changed between the two has
   another code, and the approval is refused, as in the terminal.
 - `.harness/runtime/board-serve.json` holds the port while it runs: the gate refuses an agent's request to it.
-- Talking to the chat (1.6, B72): `/api/send`, `/api/steer`, `/api/stop` (paired POST only; B78: `/api/compact`, which sends `/compact` to an idle chat) act through the link's thread, after it looked at the binding and the chat again. The code the person
-  typed at an approval is kept here in memory (`Board.codes`) for the message that tells the agent; it goes to no file and to no page but that message's preview.
+- Talking to the chat (1.6, B72): `/api/send`, `/api/steer`, `/api/stop` (paired POST only; B78: `/api/compact`, which sends `/compact` to an idle chat) act through the link's thread, after it looked at the binding and the chat again. The confirmation code typed at an
+  approval is not kept: no message to the agent holds it.
   `/api/draft` lists, adds, edits, deletes and switches the notes of `.task/drafts.json`; `/api/setting` sets the task's model and thinking level (`chat.model`); `review set` runs through `/api/act`.
 - New task (1.6, B73): `/api/create` (paired POST only; `step` options, preview or act) makes a chat in VS Code for a task the agent opens (`chatnew` checks every field again, `vslink.create` does it). It fails
   with a clear reason when VS Code is not ready; nothing is made then.
@@ -61,7 +61,8 @@ EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal i
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
 BUILTIN = ("send", "answer", "steer", "stop", "create", "confirm", "question")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
-REFRESH = 10  # seconds between two boards in the browser
+DESK_REFRESH = 10  # seconds between two reads of a task page
+REFRESH = 3  # seconds between two boards in the browser when `board.refresh_seconds` of the task policy says nothing
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
 # or send anything elsewhere, even if it ever got past the drawing (which uses textContent only).
 CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; "
@@ -72,10 +73,16 @@ def say(key: str, /, **values: Any) -> str:
     return messages.text(key, **values)
 
 
+def refresh_seconds(value: Any) -> int:
+    """Seconds between two boards in the browser: 1 to 600, else REFRESH."""
+    number = config.whole(value, REFRESH)
+    return number if 1 <= number <= 600 else REFRESH
+
+
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "autorun on", "recover", "archive", "close"]}
+    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "autorun on", "recover", "archive", "close"]}
 
 
 class Fallback(CommandError):
@@ -146,13 +153,13 @@ def disk_version(root: Path) -> str:
 class Board:
     """What one server holds: the settings, the pairing code and the sessions of paired browsers. Memory only."""
 
-    def __init__(self, root: Path, everything: bool, port: int, actions: List[str], link: Optional[vslink.VsLink] = None) -> None:
+    def __init__(self, root: Path, everything: bool, port: int, actions: List[str], link: Optional[vslink.VsLink] = None, refresh: int = REFRESH) -> None:
         self.root = root
+        self.refresh = refresh
         self.link = link or vslink.VsLink(root, enabled=False)  # a board made without a link (the tests) has none
         self.everything = everything
         self.port = port
         self.actions = actions
-        self.codes: Dict[str, Tuple[str, str]] = {}  # task -> (the `go-*` mark its approval left, the code typed); memory only
         self.code = secrets.token_urlsafe(12)
         self.sessions: set = set()
         self.lock = threading.Lock()
@@ -215,7 +222,7 @@ class Board:
 
     def page(self) -> str:
         found = self.rows()
-        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve={"actions": self.served, "refresh": REFRESH, "archive_to": found["archive_to"], "vscode": found["vscode"]}, hidden=found["hidden"])
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve={"actions": self.served, "refresh": self.refresh, "archive_to": found["archive_to"], "vscode": found["vscode"]}, hidden=found["hidden"])
 
     def desk(self, name: str) -> Dict[str, Any]:
         found = taskdesk.desk(self.root, name, self.served)
@@ -239,7 +246,7 @@ class Board:
                 "models": self.link.model_list(), "ready": bool(self.link.status()["ready"])}
 
     def desk_page(self, name: str) -> str:
-        return taskhtml.desk_page(self.desk(name), {"actions": self.served, "refresh": REFRESH})
+        return taskhtml.desk_page(self.desk(name), {"actions": self.served, "refresh": DESK_REFRESH})
 
     def report_info(self, name: str) -> Tuple[str, Dict[str, Any], Optional[Dict[str, Any]]]:
         task = task_ops.resolve(self.root, name)
@@ -390,9 +397,6 @@ class Board:
             raise CommandError(say("serve.preview.none"))
         result = call(reader=lambda _asked: code, interactive=True, out=out)
         noted(self.root, result.get("task") or task, action)
-        mark = chatsend.CODE_OF_ACTION.get(action)
-        if mark and code:
-            self.codes[result.get("task") or task_ops.resolve(self.root, task)] = (mark, code)  # for the message that tells the agent; nowhere else
         return result
 
     # --- talking to the chat (B72) ---------------------------------------------------------------------------------
@@ -412,9 +416,8 @@ class Board:
         why = tasklife.waiting(self.root, task, found)["why"] if kind == "go" else ""
         if kind == "go" and why not in chatsend.GO:
             raise CommandError(self.refusal("nogo"))
-        mark, code = self.codes.get(task, ("", ""))
         try:
-            made = chatsend.prepare(self.root, task, kind, why, code if mark == why else "", str(data.get("lang", "en")), str(data.get("body", "")), str(data.get("note", "")))
+            made = chatsend.prepare(self.root, task, kind, why, str(data.get("lang", "en")), str(data.get("body", "")), str(data.get("note", "")))
         except ValueError as error:
             raise CommandError(self.refusal("text." + str(error))) from None
         made["kind"], made["why"] = kind, why
@@ -433,7 +436,7 @@ class Board:
         return out
 
     def preview(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """What a send would say, and whether it can go now (`blocked`: the reason, or empty). Needs the paired browser: the text may hold the code of an approval."""
+        """What a send would say, and whether it can go now (`blocked`: the reason, or empty). Needs the paired browser."""
         task, found = self.target(data)
         made = self.message(task, found, data)
         why = self.link.check(task, "send")
@@ -449,8 +452,6 @@ class Board:
             raise Fallback(self.refusal(error.why), made["text"]) from None
         except Exception as error:  # noqa: BLE001 - the host said no: the person copies the text
             raise Fallback(ahp_scrub(error), made["text"]) from None
-        if made["kind"] == "go":
-            self.codes.pop(task, None)
         chatsend.drop_drafts(self.root, task, made["draft_ids"])
         return self.sent(task, found, made["kind"], made["text"], done, {"why": made["why"], "lang": made["lang"], "model": model or {}, "drafts": len(made["draft_ids"])})
 
@@ -877,7 +878,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     out = out or sys.stdout
     found = settings(root)
     link = link if link is not None else vslink.VsLink(root, enabled=vslink.enabled_by_policy(root))
-    board = Board(root, everything, port or found["port"], found["actions"], link)
+    board = Board(root, everything, port or found["port"], found["actions"], link, found["refresh"])
     try:
         server = http.server.ThreadingHTTPServer(("127.0.0.1", board.port), handler_for(board))
     except OSError as error:

@@ -4,6 +4,9 @@
 # Eval run output
 .harness/eval/results/
 
+# Samples of gate blocks a person judged wrong (written by the board; they hold the person's own commands)
+.harness/eval/fixtures/gate/
+
 # Machine-local settings (a local path, a name, how this terminal prints)
 .harness/policies/target.override.json
 .harness/policies/user.override.json

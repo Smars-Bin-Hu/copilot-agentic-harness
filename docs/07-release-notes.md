@@ -10,6 +10,32 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.11 (2026-10-31)
+
+### Added
+
+- The lobby shows the health warning (a small warning sign) beside a robot, as the list does; the mouse over it says why.
+- The Trace of a task page also lists the calls of its subagents (the reviewer, the mapper), each marked with the agent's name, newest first, in the same limit. Their ids are found in Copilot's record of the session (only the tail is read, and the answer is cached); their calls come from their own hook logs. Where the record is missing, or `report.copilot_events` is false, the Trace is the main session alone.
+- `board.refresh_seconds` in `policies/task.json` (3): how often the served board asks for the rows. The page waits while it is hidden, and skips a round while the last request has not come back. The task page asks every 10 seconds, as before.
+
+### Changed
+
+- A refresh no longer closes an open "more" menu on the board: the rows are drawn when the menu closes.
+- The VS button shows only the VS Code logo (drawn in the page, no network). It can be pressed while VS Code is not linked (it runs `code <folder>`); it is grey only when no `code` command is found. The words are its tooltip.
+- A message the board sends to the chat no longer holds the confirmation code. The code stays where a person types it to approve.
+- One name for the feature: `promote (write-back repo)` where the messages name it as a noun (English and Chinese), plain `promote` in buttons, verbs and later mentions; the go-promote and go-recover messages use it too. Other Chinese terms are unchanged.
+- The development task kind has a filled hammer icon. A task not yet started links to its page on the served board.
+- The gate text for the user-only commands now names `task review set` (words only; the pattern had it already).
+- `.harness/eval/fixtures/gate/` (samples of wrong gate blocks, written by the board) is ignored by git.
+
+### Fixed
+
+- A board file on disk showed `nullnull` beside the Off work buttons: the two parts that exist only on a served board were written as the word "null". They are left out now.
+
+### Retired
+
+- The "Switch to VS Code" words beside the VS button.
+
 ## 1.6.10 (2026-10-31)
 
 ### Added

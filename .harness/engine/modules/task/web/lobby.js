@@ -70,6 +70,14 @@ const Lobby = (function () {
     return root;
   }
 
+  // The health warning of a task (row.warn, from health.py; the list view shows the same): a small tag by the robot, the reason in its title.
+  function warnMark(slot, row) {
+    let node = slot.querySelector(".lb-warn");
+    if (!row.warn || !row.warn.length) { if (node) node.remove(); return; }
+    if (!node) { node = h("span", {class: "lb-warn", role: "img", "aria-label": t("board.warn.label")}, "\u26a0"); slot.append(node); }
+    node.title = row.warn.map((item) => t("board.warn." + item.rule, {n: item.n})).join("\n");
+  }
+
   function create(options) {
     const slots = new Map();  // task name -> {slot, bot, row, pose, zone, label}
     const rowsOf = {};
@@ -245,6 +253,7 @@ const Lobby = (function () {
           }
           entry.actionsChanged = JSON.stringify(entry.row.actions) !== JSON.stringify(row.actions);
           entry.row = row;
+          warnMark(entry.slot, row);
           if (entry.pose !== pose) {
             changed.push(entry);
             entry.bot.setAttribute("class", "lb-bot lb-pose-" + pose);

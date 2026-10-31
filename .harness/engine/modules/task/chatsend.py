@@ -3,8 +3,9 @@
 The text of a message to the agent is English and fixed. A person can add a line or two (notes), pick the reply language and, for an answer, write the text; nobody can change
 the words of a template. Control marks (`[ZH]`) are added only when the person chose them; `[review]` is never in a message (the number of checks is set on the task page).
 
-  go-req, go-plan, go-promote   the three approvals: the template with the code the person just typed (the board keeps it in memory; see `boardserve.Board.codes`)
-  go-recover, go-review         a plain line, no code
+  go-req, go-plan, go-promote   the three approvals
+  go-recover, go-review         a plain line
+  (no template holds the confirmation code: it is typed by a person at an approval and goes nowhere else)
   answer                        the person's own words, no template
 
 Notes: the saved drafts of the task (`.task/drafts.json`, the person's file: never in a digest, never written back) and the note typed in the panel go last, one line each, after
@@ -33,28 +34,18 @@ DRAFTS_NAME = "drafts.json"
 SENT_NAME = "sent.jsonl"
 
 TEMPLATES = {
-    "go-req": "Requirement confirmed (REQ.md, code {code}). Go on.",
-    "go-plan": "Plan approved (PLAN.md, code {code}). Go on with TODO.md.",
-    "go-promote": "Write-back plan approved (code {code}). Go on with the promote, then stop and report.",
-}
-NO_CODE = {  # the approval was made where the board did not see the code (a terminal, or before the board started)
     "go-req": "Requirement confirmed (REQ.md). Go on.",
     "go-plan": "Plan approved (PLAN.md). Go on with TODO.md.",
-    "go-promote": "Write-back plan approved. Go on with the promote, then stop and report.",
+    "go-promote": "Promote (write-back repo) approved. Go on with the promote, then stop and report.",
 }
-PLAIN = {"go-recover": "The repositories are put back. Try the write-back again.", "go-review": "The checks are decided. Go on."}
+PLAIN = {"go-recover": "The repositories are put back. Try the promote (write-back repo) again.", "go-review": "The checks are decided. Go on."}
 COMPACT_TEXT = "/compact"  # the one control mark the board sends, and only when the person pressed the compact button (`Board.compact`); no template holds it
 GO = tuple(TEMPLATES) + tuple(PLAIN)
-CODE_OF_ACTION = {"confirm-req": "go-req", "approve-plan": "go-plan", "approve-promote": "go-promote"}  # the approval that leaves each mark
 
 
-def template(why: str, code: str = "") -> str:
-    """The fixed text for a `go-*` wait. Empty for a wait that has none."""
-    if why in PLAIN:
-        return PLAIN[why]
-    if why in TEMPLATES:
-        return TEMPLATES[why].format(code=code) if code else NO_CODE[why]
-    return ""
+def template(why: str) -> str:
+    """The fixed text for a `go-*` wait. Empty for a wait that has none. It holds no confirmation code: the agent does not need it."""
+    return PLAIN.get(why) or TEMPLATES.get(why) or ""
 
 
 def one_line(text: str, limit: int = MAX_NOTE) -> str:
@@ -156,11 +147,11 @@ def record(root: Path, task: str, entry: Dict[str, Any]) -> None:
             handle.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
 
 
-def prepare(root: Path, task: str, kind: str, why: str, code: str, lang: str, body: str, note: str, with_drafts: bool = True) -> Dict[str, Any]:
+def prepare(root: Path, task: str, kind: str, why: str, lang: str, body: str, note: str, with_drafts: bool = True) -> Dict[str, Any]:
     """The message of a send, whole: `{text, notes (the lines added), draft_ids (the drafts merged)}`. Raises ValueError("kind"|"empty"|"long") for what cannot be sent."""
     lang = lang if lang in LANGS else "en"
     if kind == "go":
-        head = template(why, code)
+        head = template(why)
         if not head:
             raise ValueError("kind")
     elif kind == "answer":

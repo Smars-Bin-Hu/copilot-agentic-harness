@@ -214,10 +214,10 @@ class CompactTests(CompactCase):
 
     def test_no_other_call_can_send_the_mark(self) -> None:
         self.go_mark()
-        text = chatsend.prepare(self.root, TASK, "go", "go-plan", "C0DE", "en", "", "")["text"]
+        text = chatsend.prepare(self.root, TASK, "go", "go-plan", "en", "", "")["text"]
         self.assertNotIn("/compact", text)
         for why in chatsend.GO:
-            self.assertNotIn("/compact", chatsend.template(why, "C0DE"))
+            self.assertNotIn("/compact", chatsend.template(why))
         self.assertEqual(chatsend.COMPACT_TEXT, "/compact")
         self.assertEqual(self.post("/api/send", {"kind": "compact", "step": "act"})[0], 409)  # `send` has no such kind
         self.assertEqual(self.dispatched(), [])

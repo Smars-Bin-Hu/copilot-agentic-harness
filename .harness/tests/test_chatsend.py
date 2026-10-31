@@ -32,28 +32,28 @@ def said(key: str, **values: Any) -> str:
 
 
 class TemplateTests(unittest.TestCase):
-    def test_every_combination_of_wait_code_language_and_notes(self) -> None:
+    def test_every_combination_of_wait_language_and_notes(self) -> None:
         for why in GO:
-            for code in ("", "AB12CD34"):
-                for lang in ("en", "zh"):
-                    for notes in ([], ["one"], ["one", "two words"]):
-                        with self.subTest(why=why, code=code, lang=lang, notes=notes):
-                            text = chatsend.compose(chatsend.template(why, code), lang, notes)
-                            self.assertEqual(text.startswith("[ZH] "), lang == "zh")
-                            self.assertEqual("AB12CD34" in text, bool(code) and why in chatsend.TEMPLATES)
-                            self.assertEqual(chatsend.NOTES_HEAD in text, bool(notes))
-                            if notes:
-                                self.assertTrue(text.endswith("\n".join("- " + note for note in notes)))
-                            self.assertNotRegex(text, r"(?i)\[\s*review\s*\]")
-                            self.assertNotIn("[EN]", text)
-                            self.assertNotIn("/compact", text)
-                            self.assertNotIn("{", text)
+            for lang in ("en", "zh"):
+                for notes in ([], ["one"], ["one", "two words"]):
+                    with self.subTest(why=why, lang=lang, notes=notes):
+                        text = chatsend.compose(chatsend.template(why), lang, notes)
+                        self.assertEqual(text.startswith("[ZH] "), lang == "zh")
+                        self.assertEqual(chatsend.NOTES_HEAD in text, bool(notes))
+                        if notes:
+                            self.assertTrue(text.endswith("\n".join("- " + note for note in notes)))
+                        self.assertNotRegex(text, r"(?i)\[\s*review\s*\]")
+                        self.assertNotIn("[EN]", text)
+                        self.assertNotIn("/compact", text)
+                        self.assertNotIn("{", text)
+                        self.assertNotIn("code", text.lower())  # 1.6.11: no template holds the confirmation code
 
-    def test_the_three_templates_say_what_the_design_says(self) -> None:
-        self.assertEqual(chatsend.template("go-req", "7F3K"), "Requirement confirmed (REQ.md, code 7F3K). Go on.")
-        self.assertEqual(chatsend.template("go-plan", "7F3K"), "Plan approved (PLAN.md, code 7F3K). Go on with TODO.md.")
-        self.assertEqual(chatsend.template("go-promote", "7F3K"), "Write-back plan approved (code 7F3K). Go on with the promote, then stop and report.")
-        self.assertEqual(chatsend.template("stopped", "x"), "")  # a wait with no template
+    def test_the_templates_say_what_the_design_says(self) -> None:
+        self.assertEqual(chatsend.template("go-req"), "Requirement confirmed (REQ.md). Go on.")
+        self.assertEqual(chatsend.template("go-plan"), "Plan approved (PLAN.md). Go on with TODO.md.")
+        self.assertEqual(chatsend.template("go-promote"), "Promote (write-back repo) approved. Go on with the promote, then stop and report.")
+        self.assertEqual(chatsend.template("go-recover"), "The repositories are put back. Try the promote (write-back repo) again.")
+        self.assertEqual(chatsend.template("stopped"), "")  # a wait with no template
 
     def test_notes_are_one_line_each_and_the_mark_goes_first(self) -> None:
         self.assertEqual(chatsend.lines_of("a  b\n\n  c\nd"), ["a b", "c", "d"])
@@ -74,8 +74,8 @@ class DraftTests(DraftCase):
         chatsend.add_draft(self.root, TASK, "commit message in English")
         self.assertEqual([item["text"] for item in chatsend.drafts(self.root, TASK)], ["check the empty values too", "commit message in English"])
         self.assertTrue((self.root / TASK / ".task" / "drafts.json").is_file())
-        made = chatsend.prepare(self.root, TASK, "go", "go-plan", "C0DE", "en", "", "typed note")
-        self.assertEqual(made["text"], "Plan approved (PLAN.md, code C0DE). Go on with TODO.md.\n\nNotes from the person:\n- check the empty values too\n- commit message in English\n- typed note")
+        made = chatsend.prepare(self.root, TASK, "go", "go-plan", "en", "", "typed note")
+        self.assertEqual(made["text"], "Plan approved (PLAN.md). Go on with TODO.md.\n\nNotes from the person:\n- check the empty values too\n- commit message in English\n- typed note")
         self.assertEqual(len(made["draft_ids"]), 2)
         chatsend.drop_drafts(self.root, TASK, [first["id"]])
         self.assertEqual([item["text"] for item in chatsend.drafts(self.root, TASK)], ["commit message in English"])
@@ -87,12 +87,12 @@ class DraftTests(DraftCase):
         chatsend.change_draft(self.root, TASK, one["id"], text="  first,\n edited ")
         chatsend.change_draft(self.root, TASK, two["id"], use=False)
         self.assertEqual([(item["text"], item["use"]) for item in chatsend.drafts(self.root, TASK)], [("first, edited", True), ("second", False)])
-        made = chatsend.prepare(self.root, TASK, "answer", "", "", "en", "Go.", "")
+        made = chatsend.prepare(self.root, TASK, "answer", "", "en", "Go.", "")
         self.assertEqual(made["text"], "Go.\n\nNotes from the person:\n- first, edited")  # the switched-out note is not in it
         self.assertEqual(made["draft_ids"], [one["id"]])
         chatsend.drop_drafts(self.root, TASK, made["draft_ids"])  # only what went is cleared
         self.assertEqual([item["text"] for item in chatsend.drafts(self.root, TASK)], ["second"])
-        self.assertEqual(chatsend.prepare(self.root, TASK, "answer", "", "", "en", "Go.", "")["text"], "Go.")
+        self.assertEqual(chatsend.prepare(self.root, TASK, "answer", "", "en", "Go.", "")["text"], "Go.")
         with self.assertRaises(ValueError):
             chatsend.change_draft(self.root, TASK, two["id"], text="  ")
         with self.assertRaises(ValueError):
@@ -103,9 +103,9 @@ class DraftTests(DraftCase):
     def test_a_message_that_cannot_be_made_says_why(self) -> None:
         for kind, why, body, wanted in (("go", "stopped", "", "kind"), ("answer", "", "  ", "empty"), ("zzz", "", "x", "kind"), ("answer", "", "x" * 30000, "long")):
             with self.assertRaises(ValueError) as caught:
-                chatsend.prepare(self.root, TASK, kind, why, "", "en", body, "")
+                chatsend.prepare(self.root, TASK, kind, why, "en", body, "")
             self.assertEqual(str(caught.exception), wanted)
-        self.assertEqual(chatsend.prepare(self.root, TASK, "answer", "", "", "zh", " Use the second one. ", "")["text"], "[ZH] Use the second one.")
+        self.assertEqual(chatsend.prepare(self.root, TASK, "answer", "", "zh", " Use the second one. ", "")["text"], "[ZH] Use the second one.")
 
     def test_a_record_is_a_json_line_with_the_whole_text(self) -> None:
         chatsend.record(self.root, TASK, {"at": "t", "text": "whole\ntext"})
@@ -234,7 +234,7 @@ class SendCase(ServeCase):
         return [message["params"] for message in self.host.seen if message.get("method") == "dispatchAction"]
 
     def go_mark(self, why: str = "go-plan") -> str:
-        """The wait after an approval: the plan is approved on the board (its code is kept in memory), then the mark is the one asked for."""
+        """The wait after an approval: the plan is approved on the board (its code is typed, not kept), then the mark is the one asked for."""
         code = self.approve_plan() if not tasks.plan_approved(self.root, TASK, self.data()) else ""
         with task_ops.locked(self.root, TASK) as data:
             data["waiting"] = {"since": "2026-10-31T00:00:00+00:00", "why": why}
@@ -255,17 +255,17 @@ class SendCase(ServeCase):
 
 
 class SendTests(SendCase):
-    def test_the_code_of_the_approval_just_made_is_in_the_message_and_nowhere_else_the_page_reads(self) -> None:
+    def test_the_message_after_an_approval_holds_no_code_and_the_code_is_kept_nowhere(self) -> None:
         code = self.approve_plan()
         status, data, _ = self.post("/api/send", {"kind": "go", "step": "preview"})
         self.assertEqual(status, 200, data)
-        self.assertEqual(data["result"]["text"], f"Plan approved (PLAN.md, code {code}). Go on with TODO.md.")
+        self.assertEqual(data["result"]["text"], "Plan approved (PLAN.md). Go on with TODO.md.")
         self.assertEqual(data["result"]["blocked"], "")
         board = json.dumps(self.request("POST", "/api/board", {})[1])
         self.assertNotIn(code, board)  # the rows carry no code
         self.assertNotIn(code, json.dumps(self.request("POST", "/api/status", {})[1]))
         self.assertNotIn(code, json.dumps(self.link_view()))  # nor the link's view of the chat
-        self.assertEqual(self.post("/api/send", {"kind": "go", "step": "preview"}, cookie="")[0], 403)  # the preview may hold the code: paired only
+        self.assertEqual(self.post("/api/send", {"kind": "go", "step": "preview"}, cookie="")[0], 403)  # a preview is for the paired browser
 
     def test_a_send_goes_to_the_chat_as_a_new_turn_with_the_text_the_model_and_a_record(self) -> None:
         code = self.approve_plan()
@@ -279,7 +279,7 @@ class SendTests(SendCase):
         action = params["action"]
         self.assertEqual(action["type"], "chat/turnStarted")
         self.assertTrue(action["turnId"] and action["startedAt"])
-        text = f"[ZH] Plan approved (PLAN.md, code {code}). Go on with TODO.md.\n\nNotes from the person:\n- check empty values\n- second\n- third"
+        text = "[ZH] Plan approved (PLAN.md). Go on with TODO.md.\n\nNotes from the person:\n- check empty values\n- second\n- third"
         self.assertEqual(action["message"], {"text": text, "origin": {"kind": "user"}, "model": {"id": "claude-haiku-5.5", "config": {"thinkingLevel": "low"}}})
         self.assertNotRegex(action["message"]["text"], r"(?i)\[\s*review\s*\]")
         line = json.loads((self.root / TASK / ".task" / "sent.jsonl").read_text(encoding="utf-8").splitlines()[-1])
@@ -288,13 +288,12 @@ class SendTests(SendCase):
         self.assertEqual(len(sent), 1)
         self.assertIn("Plan approved", sent[0]["detail"])
         self.assertEqual(chatsend.drafts(self.root, TASK), [])  # the drafts went with it
-        again = self.post("/api/send", {"kind": "go", "step": "preview"})[1]["result"]
-        self.assertNotIn(code, again["text"])  # the code of that approval is used up
+        self.assertNotIn(code, text)
 
     def test_english_has_no_mark_and_the_default_is_english(self) -> None:
         self.go_mark("go-req")
         text = self.post("/api/send", {"kind": "go", "step": "preview"})[1]["result"]["text"]
-        self.assertEqual(text, "Requirement confirmed (REQ.md). Go on.")  # the approval was not made on this board: no code is invented
+        self.assertEqual(text, "Requirement confirmed (REQ.md). Go on.")
         self.assertNotIn("[", text)
         self.assertTrue(self.post("/api/send", {"kind": "go", "lang": "zh", "step": "preview"})[1]["result"]["text"].startswith("[ZH] "))
         self.assertFalse(self.post("/api/send", {"kind": "go", "lang": "xx", "step": "preview"})[1]["result"]["text"].startswith("["))

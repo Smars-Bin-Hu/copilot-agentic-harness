@@ -110,20 +110,27 @@ function copyCommand(button, command) {
   else fallback();
 }
 
-// Poll every `seconds`: tick() returns a promise. After 3 misses in a row (the board server gave no answer: error.offline) polling stops and a notice
+// Poll every `seconds`: tick() returns a promise (or null: nothing to do now). After 3 misses in a row (the board server gave no answer: error.offline) polling stops and a notice
 // says so, so a stopped server does not fill the console. One miss, or a refusal, changes nothing.
+// While the page is hidden nothing is asked, and the first look after it shows again is at once. A round is skipped while the last request has not come back.
 function pollEvery(seconds, tick) {
   let misses = 0;
-  const timer = setInterval(() => {
+  let waiting = false;
+  const timer = setInterval(go, seconds * 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) go(); });
+  function go() {
+    if (document.hidden || waiting) return;
     const run = tick();
     if (!run) return;
-    run.then(() => { misses = 0; }, (error) => {
+    waiting = true;
+    run.then(() => { misses = 0; waiting = false; }, (error) => {
+      waiting = false;
       if (!error || !error.offline) { misses = 0; return; }
       if (++misses < 3) return;
       clearInterval(timer);
       document.body.prepend(h("div", {class: "stopped-note", role: "alert"}, t("board.stopped")));
     });
-  }, seconds * 1000);
+  }
 }
 
 // What the task waits for, not what the person may do any time (nor a check they may say judged wrong): such an action is "hot".
@@ -147,7 +154,7 @@ function actionButton(row, item, extra) {
 
 // The kind of a task as a 16px line icon (no library). The name of the kind is the tooltip. Each icon: [tag, {attributes}] parts.
 const KIND_ICONS = {
-  dev: [["path", {d: "M3 13l6-6M8 4l3-2 3 3-2 3-1-1-5 5-2-2 5-5z"}]],  // hammer
+  dev: [["path", {d: "M2.8 13.2L8.4 7.6", "stroke-width": 2.4}], ["path", {d: "M7.6 1.8L14 8.2l-2.6 2.4L5 4.2z", fill: "currentColor", "stroke-width": 0.8}]],  // hammer: a filled head across a thick handle
   test: [["path", {d: "M6 2h4M7 2v4L3 13a1 1 0 0 0 1 1.5h8A1 1 0 0 0 13 13L9 6V2M5 10h6"}]],  // flask
   rca: [["circle", {cx: 7, cy: 7, r: 4.5}], ["path", {d: "M10.5 10.5L14 14"}]],  // magnifier
   qa: [["circle", {cx: 8, cy: 8, r: 6}], ["path", {d: "M6 6.3a2 2 0 1 1 3 1.7c-.7.4-1 .8-1 1.5M8 11.5v.5"}]],  // question

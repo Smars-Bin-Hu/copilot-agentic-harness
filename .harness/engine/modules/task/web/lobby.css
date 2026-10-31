@@ -28,6 +28,7 @@
 .lb-ring{position:absolute;left:50%;top:62px;width:96px;height:96px;border:2px solid #fff;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%) scale(.3);opacity:0}
 .lb-nm{font-size:11.5px;color:#cbd6f3;margin-top:-6px;line-height:1.3;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;padding:0 4px}  /* two lines; the whole name is in the title */
 .lb-slot svg{width:104px;height:135px;display:block;overflow:visible;margin:0 auto}
+.lb-warn{position:absolute;left:30px;top:14px;font-size:16px;line-height:1;color:var(--lb-you);cursor:help}
 .lb-slot:focus-visible .lb-nm{outline:2px solid var(--lb-you);border-radius:4px}
 .lb-empty{position:relative;text-align:center;padding:40px 0}
 .lb-empty p{color:#8fa0c8}

@@ -540,7 +540,7 @@ class ListTests(LifeCase):
 
     def test_a_dry_run_and_a_broken_promote_are_named(self) -> None:
         self.new("job", "dev")
-        for state, text in (("dry_run", "等你批准 promote"), ("partial", "promote 中途出错，等你还原仓库")):
+        for state, text in (("dry_run", "等你批准 promote (write-back repo)"), ("partial", "promote 中途出错，等你还原仓库")):
             with task_ops.locked(self.root, f"{BASE}/job") as data:
                 data["promote"] = {"state": state}
             self.assertEqual(self.listed()["tasks"][0]["waiting"], text)

@@ -107,7 +107,9 @@
   // 1. what the task waits for now (orange: confirm, approve, recover...), 2. speaking to the agent at work (room is kept: a later block fills `.act-talk`),
   // 3. the rest (pause or resume, autorun, close, the checks, copy a command). A closed task has only "archive": shown at once.
   let openMenu = null;
-  const closeMenu = () => { if (openMenu) { openMenu.remove(); openMenu = null; } };
+  // A refresh that comes while a menu is open waits (`later`): drawing the rows again would close the menu under the person's hand. It is drawn when the menu closes.
+  let later = null;
+  const closeMenu = (flush) => { if (openMenu) { openMenu.remove(); openMenu = null; } if (flush !== false && later) { const data = later; later = null; apply(data); } };
   document.addEventListener("click", (event) => { if (openMenu && !openMenu.contains(event.target) && !event.target.closest(".act-more")) closeMenu(); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMenu(); });
 
@@ -144,7 +146,7 @@
       const more = h("button", {type: "button", class: "act act-more", title: t("board.menu.more"), "aria-haspopup": "menu", "aria-label": t("board.menu.more")}, "\u22ef");
       more.addEventListener("click", () => {
         const again = openMenu && openMenu.previousElementSibling === more;
-        closeMenu();
+        closeMenu(again);
         if (again) return;
         openMenu = menuFor(row, rest, more);
         more.after(openMenu);
@@ -193,7 +195,7 @@
       canArchive ? tickCell(row) : null,
       h("td", {class: "name"},
         h("div", {class: "name-line"}, kindIcon(row.kind || "other", row.status === "new" ? t("task.kind.none") : t("task.kind." + (row.kind || "none"))),
-          DATA.serve && row.status !== "new" ? h("a", {href: "/task/" + encodeURIComponent(row.name)}, row.name)
+          DATA.serve ? h("a", {href: "/task/" + encodeURIComponent(row.name)}, row.name)
             : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : h("span", null, row.name),
           DATA.serve && row.status === "open" ? SERVE.vsButton(row.chat) : null),
         subLine(row)),
@@ -327,7 +329,8 @@
       });
       return node;
     };
-    shift.replaceChildren(button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint"), newTask(), vsPill());
+    // replaceChildren writes a null as the word "null": on a page on disk, with no server, "New task" and the VS Code pill are not there (N4, 1.6.11).
+    shift.replaceChildren(...[button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint"), newTask(), vsPill()].filter(Boolean));
   }
   // "New task" (1.6, B73): a served board only (it makes a chat in VS Code). The dialog is in chat.js.
   function newTask() {
@@ -388,11 +391,17 @@
   function refresh(strict) {  // strict: an unanswered request is thrown (the poll counts it); a click's refresh ignores it
     if (typeof SERVE === "undefined") return Promise.resolve();
     return SERVE.post("/api/board", {}).then((data) => {
-      asOf = data.as_of;
-      archiveTo = data.archive_to || "";
-      const text = JSON.stringify([data.rows, data.hidden, data.vscode || null]);
-      if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else stamp.textContent = subtitle();
+      if (openMenu && strict === true) { later = data; return; }  // the poll waits; a click's refresh is the person's own act, the menu goes
+      closeMenu(false);
+      later = null;
+      apply(data);
     }, (error) => { if (strict === true) throw error; });
+  }
+  function apply(data) {
+    asOf = data.as_of;
+    archiveTo = data.archive_to || "";
+    const text = JSON.stringify([data.rows, data.hidden, data.vscode || null]);
+    if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else stamp.textContent = subtitle();
   }
   if (typeof SERVE !== "undefined") {
     SERVE.start(app);

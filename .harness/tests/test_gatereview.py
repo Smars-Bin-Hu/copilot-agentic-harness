@@ -193,12 +193,13 @@ class ExportTests(GateCase):
         self.post("/api/verdict", {"id": self.blocks()[1]["id"], "verdict": "unsure"}, cookie)
         self.assertEqual(self.post("/api/export", {}, cookie)[1]["result"]["files"], [])
 
-    def test_the_sample_folder_is_not_a_guardrail_and_not_ignored(self) -> None:
+    def test_the_sample_folder_is_not_a_guardrail_and_is_ignored_by_git_alone(self) -> None:
         from core import guardrails  # noqa: F401 - imported to fail loudly if the module moves
 
         self.assertEqual(self.decision(self.edit(".harness/eval/fixtures/gate/x/y.json", session="no-task-session")), "")  # a session with no task: no rule guards the folder
         ignore = (Path(__file__).resolve().parents[2] / ".gitignore").read_text(encoding="utf-8")
-        self.assertNotIn("fixtures", ignore)
+        self.assertIn(".harness/eval/fixtures/gate/", ignore.splitlines())  # 1.6.11: the samples hold a person's own commands; no sample is tracked
+        self.assertNotIn(".harness/eval/fixtures/\n", ignore)  # the other fixtures (hook payloads) stay tracked
 
 
 class PageTests(GateCase):

@@ -49,9 +49,9 @@ class ValidationTests(TaskCase):
         self.assertEqual(self.plan(model="claude-haiku-4.5", thinking="")["model"], {"id": "claude-haiku-4.5"})
         self.assertEqual(self.plan(source="job1")["source"], "job1")
 
-    def test_the_three_permissions_map_to_the_host_values_and_nothing_else_is_taken(self) -> None:
-        self.assertEqual({word: self.plan(permission=word)["approve"] for word in ("allow-all", "default", "assisted")}, {"allow-all": "autoApprove", "default": "default", "assisted": "assisted"})
-        for word in ("autoApprove", "plan", "autopilot", "bypass", "ALLOW-ALL", "x"):
+    def test_a_chat_of_the_board_is_allow_all_and_nothing_else_is_taken(self) -> None:
+        self.assertEqual((self.plan()["approve"], self.plan(permission="allow-all")["approve"]), ("autoApprove", "autoApprove"))
+        for word in ("default", "assisted", "autoApprove", "plan", "autopilot", "bypass", "ALLOW-ALL", "x"):  # with another, its first command waits in VS Code before there is a task on the board
             with self.subTest(word=word):
                 self.bad("permission", permission=word)
 
@@ -275,24 +275,25 @@ class CreateCase(SendCase):
 
 
 class CreateTests(CreateCase):
-    def test_the_dialog_is_given_the_listed_models_the_kinds_the_tasks_and_the_default_permission(self) -> None:
+    def test_the_dialog_is_given_the_listed_models_the_kinds_and_the_tasks(self) -> None:
         status, data, _ = self.request("POST", "/api/create", {"step": "options"}, cookie=self.cookie)
         found = data["result"]
         self.assertEqual(status, 200, data)
         self.assertEqual([item["id"] for item in found["models"]], ["claude-haiku-5.5", "claude-haiku-4.5"])  # only what the policy enables; no other provider's
         self.assertEqual(found["kinds"], list(tasks.KINDS))
         self.assertEqual([item["name"] for item in found["sources"]], ["job1"])
-        self.assertEqual((found["ready"], found["permission"], found["permissions"]), (True, "allow-all", ["allow-all", "default", "assisted"]))
+        self.assertTrue(found["ready"])
+        self.assertNotIn("permissions", found)
 
     def test_a_create_makes_the_chat_in_this_folder_without_a_worktree_and_sends_the_first_message_with_the_model(self) -> None:
-        status, data, _ = self.make(permission="default")
+        status, data, _ = self.make()
         self.assertEqual(status, 200, data)
         self.assertEqual(len(self.made), 1)
         call = self.made[0]
         self.assertTrue(call["channel"].startswith("ahp-session:/"))
         self.assertEqual(call["provider"], "copilotcli")
         self.assertEqual(call["workingDirectories"], [ahp.folder_uri(self.root)])
-        self.assertEqual(call["config"], {"isolation": "folder", "mode": "interactive", "autoApprove": "default"})
+        self.assertEqual(call["config"], {"isolation": "folder", "mode": "interactive", "autoApprove": "autoApprove"})
         self.assertNotIn("model", call)  # createSession does not honour it: it goes on the message
         self.assertTrue(until(lambda: [item for item in self.dispatched() if item["channel"] == self.new_chat]))
         action = [item for item in self.dispatched() if item["channel"] == self.new_chat][0]["action"]
@@ -303,11 +304,9 @@ class CreateTests(CreateCase):
         self.assertIn("harness-my-task", action["message"]["text"])
         self.assertTrue(action["message"]["text"].endswith("Add a column to the load."))
 
-    def test_allow_all_is_the_default_and_the_host_gets_autoApprove(self) -> None:
+    def test_the_host_gets_autoApprove(self) -> None:
         self.assertEqual(self.make()[0], 200)
         self.assertEqual(self.made[0]["config"]["autoApprove"], "autoApprove")
-        self.assertEqual(self.make(name="second", permission="assisted")[0], 200)
-        self.assertEqual(self.made[1]["config"]["autoApprove"], "assisted")
 
     def test_the_client_name_is_not_sent_and_dispose_is_never_called(self) -> None:
         self.assertEqual(self.make()[0], 200)
@@ -372,7 +371,7 @@ class CreateTests(CreateCase):
         self.assertEqual(self.made, [])
 
     def test_the_task_the_agent_opens_is_bound_to_the_chat_and_keeps_the_model(self) -> None:
-        text = self.make(permission="default")[1]["result"]["text"]
+        text = self.make()[1]["result"]["text"]
         self.assertTrue(until(lambda: self.vs.waiting_names() == ["fresh-load"]))
         self.assertEqual(self.vs.waiting_names(), ["fresh-load"])
         self.prompt("start", session="sess-fresh")
@@ -387,7 +386,7 @@ class CreateTests(CreateCase):
         self.assertTrue(until(lambda: self.vs.waiting_names() == []))
         self.assertTrue(until(lambda: self.vs.status()["bound"] == 2), self.vs.status())  # job1 by its session id, the new one as made by the board
         line = json.loads((self.root / fresh / ".task" / "sent.jsonl").read_text(encoding="utf-8").splitlines()[-1])
-        self.assertEqual((line["kind"], line["text"], line["chat"], line["permission"]), ("create", text, self.new_chat, "default"))
+        self.assertEqual((line["kind"], line["text"], line["chat"], line["permission"]), ("create", text, self.new_chat, "allow-all"))
         self.assertIn("create", [item["what"] for item in self.data(fresh)["events"]])
         self.assertEqual(self.data()["chat"]["how"], "sdk")  # the other task is as it was
 

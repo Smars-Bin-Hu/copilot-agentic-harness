@@ -324,11 +324,12 @@ const SHELL = (function () {
     return banner;
   }
   // Is VS Code linked: green when the board reads its chats, amber when not. The title says why.
-  function vsPill(status) {
+  // `chat`, on a task page: VS Code being linked says nothing about this task when it has no chat.
+  function vsPill(status, chat) {
     if (!served || !status) return null;
-    const on = Boolean(status.ready);
-    return h("span", {class: "vs-pill" + (on ? " on" : ""), title: on ? t("board.vscode.tip.ready", {bound: status.bound, unbound: status.unbound}) : t("board.vs.why." + (status.why || "starting"))},
-      h("i"), t(on ? "board.vscode.ready" : "board.vscode.off"));
+    const on = Boolean(status.ready), alone = on && chat && !chat.bound;
+    return h("span", {class: "vs-pill" + (on ? " on" : "") + (alone ? " alone" : ""), title: alone ? t("board.vs.nochat") : on ? t("board.vscode.tip.ready", {bound: status.bound, unbound: status.unbound}) : t("board.vs.why." + (status.why || "starting"))},
+      h("i"), t(alone ? "board.vscode.nochat" : on ? "board.vscode.ready" : "board.vscode.off"));
   }
 
   buildFixed();

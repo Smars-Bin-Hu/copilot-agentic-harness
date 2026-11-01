@@ -178,7 +178,7 @@ const CHAT = (function () {
   // "New task" (B73): a chat is made in VS Code and told to open the task. The server checks every field again and makes the first message (a fixed English text, then what the person wrote);
   // this dialog only collects the fields and shows that message. The mode (interactive) and the folder (no worktree) are fixed and not on the form.
   function create() {
-    const state = {lang: "en", perm: "allow-all", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set()};
+    const state = {lang: "en", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set()};
     const field = (label, control, extra) => h("label", {class: "new-field" + (extra ? " " + extra : "")}, h("span", {class: "sub label"}, label), control);
     const name = h("input", {type: "text", class: "send-body", maxlength: 80, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.name.ph")});
     const kind = h("select", {class: "send-body"});
@@ -191,7 +191,6 @@ const CHAT = (function () {
     const preview = h("pre", {class: "send-preview"}, "...");
     const problem = h("div", {class: "sub"});  // what is not right yet: shown quietly while the person types
     const blocked = h("div", {class: "bad"});
-    const permHint = h("p", {class: "sub"});
     const kbBox = h("div", {class: "new-kb"});  // the knowledge base domains a task may be about: ticks, and "None" (a choice of its own). Drawn when the options come.
     const go = h("button", {type: "button", class: "act hot", disabled: "disabled"}, t("board.new.go"));
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
@@ -200,25 +199,16 @@ const CHAT = (function () {
       chip.addEventListener("click", () => { state.lang = lang; langChips.forEach((item, at) => { const on = ["en", "zh"][at] === lang; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); }); refresh(); });
       return chip;
     });
-    const permChips = ["allow-all", "default", "assisted"].map((perm) => {
-      const chip = h("button", {type: "button", class: "chip" + (perm === state.perm ? " on" : ""), "aria-pressed": perm === state.perm ? "true" : "false"}, t("board.new.perm." + perm));
-      chip.addEventListener("click", () => { state.perm = perm; showPerm(); refresh(); });
-      return chip;
-    });
-    function showPerm() {
-      permChips.forEach((item, at) => { const on = ["allow-all", "default", "assisted"][at] === state.perm; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); });
-      permHint.textContent = t("board.new.perm." + state.perm + ".hint");
-    }
     const view = SERVE.dialog([h("h2", null, t("board.new.title")), blocked,
       h("div", {class: "new-grid"}, field(t("board.new.name"), name), field(t("board.new.kind"), kind)),
       field(t("board.new.source"), source), h("p", {class: "sub"}, t("board.new.source.hint")),
       h("div", {class: "new-field"}, h("span", {class: "sub label"}, t("board.new.kb")), kbBox),
       field(t("board.new.text"), text), h("div", {class: "new-files"}, files.attach, files.picker, files.tray),
       h("div", {class: "new-grid three"}, field(t("board.new.model"), model), field(t("board.new.thinking"), thinking), field(t("board.new.lang"), h("div", {class: "chips"}, langChips))),
-      h("div", {class: "send-lang"}, h("span", {class: "sub"}, t("board.new.perm")), h("div", {class: "chips"}, permChips)), permHint, h("p", {class: "sub"}, t("board.new.fixed")),
+      h("p", {class: "sub"}, t("board.new.fixed")),
       h("div", {class: "sub label"}, t("board.new.first")), h("p", {class: "sub"}, t("board.new.first.hint")), preview, h("div", {class: "new-actions"}, problem, said, h("div", {class: "row send-actions"}, go, no))]);  // the bar stays in view: the reason the button is dim is read there, not below the long message
     files.zone(view.box);
-    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: text.value, model: model.value, thinking: thinking.value, lang: state.lang, permission: state.perm, domains: Array.from(state.domains)});
+    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: text.value, model: model.value, thinking: thinking.value, lang: state.lang, domains: Array.from(state.domains)});
     // The knowledge base: the domains this repository's knowledge bases have. None ticked is a valid choice. When there are no domains the box says so and the dialog goes on.
     function drawKb() {
       const list = state.domainList;
@@ -268,7 +258,7 @@ const CHAT = (function () {
         clearTimeout(state.timer);
         const done = h("button", {type: "button", class: "act hot"}, t("board.new.close"));
         done.addEventListener("click", () => { close(); SERVE.done(); });
-        view.box.replaceChildren(...[h("h2", null, t("board.new.title") + " \u00b7 " + found.name), h("p", null, t("board.new.done")), state.perm === "allow-all" ? null : h("p", null, t("board.new.done.perm")),
+        view.box.replaceChildren(...[h("h2", null, t("board.new.title") + " \u00b7 " + found.name), h("p", null, t("board.new.done")),
           found.warn ? h("p", {class: "bad"}, found.warn) : found.unchecked ? h("p", {class: "sub"}, t("board.new.done.unchecked")) : null, h("div", {class: "row send-actions"}, done)].filter(Boolean));
         done.focus();
       }, (error) => { state.busy = false; go.textContent = t("board.new.go"); sync(); said.replaceChildren(...SERVE.reasons(shown(error))); });
@@ -278,14 +268,13 @@ const CHAT = (function () {
       kind.replaceChildren(...found.kinds.map((item) => h("option", {value: item, selected: item === "dev" ? "" : null}, t("task.kind." + item))));
       source.replaceChildren(h("option", {value: ""}, t("board.new.source.none")), ...found.sources.map((item) => h("option", {value: item.name}, item.name + (item.kind ? " \u00b7 " + t("task.kind." + item.kind) : "") + (item.status === "closed" ? " \u00b7 " + t("board.filter.closed") : ""))));
       model.replaceChildren(h("option", {value: ""}, t("board.new.model.chat")), ...state.models.map((item) => h("option", {value: item.id}, item.name)));
-      state.perm = found.permission || "allow-all";
       state.domainList = Array.isArray(found.domains) ? found.domains : [];
       drawKb();
-      showPerm(); levels();
+      levels();
       if (!found.ready) blocked.replaceChildren(h("p", null, t("board.new.off")), h("p", {class: "sub"}, t("board.vs.why." + (found.why || "starting"))));
       refresh();
     }, (error) => { blocked.replaceChildren(h("p", null, t("board.new.options", {error: shown(error)}))); });
-    showPerm(); levels();
+    levels();
     name.focus();
   }
 

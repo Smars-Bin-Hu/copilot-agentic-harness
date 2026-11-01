@@ -184,6 +184,10 @@ class LinkTests(LinkCase):
         row = until(lambda: (lambda r: r if r["chat"].get("model") and r.get("sub", {}).get("text") else None)(self.row()))  # bound is set before the chat is subscribed
         self.assertTrue(row, self.row())
         self.assertEqual((row["chat"]["bound"], row["chat"]["state"], row["chat"]["model"], row["chat"]["how"]), (True, "idle", "gpt-6-luna", "sdk"))
+        self.assertEqual(row["chat"]["model_name"], "")  # not listed by the host: the page falls back on the id
+        with self.link.lock:
+            self.link.models = [{"id": "gpt-6-luna", "name": "GPT-6 Luna"}]
+        self.assertEqual(self.row()["chat"]["model_name"], "GPT-6 Luna")
         self.assertEqual((row["sub"]["kind"], row["sub"]["text"]), ("reply", "All done."))
         self.assertEqual(self.data()["chat"]["session"], self.resource)  # kept in the task state
         asked = [message["method"] for message in self.host.seen if "method" in message]

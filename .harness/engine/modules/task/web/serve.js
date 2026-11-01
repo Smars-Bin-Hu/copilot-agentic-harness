@@ -219,8 +219,8 @@ const SERVE = (function () {
   }
   function vsButton(chat) {
     const why = chat && !chat.bound ? chat.why || "" : "";
-    const nothing = why === "no-cli" || why === "off";
-    const button = h("button", {type: "button", class: "vs-btn", disabled: nothing ? "disabled" : null, title: nothing ? t("board.vs.why." + why) : t("board.vs.open"), "aria-label": t("board.vs.open")}, vsLogo());
+    const nothing = why === "no-cli" || why === "off", alone = ["no-chat", "no-session", "ambiguous"].includes(why);  // VS Code is there and this task has no chat: the window is all it can bring
+    const button = h("button", {type: "button", class: "vs-btn" + (alone ? " no-chat" : ""), disabled: nothing ? "disabled" : null, title: nothing ? t("board.vs.why." + why) : alone ? t("board.vs.nochat") : t("board.vs.open"), "aria-label": t("board.vs.open")}, vsLogo());
     button.addEventListener("click", () => {
       button.disabled = true;
       post("/api/open", {}).then(() => { setTimeout(() => { button.disabled = false; }, 1500); }, (error) => { button.disabled = false; failed(error, chat && chat.title); });

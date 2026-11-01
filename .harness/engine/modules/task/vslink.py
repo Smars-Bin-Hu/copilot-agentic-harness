@@ -181,6 +181,7 @@ class VsLink:
             if cached.get("state"):
                 found = tasksub.facts(cached["state"], self.root)
                 out["model"] = found["model"]
+                out["model_name"] = next((str(item.get("name") or "") for item in self.models if item.get("id") == found["model"]), "")  # as the pickers call it; not listed: the page falls back on the id
                 if found["busy"] and found["started"]:
                     out["started_at"] = found["started"]  # the run time of the latest turn is counted by the page, only while it runs
                 out["context"] = chatctx.meter(cached["state"], self.limits)  # None: unknown, shown empty

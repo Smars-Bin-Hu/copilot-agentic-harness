@@ -5,7 +5,7 @@ The board makes a new chat in VS Code (`vslink`, `createSession`) and sends it o
 The words of the first message are English and fixed; the person's text goes in as it is, last. `[ZH]` is added only when the person chose Chinese.
 
 Everything the page sends is checked again here: the name as `task new` takes it, the kind, the fork source (a task that exists), the text, the model (one the host lists now) and its
-thinking level, the reply language, the tool permission, the knowledge base domains (folders a knowledge base has now; none is a choice). A value that is not allowed is refused with the reason; nothing is made.
+thinking level, the reply language, the knowledge base domains (folders a knowledge base has now; none is a choice). A value that is not allowed is refused with the reason; nothing is made.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from .common import CommandError
 
 MAX_TEXT = 5000  # characters of what the person asks for
 MAX_DOMAINS = 20  # domains a request may name (a knowledge base has few)
-PERMISSIONS = {"allow-all": "autoApprove", "default": "default", "assisted": "assisted"}  # the page's word -> `config.autoApprove` of the host
+PERMISSIONS = {"allow-all": "autoApprove"}  # the page's word -> `config.autoApprove` of the host. One only (1.6.38): with another, the agent's first command waits in VS Code before there is a task to show on the board
 DEFAULT_PERMISSION = "allow-all"
 KEEP_PENDING = 3600.0  # seconds a made chat waits for its task to appear before the board lets go of it
 

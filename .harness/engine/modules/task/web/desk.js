@@ -479,21 +479,21 @@
     const kindName = t("task.kind." + (desk.kind || "none"));
     const room = bound && chat.window ? chat.window : meter ? meter.window : 0;
     const changed = desk.status === "new" ? "" : agoText(desk.updated_at);
-    ui.infoL.set(JSON.stringify([desk.kind, desk.tier, desk.status, desk.round, desk.created_at, desk.updated_at, changed, desk.domains, desk.autorun, bound && [chat.model, chat.effort, room]]), () => {
+    ui.infoL.set(JSON.stringify([desk.kind, desk.tier, desk.status, desk.round, desk.created_at, desk.updated_at, changed, desk.domains, desk.autorun, bound && [chat.model, chat.model_name, chat.effort, room]]), () => {
       const nodes = [];
       if (desk.status !== "new" && desk.kind) nodes.push(Status.card(kindIcon(desk.kind, t("desk.info.kind", {kind: kindName})), factsCard, t("desk.info.kind", {kind: kindName})));
-      if (bound && chat.model) nodes.push(infoItem("tk-model", chat.model, t("desk.info.model", {model: chat.model})));
+      if (bound && chat.model) nodes.push(infoItem("tk-model", chat.model_name || chat.model, t("desk.info.model", {model: chat.model})));
       if (bound && chat.effort) nodes.push(infoItem("tk-effort", t("desk.info.effort", {level: chat.effort}), t("desk.info.effort.tip")));
       if (bound && room) nodes.push(infoItem("tk-win", t("desk.info.window", {size: tokensShort(room)}), t("desk.info.window.tip", {tokens: room.toLocaleString("en-US")})));
       if (desk.status !== "new") {  // a task not started has no kind, no round, no dates
-        nodes.push(Status.card(h("span", {class: "tk-meta"}, h("span", null, t("task.tier." + (desk.tier || "none"))), desk.round > 1 ? h("span", null, t("desk.fact.round.short", {round: desk.round})) : null,
+        nodes.push(Status.card(h("span", {class: "tk-meta"}, h("span", null, desk.tier ? t("desk.fact.tier.short", {tier: t("task.tier." + desk.tier)}) : t("task.tier.none")), desk.round > 1 ? h("span", null, t("desk.fact.round.short", {round: desk.round})) : null,
           h("span", {class: "tk-when"}, icon(CLOCK, 13), changed)), factsCard, t("desk.fact.label")), desk.autorun ? tag(t("desk.autorun"), "good") : null);
       }
       return nodes;
     });
     ui.rounds.set(JSON.stringify([full.rounds, full.round, desk.past && desk.past.round]), () => roundSwitch());
     ui.review.set(JSON.stringify([desk.settings && [desk.settings.n, desk.settings.max_n], desk.status, Boolean(desk.past)]), () => reviewButton());
-    ui.pill.set(live ? JSON.stringify(desk.vscode) : "", () => (live ? [SHELL.vsPill(desk.vscode), SERVE.pairMark(true)] : null));
+    ui.pill.set(live ? JSON.stringify([desk.vscode, chat && chat.bound]) : "", () => (live ? [SHELL.vsPill(desk.vscode, chat), SERVE.pairMark(true)] : null));
     ui.forks.set(JSON.stringify([desk.forked_from, desk.forked_to]), () => (desk.forked_from || desk.forked_to.length ? [
       desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null, desk.forked_from && desk.forked_to.length ? " · " : null,
       desk.forked_to.length ? [t("desk.forked.to") + " ", desk.forked_to.map((name, index) => [index ? ", " : "", taskLink(name)])] : null] : null));
@@ -780,12 +780,31 @@
     return item ? actionButton(actionRow(), item, "big") : null;
   }
 
+  // What the chat asks, without opening anything: a bubble by the title of the card, and the pointer on it shows the command or the question. The node is kept between drawings, or a redraw would close the card it opened.
+  const BUBBLE = ["M2.5 5A2.5 2.5 0 0 1 5 2.5h6A2.5 2.5 0 0 1 13.5 5v3.5A2.5 2.5 0 0 1 11 11H7.5L4.5 13.5V11A2.5 2.5 0 0 1 2.5 8.5z", "M5.5 6.75h.01M8 6.75h.01M10.5 6.75h.01"];
+  let bubbleNode = null;
+  function askCard() {
+    const found = desk.ask;
+    if (!found) return {sig: "", build: () => null};
+    const asked = (item) => h("div", {class: "tk-peek-q"}, item.title !== found.message ? h("b", null, item.title) : null, item.message && item.message !== item.title ? h("p", {class: "sub"}, item.message) : null,
+      item.options.length ? h("ul", null, item.options.map((option) => h("li", null, option.label))) : null, item.free ? h("p", {class: "sub"}, t("desk.ask.peek.free")) : null);
+    return {sig: JSON.stringify(found), build: () => h("div", {class: "tk-peek"}, found.kind === "confirm"
+      ? [found.title ? h("b", null, found.title) : null, found.intention ? h("p", {class: "sub"}, found.intention) : null, h("pre", {class: "send-preview"}, found.command || "-"), h("p", {class: "sub"}, t("board.ask.call", {tool: found.tool || "-", id: found.tool_call_id}))]
+      : [h("b", null, found.message), (found.questions || []).map(asked)],
+    found.count > 1 ? h("p", {class: "sub"}, t("board.ask.more", {count: found.count - 1})) : null)};
+  }
+  function askBubble() {
+    if (!desk.ask || !served()) return null;
+    if (!bubbleNode) bubbleNode = Status.card(h("span", {class: "tk-bubble"}, icon(BUBBLE, 15)), askCard, t("desk.ask.peek"));
+    return bubbleNode;
+  }
+
   function otherCard(items, notes) {
     const row = actionRow();
     const idle = items.length ? null : quiet();
     const jump = served() && ["tests", "run"].includes(desk.waiting_why) ? jumpButton("live", t("desk.jump.live")) : null;  // the form for the results is on the Live tab
     return h("section", {class: "tk-need"},
-      h("div", {class: "tk-need-h"}, h("h2", null, idle ? idle.title : t("desk.actions.title")), desk.waited_s !== null && desk.waited_s !== undefined && (items.length || desk.waiting) ? h("span", {class: "sub tk-waited"}, t("desk.waited", {time: clock(desk.waited_s)})) : null),
+      h("div", {class: "tk-need-h"}, h("div", {class: "tk-need-t"}, h("h2", null, idle ? idle.title : t("desk.actions.title")), askBubble()), desk.waited_s !== null && desk.waited_s !== undefined && (items.length || desk.waiting) ? h("span", {class: "sub tk-waited"}, t("desk.waited", {time: clock(desk.waited_s)})) : null),
       notes,
       idle ? [h("p", {class: "hint"}, idle.hint), resumeButton(), idle.prompt ? promptLine(idle.prompt) : null, jump]
         : h("div", {class: "tk-acts"}, items.map((item) => h("div", {class: "tk-act"}, actionButton(row, item, "big"), h("p", {class: "hint"}, hintOf(item))))));
@@ -1549,8 +1568,11 @@
     } else {
       parts.push(h("div", {class: "empty-state"}, h("b", null, t("desk.changes.none")), h("p", null, t("desk.changes.none.hint"))));
     }
-    if (c.promote_plan.lines.length) parts.push(h("h3", null, t("desk.changes.promote")), h("p", {class: "sub"}, t("desk.changes.promote.hint")),
-      DiffView.create(c.promote_plan, () => diff(c.promote_plan), "plan", true));  // the same compare, the files read from the plan; a long file scrolls in a lower window
+    const body = (found) => found.lines.filter((line) => !line.startsWith("#")).join("\n");  // the first lines of each file say what it is, not what changes
+    const plan = c.promote_plan;
+    if (plan.lines.length && !plan.cut && !c.diff.cut && body(plan) === body(c.diff)) parts.push(h("p", {class: "sub"}, t("desk.changes.promote.same")));  // the same diff twice says nothing more
+    else if (plan.lines.length) parts.push(h("h3", null, t("desk.changes.promote")), h("p", {class: "sub"}, t("desk.changes.promote.hint")),
+      DiffView.create(plan, () => diff(plan), "plan", true));  // the same compare, the files read from the plan; a long file scrolls in a lower window
     return parts;
   }
 

@@ -659,14 +659,14 @@ class Board:
         return {"answered": True, "chat": done["title"]}
 
     def create_options(self) -> Dict[str, Any]:
-        """What the new-task dialog offers: the models the host lists now (policy filtered), the kinds, the tasks a fork may start from, the tool permissions, and whether VS Code is ready."""
+        """What the new-task dialog offers: the models the host lists now (policy filtered), the kinds, the tasks a fork may start from, and whether VS Code is ready."""
         status = self.link.status()
         sources = []
         for folder in tasks.folders(self.root):
             found = tasks.read(self.root, folder) or {}
             sources.append({"name": task_ops.name_of(folder), "kind": str(found.get("kind") or ""), "status": str(found.get("status") or "")})
         return {"ready": bool(status["ready"]), "why": status["why"], "models": self.link.model_list(), "kinds": list(tasks.KINDS), "sources": sources,
-                "permissions": list(chatnew.PERMISSIONS), "permission": chatnew.DEFAULT_PERMISSION, "limit": chatnew.MAX_TEXT,
+                "limit": chatnew.MAX_TEXT,
                 "domains": intake.kb_domains(self.root)}  # the knowledge base domains a task may be about (none is a choice); empty: no knowledge base has one
 
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:

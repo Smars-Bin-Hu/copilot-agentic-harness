@@ -159,6 +159,9 @@ assert.strictEqual(grey({bound: false, why: "none"}), false, "VS Code not connec
 assert.strictEqual(grey({bound: false, why: "starting"}), false);
 assert.strictEqual(grey({bound: false, why: "lost"}), false);
 assert.strictEqual(grey({bound: false, why: "no-chat"}), false);
+assert.strictEqual(vsButton({bound: false, why: "no-chat"}).attrs.class, "vs-btn no-chat", "VS Code is there, this task has no chat");
+assert.strictEqual(vsButton({bound: false, why: "none"}).attrs.class, "vs-btn", "the link is down: that is another story");
+assert.strictEqual(vsButton({bound: true}).attrs.class, "vs-btn");
 assert.strictEqual(grey({bound: true}), false);
 assert.strictEqual(grey(undefined), false);
 assert.strictEqual(grey({bound: false, why: "no-cli"}), true, "no `code` command found");
@@ -429,8 +432,6 @@ class WalkThroughTests(unittest.TestCase):
         en = messages.table("en")
         self.assertIn("Stop on this page", en["desk.busy.note"])
         self.assertIn("here or in VS Code", en["desk.wait.cancelled"])
-        chat = (WEB / "chat.js").read_text(encoding="utf-8")
-        self.assertIn('state.perm === "allow-all" ? null : h("p", null, t("board.new.done.perm"))', chat)
         self.assertIn(".tk-need-h{display:flex;flex-wrap:wrap", (WEB / "desk.css").read_text(encoding="utf-8"))  # on a phone the title wrapped letter by letter
 
     def test_an_empty_file_says_so_and_a_paused_task_has_its_way_back_on_the_card(self) -> None:
@@ -442,6 +443,44 @@ class WalkThroughTests(unittest.TestCase):
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
         self.assertIn('const parts = [h("p", {class: "hint top"}, t("desk.review.hint"))];', desk[desk.index("function review()"):][:200])  # 1.6.35 renamed the button's words and took this line with them
         self.assertEqual(desk.count('t("desk.rv.hint")'), 2)  # the popover and the title of the button
+
+    def test_a_new_task_has_no_choice_of_permissions(self) -> None:
+        chat = (WEB / "chat.js").read_text(encoding="utf-8")
+        self.assertNotIn("permChips", chat)
+        self.assertNotIn("board.new.perm", chat)
+        self.assertIn("allow all", messages.table("en")["board.new.fixed"])
+
+    def test_the_bubble_of_a_wait_shows_the_command_or_the_question_and_outlives_a_redraw(self) -> None:
+        desk = (WEB / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('h("div", {class: "tk-need-t"}, h("h2", null, idle ? idle.title : t("desk.actions.title")), askBubble())', desk)
+        self.assertIn("if (!bubbleNode) bubbleNode = Status.card(", desk)  # one node: the 3-second redraw must not close the card
+        self.assertIn('h("pre", {class: "send-preview"}, found.command || "-")', between(desk, "function askCard()", "function askBubble()"))
+        self.assertIn("found.questions", between(desk, "function askCard()", "function askBubble()"))
+
+    def test_the_same_diff_is_shown_once_and_a_different_plan_still_has_its_block(self) -> None:
+        desk = (WEB / "desk.js").read_text(encoding="utf-8")
+        part = between(desk, "function changes()", "function diffKinds(lines)")
+        self.assertIn('found.lines.filter((line) => !line.startsWith("#"))', part)
+        self.assertIn('body(plan) === body(c.diff)) parts.push(h("p", {class: "sub"}, t("desk.changes.promote.same")));', part)
+        self.assertIn('else if (plan.lines.length) parts.push(h("h3", null, t("desk.changes.promote"))', part)
+
+    def test_a_task_with_no_chat_says_so_on_the_icon_and_the_pill(self) -> None:
+        serve, shell = (WEB / "serve.js").read_text(encoding="utf-8"), (WEB / "shell.js").read_text(encoding="utf-8")
+        self.assertIn('alone ? " no-chat" : ""', serve)
+        self.assertIn('alone ? "board.vscode.nochat"', shell)
+        self.assertIn("SHELL.vsPill(desk.vscode, chat)", (WEB / "desk.js").read_text(encoding="utf-8"))
+
+    def test_the_model_has_its_full_name_and_the_tier_says_it_is_a_tier(self) -> None:
+        self.assertIn("chat.model_name || shortModel(chat.model)", (WEB / "status.js").read_text(encoding="utf-8"))
+        desk = (WEB / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('infoItem("tk-model", chat.model_name || chat.model', desk)
+        self.assertIn('t("desk.fact.tier.short", {tier: t("task.tier." + desk.tier)})', desk)
+        self.assertEqual(messages.table("en")["desk.fact.tier.short"], "{tier} tier")
+
+    def test_the_short_words_of_a_stopped_agent(self) -> None:
+        en, zh = messages.table("en"), messages.table("zh")
+        self.assertEqual((en["task.waiting.stopped"], zh["task.waiting.stopped"]), ("waits for you", "等你"))
+        self.assertIn("agent stopped", en["desk.hint.answer"])  # the card on the task page still says what happened
 
     def test_the_rest_of_the_page_follows_when_the_chat_starts_or_stops_waiting(self) -> None:
         desk = (WEB / "desk.js").read_text(encoding="utf-8")

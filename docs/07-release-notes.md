@@ -10,6 +10,24 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.38 (2026-11-01)
+
+### Added
+
+- **A bubble on the waiting card.** When the agent asks a question or waits to run a command, hover over the bubble by the title. A card shows the question and its options, or the command.
+
+### Changed
+
+- **A task with no chat says so.** The VS Code icon is grey and its tip says no chat is linked. On the task page the pill reads "VS Code linked, no chat".
+- **The full model name everywhere on the board** (Claude Haiku 5.5). The id is in the tip.
+- **The tier says it is a tier** ("medium tier"), so it is not read as a thinking level.
+- **Shorter state words.** "waits for you" and "cancelled, waits for you". The task page still says what happened.
+- **The Changes tab shows one diff when the last dry run holds the same changes.** Two blocks appear only when they differ.
+
+### Retired
+
+- **The `default` and `assisted` permissions of New task.** A chat made from the board is always allow all: with the others, its first command could wait in VS Code before the task existed, and the board had nothing to show. The harness gate still runs before every tool call. The Permissions setting in the reply panel stays for the turns after that.
+
 ## 1.6.37 (2026-11-01)
 
 ### Added

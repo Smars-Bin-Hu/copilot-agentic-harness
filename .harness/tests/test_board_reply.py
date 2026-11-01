@@ -221,7 +221,7 @@ class ServeTests(SendCase):
 
 class NewTaskFileTests(CreateCase):
     def fields(self, **more: Any) -> Dict[str, Any]:
-        return {"step": "act", "name": "with-files", "kind": "qa", "source": "", "text": "Look at this", "model": "", "thinking": "", "lang": "en", "permission": "default", "domains": [], **more}
+        return {"step": "act", "name": "with-files", "kind": "qa", "source": "", "text": "Look at this", "model": "", "thinking": "", "lang": "en", "permission": "allow-all", "domains": [], **more}
 
     def test_files_go_with_the_first_message_and_only_their_names_are_kept(self) -> None:
         status, data, _ = self.request("POST", "/api/create", self.fields(attachments=[{"name": "shot.png", "type": "image/png", "data": encoded(b"png")}]), cookie=self.cookie)

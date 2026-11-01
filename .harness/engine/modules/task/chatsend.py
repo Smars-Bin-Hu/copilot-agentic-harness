@@ -21,9 +21,9 @@ import secrets
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import tasks
+from core import messages, tasks
 from core.paths import utc_now
-from core.state import atomic_write, state_lock
+from core.state import atomic_write, state_lock, state_path
 
 LANGS = ("en", "zh")
 MAX_TEXT = 20000  # characters of one message
@@ -36,6 +36,7 @@ MAX_DRAFTS = 50
 SUMMARY_CHARS = 100
 NOTES_HEAD = "Notes from the person:"
 ZH_MARK = "[ZH]"
+EN_MARK = "[EN]"
 DRAFTS_NAME = "drafts.json"
 SENT_NAME = "sent.jsonl"
 
@@ -153,9 +154,25 @@ def record(root: Path, task: str, entry: Dict[str, Any]) -> None:
             handle.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
 
 
+def reply_of(root: Path, task: str) -> str:
+    """The language this task's chat replies in: what `[ZH]` or `[EN]` last said in its session, else the language setting."""
+    data = tasks.read(root, task) or {}
+    try:
+        state = json.loads(state_path(root, str(data.get("surface") or "vscode"), str(data.get("session_id") or "")).read_text(encoding="utf-8"))
+        reply = ((state.get("modules") or {}).get("task") or {}).get("reply")
+    except (OSError, ValueError, AttributeError):
+        reply = None
+    return reply if reply in LANGS else messages.language()
+
+
+def with_english(root: Path, task: str, chosen: str, text: str) -> str:
+    """The person chose English for a chat that replies in Chinese: only `[EN]` turns it back. An empty `chosen` means they did not touch it: the chat stays as it is."""
+    return f"{EN_MARK} {text}" if chosen == "en" and reply_of(root, task) == "zh" else text
+
+
 def prepare(root: Path, task: str, kind: str, why: str, lang: str, body: str, note: str, with_drafts: bool = True) -> Dict[str, Any]:
-    """The message of a send, whole: `{text, notes (the lines added), draft_ids (the drafts merged)}`. Raises ValueError("kind"|"empty"|"long") for what cannot be sent."""
-    lang = lang if lang in LANGS else "en"
+    """The message of a send, whole: `{text, notes (the lines added), draft_ids (the drafts merged), reply}`. Raises ValueError("kind"|"empty"|"long") for what cannot be sent."""
+    chosen, lang = lang, lang if lang in LANGS else "en"
     if kind == "go":
         head = template(why)
         if not head:
@@ -168,10 +185,10 @@ def prepare(root: Path, task: str, kind: str, why: str, lang: str, body: str, no
         raise ValueError("kind")
     saved = [item for item in drafts(root, task) if item["use"]] if with_drafts else []
     notes = [item["text"] for item in saved] + lines_of(note)
-    text = compose(head, lang, notes)
+    text = with_english(root, task, chosen, compose(head, lang, notes))
     if len(text) > MAX_TEXT:
         raise ValueError("long")
-    return {"text": text, "notes": notes, "draft_ids": [item["id"] for item in saved], "lang": lang}
+    return {"text": text, "notes": notes, "draft_ids": [item["id"] for item in saved], "lang": lang, "reply": reply_of(root, task)}
 
 
 def steer_text(body: str, lang: str = "en") -> Tuple[str, str]:

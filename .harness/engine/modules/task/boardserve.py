@@ -273,6 +273,7 @@ class Board:
         if chat.get("state") == "busy" and found["status"] == "open" and "steer" in self.served:
             found["actions"] = [item for item in found["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
         found["settings"] = self.settings_of(found["task"])
+        found["reply_lang"] = chatsend.reply_of(self.root, found["task"])
         return found
 
     def settings_of(self, task: str) -> Dict[str, Any]:
@@ -509,7 +510,7 @@ class Board:
         if kind == "go" and why not in chatsend.GO:
             raise CommandError(self.refusal("nogo"))
         try:
-            made = chatsend.prepare(self.root, task, kind, why, str(data.get("lang", "en")), str(data.get("body", "")), str(data.get("note", "")))
+            made = chatsend.prepare(self.root, task, kind, why, str(data.get("lang", "")), str(data.get("body", "")), str(data.get("note", "")))
         except ValueError as error:
             raise CommandError(self.refusal("text." + str(error))) from None
         made["kind"], made["why"] = kind, why
@@ -532,7 +533,7 @@ class Board:
         task, found = self.target(data)
         made = self.message(task, found, data)
         why = self.link.check(task, "send")
-        return {"text": made["text"], "kind": made["kind"], "lang": made["lang"], "notes": len(made["notes"]), "drafts": len(made["draft_ids"]), "blocked": self.refusal(why) if why else "", "model": chatsend.model_of(found) or {}}
+        return {"text": made["text"], "kind": made["kind"], "lang": made["lang"], "reply": made["reply"], "notes": len(made["notes"]), "drafts": len(made["draft_ids"]), "blocked": self.refusal(why) if why else "", "model": chatsend.model_of(found) or {}}
 
     def send(self, data: Dict[str, Any]) -> Dict[str, Any]:
         task, found = self.target(data)
@@ -560,9 +561,10 @@ class Board:
 
     def steer(self, data: Dict[str, Any]) -> Dict[str, Any]:
         task, found = self.target(data)
-        text, problem = chatsend.steer_text(str(data.get("text", "")), str(data.get("lang", "en")))
+        text, problem = chatsend.steer_text(str(data.get("text", "")), str(data.get("lang", "")))
         if problem:
             raise CommandError(self.refusal("text." + problem))
+        text = chatsend.with_english(self.root, task, str(data.get("lang", "")), text)
         model = chatsend.model_of(found)
         files = self.files_of(data)
         try:

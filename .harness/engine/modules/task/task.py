@@ -272,6 +272,10 @@ def next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
         text += say("task.step.fetch")
         if standards.plugged_in(root):
             text += say("task.step.standards", file=standards.shown(root))
+    from . import commitmsg  # it needs this module's neighbours
+
+    if (data.get("promote") or {}).get("state") == "done" and commitmsg.to_commit(data):
+        return say("promote.done.person").strip()  # written back and not committed: closing now would take the wait off the board
     return text + say("task.step.close")
 
 
@@ -772,7 +776,7 @@ def promoted_text(result: Dict[str, Any], record: Dict[str, Any]) -> str:
     if others:
         parts.append(say("promote.done.commit_message", file="COMMIT-MESSAGE.md"))
         parts.append(say("promote.done.test_offer"))
-    return "".join(parts) + say("promote.done.patch", patch=record["patch"])
+    return "".join(parts) + say("promote.done.patch", patch=record["patch"]) + say("promote.done.person" if others else "promote.done.close")  # files to commit: the wait for the person stays on the board until they closed it
 
 
 def has_remote(path: str) -> bool:

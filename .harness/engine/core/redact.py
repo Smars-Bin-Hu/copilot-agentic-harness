@@ -7,12 +7,23 @@ wide holes by design: a person looks at a sample before it is shared. It does no
 from __future__ import annotations
 
 import re
-from typing import Any, List, Pattern, Tuple
+from typing import Any, Callable, List, Match, Pattern, Tuple, Union
 
 MASK = "***"
 
 _NAMES = r"(?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|access[_-]?key|auth(?:orization)?|credential|private[_-]?key|sas|signature|sig)"
-_RULES: List[Tuple[Pattern[str], str]] = [
+_PATH_PART = re.compile(r"[A-Za-z]?[a-z0-9_-]*|[A-Z0-9_-]+")
+
+
+def _long_run(found: Match[str]) -> str:
+    """A long run with no space is a key or a hash, unless it reads as a path: at least two slashes and words between them. A key that has slashes (base64) mixes its cases inside a part."""
+    parts = found.group(0).split("/")
+    if len(parts) >= 3 and all(_PATH_PART.fullmatch(part) and (len(part) < 32 or "-" in part or "_" in part) for part in parts):
+        return found.group(0)
+    return MASK
+
+
+_RULES: List[Tuple[Pattern[str], Union[str, Callable[[Match[str]], str]]]] = [
     (re.compile(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}"), r"\1 " + MASK),
     (re.compile(r"(?i)(\b[\w.-]*" + _NAMES + r"[\w.-]*\s*[:=]\s*)(\"[^\"]*\"|'[^']*'|[^\s;&\"',]+)"), r"\1" + MASK),  # key=value, key: value, --password=x
     (re.compile(r"(?i)(--?[\w-]*" + _NAMES + r"[\w-]*[ ]+)(\"[^\"]*\"|'[^']*'|[^\s;&|\-][^\s;&|]*)"), r"\1" + MASK),  # --password x
@@ -20,7 +31,7 @@ _RULES: List[Tuple[Pattern[str], str]] = [
     (re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{12,}|xox[abprs]-[A-Za-z0-9-]{10,})\b"), MASK),
     (re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}\b"), MASK),  # a JWT
     (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)", re.S), MASK),
-    (re.compile(r"\b[A-Za-z0-9+/_-]{40,}={0,2}(?![A-Za-z0-9+/_-])"), MASK),  # a long run with no space: a key or a hash
+    (re.compile(r"\b[A-Za-z0-9+/_-]{40,}={0,2}(?![A-Za-z0-9+/_-])"), _long_run),
 ]
 # Short password options (`-P x`, `-pSecret`, `-a x`) mean a password only for some tools: `grep -P`, `mkdir -p`, `ssh -p 22` and `mysql -P 3306` do not. So they are masked
 # only in a command (a part between ; & |) of a known database or login tool. Long names (`--password x`, `-Password x`) are caught by the rules above for every tool.

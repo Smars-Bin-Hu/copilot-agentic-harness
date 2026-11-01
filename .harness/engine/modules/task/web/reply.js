@@ -11,7 +11,7 @@
 const REPLY = (function () {
   const NS = "http://www.w3.org/2000/svg";
   const info = {name: "", show: false, state: "", why: "", count: 0, settings: null, drafts: null, settingsSig: null};
-  const mine = {open: false, lang: "en", busy: false, fallback: "", previewing: false, timer: 0};
+  const mine = {open: false, lang: "", busy: false, fallback: "", previewing: false, timer: 0};
   const MAC = /Mac|iPhone|iPad/.test(navigator.platform || "");
 
   const icon = (paths, size) => {  // the style gives each its size too: a page style sets the width of an svg
@@ -31,7 +31,9 @@ const REPLY = (function () {
   // --- the panel ----------------------------------------------------------------------------------------------------------
   const close = h("button", {type: "button", class: "rp-x", title: t("board.serve.cancel"), "aria-label": t("desk.reply.close")}, icon(["M4 4l8 8M12 4l-8 8"], 14));
   const box = h("textarea", {rows: 4, class: "rp-text", maxlength: 20000, placeholder: t("desk.reply.ph"), "aria-label": t("desk.reply.title")});
-  const language = (lang) => { mine.lang = lang; chips.forEach((item, at) => { const on = ["en", "zh"][at] === lang; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); }); previewSoon(); };
+  // `mine.lang` stays empty until the person picks one: the chip shows the language the chat replies in, and nothing is added to the message.
+  const paintLanguage = (lang) => chips.forEach((item, at) => { const on = ["en", "zh"][at] === lang; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); });
+  const language = (lang) => { mine.lang = lang; paintLanguage(lang); previewSoon(); };
   const chips = ["en", "zh"].map((lang) => {
     const chip = h("button", {type: "button", class: "chip" + (lang === "en" ? " on" : ""), "aria-pressed": lang === "en" ? "true" : "false"}, t("desk.send.lang." + lang));
     chip.addEventListener("click", () => language(lang));
@@ -202,6 +204,7 @@ const REPLY = (function () {
   return {
     // desk.js says, with every drawing: is there a chat to talk to (`show`), the state of the chat, how many drafts, and how to make the settings and the drafts.
     update(next) {
+      if (!mine.lang) paintLanguage(next.reply || "en");
       Object.assign(info, next);
       const was = pill.hidden;
       pill.hidden = !info.show;
@@ -222,7 +225,7 @@ const REPLY = (function () {
     // A message that was withdrawn: its words are back in the box to change and send again. Its files are not kept: the panel names them.
     restore(found) {
       box.value = found.text;
-      language(found.lang);
+      if (found.lang) language(found.lang);
       open();
       sync();
       if (found.files && found.files.length) said.append(h("p", null, t("desk.reply.files.again", {names: found.files.join(", ")})));

@@ -74,7 +74,7 @@ class DraftTests(DraftCase):
         chatsend.add_draft(self.root, TASK, "commit message in English")
         self.assertEqual([item["text"] for item in chatsend.drafts(self.root, TASK)], ["check the empty values too", "commit message in English"])
         self.assertTrue((self.root / TASK / ".task" / "drafts.json").is_file())
-        made = chatsend.prepare(self.root, TASK, "go", "go-plan", "en", "", "typed note")
+        made = chatsend.prepare(self.root, TASK, "go", "go-plan", "", "", "typed note")
         self.assertEqual(made["text"], "Plan approved (PLAN.md). Go on with TODO.md.\n\nNotes from the person:\n- check the empty values too\n- commit message in English\n- typed note")
         self.assertEqual(len(made["draft_ids"]), 2)
         chatsend.drop_drafts(self.root, TASK, [first["id"]])
@@ -87,12 +87,12 @@ class DraftTests(DraftCase):
         chatsend.change_draft(self.root, TASK, one["id"], text="  first,\n edited ")
         chatsend.change_draft(self.root, TASK, two["id"], use=False)
         self.assertEqual([(item["text"], item["use"]) for item in chatsend.drafts(self.root, TASK)], [("first, edited", True), ("second", False)])
-        made = chatsend.prepare(self.root, TASK, "answer", "", "en", "Go.", "")
+        made = chatsend.prepare(self.root, TASK, "answer", "", "", "Go.", "")
         self.assertEqual(made["text"], "Go.\n\nNotes from the person:\n- first, edited")  # the switched-out note is not in it
         self.assertEqual(made["draft_ids"], [one["id"]])
         chatsend.drop_drafts(self.root, TASK, made["draft_ids"])  # only what went is cleared
         self.assertEqual([item["text"] for item in chatsend.drafts(self.root, TASK)], ["second"])
-        self.assertEqual(chatsend.prepare(self.root, TASK, "answer", "", "en", "Go.", "")["text"], "Go.")
+        self.assertEqual(chatsend.prepare(self.root, TASK, "answer", "", "", "Go.", "")["text"], "Go.")
         with self.assertRaises(ValueError):
             chatsend.change_draft(self.root, TASK, two["id"], text="  ")
         with self.assertRaises(ValueError):
@@ -103,9 +103,10 @@ class DraftTests(DraftCase):
     def test_a_message_that_cannot_be_made_says_why(self) -> None:
         for kind, why, body, wanted in (("go", "stopped", "", "kind"), ("answer", "", "  ", "empty"), ("zzz", "", "x", "kind"), ("answer", "", "x" * 30000, "long")):
             with self.assertRaises(ValueError) as caught:
-                chatsend.prepare(self.root, TASK, kind, why, "en", body, "")
+                chatsend.prepare(self.root, TASK, kind, why, "", body, "")
             self.assertEqual(str(caught.exception), wanted)
         self.assertEqual(chatsend.prepare(self.root, TASK, "answer", "", "zh", " Use the second one. ", "")["text"], "[ZH] Use the second one.")
+        self.assertEqual(chatsend.prepare(self.root, TASK, "answer", "", "", "Go.", "")["text"], "Go.")  # the person chose nothing: the chat stays as it is
 
     def test_a_record_is_a_json_line_with_the_whole_text(self) -> None:
         chatsend.record(self.root, TASK, {"at": "t", "text": "whole\ntext"})
@@ -119,6 +120,27 @@ class DraftTests(DraftCase):
         self.assertEqual(chatsend.model_of({"chat": {"model": {"id": "m"}}}), {"id": "m"})
         self.assertEqual(ahp.models_of(ROOT_STATE)[0], {"id": "claude-haiku-5.5", "name": "Claude Haiku 5.5", "price": "low", "thinking": {"levels": ["low", "medium"], "default": "medium"}, "context": None})
         self.assertEqual([item["id"] for item in ahp.models_of(ROOT_STATE)], ["claude-haiku-5.5", "claude-haiku-4.5"])  # only Copilot's, only those the policy enables
+
+
+class ReplyLanguageTests(DraftCase):
+    def set_reply(self, reply: str) -> None:
+        path = self.state_file(SESSION)
+        state = json.loads(path.read_text(encoding="utf-8"))
+        state.setdefault("modules", {}).setdefault("task", {})["reply"] = reply
+        path.write_text(json.dumps(state), encoding="utf-8")
+
+    def test_the_chat_replies_in_what_it_was_last_told_else_in_the_setting(self) -> None:
+        self.assertEqual(chatsend.reply_of(self.root, TASK), messages.language())
+        self.set_reply("en")
+        self.assertEqual(chatsend.reply_of(self.root, TASK), "en")
+
+    def test_english_is_marked_only_when_it_was_chosen_for_a_chat_that_replies_in_chinese(self) -> None:
+        self.set_reply("zh")
+        self.assertEqual(chatsend.prepare(self.root, TASK, "answer", "", "en", "Go.", "")["text"], "[EN] Go.")
+        self.assertEqual(chatsend.prepare(self.root, TASK, "answer", "", "", "Go.", "")["text"], "Go.")  # not touched: it keeps replying in Chinese
+        self.assertEqual(chatsend.with_english(self.root, TASK, "en", "Go."), "[EN] Go.")
+        self.set_reply("en")
+        self.assertEqual(chatsend.prepare(self.root, TASK, "answer", "", "en", "Go.", "")["text"], "Go.")
 
 
 class ReviewSetTests(DraftCase):

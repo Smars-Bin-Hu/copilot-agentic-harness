@@ -766,18 +766,21 @@
     return button;
   }
 
+  const CARD_WORDS = {"confirm-req": "task.waiting.req", "approve-plan": "task.waiting.plan", "approve-promote": "task.waiting.promote"};  // two cards can stand together: each says what it is about
+
   function strongCard(item, notes) {
     const row = actionRow();
     const tab = JUMPS[item.action];
     return h("section", {class: "tk-need strong", "data-action": item.action},
-      h("div", {class: "tk-need-h"}, tag(desk.waiting ? waitText(desk) : t("desk.actions.title"), "hot"), desk.waited_s !== null && desk.waited_s !== undefined ? h("span", {class: "sub tk-waited"}, t("desk.waited", {time: clock(desk.waited_s)})) : null),
+      h("div", {class: "tk-need-h"}, tag(CARD_WORDS[item.action] ? t(CARD_WORDS[item.action]) : desk.waiting ? waitText(desk) : t("desk.actions.title"), "hot"), desk.waited_s !== null && desk.waited_s !== undefined ? h("span", {class: "sub tk-waited"}, t("desk.waited", {time: clock(desk.waited_s)})) : null),
       h("p", {class: "tk-need-p"}, hintOf(item)), notes,
       h("div", {class: "tk-need-go"}, actionButton(row, item, "big"), jumpButton(tab, t("desk.jump." + tab))));
   }
 
-  // The way back from "put aside" is on the card that says it, not only in the menu.
+  // The next step of a card that names it is a button on that card, not only in the menu: resume a task put aside, close one that was committed.
   function resumeButton() {
-    const item = desk.paused_since ? desk.actions.find((entry) => entry.action === "resume") : null;
+    const wanted = desk.paused_since ? "resume" : desk.waiting_why === "commit" ? "close" : "";
+    const item = wanted ? desk.actions.find((entry) => entry.action === wanted) : null;
     return item ? actionButton(actionRow(), item, "big") : null;
   }
 
@@ -863,7 +866,7 @@
     if (typeof REPLY !== "undefined" && served()) {
       const show = hasStream() && bound;
       if (show) draftsBox();  // loads the drafts (the badge counts them) even while the panel is shut
-      REPLY.update({name: desk.name, show, state: chat ? chat.state || "" : "", count: drafts.items ? drafts.items.length : 0, settings: () => settingsRow(), settingsSig: JSON.stringify([desk.settings, desk.status, chat && [chat.model, chat.effort]]), drafts: drafts.node, saveDraft: (text) => draftCall({op: "add", text})});
+      REPLY.update({name: desk.name, show, reply: desk.reply_lang, state: chat ? chat.state || "" : "", count: drafts.items ? drafts.items.length : 0, settings: () => settingsRow(), settingsSig: JSON.stringify([desk.settings, desk.status, chat && [chat.model, chat.effort]]), drafts: drafts.node, saveDraft: (text) => draftCall({op: "add", text})});
     }
   }
 
@@ -1571,7 +1574,9 @@
     }
     const body = (found) => found.lines.filter((line) => !line.startsWith("#")).join("\n");  // the first lines of each file say what it is, not what changes
     const plan = c.promote_plan;
-    if (plan.lines.length && !plan.cut && !c.diff.cut && body(plan) === body(c.diff)) parts.push(h("p", {class: "sub"}, t("desk.changes.promote.same")));  // the same diff twice says nothing more
+    if (plan.lines.length && !plan.cut && !c.diff.cut && body(plan) === body(c.diff)) {  // the same diff twice says nothing more
+      if (!desk.commit) parts.push(h("p", {class: "sub"}, t("desk.changes.promote.same")));  // written back already: nothing is left to approve
+    }
     else if (plan.lines.length) parts.push(h("h3", null, t("desk.changes.promote")), h("p", {class: "sub"}, t("desk.changes.promote.hint")),
       DiffView.create(plan, () => diff(plan), "plan", true));  // the same compare, the files read from the plan; a long file scrolls in a lower window
     return parts;
@@ -1773,6 +1778,8 @@
       if (same(text, shown)) {
         const waited = data.desk.waited_s;
         if (waited !== null && waited !== undefined) document.querySelectorAll(".tk-waited").forEach((node) => { node.textContent = t("desk.waited", {time: clock(waited)}); });
+        const foot = ui.foot && ui.foot.querySelector("footer");
+        if (foot && foot.firstChild) foot.firstChild.textContent = t("desk.footer", {as_of: when(data.desk.as_of, 0, 19)});
         return;
       }
       setDesk(data.desk);

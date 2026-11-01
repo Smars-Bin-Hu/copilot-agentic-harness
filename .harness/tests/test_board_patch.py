@@ -17,8 +17,9 @@ from unittest import mock
 import support  # noqa: F401 - the engine on sys.path, HARNESS_VSCODE_CLI=off
 from support import HarnessTestCase
 
-from core import config, copilot_events, logs, messages
+from core import config, copilot_events, logs, messages, redact
 from modules.task import boardserve, chatlive, chatsend, taskhtml, tasktrace
+from modules.task import task as task_ops
 
 ENGINE = Path(__file__).resolve().parents[1] / "engine"
 WEB = ENGINE / "modules" / "task" / "web"
@@ -438,6 +439,7 @@ class WalkThroughTests(unittest.TestCase):
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
         self.assertIn('if (!found.blocks.length) return h("div", {class: "empty-state"}, h("b", null, t("desk.doc.empty"))', desk)
         self.assertEqual(desk.count("resumeButton()"), 3)  # the function and the two cards
+        self.assertIn('desk.waiting_why === "commit" ? "close"', desk)  # promoted and committed: closing is the next step
 
     def test_the_review_tab_has_its_own_line_and_the_review_button_its_own(self) -> None:
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
@@ -461,7 +463,7 @@ class WalkThroughTests(unittest.TestCase):
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
         part = between(desk, "function changes()", "function diffKinds(lines)")
         self.assertIn('found.lines.filter((line) => !line.startsWith("#"))', part)
-        self.assertIn('body(plan) === body(c.diff)) parts.push(h("p", {class: "sub"}, t("desk.changes.promote.same")));', part)
+        self.assertIn('if (!desk.commit) parts.push(h("p", {class: "sub"}, t("desk.changes.promote.same")));', part)  # written back: nothing is left to approve
         self.assertIn('else if (plan.lines.length) parts.push(h("h3", null, t("desk.changes.promote"))', part)
 
     def test_a_task_with_no_chat_says_so_on_the_icon_and_the_pill(self) -> None:
@@ -507,6 +509,24 @@ class WalkThroughTests(unittest.TestCase):
         for key in ("autorun.need.review", "autorun.screen.limits", "mdreport.review.on"):
             self.assertNotIn("[review]", en[key], key)
         self.assertIn('{name: st.task.split("/").pop()}', (WEB / "live.js").read_text(encoding="utf-8"))
+
+    def test_two_strong_cards_each_say_what_they_are_about(self) -> None:
+        desk = (WEB / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('"confirm-req": "task.waiting.req", "approve-plan": "task.waiting.plan"', desk)
+
+    def test_a_promote_with_files_to_commit_is_not_closed_by_the_agent(self) -> None:
+        other = {"repos": [{"name": "sales", "direct": False}], "branch": "feature/x"}
+        kb = {"repos": [{"name": "kb", "direct": True, "path": "/nowhere", "base_ref": "main", "commit": "abc"}], "branch": ""}
+        text = task_ops.promoted_text(other, {"patch": "x.patch"})
+        self.assertIn(messages.text("promote.done.person"), text)
+        self.assertNotIn(messages.text("promote.done.close"), text)
+        self.assertIn(messages.text("promote.done.close"), task_ops.promoted_text(kb, {"patch": "x.patch"}))  # a knowledge base is committed by the write-back: nothing waits
+
+    def test_a_long_path_in_what_the_agent_says_stays_and_a_key_with_slashes_goes(self) -> None:
+        for path in (".workspace/sandbox/tasks/t-e2e-real-agent", "DEV/sales-repo/src/orders_load_daily_final_version_two"):
+            self.assertEqual(redact.text("see " + path), "see " + path)
+        for key in ("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "x/" + "f" * 40 + "/y", "a2V5a2V5a2V5a2V5a2V5/a2V5a2V5a2V5a2V5a2V5/a2V5", "abcdef0123456789abcdef0123456789abcdef01"):
+            self.assertEqual(redact.text(key), redact.MASK, key)
 
     def test_the_rest_of_the_page_follows_when_the_chat_starts_or_stops_waiting(self) -> None:
         desk = (WEB / "desk.js").read_text(encoding="utf-8")

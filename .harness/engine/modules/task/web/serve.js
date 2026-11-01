@@ -70,7 +70,14 @@ const SERVE = (function () {
     const box = h("div", {class: "dialog card"}, children);
     const shade = h("div", {class: "shade"}, box);
     document.body.append(shade);
-    return {box, close: () => { shade.remove(); busy = false; }};
+    const close = () => { document.removeEventListener("keydown", onKey); shade.remove(); busy = false; };
+    const onKey = (event) => {  // Esc is Cancel, as long as it would not throw away what the person typed here
+      if (event.key !== "Escape") return;
+      const typed = [...box.querySelectorAll("textarea, input:not([type=file]):not([type=checkbox]):not([type=radio])")].some((node) => node.value.trim());
+      if (!typed) close();
+    };
+    document.addEventListener("keydown", onKey);
+    return {box, close};
   }
 
   // A refusal may list reasons, one "- reason" a line: the lines are drawn as lines, not run together.

@@ -82,16 +82,17 @@ const CHAT = (function () {
 
   // The panel: the message in full, the reply language, an optional note, then send / save as draft / copy. `action` is "send" (a template after an approval) or "answer" (the person's own words).
   function panel(row, action) {
-    const state = {lang: "en", note: "", text: "", blocked: "", busy: false, timer: null};
+    const state = {lang: "", note: "", text: "", blocked: "", busy: false, timer: null};  // lang: empty until the person picks one; the chips show what the chat replies in
     const preview = h("pre", {class: "send-preview"}, "...");
     const blocked = h("div", {class: "bad"});
     const said = h("div", {class: "bad"});
     const note = h("textarea", {rows: 2, class: "send-body", placeholder: t("desk.send.note.ph"), maxlength: 2000});
     const chips = ["en", "zh"].map((lang) => {
       const chip = h("button", {type: "button", class: "chip" + (lang === "en" ? " on" : ""), "aria-pressed": lang === "en" ? "true" : "false"}, t("desk.send.lang." + lang));
-      chip.addEventListener("click", () => { state.lang = lang; chips.forEach((item, at) => { const on = ["en", "zh"][at] === lang; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); }); refresh(); });
+      chip.addEventListener("click", () => { state.lang = lang; paintChips(lang); refresh(); });
       return chip;
     });
+    const paintChips = (lang) => chips.forEach((item, at) => { const on = ["en", "zh"][at] === lang; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); });
     const send = h("button", {type: "button", class: "act hot"}, t("desk.send.go"));
     const save = h("button", {type: "button", class: "act", title: t("desk.send.draft.tip")}, t("desk.send.draft"));
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
@@ -114,6 +115,7 @@ const CHAT = (function () {
           state.text = found.text;
           state.blocked = found.blocked || "";
           preview.textContent = found.text;
+          if (!state.lang && found.reply) paintChips(found.reply);
           drafts.textContent = found.drafts ? t("desk.send.drafts", {count: found.drafts}) : "";
           blocked.replaceChildren(...(state.blocked ? [h("p", null, state.blocked), h("p", {class: "sub"}, t("desk.send.copy.hint"))] : []));
           said.replaceChildren();

@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.40 (2026-11-01)
+
+### Fixed
+
+- **The agent no longer closes a task that waits for your commit.** After a promote the harness told it to run `task close`, so the task left "Waiting for you" before the files were committed. Now it stops, and you close the task after your commit. A knowledge base is committed by the promote itself, so there the agent still closes.
+- **The Live tab no longer hides long paths in what the agent says** (`.***`). A key with slashes is still masked.
+- **Two cards at once each say what they wait for.** The requirement card showed the words of the plan.
+- **The reply language shows what the chat really replies in,** and choosing English in a chat that replies in Chinese now switches it back.
+- **Esc closes a dialog,** unless you have typed something in it.
+- **The "Promoted" card has a Close button,** and the "As of" time at the foot of a task page keeps moving.
+
 ## 1.6.39 (2026-11-01)
 
 ### Fixed

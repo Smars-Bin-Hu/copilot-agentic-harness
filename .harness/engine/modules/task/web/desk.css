@@ -127,7 +127,7 @@ ol.timeline.history li.good::before{background:var(--good-dot);border-color:var(
 ol.timeline.history li.bad::before{background:var(--bad);border-color:var(--bad)}
 
 /* Trace: the numbers of the task, what was blocked or failed, one node per prompt */
-.tr-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:0 0 14px}
+.tr-stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin:0 0 14px}
 .tr-stat{display:flex;flex-direction:column;gap:2px;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
 .tr-stat b{font-size:17px;font-weight:600;white-space:nowrap}.tr-stat span{font-size:12px;color:var(--soft)}
 .tr-stat.bad{border-color:var(--bad-line);background:var(--bad-bg)}.tr-stat.bad b{color:var(--bad)}
@@ -136,16 +136,17 @@ ol.timeline.history li.bad::before{background:var(--bad);border-color:var(--bad)
 .tr-problems ol.timeline li{grid-template-columns:8.5em minmax(0,1fr) auto;gap:0 8px}.tr-jump{align-self:start}
 .tr-tree{display:flex;flex-direction:column;gap:6px}
 .tr-node{border:1px solid var(--line);border-radius:10px}.tr-node.bad{border-color:var(--bad-line)}
-.tr-node>summary{display:grid;grid-template-columns:auto 11em minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;list-style:none}
+.tr-node>summary{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:9px 12px;border-radius:10px;cursor:pointer;list-style:none}
 .tr-node>summary::-webkit-details-marker{display:none}.tr-node>summary:hover{background:var(--hover)}
-.tr-node>summary::before{content:"\203a";grid-column:1;grid-row:1;margin-right:18px;color:var(--soft);transition:transform .12s}.tr-node[open]>summary::before{transform:rotate(90deg)}
-.tr-n{grid-column:1;grid-row:1;margin-left:14px;font-size:12px;color:var(--soft)}
-.tr-text{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.tr-chips{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}
+.tr-node>summary::before{content:"\203a";flex:none;width:8px;color:var(--soft);transition:transform .12s}.tr-node[open]>summary::before{transform:rotate(90deg)}
+.tr-n{font-size:12px;color:var(--soft);white-space:nowrap}.tr-node>summary .when{white-space:nowrap}
+.tr-text{flex:1 1 220px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.tr-chips{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;margin-left:auto}
 .tr-node>ol.timeline{margin:4px 12px 10px 19px}.tr-node>p{margin:4px 14px}
 ol.timeline.trace li.tr-think{padding-top:2px;padding-bottom:4px}ol.timeline.trace li.tr-think::before{width:6px;height:6px;margin-left:1px;top:9px}
 ol.timeline.trace li.tr-in .what{padding-left:16px}
-@media (max-width:640px){.tr-node>summary{grid-template-columns:auto minmax(0,1fr)}.tr-node>summary .when{display:none}.tr-chips{grid-column:1/-1;justify-content:flex-start}.tr-problems ol.timeline li{grid-template-columns:minmax(0,1fr) auto}.tr-problems ol.timeline .when{display:none}}
+@media (max-width:1000px){.tr-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:640px){.tr-node>summary .when{display:none}.tr-text{flex-basis:60%}.tr-chips{margin-left:0;justify-content:flex-start}.tr-problems ol.timeline li{grid-template-columns:minmax(0,1fr) auto}.tr-problems ol.timeline .when{display:none}}
 
 @media (max-width:1100px){.tk-stage{width:100px}.tk-name{max-width:30ch}}
 @media (max-width:900px){.tk-head{flex-wrap:wrap}.tk-name{flex:1 1 40%}.tk-sp{display:none}}

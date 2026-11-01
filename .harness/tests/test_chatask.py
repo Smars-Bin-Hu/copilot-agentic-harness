@@ -261,13 +261,14 @@ class RowTests(AskCase):
     def test_the_time_aside_is_left_out_of_the_wait_on_the_row_and_on_the_task_page(self) -> None:
         self.agent_at_work()
         self.wait_for(confirm_item())
+        asked = self.vs.ask_of(TASK)  # before the write below: the link binds the chat again when the task file changes
         now = datetime.now(timezone.utc)
         at = lambda hours: (now - timedelta(hours=hours)).isoformat()  # noqa: E731
         path = tasks.state_file(self.root, TASK)
         data = json.loads(path.read_text(encoding="utf-8"))
         data["events"] += [{"at": at(2), "what": "pause"}, {"at": at(1), "what": "unpause"}]
         path.write_text(json.dumps(data), encoding="utf-8")
-        with mock.patch.object(self.vs, "ask_of", return_value=dict(self.vs.ask_of(TASK), since=at(3))):
+        with mock.patch.object(self.vs, "ask_of", return_value=dict(asked, since=at(3))):
             found = self.shown_row()
             self.assertAlmostEqual(found["waited_s"] / 3600, 2, places=2)
             self.assertAlmostEqual((now - datetime.fromisoformat(found["waiting_from"])).total_seconds() / 3600, 2, places=2)  # the clock of the task page reads the same

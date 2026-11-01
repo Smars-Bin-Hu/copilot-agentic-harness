@@ -342,13 +342,15 @@ const Lobby = (function () {
       ready = true;
       count.textContent = agents.length ? t("board.lobby.count", {count: agents.length}) : t("board.lobby.none");
       if (!agents.length) {
-        // No task at all: the first-task block (options.first, board.js: the big New task button, or how to run the served board). Tasks that are all closed: the quiet sentence.
+        // No task at all: the first-task block (options.first, board.js: the big New task button, or how to run the served board). Tasks that are all closed: the quiet sentence and the same button;
+        // a page on disk cannot start a task, so it says where to.
         const none = !rows.length && typeof options.first === "function";
         const key = none ? "first" : "quiet";
         if (empty.getAttribute("data-kind") !== key) {  // built once for each kind: a poll does not redraw the button under the pointer
           const idle = robot("idle", "other", 0);
           idle.setAttribute("class", "lb-bot lb-pose-idle lb-lone");
-          empty.replaceChildren(idle, none ? options.first() : h("p", null, t("board.lobby.quiet")));
+          const go = none || typeof options.go !== "function" ? null : options.go();
+          empty.replaceChildren(idle, ...(none ? [options.first()] : [h("p", null, t(go ? "board.lobby.quiet" : "board.lobby.quiet.disk")), go].filter(Boolean)));
           empty.setAttribute("data-kind", key);
         }
       }

@@ -391,10 +391,14 @@
   }
   // No task at all (1.6.18): in the list and in the lobby a block with a large New task button (served), in place of a sentence. The dialog tells the reason when VS Code is not linked, so the button
   // stays. A page on disk cannot start a task: no button, and how to run the served board. With tasks, the small button of the header is the one; with none, only this one.
+  function bigNewTask() {
+    if (typeof SERVE === "undefined" || !SERVE.runs("create")) return null;
+    const go = h("button", {type: "button", class: "act hot live first-go new-task", title: t("board.new.hint")}, t("board.new"));
+    go.addEventListener("click", () => CHAT.create());
+    return go;
+  }
   function firstTask() {
-    const served = typeof SERVE !== "undefined" && SERVE.runs("create");
-    const go = served ? h("button", {type: "button", class: "act hot live first-go new-task", title: t("board.new.hint")}, t("board.new")) : null;
-    if (go) go.addEventListener("click", () => CHAT.create());
+    const go = bigNewTask(), served = Boolean(go);
     return h("div", {class: "first-task"}, h("h2", null, t(served ? "board.empty.title" : "board.empty.title.disk")),
       h("p", null, served ? t("board.empty.text") : t("board.empty.disk", {command: cli + " task board"})), go);
   }
@@ -417,7 +421,7 @@
   // Two ways to look at the same rows: the lobby (the first screen) and the list. The choice stays in this browser.
   // The card of a robot (lobby.js) is the row of the list again: the same marks (status.js), the same numbers (`figures`), the same buttons (`actionStrip`).
   const lobby = Lobby.create({href: (row) => (DATA.serve && row.status !== "new" ? "/task/" + encodeURIComponent(row.name)
-    : row.report ? row.report.split("/").map(encodeURIComponent).join("/") : ""), figures, actions: actionStrip, live, first: firstTask});
+    : row.report ? row.report.split("/").map(encodeURIComponent).join("/") : ""), figures, actions: actionStrip, live, first: firstTask, go: bigNewTask});
   let mode = keep.get("mode", "lobby") === "list" ? "list" : "lobby";
   const controls = h("div", {class: "controls"}, chips, roundBox, kinds, search, clear);
   const modeButtons = {};

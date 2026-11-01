@@ -67,7 +67,7 @@ class DialogTests(unittest.TestCase):
 class EmptyBoardTests(unittest.TestCase):
     def test_no_task_gets_the_big_button_in_the_list_and_the_lobby_and_a_file_on_disk_gets_the_way_to_serve(self) -> None:
         board, lobby = source("board.js"), source("lobby.js")
-        first = board.split("function firstTask()")[1].split("// The pill that says")[0]
+        first = board.split("function bigNewTask()")[1].split("// The pill that says")[0]
         self.assertIn('SERVE.runs("create")', first)
         self.assertIn("class: \"act hot live first-go new-task\"", first)  # the button shows even when VS Code is not linked: the dialog says why
         self.assertNotIn("vscode.ready", first)
@@ -80,7 +80,8 @@ class EmptyBoardTests(unittest.TestCase):
 
     def test_the_lobby_with_only_closed_tasks_keeps_its_quiet_sentence(self) -> None:
         lobby = source("lobby.js")
-        self.assertIn('t("board.lobby.quiet")', lobby)
+        self.assertIn('t(go ? "board.lobby.quiet" : "board.lobby.quiet.disk")', lobby)  # with the big button; a page on disk has none
+        self.assertIn("go: bigNewTask", source("board.js"))
         self.assertIn('data-kind', lobby)
 
     def test_the_block_wraps_long_text(self) -> None:

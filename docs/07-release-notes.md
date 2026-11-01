@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.44 (2026-11-01)
+
+### Changed
+
+- **When every task is closed, the lobby has a big New task button,** in place of "Say what you want done in VS Code". A page saved on disk has no button and keeps the sentence.
+- **Messages to a person give the whole command** in five more places: `harness task archive`, `harness task open`, `harness task defects sync`, `harness task fork` and `harness task set-domain`.
+
 ## 1.6.43 (2026-11-01)
 
 ### Fixed

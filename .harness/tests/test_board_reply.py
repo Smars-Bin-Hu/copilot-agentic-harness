@@ -273,6 +273,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("desk.subtitle", desk)
         self.assertIn('h("span", {class: "tk-when"}, icon(CLOCK, 13), changed)), factsCard, t("desk.fact.label"))', desk)
         self.assertIn('changed, desk.domains, desk.autorun', desk)  # how long ago moves on by itself, so it is part of what is compared
+        self.assertIn(".tk-when svg{flex:none;width:13px", source("desk.css"))  # an icon with no size in the style fills its box
 
     def test_independent_review_is_set_on_the_task_page_and_not_with_a_message(self) -> None:
         desk = source("desk.js")

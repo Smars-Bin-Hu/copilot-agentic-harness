@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.29 (2026-11-01)
+
+### Changed
+
+- **Copy command opens beside the menu.** In the menu behind the three dots it is now a second menu, on the side that has room, and no longer adds lines to the first. A line with a long task name is cut on the screen and copied whole.
+
 ## 1.6.28 (2026-11-01)
 
 ### Changed

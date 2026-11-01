@@ -1533,7 +1533,7 @@
   "board.checks.tip": "Independent checks wanted: {n}. In a row: {passes}. Done: {total}, not passed: {fails}.",
   "board.menu.task": "Task",
   "board.menu.checks": "Checks",
-  "board.menu.copy": "Copy command...",
+  "board.menu.copy": "Copy command",
   "board.menu.more": "More actions",
   "board.vscode.ready": "VS Code linked",
   "board.vscode.off": "VS Code not linked",

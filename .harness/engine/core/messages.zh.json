@@ -1533,7 +1533,7 @@
   "board.checks.tip": "要求独立检查 {n} 次。连续通过 {passes} 次。已做 {total} 次，没过 {fails} 次。",
   "board.menu.task": "任务",
   "board.menu.checks": "检查",
-  "board.menu.copy": "复制命令…",
+  "board.menu.copy": "复制命令",
   "board.menu.more": "更多操作",
   "board.vscode.ready": "VS Code 已连接",
   "board.vscode.off": "VS Code 未连接",

@@ -106,19 +106,31 @@
   // The actions of a row, in three classes (the first two are in the row, the last in the menu behind the three dots):
   // 1. what the task waits for now (orange: confirm, approve, recover...), 2. speaking to the agent at work (room is kept: a later block fills `.act-talk`),
   // 3. the rest (pause or resume, autorun, close, the checks, copy a command). A closed task has only "archive": shown at once.
-  let openMenu = null, menuButton = null;
+  let openMenu = null, menuButton = null, placeCopy = null;
   // A refresh that comes while a menu is open waits (`later`): drawing the rows again would close the menu under the person's hand. It is drawn when the menu closes.
   let later = null;
-  const closeMenu = (flush) => { if (openMenu) { openMenu.remove(); openMenu = null; menuButton = null; } if (flush !== false && later) { const data = later; later = null; apply(data); } };
+  const closeMenu = (flush) => { if (openMenu) { openMenu.remove(); openMenu = null; menuButton = null; placeCopy = null; } if (flush !== false && later) { const data = later; later = null; apply(data); } };
   document.addEventListener("click", (event) => { if (openMenu && !openMenu.contains(event.target) && !event.target.closest(".act-more")) closeMenu(); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMenu(); });
   // The list scrolls sideways inside its own box, and that box cuts off whatever leaves it: the menu of a row hangs from the page, beside its button. The lobby card has no such box, and its
   // menu stays in the card, because the pointer must not leave the card to reach it.
   function hangMenu() {
-    if (!openMenu || !openMenu.classList.contains("hung")) return;
-    const at = menuButton.getBoundingClientRect(), width = openMenu.offsetWidth, height = openMenu.offsetHeight, gap = 4, edge = 8;
-    openMenu.style.left = Math.max(edge, Math.min(at.right - width, window.innerWidth - width - edge)) + "px";
-    openMenu.style.top = Math.max(edge, at.bottom + gap + height <= window.innerHeight - edge ? at.bottom + gap : at.top - gap - height) + "px";
+    if (openMenu && openMenu.classList.contains("hung")) {
+      const at = menuButton.getBoundingClientRect(), width = openMenu.offsetWidth, height = openMenu.offsetHeight, gap = 4, edge = 8;
+      openMenu.style.left = Math.max(edge, Math.min(at.right - width, window.innerWidth - width - edge)) + "px";
+      openMenu.style.top = Math.max(edge, at.bottom + gap + height <= window.innerHeight - edge ? at.bottom + gap : at.top - gap - height) + "px";
+    }
+    if (placeCopy) placeCopy();
+  }
+  // "Copy command" opens beside the menu, on the side that has room. It stays a child of the menu, so a click in it is a click in the menu and the pointer stays in the lobby card;
+  // `fixed` takes it out of a menu that scrolls. A card can be the frame of a fixed box, so 0,0 is measured first.
+  function hangCopy(menu, toggle, copy) {
+    copy.style.left = copy.style.top = "0px";
+    const zero = copy.getBoundingClientRect(), box = menu.getBoundingClientRect(), item = toggle.getBoundingClientRect(), gap = 4, edge = 8;
+    const left = box.right + gap + zero.width <= window.innerWidth - edge ? box.right + gap : Math.max(edge, box.left - gap - zero.width);
+    const top = Math.max(edge, Math.min(item.top - 7, window.innerHeight - edge - zero.height));  // 7: its padding and border, so the first line is level with the item
+    copy.style.left = left - zero.left + "px";
+    copy.style.top = top - zero.top + "px";
   }
   document.addEventListener("scroll", hangMenu, {capture: true, passive: true});  // capture: the sideways scroll of the list's box does not bubble
   window.addEventListener("resize", hangMenu);
@@ -130,7 +142,7 @@
       if (!list.length) continue;
       menu.append(h("div", {class: "menu-title"}, t(title)), ...list.map((item) => actionButton(row, item, "item")));
     }
-    const copy = h("div", {class: "menu-copy", hidden: true});
+    const copy = h("div", {class: "act-menu menu-copy", role: "menu", hidden: true});
     for (const item of items) {
       const label = t("board.action." + item.action.replace(" ", "-"));
       const line = h("button", {type: "button", class: "act item", title: item.command, "data-label": label}, label + " \u2192 " + item.command);
@@ -138,8 +150,17 @@
       line.addEventListener("click", () => copyCommand(line, item.command));
       copy.append(line);
     }
-    const toggle = h("button", {type: "button", class: "act item"}, t("board.menu.copy"));
-    toggle.addEventListener("click", () => { copy.hidden = !copy.hidden; hangMenu(); });
+    const toggle = h("button", {type: "button", class: "act item menu-more", "aria-haspopup": "menu", "aria-expanded": "false"}, t("board.menu.copy"), h("span", {class: "menu-arrow", "aria-hidden": "true"}, "\u203a"));
+    const show = (on) => {
+      copy.hidden = !on;
+      toggle.classList.toggle("open", on);
+      toggle.setAttribute("aria-expanded", String(on));
+      placeCopy = on ? () => hangCopy(menu, toggle, copy) : null;
+      if (on) placeCopy();
+    };
+    toggle.addEventListener("mouseenter", () => show(true));
+    toggle.addEventListener("click", (event) => { show(true); if (!event.detail) copy.querySelector("button").focus(); });  // detail 0: the keyboard
+    menu.addEventListener("mouseover", (event) => { const item = event.target.closest(".act"); if (item && item !== toggle && !copy.contains(item)) show(false); });
     menu.append(h("div", {class: "menu-title"}), toggle, copy);
     return menu;
   }

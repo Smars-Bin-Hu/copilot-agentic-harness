@@ -100,6 +100,15 @@ setImmediate(() => {
         self.assertIn("else more.after(openMenu);", source)  # the lobby card keeps its menu, or the pointer would leave the card
         self.assertIn(".act-menu.hung{position:fixed", (WEB / "ui.css").read_text(encoding="utf-8"))
 
+    def test_copy_command_opens_beside_the_menu(self) -> None:
+        source = (WEB / "board.js").read_text(encoding="utf-8")
+        css = (WEB / "ui.css").read_text(encoding="utf-8")
+        self.assertIn('h("div", {class: "act-menu menu-copy", role: "menu", hidden: true})', source)
+        self.assertIn('toggle.addEventListener("mouseenter", () => show(true));', source)
+        self.assertIn("if (placeCopy) placeCopy();", source)  # it follows its menu when the page scrolls
+        self.assertIn(".act-menu.menu-copy{position:fixed", css)  # a menu that hangs scrolls, and would cut off a box placed by `absolute`
+        self.assertIn("text-overflow:ellipsis", css.split(".menu-copy .act{", 1)[1].split("}", 1)[0])  # a long task name stays on one line
+
     def test_a_menu_that_is_open_holds_the_poll_and_not_a_click(self) -> None:
         source = (WEB / "board.js").read_text(encoding="utf-8")
         refresh = between(source, "  function refresh(strict)", "  if (typeof SERVE !== \"undefined\") {\n    SERVE.start")

@@ -2,7 +2,7 @@
 
 - The thread finds `code`, reads the endpoint (`core.ahp`), connects, and lists the chats of Copilot. The root notifications of the host keep the list true; a new list is asked
   for every few minutes in case one was missed. Nothing is subscribed but the chats bound to an open task (and, for one moment, a chat read to find its Copilot session id).
-- Where it cannot connect, it tries again with longer waits. The board works as before: no error, no wait. A request never starts `code` or touches the host.
+- Where it cannot connect, it tries again with longer waits. A page gets no error and no wait; the Enter screen says what is missing. A request never starts `code` or touches the host.
 - Which chat belongs to which task: `chatlink`. What a task's line shows: `tasksub`.
 - The token of the host is in the connection object only.
 - `HARNESS_VSCODE_CLI=off`, or `board.vscode = false` in `task.override.json`, switches the whole link off.

@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.45 (2026-11-01)
+
+### Changed
+
+- **The docs and messages say what is true: the harness needs VS Code.** They said the board works without it. It does not: Copilot runs in VS Code, so with no VS Code no task can start and no agent can work, and the Enter screen keeps you out of the board and offers **Open VS Code**. With `board.vscode` set to `false`, only `task board --no-serve` shows the board. Nothing in how it behaves changed.
+
 ## 1.6.44 (2026-11-01)
 
 ### Changed

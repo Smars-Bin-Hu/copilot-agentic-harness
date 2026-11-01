@@ -30,8 +30,8 @@ Who may do what:
   task state and write the samples of the blocks judged wrong (`gatereview`). `/report-save/<name>` gives the report as one file with no buttons and no calls. The report file on disk shows the verdicts, read only.
 - Files, settings and taking back (1.6.22): `/api/send` and `/api/steer` take `attachments`; `/api/chatconfig` sets the mode and the tool permission of a chat; `/api/undo` takes the last message out of an idle
   chat. All are paired POSTs only.
-- VS Code (1.6): one background thread (`vslink`) keeps a connection to the chats of VS Code and a cache; a request only reads the cache. Without VS Code the
-  board is what it was: `vscode.ready` is false, no error, no wait. `/api/open` (paired browser) asks the thread to bring the window of this folder forward.
+- VS Code (1.6): one background thread (`vslink`) keeps a connection to the chats of VS Code and a cache; a request only reads the cache. Without VS Code
+  `vscode.ready` is false: a request gets no error and no wait, and the Enter screen (`ready.py`) does not let a person in. `/api/open` (paired browser) asks the thread to bring the window of this folder forward.
 """
 
 from __future__ import annotations

@@ -312,7 +312,8 @@ class PageTests(unittest.TestCase):
     def test_the_wall_asks_the_server_for_two_calls_and_the_picture_route_only(self) -> None:
         wall = source("wall.js")
         self.assertEqual(sorted(set(re.findall(r'SERVE\.call\("(/api/[a-z]+)"', wall))), ["/api/wall", "/api/wallfolder"])
-        self.assertEqual(sorted(set(re.findall(r'fetch\("(/[a-z]+/)"', wall))), ["/wall/"])
+        self.assertEqual(sorted(set(re.findall(r'SERVE\.file\("(/[a-z]+/)"', wall))), ["/wall/"])
+        self.assertNotIn("fetch(", wall)  # the network stays in serve.js, which a page on disk does not have
         for word in ("/api/act", "/api/send", "/api/steer", "/api/stop", "/api/close", "/api/create", "approve", "http://", "https://"):
             self.assertNotIn(word, wall, word)
         self.assertNotIn("fetch(", source("space.js"))

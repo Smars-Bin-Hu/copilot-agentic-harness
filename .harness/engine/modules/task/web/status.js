@@ -319,8 +319,8 @@ const Status = (function () {
     return h("span", {class: "st-tm"}, finite(step.s) ? clock(step.s) : "");
   }
 
-  // `onReview`: what the button of the checks does. `done`: every step is done (a stamp).
-  function stageCard(found, onReview) {
+  // `onReview`: what the button of the checks does. `done`: every step is done (a stamp). `again`: the plan is asked for a second time, and the card says why.
+  function stageCard(found, onReview, again) {
     const done = found.steps.every((step) => step.kind === "done");
     const stamp = done ? t("desk.stage.stamp") : found.review && found.review.stamp ? t("stage.reviewed", {n: found.review.n}) : "";
     const lines = [h("div", {class: "st-head"}, t("board.status.stage.title") + (found.round > 1 ? " \u00b7 " + t("board.status.stage.round", {round: found.round}) : ""), stamp ? h("span", {class: "st-stamp"}, stamp) : null)];
@@ -329,6 +329,7 @@ const Status = (function () {
         h("span", {class: "st-st k-" + step.kind}, step.text), stepTime(step)));
     }
     if (found.review) lines.push(h("div", {class: "st-ln st-rv"}, h("span", {class: "st-nm"}, found.review.n ? t("desk.checks.title") : t("stage.reviewer.off")), checks(found.review, onReview)));
+    if (again) lines.push(h("div", {class: "sub"}, t("stage.again")));
     return h("div", {class: "st-list st-wide"}, lines);
   }
 

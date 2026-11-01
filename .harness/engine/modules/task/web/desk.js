@@ -354,7 +354,8 @@
     const found = view.stages;
     if (!found) return null;
     const review = ownTab("review") ? () => goTab("review") : null;
-    return {sig: JSON.stringify([found, Boolean(review)]), build: () => Status.stageCard(found, review)};
+    const again = desk.stages.steps.some((step) => step.id === "plan" && step.state === "now") && desk.history.some((event) => event.what === "approve-plan");  // approved once, asked for again
+    return {sig: JSON.stringify([found, Boolean(review), again]), build: () => Status.stageCard(found, review, again)};
   }
 
   // The menu behind the three dots: what is not needed every minute (the report, a copy to save, the chat's title) and the actions a person may take any time.

@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.20 (2026-11-01)
+
+### Fixed
+
+- **A saved board or task page is free of network calls again.** The picture download moved into `serve.js`, which only a served page has.
+- **The stage card of a task says why the plan is asked for again.** The note was lost when the task page was rebuilt in 1.6.16. It is back at the bottom of the card.
+
+### Changed
+
+- Removed 18 message texts that nothing reads any more.
+
 ## 1.6.19 (2026-11-01)
 
 ### Added

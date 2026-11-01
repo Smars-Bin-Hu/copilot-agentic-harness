@@ -50,6 +50,14 @@ const SERVE = (function () {
       }), failed);
   }
 
+  // One file of this server as a blob (the pictures of wall.js). The network stays in this script, which a page on disk does not have.
+  function file(path) {
+    return fetch(path, {credentials: "same-origin"}).then((response) => {
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      return response.blob();
+    });
+  }
+
   function dialog(children) {
     busy = true;
     const box = h("div", {class: "dialog card"}, children);
@@ -250,5 +258,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner());
   }
 
-  return {call, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, onChange: (call) => { after = call; }};
+  return {call, file, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, onChange: (call) => { after = call; }};
 })();

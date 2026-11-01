@@ -95,11 +95,7 @@ const WALL = (function () {
     ctx.drawImage(source, 0, 0, w, h);
     return encode(canvas, filter ? .88 : .86);
   }
-  async function original(entry) {
-    const response = await fetch("/wall/" + encodeURIComponent(entry.n), {credentials: "same-origin"});
-    if (!response.ok) throw new Error("HTTP " + response.status);
-    return response.blob();
-  }
+  const original = (entry) => SERVE.file("/wall/" + encodeURIComponent(entry.n));
 
   // Work is done a few at a time: the thumbnails two at a time (only the tiles on view), the picture of the page one at a time.
   function lane(limit) {

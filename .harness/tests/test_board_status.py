@@ -102,7 +102,7 @@ class PageTests(unittest.TestCase):
         used = set()
         for name in ("status.js", "lobby.js", "board.js"):
             used |= set(re.findall(r'\bt\("(board\.status\.[\w.]+)"', source(name)))
-        used |= {"board.status.stage." + word for word in ("done", "run", "wait", "now", "bad", "todo")}  # chosen by name in stages()
+        used |= {"board.status.stage." + word for word in ("done", "run", "wait", "now", "todo")}  # chosen by name in stages(); a flagged step says stage.partial or stage.failed
         self.assertTrue(used)
         for language in ("en", "zh"):
             table = messages.table(language)

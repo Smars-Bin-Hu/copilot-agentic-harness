@@ -1,0 +1,6 @@
+/* The panel of a command the person runs from the board (run.js): under the dialogs, over the page. */
+.code-bar{flex-wrap:wrap;gap:6px}.code-box .code-bar .run-ask{margin-left:auto}.code-box .code-bar .run-ask~.run-go,.code-box .code-bar .run-ask~.copy-code{margin-left:0}
+.run-panel{position:fixed;right:16px;bottom:72px;z-index:8;width:min(760px,calc(100vw - 32px));max-height:min(calc(100vh - 110px),520px);box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--card);border-color:var(--line2);box-shadow:var(--shadow)}
+.run-head{display:flex;align-items:center;gap:8px;min-width:0}.run-cmd{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:12.5px}.run-state{flex:none;font-size:12px}.run-state.good{color:var(--good)}.run-state.bad{color:var(--bad)}
+.run-out{flex:1;min-height:90px;margin:0;padding:10px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;font:12px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
+.run-foot:empty{display:none}.run-foot{overflow-wrap:anywhere}

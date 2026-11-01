@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.50 (2026-11-01)
+
+### Added
+
+- A shell code block on the task page has two new buttons. **Ask agent** sends the command to the task's chat: the gate and the confirmations hold, and the agent sees the output. **Run** runs it yourself at once: the board starts it in the task folder, the gate does not check it, and the output is shown live and saved in `INBOX/BOARD/<time>/`. Run takes no input; it is not a terminal.
+
+### Changed
+
+- `harness task queue` now says to run the dry run again before a promote, because a dry run may be out of date once another task was submitted.
+
 ## 1.6.49 (2026-11-01)
 
 ### Changed

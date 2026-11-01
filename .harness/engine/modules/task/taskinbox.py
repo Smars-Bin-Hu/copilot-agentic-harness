@@ -2,6 +2,7 @@
 
 The person runs something in an environment and has the output, the commands and screenshots. The task page takes them in (text and pictures pasted into
 a form) and the server writes them under `INBOX/<ENV>/<time>/`: `given.txt` (the output), `ran.txt` (the commands, when given) and `image-N.<type>`.
+A command the person runs from the page (taskrun.py) leaves the same two files under `INBOX/BOARD/<time>/`.
 `INBOX/` is a person's folder like `REQ/` and `REF/`: the agent's file tools cannot write there, so what is in it is what the person gave. The agent
 reads the newest folder of the environment and records it with `task test record` or `task run record` (which copy the pictures into the task).
 

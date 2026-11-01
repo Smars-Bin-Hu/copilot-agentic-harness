@@ -167,7 +167,7 @@
   function codeBlock(text, kind) {
     const button = h("button", {type: "button", class: "act copy-code", "data-label": t("desk.code.copy")}, t("desk.code.copy"));
     button.addEventListener("click", () => copyCommand(button, text));
-    return h("div", {class: "code-box"}, h("div", {class: "code-bar"}, Highlight.label(kind) ? h("span", {class: "code-lang"}, Highlight.label(kind)) : null, button), h("pre", {class: "code"}, h("code", null, Highlight.nodes(text, kind))));
+    return h("div", {class: "code-box"}, h("div", {class: "code-bar"}, Highlight.label(kind) ? h("span", {class: "code-lang"}, Highlight.label(kind)) : null, typeof Run !== "undefined" && served() && canAct() ? Run.buttons(desk.name, text, kind, () => goTab("live")) : null, button), h("pre", {class: "code"}, h("code", null, Highlight.nodes(text, kind))));
   }
 
   function blocks(list) {
@@ -1865,6 +1865,7 @@
     });
   }
   if (typeof SERVE !== "undefined" && DATA.serve.refresh) {
+    Run.attach(desk.name);
     SERVE.onChange(() => { pull(); });  // after a click that changed something (a setting, a message sent): in place, so the reply panel and what was typed stay; a reload would drop them
     if (current === "trace") pull();  // opened on this tab: the page came without the tree
     const typing = () => document.activeElement && ["TEXTAREA", "INPUT"].includes(document.activeElement.tagName);  // a redraw would take the focus from what the person is typing

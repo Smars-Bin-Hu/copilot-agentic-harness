@@ -23,6 +23,7 @@ Who may do what:
   `/api/draft` lists, adds, edits, deletes and switches the notes of `.task/drafts.json`; `/api/setting` sets the task's model and thinking level (`chat.model`); `review set` runs through `/api/act`.
 - New task (1.6, B73): `/api/create` (paired POST only; `step` options, preview or act) makes a chat in VS Code for a task the agent opens (`chatnew` checks every field again, `vslink.create` does it). It fails
   with a clear reason when VS Code is not ready; nothing is made then.
+- Run (1.6.50): `/api/run` (paired POST only) starts, reads and stops a command of the person (`taskrun.py`).
 - Confirm and answer (1.6, B75): `/api/confirm` (allow or deny one tool call) and `/api/answer` (answer one question) are paired POSTs only. The page names the item (`id`, the `toolCallId` or request id,
   and the `digest` of what it showed); the link's thread reads the host again and refuses when the item is gone or changed (`chatask`). Each decision goes to the history and `.task/sent.jsonl`, the command
   redacted and cut.
@@ -53,6 +54,7 @@ from urllib.parse import quote, unquote, urlparse
 from core import config, messages, registry, state, tasks, user
 from core.paths import board_serve_file, utc_now
 
+from . import taskrun
 from . import wallpaper
 from . import autorun, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
@@ -163,6 +165,7 @@ class Board:
 
     def __init__(self, root: Path, everything: bool, port: int, actions: List[str], link: Optional[vslink.VsLink] = None, refresh: int = REFRESH) -> None:
         self.root = root
+        self.runner = taskrun.Runner(root)
         self.refresh = refresh
         self.link = link or vslink.VsLink(root, enabled=False)  # a board made without a link (the tests) has none
         self.everything = everything
@@ -193,7 +196,7 @@ class Board:
 
     def serve_info(self, found: Dict[str, Any], refresh: int) -> Dict[str, Any]:
         """What a served page gets besides the rows: the actions, the refresh, and what the Enter screen shows without asking (the name, the release)."""
-        return {"actions": self.served, "refresh": refresh, **found, "user": self.user_name(), "version": self.release()}
+        return {"actions": self.served, "refresh": refresh, "run_kinds": taskrun.kinds(), **found, "user": self.user_name(), "version": self.release()}
 
     def release(self) -> str:
         try:
@@ -511,7 +514,7 @@ class Board:
     def message(self, task: str, found: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, Any]:
         """The whole message of a send as the page asked for it (`kind` go or answer, `lang`, `note`, `body`). Python makes the text: the page only shows it."""
         kind = str(data.get("kind", "go"))
-        why = tasklife.waiting(self.root, task, found)["why"] if kind == "go" else ""
+        why = tasklife.waiting(self.root, task, found)["why"] if kind == "go" else ""  # `command`: the "Ask agent" button of a code block
         if kind == "go" and why not in chatsend.GO:
             raise CommandError(self.refusal("nogo"))
         try:
@@ -532,6 +535,21 @@ class Board:
         except Exception:  # noqa: BLE001
             out["recorded"] = False
         return out
+
+    def run(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The Run button (`taskrun.py`). `op`: start, read, stop or latest (the run of a task under way, for a page opened meanwhile). A paired browser only."""
+        op = str(data.get("op", ""))
+        if op == "read":
+            return self.runner.read(str(data.get("id", "")), data.get("since"))
+        if op == "stop":
+            return self.runner.stop(str(data.get("id", "")))
+        if op == "latest":
+            found = taskdesk.row_of(self.root, str(data.get("task", "")))
+            return {"run": self.runner.latest(found["task"]) if found else None}
+        if op != "start":
+            raise CommandError(say("serve.refused.request"))
+        task, _ = self.target(data)
+        return self.runner.start(task, str(data.get("command", "")))
 
     def preview(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """What a send would say, and whether it can go now (`blocked`: the reason, or empty). Needs the paired browser."""
@@ -966,6 +984,16 @@ def handler_for(board: Board) -> type:
                     return self.answer(409, {"error": str(error), "fallback": error.text})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
+            if path == "/api/run":  # the Run button of a code block: the person's own run, the gate does not see it. The paired browser only: an agent can reach this address, but it has no cookie
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.run(data)
+                    if str(data.get("op", "")) in ("start", "stop"):
+                        print(say("serve.did", action="run " + str(data.get("op")), task=str(data.get("task", "-"))), flush=True)
+                    return self.answer(200, {"result": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
             if path == "/api/language":  # the language of the harness (settings panel): the paired browser only; it writes the person's own `user.override.json`
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
@@ -1105,6 +1133,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     except KeyboardInterrupt:
         pass
     finally:
+        board.runner.stop_all()
         link.stop()
         server.server_close()
         try:

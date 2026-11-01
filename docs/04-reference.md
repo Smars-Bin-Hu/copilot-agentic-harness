@@ -137,6 +137,16 @@ This is how a served board (`task board --serve`) talks to the chats of VS Code.
 
 **Credits.** The usage Copilot records itself (what older text called AIU) is called **Credits** on the board, in the totals and in the task report.
 
+### Run from the board
+
+A shell code block on a task page of an open task has **Ask agent** and **Run**. A block in another language has only **Copy**.
+
+- **Ask agent** sends the command to the task's chat. The gate and the confirmations hold, it costs credits, and the agent sees the output.
+- **Run** is your own run. The board starts one command in the task folder with your shell (PowerShell on Windows). The gate does not check it, so read the whole command in the dialog first.
+- The server takes `/api/run` from a paired browser only: an agent can reach this address but has no pairing cookie.
+- A run takes no input and is not a terminal: use a real one for a command that asks something. One run at a time for a task. **Stop** ends what the command started; closing the board does too.
+- The output is saved in `INBOX/BOARD/<time>/` (`given.txt`, up to 5 MB, and `ran.txt` with the command and the exit code). The agent can read it. The Task Record has a line for each run.
+
 ### The wallpaper
 
 The board can show your own pictures behind its panels (Settings, **Background**). The pictures stay on your computer: they are never shipped, never committed, and nothing is sent anywhere.

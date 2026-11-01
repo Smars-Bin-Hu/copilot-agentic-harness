@@ -287,6 +287,8 @@ Under the stages, **what waits for you** comes first, each button with a line on
 
 ### The tabs
 
+A shell code block on the page has **Ask agent** (the chat runs it; the gate holds) and **Run** (you run it at once; the gate does not check it; [how](04-reference.md#run-from-the-board)).
+
 The page shows the tabs its kind needs. They are in groups: **Live**, **Overview** (Overview, Requirement, Intake, Design, RCA, Plan, TODO), **Deliver** (Changes, Test, Review), **Records** (Log, Task Record, Agent actions) and **Files** (Docs, Files). The open group has a second row; a group with one tab goes straight to it; a `!` on a tab (a requirement or plan that waits for you) shows on its group. The page remembers the last tab of each group.
 
 | Tab | On | What it holds |

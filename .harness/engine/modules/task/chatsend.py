@@ -181,6 +181,13 @@ def prepare(root: Path, task: str, kind: str, why: str, lang: str, body: str, no
         head = str(body or "").strip()
         if not head:
             raise ValueError("empty")
+    elif kind == "command":  # "Ask agent" on a code block: the command and nothing else; the drafts wait for the next message
+        command = str(body or "").strip()
+        if not command:
+            raise ValueError("empty")
+        mark = "`" * max(3, 1 + max((len(run) for run in re.findall(r"`+", command)), default=0))
+        head = f"Run this command and report the output:\n\n{mark}\n{command}\n{mark}"
+        with_drafts = False
     else:
         raise ValueError("kind")
     saved = [item for item in drafts(root, task) if item["use"]] if with_drafts else []

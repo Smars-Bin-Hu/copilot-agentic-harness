@@ -276,6 +276,8 @@ const SHELL = (function () {
 
   document.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && (event.key === "k" || event.key === "K")) {
+      const field = event.target instanceof Element && (/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) || event.target.isContentEditable);
+      if (field && !open()) return;  // typing in a box (the reply, a note, a filter): Ctrl+K there is the box's own (it cuts a line); the palette opens from anywhere else, and closes from its own box
       event.preventDefault();
       if (open()) closePalette(); else openPalette();
       return;

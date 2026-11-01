@@ -565,10 +565,29 @@ def windows_of(root_state: Dict[str, Any]) -> Dict[str, int]:
     return out
 
 
+PARTS_KEEP = 60  # parts of one turn kept in memory: the board shows the latest few; a turn of 500 tool calls must not grow without end
+
+
+def slim(turn: Any) -> Any:
+    """A turn cut to what the board reads: the last `PARTS_KEEP` parts, and no result text of a tool call (its `content` can be big)."""
+    if not isinstance(turn, dict):
+        return turn
+    parts = turn.get("responseParts")
+    if not isinstance(parts, list):
+        return turn
+    kept = []
+    for part in parts[-PARTS_KEEP:]:
+        call = part.get("toolCall") if isinstance(part, dict) else None
+        if isinstance(call, dict) and "content" in call:
+            part = dict(part, toolCall={key: value for key, value in call.items() if key != "content"})
+        kept.append(part)
+    return dict(turn, responseParts=kept, dropped=int(turn.get("dropped") or 0) + max(0, len(parts) - PARTS_KEEP))
+
+
 def trimmed(state: Dict[str, Any], keep: int = 2) -> Dict[str, Any]:
     """A chat snapshot cut to what the board shows: the last turns and the one running. A long chat is big."""
     return {"status": state.get("status"), "title": state.get("title"), "modifiedAt": state.get("modifiedAt"),
-            "turns": list(state.get("turns") or [])[-keep:], "activeTurn": state.get("activeTurn")}
+            "turns": [slim(turn) for turn in list(state.get("turns") or [])[-keep:]], "activeTurn": slim(state.get("activeTurn"))}
 
 
 def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) -> None:
@@ -588,15 +607,27 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
         for part in parts:
             if part.get("kind") == "markdown" and part.get("id") == action.get("partId"):
                 part["content"] = str(part.get("content") or "") + str(action.get("content") or "")
+    elif kind == "chat/reasoning":  # the thinking text grows the same way; it is often empty (the host does not always send it)
+        for part in parts:
+            if part.get("kind") == "reasoning" and part.get("id") == action.get("partId"):
+                part["content"] = str(part.get("content") or "") + str(action.get("content") or "")
     elif kind == "chat/toolCallStart":
-        parts.append({"kind": "toolCall", "toolCall": {"toolCallId": action.get("toolCallId"), "toolName": action.get("toolName"), "displayName": action.get("displayName"),
-                                                       "intention": action.get("intention"), "status": "streaming"}})
+        call = {"toolCallId": action.get("toolCallId"), "toolName": action.get("toolName"), "displayName": action.get("displayName"), "intention": action.get("intention"), "status": "streaming"}
+        if action.get("invocationMessage") is not None:
+            call["invocationMessage"] = action["invocationMessage"]
+        parts.append({"kind": "toolCall", "toolCall": call})
     elif kind in ("chat/toolCallReady", "chat/toolCallComplete"):
         for part in parts:
             call = part.get("toolCall") if part.get("kind") == "toolCall" else None
             if call and call.get("toolCallId") == action.get("toolCallId"):
                 if kind == "chat/toolCallComplete":
-                    call["status"] = "completed" if (action.get("result") or {}).get("success", True) else "failed"
+                    result = action.get("result") if isinstance(action.get("result"), dict) else {}
+                    call["status"] = "completed" if result.get("success", True) else "failed"
+                    call["success"] = bool(result.get("success", True))
+                    for field in ("pastTenseMessage",):
+                        found = result.get(field) if result.get(field) is not None else action.get(field)
+                        if found is not None:
+                            call[field] = found
                 else:
                     call["status"] = "running" if action.get("confirmed") else "pending-confirmation"
                     for field in ("toolInput", "intention", "invocationMessage"):
@@ -608,6 +639,10 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
         done = dict(active, state={"chat/turnComplete": "complete", "chat/turnCancelled": "cancelled"}.get(kind, "error"), duration=action.get("duration"))
         state["turns"] = (list(state.get("turns") or []) + [done])[-keep:]
         state["activeTurn"] = None
+        return
+    if len(parts) > PARTS_KEEP + 20:  # cut in steps, not on every action
+        active["dropped"] = int(active.get("dropped") or 0) + len(parts) - PARTS_KEEP
+        del parts[:len(parts) - PARTS_KEEP]
 
 
 # --- what waits for a person (1.6, B75) --------------------------------------------------------------------------

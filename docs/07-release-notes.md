@@ -10,6 +10,25 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.17 (2026-10-31)
+
+### Added
+
+- **Live is a live stream.** The tab shows the latest eight items of the agent's chat, oldest first, newest at the bottom: what the agent writes (the text arrives as it is written), each tool call with an icon, what it does, its target (a path, or the command, masked and cut) and its time, and thinking (the words only when Copilot sent some, else "Thinking" with a timer). The page asks once a second while the tab is open and the page is seen, and stops when it is hidden. An item that is already there is changed in place: nothing is drawn again, no animation starts over, and the page follows the bottom only if you are there; if you scrolled up to read, what you read stays where it is.
+- While the agent works the running tool shimmers and counts its time, and a small robot shows how long the turn has run. When it is idle the page is calm. Both are off under Lite and reduced motion.
+- A decision that waits for you (approve the plan, confirm the requirement, approve the promote, allow a command, answer a question) is one strong card in the stream, where the agent stopped. They are the same cards as before and go through the same buttons and dialogs.
+- **Say something**: one small pill at the bottom centre of an open task that has a chat, on every tab (key `R`, a badge counts the drafts). It opens a panel with your text, the reply language, the model and thinking level, the drafts with their ticks, **Send** (idle chat) or **Steer** (a working agent), **Stop**, and the whole message that will be sent. What you typed stays when the panel is closed and when the page is drawn again.
+- `/api/live` (read): the latest items from the memory of the link, with a `rev` so that an unchanged answer is `{rev, same: true}`. It reads no file and asks the host nothing. Every text is redacted; a long one is cut and marked.
+- The Live tab says why in each calm state: no chat is linked, the chat has said nothing yet, the link to VS Code dropped, the task is closed.
+
+### Changed
+
+- The reply, steer, stop, the task settings and the drafts are no longer on the Live tab: they are in the reply panel. The chat bar and the Recent bar of Live are gone (the stream shows the same). A form for the results of a run (tests, run) stays on Live, under the stream, for as long as that wait lasts.
+- A change made on the task page (a setting, a draft, a message sent) is shown in place; the page is no longer loaded again, so an open panel and what you typed stay.
+- `Cmd+K` / `Ctrl+K` no longer opens the palette while you type in a box (it is the box's own key there).
+- A steer in Chinese carries `[ZH]` first, as a send does.
+- The link keeps at most 60 parts of a turn in memory, and no result text of a tool call, so a turn of 500 tool calls does not grow.
+
 ## 1.6.16 (2026-10-31)
 
 ### Added

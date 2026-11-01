@@ -168,11 +168,13 @@ def prepare(root: Path, task: str, kind: str, why: str, lang: str, body: str, no
     return {"text": text, "notes": notes, "draft_ids": [item["id"] for item in saved], "lang": lang}
 
 
-def steer_text(body: str) -> Tuple[str, str]:
-    """The text of a steer: what the person typed, as it is. (text, problem) where problem is "" or "empty" or "long"."""
+def steer_text(body: str, lang: str = "en") -> Tuple[str, str]:
+    """The text of a steer: what the person typed, as it is, with `[ZH]` first when Chinese was chosen (the reply panel). (text, problem) where problem is "" or "empty" or "long"."""
     text = str(body or "").strip()
     if not text:
         return "", "empty"
+    if lang == "zh":
+        text = ZH_MARK + " " + text
     return (text, "long") if len(text) > MAX_TEXT else (text, "")
 
 

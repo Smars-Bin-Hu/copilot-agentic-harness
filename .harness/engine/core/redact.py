@@ -54,3 +54,11 @@ def text(value: Any) -> str:
     for pattern, replacement in _RULES:
         out = pattern.sub(replacement, out)
     return _HOME.sub("~", out)
+
+
+def path(value: Any) -> str:
+    """A path or an address: the home folder name replaced, and each part between slashes checked on its own. `text` would mask a long path as one long run (a key or a hash looks like that); here only a part that is long by itself is."""
+    flat = _HOME.sub("~", str(value or ""))
+    if re.search(r"\s", flat):
+        return text(flat)  # not a plain path (a command, words): the whole text rules apply
+    return re.sub(r"[^/\\]+", lambda found: text(found.group(0)), flat)

@@ -510,7 +510,7 @@ class Board:
 
     def steer(self, data: Dict[str, Any]) -> Dict[str, Any]:
         task, found = self.target(data)
-        text, problem = chatsend.steer_text(str(data.get("text", "")))
+        text, problem = chatsend.steer_text(str(data.get("text", "")), str(data.get("lang", "en")))
         if problem:
             raise CommandError(self.refusal("text." + problem))
         model = chatsend.model_of(found)
@@ -823,6 +823,8 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, board.ready.answer(board.paired(self.token())))
                 except Exception as error:  # noqa: BLE001 - the page shows that the check itself failed
                     return self.answer(500, {"error": f"{type(error).__name__}: {error}"[:300]})
+            if path == "/api/live":  # the Live tab of an open task: the latest items of its chat, from the memory of the link (no file, no call to the host); `rev` makes an unchanged poll tiny
+                return self.answer(200, {"live": board.link.live(str(data.get("task", ""))[:200], str(data.get("rev", ""))[:300])})
             if path == "/api/open":  # bring the VS Code window of this folder forward: the thread of the link runs `code <folder>`; this answers at once
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})

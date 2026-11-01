@@ -30,7 +30,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from core import ahp, config, copilot_events, tasks
 from core.paths import utc_now
 
-from . import chatask, chatctx, chatlink, chatnew, chatsend, task as task_ops, tasklife, tasksub
+from . import chatask, chatctx, chatlink, chatlive, chatnew, chatsend, task as task_ops, tasklife, tasksub
 
 TASKS_EVERY = 3.0  # seconds between two looks at the tasks and their chats
 RELIST_EVERY = 180.0  # a whole new list of chats, in case a notification was missed
@@ -192,6 +192,25 @@ class VsLink:
                 if found["reply"]:
                     out["recent"] = tasksub.recent_text(found["reply"])
             return out
+
+    def live(self, task: str, last: str = "") -> Dict[str, Any]:
+        """For the Live tab of an open task, from the cache only (no file, no call to the host): `{rev, bound, why | state, started, now, items, more}`. `last` is the `rev` the page already has:
+        when nothing changed the answer is only `{rev, same: true}`. `task` is the folder name of the task."""
+        with self.lock:
+            binding = self.bound.get(task) if self.ready else None
+            if not binding:
+                why = self.unbound.get(task, "") if self.ready else self.why
+                rev = "x:" + why
+                return {"rev": rev, "same": True} if rev == last else {"rev": rev, "bound": False, "why": why}
+            state = ahp.status_name((self.sessions.get(binding["session"]) or {}).get("status"))
+            cached = self.chats.get(binding["chat"])
+            rev = f"{binding['chat']}:{cached.get('rev', 0) if cached else -1}:{state}"
+            if rev == last:
+                return {"rev": rev, "same": True}
+            if cached is None:  # bound, the chat is being read
+                return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), "items": [], "more": False, "started": "", "loading": True}
+            found = chatlive.build(cached["state"], cached.get("marks") or {}, self.root)
+            return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), **found}
 
     def context_parts(self, task: str, session_id: str) -> Optional[Dict[str, Any]]:
         """What the context of the chat of `task` holds (`chatctx.parts`): the newest model call of the cached state, and Copilot's own record of the session `session_id` (its file is read again
@@ -463,6 +482,8 @@ class VsLink:
                 action = params.get("action")
                 if cached is not None and isinstance(action, dict):
                     ahp.reduce_chat(cached["state"], action)
+                    chatlive.stamp(cached, action, int(time.time() * 1000))
+                    cached["rev"] = cached.get("rev", 0) + 1  # the Live tab asks only for what changed since this number
                     if action.get("type") in ("chat/toolCallStart", "chat/toolCallReady"):
                         cached["tool_at"] = utc_now()
                 held = next((item for item in self.sess.values() if item["channel"] and item["channel"] == channel), None)
@@ -591,6 +612,8 @@ class VsLink:
                     if known is not None:
                         known["status"] = ahp.IN_PROGRESS | (int(known.get("status") or 0) & (ahp.IS_READ | ahp.ARCHIVED))  # not idle at once: a second send finds it busy
                     ahp.reduce_chat(held["state"], action)
+                    chatlive.stamp(held, action, int(time.time() * 1000))
+                    held["rev"] = held.get("rev", 0) + 1
                 title = str((known or {}).get("title") or binding.get("title") or "")
                 self.dirty = True
             job.result = {"chat": chat, "title": title, "turn": str(action.get("turnId") or "")}

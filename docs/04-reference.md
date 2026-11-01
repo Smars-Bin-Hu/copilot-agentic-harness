@@ -119,9 +119,10 @@ This is how a served board (`task board --serve`) talks to the chats of VS Code.
 | --- | --- |
 | `/api/ready` | Read, for the Enter screen: one line for each check (VS Code, Copilot, `harness doctor`, pairing, and the grey knowledge base and target repositories) with a state (`ok`, `wait`, `fail`, `check`, `note`) and a reason. It reads caches and one background `doctor` run; it waits for nothing |
 | `/api/status`, `/api/board` | Read. They carry `vscode: {ready, bound, unbound, why}` and, on rows, `chat` and `sub` |
+| `/api/live` | Read, for the Live tab of an open task, once a second while the tab or the reply panel is open and the page is seen: the latest eight items of its chat (`text`, `tool`, `think`), from the memory of the link (no file, no call to the host). Every text is redacted and cut (a cut is marked). `rev` changes with the chat: asked with the same `rev`, the answer is only `{rev, same: true}` |
 | `/api/open` | Brings the VS Code window of this folder forward (it cannot open one chat) |
 | `/api/send` | `step: preview` gives the whole message; `step: act` sends it. A fixed English text (no confirmation code in it), `[ZH]` only when you chose Chinese, your note and the ticked drafts. Idle chat only |
-| `/api/steer`, `/api/stop` | Say one more thing to a working agent; cancel its turn |
+| `/api/steer`, `/api/stop` | Say one more thing to a working agent (`lang: zh` puts `[ZH]` first); cancel its turn |
 | `/api/confirm`, `/api/answer` | Allow or deny one named tool call; answer one named question. The page's digest must match what the host holds now |
 | `/api/create` | `step: options`, `preview`, `act`: makes a chat in this folder (mode interactive, no worktree) and sends the fixed first message |
 | `/api/setting` | The model and the thinking level the board puts on each message it sends; the number of independent checks (as `task review set`) |

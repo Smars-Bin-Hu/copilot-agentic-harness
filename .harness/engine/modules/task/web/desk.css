@@ -85,11 +85,8 @@
 .tk-pane>.card{background:transparent}
 
 /* ---------- the Live tab ---------- */
-.tk-chatrow{display:flex;align-items:center;gap:10px;margin:0 0 12px;min-width:0}
-.tk-chatrow .chat-title{min-width:0;max-width:60ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tk-quiet{margin:6px 0 14px}
 .tk-quiet h2{margin:0 0 4px}
-.tk-recent{display:flex;gap:12px;margin:14px 0}
 .tk-foot{margin-top:6px}
 .tk-foot footer{margin-top:14px}
 
@@ -122,4 +119,3 @@ button.st-checks:hover{background:var(--hover);border-color:var(--line2)}
 @media (max-width:1100px){.tk-stage{width:100px}.tk-name{max-width:30ch}}
 @media (max-width:900px){.tk-head{flex-wrap:wrap}.tk-name{flex:1 1 40%}.tk-sp{display:none}}
 @media (max-width:640px){.tk-pane{padding:14px}.tk-top,.tk-sub{padding-left:8px;padding-right:8px}}
-.tk-talk{display:grid;gap:10px;margin:12px 0}

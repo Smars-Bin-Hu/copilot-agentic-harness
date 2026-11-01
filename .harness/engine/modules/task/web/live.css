@@ -1,0 +1,145 @@
+/* The Live tab and the reply panel of a served task page (1.6.17, B88). Colours are tokens (tokens.css). Motion is off under `html.lite` (shell.css) and under reduced motion (the end of this file).
+   The stream (`.lv`, live.js) is made once and changed in place: nothing here may depend on a node being drawn again. */
+
+/* ---------- the stream ---------- */
+.lv{box-sizing:border-box;max-width:920px;margin:0 auto;padding:18px 22px 10px}
+.lv[hidden]{display:none}
+.lv-h{display:flex;align-items:baseline;gap:10px;min-width:0;margin-bottom:6px}
+.lv-t{flex:none;font-size:15px;font-weight:600}
+.lv-sub{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lv-link{flex:none;margin-left:auto;padding:0;border:0;background:none;color:var(--soft);font:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.lv-link::after{content:"\2197";margin-left:5px}
+.lv-link:hover:not(:disabled){color:var(--ink);text-decoration:underline}
+.lv-link:disabled{opacity:.5;cursor:not-allowed}
+.lv-stale{margin:0 0 6px}
+.lv-earlier{display:flex;align-items:center;gap:10px;margin:8px 0 2px 23px;font-size:12px;color:var(--soft)}
+.lv-earlier::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+.lv-feed{position:relative;list-style:none;margin:0;padding:0}
+.lv-feed::before{content:"";position:absolute;left:4px;top:10px;bottom:10px;width:1px;background:var(--line)}
+
+.fi{position:relative;display:flex;gap:14px;padding:9px 0;min-width:0}
+.fi[hidden]{display:none}
+.fi .dot{position:relative;z-index:1;flex:none;width:9px;height:9px;margin-top:8px;border-radius:50%;background:var(--card);border:1.5px solid var(--line2)}
+.fi .fb{flex:1;min-width:0}
+.fi.enter{animation:lvin .45s cubic-bezier(.2,.8,.2,1) both}
+@keyframes lvin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* what the agent wrote: plain text, whole words, nothing an agent wrote is markup */
+.fi-text .dot{background:var(--ink);border-color:var(--ink)}
+.fi .tx{margin:0;max-width:70ch;font-size:14.5px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.fi .ar{animation:lvar .5s ease-out}
+@keyframes lvar{from{opacity:0}to{opacity:1}}
+.cutm{display:block;margin-top:2px;font-size:12px;color:var(--soft)}
+.caret{display:inline-block;width:7px;height:15px;margin-left:2px;background:var(--ink);vertical-align:-2px;animation:lvcaret 1s steps(1) infinite}
+@keyframes lvcaret{50%{opacity:0}}
+
+/* a tool call: icon, what it does, where, and its time */
+.fi-tool .fb{display:flex;align-items:center;gap:9px;min-height:26px;padding:3px 0}
+.fi .ti{flex:none;display:inline-flex}
+.fi .ti svg{display:block;width:15px;height:15px;stroke:var(--soft)}
+.fi-tool .in{flex:0 1 auto;min-width:0;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;font-weight:500}
+.fi-tool .tg{flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:6px;background:var(--track);color:var(--soft);font:12px var(--mono)}
+.fi .el{flex:none;margin-left:auto;padding-left:8px;font:12px var(--mono);color:var(--soft);white-space:nowrap;font-variant-numeric:tabular-nums}
+.fi-tool.is-done .in{color:var(--soft);font-weight:450}
+.fi-tool.is-fail .dot{background:var(--bad);border-color:var(--bad)}
+.fi-tool.is-fail .el{color:var(--bad)}
+.fi-tool.is-wait .dot{background:var(--hot-dot);border-color:var(--hot-dot);animation:lvblink 1.8s ease-in-out infinite}
+.fi-tool.is-wait .el{color:var(--hot)}
+.fi-tool.is-run .dot{background:var(--good-dot);border-color:var(--good-dot);box-shadow:0 0 0 4px var(--good-bg);animation:lvpulse 2s ease-out infinite}
+.fi.is-run .in{background:linear-gradient(100deg,var(--ink) 35%,var(--soft) 50%,var(--ink) 65%) 0 0/250% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:lvshim 1.7s linear infinite}
+.fi-tool.is-run .el .st-time,.fi-tool.is-run .el.st-run{color:var(--good)}
+.fi .el.st-run{display:inline-block}
+@keyframes lvshim{from{background-position:120% 0}to{background-position:-120% 0}}
+@keyframes lvpulse{0%{box-shadow:0 0 0 0 var(--good-line)}70%,100%{box-shadow:0 0 0 6px transparent}}
+@keyframes lvblink{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* thinking: only the words the host sent, else "Thinking" and a time */
+.fi-think .thk-row{display:flex;align-items:center;gap:8px;min-height:26px;padding:3px 0}
+.fi-think .in{font-size:13.5px;font-style:italic}
+.fi-think.is-done .in{color:var(--soft);font-style:normal;font-size:12.5px}
+.fi-think.is-run .dot{border-color:var(--soft);animation:lvblink 1.2s ease-in-out infinite}
+.fi-think .thk{margin:2px 0 0;color:var(--soft);font-size:13px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.fi-think .thk[hidden]{display:none}
+.wv{display:inline-flex;gap:3px;margin-left:2px}
+.wv[hidden]{display:none}
+.wv i{width:4px;height:4px;border-radius:50%;background:var(--soft);animation:lvwave 1.1s ease-in-out infinite}
+.wv i:nth-child(2){animation-delay:.15s}.wv i:nth-child(3){animation-delay:.3s}
+@keyframes lvwave{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-4px);opacity:1}}
+
+/* the moment that needs the person: the cards of desk.js, in the stream, where the agent stopped */
+.fi-need .dot.hot{background:var(--hot-dot);border-color:var(--hot-dot);box-shadow:0 0 0 4px var(--hot-bg);animation:lvblink 1.8s ease-in-out infinite}
+.lv-need{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}
+.lv-need>*{margin:0}
+
+/* the life line: a small robot, and how long this turn has run */
+.lv-life{display:flex;align-items:center;gap:12px;margin:14px 0 0;padding-top:10px;border-top:1px dashed var(--line);color:var(--soft);font-size:13px;min-width:0}
+.lv-life[hidden]{display:none}
+.lv-rb{flex:none;width:26px;height:26px;color:var(--soft)}
+.lv-rb .ey,.lv-rb .bulb{fill:var(--soft)}
+.lv-life.run .lv-rb{color:var(--ink);animation:lvbob 1.6s ease-in-out infinite}
+.lv-life.run .lv-rb .ey,.lv-life.run .lv-rb .bulb{fill:var(--good-dot);animation:lvblink 1.1s ease-in-out infinite}
+.lv-life.paused .lv-rb .ey,.lv-life.paused .lv-rb .bulb{fill:var(--hot-dot)}
+.lv-life.calm .lv-rb .ey{transform-box:fill-box;transform-origin:center;transform:scaleY(.2)}
+.lv-life .lt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lv-life .lt b{font-weight:550;color:var(--ink);font-variant-numeric:tabular-nums}
+.lv-life .lt-s[hidden],.lv-life .lt-r[hidden]{display:none}
+.eq{display:none;align-items:flex-end;gap:2px;height:14px}
+.lv-life.run .eq{display:inline-flex}
+.eq i{width:2.5px;height:100%;border-radius:1px;background:var(--good-dot);transform-origin:bottom;animation:lveq 1s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:.2s}.eq i:nth-child(3){animation-delay:.4s}.eq i:nth-child(4){animation-delay:.1s}
+@keyframes lveq{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
+@keyframes lvbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+
+/* the calm states: no chat, a chat that has said nothing, a link that dropped */
+.lv-empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:56px 0 48px;text-align:center}
+.lv-empty[hidden]{display:none}
+.lv-empty .lv-rb{width:64px;height:64px;stroke-width:1.1}
+.lv-empty .lv-rb .ey{transform-box:fill-box;transform-origin:center;transform:scaleY(.2)}
+.lv-empty h3{margin:12px 0 0;font-size:16px}
+.lv-empty .act{align-self:center;margin:0}
+.lv-empty p{margin:0 0 14px;max-width:52ch;color:var(--soft);overflow-wrap:anywhere}
+
+/* ---------- the reply: no box on the page. One pill; a panel over the page ---------- */
+.rp-pill{position:fixed;left:50%;bottom:22px;z-index:50;transform:translateX(-50%);display:inline-flex;align-items:center;gap:9px;height:44px;margin:0;padding:0 10px 0 16px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;box-shadow:var(--shadow),0 10px 40px rgba(0,0,0,.18);white-space:nowrap}
+.rp-pill[hidden]{display:none}
+.rp-pill:hover,.rp-pill:focus-visible,.rp-pill.on{border-color:var(--ink)}
+.rp-pill svg{flex:none;width:16px;height:16px}
+.rp-pill kbd{font:500 10.5px/1 var(--mono);padding:3px 5px;border-radius:5px;background:var(--kbd);color:var(--soft);border:1px solid var(--line)}
+.rp-pill .bd{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:11.5px;font-weight:650}
+.rp-pill .bd[hidden]{display:none}
+.has-reply .tk-foot{padding-bottom:84px}  /* the pill never sits on the last line of the page */
+
+.rp{position:fixed;left:50%;bottom:78px;z-index:55;transform:translateX(-50%);box-sizing:border-box;width:min(600px,94vw);max-height:calc(100vh - 150px);overflow:auto;padding:16px;border-radius:20px;color:var(--ink);background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--glass-hi),var(--glass-shadow);-webkit-backdrop-filter:blur(30px) saturate(1.4);backdrop-filter:blur(30px) saturate(1.4);animation:palin .16s ease-out}
+.rp[hidden]{display:none}
+.rp-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-size:13.5px}
+.rp-x{display:inline-grid;place-items:center;width:28px;height:28px;padding:0;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--soft);cursor:pointer}
+.rp-x svg{width:14px;height:14px}
+.rp-x:hover{background:var(--hover);color:var(--ink)}
+.rp-text{display:block;box-sizing:border-box;width:100%;min-height:84px;max-height:40vh;resize:vertical;padding:10px 12px;font-size:14px;line-height:1.5;border-radius:12px}
+.rp-lang{display:flex;align-items:center;gap:10px;margin:10px 0 0;flex-wrap:wrap}
+.rp-lang .chips{display:inline-flex;gap:6px}
+.rp-set:empty,.rp-dr:empty{display:none}
+.rp .chatbar{margin:0;padding:10px 0 0;border:0;border-radius:0;background:transparent;box-shadow:none;gap:8px 14px}
+.rp .settings .chat-k,.rp .drafts .chat-k{font-weight:600;color:var(--ink)}
+.rp .settings .set-field{min-width:0;max-width:100%}
+.rp .settings select{min-width:0;max-width:min(100%,300px);text-overflow:ellipsis}
+.rp .set-note,.rp .drafts .set-note{margin:0;font-size:11.5px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:help}
+.rp .drafts{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.rp .draft-list{max-height:150px;overflow:auto}
+.rp .draft-new{display:flex;gap:6px}.rp .draft-new .draft-add{flex:1;min-width:0}
+.rp-pv{margin-top:10px;font-size:12.5px}
+.rp-pv summary{cursor:pointer;color:var(--soft)}
+.rp-pre{max-height:12em}
+.rp-said{margin-top:8px}
+.rp-said p{margin:0 0 4px;overflow-wrap:anywhere}
+.rp-f{position:sticky;bottom:-16px;z-index:1;display:flex;align-items:center;gap:10px;margin:12px -16px -16px;padding:10px 16px 16px;min-width:0;background:var(--pop);border-top:1px solid var(--line);border-radius:0 0 20px 20px}  /* Send is always in view, whatever the panel holds */
+.rp-hint{flex:1 1 auto;min-width:0;font-size:12px;overflow-wrap:anywhere}
+.rp-f kbd{flex:none;font:500 10.5px/1 var(--mono);padding:3px 5px;border-radius:5px;background:var(--kbd);color:var(--soft);border:1px solid var(--line)}
+.rp-f kbd[hidden],.rp-f .act[hidden]{display:none}
+.rp-f .act{flex:none;margin:0}
+html.lite .rp{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(--card)}
+@media (max-width:640px){.rp-pill span{display:none}.lv{padding:14px}.fi-tool .in{max-width:45%}}
+
+/* motion: off for people who asked for less of it (Lite is off in shell.css) */
+@media (prefers-reduced-motion:reduce){.lv *,.lv *::before,.rp,.rp-pill{animation:none!important;transition:none!important}.fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}.caret{opacity:1}}
+html.lite .fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}

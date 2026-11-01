@@ -425,7 +425,8 @@
     ui.wait = h("div", {class: "tk-wait"});
     ui.tabs = h("div", {class: "tk-tabs"});
     ui.pane = h("div", {class: "pane tk-pane"});
-    ui.surface = h("section", {class: "tk-surface"}, ui.wait, ui.tabs, ui.pane);
+    ui.live = typeof LIVE !== "undefined" ? LIVE.node : h("div", {hidden: ""});  // the stream of the Live tab: made once, outside the part that is drawn again, so its animations go on
+    ui.surface = h("section", {class: "tk-surface"}, ui.wait, ui.tabs, ui.live, ui.pane);
     ui.foot = h("div", {class: "tk-foot"});
     ui.root = h("div", {class: "tk"}, ui.head, ui.info, ui.forks.node, SHELL.banner(), ui.surface, ui.foot);
     app.replaceChildren(ui.root);
@@ -512,7 +513,7 @@
     return h("section", {class: "card chatbar settings"}, h("span", {class: "chat-k"}, t("desk.set.label")),
       h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.model")), pick), h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.thinking")), think),
       h("span", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.checks")), h("span", {class: "chips"}, chips)),
-      h("p", {class: "sub set-note"}, t("desk.set.note", {n: Math.max(1, info.n || 3)})));
+      h("p", {class: "sub set-note", title: t("desk.set.note", {n: Math.max(1, info.n || 3)})}, t("desk.set.note", {n: Math.max(1, info.n || 3)})));
   }
 
   // "Drafts" (1.6, B77): the person's notes for the next message the board sends. Ticked notes go at the end of it (the send panel shows them); a note is cleared only after a send went.
@@ -565,10 +566,11 @@
       drop.addEventListener("click", () => draftCall({op: "delete", id: item.id}));
       return h("li", {class: "draft-row" + (item.use ? "" : " off")}, tick, h("span", {class: "draft-text"}, item.text), edit, drop);
     });
-    drafts.node.replaceChildren(...[h("span", {class: "chat-k"}, t("desk.drafts.label")), h("p", {class: "sub set-note"}, t("desk.drafts.hint")),
+    drafts.node.replaceChildren(...[h("span", {class: "chat-k"}, t("desk.drafts.label")), h("p", {class: "sub set-note", title: t("desk.drafts.hint")}, t("desk.drafts.hint")),
       rows.length ? h("ul", {class: "draft-list"}, rows) : h("p", {class: "sub"}, drafts.items ? t("desk.drafts.none") : "..."),
       rows.length ? h("p", {class: "sub"}, t("desk.drafts.count", {count: items.length, used})) : null,
       h("div", {class: "row draft-new"}, input, add), drafts.error ? h("div", {class: "bad"}, ...SERVE.reasons(drafts.error)) : null].filter(Boolean));  // replaceChildren would write a null as the word "null"
+    if (typeof REPLY !== "undefined") REPLY.count(items.length);  // the badge of the reply pill
   }
 
   function draftsBox() {
@@ -736,28 +738,38 @@
   }
 
   // --- the Live tab --------------------------------------------------------------------------------------------------------
-  // For now what exists: the state of the chat behind the task and its latest reply (the last thing the agent did, and the first lines of its last reply to open). The whole conversation is in VS Code.
-  let recentOpen = false;
+  // The stream (live.js) is a node of its own above this pane, kept between drawings; what is drawn here is what does not belong in a stream: the words for a task with nothing to follow or nothing
+  // waiting, and the form for the results of a run (a test or a run the agent asked for; it is here, under the stream, for as long as that wait lasts). The things said to the agent (the reply, steer,
+  // stop, the task settings, the drafts) are in the reply panel (reply.js) on every tab. The cards of what needs the person are in the stream, where the agent stopped.
+  const hasStream = () => typeof LIVE !== "undefined" && served() && !desk.past && desk.status === "open";
   function livePane() {
-    const parts = [h("p", {class: "hint top"}, t("desk.live.hint"))];
-    const chat = served() && !desk.past ? desk.chat : null;
-    if (chat) {
-      const row = [h("span", {class: "chat-k"}, t("desk.chat.label"))];
-      if (chat.bound) row.push(h("span", {class: "chat-title", title: chat.title}, chat.title || "-"), tag(t("desk.chat." + (chat.state || "unknown")), chat.state === "busy" ? "good run" : chat.state === "input" || chat.state === "error" ? "hot" : ""));
-      else row.push(h("span", {class: "sub"}, t("desk.live.nochat", {why: t("board.vs.why." + (chat.why || "no-chat"))})));
-      parts.push(h("div", {class: "tk-chatrow"}, row));
-    }
+    const parts = [];
+    parts.push(hasStream() ? null : h("p", {class: "hint top"}, t("desk.live.hint")));
     parts.push(livePlain());
-    const talk = canAct() ? desk.actions.filter((item) => TALK.includes(item.action)) : [];
-    if (talk.length) parts.push(h("div", {class: "tk-talk"}, talk.map((item) => h("div", {class: "tk-act"}, actionButton(actionRow(), item, "big"), h("p", {class: "hint"}, hintOf(item))))));  // said to the agent while it works
-    if (desk.sub && (desk.sub.what || desk.sub.text) && chat) {
-      const more = desk.recent && desk.recent !== desk.sub.text ? h("details", {class: "recent-more", open: recentOpen ? "" : null}, h("summary", null, t("desk.recent.more")), h("pre", {class: "recent-text"}, desk.recent)) : null;
-      if (more) more.addEventListener("toggle", () => { recentOpen = more.open; });
-      parts.push(h("section", {class: "tk-recent"}, h("span", {class: "chat-k"}, t("desk.recent.label")), h("div", {class: "recent-body"}, h("div", {class: "recent-line"}, subNodes(desk.sub)), more)));
-    }
     if (served() && canAct() && ["tests", "run"].includes(desk.waiting_why)) parts.push(resultForm());
-    parts.push(settingsRow(), draftsBox());
     return parts;
+  }
+
+  // What the Live stream and the reply panel need from this drawing.
+  function paintLive() {
+    const chat = served() && !desk.past ? desk.chat : null;
+    const onLive = current === "live" && hasStream();
+    if (typeof LIVE !== "undefined" && served()) {
+      LIVE.config({task: desk.task, chat, off: desk.status === "open" && !desk.past ? "" : desk.status || "closed"});
+      LIVE.want("tab", onLive);
+      LIVE.visible(onLive);
+    }
+    const bound = Boolean(chat && chat.bound);
+    const into = onLive && bound;  // the cards of a wait go into the stream where the agent stopped; with no chat to show they stay above the tabs
+    const cards = waitBand();
+    fill(ui.wait, into ? null : cards);
+    ui.wait.hidden = !ui.wait.firstChild;
+    if (typeof LIVE !== "undefined" && served()) LIVE.needs(into ? cards : null);
+    if (typeof REPLY !== "undefined" && served()) {
+      const show = hasStream() && bound;
+      if (show) draftsBox();  // loads the drafts (the badge counts them) even while the panel is shut
+      REPLY.update({name: desk.name, show, state: chat ? chat.state || "" : "", count: drafts.items ? drafts.items.length : 0, settings: () => settingsRow(), settingsSig: JSON.stringify([desk.settings, desk.status]), drafts: drafts.node});
+    }
   }
 
   // --- the tabs, by function ------------------------------------------------------------------------------------------------
@@ -1575,10 +1587,10 @@
     const focused = document.activeElement && document.activeElement.closest ? document.activeElement.closest("[data-key]") : null;
     const focusKey = focused && ui.tabs.contains(focused) ? focused.dataset.key : "";
     paintHead();
-    fill(ui.wait, waitBand());
-    ui.wait.hidden = !ui.wait.firstChild;
+    paintLive();
     fill(ui.tabs, nav());
     fill(ui.pane, body());
+    ui.pane.hidden = !ui.pane.firstChild;
     fill(ui.foot, [typeof SERVE === "undefined" && !saved ? h("p", {class: "sub"}, t("board.copy.hint")) : saved ? null : SERVE.banner(true),
       h("footer", null, t(saved ? "desk.snapshot.footer" : "desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright())]);  // a null would be drawn as the word "null"
     if (focusKey) { const again = ui.tabs.querySelector('[data-key="' + focusKey + '"]'); if (again) again.focus({preventScroll: true}); }
@@ -1604,18 +1616,23 @@
   SHELL.provide(() => ({here: desk.name, tabs: tabs.filter(visible).map((tab) => ({id: tab, label: t("desk.tab." + tab), group: groupOf(tab).tabs.filter(visible).length > 1 && groupName(groupOf(tab).id) !== t("desk.tab." + tab) ? groupName(groupOf(tab).id) : "", current: tab === current,
     run: () => goTab(tab)}))}));
   draw(false);
+  // Ask the server for the task again and draw what changed (keeping the open tab, the scroll, and every node that did not change).
+  function pull() {
+    return SERVE.post("/api/desk", {task: desk.name}).then((data) => {
+      SHELL.vs(data.desk.vscode);
+      const text = JSON.stringify(data.desk);
+      if (same(text, shown)) return;
+      setDesk(data.desk);
+      shown = text;
+      draw(true);
+    }, (error) => { if (error && error.offline) throw error; });
+  }
   if (typeof SERVE !== "undefined" && DATA.serve.refresh) {
+    SERVE.onChange(() => { pull(); });  // after a click that changed something (a setting, a message sent): in place, so the reply panel and what was typed stay; a reload would drop them
     pollEvery(DATA.serve.refresh, () => {
       if (SERVE.busy()) return null;
       if (document.activeElement && ["TEXTAREA", "INPUT"].includes(document.activeElement.tagName)) return null;  // a redraw would take the focus from what the person is typing
-      return SERVE.post("/api/desk", {task: desk.name}).then((data) => {
-        SHELL.vs(data.desk.vscode);
-        const text = JSON.stringify(data.desk);
-        if (same(text, shown)) return;
-        setDesk(data.desk);
-        shown = text;
-        draw(true);
-      }, (error) => { if (error && error.offline) throw error; });
+      return pull();
     });
   }
 })();

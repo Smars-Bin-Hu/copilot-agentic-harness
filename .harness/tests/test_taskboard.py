@@ -694,7 +694,7 @@ class PageTests(BoardCase):
 
     def test_the_board_page_has_the_lobby_and_its_own_style(self) -> None:
         page = taskhtml.board_page([], "2026-10-20T00:00:00+00:00", 5)
-        for mark in ("const Lobby = (function", ".lb-scene{", "board.mode.lobby", ".rb-ribbon{", "function stateTag", "function pulse(entry)", "function leave(entry)", "lb-acts", ".lb-card.on{opacity:1;transform:none;pointer-events:auto}", "board.state.unheld", "board.lobby.zone.left", ".tag.lost{"):
+        for mark in ("const Lobby = (function", ".lb-scene{", "board.mode.lobby", ".rb-ribbon{", "function stateTag", "function pulse(entry)", "function leave(entry)", "lb-acts", ".lb-card.on{opacity:1;visibility:visible;transform:none;pointer-events:auto", "board.state.unheld", "board.lobby.zone.left", ".tag.lost{"):
             self.assertIn(mark, page)
 
 
@@ -994,7 +994,7 @@ class CheckDotsTests(BoardCase):
 
     def test_the_board_page_has_the_list_structure(self) -> None:
         board = (Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web" / "board.js").read_text(encoding="utf-8")
-        for text in ("kindIcon(", "checkDots(", "act-menu", "subLine(", "board.menu.copy"):
+        for text in ("kindIcon(", "checkDots(", "act-menu", "statusLine(", "board.menu.copy"):
             self.assertIn(text, board)
         for gone in ('header("kind")', 'header("updated")', 't("task.tier.'):
             self.assertNotIn(gone, board)

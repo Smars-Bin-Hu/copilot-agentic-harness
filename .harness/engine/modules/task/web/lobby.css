@@ -104,20 +104,28 @@
 @keyframes lbhop{0%{transform:translateY(0)}45%{transform:translateY(-12px)}100%{transform:translateY(0)}}
 .lb-slot:hover .lb-body,.lb-slot:focus .lb-body{stroke:var(--c)}
 .lb-bubble *{stroke:none}
-.lb-card{position:absolute;z-index:5;width:250px;background:var(--pop);border:1px solid var(--line2);border-radius:14px;padding:11px 13px;color:var(--ink);font-size:12.5px;box-shadow:var(--shadow);opacity:0;transform:translateY(6px);transition:opacity .15s,transform .15s}
-.lb-card{pointer-events:none}
-.lb-card.on{opacity:1;transform:none;pointer-events:auto}
-.lb-card::after{content:"";position:absolute;left:0;right:0;bottom:-12px;height:12px}.lb-card.below::after{bottom:auto;top:-12px}
-.lb-acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;padding-top:8px;border-top:1px solid var(--line)}
-.lb-card .act{margin:0;font-size:12px}
-.lb-card b{display:block;font-size:13.5px;color:var(--ink);margin-bottom:2px;overflow-wrap:anywhere}
-.lb-k{color:var(--soft)}
-.lb-mini{display:flex;align-items:center;margin-top:8px}
-.lb-d{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--line2);flex:none}
-.lb-d.is-done{background:var(--good-dot);border-color:var(--good-dot)}
-.lb-d.is-now{box-shadow:0 0 0 3px var(--hover)}.lb-d.is-ok{border-color:var(--good-dot)}.lb-d.is-you{border-color:var(--hot-dot)}.lb-d.is-left{border-color:var(--hot-dot)}
-.lb-l{flex:1;height:1.5px;background:var(--line2);min-width:6px}.lb-l.is-done{background:var(--good-dot)}
-.lb-mini-names{display:flex;justify-content:space-between;gap:8px;color:var(--soft);font-size:10.5px;margin-top:3px}
+/* the card (1.6.14): in the body, placed beside the robot by status.js (place); fixed to the window, so it can go to any edge */
+.lb-card{position:fixed;left:0;top:0;z-index:70;width:330px;max-width:calc(100vw - 16px);box-sizing:border-box;background:var(--pop);border:1px solid var(--line2);border-radius:14px;padding:12px 14px;color:var(--ink);font-size:12.5px;box-shadow:var(--shadow);opacity:0;visibility:hidden;transform:translateY(6px);transition:opacity .15s,transform .15s,visibility 0s .15s;pointer-events:none}
+.lb-card.below{transform:translateY(-6px)}
+.lb-card.on{opacity:1;visibility:visible;transform:none;pointer-events:auto;transition:opacity .15s,transform .15s}
+.lb-card::after{content:"";position:absolute;left:0;right:0;bottom:-14px;height:14px}.lb-card.below::after{bottom:auto;top:-14px}
+.lb-card>div{min-width:0}
+.lb-head{display:flex;align-items:center;gap:8px;min-width:0}
+.lb-head .kind-icon{flex:none}
+.lb-name{flex:1 1 auto;min-width:0;font-size:13.5px;font-weight:600;letter-spacing:-.005em;color:var(--ink);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+a.lb-name:hover{text-decoration:underline;text-underline-offset:3px}
+.lb-head .vs-btn{flex:none;margin-left:0}
+.lb-state{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:7px}
+.lb-state .tag{max-width:100%}
+.lb-stats{display:flex;gap:0;margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
+.lb-stat{flex:1 1 0;min-width:0;padding-left:12px;border-left:1px solid var(--line)}
+.lb-stat:first-child{padding-left:0;border-left:0}
+.lb-stat span{display:block;color:var(--soft);font-size:11px}
+.lb-stat b{display:block;font-size:13.5px;font-weight:550;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
+.lb-acts .act-strip{display:flex;flex-wrap:wrap;gap:4px 0;width:auto}
+.lb-card .act{margin:0 4px 0 0;font-size:12px}
+.lb-card .act-menu{right:auto;left:0}
 /* the dock (M38-1): closed tasks that are not archived rest apart, under the floor. Every robot stands on the same line: names are one line (a name of two lines
    made one slot taller, and with the shelf aligned to the bottom its robot sat higher than the others), the shelf is aligned to the top, and each robot has its own short plank. */
 .lb-dock{position:relative;flex:0 0 100%;order:9;margin-top:34px;padding:16px 0 0;border-top:1px solid var(--line)}

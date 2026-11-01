@@ -158,6 +158,30 @@ def with_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], served: Tuple[s
     return True
 
 
+_todo: Dict[Tuple[str, str], Tuple[Tuple[int, int], Optional[Dict[str, int]]]] = {}  # (root, task) -> (mtime and size of TODO.md, its counts)
+
+
+def todo_counts(root: Path, task: str) -> Optional[Dict[str, int]]:
+    """`{done, total}` of the steps of TODO.md (the steps the engine counts: autorun.steps_of), or None when the task has no step. The file is read only when its time or size changed:
+    the board asks every 3 seconds for every row, so one stat per row is all a quiet task costs."""
+    from . import autorun  # it needs this module
+
+    key = (str(root), task)
+    try:
+        info = (tasks.task_dir(root, task) / tasks.TODO_FILE).stat()
+    except OSError:
+        _todo.pop(key, None)
+        return None
+    stamp = (info.st_mtime_ns, info.st_size)
+    kept = _todo.get(key)
+    if kept and kept[0] == stamp:
+        return kept[1]
+    steps = autorun.steps_of(root, task)
+    found = {"done": sum(1 for step in steps if step["done"]), "total": len(steps)} if steps else None
+    _todo[key] = (stamp, found)
+    return found
+
+
 CLOSED_SHOWN = 50  # how many closed tasks the board lists (the newest); `board.closed_shown` in task.json
 _closed: Dict[Tuple[str, str], Tuple[str, Any, str]] = {}  # a closed task does not change: its numbers and page are made once
 
@@ -185,7 +209,8 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = ())
         if row["status"] == "new":
             continue
         row["stages"] = taskstages.of(root, row["task"])
-        row["todo_left"] = len(task_ops.todo_left(root, row["task"])) if row["status"] == "open" else 0
+        row["todo"] = todo_counts(root, row["task"])  # {done, total}: the small bar of the list; None without a TODO.md
+        row["todo_left"] = (row["todo"]["total"] - row["todo"]["done"]) if row["todo"] and row["status"] == "open" else 0
         if not row["todo_left"] or not tasks.plan_approved(root, row["task"]):  # `autorun on` is refused then (autorun.need.todo, need.approval): not offered
             row["actions"] = [item for item in row["actions"] if item["action"] != "autorun on"]
         row["req_unconfirmed"] = row["status"] == "open" and task_ops.req_state(root, row["task"]) in ("open", "changed")

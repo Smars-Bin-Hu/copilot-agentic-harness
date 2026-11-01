@@ -65,7 +65,6 @@ td.num{color:var(--ink)}
 td.name{white-space:nowrap}td.name .sub{max-width:23em}
 .name-line{gap:8px}.name-line a{font-weight:550;font-size:13.5px;letter-spacing:-.005em;text-decoration:none}.name-line a:hover{text-decoration:underline}
 .kind-icon{color:var(--soft);width:16px;height:16px}
-.sub-line{font-size:12px;margin-top:1px}.sub-line b{color:var(--soft);font-weight:550}
 tr.closed td{opacity:.6}
 tr:has(.tag.hot) td:first-child,tr:has(.tag.hot) td.tick{box-shadow:inset 2px 0 0 var(--hot-dot)}
 tr:has(.tag.hot) td{background:var(--hot-row)}

@@ -68,7 +68,7 @@ def reply_of(turn: Dict[str, Any]) -> str:
 
 
 def facts(state: Dict[str, Any], root: Optional[Path] = None) -> Dict[str, Any]:
-    """What the board shows of a chat, from its trimmed state: `busy`, `model`, `tool` (the call that runs, or None), `last_tool`, `reply` (the last reply, of the turn that runs or the last that ended), `modified`."""
+    """What the board shows of a chat, from its trimmed state: `busy`, `model`, `tool` (the call that runs, or None), `last_tool`, `reply` (the last reply, of the turn that runs or the last that ended), `modified`, `started` (the `startedAt` of the turn that runs, else empty)."""
     active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else None
     turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)]
     model = ""
@@ -93,7 +93,8 @@ def facts(state: Dict[str, Any], root: Optional[Path] = None) -> Dict[str, Any]:
             reply = reply_of(turn)
             if reply:
                 break
-    return {"busy": bool(active), "model": model, "tool": tool, "last_tool": last_tool, "reply": reply, "modified": str(state.get("modifiedAt") or "")}
+    started = str(active.get("startedAt") or "") if active else ""  # when the turn that runs began (the board counts its run time); none while idle
+    return {"busy": bool(active), "model": model, "tool": tool, "last_tool": last_tool, "reply": reply, "modified": str(state.get("modifiedAt") or ""), "started": started}
 
 
 def first_line(text: str) -> str:

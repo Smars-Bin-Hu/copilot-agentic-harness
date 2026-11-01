@@ -1817,5 +1817,20 @@
   "board.shell.vs.lost": "与 VS Code 的连接已断开。",
   "serve.language.bad": "已拒绝：语言只能是 `en` 或 `zh`。",
   "serve.language.env": "环境变量 {name} 已设置，优先于配置文件。先取消它，再在这里改语言。",
-  "serve.language.broken": "读不了 {file}（{error}）。请先手动修好：什么都没有改。"
+  "serve.language.broken": "读不了 {file}（{error}）。请先手动修好：什么都没有改。",
+  "board.status.model": "模型：{model}",
+  "board.status.context": "上下文：已用 {percent}%（{used} / {window} tokens）",
+  "board.status.context.warn": "已超过 {limit}% 的上限",
+  "board.status.run": "最近一次对话已运行 {time}",
+  "board.status.stage.title": "阶段",
+  "board.status.stage.round": "第 {round} 轮",
+  "board.status.stage.done": "已完成",
+  "board.status.stage.run": "进行中",
+  "board.status.stage.wait": "等你",
+  "board.status.stage.now": "当前",
+  "board.status.stage.bad": "要看一下",
+  "board.status.stage.todo": "未开始",
+  "board.status.todo": "TODO：已完成 {done} / {total} 步",
+  "board.status.card.label": "任务卡片：{name}",
+  "board.status.card.open": "打开任务页"
 }

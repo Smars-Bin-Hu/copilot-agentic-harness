@@ -6,6 +6,7 @@
  --hot:#744400;--hot-dot:#e08a00;--hot-bg:rgba(224,138,0,.13);--hot-row:rgba(224,138,0,.06);--hot-row-h:rgba(224,138,0,.10);--hot-line:rgba(224,138,0,.38);
  --good:#0f6a3a;--good-dot:#1fa968;--good-bg:rgba(31,169,104,.12);--good-line:rgba(31,169,104,.34);
  --bad:#b3261e;--bad-bg:rgba(220,60,50,.10);--bad-line:rgba(220,60,50,.34);
+ --run:#1f5fd0;--run-bg:rgba(31,95,208,.11);--run-line:rgba(31,95,208,.34);--st-todo:#0d0e10;--st-todo-ring:transparent;
  --btn:#0d0e10;--btn-ink:#ffffff;--btn-hover:#2a2c31;
  --hover:rgba(13,14,16,.045);--track:rgba(13,14,16,.07);--raise:#ffffff;--kbd:rgba(13,14,16,.06);--pop:#ffffff;--shade:rgba(13,14,16,.42);
  --model:#0d0e10;--tool:#6a6e77;--subagent:#6a6e77;--approval:#e08a00;--other:#c6c8cd;--wait:#e08a00;--usage:#555a63;
@@ -20,6 +21,7 @@ html[data-theme="dark"]{
  --hot:#f4b64a;--hot-dot:#f5a623;--hot-bg:rgba(245,166,35,.12);--hot-row:rgba(245,166,35,.05);--hot-row-h:rgba(245,166,35,.09);--hot-line:rgba(245,166,35,.34);
  --good:#4fd18c;--good-dot:#3ecf8e;--good-bg:rgba(62,207,142,.11);--good-line:rgba(62,207,142,.30);
  --bad:#ff8a80;--bad-bg:rgba(255,90,80,.11);--bad-line:rgba(255,90,80,.32);
+ --run:#6ea8ff;--run-bg:rgba(110,168,255,.13);--run-line:rgba(110,168,255,.38);--st-todo:#1d1e22;--st-todo-ring:rgba(255,255,255,.36);
  --btn:#f5f6f7;--btn-ink:#08090a;--btn-hover:#ffffff;
  --hover:rgba(255,255,255,.045);--track:rgba(255,255,255,.09);--raise:#1d1e22;--kbd:rgba(255,255,255,.08);--pop:#17181b;--shade:rgba(0,0,0,.55);
  --model:#f5f6f7;--tool:#9a9ea7;--subagent:#9a9ea7;--approval:#f5a623;--other:#4a4d55;--wait:#f5a623;--usage:#d7d9de;

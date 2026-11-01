@@ -134,9 +134,10 @@
     return menu;
   }
 
-  function actionCell(row) {
+  // The buttons of a row as one strip (also the lobby card's): what the task waits for, what is said to the agent, and the menu behind the three dots. Null: no action.
+  function actionStrip(row) {
     const items = row.actions || [];
-    if (!items.length) return h("td", {class: "acts"}, "-");
+    if (!items.length) return null;
     const direct = items.filter((item) => item.action === "archive" || isHot(row, item));
     const talk = items.filter((item) => TALK.includes(item.action));
     const rest = items.filter((item) => !direct.includes(item) && !talk.includes(item));
@@ -153,7 +154,11 @@
       });
       nodes.push(more);
     }
-    return h("td", {class: "acts"}, h("div", {class: "act-strip"}, nodes));
+    return h("div", {class: "act-strip"}, nodes);
+  }
+  function actionCell(row) {
+    const strip = actionStrip(row);
+    return strip ? h("td", {class: "acts"}, strip) : h("td", {class: "acts"}, "-");
   }
 
   function state(row) {
@@ -176,11 +181,15 @@
     return h("td", {class: "tick"}, box);
   }
 
-  // The line under a task name. `row.sub` ({at, what, text, kind}): the tool the agent runs and its target, or the first line of its last reply (from the chat of VS Code),
-  // or the last tool call of the hook log; else the board knows only what the task depends on, or nothing.
-  function subLine(row) {
-    if (row.sub && (row.sub.what || row.sub.text)) return h("div", {class: "sub sub-line", title: (row.sub.what ? row.sub.what + " " : "") + (row.sub.text || "")}, subNodes(row.sub));
-    return row.depends_on && row.depends_on.length ? h("div", {class: "sub sub-line"}, t("board.depends", {names: row.depends_on.join("\u3001")})) : null;
+  // The line under a task name (1.6.14): small status marks (status.js): model, context, run time of the latest turn, stage, TODO. A mark with no data is left empty; the line is as high
+  // for every row. `row.sub` (the last tool or reply) is still in the data, for the task page; the list no longer draws it. What the task depends on goes at the end of the line.
+  function statusLine(row) {
+    const marks = Status.row(row, {live});
+    if (row.depends_on && row.depends_on.length) {
+      const text = t("board.depends", {names: row.depends_on.join("\u3001")});
+      marks.append(h("span", {class: "st-dep", title: text, "aria-label": text}, "\u21b3 " + row.depends_on.length));
+    }
+    return marks;
   }
 
   // The warning tag after the state (B74): only when a health rule fired; the mouse over it says which and why.
@@ -195,10 +204,10 @@
       canArchive ? tickCell(row) : null,
       h("td", {class: "name"},
         h("div", {class: "name-line"}, kindIcon(row.kind || "other", row.status === "new" ? t("task.kind.none") : t("task.kind." + (row.kind || "none"))),
-          DATA.serve ? h("a", {href: "/task/" + encodeURIComponent(row.name)}, row.name)
-            : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/")}, row.name) : h("span", null, row.name),
+          DATA.serve ? h("a", {href: "/task/" + encodeURIComponent(row.name), title: row.name}, row.name)
+            : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/"), title: row.name}, row.name) : h("span", {title: row.name}, row.name),
           DATA.serve && row.status === "open" ? SERVE.vsButton(row.chat) : null),
-        subLine(row)),
+        statusLine(row)),
       h("td", {class: "state"}, state(row), warnTag(row) ? [" ", warnTag(row)] : null),
       h("td", {class: "checks"}, row.status === "new" ? "-" : checkDots(row)),
       num(row.waiting && row.waited_s !== null ? clock(row.waited_s) : "-"),
@@ -356,8 +365,9 @@
   });
 
   // Two ways to look at the same rows: the lobby (the first screen) and the list. The choice stays in this browser.
+  // The card of a robot (lobby.js) is the row of the list again: the same marks (status.js), the same numbers (`figures`), the same buttons (`actionStrip`).
   const lobby = Lobby.create({href: (row) => (DATA.serve && row.status !== "new" ? "/task/" + encodeURIComponent(row.name)
-    : row.report ? row.report.split("/").map(encodeURIComponent).join("/") : "")});
+    : row.report ? row.report.split("/").map(encodeURIComponent).join("/") : ""), figures, actions: actionStrip, live});
   let mode = keep.get("mode", "lobby") === "list" ? "list" : "lobby";
   const controls = h("div", {class: "controls"}, chips, roundBox, kinds, search, clear);
   const modeButtons = {};
@@ -373,6 +383,7 @@
     const asList = mode === "list";
     for (const part of [kpis, controls, pick, tableBox, more]) part.hidden = !asList;
     lobby.node.hidden = asList;
+    if (asList) lobby.hide();
   }
 
   app.replaceChildren(

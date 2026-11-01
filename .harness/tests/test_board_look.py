@@ -43,7 +43,7 @@ class LookTests(unittest.TestCase):
 
     def test_a_wait_is_worded_in_the_language_of_the_page(self) -> None:
         self.assertIn("task.waiting.", taskhtml.TEXT_PREFIXES)
-        self.assertIn("waitText(row)", (WEB / "lobby.js").read_text(encoding="utf-8"))
+        self.assertIn("stateTag(row, liveNow)", (WEB / "lobby.js").read_text(encoding="utf-8"))  # the card words a wait like the list does (stateTag uses waitText)
 
     def test_the_copyright_is_one_plain_line_at_the_bottom_left(self) -> None:
         css = (WEB / "ui.css").read_text(encoding="utf-8")

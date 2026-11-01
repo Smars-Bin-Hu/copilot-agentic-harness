@@ -1,6 +1,6 @@
 // The lobby: the first screen of the board. Every task that is not closed is a small robot on a floor, in the zone of what it
 // is doing: at work, waiting for the person, left alone (no session holds it), resting. The robot's pose says the state, the thing in its hand says the kind of
-// task. A mouse near it makes its eyes follow; over it, it hops and a card shows the task and its stages; a click opens the page.
+// task. A mouse near it makes its eyes follow; over it, it hops and a card opens (1.6.14): the task, the status marks of the list (status.js), its numbers and its buttons. A click opens the page.
 // Closed tasks that are not archived sit apart, on the dock under the floor (M38-1): a shelf they rest on in a row, eyes shut, cores
 // glowing slowly as if charging; one comes in sliding along the shelf, and the mouse lifts one off it. Their eyes do not follow the mouse.
 // Pure SVG and CSS (lobby.css), drawn with DOM nodes. Robots are kept between two draws, so a board that asks again every few
@@ -21,7 +21,6 @@ const Lobby = (function () {
   // `lost`: no session holds the task (a plug hangs loose).
   const ZONE_OF = {work: "work", you: "you", tests: "you", lost: "left", idle: "rest", pause: "rest"};
   const ZONES = [["you", "board.lobby.zone.you"], ["work", "board.lobby.zone.work"], ["left", "board.lobby.zone.left"], ["rest", "board.lobby.zone.rest"]];  // what waits for the person is on top
-  const STATE_TEXT = {work: "board.lobby.state.work", idle: "board.lobby.state.idle", pause: "board.state.paused", lost: "board.lobby.state.unheld", closed: "board.state.closed"};
 
   // The state is the server's (`row.state`); the pose only draws it.
   function poseOf(row, live) {
@@ -78,12 +77,15 @@ const Lobby = (function () {
     node.title = row.warn.map((item) => t("board.warn." + item.rule, {n: item.n})).join("\n");
   }
 
+  // options: href(row) the page of a task; figures(row) its Time, Credits and prompts (the brief); actions(row) the strip of buttons of the list row, or null; live: the page is kept fresh.
   function create(options) {
     const slots = new Map();  // task name -> {slot, bot, row, pose, zone, label}
     const rowsOf = {};
     const zoneBox = {};
     const count = h("div", {class: "lb-sub"});
-    const card = h("div", {class: "lb-card"});
+    const card = h("div", {class: "lb-card", role: "group"});
+    document.body.append(card);  // outside the scene: the scene clips what leaves it, and the card must be able to go to any edge of the window
+    let liveNow = Boolean(options.live);
     const empty = h("div", {class: "lb-empty"});
     const scene = h("div", {class: "lb-scene"});
     scene.append(h("h3", null, t("board.title")), count);
@@ -99,7 +101,7 @@ const Lobby = (function () {
     const shelf = h("div", {class: "lb-shelf"});
     const dockName = h("span", null);
     const dock = h("div", {class: "lb-dock"}, h("div", {class: "lb-label"}, h("i", {class: "lb-dot lb-dot-closed"}), dockName), shelf);
-    scene.append(empty, dock, card);
+    scene.append(empty, dock);
 
     function dockUpdate(rows) {
       const closed = rows.filter((row) => row.status === "closed");
@@ -111,13 +113,7 @@ const Lobby = (function () {
           const bot = robot("closed", row.kind, ((index * 0.61) % 4).toFixed(2));
           const slot = h("div", {class: "lb-slot lb-docked", tabindex: "0", role: "link", "aria-label": row.name}, bot, h("div", {class: "lb-nm", title: row.name}, row.name));
           entry = {slot, bot, row, pose: "closed", zone: "dock"};
-          slot.addEventListener("mouseenter", () => show(entry));
-          slot.addEventListener("focus", () => show(entry));
-          slot.addEventListener("mouseleave", later);
-          slot.addEventListener("blur", later);
-          const open = () => { const href = options.href(entry.row); if (href) window.location.href = href; };
-          slot.addEventListener("click", open);
-          slot.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); });
+          wire(entry);
           docked.set(row.name, entry);
           if (ready && !still && slot.animate) slot.animate([{opacity: 0, transform: "translateX(60px)"}, {opacity: 1, transform: "none"}], {duration: 900, easing: "cubic-bezier(.2,.8,.2,1)"});
         }
@@ -128,43 +124,117 @@ const Lobby = (function () {
       dockName.textContent = t("board.lobby.zone.closed") + " \u00b7 " + closed.length;
     }
 
-    function show(entry) {
-      const {row, pose} = entry;
-      const state = pose === "you" || pose === "tests" ? waitText(row) : t(STATE_TEXT[pose]);  // a task at work that already has a plan to approve is at work
-      const lines = [h("b", null, row.name), h("div", {class: "lb-k"}, t("task.kind." + (row.kind || "none")) + " · " + t("task.tier." + (row.tier || "none")) + " · " + state + (state === waitText(row) && row.waited_s ? " · " + clock(row.waited_s) : ""))];
-      const s = row.stages;
-      if (s && s.steps && s.steps.length) {
-        const dots = [];
-        s.steps.forEach((step, index) => {
-          dots.push(h("i", {class: "lb-d " + (step.state === "done" ? "is-done" : step.state === "now" ? "is-now is-" + (pose === "you" || pose === "tests" ? "you" : pose === "lost" ? "left" : "ok") : "")}));
-          if (index < s.steps.length - 1) dots.push(h("i", {class: "lb-l" + (step.state === "done" ? " is-done" : "")}));
-        });
-        const here = s.steps.find((step) => step.state === "now") || s.steps[s.steps.length - 1];
-        const reviewed = s.review && s.review.n ? t("board.lobby.reviewed", {passes: s.review.states.filter((mark) => mark === "pass").length, n: s.review.n}) : "";
-        lines.push(h("div", {class: "lb-mini"}, dots), h("div", {class: "lb-mini-names"}, h("span", null, here.label || t("stage." + here.id)),
-          h("span", null, [s.round > 1 ? t("stage.round", {round: s.round}) : "", reviewed].filter(Boolean).join(" · "))));
-      }
-      // The buttons of the list, on the card: the same ones, grey while the agent is at work. The card stays while the mouse is on it.
-      if (row.actions && row.actions.length) lines.push(h("div", {class: "lb-acts"}, row.actions.map((item) => actionButton(row, item))));
-      card.replaceChildren(...lines);
-      clearTimeout(leaveTimer);
-      current = entry;
-      const sceneBox = scene.getBoundingClientRect(), at = entry.slot.getBoundingClientRect();
-      let x = at.left - sceneBox.left + at.width / 2 - 125, y = at.top - sceneBox.top - card.offsetHeight - 6;
-      const below = y < 6;
-      if (below) y = at.bottom - sceneBox.top + 4;
-      card.classList.toggle("below", below);
-      card.style.left = Math.max(8, Math.min(sceneBox.width - 258, x)) + "px";
-      card.style.top = y + "px";
-      card.classList.add("on");
+    // --- the card of a robot (1.6.14) ------------------------------------------------------------------------------------
+    // Built once, filled in place: the parts below are drawn again only when what they show changed, so the poll (3 s) neither closes the card nor restarts a clock or an
+    // animation in it, nor takes a button from under the pointer. It is in the body and placed with `Status.place` (above the robot if there is room, else below, always inside the window).
+    const parts = {};
+    for (const name of ["head", "state", "marks", "stats", "acts"]) { parts[name] = {node: h("div", {class: "lb-" + name}), sig: null}; card.append(parts[name].node); }
+    let marks = null, current = null, hideTimer = 0, frame = 0;
+    const touchy = () => Boolean(window.matchMedia && window.matchMedia("(hover: none), (max-width: 700px)").matches);  // no hover: the card opens on a click
+
+    function put(name, sig, make) {
+      const part = parts[name];
+      if (part.sig === sig) return;
+      part.sig = sig;
+      const kids = make();
+      part.node.replaceChildren(...(kids ? [kids].flat().filter(Boolean) : []));
+      part.node.hidden = !part.node.firstChild;
     }
-    let leaveTimer = 0, current = null;
-    const hide = () => { clearTimeout(leaveTimer); card.classList.remove("on"); current = null; };
-    const later = () => { clearTimeout(leaveTimer); leaveTimer = setTimeout(hide, 220); };  // time to cross from the robot to its card
-    card.addEventListener("mouseenter", () => clearTimeout(leaveTimer));
+
+    function fill(entry) {
+      const row = entry.row, href = options.href(row);
+      const served = typeof SERVE !== "undefined" && DATA.serve;
+      card.setAttribute("aria-label", t("board.status.card.label", {name: row.name}));
+      put("head", JSON.stringify([row.name, row.kind, row.status, href, served && row.status === "open" ? row.chat || null : null]), () => [
+        kindIcon(row.kind || "other", row.status === "new" ? t("task.kind.none") : t("task.kind." + (row.kind || "none"))),
+        href ? h("a", {class: "lb-name", href, title: row.name}, row.name) : h("span", {class: "lb-name", title: row.name}, row.name),
+        served && row.status === "open" ? SERVE.vsButton(row.chat) : null]);
+      put("state", JSON.stringify([stateOf(row, liveNow), row.waiting, row.waiting_why, row.unheld_s, row.warn || []]), () => {
+        const tag = stateTag(row, liveNow);
+        const warn = row.warn && row.warn.length ? h("span", {class: "tag warn", title: row.warn.map((item) => t("board.warn." + item.rule, {n: item.n})).join("\n"), "aria-label": t("board.warn.label")}, "⚠") : null;
+        return [/\b(run|hot)\b/.test(tag.className) ? Status.phase(tag) : tag, warn];
+      });
+      if (!marks) { marks = Status.row(row, {live: liveNow, wrap: true}); parts.marks.node.append(marks); } else marks.update(row, liveNow);
+      const figures = options.figures(row);
+      put("stats", JSON.stringify(figures ? [figures.active_s, figures.aiu, figures.prompts] : null), () => {
+        if (!figures) return null;
+        const stat = (label, value) => (value === null || value === undefined ? null : h("div", {class: "lb-stat"}, h("span", null, label), h("b", {title: String(value)}, value)));
+        return [stat(t("board.col.time"), figures.active_s === null || figures.active_s === undefined ? null : clock(figures.active_s)), stat(t("board.col.credits"), figures.aiu === null || figures.aiu === undefined ? null : amount(figures.aiu)),
+          stat(t("board.col.prompts"), figures.prompts)];
+      });
+      put("acts", JSON.stringify([row.actions || [], row.state, row.waiting_why, row.waiting, row.paused_since || ""]), () => options.actions(row));
+    }
+
+    function position() {
+      frame = 0;
+      if (!current || !card.classList.contains("on")) return;
+      if (!current.slot.isConnected || scene.offsetParent === null) { hide(); return; }
+      Status.place(card, current.slot, false);
+    }
+    const again = () => { if (!frame && current) frame = requestAnimationFrame(position); };
+    window.addEventListener("scroll", again, {passive: true});
+    window.addEventListener("resize", again);
+
+    function show(entry) {
+      clearTimeout(hideTimer);
+      current = entry;
+      fill(entry);
+      card.classList.add("on");
+      position();
+    }
+    function hide() { clearTimeout(hideTimer); card.classList.remove("on"); current = null; }
+    // A little time to cross from the robot to its card. Not while the pointer is on the card, nor while the keyboard is in it.
+    const later = () => {
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => { if (!card.matches(":hover") && !card.querySelector(":focus-visible")) hide(); }, 220);
+    };
+    card.addEventListener("mouseenter", () => clearTimeout(hideTimer));
     card.addEventListener("mouseleave", later);
-    card.addEventListener("focusin", () => clearTimeout(leaveTimer));
+    card.addEventListener("focusin", () => clearTimeout(hideTimer));
     card.addEventListener("focusout", later);
+
+    const slotsInOrder = () => Array.from(scene.querySelectorAll(".lb-slot"));
+    const focusable = () => Array.from(card.querySelectorAll("a[href],button:not([disabled]),[tabindex='0']")).filter((node) => node.offsetParent !== null);
+    // The keyboard: Esc closes the card and goes back to the robot; Tab on a robot with its card open goes into the card, and Tab at the end of the card goes on to the next robot.
+    card.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab" || !current) return;
+      const items = focusable(), at = items.indexOf(document.activeElement);
+      if (event.shiftKey && at <= 0) { event.preventDefault(); current.slot.focus(); }
+      else if (!event.shiftKey && at === items.length - 1) {
+        event.preventDefault();
+        const order = slotsInOrder(), next = order[order.indexOf(current.slot) + 1];
+        hide();
+        (next || current.slot).focus();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !card.classList.contains("on")) return;
+      const inside = card.contains(document.activeElement), slot = current && current.slot;
+      hide();
+      if (inside && slot) slot.focus();
+    });
+    document.addEventListener("click", (event) => {  // a tap outside (touch, narrow window) closes it
+      if (card.classList.contains("on") && !card.contains(event.target) && !(current && current.slot.contains(event.target))) hide();
+    });
+
+    function wire(entry) {
+      const slot = entry.slot;
+      const go = () => { const href = options.href(entry.row); if (href) window.location.href = href; };
+      slot.addEventListener("mouseenter", () => { if (!touchy()) show(entry); });
+      slot.addEventListener("focus", () => { if (slot.matches(":focus-visible")) show(entry); });  // the keyboard opens it; a tap on a touch screen focuses too, but its click decides
+      slot.addEventListener("mouseleave", later);
+      slot.addEventListener("blur", later);
+      slot.addEventListener("click", () => {
+        if (touchy()) { if (current === entry && card.classList.contains("on")) hide(); else show(entry); } else go();
+      });
+      slot.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") go();
+        else if (event.key === "Tab" && !event.shiftKey && current === entry && card.classList.contains("on")) {
+          const items = focusable();
+          if (items.length) { event.preventDefault(); items[0].focus(); }
+        }
+      });
+    }
 
     function place(entry, zone) {
       if (entry.zone !== zone) { rowsOf[zone].append(entry.slot); entry.zone = zone; }
@@ -220,7 +290,7 @@ const Lobby = (function () {
     }
 
     function leave(entry) {
-      hide();
+      if (current === entry) hide();
       const slot = entry.slot;
       if (still || !slot.animate) { flip(() => { slot.remove(); zones(); }); return; }
       slot.style.pointerEvents = "none";
@@ -230,6 +300,7 @@ const Lobby = (function () {
     let ready = false;  // the first draw shows the robots where they are; it does not bring them in
 
     function update(rows, live) {
+      liveNow = Boolean(live);
       const changed = [], came = [], gone = [];
       const agents = rows.filter((row) => row.status === "open");
       const names = new Set(agents.map((row) => row.name));
@@ -243,17 +314,10 @@ const Lobby = (function () {
             const label = h("div", {class: "lb-nm", title: row.name}, row.name);
             const slot = h("div", {class: "lb-slot", tabindex: "0", role: "link", "aria-label": row.name}, bot, label);
             entry = {slot, bot, row, pose, zone: "", label};
-            slot.addEventListener("mouseenter", () => show(entry));
-            slot.addEventListener("focus", () => show(entry));
-            slot.addEventListener("mouseleave", later);
-            slot.addEventListener("blur", later);
-            const open = () => { const href = options.href(entry.row); if (href) window.location.href = href; };
-            slot.addEventListener("click", open);
-            slot.addEventListener("keydown", (event) => { if (event.key === "Enter") open(); });
+            wire(entry);
             slots.set(row.name, entry);
             if (ready) came.push(entry);
           }
-          entry.actionsChanged = JSON.stringify(entry.row.actions) !== JSON.stringify(row.actions);
           entry.row = row;
           warnMark(entry.slot, row);
           if (entry.pose !== pose) {
@@ -268,13 +332,12 @@ const Lobby = (function () {
       });
       if (!still) { changed.forEach(pulse); came.forEach(enter); }
       gone.forEach(leave);
-      // The card shows what the task is now: draw it again unless the mouse is on it (that would take a click away; an action just done is the exception),
-      // and take it away when its robot is gone or changed state.
       dockUpdate(rows);
+      // The card shows what the task is now: it is filled in place (never closed by a poll). It goes only when its robot is gone. A robot that moved to another zone is followed.
       if (current && card.classList.contains("on")) {
         const same = slots.get(current.row.name) || docked.get(current.row.name);
-        if (!same || changed.includes(same)) hide();
-        else if (!card.matches(":hover") || same.actionsChanged) show(same);
+        if (!same) hide();
+        else { current = same; fill(same); position(); if (changed.length || came.length || gone.length) setTimeout(position, 760); }
       }
       ready = true;
       count.textContent = agents.length ? t("board.lobby.count", {count: agents.length}) : t("board.lobby.none");
@@ -303,7 +366,7 @@ const Lobby = (function () {
         });
       });
     }
-    return {node: scene, update};
+    return {node: scene, update, hide};
   }
 
   return {create};

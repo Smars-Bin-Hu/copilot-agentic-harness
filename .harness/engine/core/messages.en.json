@@ -1817,5 +1817,20 @@
   "board.shell.vs.lost": "The link to VS Code was lost.",
   "serve.language.bad": "Refused: the language must be `en` or `zh`.",
   "serve.language.env": "The environment variable {name} is set and wins over the file. Unset it, then change the language here.",
-  "serve.language.broken": "{file} cannot be read ({error}). Fix it by hand first: nothing was changed."
+  "serve.language.broken": "{file} cannot be read ({error}). Fix it by hand first: nothing was changed.",
+  "board.status.model": "Model: {model}",
+  "board.status.context": "Context: {percent}% full ({used} of {window} tokens)",
+  "board.status.context.warn": "Above the limit of {limit}%",
+  "board.status.run": "The latest turn has run for {time}",
+  "board.status.stage.title": "Stages",
+  "board.status.stage.round": "Round {round}",
+  "board.status.stage.done": "done",
+  "board.status.stage.run": "working",
+  "board.status.stage.wait": "waits for you",
+  "board.status.stage.now": "now",
+  "board.status.stage.bad": "needs a look",
+  "board.status.stage.todo": "not started",
+  "board.status.todo": "TODO: {done} of {total} steps done",
+  "board.status.card.label": "Task card: {name}",
+  "board.status.card.open": "Open the task page"
 }

@@ -237,7 +237,6 @@ details.tpl-note{margin:.4em 0 .8em;color:var(--soft);font-size:12.5px}details.t
 .unpaired-note{position:fixed;top:0;left:0;right:0;z-index:20;padding:10px 16px;text-align:center;font-size:14px;font-weight:600;background:var(--approval);color:#fff;cursor:pointer}
 /* Board list (B70): the task cell (kind icon, name, sub line), the dots of the checks, the actions with their menu. */
 .name-line{display:flex;align-items:center;gap:6px}.kind-icon{flex:none;display:inline-flex;width:16px;height:16px;color:var(--soft)}.kind-icon svg{width:16px;height:16px}
-.sub-line{display:block;max-width:22em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cdots{display:inline-flex;gap:4px;align-items:center}.cdot{display:inline-block;width:9px;height:9px;border-radius:50%;box-sizing:border-box;border:1.5px solid var(--soft)}
 .cdot.pass{background:var(--good);border-color:var(--good)}.cdot.fail{background:var(--bad);border-color:var(--bad)}
 .cdot.run{border-color:var(--subagent);border-top-color:transparent;animation:cdot-spin 1s linear infinite}@keyframes cdot-spin{to{transform:rotate(360deg)}}

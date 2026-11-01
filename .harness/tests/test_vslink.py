@@ -210,6 +210,7 @@ class LinkTests(LinkCase):
         row = until(lambda: (lambda r: r if r.get("sub", {}).get("kind") == "tool" and r["sub"].get("text") else None)(self.row()))  # the tool, then its input
         self.assertTrue(row, self.row())
         self.assertEqual((row["chat"]["state"], row["chat"]["title"]), ("busy", "New title"))
+        self.assertEqual(row["chat"]["started_at"], "2026-10-31T11:00:00.000Z")  # the page counts the run time of the turn that runs (1.6.14)
         self.assertEqual((row["sub"]["what"], row["sub"]["text"]), ("Edit", "DEV/x.sql"))
         self.assertTrue(row["sub"]["at"])
         self.assertNotIn("SECRET-COMMAND", json.dumps(row))
@@ -222,6 +223,7 @@ class LinkTests(LinkCase):
         row = until(lambda: (lambda r: r if r.get("sub", {}).get("text") == "Finished the edit." and r.get("chat", {}).get("state") == "idle" else None)(self.row()))
         self.assertTrue(row, self.row())
         self.assertEqual((row["chat"]["state"], row["sub"]["kind"]), ("idle", "reply"))
+        self.assertNotIn("started_at", row["chat"])  # idle: no run time
 
     def test_a_session_added_later_is_found_and_a_removed_one_is_forgotten(self) -> None:
         self.items.clear()

@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.14 (2026-10-31)
+
+### Added
+
+- The list shows small status marks under each task name: the model (a short name such as `sonnet 5.5`, the full name on hover), a context ring (percent and token numbers on hover; it turns amber above `health.context_percent`), the run time of the latest turn (only while a turn runs, ticking, with a small live mark), the stage as a mini ribbon, and a TODO bar such as `3/8`. A mark with no data is left empty and every row keeps its height. Hovering the ribbon lists all stages. Stage colours: done green with a check, running blue and turning, waiting for you yellow and blinking, not started black (dark theme: dark fill with a grey ring).
+- The lobby card: hover a robot (or focus it with the keyboard) to open a card with the kind icon and name (a link to the task page), the VS Code button, the same status marks, Time, Credits, Prompts, and the buttons of the list row. You can move the pointer into the card. The 3 s refresh updates it in place. It stays inside the window, and on a touch screen or a narrow window it opens on a click. Esc closes it.
+- `--run` (blue) and the not-started colour as tokens in both themes. The row data has `todo` (`done`, `total`) and, while a turn runs, `chat.started_at`.
+
+### Changed
+
+- The line under the task name no longer shows the last tool or reply. The data (`sub`) is still sent: the task page uses it.
+- A long task name in the list is cut with an ellipsis and shown whole on hover.
+
 ## 1.6.13 (2026-10-31)
 
 ### Added

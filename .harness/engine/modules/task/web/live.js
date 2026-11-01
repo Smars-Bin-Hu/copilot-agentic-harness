@@ -133,7 +133,7 @@ const LIVE = (function () {
     const last = st.lastSaid === item.id && Boolean(st.data) && st.data.state === "idle";
     return {sig: JSON.stringify([item, last]), build: () => {
       const undo = last ? h("button", {type: "button", class: "act"}, t("desk.undo.title")) : null;
-      if (undo) undo.addEventListener("click", () => { CHAT.withdraw({name: st.task}, (found) => { REPLY.restore(found); kick(); }); });
+      if (undo) undo.addEventListener("click", () => { CHAT.withdraw({name: st.task.split("/").pop()}, (found) => { REPLY.restore(found); kick(); }); });
       return h("div", {class: "tk-said"}, h("div", {class: "st-head"}, t("desk.live.you")), h("div", {class: "tk-said-t"}, item.text + (item.cut ? " …" : "")),
         item.files ? h("div", {class: "sub"}, t("desk.live.files", {names: item.files.join(", ")})) : null, undo);
     }};

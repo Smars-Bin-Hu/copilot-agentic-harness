@@ -247,7 +247,7 @@ const Status = (function () {
     const node = holdNode();
     node.replaceChildren(made.build());
     ensureTimer();
-    place(node, hold.anchor, true);
+    place(node, hold.anchor, !hold.anchor.dataset.cardUp);
   }
 
   function openCard(anchor) {
@@ -295,7 +295,7 @@ const Status = (function () {
     if (!hold.anchor) return;
     if (!hold.anchor.isConnected) { closeCard(); return; }
     fillCard(false);
-    if (hold.node && hold.anchor) place(hold.node, hold.anchor, true);
+    if (hold.node && hold.anchor) place(hold.node, hold.anchor, !hold.anchor.dataset.cardUp);
   }
 
   function card(anchor, build, label) {

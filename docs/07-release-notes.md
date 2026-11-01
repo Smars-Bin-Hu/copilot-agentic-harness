@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.39 (2026-11-01)
+
+### Fixed
+
+- **A hover card stayed only a few seconds while a task waited.** The page drew itself again every 3 seconds because the time waited changed. Now only that number changes.
+- **The bubble card no longer covers the button under it.** It opens above the bubble.
+- **"The board has stopped" was hidden behind the header.** It is now on top and easy to read.
+- **A task archived or removed while its page is open** now says so, with a link back to the board. Before, the page kept showing the old task with no word.
+- **One long word no longer makes a page scroll sideways.**
+- **Narrow windows:** the review popover stays on the page, the state in the task header is no longer behind the search button, and the numbers at the top of the board wrap.
+- **The Withdraw dialog names the task,** not its folder path.
+- **Words that still asked for `[review]=n`.** The autorun refusal now points at Independent review on the task page. With no chat linked, the working note no longer mentions a Stop button that is not there.
+
 ## 1.6.38 (2026-11-01)
 
 ### Added

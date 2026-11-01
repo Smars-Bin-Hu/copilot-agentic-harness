@@ -1011,6 +1011,8 @@ def handler_for(board: Board) -> type:
             if path == "/api/desk":
                 try:
                     return self.answer(200, {"desk": board.desk(str(data.get("task", "")), data.get("trace") is True)})
+                except CommandError as error:  # no such task any more: archived or removed while the page was open
+                    return self.answer(404, {"error": str(error), "gone": True})
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
                     return self.answer(404, {"error": str(error)})
             if path == "/api/inbox":  # the person gives the task the results of a run: written to INBOX/, so the browser must be paired

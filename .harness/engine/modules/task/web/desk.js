@@ -10,7 +10,8 @@
   let full = DATA.desk;  // the task as the server gave it; `desk` is what the page draws: this, or an earlier round of it (pastView)
   let desk = full;
   let shown = JSON.stringify(full);
-  const same = (a, b) => a.replace(/"as_of":"[^"]*"/, "") === b.replace(/"as_of":"[^"]*"/, "");  // the time of asking is not a change
+  const steady = (text) => text.replace(/"as_of":"[^"]*"/, "").replace(/"waited_s":[\d.]+/g, "");  // the time of asking and the time waited are not a change: a redraw would close a card the pointer is on
+  const same = (a, b) => steady(a) === steady(b);
   // The tabs are in five groups (1.6.16): the top row has Live and the groups, the open group has a second row. A group with no tab is not there; a group with one goes straight to it.
   const GROUPS = [
     {id: "live", tabs: ["live"]},
@@ -753,7 +754,7 @@
       desk.req_changed ? h("p", {class: "hint bad"}, t("desk.req.changed")) : null,
       desk.req_unconfirmed && desk.req_placeholders ? h("p", {class: "hint bad"}, t("desk.req.placeholders", {n: desk.req_placeholders})) : null,
       desk.test && desk.test.reopen ? h("p", {class: "hint bad"}, t("desk.test.reopen", {dev: desk.test.reopen, envs: desk.test.failed.join(", ")})) : null,
-      desk.state === "working" && served() ? h("p", {class: "hint"}, t("desk.busy.note")) : null,
+      desk.state === "working" && served() ? h("p", {class: "hint"}, t(desk.chat && desk.chat.bound ? "desk.busy.note" : "desk.busy.note.nochat")) : null,
       desk.state === "waiting" && !desk.held ? h("p", {class: "hint"}, t("desk.unheld.note")) : null,
     ];
   }
@@ -795,7 +796,7 @@
   }
   function askBubble() {
     if (!desk.ask || !served()) return null;
-    if (!bubbleNode) bubbleNode = Status.card(h("span", {class: "tk-bubble"}, icon(BUBBLE, 15)), askCard, t("desk.ask.peek"));
+    if (!bubbleNode) bubbleNode = Status.card(h("span", {class: "tk-bubble", "data-card-up": "1"}, icon(BUBBLE, 15)), askCard, t("desk.ask.peek"));  // above it: the button to answer is below
     return bubbleNode;
   }
 
@@ -1769,11 +1770,22 @@
       SHELL.vs(data.desk.vscode);
       if (!data.desk.trace.tree && desk.trace.tree) data.desk.trace.tree = desk.trace.tree;  // asked for only while its tab is open
       const text = JSON.stringify(data.desk);
-      if (same(text, shown)) return;
+      if (same(text, shown)) {
+        const waited = data.desk.waited_s;
+        if (waited !== null && waited !== undefined) document.querySelectorAll(".tk-waited").forEach((node) => { node.textContent = t("desk.waited", {time: clock(waited)}); });
+        return;
+      }
       setDesk(data.desk);
       shown = text;
       draw(true);
-    }, (error) => { if (error && error.offline) throw error; });
+    }, (error) => {
+      if (error && error.offline) throw error;
+      if (error && error.data && error.data.gone && !ui.gone) {  // archived or removed while this page was open: what it shows is no longer there
+        ui.gone = true;
+        ui.wait.hidden = false;
+        ui.wait.replaceChildren(h("section", {class: "tk-need strong"}, h("p", {class: "tk-need-p"}, error.message), h("a", {class: "act", href: "/"}, t("desk.gone.back"))));
+      }
+    });
   }
   if (typeof SERVE !== "undefined" && DATA.serve.refresh) {
     SERVE.onChange(() => { pull(); });  // after a click that changed something (a setting, a message sent): in place, so the reply panel and what was typed stay; a reload would drop them

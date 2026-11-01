@@ -482,6 +482,32 @@ class WalkThroughTests(unittest.TestCase):
         self.assertEqual((en["task.waiting.stopped"], zh["task.waiting.stopped"]), ("waits for you", "等你"))
         self.assertIn("agent stopped", en["desk.hint.answer"])  # the card on the task page still says what happened
 
+    def test_the_time_waited_alone_does_not_draw_the_page_again(self) -> None:
+        desk = (WEB / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('.replace(/"waited_s":[\\d.]+/g, "")', desk)
+        self.assertIn('document.querySelectorAll(".tk-waited").forEach', desk)  # the number alone moves on
+        self.assertIn('"data-card-up": "1"', desk)  # the card opens above the bubble: the button is under it
+        self.assertIn("!hold.anchor.dataset.cardUp", (WEB / "status.js").read_text(encoding="utf-8"))
+
+    def test_a_task_that_went_away_says_so_and_the_stopped_note_is_over_the_header(self) -> None:
+        self.assertIn('"gone": True', (ENGINE / "modules" / "task" / "boardserve.py").read_text(encoding="utf-8"))
+        self.assertIn("error.data.gone", (WEB / "desk.js").read_text(encoding="utf-8"))
+        self.assertIn(".stopped-note,.unpaired-note{z-index:120;background:var(--pop)", (WEB / "ui.css").read_text(encoding="utf-8"))
+
+    def test_a_narrow_window_keeps_things_on_the_page(self) -> None:
+        desk = (WEB / "desk.css").read_text(encoding="utf-8")
+        self.assertIn(".rv-pop{right:auto;left:0}", desk)
+        self.assertIn(".tk-head{flex-wrap:wrap;padding-right:96px}", desk)
+        self.assertIn("@media (max-width:900px){.kpis{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}", (WEB / "ui.css").read_text(encoding="utf-8"))
+        self.assertIn(".md{overflow-wrap:break-word}", (WEB / "page.css").read_text(encoding="utf-8"))
+
+    def test_the_review_prompt_is_not_what_a_person_is_told_to_write(self) -> None:
+        en = messages.table("en")
+        self.assertIn("Independent review on the task page", en["autorun.need.review"])
+        for key in ("autorun.need.review", "autorun.screen.limits", "mdreport.review.on"):
+            self.assertNotIn("[review]", en[key], key)
+        self.assertIn('{name: st.task.split("/").pop()}', (WEB / "live.js").read_text(encoding="utf-8"))
+
     def test_the_rest_of_the_page_follows_when_the_chat_starts_or_stops_waiting(self) -> None:
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
         self.assertIn("LIVE.onChange(() => {", desk)

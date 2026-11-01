@@ -66,13 +66,13 @@ class TurnOnTests(AutorunCase):
         with self.assertRaises(CommandError) as caught:
             self.on(code="x")
         text = str(caught.exception)
-        for needle in ("还没有计划", "TODO.md 里没有没勾的步骤", "[review]=1"):
+        for needle in ("还没有计划", "TODO.md 里没有没勾的步骤", "Independent review"):
             self.assertIn(needle, text)  # the template's own line is not a step
         self.prepare(review=False)
         with self.assertRaises(CommandError) as caught:
             self.on(code="x")
         self.assertNotIn("TODO.md", str(caught.exception))
-        self.assertIn("[review]=1", str(caught.exception))
+        self.assertIn("Independent review", str(caught.exception))
 
     def test_the_screen_shows_the_steps_and_the_limits_and_a_wrong_code_opens_nothing(self) -> None:
         self.prepare()

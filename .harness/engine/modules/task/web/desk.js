@@ -476,7 +476,7 @@
       return nodes;
     });
     ui.rounds.set(JSON.stringify([full.rounds, full.round, desk.past && desk.past.round]), () => roundSwitch());
-    ui.pill.set(live ? JSON.stringify(desk.vscode) : "", () => (live ? SHELL.vsPill(desk.vscode) : null));
+    ui.pill.set(live ? JSON.stringify(desk.vscode) : "", () => (live ? [SHELL.vsPill(desk.vscode), SERVE.pairMark(true)] : null));
     ui.forks.set(JSON.stringify([desk.forked_from, desk.forked_to]), () => (desk.forked_from || desk.forked_to.length ? [
       desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null, desk.forked_from && desk.forked_to.length ? " · " : null,
       desk.forked_to.length ? [t("desk.forked.to") + " ", desk.forked_to.map((name, index) => [index ? ", " : "", taskLink(name)])] : null] : null));
@@ -1606,7 +1606,8 @@
     fill(ui.tabs, nav());
     fill(ui.pane, body());
     ui.pane.hidden = !ui.pane.firstChild;
-    fill(ui.foot, [typeof SERVE === "undefined" && !saved ? h("p", {class: "sub"}, t("board.copy.hint")) : saved ? null : SERVE.banner(true),
+    fill(ui.foot, [typeof SERVE === "undefined" && !saved ? h("p", {class: "sub"}, t("board.copy.hint")) : saved ? null : SERVE.banner(true),  // quiet: the mark beside the VS Code pill says it is paired
+
       h("footer", null, t(saved ? "desk.snapshot.footer" : "desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright())]);  // a null would be drawn as the word "null"
     if (focusKey) { const again = ui.tabs.querySelector('[data-key="' + focusKey + '"]'); if (again) again.focus({preventScroll: true}); }
     if (keepScroll) {

@@ -171,7 +171,7 @@ class PageFileTests(unittest.TestCase):
             for language in ("en", "zh"):
                 self.assertIn("desk.jump." + key, messages.table(language))
         self.assertNotIn("code", messages.table("en")["desk.paired.short"].lower())
-        self.assertIn('node.dataset.short ? "desk.paired.short"', source("serve.js"))
+        self.assertIn('markShort ? "desk.paired.short"', source("serve.js"))
 
     def test_the_status_part_has_the_card_and_still_one_timer(self) -> None:
         status = source("status.js")

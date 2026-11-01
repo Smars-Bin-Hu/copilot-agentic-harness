@@ -21,10 +21,12 @@ noscript{color:var(--bad)}
 .lb-top h1{display:flex;align-items:center;gap:10px}
 .lb-top h1::before{content:"";flex:none;width:22px;height:22px;background:var(--ink);-webkit-mask:var(--mark) center/contain no-repeat;mask:var(--mark) center/contain no-repeat;
  --mark:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill-rule='evenodd' d='M6 0h8a6 6 0 0 1 6 6v8a6 6 0 0 1-6 6H6a6 6 0 0 1-6-6V6a6 6 0 0 1 6-6zM6 5h2.2v3.6h3.6V5H14v10h-2.2v-4H8.2v4H6z'/%3E%3C/svg%3E")}
-.lb-top .sub{margin-top:1px;max-width:44ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-top .sub{margin-top:1px;max-width:60ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lb-top>div:first-child{min-width:0}
 .lb-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .lb-right .shift{display:inline-flex;gap:6px}.lb-right .shift .act{margin:0}
+.new-slot:empty{display:none}
+.new-task{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}.new-plus{font-size:17px;line-height:1;font-weight:500}
 .kpis{display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr 1fr;gap:0;margin-top:0;border-bottom:1px solid var(--line)}
 .kpi{background:none;border:0;border-left:1px solid var(--line);border-radius:0;padding:20px 22px 18px}
 .kpi:first-child{border-left:0;padding-left:0}
@@ -128,6 +130,9 @@ footer{color:var(--soft);font-size:12px;margin-top:22px;line-height:1.6}
 .vs-btn svg{width:14px;height:14px;margin:0}.vs-btn:hover{border-color:var(--line2);background:var(--hover)}
 .vs-pill{display:inline-flex;align-items:center;gap:7px;height:26px;margin:0;padding:0 10px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--soft)}
 .vs-pill i{width:6px;height:6px;border-radius:50%;background:var(--other)}.vs-pill.on{color:var(--ink)}.vs-pill.on i{background:var(--good-dot)}
+.vs-pill[hidden]{display:none}
+.lb-status{display:inline-flex;align-items:center;gap:12px;vertical-align:baseline}
+.lb-status .vs-pill{height:auto;padding:0;border:0;border-radius:0;background:none}
 .lb-seg{display:inline-flex;border:0;border-radius:9px;padding:2px;background:var(--track);overflow:visible;margin:0}
 .lb-seg button{border:0;border-radius:7px;background:transparent;color:var(--soft);padding:0 12px;height:26px;font:inherit;font-size:12.5px;font-weight:500;cursor:pointer}
 .lb-seg button.on{background:var(--raise);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--line)}

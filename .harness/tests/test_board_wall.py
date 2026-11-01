@@ -513,6 +513,7 @@ class PageTests(unittest.TestCase):
         self.assertIn("background:linear-gradient(to bottom,transparent,rgba(var(--sp-rgb),var(--sp-glow)) 50%,transparent)", css)  # it fades both ways, so it has no edge
         self.assertNotIn("#sp-horizon::before", css)
         self.assertNotIn("--sp-horizon", source("tokens.css"))
+        self.assertNotIn("repeating-linear-gradient(0deg", css)  # no line runs across the page
 
     def test_the_settings_have_the_background_part(self) -> None:
         wall = source("wall.js")

@@ -982,6 +982,8 @@
   "serve.pair.wrong": "配对码不对或已用过。在 `task board` 的终端里按 Enter 取新的。",
   "serve.pair.needed": "这个浏览器未配对。在 `task board` 的终端里按 Enter，打开它显示的链接。",
   "event.board": "在看板页面上操作",
+  "board.serve.mark.unpaired": "未配对",
+  "board.serve.mark.paired": "已配对",
   "board.serve.paired": "已配对：按钮可直接操作。批准仍需输入确认码。",
   "board.serve.stale": "这个看板运行的是 harness {started}，文件已是 {now}。请停掉看板（在它的终端里按 Ctrl+C）再启动，否则它仍在运行旧代码。",
   "board.serve.notpaired": "未配对：请从终端重新打开看板链接。",

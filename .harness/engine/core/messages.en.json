@@ -982,6 +982,8 @@
   "serve.pair.wrong": "The pairing code is wrong or used up. Press Enter in the terminal of `task board` for a new one.",
   "serve.pair.needed": "This browser is not paired. Press Enter in the terminal of `task board` and open the link it shows.",
   "event.board": "done from the board page",
+  "board.serve.mark.unpaired": "Not paired",
+  "board.serve.mark.paired": "Paired",
   "board.serve.paired": "Paired: the buttons act. Approvals still ask for the code.",
   "board.serve.stale": "This board runs harness {started}; the files are {now}. Stop the board (Ctrl+C in its terminal) and start it again, or it works with the old code.",
   "board.serve.notpaired": "Not paired: open the board link from the terminal again.",

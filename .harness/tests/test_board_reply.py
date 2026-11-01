@@ -218,6 +218,15 @@ class PageTests(unittest.TestCase):
         self.assertIn('LIVE.drawing(blocks)', source("desk.js"))
         self.assertIn('st.draw(item.blocks)', source("live.js"))
 
+    def test_the_header_says_the_link_and_the_pairing_and_the_line_only_what_needs_the_person(self) -> None:
+        board, serve, desk = source("board.js"), source("serve.js"), source("desk.js")
+        self.assertIn("statusBox.replaceChildren(...[SHELL.vsPill(vscode)", board)
+        self.assertIn("SERVE.pairMark(true)", desk)
+        self.assertIn("kpis.after(banner(true));", serve)
+        self.assertIn("(paired && node.dataset.quiet)", serve)  # paired, nothing wrong: the line is empty
+        self.assertIn("node.hidden = !node.textContent;", serve)
+        self.assertIn("stale ?", serve)  # old code still says so in the line
+
     def test_every_icon_of_the_panel_has_a_size_in_the_style(self) -> None:
         css = source("live.css")
         for rule in (".rp-attach svg{flex:none;width:15px", ".rp-stop svg{flex:none;width:13px", ".rp-file>svg{flex:none;width:14px", ".rp-file-x svg{width:12px"):

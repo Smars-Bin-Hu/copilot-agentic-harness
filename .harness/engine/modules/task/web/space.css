@@ -23,13 +23,12 @@ html[data-theme="light"].twin-css #wp .wl{filter:invert(1) hue-rotate(180deg) co
 #sp-studio{position:absolute;inset:0;opacity:0;transform:translateZ(-505px) scale(calc(1.2778 * var(--sp-f)));transition:opacity .4s ease,transform .5s ease;background:radial-gradient(64% 54% at 50% 34%,var(--en-bg0) 0%,var(--en-bg1) 58%,var(--en-bg2) 100%)}
 html.en-open:not(.has-wall) #sp-studio{opacity:1}
 
-/* the floor and the horizon: with no picture. The horizon has no line and no edge: a band of soft light that fades both ways; the floor is a grid that fades away towards it. */
+/* the floor and the horizon: with no picture. No line runs across the page: the horizon is a band of soft light that fades both ways, and the floor is only lines that run away to it. */
 #sp-horizon{position:absolute;left:-60%;right:-60%;top:56%;height:60vh;margin-top:-30vh;opacity:0;transform:translateZ(-500px);transition:opacity .5s ease;
  background:linear-gradient(to bottom,transparent,rgba(var(--sp-rgb),var(--sp-glow)) 50%,transparent);
  -webkit-mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent);mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent)}
 #sp-grid{position:absolute;left:-60%;top:56%;width:220%;height:300%;opacity:0;transform-origin:50% 0;transform:translateZ(-500px) rotateX(80deg);transition:opacity .5s ease;
- background:repeating-linear-gradient(90deg,rgba(var(--sp-rgb),var(--sp-grid2)) 0 1px,transparent 1px 440px),repeating-linear-gradient(90deg,rgba(var(--sp-rgb),var(--sp-grid)) 0 1px,transparent 1px 110px),
-  repeating-linear-gradient(0deg,rgba(var(--sp-rgb),var(--sp-grid)) 0 1px,transparent 1px 440px),repeating-linear-gradient(0deg,rgba(var(--sp-rgb),var(--sp-grid)) 0 1px,transparent 1px 220px);
+ background:repeating-linear-gradient(90deg,rgba(var(--sp-rgb),var(--sp-grid2)) 0 1px,transparent 1px 440px),repeating-linear-gradient(90deg,rgba(var(--sp-rgb),var(--sp-grid)) 0 1px,transparent 1px 110px);
  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 24%);mask-image:linear-gradient(to bottom,transparent 0,#000 24%)}
 html:not(.has-wall) #sp-grid,html:not(.has-wall) #sp-horizon{opacity:1}
 html.en-open:not(.has-wall) #sp-grid{opacity:1}

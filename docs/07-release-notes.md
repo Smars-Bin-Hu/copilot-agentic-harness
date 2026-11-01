@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.24 (2026-11-01)
+
+### Changed
+
+- **The header of the board says what you need to know**: VS Code and the pairing, next to **Task board**. The time of the numbers moved to a tip on the name; a page on disk still shows it.
+- **The pairing line is gone unless something needs you**: it comes back when the browser is not paired, or when the board runs old code. The task page has the same mark beside the VS Code pill.
+- **+ New task is the main button of the board**, filled, at the far end of the header.
+- **The 3D floor has only lines that run away from you.** The lines across it read as a stripe through the page, so they are gone.
+
 ## 1.6.23 (2026-11-01)
 
 ### Changed

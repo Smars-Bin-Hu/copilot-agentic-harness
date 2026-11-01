@@ -244,10 +244,13 @@
   tableBox.addEventListener("mouseleave", () => { hovering = false; });
   const more = h("p", {class: "sub"});
   const stamp = h("span");
+  const boardName = h("b", null, t("board.title"));
+  const newSlot = h("span", {class: "new-slot"});  // the main act of the board: the far end of the header, filled
+  const statusBox = h("span", {class: "lb-status"});  // a served board: VS Code and the pairing. The time of the numbers is a tip on the name: the page keeps itself fresh
   const stampNote = h("span");  // a page on disk says in the footer how to get fresher numbers; the header has room for the time only
   document.querySelector("main").classList.add("wide");
 
-  const paintStamp = () => { stamp.textContent = t("board.stamp", {as_of: when(asOf, 0, 19)}); stamp.title = subtitle(); stampNote.textContent = subtitle(); };
+  const paintStamp = () => { stamp.textContent = t("board.stamp", {as_of: when(asOf, 0, 19)}); stamp.title = subtitle(); stampNote.textContent = subtitle(); if (DATA.serve) boardName.title = t("board.stamp", {as_of: when(asOf, 0, 19)}) + ". " + subtitle(); };
   const subtitle = () => (DATA.serve ? t("board.subtitle.served", {as_of: when(asOf, 0, 19), seconds: DATA.serve.refresh})
     : t(DATA.refresh ? "board.subtitle.fresh" : "board.subtitle", {as_of: when(asOf, 0, 19), seconds: DATA.refresh}));
 
@@ -353,12 +356,14 @@
       return node;
     };
     // replaceChildren writes a null as the word "null": on a page on disk, with no server, "New task" and the VS Code pill are not there (N4, 1.6.11).
-    shift.replaceChildren(...[button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint"), rows.length ? newTask() : null, SHELL.vsPill(vscode)].filter(Boolean));
+    shift.replaceChildren(...[button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint")]);
+    newSlot.replaceChildren(...[rows.length ? newTask() : null].filter(Boolean));
+    statusBox.replaceChildren(...[SHELL.vsPill(vscode), typeof SERVE !== "undefined" ? SERVE.pairMark() : null].filter(Boolean));
   }
   // "New task" (1.6, B73): a served board only (it makes a chat in VS Code). The dialog is in chat.js.
   function newTask() {
     if (typeof SERVE === "undefined" || !SERVE.runs("create")) return null;
-    const node = h("button", {type: "button", class: "act hot new-task", title: t("board.new.hint")}, t("board.new"));
+    const node = h("button", {type: "button", class: "act hot big new-task", title: t("board.new.hint")}, h("span", {class: "new-plus", "aria-hidden": "true"}, "+"), t("board.new"));
     node.addEventListener("click", () => CHAT.create());
     return node;
   }
@@ -410,7 +415,7 @@
   }
 
   app.replaceChildren(
-    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: "sub"}, h("b", null, t("board.title")), " \u00b7 ", stamp)), h("div", {class: "lb-right"}, shift, seg)), SHELL.banner(), said,
+    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: "sub"}, boardName, DATA.serve ? [" \u00b7 ", statusBox] : [" \u00b7 ", stamp])), h("div", {class: "lb-right"}, shift, seg, newSlot)), SHELL.banner(), said,
     kpis, controls, lobby.node,
     pick, tableBox, more,
     h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint"), DATA.serve ? null : " ", DATA.serve ? null : stampNote), copyright());

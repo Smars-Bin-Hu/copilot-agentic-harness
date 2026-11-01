@@ -232,12 +232,19 @@ const SERVE = (function () {
   let paired = null;
   let stale = null;  // the board was started on an older release than the files now hold: it still runs the old code
   const banners = [];
+  const mark = h("span", {class: "vs-pill", hidden: ""}, h("i"), h("span"));  // the same state in two words, next to the VS Code pill; the tip has the sentence
+  let markShort = false;
   function showPaired() {
     for (const node of banners) {
-      node.replaceChildren(paired === null ? "" : t(paired ? (node.dataset.short ? "desk.paired.short" : "board.serve.paired") : "board.serve.unpaired"),
+      node.replaceChildren(paired === null || (paired && node.dataset.quiet) ? "" : t(paired ? "board.serve.paired" : "board.serve.unpaired"),
         stale ? h("span", {class: "bad"}, " " + t("board.serve.stale", stale)) : "");
       node.classList.toggle("good", paired === true && !stale);
+      node.hidden = !node.textContent;
     }
+    mark.hidden = paired === null;
+    mark.classList.toggle("on", paired === true);
+    mark.title = paired === null ? "" : t(paired ? (markShort ? "desk.paired.short" : "board.serve.paired") : "board.serve.unpaired");
+    mark.lastChild.textContent = paired === null ? "" : t(paired ? "board.serve.mark.paired" : "board.serve.mark.unpaired");
   }
   const note = (data) => { stale = data.started && data.now && data.started !== data.now ? {started: data.started, now: data.now} : null; return data; };
   const ready = (function () {
@@ -251,19 +258,25 @@ const SERVE = (function () {
   })();
 
   // A line that says whether this browser may approve; it stays right when the page is drawn again.
-  // `short`: the task page says only that the buttons act (it has no word about the code: a command is allowed or denied there, and a plan is approved in its own dialog).
-  function banner(short) {
-    const node = h("div", {class: "sub pairing", "data-short": short ? "1" : null});
+  // `quiet`: the page has the mark in its header, so the line is there only for what needs the person (not paired, the board runs old code).
+  function banner(quiet) {
+    const node = h("div", {class: "sub pairing", "data-quiet": quiet ? "1" : null});
     banners.splice(0, banners.length, ...banners.filter((item) => item.isConnected), node);
     showPaired();
     return node;
+  }
+  // `short`: the task page says only that the buttons act (it has no word about the code: a command is allowed or denied there, and a plan is approved in its own dialog).
+  function pairMark(short) {
+    markShort = Boolean(short);
+    showPaired();
+    return mark;
   }
 
   // The board: the line under the numbers. The board asks for its rows itself (board.js) and keeps what the person typed.
   function start(app) {
     const kpis = app.querySelector(".kpis");
-    if (kpis) kpis.after(banner());
+    if (kpis) kpis.after(banner(true));
   }
 
-  return {call, file, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, onChange: (call) => { after = call; }};
+  return {call, file, pairMark, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, onChange: (call) => { after = call; }};
 })();

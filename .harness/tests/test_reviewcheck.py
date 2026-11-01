@@ -250,6 +250,12 @@ class DismissTests(ReviewCase):
         self.assertNotIn("RCA.md:1 根因没有证据", package)  # the person said it was wrong: it is not handed on
         self.assertEqual(self.status()["passes"], 1)
 
+    def test_a_fail_with_a_pass_after_it_is_not_offered(self) -> None:
+        data = {"round": 1, "review": {"n": 2, "rounds": [{"number": 1, "task_round": 1, "verdict": "FAIL", "finished_at": "x"}, {"number": 2, "task_round": 1, "verdict": "PASS", "finished_at": "y"}]}}
+        with mock.patch.object(taskreview, "done_now", side_effect=lambda found: found["review"]["rounds"]):
+            self.assertIsNone(taskreview.dismissable(data))
+            self.assertEqual(taskreview.dismissable({"review": {"rounds": data["review"]["rounds"][:1]}})["number"], 1)
+
     def test_only_a_check_that_did_not_pass_can_be_dismissed_and_only_once(self) -> None:
         self.job(2)
         self.check(PASS)

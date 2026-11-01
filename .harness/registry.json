@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.6.50",
+  "version": "1.6.51",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -160,6 +160,7 @@
         ".harness/tests/test_company.py",
         ".harness/tests/test_promote_delete.py",
         ".harness/tests/test_taskdesk.py",
+        ".harness/tests/test_taskrun.py",
         ".harness/tests/test_taskfiles.py",
         ".harness/tests/test_taskinbox.py",
         ".harness/tests/test_taskfork.py",

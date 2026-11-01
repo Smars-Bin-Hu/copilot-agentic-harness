@@ -119,7 +119,7 @@ An approval works as in the terminal: the page shows what you approve and asks y
 
 **Task Record.** The task record keeps what happened, newest first: documents added, approvals, fetches, checks, runs, write-backs, pauses.
 
-![The history of a task](images/task-history.png)
+![The Task Record of a task](images/task-history.png)
 
 **With VS Code.** When VS Code is open on the folder, the board also reaches its chats. After an approval it sends the "go on" message to the right chat for you, you can steer or stop a working agent, allow a command or answer a question the agent asked, and start a new task (a chat in VS Code) from a button. Only you can; the agent cannot press them. See [Features](02-features.md#the-board-and-vs-code).
 

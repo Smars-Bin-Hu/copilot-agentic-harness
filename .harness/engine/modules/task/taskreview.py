@@ -492,8 +492,8 @@ def waive(root: Path, raw_task: str, reader: Optional[Callable[[str], str]] = No
 
 def dismissable(data: Dict[str, Any], number: int = 0) -> Optional[Dict[str, Any]]:
     """The finished check the person may dismiss: round `number`, or the newest that counts. Only one that did not pass, of the current round of the task."""
-    found = [item for item in done_now(data) if item["verdict"] != "PASS" and (not number or int(item.get("number") or 0) == number)]
-    return found[-1] if found else None
+    found = [item for item in done_now(data) if not number or int(item.get("number") or 0) == number]
+    return found[-1] if found and found[-1]["verdict"] != "PASS" else None  # a FAIL with a PASS after it is settled: the page must not say the newest check failed
 
 
 def dismiss(root: Path, raw_task: str, number: int = 0, reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None) -> Dict[str, Any]:

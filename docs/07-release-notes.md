@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.51 (2026-11-01)
+
+### Changed
+
+- The pictures in the README and `docs/` are new and show the current board and tabs.
+- A failed check with a pass after it can no longer be dismissed, and the task page no longer says the newest check did not pass.
+
 ## 1.6.50 (2026-11-01)
 
 ### Added

@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.15 (2026-10-31)
+
+### Added
+
+- The Enter screen. A board or task page served by `task board --serve` opens on it, once for each browser tab: the wide HARNESS wordmark with a light that follows the pointer, a small robot sitting on the last S, and `Hi, <name>` at the top right (the name `harness user` reads; no new setting). Hold the pointer down to charge: light streams in, the letters heat up from the pointer outward, the screen trembles; let go and a shockwave throws the letters out and they snap back. A full charge is clearly bigger than a short one. The robot follows the pointer with its eyes and reacts to a click. Nothing moves under Lite or when the system asks for reduced motion; the screen still works. A page saved to disk has no Enter screen.
+- A readiness list on that screen, one line for each check: VS Code is open and connected; Copilot can answer (the host lists an allowed model; it recognises `Provider copilotcli is not ready` and `Client is not connected` and says to sign in to Copilot in VS Code); `harness doctor` has no error; this browser is paired. The knowledge base and the target repositories are grey lines that never block. The last line is the copyright, the author and the version. The lines light up in order and are checked again every 3 s. The Enter button stays off, and no key goes in, until every blocking line is fine; a failing line says why and what to do, and VS Code has an Open VS Code button. A task page opened from a link skips the screen only when everything is ready; otherwise the screen shows and the task is under it.
+- `/api/ready`: the readiness as data. A read like `/api/board` (header and host checked, no pairing needed). It reads the cache of the VS Code thread and one `harness doctor` run that happens in a thread of its own with a 90 s limit, so it never waits on `code`. A doctor with errors or a failure is run again no sooner than every 20 s; a clean one is kept for 10 minutes.
+
 ## 1.6.14 (2026-10-31)
 
 ### Added

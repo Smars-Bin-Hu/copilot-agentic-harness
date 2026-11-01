@@ -6,6 +6,7 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   tokens.css, ui.css      the look, shared: the colours of the light and the dark theme, and how things look under them; theme.js sets the theme and Lite before the page is drawn
   status.js, status.css   the board only: the small status marks (model, context ring, run time, mini stage ribbon, TODO) under a task name and on the lobby card; the ribbon is shared (the task page reuses it)
   shell.js, shell.css     the board and the task page only: the search pill and Cmd+K palette, the gear and the settings panel, the VS Code banner (fixed to the window, outside the page)
+  enter.js, enter.css     a served page only: the Enter screen (wordmark, robot, hold to charge, the readiness list of `/api/ready`); a file on disk has none
   page.css, lobby.css     where things go, shared / the board's lobby
   common.js               helpers shared by both pages
   task.js, board.js       how each page is drawn from its data; desk.js the task page, diffview.js the code compare of its Changes tab, highlight.js the colours of code, serve.js the server's buttons, chat.js the send panel, steer and stop
@@ -59,6 +60,9 @@ STATUS_CSS = "status.css"  # the pages that have status.js (the board) get the s
 SHELL_CSS = "shell.css"  # the pages that have shell.js (the board and the task page) get the fixed search and settings, the palette and the VS Code banner after ui.css
 
 
+ENTER_CSS = "enter.css"  # the served pages (enter.js) get the Enter screen after the shell
+
+
 def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], refresh: int = 0, styles: Optional[List[str]] = None) -> str:
     """One file: the skeleton with the style, the scripts and the data in it. `styles`: what goes between the tokens and ui.css."""
     data = dict(data, text=page_text())
@@ -67,7 +71,7 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
         "<!--TITLE-->": escape(title),
         "<!--NOSCRIPT-->": escape(say("report.noscript")),
         "/*THEME*/": read("theme.js"),
-        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else [])]),
+        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else [])]),
         "<!--DATA-->": as_json(data),
         "/*JS*/": "\n".join(read(name) for name in scripts),
     }
@@ -98,7 +102,7 @@ def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: 
     """rows: what `task list` gives, each with `brief` (taskinsight.brief or None) and `report` (the file name of its page or '').
     serve: set when the board server sends the page: the actions it runs, and how often the page asks again.
     hidden: how many older closed tasks are not in the rows."""
-    scripts = ["common.js", "serve.js", "chat.js", "status.js", "lobby.js", "shell.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "shell.js", "board.js"]  # a file on disk never calls out
+    scripts = ["common.js", "serve.js", "chat.js", "status.js", "lobby.js", "shell.js", "enter.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "shell.js", "board.js"]  # a file on disk never calls out
     return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve, "cli": cli_command()}, refresh, ["page.css", "lobby.css"])
 
 
@@ -112,6 +116,6 @@ def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None) -> s
     """One task as the board server sends it (taskdesk.desk): documents, progress, history, changes, actions.
     Without `serve` it is a saved copy: one file with no buttons and no calls to a server, as of the time it was made."""
     if serve is not None:
-        return build("desk.html", ["common.js", "serve.js", "chat.js", "highlight.js", "diffview.js", "shell.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
+        return build("desk.html", ["common.js", "serve.js", "chat.js", "highlight.js", "diffview.js", "shell.js", "enter.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
     page = build("desk.html", ["common.js", "highlight.js", "diffview.js", "shell.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "snapshot": True}, styles=DESK_STYLES)
     return page.replace("<head>", f'<head>\n<meta http-equiv="Content-Security-Policy" content="{SNAPSHOT_CSP}">', 1)

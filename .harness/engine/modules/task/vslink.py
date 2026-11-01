@@ -25,7 +25,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from core import ahp, config, tasks
 from core.paths import utc_now
@@ -42,6 +42,7 @@ NO_CLI_WAIT = 300.0  # no `code` command: look again only now and then
 JOB_WAIT = 25.0  # seconds a page request waits for the thread to send, steer or stop
 CREATE_WAIT = 45.0  # a create makes the chat, sends, then waits for the host to list it
 REREAD_AFTER_ANSWER = 10.0  # seconds after a person answered in which a session that still says "input" is not read again for a missed item
+PROBLEM_FOR = 120.0  # seconds a "Copilot is not usable" answer of the host is still told after it was heard
 INITIATOR_WAIT = 10.0  # seconds after the first message in which the host is asked who made the chat
 
 
@@ -133,6 +134,7 @@ class VsLink:
         self.created: List[Dict[str, Any]] = []  # chats this board made whose task does not exist yet (`chatnew.pending`); memory only
         self.expect: Dict[str, Dict[str, Any]] = {}  # session resource of a chat this board made that the host has not listed yet -> {stub, until}; memory only
         self.listed_at = 0.0
+        self.problem: Tuple[str, float] = ("", 0.0)  # what the host last said that means Copilot is not usable: ("provider" | "client" | "", when); the Enter screen shows it
         self.dirty = True
 
     # --- the page side: reads only ------------------------------------------------------------------------------------------
@@ -152,6 +154,20 @@ class VsLink:
         """`{ready, bound, unbound, why}`: for `/api/status` and `/api/board`. `bound` and `unbound` count the open tasks."""
         with self.lock:
             return {"ready": self.ready, "bound": len(self.bound) if self.ready else 0, "unbound": len(self.unbound) if self.ready else 0, "why": "ok" if self.ready else self.why}
+
+    def host_said(self, error: BaseException) -> None:
+        """Remember the two things the host says when Copilot itself is not usable (`Provider copilotcli is not ready`, `Client is not connected`); any other error is not Copilot's sign-in."""
+        text = str(error).lower()
+        found = "provider" if "provider" in text and "not ready" in text else "client" if "not connected" in text else ""
+        if found:
+            with self.lock:
+                self.problem = (found, time.monotonic())
+
+    def copilot(self) -> Dict[str, Any]:
+        """For the Enter screen, from the cache: how many models the host lists (those the policy allows) and what it last said about Copilot (`provider`, `client`, or empty; forgotten after 2 minutes)."""
+        with self.lock:
+            kind, at = self.problem
+            return {"models": len(self.models) if self.ready else 0, "problem": kind if kind and time.monotonic() - at < PROBLEM_FOR else ""}
 
     def chat_of(self, task: str, name: str = "") -> Dict[str, Any]:
         """What a row or a task page shows of the chat: `{bound, why, state, title, model, how}` and, when the chat said something, `sub` and `recent`."""
@@ -213,6 +229,7 @@ class VsLink:
             job.cancelled = True  # a thread that has not begun must not make a chat the person was told failed
             raise Refused("timeout")
         if job.error is not None:
+            self.host_said(job.error)
             raise job.error
         return job.result
 
@@ -243,6 +260,7 @@ class VsLink:
             job.cancelled = True  # a late thread must not send what the person was told failed
             raise Refused("timeout")
         if job.error is not None:
+            self.host_said(job.error)
             raise job.error
         return job.result
 
@@ -281,6 +299,7 @@ class VsLink:
             job.cancelled = True  # a late thread must not answer what the person was told failed
             raise Refused("timeout")
         if job.error is not None:
+            self.host_said(job.error)
             raise job.error
         return job.result
 
@@ -365,7 +384,8 @@ class VsLink:
             link.unsubscribe("ahp-root:/")
         except ahp.ConnectionClosed:
             raise
-        except ahp.AhpError:
+        except ahp.AhpError as error:
+            self.host_said(error)
             return
         with self.lock:
             self.models, self.windows = found, windows
@@ -691,7 +711,8 @@ class VsLink:
                 link.unsubscribe(chat)
             except ahp.ConnectionClosed:
                 raise
-            except ahp.AhpError:
+            except ahp.AhpError as error:
+                self.host_said(error)
                 ids = set()  # this chat cannot be opened now: it is not read again until it changes
             with self.lock:
                 self.sdk[resource] = ids
@@ -717,10 +738,12 @@ class VsLink:
                 state = ahp.trimmed(link.subscribe(chat))
             except ahp.ConnectionClosed:
                 raise
-            except ahp.AhpError:
+            except ahp.AhpError as error:
+                self.host_said(error)
                 continue
             with self.lock:
                 self.chats[chat] = {"state": state, "tool_at": ""}
+                self.problem = ("", 0.0)  # a chat of Copilot was read: Copilot works
         self._subscribe_sessions(link, set(wanted.values()))
         self._reread_waiting(link, set(wanted.values()))
 
@@ -769,7 +792,8 @@ class VsLink:
                     break
                 except ahp.ConnectionClosed:
                     raise
-                except ahp.AhpError:
+                except ahp.AhpError as error:
+                    self.host_said(error)
                     continue
             with self.lock:
                 self.sess[resource] = held

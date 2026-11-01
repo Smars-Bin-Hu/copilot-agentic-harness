@@ -37,6 +37,19 @@ const SERVE = (function () {
         () => Promise.reject(Object.assign(new Error(t("board.serve.stopped")), {offline: true})));  // offline: no answer at all (not a refusal); pollEvery counts these
   }
 
+  // A POST with a deadline and nothing else: no bar for an unpaired browser, no reload. The Enter screen asks with it: a stalled server is an error line there, never a hang.
+  function call(path, body, seconds) {
+    const control = window.AbortController ? new AbortController() : null;
+    const timer = setTimeout(() => control && control.abort(), (seconds || 8) * 1000);
+    const failed = (error) => { clearTimeout(timer); throw new Error(error && error.name === "AbortError" ? "no answer in " + (seconds || 8) + " s" : (error && error.message) || "no answer"); };
+    return fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json", "X-Harness-Board": "1"}, body: JSON.stringify(body || {}), signal: control ? control.signal : undefined})
+      .then((response) => response.json().catch(() => ({})).then((data) => {
+        clearTimeout(timer);
+        if (!response.ok) throw Object.assign(new Error(data.error || "HTTP " + response.status), {status: response.status});
+        return data;
+      }), failed);
+  }
+
   function dialog(children) {
     busy = true;
     const box = h("div", {class: "dialog card"}, children);
@@ -236,5 +249,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner());
   }
 
-  return {runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, onChange: (call) => { after = call; }};
+  return {call, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, onChange: (call) => { after = call; }};
 })();

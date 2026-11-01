@@ -46,10 +46,11 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 
-from core import config, messages, registry, state, tasks
+from core import config, messages, registry, state, tasks, user
 from core.paths import board_serve_file, utc_now
 
 from . import autorun, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
+from . import ready as readiness
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -166,6 +167,32 @@ class Board:
         self.lock = threading.Lock()
         self.language_stamp: List[int] = []
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
+        self.ready = readiness.Ready(root, self.link)  # the Enter screen (`/api/ready`)
+        self.who: Tuple[float, str] = (-1e9, "")
+
+    def user_name(self) -> str:
+        """The name for `Hi, <name>` on the Enter screen: what `harness user` reads (user.override.json, else `git config user.name`). Kept a minute: git may be slow, and a page must not wait on it each time."""
+        now = time.monotonic()
+        with self.lock:
+            if now - self.who[0] < 60:
+                return self.who[1]
+        try:
+            name = user.who(self.root)["name"]
+        except Exception:  # noqa: BLE001 - no name is only a plainer greeting
+            name = ""
+        with self.lock:
+            self.who = (now, name)
+        return name
+
+    def serve_info(self, found: Dict[str, Any], refresh: int) -> Dict[str, Any]:
+        """What a served page gets besides the rows: the actions, the refresh, and what the Enter screen shows without asking (the name, the release)."""
+        return {"actions": self.served, "refresh": refresh, **found, "user": self.user_name(), "version": self.release()}
+
+    def release(self) -> str:
+        try:
+            return registry.harness_version(self.root)
+        except Exception:  # noqa: BLE001 - a broken registry is doctor's to report
+            return ""
 
     def sync_language(self) -> str:
         """The language now set in `user.json`. The process reads it once (`messages.language`), so a board that ran on
@@ -223,7 +250,7 @@ class Board:
 
     def page(self) -> str:
         found = self.rows()
-        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve={"actions": self.served, "refresh": self.refresh, "archive_to": found["archive_to"], "vscode": found["vscode"]}, hidden=found["hidden"])
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"]}, self.refresh), hidden=found["hidden"])
 
     def desk(self, name: str) -> Dict[str, Any]:
         found = taskdesk.desk(self.root, name, self.served)
@@ -270,7 +297,7 @@ class Board:
         return {"language": self.sync_language()}
 
     def desk_page(self, name: str) -> str:
-        return taskhtml.desk_page(self.desk(name), {"actions": self.served, "refresh": DESK_REFRESH})
+        return taskhtml.desk_page(self.desk(name), self.serve_info({}, DESK_REFRESH))
 
     def report_info(self, name: str) -> Tuple[str, Dict[str, Any], Optional[Dict[str, Any]]]:
         task = task_ops.resolve(self.root, name)
@@ -789,6 +816,11 @@ def handler_for(board: Board) -> type:
                 return self.answer(200, {"paired": True}, {"Set-Cookie": cookie})
             if path == "/api/status":
                 return self.answer(200, {"paired": board.paired(self.token()), "started": board.version, "now": disk_version(board.root), "vscode": board.link.status()})
+            if path == "/api/ready":  # the Enter screen: what is in place, one line each. A read, as /api/board is: the cache of the link and of the one doctor run; it waits for nothing
+                try:
+                    return self.answer(200, board.ready.answer(board.paired(self.token())))
+                except Exception as error:  # noqa: BLE001 - the page shows that the check itself failed
+                    return self.answer(500, {"error": f"{type(error).__name__}: {error}"[:300]})
             if path == "/api/open":  # bring the VS Code window of this folder forward: the thread of the link runs `code <folder>`; this answers at once
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})

@@ -117,6 +117,7 @@ This is how a served board (`task board --serve`) talks to the chats of VS Code.
 
 | Call | What it does |
 | --- | --- |
+| `/api/ready` | Read, for the Enter screen: one line for each check (VS Code, Copilot, `harness doctor`, pairing, and the grey knowledge base and target repositories) with a state (`ok`, `wait`, `fail`, `check`, `note`) and a reason. It reads caches and one background `doctor` run; it waits for nothing |
 | `/api/status`, `/api/board` | Read. They carry `vscode: {ready, bound, unbound, why}` and, on rows, `chat` and `sub` |
 | `/api/open` | Brings the VS Code window of this folder forward (it cannot open one chat) |
 | `/api/send` | `step: preview` gives the whole message; `step: act` sends it. A fixed English text (no confirmation code in it), `[ZH]` only when you chose Chinese, your note and the ticked drafts. Idle chat only |

@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.30 (2026-11-01)
+
+### Added
+
+- **A Q&A task can become other work.** `task upgrade --kind <kind>` changes its kind, so the board shows the new kind and icon and the task gets that kind's stages. The tier rises to that kind's own if it is lower. Raising only the tier of a Q&A task now says the kind is unchanged. Any other kind stays as it is, and is forked instead.
+
 ## 1.6.29 (2026-11-01)
 
 ### Changed

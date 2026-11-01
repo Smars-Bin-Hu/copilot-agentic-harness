@@ -263,6 +263,29 @@ class UpgradeTests(LifeCase):
         self.assertIn("只能升", self.refused("task", "upgrade", "--tier", "light"))
         self.assertIn("已经是", self.refused("task", "upgrade", "--tier", "full"))
 
+    def test_a_q_and_a_task_becomes_other_work(self) -> None:
+        self.new("job", "qa")
+        result = self.cli_json("task", "upgrade", "--kind", "dev")
+        self.assertEqual((result["kind"], result["tier"], result["from"]), ("dev", "full", "light"))
+        self.assertEqual((self.data()["kind"], self.data()["tier"]), ("dev", "full"))
+        self.assertIn("DEV/", result["made"])
+        self.assertIn("TASK.md", result["next"])
+        self.assertEqual(self.data()["events"][-1]["what"], "upgrade")
+        self.assertEqual(self.data()["events"][-1]["detail"], "qa -> dev, light -> full")
+
+    def test_a_full_q_and_a_task_keeps_its_tier_when_it_becomes_other_work(self) -> None:
+        self.new("job", "qa")
+        self.assertIn("--kind", self.cli_json("task", "upgrade", "--tier", "full")["next"])  # more files do not change what the page calls it
+        self.assertEqual(self.data()["kind"], "qa")
+        result = self.cli_json("task", "upgrade", "--kind", "rca")
+        self.assertEqual((result["kind"], result["tier"], result["made"]), ("rca", "full", []))
+        self.assertEqual(self.data()["events"][-1]["detail"], "qa -> rca")
+
+    def test_only_a_q_and_a_task_changes_its_kind(self) -> None:
+        self.new("job", "rca")
+        self.assertIn("分出新任务", self.refused("task", "upgrade", "--kind", "dev"))
+        self.assertEqual(self.data()["kind"], "rca")
+
     def test_a_closed_task_is_refused(self) -> None:
         self.new("job", "qa")
         self.cli_json("task", "close", "--task", "job")

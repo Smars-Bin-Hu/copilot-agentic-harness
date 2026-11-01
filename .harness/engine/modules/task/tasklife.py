@@ -189,20 +189,29 @@ def open_task(root: Path, raw_name: str, session_id: str, surface: str = "vscode
     return result
 
 
-def upgrade(root: Path, raw_task: str, tier: str) -> Dict[str, Any]:
+def upgrade(root: Path, raw_task: str, tier: str = "", kind: str = "") -> Dict[str, Any]:
+    """A higher tier, or a Q&A task that turned into other work: a new kind, at that kind's tier when the task is lower. No other kind changes: it would leave the stages and the checks it has."""
     task = task_ops.resolve(root, raw_task)
     with task_ops.locked(root, task) as data:
         if data["status"] != "open":
             raise CommandError(say("task.closed", task=task, name=task_ops.name_of(task)))
-        current = data.get("tier", "")
-        if current == tier:
+        current, was = data.get("tier", ""), data.get("kind", "")
+        if kind:
+            if was not in ("", "qa"):
+                raise CommandError(say("task.upgrade.kind", kind=label("kind", was)))
+            wanted = tasks.DEFAULT_TIER[kind]
+            tier = current if current and tasks.TIERS.index(current) >= tasks.TIERS.index(wanted) else wanted
+        elif current == tier:
             raise CommandError(say("task.upgrade.same", current=label("tier", current)))
-        if current and tasks.TIERS.index(tier) < tasks.TIERS.index(current):
+        elif current and tasks.TIERS.index(tier) < tasks.TIERS.index(current):
             raise CommandError(say("task.upgrade.down", current=label("tier", current), wanted=label("tier", tier)))
-        made = add_files(root, task, tier, data.get("kind", ""))
-        data["tier"] = tier
-        task_ops.note(data, "upgrade", f"{current or '-'} -> {tier}")
-    return {"task": task, "tier": tier, "from": current, "made": made, "next": say("task.upgrade.done", task=task, tier=label("tier", tier)) + next_text(root, task, data, "")}
+        made = add_files(root, task, tier, kind or was)
+        data["tier"], data["kind"] = tier, kind or was
+        task_ops.note(data, "upgrade", ", ".join(f"{old or '-'} -> {new}" for old, new in ((was, data["kind"]), (current, tier)) if old != new))
+    done = say("task.upgrade.kind.done", task=task, kind=label("kind", kind), tier=label("tier", tier)) if kind else say("task.upgrade.done", task=task, tier=label("tier", tier))
+    if not kind and was == "qa":  # more files do not make it another kind of work: the page goes on saying Q&A
+        done += say("task.upgrade.kind.hint")
+    return {"task": task, "kind": data["kind"], "tier": tier, "from": current, "made": made, "next": done + next_text(root, task, data, "")}
 
 
 def set_domains(root: Path, raw_task: str, names: List[str]) -> Dict[str, Any]:

@@ -34,7 +34,7 @@ The **kind** decides "what counts as done"; the **tier** decides "which files th
 | medium | adds `REQ.md`, `REQ/`, `REF/`, `LOG.md` |
 | full | adds `TODO.md`, `DEV/`, `TEST/` |
 
-When a task grows, use `task upgrade`: it only adds the missing files, and a tier only goes up.
+When a task grows, use `task upgrade`: it only adds the missing files, and a tier only goes up. A Q&A that turns into other work also changes its kind: `task upgrade --kind <kind>`.
 
 ### 9.3 Sessions and tasks are separate
 

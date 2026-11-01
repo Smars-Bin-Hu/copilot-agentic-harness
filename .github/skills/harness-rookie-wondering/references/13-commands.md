@@ -42,6 +42,7 @@ When an agent runs these, the gate refuses; a pipe or a script does not work eit
 | `task new <name> --kind <kind> [--tier ...]` | Makes a new task, and the session picks it up |
 | `task open <name>` | Goes on with one; reopens a closed one; starts a new round after a write-back |
 | `task upgrade --tier <tier>` | Raises the tier and adds the missing files |
+| `task upgrade --kind <kind>` | Turns a Q&A task into another kind, and raises its tier if that kind needs more |
 | `task fetch <repository>/<path>` | Fetches a file from main of the target repository into `DEV/` |
 | `task delete <repository>/<path>` | Marks a file for deletion |
 | `task diff` | Writes `CHANGES.diff` |

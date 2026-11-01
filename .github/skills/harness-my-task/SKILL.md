@@ -58,6 +58,7 @@ Do not ask for the task name: make up a short English one (lower case, hyphens) 
 | New | `harness task new <task name> --kind <kind> [--tier light\|medium\|full] --session-id <session id>` |
 | Go on, or switch over | `harness task open <task name> --session-id <session id>` |
 | It grew | `harness task upgrade --tier <tier>` |
+| A Q&A turned into other work | `harness task upgrade --kind <kind>`: the kind changes, and the tier rises to that kind's own if it is lower |
 
 What each tier has:
 
@@ -95,7 +96,7 @@ What each tier has:
   - When the checks are used up, stop and tell the user. Only the user can run `task review extend` and `task review waive`, in the terminal.
   - Without enough passes, `task promote --dry-run` is refused.
 - **A tier only goes up.** When unsure, pick the lower one and run `task upgrade` later.
-- **A wrong kind is no disaster.** It is written in `TASK.md`, and the user sees it at a glance. When you notice it, tell the user; do not change the state file yourself.
+- **A wrong kind is no disaster.** It is written in `TASK.md`, and the user sees it at a glance. When you notice it, tell the user; do not change the state file yourself. Only a Q&A task can change its kind (`task upgrade --kind`); any other is forked.
 
 ## Troubleshooting
 

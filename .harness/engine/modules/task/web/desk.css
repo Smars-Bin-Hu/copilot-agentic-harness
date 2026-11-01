@@ -40,7 +40,7 @@
 .tk-info-l{display:flex;align-items:center;gap:6px 14px;flex:1 1 0;min-width:0;white-space:nowrap}
 .tk-info-l>*{flex:none}
 .tk-meta{display:inline-flex;align-items:center;gap:12px;border-radius:6px;cursor:help}.tk-when{display:inline-flex;align-items:center;gap:5px}.tk-when svg{flex:none;width:13px;height:13px}
-.tk-facts{display:grid;gap:5px;min-width:240px;max-width:340px}.tk-fact{display:flex;justify-content:space-between;gap:24px}.tk-fact>span:last-child{text-align:right;overflow-wrap:anywhere}.tk-fact>.sub{flex:none}
+.tk-facts{display:grid;gap:5px;min-width:240px;max-width:340px}.tk-fact{display:flex;align-items:baseline;justify-content:space-between;gap:24px}.tk-fact>span:last-child{text-align:right;overflow-wrap:anywhere}.tk-fact>.sub{flex:none;margin:0}
 .tk-info-l .kind-icon{cursor:help}
 .tk-i{display:inline-block;max-width:28ch;overflow:hidden;text-overflow:ellipsis;cursor:help}
 .tk-model{color:var(--ink);font-family:var(--mono);font-size:12px}
@@ -158,5 +158,5 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 @media (max-width:1100px){.tk-stage{width:100px}.tk-name{max-width:30ch}}
 @media (max-width:900px){.tk-head{flex-wrap:wrap}.tk-name{flex:1 1 40%}.tk-sp{display:none}}
 @media (max-width:900px){.rv-name{display:none}}
-@media (max-width:640px){.tk-info{flex-wrap:wrap}.tk-info-l{flex-basis:100%}}
+@media (max-width:640px){.tk-info{flex-wrap:wrap}.tk-info-l{flex-basis:100%;flex-wrap:wrap}}
 @media (max-width:640px){.tk-pane{padding:14px}.tk-top,.tk-sub{padding-left:8px;padding-right:8px}}

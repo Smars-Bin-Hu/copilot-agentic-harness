@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.33 (2026-11-01)
+
+### Changed
+
+- **Independent review is set at the head of the task page.** A button shows whether it is on, and a click picks off or the number of checks to pass. It is a setting of the task, and runs the same command as a terminal, so the 0 to 5 in the reply panel is gone. `[review]=n` in a prompt still works.
+
 ## 1.6.32 (2026-11-01)
 
 ### Changed

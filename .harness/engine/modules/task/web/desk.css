@@ -44,6 +44,12 @@
 .tk-i{display:inline-block;max-width:28ch;overflow:hidden;text-overflow:ellipsis;cursor:help}
 .tk-model{color:var(--ink);font-family:var(--mono);font-size:12px}
 .tk-rounds,.tk-pill{flex:none}
+.tk-rv{position:relative;flex:none}
+.rv-btn{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--soft);font:inherit;font-size:12px;cursor:pointer}
+.rv-btn:hover,.rv-btn[aria-expanded=true]{border-color:var(--line2);color:var(--ink)}.rv-btn svg{flex:none;width:14px;height:14px}.rv-btn b{font-weight:600}
+.rv-btn.on{border-color:var(--good-line);background:var(--good-bg);color:var(--good)}
+.rv-pop{position:absolute;z-index:60;top:calc(100% + 6px);right:0;width:min(300px,calc(100vw - 32px));padding:12px;border:1px solid var(--line2);border-radius:10px;background:var(--pop);box-shadow:var(--shadow);color:var(--ink);white-space:normal}
+.rv-pop[hidden]{display:none}.rv-pop p{margin:6px 0 10px}.rv-pop .chips{display:flex;flex-wrap:wrap;gap:6px}.rv-pop .chip{min-width:34px;padding:0 10px}
 .tk-rounds .subtabs{margin:0;border:0}
 .tk-pill .vs-pill{margin:0}
 .tk-forks{padding:2px 0 0;overflow-wrap:anywhere}

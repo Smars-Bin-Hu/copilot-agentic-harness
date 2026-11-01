@@ -418,7 +418,8 @@
     ui.infoL = slot("div", "tk-info-l");
     ui.rounds = slot("span", "tk-rounds");
     ui.pill = slot("span", "tk-pill");
-    ui.info = h("div", {class: "tk-info"}, ui.infoL.node, ui.rounds.node, ui.pill.node);
+    ui.review = slot("span", "tk-rv");
+    ui.info = h("div", {class: "tk-info"}, ui.infoL.node, ui.rounds.node, ui.review.node, ui.pill.node);
     ui.forks = slot("div", "tk-forks sub");
     ui.wait = h("div", {class: "tk-wait"});
     ui.tabs = h("div", {class: "tk-tabs"});
@@ -472,6 +473,7 @@
       return nodes;
     });
     ui.rounds.set(JSON.stringify([full.rounds, full.round, desk.past && desk.past.round]), () => roundSwitch());
+    ui.review.set(JSON.stringify([desk.settings && [desk.settings.n, desk.settings.max_n], desk.status, Boolean(desk.past)]), () => reviewButton());
     ui.pill.set(live ? JSON.stringify(desk.vscode) : "", () => (live ? [SHELL.vsPill(desk.vscode), SERVE.pairMark(true)] : null));
     ui.forks.set(JSON.stringify([desk.forked_from, desk.forked_to]), () => (desk.forked_from || desk.forked_to.length ? [
       desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null, desk.forked_from && desk.forked_to.length ? " · " : null,
@@ -485,17 +487,6 @@
   function settingsRow() {
     const info = desk.settings;
     if (!served() || desk.past || !info || desk.status !== "open") return null;
-    const can = SERVE.runs("review set");
-    const chips = [];
-    for (let n = 0; n <= info.max_n; n++) {
-      const chip = h("button", {type: "button", class: "chip" + (n === info.n ? " on" : ""), "aria-pressed": n === info.n ? "true" : "false", disabled: can ? null : "disabled", title: t("desk.set.checks.tip", {n})}, String(n));
-      chip.addEventListener("click", () => {
-        if (n === info.n) return;
-        chips.forEach((item) => { item.disabled = true; });
-        SERVE.post("/api/act", {action: "review set", task: desk.name, n, step: "act"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
-      });
-      chips.push(chip);
-    }
     const models = info.models || [];
     const now = info.model || (desk.chat && desk.chat.model) || "";  // the model the chat uses: the board's choice, or what it ran on last
     const chosen = models.find((item) => item.id === now);
@@ -533,11 +524,39 @@
       back.addEventListener("click", () => SERVE.post("/api/chatconfig", {task: desk.name, mode: "interactive"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); }));
       return h("span", {class: "set-field", title: t("desk.set.mode.tip")}, h("span", {class: "sub"}, t("desk.set.mode")), h("span", null, (found.choices.find((item) => item.id === found.value) || {}).label || found.value), back);
     };
-    return h("section", {class: "card chatbar settings", title: t("desk.set.note", {n: Math.max(1, info.n || 3)})}, h("span", {class: "chat-k"}, t("desk.set.label")),
+    return h("section", {class: "card chatbar settings", title: t("desk.set.note")}, h("span", {class: "chat-k"}, t("desk.set.label")),
       h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.model")), pick), h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.thinking")), think),
       h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.context")), room), otherMode(), hostSetting("autoApprove", t("desk.set.permission")),
-      h("span", {class: "set-field set-checks"}, h("span", {class: "sub"}, t("desk.set.checks")), h("span", {class: "chips"}, chips)),
-      h("p", {class: "sub set-note", title: t("desk.set.note", {n: Math.max(1, info.n || 3)})}, t("desk.set.note", {n: Math.max(1, info.n || 3)})));
+      h("p", {class: "sub set-note", title: t("desk.set.note")}, t("desk.set.note")));
+  }
+
+  // "Independent review" (1.6.33): a setting of the task, at the head of its page, not of a message. A click runs `task review set`, as at a terminal; `[review]=n` in a prompt still does the same, and is not shown.
+  const SHIELD = ["M8 1.8l4.8 1.9v3.7c0 3-2 5.5-4.8 6.8-2.8-1.3-4.8-3.8-4.8-6.8V3.7L8 1.8z", "M5.8 8l1.6 1.6 2.9-3"];
+  let closeReview = null;
+  document.addEventListener("click", (event) => { if (closeReview && !event.target.closest(".tk-rv")) closeReview(); });
+  document.addEventListener("keydown", (event) => { if (closeReview && event.key === "Escape") closeReview(); });
+
+  function reviewButton() {
+    const info = desk.settings;
+    closeReview = null;
+    if (!served() || desk.past || !info || desk.status !== "open") return null;
+    const can = SERVE.runs("review set");
+    const choices = [];
+    for (let n = 0; n <= info.max_n; n++) {
+      const choice = h("button", {type: "button", class: "chip" + (n === info.n ? " on" : ""), "aria-pressed": n === info.n ? "true" : "false", disabled: can ? null : "disabled"}, n ? String(n) : t("desk.review.off"));
+      choice.addEventListener("click", () => {
+        if (n === info.n) return;
+        choices.forEach((item) => { item.disabled = true; });
+        SERVE.post("/api/act", {action: "review set", task: desk.name, n, step: "act"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
+      });
+      choices.push(choice);
+    }
+    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.review.button")), h("p", {class: "sub"}, t("desk.review.hint")), h("div", {class: "chips"}, choices));
+    const button = h("button", {type: "button", class: "rv-btn" + (info.n ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.review.hint")},
+      icon(SHIELD, 14), h("span", {class: "rv-name"}, t("desk.review.button")), h("b", null, info.n ? String(info.n) : t("desk.review.off")));
+    const show = (on) => { pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeReview = on ? () => show(false) : null; };
+    button.addEventListener("click", () => show(pop.hidden));
+    return [button, pop];
   }
 
   // "Drafts" (1.6, B77): the person's notes for the next message the board sends. Ticked notes go at the end of it (the send panel shows them); a note is cleared only after a send went.

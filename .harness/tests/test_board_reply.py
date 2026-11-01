@@ -268,6 +268,13 @@ class PageTests(unittest.TestCase):
         self.assertIn("node.hidden = !node.textContent;", serve)
         self.assertIn("stale ?", serve)  # old code still says so in the line
 
+    def test_independent_review_is_set_on_the_task_page_and_not_with_a_message(self) -> None:
+        desk = source("desk.js")
+        self.assertNotIn("set-checks", desk)  # the reply panel has no 0 to 5
+        self.assertIn("ui.review.set(", desk)
+        self.assertIn('{action: "review set", task: desk.name, n, step: "act"}', desk)  # the command of a terminal, not text in a prompt
+        self.assertNotIn("[review]", messages.text("desk.review.hint"))
+
     def test_a_new_model_fills_thinking_and_context_at_once(self) -> None:
         desk = source("desk.js")
         self.assertIn('fillFor(pick.value, "", 0); save(pick.value, "", 0);', desk)  # the row is not drawn again while its control has the focus

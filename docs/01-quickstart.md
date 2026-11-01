@@ -74,7 +74,7 @@ You need not remember commands. Say what you want done, and the agent asks until
 | "This task has to change the repository now" | Raises the task to the tier that has `DEV/` |
 | Just a question | Answers directly, with no task |
 
-For an independent check, write `[review]=1` in a prompt (2 for more certainty), or click the number on the task page of the board. Once per task is enough. The details are in [Core features](02-features.md).
+For an independent check, click **Independent review** on the task page of the board and pick 1 (2 for more certainty), or write `[review]=1` in a prompt. Once per task is enough. The details are in [Core features](02-features.md).
 
 ### The board: where you follow and approve
 

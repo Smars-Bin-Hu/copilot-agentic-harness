@@ -7,6 +7,7 @@ passed on as markup). Nothing here writes.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -16,6 +17,8 @@ from core.paths import cli_command, utc_now
 from . import autorun, common, health, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, tasktrace
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
+DECISIONS = ("confirm-req", "approve-plan", "approve-promote")  # the person's decisions that move a task on
+CHECKED = re.compile(r"^round-\d+ (\S+)( invalid)?$")  # the line a finished check wrote
 MAX_DOC_BYTES = 400_000  # a bigger document is shown cut, with a note
 MAX_DIFF_LINES = 3000
 MAX_CODE_LINES = 5000  # the new code of one changed file that is sent with the page (the code compare of the Changes tab)
@@ -136,6 +139,16 @@ def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, A
         return None
 
 
+def standout(what: str, detail: str) -> Tuple[str, str]:
+    """The lines a person looks for in the trail: the decisions that move a task on, and the verdict of a check. The mark of the line (`good`, `bad` or none) and its message."""
+    if what in DECISIONS:
+        return "good", f"event.{what}"
+    verdict = CHECKED.match(detail) if what == "review" else None
+    if not verdict:
+        return "", f"event.{what}"
+    return ("good", "event.review.pass") if verdict.group(1) == "PASS" and not verdict.group(2) else ("bad", "event.review.fail")
+
+
 def history(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """The audit trail, newest first, each line in words. The line `board` (the action came from the page) is folded into
     the line the action wrote just before it, as `via`. A session's note is told again in the language set now."""
@@ -145,9 +158,10 @@ def history(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         if what == "board" and out:
             out[-1]["via"] = "board"
             continue
-        label = say(f"event.{what}") if f"event.{what}" in messages.table(messages.language()) else what
         detail = taskinsight.SESSION_IN_DETAIL.sub(lambda found: say("task.note.session", session_id=found.group(1)), str(event.get("detail", "")))
-        out.append({"at": event.get("at", ""), "round": event.get("round", 1), "what": what, "label": label, "detail": detail, "via": ""})
+        mark, key = standout(what, detail)
+        label = say(key) if key in messages.table(messages.language()) else what
+        out.append({"at": event.get("at", ""), "round": event.get("round", 1), "what": what, "label": label, "detail": detail, "via": "", "mark": mark})
     out.reverse()
     return out
 

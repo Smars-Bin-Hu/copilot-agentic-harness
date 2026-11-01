@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.31 (2026-11-01)
+
+### Changed
+
+- **History shows the moments that count.** Confirming the requirement, approving the plan, a check that passed or failed, and approving the promote stand out in colour; the other lines stay quiet. A finished check now says in words whether it passed.
+- **A change of kind has its own line in History,** not "tier raised".
+
 ## 1.6.30 (2026-11-01)
 
 ### Added

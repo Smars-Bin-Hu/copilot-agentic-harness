@@ -207,7 +207,10 @@ def upgrade(root: Path, raw_task: str, tier: str = "", kind: str = "") -> Dict[s
             raise CommandError(say("task.upgrade.down", current=label("tier", current), wanted=label("tier", tier)))
         made = add_files(root, task, tier, kind or was)
         data["tier"], data["kind"] = tier, kind or was
-        task_ops.note(data, "upgrade", ", ".join(f"{old or '-'} -> {new}" for old, new in ((was, data["kind"]), (current, tier)) if old != new))
+        if kind:
+            task_ops.note(data, "kind", f"{was or '-'} -> {kind}")
+        if tier != current:
+            task_ops.note(data, "upgrade", f"{current or '-'} -> {tier}")
     done = say("task.upgrade.kind.done", task=task, kind=label("kind", kind), tier=label("tier", tier)) if kind else say("task.upgrade.done", task=task, tier=label("tier", tier))
     if not kind and was == "qa":  # more files do not make it another kind of work: the page goes on saying Q&A
         done += say("task.upgrade.kind.hint")

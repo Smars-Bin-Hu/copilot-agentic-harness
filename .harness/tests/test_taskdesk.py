@@ -629,6 +629,18 @@ class DeskTests(ServeCase):
         self.assertEqual(found[0]["detail"], "会话 abc-123" if messages.language() == "zh" else "session abc-123")
         self.assertNotIn("board", [item["what"] for item in found])
 
+    def test_the_decisions_and_the_verdicts_stand_out_in_the_history(self) -> None:
+        with task_ops.locked(self.root, TASK) as data:
+            data["events"] = []
+            for what, detail in (("confirm-req", ""), ("approve-plan", ""), ("review", "n=2"), ("review", "round-001 FAIL"), ("review", "round-002 PASS"), ("review", "round-003 PASS invalid"), ("approve-promote", ""), ("pause", "")):
+                task_ops.note(data, what, detail)
+        found = taskdesk.desk(self.root, "job1", ())["history"]
+        self.assertEqual([item["mark"] for item in reversed(found)], ["good", "good", "", "bad", "good", "bad", "good", ""])
+        passed, failed = found[5]["label"], found[4]["label"]
+        self.assertEqual((failed, found[3]["label"]), (messages.text("event.review.fail"), messages.text("event.review.pass")))
+        self.assertEqual(passed, messages.text("event.review"))  # the number of checks wanted is no verdict
+        self.assertEqual(found[3]["detail"], "round-002 PASS")
+
     def test_a_promote_record_that_is_not_complete_is_refused_in_words(self) -> None:
         with task_ops.locked(self.root, TASK) as data:
             data["promote"] = {"state": "partial"}

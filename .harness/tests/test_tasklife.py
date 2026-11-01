@@ -270,8 +270,7 @@ class UpgradeTests(LifeCase):
         self.assertEqual((self.data()["kind"], self.data()["tier"]), ("dev", "full"))
         self.assertIn("DEV/", result["made"])
         self.assertIn("TASK.md", result["next"])
-        self.assertEqual(self.data()["events"][-1]["what"], "upgrade")
-        self.assertEqual(self.data()["events"][-1]["detail"], "qa -> dev, light -> full")
+        self.assertEqual([(item["what"], item["detail"]) for item in self.data()["events"][-2:]], [("kind", "qa -> dev"), ("upgrade", "light -> full")])
 
     def test_a_full_q_and_a_task_keeps_its_tier_when_it_becomes_other_work(self) -> None:
         self.new("job", "qa")
@@ -279,7 +278,7 @@ class UpgradeTests(LifeCase):
         self.assertEqual(self.data()["kind"], "qa")
         result = self.cli_json("task", "upgrade", "--kind", "rca")
         self.assertEqual((result["kind"], result["tier"], result["made"]), ("rca", "full", []))
-        self.assertEqual(self.data()["events"][-1]["detail"], "qa -> rca")
+        self.assertEqual((self.data()["events"][-1]["what"], self.data()["events"][-1]["detail"]), ("kind", "qa -> rca"))
 
     def test_only_a_q_and_a_task_changes_its_kind(self) -> None:
         self.new("job", "rca")

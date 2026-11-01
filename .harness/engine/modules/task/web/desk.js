@@ -1531,7 +1531,7 @@
 
   function timeline() {
     if (!desk.history.length) return h("div", {class: "empty-state"}, h("b", null, t("desk.history.none")));
-    return h("ol", {class: "timeline"}, desk.history.map((event) => h("li", {class: "ev-" + event.what},
+    return h("ol", {class: "timeline history"}, desk.history.map((event) => h("li", {class: "ev-" + event.what + (event.mark ? " key " + event.mark : "")},
       h("span", {class: "when sub"}, when(event.at, 5, 16)),
       h("div", {class: "what"}, h("b", null, event.label),  // one block: a long line wraps under its own start, not under the time
         event.detail ? h("span", {class: "sub"}, " · " + event.detail) : null, event.via ? h("span", {class: "tag"}, t("desk.via." + event.via)) : null, event.round > 1 ? h("span", {class: "tag"}, t("desk.round", {round: event.round})) : null))));

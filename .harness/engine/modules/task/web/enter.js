@@ -406,8 +406,11 @@
     chk0.t0 = Date.now(); render();
     present(true);
   }
+  // The greeting sits in the corner and the search pill to its left: how far left depends on the name.
+  function roomForHi() { if (name && hi.isConnected) root.style.setProperty("--en-hi", (hi.offsetWidth + 40) + "px"); }
   function present(play) {
     palette(); fxSize(); app.inert = true; root.classList.add("en-open");
+    roomForHi();
     if (typeof SPACE !== "undefined") { SPACE.hosted = () => Boolean(wm.raf); SPACE.onTilt = stageApply; }
     if (play && !still()) { void enter.offsetWidth; enter.classList.add("intro"); }
     placeBot(); render(); loop();
@@ -446,7 +449,7 @@
 
   // ---------- start ----------
   buildWord(); buildBot(); bindPlay(); wm.spot.setAttribute("cx", (VBW * .62).toFixed(1));
-  window.addEventListener("resize", () => { placeBot(); fxSize(); fitList(); });
+  window.addEventListener("resize", () => { placeBot(); fxSize(); fitList(); roomForHi(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) return; poll(); loop(); });
   chk0.t0 = Date.now();
   if (shown) present(true); else render();

@@ -330,5 +330,13 @@ class PageTests(unittest.TestCase):
         self.assertIn("prefers-reduced-motion: reduce", code)
 
 
+class CornerTests(unittest.TestCase):
+    def test_the_greeting_has_the_corner_and_the_search_pill_stands_to_its_left(self) -> None:
+        css, script = (taskhtml.WEB / "enter.css").read_text(encoding="utf-8"), (taskhtml.WEB / "enter.js").read_text(encoding="utf-8")
+        self.assertIn("html.en-open .sh-pill{right:var(--en-hi,16px)}", css)
+        self.assertNotIn("margin-right:176px", css)
+        self.assertIn('root.style.setProperty("--en-hi"', script)
+
+
 if __name__ == "__main__":
     unittest.main()

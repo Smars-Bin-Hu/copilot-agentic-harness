@@ -300,6 +300,7 @@
   "board.select.clear": "Clear",
   "board.select.all": "Tick the closed tasks listed",
   "board.title": "Task board",
+  "board.stamp": "Updated {as_of}",
   "board.subtitle": "Made at {as_of}. To update the numbers, run harness task board again; run in your own terminal, it keeps the page up to date by itself.",
   "board.subtitle.fresh": "Made at {as_of}. Updated every {seconds} seconds; when harness task board stops in the terminal, the numbers stop changing.",
   "board.kpi.open": "Open tasks",

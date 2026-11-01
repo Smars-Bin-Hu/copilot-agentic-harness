@@ -500,14 +500,19 @@ class PageTests(unittest.TestCase):
 
     def test_the_light_theme_floor_and_dust_are_stronger_than_the_old_ones_and_still_quiet(self) -> None:
         tokens = source("tokens.css")
-        light = re.search(r'--sp-rgb:13,14,16;--sp-dust-o:([\d.]+);--sp-grid:([\d.]+);--sp-grid2:([\d.]+);--sp-horizon:([\d.]+);--sp-glow:([\d.]+)', tokens)
+        light = re.search(r'--sp-rgb:13,14,16;--sp-dust-o:([\d.]+);--sp-grid:([\d.]+);--sp-grid2:([\d.]+);--sp-glow:([\d.]+)', tokens)
         self.assertIsNotNone(light)
-        dust, grid, grid2, horizon, glow = (float(value) for value in light.groups())
+        dust, grid, grid2, glow = (float(value) for value in light.groups())
         self.assertGreater(grid * 1.0, 0.055)  # the draft's floor was 0.10 x 0.55
-        self.assertGreater(horizon, 0.1)
+        self.assertGreater(glow, 0)
         self.assertLessEqual(dust * 0.8 * 1.2, 0.36)  # the darkest dust dot still leaves soft text above 4.5:1 (the check is the contrast script, run on real pages)
-        self.assertLessEqual(horizon, 0.3)
         self.assertLessEqual(grid2, 0.25)
+
+    def test_the_horizon_has_no_line(self) -> None:
+        css = source("space.css")
+        self.assertIn("background:linear-gradient(to bottom,transparent,rgba(var(--sp-rgb),var(--sp-glow)) 50%,transparent)", css)  # it fades both ways, so it has no edge
+        self.assertNotIn("#sp-horizon::before", css)
+        self.assertNotIn("--sp-horizon", source("tokens.css"))
 
     def test_the_settings_have_the_background_part(self) -> None:
         wall = source("wall.js")

@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.23 (2026-11-01)
+
+### Changed
+
+- **The 3D floor has no bright line across the page.** The horizon is now a soft band of light that fades both ways, and the long grid lines across the floor are as quiet as the others.
+- **On the Enter screen the greeting has the top right corner**, and Search stands to its left.
+- **The board's header shows the time of the numbers in full.** The sentence it used to hold, which was cut off, is a tip on the time; a page on disk also says it in its footer.
+
 ## 1.6.22 (2026-11-01)
 
 ### Added

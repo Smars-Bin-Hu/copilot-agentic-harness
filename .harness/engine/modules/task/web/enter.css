@@ -23,9 +23,10 @@ html.has-wall .en-chk-l .m{background:rgba(8,9,10,.5)}
 html[data-theme="light"]:not(.has-wall) .en-chk-l .m{background:linear-gradient(var(--hot-bg),var(--hot-bg)),rgba(255,255,255,.9)}
 
 /* top right: only the greeting (the search is the fixed one of shell.css, which keeps the room at the right) */
-.en-top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:flex-end;padding:22px 32px;z-index:3;pointer-events:none}
-.en-hi{max-width:min(56vw,560px);margin-right:176px;font:500 13px/20px var(--sans);color:var(--en-cap);letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.en-top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:flex-end;padding:21px 24px;z-index:3;pointer-events:none}
+.en-hi{max-width:min(56vw,560px);font:500 13px/20px var(--sans);color:var(--en-cap);letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .en-hi b{color:var(--en-ink);font-weight:600}
+html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; enter.js gives its width */
 
 /* the wordmark */
 .en-stage{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2;padding-bottom:6vh;cursor:crosshair;will-change:transform}

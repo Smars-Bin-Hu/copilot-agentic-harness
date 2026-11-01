@@ -300,6 +300,7 @@
   "board.select.clear": "清除",
   "board.select.all": "选中列出的已关闭任务",
   "board.title": "任务看板",
+  "board.stamp": "更新于 {as_of}",
   "board.subtitle": "生成于 {as_of}。要更新数据，请重新运行 harness task board；在自己的终端里运行时，页面会自动保持最新。",
   "board.subtitle.fresh": "生成于 {as_of}，每 {seconds} 秒更新一次；终端里的 harness task board 停止后，数据不再更新。",
   "board.kpi.open": "进行中的任务",

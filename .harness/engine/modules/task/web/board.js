@@ -244,8 +244,10 @@
   tableBox.addEventListener("mouseleave", () => { hovering = false; });
   const more = h("p", {class: "sub"});
   const stamp = h("span");
+  const stampNote = h("span");  // a page on disk says in the footer how to get fresher numbers; the header has room for the time only
   document.querySelector("main").classList.add("wide");
 
+  const paintStamp = () => { stamp.textContent = t("board.stamp", {as_of: when(asOf, 0, 19)}); stamp.title = subtitle(); stampNote.textContent = subtitle(); };
   const subtitle = () => (DATA.serve ? t("board.subtitle.served", {as_of: when(asOf, 0, 19), seconds: DATA.serve.refresh})
     : t(DATA.refresh ? "board.subtitle.fresh" : "board.subtitle", {as_of: when(asOf, 0, 19), seconds: DATA.refresh}));
 
@@ -286,7 +288,7 @@
 
   function drawTable() {
     if (canArchive) DATA.serve.archive_to = archiveTo;  // the single-row button reads it
-    stamp.textContent = subtitle();
+    paintStamp();
     more.textContent = hidden ? t("board.closed.more", {count: hidden}) : "";
     if (!rows.length) { tableBox.replaceChildren(firstTask()); return; }
     const shownRows = listed();
@@ -411,7 +413,7 @@
     h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: "sub"}, h("b", null, t("board.title")), " \u00b7 ", stamp)), h("div", {class: "lb-right"}, shift, seg)), SHELL.banner(), said,
     kpis, controls, lobby.node,
     pick, tableBox, more,
-    h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint")), copyright());
+    h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint"), DATA.serve ? null : " ", DATA.serve ? null : stampNote), copyright());
   draw();
   drawMode();
   SHELL.vs(vscode);
@@ -434,7 +436,7 @@
     archiveTo = data.archive_to || "";
     SHELL.vs(data.vscode);
     const text = JSON.stringify([data.rows, data.hidden, data.vscode || null]);
-    if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else stamp.textContent = subtitle();
+    if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else paintStamp();
   }
   if (typeof SERVE !== "undefined") {
     SERVE.start(app);

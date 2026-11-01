@@ -1,7 +1,7 @@
 """The wallpaper of the board (1.6.19, B89): the pictures of one folder the person chose, read only.
 
 The pictures stay on this computer and are never shipped or committed. The folder is the person's own setting: the key `wallpaper_dir` of `user.override.json`
-(git-ignored), written by a paired browser only (`/api/wallfolder`). Nothing in a guardrail file changes.
+(git-ignored), written by a paired browser only (`/api/wallfolder`, or `/api/wallpick`, which asks the system's folder window). Nothing in a guardrail file changes.
 
 What the server hands out, and nothing else:
 - the names (and size and time) of the files directly inside that one folder whose extension is jpg, jpeg, png or webp, whose first bytes really are that kind of picture,
@@ -15,12 +15,23 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core import config
 
 KEY = "wallpaper_dir"
+PICK_SECONDS = 300  # how long a person may look for the folder in the window of the system
+PROMPT_VAR = "HARNESS_WALL_PROMPT"
+MAC_PICK = ("on run argv", "activate", "POSIX path of (choose folder with prompt (item 1 of argv) default location (path to pictures folder))", "end run")
+WINDOWS_PICK = (
+    "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; "
+    "$owner = New-Object System.Windows.Forms.Form -Property @{TopMost = $true}; "
+    "$box = New-Object System.Windows.Forms.FolderBrowserDialog; $box.Description = $env:" + PROMPT_VAR + "; "
+    "if ($box.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $box.SelectedPath }"
+)
 TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 WANT = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png", ".webp": "webp"}  # what the first bytes must show for each extension
 MAX_BYTES = 40 * 1024 * 1024  # a picture of 8K can be 20 MB; more than this is not a wallpaper
@@ -59,6 +70,32 @@ def directory(text: str) -> Optional[Path]:
         return path if path.is_dir() else None
     except (OSError, ValueError, RuntimeError):
         return None
+
+
+def picker(prompt: str) -> Optional[List[str]]:
+    """The command that opens the system's window for choosing a folder, or None where there is none (a browser cannot give the path of a folder). The prompt is never part of a script."""
+    if sys.platform == "darwin":
+        return ["osascript", *[part for line in MAC_PICK for part in ("-e", line)], prompt]
+    if sys.platform == "win32":
+        return ["powershell", "-NoProfile", "-NonInteractive", "-STA", "-Command", WINDOWS_PICK]
+    return None
+
+
+def pick(prompt: str, timeout: float = PICK_SECONDS) -> str:
+    """Opens that window and waits for the person: the folder they chose, or "" when they cancelled or took too long. OSError: the window could not be opened, so the path is typed."""
+    command = picker(prompt)
+    if command is None:
+        raise OSError("no folder window on this system")
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    try:
+        done = subprocess.run(command, capture_output=True, timeout=timeout, env={**os.environ, PROMPT_VAR: prompt}, creationflags=flags)
+    except subprocess.TimeoutExpired:
+        return ""
+    if done.returncode == 0:
+        return done.stdout.decode("utf-8", "replace").strip()
+    if b"(-128)" in done.stderr:  # Cancel on a Mac; on Windows it is an empty answer
+        return ""
+    raise OSError(done.stderr.decode("utf-8", "replace").strip()[:300])
 
 
 def kind(path: Path) -> str:

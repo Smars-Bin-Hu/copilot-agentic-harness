@@ -19,7 +19,7 @@ Who may do what:
   approval is not kept: no message to the agent holds it.
   `/api/language` (B85, paired POST only) sets the `language` setting: it writes `user.override.json`, the person's own file, and the board reads it again at once.
   Wallpaper (B89): `/api/wall` (a read, like `/api/board`) lists the pictures of the one folder the person chose; `/wall/<name>` hands out one of them (GET; see `wallpaper.py` for what is let through);
-  `/api/wallfolder` (paired POST only) sets that folder in `user.override.json`, the person's own file. The server never resizes a picture: the page does.
+  `/api/wallfolder` (paired POST only) sets that folder in `user.override.json`, the person's own file; `/api/wallpick` (paired POST only) does so from the system's folder window. The server never resizes a picture: the page does.
   `/api/draft` lists, adds, edits, deletes and switches the notes of `.task/drafts.json`; `/api/setting` sets the task's model and thinking level (`chat.model`); `review set` runs through `/api/act`.
 - New task (1.6, B73): `/api/create` (paired POST only; `step` options, preview or act) makes a chat in VS Code for a task the agent opens (`chatnew` checks every field again, `vslink.create` does it). It fails
   with a clear reason when VS Code is not ready; nothing is made then.
@@ -168,6 +168,7 @@ class Board:
         self.code = secrets.token_urlsafe(12)
         self.sessions: set = set()
         self.lock = threading.Lock()
+        self.wall_window = threading.Lock()  # one folder window at a time
         self.language_stamp: List[int] = []
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
         self.ready = readiness.Ready(root, self.link)  # the Enter screen (`/api/ready`)
@@ -320,6 +321,18 @@ class Board:
                 raise CommandError(say("serve.wall.missing", folder=text[:200]))
             self.keep_override(wallpaper.KEY, str(found))
         return wallpaper.listing(self.root)
+
+    def pick_wall_folder(self) -> Dict[str, Any]:
+        """The folder chosen in the system's window, which waits for the person on this request's own thread (a paired browser only). Cancelled: nothing changes."""
+        if not self.wall_window.acquire(blocking=False):
+            raise CommandError(say("serve.wall.picking"))
+        try:
+            text = wallpaper.pick(say("serve.wall.prompt"))
+        except OSError as error:
+            raise CommandError(say("serve.wall.nopicker")) from error
+        finally:
+            self.wall_window.release()
+        return {"wall": self.set_wall_folder({"folder": text}), "cancelled": False} if text else {"wall": wallpaper.listing(self.root), "cancelled": True}
 
     def desk_page(self, name: str) -> str:
         return taskhtml.desk_page(self.desk(name), self.serve_info({}, DESK_REFRESH))
@@ -918,6 +931,13 @@ def handler_for(board: Board) -> type:
                     result = board.set_wall_folder(data)
                     print(say("serve.did", action="wallpaper folder", task="-"), flush=True)
                     return self.answer(200, {"wall": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown in the settings panel
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/wallpick":  # the same folder, chosen in the system's window: the paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    return self.answer(200, board.pick_wall_folder())
                 except Exception as error:  # noqa: BLE001 - a refusal is shown in the settings panel
                     return self.answer(409, {"error": str(error)})
             if path == "/api/board":

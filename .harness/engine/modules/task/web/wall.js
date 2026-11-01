@@ -14,6 +14,7 @@ const WALL = (function () {
   const root = document.documentElement;
   const PICK = "harness.wall", ROT = "harness.wall.rot";
   const CACHE = "harness-wall-v1";
+  const PICK_WAIT = 305;  // seconds: a little over wallpaper.PICK_SECONDS, so the server is the one that gives up
   const FULL_W = 2560, THUMB_W = 192, MAX_SIDE = 20000, MAX_PIXELS = 120e6;
   const TWIN = "invert(1) hue-rotate(180deg) contrast(.55) brightness(1.42) saturate(1.25)";
   const memory = {};
@@ -316,7 +317,9 @@ const WALL = (function () {
       all[to].tabIndex = 0; all[to].focus();
     });
     input.addEventListener("input", () => { input.dataset.typed = "1"; });
-    const submit = () => setFolder(input.value);
+    const typed = () => setFolder(() => SERVE.call("/api/wallfolder", {folder: input.value}, 8));
+    const chosen = () => { say.textContent = t("board.wall.picking"); say.hidden = false; return setFolder(() => SERVE.call("/api/wallpick", {}, PICK_WAIT)); };
+    const submit = () => (input.value.trim() === ((W.info && W.info.folder) || "") ? chosen() : typed());  // nothing new typed: the window of the system. An emptied field clears the folder.
     change.addEventListener("click", submit);
     input.addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); submit(); } });
     rot.addEventListener("change", () => { keep.set(ROT, rot.checked ? "1" : "0"); arm(); });
@@ -361,18 +364,21 @@ const WALL = (function () {
     rot.disabled = off; rotNote.hidden = !off;
     motion.checked = SPACE.motion(); motion.disabled = off || SPACE.reduced();
   }
-  async function setFolder(text) {
+  async function setFolder(ask) {
     bad.hidden = true; change.disabled = true;
     try {
-      const data = await SERVE.call("/api/wallfolder", {folder: text}, 8);
+      const data = await ask();
       delete input.dataset.typed;
       take(data.wall);
-      if (data.wall.state === "ok") say.textContent = t("board.wall.saved", {n: data.wall.names.length});
+      const kept = data.wall.state === "ok" && !data.cancelled;
+      if (kept) say.textContent = t("board.wall.saved", {n: data.wall.names.length});
       render();
-      if (data.wall.state === "ok") say.textContent = t("board.wall.saved", {n: data.wall.names.length}) + " " + state();
+      if (kept) say.textContent = t("board.wall.saved", {n: data.wall.names.length}) + " " + state();
     } catch (error) {
+      render();
       bad.textContent = error && error.message ? error.message : t("board.wall.state.off");
       bad.hidden = false;
+      input.focus();
     }
     change.disabled = false;
   }

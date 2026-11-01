@@ -113,7 +113,7 @@ const REPLY = (function () {
     }, (error) => {
       mine.busy = false;
       const fallback = error && error.data && error.data.fallback;
-      said.replaceChildren(...SERVE.reasons((error && error.message) || String(error)), fallback ? h("p", {class: "sub"}, t("desk.send.copy.hint")) : null, fallback ? copyFallback(fallback) : null);
+      said.replaceChildren(...SERVE.reasons((error && error.message) || String(error)), ...(fallback ? [h("p", {class: "sub"}, t("desk.send.copy.hint")), copyFallback(fallback)] : []));
       sync();
     });
   }

@@ -106,12 +106,22 @@
   // The actions of a row, in three classes (the first two are in the row, the last in the menu behind the three dots):
   // 1. what the task waits for now (orange: confirm, approve, recover...), 2. speaking to the agent at work (room is kept: a later block fills `.act-talk`),
   // 3. the rest (pause or resume, autorun, close, the checks, copy a command). A closed task has only "archive": shown at once.
-  let openMenu = null;
+  let openMenu = null, menuButton = null;
   // A refresh that comes while a menu is open waits (`later`): drawing the rows again would close the menu under the person's hand. It is drawn when the menu closes.
   let later = null;
-  const closeMenu = (flush) => { if (openMenu) { openMenu.remove(); openMenu = null; } if (flush !== false && later) { const data = later; later = null; apply(data); } };
+  const closeMenu = (flush) => { if (openMenu) { openMenu.remove(); openMenu = null; menuButton = null; } if (flush !== false && later) { const data = later; later = null; apply(data); } };
   document.addEventListener("click", (event) => { if (openMenu && !openMenu.contains(event.target) && !event.target.closest(".act-more")) closeMenu(); });
   document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMenu(); });
+  // The list scrolls sideways inside its own box, and that box cuts off whatever leaves it: the menu of a row hangs from the page, beside its button. The lobby card has no such box, and its
+  // menu stays in the card, because the pointer must not leave the card to reach it.
+  function hangMenu() {
+    if (!openMenu || !openMenu.classList.contains("hung")) return;
+    const at = menuButton.getBoundingClientRect(), width = openMenu.offsetWidth, height = openMenu.offsetHeight, gap = 4, edge = 8;
+    openMenu.style.left = Math.max(edge, Math.min(at.right - width, window.innerWidth - width - edge)) + "px";
+    openMenu.style.top = Math.max(edge, at.bottom + gap + height <= window.innerHeight - edge ? at.bottom + gap : at.top - gap - height) + "px";
+  }
+  document.addEventListener("scroll", hangMenu, {capture: true, passive: true});  // capture: the sideways scroll of the list's box does not bubble
+  window.addEventListener("resize", hangMenu);
 
   function menuFor(row, items, more) {
     const menu = h("div", {class: "act-menu", role: "menu"});
@@ -129,7 +139,7 @@
       copy.append(line);
     }
     const toggle = h("button", {type: "button", class: "act item"}, t("board.menu.copy"));
-    toggle.addEventListener("click", () => { copy.hidden = !copy.hidden; });
+    toggle.addEventListener("click", () => { copy.hidden = !copy.hidden; hangMenu(); });
     menu.append(h("div", {class: "menu-title"}), toggle, copy);
     return menu;
   }
@@ -146,11 +156,13 @@
     if (rest.length) {
       const more = h("button", {type: "button", class: "act act-more", title: t("board.menu.more"), "aria-haspopup": "menu", "aria-label": t("board.menu.more")}, "\u22ef");
       more.addEventListener("click", () => {
-        const again = openMenu && openMenu.previousElementSibling === more;
+        const again = menuButton === more;
         closeMenu(again);
         if (again) return;
         openMenu = menuFor(row, rest, more);
-        more.after(openMenu);
+        menuButton = more;
+        if (more.closest(".scroll")) { openMenu.classList.add("hung"); document.body.append(openMenu); hangMenu(); }
+        else more.after(openMenu);
       });
       nodes.push(more);
     }

@@ -72,6 +72,34 @@ setImmediate(() => {
         done = run_node(script)
         self.assertEqual(done.returncode, 0, done.stderr)
 
+    def test_replace_children_is_never_handed_a_null(self) -> None:
+        for path in sorted(WEB.glob("*.js")):
+            source = path.read_text(encoding="utf-8")
+            for found in re.finditer(r"\.replaceChildren\(", source):
+                depth, at, quote, top = 1, found.end(), "", []
+                while depth and at < len(source):
+                    char = source[at]
+                    if quote:
+                        at += 1 if char == "\\" else 0
+                        quote = "" if char == quote else quote
+                    elif char in "\"'`":
+                        quote = char
+                    elif char in "([{":
+                        depth += 1
+                    elif char in ")]}":
+                        depth -= 1
+                    elif depth == 1:
+                        top.append(char)
+                    at += 1
+                # the DOM writes a null argument as the word "null"; h() leaves it out, this call does not
+                self.assertNotIn(": null", "".join(top), f"{path.name}: {source[found.start():found.start() + 90]}")
+
+    def test_the_menu_of_a_row_is_not_cut_off_by_the_box_of_the_list(self) -> None:
+        source = (WEB / "board.js").read_text(encoding="utf-8")
+        self.assertIn('if (more.closest(".scroll")) { openMenu.classList.add("hung"); document.body.append(openMenu); hangMenu(); }', source)
+        self.assertIn("else more.after(openMenu);", source)  # the lobby card keeps its menu, or the pointer would leave the card
+        self.assertIn(".act-menu.hung{position:fixed", (WEB / "ui.css").read_text(encoding="utf-8"))
+
     def test_a_menu_that_is_open_holds_the_poll_and_not_a_click(self) -> None:
         source = (WEB / "board.js").read_text(encoding="utf-8")
         refresh = between(source, "  function refresh(strict)", "  if (typeof SERVE !== \"undefined\") {\n    SERVE.start")

@@ -246,7 +246,7 @@ const LIVE = (function () {
     calm.dataset.sig = sig;
     const open = button ? h("button", {type: "button", class: "act hot live big"}, t("desk.live.open")) : null;
     if (open) open.addEventListener("click", () => { open.disabled = true; SERVE.post("/api/open", {}).then(() => { setTimeout(() => { open.disabled = false; }, 1500); }, (error) => { open.disabled = false; SERVE.failed(error, st.chat && st.chat.title); }); });
-    calm.replaceChildren(robot(), h("h3", null, title), why ? h("p", null, why) : null, open);
+    calm.replaceChildren(...[robot(), h("h3", null, title), why ? h("p", null, why) : null, open].filter(Boolean));
   }
 
   function onData(data) {

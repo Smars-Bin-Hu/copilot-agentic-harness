@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.21 (2026-11-01)
+
+### Added
+
+- **Change opens a folder window.** With nothing new typed in the Folder field, **Change** opens your system's window for choosing a folder (Mac and Windows). If that window cannot open, the panel asks you to type the path. A path you type still works, and an emptied field clears the folder. `/api/wallpick` (paired POST) does this.
+
+### Fixed
+
+- **The menu behind the three dots in the list is no longer cut off.** The box of the list clipped it; on a board with one task it could not be seen at all. It now hangs from the page, beside its button, and opens upward near the bottom of the window.
+- **The word `null` no longer shows** on the New task result, in a refused reply, or on the Live tab with nothing to open.
+- **The example under Name in New task** is a neutral name.
+
 ## 1.6.20 (2026-11-01)
 
 ### Fixed

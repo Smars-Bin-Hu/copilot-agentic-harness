@@ -204,8 +204,8 @@ const CHAT = (function () {
         clearTimeout(state.timer);
         const done = h("button", {type: "button", class: "act hot"}, t("board.new.close"));
         done.addEventListener("click", () => { close(); SERVE.done(); });
-        view.box.replaceChildren(h("h2", null, t("board.new.title") + " \u00b7 " + found.name), h("p", null, t("board.new.done")),
-          found.warn ? h("p", {class: "bad"}, found.warn) : found.unchecked ? h("p", {class: "sub"}, t("board.new.done.unchecked")) : null, h("div", {class: "row send-actions"}, done));
+        view.box.replaceChildren(...[h("h2", null, t("board.new.title") + " \u00b7 " + found.name), h("p", null, t("board.new.done")),
+          found.warn ? h("p", {class: "bad"}, found.warn) : found.unchecked ? h("p", {class: "sub"}, t("board.new.done.unchecked")) : null, h("div", {class: "row send-actions"}, done)].filter(Boolean));
         done.focus();
       }, (error) => { state.busy = false; go.textContent = t("board.new.go"); sync(); said.replaceChildren(...SERVE.reasons(shown(error))); });
     });

@@ -7,7 +7,9 @@ import http.client
 import json
 import os
 import re
+import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -256,6 +258,47 @@ class WallServeTests(ServeCase):
         self.assertEqual(json.loads(self.override.read_text(encoding="utf-8")), {"name": "Ada", "language": "en"})
         self.assertEqual(self.fetch("/wall/a.jpg")[0], 404)
 
+    def test_only_a_paired_browser_opens_the_folder_window(self) -> None:
+        with mock.patch.object(wallpaper, "pick") as pick:
+            status, data, _ = self.request("POST", "/api/wallpick", {})
+        self.assertEqual((status, data.get("unpaired")), (403, True))
+        pick.assert_not_called()
+
+    def test_a_folder_chosen_in_the_window_is_kept_like_a_typed_one(self) -> None:
+        cookie = self.pair()
+        with mock.patch.object(wallpaper, "pick", return_value=str(self.folder) + "/"):
+            status, data, _ = self.request("POST", "/api/wallpick", {}, cookie=cookie)
+        self.assertEqual((status, data["cancelled"], data["wall"]["state"]), (200, False, "ok"), data)
+        self.assertEqual(json.loads(self.override.read_text(encoding="utf-8"))["wallpaper_dir"], str(self.folder.resolve()))
+
+    def test_cancel_changes_nothing(self) -> None:
+        cookie = self.pair()
+        self.request("POST", "/api/wallfolder", {"folder": str(self.folder)}, cookie=cookie)
+        before = self.override.read_text(encoding="utf-8")
+        with mock.patch.object(wallpaper, "pick", return_value=""):
+            status, data, _ = self.request("POST", "/api/wallpick", {}, cookie=cookie)
+        self.assertEqual((status, data["cancelled"], data["wall"]["state"]), (200, True, "ok"))
+        self.assertEqual(self.override.read_text(encoding="utf-8"), before)
+
+    def test_no_window_says_to_type_the_path_and_a_second_window_is_refused(self) -> None:
+        cookie = self.pair()
+        with mock.patch.object(wallpaper, "pick", side_effect=OSError("no window")):
+            status, data, _ = self.request("POST", "/api/wallpick", {}, cookie=cookie)
+        self.assertEqual((status, data["error"]), (409, messages.text("serve.wall.nopicker")))
+        started, finish, answers = threading.Event(), threading.Event(), []
+        def waits(prompt: str) -> str:
+            started.set()
+            finish.wait(5)
+            return ""
+        with mock.patch.object(wallpaper, "pick", waits):
+            first = threading.Thread(target=lambda: answers.append(self.request("POST", "/api/wallpick", {}, cookie=cookie)[0]))
+            first.start()
+            self.assertTrue(started.wait(5))
+            status, data, _ = self.request("POST", "/api/wallpick", {}, cookie=cookie)
+            finish.set()
+            first.join(5)
+        self.assertEqual((status, data["error"], answers), (409, messages.text("serve.wall.picking"), [200]))
+
     def test_a_folder_that_is_not_one_is_refused_and_nothing_is_written(self) -> None:
         cookie = self.pair()
         for text in (r"C:\Users\me\Pictures\Wall", "relative/dir", str(self.folder / "a.jpg"), str(self.folder / "missing"), "~/no-such-folder-xyz"):
@@ -274,6 +317,44 @@ class WallServeTests(ServeCase):
         self.override.write_text(json.dumps({"wallpaper_dir": str(self.root / ".harness" / "policies")}), encoding="utf-8")
         self.assertEqual(self.fetch("/wall/gate.json")[0], 404)  # a folder may be chosen, but only pictures leave it
         self.assertEqual(self.fetch("/wall/user.override.json")[0], 404)
+
+
+class FolderWindowTests(unittest.TestCase):
+    def run_with(self, returncode: int = 0, stdout: bytes = b"", stderr: bytes = b"") -> str:
+        with mock.patch.object(wallpaper.subprocess, "run", return_value=subprocess.CompletedProcess([], returncode, stdout, stderr)), mock.patch.object(wallpaper.sys, "platform", "darwin"):
+            return wallpaper.pick("Choose")
+
+    def test_a_mac_asks_osascript_and_the_prompt_is_not_part_of_the_script(self) -> None:
+        with mock.patch.object(wallpaper.sys, "platform", "darwin"):
+            command = wallpaper.picker('a "quoted" prompt')
+        self.assertEqual((command[0], command[-1]), ("osascript", 'a "quoted" prompt'))
+        self.assertNotIn("quoted", "".join(command[:-1]))
+
+    def test_windows_asks_powershell_on_one_thread_and_reads_the_prompt_from_the_environment(self) -> None:
+        with mock.patch.object(wallpaper.sys, "platform", "win32"):
+            command = wallpaper.picker("a prompt")
+        self.assertEqual(command[0], "powershell")
+        self.assertIn("-STA", command)  # a Windows Forms dialog needs it
+        self.assertNotIn("a prompt", " ".join(command))
+        self.assertIn("$env:" + wallpaper.PROMPT_VAR, command[-1])
+
+    def test_a_system_with_no_window_is_an_error_the_person_can_answer_by_typing(self) -> None:
+        with mock.patch.object(wallpaper.sys, "platform", "linux"), self.assertRaises(OSError):
+            wallpaper.pick("Choose")
+
+    def test_the_answers_of_the_window(self) -> None:
+        self.assertEqual(self.run_with(stdout="/Users/me/图片/\n".encode("utf-8")), "/Users/me/图片/")
+        self.assertEqual(self.run_with(), "")  # Cancel on Windows
+        self.assertEqual(self.run_with(1, stderr=b"execution error: User canceled. (-128)"), "")
+        with self.assertRaises(OSError):
+            self.run_with(1, stderr=b"blocked by policy")
+
+    def test_a_window_left_open_is_no_answer_and_a_missing_tool_is_an_error(self) -> None:
+        with mock.patch.object(wallpaper.sys, "platform", "darwin"):
+            with mock.patch.object(wallpaper.subprocess, "run", side_effect=subprocess.TimeoutExpired("osascript", 1)):
+                self.assertEqual(wallpaper.pick("Choose"), "")
+            with mock.patch.object(wallpaper.subprocess, "run", side_effect=FileNotFoundError("osascript")), self.assertRaises(OSError):
+                wallpaper.pick("Choose")
 
 
 class PageTests(unittest.TestCase):
@@ -311,7 +392,7 @@ class PageTests(unittest.TestCase):
 
     def test_the_wall_asks_the_server_for_two_calls_and_the_picture_route_only(self) -> None:
         wall = source("wall.js")
-        self.assertEqual(sorted(set(re.findall(r'SERVE\.call\("(/api/[a-z]+)"', wall))), ["/api/wall", "/api/wallfolder"])
+        self.assertEqual(sorted(set(re.findall(r'SERVE\.call\("(/api/[a-z]+)"', wall))), ["/api/wall", "/api/wallfolder", "/api/wallpick"])
         self.assertEqual(sorted(set(re.findall(r'SERVE\.file\("(/[a-z]+/)"', wall))), ["/wall/"])
         self.assertNotIn("fetch(", wall)  # the network stays in serve.js, which a page on disk does not have
         for word in ("/api/act", "/api/send", "/api/steer", "/api/stop", "/api/close", "/api/create", "approve", "http://", "https://"):

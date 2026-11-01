@@ -251,6 +251,11 @@ class PageTests(unittest.TestCase):
         self.assertIn("node.hidden = !node.textContent;", serve)
         self.assertIn("stale ?", serve)  # old code still says so in the line
 
+    def test_a_new_model_fills_thinking_and_context_at_once(self) -> None:
+        desk = source("desk.js")
+        self.assertIn('fillFor(pick.value, "", 0); save(pick.value, "", 0);', desk)  # the row is not drawn again while its control has the focus
+        self.assertIn("sizes.some((item) => item.id === size) ? size :", desk)  # a size of another model never stays
+
     def test_every_icon_of_the_panel_has_a_size_in_the_style(self) -> None:
         css = source("live.css") + source("ui.css")
         for rule in (".rp-attach svg{flex:none;width:15px", ".rp-stop svg{flex:none;width:13px", ".rp-file>svg{flex:none;width:14px", ".rp-file-x svg{width:12px"):

@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.27 (2026-11-01)
+
+### Fixed
+
+- **Changing the model no longer breaks Thinking and Context.** They kept the choices of the old model, so the next change was refused. They now follow the model at once.
+
 ## 1.6.26 (2026-11-01)
 
 ### Changed

@@ -501,16 +501,22 @@
     const chosen = models.find((item) => item.id === now);
     const pick = h("select", {"aria-label": t("desk.set.model"), disabled: info.ready && models.length ? null : "disabled", title: info.ready ? "" : t("desk.set.model.off")},
       chosen ? null : h("option", {value: ""}, t("desk.set.model.chat")), models.map((item) => h("option", {value: item.id, selected: item.id === now ? "" : null}, item.name)));
-    const levels = chosen && chosen.thinking ? chosen.thinking.levels : [];
-    const level = info.thinking || (desk.chat && desk.chat.effort) || "";
-    const think = h("select", {"aria-label": t("desk.set.thinking"), disabled: levels.length ? null : "disabled"},
-      levels.includes(level) ? null : h("option", {value: ""}, t("desk.set.thinking.default")), levels.map((item) => h("option", {value: item, selected: item === level ? "" : null}, item)));
-    const sizes = chosen && chosen.context ? chosen.context.sizes : [];
-    const size = info.context || (chosen && chosen.context ? chosen.context.default : 0);
-    const room = h("select", {"aria-label": t("desk.set.context"), title: t("desk.set.context.tip"), disabled: sizes.length ? null : "disabled"},
-      sizes.length ? sizes.map((item) => h("option", {value: item.id, selected: item.id === size ? "" : null}, item.label)) : h("option", {value: ""}, t("desk.set.thinking.default")));
+    const think = h("select", {"aria-label": t("desk.set.thinking")});
+    const room = h("select", {"aria-label": t("desk.set.context"), title: t("desk.set.context.tip")});
+    // Thinking and Context offer what the model has. They are filled here again when the model changes: this row is not drawn again while one of its controls has the focus.
+    function fillFor(id, level, size) {
+      const found = models.find((item) => item.id === id);
+      const levels = found && found.thinking ? found.thinking.levels : [];
+      think.replaceChildren(...[levels.includes(level) ? null : h("option", {value: ""}, t("desk.set.thinking.default")), ...levels.map((item) => h("option", {value: item, selected: item === level ? "" : null}, item))].filter(Boolean));
+      think.disabled = !levels.length;
+      const sizes = found && found.context ? found.context.sizes : [];
+      const wanted = sizes.some((item) => item.id === size) ? size : found && found.context ? found.context.default : 0;
+      room.replaceChildren(...(sizes.length ? sizes.map((item) => h("option", {value: item.id, selected: item.id === wanted ? "" : null}, item.label)) : [h("option", {value: ""}, t("desk.set.thinking.default"))]));
+      room.disabled = !sizes.length;
+    }
+    fillFor(now, info.thinking || (desk.chat && desk.chat.effort) || "", info.context);
     const save = (id, thinking, context) => SERVE.post("/api/setting", {task: desk.name, id, thinking, context}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
-    pick.addEventListener("change", () => save(pick.value, "", 0));  // a new model starts at its own default level and size
+    pick.addEventListener("change", () => { fillFor(pick.value, "", 0); save(pick.value, "", 0); });  // a new model starts at its own default level and size
     think.addEventListener("change", () => save(pick.value, think.value, Number(room.value) || 0));
     room.addEventListener("change", () => save(pick.value, think.value, Number(room.value) || 0));
     const hostSetting = (key, label) => {  // offered by the host, told to it at once; it holds from the next turn

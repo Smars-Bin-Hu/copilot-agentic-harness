@@ -229,7 +229,7 @@
         desk.report ? [" · ", h("a", {href: desk.report.split("/").map(encodeURIComponent).join("/")}, t("desk.report"))] : null,
         served() ? [" · ", h("a", {href: "/snapshot/" + encodeURIComponent(desk.name), download: "", title: t("desk.save.hint")}, t("desk.save"))] : null),
       h("div", {class: "title-row"}, h("h1", null, desk.name), roundSwitch(), state),
-      h("div", {class: "sub"}, t("desk.subtitle", {kind, round: desk.round, created: when(desk.created_at, 0, 16), updated: when(desk.updated_at, 0, 16)}),
+      desk.status === "new" ? null : h("div", {class: "sub"}, t("desk.subtitle", {kind, round: desk.round, created: when(desk.created_at, 0, 16), updated: when(desk.updated_at, 0, 16)}),  // a task not started has no kind, no round, no dates
         desk.domains.length ? " · " + t("desk.domains", {names: desk.domains.join(", ")}) : "", desk.autorun ? [" · ", tag(t("desk.autorun"), "good")] : null),
       desk.forked_from || desk.forked_to.length ? h("div", {class: "sub"},  // the tasks this one came from and went on to (`task fork`)
         desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null,
@@ -485,7 +485,7 @@
   }
 
   function actions() {
-    if (desk.status !== "open") return h("section", {class: "card actions quiet"}, h("p", {class: "sub"}, t("desk.actions.closed")));
+    if (desk.status !== "open") return h("section", {class: "card actions quiet"}, h("p", {class: "sub"}, t(desk.status === "new" ? "desk.actions.new" : "desk.actions.closed")));
     const optional = ["pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
     const items = desk.actions.filter((item) => !optional.includes(item.action));
     const rest = desk.actions.filter((item) => optional.includes(item.action));

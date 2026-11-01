@@ -3,7 +3,8 @@
 Python gives the numbers and puts the page together; it draws nothing. The front end is in `web/`:
 
   task.html, board.html   the skeleton of each page; desk.html: one task as the board server sends it (M16)
-  page.css                the look, shared
+  tokens.css, ui.css      the look, shared: the colours of the light and the dark theme, and how things look under them; theme.js sets the theme before the page is drawn
+  page.css, lobby.css     where things go, shared / the board's lobby
   common.js               helpers shared by both pages
   task.js, board.js       how each page is drawn from its data; desk.js the task page, diffview.js the code compare of its Changes tab, highlight.js the colours of code, serve.js the server's buttons, chat.js the send panel, steer and stop
 
@@ -25,8 +26,8 @@ from core import messages
 from core.paths import cli_command
 
 WEB = Path(__file__).resolve().parent / "web"
-MARKS = re.compile("|".join(re.escape(mark) for mark in ("<!--REFRESH-->", "<!--TITLE-->", "<!--NOSCRIPT-->", "/*CSS*/", "<!--DATA-->", "/*JS*/")))
-TEXT_PREFIXES = ("report.", "board.", "insight.", "unit.", "task.kind.", "task.tier.", "desk.", "stage.")
+MARKS = re.compile("|".join(re.escape(mark) for mark in ("<!--REFRESH-->", "<!--TITLE-->", "<!--NOSCRIPT-->", "/*THEME*/", "/*CSS*/", "<!--DATA-->", "/*JS*/")))
+TEXT_PREFIXES = ("report.", "board.", "insight.", "unit.", "task.kind.", "task.tier.", "task.waiting.", "desk.", "stage.")
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -50,14 +51,19 @@ def read(name: str) -> str:
     return (WEB / name).read_text(encoding="utf-8")
 
 
+LOOK = ["tokens.css", "page.css"]  # first: the tokens and where things go ...
+FINISH = ["ui.css"]  # ... last: how they look, over the rest
+
+
 def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], refresh: int = 0, styles: Optional[List[str]] = None) -> str:
-    """One file: the skeleton with the style, the scripts and the data in it."""
+    """One file: the skeleton with the style, the scripts and the data in it. `styles`: what goes between the tokens and ui.css."""
     data = dict(data, text=page_text())
     parts = {
         "<!--REFRESH-->": f'<meta http-equiv="refresh" content="{int(refresh)}">' if refresh else "",
         "<!--TITLE-->": escape(title),
         "<!--NOSCRIPT-->": escape(say("report.noscript")),
-        "/*CSS*/": "\n".join(read(name) for name in (styles or ["page.css"])),
+        "/*THEME*/": read("theme.js"),
+        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH]),
         "<!--DATA-->": as_json(data),
         "/*JS*/": "\n".join(read(name) for name in scripts),
     }

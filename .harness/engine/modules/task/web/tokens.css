@@ -1,0 +1,30 @@
+/* The look of every page: one set of colour tokens, light and dark. Nothing else in the style sheets holds a colour that depends on the theme.
+   `data-theme` on <html> is set by theme.js: the person's choice, else the system's. Without it (no script) the page is light.
+   Colour means state only: amber = waits for you, green = working, red = failed, grey = quiet; the rest is ink on paper. */
+:root,html[data-theme="light"]{
+ --bg:#f5f5f6;--card:#ffffff;--ink:#0d0e10;--soft:#474c55;--line:rgba(13,14,16,.10);--line2:rgba(13,14,16,.20);
+ --hot:#744400;--hot-dot:#e08a00;--hot-bg:rgba(224,138,0,.13);--hot-row:rgba(224,138,0,.06);--hot-row-h:rgba(224,138,0,.10);--hot-line:rgba(224,138,0,.38);
+ --good:#0f6a3a;--good-dot:#1fa968;--good-bg:rgba(31,169,104,.12);--good-line:rgba(31,169,104,.34);
+ --bad:#b3261e;--bad-bg:rgba(220,60,50,.10);--bad-line:rgba(220,60,50,.34);
+ --btn:#0d0e10;--btn-ink:#ffffff;--btn-hover:#2a2c31;
+ --hover:rgba(13,14,16,.045);--track:rgba(13,14,16,.07);--raise:#ffffff;--kbd:rgba(13,14,16,.06);--pop:#ffffff;--shade:rgba(13,14,16,.42);
+ --model:#0d0e10;--tool:#6a6e77;--subagent:#6a6e77;--approval:#e08a00;--other:#c6c8cd;--wait:#e08a00;--usage:#555a63;
+ --robot-body:#f2f2f4;--robot-head:#ffffff;--robot-line:#16171a;--robot-visor:#16171a;--robot-feet:#d9dadd;--robot-shadow:rgba(0,0,0,.16);
+ --shadow:0 1px 2px rgba(13,14,16,.06),0 8px 24px rgba(13,14,16,.06);
+ --add-bg:rgba(31,169,104,.12);--add-no:#c8ebd9;--del-bg:rgba(220,60,50,.10);--del-no:#f3d0cc;
+ color-scheme:light;
+}
+html[data-theme="dark"]{
+ --bg:#08090a;--card:#101113;--ink:#f5f6f7;--soft:#a0a4ad;--line:rgba(255,255,255,.085);--line2:rgba(255,255,255,.17);
+ --hot:#f4b64a;--hot-dot:#f5a623;--hot-bg:rgba(245,166,35,.12);--hot-row:rgba(245,166,35,.05);--hot-row-h:rgba(245,166,35,.09);--hot-line:rgba(245,166,35,.34);
+ --good:#4fd18c;--good-dot:#3ecf8e;--good-bg:rgba(62,207,142,.11);--good-line:rgba(62,207,142,.30);
+ --bad:#ff8a80;--bad-bg:rgba(255,90,80,.11);--bad-line:rgba(255,90,80,.32);
+ --btn:#f5f6f7;--btn-ink:#08090a;--btn-hover:#ffffff;
+ --hover:rgba(255,255,255,.045);--track:rgba(255,255,255,.09);--raise:#1d1e22;--kbd:rgba(255,255,255,.08);--pop:#17181b;--shade:rgba(0,0,0,.55);
+ --model:#f5f6f7;--tool:#9a9ea7;--subagent:#9a9ea7;--approval:#f5a623;--other:#4a4d55;--wait:#f5a623;--usage:#d7d9de;
+ --robot-body:#1b1c20;--robot-head:#25272c;--robot-line:#5b5f68;--robot-visor:#050506;--robot-feet:#15161a;--robot-shadow:rgba(0,0,0,.5);
+ --shadow:0 1px 0 rgba(255,255,255,.03) inset,0 10px 30px rgba(0,0,0,.35);
+ --add-bg:rgba(62,207,142,.16);--add-no:#1d4a38;--del-bg:rgba(255,90,80,.16);--del-no:#58302c;
+ color-scheme:dark;
+}
+html{--sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;--mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,"PingFang SC","Microsoft YaHei",monospace;--r:12px}

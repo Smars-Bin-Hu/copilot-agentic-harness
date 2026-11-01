@@ -1,0 +1,198 @@
+/* The look of the board and the task page: black and white, one weight of line, one amber / green / red for state only (tokens.css).
+   It sits on top of page.css, lobby.css, diffview.css and highlight.css, which say where things go; this file says how they look.
+   A page on disk and a saved page get the same file: nothing here needs a server. */
+
+/* ---------- base ---------- */
+body{background:var(--bg);color:var(--ink);font:14px/1.55 var(--sans);font-feature-settings:"tnum" 1,"cv11" 1;-webkit-font-smoothing:antialiased;position:relative;min-height:100vh}
+main{padding-top:28px;padding-bottom:52px}main.wide{padding-top:0}
+a{color:var(--ink)}a:hover{text-decoration:underline;text-underline-offset:3px}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:6px}
+h1{font-size:15px;font-weight:600;letter-spacing:-.01em;margin:0}
+h2{font-size:14px;font-weight:600;letter-spacing:-.005em}
+.sub{color:var(--soft);font-size:12.5px}
+.sub b{color:var(--ink);font-weight:550}
+::selection{background:var(--ink);color:var(--bg)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;margin-top:14px}
+.lb-top,.kpis,.board-list,.lb-scene,.desk,.actions{position:relative}
+noscript{color:var(--bad)}
+
+/* ---------- the header and the numbers ---------- */
+.lb-top{display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;position:sticky;top:0;z-index:30;margin:0 -20px;padding:14px 20px;background:var(--bg);border-bottom:1px solid var(--line)}
+.lb-top h1{display:flex;align-items:center;gap:10px}
+.lb-top h1::before{content:"";flex:none;width:22px;height:22px;background:var(--ink);-webkit-mask:var(--mark) center/contain no-repeat;mask:var(--mark) center/contain no-repeat;
+ --mark:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill-rule='evenodd' d='M6 0h8a6 6 0 0 1 6 6v8a6 6 0 0 1-6 6H6a6 6 0 0 1-6-6V6a6 6 0 0 1 6-6zM6 5h2.2v3.6h3.6V5H14v10h-2.2v-4H8.2v4H6z'/%3E%3C/svg%3E")}
+.lb-top .sub{margin-top:1px;max-width:44ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-top>div:first-child{min-width:0}
+.lb-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lb-right .shift{display:inline-flex;gap:6px}.lb-right .shift .act{margin:0}
+.kpis{display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr 1fr;gap:0;margin-top:0;border-bottom:1px solid var(--line)}
+.kpi{background:none;border:0;border-left:1px solid var(--line);border-radius:0;padding:20px 22px 18px}
+.kpi:first-child{border-left:0;padding-left:0}
+.kpi b{font-size:30px;font-weight:500;letter-spacing:-.025em;line-height:1.15;display:block;white-space:nowrap}
+.kpi b.long{font-size:23px;line-height:1.5}
+.kpi span{display:block;margin-top:2px;color:var(--soft);font-size:12.5px}
+.kpi:nth-child(2) b:not(.zero){color:var(--hot)}
+.shift-said,.pairing{display:none}
+.shift-said:not(:empty){display:block}
+.pairing{display:flex;align-items:center;gap:8px;margin:12px 0 0;width:fit-content;font-size:12px;color:var(--soft)}
+.pairing::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--good-dot)}
+.pairing.good{color:var(--soft)}
+.stopped-note,.unpaired-note{background:var(--hot-bg);color:var(--hot);border-bottom:1px solid var(--hot-line);backdrop-filter:none}
+.stopped-note{background:var(--bad-bg);color:var(--bad);border-bottom-color:var(--bad-line)}
+
+/* ---------- filters and the list ---------- */
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0 8px}
+.controls .chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font:inherit;font-size:12.5px;height:28px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--soft);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.chip:hover{color:var(--ink);border-color:var(--line2)}
+.chip.on{background:var(--track);color:var(--ink);border-color:var(--line2);font-weight:550}
+input[type=text],input[type=search],textarea,select{font:inherit;color:var(--ink);background:transparent;border:1px solid var(--line2);border-radius:8px;padding:5px 10px}
+input[type=checkbox]{accent-color:var(--ink)}
+select option{color:#000;background:#fff}
+.controls select,.controls input.search{font-size:13px;height:28px;padding:0 10px;border:1px solid var(--line);border-radius:8px}
+.controls input.search{min-width:210px}.controls input.search::placeholder{color:var(--soft)}
+.board-list{padding:0;border:0;border-radius:0;background:none;margin-top:0}
+.board-list>.scroll{overflow-x:auto}
+.board-list table{font-size:13px;border-collapse:separate;border-spacing:0}
+th{font-size:12px;font-weight:500;color:var(--soft);padding:12px 12px 10px 0;border-bottom:1px solid var(--line);letter-spacing:0}
+th.sortable:hover,th.sortable.on{color:var(--ink)}
+td{padding:11px 12px 11px 0;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.board-list td:first-child,.board-list th:first-child{padding-left:6px}
+table tr:not(:first-child):hover td{background:var(--hover)}
+td.num,th.num{font-variant-numeric:tabular-nums;color:var(--soft)}
+td.num{color:var(--ink)}
+td.name{white-space:nowrap}td.name .sub{max-width:23em}
+.name-line{gap:8px}.name-line a{font-weight:550;font-size:13.5px;letter-spacing:-.005em;text-decoration:none}.name-line a:hover{text-decoration:underline}
+.kind-icon{color:var(--soft);width:16px;height:16px}
+.sub-line{font-size:12px;margin-top:1px}.sub-line b{color:var(--soft);font-weight:550}
+tr.closed td{opacity:.6}
+tr:has(.tag.hot) td:first-child,tr:has(.tag.hot) td.tick{box-shadow:inset 2px 0 0 var(--hot-dot)}
+tr:has(.tag.hot) td{background:var(--hot-row)}
+tr:has(.tag.hot):hover td{background:var(--hot-row-h)}
+.bar{background:var(--track)}.bar.thin{height:4px;border-radius:2px}
+.work{background:var(--soft)}
+.wait{background:var(--hot-dot)}
+.legend{margin:6px 12px 12px;font-size:12px}.legend i{border-radius:50%;width:7px;height:7px}
+.legend .work{background:var(--soft)}.legend .wait{background:var(--hot-dot)}
+.cdots{gap:4px}.cdot{width:9px;height:9px;border:1.5px solid var(--line2)}
+.cdot.pass{background:var(--good-dot);border-color:var(--good-dot)}.cdot.fail{background:var(--bad);border-color:var(--bad)}
+.cdot.run{border-color:var(--soft);border-top-color:transparent}
+footer{color:var(--soft);font-size:12px;margin-top:22px;line-height:1.6}
+.empty{color:var(--soft);padding:18px 6px}
+.chart .line{stroke:var(--ink)}
+
+/* the line at the foot: who made it, as plain text at the bottom left of the page (the body is as tall as the window at least; the copyright sits on its bottom edge) */
+.copyright{position:absolute;left:16px;bottom:12px;margin:0;padding:0;color:var(--soft);font-size:11.5px;line-height:1.5;text-align:left;background:none;border:0}
+
+/* ---------- state: a small tag, the only colour on the page ---------- */
+.tag{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px 0 8px;border-radius:6px;font-size:12px;font-weight:500;line-height:1;white-space:nowrap;
+ background:var(--track);color:var(--soft);border:1px solid transparent;letter-spacing:0;animation:none;background-image:none}
+.tag::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.55;position:static;margin:0;animation:none}
+.tag.long{height:auto;min-height:22px;padding:4px 9px 4px 8px;line-height:1.3;white-space:normal}
+.tag.hot,td.state .tag.hot{background:var(--hot-bg);color:var(--hot);border-color:var(--hot-line);animation:none}
+.tag.hot::before{background:var(--hot-dot);opacity:1;animation:dzb 2.8s ease-in-out infinite}
+.tag.run{background:var(--good-bg);color:var(--good);border-color:var(--good-line);padding-left:8px;animation:none;background-image:none}
+.tag.run::before{background:var(--good-dot);opacity:1;position:static;margin:0;width:6px;height:6px;animation:dzp 2.4s ease-out infinite;animation-delay:calc(var(--t,0ms)*-1)}
+.tag.idle{padding-left:8px}.tag.idle::before{position:static;margin:0;background:currentColor;opacity:.5}
+.tag.lost{background:transparent;color:var(--hot);border:1px dashed var(--hot-line)}
+.tag.lost::before{background:none;border:1.5px solid currentColor;opacity:.8;box-sizing:border-box}
+.tag.good{background:var(--good-bg);color:var(--good);border-color:var(--good-line)}.tag.bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)}
+.tag.warn{background:var(--hot-bg);color:var(--hot);border:1px solid var(--hot-line);padding:0 7px;cursor:help}.tag.warn::before{display:none}
+.tag:not(.hot):not(.run):not(.idle):not(.lost):not(.good):not(.bad):not(.warn)::before{background:none;border:1.5px solid currentColor;opacity:.6;box-sizing:border-box}
+@keyframes dzb{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes dzp{0%{box-shadow:0 0 0 0 var(--good-line)}70%,100%{box-shadow:0 0 0 6px transparent}}
+
+/* ---------- buttons: one solid button per row; any second hot one is quiet ---------- */
+.act{font:inherit;font-size:12.5px;font-weight:500;height:26px;padding:0 10px;margin:0 4px 0 0;border:1px solid var(--line2);border-radius:7px;background:transparent;color:var(--ink);display:inline-flex;align-items:center;cursor:pointer;white-space:nowrap}
+.act:hover{background:var(--hover);border-color:var(--soft)}
+.act.live{font-weight:550;background:transparent}
+.act.hot{border-color:var(--line2)}
+.act.hot.live{background:var(--btn);border-color:var(--btn);color:var(--btn-ink);font-weight:600}
+.act.hot.live:hover{background:var(--btn-hover);border-color:var(--btn-hover)}
+.act.hot.live ~ .act.hot.live{background:transparent;border-color:var(--line2);color:var(--ink);font-weight:500}
+.act.hot.live ~ .act.hot.live:hover{background:var(--hover);border-color:var(--soft)}
+.act:disabled,.act.locked{opacity:.45;cursor:default}.act.locked:hover,.act:disabled:hover{background:transparent;border-color:var(--line2)}
+.act.big{height:34px;font-size:13.5px;padding:0 16px;margin:0}
+.act.big.hot{background:var(--btn);border-color:var(--btn);color:var(--btn-ink)}
+.act.danger:hover{border-color:var(--bad);color:var(--bad)}
+.act.close{padding:0 10px}
+.act-strip{width:auto;gap:0;overflow:visible;padding:0;align-items:center;position:relative;background:none}
+.act-strip .act{margin:0 4px 0 0}
+.act-more{width:26px;padding:0;justify-content:center;border-color:transparent;color:var(--soft);letter-spacing:0;font-weight:600}
+.act-more:hover{color:var(--ink)}
+.act-menu{border:1px solid var(--line2);border-radius:10px;background:var(--pop);box-shadow:var(--shadow);padding:6px}
+.act-menu .act{height:28px;border-color:transparent;width:100%;margin:0;justify-content:flex-start}.act-menu .act:hover{background:var(--hover)}
+.menu-title{font-size:11.5px}
+.vs-btn{width:24px;height:24px;padding:0;margin-left:4px;display:inline-grid;place-items:center;border:1px solid var(--line);border-radius:7px;background:transparent}
+.vs-btn svg{width:14px;height:14px;margin:0}.vs-btn:hover{border-color:var(--line2);background:var(--hover)}
+.vs-pill{display:inline-flex;align-items:center;gap:7px;height:26px;margin:0;padding:0 10px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--soft)}
+.vs-pill i{width:6px;height:6px;border-radius:50%;background:var(--other)}.vs-pill.on{color:var(--ink)}.vs-pill.on i{background:var(--good-dot)}
+.lb-seg{display:inline-flex;border:0;border-radius:9px;padding:2px;background:var(--track);overflow:visible;margin:0}
+.lb-seg button{border:0;border-radius:7px;background:transparent;color:var(--soft);padding:0 12px;height:26px;font:inherit;font-size:12.5px;font-weight:500;cursor:pointer}
+.lb-seg button.on{background:var(--raise);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--line)}
+kbd{font:500 10.5px/1 var(--mono);padding:3px 5px;border-radius:5px;background:var(--kbd);color:var(--soft);border:1px solid var(--line)}
+.shade{background:var(--shade)}
+.dialog{background:var(--card);border-color:var(--line2);box-shadow:var(--shadow)}
+
+/* ---------- the task page under the same tokens ---------- */
+.brand{letter-spacing:.14em}
+.title-row h1{font-size:20px;font-weight:600;letter-spacing:-.015em}
+.crumbs a{color:var(--soft);text-decoration:none}.crumbs a:hover{color:var(--ink)}
+.chatbar{padding:11px 16px;margin-top:10px;gap:10px}
+.chat-k{font-size:11.5px;color:var(--soft);font-weight:500;min-width:3.4em}
+.ctx-bar{background:var(--track)}.ctx-bar i{background:var(--soft)!important}
+.ctx.hot .ctx-bar i{background:var(--bad)!important}
+.actions{padding:20px 22px}.actions h2{font-size:15px}
+.action{background:transparent;border:1px solid var(--line);border-radius:12px}
+.action-more{border-top:1px solid var(--line)}
+.hint{color:var(--soft);font-size:12.5px}
+.desk{padding:0}
+.tabs{background:var(--bg);border-bottom:1px solid var(--line);padding:8px 14px 0;border-radius:var(--r) var(--r) 0 0}
+.tab{font-size:13px;color:var(--soft);padding:8px 12px;border-bottom:1.5px solid transparent;font-weight:500}
+.tab:hover{color:var(--ink)}.tab.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
+.subtab.on{background:var(--card);border-color:var(--line2);color:var(--ink)}
+.subtab.good{color:var(--good)}.subtab.bad{color:var(--bad)}.subtab.hot{color:var(--hot)}
+.pane{padding:6px 22px 20px}
+article.md code{background:var(--track);border-radius:5px;padding:1px 5px;font-family:var(--mono);font-size:.9em}
+pre.code,pre.diff,.send-preview,pre.commit{font-family:var(--mono)}
+table.md th{color:var(--soft)}
+table.md td.v-good{color:var(--good)}table.md td.v-bad{color:var(--bad)}table.md td.v-warn{color:var(--hot)}
+a.linkish,.linkish{color:var(--ink)}
+.plan-approval .tag{height:auto}
+.draft-row .act{margin-left:4px}
+.box{border-color:var(--line2)}
+li.done>.box{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.chip.on{border-color:var(--line2)}
+.doc-list .chip.on{background:var(--track)}
+.dv-mode.on{background:var(--track);border-color:var(--line2);color:var(--ink)}
+.dv-pick.on{box-shadow:inset 3px 0 0 var(--ink)}
+.dv-row.add mark{background:var(--good-line)}.dv-row.del mark{background:var(--bad-line)}
+.file.on{border-color:var(--ink)}
+.fmark.modify{color:var(--soft)}
+.domain-choice.on,.intake-drop.over{border-color:var(--ink)}
+.csv-table tr.picked td{background:var(--hover)}
+.act.hot.live{border-color:var(--btn)}
+pre.diff .add{background:var(--good-bg)}pre.diff .del{background:var(--bad-bg)}pre.diff .hunk{color:var(--soft)}
+.round.editing{border-color:var(--hot-dot)}
+.cache-row.hits i{background:var(--good-dot)}
+
+/* the stage ribbon (the old one stays until the task page is redrawn): grey and ink, amber when it waits for the person, green only while it works */
+.rb-node{border-color:var(--line2);background:transparent;color:var(--soft);width:28px;height:28px}
+.rb-link{background:var(--line2);height:1.5px;margin-top:14px}
+.rb-step.is-done .rb-node{background:var(--good-dot);border-color:var(--good-dot);color:var(--bg)}
+.rb-link.is-done{background:var(--good-dot)}
+.rb-step.is-now .rb-node{border-color:var(--ink);color:var(--ink)}
+.rb-step.is-you .rb-node,.rb-step.is-now.is-bad .rb-node{border-color:var(--hot-dot);color:var(--hot)}
+.rb-step.is-bad .rb-node{border-color:var(--hot-dot);color:var(--hot)}
+.rb-step.is-work .rb-node{animation:rbring 2.4s ease-out infinite}
+.rb-name{color:var(--soft)}.rb-step.is-now .rb-name{color:var(--ink)}
+.rb-link.is-flow::after{background:linear-gradient(90deg,transparent,var(--good-dot),transparent)}
+.rb-orb{background:var(--soft);color:var(--bg)}
+.rb-check.pass{background:var(--good-dot);border-color:var(--good-dot);color:var(--bg)}
+.rb-check.fail{background:var(--bad);border-color:var(--bad);color:var(--bg)}
+.rb-check.run::before{border-top-color:var(--soft);border-right-color:var(--soft)}
+@keyframes rbring{0%{box-shadow:0 0 0 0 var(--good-line)}70%,100%{box-shadow:0 0 0 9px transparent}}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}

@@ -82,9 +82,15 @@ const tag = (text, kind) => h("span", {class: "tag" + (kind ? " " + kind : "")},
 // The one state of a task is told by the server (tasklife.state_of): new, closed, paused, waiting, working, quiet, unheld.
 // A page that is not kept fresh cannot say "working" (the last five minutes it looked at are gone), so it says "quiet".
 function stateOf(row, live) { return row.state === "working" && !live ? "quiet" : row.state || "quiet"; }
+// What a task waits for, in the language of the page. The server words it too (`row.waiting`), but a board that runs while the language is changed may still send the
+// old language for a while; the page's own table is always the one it shows. Waits with a detail in them (a command, a question, an environment) keep the server's words.
+const PLAIN_WAITS = ["plan", "promote", "recover", "review", "req", "commit", "stopped", "cancelled", "go-req", "go-plan", "go-promote", "go-recover", "go-review"];
+function waitText(row) {
+  return PLAIN_WAITS.includes(row.waiting_why) && Object.prototype.hasOwnProperty.call(TEXT, "task.waiting." + row.waiting_why) ? t("task.waiting." + row.waiting_why) : row.waiting;
+}
 function stateTag(row, live) {
   const state = stateOf(row, live);
-  if (state === "waiting") return tag(row.waiting, "hot long");
+  if (state === "waiting") return tag(waitText(row), "hot long");
   if (state === "working") return tag(t("board.state.working"), "good run");
   if (state === "quiet") return tag(t("board.state.quiet"), "idle");
   if (state === "unheld") return tag(t("board.state.unheld") + (row.unheld_s === null || row.unheld_s === undefined ? "" : " \u00b7 " + clock(row.unheld_s)), "lost");

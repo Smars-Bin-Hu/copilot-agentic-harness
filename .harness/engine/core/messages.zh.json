@@ -1144,6 +1144,7 @@
   "desk.via.board": "在页面上操作",
   "desk.actions.none": "当前无需处理",
   "desk.actions.none.hint": "自你上一条消息以来 agent 没有停下，说明它仍在工作。如果 VS Code 里显示为空闲，请在那里回复它。",
+  "desk.actions.new": "任务还没有开始：还没有类型，也没有计划。在 VS Code 里让 agent 打开它，这个页面就会填上内容。",
   "desk.actions.closed": "任务已关闭。要继续，请在 VS Code 里让 agent 打开它。",
   "desk.hint.approve-plan": "请先阅读计划（“计划”页签）。批准后 agent 才能修改 DEV/ 下的文件；在此之前它只能读取和记笔记。",
   "desk.hint.approve-promote": "请先阅读 promote (write-back repo) 的内容（“改动”页签）。批准后文件会写进目标仓库的新分支，不提交：由你自己提交。",

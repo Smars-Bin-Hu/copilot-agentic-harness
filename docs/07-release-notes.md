@@ -10,6 +10,21 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.12 (2026-10-31)
+
+### Added
+
+- One look for the board and the task pages, in black and white: colour only means state (amber waits for you, green works, red failed). It has a light and a dark theme (`data-theme` on the page). With no choice made, the page follows the system and changes with it; a choice kept in the browser (`harness.theme`) wins. The settings panel that sets it comes in a later block.
+- A line at the bottom left of every page: the copyright, in plain text.
+
+### Changed
+
+- The board list, the KPIs, the filters, the state tags and the buttons have the new look. One solid button in a row is the thing the task waits for.
+- The lobby has one block for each state, full width and stacked, what waits for you on top. All robots on the page have one size, chosen by the most crowded block (8 or fewer: large; up to 16: medium; more: small). The robots on the dock stand on one line: a name is one line, with the full name on hover.
+- What a task waits for is worded by the page in its own language (a board that runs while the language is changed no longer shows the old language).
+- A task that is not started yet says so on its page, not "the task is closed", and shows no empty kind and dates.
+- The page text colours of code, the code compare and the stage ribbon follow the theme.
+
 ## 1.6.11 (2026-10-31)
 
 ### Added

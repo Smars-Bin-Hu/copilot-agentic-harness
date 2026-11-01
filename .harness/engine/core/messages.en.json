@@ -1144,6 +1144,7 @@
   "desk.via.board": "from this page",
   "desk.actions.none": "Nothing waits for you",
   "desk.actions.none.hint": "The agent has not stopped since your last message, so it is still working. If VS Code looks idle, answer it there.",
+  "desk.actions.new": "The task is not started yet: it has no kind and no plan. Tell the agent in VS Code to open it, and this page fills in.",
   "desk.actions.closed": "The task is closed. To work on it again, ask the agent in VS Code to open it.",
   "desk.hint.approve-plan": "Read the plan (tab Plan) first. After you approve, the agent may change files under DEV/; until then it only reads and writes notes.",
   "desk.hint.approve-promote": "Read the promote (write-back repo) in the tab Changes first. After you approve, the files go into the target repository on a new branch, not committed: you commit them yourself.",

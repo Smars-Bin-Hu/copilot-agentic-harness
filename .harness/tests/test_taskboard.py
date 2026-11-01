@@ -688,7 +688,7 @@ class PageTests(BoardCase):
         self.new_under_a_name_the_command_refuses(name)
         text = (self.root / self.cli_json("task", "report")["analysis"]).read_text(encoding="utf-8")
         self.assertIn("<title>任务分析：a&lt;script&gt;&lt;b&gt;&amp;c&lt;!--</title>", text)
-        self.assertEqual((text.count("<script"), text.count("</script>")), (2, 2))
+        self.assertEqual((text.count("<script"), text.count("</script>")), (3, 3))  # the theme, the data, the page
         self.assertNotIn("<b>", text)
         self.assertEqual(page_data(text)["info"]["name"], name)
 
@@ -854,7 +854,7 @@ class PageTests(BoardCase):
     def test_a_long_reason_wraps_inside_its_cell(self) -> None:
         css = (taskhtml.WEB / "page.css").read_text(encoding="utf-8")
         self.assertRegex(css, r"\.tag\.long\{[^}]*white-space:normal[^}]*overflow-wrap:anywhere")
-        self.assertIn('tag(row.waiting, "hot long")', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
+        self.assertIn('tag(waitText(row), "hot long")', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
 
     def test_the_buttons_of_a_row_scroll_sideways_and_only_what_it_waits_for_is_marked(self) -> None:
         css = (taskhtml.WEB / "page.css").read_text(encoding="utf-8")

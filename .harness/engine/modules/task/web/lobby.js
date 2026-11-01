@@ -20,7 +20,7 @@ const Lobby = (function () {
   // pose -> zone. `tests`: waiting for the results of a test the person is to run.
   // `lost`: no session holds the task (a plug hangs loose).
   const ZONE_OF = {work: "work", you: "you", tests: "you", lost: "left", idle: "rest", pause: "rest"};
-  const ZONES = [["work", "board.lobby.zone.work"], ["you", "board.lobby.zone.you"], ["left", "board.lobby.zone.left"], ["rest", "board.lobby.zone.rest"]];
+  const ZONES = [["you", "board.lobby.zone.you"], ["work", "board.lobby.zone.work"], ["left", "board.lobby.zone.left"], ["rest", "board.lobby.zone.rest"]];  // what waits for the person is on top
   const STATE_TEXT = {work: "board.lobby.state.work", idle: "board.lobby.state.idle", pause: "board.state.paused", lost: "board.lobby.state.unheld", closed: "board.state.closed"};
 
   // The state is the server's (`row.state`); the pose only draws it.
@@ -86,13 +86,6 @@ const Lobby = (function () {
     const card = h("div", {class: "lb-card"});
     const empty = h("div", {class: "lb-empty"});
     const scene = h("div", {class: "lb-scene"});
-    for (let index = 0; index < 34; index++) {  // the stars are drawn once and stay where they are
-      const star = h("i", {class: "lb-star"});
-      star.style.left = Math.random() * 100 + "%";
-      star.style.top = Math.random() * 60 + "%";
-      star.style.animationDelay = Math.random() * 3 + "s";
-      scene.append(star);
-    }
     scene.append(h("h3", null, t("board.title")), count);
     for (const [id, label] of ZONES) {
       const row = h("div", {class: "lb-row"});
@@ -105,7 +98,7 @@ const Lobby = (function () {
     const docked = new Map();  // task name -> entry, for the closed tasks
     const shelf = h("div", {class: "lb-shelf"});
     const dockName = h("span", null);
-    const dock = h("div", {class: "lb-dock"}, h("div", {class: "lb-label"}, h("i", {class: "lb-dot lb-dot-closed"}), dockName), shelf, h("i", {class: "lb-sweep"}));
+    const dock = h("div", {class: "lb-dock"}, h("div", {class: "lb-label"}, h("i", {class: "lb-dot lb-dot-closed"}), dockName), shelf);
     scene.append(empty, dock, card);
 
     function dockUpdate(rows) {
@@ -137,8 +130,8 @@ const Lobby = (function () {
 
     function show(entry) {
       const {row, pose} = entry;
-      const state = pose === "you" || pose === "tests" ? row.waiting : t(STATE_TEXT[pose]);  // a task at work that already has a plan to approve is at work
-      const lines = [h("b", null, row.name), h("div", {class: "lb-k"}, t("task.kind." + (row.kind || "none")) + " · " + t("task.tier." + (row.tier || "none")) + " · " + state + (state === row.waiting && row.waited_s ? " · " + clock(row.waited_s) : ""))];
+      const state = pose === "you" || pose === "tests" ? waitText(row) : t(STATE_TEXT[pose]);  // a task at work that already has a plan to approve is at work
+      const lines = [h("b", null, row.name), h("div", {class: "lb-k"}, t("task.kind." + (row.kind || "none")) + " · " + t("task.tier." + (row.tier || "none")) + " · " + state + (state === waitText(row) && row.waited_s ? " · " + clock(row.waited_s) : ""))];
       const s = row.stages;
       if (s && s.steps && s.steps.length) {
         const dots = [];
@@ -208,6 +201,15 @@ const Lobby = (function () {
         zoneBox[id].box.hidden = !rowsOf[id].childElementCount;  // a robot on its way out still holds its zone open
         zoneBox[id].name.textContent = t(zoneBox[id].label) + " \u00b7 " + here;
       }
+      size();
+    }
+
+    // One robot size for the whole page: the block with the most robots decides, so a robot is as big in a quiet block as in a crowded one.
+    // 8 or fewer: large; up to 16: medium; more: small (the sizes are in lobby.css). The dock has the same size and does not count.
+    function size() {
+      const most = Math.max(0, ...ZONES.map(([id]) => rowsOf[id].childElementCount));
+      const wanted = most >= 17 ? "s" : most >= 9 ? "m" : "l";
+      if (scene.dataset.size !== wanted) scene.dataset.size = wanted;
     }
 
     // A robot that comes drops in from above and springs; one that goes lifts, shrinks and fades, and then the others close the gap.

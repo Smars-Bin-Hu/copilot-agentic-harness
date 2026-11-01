@@ -27,17 +27,13 @@
 .dv.unified .dv-no{width:44px}.dv.unified .dv-no+.dv-no{left:44px}
 .dv-code{flex:1 0 auto;padding:0 10px 0 6px}
 .dv.unified .dv-code::before{content:attr(data-sign);display:inline-block;width:1.4ch;margin-left:-4px;color:var(--soft);user-select:none}
-.dv-row.add{background:rgba(31,157,99,.14)}.dv-row.add .dv-no{background:#c8ebd9;color:var(--good)}
-.dv-row.del{background:rgba(210,73,61,.12)}.dv-row.del .dv-no{background:#f3d0cc;color:var(--bad)}
+.dv-row.add{background:var(--add-bg)}.dv-row.add .dv-no{background:var(--add-no);color:var(--good)}
+.dv-row.del{background:var(--del-bg)}.dv-row.del .dv-no{background:var(--del-no);color:var(--bad)}
 .dv-row.add mark{background:rgba(31,157,99,.35);color:inherit;border-radius:2px}
 .dv-row.del mark{background:rgba(210,73,61,.32);color:inherit;border-radius:2px}
 .dv-row.dv-fill{background:repeating-linear-gradient(135deg,transparent 0 5px,var(--line) 5px 6px)}.dv-row.dv-fill .dv-no{background:var(--card)}
 .dv-row.dv-sep,.dv-row.dv-fold{color:var(--soft);background:var(--bg)}.dv-row.dv-sep .dv-no,.dv-row.dv-fold .dv-no{background:var(--bg)}
 .dv-row.dv-fold{cursor:pointer}.dv-row.dv-fold:hover{color:var(--model)}
-@media (prefers-color-scheme:dark){
-  .dv-row.add .dv-no{background:#1d4a38}.dv-row.del .dv-no{background:#58302c}
-  .dv-row.add{background:rgba(31,157,99,.2)}.dv-row.del{background:rgba(210,73,61,.2)}
-}
 @media (max-width:760px){.dv{grid-template-columns:1fr}.dv-left{border-right:0;border-bottom:1px solid var(--line)}}
 /* The plain diff text: its red and green bars are as wide as the longest line too, so they do not end when it is scrolled sideways. */
 .scroll>pre.diff{overflow:visible;width:max-content;min-width:100%;box-sizing:border-box}

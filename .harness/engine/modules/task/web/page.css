@@ -1,8 +1,4 @@
-/* Shared by the task page and the board. Colours are variables; dark mode follows the system. */
-:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2330;--soft:#667085;--line:#e4e7ec;--model:#4f7cf0;--tool:#27a591;--subagent:#8e6fe0;
---approval:#eb9a26;--other:#c3c9d4;--wait:#e58a8a;--usage:#30364a;--good:#1f9d63;--bad:#d2493d;--track:#eef0f4}
-@media (prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b2029;--ink:#e7eaf0;--soft:#98a2b3;--line:#2b3340;--other:#4a5364;
---usage:#cdd3e0;--track:#262d39}}
+/* Shared by the task page and the board. Colours are variables (tokens.css); ui.css is the look on top. */
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
 main{max-width:1040px;margin:0 auto;padding:32px 20px 56px}
@@ -36,7 +32,6 @@ td.grow{width:42%}
 /* A long reason (why autorun stopped) takes several lines; it must not push the table out of the card. */
 .tag.long{white-space:normal;overflow-wrap:anywhere;border-radius:10px;padding:2px 8px}
 .tag.lost{background:rgba(217,180,90,.18);color:#a8761a;border:1px dashed rgba(217,180,90,.7)}
-@media (prefers-color-scheme:dark){.tag.lost{color:#e0bd6a}}
 /* A long task name wraps (at a hyphen first) instead of pushing the buttons out of the card. */
 td.name{white-space:nowrap}td.name .sub{white-space:normal;max-width:18em}
 td.when{white-space:nowrap}
@@ -277,7 +272,6 @@ td.acts{position:relative}.board-list .act-strip{width:auto;min-width:8em;flex-w
 .act.live{background:var(--track)}
 /* Health warning (B74): the tag after the state, and the Trace tab. */
 .tag.warn{background:rgba(235,154,38,.18);color:#a8620a;cursor:help}
-@media (prefers-color-scheme:dark){.tag.warn{color:#f0b45a}}
 .warn-note{margin:0 0 10px}
 ol.trace li.tr-prompt{opacity:.7}ol.trace li.tr-gate .what b{color:var(--bad)}ol.trace code{font-size:.88em;overflow-wrap:anywhere}
 .drafts{display:block}.draft-list{list-style:none;margin:6px 0;padding:0}.draft-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)}.draft-row .draft-text{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}.draft-row.off .draft-text{color:var(--soft);text-decoration:line-through}.draft-row .send-body{margin:0;flex:1 1 auto}.draft-new{display:flex;gap:8px;align-items:center}.draft-new .send-body{margin:0;flex:1 1 auto}

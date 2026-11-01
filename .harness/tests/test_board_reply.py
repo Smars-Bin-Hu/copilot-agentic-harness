@@ -268,6 +268,12 @@ class PageTests(unittest.TestCase):
         self.assertIn("node.hidden = !node.textContent;", serve)
         self.assertIn("stale ?", serve)  # old code still says so in the line
 
+    def test_the_line_under_the_name_is_short_and_a_card_says_the_rest(self) -> None:
+        desk = source("desk.js")
+        self.assertNotIn("desk.subtitle", desk)
+        self.assertIn('h("span", {class: "tk-when"}, icon(CLOCK, 13), changed)), factsCard, t("desk.fact.label"))', desk)
+        self.assertIn('changed, desk.domains, desk.autorun', desk)  # how long ago moves on by itself, so it is part of what is compared
+
     def test_independent_review_is_set_on_the_task_page_and_not_with_a_message(self) -> None:
         desk = source("desk.js")
         self.assertNotIn("set-checks", desk)  # the reply panel has no 0 to 5

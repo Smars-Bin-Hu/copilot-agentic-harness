@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.34 (2026-11-01)
+
+### Changed
+
+- **The line under a task's name is short.** It shows the tier, the round from the second on, and how long ago the task last changed. Hover or focus it, or the icon of the kind, for all of it: kind, tier, round, the exact times, domains and autorun.
+
 ## 1.6.33 (2026-11-01)
 
 ### Changed

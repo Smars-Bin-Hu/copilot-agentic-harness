@@ -431,6 +431,21 @@
     app.replaceChildren(ui.root);
   }
 
+  // The line under the name says little; the card says it all (the same card on the icon of the kind). An exact time belongs in the card: on the line, how long ago is what counts.
+  const CLOCK = ["M8 14.5a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z", "M8 4.5V8l2.3 1.4"];
+  function agoText(stamp) {
+    const minutes = Math.floor((Date.now() - Date.parse(stamp)) / 60000);
+    if (!(minutes >= 1)) return t("desk.ago.now");
+    if (minutes < 60) return t("desk.ago.min", {n: minutes});
+    return minutes < 1440 ? t("desk.ago.hour", {n: Math.floor(minutes / 60)}) : t("desk.ago.day", {n: Math.floor(minutes / 1440)});
+  }
+  function factsCard() {
+    const fact = (label, value) => h("div", {class: "tk-fact"}, h("span", {class: "sub"}, t("desk.fact." + label)), h("span", null, value));
+    return {sig: JSON.stringify([desk.kind, desk.tier, desk.round, desk.created_at, desk.updated_at, desk.domains, desk.autorun]), build: () => h("div", {class: "tk-facts"},
+      fact("kind", t("task.kind." + (desk.kind || "none"))), fact("tier", t("task.tier." + (desk.tier || "none"))), fact("round", String(desk.round)), fact("opened", when(desk.created_at, 0, 16)), fact("changed", when(desk.updated_at, 0, 16)),
+      desk.domains.length ? fact("domains", desk.domains.join(", ")) : null, desk.autorun ? fact("autorun", t("desk.autorun")) : null)};
+  }
+
   function infoItem(cls, text, title) {
     return h("span", {class: "tk-i " + cls, title}, text);
   }
@@ -460,15 +475,16 @@
 
     const kindName = t("task.kind." + (desk.kind || "none"));
     const room = bound && chat.window ? chat.window : meter ? meter.window : 0;
-    ui.infoL.set(JSON.stringify([desk.kind, desk.tier, desk.status, desk.round, desk.created_at, desk.updated_at, desk.domains, desk.autorun, bound && [chat.model, chat.effort, room]]), () => {
+    const changed = desk.status === "new" ? "" : agoText(desk.updated_at);
+    ui.infoL.set(JSON.stringify([desk.kind, desk.tier, desk.status, desk.round, desk.created_at, desk.updated_at, changed, desk.domains, desk.autorun, bound && [chat.model, chat.effort, room]]), () => {
       const nodes = [];
-      if (desk.status !== "new" && desk.kind) nodes.push(kindIcon(desk.kind, t("desk.info.kind", {kind: kindName})));
+      if (desk.status !== "new" && desk.kind) nodes.push(Status.card(kindIcon(desk.kind, t("desk.info.kind", {kind: kindName})), factsCard, t("desk.info.kind", {kind: kindName})));
       if (bound && chat.model) nodes.push(infoItem("tk-model", chat.model, t("desk.info.model", {model: chat.model})));
       if (bound && chat.effort) nodes.push(infoItem("tk-effort", t("desk.info.effort", {level: chat.effort}), t("desk.info.effort.tip")));
       if (bound && room) nodes.push(infoItem("tk-win", t("desk.info.window", {size: tokensShort(room)}), t("desk.info.window.tip", {tokens: room.toLocaleString("en-US")})));
       if (desk.status !== "new") {  // a task not started has no kind, no round, no dates
-        const text = t("desk.subtitle", {kind: kindName + " · " + t("task.tier." + (desk.tier || "none")), round: desk.round, created: when(desk.created_at, 0, 16), updated: when(desk.updated_at, 0, 16)}) + (desk.domains.length ? " · " + t("desk.domains", {names: desk.domains.join(", ")}) : "");
-        nodes.push(h("span", {class: "tk-meta", title: text}, text), desk.autorun ? tag(t("desk.autorun"), "good") : null);
+        nodes.push(Status.card(h("span", {class: "tk-meta"}, h("span", null, t("task.tier." + (desk.tier || "none"))), desk.round > 1 ? h("span", null, t("desk.fact.round.short", {round: desk.round})) : null,
+          h("span", {class: "tk-when"}, icon(CLOCK, 13), changed)), factsCard, t("desk.fact.label")), desk.autorun ? tag(t("desk.autorun"), "good") : null);
       }
       return nodes;
     });

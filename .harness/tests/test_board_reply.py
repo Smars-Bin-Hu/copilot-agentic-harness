@@ -14,8 +14,8 @@ from test_chatnew import CreateCase
 from test_chatsend import ROOT_STATE, SendCase
 from test_vslink import until
 
-from core import ahp, messages
-from modules.task import chatlive, chatsend, taskhtml
+from core import ahp, messages, tasks
+from modules.task import chatlive, chatsend, taskhtml, tasklife
 
 WEB = taskhtml.WEB
 OPTIONS = {"mode": {"enum": ["interactive", "plan", "autopilot"], "enumLabels": ["Interactive", "Plan", "Autopilot"]}, "autoApprove": {"enum": ["default", "assisted", "autoApprove"], "enumLabels": ["Manual", "Assisted", "Allow all"]}}
@@ -151,6 +151,17 @@ class ServeTests(SendCase):
         self.assertIn('"name": "a.png"', line)
         self.assertNotIn(encoded(b"png"), line)
         self.assertNotIn("attachments", json.dumps(self.vs.chats[self.chat]["state"]))  # the bytes are not kept in the memory of the link
+
+    def test_a_message_that_went_takes_the_waiting_card_away_at_once(self) -> None:
+        task = ".workspace/sandbox/tasks/job1"
+        answer = {"kind": "answer", "lang": "en", "note": "", "body": "Go on", "step": "act"}
+        tasklife.set_waiting(self.root, task, {"since": "2026-11-01T00:00:00+00:00", "why": "stopped"})
+        status, data, _ = self.post("/api/send", dict(answer, attachments=[{"name": "a", "data": "!"}]))
+        self.assertEqual(status, 409, data)
+        self.assertTrue(tasks.read(self.root, task)["waiting"])  # refused: the person is still next
+        status, data, _ = self.post("/api/send", answer)
+        self.assertEqual(status, 200, data)
+        self.assertIsNone(tasks.read(self.root, task)["waiting"])
 
     def test_a_refused_file_sends_nothing(self) -> None:
         status, data, _ = self.post("/api/send", {"kind": "answer", "lang": "en", "note": "", "body": "Look", "step": "act", "attachments": [{"name": "a", "data": "!"}]})

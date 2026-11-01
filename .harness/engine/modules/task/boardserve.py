@@ -546,6 +546,10 @@ class Board:
         except Exception as error:  # noqa: BLE001 - the host said no: the person copies the text
             raise Fallback(ahp_scrub(error), made["text"]) from None
         chatsend.drop_drafts(self.root, task, made["draft_ids"])
+        try:
+            tasklife.set_waiting(self.root, task, None)  # the person answered: the card goes now, not when the hook of the new turn has run
+        except Exception:  # noqa: BLE001 - the message went; that hook takes the mark away too
+            pass
         return self.sent(task, found, made["kind"], made["text"], done, {"why": made["why"], "lang": made["lang"], "model": model or {}, "drafts": len(made["draft_ids"]), "files": chatsend.listed(files)})
 
     def files_of(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:

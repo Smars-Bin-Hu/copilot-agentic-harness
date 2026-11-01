@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.36 (2026-11-01)
+
+### Fixed
+
+- **The "Waiting for you" card goes as soon as your message is sent.** It used to stay until the new turn's hook had run, next to "Working".
+
 ## 1.6.35 (2026-11-01)
 
 ### Changed

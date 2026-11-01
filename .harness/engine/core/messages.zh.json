@@ -165,7 +165,7 @@
   "task.pause.already": "任务 {name} 已经搁置了。接着做：`{command} task resume --task {name}`。",
   "task.offwork.next": "已搁置 {count} 个任务过夜：搁置的时间不算等待。`{command} task onwork` 把它们恢复。",
   "task.offwork.left": "没动（agent 正在工作，或开着 autorun）：{names}。",
-  "task.onwork.next": "已恢复 {count} 个任务：各自接着等之前等的东西，从现在算起。",
+  "task.onwork.next": "已恢复 {count} 个任务：等待时间接着之前的算，搁置的时间不计入。",
   "task.onwork.kept": "仍然搁置，因为是你手动搁置的：{names}。",
   "task.resume.not_paused": "任务 {name} 没有搁置，不用恢复。",
   "unit.seconds": "{s} 秒",

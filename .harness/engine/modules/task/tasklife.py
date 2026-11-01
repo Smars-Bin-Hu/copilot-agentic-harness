@@ -335,12 +335,12 @@ def ask_text(ask: Dict[str, Any]) -> str:
     return messages.text("task.waiting.question", what=" ".join(str(ask.get("message") or "").split())[:WAIT_WHAT])
 
 
-def apply_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]]) -> bool:
+def apply_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], data: Optional[Dict[str, Any]] = None) -> bool:
     """Say on a row of an open task that is not put aside that its chat waits for the person to allow a command or answer a question: this comes before anything else the task waits for, and the
-    agent is not "working" then. The row of a task with no such item is left alone. True when the row changed."""
+    agent is not "working" then. The row of a task with no such item is left alone. True when the row changed. `data`: the task, for the time aside: an item can outlast a night of Off work."""
     if not ask or row.get("status") != "open" or row.get("paused_since"):
         return False
-    waited = seconds_since(str(ask.get("since") or ""))
+    waited = waited_since(data or {}, str(ask.get("since") or ""))
     row.update({"waiting": ask_text(ask), "waiting_why": "confirm" if ask.get("kind") == "confirm" else "question", "waiting_since": ask.get("since", ""),
                 "waited_s": round(waited) if waited is not None else None, "state": "waiting", "active": False})
     return True
@@ -525,12 +525,10 @@ def pause(root: Path, raw_task: str = "", interactive: Optional[bool] = None, fo
 
 
 def resume_in(data: Dict[str, Any]) -> bool:
-    """Take the task back. What it waited for before starts counting from now. False when it was not aside."""
+    """Take the task back. What it waited for goes on from where it stood: `waited_since` leaves the time aside out. False when it was not aside."""
     if not paused_since(data):
         return False
     data["paused"] = None
-    if isinstance(data.get("waiting"), dict):
-        data["waiting"] = dict(data["waiting"], since=utc_now())
     task_ops.note(data, "unpause")  # `resume` is taken: a session picking the task up again
     return True
 

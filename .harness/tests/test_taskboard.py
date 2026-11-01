@@ -312,9 +312,41 @@ class PauseTests(BoardCase):
         tasklife.resume(self.root, "job", interactive=True)
         data = self.data()
         self.assertIsNone(data["paused"])
-        self.assertGreaterEqual(data["waiting"]["since"], marked)  # the wait starts again from the resume
+        self.assertEqual(data["waiting"]["since"], marked)  # the mark stays: `waited_since` leaves the time aside out
         self.assertEqual(self.listed()["waiting"], 1)
         self.assertEqual([item["what"] for item in data["events"]][-2:], ["pause", "unpause"])
+
+    def after_a_night(self, aside: Any, back: Any) -> Dict[str, Any]:
+        """The row of a task that waited 2 h, was put aside for 14 h and came back 30 min ago."""
+        now = datetime.now(timezone.utc)
+        at = lambda hours: (now - timedelta(hours=hours)).isoformat()  # noqa: E731
+        path = self.root / BASE / "job" / ".task" / "task.json"
+        self.new()
+        self.stop()
+        data = self.data()
+        data["waiting"]["since"] = at(16.5)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        aside()
+        back()
+        data = self.data()
+        data["events"][-2]["at"], data["events"][-1]["at"] = at(14.5), at(0.5)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return self.listed()["tasks"][0]
+
+    def test_a_wait_goes_on_from_where_it_stood_after_a_pause(self) -> None:
+        row = self.after_a_night(lambda: tasklife.pause(self.root, "job", interactive=True), lambda: tasklife.resume(self.root, "job", interactive=True))
+        self.assertAlmostEqual(row["waited_s"] / 3600, 2.5, places=2)  # not 30 min, and not the night
+
+    def test_a_wait_goes_on_from_where_it_stood_after_off_work(self) -> None:
+        row = self.after_a_night(lambda: tasklife.offwork(self.root, interactive=True), lambda: tasklife.onwork(self.root, interactive=True))
+        self.assertAlmostEqual(row["waited_s"] / 3600, 2.5, places=2)
+
+    def test_the_night_is_not_counted_for_what_the_chat_waits_for(self) -> None:
+        """Copilot asked, the person left with Off work and came back: the question is still there, seen before the night."""
+        row = self.after_a_night(lambda: tasklife.offwork(self.root, interactive=True), lambda: tasklife.onwork(self.root, interactive=True))
+        asked = (datetime.now(timezone.utc) - timedelta(hours=16.5)).isoformat()
+        self.assertTrue(taskboard.with_ask(row, {"kind": "confirm", "command": "ls", "since": asked}, (), self.root))
+        self.assertAlmostEqual(row["waited_s"] / 3600, 2.5, places=2)
 
     def test_a_prompt_in_the_tasks_session_takes_it_back(self) -> None:
         self.new()

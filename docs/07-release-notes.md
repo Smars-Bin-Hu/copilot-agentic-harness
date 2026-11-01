@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.41 (2026-11-01)
+
+### Fixed
+
+- **A wait goes on from where it stood after a pause.** A task that waited for you because the agent had stopped went back to 0 when you took it back, by hand or with Back to work: two hours of waiting were lost. A plan or a requirement that waited kept its time, so the same pause read differently from task to task. Now every wait keeps what it had reached, and the time aside is left out.
+- **A night of Off work is no longer counted for a command or a question in the chat.** When Copilot asked before you left, the wait read the whole night the next morning.
+- **Turning autorun on for a paused task ends the pause in the task's history too.** The end was not recorded, so every later wait read 0 and the report counted the time as paused.
+
 ## 1.6.40 (2026-11-01)
 
 ### Fixed

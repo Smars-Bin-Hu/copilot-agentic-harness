@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import support  # noqa: F401  (puts the engine on sys.path)
 from core import tasks
-from modules.task import autorun, task as task_ops
+from modules.task import autorun, task as task_ops, tasklife
 from modules.task.common import CommandError
 from support import payload, pre_tool
 from taskcase import NAME, SESSION, TASK, TaskCase
@@ -87,6 +87,17 @@ class TurnOnTests(AutorunCase):
         run = self.run_state()
         self.assertEqual((run["state"], run["steps"], run["max_steps"]), ("on", 0, 20))
         self.assertEqual(self.data()["events"][-1]["what"], "autorun-on")
+
+    def test_turning_it_on_ends_a_pause_in_the_events_too(self) -> None:
+        """A pause with no end in the events counted all the time after it as aside: every later wait read 0."""
+        self.prepare()
+        self.stop()
+        tasklife.pause(self.root, NAME, interactive=True)
+        self.on()
+        data = self.data()
+        self.assertFalse(data.get("paused"))
+        self.assertEqual([item["what"] for item in data["events"]][-3:], ["pause", "unpause", "autorun-on"])
+        self.assertGreater(tasklife.waited_since(data, (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()), 3500)
 
     def test_a_plan_changed_after_the_screen_is_not_what_was_agreed(self) -> None:
         self.prepare()

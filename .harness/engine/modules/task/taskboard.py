@@ -142,10 +142,10 @@ def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str,
     return [{"action": action, "command": "" if action in ("send", "answer") else f"{cli_command()} task {action} --task {row['name']}"} for action in found]
 
 
-def with_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], served: Tuple[str, ...] = ()) -> bool:
+def with_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], served: Tuple[str, ...] = (), root: Optional[Path] = None) -> bool:
     """A row (or a task page) whose chat waits for a person to allow a command or answer a question (1.6, B75): the wait is that (`tasklife.apply_ask`), `ask` carries what to show, and the one orange
     button is "allow · deny" or "answer..." in place of the buttons of the wait that was. A question the board cannot take from a form has no button: it is answered in VS Code."""
-    if ask is None or not tasklife.apply_ask(row, ask):
+    if ask is None or not tasklife.apply_ask(row, ask, tasks.read(root, row["task"]) if root else None):
         return False
     row["ask"] = ask
     gone = {name for names in ACTIONS_BY_WAIT.values() for name in names} | {"send", "answer", "steer", "stop"}

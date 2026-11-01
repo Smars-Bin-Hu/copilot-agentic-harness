@@ -9,7 +9,9 @@ from __future__ import annotations
 import copy
 import json
 import unittest
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
+from unittest import mock
 
 import support  # noqa: F401 - HARNESS_VSCODE_CLI=off
 from taskcase import SESSION, TASK
@@ -17,7 +19,7 @@ from test_ahp import FakeHost, TOKEN
 from test_chatsend import ROOT_STATE, SendCase, said
 from test_vslink import chat_state, summary, until
 
-from core import ahp, messages
+from core import ahp, messages, tasks
 from modules.task import chatask, taskboard, tasklife
 
 CHAT, SESSION_URI = "ahp-chat:/abc", "ahp-session:/abc"
@@ -255,6 +257,19 @@ class RowTests(AskCase):
         self.assertEqual(rows[0]["name"], "job1")  # in the "waiting for you" order
         desk = self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]
         self.assertEqual((desk["waiting_why"], desk["ask"]["id"], desk["actions"][0]["action"]), ("confirm", row["ask"]["id"], "confirm"))
+
+    def test_the_time_aside_is_left_out_of_the_wait_on_the_row_and_on_the_task_page(self) -> None:
+        self.agent_at_work()
+        self.wait_for(confirm_item())
+        now = datetime.now(timezone.utc)
+        at = lambda hours: (now - timedelta(hours=hours)).isoformat()  # noqa: E731
+        path = tasks.state_file(self.root, TASK)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["events"] += [{"at": at(2), "what": "pause"}, {"at": at(1), "what": "unpause"}]
+        path.write_text(json.dumps(data), encoding="utf-8")
+        with mock.patch.object(self.vs, "ask_of", return_value=dict(self.vs.ask_of(TASK), since=at(3))):
+            self.assertAlmostEqual(self.shown_row()["waited_s"] / 3600, 2, places=2)
+            self.assertAlmostEqual(self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["waited_s"] / 3600, 2, places=2)
 
     def test_a_question_makes_the_row_wait_with_an_answer_button_and_a_page_that_is_not_fooled_by_other_kinds(self) -> None:
         self.wait_for(question_item())

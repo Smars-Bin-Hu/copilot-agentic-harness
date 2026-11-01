@@ -162,7 +162,7 @@ def turn_on(
             "steps": 0, "max_steps": limits["max_steps"], "max_denies": limits["max_denies"], "max_stalls": limits["max_stalls"],
             "stalls": 0, "progress": None, "stopped": None,
         }
-        again["paused"] = None
+        tasklife.resume_in(again)
         task_ops.note(again, "autorun-on", say("autorun.note.on", steps=len(open_steps), max_steps=limits["max_steps"], minutes=limits["minutes"]))
     return {"task": task, "autorun": "on", "open_steps": len(open_steps), **limits, "next": say("autorun.on.next")}
 

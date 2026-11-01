@@ -247,7 +247,7 @@ class Board:
         self.link.overlay(result["tasks"])
         for row in result["tasks"]:
             health.with_context(self.root, row, row.get("chat"))
-        asked = [taskboard.with_ask(row, self.link.ask_of(row["task"]), tuple(self.served)) for row in result["tasks"] if row.get("status") == "open"]
+        asked = [taskboard.with_ask(row, self.link.ask_of(row["task"]), tuple(self.served), self.root) for row in result["tasks"] if row.get("status") == "open"]
         if any(asked):  # the chat waits for a person to allow a command or answer a question: that wait comes first in the order
             tasklife.sort_rows(result["tasks"])
         for row in result["tasks"]:  # the agent is at work in the chat: say something to it, or stop it
@@ -269,7 +269,7 @@ class Board:
         found["chat"], found["sub"], found["recent"], found["vscode"] = chat, sub, recent, self.link.status()
         health.with_context(self.root, found, chat)
         if found["status"] == "open":
-            taskboard.with_ask(found, self.link.ask_of(found["task"]), tuple(self.served))
+            taskboard.with_ask(found, self.link.ask_of(found["task"]), tuple(self.served), self.root)
         if chat.get("state") == "busy" and found["status"] == "open" and "steer" in self.served:
             found["actions"] = [item for item in found["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
         found["settings"] = self.settings_of(found["task"])

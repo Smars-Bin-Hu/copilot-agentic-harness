@@ -17,8 +17,8 @@ from unittest import mock
 import support  # noqa: F401 - the engine on sys.path, HARNESS_VSCODE_CLI=off
 from support import HarnessTestCase
 
-from core import config, logs, messages
-from modules.task import boardserve, chatsend, taskhtml, tasktrace
+from core import config, copilot_events, logs, messages
+from modules.task import boardserve, chatlive, chatsend, taskhtml, tasktrace
 
 ENGINE = Path(__file__).resolve().parents[1] / "engine"
 WEB = ENGINE / "modules" / "task" / "web"
@@ -383,6 +383,65 @@ class PromoteTermTests(unittest.TestCase):
         self.assertIn("promote (write-back repo)", chatsend.PLAIN["go-recover"])
         self.assertEqual(self.table("en")["board.action.approve-promote"], "approve promote")  # a button: plain
         self.assertEqual(self.table("en")["desk.go.recover"], chatsend.PLAIN["go-recover"])
+
+
+class WalkThroughTests(unittest.TestCase):
+    """What a walk through the board with a set of real tasks found (1.6.37)."""
+
+    def test_a_call_the_hook_never_saw_end_is_not_running_when_it_was_denied_or_stopped(self) -> None:
+        stamp = lambda second: f"2026-11-01T08:53:{second:02d}+00:00"  # noqa: E731
+        node = {"rows": [{"kind": "tool", "at": stamp(1), "tool": "bash", "ok": None, "seconds": None}, {"kind": "tool", "at": stamp(20), "tool": "bash", "ok": None, "seconds": None},
+                         {"kind": "tool", "at": stamp(40), "tool": "view", "ok": True, "seconds": 1.0}]}
+        refused = [{"at": copilot_events.seconds(stamp(2)), "seconds": 0.5, "error": "The user rejected this tool call."}]
+        tasktrace.settle(node, {"until": stamp(50), "refused": refused}, None)
+        first, second, third = node["rows"]
+        self.assertEqual((first["ok"], first["seconds"], first["error"]), (False, 0.5, "The user rejected this tool call."))
+        self.assertTrue(tasktrace.problem(first))
+        self.assertEqual((second["ok"], second.get("stopped")), (None, True))  # a newer prompt came: it will not end
+        self.assertNotIn("stopped", third)
+
+    def test_the_call_of_the_newest_prompt_runs_until_the_turn_was_stopped(self) -> None:
+        at = "2026-11-01T08:55:36+00:00"
+        running = {"rows": [{"kind": "tool", "at": at, "tool": "bash", "ok": None, "seconds": None}]}
+        tasktrace.settle(running, {"until": "", "refused": []}, None)
+        self.assertNotIn("stopped", running["rows"][0])
+        tasktrace.settle(running, {"until": "", "refused": []}, copilot_events.seconds("2026-11-01T08:55:57+00:00"))
+        self.assertTrue(running["rows"][0]["stopped"])
+        self.assertIn('item.stopped ? tag(t("desk.trace.stopped"))', (WEB / "desk.js").read_text(encoding="utf-8"))
+
+    def test_a_long_path_in_the_trace_is_a_path_and_a_key_in_it_is_still_masked(self) -> None:
+        path = "/work/company/repositories/sales-repo/src/orders/daily/load.sql"
+        row = {"at": "2026-11-01T08:00:00+00:00", "event": "PreToolUse", "tool_name": "Write", "decision": "deny", "target": {"paths": [path, "/a/" + "k" * 60 + "/b.sql"]}}
+        self.assertEqual(tasktrace.build([row])["entries"][0]["paths"], [path, "/a/***/b.sql"])
+
+    def test_the_same_words_are_not_shown_twice_on_a_line_of_the_live_tab(self) -> None:
+        item = chatlive.tool_item({"toolName": "ask_user", "displayName": "Ask User", "intention": "Waiting for response", "status": "running"}, "i", True, None)
+        self.assertEqual((item["say"], "target" in item), ("Waiting for response", False))
+        shell = chatlive.tool_item({"toolName": "bash", "intention": "Sleep", "status": "running", "toolInput": json.dumps({"command": "sleep 5"})}, "j", True, None)
+        self.assertEqual((shell["say"], shell["target"]), ("Sleep", "sleep 5"))
+
+    def test_a_row_has_one_button_of_its_own_and_the_rest_are_in_the_menu(self) -> None:
+        strip = between((WEB / "board.js").read_text(encoding="utf-8"), "function actionStrip(row)", "function actionCell(row)")
+        self.assertIn("const first = items.find((item) => isHot(row, item));", strip)
+        self.assertIn('item.action === "archive" || item === first', strip)
+
+    def test_the_words_of_a_stop_and_of_a_dim_button_are_where_they_are_read(self) -> None:
+        en = messages.table("en")
+        self.assertIn("Stop on this page", en["desk.busy.note"])
+        self.assertIn("here or in VS Code", en["desk.wait.cancelled"])
+        chat = (WEB / "chat.js").read_text(encoding="utf-8")
+        self.assertIn('state.perm === "allow-all" ? null : h("p", null, t("board.new.done.perm"))', chat)
+        self.assertIn(".tk-need-h{display:flex;flex-wrap:wrap", (WEB / "desk.css").read_text(encoding="utf-8"))  # on a phone the title wrapped letter by letter
+
+    def test_an_empty_file_says_so_and_a_paused_task_has_its_way_back_on_the_card(self) -> None:
+        desk = (WEB / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('if (!found.blocks.length) return h("div", {class: "empty-state"}, h("b", null, t("desk.doc.empty"))', desk)
+        self.assertEqual(desk.count("resumeButton()"), 3)  # the function and the two cards
+
+    def test_the_rest_of_the_page_follows_when_the_chat_starts_or_stops_waiting(self) -> None:
+        desk = (WEB / "desk.js").read_text(encoding="utf-8")
+        self.assertIn("LIVE.onChange(() => {", desk)
+        self.assertIn("if (changed && !SERVE.busy() && !typing()) pull();", desk)
 
 
 class GuardrailWordsTests(unittest.TestCase):

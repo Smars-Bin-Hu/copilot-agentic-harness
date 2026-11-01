@@ -62,7 +62,7 @@
 .tk-wait>.card{margin:0}
 .tk-need{padding:12px 14px;border:1px solid var(--line);border-radius:12px}
 .tk-need.strong{border-color:var(--hot-line);border-left:3px solid var(--hot-dot);background:var(--hot-bg)}
-.tk-need-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;min-width:0}
+.tk-need-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 10px;margin-bottom:6px;min-width:0}
 .tk-need-h h2{margin:0;font-size:14.5px;min-width:0;overflow-wrap:anywhere}
 .tk-need-h .tag{max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .tk-waited{flex:none;font-variant-numeric:tabular-nums}

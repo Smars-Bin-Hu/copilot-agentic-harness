@@ -191,6 +191,23 @@ class LinkTests(LinkCase):
         subscribed = [message["params"]["channel"] for message in self.host.seen if message.get("method") == "subscribe"]
         self.assertEqual(set(subscribed), {self.chat, self.resource, "ahp-root:/"})  # only the chat of this folder and its session (for what waits for a person, B75), no other chat; the root once, for the model list (B72), and let go of at once
 
+    def test_the_scan_for_an_unbound_task_leaves_a_chat_held_here_subscribed(self) -> None:
+        """It read each chat of the folder and let go of it, a held one too: the Live tab of a chat the board had just made stopped at the person's message, with no word (found on a real chat, 1.6.37)."""
+        calls = []
+
+        class Stub:
+            def subscribe(self, channel: str) -> Dict[str, Any]:
+                calls.append(("subscribe", channel))
+                return {}
+
+            def unsubscribe(self, channel: str) -> None:
+                calls.append(("unsubscribe", channel))
+
+        self.link.chats[self.chat] = {"state": {}, "tool_at": ""}
+        other = summary("ahp-session:/other", "ahp-chat:/other", self.folder)
+        self.link._scan(Stub(), [entry(TASK, "a-session-no-chat-has")], {self.resource: self.items[0], other["resource"]: other})
+        self.assertEqual(calls, [("subscribe", "ahp-chat:/other"), ("unsubscribe", "ahp-chat:/other")])
+
     def test_a_chat_that_has_a_different_id_leaves_the_task_unbound_and_says_why(self) -> None:
         self.states[self.chat] = chat_state("another-session")
         self.link.start()

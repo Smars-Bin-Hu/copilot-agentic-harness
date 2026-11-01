@@ -10,6 +10,29 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.37 (2026-11-01)
+
+### Added
+
+- **Your own words under a list of options.** When the agent asks a question with options, the board's answer dialog has a box for your own answer, as VS Code has, unless the question says it takes none.
+
+### Changed
+
+- **A row of the list has one button of its own.** A second one, such as "waive checks", is behind the three dots. Before, two buttons took their width from the State column of every row.
+- **The paused card has a Resume button.** Before, it was only in the menu.
+- **New task with `default` or `assisted` permissions says what comes next.** The agent may ask before its first command, and the task appears only after that.
+- **An empty file says so** on its tab, instead of an empty box.
+
+### Fixed
+
+- **The Live tab and the context of a new chat stopped updating.** The board read every chat of the folder to link an unlinked task, and let go of chats it was following. A chat made from the board then showed only your message until the board restarted.
+- **Trace showed a denied or stopped call as "running".** A call you denied now counts as failed, with the reason, and a call stopped mid-way says "stopped". The numbers agree with the Time and usage page.
+- **Trace masked long paths as if they were keys** (`/***.sql`). They are shown; a key inside a path is still masked.
+- **The page said two things for a moment.** When the chat started or stopped waiting, the state came up to 3 seconds after the stream. Now it follows at once.
+- **The texts still sent you to VS Code to stop or to answer after a cancel.** Stop is on the page.
+- **On a phone, the title of the waiting card wrapped letter by letter.**
+- **The same words twice on a line of the Live tab.**
+
 ## 1.6.36 (2026-11-01)
 
 ### Fixed

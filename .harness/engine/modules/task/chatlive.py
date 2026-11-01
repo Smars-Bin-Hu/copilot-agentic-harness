@@ -125,7 +125,7 @@ def tool_item(call: Dict[str, Any], ident: str, active: bool, root: Optional[Pat
     item: Dict[str, Any] = {"id": ident, "k": "tool", "tool": str(call.get("toolName") or "")[:60], "name": name, "st": st}
     if say:
         item["say"] = say
-    if target:
+    if target and target != say:  # words of Copilot, not a place: once is enough
         item["target"] = target
     if said or cut_target:
         item["cut"] = True

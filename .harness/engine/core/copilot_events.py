@@ -221,6 +221,7 @@ def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
                     current["tools"].append({
                         "name": started["name"], "seconds": max(0.0, at - started["at"] - started["asked"]), "ok": data.get("success") is not False,
                         "result_tokens": number(metrics.get("result_token_count")) if isinstance(metrics, dict) else None,
+                        "at": started["at"], "error": str((data.get("error") or {}).get("message") or "") if isinstance(data.get("error"), dict) else "",
                     })
             elif kind == "permission.requested":
                 permissions[str(data.get("requestId"))] = at

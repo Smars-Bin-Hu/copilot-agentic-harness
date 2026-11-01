@@ -440,6 +440,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True, 
         if steps:
             entry["until"] = utc_text(prompt["next_at"]) if prompt["next_at"] is not None else ""
             entry["thinks"] = [{"at": utc_text(think["at"]), "seconds": round(think["seconds"], 1)} for think in prompt["thinks"]]
+            entry["refused"] = [{"at": tool["at"], "seconds": round(tool["seconds"], 1), "error": tool.get("error", "")} for tool in prompt["tools"] if not tool["ok"] and tool.get("at") is not None]
         entry.update({key: round(value, 1) if value is not None else None for key, value in parts.items()})
         wait = None
         if waited is not None and waited >= 1:

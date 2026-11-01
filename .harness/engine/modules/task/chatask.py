@@ -78,7 +78,8 @@ def question_view(question: Any) -> Optional[Dict[str, Any]]:
     if question["kind"] in ("single-select", "multi-select") and not options:
         return None
     return {"id": str(question["id"]), "title": one_line(question.get("title") or question.get("message") or question["id"], MAX_LINE), "message": one_line(question.get("message") or "", MAX_LINE),
-            "kind": question["kind"], "required": bool(question.get("required")), "options": options}
+            "kind": question["kind"], "required": bool(question.get("required")), "options": options,
+            "free": question["kind"] in ("single-select", "multi-select") and question.get("allowFreeformInput") is not False}  # VS Code's own rule: a list takes typed words unless it says it does not
 
 
 def shown(item: Any) -> Optional[Dict[str, Any]]:
@@ -121,17 +122,26 @@ def one_answer(view: Dict[str, Any], value: Any) -> Tuple[Optional[Dict[str, Any
     """(the value in the shape of the host, a line for the history) for one question, or (None, "") when it is left empty. Raises AnswerError."""
     kind, title = view["kind"], view["title"]
     ids = [option["id"] for option in view["options"]]
-    if value is None or value == "" or value == []:
+    typed = ""
+    if isinstance(value, dict) and view.get("free"):  # {value: what was picked, free: what was typed}
+        typed, value = str(value.get("free") or "").strip(), value.get("value")
+        if len(typed) > MAX_ANSWER:
+            raise AnswerError("long", title)
+    if typed and kind == "single-select":
+        return {"kind": "text", "value": typed}, typed  # as VS Code sends it: the words stand for the choice
+    if not typed and (value is None or value == "" or value == []):
         return None, ""
     if kind == "single-select":
         if not isinstance(value, str) or value not in ids:
             raise AnswerError("bad", title)
         return {"kind": "selected", "value": value}, next(option["label"] for option in view["options"] if option["id"] == value)
     if kind == "multi-select":
+        value = [] if value is None and typed else value
         if not isinstance(value, list) or not all(isinstance(one, str) and one in ids for one in value):
             raise AnswerError("bad", title)
         chosen = [one for one in ids if one in value]
-        return {"kind": "selected-many", "value": chosen}, ", ".join(option["label"] for option in view["options"] if option["id"] in chosen)
+        labels = [option["label"] for option in view["options"] if option["id"] in chosen]
+        return {"kind": "selected-many", "value": chosen, **({"freeformValues": [typed]} if typed else {})}, ", ".join(labels + ([typed] if typed else []))
     if kind == "text":
         if not isinstance(value, str):
             raise AnswerError("bad", title)

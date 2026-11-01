@@ -21,7 +21,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from core import config, copilot_events, redact
 from core.logs import read_tail, session_log_path
@@ -38,6 +38,7 @@ ROWS_KEPT = 2000  # the lines the tree sends, the newest; an older prompt keeps 
 ROWS_PER_PROMPT = 300
 PROBLEMS_KEPT = 100
 FRESH_S = 10.0  # the files change all the time while the agent works: the tree is read again at most this often
+SAME_CALL_S = 3.0  # the hook and Copilot's record see the start of one call within this
 TREES_KEPT = 20
 _found: Dict[str, Tuple[Tuple[int, int], List[Tuple[str, str, float]]]] = {}  # events file -> (size, mtime), its subagents
 _trees: Dict[str, Tuple[Any, float, Dict[str, Any]]] = {}  # task -> what its files were, when it was read, the tree
@@ -45,6 +46,12 @@ _trees: Dict[str, Tuple[Any, float, Dict[str, Any]]] = {}  # task -> what its fi
 
 def _clip(text: Any) -> str:
     text = redact.text(str(text or "")).strip()
+    return text if len(text) <= TEXT_CHARS else text[:TEXT_CHARS - 1].rstrip() + "…"
+
+
+def _path(text: Any) -> str:
+    """A path, which `redact.text` would take for a key: a long path is one long run with no space."""
+    text = redact.path(str(text or "")).strip()
     return text if len(text) <= TEXT_CHARS else text[:TEXT_CHARS - 1].rstrip() + "…"
 
 
@@ -62,7 +69,7 @@ def build(rows: List[Dict[str, Any]], shown: int = SHOWN, source: str = "") -> D
             entries.append({
                 "at": at, "kind": "gate", "tool": name, "tool_kind": str(row.get("tool_kind") or ""), "decision": row["decision"],
                 "rule": str(row.get("kind") or "") or ".".join(str(item) for item in (row.get("by") or [])), "reason": _clip(row.get("reason")),
-                "paths": [_clip(item) for item in target.get("paths") or []], "command": _clip(target.get("command")),
+                "paths": [_path(item) for item in target.get("paths") or []], "command": _clip(target.get("command")),
             })
         elif event == "PreToolUse" and name:
             item = {"at": at, "kind": "tool", "tool": name, "tool_kind": str(row.get("tool_kind") or ""), "paths": [], "seconds": None, "ok": None}
@@ -78,7 +85,7 @@ def build(rows: List[Dict[str, Any]], shown: int = SHOWN, source: str = "") -> D
             item["seconds"] = round(max(0.0, ended - started), 1) if started is not None and ended is not None and started != ended else item.get("seconds")
             item["ok"] = event == "PostToolUse"
             target = row.get("target") if isinstance(row.get("target"), dict) else {}
-            item["paths"] = [_clip(path) for path in target.get("paths") or []]
+            item["paths"] = [_path(path) for path in target.get("paths") or []]
             if event == "PostToolUseFailure":
                 item["error"] = _clip(row.get("error"))
     if source:
@@ -158,12 +165,33 @@ def nodes_of(info: Dict[str, Any], entries: List[Dict[str, Any]]) -> List[Dict[s
     return nodes
 
 
+def settle(node: Dict[str, Any], item: Dict[str, Any], stopped_at: Optional[float]) -> None:
+    """The calls of a prompt whose end the hook never saw (no Post hook fires for them) are not running. The person denied the call, or it failed before it ran: Copilot's record says so.
+    Or the turn was stopped, or a newer prompt came: the call will not end. Only the newest prompt can have a call that really runs."""
+    moment = copilot_events.seconds
+    refused = list(item.get("refused") or [])
+    for row in node["rows"]:
+        if row["kind"] != "tool" or row.get("ok") is not None:
+            continue
+        at = moment(row["at"])
+        found = next((call for call in refused if at is not None and abs(call["at"] - at) <= SAME_CALL_S), None)
+        if found is not None:
+            refused.remove(found)
+            row.update(ok=False, seconds=found["seconds"] or row.get("seconds"), error=_clip(found["error"]))
+        elif item.get("until") or (stopped_at is not None and at is not None and at <= stopped_at):
+            row["stopped"] = True
+
+
 def tree(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     """The prompts of the task, newest first, with what the agent did for each; `stats`, the numbers of the whole task; `problems`, what was blocked or failed, newest first. Empty: nothing to show."""
     info = taskinsight.of_task(root, task, None, True)
     surface = str(data.get("surface") or "vscode")
     entries = [item for session in info["sessions"] for item in entries_of(root, surface, session["session_id"], str(data.get("created_at") or ""))]
     nodes = nodes_of(info, entries)
+    for node, item in zip(nodes, info["prompts"]):
+        path = None if item.get("until") else copilot_events.events_path(item.get("session_id") or "")
+        stopped = copilot_events.cancelled_at(path) if path is not None else None
+        settle(node, item, copilot_events.seconds(stopped) if stopped else None)
     problems: List[Dict[str, Any]] = []
     for node in nodes:
         for row in node["rows"]:

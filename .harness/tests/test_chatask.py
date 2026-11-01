@@ -110,6 +110,24 @@ class ActionShapeTests(unittest.TestCase):
         self.assertEqual(done["skip"], {"state": "skipped"})
         self.assertEqual(len(actions), 8)  # seven changes, one completion
 
+    def test_words_typed_under_a_list_are_sent_as_vs_code_sends_them_and_only_where_the_list_takes_them(self) -> None:
+        one = {"id": "s", "kind": "single-select", "options": [{"id": "a", "label": "A"}]}
+        many = {"id": "m", "kind": "multi-select", "options": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}]}
+        closed = {"id": "c", "kind": "single-select", "allowFreeformInput": False, "options": [{"id": "a", "label": "A"}]}
+        views = chatask.shown(question_item(questions=[one, many, closed]))["questions"]
+        self.assertEqual([view["free"] for view in views], [True, True, False])  # VS Code: a list takes words unless it says it does not
+        actions, line = chatask.answer_actions(question_item(questions=[one, many]), {"s": {"free": "  teal "}, "m": {"value": ["b"], "free": "pink"}})
+        done = actions[-1]["answers"]
+        self.assertEqual(done["s"]["value"], {"kind": "text", "value": "teal"})
+        self.assertEqual(done["m"]["value"], {"kind": "selected-many", "value": ["b"], "freeformValues": ["pink"]})
+        self.assertIn("B, pink", line)
+        only = chatask.answer_actions(question_item(questions=[dict(many, required=True)]), {"m": {"free": "pink"}})[0][-1]["answers"]["m"]["value"]
+        self.assertEqual(only, {"kind": "selected-many", "value": [], "freeformValues": ["pink"]})
+        for question, given, code in ((one, {"free": "x" * 3000}, "long"), (closed, {"free": "no"}, "bad")):
+            with self.assertRaises(chatask.AnswerError) as caught:
+                chatask.answer_actions(question_item(questions=[question]), {question["id"]: given})
+            self.assertEqual(caught.exception.code, code)
+
     def test_what_the_question_does_not_take_is_refused_before_anything_is_sent(self) -> None:
         required = question_item(questions=[{"id": "q", "title": "Which", "kind": "text", "required": True}])
         for item, given, code in ((required, {}, "required"), (required, {"q": "  "}, "required"), (required, {"q": "x" * 3000}, "long"), (required, {"zzz": "x"}, "unknown"), (required, "no", "unknown"),

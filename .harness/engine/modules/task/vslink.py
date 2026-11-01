@@ -781,8 +781,8 @@ class VsLink:
         todo = []
         for item in wanted:
             resource = item["resource"]
-            if resource in self.chats or not item.get("defaultChat"):
-                continue
+            if item.get("defaultChat") in self.chats or not item.get("defaultChat"):
+                continue  # a chat held here is left alone: the unsubscribe below would end its updates, and nothing would subscribe it again
             if resource not in self.scanned or (not self.sdk.get(resource) and self.scanned[resource] != item.get("modifiedAt")):
                 todo.append(item)
         for item in todo[:SCAN_PER_TURN]:

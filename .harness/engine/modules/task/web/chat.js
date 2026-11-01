@@ -216,7 +216,7 @@ const CHAT = (function () {
       field(t("board.new.text"), text), h("div", {class: "new-files"}, files.attach, files.picker, files.tray),
       h("div", {class: "new-grid three"}, field(t("board.new.model"), model), field(t("board.new.thinking"), thinking), field(t("board.new.lang"), h("div", {class: "chips"}, langChips))),
       h("div", {class: "send-lang"}, h("span", {class: "sub"}, t("board.new.perm")), h("div", {class: "chips"}, permChips)), permHint, h("p", {class: "sub"}, t("board.new.fixed")),
-      h("div", {class: "sub label"}, t("board.new.first")), h("p", {class: "sub"}, t("board.new.first.hint")), preview, problem, said, h("div", {class: "row send-actions new-actions"}, go, no)]);
+      h("div", {class: "sub label"}, t("board.new.first")), h("p", {class: "sub"}, t("board.new.first.hint")), preview, h("div", {class: "new-actions"}, problem, said, h("div", {class: "row send-actions"}, go, no))]);  // the bar stays in view: the reason the button is dim is read there, not below the long message
     files.zone(view.box);
     const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: text.value, model: model.value, thinking: thinking.value, lang: state.lang, permission: state.perm, domains: Array.from(state.domains)});
     // The knowledge base: the domains this repository's knowledge bases have. None ticked is a valid choice. When there are no domains the box says so and the dialog goes on.
@@ -268,7 +268,7 @@ const CHAT = (function () {
         clearTimeout(state.timer);
         const done = h("button", {type: "button", class: "act hot"}, t("board.new.close"));
         done.addEventListener("click", () => { close(); SERVE.done(); });
-        view.box.replaceChildren(...[h("h2", null, t("board.new.title") + " \u00b7 " + found.name), h("p", null, t("board.new.done")),
+        view.box.replaceChildren(...[h("h2", null, t("board.new.title") + " \u00b7 " + found.name), h("p", null, t("board.new.done")), state.perm === "allow-all" ? null : h("p", null, t("board.new.done.perm")),
           found.warn ? h("p", {class: "bad"}, found.warn) : found.unchecked ? h("p", {class: "sub"}, t("board.new.done.unchecked")) : null, h("div", {class: "row send-actions"}, done)].filter(Boolean));
         done.focus();
       }, (error) => { state.busy = false; go.textContent = t("board.new.go"); sync(); said.replaceChildren(...SERVE.reasons(shown(error))); });
@@ -322,7 +322,14 @@ const CHAT = (function () {
     const said = h("div", {class: "bad"});
     const send = h("button", {type: "button", class: "act hot", disabled: "disabled"}, t("board.ask.send"));
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
-    const ready = () => { send.disabled = found.questions.some((item) => item.required && (values[item.id] === undefined || values[item.id] === "" || (Array.isArray(values[item.id]) && !values[item.id].length))); };
+    const typed = {};  // what the person wrote under a list of options
+    const ready = () => { send.disabled = found.questions.some((item) => item.required && !(typed[item.id] || "").trim() && (values[item.id] === undefined || values[item.id] === "" || (Array.isArray(values[item.id]) && !values[item.id].length))); };
+    const freeBox = (item) => {
+      if (!item.free) return null;
+      const input = h("input", {type: "text", class: "send-body ask-free", maxlength: 2000, placeholder: t("board.ask.free"), "aria-label": t("board.ask.free")});
+      input.addEventListener("input", () => { typed[item.id] = input.value; ready(); });
+      return input;
+    };
     const control = (item) => {
       const name = "q-" + item.id;
       if (item.kind === "single-select" || item.kind === "boolean") {
@@ -331,7 +338,7 @@ const CHAT = (function () {
           const box = h("input", {type: "radio", name});
           box.addEventListener("change", () => { values[item.id] = item.kind === "boolean" ? option.id === "yes" : option.id; ready(); });
           return h("label", {class: "ask-option"}, box, " " + option.label);
-        }));
+        }), freeBox(item));
       }
       if (item.kind === "multi-select") {
         return h("div", {class: "ask-options"}, item.options.map((option) => {
@@ -343,7 +350,7 @@ const CHAT = (function () {
             ready();
           });
           return h("label", {class: "ask-option"}, box, " " + option.label);
-        }));
+        }), freeBox(item));
       }
       const number = item.kind === "number" || item.kind === "integer";
       const input = number ? h("input", {type: "number", class: "send-body", step: item.kind === "integer" ? "1" : "any"}) : h("textarea", {rows: 3, class: "send-body", maxlength: 2000});
@@ -359,6 +366,7 @@ const CHAT = (function () {
       send.disabled = true; send.textContent = t("board.serve.working");
       const answers = {};
       for (const [key, value] of Object.entries(values)) if (value !== undefined) answers[key] = value;
+      for (const [key, text] of Object.entries(typed)) if (text.trim()) answers[key] = {value: values[key], free: text};
       ask("/api/answer", {task: row.name, id: found.id, request_id: found.request_id, digest: found.digest, answers}).then(() => { view.close(); SERVE.done(); },
         (error) => { send.textContent = t("board.ask.send"); ready(); said.replaceChildren(...SERVE.reasons(shown(error))); });
     });

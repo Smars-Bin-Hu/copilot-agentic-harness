@@ -48,7 +48,7 @@ class DialogTests(unittest.TestCase):
         self.assertIn(".new-kb .kb-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}", css)
         self.assertIn("max-height:98px;overflow:auto", css)  # many domains scroll inside their box
         create = source("chat.js").split("function create()")[1]
-        self.assertLess(create.index("said, h(\"div\", {class: \"row send-actions new-actions\"}"), create.index("const body = (step)"))
+        self.assertLess(create.index("h(\"div\", {class: \"new-actions\"}, problem, said, h(\"div\", {class: \"row send-actions\"}"), create.index("const body = (step)"))
 
     def test_every_literal_key_of_the_new_pieces_is_in_both_languages(self) -> None:
         en, zh = messages.table("en"), messages.table("zh")

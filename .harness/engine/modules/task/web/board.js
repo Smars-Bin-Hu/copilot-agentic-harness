@@ -169,7 +169,8 @@
   function actionStrip(row) {
     const items = row.actions || [];
     if (!items.length) return null;
-    const direct = items.filter((item) => item.action === "archive" || isHot(row, item));
+    const first = items.find((item) => isHot(row, item));  // the others go behind the three dots: a second button takes its width from the State column of every row
+    const direct = items.filter((item) => item.action === "archive" || item === first);
     const talk = items.filter((item) => TALK.includes(item.action));
     const rest = items.filter((item) => !direct.includes(item) && !talk.includes(item));
     const nodes = direct.map((item) => actionButton(row, item));

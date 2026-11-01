@@ -203,6 +203,7 @@
   function markdown(name, empty) {
     const found = doc(name);
     if (!found) return h("div", {class: "empty-state"}, h("b", null, t("desk.missing", {file: name})), h("p", null, empty));
+    if (!found.blocks.length) return h("div", {class: "empty-state"}, h("b", null, t("desk.doc.empty")), h("p", null, empty));
     // The template's own words under the title ("> The handover file. A new session reads this file first...") are for the agent: folded, so the page starts with the task.
     const note = (name === "TASK.md" || name === "REQ.md") && found.blocks.length > 1 && found.blocks[0].t === "h" && found.blocks[1].t === "quote";
     const parts = note ? [blocks(found.blocks.slice(0, 1)), h("details", {class: "tpl-note"}, h("summary", null, t("desk.template.note")), blocks(found.blocks.slice(1, 2))), blocks(found.blocks.slice(2))] : blocks(found.blocks);
@@ -773,6 +774,12 @@
       h("div", {class: "tk-need-go"}, actionButton(row, item, "big"), jumpButton(tab, t("desk.jump." + tab))));
   }
 
+  // The way back from "put aside" is on the card that says it, not only in the menu.
+  function resumeButton() {
+    const item = desk.paused_since ? desk.actions.find((entry) => entry.action === "resume") : null;
+    return item ? actionButton(actionRow(), item, "big") : null;
+  }
+
   function otherCard(items, notes) {
     const row = actionRow();
     const idle = items.length ? null : quiet();
@@ -780,7 +787,7 @@
     return h("section", {class: "tk-need"},
       h("div", {class: "tk-need-h"}, h("h2", null, idle ? idle.title : t("desk.actions.title")), desk.waited_s !== null && desk.waited_s !== undefined && (items.length || desk.waiting) ? h("span", {class: "sub tk-waited"}, t("desk.waited", {time: clock(desk.waited_s)})) : null),
       notes,
-      idle ? [h("p", {class: "hint"}, idle.hint), idle.prompt ? promptLine(idle.prompt) : null, jump]
+      idle ? [h("p", {class: "hint"}, idle.hint), resumeButton(), idle.prompt ? promptLine(idle.prompt) : null, jump]
         : h("div", {class: "tk-acts"}, items.map((item) => h("div", {class: "tk-act"}, actionButton(row, item, "big"), h("p", {class: "hint"}, hintOf(item))))));
   }
 
@@ -802,7 +809,7 @@
     if (desk.status !== "open") return h("p", {class: "hint top"}, t(desk.status === "new" ? "desk.actions.new" : "desk.actions.closed"));
     if (needsCard()) return null;
     const idle = quiet();
-    return h("section", {class: "tk-quiet"}, h("h2", null, idle.title), h("p", {class: "hint"}, idle.hint), idle.prompt ? promptLine(idle.prompt) : null, waitNotes());
+    return h("section", {class: "tk-quiet"}, h("h2", null, idle.title), h("p", {class: "hint"}, idle.hint), resumeButton(), idle.prompt ? promptLine(idle.prompt) : null, waitNotes());
   }
 
   // --- the Live tab --------------------------------------------------------------------------------------------------------
@@ -1597,7 +1604,7 @@
       h("div", {class: "what"}, h("b", null, item.tool), item.source ? [" ", h("span", {class: "tag", title: t("desk.trace.source", {name: item.source})}, item.source)] : null,
         gate ? [" ", tag(t("desk.trace." + item.decision), item.decision === "deny" ? "bad" : "hot"), item.rule ? h("span", {class: "sub"}, " \u00b7 " + item.rule) : null] : null,
         !gate && item.ok === false ? [" ", tag(t("desk.trace.failed"), "bad")] : null,
-        !gate && item.ok === null ? [" ", tag(t("desk.trace.running"), "good run")] : null,
+        !gate && item.ok === null ? [" ", item.stopped ? tag(t("desk.trace.stopped")) : tag(t("desk.trace.running"), "good run")] : null,
         item.seconds ? h("span", {class: "sub"}, " \u00b7 " + spent(item.seconds)) : null,
         (item.paths || []).map((path) => [" ", h("span", {class: "path", title: path}, path)]),
         item.command ? [" ", h("code", null, item.command)] : null,
@@ -1749,9 +1756,19 @@
   if (typeof SERVE !== "undefined" && DATA.serve.refresh) {
     SERVE.onChange(() => { pull(); });  // after a click that changed something (a setting, a message sent): in place, so the reply panel and what was typed stay; a reload would drop them
     if (current === "trace") pull();  // opened on this tab: the page came without the tree
+    const typing = () => document.activeElement && ["TEXTAREA", "INPUT"].includes(document.activeElement.tagName);  // a redraw would take the focus from what the person is typing
+    if (typeof LIVE !== "undefined") {  // the stream is asked every second, the page every few: when the chat starts or stops waiting the rest follows at once, or the two say different things for a moment
+      let chat = "";
+      LIVE.onChange(() => {
+        const now = (LIVE.data() || {}).state || "";
+        if (now === chat) return;
+        const changed = Boolean(chat);
+        chat = now;
+        if (changed && !SERVE.busy() && !typing()) pull();
+      });
+    }
     pollEvery(DATA.serve.refresh, () => {
-      if (SERVE.busy()) return null;
-      if (document.activeElement && ["TEXTAREA", "INPUT"].includes(document.activeElement.tagName)) return null;  // a redraw would take the focus from what the person is typing
+      if (SERVE.busy() || typing()) return null;
       return pull();
     });
   }

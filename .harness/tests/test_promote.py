@@ -489,7 +489,7 @@ class RecoverTests(FailureBase):
         edited = self.repo_a / "a.sql"
         edited.write_text("select 9, 9;\n-- by hand\n", encoding="utf-8")
         result = self.recover(request_id)
-        self.assertIn(messages.text("recover.screen.edited", files=f"{self.repo_a.name}/a.sql"), self.shown.getvalue())
+        self.assertTrue(self.shown.getvalue().startswith(messages.text("recover.screen.edited", files=f"{self.repo_a.name}/a.sql")))  # above the commands: they can fill the window
         self.assertEqual(run_git(self.repo_a, "status", "--porcelain"), "")  # the repository is put back all the same
         found = self.copies(request_id, "a.sql")
         self.assertEqual([path.read_text(encoding="utf-8") for path in found], ["select 9, 9;\n-- by hand\n"])

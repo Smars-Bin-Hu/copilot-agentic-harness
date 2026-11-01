@@ -843,8 +843,8 @@ def recover(
     lines += [f"  {command}" for command in record.get("recovery", [])] or [say("recover.screen.none")]
     found = common.load_targets(root)
     edits = promote_target.edits_at_risk(record["recovery_steps"], record["branch"], found.timeout)
-    if edits:
-        lines.append(say("recover.screen.edited", files=", ".join(f"{Path(repo).name}/{relative}" for repo, relative in edits)))
+    if edits:  # first: a list of commands can be longer than the window that shows it
+        lines.insert(0, say("recover.screen.edited", files=", ".join(f"{Path(repo).name}/{relative}" for repo, relative in edits)))
     approval.say(out, *lines)
     typed(say("recover.question"), record["plan_sha256"], say("recover.refused"), reader)
     edits = promote_target.edits_at_risk(record["recovery_steps"], record["branch"], found.timeout)  # the person read the screen for a while

@@ -1987,6 +1987,8 @@
   "desk.ctx.session": "会话",
   "desk.set.permission": "权限",
   "desk.set.mode": "模式",
+  "desk.set.mode.back": "切回 Interactive",
+  "desk.set.mode.tip": "这是在 VS Code 里设置的。看板只用 Interactive：任务有自己的计划和 autorun。",
   "desk.set.context.tip": "这个 chat 能用多大的上下文。越大可能越贵。从下一条消息起生效。",
   "desk.set.context": "上下文",
   "desk.undo.hint": "这条消息和它之后的所有回复都会从 chat 里移除，agent 也会忘记。它已经改过的文件不会还原。你写的内容会回到回复框。",

@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.28 (2026-11-01)
+
+### Changed
+
+- **The board no longer offers Plan and Autopilot.** A task has its own `PLAN.md`, approved in the terminal, and autorun. Copilot's Plan keeps its plan in the session folder, blocks changes to the workspace, and ends in a menu that can start Autopilot. A chat set to either in VS Code shows it in the reply panel, with **Back to Interactive**. **Permissions** stays.
+
 ## 1.6.27 (2026-11-01)
 
 ### Fixed

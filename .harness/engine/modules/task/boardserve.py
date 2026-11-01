@@ -755,11 +755,12 @@ class Board:
         return {"text": done["text"][len(chatsend.ZH_MARK):].lstrip() if chinese else done["text"], "lang": "zh" if chinese else "en", "files": done["files"]}
 
     def chatconfig(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """The mode and the tool permission of the chat of the task: told to the host at once, they hold from the next turn. Only a value the host offers."""
+        """The mode and the tool permission of the chat of the task: told to the host at once, they hold from the next turn. Only a value the host offers;
+        the mode only goes back to Interactive, since a task has its own plan and autorun (Plan or Autopilot can only have been set in VS Code)."""
         task, _found = self.target(data)
         offered = self.link.chat_options(task)
         values = {key: data[key] for key in ("mode", "autoApprove") if key in data}
-        if not values or any(value not in [item["id"] for item in (offered.get(key) or {}).get("choices") or []] for key, value in values.items()):
+        if not values or data.get("mode", "interactive") != "interactive" or any(value not in [item["id"] for item in (offered.get(key) or {}).get("choices") or []] for key, value in values.items()):
             raise CommandError(self.refusal("setting"))
         try:
             self.link.dispatch("config", task, plan=values)

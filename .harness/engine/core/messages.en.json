@@ -1987,6 +1987,8 @@
   "desk.ctx.session": "Session",
   "desk.set.permission": "Permissions",
   "desk.set.mode": "Mode",
+  "desk.set.mode.back": "Back to Interactive",
+  "desk.set.mode.tip": "Set in VS Code. The board works in Interactive: a task has its own plan and autorun.",
   "desk.set.context.tip": "How much context the chat may use. A larger size can cost more. It holds from the next message.",
   "desk.set.context": "Context",
   "desk.undo.hint": "This message and everything that answered it leave the chat, and the agent forgets them. Files it changed stay changed. Your words come back to the reply box.",

@@ -526,9 +526,16 @@
       select.addEventListener("change", () => SERVE.post("/api/chatconfig", {task: desk.name, [key]: select.value}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); }));
       return h("label", {class: "set-field"}, h("span", {class: "sub"}, label), select);
     };
+    const otherMode = () => {  // Plan and Autopilot are not offered here: a task has its own plan and autorun. One set in VS Code is shown, with the way back
+      const found = (info.options || {}).mode;
+      if (!found || !found.value || found.value === "interactive") return null;
+      const back = h("button", {type: "button", class: "chip"}, t("desk.set.mode.back"));
+      back.addEventListener("click", () => SERVE.post("/api/chatconfig", {task: desk.name, mode: "interactive"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); }));
+      return h("span", {class: "set-field", title: t("desk.set.mode.tip")}, h("span", {class: "sub"}, t("desk.set.mode")), h("span", null, (found.choices.find((item) => item.id === found.value) || {}).label || found.value), back);
+    };
     return h("section", {class: "card chatbar settings", title: t("desk.set.note", {n: Math.max(1, info.n || 3)})}, h("span", {class: "chat-k"}, t("desk.set.label")),
       h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.model")), pick), h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.thinking")), think),
-      h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.context")), room), hostSetting("mode", t("desk.set.mode")), hostSetting("autoApprove", t("desk.set.permission")),
+      h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.context")), room), otherMode(), hostSetting("autoApprove", t("desk.set.permission")),
       h("span", {class: "set-field set-checks"}, h("span", {class: "sub"}, t("desk.set.checks")), h("span", {class: "chips"}, chips)),
       h("p", {class: "sub set-note", title: t("desk.set.note", {n: Math.max(1, info.n || 3)})}, t("desk.set.note", {n: Math.max(1, info.n || 3)})));
   }

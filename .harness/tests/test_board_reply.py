@@ -159,12 +159,29 @@ class ServeTests(SendCase):
 
     def test_only_a_setting_the_host_offers_is_told_to_it(self) -> None:
         with mock.patch.object(self.vs, "chat_options", return_value=self.options()):
-            status, data, _ = self.post("/api/chatconfig", {"mode": "autopilot"})
+            status, data, _ = self.post("/api/chatconfig", {"autoApprove": "nothing-offered"})
             self.assertEqual((status, data["error"]), (409, messages.text("send.refused.setting")))
-            status, data, _ = self.post("/api/chatconfig", {"mode": "plan"})
+            status, data, _ = self.post("/api/chatconfig", {"autoApprove": "default"})
         self.assertEqual(status, 200, data)
-        self.assertEqual(self.told(), {"type": "chat/configChanged", "config": {"mode": "plan"}})
-        self.assertEqual(ahp.config_values(self.vs.chats[self.chat]["state"])["mode"], "plan")
+        self.assertEqual(self.told(), {"type": "chat/configChanged", "config": {"autoApprove": "default"}})
+        self.assertEqual(ahp.config_values(self.vs.chats[self.chat]["state"])["autoApprove"], "default")
+
+    def test_the_mode_only_goes_back_to_interactive(self) -> None:
+        with mock.patch.object(self.vs, "chat_options", return_value=self.options()):
+            before = len(self.actions())
+            for mode in ("plan", "autopilot"):
+                status, data, _ = self.post("/api/chatconfig", {"mode": mode})
+                self.assertEqual((status, data["error"]), (409, messages.text("send.refused.setting")))
+            self.assertEqual(len(self.actions()), before)
+            status, data, _ = self.post("/api/chatconfig", {"mode": "interactive"})
+        self.assertEqual(status, 200, data)
+        self.assertEqual(self.told(), {"type": "chat/configChanged", "config": {"mode": "interactive"}})
+
+    def test_the_panel_offers_no_native_mode_and_shows_one_set_in_vs_code(self) -> None:
+        desk = source("desk.js")
+        self.assertNotIn('hostSetting("mode"', desk)
+        self.assertIn('found.value === "interactive") return null;', desk)
+        self.assertIn('{task: desk.name, mode: "interactive"}', desk)
 
     def test_nothing_changes_without_a_paired_browser(self) -> None:
         for path in ("/api/chatconfig", "/api/undo"):

@@ -130,7 +130,7 @@ button.st-checks:hover{background:var(--hover);border-color:var(--line2)}
 .st-card .st-checks{height:26px;padding:0 8px}
 .st-checks .st-d.k-done{animation:rbpop .4s cubic-bezier(.2,.9,.3,1.4)}
 
-/* Task log: only the decisions and the verdicts stand out; the rest stays quiet, or nothing does */
+/* Task Record: only the decisions and the verdicts stand out; the rest stays quiet, or nothing does */
 ol.timeline.history .what b{font-weight:400;color:var(--soft)}
 ol.timeline.history li.key{margin:2px 0;padding-right:10px;border-radius:8px}
 ol.timeline.history li.key .what b{font-weight:600}

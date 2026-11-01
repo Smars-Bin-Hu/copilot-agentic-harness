@@ -652,7 +652,7 @@ def require_idle(root: Path, data: Dict[str, Any], command: str, force: bool = F
         raise CommandError(messages.text("task.busy", command=command, minutes=ACTIVE_SECONDS // 60))
 
 
-STATES = ("waiting", "working", "quiet", "unheld", "paused", "closed", "new")  # the order of the list; `state_of` picks one
+STATES = ("broken", "waiting", "working", "quiet", "unheld", "paused", "closed", "new")  # the order of the list; `state_of` picks one
 
 
 def session_state(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -697,7 +697,7 @@ def state_of(status: str, paused: str, why: str, is_held: bool, is_active: bool)
 
 
 def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
-    """Tasks by state (STATES): those that wait for the person first, the one that waited longest on top; then the one touched last. A folder that was never started is listed as `new`.
+    """Tasks by state (STATES): those that wait for the person first, the one that waited longest on top; then the one touched last. A folder that was never started is listed as `new`; one whose task.json is damaged, as `broken` (its status stays `new`: nothing else of it can be read).
     Every row has `state` (one of STATES), `held` and `active`; a row with no session on it has `unheld_s`."""
     rows = []
     for task in tasks.folders(root):
@@ -706,7 +706,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
             rows.append({
                 "task": task, "name": task_ops.name_of(task), "status": "new", "kind": "", "tier": "", "updated_at": "", "waiting": "",
                 "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "paused_since": "", "paused_by": "",
-                "state": "new", "held": False, "active": False,
+                "state": "broken" if tasks.damaged(root, task) else "new", "held": False, "active": False,
             })
             continue
         if data.get("status") != "open" and not everything:

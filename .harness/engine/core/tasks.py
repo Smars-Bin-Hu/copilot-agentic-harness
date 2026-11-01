@@ -82,6 +82,14 @@ def read(root: Path, task: str) -> Optional[Dict[str, Any]]:
     return data if isinstance(data, dict) else None
 
 
+def damaged(root: Path, task: str) -> bool:
+    """task.json is there but cannot be read: the task started once, and only a person can bring it back."""
+    try:
+        return state_file(root, task).is_file() and read(root, task) is None
+    except OSError:
+        return False
+
+
 def open_of(root: Path, state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The open task a session holds, or None."""
     name = state.get("active_task")

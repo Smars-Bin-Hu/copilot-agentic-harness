@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.49 (2026-11-01)
+
+### Changed
+
+- The tab **Task log** is now **Task Record** (zh: 任务记录): the name was too close to **Log**.
+- New task shows the first message beside the fields, so a low window need not scroll to read it. On a narrow window it stays below them.
+- A task whose `task.json` cannot be read shows "task file damaged" on the board, first in the list, not "not started".
+
 ## 1.6.48 (2026-11-01)
 
 ### Changed

@@ -297,6 +297,14 @@ class UpgradeTests(LifeCase):
 
 
 class ListTests(LifeCase):
+    def test_a_damaged_task_file_is_listed_as_broken_not_as_not_started(self) -> None:
+        tasks.state_file(self.root, f"{tasks.TASKS_DIR}/t-bad").parent.mkdir(parents=True)
+        tasks.state_file(self.root, f"{tasks.TASKS_DIR}/t-bad").write_text("{ not json", encoding="utf-8")
+        tasks.task_dir(self.root, f"{tasks.TASKS_DIR}/t-new").mkdir(parents=True)
+        rows = {row["name"]: row for row in tasklife.list_tasks(self.root, everything=True)["tasks"]}
+        self.assertEqual((rows["t-bad"]["state"], rows["t-bad"]["status"]), ("broken", "new"))
+        self.assertEqual(rows["t-new"]["state"], "new")
+
     def test_no_tasks(self) -> None:
         self.assertEqual(self.listed(), {"tasks": [], "open": 0, "waiting": 0, "paused": 0, "promote_queue": []})
 

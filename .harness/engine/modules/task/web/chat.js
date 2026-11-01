@@ -202,13 +202,17 @@ const CHAT = (function () {
       return chip;
     });
     const view = SERVE.dialog([h("h2", null, t("board.new.title")), blocked,
-      h("div", {class: "new-grid"}, field(t("board.new.name"), name), field(t("board.new.kind"), kind)),
-      field(t("board.new.source"), source), h("p", {class: "sub"}, t("board.new.source.hint")),
-      h("div", {class: "new-field"}, h("span", {class: "sub label"}, t("board.new.kb")), kbBox),
-      field(t("board.new.text"), text), h("div", {class: "new-files"}, files.attach, files.picker, files.tray),
-      h("div", {class: "new-grid three"}, field(t("board.new.model"), model), field(t("board.new.thinking"), thinking), field(t("board.new.lang"), h("div", {class: "chips"}, langChips))),
-      h("p", {class: "sub"}, t("board.new.fixed")),
-      h("div", {class: "sub label"}, t("board.new.first")), h("p", {class: "sub"}, t("board.new.first.hint")), preview, h("div", {class: "new-actions"}, problem, said, h("div", {class: "row send-actions"}, go, no))]);  // the bar stays in view: the reason the button is dim is read there, not below the long message
+      h("div", {class: "new-split"},
+        h("div", {class: "new-form"},
+          h("div", {class: "new-grid"}, field(t("board.new.name"), name), field(t("board.new.kind"), kind)),
+          field(t("board.new.source"), source), h("p", {class: "sub"}, t("board.new.source.hint")),
+          h("div", {class: "new-field"}, h("span", {class: "sub label"}, t("board.new.kb")), kbBox),
+          field(t("board.new.text"), text), h("div", {class: "new-files"}, files.attach, files.picker, files.tray),
+          h("div", {class: "new-grid three"}, field(t("board.new.model"), model), field(t("board.new.thinking"), thinking), field(t("board.new.lang"), h("div", {class: "chips"}, langChips))),
+          h("p", {class: "sub"}, t("board.new.fixed"))),
+        h("div", {class: "new-side"}, h("div", {class: "sub label"}, t("board.new.first")), h("p", {class: "sub"}, t("board.new.first.hint")), preview)),  // beside the fields, so a low window need not scroll to read it
+      h("div", {class: "new-actions"}, problem, said, h("div", {class: "row send-actions"}, go, no))]);  // the bar stays in view: the reason the button is dim is read there, not below the long message
+    view.box.classList.add("new-wide");
     files.zone(view.box);
     const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: text.value, model: model.value, thinking: thinking.value, lang: state.lang, domains: Array.from(state.domains)});
     // The knowledge base: the domains this repository's knowledge bases have. None ticked is a valid choice. When there are no domains the box says so and the dialog goes on.

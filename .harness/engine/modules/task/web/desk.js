@@ -839,7 +839,7 @@
   // The words for a task that has nothing waiting on it, on the Live tab: closed, not started, quiet, or at work with nothing to decide.
   function livePlain() {
     if (desk.past || saved) return null;
-    if (desk.status !== "open") return h("p", {class: "hint top"}, t(desk.status === "new" ? "desk.actions.new" : "desk.actions.closed"));
+    if (desk.status !== "open") return h("p", {class: "hint top"}, t(desk.status === "new" ? (desk.state === "broken" ? "desk.actions.broken" : "desk.actions.new") : "desk.actions.closed"));
     if (needsCard()) return null;
     const idle = quiet();
     return h("section", {class: "tk-quiet"}, h("h2", null, idle.title), h("p", {class: "hint"}, idle.hint), resumeButton(), idle.prompt ? promptLine(idle.prompt) : null, waitNotes());

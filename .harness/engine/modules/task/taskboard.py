@@ -45,7 +45,7 @@ def table(result: Dict[str, Any]) -> str:
     lines: List[List[str]] = []
     for row in result["tasks"]:
         if row["status"] == "new":
-            kind, state = "-", say("board.state.new")
+            kind, state = "-", say(f"board.state.{row['state']}")
         else:
             kind = say(f"task.kind.{row['kind'] or 'none'}") + " · " + say(f"task.tier.{row['tier'] or 'none'}")
             state = row["waiting"] or say(f"board.state.{row['state']}") + (" · " + taskinsight.clock(row["unheld_s"]) if row["state"] == "unheld" and row.get("unheld_s") is not None else "")

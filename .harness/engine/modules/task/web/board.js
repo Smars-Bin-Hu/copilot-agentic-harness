@@ -36,7 +36,7 @@
   const figures = (row) => (row.brief && current && row.brief.current ? row.brief.current : row.brief);
 
   const matches = Object.fromEntries(FILTERS.map((name) => [name, name === "all" ? () => true : (row) => stateOf(row, live) === name]));
-  const ORDER = ["waiting", "working", "quiet", "unheld", "paused", "closed", "new"];
+  const ORDER = ["broken", "waiting", "working", "quiet", "unheld", "paused", "closed", "new"];
   const rank = (row) => ORDER.indexOf(stateOf(row, live));
   const kindText = (row) => (row.status === "new" ? "-" : t("task.kind." + (row.kind || "none")));
   // The columns that sort: the value of a row, and whether a bigger number comes first on the first click.

@@ -51,7 +51,7 @@ class LookTests(unittest.TestCase):
         self.assertNotRegex(css, r"\.copyright\{[^}]*border-radius")
 
     def test_a_task_not_started_does_not_say_it_is_closed(self) -> None:
-        self.assertIn('desk.status === "new" ? "desk.actions.new"', (WEB / "desk.js").read_text(encoding="utf-8"))
+        self.assertIn('desk.state === "broken" ? "desk.actions.broken" : "desk.actions.new"', (WEB / "desk.js").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

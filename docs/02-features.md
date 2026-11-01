@@ -287,7 +287,7 @@ Under the stages, **what waits for you** comes first, each button with a line on
 
 ### The tabs
 
-The page shows the tabs its kind needs. They are in groups: **Live**, **Overview** (Overview, Requirement, Intake, Design, RCA, Plan, TODO), **Deliver** (Changes, Test, Review), **Records** (Log, Task log, Agent actions) and **Files** (Docs, Files). The open group has a second row; a group with one tab goes straight to it; a `!` on a tab (a requirement or plan that waits for you) shows on its group. The page remembers the last tab of each group.
+The page shows the tabs its kind needs. They are in groups: **Live**, **Overview** (Overview, Requirement, Intake, Design, RCA, Plan, TODO), **Deliver** (Changes, Test, Review), **Records** (Log, Task Record, Agent actions) and **Files** (Docs, Files). The open group has a second row; a group with one tab goes straight to it; a `!` on a tab (a requirement or plan that waits for you) shows on its group. The page remembers the last tab of each group.
 
 | Tab | On | What it holds |
 | --- | --- | --- |
@@ -301,7 +301,7 @@ The page shows the tabs its kind needs. They are in groups: **Live**, **Overview
 | Changes | development, knowledge base update | The files the task changes and their diff; the write-back the last dry run prepared; after a write-back, the commit message and the commands that commit it |
 | Review | any task, when you asked for independent checks or one has run | Each round with the package the reviewer was given and what it answered, newest first. While the reviewer runs the task is still *working*, and the tab says which round is out |
 | Test | a test task | The guide, then a sub-tab for each environment: its results file, a tab for each run, the verdict the agent judged, and the defects (the open ones with their text, the fixed ones folded) |
-| Task log | every task | What happened, newest first: documents added, approvals, fetches, checks, runs, write-backs, pauses |
+| Task Record | every task | What happened, newest first: documents added, approvals, fetches, checks, runs, write-backs, pauses |
 | Files | when there is something | What is in `REQ/`, `REF/`, `INBOX/`, `DEV/` and `RUNS/`, as a folder tree like the VS Code explorer: a folder that holds only one folder is joined with it (`d/e/f/`). Open a file to read it: Markdown is drawn, code is coloured and a picture is shown. A CSV or TSV file, and each sheet of an Excel workbook (`.xlsx`, `.xlsm`, `.xls`), is a table you can search. A table only reads (to trim rows, use Intake). The page says what it leaves out: hidden sheets, rows and columns, and the rows past its limit. A workbook has a link to download it |
 
 **Giving results.** When the task waits for the results of a run or a test, the page has a form, **Give the results here**: paste the output, paste or add the screenshots, say what you ran, and save. The board server, with a paired browser, writes it under `INBOX/<ENV>/<time>/` in the task, a folder only you can write. The page then gives the message that tells the agent, who records it with `task run record` (a run before the write-back) or `task test record` (a test). Giving results in the chat still works.

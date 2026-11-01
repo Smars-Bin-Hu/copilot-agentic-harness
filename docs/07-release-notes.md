@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.42 (2026-11-01)
+
+### Added
+
+- **CSV and Excel files open as tables in the Files tab.** A `.csv` or `.tsv` file is a table you can search, and **Table** and **Text** switch between it and the coloured text. An Excel workbook (`.xlsx`, `.xlsm`, `.xls`) has a table for each sheet, its sheets in a row above and a link to download it below. It is read as Intake reads it: nothing is installed, and `.xls` needs the same optional reader. A table only reads; to trim rows, use Intake. The page says what a table leaves out: hidden rows, columns and sheets, empty sheets, and the rows past the limit (400,000 characters of text for each sheet). A workbook over 28 MB, or one that cannot be read, is only named, with the link.
+
+### Fixed
+
+- **Table and Text show which one is on,** in Intake too. Both looked the same.
+- **A file that failed to load is no longer asked for again and again,** and a file that takes long to load is asked for once.
+- **A very long header no longer makes a table column huge,** and a row with fewer cells than the header keeps its lines.
+- **An empty text file says it is empty,** instead of showing an empty box.
+
 ## 1.6.41 (2026-11-01)
 
 ### Fixed

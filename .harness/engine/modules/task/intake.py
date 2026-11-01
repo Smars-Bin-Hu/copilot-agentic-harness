@@ -198,7 +198,7 @@ def convert_xls(root: Path, data: bytes, stem: str, include_hidden: bool) -> Dic
             name = f"{stem}--{convert.safe_name(sheet.name)}-{copy}.csv"
         names.add(name)
         files.append((name, convert.csv_bytes(rows)))
-        info.update(file=name, rows=len(rows), columns=len(rows[0]), preview=rows[: convert.PREVIEW_ROWS], extras=[])
+        info.update(file=name, rows=len(rows), columns=len(rows[0]), preview=rows[: convert.PREVIEW_ROWS], extras=[], hidden_rows=len(skipped_rows), hidden_columns=len(skipped_columns))
         if merged:
             notes.append(f"sheet '{sheet.name}': {merged} merged range(s): the value is repeated in every cell of the range")
         if skipped_rows or skipped_columns:

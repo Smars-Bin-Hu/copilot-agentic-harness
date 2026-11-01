@@ -40,12 +40,86 @@ assert.deepStrictEqual(rows, [["a", 'b "q" x', "c"], ['line1\n- Fields containin
 assert.strictEqual(toCsv(rows), 'a,"b ""q"" x",c\n"line1\n- Fields containing ""X"" must",2,"x,y"\n3,,\n');
 assert.deepStrictEqual(parseCsv("a,b\r\nc,d"), [["a", "b"], ["c", "d"]]);
 assert.deepStrictEqual(parseCsv(""), []);
+assert.deepStrictEqual(parseCsv('a\tb,c\n"x\ty"\t2\n', "\t"), [["a", "b,c"], ["x\ty", "2"]]);
 """
+        self.run_js(script)
+
+    def run_js(self, script: str) -> None:
         with tempfile.TemporaryDirectory() as folder:
             file = Path(folder) / "csv_check.js"
             file.write_text(script, encoding="utf-8")
             done = subprocess.run(["node", str(file)], capture_output=True, text=True, check=False)
         self.assertEqual(done.returncode, 0, done.stderr)
+
+    FAKE_PAGE = r"""
+const assert = require("assert");
+const node = (tag, attrs, kids) => ({tag, attrs: attrs || {}, kids, hidden: false, disabled: false, textContent: "", addEventListener() {}, replaceChildren(...items) { this.kids = items; }});
+const h = (tag, attrs, ...kids) => node(tag, attrs, kids.flat(Infinity).filter((kid) => kid !== null && kid !== undefined));
+const t = (key, args) => key + (args ? " " + JSON.stringify(args) : "");
+const all = (item, tag) => (!item || typeof item !== "object" ? [] : [...(item.tag === tag ? [item] : []), ...(item.kids || []).flatMap((kid) => all(kid, tag))]);
+"""
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_the_table_of_the_files_tab_only_reads_and_every_row_has_every_column(self) -> None:
+        source = (ENGINE_WEB / "desk.js").read_text(encoding="utf-8")
+        script = self.FAKE_PAGE + source[source.index("function parseCsv"): source.index("function intakeEditor")] + r"""
+const edit = {text: "a,b,c\n1\n2,3,4,5\n", delimiter: ","};
+csvLoad(edit, true);
+assert.strictEqual(edit.view, "table");
+const shown = csvTable(edit, "REF/x.csv");
+assert.strictEqual(all(shown, "tr").length, 3, "the head and two rows");
+assert.deepStrictEqual(all(shown, "tr").slice(1).map((row) => all(row, "td").length), [5, 5], "the number and the widest row's four columns");
+assert.strictEqual(all(shown, "input").filter((item) => item.attrs.type === "checkbox").length, 0);
+assert.strictEqual(all(shown, "button").filter((item) => !item.hidden).length, 0, "nothing is picked or deleted, and every row is drawn");
+assert.strictEqual(all(shown, "p").length, 0, "the note on picking is Intake's");
+const intake = csvTable(edit);
+assert.strictEqual(all(intake, "input").filter((item) => item.attrs.type === "checkbox").length, 2, "Intake still picks");
+const long = {text: "a,b\n" + "x,y\n".repeat(200000)};
+csvLoad(long, true);
+const big = csvTable(long, "REF/long.csv");
+assert.strictEqual(all(big, "tr").length, 201, "200 rows are drawn at first");
+const short = {text: "a\n".repeat(200000)};
+csvLoad(short, true);
+assert.strictEqual(short.view, "text", "one column may not be a comma file");
+csvTable(short, "REF/one.csv");  // a file of short lines: it used to be too many arguments for Math.max
+"""
+        self.run_js(script)
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_text_cut_short_loses_the_row_it_ended_in(self) -> None:
+        source = (ENGINE_WEB / "desk.js").read_text(encoding="utf-8")
+        script = self.FAKE_PAGE + source[source.index("function parseCsv"): source.index("function intakeEditor")] + source[source.index("const fileTables = {};"): source.index("function textFile")] + r"""
+assert.deepStrictEqual(fileTable("cut", 'a,b\n1,2\n3,"par', true, ",").rows, [["a", "b"], ["1", "2"]]);
+assert.deepStrictEqual(fileTable("whole", "a,b\n1,2\n", false, ",").rows, [["a", "b"], ["1", "2"]]);
+assert.strictEqual(fileTable("whole", "another text", false, ",").rows.length, 2, "what the person did with a table stays while the page is open");
+"""
+        self.run_js(script)
+
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_a_file_is_asked_for_once_while_it_loads_and_after_it_failed(self) -> None:
+        """A workbook takes seconds, and a redraw in between asked again; a file that failed was asked for again by the redraw of its own failure, for ever."""
+        source = (ENGINE_WEB / "desk.js").read_text(encoding="utf-8")
+        script = r"""
+const assert = require("assert");
+const fileCache = {}, desk = {name: "job"}, FILE_KINDS = ["markdown", "text", "sheet"];
+const served = () => true;
+let posts = 0, draws = 0, answer = null;
+const draw = () => { draws++; };
+const SERVE = {post: () => { posts++; return new Promise((resolve, reject) => { answer = {resolve, reject}; }); }};
+""" + source[source.index("function fileLoad"): source.index("function filesTab")] + r"""
+const item = {path: "REF/book.xlsx", kind: "sheet"};
+fileLoad(item);
+fileLoad(item);
+assert.strictEqual(posts, 1, "a redraw while it loads does not ask again");
+answer.reject(new Error("gone"));
+setImmediate(() => {
+  assert.strictEqual(fileCache[item.path], null);
+  assert.strictEqual(draws, 1);
+  fileLoad(item);
+  assert.strictEqual(posts, 1, "a failed file is not asked for in a loop");
+});
+"""
+        self.run_js(script)
 
     def test_every_text_of_the_table_view_is_written_in_both_languages(self) -> None:
         source = (ENGINE_WEB / "desk.js").read_text(encoding="utf-8")

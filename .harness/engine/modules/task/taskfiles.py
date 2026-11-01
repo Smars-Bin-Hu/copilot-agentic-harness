@@ -3,7 +3,7 @@
 These are the folders of a task that hold files of any kind (several requirement papers, reference code, the files to write back, the outputs of a run), not only Markdown.
 The page lists them (names and sizes: small) and asks for one file only when the person opens it; a saved copy takes the small text files in.
 Everything read here is inside the task folder, a link anywhere on the way is not followed, and a file is shown by what it holds: Markdown is
-drawn, text and code are shown as a block to copy, a picture is shown, anything else is only named.
+drawn, text and code are shown as a block to copy, a CSV file and a workbook are drawn as tables by the page, a picture is shown, anything else is only named.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from core import tasks
 
-from . import common, mdtree
+from . import common, intakeconvert, mdtree
 
 FOLDERS = ("REQ", "REF", "INBOX", "DEV", "RUNS")  # the order of the list: what the person gave, what the agent made, what came back
 ROUND_DEV = re.compile(r"DEV_R\d+$", re.IGNORECASE)  # DEV_r<n>: the result of an earlier round, read only (M44)
@@ -25,7 +25,10 @@ MAX_EMBED_BYTES = 150_000  # a saved copy takes a text file in up to this size e
 MAX_EMBED_TOTAL = 2 * 1024 * 1024
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_DOWNLOAD_BYTES = 30 * 1024 * 1024  # intake takes in 28 MB at most
+MAX_BOOK_BYTES = 28 * 1024 * 1024  # a workbook larger than intake takes is only named
+MAX_BOOK_TEXT = 4 * MAX_VIEW_BYTES  # the text of all the sheets of a workbook sent to the page; each sheet stops at MAX_VIEW_BYTES
 MARKDOWN = {".md", ".markdown"}
+SHEETS = {".xlsx", ".xlsm", ".xls"}
 TEXT = {".txt", ".log", ".sql", ".py", ".sh", ".ps1", ".bat", ".cmd", ".json", ".jsonl", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".csv", ".tsv", ".xml",
         ".html", ".css", ".js", ".ts", ".java", ".scala", ".r", ".diff", ".patch", ".properties", ".env", ".md5",
         ".cs", ".csx", ".csproj", ".bash", ".zsh", ".psm1", ".psd1", ".jsx", ".tsx", ".mjs", ".jsonc", ".go", ".c", ".h", ".cpp", ".hpp", ".kt", ".htm", ".xhtml",
@@ -39,6 +42,8 @@ def kind_of(path: Path) -> str:
         return "markdown"
     if suffix in mdtree.IMAGE_TYPES:
         return "image"
+    if suffix in SHEETS:
+        return "sheet"
     if suffix in TEXT:
         return "text"
     return "other"
@@ -124,6 +129,34 @@ def download(root: Path, task: str, relative: str) -> Optional[Path]:
     return path if path is not None and path.stat().st_size <= MAX_DOWNLOAD_BYTES else None
 
 
+def workbook(root: Path, path: Path, size: int) -> Dict[str, Any]:
+    """A workbook as the page draws it, read as Intake reads one: `sheets` in the order of the book (`text`: csv, `rows` counts the header, `cut`: the text stops early) and `left_out` (the sheets with no
+    table, and why). What cannot be read, or is too large, is only named: `kind` other and `note`."""
+    if size > MAX_BOOK_BYTES:
+        return {"kind": "other", "note": "big"}
+    try:
+        from . import intake  # it needs this module's neighbours
+
+        data = path.read_bytes()
+        made = intake.convert_xls(root, data, path.stem, False) if path.suffix.lower() == ".xls" else intakeconvert.convert_xlsx(data, path.stem)
+    except Exception:  # noqa: BLE001 - a damaged file, or no reader for an old one: the person opens it in Excel
+        return {"kind": "other", "note": "failed"}
+    texts = dict(made["files"])
+    sheets: List[Dict[str, Any]] = []
+    left_out: List[Dict[str, str]] = []
+    room = MAX_BOOK_TEXT
+    for sheet in made["sheets"]:
+        if sheet.get("skipped") or sheet.get("file") not in texts:
+            left_out.append({"name": sheet["name"], "why": str(sheet.get("skipped") or "")})
+            continue
+        whole = texts[sheet["file"]].decode("utf-8")
+        text = whole[:min(MAX_VIEW_BYTES, room)]
+        room -= len(text)
+        sheets.append({"name": sheet["name"], "text": text, "rows": sheet["rows"], "columns": sheet["columns"], "cut": len(text) < len(whole),
+                       "hidden_rows": sheet.get("hidden_rows", 0), "hidden_columns": sheet.get("hidden_columns", 0)})
+    return {"sheets": sheets, "left_out": left_out}
+
+
 def view(root: Path, task: str, relative: str) -> Optional[Dict[str, Any]]:
     """One file as the page shows it, or None when it is not one the tab lists. `cut`: it was longer than MAX_VIEW_BYTES."""
     path = locate(root, task, relative)
@@ -134,6 +167,8 @@ def view(root: Path, task: str, relative: str) -> Optional[Dict[str, Any]]:
     out: Dict[str, Any] = {"path": relative, "kind": kind, "size": size}
     if kind == "image":
         out["ok"] = size <= MAX_IMAGE_BYTES  # a picture too large is only named
+    elif kind == "sheet":
+        out.update(workbook(root, path, size))
     elif kind in ("markdown", "text"):
         data = path.read_bytes()[:MAX_VIEW_BYTES]
         wide = data[:2] in (b"\xff\xfe", b"\xfe\xff")  # UTF-16 with its mark, as SSMS and Visual Studio may save a file

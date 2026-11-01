@@ -422,7 +422,7 @@ def convert_xlsx(data: bytes, stem: str, include_hidden: bool = False, prefix: s
             continue
         grid = sheet_grid(archive, target, strings, formats, base1904, include_hidden, colours)
         rows, cut_columns = trim_grid(grid["cells"], grid["skipped_rows"])
-        info.update(rows=len(rows), columns=len(rows[0]) if rows else 0)
+        info.update(rows=len(rows), columns=len(rows[0]) if rows else 0, hidden_rows=grid["hidden_rows"], hidden_columns=grid["hidden_columns"])
         extras = []
         if grid["hidden_rows"] and not include_hidden:
             extras.append(f"{grid['hidden_rows']} hidden row(s) skipped")

@@ -1150,6 +1150,15 @@
   const rootHint = (root) => ROOT_HINT[root.toUpperCase()] || (/^DEV_R\d+$/i.test(root) ? ROOT_HINT.DEV : "desk.files.hint");  // DEV_r<n>: the files an earlier round wrote back
   const size = (bytes) => bytes < 1024 ? bytes + " B" : bytes < 1048576 ? Math.round(bytes / 1024) + " KB" : (bytes / 1048576).toFixed(1) + " MB";
 
+  // One of a few to choose from over a table: Table or Text, a sheet of a workbook.
+  const pickChip = (label, on, call, title) => {
+    const button = h("button", {type: "button", class: "chip" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false", title: title || null}, label);
+    button.addEventListener("click", call);
+    return button;
+  };
+
+  const fileLink = (item) => h("a", {href: "/download/" + encodeURIComponent(desk.name) + "/" + item.path.split("/").map(encodeURIComponent).join("/"), download: ""}, t("desk.files.download"));
+
   // An original kept by Intake: the files made from it (they open here) and the original itself to save.
   function originalExtras(item) {
     if (!item.path.startsWith("REQ/originals/")) return null;
@@ -1158,26 +1167,74 @@
       a.addEventListener("click", (event) => { event.preventDefault(); fileOpen = path; draw(false); });
       return a;
     });
-    const href = "/download/" + encodeURIComponent(desk.name) + "/" + item.path.split("/").map(encodeURIComponent).join("/");
-    return h("p", {class: "sub"}, made.length ? [t("desk.files.made") + " ", made.map((a, index) => [index ? ", " : "", a]), " · "] : null,
-      served() ? h("a", {href, download: ""}, t("desk.files.download")) : null);
+    return h("p", {class: "sub"}, made.length ? [t("desk.files.made") + " ", made.map((a, index) => [index ? ", " : "", a]), " · "] : null, served() ? fileLink(item) : null);
   }
 
+  // A workbook is opened outside the page: Excel, not VS Code.
+  const fileSave = (item) => originalExtras(item) || (served() ? h("p", {class: "sub"}, fileLink(item)) : null);
+
+  // A table of the Files tab: what the person did with it (table or text, the search, how many rows) stays while the page is open. Text cut short ends inside a row: that row is left out.
+  const fileTables = {};
+  function fileTable(key, text, cut, delimiter) {
+    if (!fileTables[key]) {
+      const edit = {text, delimiter, cut};
+      csvLoad(edit, true);
+      if (cut) edit.rows.pop();
+      fileTables[key] = edit;
+    }
+    return fileTables[key];
+  }
+
+  function textFile(item, found) {
+    if (!found.text.trim()) return h("p", {class: "sub"}, t("desk.doc.empty"));
+    const language = Highlight.fileLanguage(item.path);
+    const cut = found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null;
+    if (language !== "csv" && language !== "tsv") return [codeBlock(found.text, language), cut];
+    const edit = fileTable(item.path, found.text, found.cut, language === "tsv" ? "\t" : ",");
+    const choice = ([view, label]) => pickChip(label, edit.view === view, () => { edit.view = view; draw(true); });
+    const views = edit.rows.length ? h("div", {class: "table-picks"}, [["table", t("desk.intake.view.table")], ["text", t("desk.intake.view.text")]].map(choice)) : null;
+    return [views, edit.view === "table" ? csvTable(edit, item.path) : codeBlock(found.text, language), cut];
+  }
+
+  // A workbook: its sheets in a row, the open one as a table, and under it what the table leaves out.
+  const fileSheet = {};  // a workbook's path -> the number of the sheet open in it
+  const LEFT_OUT = {hidden: "desk.files.sheet.skip.hidden", empty: "desk.files.sheet.skip.empty"};  // anything else is a chart sheet or a macro sheet
+  function sheetView(item, found) {
+    const sheets = found.sheets;
+    const number = Math.min(fileSheet[item.path] || 0, sheets.length - 1);
+    const open = sheets[number];
+    const key = item.path + "#" + number;
+    const table = open ? fileTable(key, open.text, open.cut, ",") : null;
+    const tab = (sheet, index) => pickChip(sheet.name, index === number, () => { fileSheet[item.path] = index; draw(true); }, sheet.name);
+    const left = found.left_out.map((sheet) => t(LEFT_OUT[sheet.why] || "desk.files.sheet.skip.other", {name: sheet.name})).join(", ");
+    const notes = [
+      open && (open.hidden_rows || open.hidden_columns) ? t("desk.files.sheet.hidden", {rows: open.hidden_rows, columns: open.hidden_columns}) : "",
+      open && open.cut ? t("desk.files.sheet.cut", {shown: Math.max(0, table.rows.length - 1), rows: open.rows - 1}) : "",
+      left ? t("desk.files.sheet.left", {names: left}) : "",
+    ].filter(Boolean);
+    return [sheets.length ? h("div", {class: "table-picks"}, sheets.map(tab)) : h("p", {class: "sub"}, t("desk.files.sheet.empty")), open ? csvTable(table, key) : null,
+      notes.length ? h("p", {class: "sub"}, notes.join(" ")) : null, fileSave(item)];
+  }
+
+  const FILE_KINDS = ["markdown", "text", "sheet"];  // what the page asks the server for
   function fileView(item) {
     if (item.kind === "image") {
       return picture({src: item.path, alt: item.path.split("/").pop(), data: item.data || ""});
     }
     const found = fileCache[item.path] || item.doc;
-    if (!found && !["markdown", "text"].includes(item.kind)) return [h("p", {class: "sub"}, t("desk.files.other", {size: size(item.size)})), originalExtras(item)];  // never asked for: it was "Loading…" for good
+    if (!found && !FILE_KINDS.includes(item.kind)) return [h("p", {class: "sub"}, t("desk.files.other", {size: size(item.size)})), originalExtras(item)];  // never asked for: it was "Loading…" for good
     if (!found && !served()) return h("p", {class: "sub"}, t("desk.files.saved"));  // a saved copy took in only the small files
     if (!found) return h("p", {class: "sub"}, fileCache[item.path] === null ? t("desk.files.failed") : t("desk.files.loading"));
     if (found.kind === "markdown") return h("article", {class: "md"}, runTabs("file:" + item.path, found.blocks, null, true) || blocks(found.blocks), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
-    if (found.kind === "text") return [codeBlock(found.text, Highlight.fileLanguage(item.path)), found.cut ? h("p", {class: "sub"}, t("desk.cut")) : null];
+    if (found.kind === "text") return textFile(item, found);
+    if (found.kind === "sheet") return sheetView(item, found);
+    if (found.note) return [h("p", {class: "sub"}, found.note === "big" ? t("desk.files.sheet.big", {size: size(found.size)}) : t("desk.files.sheet.failed")), fileSave(item)];
     return h("p", {class: "sub"}, t("desk.files.other", {size: size(found.size)}));
   }
 
+  // Asked once: the key stays while the answer is on its way (a workbook takes seconds, and a redraw must not ask again) and after a failure (the page says to reload).
   function fileLoad(item) {
-    if (item.doc || fileCache[item.path] || !served() || !["markdown", "text"].includes(item.kind)) return;
+    if (item.doc || item.path in fileCache || !served() || !FILE_KINDS.includes(item.kind)) return;
     fileCache[item.path] = undefined;
     SERVE.post("/api/file", {task: desk.name, path: item.path}).then((data) => { fileCache[item.path] = data.file; draw(true); }, () => { fileCache[item.path] = null; draw(true); });
   }
@@ -1316,8 +1373,8 @@
       .then(() => intakeRefresh()).then(() => { intake.busy = false; draw(true); });
   }
 
-  // A CSV file as rows of cells, the way the converter writes it: commas, a cell in quotes when it holds a comma, a quote ("" inside) or a line break. Blank lines are dropped.
-  function parseCsv(text) {
+  // A CSV file as rows of cells, the way the converter writes it: commas (`delimiter`: a tab for a TSV file), a cell in quotes when it holds a comma, a quote ("" inside) or a line break. Blank lines are dropped.
+  function parseCsv(text, delimiter = ",") {
     const rows = [];
     let row = [], cell = "", quoted = false;
     for (let i = 0; i < text.length; i++) {
@@ -1327,7 +1384,7 @@
         else if (text[i + 1] === '"') { cell += '"'; i++; }
         else quoted = false;
       } else if (c === '"' && cell === "") quoted = true;
-      else if (c === ",") { row.push(cell); cell = ""; }
+      else if (c === delimiter) { row.push(cell); cell = ""; }
       else if (c === "\n" || c === "\r") {
         if (c === "\r" && text[i + 1] === "\n") i++;
         row.push(cell);
@@ -1343,15 +1400,17 @@
     return rows.map((row) => row.map((cell) => (/[",\n\r]/.test(cell) ? '"' + cell.replace(/"/g, '""') + '"' : cell)).join(",")).join("\n") + "\n";
   }
 
-  // The table view of a CSV file: the rows the person picks are taken out, or the only ones kept. The text follows, and is written only by Save.
+  // The table view of a CSV file. In Intake the rows the person picks are taken out, or the only ones kept: the text follows, and is written only by Save. With a `key` (the Files tab) it only reads: nothing to pick.
   const CSV_PAGE = 200;
   function csvLoad(edit, first) {
-    edit.rows = parseCsv(edit.text);
+    edit.rows = parseCsv(edit.text, edit.delimiter);
     edit.picked = new Set(); edit.q = edit.q || ""; edit.shown = CSV_PAGE;
     if (first) edit.view = edit.rows.length > 1 && edit.rows.some((row) => row.length > 1) ? "table" : "text";  // one column or one line: it may not be a comma file; the text is shown
   }
 
-  function csvTable(edit) {
+  function csvTable(edit, key) {
+    const columns = edit.rows.reduce((most, row) => Math.max(most, row.length), 1), first = edit.rows[0] || [];  // not Math.max(...rows): a file of 200,000 short lines is too many arguments
+    const cells = (row) => Array.from({length: columns}, (_, c) => h("td", null, h("div", {class: "csv-cell"}, row[c] || "")));
     const matching = () => {
       const q = edit.q.trim().toLowerCase(), out = [];
       for (let i = 1; i < edit.rows.length; i++) if (!q || edit.rows[i].some((cell) => cell.toLowerCase().includes(q))) out.push(i);
@@ -1376,31 +1435,32 @@
     const more = tools("", () => { edit.shown += CSV_PAGE; refresh(); });
     const refresh = () => {
       const hits = matching();
-      info.textContent = t("desk.intake.csv.info", {rows: edit.rows.length - 1, match: hits.length, drawn: Math.min(hits.length, edit.shown), picked: edit.picked.size});
+      const rows = Math.max(0, edit.rows.length - 1), drawn = Math.min(hits.length, edit.shown);
+      if (!key) info.textContent = t("desk.intake.csv.info", {rows, match: hits.length, drawn, picked: edit.picked.size});
+      else info.textContent = edit.q.trim() ? t("desk.files.table.found", {match: hits.length, rows, drawn}) : edit.cut ? t("desk.files.table.part", {rows, columns, drawn}) : t("desk.files.table.info", {rows, columns, drawn});
       del.textContent = t("desk.intake.csv.delete", {n: edit.picked.size});
       keep.textContent = t("desk.intake.csv.keep", {n: edit.picked.size});
       del.disabled = keep.disabled = !edit.picked.size;
       const cut = hits.slice(0, edit.shown);
       body.replaceChildren(...cut.map((i) => {
+        if (key) return h("tr", null, h("td", {class: "csv-pick"}, h("span", {class: "sub"}, i)), cells(edit.rows[i]));
         const box = h("input", {type: "checkbox", checked: edit.picked.has(i) ? "" : null});
         box.addEventListener("change", () => { if (box.checked) edit.picked.add(i); else edit.picked.delete(i); refresh(); });
-        return h("tr", {class: edit.picked.has(i) ? "picked" : null}, h("td", {class: "csv-pick"}, box, " ", h("span", {class: "sub"}, i)),
-          edit.rows[i].map((cell) => h("td", null, h("div", {class: "csv-cell"}, cell))));
+        return h("tr", {class: edit.picked.has(i) ? "picked" : null}, h("td", {class: "csv-pick"}, box, " ", h("span", {class: "sub"}, i)), cells(edit.rows[i]));
       }));
       more.hidden = hits.length <= cut.length;
       more.textContent = t("desk.intake.csv.more", {n: Math.min(CSV_PAGE, hits.length - cut.length)});
     };
     search.addEventListener("input", () => { edit.q = search.value; edit.shown = CSV_PAGE; refresh(); });
-    const columns = Math.max(1, ...edit.rows.map((row) => row.length)), first = edit.rows[0] || [];
-    const head = h("thead", null, h("tr", null, h("th", null, "#"), Array.from({length: columns}, (_, c) => h("th", null, first[c] || ""))));
+    const head = h("thead", null, h("tr", null, h("th", null, "#"), Array.from({length: columns}, (_, c) => h("th", {title: first[c] || null}, first[c] || ""))));
     refresh();
     return h("div", {class: "csv"},
-      h("div", {class: "csv-tools"}, search,
+      h("div", {class: "csv-tools"}, search, key ? null : [
         tools(t("desk.intake.csv.pickshown"), () => { for (const i of matching()) edit.picked.add(i); refresh(); }),
-        tools(t("desk.intake.csv.clear"), () => { edit.picked.clear(); refresh(); }), del, keep, info),
-      h("div", {class: "csv-scroll"}, h("table", {class: "csv-table"}, head, body)),
+        tools(t("desk.intake.csv.clear"), () => { edit.picked.clear(); refresh(); }), del, keep], info),
+      h("div", {class: "csv-scroll", "data-keep": "csv." + (key || "intake")}, h("table", {class: "csv-table"}, head, body)),
       h("div", {class: "inbox-save"}, more),
-      h("p", {class: "hint"}, t("desk.intake.csv.note")));
+      key ? null : h("p", {class: "hint"}, t("desk.intake.csv.note")));
   }
 
   function intakeEditor() {
@@ -1437,7 +1497,7 @@
     const area = h("textarea", {rows: 22, class: "editor", spellcheck: "false", disabled: intake.busy ? "" : null}, edit.text);
     area.addEventListener("input", () => { edit.text = area.value; });
     const views = edit.rows ? h("div", {class: "inbox-save"}, ...[["table", t("desk.intake.view.table")], ["text", t("desk.intake.view.text")]].map(([view, label]) =>
-      button(label, () => { if (edit.view !== view) { edit.view = view; if (view === "table") csvLoad(edit); draw(true); } }, edit.view === view ? "hot" : "")), edit.text !== edit.saved ? button(t("desk.intake.csv.undo"), () => { edit.text = edit.saved; csvLoad(edit); draw(true); }) : null) : null;
+      pickChip(label, edit.view === view, () => { if (edit.view !== view) { edit.view = view; if (view === "table") csvLoad(edit); draw(true); } })), edit.text !== edit.saved ? button(t("desk.intake.csv.undo"), () => { edit.text = edit.saved; csvLoad(edit); draw(true); }) : null) : null;
     const reset = () => { if (window.confirm(t("desk.intake.reset.confirm"))) intakeAct("reset", edit.path, () => { intake.editing = null; intakeOpen(edit.path); }); };
     return h("section", {class: "round editing"}, head, views, edit.view === "table" ? csvTable(edit) : area,
       h("div", {class: "inbox-save"}, button(t("desk.intake.save"), intakeSave, "hot"), " ", edit.pristine ? button(t("desk.intake.reset"), reset) : null));

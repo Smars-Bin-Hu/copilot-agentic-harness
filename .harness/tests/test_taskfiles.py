@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 from test_boardserve import ServeCase
+from test_intake import xlsx
 
-from modules.task import taskdesk, taskfiles
+from modules.task import intake, taskdesk, taskfiles
+from modules.task.common import CommandError
 from taskcase import TASK
 
 
@@ -87,6 +90,78 @@ class FilesTests(ServeCase):
         for path in ("secret.md", "REQ/../task.json", "DEV-RUN/run.sh"):
             self.assertIsNone(taskdesk.download_file(self.root, "job1", path), path)
         self.assertIsNone(taskdesk.download_file(self.root, "nope", "REQ/brd.md"))
+
+
+def row(number: int, *cells: str) -> str:
+    return f'<row r="{number}">' + "".join(f'<c r="{chr(65 + index)}{number}" t="inlineStr"><is><t>{text}</t></is></c>' for index, text in enumerate(cells)) + "</row>"
+
+
+class WorkbookTests(ServeCase):
+    """A workbook opens in the Files tab as tables: the reader of Intake gives each sheet as csv text, and the page draws it."""
+
+    def book(self, data: bytes, name: str = "orders.xlsx") -> str:
+        (self.task / "REF").mkdir(exist_ok=True)
+        (self.task / "REF" / name).write_bytes(data)
+        return f"REF/{name}"
+
+    def test_each_sheet_comes_with_its_text_and_size(self) -> None:
+        path = self.book(xlsx([{"name": "Orders", "rows": row(1, "id", "customer") + row(2, "1", "Ann, Ltd")}, {"name": "总计", "rows": row(1, "sum") + row(2, "9")}]))
+        self.assertEqual({item["path"]: item["kind"] for item in taskfiles.listing(self.root, TASK)}[path], "sheet")
+        found = taskfiles.view(self.root, TASK, path)
+        self.assertEqual(found["kind"], "sheet")
+        self.assertEqual([(sheet["name"], sheet["text"], sheet["rows"], sheet["columns"], sheet["cut"]) for sheet in found["sheets"]],
+                         [("Orders", 'id,customer\n1,"Ann, Ltd"\n', 2, 2, False), ("总计", "sum\n9\n", 2, 1, False)])
+        self.assertEqual(found["left_out"], [])
+
+    def test_a_sheet_with_no_table_is_named_with_the_reason(self) -> None:
+        path = self.book(xlsx([{"name": "Open", "rows": row(1, "a")}, {"name": "Secret", "state": "hidden", "rows": row(1, "b")}, {"name": "Blank", "rows": ""}]))
+        found = taskfiles.view(self.root, TASK, path)
+        self.assertEqual([sheet["name"] for sheet in found["sheets"]], ["Open"])
+        self.assertEqual(found["left_out"], [{"name": "Secret", "why": "hidden"}, {"name": "Blank", "why": "empty"}])
+        self.assertNotIn("b", found["sheets"][0]["text"])
+
+    def test_a_book_of_only_empty_sheets_has_no_table(self) -> None:
+        found = taskfiles.view(self.root, TASK, self.book(xlsx([{"name": "Blank", "rows": ""}])))
+        self.assertEqual((found["kind"], found["sheets"]), ("sheet", []))
+
+    def test_hidden_rows_and_columns_are_counted_for_the_page_to_say(self) -> None:
+        rows = row(1, "a", "secret", "c") + row(2, "1", "2", "3") + '<row r="3" hidden="1"><c r="A3" t="inlineStr"><is><t>gone</t></is></c></row>'
+        found = taskfiles.view(self.root, TASK, self.book(xlsx([{"name": "S", "rows": rows, "cols": '<cols><col min="2" max="2" hidden="1"/></cols>'}])))
+        sheet = found["sheets"][0]
+        self.assertEqual((sheet["hidden_rows"], sheet["hidden_columns"]), (1, 1))
+        self.assertNotIn("secret", sheet["text"])
+        self.assertNotIn("gone", sheet["text"])
+
+    def test_a_long_sheet_stops_early_and_says_so_and_the_book_has_one_budget(self) -> None:
+        rows = "".join(row(number, "x" * 20) for number in range(1, 101))
+        path = self.book(xlsx([{"name": "One", "rows": rows}, {"name": "Two", "rows": rows}, {"name": "Three", "rows": rows}]))
+        with mock.patch.object(taskfiles, "MAX_VIEW_BYTES", 500), mock.patch.object(taskfiles, "MAX_BOOK_TEXT", 800):
+            sheets = taskfiles.view(self.root, TASK, path)["sheets"]
+        self.assertEqual([(len(sheet["text"]), sheet["cut"], sheet["rows"]) for sheet in sheets], [(500, True, 100), (300, True, 100), (0, True, 100)])
+
+    def test_a_damaged_workbook_or_one_too_large_is_only_named(self) -> None:
+        for data in (b"not a zip", xlsx([{"name": "S", "rows": row(1, "a")}])[:40]):
+            found = taskfiles.view(self.root, TASK, self.book(data))
+            self.assertEqual((found["kind"], found["note"]), ("other", "failed"))
+            self.assertNotIn("sheets", found)
+        path = self.book(xlsx([{"name": "S", "rows": row(1, "a")}]))
+        with mock.patch.object(taskfiles, "MAX_BOOK_BYTES", 10):
+            self.assertEqual(taskfiles.view(self.root, TASK, path)["note"], "big")
+
+    def test_an_old_workbook_with_no_reader_is_only_named(self) -> None:
+        path = self.book(b"\xd0\xcf\x11\xe0old", "old.xls")
+        self.assertEqual({item["path"]: item["kind"] for item in taskfiles.listing(self.root, TASK)}[path], "sheet")
+        with mock.patch.object(intake, "need_package", side_effect=CommandError("no reader")):
+            self.assertEqual(taskfiles.view(self.root, TASK, path)["note"], "failed")
+
+    def test_the_page_gets_it_from_the_server_and_a_saved_copy_leaves_it_out(self) -> None:
+        path = self.book(xlsx([{"name": "S", "rows": row(1, "a", "b")}]))
+        status, data, _headers = self.request("POST", "/api/file", {"task": "job1", "path": path})
+        self.assertEqual((status, data["file"]["sheets"][0]["text"]), (200, "a,b\n"))
+        listed = taskfiles.listing(self.root, TASK)
+        taskfiles.embed(self.root, TASK, listed)
+        self.assertNotIn("doc", {item["path"]: item for item in listed}[path])
+        self.assertEqual(self.request("GET", "/download/job1/REF/orders.xlsx")[0], 200)
 
 
 if __name__ == "__main__":

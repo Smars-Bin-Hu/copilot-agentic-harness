@@ -292,10 +292,22 @@ def blocks(lines: List[str]) -> List[Block]:
     return out
 
 
+def without_comments(lines: List[str]) -> List[str]:
+    """Lines that are only an HTML comment are notes for the writer, such as the mark in LOG.md. In a code fence they stay."""
+    kept: List[str] = []
+    fenced = False
+    for line in lines:
+        if line.lstrip().startswith(("```", "~~~")):
+            fenced = not fenced
+        if fenced or not re.fullmatch(r"\s*<!--.*-->\s*", line):
+            kept.append(line)
+    return kept
+
+
 def parse(text: str) -> Dict[str, Any]:
     """{"blocks": [...], "cut": True when the text was longer than MAX_LINES (the rest is not shown)}."""
     text = text[1:] if text.startswith("\ufeff") else text  # a file written by Windows PowerShell or Notepad starts with a BOM: it would hide the first heading
-    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    lines = without_comments(text.replace("\r\n", "\n").replace("\r", "\n").split("\n"))
     cut = len(lines) > MAX_LINES
     return {"blocks": blocks(lines[:MAX_LINES]), "cut": cut}
 

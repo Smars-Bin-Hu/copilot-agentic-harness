@@ -64,6 +64,7 @@ def build(rows: List[Dict[str, Any]], shown: int = SHOWN, source: str = "") -> D
         event, name, at = row.get("event"), str(row.get("tool_name") or ""), str(row.get("at") or "")
         if event == "UserPromptSubmit" and not row.get("from_subagent") and not row.get("continuation"):
             entries.append({"at": at, "kind": "prompt"})
+            pending.clear()  # what a person stopped or denied never ends: it must not take the end of a later call
         elif event == "PreToolUse" and row.get("decision") in ("deny", "ask"):
             target = row.get("target") if isinstance(row.get("target"), dict) else {}
             entries.append({
@@ -73,7 +74,9 @@ def build(rows: List[Dict[str, Any]], shown: int = SHOWN, source: str = "") -> D
             })
         elif event == "PreToolUse" and name:
             item = {"at": at, "kind": "tool", "tool": name, "tool_kind": str(row.get("tool_kind") or ""), "paths": [], "seconds": None, "ok": None}
-            pending.setdefault(name, []).append(item)
+            begun = copilot_events.seconds(at)
+            alive = [call for call in pending.get(name, []) if begun is None or abs(begun - (copilot_events.seconds(call["at"]) or begun)) <= SAME_CALL_S]  # calls that run together start together
+            pending[name] = alive + [item]
             entries.append(item)
         elif event in ("PostToolUse", "PostToolUseFailure") and name:
             waiting = pending.get(name) or []

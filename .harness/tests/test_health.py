@@ -350,6 +350,29 @@ class TraceTests(Logs):
         self.assertEqual(len(tasktrace.of_task(self.root, self.data)["entries"]), 1)
 
 
+class TraceEndsTests(HarnessTestCase):
+    """1.6.48: a call with no end must not take the end of a later call."""
+
+    def pre(self, second: int) -> Dict[str, Any]:
+        return {"event": "PreToolUse", "tool_name": "Bash", "decision": "none", "at": f"2026-11-01T10:00:{second:02d}+00:00"}
+
+    def post(self, second: int) -> Dict[str, Any]:
+        return {"event": "PostToolUse", "tool_name": "Bash", "at": f"2026-11-01T10:00:{second:02d}+00:00"}
+
+    def seconds(self, rows: List[Dict[str, Any]]) -> List[Any]:
+        return [(item["ok"], item["seconds"]) for item in tasktrace.build(rows)["entries"] if item["kind"] == "tool"]
+
+    def test_a_new_prompt_forgets_a_call_that_was_stopped(self) -> None:
+        prompt = {"event": "UserPromptSubmit", "at": "2026-11-01T10:00:10+00:00"}
+        self.assertEqual(self.seconds([self.pre(1), prompt, self.pre(20), self.post(21)]), [(None, None), (True, 1.0)])
+
+    def test_a_later_call_forgets_a_denied_one_in_the_same_turn(self) -> None:
+        self.assertEqual(self.seconds([self.pre(1), self.pre(20), self.post(21)]), [(None, None), (True, 1.0)])
+
+    def test_calls_that_run_together_keep_their_order(self) -> None:
+        self.assertEqual(self.seconds([self.pre(1), self.pre(2), self.post(5), self.post(9)]), [(True, 4.0), (True, 7.0)])
+
+
 class RecordTargetTests(SessionCase):
     """The hook: a finished call records the paths it touched (and a hash of a terminal command), never a command."""
 

@@ -773,7 +773,7 @@
     if (isNaN(from)) return h("span", {class: "sub tk-waited"}, t("desk.waited", {time: clock(desk.waited_s)}));
     const [before, after] = t("desk.waited", {time: "\n"}).split("\n");
     Status.clock();
-    return h("span", {class: "sub tk-waited st-run", "data-since": String(from)}, before, h("span", {class: "st-time"}, clock(desk.waited_s)), after);
+    return h("span", {class: "sub tk-waited st-run", "data-since": String(from)}, before, h("span", {class: "st-time"}, clock(Math.max(0, Math.floor((Date.now() - from) / 1000)))), after);  // the steady page keeps an old `waited_s`
   }
 
   const CARD_WORDS = {"confirm-req": "task.waiting.req", "approve-plan": "task.waiting.plan", "approve-promote": "task.waiting.promote"};  // two cards can stand together: each says what it is about

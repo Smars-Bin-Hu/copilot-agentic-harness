@@ -1296,7 +1296,7 @@
   "desk.files.sheet.failed": "This workbook could not be read here. Download it and open it in Excel.",
   "desk.files.download": "Download the original",
   "desk.plan.hint": "What the agent will change and how it will check it. You approve it before any file is changed.",
-  "desk.log.hint": "The decisions and findings of the agent, oldest first.",
+  "desk.log.hint": "The decisions and findings of the agent, newest first.",
   "desk.history.hint": "What happened to the task, newest first: approvals, fetches, checks, promotes, pauses.",
   "desk.missing": "No {file} yet",
   "desk.missing.task": "The agent writes it when the task opens.",

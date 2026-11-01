@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.48 (2026-11-01)
+
+### Changed
+
+- Agent actions pairs each call with its own end. A call a person stopped or denied has no end, and it used to shift every later call of that name: wrong times, and one refusal counted twice.
+- Live marks a call stopped with its turn as stopped, not with a tick.
+- The wait on a task card is right as soon as a tab opens, with no old number for a second.
+- The Log tab says newest first, as `LOG.md` is written, and no longer shows the template's comment line.
+
 ## 1.6.47 (2026-11-01)
 
 ### Changed

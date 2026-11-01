@@ -1296,7 +1296,7 @@
   "desk.files.sheet.failed": "这个工作簿在这里读不出来。请下载后用 Excel 打开。",
   "desk.files.download": "下载原件",
   "desk.plan.hint": "agent 要改什么、怎么验证。任何文件改动之前都要你批准。",
-  "desk.log.hint": "agent 的决定和发现，从旧到新。",
+  "desk.log.hint": "agent 的决定和发现，新的在前。",
   "desk.history.hint": "这个任务发生过什么，从新到旧：批准、取文件、检查、promote、搁置。",
   "desk.missing": "还没有 {file}",
   "desk.missing.task": "任务打开时 agent 会写。",

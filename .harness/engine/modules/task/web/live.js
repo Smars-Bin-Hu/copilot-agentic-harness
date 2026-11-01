@@ -167,7 +167,7 @@ const LIVE = (function () {
       else {
         stopped(time);
         const label2 = time.querySelector(".st-time");
-        setText(label2, item.st === "wait" ? t("desk.live.wait") : item.st === "run" ? "" : (item.st === "fail" ? "✗" : "✓") + (item.t0 && item.t1 ? " " + seconds(item.t1 - item.t0) : ""));
+        setText(label2, item.st === "wait" ? t("desk.live.wait") : item.st === "run" ? "" : item.st === "stop" ? t("desk.trace.stopped") : (item.st === "fail" ? "✗" : "✓") + (item.t0 && item.t1 ? " " + seconds(item.t1 - item.t0) : ""));
       }
     } else {
       const done = !item.run;

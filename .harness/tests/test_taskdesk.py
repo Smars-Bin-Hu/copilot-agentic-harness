@@ -765,5 +765,13 @@ def boardserve_actions(root):
     return boardserve.settings(root)["actions"]
 
 
+
+class CommentTests(unittest.TestCase):
+    def test_a_comment_line_is_not_shown_but_stays_in_code(self) -> None:
+        found = mdtree.parse("# LOG\n\n<!-- New entries go here -->\n\n```html\n<!-- kept -->\n```\n")["blocks"]
+        self.assertEqual([block["t"] for block in found], ["h", "code"])
+        self.assertIn("<!-- kept -->", found[1]["text"])
+
+
 if __name__ == "__main__":
     unittest.main()

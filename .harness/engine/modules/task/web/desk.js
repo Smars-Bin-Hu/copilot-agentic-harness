@@ -1704,6 +1704,7 @@
   }
   if (typeof SERVE !== "undefined" && DATA.serve.refresh) {
     SERVE.onChange(() => { pull(); });  // after a click that changed something (a setting, a message sent): in place, so the reply panel and what was typed stay; a reload would drop them
+    if (current === "trace") pull();  // opened on this tab: the page came without the tree
     pollEvery(DATA.serve.refresh, () => {
       if (SERVE.busy()) return null;
       if (document.activeElement && ["TEXTAREA", "INPUT"].includes(document.activeElement.tagName)) return null;  // a redraw would take the focus from what the person is typing

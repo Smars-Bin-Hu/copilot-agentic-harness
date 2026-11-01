@@ -343,6 +343,7 @@ class TraceTests(Logs):
         desk = (Path(tasktrace.__file__).parent / "web" / "desk.js").read_text(encoding="utf-8")
         self.assertIn('trace: current === "trace"', desk)
         self.assertIn("data.desk.trace.tree = desk.trace.tree", desk)
+        self.assertIn('if (current === "trace") pull();', desk)  # a page opened on this tab does not wait for the next round
 
     def test_calls_before_the_task_began_are_left_out(self) -> None:
         self.hook_rows([dict(self.call(1), at="2026-10-30T00:00:00+00:00"), self.call(1)])

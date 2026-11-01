@@ -2,7 +2,7 @@
 
 Written for: <user name>. Change under test: <one line>, branch `<branch>` of `<repository>`, written back by task `<development task>` ([REQ.md](.workspace/sandbox/tasks/<development task>/REQ.md), [CHANGES.diff](.workspace/sandbox/tasks/<development task>/CHANGES.diff)).
 
-Order: DEV, then IST, then QAT. Start the next only when the one before passed. Send the results back in VS Code; the list "Send back" of each section says what.
+Order: DEV, then IST, then UAT. Start the next only when the one before passed. Send the results back in VS Code; the list "Send back" of each section says what.
 
 ## <DEV>
 
@@ -46,6 +46,6 @@ Order: DEV, then IST, then QAT. Start the next only when the one before passed. 
 
 (same sections)
 
-## <QAT>
+## <UAT>
 
 (same sections)

@@ -539,7 +539,7 @@ class ListTests(LifeCase):
         self.refused("task", "handoff", "tests", "--env", " ", "--task", "job")
         self.refused("task", "handoff", "tests", "--env", "x" * 41, "--task", "job")
         self.refused("task", "handoff", "clear", "--task", "job")
-        self.cli_json("task", "handoff", "tests", "--env", "QAT", "--task", "job")
+        self.cli_json("task", "handoff", "tests", "--env", "UAT", "--task", "job")
         with task_ops.locked(self.root, f"{BASE}/job") as data:
             data["paused"] = {"since": "2026-10-20T00:00:00+00:00"}
         self.assertEqual(self.listed()["tasks"][0]["waiting"], "", "a task put aside waits for nobody")

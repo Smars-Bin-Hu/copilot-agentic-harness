@@ -5,6 +5,7 @@ A refusal raises CommandError with the reason and the next step. Files are copie
 
 from __future__ import annotations
 
+import codecs
 import hashlib
 import os
 import posixpath
@@ -27,6 +28,18 @@ class CommandError(Exception):
 
 def say(key: str, /, **values: Any) -> str:
     return messages.text(key, **values)
+
+
+def decode_text(data: bytes) -> str:
+    """Bytes of a text file a person brought: UTF-8, UTF-16 with its mark, or GB18030 (holds GBK: a Chinese Excel's plain "CSV")."""
+    if data[:2] in (b"\xff\xfe", b"\xfe\xff"):  # as SSMS and Visual Studio may save a file
+        return data.decode("utf-16", errors="replace")
+    for encoding in ("utf-8-sig", "gb18030"):
+        try:
+            return codecs.getincrementaldecoder(encoding)().decode(data)  # not final: a view cut in mid-character is not an error
+        except UnicodeDecodeError:
+            pass
+    return data.decode("utf-8", errors="replace")
 
 
 def relative_name(raw: str, what: str = "") -> str:

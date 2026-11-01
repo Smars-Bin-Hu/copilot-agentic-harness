@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.47 (2026-11-01)
+
+### Changed
+
+- The task page tabs History and Trace are now **Task log** and **Agent actions**. The third tab of the group, Log, still shows `LOG.md`.
+- The default test environments are DEV, IST and UAT in every rule, skill and template. QAT is gone.
+- Files and the intake editor read a text file in GBK or GB18030 too, such as the plain "CSV" a Chinese Excel saves. Before, its Chinese came out garbled.
+
 ## 1.6.46 (2026-11-01)
 
 ### Retired
@@ -1243,7 +1251,7 @@ Found on a company computer, on a task that was written back and closed: the pag
 
 ### Added
 
-- **After the PR, testing in DEV, IST and QAT: the skill `generic-test-guide` and `task handoff`.** The flow used to end at the pull request. Now, when a write-back is done, the message to the agent says to offer a test task. On your yes, the agent opens a new task of kind `test` (not another round of the development task: nothing is written back in it), reads the development task and the `environment.md` of the knowledge base, and writes **`TEST-GUIDE.md`**: per environment, what to deploy or run, the exact commands, the expected results, the pass criteria written before the run, and what to send back. You read it on the task's page (the docs tab). It marks what the knowledge base does not state as UNKNOWN and asks, never invents a host or a job.
+- **After the PR, testing in DEV, IST and UAT: the skill `generic-test-guide` and `task handoff`.** The flow used to end at the pull request. Now, when a write-back is done, the message to the agent says to offer a test task. On your yes, the agent opens a new task of kind `test` (not another round of the development task: nothing is written back in it), reads the development task and the `environment.md` of the knowledge base, and writes **`TEST-GUIDE.md`**: per environment, what to deploy or run, the exact commands, the expected results, the pass criteria written before the run, and what to send back. You read it on the task's page (the docs tab). It marks what the knowledge base does not state as UNKNOWN and asks, never invents a host or a job.
 - **The board says "waits for your test results (DEV)".** `harness task handoff tests --env <E>` is how the agent hands one environment at a time to you; it stays on the board, in orange, above the plain "the agent stopped", until the agent clears it (`task handoff clear`) when you bring the results. It is not an approval and unlocks nothing. The task page's card tells you what to do and gives a message to copy.
 - **When you bring the results**, the agent saves them as you gave them in `TEST/results-<env>.md`, judges each pass criterion (PASS, FAIL, or NEEDS MORE when the evidence is missing), and updates `TEST/summary.md`, `LOG.md`, `TASK.md` and `TODO.md` together. PASS hands over the next environment, or asks whether to close the task; FAIL writes `TEST/defects.md` and sends you back to the development task for a new round.
 

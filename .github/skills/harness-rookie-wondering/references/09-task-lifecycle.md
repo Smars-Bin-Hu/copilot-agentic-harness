@@ -91,7 +91,7 @@ Key points:
 
 A `task open` after a write-back starts a new round: the work of the last round moves to `DEV_r<n>/`, the plan to `PLAN_r<n>.md`, and a new plan and a new approval are needed.
 
-Testing in DEV, IST and QAT is **not** another round. It is a new task of kind `test` (`generic-test-guide`): nothing in it is written back, the agent cannot run anything in those environments, and what it waits for is you. It writes `TEST-GUIDE.md`, calls `task handoff tests --env DEV` so the board says "waits for your test results", and judges what you bring. A failed test goes back to the development task as a new round.
+Testing in DEV, IST and UAT is **not** another round. It is a new task of kind `test` (`generic-test-guide`): nothing in it is written back, the agent cannot run anything in those environments, and what it waits for is you. It writes `TEST-GUIDE.md`, calls `task handoff tests --env DEV` so the board says "waits for your test results", and judges what you bring. A failed test goes back to the development task as a new round.
 
 A run you must do **before** the write-back (a job in DEV whose counts the work needs) is handed over the same way inside the development task: `task handoff run --env DEV --what "..."`. The board says "waits for your run", no check can start, and what you send back is saved in `RUNS/DEV/` by `task run record`: the commands, your words and the screenshots. You can give it in the chat or in the form on the task page (**Give the results here**): the page saves it under `INBOX/DEV/`, a folder only you can write, and tells you what to say to the agent.
 

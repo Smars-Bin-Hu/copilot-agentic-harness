@@ -15,7 +15,7 @@ The form every domain of a knowledge base takes, so that code can check it and f
   domains/<domain>/
     domain.yaml              who the domain is (below). It lists no objects
     architecture.md          read first by every task of the domain (below)
-    environment.md           facts about DEV/IST/QAT/PROD, one table (below); filled only from results a person gave, cleaned
+    environment.md           facts about DEV/IST/UAT/PROD, one table (below); filled only from results a person gave, cleaned
     requests.md              what the code cannot tell and a person must give: one table (below)
     objects/index.jsonl      one line per object (below)
     objects/<type>.md        the cards: one `## <id>` section per object; one file per type (sp.md, jobs.md ...)

@@ -8,7 +8,7 @@ from unittest import mock
 from test_boardserve import ServeCase
 from test_intake import xlsx
 
-from modules.task import intake, taskdesk, taskfiles
+from modules.task import common, intake, taskdesk, taskfiles
 from modules.task.common import CommandError
 from taskcase import TASK
 
@@ -94,6 +94,22 @@ class FilesTests(ServeCase):
 
 def row(number: int, *cells: str) -> str:
     return f'<row r="{number}">' + "".join(f'<c r="{chr(65 + index)}{number}" t="inlineStr"><is><t>{text}</t></is></c>' for index, text in enumerate(cells)) + "</row>"
+
+
+class EncodingTests(unittest.TestCase):
+    def test_a_file_is_read_in_the_encoding_it_was_saved_in(self) -> None:
+        text = "\u59d3\u540d,\u91d1\u989d\n\u5f20\u4e09,12\n"
+        for data in (text.encode("gbk"), text.encode("gb18030"), text.encode("utf-8"), text.encode("utf-8-sig"), text.encode("utf-16")):
+            self.assertEqual(common.decode_text(data), text)
+
+    def test_a_view_cut_in_mid_character_keeps_the_encoding(self) -> None:
+        for encoding in ("gbk", "utf-8"):
+            data = ("\u59d3\u540d" * 50).encode(encoding)
+            self.assertTrue(common.decode_text(data[:len(data) - 1]).startswith("\u59d3\u540d"))
+
+    def test_bytes_in_no_known_encoding_still_give_text(self) -> None:
+        self.assertIn("\ufffd", common.decode_text(b"abc \xff\xff"))
+        self.assertEqual(common.decode_text(b""), "")
 
 
 class WorkbookTests(ServeCase):

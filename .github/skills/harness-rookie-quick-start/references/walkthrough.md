@@ -36,7 +36,7 @@ Write the "result file" at the root of the task folder, and update "Doing now" a
 
 ### 5. You change your mind (the user does this)
 
-Ask the user to add a condition, such as the "example of a change of mind" in the scenario. Change `REQ.md` first and add a line to its change record, then change the result file. Tell the user: the order is the requirement first, the result after. Ask them to look at the **History** tab: what happened is listed there.
+Ask the user to add a condition, such as the "example of a change of mind" in the scenario. Change `REQ.md` first and add a line to its change record, then change the result file. Tell the user: the order is the requirement first, the result after. Ask them to look at the **Task log** tab: what happened is listed there.
 
 ### 6. Get a second pair of eyes (the user does this)
 

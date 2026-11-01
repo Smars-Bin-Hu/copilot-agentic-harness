@@ -1,6 +1,6 @@
 ---
 name: generic-test-guide
-description: 'After a development task is written back and the PR is up: open a test task, write TEST-GUIDE.md (what to run in DEV, IST and QAT, with expected results and what to send back) for the user to read on the task board, then judge the results the user brings and record them in TEST/, LOG.md, TASK.md and TODO.md. Use when the PR is submitted, or the user says test guide, test plan, start testing, DEV/IST/QAT, or here are the test results. Keywords: testing, test guide, test results, after PR.'
+description: 'After a development task is written back and the PR is up: open a test task, write TEST-GUIDE.md (what to run in DEV, IST and UAT, with expected results and what to send back) for the user to read on the task board, then judge the results the user brings and record them in TEST/, LOG.md, TASK.md and TODO.md. Use when the PR is submitted, or the user says test guide, test plan, start testing, DEV/IST/UAT, or here are the test results. Keywords: testing, test guide, test results, after PR.'
 argument-hint: 'The development task to test, or nothing for the latest written-back one'
 type: workflow
 specificTo: generic
@@ -8,14 +8,14 @@ specificTo: generic
 
 # Test guide: from the PR to the results of each environment
 
-The agent cannot run anything in DEV, IST or QAT. The user does. This skill writes what the user is to run, hands it over, and when the user brings the results back, judges them against the criteria written before, and records them. The work goes in a **new task of kind `test`**, not in the development task: that task ended at the PR, and a second round of it means a new plan and a new write-back.
+The agent cannot run anything in DEV, IST or UAT. The user does. This skill writes what the user is to run, hands it over, and when the user brings the results back, judges them against the criteria written before, and records them. The work goes in a **new task of kind `test`**, not in the development task: that task ended at the PR, and a second round of it means a new plan and a new write-back.
 
 ## When to Use This Skill
 
 - A development task was written back (the promote text says so, and names this skill), and the next step is testing in the environments.
 - The user says the PR is up, asks for test instructions or a test plan, or brings test results.
 
-**Who starts it: offer.** After a write-back, ask the user in one line ("Open a test task and write the test guide for DEV, IST and QAT?"). Go on only after a yes. When the user typed `/generic-test-guide` or asked for it by name, do not ask again.
+**Who starts it: offer.** After a write-back, ask the user in one line ("Open a test task and write the test guide for DEV, IST and UAT?"). Go on only after a yes. When the user typed `/generic-test-guide` or asked for it by name, do not ask again.
 
 ## Step-by-Step Workflows
 

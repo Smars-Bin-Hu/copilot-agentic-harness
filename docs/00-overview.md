@@ -117,7 +117,7 @@ An approval works as in the terminal: the page shows what you approve and asks y
 
 ![The Test tab: a sub-tab for each environment, and a tab for each run with its commands, your words, a screenshot and the verdict](images/task-test.png)
 
-**History.** The history of the task keeps what happened, newest first: documents added, approvals, fetches, checks, runs, write-backs, pauses.
+**Task log.** The task log keeps what happened, newest first: documents added, approvals, fetches, checks, runs, write-backs, pauses.
 
 ![The history of a task](images/task-history.png)
 

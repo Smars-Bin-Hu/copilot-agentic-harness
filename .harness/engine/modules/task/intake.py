@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import config, domainskills, messages, pinpython, tasks
 from core.paths import cli_command, local_stamp
 
-from . import intakeconvert as convert, task as task_ops
+from . import common, intakeconvert as convert, task as task_ops
 from .common import CommandError
 
 REQ_DIR = "REQ"
@@ -490,7 +490,7 @@ def read_for_edit(root: Path, raw_task: str, relative: str) -> Dict[str, Any]:
     size = target.stat().st_size
     if size > EDIT_BYTES:
         raise CommandError(say("intake.edit.big", path=f"{REQ_DIR}/{clean}", kb=EDIT_BYTES // 1000))
-    return {"path": clean, "text": target.read_bytes().decode("utf-8-sig", errors="replace"), "size": size, "pristine": (req_dir(root, task) / PRISTINE / clean).is_file()}
+    return {"path": clean, "text": common.decode_text(target.read_bytes()), "size": size, "pristine": (req_dir(root, task) / PRISTINE / clean).is_file()}
 
 
 def save_text(root: Path, raw_task: str, relative: str, text: str) -> Dict[str, Any]:

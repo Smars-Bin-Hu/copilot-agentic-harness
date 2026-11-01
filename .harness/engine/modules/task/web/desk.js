@@ -1687,7 +1687,7 @@
         event.detail ? h("span", {class: "sub"}, " · " + event.detail) : null, event.via ? h("span", {class: "tag"}, t("desk.via." + event.via)) : null, event.round > 1 ? h("span", {class: "tag"}, t("desk.round", {round: event.round})) : null))));
   }
 
-  // The Trace tab. Open, it asks for the tree (pull): the numbers of the whole task, what was blocked or failed, and one node per prompt with what the agent did for it, in order.
+  // The Agent actions tab. Open, it asks for the tree (pull): the numbers of the whole task, what was blocked or failed, and one node per prompt with what the agent did for it, in order.
   // Until the tree comes, or where there is none, it is the plain list of the hook log. What the model thought is not in Copilot's record: only how long.
   const traceOpen = new Map();  // prompt number -> open; the newest is open until the person says otherwise
   const spent = (seconds) => (seconds > 0 && seconds < 10 ? seconds.toFixed(1) + " s" : clock(seconds));

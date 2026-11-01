@@ -171,11 +171,11 @@ def view(root: Path, task: str, relative: str) -> Optional[Dict[str, Any]]:
         out.update(workbook(root, path, size))
     elif kind in ("markdown", "text"):
         data = path.read_bytes()[:MAX_VIEW_BYTES]
-        wide = data[:2] in (b"\xff\xfe", b"\xfe\xff")  # UTF-16 with its mark, as SSMS and Visual Studio may save a file
+        wide = data[:2] in (b"\xff\xfe", b"\xfe\xff")
         if not wide and b"\x00" in data[:4096]:  # a binary file with a text-like name
             out["kind"] = "other"
             return out
-        text = data.decode("utf-16", errors="replace") if wide else data.decode("utf-8-sig", errors="replace")
+        text = common.decode_text(data)
         out["cut"] = size > MAX_VIEW_BYTES
         if kind == "markdown":
             tree = mdtree.parse(text)

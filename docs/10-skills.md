@@ -31,7 +31,7 @@ The agent loads these from what you say. You rarely type them.
 | `generic-req-review` | Reads the files in the task's `REQ/` folder, writes `REQ.md` from them, checks it against the knowledge base, and lists what is unclear until you confirm | "Read the requirement and check it for gaps" |
 | `generic-impact-analysis` | Before the plan: finds everything a change touches (who uses this table, column, job) in all target repositories and the knowledge base | "What else does this affect?" |
 | `generic-code-standards` | Checks the task's code against your company's code standards and fixes what does not comply | "Check the code style" |
-| `generic-test-guide` | After write-back and a PR: opens a test task, writes `TEST-GUIDE.md` for DEV, IST and QAT, then judges the results you bring back | "Make the test guide", "here are the IST results" |
+| `generic-test-guide` | After write-back and a PR: opens a test task, writes `TEST-GUIDE.md` for DEV, IST and UAT, then judges the results you bring back | "Make the test guide", "here are the IST results" |
 | `harness-task-fork` | Starts the next task from a finished one (RCA to development, development to test, defects to development). The old conclusions are copied, the old state is not | "The RCA is done, now develop it" |
 | `generic-capture-knowledge` | After a task: drafts what a future agent would get wrong as knowledge base entries or skill gotchas. It only drafts; you approve | "Write down what we learned" |
 | `harness-task-archive` | Moves closed tasks out of the sandbox into an archive folder you pick. Nothing moves before you say yes | "Clean up old tasks" |

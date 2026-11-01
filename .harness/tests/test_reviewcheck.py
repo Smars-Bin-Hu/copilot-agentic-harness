@@ -37,7 +37,7 @@ Move the rules to INBOUND.
 
 ### Shown after the write-back
 
-- [A1] QAT: the monthly report shows INBOUND
+- [A1] UAT: the monthly report shows INBOUND
 
 ## Source
 

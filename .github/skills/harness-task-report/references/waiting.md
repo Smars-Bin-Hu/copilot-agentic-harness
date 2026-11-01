@@ -25,6 +25,5 @@ The board texts above are the English ones; with `language` set to `zh` the boar
 ## Which to look at first
 
 1. One with `recover` first of all: the repository may be half written.
-2. One that other tasks depend on (see whether it is in the `depends_on` of other tasks).
-3. The one that has waited longest.
-4. `stopped` ones last: mostly the agent has just finished answering.
+2. The one that has waited longest.
+3. `stopped` ones last: mostly the agent has just finished answering.

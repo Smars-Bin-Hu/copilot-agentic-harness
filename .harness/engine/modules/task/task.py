@@ -166,7 +166,7 @@ def attach(root: Path, raw_task: str, session_id: str, surface: str = "vscode", 
                     "status": "open", "created_at": now, "updated_at": now, "round": 1, "round_started_at": now,
                     "target_mode": found.configured, "branch": "", "targets": {}, "target_files": {}, "deletes": [],
                     "plan": {}, "promote": {"state": "none"}, "rounds": [], "events": [],
-                    "kind": kind, "tier": tier, "waiting": None, "depends_on": [],
+                    "kind": kind, "tier": tier, "waiting": None,
                 }
                 note(data, "start", say("task.note.session", session_id=session_id))
             else:

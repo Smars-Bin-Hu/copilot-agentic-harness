@@ -30,7 +30,7 @@ def task_state(kind: str = "dev", tier: str = "full", size: Optional[str] = "M",
         "schema_version": 1, "task": f".workspace/sandbox/tasks/{NAME}", "name": NAME, "session_id": "sess-main", "surface": "vscode",
         "status": "closed", "created_at": CREATED, "updated_at": CLOSED, "round": 1, "round_started_at": CREATED,
         "target_mode": True, "branch": f"{CANARY}-BRANCH", "targets": {f"{CANARY}-REPO": {"path": f"{CANARY}-PATH/repo"}}, "target_files": {}, "deletes": [],
-        "plan": {"approved_sha256": "a" * 64}, "promote": {"state": "done"}, "rounds": [], "kind": kind, "tier": tier, "waiting": None, "depends_on": [],
+        "plan": {"approved_sha256": "a" * 64}, "promote": {"state": "done"}, "rounds": [], "kind": kind, "tier": tier, "waiting": None,
         "domains": [f"{CANARY}-DOMAIN"],
         "prompts": [{"text": f"{CANARY}-PROMPT write the load for ticket 12345"}],
         "events": [

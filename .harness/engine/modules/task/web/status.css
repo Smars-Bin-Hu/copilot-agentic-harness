@@ -73,7 +73,6 @@
 /* the list: the line under the task name; a long name is cut and shown whole on hover */
 .board-list td.name .name-line a{min-width:0;max-width:22em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .board-list td.name .name-line>.kind-icon,.board-list td.name .name-line>.vs-btn{flex:none}
-.board-list td.name .st-dep{flex:none;color:var(--soft);font-size:11.5px;cursor:help}
 .board-list td.name .st-row{margin-top:2px}
 
 /* the card of the lobby: the same marks, the numbers of the task, its buttons */

@@ -216,14 +216,9 @@
   }
 
   // The line under a task name (1.6.14): small status marks (status.js): model, context, run time of the latest turn, stage, TODO. A mark with no data is left empty; the line is as high
-  // for every row. `row.sub` (the last tool or reply) is still in the data, for the task page; the list no longer draws it. What the task depends on goes at the end of the line.
+  // for every row. `row.sub` (the last tool or reply) is still in the data, for the task page; the list no longer draws it.
   function statusLine(row) {
-    const marks = Status.row(row, {live});
-    if (row.depends_on && row.depends_on.length) {
-      const text = t("board.depends", {names: row.depends_on.join("\u3001")});
-      marks.append(h("span", {class: "st-dep", title: text, "aria-label": text}, "\u21b3 " + row.depends_on.length));
-    }
-    return marks;
+    return Status.row(row, {live});
   }
 
   // The warning tag after the state (B74): only when a health rule fired; the mouse over it says which and why.

@@ -342,7 +342,6 @@
   "board.state.paused": "已搁置",
   "board.state.closed": "已关闭",
   "board.state.new": "未开始",
-  "board.depends": "依赖：{names}",
   "board.footer": "点击任务名打开任务页。用时和用量见任务页的“时间和用量”链接。时间为本机时间。",
   "board.text.head": "任务看板  进行中 {open}  等你 {waiting}  已搁置 {paused}  （{as_of}）",
   "board.text.watch": "每 {seconds} 秒刷新。按 Ctrl+C 退出。",

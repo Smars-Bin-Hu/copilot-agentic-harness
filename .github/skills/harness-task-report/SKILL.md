@@ -36,7 +36,7 @@ It changes no task file. Neither of the two needs a task picked up first.
 2. Read the output. Each task has `waiting` (what it waits for; empty means it does not wait) and `waited_s` (how many seconds it has waited). Tasks waiting for the user come first, the longest wait on top.
 3. Answer the user in this order:
    - One sentence of summary: how many are open, how many wait for them.
-   - Which to look at first, and why (the longest wait, or it blocks other tasks: see `depends_on`).
+   - Which to look at first, and why (the longest wait).
    - What they have to do next for that task. Say it as the table in [What it waits for](references/waiting.md) has it, and give the command as written.
 4. The user wants a page: run `harness task board --once` and give the link to the file under `board`. On the page, a click on a task name shows the analysis of that task. Run by you, the command writes the page once and returns. For a page that keeps itself up to date, the user runs `harness task board --open` in their own terminal.
 

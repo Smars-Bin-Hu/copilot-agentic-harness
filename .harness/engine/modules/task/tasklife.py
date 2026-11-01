@@ -705,7 +705,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
         if data is None:
             rows.append({
                 "task": task, "name": task_ops.name_of(task), "status": "new", "kind": "", "tier": "", "updated_at": "", "waiting": "",
-                "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "depends_on": [], "paused_since": "", "paused_by": "",
+                "waiting_why": "", "waiting_since": "", "waited_s": None, "session_id": "", "paused_since": "", "paused_by": "",
                 "state": "new", "held": False, "active": False,
             })
             continue
@@ -722,7 +722,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
             "kind": data.get("kind", ""), "tier": data.get("tier", ""), "updated_at": data.get("updated_at", ""),
             "waiting": waiting_text(data, found["why"]), "waiting_why": found["why"], "waiting_since": found["since"], "waiting_from": wait_clock(data, found["since"]) if found["why"] else "",
             "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
-            "depends_on": list(data.get("depends_on") or []), "paused_since": aside, "paused_by": str((data.get("paused") or {}).get("by") or "") if aside else "",
+            "paused_since": aside, "paused_by": str((data.get("paused") or {}).get("by") or "") if aside else "",
             "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",
             "held": is_held, "active": working, "dismiss": dismiss_of(data) if is_open and not aside else "", "checks": checks_of(data),
             "state": state_of(data.get("status", ""), aside, found["why"], is_held, working),

@@ -88,7 +88,7 @@ class NewTests(LifeCase):
         self.new()
         data = self.data()
         self.assertEqual((data["kind"], data["tier"], data["status"], data["session_id"]), ("rca", "medium", "open", S1))
-        self.assertEqual((data["waiting"], data["depends_on"]), (None, []))
+        self.assertIsNone(data["waiting"])
         self.assertTrue(data["updated_at"])
 
     def test_the_task_file_names_the_kind_and_tier_in_words(self) -> None:

@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.46 (2026-11-01)
+
+### Retired
+
+- **`depends_on` and the mark in the list that showed it.** No command could set it, nothing kept to it, and no task ever had a value. `task queue` is what keeps the order of tasks written into one repository. Tasks that have the field in `task.json` keep it; nothing reads it.
+
 ## 1.6.45 (2026-11-01)
 
 ### Changed

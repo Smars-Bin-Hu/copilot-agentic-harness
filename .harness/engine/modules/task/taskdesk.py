@@ -331,8 +331,8 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
     return {
         "name": name, "task": task, "as_of": utc_now(),
         "kind": data.get("kind", ""), "tier": data.get("tier", ""), "status": row.get("status", ""), "round": data.get("round", 1), "branch": str((data.get("promote") or {}).get("branch") or data.get("branch") or ""),
-        "domains": list(data.get("domains") or []), "autorun": bool(row.get("autorun")), "paused_since": row.get("paused_since") or "",
-        "waiting": row.get("waiting") or "", "waiting_why": row.get("waiting_why") or "", "waited_s": row.get("waited_s"),
+        "promote_direct": bool((data.get("promote") or {}).get("direct")), "domains": list(data.get("domains") or []), "autorun": bool(row.get("autorun")), "paused_since": row.get("paused_since") or "",
+        "waiting": row.get("waiting") or "", "waiting_why": row.get("waiting_why") or "", "waited_s": row.get("waited_s"), "waiting_from": row.get("waiting_from") or "",
         "handoff": {key: str((data.get("handoff") or {}).get(key) or "") for key in ("what", "env", "detail")} if isinstance(data.get("handoff"), dict) else None,
         "created_at": data.get("created_at", ""), "updated_at": data.get("updated_at", ""),
         "forked_from": task_ops.name_of(str(data.get("forked_from"))) if data.get("forked_from") else "",

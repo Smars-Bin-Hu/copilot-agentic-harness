@@ -39,6 +39,67 @@ def between(source: str, start: str, end: str) -> str:
 
 
 @unittest.skipUnless(NODE, "node is not installed")
+class OneWaitOneNumberTests(unittest.TestCase):
+    def test_the_step_that_waits_shows_the_wait_and_a_step_at_work_its_own_time(self) -> None:
+        """Seen on the page: "waits for you 18 min 49 s" on the stage card and "waited for you 18 min 31 s" on the card of waits: one was the age of the step."""
+        source = between((WEB / "status.js").read_text(encoding="utf-8"), "function stages(row, live)", "const dot = (kind, extra)")
+        script = r"""
+const assert = require("assert");
+const t = (key) => key, finite = Number.isFinite;
+let state = "waiting";
+const stateOf = () => state;
+""" + source + r"""
+const row = {status: "open", waiting_from: "2026-11-01T10:00:18+00:00", waiting_why: "stopped", stages: {steps: [{id: "requirement", state: "now", since: "2026-11-01T09:59:58.000Z"}]}};
+assert.strictEqual(stages(row, true).steps[0].since, Date.parse(row.waiting_from));
+state = "working";
+assert.strictEqual(stages(row, true).steps[0].since, Date.parse("2026-11-01T09:59:58.000Z"));
+"""
+        done = run_node(script)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class PairingLinkTests(unittest.TestCase):
+    def test_a_link_pasted_into_a_tab_that_shows_the_board_is_read(self) -> None:
+        """Only what follows the # changes then, so the page does not load again; the code stayed in the address bar and the page said "not paired"."""
+        source = between((WEB / "serve.js").read_text(encoding="utf-8"), "const pairCode", "// A line that says whether this browser may approve")
+        script = r"""
+const assert = require("assert");
+let hashchange = null, paired = false, reloaded = 0, posted = [], right = "good";
+global.location = {hash: "", pathname: "/", reload() { reloaded++; }};
+global.history = {replaceState() { location.hash = ""; }};
+global.window = {addEventListener(name, fn) { if (name === "hashchange") hashchange = fn; }};
+const showPaired = () => {}, note = (data) => data, failed = () => {};
+const post = (path, body) => {
+  posted.push(path);
+  if (path === "/api/pair") { if (body.code !== right) return Promise.reject(new Error("wrong")); paired = true; right = ""; }
+  return Promise.resolve({paired});
+};
+""" + source + r"""
+ready.then(() => {
+  assert.strictEqual(posted.includes("/api/pair"), false, "no code in the address: nothing to trade");
+  location.hash = "#pair=used-up";
+  hashchange();
+  return new Promise((done) => setTimeout(done, 20));
+}).then(() => {
+  assert.strictEqual(location.hash, "", "the code leaves the address bar");
+  assert.strictEqual(reloaded, 0, "a code that failed keeps the page and what it says");
+  location.hash = "#pair=good";
+  hashchange();
+  return new Promise((done) => setTimeout(done, 20));
+}).then(() => {
+  assert.strictEqual(paired, true);
+  assert.strictEqual(reloaded, 1, "paired: the page loads again, with its buttons");
+  location.hash = "#files";
+  hashchange();
+  return new Promise((done) => setTimeout(done, 20));
+}).then(() => assert.strictEqual(reloaded, 1, "any other hash is the page's own"));
+"""
+        done = run_node(script)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+
+@unittest.skipUnless(NODE, "node is not installed")
 class RefreshRhythmTests(unittest.TestCase):
     def test_polling_waits_while_the_page_is_hidden_and_while_the_last_request_is_not_back(self) -> None:
         source = between((WEB / "common.js").read_text(encoding="utf-8"), "function pollEvery", "// What the task waits for")
@@ -487,7 +548,7 @@ class WalkThroughTests(unittest.TestCase):
     def test_the_time_waited_alone_does_not_draw_the_page_again(self) -> None:
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
         self.assertIn('.replace(/"waited_s":[\\d.]+/g, "")', desk)
-        self.assertIn('document.querySelectorAll(".tk-waited").forEach', desk)  # the number alone moves on
+        self.assertIn('document.querySelectorAll(".tk-waited:not(.st-run)").forEach', desk)  # the number alone moves on; a live one moves with the clock of the page
         self.assertIn('"data-card-up": "1"', desk)  # the card opens above the bubble: the button is under it
         self.assertIn("!hold.anchor.dataset.cardUp", (WEB / "status.js").read_text(encoding="utf-8"))
 

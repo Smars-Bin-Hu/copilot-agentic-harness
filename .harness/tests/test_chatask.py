@@ -268,7 +268,9 @@ class RowTests(AskCase):
         data["events"] += [{"at": at(2), "what": "pause"}, {"at": at(1), "what": "unpause"}]
         path.write_text(json.dumps(data), encoding="utf-8")
         with mock.patch.object(self.vs, "ask_of", return_value=dict(self.vs.ask_of(TASK), since=at(3))):
-            self.assertAlmostEqual(self.shown_row()["waited_s"] / 3600, 2, places=2)
+            found = self.shown_row()
+            self.assertAlmostEqual(found["waited_s"] / 3600, 2, places=2)
+            self.assertAlmostEqual((now - datetime.fromisoformat(found["waiting_from"])).total_seconds() / 3600, 2, places=2)  # the clock of the task page reads the same
             self.assertAlmostEqual(self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["waited_s"] / 3600, 2, places=2)
 
     def test_a_question_makes_the_row_wait_with_an_answer_button_and_a_page_that_is_not_fooled_by_other_kinds(self) -> None:

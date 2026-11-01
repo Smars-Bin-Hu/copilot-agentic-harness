@@ -97,6 +97,7 @@ class PromoteTests(KbCase):
         main = self.main_commit(self.repo_b)
         plan = self.run_cli("task", "promote", "--dry-run")
         self.assertEqual([repo["name"] for repo in plan["repos"]], ["repo_b", "kb"])  # the knowledge base last
+        self.assertTrue(self.data()["promote"]["direct"])  # the card on the task page says what really happens: not "on a new branch" alone
         self.approve_promote()
         result = self.run_cli("task", "promote")
         self.assertEqual(run_git(self.repo_b, "rev-parse", "HEAD"), main)

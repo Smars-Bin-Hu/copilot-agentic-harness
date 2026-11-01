@@ -308,7 +308,7 @@
       result_missing: FILES[desk.kind] && ["design", "rca"].includes(desk.kind) && !doc(FILES[desk.kind]) ? FILES[desk.kind] : ""};  // a design or an RCA task without its result file: the close dialog warns
   }
   const OPTIONAL = ["pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
-  const hintOf = (item) => t("desk.hint." + item.action.replace(" ", "-"));
+  const hintOf = (item) => (item.action === "approve-promote" && desk.promote_direct ? t("desk.hint.approve-promote.kb") : t("desk.hint." + item.action.replace(" ", "-")));
   const canAct = () => desk.status === "open" && !desk.past && !saved;
 
   // How full the context is: a label, a thin bar, the percent. Unknown is "-" and no bar, never 0.
@@ -766,13 +766,23 @@
     return button;
   }
 
+  // "It has waited for you...": on a live page the time moves with the one clock of the page (status.js), so it is the number of the stage card to the second. A saved copy says the time as of then.
+  function waitedLine() {
+    if (desk.waited_s === null || desk.waited_s === undefined) return null;
+    const from = saved ? NaN : Date.parse(desk.waiting_from);
+    if (isNaN(from)) return h("span", {class: "sub tk-waited"}, t("desk.waited", {time: clock(desk.waited_s)}));
+    const [before, after] = t("desk.waited", {time: "\n"}).split("\n");
+    Status.clock();
+    return h("span", {class: "sub tk-waited st-run", "data-since": String(from)}, before, h("span", {class: "st-time"}, clock(desk.waited_s)), after);
+  }
+
   const CARD_WORDS = {"confirm-req": "task.waiting.req", "approve-plan": "task.waiting.plan", "approve-promote": "task.waiting.promote"};  // two cards can stand together: each says what it is about
 
   function strongCard(item, notes) {
     const row = actionRow();
     const tab = JUMPS[item.action];
     return h("section", {class: "tk-need strong", "data-action": item.action},
-      h("div", {class: "tk-need-h"}, tag(CARD_WORDS[item.action] ? t(CARD_WORDS[item.action]) : desk.waiting ? waitText(desk) : t("desk.actions.title"), "hot"), desk.waited_s !== null && desk.waited_s !== undefined ? h("span", {class: "sub tk-waited"}, t("desk.waited", {time: clock(desk.waited_s)})) : null),
+      h("div", {class: "tk-need-h"}, tag(CARD_WORDS[item.action] ? t(CARD_WORDS[item.action]) : desk.waiting ? waitText(desk) : t("desk.actions.title"), "hot"), waitedLine()),
       h("p", {class: "tk-need-p"}, hintOf(item)), notes,
       h("div", {class: "tk-need-go"}, actionButton(row, item, "big"), jumpButton(tab, t("desk.jump." + tab))));
   }
@@ -808,7 +818,7 @@
     const idle = items.length ? null : quiet();
     const jump = served() && ["tests", "run"].includes(desk.waiting_why) ? jumpButton("live", t("desk.jump.live")) : null;  // the form for the results is on the Live tab
     return h("section", {class: "tk-need"},
-      h("div", {class: "tk-need-h"}, h("div", {class: "tk-need-t"}, h("h2", null, idle ? idle.title : t("desk.actions.title")), askBubble()), desk.waited_s !== null && desk.waited_s !== undefined && (items.length || desk.waiting) ? h("span", {class: "sub tk-waited"}, t("desk.waited", {time: clock(desk.waited_s)})) : null),
+      h("div", {class: "tk-need-h"}, h("div", {class: "tk-need-t"}, h("h2", null, idle ? idle.title : t("desk.actions.title")), askBubble()), items.length || desk.waiting ? waitedLine() : null),
       notes,
       idle ? [h("p", {class: "hint"}, idle.hint), resumeButton(), idle.prompt ? promptLine(idle.prompt) : null, jump]
         : h("div", {class: "tk-acts"}, items.map((item) => h("div", {class: "tk-act"}, actionButton(row, item, "big"), h("p", {class: "hint"}, hintOf(item))))));
@@ -1837,7 +1847,7 @@
       const text = JSON.stringify(data.desk);
       if (same(text, shown)) {
         const waited = data.desk.waited_s;
-        if (waited !== null && waited !== undefined) document.querySelectorAll(".tk-waited").forEach((node) => { node.textContent = t("desk.waited", {time: clock(waited)}); });
+        if (waited !== null && waited !== undefined) document.querySelectorAll(".tk-waited:not(.st-run)").forEach((node) => { node.textContent = t("desk.waited", {time: clock(waited)}); });
         const foot = ui.foot && ui.foot.querySelector("footer");
         if (foot && foot.firstChild) foot.firstChild.textContent = t("desk.footer", {as_of: when(data.desk.as_of, 0, 19)});
         return;

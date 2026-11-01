@@ -304,10 +304,11 @@ def recovery_steps(repo: Dict[str, Any], branch: str, switched: bool, written: L
         switched = False
     modified = [item["relative"] for item in written if item["action"] in ("modify", "delete")]  # a deleted file comes back with `restore`
     created = [item["relative"] for item in written if item["action"] == "create"]
+    digests = {item["relative"]: item["sha256"] for item in written if item["action"] != "delete" and item.get("sha256")}  # `edits_at_risk` tells an edit from what promote wrote
     if modified:
-        steps.append({"repo": path, "git": ["restore", "--", *modified]})
+        steps.append({"repo": path, "git": ["restore", "--", *modified], "wrote": {name: digests[name] for name in modified if name in digests}})
     if created:
-        steps.append({"repo": path, "git": ["clean", "-f", "--", *created]})
+        steps.append({"repo": path, "git": ["clean", "-f", "--", *created], "wrote": {name: digests[name] for name in created if name in digests}})
     if repo.get("direct"):
         return [dict(step, on=repo["base_ref"]) for step in steps]
     if switched:
@@ -315,6 +316,34 @@ def recovery_steps(repo: Dict[str, Any], branch: str, switched: bool, written: L
         steps.append({"repo": path, "git": ["switch", original]})
         steps.append({"repo": path, "git": ["branch", "-d", branch]})
     return steps
+
+
+def edits_at_risk(steps: List[Dict[str, Any]], branch: str, timeout: int) -> List[Tuple[str, str]]:
+    """(repository folder, file) of what `run_recovery` would throw away: a file that is neither what promote wrote nor what git holds, in a repository still on the promote branch.
+    A file the write failed on before it changed anything is what git holds. A record from before 1.6.43 has no digests: nothing is found."""
+    found: List[Tuple[str, str]] = []
+    heads: Dict[str, str] = {}
+    for step in steps:
+        top = Path(step["repo"])
+        if step["git"][0] not in ("restore", "clean"):
+            continue
+        if step["repo"] not in heads:
+            heads[step["repo"]] = targets.run_step(top, ["symbolic-ref", "--short", "-q", "HEAD"], timeout)[1]
+        if heads[step["repo"]] != step.get("on", branch):
+            continue
+        for relative, digest in (step.get("wrote") or {}).items():
+            path = top / relative
+            if not path.is_file() or common.sha256_file(path) == digest:
+                continue
+            if step["git"][0] == "clean" or targets.run_step(top, ["diff", "--quiet", "HEAD", "--", relative], timeout)[0] != 0:
+                found.append((step["repo"], relative))
+    return found
+
+
+def keep_edits(edits: List[Tuple[str, str]], folder: Path) -> None:
+    """A copy of each file of `edits_at_risk` under `folder`, by repository: the recovery goes on, and nobody's work goes with it."""
+    for repo, relative in edits:
+        common.copy_file(Path(repo) / relative, folder / Path(repo).name / relative)
 
 
 def run_recovery(steps: List[Dict[str, Any]], branch: str, timeout: int) -> List[Dict[str, Any]]:

@@ -341,6 +341,16 @@ class PauseTests(BoardCase):
         row = self.after_a_night(lambda: tasklife.offwork(self.root, interactive=True), lambda: tasklife.onwork(self.root, interactive=True))
         self.assertAlmostEqual(row["waited_s"] / 3600, 2.5, places=2)
 
+    def test_the_clock_of_a_wait_stands_still_and_reads_what_the_board_says(self) -> None:
+        """The task page counts up from it: the stage card and the card of waits must say one number, and a clock that moved at every poll would draw the page again."""
+        row = self.after_a_night(lambda: tasklife.pause(self.root, "job", interactive=True), lambda: tasklife.resume(self.root, "job", interactive=True))
+        read = (datetime.now(timezone.utc) - datetime.fromisoformat(row["waiting_from"])).total_seconds()
+        self.assertAlmostEqual(read, row["waited_s"], delta=3)
+        data = self.data()
+        self.assertEqual(tasklife.wait_clock(data, row["waiting_since"]), tasklife.wait_clock(data, row["waiting_since"]))
+        self.assertEqual(tasklife.wait_clock(data, "not a time"), "")
+        self.assertEqual(self.listed()["tasks"][0]["waiting_from"], row["waiting_from"])
+
     def test_the_night_is_not_counted_for_what_the_chat_waits_for(self) -> None:
         """Copilot asked, the person left with Off work and came back: the question is still there, seen before the night."""
         row = self.after_a_night(lambda: tasklife.offwork(self.root, interactive=True), lambda: tasklife.onwork(self.root, interactive=True))
@@ -897,7 +907,7 @@ class PageTests(BoardCase):
     def test_a_click_asks_the_server_again_in_place_and_does_not_reload_the_board(self) -> None:
         """A reload draws the board from nothing, so no robot slides or springs after the very click that changed something."""
         serve = (taskhtml.WEB / "serve.js").read_text(encoding="utf-8")
-        self.assertEqual(serve.count("location.reload()"), 2, "the fallback of a page that has no board in it (the task page), and a language that changed")
+        self.assertEqual(serve.count("location.reload()"), 3, "the fallback of a page that has no board in it (the task page), a language that changed, and a pairing link pasted into an open tab")
         self.assertIn("data.language !== document.documentElement.lang && !reloading", serve)
         self.assertIn("const done = () => (after ? after() : location.reload());", serve)
         self.assertIn("SERVE.onChange(refresh)", (taskhtml.WEB / "board.js").read_text(encoding="utf-8"))

@@ -14,6 +14,7 @@ the plan is asked for again, a new round after a write-back) falls back to the r
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -154,8 +155,10 @@ ENDS = {
 
 def with_timing(found: Dict[str, Any], data: Dict[str, Any]) -> None:
     """Add to each step what the history knows of its time: `s` (seconds, a step that is done and has both ends) or `since` (a step that is now, from when it began). Nothing is guessed:
-    a step with an end missing has neither. The test kind has no such events."""
+    a step with an end missing has neither. The test kind has no such events. Time put aside is not part of a step: `since` moves on by it, and a step of a task put aside has `s`, which stands still."""
     from core import copilot_events
+
+    from . import taskinsight  # it needs this module
 
     steps = found.get("steps") or []
     round_now = int(data.get("round") or 1)
@@ -167,6 +170,9 @@ def with_timing(found: Dict[str, Any], data: Dict[str, Any]) -> None:
         opened = [copilot_events.seconds(event.get("at")) for event in events if event.get("what") == "new-round"]
         start = opened[0] if opened and opened[0] is not None else None
     begin = start
+    marks = [(copilot_events.seconds(event.get("at")), str(event.get("what", ""))) for event in data.get("events") or [] if isinstance(event, dict)]
+    aside = taskinsight.pauses(sorted(item for item in marks if item[0] is not None))
+    now = time.time()
     for step in steps:
         names = ENDS.get(step.get("id", ""), ())
         end = None
@@ -177,10 +183,14 @@ def with_timing(found: Dict[str, Any], data: Dict[str, Any]) -> None:
                 end = marks[0] if name != "promote" else marks[-1]
                 break
         if step.get("state") == "done" and begin is not None and end is not None and end >= begin:
-            step["s"] = round(end - begin, 1)
+            step["s"] = round(end - begin - taskinsight.aside(aside, begin, end), 1)
         elif step.get("state") == "now" and begin is not None:
-            from datetime import datetime, timezone
-            step["since"] = datetime.fromtimestamp(begin, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+            spent = taskinsight.aside(aside, begin, now)
+            if aside and aside[-1][1] == float("inf"):
+                step["s"] = round(now - begin - spent, 1)
+            else:
+                from datetime import datetime, timezone
+                step["since"] = datetime.fromtimestamp(begin + spent, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
         begin = end if end is not None else None
 
 

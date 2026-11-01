@@ -254,15 +254,19 @@ const SERVE = (function () {
     mark.lastChild.textContent = paired === null ? "" : t(paired ? "board.serve.mark.paired" : "board.serve.mark.unpaired");
   }
   const note = (data) => { stale = data.started && data.now && data.started !== data.now ? {started: data.started, now: data.now} : null; return data; };
-  const ready = (function () {
-    const code = location.hash.startsWith("#pair=") ? decodeURIComponent(location.hash.slice(6)) : "";
+  const pairCode = () => (location.hash.startsWith("#pair=") ? decodeURIComponent(location.hash.slice(6)) : "");
+  function trade() {
+    const code = pairCode();
     if (code) history.replaceState(null, "", location.pathname);  // the code leaves the address bar and the history
     // A browser that has the cookie of an earlier pairing does not need the code again: a second tab, a tab the browser restored
     // or loaded twice would otherwise find the code used up and say so.
     const already = post("/api/status", {}).then((data) => data.paired, () => false);
     return already.then((yes) => (code && !yes ? post("/api/pair", {code}).catch(failed) : null))
       .then(() => post("/api/status", {})).then((data) => { paired = note(data).paired; showPaired(); }, () => { paired = false; showPaired(); });
-  })();
+  }
+  const ready = trade();
+  // A link pasted into a tab that already shows the board changes only what follows the #: the page does not load again, and without this the code would never be read.
+  window.addEventListener("hashchange", () => { if (pairCode()) trade().then(() => { if (paired) location.reload(); }); });
 
   // A line that says whether this browser may approve; it stays right when the page is drawn again.
   // `quiet`: the page has the mark in its header, so the line is there only for what needs the person (not paired, the board runs old code).

@@ -18,7 +18,7 @@ import json
 import os
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -341,7 +341,7 @@ def apply_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], data: Optional
     if not ask or row.get("status") != "open" or row.get("paused_since"):
         return False
     waited = waited_since(data or {}, str(ask.get("since") or ""))
-    row.update({"waiting": ask_text(ask), "waiting_why": "confirm" if ask.get("kind") == "confirm" else "question", "waiting_since": ask.get("since", ""),
+    row.update({"waiting": ask_text(ask), "waiting_why": "confirm" if ask.get("kind") == "confirm" else "question", "waiting_since": ask.get("since", ""), "waiting_from": wait_clock(data or {}, str(ask.get("since") or "")),
                 "waited_s": round(waited) if waited is not None else None, "state": "waiting", "active": False})
     return True
 
@@ -395,7 +395,21 @@ def waited_since(data: Dict[str, Any], stamp: str) -> Optional[float]:
         start = datetime.fromisoformat(stamp).timestamp()
     except (TypeError, ValueError):
         return waited
-    now = datetime.now(timezone.utc).timestamp()
+    return max(0.0, waited - aside_since(data, start, datetime.now(timezone.utc).timestamp()))
+
+
+def wait_clock(data: Dict[str, Any], stamp: str) -> str:
+    """When a clock that reads what `waited_since` says would have started: `stamp`, moved on by the time aside. It stands still while the wait goes on, so a page can count up from it, and every
+    place that shows this wait shows one number. Empty when `stamp` cannot be read."""
+    try:
+        start = datetime.fromisoformat(stamp)
+        return (start + timedelta(seconds=aside_since(data, start.timestamp(), datetime.now(timezone.utc).timestamp()))).isoformat()
+    except (TypeError, ValueError):
+        return ""
+
+
+def aside_since(data: Dict[str, Any], start: float, now: float) -> float:
+    """How many seconds from `start` to `now` the person had the task put aside."""
     aside, began = 0.0, None
     for event in data.get("events") or []:
         what = event.get("what")
@@ -410,7 +424,7 @@ def waited_since(data: Dict[str, Any], stamp: str) -> Optional[float]:
             began = None
     if began is not None:
         aside += max(0.0, now - max(start, began))
-    return max(0.0, waited - aside)
+    return aside
 
 
 def seconds_since(stamp: str) -> Optional[float]:
@@ -706,7 +720,7 @@ def list_tasks(root: Path, everything: bool = False) -> Dict[str, Any]:
         rows.append({
             "task": task, "name": data.get("name") or task_ops.name_of(task), "status": data.get("status", ""),
             "kind": data.get("kind", ""), "tier": data.get("tier", ""), "updated_at": data.get("updated_at", ""),
-            "waiting": waiting_text(data, found["why"]), "waiting_why": found["why"], "waiting_since": found["since"],
+            "waiting": waiting_text(data, found["why"]), "waiting_why": found["why"], "waiting_since": found["since"], "waiting_from": wait_clock(data, found["since"]) if found["why"] else "",
             "waited_s": round(waited) if waited is not None else None, "session_id": data.get("session_id", ""),
             "depends_on": list(data.get("depends_on") or []), "paused_since": aside, "paused_by": str((data.get("paused") or {}).get("by") or "") if aside else "",
             "autorun": isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on",

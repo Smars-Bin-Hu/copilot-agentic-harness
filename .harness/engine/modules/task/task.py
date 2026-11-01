@@ -734,7 +734,7 @@ def run_promote(root: Path, raw_task: str, dry_run: bool) -> Dict[str, Any]:
         result = make_plan(root, task, data, sync=dry_run)
         if dry_run:
             result["snapshot"] = tasksnap.take(root, task, "promote")["snapshot"]
-            new = {"state": "dry_run", "plan_sha256": result["plan_sha256"], "at": utc_now()}
+            new = {"state": "dry_run", "plan_sha256": result["plan_sha256"], "at": utc_now(), **({"direct": True} if any(repo.get("direct") for repo in result["repos"]) else {})}  # a knowledge base: committed, not left on a branch
             if record.get("approved_plan_sha256") == result["plan_sha256"]:
                 new.update(approved_plan_sha256=record["approved_plan_sha256"], approved_at=record["approved_at"])  # same plan: keep the approval
             data["promote"] = new
@@ -841,9 +841,16 @@ def recover(
         raise CommandError(say("recover.broken", task=task))  # the record is not the one a promote writes: nothing to replay
     lines = [say("recover.screen.head", task=task, repo=record.get("repo_failed", ""), error=record.get("error", ""))]
     lines += [f"  {command}" for command in record.get("recovery", [])] or [say("recover.screen.none")]
+    found = common.load_targets(root)
+    edits = promote_target.edits_at_risk(record["recovery_steps"], record["branch"], found.timeout)
+    if edits:
+        lines.append(say("recover.screen.edited", files=", ".join(f"{Path(repo).name}/{relative}" for repo, relative in edits)))
     approval.say(out, *lines)
     typed(say("recover.question"), record["plan_sha256"], say("recover.refused"), reader)
-    found = common.load_targets(root)
+    edits = promote_target.edits_at_risk(record["recovery_steps"], record["branch"], found.timeout)  # the person read the screen for a while
+    kept = f"REF/recovered-{datetime.now().strftime('%Y%m%d-%H%M%S')}" if edits else ""
+    if edits:
+        promote_target.keep_edits(edits, tasks.task_dir(root, task) / kept)
     results = promote_target.run_recovery(record["recovery_steps"], record["branch"], found.timeout)
     approval.say(out, *[f"  [{item['status']}] {item['command']}" + (f"  {item['message']}" if item["message"] else "") for item in results])
     failed = [item for item in results if item["status"] == "failed"]
@@ -851,7 +858,7 @@ def recover(
         raise CommandError(say("recover.failed", count=len(failed)))
     with locked(root, task) as again:
         again["promote"] = {"state": "none", "recovered_at": utc_now()}
-        note(again, "recover")
+        note(again, "recover", kept)
         again["waiting"] = {"since": utc_now(), "why": "go-recover"}
     counts = {name: sum(1 for item in results if item["status"] == name) for name in ("done", "skipped")}
-    return {"recovered": True, "task": task, **counts, "next": say("recover.next")}
+    return {"recovered": True, "task": task, **counts, "kept": kept, "next": say("recover.next") + (" " + say("recover.kept", folder=kept) if kept else "")}

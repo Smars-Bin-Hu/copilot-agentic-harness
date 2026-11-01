@@ -17,7 +17,7 @@ from typing import Any, Dict, Iterator, List, Optional
 from unittest import mock
 
 import support  # noqa: F401  (puts the engine on sys.path)
-from core import tasks
+from core import messages, tasks
 from modules.task import promote_target, task as task_ops
 from modules.task.common import CommandError
 from taskcase import SESSION, TaskCase
@@ -477,7 +477,62 @@ class RecoverTests(FailureBase):
         self.assertIn(f"task recover --task {request_id}", str(raised.exception))
         record = self.request(request_id)["promote"]
         self.assertEqual(len(record["recovery_steps"]), len(record["recovery"]))
-        self.assertEqual(record["recovery_steps"][0], {"repo": str(self.repo_a), "git": ["restore", "--", "a.sql"]})
+        self.assertEqual({key: value for key, value in record["recovery_steps"][0].items() if key != "wrote"}, {"repo": str(self.repo_a), "git": ["restore", "--", "a.sql"]})
+        self.assertEqual(list(record["recovery_steps"][0]["wrote"]), ["a.sql"])
+
+    def copies(self, request_id: str, name: str) -> List[Path]:
+        return sorted((self.root / request_id / "REF").rglob(name))
+
+    def test_an_edit_made_after_the_promote_is_kept_and_the_screen_says_so_first(self) -> None:
+        """Seen on the board: a line added by hand on the half-written branch went with `git restore`, and nothing said so."""
+        request_id = self.partial_request()
+        edited = self.repo_a / "a.sql"
+        edited.write_text("select 9, 9;\n-- by hand\n", encoding="utf-8")
+        result = self.recover(request_id)
+        self.assertIn(messages.text("recover.screen.edited", files=f"{self.repo_a.name}/a.sql"), self.shown.getvalue())
+        self.assertEqual(run_git(self.repo_a, "status", "--porcelain"), "")  # the repository is put back all the same
+        found = self.copies(request_id, "a.sql")
+        self.assertEqual([path.read_text(encoding="utf-8") for path in found], ["select 9, 9;\n-- by hand\n"])
+        self.assertEqual(found[0].relative_to(self.root / request_id).parts[2:], (self.repo_a.name, "a.sql"))
+        self.assertTrue(result["kept"].endswith(found[0].parents[1].name))
+        self.assertIn(result["kept"], result["next"])
+        self.assertEqual(self.request(request_id)["events"][-1]["detail"], result["kept"])
+
+    def test_what_the_promote_wrote_needs_no_copy_and_neither_does_a_file_the_write_never_changed(self) -> None:
+        request_id = self.partial_request()
+        result = self.recover(request_id)
+        self.assertNotIn(messages.text("recover.screen.edited", files=""), self.shown.getvalue())
+        self.assertEqual((result["kept"], self.copies(request_id, "a.sql")), ("", []))
+
+    def test_a_new_file_edited_by_hand_is_kept_before_it_is_cleaned(self) -> None:
+        request_id = self.flow({"repo_b/src/a.sql": "select 1, 2;\n", "repo_a/new.sql": "select 3;\n"})
+        self.dry_run(request_id)
+        self.approve(request_id)
+        with self.fail_on(self.repo_b / "src" / "a.sql"):
+            with self.assertRaises(CommandError):
+                task_ops.run_promote(self.root, request_id, False)
+        (self.repo_a / "new.sql").write_text("select 3;\n-- by hand\n", encoding="utf-8")
+        self.recover(request_id)
+        self.assertFalse((self.repo_a / "new.sql").exists())
+        self.assertEqual([path.read_text(encoding="utf-8") for path in self.copies(request_id, "new.sql")], ["select 3;\n-- by hand\n"])
+
+    def test_a_repository_the_person_left_is_not_touched_so_nothing_is_at_risk(self) -> None:
+        request_id = self.partial_request()
+        run_git(self.repo_a, "restore", "--", "a.sql")
+        run_git(self.repo_a, "switch", "main")
+        (self.repo_a / "a.sql").write_text("-- by hand on main\n", encoding="utf-8")
+        result = self.recover(request_id)
+        self.assertEqual(result["kept"], "")
+        self.assertEqual((self.repo_a / "a.sql").read_text(encoding="utf-8"), "-- by hand on main\n")
+
+    def test_a_record_written_before_the_files_had_digests_still_recovers(self) -> None:
+        request_id = self.partial_request()
+        path = tasks.state_file(self.root, request_id)
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for step in data["promote"]["recovery_steps"]:
+            step.pop("wrote", None)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        self.assertEqual(self.recover(request_id)["kept"], "")
 
     def test_recover_puts_both_repositories_back_and_opens_the_promote_again(self) -> None:
         request_id = self.partial_request()

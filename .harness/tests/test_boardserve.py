@@ -165,6 +165,10 @@ class ServeTests(ServeCase):
         self.assertEqual(self.request("POST", "/api/close", {"task": "job1"}, cookie=cookie)[0], 200)
         self.assertEqual([event["detail"] for event in self.data()["events"] if event["what"] == "close"], [messages.text("serve.close.reason")])
 
+    def test_the_pairing_cookie_is_this_boards_own(self) -> None:
+        """Cookies do not tell ports apart: with one name, opening a second board in the same browser took the pairing of the first."""
+        self.assertTrue(self.pair().startswith(f"harness_board_{self.port}="))
+
     def test_pause_and_resume_need_no_pairing(self) -> None:
         status, data, _ = self.request("POST", "/api/act", {"action": "pause", "task": TASK})
         self.assertEqual(status, 200, data)

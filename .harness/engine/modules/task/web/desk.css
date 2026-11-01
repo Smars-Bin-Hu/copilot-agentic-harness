@@ -70,7 +70,7 @@
 .tk-bubble svg{width:15px;height:15px}
 .tk-peek{display:grid;gap:6px;max-width:100%;overflow-wrap:anywhere}.tk-peek p,.tk-peek ul,.tk-peek pre{margin:0}.tk-peek ul{padding-left:16px}.tk-peek pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:10em}.tk-peek-q{display:grid;gap:4px}
 .tk-need-h .tag{max-width:100%;overflow:hidden;text-overflow:ellipsis}
-.tk-waited{flex:none;font-variant-numeric:tabular-nums}
+.tk-waited{flex:none;font-variant-numeric:tabular-nums}.tk-waited.st-run{display:inline;color:var(--soft)}
 .tk-need-p{margin:0 0 10px;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere}
 .tk-need-go{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .tk-need-go .act{margin:0}

@@ -7,6 +7,7 @@ import json
 import re
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -96,6 +97,25 @@ class TimingTests(unittest.TestCase):
         self.assertEqual([step.get("s") for step in found["steps"]], [60.0, 360.0, 4980.0, None, None])
         self.assertTrue(found["steps"][3]["since"].startswith("2026-10-31T11:30:00"))
         self.assertNotIn("since", found["steps"][0])
+
+    def test_time_aside_is_not_part_of_a_step(self) -> None:
+        pause = [{"at": "2026-10-31T10:04:00+00:00", "round": 1, "what": "pause", "detail": ""}, {"at": "2026-10-31T10:04:50+00:00", "round": 1, "what": "unpause", "detail": ""}]
+        plain = self.data()
+        data = self.data(events=sorted(plain["events"] + pause, key=lambda event: event["at"]))
+        found = self.steps("done", "done", "done", "now", "todo")
+        taskstages.with_timing(found, data)
+        self.assertEqual([step.get("s") for step in found["steps"]], [60.0, 310.0, 4980.0, None, None])
+
+    def test_a_step_of_a_task_put_aside_stands_still(self) -> None:
+        """Seen on the page: the stage card kept counting and said 18 s more than the card of waits, which was the time of an Off work."""
+        plain = self.data()
+        began = plain["events"][-1]["at"]
+        later = (datetime.fromisoformat(began) + timedelta(minutes=2)).isoformat()
+        data = self.data(events=plain["events"] + [{"at": later, "round": 1, "what": "pause", "detail": ""}])
+        found = self.steps("done", "done", "done", "now", "todo")
+        taskstages.with_timing(found, data)
+        self.assertNotIn("since", found["steps"][3])
+        self.assertEqual(found["steps"][3]["s"], 120.0)
 
     def test_a_step_with_an_end_missing_has_no_time_and_nothing_is_guessed(self) -> None:
         found = self.steps("done", "done", "now", "todo", "todo")

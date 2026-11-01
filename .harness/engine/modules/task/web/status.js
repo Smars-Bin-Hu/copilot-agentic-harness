@@ -182,7 +182,8 @@ const Status = (function () {
         else if (works) { kind = "run"; text = t("board.status.stage.run"); }
         else { kind = "now"; text = t("board.status.stage.now"); }
       }
-      return {label, kind, text, s: finite(step.s) ? step.s : null, since: step.since ? Date.parse(step.since) : NaN};
+      const since = kind === "wait" && row.waiting_from ? row.waiting_from : step.since;  // "waits for you" and a time: the wait, the number the card of the task page says
+      return {label, kind, text, s: finite(step.s) ? step.s : null, since: since ? Date.parse(since) : NaN};
     });
     const review = s.review && (s.review.n || (s.review.states || []).length) ? {n: s.review.n, states: (s.review.states || []).map((mark) => ({pass: "done", run: "run", fail: "fail"}[mark] || "todo")), waived: Boolean(s.review.waived), stamp: Boolean(s.review.stamp)} : null;
     return {steps, round: s.round || 1, review};

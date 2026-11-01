@@ -227,6 +227,11 @@ class Board:
             self.code = secrets.token_urlsafe(12)
             return self.code
 
+    @property
+    def cookie(self) -> str:
+        """The name of this board's cookie. Cookies do not tell ports apart: with one name, a second board in the same browser would take this one's pairing away."""
+        return f"{COOKIE}_{self.port}"
+
     def pair(self, code: str) -> Optional[str]:
         """A session token for the right code; the code is used up."""
         with self.lock:
@@ -823,7 +828,7 @@ def handler_for(board: Board) -> type:
         def token(self) -> str:
             for part in self.headers.get("Cookie", "").split(";"):
                 name, _, value = part.strip().partition("=")
-                if name == COOKIE:
+                if name == board.cookie:
                     return value
             return ""
 
@@ -918,7 +923,7 @@ def handler_for(board: Board) -> type:
                 token = board.pair(str(data.get("code", "")))
                 if token is None:
                     return self.answer(403, {"error": say("serve.pair.wrong")})
-                cookie = f"{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/"
+                cookie = f"{board.cookie}={token}; HttpOnly; SameSite=Strict; Path=/"
                 return self.answer(200, {"paired": True}, {"Set-Cookie": cookie})
             if path == "/api/status":
                 return self.answer(200, {"paired": board.paired(self.token()), "started": board.version, "now": disk_version(board.root), "vscode": board.link.status()})

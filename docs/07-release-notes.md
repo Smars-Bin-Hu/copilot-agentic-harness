@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.43 (2026-11-01)
+
+### Fixed
+
+- **Recover no longer throws away an edit made by hand.** A file you changed on the half-written branch after a promote failed went with `git restore`, and nothing said so. Now the recover screen names such a file, a copy goes to `REF/recovered-<time>/` in the task first (the Files tab lists it), and the history says where. A repository you already left was never touched; that has not changed.
+- **The stage card and the card of waits say one number.** The stage card showed how old the step was, and it counted time put aside, so it could read 18 s more than "It has waited for you", or far more when the agent had worked first. A step that waits now shows the wait, and both move with one clock. A step no longer counts time put aside, and it stands still while the task is paused.
+- **Two boards in one browser keep their pairing.** Cookies do not tell ports apart, so opening a second board took the pairing of the first.
+- **A pairing link pasted into a tab that shows the board works.** Only the part after `#` changed, so the page did not read it. You have to pair each board once again after this update.
+- **The card of a promote into a knowledge base says what happens:** the files go straight on its base branch, with one commit. It said "on a new branch, not committed".
+- **The message about the link to VS Code being off names both switches:** `board.vscode` in `task.override.json`, and `HARNESS_VSCODE_CLI=off`.
+- **Messages to a person say `harness task board`,** the command they can run.
+
 ## 1.6.42 (2026-11-01)
 
 ### Added

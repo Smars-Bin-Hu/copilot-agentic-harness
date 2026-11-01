@@ -47,7 +47,7 @@ What a command prints: text on a terminal, JSON on a pipe (a script, a redirect)
 | `task confirm-req` | Confirms the `REQ.md` of a task: you have read it and it says what you meant. The harness fills the confirmation line. Terminal only, with a typed code (the page has a button for it) |
 | `task approve-plan` | Approves the `PLAN.md` of a task. Terminal only, with a typed code. Refused while `REQ.md` is not written, not confirmed, or changed since its confirmation; `--with-req` confirms `REQ.md` and approves the plan with one code (the code of both files) |
 | `task approve-promote` | Approves the plan of the last `task promote --dry-run`. Terminal only, with a typed code |
-| `task recover` | After a promote failed partway, puts the repositories back as they were. Terminal only, with a typed code |
+| `task recover` | After a promote failed partway, puts the repositories back as they were. A file someone edited after the promote is named on the screen and copied to `REF/recovered-<time>/` in the task first. Terminal only, with a typed code |
 | `task review set` | With `--n N`, sets how many independent checks the work must pass in a row (0 switches them off; the cap is `review.max_n`). The chips of the task page run it. Terminal, or the paired board page; not while the agent is in the middle of a turn. The history says so; the next prompt's rules carry the number |
 | `task review extend` | Gives more checks after they are used up. Terminal only, with a typed code |
 | `task review waive` | Lets this version of the work through to the write-back without enough passes. When the work changes again, the waiver ends. Terminal only, with a typed code |

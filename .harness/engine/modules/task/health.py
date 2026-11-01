@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import config, copilot_events
 from core.logs import read_tail, session_log_path
 
-DEFAULTS = {"stuck_minutes": 10, "repeat_commands": 3, "idle_turns": 4, "cost_ratio": 2.0, "context_percent": 85}
+DEFAULTS = {"stuck_minutes": 10, "repeat_commands": 3, "idle_turns": 4, "cost_ratio": 2.0, "context_percent": 70, "context_notice": 50}
 MIN_PEERS = 3  # closed tasks of the same kind with Credits, before the cost rule may fire
 HOOK_TAIL = 256 * 1024
 EVENTS_TAIL = 512 * 1024
@@ -172,7 +172,7 @@ def with_context(root: Path, row: Dict[str, Any], chat: Optional[Dict[str, Any]]
     if row.get("status") != "open":
         return
     if isinstance(chat, dict) and isinstance(chat.get("context"), dict):
-        chat["context"]["limit"] = settings(root)["context_percent"]  # the page colours the bar with the same limit
+        chat["context"].update(limit=settings(root)["context_percent"], notice=settings(root)["context_notice"])  # the page colours the bar with the same limits
     found = context_rule(root, chat)
     row["warn"] = [item for item in row.get("warn") or [] if item.get("rule") != "context"] + ([found] if found else [])
 

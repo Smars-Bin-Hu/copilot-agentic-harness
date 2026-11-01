@@ -134,7 +134,7 @@ const Status = (function () {
     if (!meter || !finite(meter.percent)) return null;
     const radius = 6.2, length = 2 * Math.PI * radius, shown = clamp(meter.percent, 0, 100);
     const over = finite(meter.limit) && meter.percent > meter.limit;
-    const ring = svg("svg", {viewBox: "0 0 16 16", class: "st-ring" + (over ? (meter.percent >= 100 ? " bad" : " warn") : ""), "aria-hidden": "true"});
+    const ring = svg("svg", {viewBox: "0 0 16 16", class: "st-ring" + (over ? " bad" : finite(meter.notice) && meter.percent > meter.notice ? " warn" : ""), "aria-hidden": "true"});
     ring.append(svg("circle", {cx: 8, cy: 8, r: radius, class: "st-track"}));
     if (shown > 0) ring.append(svg("circle", {cx: 8, cy: 8, r: radius, class: "st-arc", "stroke-dasharray": (length * shown / 100).toFixed(2) + " " + length.toFixed(2), transform: "rotate(-90 8 8)"}));
     const text = t("board.status.context", {percent: Math.round(meter.percent * 10) / 10, used: amount(meter.used), window: amount(meter.window)})

@@ -141,6 +141,7 @@
 .rp .settings .chat-k,.rp .settings .set-note,.rp .drafts .chat-k,.rp .drafts .set-note{display:none}  /* the panel says this in tips */
 .rp .settings .set-field{display:flex;flex-direction:column;align-items:stretch;gap:3px;min-width:0}
 .rp .settings .set-field .sub{font-size:11.5px}
+.rp .settings .set-warn,.rp .settings .set-tip{grid-column:1/-1}
 .rp .settings select{width:100%;min-width:0;max-width:none;text-overflow:ellipsis}
 .rp .drafts{margin:0;padding:6px 0 0}
 .rp .draft-list{max-height:150px;overflow:auto}

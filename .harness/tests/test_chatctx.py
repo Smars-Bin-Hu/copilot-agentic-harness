@@ -116,10 +116,10 @@ class RuleTests(unittest.TestCase):
         from pathlib import Path
         root = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
-        self.assertEqual(health.settings(root)["context_percent"], 85)
-        self.assertEqual(health.context_rule(root, self.meter(85.1)), {"rule": "context", "n": 85})
+        self.assertEqual((health.settings(root)["context_percent"], health.settings(root)["context_notice"]), (70, 50))
+        self.assertEqual(health.context_rule(root, self.meter(70.1)), {"rule": "context", "n": 70})
         self.assertEqual(health.context_rule(root, self.meter(120.0)), {"rule": "context", "n": 120})
-        self.assertIsNone(health.context_rule(root, self.meter(85.0)))
+        self.assertIsNone(health.context_rule(root, self.meter(70.0)))
         self.assertIsNone(health.context_rule(root, self.meter(10.0)))
 
     def test_nothing_known_means_no_rule(self) -> None:
@@ -141,7 +141,7 @@ class RuleTests(unittest.TestCase):
         health.with_context(root, found, chat)
         health.with_context(root, found, chat)
         self.assertEqual([item["rule"] for item in found["warn"]], ["stuck", "context"])
-        self.assertEqual(chat["context"]["limit"], 85)
+        self.assertEqual((chat["context"]["limit"], chat["context"]["notice"]), (70, 50))
         health.with_context(root, found, self.meter(10.0))
         self.assertEqual([item["rule"] for item in found["warn"]], ["stuck"])  # it fell: the tag goes
         done = row(status="closed")
@@ -169,7 +169,7 @@ class ContextOnThePageTests(CompactCase):
         self.finish_turn(i=100000, o=5000)
         chat = self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["chat"]
         self.assertEqual({key: chat["context"][key] for key in ("used", "window", "percent")}, {"used": 105000, "window": 200000, "percent": 52.5})
-        self.assertEqual(chat["context"]["limit"], 85)
+        self.assertEqual((chat["context"]["limit"], chat["context"]["notice"]), (70, 50))
         self.assertEqual(self.request("POST", "/api/desk", {"task": "job1"})[1]["desk"]["warn"], [])
 
     def test_a_model_the_host_does_not_list_has_no_meter(self) -> None:

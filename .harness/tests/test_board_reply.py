@@ -275,12 +275,28 @@ class PageTests(unittest.TestCase):
         self.assertIn('changed, desk.domains, desk.autorun', desk)  # how long ago moves on by itself, so it is part of what is compared
         self.assertIn(".tk-when svg{flex:none;width:13px", source("desk.css"))  # an icon with no size in the style fills its box
 
+    def test_the_costs_are_said_where_they_are_chosen(self) -> None:
+        desk = source("desk.js")
+        self.assertIn('h("p", {class: "set-warn"}, t("desk.rv.cost"))', desk)
+        self.assertIn("switching.hidden = !(from && to && from !== to);", desk)  # only a model other than the one the chat runs on
+        self.assertIn('save(pick.value, "", 0); warnSwitch();', desk)
+        self.assertIn('h("p", {class: "set-tip"}, t("desk.set.thinking.hint"))', desk)
+        self.assertIn('level === "medium" ? t("desk.set.thinking.recommended", {level}) : level', source("common.js"))
+        for page in (desk, source("chat.js")):
+            self.assertIn("thinkingLabel(", page)
+
+    def test_the_context_warns_in_two_steps(self) -> None:
+        desk = source("desk.js")
+        self.assertIn('meter.percent > (meter.limit || 70) ? "hot" : meter.percent > (meter.notice || 50) ? "warm" : ""', desk)
+        self.assertIn('t("desk.ctx.level." + level)', desk)
+        self.assertIn('(over ? " bad" : finite(meter.notice) && meter.percent > meter.notice ? " warn" : "")', source("status.js"))
+
     def test_independent_review_is_set_on_the_task_page_and_not_with_a_message(self) -> None:
         desk = source("desk.js")
         self.assertNotIn("set-checks", desk)  # the reply panel has no 0 to 5
         self.assertIn("ui.review.set(", desk)
         self.assertIn('{action: "review set", task: desk.name, n, step: "act"}', desk)  # the command of a terminal, not text in a prompt
-        self.assertNotIn("[review]", messages.text("desk.review.hint"))
+        self.assertNotIn("[review]", messages.text("desk.rv.hint"))
 
     def test_a_new_model_fills_thinking_and_context_at_once(self) -> None:
         desk = source("desk.js")

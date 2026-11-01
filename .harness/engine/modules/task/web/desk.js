@@ -310,11 +310,13 @@
   const canAct = () => desk.status === "open" && !desk.past && !saved;
 
   // How full the context is: a label, a thin bar, the percent. Unknown is "-" and no bar, never 0.
+  // How full the context is: over `notice`, a note; over `limit`, time to compact, and the warning tag on the board (`health`).
+  const ctxLevel = (meter) => (meter.percent > (meter.limit || 70) ? "hot" : meter.percent > (meter.notice || 50) ? "warm" : "");
   function ctxBar(percentNow, meter) {
     if (percentNow === null) return [h("span", {class: "tk-cl"}, t("desk.ctx.label")), h("b", {class: "tk-cv"}, "-")];
-    const hot = percentNow > (meter.limit || 85);
-    return [h("span", {class: "tk-cl"}, t("desk.ctx.label")), h("span", {class: "tk-cb" + (hot ? " hot" : "")}, h("i", {style: "width:" + Math.max(0, Math.min(100, percentNow)) + "%"})),
-      h("b", {class: "tk-cv" + (hot ? " hot" : "")}, Math.round(percentNow * 10) / 10 + "%")];
+    const level = ctxLevel(meter);
+    return [h("span", {class: "tk-cl"}, t("desk.ctx.label")), h("span", {class: "tk-cb" + (level ? " " + level : "")}, h("i", {style: "width:" + Math.max(0, Math.min(100, percentNow)) + "%"})),
+      h("b", {class: "tk-cv" + (level ? " " + level : "")}, Math.round(percentNow * 10) / 10 + "%")];
   }
 
   // The card over the context bar: the figure, what the context holds when Copilot gave real counts, and the compact action.
@@ -329,11 +331,11 @@
       if (typeof chat.cost === "number") box.append(h("div", {class: "st-head"}, t("desk.ctx.session")), h("div", {class: "tk-part"}, h("span", {class: "tk-pn"}, t("desk.ctx.cost")), h("b", null, t("desk.ctx.cost.v", {n: chat.cost}))));
       box.append(h("div", {class: "st-head" + (typeof chat.cost === "number" ? " tk-cx-h" : "")}, t("desk.ctx.label")));
       if (meter) {
-        const hot = meter.percent > (meter.limit || 85);
-        box.append(h("div", {class: "tk-cx-big" + (hot ? " hot" : "")}, t("desk.ctx.card.used", {percent: Math.round(meter.percent * 10) / 10, used: amount(meter.used), window: amount(meter.window)})),
-          h("span", {class: "tk-cb wide" + (hot ? " hot" : "")}, h("i", {style: "width:" + Math.max(0, Math.min(100, meter.percent)) + "%"}), meter.reserved > 0 ? h("b", {class: "tk-cr", style: "width:" + Math.min(Math.max(0, 100 - meter.percent), meter.reserved) + "%"}) : null));
+        const level = ctxLevel(meter);
+        box.append(h("div", {class: "tk-cx-big" + (level ? " " + level : "")}, t("desk.ctx.card.used", {percent: Math.round(meter.percent * 10) / 10, used: amount(meter.used), window: amount(meter.window)})),
+          h("span", {class: "tk-cb wide" + (level ? " " + level : "")}, h("i", {style: "width:" + Math.max(0, Math.min(100, meter.percent)) + "%"}), meter.reserved > 0 ? h("b", {class: "tk-cr", style: "width:" + Math.min(Math.max(0, 100 - meter.percent), meter.reserved) + "%"}) : null));
         if (meter.reserved > 0) box.append(h("div", {class: "sub tk-cr-l"}, h("i", {class: "tk-cr"}), t("desk.ctx.reserved")));
-        if (hot) box.append(h("div", {class: "sub"}, t("board.status.context.warn", {limit: meter.limit || 85})));
+        if (level) box.append(h("div", {class: "set-warn"}, t("desk.ctx.level." + level)));
         box.append(h("div", {class: "sub"}, t("desk.ctx.card.note")));
       } else {
         box.append(h("div", {class: "sub"}, t("desk.ctx.unknown")));
@@ -468,7 +470,7 @@
 
     const bound = Boolean(chat && chat.bound);
     const meter = bound && chat.context && typeof chat.context.percent === "number" ? chat.context : null;
-    ui.ctx.set(bound ? JSON.stringify(meter ? [meter.percent, meter.limit] : null) : "", () => (bound ? ctxBar(meter ? meter.percent : null, meter) : null));
+    ui.ctx.set(bound ? JSON.stringify(meter ? [meter.percent, meter.limit, meter.notice] : null) : "", () => (bound ? ctxBar(meter ? meter.percent : null, meter) : null));
     if (bound) ui.ctx.node.setAttribute("aria-label", meter ? t("board.status.context", {percent: Math.round(meter.percent * 10) / 10, used: amount(meter.used), window: amount(meter.window)}) : t("desk.ctx.unknown"));
     ui.vs.set(chat ? "vs:" + (chat.bound ? "" : chat.why || "") : "", () => (chat ? SERVE.vsButton(chat) : null));
     paintMenu(false);
@@ -514,7 +516,7 @@
     function fillFor(id, level, size) {
       const found = models.find((item) => item.id === id);
       const levels = found && found.thinking ? found.thinking.levels : [];
-      think.replaceChildren(...[levels.includes(level) ? null : h("option", {value: ""}, t("desk.set.thinking.default")), ...levels.map((item) => h("option", {value: item, selected: item === level ? "" : null}, item))].filter(Boolean));
+      think.replaceChildren(...[levels.includes(level) ? null : h("option", {value: ""}, t("desk.set.thinking.default")), ...levels.map((item) => h("option", {value: item, selected: item === level ? "" : null}, thinkingLabel(item)))].filter(Boolean));
       think.disabled = !levels.length;
       const sizes = found && found.context ? found.context.sizes : [];
       const wanted = sizes.some((item) => item.id === size) ? size : found && found.context ? found.context.default : 0;
@@ -523,7 +525,14 @@
     }
     fillFor(now, info.thinking || (desk.chat && desk.chat.effort) || "", info.context);
     const save = (id, thinking, context) => SERVE.post("/api/setting", {task: desk.name, id, thinking, context}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
-    pick.addEventListener("change", () => { fillFor(pick.value, "", 0); save(pick.value, "", 0); });  // a new model starts at its own default level and size
+    const switching = h("p", {class: "set-warn", hidden: true});
+    const warnSwitch = () => {  // the next message moves the chat to another model: its cache is of no use there
+      const from = desk.chat && desk.chat.model, to = pick.value, name = (id) => (models.find((item) => item.id === id) || {}).name || id;
+      switching.hidden = !(from && to && from !== to);
+      switching.textContent = switching.hidden ? "" : t("desk.set.model.switch", {from: name(from), to: name(to)});
+    };
+    warnSwitch();
+    pick.addEventListener("change", () => { fillFor(pick.value, "", 0); save(pick.value, "", 0); warnSwitch(); });  // a new model starts at its own default level and size
     think.addEventListener("change", () => save(pick.value, think.value, Number(room.value) || 0));
     room.addEventListener("change", () => save(pick.value, think.value, Number(room.value) || 0));
     const hostSetting = (key, label) => {  // offered by the host, told to it at once; it holds from the next turn
@@ -542,7 +551,7 @@
     };
     return h("section", {class: "card chatbar settings", title: t("desk.set.note")}, h("span", {class: "chat-k"}, t("desk.set.label")),
       h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.model")), pick), h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.thinking")), think),
-      h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.context")), room), otherMode(), hostSetting("autoApprove", t("desk.set.permission")),
+      h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.context")), room), switching, h("p", {class: "set-tip"}, t("desk.set.thinking.hint")), otherMode(), hostSetting("autoApprove", t("desk.set.permission")),
       h("p", {class: "sub set-note", title: t("desk.set.note")}, t("desk.set.note")));
   }
 
@@ -559,7 +568,7 @@
     const can = SERVE.runs("review set");
     const choices = [];
     for (let n = 0; n <= info.max_n; n++) {
-      const choice = h("button", {type: "button", class: "chip" + (n === info.n ? " on" : ""), "aria-pressed": n === info.n ? "true" : "false", disabled: can ? null : "disabled"}, n ? String(n) : t("desk.review.off"));
+      const choice = h("button", {type: "button", class: "chip" + (n === info.n ? " on" : ""), "aria-pressed": n === info.n ? "true" : "false", disabled: can ? null : "disabled"}, n ? String(n) : t("desk.rv.off"));
       choice.addEventListener("click", () => {
         if (n === info.n) return;
         choices.forEach((item) => { item.disabled = true; });
@@ -567,9 +576,9 @@
       });
       choices.push(choice);
     }
-    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.review.button")), h("p", {class: "sub"}, t("desk.review.hint")), h("div", {class: "chips"}, choices));
-    const button = h("button", {type: "button", class: "rv-btn" + (info.n ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.review.hint")},
-      icon(SHIELD, 14), h("span", {class: "rv-name"}, t("desk.review.button")), h("b", null, info.n ? String(info.n) : t("desk.review.off")));
+    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.rv.button")), h("p", {class: "sub"}, t("desk.rv.hint")), h("p", {class: "set-warn"}, t("desk.rv.cost")), h("div", {class: "chips"}, choices));
+    const button = h("button", {type: "button", class: "rv-btn" + (info.n ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.rv.hint")},
+      icon(SHIELD, 14), h("span", {class: "rv-name"}, t("desk.rv.button")), h("b", null, info.n ? String(info.n) : t("desk.rv.off")));
     const show = (on) => { pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeReview = on ? () => show(false) : null; };
     button.addEventListener("click", () => show(pop.hidden));
     return [button, pop];
@@ -930,7 +939,7 @@
 
   function review() {
     const r = desk.review;
-    const parts = [h("p", {class: "hint top"}, t("desk.review.hint"))];
+    const parts = [h("p", {class: "hint top"}, t("desk.rv.hint"))];
     parts.push(h("div", {class: "review-sum"},
       r.n ? t("desk.review.sum", {n: r.n, passes: r.passes, used: r.used, limit: r.limit}) : t("desk.review.off"),
       r.waived ? [" ", tag(t("desk.review.waived"), "hot")] : null,

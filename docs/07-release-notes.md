@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.35 (2026-11-01)
+
+### Changed
+
+- **The costs are said where they are chosen.** Independent review warns that several rounds of a reviewer subagent can be very expensive. The reply panel warns when the chosen model is not the one the chat runs on, because the whole context is loaded again. Thinking marks `medium` as recommended and says that more thinking takes longer and uses more tokens.
+- **The context warns earlier, in two steps.** From 50% (`health.context_notice`) the bar is amber and says to compact at a natural stop. From 70% (`health.context_percent`, was 85) it is red and the task gets the warning tag. The old 85% came after Copilot's own compaction at about 80%, so it almost never showed.
+
+### Fixed
+
+- **The Review tab has its own texts again.** 1.6.33 reused two message names and replaced them. A test now refuses a message written twice.
+
 ## 1.6.34 (2026-11-01)
 
 ### Changed

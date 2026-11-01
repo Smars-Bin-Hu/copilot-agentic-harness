@@ -10,6 +10,21 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.18 (2026-10-31)
+
+### Added
+
+- **New task asks for the knowledge base.** The dialog lists the knowledge base domains this folder has (the same as the Intake tab: folders under `<knowledge base>/domains/`) as ticks, with **None** as a choice of its own. The choice goes into the first message as one line; the agent sets it on the task with `task set-domain` and does not ask which. With no domain set up the box says so and the dialog goes on. The server checks the names again and refuses one that no knowledge base has.
+- **The first message is shown before it is sent**, and changes as you type. It is made by the board's own code, the same that makes the real message, so the two cannot differ. A field that is not right yet shows as a `<placeholder>`, with what is wrong under it. You cannot type in it; the text field stays where you write. It needs no link to VS Code.
+- **An empty board has a first step.** With no task at all, the list and the lobby show a large **New task** button instead of the sentence "There are no tasks yet". With tasks, the small button in the header stays and the large one is gone. When VS Code is not linked the button still shows and the dialog tells why. A board page saved on disk has no button and says how to run the served board.
+- `/api/create` `options` gives `domains`; `preview` gives `problem` and no longer needs VS Code.
+
+### Changed
+
+- `Cmd+K` / `Ctrl+K` opens the palette again while you type in a box. It carries a modifier, so it does not collide with typing. The plain `R` key (the reply pill) stays off in a box.
+- A dialog is now above the page header, the search pill and the gear (it was cut at the top by the header); the palette is still above the dialog. The buttons of the New task dialog stay in view in a short window.
+- Chinese: the tab `Live` is `实时`, `thinking` has a level in Chinese, `System prompt` is `系统指令`. The words that stay English in Chinese by design are `Glass` and `Lite` (the render modes), `Harness` and two placeholder messages; the language test lists them by name. The language buttons of the settings panel take their names from the message table, so no page file holds Chinese.
+
 ## 1.6.17 (2026-10-31)
 
 ### Added

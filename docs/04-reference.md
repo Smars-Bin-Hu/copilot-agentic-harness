@@ -124,7 +124,7 @@ This is how a served board (`task board --serve`) talks to the chats of VS Code.
 | `/api/send` | `step: preview` gives the whole message; `step: act` sends it. A fixed English text (no confirmation code in it), `[ZH]` only when you chose Chinese, your note and the ticked drafts. Idle chat only |
 | `/api/steer`, `/api/stop` | Say one more thing to a working agent (`lang: zh` puts `[ZH]` first); cancel its turn |
 | `/api/confirm`, `/api/answer` | Allow or deny one named tool call; answer one named question. The page's digest must match what the host holds now |
-| `/api/create` | `step: options`, `preview`, `act`: makes a chat in this folder (mode interactive, no worktree) and sends the fixed first message |
+| `/api/create` | `step: options` (models, kinds, forkable tasks, knowledge base `domains`), `preview` (the first message as it would go now, `problem` for a field not right yet, `blocked` when VS Code is not linked; needs no VS Code), `act`: makes a chat in this folder (mode interactive, no worktree) and sends the fixed first message. `domains`: the knowledge base domains ticked; the server checks them again |
 | `/api/setting` | The model and the thinking level the board puts on each message it sends; the number of independent checks (as `task review set`) |
 | `/api/draft` | Add, edit, delete, tick a note (`.task/drafts.json`; never in page data, digests, saved copies or the write-back) |
 | `/api/compact` | After a confirm, sends `/compact` to an idle chat. The only place a control mark is sent |

@@ -276,7 +276,7 @@
     if (canArchive) DATA.serve.archive_to = archiveTo;  // the single-row button reads it
     stamp.textContent = subtitle();
     more.textContent = hidden ? t("board.closed.more", {count: hidden}) : "";
-    if (!rows.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.empty"))); return; }
+    if (!rows.length) { tableBox.replaceChildren(firstTask()); return; }
     const shownRows = listed();
     const before = rowTops();
     touched = new Set(rows.filter((row) => row.status === "open" && seen.has(row.name) && seen.get(row.name) !== row.updated_at).map((row) => row.name));
@@ -339,7 +339,7 @@
       return node;
     };
     // replaceChildren writes a null as the word "null": on a page on disk, with no server, "New task" and the VS Code pill are not there (N4, 1.6.11).
-    shift.replaceChildren(...[button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint"), newTask(), SHELL.vsPill(vscode)].filter(Boolean));
+    shift.replaceChildren(...[button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint"), rows.length ? newTask() : null, SHELL.vsPill(vscode)].filter(Boolean));
   }
   // "New task" (1.6, B73): a served board only (it makes a chat in VS Code). The dialog is in chat.js.
   function newTask() {
@@ -347,6 +347,15 @@
     const node = h("button", {type: "button", class: "act hot new-task", title: t("board.new.hint")}, t("board.new"));
     node.addEventListener("click", () => CHAT.create());
     return node;
+  }
+  // No task at all (1.6.18): in the list and in the lobby a block with a large New task button (served), in place of a sentence. The dialog tells the reason when VS Code is not linked, so the button
+  // stays. A page on disk cannot start a task: no button, and how to run the served board. With tasks, the small button of the header is the one; with none, only this one.
+  function firstTask() {
+    const served = typeof SERVE !== "undefined" && SERVE.runs("create");
+    const go = served ? h("button", {type: "button", class: "act hot live first-go new-task", title: t("board.new.hint")}, t("board.new")) : null;
+    if (go) go.addEventListener("click", () => CHAT.create());
+    return h("div", {class: "first-task"}, h("h2", null, t(served ? "board.empty.title" : "board.empty.title.disk")),
+      h("p", null, served ? t("board.empty.text") : t("board.empty.disk", {command: cli + " task board"})), go);
   }
   // The pill that says whether VS Code is linked is SHELL.vsPill (shell.js): the same state as the banner and the dimmed buttons.
   const cli = DATA.cli || "harness";
@@ -367,7 +376,7 @@
   // Two ways to look at the same rows: the lobby (the first screen) and the list. The choice stays in this browser.
   // The card of a robot (lobby.js) is the row of the list again: the same marks (status.js), the same numbers (`figures`), the same buttons (`actionStrip`).
   const lobby = Lobby.create({href: (row) => (DATA.serve && row.status !== "new" ? "/task/" + encodeURIComponent(row.name)
-    : row.report ? row.report.split("/").map(encodeURIComponent).join("/") : ""), figures, actions: actionStrip, live});
+    : row.report ? row.report.split("/").map(encodeURIComponent).join("/") : ""), figures, actions: actionStrip, live, first: firstTask});
   let mode = keep.get("mode", "lobby") === "list" ? "list" : "lobby";
   const controls = h("div", {class: "controls"}, chips, roundBox, kinds, search, clear);
   const modeButtons = {};

@@ -116,7 +116,7 @@ const CHAT = (function () {
   // "New task" (B73): a chat is made in VS Code and told to open the task. The server checks every field again and makes the first message (a fixed English text, then what the person wrote);
   // this dialog only collects the fields and shows that message. The mode (interactive) and the folder (no worktree) are fixed and not on the form.
   function create() {
-    const state = {lang: "en", perm: "allow-all", busy: false, ready: false, timer: null, models: [], options: null};
+    const state = {lang: "en", perm: "allow-all", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set()};
     const field = (label, control, extra) => h("label", {class: "new-field" + (extra ? " " + extra : "")}, h("span", {class: "sub label"}, label), control);
     const name = h("input", {type: "text", class: "send-body", maxlength: 80, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.name.ph")});
     const kind = h("select", {class: "send-body"});
@@ -129,6 +129,7 @@ const CHAT = (function () {
     const blocked = h("div", {class: "bad"});
     const said = h("div", {class: "bad"});
     const permHint = h("p", {class: "sub"});
+    const kbBox = h("div", {class: "new-kb"});  // the knowledge base domains a task may be about: ticks, and "None" (a choice of its own). Drawn when the options come.
     const go = h("button", {type: "button", class: "act hot", disabled: "disabled"}, t("board.new.go"));
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const langChips = ["en", "zh"].map((lang) => {
@@ -148,11 +149,26 @@ const CHAT = (function () {
     const view = SERVE.dialog([h("h2", null, t("board.new.title")), blocked,
       h("div", {class: "new-grid"}, field(t("board.new.name"), name), field(t("board.new.kind"), kind)),
       field(t("board.new.source"), source), h("p", {class: "sub"}, t("board.new.source.hint")),
+      h("div", {class: "new-field"}, h("span", {class: "sub label"}, t("board.new.kb")), kbBox),
       field(t("board.new.text"), text),
       h("div", {class: "new-grid three"}, field(t("board.new.model"), model), field(t("board.new.thinking"), thinking), field(t("board.new.lang"), h("div", {class: "chips"}, langChips))),
       h("div", {class: "send-lang"}, h("span", {class: "sub"}, t("board.new.perm")), h("div", {class: "chips"}, permChips)), permHint, h("p", {class: "sub"}, t("board.new.fixed")),
-      h("div", {class: "sub label"}, t("board.new.first")), preview, problem, h("div", {class: "row send-actions"}, go, no), said]);
-    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: text.value, model: model.value, thinking: thinking.value, lang: state.lang, permission: state.perm});
+      h("div", {class: "sub label"}, t("board.new.first")), h("p", {class: "sub"}, t("board.new.first.hint")), preview, problem, said, h("div", {class: "row send-actions new-actions"}, go, no)]);
+    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: text.value, model: model.value, thinking: thinking.value, lang: state.lang, permission: state.perm, domains: Array.from(state.domains)});
+    // The knowledge base: the domains this repository's knowledge bases have. None ticked is a valid choice. When there are no domains the box says so and the dialog goes on.
+    function drawKb() {
+      const list = state.domainList;
+      if (list === null) { kbBox.replaceChildren(); return; }
+      if (!list.length) { kbBox.replaceChildren(h("p", {class: "sub new-kb-empty"}, t("board.new.kb.empty"))); return; }
+      const chip = (label, on, click, full) => {
+        const node = h("button", {type: "button", class: "chip kb-chip" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false", title: full || label}, h("span", {class: "kb-name"}, label));
+        node.addEventListener("click", click);
+        return node;
+      };
+      const none = chip(t("board.new.kb.none"), !state.domains.size, () => { state.domains.clear(); drawKb(); refresh(); });
+      const ticks = list.map((item) => chip(item, state.domains.has(item), () => { state.domains.has(item) ? state.domains.delete(item) : state.domains.add(item); drawKb(); refresh(); }));
+      kbBox.replaceChildren(h("div", {class: "chips kb-list"}, none, ...ticks), h("p", {class: "sub"}, t("board.new.kb.hint")));
+    }
     const sync = () => { go.disabled = state.busy || !state.ready; };
     function levels() {
       const found = state.models.find((item) => item.id === model.value);
@@ -164,9 +180,9 @@ const CHAT = (function () {
       clearTimeout(state.timer);
       state.timer = setTimeout(() => {
         ask("/api/create", body("preview")).then((found) => {
-          preview.textContent = found.text;
-          problem.textContent = "";
-          state.ready = !found.blocked;
+          preview.textContent = found.text;  // the server's own message, grown from the fields as they are now (a field not right yet is a <placeholder>); read only
+          problem.replaceChildren(...(found.problem ? SERVE.reasons(found.problem) : []));  // quiet: it is what is missing now, not a failure
+          state.ready = !found.blocked && !found.problem;
           blocked.replaceChildren(...(found.blocked ? SERVE.reasons(found.blocked) : []));
           sync();
         }, (error) => {
@@ -199,6 +215,8 @@ const CHAT = (function () {
       source.replaceChildren(h("option", {value: ""}, t("board.new.source.none")), ...found.sources.map((item) => h("option", {value: item.name}, item.name + (item.kind ? " \u00b7 " + t("task.kind." + item.kind) : "") + (item.status === "closed" ? " \u00b7 " + t("board.filter.closed") : ""))));
       model.replaceChildren(h("option", {value: ""}, t("board.new.model.chat")), ...state.models.map((item) => h("option", {value: item.id}, item.name)));
       state.perm = found.permission || "allow-all";
+      state.domainList = Array.isArray(found.domains) ? found.domains : [];
+      drawKb();
       showPerm(); levels();
       if (!found.ready) blocked.replaceChildren(h("p", null, t("board.new.off")), h("p", {class: "sub"}, t("board.vs.why." + (found.why || "starting"))));
       refresh();

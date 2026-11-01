@@ -615,7 +615,8 @@ class Board:
             found = tasks.read(self.root, folder) or {}
             sources.append({"name": task_ops.name_of(folder), "kind": str(found.get("kind") or ""), "status": str(found.get("status") or "")})
         return {"ready": bool(status["ready"]), "why": status["why"], "models": self.link.model_list(), "kinds": list(tasks.KINDS), "sources": sources,
-                "permissions": list(chatnew.PERMISSIONS), "permission": chatnew.DEFAULT_PERMISSION, "limit": chatnew.MAX_TEXT}
+                "permissions": list(chatnew.PERMISSIONS), "permission": chatnew.DEFAULT_PERMISSION, "limit": chatnew.MAX_TEXT,
+                "domains": intake.kb_domains(self.root)}  # the knowledge base domains a task may be about (none is a choice); empty: no knowledge base has one
 
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """`step` options: what the dialog offers. `preview`: the first message, whole, and whether it can go now. `act`: make the chat in VS Code and send it. Every field is checked here again."""
@@ -623,14 +624,13 @@ class Board:
         if step == "options":
             return self.create_options()
         why = self.link.create_blocked()
-        if why and step != "preview":
+        if step == "preview":  # the message grows while the person types: it is made without VS Code, by the same code as the real one; `blocked` is why it cannot go now, `problem` what is not right in the fields
+            made = chatnew.preview(self.root, data, [] if why else self.link.model_list(), self.link.waiting_names())
+            return {**made, "blocked": say(f"create.refused.{why}") if why else ""}
+        if why:
             raise CommandError(say(f"create.refused.{why}"))
-        if why:  # preview only (an act was refused above): nothing can be checked against a list the host has not given
-            return {"text": "", "blocked": say(f"create.refused.{why}")}
         plan = chatnew.validate(self.root, data, self.link.model_list(), self.link.waiting_names())
         text = chatnew.first_message(plan)
-        if step == "preview":
-            return {"text": text, "blocked": "", "model": plan["model"] or {}, "permission": plan["permission"]}
         try:
             done = self.link.create(plan, text)
         except vslink.Refused as error:

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.6.17",
+  "version": "1.6.18",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -129,6 +129,7 @@
         ".harness/tests/test_board_patch.py",
         ".harness/tests/test_board_look.py",
         ".harness/tests/test_board_shell.py",
+        ".harness/tests/test_board_newtask.py",
         ".harness/tests/test_board_status.py",
         ".harness/tests/test_board_enter.py",
         ".harness/tests/test_board_task_shell.py",

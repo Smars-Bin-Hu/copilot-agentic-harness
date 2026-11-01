@@ -57,7 +57,7 @@ class ValidationTests(TaskCase):
 
     def test_the_mode_and_the_folder_cannot_be_asked_for(self) -> None:
         found = self.plan(mode="autopilot", isolation="worktree", provider="claude", workingDirectories=["file:///etc"])
-        self.assertEqual(sorted(found), ["approve", "kind", "lang", "model", "name", "permission", "source", "text"])  # nothing of them is carried
+        self.assertEqual(sorted(found), ["approve", "domain_choice", "domains", "kind", "lang", "model", "name", "permission", "source", "text"])  # nothing of them is carried
 
     def test_the_name_follows_the_rules_of_task_new_and_is_not_taken(self) -> None:
         for name in ("", "  ", "a/b", "a\\b", ".hidden", "a b", "x" * 81, "..", "a;b", "$(x)", "-x"):
@@ -146,6 +146,84 @@ class MessageTests(TaskCase):
     def test_what_the_person_wrote_is_in_as_typed(self) -> None:
         typed = "First line.\n\n  Indented {braces} and `ticks` and 100% of the rows."
         self.assertTrue(self.made(text=typed).endswith("What to do:\n" + typed))
+
+
+def add_domains(root: Any, *names: str) -> None:
+    for name in names:
+        (root / "knowledge-base" / "domains" / name).mkdir(parents=True, exist_ok=True)
+
+
+class DomainTests(TaskCase):
+    """The knowledge base in the first message (1.6.18): the domains the knowledge bases have, none as a choice, the same words in the preview and in the real message."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.new()
+
+    def made(self, **change: Any) -> str:
+        return chatnew.first_message(chatnew.validate(self.root, {**GOOD, **change}, MODELS))
+
+    def test_with_no_domain_in_any_knowledge_base_the_message_has_no_line_and_nothing_is_blocked(self) -> None:
+        self.assertEqual(chatnew.validate(self.root, GOOD, MODELS)["domains"], [])
+        self.assertNotIn("Knowledge base", self.made())
+        self.assertNotIn("Knowledge base", chatnew.preview(self.root, {**GOOD, "name": ""}, MODELS)["text"])  # not in a preview with a problem either
+        with self.assertRaises(CommandError) as caught:
+            chatnew.validate(self.root, {**GOOD, "domains": ["Sales"]}, MODELS)
+        self.assertEqual(str(caught.exception), refused("domain", names="Sales", known="-"))
+
+    def test_domains_are_taken_as_their_folders_have_them_without_repeats(self) -> None:
+        add_domains(self.root, "Sales", "finance")
+        plan = chatnew.validate(self.root, {**GOOD, "domains": ["sales", "FINANCE", "Sales", " "]}, MODELS)
+        self.assertEqual((plan["domains"], plan["domain_choice"]), (["Sales", "finance"], True))
+        self.assertIn("\n- Knowledge base domains: Sales, finance (set them with harness task set-domain once the task is open; do not ask which)\n", self.made(domains=["sales", "finance"]))
+
+    def test_none_is_a_choice_and_says_not_to_ask(self) -> None:
+        add_domains(self.root, "Sales")
+        for given in ({}, {"domains": []}, {"domains": None}):
+            self.assertIn("- Knowledge base domains: none (do not set a domain and do not ask which)", self.made(**given))
+
+    def test_the_knowledge_base_line_is_in_a_fork_message_too_and_before_the_text(self) -> None:
+        add_domains(self.root, "Sales")
+        text = self.made(source="job1", domains=["Sales"])
+        self.assertLess(text.index("- Fork from: job1"), text.index("- Knowledge base domains: Sales"))
+        self.assertLess(text.index("- Knowledge base domains: Sales"), text.index("What to do:"))
+
+    def test_a_domain_that_is_not_there_or_a_value_that_is_not_text_is_refused(self) -> None:
+        add_domains(self.root, "Sales")
+        for given, names in ((["Nope"], "Nope"), (["Sales", "x/../y"], "x/../y"), (["Sales", "A" * 200], "A" * 80)):
+            with self.subTest(given=given):
+                with self.assertRaises(CommandError) as caught:
+                    chatnew.validate(self.root, {**GOOD, "domains": given}, MODELS)
+                self.assertEqual(str(caught.exception), refused("domain", names=names, known="Sales"))
+        for bad in ("Sales", {"a": 1}, [1], ["Sales", None], ["x"] * (chatnew.MAX_DOMAINS + 1)):
+            with self.subTest(bad=bad):
+                with self.assertRaises(CommandError) as caught:
+                    chatnew.validate(self.root, {**GOOD, "domains": bad}, MODELS)
+                self.assertEqual(str(caught.exception), refused("field", field="domains"))
+
+    def test_the_preview_is_the_real_message_when_the_fields_are_right_and_a_placeholder_one_when_not(self) -> None:
+        add_domains(self.root, "Sales", "Finance")
+        body = {**GOOD, "domains": ["Sales"]}
+        shown = chatnew.preview(self.root, body, MODELS)
+        self.assertEqual((shown["problem"], shown["text"]), ("", chatnew.first_message(chatnew.validate(self.root, body, MODELS))))
+        for change, mark in (({"name": ""}, "<task name>"), ({"text": ""}, "<what to do>"), ({"kind": "x"}, "<kind>")):
+            with self.subTest(change=change):
+                part = chatnew.preview(self.root, {**body, **change}, MODELS)
+                self.assertIn(mark, part["text"])
+                self.assertTrue(part["problem"])
+                self.assertIn("- Knowledge base domains: Sales", part["text"])
+        junk = chatnew.preview(self.root, {"name": ["a"], "kind": 5, "text": {"x": 1}, "lang": True, "source": 3, "domains": "Sales"}, MODELS)  # nothing the page sends, none of it raises
+        self.assertIn("<task name>", junk["text"])
+        self.assertIn("<what to do>", junk["text"])
+        self.assertIn("none (do not set", junk["text"])
+        self.assertTrue(junk["problem"])
+
+    def test_a_long_name_and_long_text_do_not_break_the_preview(self) -> None:
+        shown = chatnew.preview(self.root, {**GOOD, "name": "n" * 500, "text": "t" * (chatnew.MAX_TEXT + 500)}, MODELS)
+        self.assertTrue(shown["problem"])
+        self.assertIn("n" * 80, shown["text"])
+        self.assertNotIn("n" * 81, shown["text"])
+        self.assertLessEqual(len(shown["text"]), chatnew.MAX_TEXT + 1000)
 
 
 class WaitingMessageTable(unittest.TestCase):
@@ -287,7 +365,11 @@ class CreateTests(CreateCase):
         self.assertEqual((data["result"]["blocked"], data["result"]["permission"]), ("", "allow-all"))
         self.assertTrue(data["result"]["text"].startswith("This task is made from the board."))
         self.assertEqual(self.made, [])  # a preview makes nothing
-        self.assertEqual(self.make(step="preview", name="")[0], 409)
+        found = self.make(step="preview", name="")  # a field that is not right yet: the message still grows (a <placeholder>), and the problem is told
+        self.assertEqual(found[0], 200, found[1])
+        self.assertIn("- Task name: <task name>", found[1]["result"]["text"])
+        self.assertTrue(found[1]["result"]["problem"])
+        self.assertEqual(self.made, [])
 
     def test_the_task_the_agent_opens_is_bound_to_the_chat_and_keeps_the_model(self) -> None:
         text = self.make(permission="default")[1]["result"]["text"]
@@ -339,6 +421,36 @@ class CreateTests(CreateCase):
         time.sleep(1.0)  # a pass of the thread at least
         self.assertEqual(self.vs.waiting_names(), ["fresh-load"])
         self.assertNotEqual((self.data(f"{tasks.TASKS_DIR}/something-else").get("chat") or {}).get("how"), "board")
+
+
+class KnowledgeBaseServerTests(CreateCase):
+    def test_the_options_list_the_domains_and_the_act_sends_the_chosen_ones_in_the_first_message(self) -> None:
+        options = lambda: self.request("POST", "/api/create", {"step": "options"}, cookie=self.cookie)[1]["result"]  # noqa: E731
+        self.assertEqual(options()["domains"], [])  # no knowledge base domain: the dialog says so and goes on
+        self.assertEqual(self.make()[0], 200)
+        add_domains(self.root, "Sales", "finance")
+        self.assertEqual(options()["domains"], ["finance", "Sales"])
+        status, data, _ = self.make(name="with-kb", domains=["sales"])
+        self.assertEqual(status, 200, data)
+        self.assertIn("- Knowledge base domains: Sales (set them with harness task set-domain", data["result"]["text"])
+        self.assertTrue(until(lambda: len(self.made) == 2))
+        status, data, _ = self.make(name="none-kb")
+        self.assertIn("domains: none (do not set", data["result"]["text"])
+        before = len(self.made)
+        status, data, _ = self.make(name="bad-kb", domains=["../etc"])
+        self.assertEqual((status, data["error"]), (409, refused("domain", names="../etc", known="finance, Sales")))
+        self.assertEqual(len(self.made), before)
+
+    def test_the_preview_is_the_text_of_the_act_and_needs_no_vs_code(self) -> None:
+        add_domains(self.root, "Sales")
+        body = {"domains": ["Sales"]}
+        shown = self.make(step="preview", **body)[1]["result"]
+        self.assertEqual(self.make(name="fresh-load", **body)[1]["result"]["text"], shown["text"])  # the same code path: the same words
+        self.vs.ready, self.vs.why = False, "none"
+        found = self.make(step="preview", name="other", model="", thinking="", **body)[1]["result"]  # the dialog has no model to pick while the host is out
+        self.assertEqual((found["blocked"], found["problem"]), (refused("not-ready"), ""))
+        self.assertIn("- Task name: other", found["text"])  # still made, so the person sees what would go
+        self.assertEqual(len(self.made), 1)
 
 
 class NotReadyTests(CreateCase):

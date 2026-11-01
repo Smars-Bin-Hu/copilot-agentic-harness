@@ -212,7 +212,7 @@ const SHELL = (function () {
       h("div", {class: "sp-row"}, h("span", null, t("board.shell.theme")), segment("theme", [["light", t("board.shell.light")], ["dark", t("board.shell.dark")]])),
       h("div", {class: "sp-row"}, h("span", null, t("board.shell.render")), segment("lite", [["false", t("board.shell.glass")], ["true", t("board.shell.lite")]])),
       h("p", {class: "sp-note"}, t("board.shell.lite.hint")),
-      served ? h("div", {class: "sp-row"}, h("span", null, t("board.shell.lang")), segment("lang", [["en", "EN"], ["zh", "中文"]])) : null,
+      served ? h("div", {class: "sp-row"}, h("span", null, t("board.shell.lang")), segment("lang", [["en", t("desk.send.lang.name.en")], ["zh", t("desk.send.lang.name.zh")]])) : null,
       served ? h("p", {class: "sp-note"}, t("board.shell.lang.hint")) : null, said);
     document.body.append(panel);
     panel.addEventListener("click", (event) => {
@@ -276,8 +276,7 @@ const SHELL = (function () {
 
   document.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && (event.key === "k" || event.key === "K")) {
-      const field = event.target instanceof Element && (/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) || event.target.isContentEditable);
-      if (field && !open()) return;  // typing in a box (the reply, a note, a filter): Ctrl+K there is the box's own (it cuts a line); the palette opens from anywhere else, and closes from its own box
+      // From anywhere, a box included: the key carries a modifier, so it never collides with typing (the plain keys, like R of the reply pill, stay off in a box).
       event.preventDefault();
       if (open()) closePalette(); else openPalette();
       return;

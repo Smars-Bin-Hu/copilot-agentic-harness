@@ -5,20 +5,21 @@ The board makes a new chat in VS Code (`vslink`, `createSession`) and sends it o
 The words of the first message are English and fixed; the person's text goes in as it is, last. `[ZH]` is added only when the person chose Chinese.
 
 Everything the page sends is checked again here: the name as `task new` takes it, the kind, the fork source (a task that exists), the text, the model (one the host lists now) and its
-thinking level, the reply language, the tool permission. A value that is not allowed is refused with the reason; nothing is made.
+thinking level, the reply language, the tool permission, the knowledge base domains (folders a knowledge base has now; none is a choice). A value that is not allowed is refused with the reason; nothing is made.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Optional
 
-from core import ahp, messages, tasks
+from core import ahp, domainskills, messages, tasks
 from core.paths import utc_now
 
-from . import chatsend, task as task_ops, tasklife
+from . import chatsend, intake, task as task_ops, tasklife
 from .common import CommandError
 
 MAX_TEXT = 5000  # characters of what the person asks for
+MAX_DOMAINS = 20  # domains a request may name (a knowledge base has few)
 PERMISSIONS = {"allow-all": "autoApprove", "default": "default", "assisted": "assisted"}  # the page's word -> `config.autoApprove` of the host
 DEFAULT_PERMISSION = "allow-all"
 KEEP_PENDING = 3600.0  # seconds a made chat waits for its task to appear before the board lets go of it
@@ -70,7 +71,42 @@ def validate(root: Any, data: Dict[str, Any], models: List[Dict[str, Any]], wait
     if permission not in PERMISSIONS:
         raise refusal("permission")
     model = model_of(data, models)
-    return {"name": name, "kind": kind, "source": source, "text": text, "lang": lang, "permission": permission, "approve": PERMISSIONS[permission], "model": model}
+    return {"name": name, "kind": kind, "source": source, "text": text, "lang": lang, "permission": permission, "approve": PERMISSIONS[permission], "model": model,
+            "domains": domains_of(root, data), "domain_choice": bool(intake.kb_domains(root))}
+
+
+def domains_of(root: Any, data: Dict[str, Any]) -> List[str]:
+    """The knowledge base domains the person ticked, as their folders have them (a name matches in any case), without repeats. A domain no knowledge base has is refused, with the ones it has."""
+    raw = data.get("domains")
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or len(raw) > MAX_DOMAINS or not all(isinstance(item, str) for item in raw):
+        raise refusal("field", field="domains")
+    try:
+        return tasklife.known_domains(root, [item for item in raw if item.strip()])
+    except CommandError:
+        known = ", ".join(intake.kb_domains(root)) or "-"
+        raise refusal("domain", names=", ".join(item.strip()[:80] for item in raw if item.strip() and not domainskills.find(domainskills.domains(root), item.strip())), known=known) from None
+
+
+def preview(root: Any, data: Dict[str, Any], models: List[Dict[str, Any]], waiting: Iterable[str] = ()) -> Dict[str, Any]:
+    """The first message as it would go now, and what is wrong with the fields (`problem`, empty when nothing). A field that is not right yet is shown as a <placeholder>, so the person sees the
+    message grow while typing; the message is made by the same `first_message` as the real one, which is made only from a plan `validate` passed."""
+    try:
+        plan = validate(root, data, models, waiting)
+        return {"text": first_message(plan), "problem": "", "model": plan["model"] or {}, "permission": plan["permission"]}
+    except CommandError as error:
+        problem = str(error)
+    def word(key: str) -> str:
+        value = data.get(key)
+        return "".join(char for char in value if char >= " " or char in "\n\r\t").strip() if isinstance(value, str) else ""
+    known = domainskills.domains(root)
+    wanted = data.get("domains") if isinstance(data.get("domains"), list) else []
+    plan = {"name": word("name")[:80] or "<task name>", "kind": word("kind") if word("kind") in tasks.KINDS else "<kind>", "source": word("source") if word("source") in known_names(root) else "",
+            "text": word("text")[:MAX_TEXT] or "<what to do>", "lang": word("lang") if word("lang") in chatsend.LANGS else "en",
+            "domains": list(dict.fromkeys(found for found in (domainskills.find(known, item.strip()) for item in wanted if isinstance(item, str)) if found))[:MAX_DOMAINS],
+            "domain_choice": bool(known)}
+    return {"text": first_message(plan), "problem": problem, "model": {}, "permission": DEFAULT_PERMISSION}
 
 
 def model_of(data: Dict[str, Any], models: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -99,7 +135,15 @@ def first_message(plan: Dict[str, Any]) -> str:
         head = ("This task is made from the board. Use the skill harness-my-task to open it now (harness task new). "
                 "The name and the kind are given: do not ask for them.\n"
                 f"- Task name: {plan['name']}\n- Kind: {plan['kind']}")
+    head += domain_line(plan)
     return chatsend.compose(head + "\n\nWhat to do:\n" + plan["text"], plan["lang"], [])
+
+
+def domain_line(plan: Dict[str, Any]) -> str:
+    """The knowledge base line of the first message. Nothing when the knowledge base has no domain to choose from; `none` when it has and the person chose none (the agent then does not ask)."""
+    if plan.get("domains"):
+        return f"\n- Knowledge base domains: {', '.join(plan['domains'])} (set them with harness task set-domain once the task is open; do not ask which)"
+    return "\n- Knowledge base domains: none (do not set a domain and do not ask which)" if plan.get("domain_choice") else ""
 
 
 def pending(plan: Dict[str, Any], text: str, session: str, chat: str, title: str = "") -> Dict[str, Any]:

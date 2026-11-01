@@ -22,6 +22,9 @@ HAN = re.compile(r"[一-鿿]")
 WIDE_PUNCTUATION = re.compile(r"[，。：；（）、“”]")
 HOLE = re.compile(r"(?<!\{)\{([a-z_]+)\}(?!\})")
 SESSION = "sess-language"
+# Messages that read the same in Chinese, by rule (exact names, so a new untranslated message still fails): the two render modes are proper names (Glass, Lite: the user's words for them, as in the
+# settings panel in both languages); the product name; and two that are only placeholders or a copyright line.
+SAME_IN_CHINESE = {"board.shell.glass", "board.shell.lite", "board.enter.label", "board.enter.m.repos.problem", "board.enter.legal"}
 # Chinese that stays in the code on purpose: the sample line doctor prints, and the labels a task made in Chinese has.
 CHINESE_ALLOWED = {
     "core/output.py": ("SAMPLE = ",),
@@ -55,7 +58,7 @@ class TableTests(unittest.TestCase):
     def test_every_message_has_a_chinese_text_that_is_chinese(self) -> None:
         plain = ("task.kind.rca", "report.kpi.premium", "log.count.item", "list.", "mdreport.fetched.more", "board.brand", "board.copyright", "board.action.archive", "board.action.close", "desk.chat.label", "report.kpi.aiu", "board.col.credits", "desk.send.lang.", "board.new.perm.")  # a product word or a pattern: the same in both
         chinese = messages.table("zh")
-        self.assertEqual([name for name, text in chinese.items() if not HAN.search(text) and not WIDE_PUNCTUATION.search(text) and not name.startswith(plain)], [])
+        self.assertEqual([name for name, text in chinese.items() if not HAN.search(text) and not WIDE_PUNCTUATION.search(text) and not name.startswith(plain) and name not in SAME_IN_CHINESE], [])
 
     def test_the_engine_has_no_chinese_text_outside_the_tables(self) -> None:
         found = []

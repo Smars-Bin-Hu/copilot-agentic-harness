@@ -316,12 +316,14 @@ class PageFilesTests(unittest.TestCase):
         self.assertIn("mine.busy", reply)
         self.assertRegex(reply, r"const call = now\.kind === \"steer\"")
 
-    def test_the_keys_do_not_fire_while_typing(self) -> None:
+    def test_the_plain_keys_do_not_fire_while_typing_but_cmd_k_does(self) -> None:
         reply, shell = source("reply.js"), source("shell.js")
         self.assertIn("if (typing(event.target) || SERVE.busy()", reply)
         self.assertIn("event.metaKey || event.ctrlKey || event.altKey || event.shiftKey", reply)
         self.assertIn("event.isComposing", reply)
-        self.assertRegex(shell, r"field && !open\(\)\) return;")
+        key = shell.split("document.addEventListener(\"keydown\"")[1].split("if (open()) {")[0]  # Cmd+K / Ctrl+K carries a modifier, so it opens the palette from anywhere, a box too (1.6.18)
+        self.assertIn("event.metaKey || event.ctrlKey", key)
+        self.assertNotIn("TEXTAREA", key)
 
     def test_the_pill_does_not_cover_the_page_or_the_other_fixed_controls(self) -> None:
         css = source("live.css")

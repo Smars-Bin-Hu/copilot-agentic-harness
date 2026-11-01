@@ -76,7 +76,7 @@ def new_prompt(at: float) -> Dict[str, Any]:
     return {
         "at": at, "end": at, "turns": 0, "model_s": 0.0, "turn_s": 0.0, "approval_s": 0.0, "hook_s": 0.0, "subagent_s": 0.0,
         "tools": [], "subagents": [], "skills": [], "models": [], "aiu": None, "premium_requests": None, "context_tokens": None,
-        "input_tokens": None, "output_tokens": None, "queued": False, "text": "", "compactions": [], "cache_calls": [],
+        "input_tokens": None, "output_tokens": None, "queued": False, "text": "", "compactions": [], "cache_calls": [], "thinks": [],
     }
 
 
@@ -201,7 +201,9 @@ def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
                 current["turns"] += 1
             elif kind == "assistant.message":
                 if turn_started is not None and message_at is None:
-                    current["model_s"] += max(0.0, at - turn_started - asked_in_turn)
+                    spent = max(0.0, at - turn_started - asked_in_turn)
+                    current["model_s"] += spent
+                    current["thinks"].append({"at": turn_started, "seconds": spent})
                 message_at = at
                 name = str(data.get("model") or model)
                 if name and name not in current["models"]:

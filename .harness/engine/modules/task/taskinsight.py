@@ -128,7 +128,7 @@ def merge(into: Dict[str, Any], other: Dict[str, Any]) -> None:
     into["end"] = max(into["end"], other["end"])
     for key in ("turns", "model_s", "turn_s", "approval_s", "hook_s", "subagent_s"):
         into[key] += other[key]
-    for key in ("tools", "subagents", "skills", "compactions", "cache_calls"):
+    for key in ("tools", "subagents", "skills", "compactions", "cache_calls", "thinks"):
         into[key].extend(other[key])
     for name in other["models"]:
         if name not in into["models"]:
@@ -394,7 +394,8 @@ def stage_table(prompts: List[Dict[str, Any]], totals: Dict[str, Any]) -> List[D
     return out
 
 
-def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) -> Dict[str, Any]:
+def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True, steps: bool = False) -> Dict[str, Any]:
+    """The numbers of a task. `steps`: each prompt also says when it ended and when the model thought, for the Trace tab; a report stays the size it was."""
     picked = attaches(data)
     closed = closes(data)
     marked = sorted((at, str(event.get("what", "")), str(event.get("detail", ""))) for at, event in ((copilot_events.seconds(event.get("at")), event) for event in data.get("events") or []) if at is not None)
@@ -436,6 +437,9 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True) 
             "text": prompt.get("text", ""),  # for the page only: `for_agent` takes it out
         }
         entry["stage_label"] = stage_label(entry["stage"])
+        if steps:
+            entry["until"] = utc_text(prompt["next_at"]) if prompt["next_at"] is not None else ""
+            entry["thinks"] = [{"at": utc_text(think["at"]), "seconds": round(think["seconds"], 1)} for think in prompt["thinks"]]
         entry.update({key: round(value, 1) if value is not None else None for key, value in parts.items()})
         wait = None
         if waited is not None and waited >= 1:
@@ -702,13 +706,13 @@ def brief(result: Dict[str, Any]) -> Dict[str, Any]:
     return found
 
 
-def of_task(root: Path, task: str, use_events: Optional[bool] = None) -> Dict[str, Any]:
+def of_task(root: Path, task: str, use_events: Optional[bool] = None, steps: bool = False) -> Dict[str, Any]:
     data = tasks.read(root, task)
     if data is None:
         raise common.CommandError(say("insight.not_started", task=task))
     if use_events is None:
         use_events = events_allowed(root)
-    return build(root, task, data, use_events)
+    return build(root, task, data, use_events, steps)
 
 
 def events_allowed(root: Path) -> bool:

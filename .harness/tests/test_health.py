@@ -288,6 +288,62 @@ class TraceTests(Logs):
         self.assertEqual(tasktrace.of_task(self.root, self.data), {"entries": [], "cut": 0})
         self.assertEqual(tasktrace.of_task(self.root, {}), {"entries": [], "cut": 0})
 
+    def test_each_line_falls_into_the_prompt_it_came_after(self) -> None:
+        stamp = "2026-11-01T01:{:02d}:{:02d}+00:00".format
+        info = {
+            "prompts": [
+                {"n": 1, "at": stamp(0, 0), "until": stamp(10, 0), "text": "first", "active_s": 5.0, "turns": 2, "tool_calls": 1, "subagents": 1, "thinks": [{"at": stamp(0, 1), "seconds": 1.2}, {"at": stamp(0, 2), "seconds": 0.0}]},
+                {"n": 2, "at": stamp(10, 0), "until": "", "text": "", "active_s": None, "turns": 0, "tool_calls": 0, "subagents": 0, "thinks": []},
+            ],
+            "subagents": [{"prompt": 1, "agent": "reviewer", "model": "m", "at": stamp(0, 4), "seconds": 9.0, "tool_calls": 4}],
+        }
+        entries = [{"at": stamp(0, 3), "kind": "tool", "tool": "Read"}, {"at": stamp(10, 0), "kind": "prompt"}, {"at": stamp(10, 5), "kind": "gate", "tool": "Bash", "decision": "deny"}, {"at": stamp(20, 0), "kind": "prompt"}]
+        first, second = tasktrace.nodes_of(info, entries)
+        self.assertEqual([item["kind"] for item in first["rows"]], ["think", "tool", "subagent"])  # in order, and a turn with no time is not a line
+        self.assertEqual([item["kind"] for item in second["rows"]], ["gate", "prompt"])  # the prompt that opened it is the node; a later one is a message the record lost
+
+    def tree_info(self) -> Dict[str, Any]:
+        return {
+            "sessions": [{"session_id": SESSION}], "subagents": [],
+            "prompts": [{"n": 1, "at": ago(9).isoformat(), "until": "", "text": "fix it", "active_s": 5.0, "turns": 3, "tool_calls": 2, "subagents": 0, "asked": 0, "thinks": []}],
+            "totals": {"prompts": 1, "active_s": 5.0, "model_s": 3.0, "tool_s": 2.0, "subagent_s": 0.0, "tool_calls": 2, "asked": 0},
+        }
+
+    def test_what_was_blocked_or_failed_is_counted_and_listed_newest_first(self) -> None:
+        self.hook_rows([
+            {"at": ago(6).isoformat(), "event": "PreToolUse", "tool_name": "Bash", "decision": "deny", "kind": "task-scope", "reason": "outside the task", "target": {"paths": [], "command": "rm"}},
+            {"at": ago(5).isoformat(), "event": "PreToolUse", "tool_name": "Read", "decision": "none"},
+            {"at": ago(4.5).isoformat(), "event": "PostToolUseFailure", "tool_name": "Read", "decision": "none", "error": "no such file"},
+            {"at": ago(4).isoformat(), "event": "PreToolUse", "tool_name": "Edit", "decision": "ask", "reason": "check"},
+        ])
+        with mock.patch.object(tasktrace.taskinsight, "of_task", return_value=self.tree_info()):
+            found = tasktrace.tree(self.root, "t", self.data)
+        self.assertEqual((found["stats"]["blocked"], found["stats"]["failed"], found["stats"]["turns"]), (1, 1, 3))
+        self.assertEqual([(item["tool"], item["prompt"]) for item in found["problems"]], [("Read", 1), ("Bash", 1)])  # a question to the person is no problem
+        self.assertEqual((found["prompts"][0]["blocked"], found["prompts"][0]["failed"]), (1, 1))
+
+    def test_a_long_task_sends_the_newest_lines_and_counts_the_rest(self) -> None:
+        self.hook_rows([self.call(8 - index / 100, "Read", "read") for index in range(12)])
+        with mock.patch.object(tasktrace.taskinsight, "of_task", return_value=self.tree_info()), mock.patch.object(tasktrace, "ROWS_PER_PROMPT", 5):
+            node = tasktrace.tree(self.root, "t", self.data)["prompts"][0]
+        self.assertEqual((len(node["rows"]), node["cut"]), (5, 7))
+
+    def test_the_tree_is_read_once_while_nothing_changes_and_a_broken_one_leaves_the_plain_list(self) -> None:
+        tasktrace._trees.clear()
+        with mock.patch.object(tasktrace, "tree", return_value={"stats": {}}) as read:
+            self.assertEqual(tasktrace.of_task(self.root, self.data, "t")["tree"], {"stats": {}})
+            tasktrace.of_task(self.root, self.data, "t")
+        self.assertEqual(read.call_count, 1)
+        tasktrace._trees.clear()
+        with mock.patch.object(tasktrace, "tree", side_effect=ValueError("broken")):
+            self.assertEqual(tasktrace.of_task(self.root, self.data, "t")["tree"], {})
+        self.assertNotIn("tree", tasktrace.of_task(self.root, self.data))  # a page that does not ask pays nothing
+
+    def test_the_page_asks_for_the_tree_only_while_its_tab_is_open(self) -> None:
+        desk = (Path(tasktrace.__file__).parent / "web" / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('trace: current === "trace"', desk)
+        self.assertIn("data.desk.trace.tree = desk.trace.tree", desk)
+
     def test_calls_before_the_task_began_are_left_out(self) -> None:
         self.hook_rows([dict(self.call(1), at="2026-10-30T00:00:00+00:00"), self.call(1)])
         self.assertEqual(len(tasktrace.of_task(self.root, self.data)["entries"]), 1)

@@ -259,8 +259,8 @@ class Board:
         found = self.rows()
         return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"]}, self.refresh), hidden=found["hidden"])
 
-    def desk(self, name: str) -> Dict[str, Any]:
-        found = taskdesk.desk(self.root, name, self.served)
+    def desk(self, name: str, trace_tree: bool = False) -> Dict[str, Any]:
+        found = taskdesk.desk(self.root, name, self.served, trace_tree)  # the tree reads whole logs: only for a Trace tab that is open
         chat = self.link.chat_of(found["task"], name)
         recent = chat.pop("recent", "")
         sub = chat.pop("sub", None) or tasksub.from_hooklog(self.root, tasks.read(self.root, found["task"]) or {})  # the chat's own line; else the hook log's
@@ -1006,7 +1006,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(409, {"error": str(error)})
             if path == "/api/desk":
                 try:
-                    return self.answer(200, {"desk": board.desk(str(data.get("task", "")))})
+                    return self.answer(200, {"desk": board.desk(str(data.get("task", "")), data.get("trace") is True)})
                 except Exception as error:  # noqa: BLE001 - the page keeps what it shows
                     return self.answer(404, {"error": str(error)})
             if path == "/api/inbox":  # the person gives the task the results of a run: written to INBOX/, so the browser must be paired

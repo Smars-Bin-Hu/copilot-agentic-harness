@@ -813,6 +813,7 @@
     history.replaceState(null, "", hashOf(tab));
     draw(false);
     window.scrollTo(0, 0);
+    if (tab === "trace" && typeof SERVE !== "undefined" && DATA.serve.refresh) pull();
   }
 
   // What a tab shows next to its name: a count, and whether something in it waits for the person.
@@ -1537,26 +1538,74 @@
         event.detail ? h("span", {class: "sub"}, " · " + event.detail) : null, event.via ? h("span", {class: "tag"}, t("desk.via." + event.via)) : null, event.round > 1 ? h("span", {class: "tag"}, t("desk.round", {round: event.round})) : null))));
   }
 
-  // The Trace tab: the tool calls and the gate decisions of the session, newest first. The server sends tool names, paths, times and the gate's reasons; no thinking, no reply, no prompt text.
+  // The Trace tab. Open, it asks for the tree (pull): the numbers of the whole task, what was blocked or failed, and one node per prompt with what the agent did for it, in order.
+  // Until the tree comes, or where there is none, it is the plain list of the hook log. What the model thought is not in Copilot's record: only how long.
+  const traceOpen = new Map();  // prompt number -> open; the newest is open until the person says otherwise
+  const spent = (seconds) => (seconds > 0 && seconds < 10 ? seconds.toFixed(1) + " s" : clock(seconds));
+
+  function traceRow(item) {
+    const stamp = h("span", {class: "when sub"}, when(item.at, 5, 19));
+    if (item.kind === "prompt") return h("li", {class: "tr-prompt"}, stamp, h("div", {class: "what sub"}, t("desk.trace.prompt")));
+    if (item.kind === "think") return h("li", {class: "tr-think"}, stamp, h("div", {class: "what sub"}, t("desk.trace.think"), " \u00b7 " + spent(item.seconds)));
+    if (item.kind === "subagent") return h("li", {class: "tr-agent"}, stamp, h("div", {class: "what"}, h("b", null, item.agent), " ", tag(t("desk.trace.subagent")), h("span", {class: "sub"}, " \u00b7 " + spent(item.seconds) + " \u00b7 " + t("desk.trace.calls", {n: item.tool_calls || 0}) + (item.model ? " \u00b7 " + item.model : ""))));
+    const gate = item.kind === "gate";
+    return h("li", {class: (gate ? "tr-gate" : item.ok === false ? "tr-fail" : "") + (item.source ? " tr-in" : "")}, stamp,
+      h("div", {class: "what"}, h("b", null, item.tool), item.source ? [" ", h("span", {class: "tag", title: t("desk.trace.source", {name: item.source})}, item.source)] : null,
+        gate ? [" ", tag(t("desk.trace." + item.decision), item.decision === "deny" ? "bad" : "hot"), item.rule ? h("span", {class: "sub"}, " \u00b7 " + item.rule) : null] : null,
+        !gate && item.ok === false ? [" ", tag(t("desk.trace.failed"), "bad")] : null,
+        !gate && item.ok === null ? [" ", tag(t("desk.trace.running"), "good run")] : null,
+        item.seconds ? h("span", {class: "sub"}, " \u00b7 " + spent(item.seconds)) : null,
+        (item.paths || []).map((path) => [" ", h("span", {class: "path", title: path}, path)]),
+        item.command ? [" ", h("code", null, item.command)] : null,
+        item.reason ? h("div", {class: "sub"}, item.reason) : null,
+        item.error ? h("div", {class: "sub"}, item.error) : null));
+  }
+
+  function traceStats(stats) {
+    const tile = (value, label, kind) => h("div", {class: "tr-stat" + (kind ? " " + kind : "")}, h("b", null, value), h("span", null, label));
+    return h("div", {class: "tr-stats"},
+      tile(amount(stats.prompts), t("desk.trace.stat.prompts", {time: clock(stats.active_s)})),
+      tile(clock(stats.model_s), t("desk.trace.stat.thinking", {n: amount(stats.turns)})),
+      tile(amount(stats.tool_calls), t("desk.trace.stat.tools", {time: clock(stats.tool_s)})),
+      tile(amount(stats.subagents), t("desk.trace.stat.subagents", {time: clock(stats.subagent_s)})),
+      tile(amount(stats.blocked), t("desk.trace.stat.blocked"), stats.blocked ? "bad" : ""),
+      tile(amount(stats.failed), t("desk.trace.stat.failed"), stats.failed ? "bad" : ""));
+  }
+
+  function goPrompt(number) {
+    traceOpen.set(number, true);
+    draw(true);
+    const node = document.getElementById("tr-p-" + number);
+    if (node) node.scrollIntoView({block: "start", behavior: "smooth"});
+  }
+
+  function traceProblems(found) {
+    if (!found.problems.length) return null;
+    return h("section", {class: "tr-problems"}, h("h3", null, t("desk.trace.problems", {n: found.stats.blocked + found.stats.failed})),
+      h("ol", {class: "timeline trace"}, found.problems.map((item) => {
+        const row = traceRow(item), jump = h("button", {type: "button", class: "chip tr-jump", title: t("desk.trace.jump", {n: item.prompt})}, "#" + item.prompt);
+        jump.addEventListener("click", () => goPrompt(item.prompt));
+        row.append(jump);
+        return row;
+      })), found.problems_cut ? h("p", {class: "sub"}, t("desk.trace.cut", {count: found.problems_cut})) : null);
+  }
+
+  function promptNode(node, newest) {
+    const chips = [
+      node.seconds !== null && node.seconds !== undefined ? tag(clock(node.seconds)) : null, node.tool_calls ? tag(t("desk.trace.chip.tools", {n: node.tool_calls})) : null, node.subagents ? tag(t("desk.trace.chip.subagents", {n: node.subagents})) : null,
+      node.asked ? tag(t("desk.trace.chip.asked", {n: node.asked}), "hot") : null, node.blocked ? tag(t("desk.trace.chip.blocked", {n: node.blocked}), "bad") : null, node.failed ? tag(t("desk.trace.chip.failed", {n: node.failed}), "bad") : null];
+    const head = h("summary", null, h("span", {class: "tr-n"}, "#" + node.n), h("span", {class: "when sub"}, when(node.at, 5, 19)), h("span", {class: "tr-text", title: node.text}, node.text || t("desk.trace.prompt")), h("span", {class: "tr-chips"}, chips));
+    const box = h("details", {class: "tr-node" + (node.blocked || node.failed ? " bad" : ""), id: "tr-p-" + node.n, open: (traceOpen.has(node.n) ? traceOpen.get(node.n) : newest) ? "" : null}, head,
+      node.cut ? h("p", {class: "sub"}, t("desk.trace.cut", {count: node.cut})) : null, h("ol", {class: "timeline trace"}, node.rows.map(traceRow)));
+    head.addEventListener("click", () => traceOpen.set(node.n, !box.open));  // a click, not the `toggle` event: that one also fires when a node is drawn open
+    return box;
+  }
+
   function trace() {
-    const found = desk.trace;
+    const found = desk.trace, tree = found.tree;
     const notes = (desk.warn || []).map((item) => h("p", {class: "warn-note"}, tag("\u26a0", "warn"), " ", t("board.warn." + item.rule, {n: item.n})));
-    const rows = found.entries.slice().reverse().map((item) => {
-      if (item.kind === "prompt") return h("li", {class: "tr-prompt"}, h("span", {class: "when sub"}, when(item.at, 5, 19)), h("div", {class: "what sub"}, t("desk.trace.prompt")));
-      const gate = item.kind === "gate";
-      return h("li", {class: gate ? "tr-gate" : item.ok === false ? "tr-fail" : ""},
-        h("span", {class: "when sub"}, when(item.at, 5, 19)),
-        h("div", {class: "what"}, h("b", null, item.tool), item.source ? [" ", h("span", {class: "tag", title: t("desk.trace.source", {name: item.source})}, item.source)] : null,
-          gate ? [" ", tag(t("desk.trace." + item.decision), item.decision === "deny" ? "bad" : "hot"), item.rule ? h("span", {class: "sub"}, " \u00b7 " + item.rule) : null] : null,
-          !gate && item.ok === false ? [" ", tag(t("desk.trace.failed"), "bad")] : null,
-          !gate && item.ok === null ? [" ", tag(t("desk.trace.running"), "good run")] : null,
-          item.seconds ? h("span", {class: "sub"}, " \u00b7 " + clock(item.seconds)) : null,
-          (item.paths || []).map((path) => [" ", h("span", {class: "path", title: path}, path)]),
-          item.command ? [" ", h("code", null, item.command)] : null,
-          item.reason ? h("div", {class: "sub"}, item.reason) : null,
-          item.error ? h("div", {class: "sub"}, item.error) : null));
-    });
-    return [h("p", {class: "hint top"}, t("desk.trace.hint")), notes, h("ol", {class: "timeline trace"}, rows), found.cut ? h("p", {class: "sub"}, t("desk.trace.cut", {count: found.cut})) : null];
+    if (tree && tree.prompts && tree.prompts.length) return [h("p", {class: "hint top"}, t("desk.trace.hint.tree")), notes, traceStats(tree.stats), traceProblems(tree), h("div", {class: "tr-tree"}, tree.prompts.map((node, index) => promptNode(node, index === 0)))];
+    return [h("p", {class: "hint top"}, t("desk.trace.hint")), notes, h("ol", {class: "timeline trace"}, found.entries.slice().reverse().map(traceRow)), found.cut ? h("p", {class: "sub"}, t("desk.trace.cut", {count: found.cut})) : null];
   }
 
   function openDoc(name) {
@@ -1643,8 +1692,9 @@
   draw(false);
   // Ask the server for the task again and draw what changed (keeping the open tab, the scroll, and every node that did not change).
   function pull() {
-    return SERVE.post("/api/desk", {task: desk.name}).then((data) => {
+    return SERVE.post("/api/desk", {task: desk.name, trace: current === "trace"}).then((data) => {
       SHELL.vs(data.desk.vscode);
+      if (!data.desk.trace.tree && desk.trace.tree) data.desk.trace.tree = desk.trace.tree;  // asked for only while its tab is open
       const text = JSON.stringify(data.desk);
       if (same(text, shown)) return;
       setDesk(data.desk);

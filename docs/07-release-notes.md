@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.32 (2026-11-01)
+
+### Changed
+
+- **Trace is now a tree of prompts.** One line per prompt, with its text, time and counts; click it to see what the agent did for that prompt, in order: thinking, tool calls, subagents, gate decisions. The newest is open. A long task stays readable, and a prompt's text follows `report.prompt_chars`, as on the Time and usage page.
+- **Trace starts with the numbers of the whole task:** prompts, thinking, tool calls and subagents, with their time and counts.
+- **What was blocked or failed stands out.** A box above the tree lists every call a hook blocked and every call that failed, newest first, each with a link to its prompt, and the prompt lines show them in red.
+
+The time of thinking is shown, not its text: Copilot's record does not keep it.
+
 ## 1.6.31 (2026-11-01)
 
 ### Changed

@@ -316,7 +316,7 @@ def offered(root: Path, row: Dict[str, Any], task: str, served: Tuple[str, ...],
     return found
 
 
-def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
+def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Dict[str, Any]:
     """Everything the task page shows."""
     row = row_of(root, name)
     if row is None:
@@ -343,7 +343,7 @@ def desk(root: Path, name: str, served: Any = ()) -> Dict[str, Any]:
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),
         "req_changed": needs_req(data) and row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),
-        "trace": tasktrace.of_task(root, data), "warn": health.check(root, row, data) if row.get("status") == "open" else [],
+        "trace": tasktrace.of_task(root, data, task if trace_tree else ""), "warn": health.check(root, row, data) if row.get("status") == "open" else [],
         "report": "/" + report.relative_to(root / common.REPORTS_DIR).as_posix() if report.is_file() else "",
     }
 

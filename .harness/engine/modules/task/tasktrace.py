@@ -1,8 +1,11 @@
 """The Trace tab of a task page (1.6, B74): a timeline of the tool calls and the gate decisions of the task's session.
 
 It reads the hook log only, the tail of it. A line holds the tool, its kind, the paths it touched, how long it took,
-and for a refusal the rule and the reason. There is no thinking, no reply and no prompt text in the hook log, and none
-is read from Copilot's record here.
+and for a refusal the rule and the reason. There is no thinking, no reply and no prompt text in the hook log.
+
+The tree (1.6.32): with the Trace tab open, the same lines are cut into the prompts of the Time and usage page (`tree`), with the numbers of the whole task and what
+was blocked or failed. It reads the whole logs and Copilot's record, so it runs only when asked, at most every FRESH_S seconds. A prompt's text follows `report.prompt_chars`,
+as on that page. How long the model thought is known; what it thought is not: Copilot's record keeps it empty or sealed.
 
 Subagents (1.6.11): a subagent (the reviewer, the mapper) runs in a session of its own, and its session id is the `agentId` that Copilot's record
 (`events.jsonl` of the main session) puts on its rows. The record is read only to find those ids and names: a line that holds `subagent.started`
@@ -13,12 +16,17 @@ the Trace is the main session alone, as before.
 
 from __future__ import annotations
 
+import bisect
 import json
+import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from core import config, copilot_events, redact
 from core.logs import read_tail, session_log_path
+
+from . import common, taskinsight
 
 TAIL_BYTES = 768 * 1024
 SHOWN = 300  # the newest entries; `cut` says how many older ones are left out
@@ -26,7 +34,13 @@ TEXT_CHARS = 200
 EVENTS_TAIL = 1024 * 1024  # the end of Copilot's record, looked at for `subagent.started`
 SUB_TAIL = 256 * 1024  # the end of a subagent's hook log
 MAX_SUBAGENTS = 12  # the newest ones
+ROWS_KEPT = 2000  # the lines the tree sends, the newest; an older prompt keeps its numbers
+ROWS_PER_PROMPT = 300
+PROBLEMS_KEPT = 100
+FRESH_S = 10.0  # the files change all the time while the agent works: the tree is read again at most this often
+TREES_KEPT = 20
 _found: Dict[str, Tuple[Tuple[int, int], List[Tuple[str, str, float]]]] = {}  # events file -> (size, mtime), its subagents
+_trees: Dict[str, Tuple[Any, float, Dict[str, Any]]] = {}  # task -> what its files were, when it was read, the tree
 
 
 def _clip(text: Any) -> str:
@@ -109,8 +123,105 @@ def subagents(root: Path, session: str, since: float) -> List[Tuple[str, str, fl
         return []
 
 
-def of_task(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
-    """The Trace of the task's session, since the task began. Empty when there is no session or no log."""
+def problem(item: Dict[str, Any]) -> bool:
+    return (item["kind"] == "gate" and item.get("decision") == "deny") or (item["kind"] == "tool" and item.get("ok") is False)
+
+
+def entries_of(root: Path, surface: str, session: str, since: str) -> List[Dict[str, Any]]:
+    """Every call and refusal of a session and of its subagents, whatever the size of the logs."""
+    names = {agent: name for agent, name, _at in subagents(root, session, 0.0)}
+    found = build(common.read_session(root, surface, session), sys.maxsize)["entries"]
+    for child in common.child_sessions(root, surface, session, since):
+        found += build(child["rows"], sys.maxsize, names.get(child["session_id"]) or str(child["rows"][0].get("agent_type") or "subagent"))["entries"]
+    return found
+
+
+def nodes_of(info: Dict[str, Any], entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """One node for each prompt of `info`, oldest first: its numbers, and in `rows` when the model thought, the subagents and the lines of `entries` that fall in it."""
+    moment = copilot_events.seconds
+    nodes = [{
+        "n": item["n"], "at": item["at"], "text": _clip(item.get("text")), "stage": item.get("stage_label", ""), "seconds": item.get("active_s"), "turns": item.get("turns", 0),
+        "tool_calls": item.get("tool_calls", 0), "subagents": item.get("subagents", 0), "asked": item.get("asked", 0), "blocked": 0, "failed": 0, "cut": 0,
+        "rows": [dict(think, kind="think") for think in item.get("thinks") or [] if think["seconds"]],
+    } for item in info["prompts"]]
+    starts = [(moment(item["at"]) or 0.0) - 1 for item in info["prompts"]]
+    ends = [(moment(item.get("until")) or float("inf")) - 1 for item in info["prompts"]]
+    for run in info.get("subagents") or []:
+        nodes[run["prompt"] - 1]["rows"].append({"kind": "subagent", "at": run["at"], "agent": _clip(run["agent"]), "seconds": run["seconds"], "tool_calls": run["tool_calls"], "model": run["model"]})
+    for item in entries:
+        at = moment(item.get("at"))
+        index = bisect.bisect_right(starts, at) - 1 if at is not None else -1
+        if index >= 0 and at < ends[index] and not (item["kind"] == "prompt" and at - starts[index] <= taskinsight.MATCH_SECONDS + 1):  # the node itself; a later one is a prompt the record no longer has (withdrawn)
+            nodes[index]["rows"].append(item)
+    for node in nodes:
+        node["rows"].sort(key=lambda row: moment(row["at"]) or 0.0)
+    return nodes
+
+
+def tree(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """The prompts of the task, newest first, with what the agent did for each; `stats`, the numbers of the whole task; `problems`, what was blocked or failed, newest first. Empty: nothing to show."""
+    info = taskinsight.of_task(root, task, None, True)
+    surface = str(data.get("surface") or "vscode")
+    entries = [item for session in info["sessions"] for item in entries_of(root, surface, session["session_id"], str(data.get("created_at") or ""))]
+    nodes = nodes_of(info, entries)
+    problems: List[Dict[str, Any]] = []
+    for node in nodes:
+        for row in node["rows"]:
+            if row["kind"] in ("gate", "tool") and problem(row):
+                node["blocked" if row["kind"] == "gate" else "failed"] += 1
+                problems.append(dict(row, prompt=node["n"]))
+    left = ROWS_KEPT
+    for node in reversed(nodes):
+        room = min(ROWS_PER_PROMPT, left)
+        node["cut"] = max(0, len(node["rows"]) - room)
+        node["rows"] = node["rows"][-room:] if room else []
+        left -= len(node["rows"])
+    totals = info["totals"]
+    problems.sort(key=lambda row: copilot_events.seconds(row["at"]) or 0.0, reverse=True)
+    return {
+        "prompts": nodes[::-1], "problems": problems[:PROBLEMS_KEPT], "problems_cut": max(0, len(problems) - PROBLEMS_KEPT),
+        "stats": {
+            "prompts": totals["prompts"], "active_s": totals["active_s"], "model_s": totals["model_s"], "tool_s": totals["tool_s"], "subagent_s": totals["subagent_s"], "tool_calls": totals["tool_calls"],
+            "turns": sum(item.get("turns", 0) for item in info["prompts"]), "subagents": len(info.get("subagents") or []), "asked": totals["asked"],
+            "blocked": sum(node["blocked"] for node in nodes), "failed": sum(node["failed"] for node in nodes),
+        },
+    }
+
+
+def file_stamp(path: Any) -> Tuple[int, int]:
+    try:
+        found = Path(path).stat()
+        return found.st_size, found.st_mtime_ns
+    except (OSError, TypeError):
+        return (0, 0)
+
+
+def held_tree(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """`tree`, read again only when the files changed and at most every FRESH_S seconds. Never raises: without it the page shows the plain list."""
+    try:
+        session, surface = str(data.get("session_id") or ""), str(data.get("surface") or "vscode")
+        stamp = (data.get("updated_at"), file_stamp(session_log_path(root, surface, session)), file_stamp(copilot_events.events_path(session)))
+        held = _trees.get(task)
+        if held is not None and (held[0] == stamp or time.monotonic() - held[1] < FRESH_S):
+            return held[2]
+        found = tree(root, task, data)
+        if len(_trees) >= TREES_KEPT:
+            _trees.clear()
+        _trees[task] = (stamp, time.monotonic(), found)
+        return found
+    except Exception:  # noqa: BLE001 - logs and a record that are not what they should be must not take the page down
+        return {}
+
+
+def of_task(root: Path, data: Dict[str, Any], task: str = "") -> Dict[str, Any]:
+    """The Trace of the task's session, since the task began. Empty when there is no session or no log. With `task`, also the `tree`."""
+    found = flat(root, data)
+    if task:
+        found["tree"] = held_tree(root, task, data)
+    return found
+
+
+def flat(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     session = str(data.get("session_id") or "")
     if not session:
         return {"entries": [], "cut": 0}

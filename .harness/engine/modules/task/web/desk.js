@@ -946,7 +946,7 @@
 
   function review() {
     const r = desk.review;
-    const parts = [h("p", {class: "hint top"}, t("desk.rv.hint"))];
+    const parts = [h("p", {class: "hint top"}, t("desk.review.hint"))];
     parts.push(h("div", {class: "review-sum"},
       r.n ? t("desk.review.sum", {n: r.n, passes: r.passes, used: r.used, limit: r.limit}) : t("desk.review.off"),
       r.waived ? [" ", tag(t("desk.review.waived"), "hot")] : null,

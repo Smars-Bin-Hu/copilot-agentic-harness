@@ -438,6 +438,11 @@ class WalkThroughTests(unittest.TestCase):
         self.assertIn('if (!found.blocks.length) return h("div", {class: "empty-state"}, h("b", null, t("desk.doc.empty"))', desk)
         self.assertEqual(desk.count("resumeButton()"), 3)  # the function and the two cards
 
+    def test_the_review_tab_has_its_own_line_and_the_review_button_its_own(self) -> None:
+        desk = (WEB / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('const parts = [h("p", {class: "hint top"}, t("desk.review.hint"))];', desk[desk.index("function review()"):][:200])  # 1.6.35 renamed the button's words and took this line with them
+        self.assertEqual(desk.count('t("desk.rv.hint")'), 2)  # the popover and the title of the button
+
     def test_the_rest_of_the_page_follows_when_the_chat_starts_or_stops_waiting(self) -> None:
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
         self.assertIn("LIVE.onChange(() => {", desk)

@@ -32,6 +32,7 @@ To see which version you have: `harness --version`.
 - **The texts still sent you to VS Code to stop or to answer after a cancel.** Stop is on the page.
 - **On a phone, the title of the waiting card wrapped letter by letter.**
 - **The same words twice on a line of the Live tab.**
+- **The Review tab has its own first line again.** 1.6.35 fixed its texts but left the first line showing the words of the review button.
 
 ## 1.6.36 (2026-11-01)
 

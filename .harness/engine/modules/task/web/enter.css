@@ -2,15 +2,25 @@
    Colours are tokens (--en-* in tokens.css, light and dark). It sits under the fixed search and gear of shell.css (z-index 160 and up), so those stay the global ones.
    Motion: transform and opacity (the charge is drawn on a canvas). `html.lite` and `prefers-reduced-motion` turn all of it off; the screen still works. */
 
-#enter{position:fixed;inset:0;z-index:100;overflow:hidden;color:var(--en-ink);background:var(--en-bg2);font-family:var(--sans);transition:opacity .38s ease,transform .38s ease,visibility 0s .38s}
+#enter{position:fixed;inset:0;z-index:100;overflow:hidden;color:var(--en-ink);background:transparent;font-family:var(--sans);transition:opacity .38s ease,transform .38s ease,visibility 0s .38s}
 #enter[hidden]{display:none}
 #enter.pending{opacity:0;visibility:hidden;pointer-events:none;transition:none}
 #enter.out{opacity:0;transform:scale(1.025);visibility:hidden;pointer-events:none}
 html.en-open{overflow:hidden}
-.en-ground{position:absolute;inset:0;background:radial-gradient(62% 52% at 50% 36%,var(--en-bg0) 0%,var(--en-bg1) 58%,var(--en-bg2) 100%)}
+html.en-open main{visibility:hidden}
+/* over a picture the screen is dark in both themes: light letters, warm light */
+html.has-wall #enter{--en-ink:var(--enw-ink);--en-cap:rgba(245,246,247,.78);--en-m0:rgba(255,255,255,.97);--en-m1:rgba(255,255,255,.55);--en-rim:rgba(255,255,255,.35);--en-spot:rgba(255,255,255,.96);--en-sheen:rgba(255,255,255,.03);--en-floor:rgba(0,0,0,.35);
+ --en-fx:255,214,150;--en-hot:255,170,70;--en-flash:255,255,255;--soft:var(--enw-soft);--good:var(--enw-good);--good-dot:var(--enw-good-dot);--hot:var(--enw-hot);--hot-dot:var(--enw-hot-dot);--bad:var(--enw-bad);--ink:var(--enw-ink);--line:rgba(255,255,255,.14);--line2:rgba(255,255,255,.24);
+ --robot-body:var(--enw-body);--robot-head:var(--enw-head);--robot-line:var(--enw-line);--robot-visor:var(--enw-visor)}
+.en-ground{position:absolute;inset:0}  /* the studio itself is in the 3D stage (space.css), so it can turn */
 .en-ground::after{content:"";position:absolute;left:0;right:0;top:60%;bottom:0;background:linear-gradient(to bottom,transparent,var(--en-sheen) 14%,transparent 50%,var(--en-floor))}
 #enter .en-sp{stop-color:var(--en-spot)}#enter .en-m0{stop-color:var(--en-m0)}#enter .en-m1{stop-color:var(--en-m1)}
 #enter .en-rim{fill:none;stroke:var(--en-rim)}
+
+/* the list sits on a dark backing over a picture: the amber and grey lines hold their contrast on any picture */
+html.has-wall .en-chk{padding:12px 14px;border-radius:14px;background:rgba(8,9,10,.58)}
+html.has-wall .en-chk-l .m{background:rgba(8,9,10,.5)}
+html[data-theme="light"]:not(.has-wall) .en-chk-l .m{background:linear-gradient(var(--hot-bg),var(--hot-bg)),rgba(255,255,255,.9)}
 
 /* top right: only the greeting (the search is the fixed one of shell.css, which keeps the room at the right) */
 .en-top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:flex-end;padding:22px 32px;z-index:3;pointer-events:none}
@@ -63,15 +73,15 @@ html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5
 .en-chk-h.h-check i{animation:enbeat 1s ease-in-out infinite}
 .en-chk-l{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
 .en-chk-l li{display:grid;grid-template-columns:14px minmax(0,1fr) auto;column-gap:9px;align-items:center}
-.en-chk-l li .t{color:var(--en-ink);opacity:.82;min-width:0;overflow-wrap:anywhere}
-.en-chk-l li em{font-style:normal;opacity:.75;font-size:11px;text-align:right;max-width:150px;overflow-wrap:anywhere}
+.en-chk-l li .t{color:var(--en-ink);opacity:.92;min-width:0;overflow-wrap:anywhere}
+.en-chk-l li em{font-style:normal;opacity:1;font-size:11px;text-align:right;max-width:150px;overflow-wrap:anywhere}
 .en-chk-l .ck{width:7px;height:7px;border-radius:50%;justify-self:center;background:var(--soft);opacity:.7}
 .en-chk-l .s-check .ck{background:none;border:1.5px solid var(--soft);border-top-color:transparent;width:9px;height:9px;opacity:1;animation:enspin .8s linear infinite}
 .en-chk-l .s-ok .ck{background:var(--good-dot);opacity:1}
 .en-chk-l .s-wait .ck{background:var(--hot-dot);opacity:1;animation:enbeat 1.2s ease-in-out infinite}
 .en-chk-l .s-fail .ck{background:var(--hot-dot);opacity:1;box-shadow:0 0 0 3px var(--hot-line)}
 .en-chk-l .s-wait em,.en-chk-l .s-fail em{color:var(--hot);opacity:1}
-.en-chk-l .s-note .t,.en-chk-l .warns .t{opacity:.6}
+.en-chk-l .s-note .t,.en-chk-l .warns .t{opacity:.82}
 .en-chk-l .m{grid-column:2/4;margin:2px 0 6px;padding:7px 10px;border-radius:8px;background:var(--hot-bg);border:1px solid var(--hot-line);color:var(--hot);font:12px/1.5 var(--sans);overflow-wrap:anywhere;word-break:break-word}
 .en-chk-l .m.soft{background:var(--track);border-color:var(--line);color:var(--en-cap)}
 .en-chk-l .m[hidden]{display:none}
@@ -79,7 +89,7 @@ html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5
 .en-chk-l .en-open:disabled{opacity:.5;cursor:default}
 .en-err{margin:8px 0 0;padding:7px 10px;border-radius:8px;border:1px solid var(--bad-line);background:var(--bad-bg);color:var(--bad);font:12px/1.5 var(--sans);overflow-wrap:anywhere}
 .en-err[hidden]{display:none}
-.en-legal{margin:10px 0 0;font:11px/1.4 var(--mono);color:var(--en-cap);opacity:.75;overflow-wrap:anywhere}
+.en-legal{margin:10px 0 0;font:11px/1.4 var(--mono);color:var(--en-cap);overflow-wrap:anywhere}
 .en-go{font:600 15px var(--sans);display:inline-flex;align-items:center;gap:12px;height:54px;padding:0 14px 0 30px;border-radius:999px;border:0;cursor:pointer;color:var(--en-btn-ink);background:var(--en-btn);
  box-shadow:0 14px 34px rgba(0,0,0,.3);transition:transform .2s,box-shadow .2s}
 .en-go:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 0 60px rgba(var(--en-fx),.35),0 18px 40px rgba(0,0,0,.35)}

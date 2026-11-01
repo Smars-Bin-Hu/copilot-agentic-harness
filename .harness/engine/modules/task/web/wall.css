@@ -1,0 +1,73 @@
+/* The wallpaper (wall.js, 1.6.19 B89): the glass panels over a picture, and the Background part of the settings panel. Colours are tokens (tokens.css).
+   With no picture none of this applies: the page stays flat and monochrome, complete by itself. `html.has-wall` is set by wall.js while a picture is on view.
+   A page has at most three blurred layers: the header and two panels on the board, the header and the surface on a task page. Everything that opens over them (the palette, the settings, the
+   reply panel, the dialogs, the cards) is nearly solid and does not blur. Lite keeps the picture but makes every panel opaque and removes the blur and the motion. */
+
+html.has-wall{--r:16px}
+html[data-theme="dark"].has-wall{--glass:rgba(10,11,13,.82);--glass-line:rgba(255,255,255,.16);--flat:rgba(12,13,15,.88)}
+/* The light theme over a picture: the pictures are mostly dark, so the picture itself is turned into its daylight twin (wall.js bakes it; space.css has the filter for a browser that cannot)
+   and the panels take their colour from it. No veil over the page. */
+html[data-theme="light"].has-wall{--glass:rgba(255,255,255,.60);--glass-line:rgba(255,255,255,.72);--flat:rgba(255,255,255,.84);--soft:#3b4049;--hot:#6b3f00;--good:#0b5f33;--bad:#a8201a;--run:#1a55bd}
+
+/* the blurred layers */
+html.has-wall .lb-top,html.has-wall .kpis,html.has-wall .board-list,html.has-wall .lb-scene,html.has-wall .tk-head,html.has-wall .tk-surface{
+ background:var(--glass);border:1px solid var(--glass-line);border-radius:var(--r);box-shadow:var(--glass-hi),var(--shadow);
+ -webkit-backdrop-filter:blur(26px) saturate(1.35);backdrop-filter:blur(26px) saturate(1.35)}
+html[data-theme="light"].has-wall .lb-top,html[data-theme="light"].has-wall .kpis,html[data-theme="light"].has-wall .board-list,html[data-theme="light"].has-wall .lb-scene,html[data-theme="light"].has-wall .tk-head,html[data-theme="light"].has-wall .tk-surface{
+ -webkit-backdrop-filter:blur(34px) saturate(1.6) brightness(1.06);backdrop-filter:blur(34px) saturate(1.6) brightness(1.06)}
+/* the header floats on the picture instead of running edge to edge */
+html.has-wall .lb-top,html.has-wall .tk-head{top:0;margin:12px 0 0;padding:12px 18px;border-radius:18px}  /* 12 px down at rest, stuck at the top edge when scrolled */
+html.has-wall .tk-head{padding:10px 16px}
+html.has-wall main{padding-top:0}
+html.has-wall .kpis{margin-top:14px}
+html.has-wall .kpi:first-child{padding-left:22px}
+html.has-wall .board-list{margin-top:14px;padding:6px 14px 4px;overflow:hidden}
+html.has-wall .board-list td:first-child,html.has-wall .board-list th:first-child{padding-left:4px}
+html.has-wall .lb-scene{background-image:none;margin-top:14px}
+html.has-wall .tk-surface{margin-top:14px}
+
+/* what sits on the picture but is not a panel: a flat tint, no blur */
+html.has-wall .chip,html.has-wall .controls select,html.has-wall .controls input.search,html.has-wall .pairing,html.has-wall .shift-said:not(:empty){background:var(--flat);border-color:var(--glass-line)}
+html.has-wall .chip.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+html.has-wall .pairing,html.has-wall .shift-said:not(:empty){padding:3px 10px;border-radius:999px;border:1px solid var(--glass-line)}
+html.has-wall main>p.sub:not([hidden]),html.has-wall main>.sub:not([hidden]){background:var(--flat);border:1px solid var(--glass-line);border-radius:12px;padding:8px 14px}
+html.has-wall footer{background:var(--flat);border:1px solid var(--glass-line);border-radius:14px;padding:12px 16px}
+html.has-wall .copyright{background:var(--flat);border-radius:8px;padding:1px 8px}
+html.has-wall .board-list .card,html.has-wall .tk-surface .card,html.has-wall .chatbar{background:var(--flat);border-color:var(--glass-line)}
+html.has-wall .dialog.card,html.has-wall .shade .card{background:var(--card)}
+html.has-wall .tk-sub,html.has-wall .tabs{background:transparent}
+html.has-wall .tk-tabs{background:var(--card)}  /* solid: what scrolls under the bar must not show through */
+html.has-wall .action{background:transparent}
+html.has-wall .act-menu,html.has-wall .tk-menu{background:var(--card)}
+html.has-wall tbody tr:hover td{background:var(--hover)}
+html.has-wall .lb-top .sub{max-width:36ch}
+
+/* Lite: the same panels, opaque, no blur; the picture stays, still */
+html.lite.has-wall .lb-top,html.lite.has-wall .kpis,html.lite.has-wall .board-list,html.lite.has-wall .lb-scene,html.lite.has-wall .tk-head,html.lite.has-wall .tk-surface{
+ -webkit-backdrop-filter:none;backdrop-filter:none;background:var(--card);box-shadow:var(--shadow)}
+html.lite.has-wall .chip,html.lite.has-wall .controls select,html.lite.has-wall .controls input.search{background:var(--card)}
+html.lite.has-wall .chip.on{background:var(--ink)}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+ html.has-wall .lb-top,html.has-wall .kpis,html.has-wall .board-list,html.has-wall .lb-scene,html.has-wall .tk-head,html.has-wall .tk-surface{background:var(--card)}}
+
+/* ---------- the Background part of the settings ---------- */
+.sp-bg h5{margin:14px 0 8px;padding-top:12px;border-top:1px solid var(--line);font-size:12.5px;font-weight:600;color:var(--ink)}
+.sp-bg .wgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;max-height:178px;overflow:auto;padding:3px;overscroll-behavior:contain;scrollbar-width:thin}
+.sp-bg .th{box-sizing:border-box;width:100%;aspect-ratio:3/2;padding:0;border-radius:8px;border:1px solid var(--line2);background:var(--track) center/cover no-repeat;cursor:pointer;color:var(--soft);font:inherit;font-size:11px;font-weight:500}
+.sp-bg .th:hover{border-color:var(--ink)}
+.sp-bg .th.on{outline:2px solid var(--ink);outline-offset:1px}
+.sp-bg .th.none{background:transparent;display:grid;place-items:center}
+.sp-bg .th.bad{opacity:.45;cursor:default;background-image:repeating-linear-gradient(135deg,transparent 0 5px,var(--line2) 5px 6px)}
+.sp-bg .th:not(.ready):not(.none):not(.bad){background-color:var(--track)}
+.sp-bg .sp-note{margin:6px 0 4px;overflow-wrap:anywhere}
+.sp-bg .wfolder{margin-top:8px}
+.sp-bg .wfolder label{display:block;margin:0 0 4px}
+.sp-bg .wline{display:flex;gap:6px}
+.sp-bg .wpath{flex:1;min-width:0;height:28px;box-sizing:border-box;padding:0 8px;font:12px var(--mono);border-radius:7px}
+.sp-bg .wchange{flex:none;height:28px;padding:0 10px;border-radius:7px;border:1px solid var(--line2);background:transparent;color:var(--ink);font:inherit;font-size:12px;font-weight:500;cursor:pointer}
+.sp-bg .wchange:hover:not(:disabled){border-color:var(--ink)}
+.sp-bg .wchange:disabled{opacity:.5;cursor:default}
+.sp-bg .sp-check{display:flex;align-items:flex-start;gap:8px;padding:6px 0 0;font-size:13px;cursor:pointer}
+.sp-bg .sp-check input{flex:none;margin:2px 0 0;accent-color:var(--ink)}
+.sp-bg .sp-check span{min-width:0;overflow-wrap:anywhere}
+.sp-bg .sp-check input:disabled+span{color:var(--soft)}

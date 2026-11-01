@@ -108,10 +108,12 @@ class PageTests(unittest.TestCase):
                 self.assertIn(key, table, f"{language}: {key}")
         self.assertIn("board.", taskhtml.TEXT_PREFIXES)  # the page gets them
 
-    def test_the_gear_has_no_background_section_yet(self) -> None:
-        """Background (picker, rotation, motion) is B89: nothing for it is drawn now."""
-        self.assertNotIn("wallpaper", source("shell.js").lower().replace("kw:", ""))
-        self.assertNotIn("board.shell.bg", source("shell.js"))
+    def test_the_gear_hands_the_background_part_to_wall_js(self) -> None:
+        """The Background part (picture, folder, rotation, motion) is wall.js (B89); the shell only puts it in the panel and tells it the panel opened."""
+        shell = source("shell.js")
+        self.assertIn("WALL.section()", shell)
+        self.assertIn("WALL.opened()", shell)
+        self.assertNotIn("board.shell.bg", shell)
 
 
 class LanguageTests(ServeCase):

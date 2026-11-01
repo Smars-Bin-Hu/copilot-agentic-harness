@@ -17,11 +17,13 @@
 @media (max-width:1480px){main,main.wide{margin-left:20px;margin-right:152px;max-width:none}}
 @media (max-width:900px){main,main.wide{margin-right:20px}.sh-pill span{display:none}}
 
+/* An overlay (the palette, the settings, the reply panel) is nearly solid and does not blur: a page has at most three blurred layers (wall.css), whatever is open. */
+
 /* ---------- the palette (Cmd+K) ---------- */
 .pal-shade{position:fixed;inset:0;z-index:200;background:var(--scrim);display:flex;justify-content:center;align-items:flex-start;padding-top:13vh}
 .pal-shade[hidden]{display:none}
-.pal{width:min(660px,92vw);max-height:68vh;display:flex;flex-direction:column;border-radius:20px;color:var(--ink);background:var(--glass);border:1px solid var(--glass-line);
- -webkit-backdrop-filter:blur(30px) saturate(1.5);backdrop-filter:blur(30px) saturate(1.5);box-shadow:var(--glass-hi),var(--glass-shadow);overflow:hidden;animation:palin .16s ease-out}
+.pal{width:min(660px,92vw);max-height:68vh;display:flex;flex-direction:column;border-radius:20px;color:var(--ink);background:var(--over);border:1px solid var(--glass-line);
+ box-shadow:var(--glass-hi),var(--glass-shadow);overflow:hidden;animation:palin .16s ease-out}
 @keyframes palin{from{opacity:0;transform:translateY(-8px) scale(.985)}to{opacity:1;transform:none}}
 .pal-in{display:flex;align-items:center;gap:12px;padding:0 18px;height:56px;border-bottom:1px solid var(--line)}
 .pal-in svg{width:18px;height:18px;stroke-width:1.6;color:var(--soft);flex:none}
@@ -41,8 +43,8 @@
 .pal-ft span{display:inline-flex;align-items:center;gap:6px}.pal-ft .grow{flex:1}
 
 /* ---------- the settings panel ---------- */
-.setp{position:fixed;right:20px;bottom:74px;z-index:170;width:344px;max-width:calc(100vw - 40px);max-height:calc(100vh - 110px);overflow:auto;padding:16px;border-radius:18px;color:var(--ink);background:var(--glass);border:1px solid var(--glass-line);
- -webkit-backdrop-filter:blur(30px) saturate(1.5);backdrop-filter:blur(30px) saturate(1.5);box-shadow:var(--glass-hi),var(--glass-shadow)}
+.setp{position:fixed;right:20px;bottom:74px;z-index:170;width:344px;max-width:calc(100vw - 40px);max-height:calc(100vh - 110px);overflow:auto;padding:16px;border-radius:18px;color:var(--ink);background:var(--over);border:1px solid var(--glass-line);
+ box-shadow:var(--glass-hi),var(--glass-shadow)}
 .setp[hidden]{display:none}
 .setp h4{margin:0 0 12px;font-size:13px;font-weight:600}
 .sp-row>span{min-width:0;overflow-wrap:anywhere}.sp-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;font-size:13px}

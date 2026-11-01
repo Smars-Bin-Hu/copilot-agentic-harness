@@ -18,6 +18,8 @@ Who may do what:
 - Talking to the chat (1.6, B72): `/api/send`, `/api/steer`, `/api/stop` (paired POST only; B78: `/api/compact`, which sends `/compact` to an idle chat) act through the link's thread, after it looked at the binding and the chat again. The confirmation code typed at an
   approval is not kept: no message to the agent holds it.
   `/api/language` (B85, paired POST only) sets the `language` setting: it writes `user.override.json`, the person's own file, and the board reads it again at once.
+  Wallpaper (B89): `/api/wall` (a read, like `/api/board`) lists the pictures of the one folder the person chose; `/wall/<name>` hands out one of them (GET; see `wallpaper.py` for what is let through);
+  `/api/wallfolder` (paired POST only) sets that folder in `user.override.json`, the person's own file. The server never resizes a picture: the page does.
   `/api/draft` lists, adds, edits, deletes and switches the notes of `.task/drafts.json`; `/api/setting` sets the task's model and thinking level (`chat.model`); `review set` runs through `/api/act`.
 - New task (1.6, B73): `/api/create` (paired POST only; `step` options, preview or act) makes a chat in VS Code for a task the agent opens (`chatnew` checks every field again, `vslink.create` does it). It fails
   with a clear reason when VS Code is not ready; nothing is made then.
@@ -49,6 +51,7 @@ from urllib.parse import quote, unquote, urlparse
 from core import config, messages, registry, state, tasks, user
 from core.paths import board_serve_file, utc_now
 
+from . import wallpaper
 from . import autorun, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
 from .common import CommandError
@@ -275,15 +278,8 @@ class Board:
         return {"n": taskreview.state_of(data)["n"], "max_n": taskreview.settings(self.root)["max_n"], "model": model.get("id", ""), "thinking": (model.get("config") or {}).get("thinkingLevel", ""),
                 "models": self.link.model_list(), "ready": bool(self.link.status()["ready"])}
 
-    def set_language(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """The `language` setting of the harness (`en` or `zh`), written to `user.override.json` next to what the person already keeps there, as `task archive --remember` does. A paired browser only.
-        The board reads it again at once (`sync_language`), so the answer already carries the new language and an open page loads its texts again."""
-        wanted = str(data.get("language", "")).strip().lower()
-        if wanted not in messages.LANGUAGES:
-            raise CommandError(say("serve.language.bad"))
-        forced = os.environ.get(messages.ENVIRONMENT, "").strip().lower()
-        if forced and forced != wanted:
-            raise CommandError(say("serve.language.env", name=messages.ENVIRONMENT))  # the environment wins over the file: writing the file would change nothing
+    def keep_override(self, key: str, value: Any) -> None:
+        """One key of `user.override.json`, the person's own file, next to what is already there (nothing else in it changes). `value` None removes the key."""
         path = config.override_path(self.root, "user")
         kept: Dict[str, Any] = {}
         if path.exists():
@@ -293,10 +289,37 @@ class Board:
                 raise CommandError(say("serve.language.broken", file=str(path), error=error)) from None
             if not isinstance(kept, dict):
                 raise CommandError(say("serve.language.broken", file=str(path), error="not an object"))
-        kept["language"] = wanted
+        if value is None:
+            kept.pop(key, None)
+        else:
+            kept[key] = value
         state.atomic_write(path, kept)
+
+    def set_language(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The `language` setting of the harness (`en` or `zh`), written to `user.override.json` next to what the person already keeps there, as `task archive --remember` does. A paired browser only.
+        The board reads it again at once (`sync_language`), so the answer already carries the new language and an open page loads its texts again."""
+        wanted = str(data.get("language", "")).strip().lower()
+        if wanted not in messages.LANGUAGES:
+            raise CommandError(say("serve.language.bad"))
+        forced = os.environ.get(messages.ENVIRONMENT, "").strip().lower()
+        if forced and forced != wanted:
+            raise CommandError(say("serve.language.env", name=messages.ENVIRONMENT))  # the environment wins over the file: writing the file would change nothing
+        self.keep_override("language", wanted)
         self.language_stamp = []  # the file is new: read it at once
         return {"language": self.sync_language()}
+
+    def set_wall_folder(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The folder the wallpaper is read from (a paired browser only). Empty: no wallpaper folder. A path that is not a folder on this computer is refused and nothing is written.
+        The answer is the listing of the folder, as `/api/wall` gives it."""
+        text = wallpaper.clean(data.get("folder", ""))
+        if not text:
+            self.keep_override(wallpaper.KEY, None)
+        else:
+            found = wallpaper.directory(text)
+            if found is None:
+                raise CommandError(say("serve.wall.missing", folder=text[:200]))
+            self.keep_override(wallpaper.KEY, str(found))
+        return wallpaper.listing(self.root)
 
     def desk_page(self, name: str) -> str:
         return taskhtml.desk_page(self.desk(name), self.serve_info({}, DESK_REFRESH))
@@ -714,7 +737,8 @@ def handler_for(board: Board) -> type:
             self.send_response(status)
             self.send_header("Content-Type", kind)
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
+            if "Cache-Control" not in (extra or {}):
+                self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
             if kind.startswith("text/html"):
@@ -778,6 +802,22 @@ def handler_for(board: Board) -> type:
                     return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead page
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
+            if path.startswith("/wall/"):  # one picture of the wallpaper folder: read only, by its bare name. Another site's page may not use it (Origin, Sec-Fetch-Site)
+                origin = self.headers.get("Origin", "")
+                if (origin and origin not in allowed_origins) or self.headers.get("Sec-Fetch-Site", "same-origin") not in ("same-origin", "none"):
+                    return self.send(403, b"", "text/plain")
+                found = wallpaper.file_for(board.root, path[len("/wall/"):])
+                if found is None:
+                    return self.send(404, b"", "text/plain")
+                target, kind, info = found
+                tag = f'"{info.st_mtime_ns:x}-{info.st_size:x}"'
+                headers = {"ETag": tag, "Cache-Control": "private, max-age=86400"}
+                if self.headers.get("If-None-Match", "") == tag:
+                    return self.send(304, b"", kind, headers)
+                try:
+                    return self.send(200, target.read_bytes(), kind, headers)
+                except OSError:
+                    return self.send(404, b"", "text/plain")
             if path.startswith("/file/"):  # a picture of a task page (evidence a person gave): read only, by the task's name and a path inside its folder
                 name, _, relative = path[len("/file/"):].partition("/")
                 found = taskdesk.image_file(board.root, name, relative)
@@ -864,6 +904,20 @@ def handler_for(board: Board) -> type:
                     result = board.set_language(data)
                     print(say("serve.did", action="language " + result["language"], task="-"), flush=True)
                     return self.answer(200, {"result": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown in the settings panel
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/wall":  # the pictures of the wallpaper folder: a read, as /api/board is
+                try:
+                    return self.answer(200, {"wall": wallpaper.listing(board.root)})
+                except Exception as error:  # noqa: BLE001 - the page then has no wallpaper and says why
+                    return self.answer(500, {"error": f"{type(error).__name__}: {error}"[:300]})
+            if path == "/api/wallfolder":  # the folder the wallpaper is read from: the paired browser only; it writes the person's own `user.override.json`
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.set_wall_folder(data)
+                    print(say("serve.did", action="wallpaper folder", task="-"), flush=True)
+                    return self.answer(200, {"wall": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown in the settings panel
                     return self.answer(409, {"error": str(error)})
             if path == "/api/board":

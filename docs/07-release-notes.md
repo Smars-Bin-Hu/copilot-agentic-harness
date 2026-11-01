@@ -10,6 +10,25 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.19 (2026-11-01)
+
+### Added
+
+- **A background of your own pictures.** Settings (the gear) has a **Background** part: **None** (the default), a thumbnail of each picture in the folder you chose, the folder's path (a text field with **Change**: a browser cannot choose a folder of the server's computer), and a switch that changes the picture every 10 minutes in random order (it waits while the page is hidden; a 1.5 s crossfade). The pictures stay on your computer and are never shipped or committed. The folder is your setting `wallpaper_dir` in `user.override.json` (git-ignored; only a paired browser writes it, like the language). The server hands out only the jpg, jpeg, png and webp files directly in that folder (real pictures, up to 40 MB; no `..`, no link out of the folder, only this address); a missing or empty folder is a calm line. [Details](04-reference.md#the-wallpaper)
+- **The browser makes the small copies.** The server cannot resize, so the page makes a thumbnail (about 192 px) for each tile and a copy of at most 2560 px wide for the page, and keeps them in the Cache API. Only the tiles in view are made, two at a time: a folder of 500 pictures, or one of 8K and 20 MB, is fine. A picture that cannot be read shows as a crossed tile.
+- **Glass panels over a picture, flat with none.** With a picture the header and the panels are glass (a page has at most three blurred layers); with none the page stays black and white. In the light theme the picture becomes its brighter "daylight twin" (made once, not on every frame) and the panels take their colour from it. Text keeps 4.5:1 against the worst pixel behind it on the pictures tried.
+- **A 3D background.** A fixed space behind the page: the picture far back, two layers of dust nearer, and with no picture a faint floor grid and a horizon. It turns up to 4 degrees with the pointer on the board and the task page, 8 on the Enter screen, glides and comes back to the centre in about 4 seconds. Panels and text never move. It uses one frame callback and only the transform; it stops when settled, when the page is hidden, in Lite and under reduced motion. A **Background motion** switch (on by default) keeps it still.
+- **A slow-computer note.** While the background moves, the page measures its frame time. When it stays below 30 frames a second for a few seconds, a small note offers **Lite** once. It never switches by itself.
+- `/api/wall` (read) and `/wall/<name>` (GET) give the list and one picture; `/api/wallfolder` (paired POST) sets the folder.
+
+### Changed
+
+- **The light theme's 3D background is easier to see**: a stronger floor grid, a horizon line with a soft glow and clearer dust, so that turning shows without a picture. All of it stays light enough for text to keep its contrast.
+- **Lite is complete**: with a picture, every panel is opaque, with no blur, no motion and no rotation.
+- The palette, the settings panel and the reply panel no longer blur (they are nearly solid), so a page never has more than three blurred layers.
+- The Enter screen is drawn on the 3D background; over a picture its letters and list are light in both themes.
+- Docs: the board's look and settings, the tab groups and the stage colours, `/api/language`, `/api/wall` and the wallpaper.
+
 ## 1.6.18 (2026-10-31)
 
 ### Added

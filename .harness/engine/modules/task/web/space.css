@@ -1,0 +1,55 @@
+/* The 3D space behind the page (space.js, 1.6.19 B89). A fixed stage with perspective; only background layers live in it. The picture is far back, two layers of dust are nearer,
+   and with no picture a faint floor grid and a horizon give the eye something to turn against. The world turns around the FAR plane, so what is nearer swings more than the picture
+   (real parallax). Panels, rows and text are not in it and never move. Only transform and opacity change while it moves.
+   `html.lite`, `prefers-reduced-motion` and the "Background motion" switch (`html.sp-still`) keep it still; Lite also removes grid, horizon and dust. Colours are tokens (tokens.css). */
+
+#sp{position:fixed;inset:0;z-index:-1;overflow:hidden;perspective:1800px;perspective-origin:50% 50%;pointer-events:none;--sp-f:1.22}
+html.en-open #sp{z-index:99;--sp-f:1.4}
+#sp-world{position:absolute;inset:0;transform-style:preserve-3d;transform-origin:50% 50% -500px;will-change:transform}
+
+/* the far plane: pushed back 500 px and scaled by (1800+500)/1800 and a little more, so an edge never shows at the largest tilt */
+#wp{position:absolute;inset:0;opacity:1;transform:translateZ(-500px) scale(calc(1.2778 * var(--sp-f)));transform-origin:50% 50%;transition:transform .5s ease}
+html:not(.has-wall) #wp{opacity:0}
+#wp .wl{position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat;opacity:0;transition:opacity 1.5s ease}
+#wp .wl.on{opacity:1}
+#wp .wl.inst{transition:none}
+#wp::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,var(--sp-veil));z-index:3}
+html.en-open #wp::after{background:radial-gradient(70% 60% at 50% 45%,rgba(0,0,0,.30),rgba(0,0,0,.66))}
+html.en-open[data-theme="light"] #wp::after{background:radial-gradient(70% 60% at 50% 45%,rgba(0,0,0,.42),rgba(0,0,0,.74))}
+/* a browser that cannot draw the daylight twin itself (wall.js bakes it into the picture): the twin is made with a filter */
+html[data-theme="light"].twin-css #wp .wl{filter:invert(1) hue-rotate(180deg) contrast(.55) brightness(1.42) saturate(1.25)}
+
+/* the studio of the Enter screen when there is no picture */
+#sp-studio{position:absolute;inset:0;opacity:0;transform:translateZ(-505px) scale(calc(1.2778 * var(--sp-f)));transition:opacity .4s ease,transform .5s ease;background:radial-gradient(64% 54% at 50% 34%,var(--en-bg0) 0%,var(--en-bg1) 58%,var(--en-bg2) 100%)}
+html.en-open:not(.has-wall) #sp-studio{opacity:1}
+
+/* the floor and the horizon: with no picture. The horizon is a line with a soft glow above it; the floor is a grid that fades away towards it. */
+#sp-horizon{position:absolute;left:-60%;right:-60%;top:56%;height:2px;opacity:0;transform:translateZ(-500px);transition:opacity .5s ease;
+ background:linear-gradient(90deg,transparent,rgba(var(--sp-rgb),var(--sp-horizon)) 14%,rgba(var(--sp-rgb),var(--sp-horizon)) 86%,transparent)}
+#sp-horizon::before{content:"";position:absolute;left:0;right:0;bottom:2px;height:34vh;background:linear-gradient(to top,rgba(var(--sp-rgb),var(--sp-glow)),transparent);
+ -webkit-mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent);mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent)}
+#sp-grid{position:absolute;left:-60%;top:56%;width:220%;height:300%;opacity:0;transform-origin:50% 0;transform:translateZ(-500px) rotateX(80deg);transition:opacity .5s ease;
+ background:repeating-linear-gradient(90deg,rgba(var(--sp-rgb),var(--sp-grid2)) 0 1px,transparent 1px 440px),repeating-linear-gradient(90deg,rgba(var(--sp-rgb),var(--sp-grid)) 0 1px,transparent 1px 110px),
+  repeating-linear-gradient(0deg,rgba(var(--sp-rgb),var(--sp-grid2)) 0 1px,transparent 1px 440px),repeating-linear-gradient(0deg,rgba(var(--sp-rgb),var(--sp-grid)) 0 1px,transparent 1px 220px);
+ -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 24%);mask-image:linear-gradient(to bottom,transparent 0,#000 24%)}
+html:not(.has-wall) #sp-grid,html:not(.has-wall) #sp-horizon{opacity:1}
+html.en-open:not(.has-wall) #sp-grid{opacity:1}
+
+/* dust: two layers nearer than the picture */
+.sp-dust{position:absolute;inset:0;opacity:var(--sp-dust-o);background-repeat:no-repeat}
+#sp-d1{transform:translateZ(-220px) scale(calc(1.1222 * 1.45))}
+#sp-d2{opacity:calc(var(--sp-dust-o) * 1.2);transform:translateZ(-60px) scale(calc(1.0333 * 1.55))}
+
+html.lite #sp-grid,html.lite #sp-horizon,html.lite .sp-dust{display:none}
+html.lite #sp-world,html.sp-still #sp-world{transform:none!important}
+html.lite #wp .wl,html.lite #wp,html.lite #sp-studio{transition:none}
+@media (prefers-reduced-motion:reduce){#sp-world{transform:none!important}#wp .wl{transition:none}}
+
+/* The note offered once when the background moves slowly: in the style of the settings panel, above the gear. */
+.sp-slow{position:fixed;right:20px;bottom:74px;z-index:175;width:300px;max-width:calc(100vw - 40px);padding:14px 16px;border-radius:16px;color:var(--ink);background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--glass-hi),var(--glass-shadow)}
+.sp-slow[hidden]{display:none}
+.sp-slow p{margin:0 0 10px;font-size:13px;line-height:1.5}
+.sp-slow .row{display:flex;gap:8px;justify-content:flex-end}
+.sp-slow button{height:28px;padding:0 12px;border-radius:8px;border:1px solid var(--line2);background:transparent;color:var(--ink);font:inherit;font-size:12.5px;font-weight:500;cursor:pointer}
+.sp-slow button.go{background:var(--btn);color:var(--btn-ink);border-color:var(--btn)}
+html.lite .sp-slow{background:var(--card)}

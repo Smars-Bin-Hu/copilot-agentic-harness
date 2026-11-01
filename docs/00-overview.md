@@ -81,7 +81,9 @@ Run `harness task board` in your own terminal. Your browser first shows an Enter
 
 ![The lobby: every open task as a small agent; the card of one shows its stage, how long it waited and its buttons](images/board.png)
 
-The switch at the top right changes to the list: one line per task with what it waits for, how long, the time split, the checks, and the buttons. Filter by state or kind, search, sort by any column.
+The **Lobby / List** switch in the header changes to the list: one line per task with what it waits for, how long, the time split, the checks, and the buttons. Filter by state or kind, search, sort by any column.
+
+The gear at the bottom right opens the settings: light or dark, **Glass** or **Lite** (for a slow computer), a background of your own pictures (kept on your computer, never shipped) with a slow 3D feel, and the language. `Cmd+K` / `Ctrl+K` searches tasks, views and tabs. [More](02-features.md#look-and-settings).
 
 ![The list: what each task waits for and since when, the working time, the checks, and a button for the next move](images/board-list.png)
 

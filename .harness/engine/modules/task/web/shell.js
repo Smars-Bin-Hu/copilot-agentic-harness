@@ -212,6 +212,7 @@ const SHELL = (function () {
       h("div", {class: "sp-row"}, h("span", null, t("board.shell.theme")), segment("theme", [["light", t("board.shell.light")], ["dark", t("board.shell.dark")]])),
       h("div", {class: "sp-row"}, h("span", null, t("board.shell.render")), segment("lite", [["false", t("board.shell.glass")], ["true", t("board.shell.lite")]])),
       h("p", {class: "sp-note"}, t("board.shell.lite.hint")),
+      typeof WALL !== "undefined" ? WALL.section() : null,  // the Background part (wall.js): the picture, its folder, rotation, motion
       served ? h("div", {class: "sp-row"}, h("span", null, t("board.shell.lang")), segment("lang", [["en", t("desk.send.lang.name.en")], ["zh", t("desk.send.lang.name.zh")]])) : null,
       served ? h("p", {class: "sp-note"}, t("board.shell.lang.hint")) : null, said);
     document.body.append(panel);
@@ -220,7 +221,7 @@ const SHELL = (function () {
       if (!button) return;
       const key = button.parentNode.dataset.key, value = button.dataset.v;
       if (key === "theme") harnessTheme.set(value);
-      else if (key === "lite") harnessTheme.setLite(value === "true");
+      else if (key === "lite") { harnessTheme.setLite(value === "true"); if (typeof WALL !== "undefined") WALL.mark(); }
       else if (key === "lang" && value !== langNow()) setLanguage(value, button.parentNode);
       syncSettings();
     });
@@ -255,6 +256,7 @@ const SHELL = (function () {
     syncSettings();
     panel.hidden = false;
     gear.setAttribute("aria-expanded", "true");
+    if (typeof WALL !== "undefined") WALL.opened();
     const first = panel.querySelector("button.on") || panel.querySelector("button");
     if (first) first.focus({preventScroll: true});
   }

@@ -154,7 +154,7 @@
     return parts.length === 3 && parts.every((x) => !isNaN(x)) ? parts : fallback;
   }
   function palette() {  // the light theme draws over a light page: normal blending with a warm ink; the dark one adds light
-    FX.light = root.getAttribute("data-theme") === "light";
+    FX.light = root.getAttribute("data-theme") === "light" && !root.classList.contains("has-wall");  // over a picture the screen is dark in both themes
     FX.fx = triple("--en-fx", FX.fx); FX.hot = triple("--en-hot", FX.hot); FX.flash = triple("--en-flash", FX.flash);
   }
   const fxOn = () => Boolean(ctx) && !still();
@@ -230,11 +230,14 @@
   }
   function fxClear() { if (ctx) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); } }
   const trem = {x: 0, y: 0};
-  function tremble(x, y) {
-    trem.x = x; trem.y = y;
-    const value = x || y ? "translate3d(" + x.toFixed(2) + "px," + y.toFixed(2) + "px,0)" : "";
+  // The wordmark tilts with the 3D space behind it (space.js, a little less than the world) and trembles while it charges.
+  function stageApply() {
+    let value = "";
+    if (typeof SPACE !== "undefined" && SPACE.on() && (Math.abs(SPACE.ax) > .01 || Math.abs(SPACE.ay) > .01)) value = "perspective(1500px) rotateX(" + (SPACE.ax * .8).toFixed(3) + "deg) rotateY(" + (SPACE.ay * .8).toFixed(3) + "deg) ";
+    if (trem.x || trem.y) value += "translate3d(" + trem.x.toFixed(2) + "px," + trem.y.toFixed(2) + "px,0)";
     if (stage.style.transform !== value) stage.style.transform = value;
   }
+  function tremble(x, y) { trem.x = x; trem.y = y; stageApply(); }
   function botReact(ch, released) {
     bot.classList.toggle("brace", ch > .05 && !released); bot.style.setProperty("--sh", (ch * 2.6).toFixed(2) + "px");
     bot.classList.toggle("you", ch > .55 && !released);
@@ -246,6 +249,7 @@
     if (!open || !shown || still()) return;
     const dt = Math.min(32, now - (wm.last || now));
     wm.last = now;
+    if (typeof SPACE !== "undefined" && SPACE.on()) SPACE.step(now);  // the 3D space turns on this loop's frame: one frame callback for the whole page
     const idle = now - wm.lastMove > 2400 && !FX.down;
     let tx = wm.x, ty = wm.y;
     if (idle) { tx = .5 + Math.sin(now / 2300) * .28; ty = .38 + Math.cos(now / 3100) * .1; }
@@ -404,6 +408,7 @@
   }
   function present(play) {
     palette(); fxSize(); app.inert = true; root.classList.add("en-open");
+    if (typeof SPACE !== "undefined") { SPACE.hosted = () => Boolean(wm.raf); SPACE.onTilt = stageApply; }
     if (play && !still()) { void enter.offsetWidth; enter.classList.add("intro"); }
     placeBot(); render(); loop();
     setTimeout(placeBot, 60); setTimeout(() => { if (open && shown) wake(); }, 1500);
@@ -414,6 +419,8 @@
     open = false; remember();
     clearInterval(chk0.timer); clearInterval(chk0.tick); clearTimeout(chk0.soon); cancelAnimationFrame(wm.raf); wm.raf = 0; FX.down = false; FX.rel = null; fxClear(); tremble(0, 0);
     app.inert = false; root.classList.remove("en-open");
+    if (typeof SPACE !== "undefined") { SPACE.hosted = null; SPACE.onTilt = null; SPACE.set(SPACE.tx / 2, SPACE.ty / 2); }
+    stage.style.transform = "";
     if (quick || still()) { enter.remove(); return; }
     enter.classList.add("out"); setTimeout(() => enter.remove(), 450);
   }

@@ -118,6 +118,8 @@ This is how a served board (`task board --serve`) talks to the chats of VS Code.
 | Call | What it does |
 | --- | --- |
 | `/api/ready` | Read, for the Enter screen: one line for each check (VS Code, Copilot, `harness doctor`, pairing, and the grey knowledge base and target repositories) with a state (`ok`, `wait`, `fail`, `check`, `note`) and a reason. It reads caches and one background `doctor` run; it waits for nothing |
+| `/api/language` | Sets the `language` setting (`en` or `zh`) in `user.override.json`, the settings panel's language switch; a paired browser only. The page then loads its texts again |
+| `/api/wall`, `/wall/<name>` | Read, for the wallpaper: the list of the pictures in the one folder you chose, and one picture by its bare name (a GET; see [The wallpaper](#the-wallpaper)). The folder is set with `/api/wallfolder` (a paired browser only; it writes `wallpaper_dir` in `user.override.json`) |
 | `/api/status`, `/api/board` | Read. They carry `vscode: {ready, bound, unbound, why}` and, on rows, `chat` and `sub` |
 | `/api/live` | Read, for the Live tab of an open task, once a second while the tab or the reply panel is open and the page is seen: the latest eight items of its chat (`text`, `tool`, `think`), from the memory of the link (no file, no call to the host). Every text is redacted and cut (a cut is marked). `rev` changes with the chat: asked with the same `rev`, the answer is only `{rev, same: true}` |
 | `/api/open` | Brings the VS Code window of this folder forward (it cannot open one chat) |
@@ -131,6 +133,18 @@ This is how a served board (`task board --serve`) talks to the chats of VS Code.
 | `/api/verdict`, `/api/export` | Judge a Gate block; export a block judged wrong as an eval sample |
 
 **Credits.** The usage Copilot records itself (what older text called AIU) is called **Credits** on the board, in the totals and in the task report.
+
+### The wallpaper
+
+The board can show your own pictures behind its panels (Settings, **Background**). The pictures stay on your computer: they are never shipped, never committed, and nothing is sent anywhere.
+
+- **The folder** is `wallpaper_dir` in `.harness/policies/user.override.json` (your own file, ignored by git; it is not in `user.json`). Set it in the settings panel (a text field: a browser cannot choose a folder of the server's computer) or write it yourself. An empty text removes it. A path that is not a folder on this computer (a Windows path on a Mac, a relative path, a file) is refused and nothing is written.
+- **What the server hands out**: only files directly inside that folder, with the extension `jpg`, `jpeg`, `png` or `webp`, whose first bytes really are that kind of picture, up to 40 MB, and at most 2000 names. A name with a slash, a backslash, a dot at the start, a NUL or `..` is refused; so is a link that points out of the folder. It answers only to this address (Host), refuses another site's page (Origin, `Sec-Fetch-Site`), sends the right content type and `ETag` (an unchanged picture is `304`), and caches for a day, private. A missing, empty or unreadable folder is a calm line in the panel, not an error.
+- **The server cannot resize** (standard library only). The browser makes a small copy for each tile (about 192 px) and a copy of at most 2560 px wide for the page, with `createImageBitmap` and a canvas, and keeps them in its Cache API. Only the tiles in view are made, two at a time, so a folder of 500 pictures, or one picture of 8K and 20 MB, is read once and does not fill the memory. A picture that cannot be read shows as a crossed tile and is skipped.
+- **What your browser keeps** (`localStorage`, only this browser): `harness.theme`, `harness.lite`, `harness.wall` (the chosen picture), `harness.wall.rot` (rotation), `harness.motion` (`0` = still) and `harness.slow.asked` (the Lite note was shown once).
+- **In the light theme** the picture is turned into its daylight twin when its copy is made (inverted and brightened; the page does not filter it on every frame) and the panels take their colour from it. In the dark theme it is darkened a little.
+- **The panels over a picture are glass** (blur); a page has at most three blurred layers whatever is open: the header and two panels on the board, the header and the surface on a task page. The palette, the settings, the reply panel and the dialogs are nearly solid. With no picture the page stays flat and monochrome. Text keeps 4.5:1 against the worst pixel behind it, on the pictures tried (see the test guide of 1.6.19).
+- **Lite** keeps the picture but makes every panel opaque, and removes the blur and all motion, the rotation included.
 
 ## Policy fields
 

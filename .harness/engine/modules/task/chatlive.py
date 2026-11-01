@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from core import redact
 
+from . import mdtree
+
 LATEST = 8  # items sent
 TEXT_CAP = 4000  # characters of agent text (a reply of 20,000 is cut here; the rest is in VS Code)
 THINK_CAP = 1200
@@ -130,6 +132,23 @@ def tool_item(call: Dict[str, Any], ident: str, active: bool, root: Optional[Pat
     return item
 
 
+def said_item(turn: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """What the person said to start a turn: a small mark in the stream, with the words in its card. None for a turn no person started."""
+    message = turn.get("message") if isinstance(turn.get("message"), dict) else {}
+    if (message.get("origin") or {}).get("kind") != "user":
+        return None
+    text, was_cut = cut(message.get("text"), TEXT_CAP)
+    if not text:
+        return None
+    item: Dict[str, Any] = {"id": f"{turn.get('id')}.me", "k": "me", "text": text}
+    files = [str(entry["label"]) for entry in message.get("attachments") or [] if isinstance(entry, dict) and entry.get("label")]
+    if files:
+        item["files"] = files
+    if was_cut:
+        item["cut"] = True
+    return item
+
+
 def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Path] = None, latest: int = LATEST) -> Dict[str, Any]:
     """`{items, more, started}` from a trimmed chat state: the newest `latest` items of the last turns, oldest first. `more`: there is something older (here or in VS Code)."""
     active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else None
@@ -142,9 +161,10 @@ def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pat
         base = int(turn.get("dropped") or 0)
         if base:
             more = True
+        whole = True
         for at in range(len(parts) - 1, -1, -1):
             if len(items) >= latest:
-                more = True
+                more, whole = True, False
                 break
             part, kind = parts[at], parts[at].get("kind")
             ident = part_id(part) or f"{turn.get('id')}.{base + at}"
@@ -153,7 +173,7 @@ def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pat
                 text, was_cut = cut(part.get("content"), TEXT_CAP)
                 if not text:
                     continue
-                item = {"id": ident, "k": "text", "text": text}
+                item = {"id": ident, "k": "text", "text": text, "blocks": mdtree.parse(text)["blocks"]}  # the page draws it as it draws the documents of a task
                 if was_cut:
                     item["cut"] = True
                 if last:
@@ -175,6 +195,9 @@ def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pat
                 if mark[1] and item["k"] == "tool":
                     item["t1"] = mark[1]
             items.append(item)
+        said = said_item(turn) if whole else None
+        if said:
+            items.append(said)
         if len(items) >= latest:
             more = more or len(turns) > 1
             break

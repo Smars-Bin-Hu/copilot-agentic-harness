@@ -20,7 +20,9 @@
 .tk-cb{display:inline-block;flex:none;width:56px;height:4px;border-radius:2px;background:var(--track);overflow:hidden}
 .tk-cb i{display:block;height:100%;background:var(--soft);border-radius:2px}
 .tk-cb.hot i{background:var(--bad)}
-.tk-cb.wide{display:block;width:100%;height:6px;margin:8px 0}
+.tk-cb.wide{display:flex;width:100%;height:6px;margin:8px 0}
+.tk-cr{display:block;height:100%;background:repeating-linear-gradient(135deg,var(--soft) 0 2px,transparent 2px 5px)}
+.tk-cr-l{display:flex;align-items:center;gap:6px}.tk-cr-l .tk-cr{width:14px;height:8px;border-radius:2px}
 .tk-cv{min-width:2.8em;text-align:right;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
 .tk-cv.hot{color:var(--bad)}
 .tk-tools{flex:none;display:inline-flex;align-items:center;gap:6px;padding-left:6px;border-left:1px solid var(--line)}

@@ -1,18 +1,19 @@
-"""How full the context of a chat is (1.6, B78). The same figure VS Code draws for these chats, read from its source: (inputTokens + outputTokens) of the newest model call, over the context window.
+"""How full the context of a chat is (1.6, B78). The same figures VS Code draws for these chats, read from its source and checked against a real chat on 2026-11-01.
 
 Used: `usage.inputTokens + usage.outputTokens` of the turn that runs (`chat/usage` keeps the newest there), else of the last turn that ended. Both numbers must be there.
-Window: `usage.contextUsage.tokenLimit` when the turn carries one, else `maxContextWindow` of the model of that turn in the root state of the host.
-Nothing else is mixed in: not `contextAttribution`, not the `currentTokens` of a compaction (a local estimate with no tool definitions), not a size the person chose in VS Code (the board cannot read it).
+Window: `usage.contextUsage.tokenLimit` when the turn carries one. Else what VS Code works out for the model: `min(maxContextWindow, contextSize + maxOutputTokens)`, or `maxContextWindow` for a
+model with no `contextSize`. The size is the one the newest message named, else the model's default. VS Code's own bar reads the size chosen in its model picker, which is not in the protocol:
+for a chat whose messages named no size the two differ, and the board's figure is the one the chat runs with (Copilot's record of such a chat says `contextTier: long_context`).
+Reserved: `maxOutputTokens` less what the call wrote, over the window: the part VS Code draws striped.
 No window or no usage: `None`, which the page shows as empty, never as 0.
 
-The task page (1.6.16) also shows what the context holds, for the three kinds that have a real number (`parts`): system prompt, tool definitions, conversation. The system prompt and the tool
-definitions come from `usage._meta.contextAttribution` of the newest model call; the conversation, and either of the two when the call has none, from Copilot's own record
-(`copilot_events.context_parts`: the last `session.shutdown` or compaction start). Skills, MCP servers and the like have no number in either place: they are not drawn, and nothing is estimated.
+What the context holds (`parts`) is `usage._meta.contextAttribution` of the newest model call, drawn as VS Code does: each entry's share of `totalTokens` (a rounded percent), scaled to how full the
+window is; what the entries do not cover is the messages, and what the rounding leaves is "other". Nothing is estimated beyond that.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 def number(value: Any) -> Optional[float]:
@@ -30,84 +31,127 @@ def newest_usage(state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
-def window_of(usage: Dict[str, Any], windows: Dict[str, int]) -> Optional[int]:
+def chosen_size(state: Dict[str, Any], model: str) -> Optional[int]:
+    """The `contextSize` the newest message that names `model` asked for; None: it asked for none."""
+    for message in messages(state):
+        chosen = message.get("model") if isinstance(message.get("model"), dict) else {}
+        if str(chosen.get("id") or "") not in ("", model):
+            continue
+        size = number((chosen.get("config") if isinstance(chosen.get("config"), dict) else {}).get("contextSize"))
+        return int(size) if size else None
+    return None
+
+
+def window_of(usage: Dict[str, Any], limits: Dict[str, Dict[str, int]], size: Optional[int] = None) -> Optional[int]:
     limit = number((usage.get("contextUsage") or {}).get("tokenLimit")) if isinstance(usage.get("contextUsage"), dict) else None
-    if limit:
-        return int(limit)
-    size = windows.get(str(usage.get("model") or ""))
-    return int(size) if size else None
+    return int(limit) if limit else capacity(str(usage.get("model") or ""), limits, size)
 
 
-def meter(state: Dict[str, Any], windows: Dict[str, int]) -> Optional[Dict[str, Any]]:
-    """`{used, window, percent}` (percent with one decimal, not capped), or None when the chat has no usage yet or the window is not known."""
+def meter(state: Dict[str, Any], limits: Dict[str, Dict[str, int]]) -> Optional[Dict[str, Any]]:
+    """`{used, window, percent}` (percent with one decimal, not capped), and `reserved` (percent) when the output limit is known; or None when the chat has no usage yet or the window is not known."""
     usage = newest_usage(state or {})
     if usage is None:
         return None
-    window = window_of(usage, windows)
+    model = str(usage.get("model") or "")
+    window = window_of(usage, limits, chosen_size(state or {}, model))
     if not window:
         return None
     used = int(number(usage["inputTokens"]) + number(usage["outputTokens"]))
-    return {"used": used, "window": window, "percent": round(used * 100.0 / window, 1)}
+    out: Dict[str, Any] = {"used": used, "window": window, "percent": round(used * 100.0 / window, 1)}
+    output = (limits.get(model) or {}).get("output")
+    if output:
+        out["reserved"] = round(max(0.0, output - number(usage["outputTokens"])) * 100.0 / window, 1)
+    return out
 
 
-def capacity(model: str, windows: Dict[str, int]) -> Optional[int]:
-    """`maxContextWindow` of the model, from the root state of the host. None when the model is not known or lists none."""
-    size = windows.get(str(model or ""))
-    return int(size) if size else None
+def capacity(model: str, limits: Dict[str, Dict[str, int]], size: Optional[int] = None) -> Optional[int]:
+    """The context window of `model` with the context size `size` (None: the model's default): as VS Code works it out. None when the model is not known."""
+    found = limits.get(str(model or ""))
+    if not found:
+        return None
+    size = size or found.get("size")
+    return min(found["window"], size + found.get("output", 0)) if size else found["window"]
+
+
+def messages(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The messages of the chat, the newest first."""
+    active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else None
+    turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)]
+    return [turn["message"] for turn in ([active] if active else []) + list(reversed(turns)) if isinstance(turn.get("message"), dict)]
 
 
 def effort(state: Dict[str, Any], model: str = "") -> Optional[str]:
-    """The thinking level the newest message of the chat carried (`message.model.config.thinkingLevel`): only what a message said, so only what the board sent; a level chosen in VS Code is not here.
-    A message that named another model than the one that ran is skipped: the level was for that model."""
-    active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else None
-    turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)]
-    for turn in ([active] if active else []) + list(reversed(turns)):
-        message = turn.get("message") if isinstance(turn.get("message"), dict) else {}
+    """The thinking level the newest message of the chat carried: `thinkingLevel` from the board, `reasoningEffort` where the host read it back from Copilot's record. A message with no level says
+    nothing and the one before it counts; a message that named a model and gave no level stands for that model's default, which is not known here. A message for another model than the one
+    that ran is skipped: the level was for that model."""
+    for message in messages(state):
         chosen = message.get("model") if isinstance(message.get("model"), dict) else {}
         config = chosen.get("config") if isinstance(chosen.get("config"), dict) else {}
-        level = config.get("thinkingLevel")
+        level = config.get("thinkingLevel") or config.get("reasoningEffort")
         if isinstance(level, str) and level.strip():
             named = str(chosen.get("id") or "")
             return level.strip() if not (named and model and named != model) else None
         if chosen.get("id"):
-            return None  # the newest message that names a model gave no level: the model's own default, which is not known here
+            return None
     return None
 
 
-def attribution(state: Dict[str, Any]) -> Dict[str, int]:
-    """`{system, tools}` of the newest model call that carries `contextAttribution`: the entries of kind `system` and `toolDefinition` (children of an entry are in their parent). Missing kinds are left out."""
+def usages(state: Dict[str, Any]) -> List[Dict[str, Any]]:
     active = state.get("activeTurn") if isinstance(state.get("activeTurn"), dict) else None
     turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)]
-    for turn in ([active] if active else []) + list(reversed(turns)):
-        usage = turn.get("usage") if isinstance(turn.get("usage"), dict) else {}
+    return [turn["usage"] for turn in ([active] if active else []) + list(reversed(turns)) if isinstance(turn.get("usage"), dict)]
+
+
+def attribution(state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """`contextAttribution` of the newest model call that carries one."""
+    for usage in usages(state):
         meta = usage.get("_meta") if isinstance(usage.get("_meta"), dict) else {}
-        found = meta.get("contextAttribution") if isinstance(meta.get("contextAttribution"), dict) else None
-        if not found:
-            continue
-        sums: Dict[str, int] = {}
-        for entry in found.get("entries") or []:
-            if not isinstance(entry, dict) or entry.get("parentId"):
-                continue
-            tokens = number(entry.get("tokens"))
-            key = {"system": "system", "toolDefinition": "tools"}.get(str(entry.get("kind") or ""))
-            if key and tokens:
-                sums[key] = sums.get(key, 0) + int(tokens)
-        return sums
-    return {}
+        found = meta.get("contextAttribution")
+        if isinstance(found, dict) and number(found.get("totalTokens")) and isinstance(found.get("entries"), list) and found["entries"]:
+            return found
+    return None
 
 
-def parts(state: Dict[str, Any], record: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """What the context holds, real numbers only: `{system, tools, conversation, recorded: [keys that come from the record], at}`, or None when nothing is known.
-    `record`: `copilot_events.context_parts` (keys system, tools, conversation, at). A number of the call itself wins over the record."""
-    live = attribution(state or {})
-    out: Dict[str, Any] = dict(live)
-    recorded: list = []
-    for key in ("system", "tools", "conversation"):
-        if key not in out and record and record.get(key):
-            out[key] = int(record[key])
-            recorded.append(key)
-    if not out:
+GROUPS = {"toolDefinition": ("system", "tools"), "tool": ("user", "results"), "skill": ("user", "skills"), "subagent": ("user", "subagents"), "mcpServer": ("user", "mcp"), "plugin": ("user", "plugins")}
+
+
+def parts(state: Dict[str, Any], percent: Optional[float]) -> Optional[List[Dict[str, Any]]]:
+    """What the context holds, as VS Code lists it: `[{group, key or label, percent}]`, each a percent of the window. `percent`: how full the window is. None when the call says nothing."""
+    found = attribution(state or {})
+    if found is None or percent is None:
         return None
-    out["recorded"] = recorded
-    out["at"] = str((record or {}).get("at") or "") if recorded else ""
-    return out
+    total = number(found["totalTokens"])
+    entries = [entry for entry in found["entries"] if isinstance(entry, dict) and number(entry.get("tokens")) is not None]
+    parents = {entry.get("parentId") for entry in entries if entry.get("parentId")}
+    rows: List[Dict[str, Any]] = []
+    kinds: Dict[str, float] = {}
+    counted = 0.0
+    for entry in entries:
+        tokens = number(entry["tokens"])
+        if entry.get("kind") == "system":
+            if entry.get("id") in parents:
+                continue
+            counted += tokens
+            rows.append({"group": "system", "key": "system" if entry.get("id") == "systemPrompt" else "", "label": str(entry.get("label") or ""), "share": round(tokens * 100 / total)})
+        else:
+            kinds[str(entry.get("kind") or "")] = kinds.get(str(entry.get("kind") or ""), 0.0) + tokens
+    for kind, tokens in kinds.items():
+        counted += tokens
+        group, key = GROUPS.get(kind, ("user", ""))
+        rows.append({"group": group, "key": key, "label": kind, "share": round(tokens * 100 / total)})
+    rows.append({"group": "user", "key": "messages", "label": "", "share": round(max(0.0, total - counted) * 100 / total)})
+    shown = [{**row, "percent": row["share"] * percent / 100} for row in rows if row["share"] > 0]
+    rest = percent - sum(row["percent"] for row in shown)
+    if rest >= 0.05:
+        shown.append({"group": "other", "key": "other", "label": "", "percent": rest})
+    return [{"group": row["group"], "key": row["key"], "label": row["label"], "percent": round(row["percent"], 1)} for row in shown]
+
+
+def session_cost(state: Dict[str, Any]) -> Optional[float]:
+    """The credits of the whole session so far (`copilotUsage.sessionTotalNanoAiu` of the newest call that says)."""
+    for usage in usages(state or {}):
+        meta = usage.get("_meta") if isinstance(usage.get("_meta"), dict) else {}
+        found = number((meta.get("copilotUsage") or {}).get("sessionTotalNanoAiu")) if isinstance(meta.get("copilotUsage"), dict) else None
+        if found is not None:
+            return round(found / 1e9, 1)
+    return None

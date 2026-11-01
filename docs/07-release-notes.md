@@ -10,6 +10,29 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.22 (2026-11-01)
+
+### Added
+
+- **Files in a message.** The reply panel takes files by the **Attach** button, a paste or a drop: a screenshot, a text file, a PDF. Up to 10 files, 10 MB each, 20 MB together. VS Code keeps its own copy; `.task/sent.jsonl` keeps only the names.
+- **Mode and permissions from the board.** The reply panel sets the chat's **Mode** (Interactive, Plan, Autopilot) and **Permissions** (the choices VS Code offers), and a **Context** size. They hold from the next message, and both are written in the history.
+- **Take back your last message.** Hover **You** in the Live tab and choose **Withdraw and edit**: the message and what answered it leave the chat, the agent forgets them, and your words come back to the reply box. Files the agent changed stay changed, and attached files must be added again.
+- **Your messages in the Live tab.** Each is a small mark named **You**; hover it for the words and the files.
+- **Stop is always in reach.** While the agent works, a **Stop** button stays beside the reply pill on every tab.
+- **Save draft** in the reply panel keeps what you typed for later.
+
+### Changed
+
+- **The Live tab draws the agent's words as Markdown**: headings, lists, tables, and code blocks with a **Copy** button.
+- **The context card matches VS Code**: session cost, the space reserved for the response, and system, tools, skills, tool results and messages as a share of the window. The window is worked out as VS Code does, from the context size the chat runs with. VS Code's own bar reads the size in its model picker, so the two differ until a message names that size.
+- **answer** and **steer** open the reply panel; from the board, the task page opens with the panel. The old answer and steer dialogs are gone.
+- The reply panel is laid out as a grid, and the drafts fold away.
+- The model, thinking and context fields show what the chat uses now, so they can be changed at once.
+
+### Fixed
+
+- A task that waits for you no longer says **Idle** under the stream.
+
 ## 1.6.21 (2026-11-01)
 
 ### Added

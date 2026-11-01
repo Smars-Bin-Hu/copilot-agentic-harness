@@ -28,6 +28,8 @@ Who may do what:
   redacted and cut.
 - Gate review (1.6, B76): the report page (`/tasks/<name>/report.html`) is drawn by the server, with buttons for the verdicts; `/api/verdict` and `/api/export` (paired POST only) keep a verdict in the
   task state and write the samples of the blocks judged wrong (`gatereview`). `/report-save/<name>` gives the report as one file with no buttons and no calls. The report file on disk shows the verdicts, read only.
+- Files, settings and taking back (1.6.22): `/api/send` and `/api/steer` take `attachments`; `/api/chatconfig` sets the mode and the tool permission of a chat; `/api/undo` takes the last message out of an idle
+  chat. All are paired POSTs only.
 - VS Code (1.6): one background thread (`vslink`) keeps a connection to the chats of VS Code and a cache; a request only reads the cache. Without VS Code the
   board is what it was: `vscode.ready` is false, no error, no wait. `/api/open` (paired browser) asks the thread to bring the window of this folder forward.
 """
@@ -59,7 +61,8 @@ from .common import CommandError
 HEADER = "X-Harness-Board"
 COOKIE = "harness_board"
 MAX_BODY = 4096
-MAX_SEND_BODY = 64 * 1024  # `/api/send`, `/api/steer` and `/api/create`: the person's own words
+MAX_SEND_BODY = 64 * 1024  # `/api/create` and `/api/answer`: the person's own words
+MAX_FILES_BODY = (chatsend.MAX_FILES_TOTAL * 4) // 3 + chatsend.MAX_FILES * 1024 + MAX_SEND_BODY  # `/api/send` and `/api/steer`: the words and their files, as base64
 MAX_INBOX_BODY = 40 * 1024 * 1024  # `/api/inbox` carries pictures (base64); the other calls stay small
 MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
@@ -262,7 +265,7 @@ class Board:
         recent = chat.pop("recent", "")
         sub = chat.pop("sub", None) or tasksub.from_hooklog(self.root, tasks.read(self.root, found["task"]) or {})  # the chat's own line; else the hook log's
         if chat.get("bound"):
-            chat["parts"] = self.link.context_parts(found["task"], str((tasks.read(self.root, found["task"]) or {}).get("session_id") or ""))  # the real numbers of the context card; None: none known
+            chat.update(self.link.context_card(found["task"]))
         found["chat"], found["sub"], found["recent"], found["vscode"] = chat, sub, recent, self.link.status()
         health.with_context(self.root, found, chat)
         if found["status"] == "open":
@@ -276,7 +279,7 @@ class Board:
         """The row `Task settings` of the task page: the checks (0 to the cap), and the model and thinking level of the messages the board sends, from the models the host lists."""
         data = tasks.read(self.root, task) or {}
         model = chatsend.model_of(data) or {}
-        return {"n": taskreview.state_of(data)["n"], "max_n": taskreview.settings(self.root)["max_n"], "model": model.get("id", ""), "thinking": (model.get("config") or {}).get("thinkingLevel", ""),
+        return {"n": taskreview.state_of(data)["n"], "max_n": taskreview.settings(self.root)["max_n"], "model": model.get("id", ""), "thinking": (model.get("config") or {}).get("thinkingLevel", ""), "context": (model.get("config") or {}).get("contextSize", 0), "options": self.link.chat_options(task),
                 "models": self.link.model_list(), "ready": bool(self.link.status()["ready"])}
 
     def keep_override(self, key: str, value: Any) -> None:
@@ -535,14 +538,21 @@ class Board:
         task, found = self.target(data)
         made = self.message(task, found, data)
         model = chatsend.model_of(found)
+        files = self.files_of(data)
         try:
-            done = self.link.dispatch("send", task, made["text"], model)
+            done = self.link.dispatch("send", task, made["text"], model, files)
         except vslink.Refused as error:
             raise Fallback(self.refusal(error.why), made["text"]) from None
         except Exception as error:  # noqa: BLE001 - the host said no: the person copies the text
             raise Fallback(ahp_scrub(error), made["text"]) from None
         chatsend.drop_drafts(self.root, task, made["draft_ids"])
-        return self.sent(task, found, made["kind"], made["text"], done, {"why": made["why"], "lang": made["lang"], "model": model or {}, "drafts": len(made["draft_ids"])})
+        return self.sent(task, found, made["kind"], made["text"], done, {"why": made["why"], "lang": made["lang"], "model": model or {}, "drafts": len(made["draft_ids"]), "files": chatsend.listed(files)})
+
+    def files_of(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        try:
+            return chatsend.attachments(data.get("attachments"))
+        except ValueError as error:
+            raise CommandError(self.refusal(str(error))) from None
 
     def steer(self, data: Dict[str, Any]) -> Dict[str, Any]:
         task, found = self.target(data)
@@ -550,13 +560,14 @@ class Board:
         if problem:
             raise CommandError(self.refusal("text." + problem))
         model = chatsend.model_of(found)
+        files = self.files_of(data)
         try:
-            done = self.link.dispatch("steer", task, text, model)
+            done = self.link.dispatch("steer", task, text, model, files)
         except vslink.Refused as error:
             raise Fallback(self.refusal(error.why), text) from None
         except Exception as error:  # noqa: BLE001
             raise Fallback(ahp_scrub(error), text) from None
-        return self.sent(task, found, "steer", text, done, {"model": model or {}})
+        return self.sent(task, found, "steer", text, done, {"model": model or {}, "files": chatsend.listed(files)})
 
     def stop(self, data: Dict[str, Any]) -> Dict[str, Any]:
         task, found = self.target(data)
@@ -702,7 +713,7 @@ class Board:
     def setting(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """The model and thinking level of the messages the board sends (`chat.model`). Only a model the host lists, only a level that model has. `id` empty: the chat keeps its own."""
         task, _found = self.target(data)
-        wanted, level = str(data.get("id", "")).strip(), str(data.get("thinking", "")).strip()
+        wanted, level, size = str(data.get("id", "")).strip(), str(data.get("thinking", "")).strip(), data.get("context") or 0
         model: Optional[Dict[str, Any]] = None
         if wanted:
             listed = {item["id"]: item for item in self.link.model_list()}
@@ -711,7 +722,10 @@ class Board:
             levels = (listed[wanted]["thinking"] or {}).get("levels") or []
             if level and level not in levels:
                 raise CommandError(self.refusal("thinking"))
-            model = {"id": wanted, **({"config": {"thinkingLevel": level}} if level else {})}
+            if size and size not in [item["id"] for item in (listed[wanted].get("context") or {}).get("sizes") or []]:
+                raise CommandError(self.refusal("context"))
+            config = {**({"thinkingLevel": level} if level else {}), **({"contextSize": size} if size else {})}
+            model = {"id": wanted, **({"config": config} if config else {})}
         with task_ops.locked(self.root, task) as again:
             kept = dict(again.get("chat") or {})
             if model:
@@ -722,8 +736,37 @@ class Board:
                 again["chat"] = kept
             else:
                 again.pop("chat", None)
-            task_ops.note(again, "chat-model", (wanted + (" " + level if level else "")) if wanted else "-")
+            task_ops.note(again, "chat-model", " ".join(str(part) for part in (wanted, level, size) if part) or "-")
         return {"model": model or {}}
+
+    def undo(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Take the last message of the person out of the chat, with what answered it, and give back its words for the reply box. The chat must be idle."""
+        task, _found = self.target(data)
+        try:
+            done = self.link.dispatch("undo", task)
+        except vslink.Refused as error:
+            raise CommandError(self.refusal(error.why)) from None
+        except Exception as error:  # noqa: BLE001 - the host said no
+            raise CommandError(ahp_scrub(error)) from None
+        with task_ops.locked(self.root, task) as again:
+            task_ops.note(again, "chat-undo", chatsend.summary(done["text"]))
+        chinese = done["text"].startswith(chatsend.ZH_MARK)
+        return {"text": done["text"][len(chatsend.ZH_MARK):].lstrip() if chinese else done["text"], "lang": "zh" if chinese else "en", "files": done["files"]}
+
+    def chatconfig(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The mode and the tool permission of the chat of the task: told to the host at once, they hold from the next turn. Only a value the host offers."""
+        task, _found = self.target(data)
+        offered = self.link.chat_options(task)
+        values = {key: data[key] for key in ("mode", "autoApprove") if key in data}
+        if not values or any(value not in [item["id"] for item in (offered.get(key) or {}).get("choices") or []] for key, value in values.items()):
+            raise CommandError(self.refusal("setting"))
+        try:
+            self.link.dispatch("config", task, plan=values)
+        except vslink.Refused as error:
+            raise CommandError(self.refusal(error.why)) from None
+        with task_ops.locked(self.root, task) as again:
+            task_ops.note(again, "chat-config", " ".join(f"{key}={value}" for key, value in values.items()))
+        return values
 
 
 def noted(root: Path, task: str, action: str) -> None:
@@ -854,7 +897,7 @@ def handler_for(board: Board) -> type:
             origin = self.headers.get("Origin", "")
             if not self.host_ok() or (origin and origin not in allowed_origins) or self.headers.get(HEADER) != "1":
                 return self.answer(403, {"error": say("serve.refused.request")})
-            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_SEND_BODY if urlparse(self.path).path in ("/api/send", "/api/steer", "/api/create", "/api/answer") else MAX_BODY
+            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_FILES_BODY if urlparse(self.path).path in ("/api/send", "/api/steer") else MAX_SEND_BODY if urlparse(self.path).path in ("/api/create", "/api/answer") else MAX_BODY
             try:
                 size = int(self.headers.get("Content-Length", "0"))
                 data = json.loads(self.rfile.read(min(size, limit)).decode("utf-8") or "{}") if 0 <= size <= limit else None
@@ -895,7 +938,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown in the dialog
                     return self.answer(409, {"error": str(error)})
-            if path in ("/api/send", "/api/steer", "/api/stop", "/api/compact", "/api/draft", "/api/setting", "/api/verdict", "/api/export", "/api/confirm", "/api/answer"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
+            if path in ("/api/send", "/api/steer", "/api/stop", "/api/compact", "/api/draft", "/api/setting", "/api/chatconfig", "/api/undo", "/api/verdict", "/api/export", "/api/confirm", "/api/answer"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:

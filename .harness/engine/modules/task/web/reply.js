@@ -1,5 +1,6 @@
-// The reply panel of a task page (1.6.17, B88): one small pill fixed at the bottom centre ("Say something", key R, a badge for the drafts) and, over the page, the panel it opens: the text, the reply
-// language, the model and the thinking level, the drafts, and Send, or Steer while the agent works, and Stop. Nothing of it stays on the page. A served page only, and only for an open task that has a chat.
+// The reply panel of a task page (1.6.17, B88): one small pill fixed at the bottom centre ("Say something", key R, a badge for the drafts), a Stop button beside it while the agent works, and, over the
+// page, the panel the pill opens: the text and its files, the reply language, the settings of the chat, the drafts, and Send, or Steer while the agent works. Nothing of it stays on the page. A served page
+// only, and only for an open task that has a chat. Files come by the Attach button, a paste or a drop, and are read into the page; they go with the message and are not kept anywhere else.
 // The text of a message is made by the server (chatsend.py): `/api/send` (kind "answer": the person's own words, the ticked drafts go at the end) when the chat is idle, `/api/steer` while it works.
 // The task settings (model, thinking, checks) and the drafts are drawn by desk.js and shown here; the model chosen there goes on every message the board sends. What was typed is kept in the box:
 // a poll, a redraw of the page and closing the panel do not touch it. A message that was refused keeps its text and offers it to copy. An approval message (go-req, go-plan, go-promote...) is not made here:
@@ -10,10 +11,11 @@
 const REPLY = (function () {
   const NS = "http://www.w3.org/2000/svg";
   const info = {name: "", show: false, state: "", why: "", count: 0, settings: null, drafts: null, settingsSig: null};
-  const mine = {open: false, lang: "en", busy: false, fallback: "", previewing: false, timer: 0};
+  const mine = {open: false, lang: "en", busy: false, fallback: "", previewing: false, timer: 0, files: []};
+  const MAX_FILES = 10, MAX_FILE = 10 * 1024 * 1024, MAX_TOTAL = 20 * 1024 * 1024;  // chatsend.py holds the same three; a file over them is not even read
   const MAC = /Mac|iPhone|iPad/.test(navigator.platform || "");
 
-  const icon = (paths, size) => {
+  const icon = (paths, size) => {  // the style gives each its size too: a page style sets the width of an svg
     const node = document.createElementNS(NS, "svg");
     for (const [name, value] of Object.entries({viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", "stroke-width": "1.5", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", width: size, height: size})) node.setAttribute(name, value);
     for (const d of paths) { const part = document.createElementNS(NS, "path"); part.setAttribute("d", d); node.append(part); }
@@ -25,28 +27,36 @@ const REPLY = (function () {
   const pill = h("button", {type: "button", class: "rp-pill chat-act", hidden: "", "aria-haspopup": "dialog", "aria-expanded": "false", "aria-keyshortcuts": "R"},
     icon(["M2.5 3h11v7.5H8L5 13v-2.5H2.5z"], 16), h("span", null, t("desk.reply.pill")), h("kbd", null, "R"), badge);
 
+  const halt = h("button", {type: "button", class: "rp-stop chat-act", hidden: "", title: t("desk.reply.stop.tip")}, icon(["M4 4h8v8H4z"], 14), h("span", null, t("board.action.stop")));
+
   // --- the panel ----------------------------------------------------------------------------------------------------------
   const close = h("button", {type: "button", class: "rp-x", title: t("board.serve.cancel"), "aria-label": t("desk.reply.close")}, icon(["M4 4l8 8M12 4l-8 8"], 14));
   const box = h("textarea", {rows: 4, class: "rp-text", maxlength: 20000, placeholder: t("desk.reply.ph"), "aria-label": t("desk.reply.title")});
+  const language = (lang) => { mine.lang = lang; chips.forEach((item, at) => { const on = ["en", "zh"][at] === lang; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); }); previewSoon(); };
   const chips = ["en", "zh"].map((lang) => {
     const chip = h("button", {type: "button", class: "chip" + (lang === "en" ? " on" : ""), "aria-pressed": lang === "en" ? "true" : "false"}, t("desk.send.lang." + lang));
-    chip.addEventListener("click", () => { mine.lang = lang; chips.forEach((item, at) => { const on = ["en", "zh"][at] === lang; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); }); previewSoon(); });
+    chip.addEventListener("click", () => language(lang));
     return chip;
   });
+  const tray = h("div", {class: "rp-files", hidden: ""});
+  const picker = h("input", {type: "file", multiple: "multiple", hidden: ""});
+  const attach = h("button", {type: "button", class: "act rp-attach", title: t("desk.reply.attach.tip")}, icon(["M13 7.5l-5.2 5.2a3 3 0 0 1-4.3-4.3l5.6-5.5a2 2 0 0 1 2.8 2.8L6.4 11.2a1 1 0 0 1-1.4-1.4l4.8-4.7"], 15), h("span", null, t("desk.reply.attach")));
   const settingsSlot = h("div", {class: "rp-set"});
   const draftsSlot = h("div", {class: "rp-dr"});
+  const draftHead = h("summary", {title: t("desk.drafts.hint")}, t("desk.drafts.label"));
+  const draftBox = h("details", {class: "rp-pv"}, draftHead, draftsSlot);
   const preview = h("pre", {class: "send-preview rp-pre"}, "");
   const whole = h("details", {class: "rp-pv"}, h("summary", null, t("desk.reply.whole")), preview);
   const said = h("div", {class: "bad rp-said"});
   const hint = h("span", {class: "hint rp-hint"});
   const kbd = h("kbd", null, (MAC ? "⌘" : "Ctrl") + " ↵");
-  const stop = h("button", {type: "button", class: "act", hidden: ""}, t("board.action.stop"));
+  const save = h("button", {type: "button", class: "act", title: t("desk.reply.draft.tip")}, t("desk.reply.draft"));
   const go = h("button", {type: "button", class: "act hot live big"}, t("desk.reply.send"));
   const panel = h("div", {class: "rp", role: "dialog", "aria-label": t("desk.reply.title"), hidden: ""},
-    h("div", {class: "rp-h"}, h("b", null, t("desk.reply.title")), close), box,
-    h("div", {class: "rp-lang"}, h("span", {class: "sub"}, t("desk.send.lang")), h("span", {class: "chips"}, chips)),
-    settingsSlot, draftsSlot, whole, said, h("div", {class: "rp-f"}, hint, kbd, stop, go));
-  document.body.append(pill, panel);
+    h("div", {class: "rp-h"}, h("b", null, t("desk.reply.title")), close), box, tray,
+    h("div", {class: "rp-lang"}, attach, picker, h("span", {class: "sub"}, t("desk.send.lang")), h("span", {class: "chips"}, chips)),
+    settingsSlot, draftBox, whole, said, h("div", {class: "rp-f"}, hint, kbd, save, go));
+  document.body.append(h("div", {class: "rp-bar"}, pill, halt), panel);
 
   const typing = (node) => node instanceof Element && (/^(INPUT|TEXTAREA|SELECT)$/.test(node.tagName) || node.isContentEditable);
   const stateNow = () => {
@@ -69,9 +79,10 @@ const REPLY = (function () {
     const text = now.kind === "steer" ? t("desk.reply.steer") : t("desk.reply.send");
     const label = mine.busy ? t("board.serve.working") : text;
     if (go.textContent !== label) go.textContent = label;
-    go.disabled = mine.busy || now.kind === "off" || !box.value.trim();
+    go.disabled = mine.busy || now.kind === "off" || !box.value.trim() || mine.files.some((item) => !item.data);
+    save.disabled = mine.busy || !box.value.trim() || !info.saveDraft;
     if (hint.textContent !== now.hint) hint.textContent = now.hint;
-    stop.hidden = stateNow() !== "busy";
+    halt.hidden = stateNow() !== "busy" || !info.show;
     kbd.hidden = go.disabled;
     whole.hidden = now.kind !== "send";
     pill.classList.toggle("on", mine.open);
@@ -79,6 +90,8 @@ const REPLY = (function () {
     badge.hidden = !count;
     if (count && badge.textContent !== String(count)) badge.textContent = String(count);
     pill.title = count ? t("desk.reply.pill.drafts", {count}) : "";
+    const heading = t("desk.drafts.label") + (count ? " \u00b7 " + count : "");
+    if (draftHead.textContent !== heading) draftHead.textContent = heading;
   }
 
   // The whole message as the server makes it (text, language, the ticked drafts at the end): read only when the person opens "the whole message".
@@ -96,17 +109,68 @@ const REPLY = (function () {
     return button;
   }
 
+  // --- the files of the message --------------------------------------------------------------------------------------------
+  const sizeOf = (bytes) => (bytes < 1024 ? bytes + " B" : bytes < 1048576 ? Math.round(bytes / 1024) + " KB" : (bytes / 1048576).toFixed(1) + " MB");
+  const refuse = (text) => said.append(h("p", null, text));
+
+  function paintFiles() {
+    tray.hidden = !mine.files.length;
+    tray.replaceChildren(...mine.files.map((item) => {
+      const off = h("button", {type: "button", class: "rp-file-x", title: t("desk.reply.files.remove", {name: item.name}), "aria-label": t("desk.reply.files.remove", {name: item.name})}, icon(["M4 4l8 8M12 4l-8 8"], 12));
+      off.addEventListener("click", () => dropFile(item));
+      return h("span", {class: "rp-file", title: item.name}, item.url ? h("img", {src: item.url, alt: ""}) : icon(["M4 2h5l3 3v9H4zM9 2v3h3"], 14), h("span", {class: "rp-file-n"}, item.name), h("span", {class: "sub"}, sizeOf(item.size)), off);
+    }));
+    sync();
+  }
+  function dropFile(item) {
+    if (item.url) URL.revokeObjectURL(item.url);
+    mine.files = mine.files.filter((other) => other !== item);
+    paintFiles();
+  }
+  function addFiles(list) {
+    said.replaceChildren();
+    for (const file of list) {
+      const total = mine.files.reduce((sum, item) => sum + item.size, 0);
+      if (mine.files.length >= MAX_FILES) { refuse(t("desk.reply.files.many", {n: MAX_FILES})); break; }
+      if (file.size > MAX_FILE || total + file.size > MAX_TOTAL) { refuse(t("desk.reply.files.big", {name: file.name})); continue; }
+      const item = {name: file.name || "file", type: file.type, size: file.size, data: "", url: file.type.startsWith("image/") ? URL.createObjectURL(file) : ""};
+      mine.files.push(item);
+      const reader = new FileReader();
+      reader.addEventListener("load", () => { item.data = String(reader.result).split(",")[1] || ""; if (item.data) sync(); else { refuse(t("desk.reply.files.read", {name: item.name})); dropFile(item); } });
+      reader.addEventListener("error", () => { refuse(t("desk.reply.files.read", {name: item.name})); dropFile(item); });
+      reader.readAsDataURL(file);
+    }
+    paintFiles();
+  }
+
+  function saveDraft() {
+    const text = box.value.trim();
+    if (!text || mine.busy || !info.saveDraft) return;
+    mine.busy = true;
+    sync();
+    info.saveDraft(text).then((kept) => {
+      mine.busy = false;
+      if (kept) box.value = "";
+      sync();
+      box.focus();
+    });
+  }
+
   function send() {
     const text = box.value.trim();
     const now = mode();
-    if (!text || mine.busy || now.kind === "off") return;
+    if (!text || mine.busy || now.kind === "off" || mine.files.some((item) => !item.data)) return;
     mine.busy = true;
     said.replaceChildren();
     sync();
-    const call = now.kind === "steer" ? SERVE.post("/api/steer", {task: info.name, text, lang: mine.lang}) : SERVE.post("/api/send", {task: info.name, kind: "answer", lang: mine.lang, note: "", body: text, step: "act"});
+    const attachments = mine.files.map((item) => ({name: item.name, type: item.type, data: item.data}));
+    const call = now.kind === "steer" ? SERVE.post("/api/steer", {task: info.name, text, lang: mine.lang, attachments}) : SERVE.post("/api/send", {task: info.name, kind: "answer", lang: mine.lang, note: "", body: text, step: "act", attachments});
     call.then(() => {
       mine.busy = false;
       box.value = "";
+      for (const item of mine.files) if (item.url) URL.revokeObjectURL(item.url);
+      mine.files = [];
+      paintFiles();
       shut(false);
       sync();
       SERVE.done();
@@ -154,7 +218,19 @@ const REPLY = (function () {
   pill.addEventListener("click", () => (mine.open ? shut(true) : open()));
   close.addEventListener("click", () => shut(true));
   go.addEventListener("click", send);
-  stop.addEventListener("click", () => { shut(false); CHAT.stop({name: info.name}); });  // its own confirm dialog; this panel steps aside
+  save.addEventListener("click", saveDraft);
+  halt.addEventListener("click", () => { shut(false); CHAT.stop({name: info.name}); });  // its own confirm dialog; this panel steps aside
+  attach.addEventListener("click", () => picker.click());
+  picker.addEventListener("change", () => { addFiles([...picker.files]); picker.value = ""; });
+  box.addEventListener("paste", (event) => {
+    const data = event.clipboardData;
+    if (!data || !data.files.length || data.getData("text/plain")) return;  // words are pasted as words; a screenshot has none
+    event.preventDefault();
+    addFiles([...data.files]);
+  });
+  panel.addEventListener("dragover", (event) => { event.preventDefault(); panel.classList.add("drag"); });
+  panel.addEventListener("dragleave", (event) => { if (!panel.contains(event.relatedTarget)) panel.classList.remove("drag"); });
+  panel.addEventListener("drop", (event) => { event.preventDefault(); panel.classList.remove("drag"); addFiles([...event.dataTransfer.files]); });
   box.addEventListener("input", () => { sync(); previewSoon(); said.replaceChildren(); });
   box.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && !event.isComposing) { event.preventDefault(); send(); }
@@ -183,9 +259,22 @@ const REPLY = (function () {
       if (was !== pill.hidden) sync();
       sync();
       fillSlots(false);
+      if (!info.show) return;
+      try {  // the board sent the person here to answer
+        if (sessionStorage.getItem("harness.reply") === info.name) { sessionStorage.removeItem("harness.reply"); open(); }
+      } catch (error) { /* no storage: the pill is there */ }
     },
     count(value) { info.count = value; sync(); },
     isOpen: () => mine.open,
+    shown: () => info.show,
     open,
+    // A message that was withdrawn: its words are back in the box to change and send again. Its files are not kept: the panel names them.
+    restore(found) {
+      box.value = found.text;
+      language(found.lang);
+      open();
+      sync();
+      if (found.files && found.files.length) refuse(t("desk.reply.files.again", {names: found.files.join(", ")}));
+    },
   };
 })();

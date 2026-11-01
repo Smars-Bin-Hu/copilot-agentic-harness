@@ -545,27 +545,48 @@ def models_of(root_state: Dict[str, Any]) -> List[Dict[str, Any]]:
         for model in agent.get("models") or []:
             if not isinstance(model, dict) or model.get("policyState") != "enabled" or not model.get("id"):
                 continue
-            level = ((model.get("configSchema") or {}).get("properties") or {}).get("thinkingLevel") or {}
+            properties = (model.get("configSchema") or {}).get("properties") or {}
+            level = properties.get("thinkingLevel") or {}
             levels = [str(item) for item in level.get("enum") or [] if isinstance(item, str)]
+            size = properties.get("contextSize") or {}
+            sizes = named(size)
             out.append({"id": str(model["id"]), "name": str(model.get("name") or model["id"]), "price": str((model.get("_meta") or {}).get("priceCategory") or ""),
-                        "thinking": {"levels": levels, "default": level.get("default")} if levels else None})
+                        "thinking": {"levels": levels, "default": level.get("default")} if levels else None, "context": {"sizes": sizes, "default": size.get("default")} if sizes else None})
     return out
 
 
-def windows_of(root_state: Dict[str, Any]) -> Dict[str, int]:
-    """The context window of every model Copilot lists (`agents[].models[].maxContextWindow` of the root state), by model id, whatever its policy. A model with no such number is not in it."""
-    out: Dict[str, int] = {}
+def named(schema: Any) -> List[Dict[str, Any]]:
+    """The choices of a setting in a schema of the host: `[{id, label}]`, from its `enum` and `enumLabels`."""
+    schema = schema if isinstance(schema, dict) else {}
+    labels = schema.get("enumLabels") if isinstance(schema.get("enumLabels"), list) else []
+    return [{"id": item, "label": str(labels[at]) if at < len(labels) else str(item)} for at, item in enumerate(schema.get("enum") or []) if isinstance(item, (str, int)) and not isinstance(item, bool)]
+
+
+def limits_of(root_state: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
+    """What decides the context window of every model Copilot lists, by model id, whatever its policy: `{window, output, size}` (`maxContextWindow`, `maxOutputTokens`, the default of
+    `contextSize`; the last two only when the model has them). A model with no window is not in it."""
+    out: Dict[str, Dict[str, int]] = {}
+    positive = lambda value: isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0  # noqa: E731
     for agent in root_state.get("agents") or []:
         if not isinstance(agent, dict) or agent.get("provider") != LOCAL_PROVIDER:
             continue
         for model in agent.get("models") or []:
-            size = model.get("maxContextWindow") if isinstance(model, dict) else None
-            if isinstance(model, dict) and model.get("id") and isinstance(size, (int, float)) and not isinstance(size, bool) and size > 0:
-                out[str(model["id"])] = int(size)
+            if not isinstance(model, dict) or not model.get("id") or not positive(model.get("maxContextWindow")):
+                continue
+            size = (((model.get("configSchema") or {}).get("properties") or {}).get("contextSize") or {}).get("default")
+            found = {"window": int(model["maxContextWindow"])}
+            if positive(model.get("maxOutputTokens")):
+                found["output"] = int(model["maxOutputTokens"])
+            if positive(size):
+                found["size"] = int(size)
+            out[str(model["id"])] = found
     return out
 
 
 PARTS_KEEP = 60  # parts of one turn kept in memory: the board shows the latest few; a turn of 500 tool calls must not grow without end
+
+
+CHAT_SETTINGS = ("mode", "autoApprove")  # both may change while a chat lives (`chatMutable`); a value set on the chat goes over the session's
 
 
 def slim(turn: Any) -> Any:
@@ -586,13 +607,22 @@ def slim(turn: Any) -> Any:
 
 def trimmed(state: Dict[str, Any], keep: int = 2) -> Dict[str, Any]:
     """A chat snapshot cut to what the board shows: the last turns and the one running. A long chat is big."""
-    return {"status": state.get("status"), "title": state.get("title"), "modifiedAt": state.get("modifiedAt"),
+    return {"status": state.get("status"), "title": state.get("title"), "modifiedAt": state.get("modifiedAt"), "config": state.get("config"),
             "turns": [slim(turn) for turn in list(state.get("turns") or [])[-keep:]], "activeTurn": slim(state.get("activeTurn"))}
 
 
 def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) -> None:
     """Apply one action of a subscribed chat to a trimmed state, as the host's own reducer does (read from its code): enough to know the tool that runs and the reply that grows."""
     kind = str(action.get("type") or "")
+    if kind == "chat/configChanged":
+        state["config"] = {"values": {**config_values(state), **(action.get("config") or {})}}
+        return
+    if kind == "chat/truncated":  # kept: up to and with `turnId`; no `turnId`: nothing. A turn this cut state no longer holds changes nothing here
+        turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)]
+        ends = [at for at, turn in enumerate(turns) if turn.get("id") == action.get("turnId")]
+        state["turns"] = turns[:ends[0] + 1] if ends else [] if action.get("turnId") is None else turns
+        state["activeTurn"] = None
+        return
     if kind == "chat/turnStarted":
         state["activeTurn"] = {"id": action.get("turnId"), "startedAt": action.get("startedAt"), "message": action.get("message"), "responseParts": [], "usage": None}
         state["modifiedAt"] = action.get("startedAt") or state.get("modifiedAt")
@@ -647,17 +677,29 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
 
 # --- what waits for a person (1.6, B75) --------------------------------------------------------------------------
 
+def config_values(state: Dict[str, Any]) -> Dict[str, Any]:
+    config = state.get("config") if isinstance(state.get("config"), dict) else {}
+    return config.get("values") if isinstance(config.get("values"), dict) else {}
+
+
 def trimmed_session(state: Dict[str, Any]) -> Dict[str, Any]:
-    """A session snapshot cut to what the board reads of it: `inputNeeded[]` (the questions and tool confirmations that wait for a person)."""
+    """A session snapshot cut to what the board reads of it: `inputNeeded[]` (the questions and tool confirmations that wait for a person), and of its settings the two a person may
+    change from the board (`mode`, `autoApprove`): the value and the choices the host offers."""
     items = state.get("inputNeeded")
-    return {"inputNeeded": [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []}
+    config = state.get("config") if isinstance(state.get("config"), dict) else {}
+    schema = (config.get("schema") or {}).get("properties") or {}
+    values = config_values(state)
+    return {"inputNeeded": [item for item in items if isinstance(item, dict)] if isinstance(items, list) else [],
+            "config": {"values": {key: values.get(key) for key in CHAT_SETTINGS}, "choices": {key: named(schema.get(key)) for key in CHAT_SETTINGS}}}
 
 
 def reduce_session(state: Dict[str, Any], action: Dict[str, Any]) -> None:
     """Apply `session/inputNeededSet` (an item came, or changed: same `id`) and `session/inputNeededRemoved` to a trimmed session state."""
     kind = str(action.get("type") or "")
     items = state.setdefault("inputNeeded", [])
-    if kind == "session/inputNeededSet" and isinstance(action.get("request"), dict) and action["request"].get("id"):
+    if kind == "session/configChanged" and isinstance(state.get("config"), dict) and isinstance(action.get("config"), dict):
+        state["config"]["values"].update({key: value for key, value in action["config"].items() if key in CHAT_SETTINGS})
+    elif kind == "session/inputNeededSet" and isinstance(action.get("request"), dict) and action["request"].get("id"):
         new = action["request"]
         for at, item in enumerate(items):
             if item.get("id") == new["id"]:

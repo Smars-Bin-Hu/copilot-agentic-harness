@@ -27,7 +27,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from core import ahp, config, copilot_events, tasks
+from core import ahp, config, tasks
 from core.paths import utc_now
 
 from . import chatask, chatctx, chatlink, chatlive, chatnew, chatsend, task as task_ops, tasklife, tasksub
@@ -95,15 +95,15 @@ class Refused(Exception):
 class Job:
     """One thing for the thread to do to a chat. The page request waits on `done`."""
 
-    def __init__(self, kind: str, task: str, text: str = "", model: Optional[Dict[str, Any]] = None, plan: Optional[Dict[str, Any]] = None) -> None:
-        self.kind, self.task, self.text, self.model, self.plan = kind, task, text, model, plan
+    def __init__(self, kind: str, task: str, text: str = "", model: Optional[Dict[str, Any]] = None, plan: Optional[Dict[str, Any]] = None, attachments: Optional[List[Dict[str, Any]]] = None) -> None:
+        self.kind, self.task, self.text, self.model, self.plan, self.attachments = kind, task, text, model, plan, attachments
         self.done = threading.Event()
         self.cancelled = False
         self.result: Dict[str, Any] = {}
         self.error: Optional[BaseException] = None
 
 
-NEEDS = {"send": "idle", "steer": "busy", "stop": "busy", "confirm": "input", "answer": "input"}
+NEEDS = {"send": "idle", "steer": "busy", "stop": "busy", "confirm": "input", "answer": "input", "config": "", "undo": "idle"}  # "": any state: a setting of the chat holds from its next turn
 
 
 class VsLink:
@@ -129,7 +129,7 @@ class VsLink:
         self.unbound: Dict[str, str] = {}  # task -> why
         self.chats: Dict[str, Dict[str, Any]] = {}  # chat resource -> {state, tool_at}
         self.sess: Dict[str, Dict[str, Any]] = {}  # session resource of a bound chat -> {channel, state (trimmed: inputNeeded), seen: {item id: when first seen}}
-        self.windows: Dict[str, int] = {}  # model id -> maxContextWindow, every model the host lists (for the context meter)
+        self.limits: Dict[str, Dict[str, int]] = {}  # model id -> what decides its context window, every model the host lists (for the context meter)
         self.models: List[Dict[str, Any]] = []  # what a person may pick (`ahp.models_of`); empty until the host said
         self.created: List[Dict[str, Any]] = []  # chats this board made whose task does not exist yet (`chatnew.pending`); memory only
         self.expect: Dict[str, Dict[str, Any]] = {}  # session resource of a chat this board made that the host has not listed yet -> {stub, until}; memory only
@@ -183,9 +183,9 @@ class VsLink:
                 out["model"] = found["model"]
                 if found["busy"] and found["started"]:
                     out["started_at"] = found["started"]  # the run time of the latest turn is counted by the page, only while it runs
-                out["context"] = chatctx.meter(cached["state"], self.windows)  # None: unknown, shown empty
-                out["effort"] = chatctx.effort(cached["state"], found["model"])  # only what a message of the board said; None: not known
-                out["window"] = chatctx.capacity(found["model"], self.windows)  # maxContextWindow of the model; None: not listed
+                out["context"] = chatctx.meter(cached["state"], self.limits)  # None: unknown, shown empty
+                out["effort"] = chatctx.effort(cached["state"], found["model"])  # only what a message said; None: not known
+                out["window"] = chatctx.capacity(found["model"], self.limits, chatctx.chosen_size(cached["state"], found["model"]))  # None: not listed
                 sub = tasksub.sub_of(found, cached.get("tool_at", "") if found["busy"] else "")
                 if sub:
                     out["sub"] = sub
@@ -212,21 +212,26 @@ class VsLink:
             found = chatlive.build(cached["state"], cached.get("marks") or {}, self.root)
             return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), **found}
 
-    def context_parts(self, task: str, session_id: str) -> Optional[Dict[str, Any]]:
-        """What the context of the chat of `task` holds (`chatctx.parts`): the newest model call of the cached state, and Copilot's own record of the session `session_id` (its file is read again
-        only when it grew). Only the task page asks for it. None: nothing real is known."""
+    def context_card(self, task: str) -> Dict[str, Any]:
+        """For the context card of the task page: `parts` (what the context holds, `chatctx.parts`; None: the chat says nothing) and `cost` (credits of the session; None: not known)."""
         with self.lock:
             binding = self.bound.get(task) if self.ready else None
             state = (self.chats.get(binding["chat"]) or {}).get("state") if binding else None
-        if not isinstance(state, dict):
-            return None
-        record = None
-        try:
-            path = copilot_events.events_path(session_id) if session_id else None
-            record = copilot_events.context_parts(path) if path is not None else None
-        except Exception:  # noqa: BLE001 - Copilot's file is not ours
-            record = None
-        return chatctx.parts(state, record)
+            if not isinstance(state, dict):
+                return {"parts": None, "cost": None}
+            found = chatctx.meter(state, self.limits)
+            return {"parts": chatctx.parts(state, found["percent"] if found else None), "cost": chatctx.session_cost(state)}
+
+    def chat_options(self, task: str) -> Dict[str, Any]:
+        """The settings of the chat of `task` a person may change, from the cache: `{mode: {value, choices}, autoApprove: {value, choices}}`, the choices as the host offers them. A value set on
+        the chat goes over the session's. Empty: no chat, or the host has not told us."""
+        with self.lock:
+            binding = self.bound.get(task) if self.ready else None
+            if not binding:
+                return {}
+            config = ((self.sess.get(binding["session"]) or {}).get("state") or {}).get("config") or {}
+            chat = ahp.config_values((self.chats.get(binding["chat"]) or {}).get("state") or {})
+            return {key: {"value": chat.get(key) or (config.get("values") or {}).get(key), "choices": (config.get("choices") or {}).get(key) or []} for key in ahp.CHAT_SETTINGS if (config.get("choices") or {}).get(key)}
 
     def overlay(self, rows: List[Dict[str, Any]]) -> None:
         """Put `chat` on every open row, and `sub` where the chat has something newer than the hook log gave. No I/O."""
@@ -281,16 +286,16 @@ class VsLink:
             if not binding:
                 return "unsure" if self.unbound.get(task) == "ambiguous" else "unbound"
             state = ahp.status_name((self.sessions.get(binding["session"]) or {}).get("status"))
-            if state != NEEDS[kind]:
+            if NEEDS[kind] and state != NEEDS[kind]:
                 return "not-" + NEEDS[kind]
             return ""
 
-    def dispatch(self, kind: str, task: str, text: str = "", model: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def dispatch(self, kind: str, task: str, text: str = "", model: Optional[Dict[str, Any]] = None, attachments: Optional[List[Dict[str, Any]]] = None, plan: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Send a message, steer, or stop the turn of the chat of `task`; the answer of the thread: {chat, turn}. Raises Refused. Returns when the host has been told, not when the agent has answered."""
         why = self.check(task, kind)
         if why:
             raise Refused(why)
-        job = Job(kind, task, text, model)
+        job = Job(kind, task, text, model, plan, attachments)
         self.jobs.put(job)
         self.wake.set()
         if not job.done.wait(JOB_WAIT):
@@ -417,7 +422,7 @@ class VsLink:
         """The models of the host, read from its root state once and then with every new list. One read, then we let go of the channel."""
         try:
             root_state = link.subscribe("ahp-root:/")
-            found, windows = ahp.models_of(root_state), ahp.windows_of(root_state)
+            found, limits = ahp.models_of(root_state), ahp.limits_of(root_state)
             link.unsubscribe("ahp-root:/")
         except ahp.ConnectionClosed:
             raise
@@ -425,7 +430,7 @@ class VsLink:
             self.host_said(error)
             return
         with self.lock:
-            self.models, self.windows = found, windows
+            self.models, self.limits = found, limits
 
     def _list(self, link: ahp.Connection) -> None:
         mine = {item["resource"]: item for item in link.sessions() if ahp.is_ours(item) and ahp.session_in(item, str(self.root)) and item.get("resource")}
@@ -518,7 +523,7 @@ class VsLink:
         if not chatlink.same(shown, binding):
             raise Refused("changed")  # the page showed another chat (or none): it is looked at again before anything is sent
         state = ahp.status_name(sessions[binding["session"]].get("status"))
-        if state != NEEDS[kind]:
+        if NEEDS[kind] and state != NEEDS[kind]:
             raise Refused("not-" + NEEDS[kind])
         return binding
 
@@ -592,6 +597,16 @@ class VsLink:
                 held = {"state": ahp.trimmed(link.subscribe(chat)), "tool_at": ""}
                 with self.lock:
                     self.chats[chat] = held
+            if job.kind == "config":
+                action = {"type": "chat/configChanged", "config": dict(job.plan or {})}
+                link.dispatch(chat, action)
+                with self.lock:
+                    ahp.reduce_chat(held["state"], action)
+                    self.dirty = True
+                job.result = {"chat": chat}
+                return
+            if job.kind == "undo":
+                return self._undo(link, job, chat, held)
             if job.kind == "stop":
                 active = held["state"].get("activeTurn") if isinstance(held["state"].get("activeTurn"), dict) else None
                 if not active or not active.get("id"):
@@ -601,6 +616,8 @@ class VsLink:
                 message: Dict[str, Any] = {"text": job.text, "origin": {"kind": "user"}}
                 if job.model:
                     message["model"] = job.model  # on every message: the host keeps the last one, whoever sent it
+                if job.attachments:
+                    message["attachments"] = job.attachments  # the host keeps a copy of each and lists its own address in the chat
                 if job.kind == "send":
                     action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
                 else:
@@ -611,7 +628,7 @@ class VsLink:
                 if job.kind == "send":
                     if known is not None:
                         known["status"] = ahp.IN_PROGRESS | (int(known.get("status") or 0) & (ahp.IS_READ | ahp.ARCHIVED))  # not idle at once: a second send finds it busy
-                    ahp.reduce_chat(held["state"], action)
+                    ahp.reduce_chat(held["state"], {**action, "message": {key: value for key, value in message.items() if key != "attachments"}})  # the bytes are not kept here
                     chatlive.stamp(held, action, int(time.time() * 1000))
                     held["rev"] = held.get("rev", 0) + 1
                 title = str((known or {}).get("title") or binding.get("title") or "")
@@ -624,6 +641,27 @@ class VsLink:
             job.error = error
         finally:
             job.done.set()
+
+    def _undo(self, link: ahp.Connection, job: Job, chat: str, held: Dict[str, Any]) -> None:
+        """Take the last turn out of the chat: the message of the person and all that answered it. The host cuts Copilot's own history too (the model forgets it: checked on a real chat), but files
+        the agent changed stay changed. The chat is read again first, for the whole text and the last turn as it is now."""
+        link.unsubscribe(chat)
+        full = link.subscribe(chat)
+        turns = [turn for turn in full.get("turns") or [] if isinstance(turn, dict)]
+        if not turns or full.get("activeTurn"):
+            held["state"] = ahp.trimmed(full)
+            raise Refused("no-turn")
+        message = turns[-1].get("message") if isinstance(turns[-1].get("message"), dict) else {}
+        action: Dict[str, Any] = {"type": "chat/truncated"}
+        if len(turns) > 1:
+            action["turnId"] = turns[-2].get("id")
+        link.dispatch(chat, action)
+        ahp.reduce_chat(full, action)
+        with self.lock:
+            held["state"] = ahp.trimmed(full)
+            held["rev"] = held.get("rev", 0) + 1
+            self.dirty = True
+        job.result = {"text": str(message.get("text") or ""), "files": [str(item["label"]) for item in message.get("attachments") or [] if isinstance(item, dict) and item.get("label")]}
 
     def _respond(self, link: ahp.Connection, job: Job, binding: Dict[str, Any]) -> None:
         """Allow, deny or answer one waiting item of the chat of a task. The session is read again from the host first, and the item must be there, in this chat, and be what the page

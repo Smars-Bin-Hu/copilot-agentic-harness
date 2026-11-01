@@ -26,9 +26,19 @@
 
 /* what the agent wrote: plain text, whole words, nothing an agent wrote is markup */
 .fi-text .dot{background:var(--ink);border-color:var(--ink)}
-.fi .tx{margin:0;max-width:70ch;font-size:14.5px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
-.fi .ar{animation:lvar .5s ease-out}
-@keyframes lvar{from{opacity:0}to{opacity:1}}
+.fi .tx{margin:0;max-width:78ch;font-size:14.5px;line-height:1.6;overflow-wrap:anywhere}
+.fi .tx.thk{white-space:pre-wrap}
+.fi .tx.md>:first-child{margin-top:0}.fi .tx.md>:last-child{margin-bottom:0}
+.fi .tx.md p{margin:.55em 0}.fi .tx.md ul,.fi .tx.md ol{margin:.5em 0;padding-left:1.4em}
+.fi .tx.md .md-h{font-size:14.5px;margin:.9em 0 .35em}
+.fi .tx.md .code-box{margin:.7em 0}
+/* what the person said: a small mark; the words are in its card */
+.fi-me{padding:3px 0}
+.fi-me .dot{width:7px;height:7px;margin:7px 0 0 1px;background:var(--bg);border-color:var(--soft)}
+.me-tag{display:inline-block;font-size:12px;line-height:20px;color:var(--soft);cursor:default}
+.me-tag:hover,.me-tag:focus-visible{color:var(--ink)}
+.tk-said{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.tk-said-t{max-height:40vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13.5px;line-height:1.5}
 .cutm{display:block;margin-top:2px;font-size:12px;color:var(--soft)}
 .caret{display:inline-block;width:7px;height:15px;margin-left:2px;background:var(--ink);vertical-align:-2px;animation:lvcaret 1s steps(1) infinite}
 @keyframes lvcaret{50%{opacity:0}}
@@ -100,7 +110,12 @@
 .lv-empty p{margin:0 0 14px;max-width:52ch;color:var(--soft);overflow-wrap:anywhere}
 
 /* ---------- the reply: no box on the page. One pill; a panel over the page ---------- */
-.rp-pill{position:fixed;left:50%;bottom:22px;z-index:50;transform:translateX(-50%);display:inline-flex;align-items:center;gap:9px;height:44px;margin:0;padding:0 10px 0 16px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;box-shadow:var(--shadow),0 10px 40px rgba(0,0,0,.18);white-space:nowrap}
+.rp-bar{position:fixed;left:50%;bottom:22px;z-index:50;transform:translateX(-50%);display:flex;align-items:center;gap:8px}
+.rp-stop{display:inline-flex;align-items:center;gap:7px;height:44px;margin:0;padding:0 16px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;box-shadow:var(--shadow),0 10px 40px rgba(0,0,0,.18);white-space:nowrap}
+.rp-stop[hidden]{display:none}
+.rp-stop:hover,.rp-stop:focus-visible{border-color:var(--bad);color:var(--bad)}
+.rp-stop svg{flex:none;width:13px;height:13px;fill:currentColor}
+.rp-pill{display:inline-flex;align-items:center;gap:9px;height:44px;margin:0;padding:0 10px 0 16px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;box-shadow:var(--shadow),0 10px 40px rgba(0,0,0,.18);white-space:nowrap}
 .rp-pill[hidden]{display:none}
 .rp-pill:hover,.rp-pill:focus-visible,.rp-pill.on{border-color:var(--ink)}
 .rp-pill svg{flex:none;width:16px;height:16px}
@@ -117,17 +132,34 @@
 .rp-x:hover{background:var(--hover);color:var(--ink)}
 .rp-text{display:block;box-sizing:border-box;width:100%;min-height:84px;max-height:40vh;resize:vertical;padding:10px 12px;font-size:14px;line-height:1.5;border-radius:12px}
 .rp-lang{display:flex;align-items:center;gap:10px;margin:10px 0 0;flex-wrap:wrap}
+.rp-lang .sub{margin-left:auto}
+.rp-attach{display:inline-flex;align-items:center;gap:6px;width:auto;margin:0}
+.rp-attach svg{flex:none;width:15px;height:15px}
+.rp.drag{outline:2px dashed var(--ink);outline-offset:-6px}
+.rp-files{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.rp-files[hidden]{display:none}
+.rp-file{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 4px 3px 6px;border:1px solid var(--line);border-radius:8px;font-size:12.5px}
+.rp-file img{width:26px;height:26px;object-fit:cover;border-radius:4px}
+.rp-file>svg{flex:none;width:14px;height:14px}
+.rp-file-n{min-width:0;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-file-x{display:inline-grid;place-items:center;width:20px;height:20px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--soft);cursor:pointer}
+.rp-file-x:hover{background:var(--hover);color:var(--ink)}
+.rp-file-x svg{width:12px;height:12px}
 .rp-lang .chips{display:inline-flex;gap:6px}
 .rp-set:empty,.rp-dr:empty{display:none}
-.rp .chatbar{margin:0;padding:10px 0 0;border:0;border-radius:0;background:transparent;box-shadow:none;gap:8px 14px}
-.rp .settings .chat-k,.rp .drafts .chat-k{font-weight:600;color:var(--ink)}
-.rp .settings .set-field{min-width:0;max-width:100%}
-.rp .settings select{min-width:0;max-width:min(100%,300px);text-overflow:ellipsis}
-.rp .set-note,.rp .drafts .set-note{margin:0;font-size:11.5px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:help}
-.rp .drafts{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.rp .chatbar{margin:0;padding:10px 0 0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.rp .settings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 10px;padding-top:12px}
+@media (max-width:560px){.rp .settings{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.rp .settings .chat-k,.rp .settings .set-note,.rp .drafts .chat-k,.rp .drafts .set-note{display:none}  /* the panel says this in tips */
+.rp .settings .set-field{display:flex;flex-direction:column;align-items:stretch;gap:3px;min-width:0}
+.rp .settings .set-field .sub{font-size:11.5px}
+.rp .settings select{width:100%;min-width:0;max-width:none;text-overflow:ellipsis}
+.rp .settings .set-checks{grid-column:1/-1;flex-direction:row;align-items:center;gap:8px}
+.rp .drafts{margin:0;padding:6px 0 0}
 .rp .draft-list{max-height:150px;overflow:auto}
 .rp .draft-new{display:flex;gap:6px}.rp .draft-new .draft-add{flex:1;min-width:0}
-.rp-pv{margin-top:10px;font-size:12.5px}
+.rp-pv{margin-top:10px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px}
+.rp-pv+.rp-pv{margin-top:8px}
 .rp-pv summary{cursor:pointer;color:var(--soft)}
 .rp-pre{max-height:12em}
 .rp-said{margin-top:8px}

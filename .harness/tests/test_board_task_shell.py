@@ -47,82 +47,8 @@ class EffortTests(unittest.TestCase):
             with self.subTest(chat):
                 self.assertIsNone(chatctx.effort(chat, "m"))
 
-    def test_the_window_is_the_one_the_host_lists_for_the_model(self) -> None:
-        self.assertEqual(chatctx.capacity("a", {"a": 200000}), 200000)
-        self.assertIsNone(chatctx.capacity("b", {"a": 200000}))
-        self.assertIsNone(chatctx.capacity("", {"": 0}))
-
-
-def attributed(entries: list, **more: object) -> dict:
-    return {"turns": [{"id": "t", "usage": {"model": "m", "inputTokens": 1, "outputTokens": 1, "_meta": {"contextAttribution": {"totalTokens": 1, "entries": entries}}, **more}}]}
-
-
-class PartsTests(unittest.TestCase):
-    def test_system_and_tool_definitions_come_from_the_attribution_of_the_newest_call(self) -> None:
-        found = chatctx.parts(attributed([{"kind": "system", "tokens": 14953}, {"kind": "toolDefinition", "tokens": 20000}, {"kind": "toolDefinition", "tokens": 3975}]), None)
-        self.assertEqual((found["system"], found["tools"]), (14953, 23975))
-        self.assertNotIn("conversation", found)  # there is no number for it: it is left out, not worked out
-        self.assertEqual(found["recorded"], [])
-
-    def test_a_child_of_an_entry_is_in_its_parent_and_a_kind_without_a_number_is_not_drawn(self) -> None:
-        found = chatctx.parts(attributed([{"kind": "system", "tokens": 100, "id": "s"}, {"kind": "system", "tokens": 60, "parentId": "s"}, {"kind": "skill", "tokens": 500}, {"kind": "mcpServer", "tokens": 70},
-                                          {"kind": "toolDefinition", "tokens": 0}]), None)
-        self.assertEqual(found, {"system": 100, "recorded": [], "at": ""})  # skills and MCP servers are not parts of this card, and a zero is no number
-
-    def test_the_record_fills_what_the_call_has_not_and_the_call_wins(self) -> None:
-        record = {"system": 111, "tools": 222, "conversation": 333, "at": "2026-10-31T22:35:32.135Z"}
-        found = chatctx.parts(attributed([{"kind": "system", "tokens": 14953}]), record)
-        self.assertEqual((found["system"], found["tools"], found["conversation"]), (14953, 222, 333))
-        self.assertEqual(found["recorded"], ["tools", "conversation"])
-        self.assertEqual(found["at"], record["at"])
-        only = chatctx.parts({}, record)
-        self.assertEqual((only["system"], only["recorded"]), (111, ["system", "tools", "conversation"]))
-
-    def test_no_number_anywhere_is_none(self) -> None:
-        self.assertIsNone(chatctx.parts({}, None))
-        self.assertIsNone(chatctx.parts(attributed([]), {}))
-        self.assertIsNone(chatctx.parts(attributed([{"kind": "system", "tokens": "x"}]), None))
-
-
-def event(kind: str, stamp: str, **data: object) -> str:
-    return json.dumps({"type": kind, "timestamp": stamp, "data": data})
-
-
-class RecordTests(unittest.TestCase):
-    def setUp(self) -> None:
-        copilot_events._PARTS.clear()
-        self.folder = tempfile.TemporaryDirectory()
-        self.path = Path(self.folder.name) / "events.jsonl"
-
-    def tearDown(self) -> None:
-        self.folder.cleanup()
-
-    def test_each_part_keeps_its_newest_number_and_a_zero_is_not_a_number(self) -> None:
-        self.path.write_text("\n".join([
-            event("session.shutdown", "2026-10-30T10:00:00.000Z", systemTokens=13000, conversationTokens=30000, toolDefinitionsTokens=24000, currentModel="m"),
-            event("session.compaction_start", "2026-10-31T10:00:00.000Z", systemTokens=14956, conversationTokens=1488, toolDefinitionsTokens=0, currentTokens=16448),  # the local estimate has no tool definitions
-            event("assistant.message", "2026-10-31T10:01:00.000Z", systemTokens=1),
-        ]) + "\n", encoding="utf-8")
-        found = copilot_events.context_parts(self.path)
-        self.assertEqual({key: found[key] for key in ("system", "tools", "conversation")}, {"system": 14956, "tools": 24000, "conversation": 1488})
-        self.assertEqual(found["at"], "2026-10-31T10:00:00.000Z")
-
-    def test_a_file_with_nothing_to_say_and_a_missing_file_give_none(self) -> None:
-        self.assertIsNone(copilot_events.context_parts(self.path))
-        self.path.write_text(event("session.shutdown", "2026-10-30T10:00:00.000Z", systemTokens=0) + "\nnot json\n", encoding="utf-8")
-        self.assertIsNone(copilot_events.context_parts(self.path))
-
-    def test_the_file_is_read_again_only_when_its_size_changed(self) -> None:
-        self.path.write_text(event("session.shutdown", "2026-10-30T10:00:00.000Z", systemTokens=5) + "\n", encoding="utf-8")
-        with mock.patch.object(copilot_events.json, "loads", wraps=json.loads) as reads:
-            first = copilot_events.context_parts(self.path)
-            for _ in range(5):  # the page asks every 10 seconds
-                self.assertEqual(copilot_events.context_parts(self.path), first)
-            self.assertEqual(reads.call_count, 1)
-            with self.path.open("a", encoding="utf-8") as handle:
-                handle.write(event("session.shutdown", "2026-10-31T10:00:00.000Z", systemTokens=9) + "\n")
-            self.assertEqual(copilot_events.context_parts(self.path)["system"], 9)
-            self.assertEqual(reads.call_count, 3)
+    def test_a_level_read_back_from_copilots_record_counts_too(self) -> None:
+        self.assertEqual(chatctx.effort({"turns": [{"id": "t", "message": {"model": {"id": "m", "config": {"reasoningEffort": "medium"}}}}]}, "m"), "medium")
 
 
 class LinkTests(unittest.TestCase):
@@ -133,7 +59,7 @@ class LinkTests(unittest.TestCase):
         link.bound = {"t": {"session": "s", "chat": "c", "how": "hook"}}
         link.sessions = {"s": {"title": "A chat", "status": "idle"}}
         link.chats = {"c": {"state": state}}
-        link.windows = {"m": 200000}
+        link.limits = {"m": {"window": 200000}}
         return link
 
     def test_a_row_carries_the_effort_the_window_and_the_meter(self) -> None:
@@ -147,15 +73,11 @@ class LinkTests(unittest.TestCase):
         self.assertIsNone(out["window"])
         self.assertIsNone(out["context"])
 
-    def test_the_parts_of_a_chat_come_from_its_state_and_the_record_of_its_session(self) -> None:
-        link = self.link(attributed([{"kind": "system", "tokens": 7}]))
-        with mock.patch.object(copilot_events, "events_path", return_value=Path("x")), mock.patch.object(copilot_events, "context_parts", return_value={"conversation": 9, "at": "a"}):
-            found = link.context_parts("t", "sess")
-        self.assertEqual((found["system"], found["conversation"], found["recorded"]), (7, 9, ["conversation"]))
-        self.assertIsNone(link.context_parts("nobody", "sess"))  # a task with no chat has none
-        broken = mock.patch.object(copilot_events, "events_path", side_effect=OSError("no"))
-        with broken:
-            self.assertEqual(link.context_parts("t", "sess")["system"], 7)  # Copilot's file is not ours: it can fail without hurting the page
+    def test_the_card_of_a_chat_comes_from_its_state(self) -> None:
+        link = self.link({"turns": [dict(turn("m"), usage={"model": "m", "inputTokens": 50000, "outputTokens": 1000, "_meta": {"contextAttribution": {"totalTokens": 10, "entries": [{"kind": "system", "id": "systemPrompt", "tokens": 10}]}, "copilotUsage": {"sessionTotalNanoAiu": 2e9}}})]})
+        found = link.context_card("t")
+        self.assertEqual((found["parts"][0]["key"], found["parts"][0]["percent"], found["cost"]), ("system", 25.5, 2.0))
+        self.assertEqual(link.context_card("nobody"), {"parts": None, "cost": None})  # a task with no chat has none
 
 
 class TimingTests(unittest.TestCase):

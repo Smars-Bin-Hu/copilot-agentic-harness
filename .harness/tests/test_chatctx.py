@@ -15,7 +15,10 @@ from core import ahp, messages
 from modules.task import chatctx, chatsend, health
 from test_vslink import until
 
-WINDOWS = {"claude-haiku-5.5": 200000, "claude-haiku-4.5": 100000}
+WINDOWS = {"claude-haiku-5.5": {"window": 200000}, "claude-haiku-4.5": {"window": 100000}}
+SONNET = {"m": {"window": 1000000, "output": 128000, "size": 936000}}
+ATTRIBUTION = {"totalTokens": 48933, "entries": [{"kind": "system", "id": "systemPrompt", "label": "System prompt", "tokens": 15207}, {"kind": "tool", "id": "tool", "label": "tool", "tokens": 2664},
+                                                 {"kind": "toolDefinition", "id": "toolDefinition", "label": "toolDefinition", "tokens": 23992}], "compactions": {"count": 0}}  # a real chat, 2026-11-01
 
 
 def usage(model: str = "claude-haiku-5.5", i: Any = 50000, o: Any = 1000, **more: Any) -> Dict[str, Any]:
@@ -67,8 +70,41 @@ class MeterTests(unittest.TestCase):
         root["agents"][0]["models"][3]["maxContextWindow"] = 64000  # the policy turns this model off: a chat may still have used it
         root["agents"][0]["models"][2]["maxContextWindow"] = "big"
         root["agents"][1]["models"][0]["maxContextWindow"] = 1  # not Copilot's
-        self.assertEqual(ahp.windows_of(root), {"claude-haiku-5.5": 200000, "off": 64000})
-        self.assertEqual(ahp.windows_of({}), {})
+        self.assertEqual(ahp.limits_of(root), {"claude-haiku-5.5": {"window": 200000}, "off": {"window": 64000}})
+        self.assertEqual(ahp.limits_of({}), {})
+
+    def test_the_window_is_worked_out_as_vs_code_does(self) -> None:
+        self.assertEqual(chatctx.capacity("m", SONNET), 1000000)  # 936000 + 128000 is more than the model's window
+        self.assertEqual(chatctx.capacity("m", SONNET, 200000), 328000)  # what VS Code showed for a picker on 200K
+        self.assertEqual(chatctx.capacity("h", {"h": {"window": 1000000, "output": 128000, "size": 100000}}), 228000)
+        self.assertEqual(chatctx.capacity("k", {"k": {"window": 200000, "output": 32000}}), 200000)  # no sizes: its window
+        self.assertIsNone(chatctx.capacity("other", SONNET))
+
+    def test_the_size_a_message_named_counts_and_a_message_for_another_model_does_not(self) -> None:
+        named = {"turns": [{"id": "1", "message": {"model": {"id": "m", "config": {"contextSize": 200000}}}, "usage": usage("m", 63301, 6)}]}
+        self.assertEqual(chatctx.meter(named, SONNET), {"used": 63307, "window": 328000, "percent": 19.3, "reserved": 39.0})
+        named["turns"][0]["message"]["model"]["id"] = "other"
+        self.assertEqual(chatctx.meter(named, SONNET)["window"], 1000000)
+
+    def test_what_the_context_holds_is_what_vs_code_lists(self) -> None:
+        chat = {"turns": [{"id": "1", "usage": usage("m", 63301, 6, _meta={"contextAttribution": ATTRIBUTION})}]}
+        rows = chatctx.parts(chat, 63307 * 100.0 / 328000)
+        self.assertEqual({(row["group"], row["key"], row["percent"]) for row in rows}, {("system", "system", 6.0), ("system", "tools", 9.5), ("user", "results", 1.0), ("user", "messages", 2.7), ("other", "other", 0.2)})  # the figures VS Code showed
+
+    def test_a_parent_gives_way_to_its_children_and_a_kind_with_no_name_keeps_the_hosts(self) -> None:
+        chat = {"turns": [{"id": "1", "usage": usage(_meta={"contextAttribution": {"totalTokens": 100, "entries": [{"kind": "system", "id": "a", "label": "Whole", "tokens": 50}, {"kind": "system", "id": "b", "parentId": "a", "label": "Part", "tokens": 50},
+                                                                                                                  {"kind": "new", "tokens": 50}]}})}]}
+        rows = chatctx.parts(chat, 10.0)
+        self.assertEqual([(row["key"], row["label"], row["percent"]) for row in rows], [("", "Part", 5.0), ("", "new", 5.0)])
+
+    def test_no_attribution_or_no_figure_is_no_parts(self) -> None:
+        self.assertIsNone(chatctx.parts({}, 10.0))
+        self.assertIsNone(chatctx.parts({"turns": [{"id": "1", "usage": usage(_meta={"contextAttribution": {"totalTokens": 0, "entries": []}})}]}, 10.0))
+        self.assertIsNone(chatctx.parts({"turns": [{"id": "1", "usage": usage(_meta={"contextAttribution": ATTRIBUTION})}]}, None))
+
+    def test_the_cost_of_the_session_is_the_newest_the_host_gave(self) -> None:
+        self.assertEqual(chatctx.session_cost({"turns": [{"id": "1", "usage": usage(_meta={"copilotUsage": {"sessionTotalNanoAiu": 20874370000}})}]}), 20.9)
+        self.assertIsNone(chatctx.session_cost({"turns": [{"id": "1", "usage": usage()}]}))
 
 
 class RuleTests(unittest.TestCase):

@@ -12,7 +12,6 @@ const LIVE = (function () {
   const EVERY = 1000;  // ms between two answers and the next question
   const SLOW = 3000;  // after a failed one
   const LINK_DOWN = ["starting", "none", "no-cli", "cli-failed", "many", "error", "lost", "off"];  // why the link to VS Code itself is not there (the other reasons are about this task's chat)
-  const PIECES = 24;  // grown pieces of one text kept as pieces; more are made one node again
 
   const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, listeners: [], needs: [], started: ""};
 
@@ -92,10 +91,12 @@ const LIVE = (function () {
     const body = h("div", {class: "fb"});
     li.append(body);
     const rec = {el: li, body, kind: item.k, sig: "", text: "", pieces: 0};
-    if (item.k === "text") {
-      rec.tx = h("p", {class: "tx"});
-      rec.base = document.createTextNode("");
-      rec.tx.append(rec.base);
+    if (item.k === "me") {  // what the person said: a small mark; the words are in its card
+      rec.tag = h("span", {class: "me-tag", role: "button"}, t("desk.live.you"));
+      Status.card(rec.tag, () => saidCard(rec), t("desk.live.you"));
+      body.append(rec.tag);
+    } else if (item.k === "text") {
+      rec.tx = h("div", {class: "tx md"});
       rec.cutm = h("span", {class: "cutm", hidden: ""}, t("desk.live.cut"));
       rec.caret = h("span", {class: "caret", hidden: ""});
       body.append(rec.tx, rec.cutm);
@@ -117,29 +118,39 @@ const LIVE = (function () {
     return rec;
   }
 
-  // The text of an agent item only grows while it is written: the new letters are a piece of their own (it fades in); when it is replaced the whole text is set again.
-  function growText(rec, text) {
-    if (text === rec.text) return;
-    if (rec.text && text.startsWith(rec.text) && rec.pieces < PIECES) {
-      rec.tx.append(h("span", {class: "ar"}, text.slice(rec.text.length)));
-      rec.pieces += 1;
-    } else {
-      rec.tx.replaceChildren(rec.base);
-      rec.base.nodeValue = text;
-      rec.pieces = 0;
-    }
-    rec.text = text;
+  // An agent item is Markdown, drawn the way the documents of the task are (desk.js gives the drawing: `drawing`, with a Copy button on each code block). It is drawn only when its text changed,
+  // so a finished item keeps the person's selection.
+  function growText(rec, item) {
+    if (item.text === rec.text) return;
+    rec.text = item.text;
+    rec.tx.replaceChildren(...[st.draw && item.blocks ? st.draw(item.blocks) : item.text].flat(Infinity).filter(Boolean));
+  }
+
+  // The card of a message of the person. The newest can be taken back while the chat is idle.
+  function saidCard(rec) {
+    const item = rec.item;
+    if (!item) return null;
+    const last = st.lastSaid === item.id && Boolean(st.data) && st.data.state === "idle";
+    return {sig: JSON.stringify([item, last]), build: () => {
+      const undo = last ? h("button", {type: "button", class: "act"}, t("desk.undo.title")) : null;
+      if (undo) undo.addEventListener("click", () => { CHAT.withdraw({name: st.task}, (found) => { REPLY.restore(found); kick(); }); });
+      return h("div", {class: "tk-said"}, h("div", {class: "st-head"}, t("desk.live.you")), h("div", {class: "tk-said-t"}, item.text + (item.cut ? " …" : "")),
+        item.files ? h("div", {class: "sub"}, t("desk.live.files", {names: item.files.join(", ")})) : null, undo);
+    }};
   }
 
   function paint(rec, item) {
     const sig = JSON.stringify(item);
     if (sig === rec.sig) return;
     rec.sig = sig;
-    if (item.k === "text") {
-      growText(rec, item.text);
+    rec.item = item;
+    if (item.k === "me") {
+      rec.tag.setAttribute("aria-label", t("desk.live.you") + ": " + item.text.slice(0, 200));
+    } else if (item.k === "text") {
+      growText(rec, item);
       rec.cutm.hidden = !item.cut;
       rec.caret.hidden = !item.live;
-      if (item.live) rec.tx.append(rec.caret);  // the caret stays at the end of the growing text
+      if (item.live) (rec.tx.lastElementChild || rec.tx).append(rec.caret);  // the caret stays at the end of the growing text
       rec.el.classList.toggle("is-live", Boolean(item.live));
     } else if (item.k === "tool") {
       const kind = kindOf(item.tool || "", item.name || "");
@@ -198,6 +209,7 @@ const LIVE = (function () {
     const items = data && data.bound ? data.items || [] : [];
     const ids = new Set(items.map((item) => item.id));
     for (const [id, rec] of st.nodes) if (!ids.has(id)) { rec.el.remove(); st.nodes.delete(id); }
+    st.lastSaid = (items.filter((item) => item.k === "me").pop() || {}).id || "";
     let previous = null;
     for (const item of items) {
       let rec = st.nodes.get(item.id);
@@ -222,9 +234,10 @@ const LIVE = (function () {
     const bound = Boolean(data && data.bound);
     const state = bound ? data.state : "";
     life.hidden = !bound;
-    setClass(life, "lv-life " + (state === "busy" ? "run" : state === "input" ? "paused" : "calm"));
+    const waits = state === "input" || (state === "idle" && st.needs.length > 0);  // the chat is idle, the task is not: a card above says what it waits for
+    setClass(life, "lv-life " + (state === "busy" ? "run" : waits ? "paused" : "calm"));
     const when = state === "busy" && data.started ? Date.parse(data.started) : NaN;
-    setText(lifeLabel, state === "busy" ? t("desk.live.working") : state === "input" ? t("desk.live.input") : state === "error" ? t("desk.chat.error") : t("desk.live.idle"));
+    setText(lifeLabel, state === "busy" ? t("desk.live.working") : waits ? t("desk.live.input") : state === "error" ? t("desk.chat.error") : t("desk.live.idle"));
     lifeSep.hidden = lifeRun.hidden = isNaN(when);
     if (!isNaN(when)) running(lifeRun, when); else stopped(lifeRun);
   }
@@ -315,7 +328,9 @@ const LIVE = (function () {
       if (same) return;
       st.needs = list;
       view(() => { box.replaceChildren(...list); needLi.hidden = list.length === 0; });
+      if (st.data) paintLife(st.data);
     },
+    drawing(draw) { st.draw = draw; },
     visible(on) { root.hidden = !on; if (on) kick(); },
   };
 })();

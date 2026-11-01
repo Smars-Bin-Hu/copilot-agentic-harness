@@ -58,6 +58,13 @@ const SERVE = (function () {
     });
   }
 
+  // The person's own words have one place: the reply panel of the task page. From the board the task page opens with it.
+  function speak(row) {
+    if (typeof REPLY !== "undefined" && REPLY.shown()) return REPLY.open();
+    try { sessionStorage.setItem("harness.reply", row.name); } catch (error) { /* the page opens, the panel does not */ }
+    location.href = "/task/" + encodeURIComponent(row.name);
+  }
+
   function dialog(children) {
     busy = true;
     const box = h("div", {class: "dialog card"}, children);
@@ -147,10 +154,10 @@ const SERVE = (function () {
   }
 
   function act(button, row, item, withReq) {
-    if (item.action === "send" || item.action === "answer") return CHAT.panel(row, item.action);  // chat.js: the panel that shows the message, then sends it
+    if (item.action === "send") return CHAT.panel(row, item.action);  // chat.js: the panel that shows the message, then sends it
+    if (item.action === "answer" || item.action === "steer") return speak(row);
     if (item.action === "confirm") return CHAT.confirm(row);  // the chat waits for a tool to be allowed (B75)
     if (item.action === "question") return CHAT.question(row);
-    if (item.action === "steer") return CHAT.steer(row);
     if (item.action === "stop") return CHAT.stop(row);
     if (item.action === "close") return close(row);
     if (item.action === "archive") return archive([row.name], serve.archive_to);

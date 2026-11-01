@@ -14,7 +14,9 @@ Notes: the saved drafts of the task (`.task/drafts.json`, the person's file: nev
 
 from __future__ import annotations
 
+import base64
 import json
+import re
 import secrets
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -25,6 +27,10 @@ from core.state import atomic_write, state_lock
 
 LANGS = ("en", "zh")
 MAX_TEXT = 20000  # characters of one message
+MAX_FILES = 10  # files of one message
+MAX_FILE = 10 * 1024 * 1024  # bytes of one file
+MAX_FILES_TOTAL = 20 * 1024 * 1024  # bytes of all the files of one message
+FILE_TYPE = re.compile(r"[A-Za-z0-9.+-]+/[A-Za-z0-9.+-]+")
 MAX_NOTE = 2000  # characters of one note or draft
 MAX_DRAFTS = 50
 SUMMARY_CHARS = 100
@@ -176,6 +182,35 @@ def steer_text(body: str, lang: str = "en") -> Tuple[str, str]:
     if lang == "zh":
         text = ZH_MARK + " " + text
     return (text, "long") if len(text) > MAX_TEXT else (text, "")
+
+
+def attachments(items: Any) -> List[Dict[str, Any]]:
+    """What the page attached to a message, as the host takes it. An `embeddedResource` of any type reaches the model: pictures, text and PDF were read back on a real chat (2026-11-01). The host
+    keeps a copy and lists its own address in the chat, so the bytes stay out of the snapshots. ValueError: `file-count`, `file-big` or `file-bad`."""
+    if items is None or items == []:
+        return []
+    if not isinstance(items, list) or len(items) > MAX_FILES:
+        raise ValueError("file-count")
+    out: List[Dict[str, Any]] = []
+    total = 0
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("data"), str) or not str(item.get("name") or "").strip():
+            raise ValueError("file-bad")
+        try:
+            size = len(base64.b64decode(item["data"], validate=True))
+        except ValueError:
+            raise ValueError("file-bad") from None
+        total += size
+        if size > MAX_FILE or total > MAX_FILES_TOTAL:
+            raise ValueError("file-big")
+        kind = str(item.get("type") or "")
+        out.append({"type": "embeddedResource", "data": item["data"], "contentType": kind if FILE_TYPE.fullmatch(kind) else "application/octet-stream", "label": re.split(r"[\\/]", str(item["name"]).strip())[-1][:200]})
+    return out
+
+
+def listed(files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """What `.task/sent.jsonl` keeps of the files of a message: the name and the size, not the bytes."""
+    return [{"name": item["label"], "type": item["contentType"], "bytes": len(item["data"]) * 3 // 4} for item in files]
 
 
 def model_of(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:

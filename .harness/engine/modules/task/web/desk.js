@@ -198,6 +198,8 @@
     });
   }
 
+  if (typeof LIVE !== "undefined") LIVE.drawing(blocks);  // the items of the agent in the Live tab are drawn as the documents are
+
   function markdown(name, empty) {
     const found = doc(name);
     if (!found) return h("div", {class: "empty-state"}, h("b", null, t("desk.missing", {file: name})), h("p", null, empty));
@@ -316,33 +318,30 @@
   }
 
   // The card over the context bar: the figure, what the context holds when Copilot gave real counts, and the compact action.
-  const PART_ORDER = ["system", "tools", "conversation"];
   function ctxCard() {
     const chat = view.chat;
     if (!chat || !chat.bound) return null;
     const meter = chat.context && typeof chat.context.percent === "number" ? chat.context : null;
-    const parts = chat.parts && PART_ORDER.some((key) => chat.parts[key] > 0) ? chat.parts : null;
+    const parts = Array.isArray(chat.parts) && chat.parts.length ? chat.parts : null;
     const can = canCompact(chat);
-    return {sig: JSON.stringify([meter, parts, can, chat.state]), build: () => {
-      const box = h("div", {class: "tk-cx"}, h("div", {class: "st-head"}, t("desk.ctx.label")));
+    return {sig: JSON.stringify([meter, parts, chat.cost, can, chat.state]), build: () => {
+      const box = h("div", {class: "tk-cx"});
+      if (typeof chat.cost === "number") box.append(h("div", {class: "st-head"}, t("desk.ctx.session")), h("div", {class: "tk-part"}, h("span", {class: "tk-pn"}, t("desk.ctx.cost")), h("b", null, t("desk.ctx.cost.v", {n: chat.cost}))));
+      box.append(h("div", {class: "st-head" + (typeof chat.cost === "number" ? " tk-cx-h" : "")}, t("desk.ctx.label")));
       if (meter) {
         const hot = meter.percent > (meter.limit || 85);
         box.append(h("div", {class: "tk-cx-big" + (hot ? " hot" : "")}, t("desk.ctx.card.used", {percent: Math.round(meter.percent * 10) / 10, used: amount(meter.used), window: amount(meter.window)})),
-          h("span", {class: "tk-cb wide" + (hot ? " hot" : "")}, h("i", {style: "width:" + Math.max(0, Math.min(100, meter.percent)) + "%"})));
+          h("span", {class: "tk-cb wide" + (hot ? " hot" : "")}, h("i", {style: "width:" + Math.max(0, Math.min(100, meter.percent)) + "%"}), meter.reserved > 0 ? h("b", {class: "tk-cr", style: "width:" + Math.min(Math.max(0, 100 - meter.percent), meter.reserved) + "%"}) : null));
+        if (meter.reserved > 0) box.append(h("div", {class: "sub tk-cr-l"}, h("i", {class: "tk-cr"}), t("desk.ctx.reserved")));
         if (hot) box.append(h("div", {class: "sub"}, t("board.status.context.warn", {limit: meter.limit || 85})));
         box.append(h("div", {class: "sub"}, t("desk.ctx.card.note")));
       } else {
         box.append(h("div", {class: "sub"}, t("desk.ctx.unknown")));
       }
-      if (parts) {
-        box.append(h("div", {class: "st-head tk-cx-h"}, t("desk.ctx.parts")));
-        for (const key of PART_ORDER) {
-          if (!(parts[key] > 0)) continue;
-          const recorded = (parts.recorded || []).includes(key);
-          box.append(h("div", {class: "tk-part"}, h("span", {class: "tk-pn"}, t("desk.ctx.part." + key) + (recorded ? " †" : "")), h("span", {class: "tk-pv"}, amount(parts[key])),
-            meter ? h("span", {class: "tk-cb"}, h("i", {style: "width:" + Math.max(1, Math.min(100, parts[key] / meter.window * 100)) + "%"})) : null));
-        }
-        box.append(h("div", {class: "sub"}, t("desk.ctx.parts.note") + ((parts.recorded || []).length ? " " + t("desk.ctx.parts.recorded", {at: when(parts.at, 5, 16)}) : "")));
+      for (const group of ["system", "user", "other"]) {
+        const rows = (parts || []).filter((row) => row.group === group);
+        if (rows.length) box.append(h("div", {class: "st-head tk-cx-h"}, t("desk.ctx.group." + group)));
+        for (const row of rows) box.append(h("div", {class: "tk-part"}, h("span", {class: "tk-pn"}, row.key ? t("desk.ctx.part." + row.key) : row.label), h("span", {class: "tk-pv"}, row.percent.toFixed(1) + "%")));
       }
       if (can) { const go = compactButton("tk-cx-go"); tuneCompact(go, chat); box.append(go); }
       return box;
@@ -502,18 +501,33 @@
       chips.push(chip);
     }
     const models = info.models || [];
+    const now = info.model || (desk.chat && desk.chat.model) || "";  // the model the chat uses: the board's choice, or what it ran on last
+    const chosen = models.find((item) => item.id === now);
     const pick = h("select", {"aria-label": t("desk.set.model"), disabled: info.ready && models.length ? null : "disabled", title: info.ready ? "" : t("desk.set.model.off")},
-      h("option", {value: ""}, t("desk.set.model.chat")), models.map((item) => h("option", {value: item.id, selected: item.id === info.model ? "" : null}, item.name)));
-    const chosen = models.find((item) => item.id === info.model);
+      chosen ? null : h("option", {value: ""}, t("desk.set.model.chat")), models.map((item) => h("option", {value: item.id, selected: item.id === now ? "" : null}, item.name)));
     const levels = chosen && chosen.thinking ? chosen.thinking.levels : [];
+    const level = info.thinking || (desk.chat && desk.chat.effort) || "";
     const think = h("select", {"aria-label": t("desk.set.thinking"), disabled: levels.length ? null : "disabled"},
-      h("option", {value: ""}, t("desk.set.thinking.default")), levels.map((level) => h("option", {value: level, selected: level === info.thinking ? "" : null}, level)));
-    const save = (id, level) => SERVE.post("/api/setting", {task: desk.name, id, thinking: level}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
-    pick.addEventListener("change", () => save(pick.value, ""));  // a new model starts at its own default level
-    think.addEventListener("change", () => save(pick.value, think.value));
-    return h("section", {class: "card chatbar settings"}, h("span", {class: "chat-k"}, t("desk.set.label")),
+      levels.includes(level) ? null : h("option", {value: ""}, t("desk.set.thinking.default")), levels.map((item) => h("option", {value: item, selected: item === level ? "" : null}, item)));
+    const sizes = chosen && chosen.context ? chosen.context.sizes : [];
+    const size = info.context || (chosen && chosen.context ? chosen.context.default : 0);
+    const room = h("select", {"aria-label": t("desk.set.context"), title: t("desk.set.context.tip"), disabled: sizes.length ? null : "disabled"},
+      sizes.length ? sizes.map((item) => h("option", {value: item.id, selected: item.id === size ? "" : null}, item.label)) : h("option", {value: ""}, t("desk.set.thinking.default")));
+    const save = (id, thinking, context) => SERVE.post("/api/setting", {task: desk.name, id, thinking, context}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
+    pick.addEventListener("change", () => save(pick.value, "", 0));  // a new model starts at its own default level and size
+    think.addEventListener("change", () => save(pick.value, think.value, Number(room.value) || 0));
+    room.addEventListener("change", () => save(pick.value, think.value, Number(room.value) || 0));
+    const hostSetting = (key, label) => {  // offered by the host, told to it at once; it holds from the next turn
+      const found = (info.options || {})[key];
+      if (!found) return null;
+      const select = h("select", {"aria-label": label}, found.choices.map((item) => h("option", {value: item.id, selected: item.id === found.value ? "" : null}, item.label)));
+      select.addEventListener("change", () => SERVE.post("/api/chatconfig", {task: desk.name, [key]: select.value}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); }));
+      return h("label", {class: "set-field"}, h("span", {class: "sub"}, label), select);
+    };
+    return h("section", {class: "card chatbar settings", title: t("desk.set.note", {n: Math.max(1, info.n || 3)})}, h("span", {class: "chat-k"}, t("desk.set.label")),
       h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.model")), pick), h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.thinking")), think),
-      h("span", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.checks")), h("span", {class: "chips"}, chips)),
+      h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.context")), room), hostSetting("mode", t("desk.set.mode")), hostSetting("autoApprove", t("desk.set.permission")),
+      h("span", {class: "set-field set-checks"}, h("span", {class: "sub"}, t("desk.set.checks")), h("span", {class: "chips"}, chips)),
       h("p", {class: "sub set-note", title: t("desk.set.note", {n: Math.max(1, info.n || 3)})}, t("desk.set.note", {n: Math.max(1, info.n || 3)})));
   }
 
@@ -769,7 +783,7 @@
     if (typeof REPLY !== "undefined" && served()) {
       const show = hasStream() && bound;
       if (show) draftsBox();  // loads the drafts (the badge counts them) even while the panel is shut
-      REPLY.update({name: desk.name, show, state: chat ? chat.state || "" : "", count: drafts.items ? drafts.items.length : 0, settings: () => settingsRow(), settingsSig: JSON.stringify([desk.settings, desk.status]), drafts: drafts.node});
+      REPLY.update({name: desk.name, show, state: chat ? chat.state || "" : "", count: drafts.items ? drafts.items.length : 0, settings: () => settingsRow(), settingsSig: JSON.stringify([desk.settings, desk.status, chat && [chat.model, chat.effort]]), drafts: drafts.node, saveDraft: (text) => draftCall({op: "add", text})});
     }
   }
 

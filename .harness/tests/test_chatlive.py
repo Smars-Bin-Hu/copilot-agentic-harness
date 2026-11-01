@@ -305,11 +305,11 @@ class PageFilesTests(unittest.TestCase):
     def test_the_reply_panel_keeps_what_send_steer_and_the_drafts_did(self) -> None:
         reply, chat = source("reply.js"), source("chat.js")
         self.assertIn('"/api/send", {task: info.name, kind: "answer"', reply)
-        self.assertIn('"/api/steer", {task: info.name, text, lang: mine.lang}', reply)
+        self.assertIn('"/api/steer", {task: info.name, text, lang: mine.lang, attachments}', reply)
         self.assertIn('step: "preview"', reply)
         self.assertIn("CHAT.stop(", reply)
         self.assertIn("error.data.fallback", reply)
-        for kept in ("function panel(row, action)", "function steer(row)", "function stop(row)", "function create()", "function confirm(row)", "function question(row)"):
+        for kept in ("function panel(row, action)", "function withdraw(row, done)", "function stop(row)", "function create()", "function confirm(row)", "function question(row)"):
             self.assertIn(kept, chat)  # the approval messages, the dialogs and the new-task dialog are not touched
         self.assertIn("compact", source("desk.js"))
         self.assertNotIn("/compact", reply)  # `/compact` goes only by its own button
@@ -328,7 +328,7 @@ class PageFilesTests(unittest.TestCase):
     def test_the_pill_does_not_cover_the_page_or_the_other_fixed_controls(self) -> None:
         css = source("live.css")
         self.assertIn(".has-reply .tk-foot{padding-bottom:84px}", css)
-        self.assertRegex(css, r"\.rp-pill\{position:fixed;left:50%;bottom:22px")
+        self.assertRegex(css, r"\.rp-bar\{position:fixed;left:50%;bottom:22px")
         gear = re.search(r"\.sh-gear\{[^}]*\}", source("shell.css")).group(0)
         self.assertIn("right:20px", gear)  # the gear is at the right, the pill at the middle; the search is at the top
         self.assertIn("prefers-reduced-motion:reduce", css)
@@ -346,7 +346,7 @@ class PageFilesTests(unittest.TestCase):
 
     def test_the_servers_one_poll_does_not_start_a_subscription(self) -> None:
         link = Path(boardserve.__file__).with_name("vslink.py").read_text(encoding="utf-8")
-        live = link.split("def live(")[1].split("def context_parts")[0]
+        live = link.split("def live(")[1].split("def context_card")[0]
         self.assertNotIn("subscribe", live)
         self.assertNotIn("open(", live)
         self.assertNotIn("tasks.read", live)

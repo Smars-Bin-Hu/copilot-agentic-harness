@@ -133,18 +133,6 @@
 .rp-text{display:block;box-sizing:border-box;width:100%;min-height:84px;max-height:40vh;resize:vertical;padding:10px 12px;font-size:14px;line-height:1.5;border-radius:12px}
 .rp-lang{display:flex;align-items:center;gap:10px;margin:10px 0 0;flex-wrap:wrap}
 .rp-lang .sub{margin-left:auto}
-.rp-attach{display:inline-flex;align-items:center;gap:6px;width:auto;margin:0}
-.rp-attach svg{flex:none;width:15px;height:15px}
-.rp.drag{outline:2px dashed var(--ink);outline-offset:-6px}
-.rp-files{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.rp-files[hidden]{display:none}
-.rp-file{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 4px 3px 6px;border:1px solid var(--line);border-radius:8px;font-size:12.5px}
-.rp-file img{width:26px;height:26px;object-fit:cover;border-radius:4px}
-.rp-file>svg{flex:none;width:14px;height:14px}
-.rp-file-n{min-width:0;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rp-file-x{display:inline-grid;place-items:center;width:20px;height:20px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--soft);cursor:pointer}
-.rp-file-x:hover{background:var(--hover);color:var(--ink)}
-.rp-file-x svg{width:12px;height:12px}
 .rp-lang .chips{display:inline-flex;gap:6px}
 .rp-set:empty,.rp-dr:empty{display:none}
 .rp .chatbar{margin:0;padding:10px 0 0;border:0;border-radius:0;background:transparent;box-shadow:none}

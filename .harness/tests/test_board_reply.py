@@ -10,6 +10,7 @@ from typing import Any, Dict
 from unittest import mock
 
 import support  # noqa: F401 - HARNESS_VSCODE_CLI=off
+from test_chatnew import CreateCase
 from test_chatsend import ROOT_STATE, SendCase
 from test_vslink import until
 
@@ -190,6 +191,26 @@ class ServeTests(SendCase):
         self.assertEqual(status, 409, data)
 
 
+class NewTaskFileTests(CreateCase):
+    def fields(self, **more: Any) -> Dict[str, Any]:
+        return {"step": "act", "name": "with-files", "kind": "qa", "source": "", "text": "Look at this", "model": "", "thinking": "", "lang": "en", "permission": "default", "domains": [], **more}
+
+    def test_files_go_with_the_first_message_and_only_their_names_are_kept(self) -> None:
+        status, data, _ = self.request("POST", "/api/create", self.fields(attachments=[{"name": "shot.png", "type": "image/png", "data": encoded(b"png")}]), cookie=self.cookie)
+        self.assertEqual(status, 200, data)
+        self.assertTrue(until(lambda: any(message.get("method") == "dispatchAction" for message in self.host.seen)))
+        sent = [message["params"]["action"] for message in self.host.seen if message.get("method") == "dispatchAction"][-1]
+        self.assertEqual(sent["message"]["attachments"][0]["label"], "shot.png")
+        self.assertEqual(self.vs.created[-1]["files"], [{"name": "shot.png", "type": "image/png", "bytes": 3}])
+        self.assertNotIn(encoded(b"png"), json.dumps(self.vs.created))
+        self.assertNotIn(encoded(b"png"), json.dumps(list(self.vs.chats.values())))
+
+    def test_a_refused_file_makes_no_chat(self) -> None:
+        status, data, _ = self.request("POST", "/api/create", self.fields(attachments=[{"name": "a", "data": "!"}]), cookie=self.cookie)
+        self.assertEqual((status, data["error"]), (409, messages.text("send.refused.file-bad")))
+        self.assertNotIn("createSession", [message.get("method") for message in self.host.seen])
+
+
 class PageTests(unittest.TestCase):
     def test_the_persons_words_have_one_place(self) -> None:
         serve = source("serve.js")
@@ -203,11 +224,14 @@ class PageTests(unittest.TestCase):
         self.assertIn('halt.hidden = stateNow() !== "busy"', reply)
 
     def test_a_file_comes_by_the_button_a_paste_or_a_drop(self) -> None:
-        reply = source("reply.js")
-        for way in ('picker.addEventListener("change"', 'box.addEventListener("paste"', 'panel.addEventListener("drop"'):
-            self.assertIn(way, reply)
-        self.assertIn('data.getData("text/plain")', reply)  # words are pasted as words
-        limits = re.search(r"MAX_FILES = (\d+), MAX_FILE = 10 \* 1024 \* 1024, MAX_TOTAL = 20 \* 1024 \* 1024", reply)
+        chat = source("chat.js")
+        for way in ('picker.addEventListener("change"', 'box.addEventListener("paste"', 'node.addEventListener("drop"'):
+            self.assertIn(way, chat)
+        self.assertIn('data.getData("text/plain")', chat)  # words are pasted as words
+        self.assertIn("CHAT.fileTray(box, said,", source("reply.js"))
+        self.assertIn("const files = fileTray(text, said,", chat)  # New task has the same part
+        self.assertIn("attachments: files.list()", chat)
+        limits = re.search(r"MAX_FILES = (\d+), MAX_FILE = 10 \* 1024 \* 1024, MAX_TOTAL = 20 \* 1024 \* 1024", chat)
         self.assertEqual(int(limits.group(1)), chatsend.MAX_FILES)
         self.assertEqual((chatsend.MAX_FILE, chatsend.MAX_FILES_TOTAL), (10 * 1024 * 1024, 20 * 1024 * 1024))
 
@@ -228,7 +252,7 @@ class PageTests(unittest.TestCase):
         self.assertIn("stale ?", serve)  # old code still says so in the line
 
     def test_every_icon_of_the_panel_has_a_size_in_the_style(self) -> None:
-        css = source("live.css")
+        css = source("live.css") + source("ui.css")
         for rule in (".rp-attach svg{flex:none;width:15px", ".rp-stop svg{flex:none;width:13px", ".rp-file>svg{flex:none;width:14px", ".rp-file-x svg{width:12px"):
             self.assertIn(rule, css)
 

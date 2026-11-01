@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.25 (2026-11-01)
+
+### Added
+
+- **New task takes files too**: by the **Attach** button, a paste or a drop, with the same limits as the reply panel. They go with the first message.
+
 ## 1.6.24 (2026-11-01)
 
 ### Changed

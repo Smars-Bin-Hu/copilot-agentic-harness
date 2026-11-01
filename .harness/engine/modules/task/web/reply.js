@@ -11,8 +11,7 @@
 const REPLY = (function () {
   const NS = "http://www.w3.org/2000/svg";
   const info = {name: "", show: false, state: "", why: "", count: 0, settings: null, drafts: null, settingsSig: null};
-  const mine = {open: false, lang: "en", busy: false, fallback: "", previewing: false, timer: 0, files: []};
-  const MAX_FILES = 10, MAX_FILE = 10 * 1024 * 1024, MAX_TOTAL = 20 * 1024 * 1024;  // chatsend.py holds the same three; a file over them is not even read
+  const mine = {open: false, lang: "en", busy: false, fallback: "", previewing: false, timer: 0};
   const MAC = /Mac|iPhone|iPad/.test(navigator.platform || "");
 
   const icon = (paths, size) => {  // the style gives each its size too: a page style sets the width of an svg
@@ -38,9 +37,6 @@ const REPLY = (function () {
     chip.addEventListener("click", () => language(lang));
     return chip;
   });
-  const tray = h("div", {class: "rp-files", hidden: ""});
-  const picker = h("input", {type: "file", multiple: "multiple", hidden: ""});
-  const attach = h("button", {type: "button", class: "act rp-attach", title: t("desk.reply.attach.tip")}, icon(["M13 7.5l-5.2 5.2a3 3 0 0 1-4.3-4.3l5.6-5.5a2 2 0 0 1 2.8 2.8L6.4 11.2a1 1 0 0 1-1.4-1.4l4.8-4.7"], 15), h("span", null, t("desk.reply.attach")));
   const settingsSlot = h("div", {class: "rp-set"});
   const draftsSlot = h("div", {class: "rp-dr"});
   const draftHead = h("summary", {title: t("desk.drafts.hint")}, t("desk.drafts.label"));
@@ -48,13 +44,14 @@ const REPLY = (function () {
   const preview = h("pre", {class: "send-preview rp-pre"}, "");
   const whole = h("details", {class: "rp-pv"}, h("summary", null, t("desk.reply.whole")), preview);
   const said = h("div", {class: "bad rp-said"});
+  const files = CHAT.fileTray(box, said, () => sync());
   const hint = h("span", {class: "hint rp-hint"});
   const kbd = h("kbd", null, (MAC ? "⌘" : "Ctrl") + " ↵");
   const save = h("button", {type: "button", class: "act", title: t("desk.reply.draft.tip")}, t("desk.reply.draft"));
   const go = h("button", {type: "button", class: "act hot live big"}, t("desk.reply.send"));
   const panel = h("div", {class: "rp", role: "dialog", "aria-label": t("desk.reply.title"), hidden: ""},
-    h("div", {class: "rp-h"}, h("b", null, t("desk.reply.title")), close), box, tray,
-    h("div", {class: "rp-lang"}, attach, picker, h("span", {class: "sub"}, t("desk.send.lang")), h("span", {class: "chips"}, chips)),
+    h("div", {class: "rp-h"}, h("b", null, t("desk.reply.title")), close), box, files.tray,
+    h("div", {class: "rp-lang"}, files.attach, files.picker, h("span", {class: "sub"}, t("desk.send.lang")), h("span", {class: "chips"}, chips)),
     settingsSlot, draftBox, whole, said, h("div", {class: "rp-f"}, hint, kbd, save, go));
   document.body.append(h("div", {class: "rp-bar"}, pill, halt), panel);
 
@@ -79,7 +76,7 @@ const REPLY = (function () {
     const text = now.kind === "steer" ? t("desk.reply.steer") : t("desk.reply.send");
     const label = mine.busy ? t("board.serve.working") : text;
     if (go.textContent !== label) go.textContent = label;
-    go.disabled = mine.busy || now.kind === "off" || !box.value.trim() || mine.files.some((item) => !item.data);
+    go.disabled = mine.busy || now.kind === "off" || !box.value.trim() || files.reading();
     save.disabled = mine.busy || !box.value.trim() || !info.saveDraft;
     if (hint.textContent !== now.hint) hint.textContent = now.hint;
     halt.hidden = stateNow() !== "busy" || !info.show;
@@ -109,40 +106,6 @@ const REPLY = (function () {
     return button;
   }
 
-  // --- the files of the message --------------------------------------------------------------------------------------------
-  const sizeOf = (bytes) => (bytes < 1024 ? bytes + " B" : bytes < 1048576 ? Math.round(bytes / 1024) + " KB" : (bytes / 1048576).toFixed(1) + " MB");
-  const refuse = (text) => said.append(h("p", null, text));
-
-  function paintFiles() {
-    tray.hidden = !mine.files.length;
-    tray.replaceChildren(...mine.files.map((item) => {
-      const off = h("button", {type: "button", class: "rp-file-x", title: t("desk.reply.files.remove", {name: item.name}), "aria-label": t("desk.reply.files.remove", {name: item.name})}, icon(["M4 4l8 8M12 4l-8 8"], 12));
-      off.addEventListener("click", () => dropFile(item));
-      return h("span", {class: "rp-file", title: item.name}, item.url ? h("img", {src: item.url, alt: ""}) : icon(["M4 2h5l3 3v9H4zM9 2v3h3"], 14), h("span", {class: "rp-file-n"}, item.name), h("span", {class: "sub"}, sizeOf(item.size)), off);
-    }));
-    sync();
-  }
-  function dropFile(item) {
-    if (item.url) URL.revokeObjectURL(item.url);
-    mine.files = mine.files.filter((other) => other !== item);
-    paintFiles();
-  }
-  function addFiles(list) {
-    said.replaceChildren();
-    for (const file of list) {
-      const total = mine.files.reduce((sum, item) => sum + item.size, 0);
-      if (mine.files.length >= MAX_FILES) { refuse(t("desk.reply.files.many", {n: MAX_FILES})); break; }
-      if (file.size > MAX_FILE || total + file.size > MAX_TOTAL) { refuse(t("desk.reply.files.big", {name: file.name})); continue; }
-      const item = {name: file.name || "file", type: file.type, size: file.size, data: "", url: file.type.startsWith("image/") ? URL.createObjectURL(file) : ""};
-      mine.files.push(item);
-      const reader = new FileReader();
-      reader.addEventListener("load", () => { item.data = String(reader.result).split(",")[1] || ""; if (item.data) sync(); else { refuse(t("desk.reply.files.read", {name: item.name})); dropFile(item); } });
-      reader.addEventListener("error", () => { refuse(t("desk.reply.files.read", {name: item.name})); dropFile(item); });
-      reader.readAsDataURL(file);
-    }
-    paintFiles();
-  }
-
   function saveDraft() {
     const text = box.value.trim();
     if (!text || mine.busy || !info.saveDraft) return;
@@ -159,18 +122,16 @@ const REPLY = (function () {
   function send() {
     const text = box.value.trim();
     const now = mode();
-    if (!text || mine.busy || now.kind === "off" || mine.files.some((item) => !item.data)) return;
+    if (!text || mine.busy || now.kind === "off" || files.reading()) return;
     mine.busy = true;
     said.replaceChildren();
     sync();
-    const attachments = mine.files.map((item) => ({name: item.name, type: item.type, data: item.data}));
+    const attachments = files.list();
     const call = now.kind === "steer" ? SERVE.post("/api/steer", {task: info.name, text, lang: mine.lang, attachments}) : SERVE.post("/api/send", {task: info.name, kind: "answer", lang: mine.lang, note: "", body: text, step: "act", attachments});
     call.then(() => {
       mine.busy = false;
       box.value = "";
-      for (const item of mine.files) if (item.url) URL.revokeObjectURL(item.url);
-      mine.files = [];
-      paintFiles();
+      files.clear();
       shut(false);
       sync();
       SERVE.done();
@@ -220,17 +181,7 @@ const REPLY = (function () {
   go.addEventListener("click", send);
   save.addEventListener("click", saveDraft);
   halt.addEventListener("click", () => { shut(false); CHAT.stop({name: info.name}); });  // its own confirm dialog; this panel steps aside
-  attach.addEventListener("click", () => picker.click());
-  picker.addEventListener("change", () => { addFiles([...picker.files]); picker.value = ""; });
-  box.addEventListener("paste", (event) => {
-    const data = event.clipboardData;
-    if (!data || !data.files.length || data.getData("text/plain")) return;  // words are pasted as words; a screenshot has none
-    event.preventDefault();
-    addFiles([...data.files]);
-  });
-  panel.addEventListener("dragover", (event) => { event.preventDefault(); panel.classList.add("drag"); });
-  panel.addEventListener("dragleave", (event) => { if (!panel.contains(event.relatedTarget)) panel.classList.remove("drag"); });
-  panel.addEventListener("drop", (event) => { event.preventDefault(); panel.classList.remove("drag"); addFiles([...event.dataTransfer.files]); });
+  files.zone(panel);
   box.addEventListener("input", () => { sync(); previewSoon(); said.replaceChildren(); });
   box.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && !event.isComposing) { event.preventDefault(); send(); }
@@ -274,7 +225,7 @@ const REPLY = (function () {
       language(found.lang);
       open();
       sync();
-      if (found.files && found.files.length) refuse(t("desk.reply.files.again", {names: found.files.join(", ")}));
+      if (found.files && found.files.length) said.append(h("p", null, t("desk.reply.files.again", {names: found.files.join(", ")})));
     },
   };
 })();

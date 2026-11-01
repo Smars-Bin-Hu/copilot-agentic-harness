@@ -61,8 +61,8 @@ from .common import CommandError
 HEADER = "X-Harness-Board"
 COOKIE = "harness_board"
 MAX_BODY = 4096
-MAX_SEND_BODY = 64 * 1024  # `/api/create` and `/api/answer`: the person's own words
-MAX_FILES_BODY = (chatsend.MAX_FILES_TOTAL * 4) // 3 + chatsend.MAX_FILES * 1024 + MAX_SEND_BODY  # `/api/send` and `/api/steer`: the words and their files, as base64
+MAX_SEND_BODY = 64 * 1024  # `/api/answer`: the person's own words
+MAX_FILES_BODY = (chatsend.MAX_FILES_TOTAL * 4) // 3 + chatsend.MAX_FILES * 1024 + MAX_SEND_BODY  # `/api/send`, `/api/steer` and `/api/create`: the words and their files, as base64
 MAX_INBOX_BODY = 40 * 1024 * 1024  # `/api/inbox` carries pictures (base64); the other calls stay small
 MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
@@ -678,8 +678,9 @@ class Board:
             raise CommandError(say(f"create.refused.{why}"))
         plan = chatnew.validate(self.root, data, self.link.model_list(), self.link.waiting_names())
         text = chatnew.first_message(plan)
+        files = self.files_of(data)
         try:
-            done = self.link.create(plan, text)
+            done = self.link.create(plan, text, files)
         except vslink.Refused as error:
             raise CommandError(say(f"create.refused.{error.why}")) from None
         except Exception as error:  # noqa: BLE001 - the host said no: nothing more is known; the name of the error only, never its text
@@ -897,7 +898,7 @@ def handler_for(board: Board) -> type:
             origin = self.headers.get("Origin", "")
             if not self.host_ok() or (origin and origin not in allowed_origins) or self.headers.get(HEADER) != "1":
                 return self.answer(403, {"error": say("serve.refused.request")})
-            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_FILES_BODY if urlparse(self.path).path in ("/api/send", "/api/steer") else MAX_SEND_BODY if urlparse(self.path).path in ("/api/create", "/api/answer") else MAX_BODY
+            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_FILES_BODY if urlparse(self.path).path in ("/api/send", "/api/steer", "/api/create") else MAX_SEND_BODY if urlparse(self.path).path == "/api/answer" else MAX_BODY
             try:
                 size = int(self.headers.get("Content-Length", "0"))
                 data = json.loads(self.rfile.read(min(size, limit)).decode("utf-8") or "{}") if 0 <= size <= limit else None

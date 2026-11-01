@@ -13,6 +13,73 @@ const CHAT = (function () {
     return button;
   }
 
+  // The files of a message, for the reply panel and New task: by the Attach button, a paste in `box` (a paste with words stays words: a screenshot has none) or a drop on `zone`. Each file is read into
+  // the page; it goes with the message and is not kept anywhere else. `said`: where a refusal is written. `changed`: called when the list changed. chatsend.py holds the same three limits.
+  const MAX_FILES = 10, MAX_FILE = 10 * 1024 * 1024, MAX_TOTAL = 20 * 1024 * 1024;
+  const fileIcon = (paths) => {
+    const NS = "http://www.w3.org/2000/svg", node = document.createElementNS(NS, "svg");
+    for (const [key, value] of Object.entries({viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", "stroke-width": "1.5", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true"})) node.setAttribute(key, value);
+    for (const d of paths) { const part = document.createElementNS(NS, "path"); part.setAttribute("d", d); node.append(part); }
+    return node;
+  };
+  const sizeOf = (bytes) => (bytes < 1024 ? bytes + " B" : bytes < 1048576 ? Math.round(bytes / 1024) + " KB" : (bytes / 1048576).toFixed(1) + " MB");
+
+  function fileTray(box, said, changed) {
+    let files = [];
+    const tray = h("div", {class: "rp-files", hidden: ""});
+    const picker = h("input", {type: "file", multiple: "multiple", hidden: ""});
+    const attach = h("button", {type: "button", class: "act rp-attach", title: t("desk.reply.attach.tip")}, fileIcon(["M13 7.5l-5.2 5.2a3 3 0 0 1-4.3-4.3l5.6-5.5a2 2 0 0 1 2.8 2.8L6.4 11.2a1 1 0 0 1-1.4-1.4l4.8-4.7"]), h("span", null, t("desk.reply.attach")));
+    const refuse = (text) => said.append(h("p", null, text));
+    function paint() {
+      tray.hidden = !files.length;
+      tray.replaceChildren(...files.map((item) => {
+        const off = h("button", {type: "button", class: "rp-file-x", title: t("desk.reply.files.remove", {name: item.name}), "aria-label": t("desk.reply.files.remove", {name: item.name})}, fileIcon(["M4 4l8 8M12 4l-8 8"]));
+        off.addEventListener("click", () => drop(item));
+        return h("span", {class: "rp-file", title: item.name}, item.url ? h("img", {src: item.url, alt: ""}) : fileIcon(["M4 2h5l3 3v9H4zM9 2v3h3"]), h("span", {class: "rp-file-n"}, item.name), h("span", {class: "sub"}, sizeOf(item.size)), off);
+      }));
+      changed();
+    }
+    function drop(item) {
+      if (item.url) URL.revokeObjectURL(item.url);
+      files = files.filter((other) => other !== item);
+      paint();
+    }
+    function add(list) {
+      said.replaceChildren();
+      for (const file of list) {
+        const total = files.reduce((sum, item) => sum + item.size, 0);
+        if (files.length >= MAX_FILES) { refuse(t("desk.reply.files.many", {n: MAX_FILES})); break; }
+        if (file.size > MAX_FILE || total + file.size > MAX_TOTAL) { refuse(t("desk.reply.files.big", {name: file.name})); continue; }
+        const item = {name: file.name || "file", type: file.type, size: file.size, data: "", url: file.type.startsWith("image/") ? URL.createObjectURL(file) : ""};
+        files.push(item);
+        const reader = new FileReader();
+        reader.addEventListener("load", () => { item.data = String(reader.result).split(",")[1] || ""; if (item.data) changed(); else { refuse(t("desk.reply.files.read", {name: item.name})); drop(item); } });
+        reader.addEventListener("error", () => { refuse(t("desk.reply.files.read", {name: item.name})); drop(item); });
+        reader.readAsDataURL(file);
+      }
+      paint();
+    }
+    attach.addEventListener("click", () => picker.click());
+    picker.addEventListener("change", () => { add([...picker.files]); picker.value = ""; });
+    box.addEventListener("paste", (event) => {
+      const data = event.clipboardData;
+      if (!data || !data.files.length || data.getData("text/plain")) return;
+      event.preventDefault();
+      add([...data.files]);
+    });
+    return {
+      tray, attach, picker,
+      zone(node) {
+        node.addEventListener("dragover", (event) => { event.preventDefault(); node.classList.add("drag-on"); });
+        node.addEventListener("dragleave", (event) => { if (!node.contains(event.relatedTarget)) node.classList.remove("drag-on"); });
+        node.addEventListener("drop", (event) => { event.preventDefault(); node.classList.remove("drag-on"); add([...event.dataTransfer.files]); });
+      },
+      reading: () => files.some((item) => !item.data),
+      list: () => files.map((item) => ({name: item.name, type: item.type, data: item.data})),
+      clear() { for (const item of files) if (item.url) URL.revokeObjectURL(item.url); files = []; paint(); },
+    };
+  }
+
   // The panel: the message in full, the reply language, an optional note, then send / save as draft / copy. `action` is "send" (a template after an approval) or "answer" (the person's own words).
   function panel(row, action) {
     const state = {lang: "en", note: "", text: "", blocked: "", busy: false, timer: null};
@@ -117,12 +184,13 @@ const CHAT = (function () {
     const kind = h("select", {class: "send-body"});
     const source = h("select", {class: "send-body"});
     const text = h("textarea", {rows: 5, class: "send-body", placeholder: t("board.new.text.ph"), maxlength: 5000});
+    const said = h("div", {class: "bad"});
+    const files = fileTray(text, said, () => sync());
     const model = h("select", {class: "send-body"});
     const thinking = h("select", {class: "send-body"});
     const preview = h("pre", {class: "send-preview"}, "...");
     const problem = h("div", {class: "sub"});  // what is not right yet: shown quietly while the person types
     const blocked = h("div", {class: "bad"});
-    const said = h("div", {class: "bad"});
     const permHint = h("p", {class: "sub"});
     const kbBox = h("div", {class: "new-kb"});  // the knowledge base domains a task may be about: ticks, and "None" (a choice of its own). Drawn when the options come.
     const go = h("button", {type: "button", class: "act hot", disabled: "disabled"}, t("board.new.go"));
@@ -145,10 +213,11 @@ const CHAT = (function () {
       h("div", {class: "new-grid"}, field(t("board.new.name"), name), field(t("board.new.kind"), kind)),
       field(t("board.new.source"), source), h("p", {class: "sub"}, t("board.new.source.hint")),
       h("div", {class: "new-field"}, h("span", {class: "sub label"}, t("board.new.kb")), kbBox),
-      field(t("board.new.text"), text),
+      field(t("board.new.text"), text), h("div", {class: "new-files"}, files.attach, files.picker, files.tray),
       h("div", {class: "new-grid three"}, field(t("board.new.model"), model), field(t("board.new.thinking"), thinking), field(t("board.new.lang"), h("div", {class: "chips"}, langChips))),
       h("div", {class: "send-lang"}, h("span", {class: "sub"}, t("board.new.perm")), h("div", {class: "chips"}, permChips)), permHint, h("p", {class: "sub"}, t("board.new.fixed")),
       h("div", {class: "sub label"}, t("board.new.first")), h("p", {class: "sub"}, t("board.new.first.hint")), preview, problem, said, h("div", {class: "row send-actions new-actions"}, go, no)]);
+    files.zone(view.box);
     const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: text.value, model: model.value, thinking: thinking.value, lang: state.lang, permission: state.perm, domains: Array.from(state.domains)});
     // The knowledge base: the domains this repository's knowledge bases have. None ticked is a valid choice. When there are no domains the box says so and the dialog goes on.
     function drawKb() {
@@ -164,7 +233,7 @@ const CHAT = (function () {
       const ticks = list.map((item) => chip(item, state.domains.has(item), () => { state.domains.has(item) ? state.domains.delete(item) : state.domains.add(item); drawKb(); refresh(); }));
       kbBox.replaceChildren(h("div", {class: "chips kb-list"}, none, ...ticks), h("p", {class: "sub"}, t("board.new.kb.hint")));
     }
-    const sync = () => { go.disabled = state.busy || !state.ready; };
+    const sync = () => { go.disabled = state.busy || !state.ready || files.reading(); };
     function levels() {
       const found = state.models.find((item) => item.id === model.value);
       const list = (found && found.thinking && found.thinking.levels) || [];
@@ -195,7 +264,7 @@ const CHAT = (function () {
     model.addEventListener("change", () => { levels(); refresh(); });
     go.addEventListener("click", () => {
       state.busy = true; go.textContent = t("board.new.working"); sync(); said.replaceChildren();
-      ask("/api/create", body("act")).then((found) => {
+      ask("/api/create", {...body("act"), attachments: files.list()}).then((found) => {
         clearTimeout(state.timer);
         const done = h("button", {type: "button", class: "act hot"}, t("board.new.close"));
         done.addEventListener("click", () => { close(); SERVE.done(); });
@@ -296,5 +365,5 @@ const CHAT = (function () {
     no.addEventListener("click", view.close);
   }
 
-  return {panel, stop, withdraw, create, confirm, question};
+  return {panel, stop, withdraw, create, confirm, question, fileTray};
 })();

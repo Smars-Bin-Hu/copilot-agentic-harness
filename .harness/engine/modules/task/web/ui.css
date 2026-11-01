@@ -26,6 +26,20 @@ noscript{color:var(--bad)}
 .lb-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .lb-right .shift{display:inline-flex;gap:6px}.lb-right .shift .act{margin:0}
 .new-slot:empty{display:none}
+/* the files of a message: the reply panel and New task */
+.rp-attach{display:inline-flex;align-items:center;gap:6px;width:auto;margin:0}
+.rp-attach svg{flex:none;width:15px;height:15px}
+.drag-on{outline:2px dashed var(--ink);outline-offset:-6px}
+.rp-files{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.rp-files[hidden]{display:none}
+.rp-file{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 4px 3px 6px;border:1px solid var(--line);border-radius:8px;font-size:12.5px}
+.rp-file img{width:26px;height:26px;object-fit:cover;border-radius:4px}
+.rp-file>svg{flex:none;width:14px;height:14px}
+.rp-file-n{min-width:0;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-file-x{display:inline-grid;place-items:center;width:20px;height:20px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--soft);cursor:pointer}
+.rp-file-x:hover{background:var(--hover);color:var(--ink)}
+.rp-file-x svg{width:12px;height:12px}
+.new-files{margin-top:-2px}.new-files .rp-files{margin-top:8px}
 .new-task{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}.new-plus{font-size:17px;line-height:1;font-weight:500}
 .kpis{display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr 1fr;gap:0;margin-top:0;border-bottom:1px solid var(--line)}
 .kpi{background:none;border:0;border-left:1px solid var(--line);border-radius:0;padding:20px 22px 18px}

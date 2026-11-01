@@ -259,12 +259,12 @@ class VsLink:
         with self.lock:
             return "off" if not self.enabled else "" if self.ready else "not-ready"
 
-    def create(self, plan: Dict[str, Any], text: str) -> Dict[str, Any]:
+    def create(self, plan: Dict[str, Any], text: str, attachments: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Make a chat for the task of `plan` and send `text` to it, on the thread. The answer: {session, chat, initiator, title}. Raises Refused (`off`, `not-ready`, `timeout`) or the host's error."""
         why = self.create_blocked()
         if why:
             raise Refused(why)
-        job = Job("create", "", text, plan["model"], plan)
+        job = Job("create", "", text, plan["model"], plan, attachments)
         self.jobs.put(job)
         self.wake.set()
         if not job.done.wait(CREATE_WAIT):
@@ -561,8 +561,10 @@ class VsLink:
         message: Dict[str, Any] = {"text": job.text, "origin": {"kind": "user"}}
         if job.model:
             message["model"] = job.model
+        if job.attachments:
+            message["attachments"] = job.attachments
         action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
-        made = {"name": plan["name"], "kind": plan["kind"], "source": plan["source"], "lang": plan["lang"], "permission": plan["permission"], "model": job.model, "text": job.text,
+        made = {"name": plan["name"], "kind": plan["kind"], "source": plan["source"], "lang": plan["lang"], "permission": plan["permission"], "model": job.model, "text": job.text, "files": chatsend.listed(job.attachments or []),
                 "session": resource, "chat": chat, "title": "", "clock": time.monotonic()}
         stub = {"resource": resource, "provider": ahp.LOCAL_PROVIDER, "title": "", "status": ahp.IN_PROGRESS, "defaultChat": chat, "chats": [{"resource": chat}],
                 "workingDirectories": [ahp.folder_uri(self.root)], "modifiedAt": ahp.utc_stamp()}
@@ -573,7 +575,7 @@ class VsLink:
             self.sess[resource] = {"channel": resource, "state": ahp.trimmed_session(state), "seen": {}}
         link.dispatch(chat, action)
         with self.lock:
-            ahp.reduce_chat(held["state"], action)
+            ahp.reduce_chat(held["state"], {**action, "message": {key: value for key, value in message.items() if key != "attachments"}})  # the bytes are not kept here
         with self.lock:
             self.sessions.setdefault(resource, dict(stub))  # tracked at once; `_list` asks again every EXPECT_EVERY seconds until the host lists it
             self.dirty = True
@@ -760,7 +762,7 @@ class VsLink:
             self._forget(made)
             try:
                 chatsend.record(self.root, entry["task"], {"at": utc_now(), "task": entry["task"], "kind": "create", "chat": made["chat"], "text": made["text"], "lang": made["lang"],
-                                                           "source": made["source"], "model": made["model"] or {}, "permission": made["permission"]})
+                                                           "source": made["source"], "model": made["model"] or {}, "permission": made["permission"], "files": made.get("files") or []})
                 with task_ops.locked(self.root, entry["task"]) as data:
                     task_ops.note(data, "create", chatsend.summary(made["text"]))
             except Exception:  # noqa: BLE001 - the binding is made; a missing line of history must not undo it

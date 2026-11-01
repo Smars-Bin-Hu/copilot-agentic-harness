@@ -145,8 +145,47 @@ def reviewer(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, 
     return {"n": n, "states": states, "waived": info["waived"], "stamp": n > 0 and info["passes"] >= n}
 
 
-def of(root: Path, task: str, data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
-    """The ribbon of a task, or None for a kind that has none (a question), a task not started, or one that cannot be read."""
+# The event that ends each step, by kind (the first of the names that the current round has): the time of a step is from the end of the one before it to its own end.
+ENDS = {
+    "requirement": ("confirm-req", "approve-plan"), "plan": ("approve-plan",), "developing": ("approve-promote", "promote"),
+    "writeback": ("promote",), "doing": ("close",),
+}
+
+
+def with_timing(found: Dict[str, Any], data: Dict[str, Any]) -> None:
+    """Add to each step what the history knows of its time: `s` (seconds, a step that is done and has both ends) or `since` (a step that is now, from when it began). Nothing is guessed:
+    a step with an end missing has neither. The test kind has no such events."""
+    from core import copilot_events
+
+    steps = found.get("steps") or []
+    round_now = int(data.get("round") or 1)
+    events = [event for event in data.get("events") or [] if isinstance(event, dict) and int(event.get("round") or 1) == round_now]
+    start = None
+    if round_now == 1:
+        start = copilot_events.seconds(data.get("created_at"))
+    else:
+        opened = [copilot_events.seconds(event.get("at")) for event in events if event.get("what") == "new-round"]
+        start = opened[0] if opened and opened[0] is not None else None
+    begin = start
+    for step in steps:
+        names = ENDS.get(step.get("id", ""), ())
+        end = None
+        for name in names:
+            marks = [copilot_events.seconds(event.get("at")) for event in events if event.get("what") == name]
+            marks = [mark for mark in marks if mark is not None]
+            if marks:
+                end = marks[0] if name != "promote" else marks[-1]
+                break
+        if step.get("state") == "done" and begin is not None and end is not None and end >= begin:
+            step["s"] = round(end - begin, 1)
+        elif step.get("state") == "now" and begin is not None:
+            from datetime import datetime, timezone
+            step["since"] = datetime.fromtimestamp(begin, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        begin = end if end is not None else None
+
+
+def of(root: Path, task: str, data: Optional[Dict[str, Any]] = None, timing: bool = False) -> Optional[Dict[str, Any]]:
+    """The ribbon of a task, or None for a kind that has none (a question), a task not started, or one that cannot be read. `timing`: the task page also wants the time of each step."""
     try:
         data = data if data is not None else tasks.read(root, task)
         kind = (data or {}).get("kind", "")
@@ -160,6 +199,8 @@ def of(root: Path, task: str, data: Optional[Dict[str, Any]] = None) -> Optional
         else:
             found = write_back(root, task, data)
         found.update(kind=kind, round=int(data.get("round") or 1), review=reviewer(root, task, data))
+        if timing and kind != "test":
+            with_timing(found, data)
         return found
     except Exception:  # noqa: BLE001 - a ribbon is a picture: a task that cannot be read has none
         return None

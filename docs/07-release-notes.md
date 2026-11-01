@@ -10,6 +10,27 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.16 (2026-10-31)
+
+### Added
+
+- The task page has a new shell. One surface instead of stacked cards. A slim header made once and changed in place (so the refresh never closes a card or the menu, or starts an animation again): back, the task name, its state, the stage strip, the independent checks, the context bar, the VS Code button, **Compact** and a menu (time and usage, save as HTML, copy chat title, and the actions you may take any time: pause, resume, autorun, close).
+- The stage strip has no words. Done is green with a tick, running is blue and turning, waiting for you is yellow and blinking, not started is black (dark grey with a ring in the dark theme). A light travels along the line after the running stage. Hover or focus it for a card: every stage with its state and its time (a running stage counts on), a stamp when all is done, and the independent checks. Under Lite and reduced motion nothing moves. A saved copy shows the times as of the day it was saved.
+- The independent checks are one button: a tick for a pass, a red cross for a fail, a turning ring while a check runs. It is in the header and in the stage card, and it goes straight to the Review tab.
+- One line under the task name: an icon for the kind of task (hover for its name), the model of the latest turn, the thinking effort, and the context window of the model. The thinking effort is known only from what the board sent; when it is not known it is left out. Nothing is made up.
+- Hover or focus the context bar for a card: the percent, the numbers, **Compact**, and what the context holds. Only parts that have a real number are listed: system prompt and tool definitions (from the newest model call), conversation (from Copilot's own record, marked †: counted at the last compaction or end of a session). Skills and MCP servers have no number, so they are not drawn. The record is read from the end of `events.jsonl` and only when the file grew.
+- The tabs are in groups: **Live**, **Overview** (Overview, Requirement, Intake, Design, RCA, Plan, TODO), **Deliver** (Changes, Test, Review), **Records** (Log, History, Trace), **Files** (Docs, Files). The open group has a second row. A group with one tab goes straight to it, a group with none is not there. A mark on a tab (the `!` of a requirement or a plan that waits for you, of a promote) rises to its group. Each group remembers the tab it was left on, in this browser. Arrow keys move along a row, Home and End go to its ends, and Cmd+K lists every tab with its group. A link with a tab (`#plan`) still works.
+- **Live** is the first tab of a served page. For now it shows what exists: the state of the chat, the latest thing the agent did and the first lines of its last reply, the steer and stop buttons, the task settings and the drafts.
+- A decision that waits for you is one strong card above the tabs: approve the plan, confirm the requirement, approve the promote. Each has its action and a link to the tab where you read what you decide on (Plan, Requirement, Changes). Confirm a command, answer a question and every other wait keep their cards; none of them has a word about a code.
+
+### Changed
+
+- The task page opens on **Live** (a task that is open or not started), else on Overview. A saved copy opens on Overview.
+- Define is gone: Requirement, Intake, Design, RCA, Plan and TODO are in Overview. The Test tab is in Deliver.
+- The chat bar, the settings row and the drafts row above the tabs are gone from the top of the page: the state of the chat is on Live, the context and Compact are in the header, the model and effort are in the line under the name.
+- The old stage ribbon and its reviewer row are replaced by the strip, its card and the checks button.
+- The pairing line at the foot of a task page says only that the buttons act.
+
 ## 1.6.15 (2026-10-31)
 
 ### Added

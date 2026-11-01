@@ -219,7 +219,7 @@ const SERVE = (function () {
   const banners = [];
   function showPaired() {
     for (const node of banners) {
-      node.replaceChildren(paired === null ? "" : t(paired ? "board.serve.paired" : "board.serve.unpaired"),
+      node.replaceChildren(paired === null ? "" : t(paired ? (node.dataset.short ? "desk.paired.short" : "board.serve.paired") : "board.serve.unpaired"),
         stale ? h("span", {class: "bad"}, " " + t("board.serve.stale", stale)) : "");
       node.classList.toggle("good", paired === true && !stale);
     }
@@ -236,8 +236,9 @@ const SERVE = (function () {
   })();
 
   // A line that says whether this browser may approve; it stays right when the page is drawn again.
-  function banner() {
-    const node = h("div", {class: "sub pairing"});
+  // `short`: the task page says only that the buttons act (it has no word about the code: a command is allowed or denied there, and a plan is approved in its own dialog).
+  function banner(short) {
+    const node = h("div", {class: "sub pairing", "data-short": short ? "1" : null});
     banners.splice(0, banners.length, ...banners.filter((item) => item.isConnected), node);
     showPaired();
     return node;

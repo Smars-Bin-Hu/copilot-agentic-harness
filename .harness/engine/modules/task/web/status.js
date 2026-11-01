@@ -2,6 +2,8 @@
 // The list shows the row under the task name; the lobby card shows the same row. A mark with no data is not drawn (its place stays, so rows are as high and as aligned as the others).
 // The mini stage ribbon (`Status.stages`, `Status.ribbon`) is a shared part: it does not know the list. The task page (B87) draws its stage strip from the same states and colours.
 //   done: green, a check    running: blue, turning    waits for the person: yellow, blinking    not started: black (dark theme: dark fill, grey ring)
+// The task page (1.6.16, B87) draws its stage strip from the same part and opens a card on it (`Status.card`: like the tip, but the pointer may go into it, it holds buttons, and it is filled again
+// in place when its data changes); the independent checks are one button (`Status.checks`) that the page sends to the Review tab. A step has a time: done `s` seconds, or running since `since`.
 // One timer for the whole page ticks every run time; nothing here keeps a timer per row. Animations are in step with the clock (a negative delay from `--t`),
 // so a row that is drawn again by the 3-second poll goes on from where its animation was, and does not start over.
 // Needs common.js (h, t, clock, amount, stateOf, waitText). Drawn with DOM nodes and textContent only.
@@ -180,21 +182,22 @@ const Status = (function () {
         else if (works) { kind = "run"; text = t("board.status.stage.run"); }
         else { kind = "now"; text = t("board.status.stage.now"); }
       }
-      return {label, kind, text};
+      return {label, kind, text, s: finite(step.s) ? step.s : null, since: step.since ? Date.parse(step.since) : NaN};
     });
-    const review = s.review && (s.review.n || (s.review.states || []).length) ? {n: s.review.n, states: (s.review.states || []).map((mark) => ({pass: "done", run: "run", fail: "bad"}[mark] || "todo")), waived: Boolean(s.review.waived)} : null;
+    const review = s.review && (s.review.n || (s.review.states || []).length) ? {n: s.review.n, states: (s.review.states || []).map((mark) => ({pass: "done", run: "run", fail: "fail"}[mark] || "todo")), waived: Boolean(s.review.waived), stamp: Boolean(s.review.stamp)} : null;
     return {steps, round: s.round || 1, review};
   }
 
   const dot = (kind, extra) => h("span", {class: "st-d k-" + kind + (extra ? " " + extra : "")});
 
   // The ribbon: a dot for each step and a line between two dots (a line is green once the step before it is done). Many steps: one segment each.
-  function ribbon(found) {
+  // `flow` (the task page): a light travels along the line after the step that runs.
+  function ribbon(found, flow) {
     const compact = found.steps.length >= COMPACT_FROM;
     const parts = [];
     found.steps.forEach((step, index) => {
       parts.push(dot(step.kind, compact ? "seg" : ""));
-      if (!compact && index < found.steps.length - 1) parts.push(h("i", {class: "st-l" + (step.kind === "done" ? " k-done" : "")}));
+      if (!compact && index < found.steps.length - 1) parts.push(h("i", {class: "st-l" + (step.kind === "done" ? " k-done" : "") + (flow && step.kind === "run" ? " is-flow" : "")}));
     });
     return h("span", {class: "st-ribbon" + (compact ? " compact" : "")}, parts);
   }
@@ -216,6 +219,129 @@ const Status = (function () {
     if (!found) return null;
     const label = t("board.status.stage.title") + ": " + found.steps.map((step) => step.label + " " + step.text).join(", ");
     return marked(ribbon(found), key, () => stageList(found), label, true);
+  }
+
+  // --- the card: a tip the pointer can enter ----------------------------------------------------------------------------
+  // An anchor with `data-card` and `_card = () => ({sig, build})` opens it: by the pointer (it stays while the pointer is on the anchor or in the card, and for a moment after), by keyboard focus,
+  // and Enter, Space or the down arrow on the anchor move the focus into the card (Esc comes back). `sig` says whether the content changed: `Status.refresh()` (the page calls it after it
+  // changed the data) builds the content again only then, in place, so a card the person is using is never closed or emptied by the 3-second poll.
+  const hold = {node: null, anchor: null, sig: "", timer: 0};
+
+  function holdNode() {
+    if (!hold.node) {
+      hold.node = h("div", {class: "st-card", role: "group"});
+      document.body.append(hold.node);
+      hold.node.addEventListener("mouseenter", () => clearTimeout(hold.timer));
+      hold.node.addEventListener("mouseleave", () => closeSoon());
+      hold.node.addEventListener("focusout", (event) => { if (!hold.node.contains(event.relatedTarget) && event.relatedTarget !== hold.anchor) closeSoon(); });
+      hold.node.addEventListener("keydown", (event) => { if (event.key === "Escape") { const back = hold.anchor; closeCard(); if (back) back.focus(); event.stopPropagation(); } });
+    }
+    return hold.node;
+  }
+
+  function fillCard(force) {
+    const made = hold.anchor && hold.anchor._card ? hold.anchor._card() : null;
+    if (!made) { closeCard(); return; }
+    if (!force && made.sig === hold.sig) return;
+    hold.sig = made.sig;
+    const node = holdNode();
+    node.replaceChildren(made.build());
+    ensureTimer();
+    place(node, hold.anchor, true);
+  }
+
+  function openCard(anchor) {
+    clearTimeout(hold.timer);
+    if (hold.anchor === anchor && hold.node && hold.node.classList.contains("on")) return;
+    hideTip();
+    hold.anchor = anchor;
+    fillCard(true);
+    if (hold.anchor) holdNode().classList.add("on");
+  }
+
+  function closeCard() {
+    clearTimeout(hold.timer);
+    hold.anchor = null;
+    hold.sig = "";
+    if (hold.node) hold.node.classList.remove("on");
+  }
+
+  function closeSoon() {
+    clearTimeout(hold.timer);
+    hold.timer = setTimeout(() => {
+      const keep = hold.node && hold.node.contains(document.activeElement) || hold.anchor && hold.anchor === document.activeElement && hold.anchor.matches(":focus-visible");
+      if (!keep) closeCard();
+    }, 220);
+  }
+
+  const cardOf = (event) => (event.target instanceof Element ? event.target.closest("[data-card]") : null);
+  document.addEventListener("mouseover", (event) => { const hit = cardOf(event); if (hit) openCard(hit); });
+  document.addEventListener("mouseout", (event) => { const hit = cardOf(event); if (hit && hit === hold.anchor && !(event.relatedTarget instanceof Node && (hit.contains(event.relatedTarget) || (hold.node && hold.node.contains(event.relatedTarget))))) closeSoon(); });
+  document.addEventListener("focusin", (event) => { const hit = cardOf(event); if (hit && hit.matches(":focus-visible")) openCard(hit); });
+  document.addEventListener("focusout", (event) => { const hit = cardOf(event); if (hit && hit === hold.anchor && !(hold.node && hold.node.contains(event.relatedTarget))) closeSoon(); });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && hold.anchor) { const back = hold.anchor; closeCard(); if (back instanceof HTMLElement) back.focus({preventScroll: true}); return; }
+    const hit = cardOf(event);
+    if (hit && hit === event.target && hold.anchor === hit && hold.node && ["Enter", " ", "ArrowDown"].includes(event.key)) {
+      const first = hold.node.querySelector("button:not([disabled]), a[href]");
+      if (first) { event.preventDefault(); first.focus(); }
+    }
+  });
+  document.addEventListener("scroll", (event) => { if (hold.anchor && !(hold.node && event.target instanceof Node && hold.node.contains(event.target))) closeCard(); }, true);
+  window.addEventListener("resize", () => closeCard());
+
+  // The page changed its data: a card that is open is made again only if its `sig` changed, and put back next to its anchor (which may have moved); a card whose anchor is gone closes.
+  function refresh() {
+    if (!hold.anchor) return;
+    if (!hold.anchor.isConnected) { closeCard(); return; }
+    fillCard(false);
+    if (hold.node && hold.anchor) place(hold.node, hold.anchor, true);
+  }
+
+  function card(anchor, build, label) {
+    anchor._card = build;
+    anchor.setAttribute("data-card", "1");
+    anchor.setAttribute("tabindex", "0");
+    if (label) anchor.setAttribute("aria-label", label);
+    return anchor;
+  }
+
+  // --- the card of the stage strip, and the independent checks ---------------------------------------------------------------
+
+  // The time of a step: running, a live clock (the timer of this file moves it); done, its length; else nothing.
+  function stepTime(step) {
+    if (["run", "wait", "now", "bad"].includes(step.kind) && finite(step.since) && !isNaN(step.since)) {
+      const node = h("span", {class: "st-run st-tm", "data-since": String(step.since)}, h("span", {class: "st-time"}, ""));
+      paintRun(node);
+      ensureTimer();
+      return node;
+    }
+    return h("span", {class: "st-tm"}, finite(step.s) ? clock(step.s) : "");
+  }
+
+  // `onReview`: what the button of the checks does. `done`: every step is done (a stamp).
+  function stageCard(found, onReview) {
+    const done = found.steps.every((step) => step.kind === "done");
+    const stamp = done ? t("desk.stage.stamp") : found.review && found.review.stamp ? t("stage.reviewed", {n: found.review.n}) : "";
+    const lines = [h("div", {class: "st-head"}, t("board.status.stage.title") + (found.round > 1 ? " \u00b7 " + t("board.status.stage.round", {round: found.round}) : ""), stamp ? h("span", {class: "st-stamp"}, stamp) : null)];
+    for (const step of found.steps) {
+      lines.push(h("div", {class: "st-ln" + (["run", "wait", "now", "bad"].includes(step.kind) ? " cur" : "")}, dot(step.kind), h("span", {class: "st-nm", title: step.label}, step.label),
+        h("span", {class: "st-st k-" + step.kind}, step.text), stepTime(step)));
+    }
+    if (found.review) lines.push(h("div", {class: "st-ln st-rv"}, h("span", {class: "st-nm"}, found.review.n ? t("desk.checks.title") : t("stage.reviewer.off")), checks(found.review, onReview)));
+    return h("div", {class: "st-list st-wide"}, lines);
+  }
+
+  // The independent checks as one button: a mark for each check asked for (a check that passed: green with a tick; failed: red with a cross; running: a blue ring that turns; not yet: empty).
+  // It goes to the Review tab. A page with no way to go (a saved copy) gets the marks with no button.
+  function checks(review, onReview) {
+    const marks = review.states.map((kind) => dot(kind));
+    const passes = review.states.filter((kind) => kind === "done").length;
+    const label = review.n ? t("desk.checks.label", {passes, n: review.states.length}) : t("stage.reviewer.off");
+    if (!onReview) return h("span", {class: "st-checks", title: label, role: "img", "aria-label": label}, marks);
+    const button = h("button", {type: "button", class: "st-checks", title: label + " \u00b7 " + t("desk.checks.open"), "aria-label": label + ". " + t("desk.checks.open")}, marks);
+    button.addEventListener("click", () => { closeCard(); onReview(); });  // the card (if the button is in it) is done
+    return button;
   }
 
   // --- the row ----------------------------------------------------------------------------------------------------------
@@ -256,5 +382,5 @@ const Status = (function () {
     return box;
   }
 
-  return {row: build, stages, ribbon, stageList, dot, place, phase, shortModel, tick};
+  return {row: build, stages, ribbon, stageList, stageCard, checks, card, refresh, dot, place, phase, shortModel, tick, clock: ensureTimer};
 })();

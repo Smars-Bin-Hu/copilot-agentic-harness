@@ -27,7 +27,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from core import ahp, config, tasks
+from core import ahp, config, copilot_events, tasks
 from core.paths import utc_now
 
 from . import chatask, chatctx, chatlink, chatnew, chatsend, task as task_ops, tasklife, tasksub
@@ -184,12 +184,30 @@ class VsLink:
                 if found["busy"] and found["started"]:
                     out["started_at"] = found["started"]  # the run time of the latest turn is counted by the page, only while it runs
                 out["context"] = chatctx.meter(cached["state"], self.windows)  # None: unknown, shown empty
+                out["effort"] = chatctx.effort(cached["state"], found["model"])  # only what a message of the board said; None: not known
+                out["window"] = chatctx.capacity(found["model"], self.windows)  # maxContextWindow of the model; None: not listed
                 sub = tasksub.sub_of(found, cached.get("tool_at", "") if found["busy"] else "")
                 if sub:
                     out["sub"] = sub
                 if found["reply"]:
                     out["recent"] = tasksub.recent_text(found["reply"])
             return out
+
+    def context_parts(self, task: str, session_id: str) -> Optional[Dict[str, Any]]:
+        """What the context of the chat of `task` holds (`chatctx.parts`): the newest model call of the cached state, and Copilot's own record of the session `session_id` (its file is read again
+        only when it grew). Only the task page asks for it. None: nothing real is known."""
+        with self.lock:
+            binding = self.bound.get(task) if self.ready else None
+            state = (self.chats.get(binding["chat"]) or {}).get("state") if binding else None
+        if not isinstance(state, dict):
+            return None
+        record = None
+        try:
+            path = copilot_events.events_path(session_id) if session_id else None
+            record = copilot_events.context_parts(path) if path is not None else None
+        except Exception:  # noqa: BLE001 - Copilot's file is not ours
+            record = None
+        return chatctx.parts(state, record)
 
     def overlay(self, rows: List[Dict[str, Any]]) -> None:
         """Put `chat` on every open row, and `sub` where the chat has something newer than the hook log gave. No I/O."""

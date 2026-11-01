@@ -297,3 +297,45 @@ def cancelled_at(path: Path) -> Optional[str]:
         elif kind == "abort" and seconds(row.get("timestamp")) is not None:
             found = str(row["timestamp"])
     return found
+
+
+_PARTS: Dict[str, Any] = {}  # path -> (size, result): the tail is read again only when the file grew
+PARTS_KEPT = 64
+
+
+def context_parts(path: Path) -> Optional[Dict[str, Any]]:
+    """What Copilot wrote last about the parts of the context: the newest `session.shutdown` or `session.compaction_start` in the tail of the file with a number for the system prompt, the
+    tool definitions or the conversation. `{system, tools, conversation, at}` (only the numbers above zero), or None. Kept by the size of the file: the board asks every few seconds."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return None
+    key = str(path)
+    kept = _PARTS.get(key)
+    if kept and kept[0] == size:
+        return kept[1]
+    found: Optional[Dict[str, Any]] = None
+    try:
+        with path.open("rb") as handle:
+            handle.seek(max(0, size - TAIL_BYTES))
+            lines = handle.read().decode("utf-8", errors="replace").splitlines()[1 if size > TAIL_BYTES else 0:]
+    except OSError:
+        return None
+    for line in lines:
+        if '"session.shutdown"' not in line and '"session.compaction_start"' not in line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        data = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else None
+        if data is None or row.get("type") not in ("session.shutdown", "session.compaction_start") or row.get("agentId"):
+            continue
+        numbers = {name: whole_number(data.get(field)) for name, field in (("system", "systemTokens"), ("tools", "toolDefinitionsTokens"), ("conversation", "conversationTokens"))}
+        numbers = {name: value for name, value in numbers.items() if value and value > 0}
+        if numbers:
+            found = dict(found or {}, **numbers, at=str(row.get("timestamp") or ""))  # each kind keeps its newest number
+    if len(_PARTS) >= PARTS_KEPT:
+        _PARTS.clear()
+    _PARTS[key] = (size, found)
+    return found

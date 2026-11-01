@@ -11,7 +11,17 @@
   let desk = full;
   let shown = JSON.stringify(full);
   const same = (a, b) => a.replace(/"as_of":"[^"]*"/, "") === b.replace(/"as_of":"[^"]*"/, "");  // the time of asking is not a change
-  const tabs = ["overview", "req", "intake", "design", "rca", "test", "plan", "todo", "log", "changes", "review", "history", "trace", "docs", "files"];  // the commit message is at the top of "changes" once written back (1.5.34)
+  // The tabs are in five groups (1.6.16): the top row has Live and the groups, the open group has a second row. A group with no tab is not there; a group with one goes straight to it.
+  const GROUPS = [
+    {id: "live", tabs: ["live"]},
+    {id: "overview", tabs: ["overview", "req", "intake", "design", "rca", "plan", "todo"]},
+    {id: "deliver", tabs: ["changes", "test", "review"]},
+    {id: "records", tabs: ["log", "history", "trace"]},
+    {id: "files", tabs: ["docs", "files"]},
+  ];
+  const tabs = GROUPS.flatMap((group) => group.tabs);  // the commit message is at the top of "changes" once written back (1.5.34)
+  const groupOf = (tab) => GROUPS.find((group) => group.tabs.includes(tab));
+  const JUMPS = {"approve-plan": "plan", "confirm-req": "req", "approve-promote": "changes"};  // the waits that have a strong card, and the tab where what they ask about is read
   const FILES = {overview: "TASK.md", req: "REQ.md", plan: "PLAN.md", todo: "TODO.md", log: "LOG.md", design: "DESIGN.md", rca: "RCA.md"};
   const WRITES_BACK = ["dev", "kb"];  // the kinds that have a plan, a diff and a commit
   const PAST_TABS = ["req", "plan", "changes", "review", "history", "files"];  // an earlier round keeps these; the others (overview, TODO, log, intake) are the task's, not one round's
@@ -37,23 +47,26 @@
     });
   }
   const hashOf = (tab) => "#" + (desk.past ? "r" + desk.past.round + "/" : "") + tab;
-  const firstTab = () => tabs.find((tab) => ownTab(tab) && tab !== "docs") || "overview";
+  // The tab a task opens on: Live for a task of a served page that is open or not started, else Overview.
+  const firstTab = () => (ownTab("live") && desk.status !== "closed" ? "live" : tabs.find((tab) => ownTab(tab) && tab !== "docs" && tab !== "live") || "overview");
+  const visible = (tab) => (tab === "docs" ? extra().length > 0 : ownTab(tab));
   // The server sent the task again: draw the round that is open from the new data.
   function setDesk(next) {
     full = next;
     drafts.stale = true;  // a send may have used the notes: read them again at the next draw
     shown = JSON.stringify(next);
     desk = desk.past ? pastView(full, desk.past.round) : full;
-    if (!ownTab(current)) current = firstTab();
+    if (!visible(current)) current = firstTab();
   }
   function showRound(number, tab) {
     desk = number === full.round ? full : pastView(full, number);
-    current = tab && ownTab(tab) ? tab : firstTab();
+    current = tab && visible(tab) ? tab : firstTab();
     history.replaceState(null, "", hashOf(current));
     draw(false);
   }
   // A tab is there when the kind of the task has it, or when its file is there (M40-1): a test task has no plan and no diff; a question has no log.
   const ownTab = (tab) => {
+    if (tab === "live") return served() && !desk.past;  // a saved copy and an earlier round have no live chat
     if (desk.past && !PAST_TABS.includes(tab)) return false;
     if (desk.past && tab === "plan") return Boolean(doc(FILES.plan));
     if (tab === "design" || tab === "rca") return Boolean(doc(FILES[tab])) || (desk.kind === tab && desk.status === "open");  // a closed task that never wrote it has nothing to show
@@ -70,7 +83,7 @@
   const extra = () => desk.docs.filter((item) => !Object.keys(FILES).some((tab) => FILES[tab] === item.name && ownTab(tab)) && item.name !== "REQ.md" && !(desk.test && item.name === "TEST-GUIDE.md") && !(desk.commit && item.name === "COMMIT-MESSAGE.md"));  // these have a tab of their own
   let current = "overview";
   if (route && (full.rounds || []).some((item) => item.round === Number(route[1]))) desk = pastView(full, Number(route[1]));
-  current = tabs.includes(asked) && ownTab(asked) ? asked : firstTab();
+  current = tabs.includes(asked) && visible(asked) ? asked : firstTab();
 
   // --- markdown -------------------------------------------------------------------------------------------
 
@@ -220,54 +233,63 @@
     return h("section", {class: "card actions quiet"}, h("p", {class: "sub"}, t("desk.round.past", {round: desk.past.round})), back);
   }
 
-  function header() {
-    const kind = t("task.kind." + (desk.kind || "none")) + " · " + t("task.tier." + (desk.tier || "none"));
-    const state = stateTag(desk, served());
-    return [
-      brand(),
-      saved ? null : h("div", {class: "crumbs sub"}, h("a", {href: "/"}, "← " + t("desk.back")),
-        desk.report ? [" · ", h("a", {href: desk.report.split("/").map(encodeURIComponent).join("/")}, t("desk.report"))] : null,
-        served() ? [" · ", h("a", {href: "/snapshot/" + encodeURIComponent(desk.name), download: "", title: t("desk.save.hint")}, t("desk.save"))] : null),
-      h("div", {class: "title-row"}, h("h1", null, desk.name), roundSwitch(), state),
-      desk.status === "new" ? null : h("div", {class: "sub"}, t("desk.subtitle", {kind, round: desk.round, created: when(desk.created_at, 0, 16), updated: when(desk.updated_at, 0, 16)}),  // a task not started has no kind, no round, no dates
-        desk.domains.length ? " · " + t("desk.domains", {names: desk.domains.join(", ")}) : "", desk.autorun ? [" · ", tag(t("desk.autorun"), "good")] : null),
-      desk.forked_from || desk.forked_to.length ? h("div", {class: "sub"},  // the tasks this one came from and went on to (`task fork`)
-        desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null,
-        desk.forked_from && desk.forked_to.length ? " · " : null,
-        desk.forked_to.length ? [t("desk.forked.to") + " ", desk.forked_to.map((name, index) => [index ? ", " : "", taskLink(name)])] : null) : null,
-    ];
+  // --- the header: one slim bar, made once and changed in place ----------------------------------------------------------------
+  // The nodes of the shell are made once (`shell()`) and `paintHead()` changes only the places whose data changed (`slot`). So the 3-second poll cannot close a card or the menu, empty a field,
+  // or start an animation again: nothing that is on screen is drawn a second time unless its own data changed.
+  const ui = {};
+  const view = {stages: null, chat: null};  // what the cards read when they open or are filled again
+
+  const useful = (item) => item !== null && item !== undefined && item !== false;
+  const fill = (node, kids) => node.replaceChildren(...[kids].flat(Infinity).filter(useful).map((item) => (item instanceof Node ? item : document.createTextNode(String(item)))));
+
+  function slot(tagName, cls) {
+    const place = {node: h(tagName, {class: cls}), sig: null, set(sig, make) {
+      if (sig === place.sig) return place;
+      place.sig = sig;
+      const made = [make()].flat(Infinity).filter(useful);
+      place.node.replaceChildren(...made);
+      place.node.hidden = made.length === 0;
+      return place;
+    }};
+    return place;
   }
 
-  // The chat of VS Code behind this task (1.6): its state now, the model of its last turn, a button to its window; under it the last thing the agent did, with the first lines of its last reply to open.
-  // The whole conversation is not drawn: it is in VS Code. Only a served page, and not an earlier round.
-  let recentOpen = false;
-
-  // How full the context of the chat is: the percent and a thin bar; the mouse over it gives the tokens. Unknown is empty ("-" and no bar), never 0.
-  function contextMeter(chat) {
-    const meter = chat.context;
-    if (!meter || typeof meter.percent !== "number") return h("span", {class: "ctx unknown", title: t("desk.ctx.unknown")}, h("span", {class: "sub"}, t("desk.ctx.label")), " -");
-    const hot = meter.percent > (meter.limit || 85);  // the limit is `health.context_percent`
-    return h("span", {class: "ctx" + (hot ? " hot" : ""), title: t("desk.ctx.tip", {used: meter.used.toLocaleString(), window: meter.window.toLocaleString()})},
-      h("span", {class: "sub"}, t("desk.ctx.label")), " ", h("span", {class: "ctx-bar"}, h("i", {style: "width:" + Math.min(100, meter.percent) + "%"})), " ", h("b", null, meter.percent + "%"));
+  const SVG = "http://www.w3.org/2000/svg";
+  function icon(paths, size) {
+    const node = document.createElementNS(SVG, "svg");
+    for (const [name, value] of Object.entries({viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", "stroke-width": "1.5", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true"})) node.setAttribute(name, value);
+    if (size) { node.setAttribute("width", size); node.setAttribute("height", size); }
+    for (const d of paths) { const part = document.createElementNS(SVG, "path"); part.setAttribute("d", d); node.append(part); }
+    return node;
   }
+
+  // 128000 -> "128k", 1048576 -> "1M"
+  const tokensShort = (value) => (value >= 1e6 ? (Math.round(value / 1e5) / 10).toString().replace(/\.0$/, "") + "M" : value >= 1000 ? Math.round(value / 1000) + "k" : String(value));
 
   // Compact: one confirm, then the server sends /compact to an idle chat. The only place a control mark goes out, and only for this click.
-  function compactButton(chat) {
-    const idle = chat.state === "idle";
-    const button = h("button", {type: "button", class: "act", disabled: idle ? null : "disabled", title: t(idle ? "desk.compact.tip" : "desk.compact.busy")}, t("desk.compact.go"));
-    button.addEventListener("click", () => {
-      const said = h("div", {class: "bad"});
-      const yes = h("button", {class: "act hot", type: "button"}, t("desk.compact.confirm"));
-      const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
-      const view = SERVE.dialog([h("h2", null, t("desk.compact.title", {name: desk.name})), h("p", null, t("desk.compact.warn")), h("div", {class: "row"}, yes, no), said]);
-      no.addEventListener("click", view.close);
-      yes.addEventListener("click", () => {
-        yes.disabled = true;
-        SERVE.post("/api/compact", {task: desk.name}).then(() => { view.close(); SERVE.done(); },
-          (error) => { said.replaceChildren(...SERVE.reasons(error.message)); yes.disabled = false; });
-      });
+  function askCompact() {
+    const said = h("div", {class: "bad"});
+    const yes = h("button", {class: "act hot", type: "button"}, t("desk.compact.confirm"));
+    const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
+    const dialog = SERVE.dialog([h("h2", null, t("desk.compact.title", {name: desk.name})), h("p", null, t("desk.compact.warn")), h("div", {class: "row"}, yes, no), said]);
+    no.addEventListener("click", dialog.close);
+    yes.addEventListener("click", () => {
+      yes.disabled = true;
+      SERVE.post("/api/compact", {task: desk.name}).then(() => { dialog.close(); SERVE.done(); },
+        (error) => { said.replaceChildren(...SERVE.reasons(error.message)); yes.disabled = false; });
     });
+  }
+
+  function compactButton(extra) {
+    const button = h("button", {type: "button", class: "act chat-act" + (extra ? " " + extra : "")}, t("desk.compact.go"));
+    button.addEventListener("click", askCompact);
     return button;
+  }
+  const canCompact = (chat) => Boolean(served() && chat && chat.bound && SERVE.runs("send"));
+  function tuneCompact(button, chat) {
+    const idle = chat && chat.state === "idle";
+    button.disabled = !idle;
+    button.title = t(idle ? "desk.compact.tip" : "desk.compact.busy");
   }
 
   function copyTitleButton(chat) {
@@ -276,25 +298,189 @@
     return button;
   }
 
-  function chatBars() {
-    if (!served() || desk.past || !desk.chat) return null;
-    const chat = desk.chat;
-    const row = [h("span", {class: "chat-k"}, t("desk.chat.label"))];
-    if (chat.bound) {
-      row.push(h("span", {class: "chat-title", title: chat.title}, chat.title || "-"), tag(t("desk.chat." + (chat.state || "unknown")), chat.state === "busy" ? "good run" : chat.state === "input" || chat.state === "error" ? "hot" : ""));
-      if (chat.model) row.push(h("span", {class: "sub"}, t("desk.chat.model", {model: chat.model})));
-      row.push(contextMeter(chat));
-    } else {
-      row.push(h("span", {class: "sub"}, t("desk.chat.unbound", {why: t("board.vs.why." + (chat.why || "no-chat"))})));
+  // The row an action button is made for (what `actionButton` and the dialogs read of the task).
+  function actionRow() {
+    return {name: desk.name, waiting: desk.waiting, state: desk.state, ask: desk.ask, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed,
+      result_missing: FILES[desk.kind] && ["design", "rca"].includes(desk.kind) && !doc(FILES[desk.kind]) ? FILES[desk.kind] : ""};  // a design or an RCA task without its result file: the close dialog warns
+  }
+  const OPTIONAL = ["pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
+  const hintOf = (item) => t("desk.hint." + item.action.replace(" ", "-"));
+  const canAct = () => desk.status === "open" && !desk.past && !saved;
+
+  // How full the context is: a label, a thin bar, the percent. Unknown is "-" and no bar, never 0.
+  function ctxBar(percentNow, meter) {
+    if (percentNow === null) return [h("span", {class: "tk-cl"}, t("desk.ctx.label")), h("b", {class: "tk-cv"}, "-")];
+    const hot = percentNow > (meter.limit || 85);
+    return [h("span", {class: "tk-cl"}, t("desk.ctx.label")), h("span", {class: "tk-cb" + (hot ? " hot" : "")}, h("i", {style: "width:" + Math.max(0, Math.min(100, percentNow)) + "%"})),
+      h("b", {class: "tk-cv" + (hot ? " hot" : "")}, Math.round(percentNow * 10) / 10 + "%")];
+  }
+
+  // The card over the context bar: the figure, what the context holds when Copilot gave real counts, and the compact action.
+  const PART_ORDER = ["system", "tools", "conversation"];
+  function ctxCard() {
+    const chat = view.chat;
+    if (!chat || !chat.bound) return null;
+    const meter = chat.context && typeof chat.context.percent === "number" ? chat.context : null;
+    const parts = chat.parts && PART_ORDER.some((key) => chat.parts[key] > 0) ? chat.parts : null;
+    const can = canCompact(chat);
+    return {sig: JSON.stringify([meter, parts, can, chat.state]), build: () => {
+      const box = h("div", {class: "tk-cx"}, h("div", {class: "st-head"}, t("desk.ctx.label")));
+      if (meter) {
+        const hot = meter.percent > (meter.limit || 85);
+        box.append(h("div", {class: "tk-cx-big" + (hot ? " hot" : "")}, t("desk.ctx.card.used", {percent: Math.round(meter.percent * 10) / 10, used: amount(meter.used), window: amount(meter.window)})),
+          h("span", {class: "tk-cb wide" + (hot ? " hot" : "")}, h("i", {style: "width:" + Math.max(0, Math.min(100, meter.percent)) + "%"})));
+        if (hot) box.append(h("div", {class: "sub"}, t("board.status.context.warn", {limit: meter.limit || 85})));
+        box.append(h("div", {class: "sub"}, t("desk.ctx.card.note")));
+      } else {
+        box.append(h("div", {class: "sub"}, t("desk.ctx.unknown")));
+      }
+      if (parts) {
+        box.append(h("div", {class: "st-head tk-cx-h"}, t("desk.ctx.parts")));
+        for (const key of PART_ORDER) {
+          if (!(parts[key] > 0)) continue;
+          const recorded = (parts.recorded || []).includes(key);
+          box.append(h("div", {class: "tk-part"}, h("span", {class: "tk-pn"}, t("desk.ctx.part." + key) + (recorded ? " †" : "")), h("span", {class: "tk-pv"}, amount(parts[key])),
+            meter ? h("span", {class: "tk-cb"}, h("i", {style: "width:" + Math.max(1, Math.min(100, parts[key] / meter.window * 100)) + "%"})) : null));
+        }
+        box.append(h("div", {class: "sub"}, t("desk.ctx.parts.note") + ((parts.recorded || []).length ? " " + t("desk.ctx.parts.recorded", {at: when(parts.at, 5, 16)}) : "")));
+      }
+      if (can) { const go = compactButton("tk-cx-go"); tuneCompact(go, chat); box.append(go); }
+      return box;
+    }};
+  }
+
+  // The card over the stage strip.
+  function stageCardNow() {
+    const found = view.stages;
+    if (!found) return null;
+    const review = ownTab("review") ? () => goTab("review") : null;
+    return {sig: JSON.stringify([found, Boolean(review)]), build: () => Status.stageCard(found, review)};
+  }
+
+  // The menu behind the three dots: what is not needed every minute (the report, a copy to save, the chat's title) and the actions a person may take any time.
+  let menuOpen = false, menuSig = "";
+  function menuItems() {
+    const items = [];
+    const chat = view.chat;
+    if (!saved && desk.report) items.push(h("a", {class: "tk-mi act", href: desk.report.split("/").map(encodeURIComponent).join("/")}, t("desk.report")));
+    if (!saved && served()) items.push(h("a", {class: "tk-mi act", href: "/snapshot/" + encodeURIComponent(desk.name), download: "", title: t("desk.save.hint")}, t("desk.save")));
+    if (chat && chat.bound && chat.title) items.push(copyTitleButton(chat));
+    if (canAct()) {
+      const row = actionRow();
+      for (const item of desk.actions.filter((entry) => OPTIONAL.includes(entry.action))) items.push(h("div", {class: "tk-mi-act"}, actionButton(row, item), h("span", {class: "hint"}, hintOf(item))));
     }
-    row.push(h("span", {class: "chat-grow"}), chat.bound && SERVE.runs("send") ? compactButton(chat) : null, chat.bound && chat.title ? copyTitleButton(chat) : null, SHELL.vsPill(desk.vscode), SERVE.vsButton(chat));
-    const bars = [h("section", {class: "card chatbar"}, row)];
-    if (desk.sub && (desk.sub.what || desk.sub.text)) {
-      const more = desk.recent && desk.recent !== desk.sub.text ? h("details", {class: "recent-more", open: recentOpen ? "" : null}, h("summary", null, t("desk.recent.more")), h("pre", {class: "recent-text"}, desk.recent)) : null;
-      if (more) more.addEventListener("toggle", () => { recentOpen = more.open; });
-      bars.push(h("section", {class: "card chatbar recent"}, h("span", {class: "chat-k"}, t("desk.recent.label")), h("div", {class: "recent-body"}, h("div", {class: "recent-line"}, subNodes(desk.sub)), more)));
-    }
-    return bars;
+    return items;
+  }
+  function paintMenu(force) {
+    const chat = view.chat;
+    const sig = JSON.stringify([desk.report, served(), saved, desk.past && desk.past.round, desk.actions, desk.state, desk.waiting, desk.status, chat && [chat.bound, chat.title]]);
+    const items = menuItems();
+    ui.more.hidden = items.length === 0;
+    if (sig === menuSig && !force) return;
+    menuSig = sig;
+    if (menuOpen) fill(ui.menu, items);
+  }
+  function openMenu() {
+    menuOpen = true;
+    fill(ui.menu, menuItems());
+    ui.menu.hidden = false;
+    ui.moreBtn.setAttribute("aria-expanded", "true");
+    const first = ui.menu.querySelector("a,button:not([disabled])");
+    if (first) first.focus();
+  }
+  function closeMenu() {
+    menuOpen = false;
+    ui.menu.hidden = true;
+    ui.moreBtn.setAttribute("aria-expanded", "false");
+  }
+
+  function shell() {
+    if (ui.root) return;
+    ui.back = saved ? null : h("a", {class: "tk-icon tk-back", href: "/", title: t("desk.back"), "aria-label": t("desk.back.label")}, icon(["M10 3L5 8l5 5"], 16));
+    ui.name = h("h1", {class: "tk-name"});
+    ui.state = slot("span", "tk-state");
+    ui.stage = slot("span", "tk-stage");
+    Status.card(ui.stage.node, stageCardNow);
+    ui.stage.node.setAttribute("role", "group");
+    Status.phase(ui.stage.node);
+    ui.checks = slot("span", "tk-checks");
+    ui.ctx = slot("span", "tk-ctx");
+    Status.card(ui.ctx.node, ctxCard);
+    ui.compact = compactButton("tk-compact");
+    ui.compact.hidden = true;
+    ui.vs = slot("span", "tk-vs");
+    ui.moreBtn = h("button", {type: "button", class: "tk-icon tk-morebtn", "aria-haspopup": "menu", "aria-expanded": "false", title: t("desk.menu.more"), "aria-label": t("desk.menu.more")}, icon(["M3 8h.01M8 8h.01M13 8h.01"], 16));
+    ui.menu = h("div", {class: "tk-menu", role: "menu", hidden: ""});
+    ui.more = h("span", {class: "tk-more"}, ui.moreBtn, ui.menu);
+    ui.moreBtn.addEventListener("click", () => (menuOpen ? closeMenu() : openMenu()));
+    ui.menu.addEventListener("click", (event) => { if (event.target.closest("a,button")) setTimeout(closeMenu, 0); });  // after the click has done its work
+    document.addEventListener("click", (event) => { if (menuOpen && !ui.more.contains(event.target)) closeMenu(); });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape" && menuOpen) { closeMenu(); ui.moreBtn.focus(); } });
+    ui.head = h("header", {class: "tk-head"}, ui.back, ui.name, ui.state.node, ui.stage.node, ui.checks.node, h("span", {class: "tk-sp"}), ui.ctx.node, h("span", {class: "tk-tools"}, ui.vs.node, ui.compact, ui.more));
+    ui.infoL = slot("div", "tk-info-l");
+    ui.rounds = slot("span", "tk-rounds");
+    ui.pill = slot("span", "tk-pill");
+    ui.info = h("div", {class: "tk-info"}, ui.infoL.node, ui.rounds.node, ui.pill.node);
+    ui.forks = slot("div", "tk-forks sub");
+    ui.wait = h("div", {class: "tk-wait"});
+    ui.tabs = h("div", {class: "tk-tabs"});
+    ui.pane = h("div", {class: "pane tk-pane"});
+    ui.surface = h("section", {class: "tk-surface"}, ui.wait, ui.tabs, ui.pane);
+    ui.foot = h("div", {class: "tk-foot"});
+    ui.root = h("div", {class: "tk"}, ui.head, ui.info, ui.forks.node, SHELL.banner(), ui.surface, ui.foot);
+    app.replaceChildren(ui.root);
+  }
+
+  function infoItem(cls, text, title) {
+    return h("span", {class: "tk-i " + cls, title}, text);
+  }
+
+  function paintHead() {
+    const live = served();
+    const chat = served() && !desk.past && desk.chat ? desk.chat : null;
+    view.chat = chat;
+    if (ui.name.textContent !== desk.name) { ui.name.textContent = desk.name; ui.name.title = desk.name; }
+    const state = stateTag(desk, live);
+    state.title = state.textContent;
+    ui.state.set(state.className + "|" + state.textContent, () => state);
+
+    const found = desk.stages && desk.status !== "new" ? Status.stages(desk, live) : null;
+    if (saved && found) found.steps.forEach((step) => { if (!isNaN(step.since)) { step.s = Math.max(0, (Date.parse(desk.as_of) - step.since) / 1000); step.since = NaN; } });  // a saved copy does not count on: the time is as of the day it was saved
+    view.stages = found;
+    ui.stage.set(found ? JSON.stringify(found) : "", () => (found ? Status.ribbon(found, true) : null));
+    if (found) ui.stage.node.setAttribute("aria-label", t("board.status.stage.title") + ": " + found.steps.map((step) => step.label + " " + step.text).join(", "));
+    ui.checks.set(found && found.review ? JSON.stringify([found.review, ownTab("review")]) : "", () => (found && found.review ? Status.checks(found.review, ownTab("review") ? () => goTab("review") : null) : null));
+
+    const bound = Boolean(chat && chat.bound);
+    const meter = bound && chat.context && typeof chat.context.percent === "number" ? chat.context : null;
+    ui.ctx.set(bound ? JSON.stringify(meter ? [meter.percent, meter.limit] : null) : "", () => (bound ? ctxBar(meter ? meter.percent : null, meter) : null));
+    if (bound) ui.ctx.node.setAttribute("aria-label", meter ? t("board.status.context", {percent: Math.round(meter.percent * 10) / 10, used: amount(meter.used), window: amount(meter.window)}) : t("desk.ctx.unknown"));
+    ui.compact.hidden = !canCompact(chat);
+    if (!ui.compact.hidden) tuneCompact(ui.compact, chat);
+    ui.vs.set(chat ? "vs:" + (chat.bound ? "" : chat.why || "") : "", () => (chat ? SERVE.vsButton(chat) : null));
+    paintMenu(false);
+
+    const kindName = t("task.kind." + (desk.kind || "none"));
+    const room = bound && chat.window ? chat.window : meter ? meter.window : 0;
+    ui.infoL.set(JSON.stringify([desk.kind, desk.tier, desk.status, desk.round, desk.created_at, desk.updated_at, desk.domains, desk.autorun, bound && [chat.model, chat.effort, room]]), () => {
+      const nodes = [];
+      if (desk.status !== "new" && desk.kind) nodes.push(kindIcon(desk.kind, t("desk.info.kind", {kind: kindName})));
+      if (bound && chat.model) nodes.push(infoItem("tk-model", chat.model, t("desk.info.model", {model: chat.model})));
+      if (bound && chat.effort) nodes.push(infoItem("tk-effort", t("desk.info.effort", {level: chat.effort}), t("desk.info.effort.tip")));
+      if (bound && room) nodes.push(infoItem("tk-win", t("desk.info.window", {size: tokensShort(room)}), t("desk.info.window.tip", {tokens: room.toLocaleString("en-US")})));
+      if (desk.status !== "new") {  // a task not started has no kind, no round, no dates
+        const text = t("desk.subtitle", {kind: kindName + " · " + t("task.tier." + (desk.tier || "none")), round: desk.round, created: when(desk.created_at, 0, 16), updated: when(desk.updated_at, 0, 16)}) + (desk.domains.length ? " · " + t("desk.domains", {names: desk.domains.join(", ")}) : "");
+        nodes.push(h("span", {class: "tk-meta", title: text}, text), desk.autorun ? tag(t("desk.autorun"), "good") : null);
+      }
+      return nodes;
+    });
+    ui.rounds.set(JSON.stringify([full.rounds, full.round, desk.past && desk.past.round]), () => roundSwitch());
+    ui.pill.set(live ? JSON.stringify(desk.vscode) : "", () => (live ? SHELL.vsPill(desk.vscode) : null));
+    ui.forks.set(JSON.stringify([desk.forked_from, desk.forked_to]), () => (desk.forked_from || desk.forked_to.length ? [
+      desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null, desk.forked_from && desk.forked_to.length ? " · " : null,
+      desk.forked_to.length ? [t("desk.forked.to") + " ", desk.forked_to.map((name, index) => [index ? ", " : "", taskLink(name)])] : null] : null));
+    document.documentElement.style.setProperty("--tkh", ui.head.offsetHeight + "px");  // the tab bar sticks under the header
+    Status.refresh();
   }
 
   // "Task settings" (1.6, B72): the independent checks (0 to the cap), the model and the thinking level of the messages the board sends. Only the person changes them, from a served page;
@@ -484,83 +670,191 @@
     return h("div", {class: "prompt-line"}, h("code", null, text), button);
   }
 
-  function actions() {
-    if (desk.status !== "open") return h("section", {class: "card actions quiet"}, h("p", {class: "sub"}, t(desk.status === "new" ? "desk.actions.new" : "desk.actions.closed")));
-    const optional = ["pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
-    const items = desk.actions.filter((item) => !optional.includes(item.action));
-    const rest = desk.actions.filter((item) => optional.includes(item.action));
-    const row = {name: desk.name, waiting: desk.waiting, state: desk.state, ask: desk.ask, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed,
-      result_missing: FILES[desk.kind] && ["design", "rca"].includes(desk.kind) && !doc(FILES[desk.kind]) ? FILES[desk.kind] : ""};  // a design or an RCA task without its result file: the close dialog warns
-    const hint = (item) => t("desk.hint." + item.action.replace(" ", "-"));
-    const entry = (item) => h("div", {class: "action"}, actionButton(row, item, "big"), h("p", {class: "hint"}, hint(item)));
-    const line = (item) => h("div", {class: "action-line"}, actionButton(row, item), h("span", {class: "hint"}, hint(item)));
-    const idle = items.length ? null : quiet();
-    return h("section", {class: "card actions"},
-      h("h2", null, idle ? idle.title : t("desk.actions.title")),
-      desk.waited_s !== null && (items.length || desk.waiting) ? h("p", {class: "sub"}, t("desk.waited", {time: clock(desk.waited_s)})) : null,
+  // --- what waits for the person --------------------------------------------------------------------------------------------
+  // A wait that asks for a decision gets one strong card (approve the plan, confirm the requirement, approve the promote): the wait, what to do, the action, and a link to the tab where the
+  // thing is read. Any other wait that has an action (confirm a command, answer a question, send, recover, the checks...) is listed in one quieter card. The card is above the tabs, so it is
+  // there on every tab. A task that only runs, or is quiet, has no card: its words are on the Live tab.
+  const needItems = () => desk.actions.filter((item) => !OPTIONAL.includes(item.action) && !TALK.includes(item.action));  // steer and stop are not a wait: they are on the Live tab
+  const needsCard = () => canAct() && Boolean(needItems().length || desk.waiting || desk.paused_since || desk.state === "unheld");
+
+  function waitNotes() {
+    return [
       desk.req_changed ? h("p", {class: "hint bad"}, t("desk.req.changed")) : null,
       desk.req_unconfirmed && desk.req_placeholders ? h("p", {class: "hint bad"}, t("desk.req.placeholders", {n: desk.req_placeholders})) : null,
       desk.test && desk.test.reopen ? h("p", {class: "hint bad"}, t("desk.test.reopen", {dev: desk.test.reopen, envs: desk.test.failed.join(", ")})) : null,
       desk.state === "working" && served() ? h("p", {class: "hint"}, t("desk.busy.note")) : null,
       desk.state === "waiting" && !desk.held ? h("p", {class: "hint"}, t("desk.unheld.note")) : null,
-      idle ? [h("p", {class: "hint"}, idle.hint), idle.prompt ? promptLine(idle.prompt) : null] : h("div", {class: "action-list"}, items.map(entry)),
-      served() && ["tests", "run"].includes(desk.waiting_why) ? resultForm() : null,
-      rest.length ? h("div", {class: "action-more"}, h("div", {class: "sub label"}, t("desk.actions.more")), rest.map(line)) : null,
-      typeof SERVE === "undefined" ? h("p", {class: "sub"}, t("board.copy.hint")) : SERVE.banner());
+    ];
   }
 
-  // The stages of the task by its kind (taskstages.py) and the reviewer's checks. The step that is now moves: orange when the
-  // task waits for the person, blue while the agent is at work (and the page is live), still otherwise.
-  function ribbon() {
-    const s = desk.stages;
-    if (!s || desk.status === "new") return null;
-    const live = served();
-    const waits = Boolean(desk.waiting) && desk.status === "open" && !desk.paused_since;
-    const works = Boolean(live) && desk.active && !waits && desk.status === "open";
-    const again = s.steps.some((step) => step.id === "plan" && step.state === "now") && desk.history.some((event) => event.what === "approve-plan");
-    const parts = [];
-    s.steps.forEach((step, index) => {
-      const label = step.label || t("stage." + step.id);
-      const mark = step.state === "done" ? "\u2713" : step.flag ? "!" : String(index + 1);
-      const here = step.state === "now";
-      const note = here ? (step.flag === "partial" ? t("stage.partial") : step.flag === "failed" ? t("stage.failed")
-        : waits ? (desk.waiting_why === "tests" && s.handoff && s.handoff === step.label ? t("stage.tests") : t("stage.you")) : works ? t("stage.work") : "") : "";
-      parts.push(h("div", {class: "rb-step" + (step.state === "done" ? " is-done" : here ? " is-now" + (step.flag ? " is-bad" : waits ? " is-you" : works ? " is-work" : "") : "")},
-        h("div", {class: "rb-node"}, mark), h("div", {class: "rb-name"}, label), h("div", {class: "rb-note"}, note)));
-      if (index < s.steps.length - 1) parts.push(h("div", {class: "rb-link" + (step.state === "done" ? " is-done" : "") + (here && works && !waits ? " is-flow" : "")}));
-    });
-    return h("section", {class: "card"},
-      s.round > 1 || again ? h("div", {class: "rb-round sub"}, s.round > 1 ? tag(t("stage.round", {round: s.round})) : null, again ? " " + t("stage.again") : null) : null,
-      h("div", {class: "rb-ribbon"}, parts), s.review ? lane(s.review, works) : null);
+  function jumpButton(tab, label) {
+    if (!visible(tab) || tab === current) return null;
+    const button = h("button", {type: "button", class: "act tk-jump"}, label + " →");
+    button.addEventListener("click", () => goTab(tab));
+    return button;
   }
 
-  // Under the ribbon: the reviewer and one mark for each check asked for: not yet, running, passed, failed.
-  function lane(r, works) {
-    const marks = r.states.map((state) => h("span", {class: "rb-check " + state}, state === "pass" ? "\u2713" : state === "fail" ? "\u00d7" : ""));
-    return h("div", {class: "rb-lane"}, h("span", {class: "rb-who"}, h("span", {class: "rb-orb"}, "R"), r.n ? t("stage.reviewer", {n: r.n}) : t("stage.reviewer.off")),
-      marks, r.waived ? tag(t("desk.review.waived"), "hot") : null, r.stamp ? h("span", {class: "rb-stamp"}, t("stage.reviewed", {n: r.n})) : null);
+  function strongCard(item, notes) {
+    const row = actionRow();
+    const tab = JUMPS[item.action];
+    return h("section", {class: "tk-need strong", "data-action": item.action},
+      h("div", {class: "tk-need-h"}, tag(desk.waiting ? waitText(desk) : t("desk.actions.title"), "hot"), desk.waited_s !== null && desk.waited_s !== undefined ? h("span", {class: "sub tk-waited"}, t("desk.waited", {time: clock(desk.waited_s)})) : null),
+      h("p", {class: "tk-need-p"}, hintOf(item)), notes,
+      h("div", {class: "tk-need-go"}, actionButton(row, item, "big"), jumpButton(tab, t("desk.jump." + tab))));
   }
+
+  function otherCard(items, notes) {
+    const row = actionRow();
+    const idle = items.length ? null : quiet();
+    const jump = served() && ["tests", "run"].includes(desk.waiting_why) ? jumpButton("live", t("desk.jump.live")) : null;  // the form for the results is on the Live tab
+    return h("section", {class: "tk-need"},
+      h("div", {class: "tk-need-h"}, h("h2", null, idle ? idle.title : t("desk.actions.title")), desk.waited_s !== null && desk.waited_s !== undefined && (items.length || desk.waiting) ? h("span", {class: "sub tk-waited"}, t("desk.waited", {time: clock(desk.waited_s)})) : null),
+      notes,
+      idle ? [h("p", {class: "hint"}, idle.hint), idle.prompt ? promptLine(idle.prompt) : null, jump]
+        : h("div", {class: "tk-acts"}, items.map((item) => h("div", {class: "tk-act"}, actionButton(row, item, "big"), h("p", {class: "hint"}, hintOf(item))))));
+  }
+
+  function waitBand() {
+    if (desk.past) return pastNote();
+    if (!needsCard()) return null;
+    const items = needItems();
+    const strong = items.filter((item) => JUMPS[item.action]);
+    const other = items.filter((item) => !JUMPS[item.action]);
+    const notes = waitNotes().filter(Boolean);
+    const cards = strong.map((item, index) => strongCard(item, index ? [] : notes));
+    if (other.length || !strong.length) cards.push(otherCard(other, strong.length ? [] : notes));
+    return cards;
+  }
+
+  // The words for a task that has nothing waiting on it, on the Live tab: closed, not started, quiet, or at work with nothing to decide.
+  function livePlain() {
+    if (desk.past || saved) return null;
+    if (desk.status !== "open") return h("p", {class: "hint top"}, t(desk.status === "new" ? "desk.actions.new" : "desk.actions.closed"));
+    if (needsCard()) return null;
+    const idle = quiet();
+    return h("section", {class: "tk-quiet"}, h("h2", null, idle.title), h("p", {class: "hint"}, idle.hint), idle.prompt ? promptLine(idle.prompt) : null, waitNotes());
+  }
+
+  // --- the Live tab --------------------------------------------------------------------------------------------------------
+  // For now what exists: the state of the chat behind the task and its latest reply (the last thing the agent did, and the first lines of its last reply to open). The whole conversation is in VS Code.
+  let recentOpen = false;
+  function livePane() {
+    const parts = [h("p", {class: "hint top"}, t("desk.live.hint"))];
+    const chat = served() && !desk.past ? desk.chat : null;
+    if (chat) {
+      const row = [h("span", {class: "chat-k"}, t("desk.chat.label"))];
+      if (chat.bound) row.push(h("span", {class: "chat-title", title: chat.title}, chat.title || "-"), tag(t("desk.chat." + (chat.state || "unknown")), chat.state === "busy" ? "good run" : chat.state === "input" || chat.state === "error" ? "hot" : ""));
+      else row.push(h("span", {class: "sub"}, t("desk.live.nochat", {why: t("board.vs.why." + (chat.why || "no-chat"))})));
+      parts.push(h("div", {class: "tk-chatrow"}, row));
+    }
+    parts.push(livePlain());
+    const talk = canAct() ? desk.actions.filter((item) => TALK.includes(item.action)) : [];
+    if (talk.length) parts.push(h("div", {class: "tk-talk"}, talk.map((item) => h("div", {class: "tk-act"}, actionButton(actionRow(), item, "big"), h("p", {class: "hint"}, hintOf(item))))));  // said to the agent while it works
+    if (desk.sub && (desk.sub.what || desk.sub.text) && chat) {
+      const more = desk.recent && desk.recent !== desk.sub.text ? h("details", {class: "recent-more", open: recentOpen ? "" : null}, h("summary", null, t("desk.recent.more")), h("pre", {class: "recent-text"}, desk.recent)) : null;
+      if (more) more.addEventListener("toggle", () => { recentOpen = more.open; });
+      parts.push(h("section", {class: "tk-recent"}, h("span", {class: "chat-k"}, t("desk.recent.label")), h("div", {class: "recent-body"}, h("div", {class: "recent-line"}, subNodes(desk.sub)), more)));
+    }
+    if (served() && canAct() && ["tests", "run"].includes(desk.waiting_why)) parts.push(resultForm());
+    parts.push(settingsRow(), draftsBox());
+    return parts;
+  }
+
+  // --- the tabs, by function ------------------------------------------------------------------------------------------------
+  // The top row: Live and the groups. The group that holds the open tab shows a second row. A group remembers the tab it was left on (for this viewer, in this browser).
+  const REMEMBER = "harness.desk.tabs";
+  let lastTab = {};
+  try { lastTab = JSON.parse(localStorage.getItem(REMEMBER) || "{}") || {}; } catch (error) { lastTab = {}; }  // not allowed here: kept until the page closes
+  function remember(tab) {
+    if (lastTab[groupOf(tab).id] === tab) return;
+    lastTab[groupOf(tab).id] = tab;
+    try { localStorage.setItem(REMEMBER, JSON.stringify(lastTab)); } catch (error) { /* kept until the page closes */ }
+  }
+  function goTab(tab) {
+    if (!visible(tab)) return;
+    current = tab;
+    remember(tab);
+    history.replaceState(null, "", hashOf(tab));
+    draw(false);
+    window.scrollTo(0, 0);
+  }
+
+  // What a tab shows next to its name: a count, and whether something in it waits for the person.
+  function tabInfo(tab) {
+    const name = t("desk.tab." + tab);
+    const mine = canAct();
+    if (tab === "req") return {name, bang: desk.req_unconfirmed};  // waits for the person's confirmation
+    if (tab === "plan") return {name, bang: mine && desk.waiting_why === "plan"};
+    if (tab === "todo") return {name, count: desk.todo.total ? desk.todo.done + "/" + desk.todo.total : ""};
+    if (tab === "changes") return {name, count: desk.changes.files.length ? String(desk.changes.files.length) : "", bang: Boolean(desk.commit && !desk.commit.written) || (mine && desk.waiting_why === "promote")};
+    if (tab === "test") return {name, count: desk.test.passed + "/" + desk.test.total};
+    if (tab === "review") return {name, count: desk.review.n ? desk.review.passes + "/" + desk.review.n : String(desk.review.rounds.length)};
+    if (tab === "history") return {name, count: String(desk.history.length)};
+    if (tab === "trace") return {name, count: desk.trace.entries.length + (desk.trace.cut ? "+" : "")};
+    if (tab === "docs") return {name, count: String(extra().length)};
+    if (tab === "files") return {name, count: String(desk.files.length)};
+    if (tab === "intake") { const reads = desk.intake.files.filter((item) => !item.original && !item.report && !item.path.startsWith("media/")).length; return {name, count: reads ? String(reads) : ""}; }  // the same set as "What the agent reads"
+    return {name};
+  }
+  const tabText = (info) => info.name + (info.count ? " " + info.count : "") + (info.bang ? " !" : "");
+
+  // The groups that have a tab to show: {id, tabs (the visible ones), single (a group of one goes straight to its tab)}.
+  function shownGroups() {
+    return GROUPS.map((group) => ({id: group.id, tabs: group.tabs.filter(visible)})).filter((group) => group.tabs.length);
+  }
+  const groupName = (id) => t(id === "overview" ? "desk.tab.overview" : "desk.group." + id);
 
   function nav() {
-    const label = (tab) => {
-      if (tab === "req" && desk.req_unconfirmed) return t("desk.tab.req") + " !";  // waits for the person's confirmation
-      if (tab === "todo" && desk.todo.total) return t("desk.tab.todo") + " " + desk.todo.done + "/" + desk.todo.total;
-      if (tab === "changes" && desk.changes.files.length) return t("desk.tab.changes") + " " + desk.changes.files.length + (desk.commit && !desk.commit.written ? " !" : "");
-      if (tab === "test") return t("desk.tab.test") + " " + desk.test.passed + "/" + desk.test.total;
-      if (tab === "review") return t("desk.tab.review") + (desk.review.n ? " " + desk.review.passes + "/" + desk.review.n : " " + desk.review.rounds.length);
-      if (tab === "history") return t("desk.tab.history") + " " + desk.history.length;
-      if (tab === "trace") return t("desk.tab.trace") + " " + desk.trace.entries.length + (desk.trace.cut ? "+" : "");
-      if (tab === "docs") return t("desk.tab.docs") + " " + extra().length;
-      if (tab === "files") return t("desk.tab.files") + " " + desk.files.length;
-      if (tab === "intake") { const reads = desk.intake.files.filter((item) => !item.original && !item.report && !item.path.startsWith("media/")).length; return t("desk.tab.intake") + (reads ? " " + reads : ""); }  // the same set as "What the agent reads"
-      return t("desk.tab." + tab);
-    };
-    return h("nav", {class: "tabs"}, tabs.filter((tab) => tab === "docs" ? extra().length > 0 : ownTab(tab)).map((tab) => {
-      const button = h("button", {type: "button", class: "tab" + (tab === current ? " on" : "")}, label(tab));
-      button.addEventListener("click", () => { current = tab; history.replaceState(null, "", hashOf(tab)); draw(false); });
+    const groups = shownGroups();
+    const open = groupOf(current);
+    const top = h("div", {class: "tk-top", role: "tablist", "aria-label": t("desk.tabs.label")}, groups.map((group) => {
+      const single = group.tabs.length === 1;
+      const infos = group.tabs.map(tabInfo);
+      const info = single ? infos[0] : {name: groupName(group.id), bang: infos.some((item) => item.bang)};
+      const on = group.id === open.id;
+      const target = single ? group.tabs[0] : (group.tabs.includes(lastTab[group.id]) ? lastTab[group.id] : group.tabs[0]);
+      const summary = single ? tabText(infos[0]) : t("desk.tab.group", {group: info.name, tabs: infos.map(tabText).join(", ")});
+      const button = h("button", {type: "button", role: "tab", class: "tk-tab" + (on ? " on" : "") + (single ? "" : " has-sub"), "aria-selected": on ? "true" : "false", tabindex: on ? "0" : "-1", "data-key": "g:" + group.id, title: summary, "aria-label": summary},
+        info.name, info.count ? h("span", {class: "tk-n"}, info.count) : null, info.bang ? h("i", {class: "tk-bang", title: t("desk.tab.bang")}) : null);
+      button.addEventListener("click", () => goTab(on && !single ? current : target));
       return button;
     }));
+    const here = groups.find((group) => group.id === open.id);
+    const rows = [top];
+    if (here && here.tabs.length > 1) {
+      rows.push(h("div", {class: "tk-sub", role: "tablist", "aria-label": groupName(here.id)}, here.tabs.map((tab) => {
+        const info = tabInfo(tab);
+        const on = tab === current;
+        const button = h("button", {type: "button", role: "tab", class: "tk-tab" + (on ? " on" : ""), "aria-selected": on ? "true" : "false", tabindex: on ? "0" : "-1", "data-key": "t:" + tab, "aria-label": tabText(info)},
+          info.name, info.count ? h("span", {class: "tk-n"}, info.count) : null, info.bang ? h("i", {class: "tk-bang", title: t("desk.tab.bang")}) : null);
+        button.addEventListener("click", () => goTab(tab));
+        return button;
+      })));
+    }
+    rows.forEach((row) => row.addEventListener("keydown", moveInTabs));
+    return rows;
   }
+
+  // Arrow keys move along a row and open the tab; Home and End go to its ends; down from the top row goes into the second, up comes back.
+  function moveInTabs(event) {
+    const button = event.target instanceof Element ? event.target.closest("[role=tab]") : null;
+    if (!button || event.metaKey || event.ctrlKey || event.altKey) return;
+    const row = button.parentElement;
+    const list = Array.from(row.querySelectorAll("[role=tab]"));
+    const at = list.indexOf(button);
+    let next = null;
+    if (event.key === "ArrowRight") next = list[(at + 1) % list.length];
+    else if (event.key === "ArrowLeft") next = list[(at - 1 + list.length) % list.length];
+    else if (event.key === "Home") next = list[0];
+    else if (event.key === "End") next = list[list.length - 1];
+    else if (event.key === "ArrowDown" && row.classList.contains("tk-top")) next = ui.tabs.querySelector(".tk-sub [aria-selected=true]");
+    else if (event.key === "ArrowUp" && row.classList.contains("tk-sub")) next = ui.tabs.querySelector(".tk-top [aria-selected=true]");
+    if (!next) return;
+    event.preventDefault();
+    next.focus();
+    if (next.parentElement === row) next.click();  // moving along a row opens the tab (the page then puts the focus on the same tab again)
+  }
+
 
   function review() {
     const r = desk.review;
@@ -1245,6 +1539,7 @@
   }
 
   function body() {
+    if (current === "live") return livePane();
     if (current === "overview") {
       return [h("p", {class: "hint top"}, t("desk.overview.hint") + (doc("REQ.md") ? " " + t("desk.overview.req") : "")), markdown("TASK.md", t("desk.missing.task"))];
     }
@@ -1270,12 +1565,23 @@
     })), name ? markdown(name, "") : null];
   }
 
-  // A redraw makes every node again: a list or a code window that scrolls by itself (marked `data-keep`) is put back where it was.
+  // A redraw changes the parts of the page that depend on the data: the header is changed in place (paintHead), the card of waits, the tabs and the open tab are made again. A list or a code window that
+  // scrolls by itself (marked `data-keep`) is put back where it was, and so is the focus on a tab.
   function draw(keepScroll) {
+    shell();
+    remember(current);
     const y = window.scrollY;
     const kept = new Map([...app.querySelectorAll("[data-keep]")].map((node) => [node.dataset.keep, [node.scrollTop, node.scrollLeft]]));
-    app.replaceChildren(...[...header(), SHELL.banner(), ...(chatBars() || []), settingsRow(), draftsBox(), ribbon(), desk.past ? pastNote() : saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
-      h("footer", null, t(saved ? "desk.snapshot.footer" : "desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright())].filter(Boolean));  // a null would be drawn as the word "null"
+    const focused = document.activeElement && document.activeElement.closest ? document.activeElement.closest("[data-key]") : null;
+    const focusKey = focused && ui.tabs.contains(focused) ? focused.dataset.key : "";
+    paintHead();
+    fill(ui.wait, waitBand());
+    ui.wait.hidden = !ui.wait.firstChild;
+    fill(ui.tabs, nav());
+    fill(ui.pane, body());
+    fill(ui.foot, [typeof SERVE === "undefined" && !saved ? h("p", {class: "sub"}, t("board.copy.hint")) : saved ? null : SERVE.banner(true),
+      h("footer", null, t(saved ? "desk.snapshot.footer" : "desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright())]);  // a null would be drawn as the word "null"
+    if (focusKey) { const again = ui.tabs.querySelector('[data-key="' + focusKey + '"]'); if (again) again.focus({preventScroll: true}); }
     if (keepScroll) {
       for (const node of app.querySelectorAll("[data-keep]")) if (kept.has(node.dataset.keep)) [node.scrollTop, node.scrollLeft] = kept.get(node.dataset.keep);
       window.scrollTo(0, y);
@@ -1295,8 +1601,8 @@
   SHELL.vs(desk.vscode);
   SHELL.visit(desk.name);
   // What Cmd+K can open on a task page: every tab this task has, and (shell.js) the other tasks, the board views and filters.
-  SHELL.provide(() => ({here: desk.name, tabs: tabs.filter((tab) => tab === "docs" ? extra().length > 0 : ownTab(tab)).map((tab) => ({id: tab, label: t("desk.tab." + tab), current: tab === current,
-    run: () => { current = tab; history.replaceState(null, "", hashOf(tab)); draw(false); }}))}));
+  SHELL.provide(() => ({here: desk.name, tabs: tabs.filter(visible).map((tab) => ({id: tab, label: t("desk.tab." + tab), group: groupOf(tab).tabs.filter(visible).length > 1 && groupName(groupOf(tab).id) !== t("desk.tab." + tab) ? groupName(groupOf(tab).id) : "", current: tab === current,
+    run: () => goTab(tab)}))}));
   draw(false);
   if (typeof SERVE !== "undefined" && DATA.serve.refresh) {
     pollEvery(DATA.serve.refresh, () => {

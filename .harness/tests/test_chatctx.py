@@ -228,7 +228,7 @@ class PagesTests(unittest.TestCase):
         from pathlib import Path
         web = Path(__file__).resolve().parent.parent / "engine" / "modules" / "task" / "web"
         desk, serve = (web / "desk.js").read_text(encoding="utf-8"), (web / "serve.js").read_text(encoding="utf-8")
-        for needle in ("/api/compact", "contextMeter", "copyTitleButton"):
+        for needle in ("/api/compact", "ctxBar", "ctxCard", "copyTitleButton"):
             self.assertIn(needle, desk)
         self.assertIn("failed(error, chat && chat.title)", serve)
         for key in ("desk.ctx.label", "desk.compact.go", "desk.chat.copy", "board.vs.open"):

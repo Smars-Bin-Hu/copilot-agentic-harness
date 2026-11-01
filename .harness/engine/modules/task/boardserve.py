@@ -257,6 +257,8 @@ class Board:
         chat = self.link.chat_of(found["task"], name)
         recent = chat.pop("recent", "")
         sub = chat.pop("sub", None) or tasksub.from_hooklog(self.root, tasks.read(self.root, found["task"]) or {})  # the chat's own line; else the hook log's
+        if chat.get("bound"):
+            chat["parts"] = self.link.context_parts(found["task"], str((tasks.read(self.root, found["task"]) or {}).get("session_id") or ""))  # the real numbers of the context card; None: none known
         found["chat"], found["sub"], found["recent"], found["vscode"] = chat, sub, recent, self.link.status()
         health.with_context(self.root, found, chat)
         if found["status"] == "open":

@@ -113,7 +113,7 @@ const SHELL = (function () {
     };
     const recent = recents().filter((name) => !known || known.has(name)).slice(0, 3);
     for (const name of recent) { const item = task(name, "recent"); if (item) out.push(item); }
-    for (const tab of own.tabs || []) out.push({g: "tabs", key: "tab:" + tab.id, label: t("board.shell.tab", {name: tab.label}), icon: "tab", kw: "tab " + tab.label, run: tab.run, current: tab.current});
+    for (const tab of own.tabs || []) out.push({g: "tabs", key: "tab:" + tab.id, label: t("board.shell.tab", {name: tab.label + (tab.group ? " \u00b7 " + tab.group : "")}), icon: "tab", kw: "tab " + tab.label + " " + (tab.group || ""), run: tab.run, current: tab.current});
     if (rows) for (const row of rows) { if (recent.includes(row.name)) continue; const item = task(row.name, "tasks"); if (item) out.push(item); }
     const views = own.views || (served ? [{id: "board", label: t("board.shell.view.board"), kw: "board home all tasks", run: () => toBoard()},
       {id: "list", label: t("board.shell.view.list"), kw: "list table", run: () => toBoard("list")}, {id: "lobby", label: t("board.shell.view.lobby"), kw: "lobby robots floor", run: () => toBoard("lobby")}] : []);

@@ -1,0 +1,125 @@
+/* The task page shell (1.6.16, B87): one slim header, one line of facts, one surface with the waits, the tabs by function and the open tab. Colours are tokens (tokens.css).
+   desk.js makes the header once and changes it in place, so nothing here depends on a node being drawn again. A saved copy gets the same file. */
+[hidden]{display:none!important}
+
+/* ---------- the header ---------- */
+.tk-head{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:10px;min-height:56px;margin:0 -20px;padding:10px 20px;background:var(--bg);border-bottom:1px solid var(--line)}
+.tk-icon{flex:none;width:30px;height:30px;padding:0;display:inline-grid;place-items:center;border:1px solid var(--line);border-radius:9px;background:transparent;color:var(--ink);cursor:pointer;text-decoration:none}
+.tk-icon:hover,.tk-icon[aria-expanded="true"]{background:var(--hover);border-color:var(--line2);text-decoration:none}
+.tk-icon svg{width:16px;height:16px;display:block}
+.tk-name{flex:0 1 auto;min-width:6ch;max-width:44ch;margin:0;font-size:18px;font-weight:600;letter-spacing:-.015em;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tk-state{flex:0 0 auto;min-width:0;max-width:30ch;display:inline-flex}
+.tk-state .tag,.tk-state .tag.long{display:block;max-width:100%;height:22px;padding:0 9px 0 8px;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-state .tag::before{display:inline-block;vertical-align:1px;margin-right:6px}
+.tk-stage{flex:none;display:flex;align-items:center;width:clamp(100px,13vw,172px);height:30px;padding:0 6px;border-radius:999px;cursor:default}
+.tk-stage .st-ribbon{height:20px;--d:14px}
+.tk-checks{flex:none;display:inline-flex}
+.tk-sp{flex:1 1 0;min-width:0}
+.tk-ctx{flex:none;display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 10px;border-radius:9px;font-size:12px;color:var(--soft);cursor:default;white-space:nowrap}
+.tk-ctx:hover,.tk-ctx:focus-visible{background:var(--hover)}
+.tk-cb{display:inline-block;flex:none;width:56px;height:4px;border-radius:2px;background:var(--track);overflow:hidden}
+.tk-cb i{display:block;height:100%;background:var(--soft);border-radius:2px}
+.tk-cb.hot i{background:var(--bad)}
+.tk-cb.wide{display:block;width:100%;height:6px;margin:8px 0}
+.tk-cv{min-width:2.8em;text-align:right;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.tk-cv.hot{color:var(--bad)}
+.tk-tools{flex:none;display:inline-flex;align-items:center;gap:6px;padding-left:6px;border-left:1px solid var(--line)}
+.tk-tools .vs-btn{margin:0;width:30px;height:30px;border-radius:9px}
+.tk-tools .vs-btn svg{width:16px;height:16px}
+.tk-compact{margin:0;height:30px;border-radius:9px}
+.tk-more{position:relative;display:inline-flex}
+.tk-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:60;display:flex;flex-direction:column;gap:2px;min-width:230px;max-width:min(340px,calc(100vw - 40px));padding:6px;border:1px solid var(--line2);border-radius:12px;background:var(--pop);box-shadow:var(--shadow)}
+.tk-menu .act{width:100%;height:30px;margin:0;justify-content:flex-start;border-color:transparent;text-decoration:none}
+.tk-menu .act:hover{background:var(--hover);text-decoration:none}
+.tk-mi-act{padding:2px 0 6px}
+.tk-mi-act .hint{display:block;padding:0 10px;font-size:11.5px;line-height:1.4}
+
+/* ---------- the line of facts under the title ---------- */
+.tk-info{display:flex;align-items:center;gap:6px 14px;min-height:34px;padding:8px 0 2px;font-size:12.5px;color:var(--soft)}
+.tk-info-l{display:flex;align-items:center;gap:6px 14px;flex:1 1 0;min-width:0;white-space:nowrap}
+.tk-info-l>*{flex:none}
+.tk-info-l>.tk-meta{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tk-info-l .kind-icon{cursor:help}
+.tk-i{display:inline-block;max-width:28ch;overflow:hidden;text-overflow:ellipsis;cursor:help}
+.tk-model{color:var(--ink);font-family:var(--mono);font-size:12px}
+.tk-rounds,.tk-pill{flex:none}
+.tk-rounds .subtabs{margin:0;border:0}
+.tk-pill .vs-pill{margin:0}
+.tk-forks{padding:2px 0 0;overflow-wrap:anywhere}
+
+/* ---------- the surface ---------- */
+.tk-surface{margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:var(--r)}
+.tk-wait{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.tk-wait>.card{margin:0}
+.tk-need{padding:12px 14px;border:1px solid var(--line);border-radius:12px}
+.tk-need.strong{border-color:var(--hot-line);border-left:3px solid var(--hot-dot);background:var(--hot-bg)}
+.tk-need-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;min-width:0}
+.tk-need-h h2{margin:0;font-size:14.5px;min-width:0;overflow-wrap:anywhere}
+.tk-need-h .tag{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.tk-waited{flex:none;font-variant-numeric:tabular-nums}
+.tk-need-p{margin:0 0 10px;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere}
+.tk-need-go{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tk-need-go .act{margin:0}
+.tk-acts{display:grid;gap:10px}
+.tk-act{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.tk-act .act{flex:none}
+.tk-act .hint{margin:0;flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
+.tk-need .hint{overflow-wrap:anywhere}
+.tk-need .prompt-line{margin-top:8px}
+
+/* ---------- the tabs: a top row, and a second row for the open group ---------- */
+.tk-tabs{position:sticky;top:var(--tkh,56px);z-index:20;background:var(--card);border-radius:var(--r) var(--r) 0 0}
+.tk-wait:empty{display:none}
+.tk-top,.tk-sub{display:flex;gap:2px;padding:6px 14px 0;overflow-x:auto;scrollbar-width:none}
+.tk-top::-webkit-scrollbar,.tk-sub::-webkit-scrollbar{display:none}
+.tk-top{border-bottom:1px solid var(--line)}
+.tk-sub{background:var(--bg);border-bottom:1px solid var(--line)}
+.tk-tab{flex:none;display:inline-flex;align-items:center;gap:6px;margin-bottom:-1px;padding:8px 12px;font:inherit;font-size:13px;font-weight:500;color:var(--soft);background:none;border:0;border-bottom:1.5px solid transparent;cursor:pointer;white-space:nowrap}
+.tk-tab:hover{color:var(--ink)}
+.tk-tab.on{color:var(--ink);font-weight:600;border-bottom-color:var(--ink)}
+.tk-tab.has-sub::after{content:"";width:5px;height:5px;border:solid currentColor;border-width:0 1.4px 1.4px 0;transform:rotate(45deg) translate(-1px,-1px);opacity:.55}
+.tk-sub .tk-tab{font-size:12.5px;padding:7px 10px}
+.tk-n{font-size:12px;font-weight:500;color:var(--soft);font-variant-numeric:tabular-nums}
+.tk-bang{flex:none;width:6px;height:6px;border-radius:50%;background:var(--hot-dot)}
+.tk-pane{padding:18px 22px 24px}
+.tk-pane>.card{background:transparent}
+
+/* ---------- the Live tab ---------- */
+.tk-chatrow{display:flex;align-items:center;gap:10px;margin:0 0 12px;min-width:0}
+.tk-chatrow .chat-title{min-width:0;max-width:60ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-quiet{margin:6px 0 14px}
+.tk-quiet h2{margin:0 0 4px}
+.tk-recent{display:flex;gap:12px;margin:14px 0}
+.tk-foot{margin-top:6px}
+.tk-foot footer{margin-top:14px}
+
+/* ---------- the cards over the stage strip and the context bar ---------- */
+.st-card{position:fixed;z-index:95;left:0;top:0;min-width:240px;max-width:min(340px,calc(100vw - 16px));box-sizing:border-box;padding:10px 12px;background:var(--pop);color:var(--ink);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);font-size:12.5px;line-height:1.45;opacity:0;visibility:hidden;transition:opacity .12s}
+.st-card.on{opacity:1;visibility:visible}
+.st-card .st-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.st-card .tk-cx-h{margin-top:12px}
+.st-card .sub{margin-top:6px;overflow-wrap:anywhere}
+.tk-cx-big{font-size:14px;font-weight:600;overflow-wrap:anywhere}.tk-cx-big.hot{color:var(--bad)}
+.tk-part{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;margin:6px 0}
+.tk-pn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-pv{font-variant-numeric:tabular-nums;color:var(--soft)}
+.tk-part .tk-cb{grid-column:1/-1;width:100%}
+.tk-cx-go{margin:12px 0 0}
+.st-wide .st-ln{gap:10px}
+.st-tm{flex:none;min-width:5.5em;text-align:right;color:var(--soft);font-variant-numeric:tabular-nums;white-space:nowrap}
+.st-run.st-tm{display:inline-block;color:var(--run)}
+.st-stamp{margin-left:auto;border:2px solid var(--good);color:var(--good);border-radius:8px;padding:1px 8px;font-size:11px;font-weight:700;letter-spacing:.06em;transform:rotate(-4deg);animation:rbstamp .45s cubic-bezier(.2,.9,.3,1.3)}
+.st-wide .st-rv{justify-content:space-between}
+
+/* the independent checks: one button */
+.st-checks{display:inline-flex;align-items:center;gap:5px;flex:none;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:transparent;color:inherit;font:inherit}
+button.st-checks{cursor:pointer}
+button.st-checks:hover{background:var(--hover);border-color:var(--line2)}
+.st-checks .st-d{--d:13px}
+.st-card .st-checks{height:26px;padding:0 8px}
+.st-checks .st-d.k-done{animation:rbpop .4s cubic-bezier(.2,.9,.3,1.4)}
+
+@media (max-width:1100px){.tk-stage{width:100px}.tk-name{max-width:30ch}}
+@media (max-width:900px){.tk-head{flex-wrap:wrap}.tk-name{flex:1 1 40%}.tk-sp{display:none}}
+@media (max-width:640px){.tk-pane{padding:14px}.tk-top,.tk-sub{padding-left:8px;padding-right:8px}}
+.tk-talk{display:grid;gap:10px;margin:12px 0}

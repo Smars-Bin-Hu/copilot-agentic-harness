@@ -40,6 +40,18 @@
 .st-d.seg.k-run{border-top-color:var(--run);border-color:var(--run);background:var(--run-bg);animation:stblink 2.4s ease-in-out infinite;animation-delay:calc(var(--t,0ms)*-1)}
 .st-d.seg.k-now{background:var(--ink)}
 .st-d.seg.k-bad{background:var(--hot-dot)}
+/* a check that failed: red with a cross */
+.st-d.k-fail{background:var(--bad);border-color:var(--bad)}
+.st-d.k-fail::before,.st-d.k-fail::after{content:"";position:absolute;left:50%;top:50%;width:56%;height:1.6px;border-radius:1px;background:var(--card);transform:translate(-50%,-50%) rotate(45deg)}
+.st-d.k-fail::after{transform:translate(-50%,-50%) rotate(-45deg)}
+/* the task page's strip: a ring goes out from the step that runs, a beat from the one that waits for you, a light travels along the line after the running step (the 1.5 ribbon's motions) */
+.st-d.k-run{box-shadow:0 0 0 0 var(--run-line)}
+.tk-stage .st-ribbon:not(.compact) .st-d.k-run{animation:stspin 1.2s linear infinite,string 2.4s ease-out infinite;animation-delay:calc(var(--t,0ms)*-1),calc(var(--t,0ms)*-1)}
+.tk-stage .st-ribbon:not(.compact) .st-d.k-wait{animation:stblink 2.4s ease-in-out infinite,stbeat 2.4s ease-in-out infinite;animation-delay:calc(var(--t,0ms)*-1),calc(var(--t,0ms)*-1)}
+.st-ribbon .st-l{position:relative;overflow:hidden}
+.st-ribbon .st-l.is-flow::after{content:"";position:absolute;top:0;left:0;height:100%;width:40%;background:linear-gradient(90deg,transparent,var(--run),transparent);animation:rbtravel 1.6s linear infinite}
+@keyframes string{0%{box-shadow:0 0 0 0 var(--run-line)}70%,100%{box-shadow:0 0 0 7px transparent}}
+@keyframes stbeat{0%,100%{box-shadow:0 0 0 0 var(--hot-line)}50%{box-shadow:0 0 0 5px transparent}}
 @keyframes stspin{to{transform:rotate(360deg)}}
 @keyframes stblink{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes stlive{0%,100%{opacity:1}50%{opacity:.25}}
@@ -70,4 +82,4 @@
 .st-wrap .st-slot:empty{display:none}
 .st-wrap .st-s-stage{width:100px}.st-wrap .st-s-model{width:auto;max-width:130px}.st-wrap .st-s-todo,.st-wrap .st-s-run{width:auto}.st-wrap .st-s-run{overflow:visible}
 .lb-card .st-chip{max-width:130px}
-@media (prefers-reduced-motion:reduce){.st-live,.st-d,.st-d.seg{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.st-live,.st-d,.st-d.seg,.st-ribbon .st-l::after{animation:none!important}}

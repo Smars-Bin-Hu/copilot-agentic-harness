@@ -85,7 +85,7 @@ The switch at the top right changes to the list: one line per task with what it 
 
 ![The list: what each task waits for and since when, the working time, the checks, and a button for the next move](images/board-list.png)
 
-A click on a task opens its page. The page opens with the task's **stages**, which depend on its kind (a test task has one step for each environment). Under them, what waits for you comes first, each button with a line on when to press it. A reviewer row shows the independent checks, and a stamp when all have passed.
+A click on a task opens its page. A slim bar at the top holds the task name, its state, the **stages** (dots only: done green with a tick, running blue and turning, waiting for you yellow and blinking, not started black; hover or focus them for every stage with its time), the independent checks (a tick, a cross or a turning ring for each; a click goes to the Review tab), the context bar (hover it for the numbers and the **Compact** action) and the menu with the rest. Under the name one line says the kind of task, the model, the thinking effort the board sent, and the context window. What waits for you comes first, as one card with its button and a link to the tab where you read what you decide on. The tabs are in groups: Live, Overview, Deliver, Records, Files.
 
 ![A task page: the stages, the reviewer's checks, what waits for you, and the tabs](images/task-overview.png)
 

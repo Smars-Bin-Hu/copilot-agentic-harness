@@ -4,7 +4,8 @@ Python gives the numbers and puts the page together; it draws nothing. The front
 
   task.html, board.html   the skeleton of each page; desk.html: one task as the board server sends it (M16)
   tokens.css, ui.css      the look, shared: the colours of the light and the dark theme, and how things look under them; theme.js sets the theme and Lite before the page is drawn
-  status.js, status.css   the board only: the small status marks (model, context ring, run time, mini stage ribbon, TODO) under a task name and on the lobby card; the ribbon is shared (the task page reuses it)
+  status.js, status.css   the small status marks (model, context ring, run time, mini stage ribbon, TODO) under a task name and on the lobby card; the ribbon is shared: the task page draws its stage strip from it and opens a card on it (`Status.card`)
+  desk.css                the task page shell: the slim header, the line of facts, the cards of waits, the tabs by function
   shell.js, shell.css     the board and the task page only: the search pill and Cmd+K palette, the gear and the settings panel, the VS Code banner (fixed to the window, outside the page)
   enter.js, enter.css     a served page only: the Enter screen (wordmark, robot, hold to charge, the readiness list of `/api/ready`); a file on disk has none
   page.css, lobby.css     where things go, shared / the board's lobby
@@ -60,6 +61,7 @@ STATUS_CSS = "status.css"  # the pages that have status.js (the board) get the s
 SHELL_CSS = "shell.css"  # the pages that have shell.js (the board and the task page) get the fixed search and settings, the palette and the VS Code banner after ui.css
 
 
+DESK_CSS = "desk.css"  # the task page (desk.js) gets its shell last: the slim header, the info line, the tabs by function, the cards of waits
 ENTER_CSS = "enter.css"  # the served pages (enter.js) get the Enter screen after the shell
 
 
@@ -71,7 +73,7 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
         "<!--TITLE-->": escape(title),
         "<!--NOSCRIPT-->": escape(say("report.noscript")),
         "/*THEME*/": read("theme.js"),
-        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else [])]),
+        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else [])]),
         "<!--DATA-->": as_json(data),
         "/*JS*/": "\n".join(read(name) for name in scripts),
     }
@@ -116,6 +118,6 @@ def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None) -> s
     """One task as the board server sends it (taskdesk.desk): documents, progress, history, changes, actions.
     Without `serve` it is a saved copy: one file with no buttons and no calls to a server, as of the time it was made."""
     if serve is not None:
-        return build("desk.html", ["common.js", "serve.js", "chat.js", "highlight.js", "diffview.js", "shell.js", "enter.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
-    page = build("desk.html", ["common.js", "highlight.js", "diffview.js", "shell.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "snapshot": True}, styles=DESK_STYLES)
+        return build("desk.html", ["common.js", "serve.js", "chat.js", "status.js", "highlight.js", "diffview.js", "shell.js", "enter.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
+    page = build("desk.html", ["common.js", "status.js", "highlight.js", "diffview.js", "shell.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "snapshot": True}, styles=DESK_STYLES)
     return page.replace("<head>", f'<head>\n<meta http-equiv="Content-Security-Policy" content="{SNAPSHOT_CSP}">', 1)

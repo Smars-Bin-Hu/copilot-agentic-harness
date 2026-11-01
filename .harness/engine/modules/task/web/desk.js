@@ -406,8 +406,6 @@
     ui.checks = slot("span", "tk-checks");
     ui.ctx = slot("span", "tk-ctx");
     Status.card(ui.ctx.node, ctxCard);
-    ui.compact = compactButton("tk-compact");
-    ui.compact.hidden = true;
     ui.vs = slot("span", "tk-vs");
     ui.moreBtn = h("button", {type: "button", class: "tk-icon tk-morebtn", "aria-haspopup": "menu", "aria-expanded": "false", title: t("desk.menu.more"), "aria-label": t("desk.menu.more")}, icon(["M3 8h.01M8 8h.01M13 8h.01"], 16));
     ui.menu = h("div", {class: "tk-menu", role: "menu", hidden: ""});
@@ -416,7 +414,7 @@
     ui.menu.addEventListener("click", (event) => { if (event.target.closest("a,button")) setTimeout(closeMenu, 0); });  // after the click has done its work
     document.addEventListener("click", (event) => { if (menuOpen && !ui.more.contains(event.target)) closeMenu(); });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape" && menuOpen) { closeMenu(); ui.moreBtn.focus(); } });
-    ui.head = h("header", {class: "tk-head"}, ui.back, ui.name, ui.state.node, ui.stage.node, ui.checks.node, h("span", {class: "tk-sp"}), ui.ctx.node, h("span", {class: "tk-tools"}, ui.vs.node, ui.compact, ui.more));
+    ui.head = h("header", {class: "tk-head"}, ui.back, ui.name, ui.state.node, ui.stage.node, ui.checks.node, h("span", {class: "tk-sp"}), ui.ctx.node, h("span", {class: "tk-tools"}, ui.vs.node, ui.more));
     ui.infoL = slot("div", "tk-info-l");
     ui.rounds = slot("span", "tk-rounds");
     ui.pill = slot("span", "tk-pill");
@@ -456,8 +454,6 @@
     const meter = bound && chat.context && typeof chat.context.percent === "number" ? chat.context : null;
     ui.ctx.set(bound ? JSON.stringify(meter ? [meter.percent, meter.limit] : null) : "", () => (bound ? ctxBar(meter ? meter.percent : null, meter) : null));
     if (bound) ui.ctx.node.setAttribute("aria-label", meter ? t("board.status.context", {percent: Math.round(meter.percent * 10) / 10, used: amount(meter.used), window: amount(meter.window)}) : t("desk.ctx.unknown"));
-    ui.compact.hidden = !canCompact(chat);
-    if (!ui.compact.hidden) tuneCompact(ui.compact, chat);
     ui.vs.set(chat ? "vs:" + (chat.bound ? "" : chat.why || "") : "", () => (chat ? SERVE.vsButton(chat) : null));
     paintMenu(false);
 

@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.26 (2026-11-01)
+
+### Changed
+
+- **Compact is only in the context card** of the task page: hover the context bar. The second button in the header is gone.
+
 ## 1.6.25 (2026-11-01)
 
 ### Added

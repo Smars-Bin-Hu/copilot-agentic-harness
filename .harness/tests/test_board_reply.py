@@ -191,7 +191,7 @@ class ServeTests(SendCase):
     def test_the_panel_offers_no_native_mode_and_shows_one_set_in_vs_code(self) -> None:
         desk = source("desk.js")
         self.assertNotIn('hostSetting("mode"', desk)
-        self.assertIn('found.value === "interactive") return null;', desk)
+        self.assertIn('found.value === "interactive") { leavingMode = false; return null; }', desk)
         self.assertIn('{task: desk.name, mode: "interactive"}', desk)
 
     def test_nothing_changes_without_a_paired_browser(self) -> None:

@@ -83,6 +83,7 @@
   };
   const extra = () => desk.docs.filter((item) => !Object.keys(FILES).some((tab) => FILES[tab] === item.name && ownTab(tab)) && item.name !== "REQ.md" && !(desk.test && item.name === "TEST-GUIDE.md") && !(desk.commit && item.name === "COMMIT-MESSAGE.md"));  // these have a tab of their own
   let current = "overview";
+  let leavingMode = false;  // "Back to Interactive" was pressed: see otherMode
   if (route && (full.rounds || []).some((item) => item.round === Number(route[1]))) desk = pastView(full, Number(route[1]));
   current = tabs.includes(asked) && visible(asked) ? asked : firstTab();
 
@@ -546,10 +547,16 @@
     };
     const otherMode = () => {  // Plan and Autopilot are not offered here: a task has its own plan and autorun. One set in VS Code is shown, with the way back
       const found = (info.options || {}).mode;
-      if (!found || !found.value || found.value === "interactive") return null;
+      if (!found || !found.value || found.value === "interactive") { leavingMode = false; return null; }
+      if (leavingMode) return null;  // pressed: the host tells the new mode a moment later, and the page must not look as if nothing happened
       const back = h("button", {type: "button", class: "chip"}, t("desk.set.mode.back"));
-      back.addEventListener("click", () => SERVE.post("/api/chatconfig", {task: desk.name, mode: "interactive"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); }));
-      return h("span", {class: "set-field", title: t("desk.set.mode.tip")}, h("span", {class: "sub"}, t("desk.set.mode")), h("span", null, (found.choices.find((item) => item.id === found.value) || {}).label || found.value), back);
+      const field = h("span", {class: "set-field", title: t("desk.set.mode.tip")}, h("span", {class: "sub"}, t("desk.set.mode")), h("span", null, (found.choices.find((item) => item.id === found.value) || {}).label || found.value), back);
+      back.addEventListener("click", () => {
+        leavingMode = true;
+        field.remove();
+        SERVE.post("/api/chatconfig", {task: desk.name, mode: "interactive"}).then(() => SERVE.done(), (error) => { leavingMode = false; SERVE.failed(error); SERVE.done(); });
+      });
+      return field;
     };
     return h("section", {class: "card chatbar settings", title: t("desk.set.note")}, h("span", {class: "chat-k"}, t("desk.set.label")),
       h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.model")), pick), h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.thinking")), think),

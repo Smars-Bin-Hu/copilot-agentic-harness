@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.52 (2026-11-01)
+
+### Changed
+
+- **Back to Interactive** takes the Mode line away as soon as you press it, not when the host answers.
+
 ## 1.6.51 (2026-11-01)
 
 ### Changed

@@ -287,7 +287,7 @@
     } else {
       row.push(h("span", {class: "sub"}, t("desk.chat.unbound", {why: t("board.vs.why." + (chat.why || "no-chat"))})));
     }
-    row.push(h("span", {class: "chat-grow"}), chat.bound && SERVE.runs("send") ? compactButton(chat) : null, chat.bound && chat.title ? copyTitleButton(chat) : null, SERVE.vsButton(chat));
+    row.push(h("span", {class: "chat-grow"}), chat.bound && SERVE.runs("send") ? compactButton(chat) : null, chat.bound && chat.title ? copyTitleButton(chat) : null, SHELL.vsPill(desk.vscode), SERVE.vsButton(chat));
     const bars = [h("section", {class: "card chatbar"}, row)];
     if (desk.sub && (desk.sub.what || desk.sub.text)) {
       const more = desk.recent && desk.recent !== desk.sub.text ? h("details", {class: "recent-more", open: recentOpen ? "" : null}, h("summary", null, t("desk.recent.more")), h("pre", {class: "recent-text"}, desk.recent)) : null;
@@ -1274,7 +1274,7 @@
   function draw(keepScroll) {
     const y = window.scrollY;
     const kept = new Map([...app.querySelectorAll("[data-keep]")].map((node) => [node.dataset.keep, [node.scrollTop, node.scrollLeft]]));
-    app.replaceChildren(...[...header(), ...(chatBars() || []), settingsRow(), draftsBox(), ribbon(), desk.past ? pastNote() : saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
+    app.replaceChildren(...[...header(), SHELL.banner(), ...(chatBars() || []), settingsRow(), draftsBox(), ribbon(), desk.past ? pastNote() : saved ? null : actions(), h("section", {class: "card desk"}, nav(), h("div", {class: "pane"}, body())),
       h("footer", null, t(saved ? "desk.snapshot.footer" : "desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright())].filter(Boolean));  // a null would be drawn as the word "null"
     if (keepScroll) {
       for (const node of app.querySelectorAll("[data-keep]")) if (kept.has(node.dataset.keep)) [node.scrollTop, node.scrollLeft] = kept.get(node.dataset.keep);
@@ -1292,12 +1292,18 @@
   });
 
   document.querySelector("main").classList.add("wide");
+  SHELL.vs(desk.vscode);
+  SHELL.visit(desk.name);
+  // What Cmd+K can open on a task page: every tab this task has, and (shell.js) the other tasks, the board views and filters.
+  SHELL.provide(() => ({here: desk.name, tabs: tabs.filter((tab) => tab === "docs" ? extra().length > 0 : ownTab(tab)).map((tab) => ({id: tab, label: t("desk.tab." + tab), current: tab === current,
+    run: () => { current = tab; history.replaceState(null, "", hashOf(tab)); draw(false); }}))}));
   draw(false);
   if (typeof SERVE !== "undefined" && DATA.serve.refresh) {
     pollEvery(DATA.serve.refresh, () => {
       if (SERVE.busy()) return null;
       if (document.activeElement && ["TEXTAREA", "INPUT"].includes(document.activeElement.tagName)) return null;  // a redraw would take the focus from what the person is typing
       return SERVE.post("/api/desk", {task: desk.name}).then((data) => {
+        SHELL.vs(data.desk.vscode);
         const text = JSON.stringify(data.desk);
         if (same(text, shown)) return;
         setDesk(data.desk);

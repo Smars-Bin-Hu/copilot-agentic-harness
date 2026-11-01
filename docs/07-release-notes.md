@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.13 (2026-10-31)
+
+### Added
+
+- A search pill at the top right of the browser window of the board and the task page, with the key hint (Cmd+K, or Ctrl+K). It opens a palette: recent tasks, any task, the list and the lobby, the filters, every tab of a task, the theme, Lite and the settings. Arrows, Enter and Esc work. It only navigates: it never approves, promotes or sends. Recent tasks are kept in this browser.
+- A gear at the bottom right of the same pages. Its panel sets the theme (light, dark), Glass or Lite (Lite removes blur and motion), and the language (EN, 中文). The language is the real `language` setting: a paired browser writes it to `user.override.json`, and the page loads its texts again. Theme and Lite are kept in this browser.
+- When the link to VS Code drops while a page is open, a banner appears in the page under the header (nothing is covered, nobody is thrown out). The header pill, the VS Code button and the buttons that talk to the chat show the same state, and the banner clears by itself when the link returns.
+
+### Changed
+
+- Below 1480 px wide the page content moves left, so the fixed controls cover nothing.
+- A page on disk has the search, theme, Lite and tab items, but no language change and no jump to a task page (it needs the board server).
+
 ## 1.6.12 (2026-10-31)
 
 ### Added

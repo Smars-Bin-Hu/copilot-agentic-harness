@@ -330,7 +330,7 @@
       return node;
     };
     // replaceChildren writes a null as the word "null": on a page on disk, with no server, "New task" and the VS Code pill are not there (N4, 1.6.11).
-    shift.replaceChildren(...[button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint"), newTask(), vsPill()].filter(Boolean));
+    shift.replaceChildren(...[button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint"), newTask(), SHELL.vsPill(vscode)].filter(Boolean));
   }
   // "New task" (1.6, B73): a served board only (it makes a chat in VS Code). The dialog is in chat.js.
   function newTask() {
@@ -339,13 +339,7 @@
     node.addEventListener("click", () => CHAT.create());
     return node;
   }
-  // Is VS Code linked: green when the board reads its chats, grey when not (not open, not found, still starting). The title says why. Without VS Code the board is what it was.
-  function vsPill() {
-    if (!DATA.serve || !vscode) return null;
-    const on = Boolean(vscode.ready);
-    return h("span", {class: "vs-pill" + (on ? " on" : ""), title: on ? t("board.vscode.tip.ready", {bound: vscode.bound, unbound: vscode.unbound}) : t("board.vs.why." + (vscode.why || "starting"))},
-      h("i"), t(on ? "board.vscode.ready" : "board.vscode.off"));
-  }
+  // The pill that says whether VS Code is linked is SHELL.vsPill (shell.js): the same state as the banner and the dimmed buttons.
   const cli = DATA.cli || "harness";
 
   function draw() { drawNumbers(); drawControls(); drawTable(); drawSelection(); drawShift(); lobby.update(rows, live); }
@@ -369,10 +363,11 @@
   const modeButtons = {};
   const seg = h("div", {class: "lb-seg", role: "group"}, ["lobby", "list"].map((name) => {
     const button = h("button", {type: "button"}, t(name === "lobby" ? "board.mode.lobby" : "board.mode.list"));
-    button.addEventListener("click", () => { mode = name; keep.set("mode", name); drawMode(); });
+    button.addEventListener("click", () => setMode(name));
     modeButtons[name] = button;
     return button;
   }));
+  function setMode(name) { mode = name; keep.set("mode", name); drawMode(); }
   function drawMode() {
     for (const name of Object.keys(modeButtons)) modeButtons[name].classList.toggle("on", name === mode);
     const asList = mode === "list";
@@ -381,12 +376,17 @@
   }
 
   app.replaceChildren(
-    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: "sub"}, h("b", null, t("board.title")), " \u00b7 ", stamp)), h("div", {class: "lb-right"}, shift, seg)), said,
+    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: "sub"}, h("b", null, t("board.title")), " \u00b7 ", stamp)), h("div", {class: "lb-right"}, shift, seg)), SHELL.banner(), said,
     kpis, controls, lobby.node,
     pick, tableBox, more,
     h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint")), copyright());
   draw();
   drawMode();
+  SHELL.vs(vscode);
+  // What Cmd+K can open on the board: its tasks, the two views and the filters (it only changes what is shown; it never acts on a task).
+  SHELL.provide(() => ({tasks: rows,
+    views: [{id: "list", label: t("board.shell.view.list"), kw: "list table", run: () => setMode("list")}, {id: "lobby", label: t("board.shell.view.lobby"), kw: "lobby robots floor", run: () => setMode("lobby")}],
+    filters: FILTERS.map((name) => ({id: name, label: t("board.filter." + name), run: () => { view.filter = name; keep.set("filter", name); setMode("list"); drawControls(); drawTable(); }}))}));
 
   function refresh(strict) {  // strict: an unanswered request is thrown (the poll counts it); a click's refresh ignores it
     if (typeof SERVE === "undefined") return Promise.resolve();
@@ -400,6 +400,7 @@
   function apply(data) {
     asOf = data.as_of;
     archiveTo = data.archive_to || "";
+    SHELL.vs(data.vscode);
     const text = JSON.stringify([data.rows, data.hidden, data.vscode || null]);
     if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else stamp.textContent = subtitle();
   }

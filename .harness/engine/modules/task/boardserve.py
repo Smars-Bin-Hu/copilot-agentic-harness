@@ -17,6 +17,7 @@ Who may do what:
 - `.harness/runtime/board-serve.json` holds the port while it runs: the gate refuses an agent's request to it.
 - Talking to the chat (1.6, B72): `/api/send`, `/api/steer`, `/api/stop` (paired POST only; B78: `/api/compact`, which sends `/compact` to an idle chat) act through the link's thread, after it looked at the binding and the chat again. The confirmation code typed at an
   approval is not kept: no message to the agent holds it.
+  `/api/language` (B85, paired POST only) sets the `language` setting: it writes `user.override.json`, the person's own file, and the board reads it again at once.
   `/api/draft` lists, adds, edits, deletes and switches the notes of `.task/drafts.json`; `/api/setting` sets the task's model and thinking level (`chat.model`); `review set` runs through `/api/act`.
 - New task (1.6, B73): `/api/create` (paired POST only; `step` options, preview or act) makes a chat in VS Code for a task the agent opens (`chatnew` checks every field again, `vslink.create` does it). It fails
   with a clear reason when VS Code is not ready; nothing is made then.
@@ -45,7 +46,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 
-from core import config, messages, registry, tasks
+from core import config, messages, registry, state, tasks
 from core.paths import board_serve_file, utc_now
 
 from . import autorun, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
@@ -244,6 +245,29 @@ class Board:
         model = chatsend.model_of(data) or {}
         return {"n": taskreview.state_of(data)["n"], "max_n": taskreview.settings(self.root)["max_n"], "model": model.get("id", ""), "thinking": (model.get("config") or {}).get("thinkingLevel", ""),
                 "models": self.link.model_list(), "ready": bool(self.link.status()["ready"])}
+
+    def set_language(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """The `language` setting of the harness (`en` or `zh`), written to `user.override.json` next to what the person already keeps there, as `task archive --remember` does. A paired browser only.
+        The board reads it again at once (`sync_language`), so the answer already carries the new language and an open page loads its texts again."""
+        wanted = str(data.get("language", "")).strip().lower()
+        if wanted not in messages.LANGUAGES:
+            raise CommandError(say("serve.language.bad"))
+        forced = os.environ.get(messages.ENVIRONMENT, "").strip().lower()
+        if forced and forced != wanted:
+            raise CommandError(say("serve.language.env", name=messages.ENVIRONMENT))  # the environment wins over the file: writing the file would change nothing
+        path = config.override_path(self.root, "user")
+        kept: Dict[str, Any] = {}
+        if path.exists():
+            try:
+                kept = json.loads(path.read_text(encoding="utf-8-sig"))
+            except ValueError as error:
+                raise CommandError(say("serve.language.broken", file=str(path), error=error)) from None
+            if not isinstance(kept, dict):
+                raise CommandError(say("serve.language.broken", file=str(path), error="not an object"))
+        kept["language"] = wanted
+        state.atomic_write(path, kept)
+        self.language_stamp = []  # the file is new: read it at once
+        return {"language": self.sync_language()}
 
     def desk_page(self, name: str) -> str:
         return taskhtml.desk_page(self.desk(name), {"actions": self.served, "refresh": DESK_REFRESH})
@@ -796,6 +820,15 @@ def handler_for(board: Board) -> type:
                 except Fallback as error:  # not sent: the reason, and the text to copy
                     return self.answer(409, {"error": str(error), "fallback": error.text})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/language":  # the language of the harness (settings panel): the paired browser only; it writes the person's own `user.override.json`
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.set_language(data)
+                    print(say("serve.did", action="language " + result["language"], task="-"), flush=True)
+                    return self.answer(200, {"result": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown in the settings panel
                     return self.answer(409, {"error": str(error)})
             if path == "/api/board":
                 try:

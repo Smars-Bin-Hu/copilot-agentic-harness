@@ -67,6 +67,7 @@ class SyncTests(CompanyCase):
         self.assertEqual(result["copied"], [".github/skills/acme-ticket"])
         self.assertFalse((copy / "old.md").exists())
         self.assertEqual(result["only_here"], ["acme-local"])  # listed, not deleted
+        self.assertIn("acme-local", result["next"])
         self.assertTrue((self.root / ".github" / "skills" / "acme-local" / "SKILL.md").is_file())
         self.assertTrue((self.root / ".github" / "skills" / "generic-mine" / "SKILL.md").is_file())
 

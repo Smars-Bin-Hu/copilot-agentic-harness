@@ -6,6 +6,9 @@
 const DATA = JSON.parse(document.getElementById("data").textContent);
 const TEXT = DATA.text || {};
 
+// Enter that ends a line. Not the Enter that picks a word in an input method: Chinese is typed with it.
+const isEnter = (event) => event.key === "Enter" && !event.isComposing && event.keyCode !== 229;
+
 // A message by name with its {placeholders} filled in. An unknown name shows itself.
 function t(key, values) {
   const template = Object.prototype.hasOwnProperty.call(TEXT, key) ? TEXT[key] : key;

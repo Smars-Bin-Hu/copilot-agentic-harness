@@ -20,6 +20,7 @@ from .common import CommandError, say
 MAX_WORDS = 2000
 NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,80}")
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+BREAKS = re.compile(r"[\t\r\n]+")  # what a paste brings: a space to a person
 
 
 def known(root: Path, name: str) -> bool:
@@ -27,7 +28,7 @@ def known(root: Path, name: str) -> bool:
 
 
 def message(root: Path, data: Dict[str, Any]) -> str:
-    name, words, lang = str(data.get("skill") or ""), str(data.get("words") or "").strip(), str(data.get("lang") or "en")
+    name, words, lang = str(data.get("skill") or ""), BREAKS.sub(" ", str(data.get("words") or "")).strip(), str(data.get("lang") or "en")
     if not known(root, name):
         raise CommandError(say("skill.refused.name"))
     if len(words) > MAX_WORDS or CONTROL.search(words):

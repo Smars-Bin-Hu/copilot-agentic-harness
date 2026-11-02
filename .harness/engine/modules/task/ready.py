@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from core import config, shortcmd, targets, tasks
 
+LINES = 6  # errors of doctor shown at the end of the setup
 DOCTOR_TIMEOUT = 90.0  # seconds the child `doctor` may take (a stalled `code` command inside it has its own 25 s)
 RETRY_FAILED = 20.0  # a doctor that failed or found errors is run again no sooner than this
 REFRESH_CLEAN = 600.0  # a clean doctor is looked at again after this long
@@ -62,10 +63,11 @@ def run_doctor(root: Path, timeout: float = DOCTOR_TIMEOUT) -> Dict[str, Any]:
         return {"errors": 0, "first": "", "failed": short(f"{type(error).__name__}: {error}")}
     text = done.stdout.decode("utf-8", errors="replace")
     errors = [line[len("[ERROR]"):].strip() for line in text.splitlines() if line.startswith("[ERROR]")]
+    warnings = [line[len("[WARN]"):].strip() for line in text.splitlines() if line.startswith("[WARN]")]
     if not errors and done.returncode != 0 and '"errors"' not in text:  # it did not get as far as its summary line
         tail = done.stderr.decode("utf-8", errors="replace").strip().splitlines()
         return {"errors": 0, "first": "", "failed": short(tail[-1] if tail else f"exit code {done.returncode}")}
-    return {"errors": len(errors) if errors else (1 if done.returncode else 0), "first": short(errors[0]) if errors else "", "failed": ""}
+    return {"errors": len(errors) if errors else (1 if done.returncode else 0), "first": short(errors[0]) if errors else "", "failed": "", "lines": [short(line) for line in errors[:LINES]], "warned": len(warnings), "warning": short(warnings[0]) if warnings else ""}
 
 
 class Ready:

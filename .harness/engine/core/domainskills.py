@@ -21,6 +21,18 @@ SKILLS_DIR = "skills"
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")  # a folder keeps its case; a name matches it in any case (`sales` is `Sales`)
 
 
+def bad_names(root: Path) -> List[str]:
+    """Folders under `domains/` that `domains` leaves out for their name. Hidden ones are no domains at all."""
+    found: List[str] = []
+    for _name, base in targets.knowledge_bases(root):
+        try:
+            items = sorted((base / DOMAINS_DIR).iterdir()) if (base / DOMAINS_DIR).is_dir() else []
+        except OSError:
+            items = []
+        found += [item.name for item in items if item.is_dir() and not NAME.match(item.name) and not item.name.startswith(".")]
+    return found
+
+
 def domains(root: Path) -> Dict[str, Path]:
     """{domain: its folder}, over every knowledge base. The first knowledge base that has a domain wins, and of two
     folders whose names differ only in case, the first (on a file system that tells them apart)."""

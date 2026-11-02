@@ -238,9 +238,103 @@ class RepositoryListTests(unittest.TestCase):
         far = str(self.base / "far" / "billing")
         self.assertEqual(self.finish({"repos_root": "", "singles": [far]})["repos"], {"billing": {"path": far}})
         setup.write(self.root, "target", {"repos": {"billing": {"path": far}, "kb": {"path": "knowledge-base", "knowledge_base": True}}})
-        self.assertEqual(setup.status(self.root, "/x")["singles"], [far])
-        self.assertEqual(setup.status(self.root, "/x")["broken"], [])
+        self.assertEqual(setup.status(self.root, {"found": "/x"})["singles"], [far])
+        self.assertEqual(setup.status(self.root, {"found": "/x"})["broken"], [])
         self.assertEqual(self.finish({"repos_root": ""})["repos"], {"kb": {"path": "knowledge-base", "knowledge_base": True}})
+
+    def test_a_name_a_person_gave_stays_and_makes_no_second_entry(self) -> None:
+        far = str(self.base / "far" / "billing")
+        setup.write(self.root, "target", {"repos": {"money": {"path": far}}})
+        found = self.finish({"repos_root": "", "singles": [far], "refused": [far + "/deploy.sh"]})
+        self.assertEqual(found["repos"], {"money": {"path": far, "refused_paths": [".git/**", "deploy.sh"]}})
+
+    def test_a_language_the_harness_does_not_have_changes_nothing(self) -> None:
+        with mock.patch.dict(os.environ, {messages.ENVIRONMENT: "fr"}):
+            self.assertFalse(setup.status(self.root, {"found": "/x"})["language_forced"])
+            setup.check(self.root, {"name": "A", "language": "en"})
+
+    def test_a_broken_file_is_said_as_it_is(self) -> None:
+        (self.root / ".harness" / "policies" / "user.override.json").write_text("{ broken", encoding="utf-8")
+        with mock.patch.dict(os.environ):
+            os.environ.pop(messages.ENVIRONMENT, None)
+            with self.assertRaises(ValueError) as told:
+                setup.check(self.root, {"name": "A", "language": "en", "stamp": "old"})
+        self.assertNotIn(messages.text("setup.changed"), str(told.exception))
+
+    def test_taking_the_folder_off_takes_its_rules_with_it(self) -> None:
+        self.finish({"repos_root": str(self.shelf), "refused": [str(self.shelf / "orders" / "x.sql")]})
+        found = self.finish({"repos_root": ""})
+        self.assertNotIn("orders", found.get("repos") or {})
+
+    def test_the_form_shows_the_rules_and_one_taken_off_goes(self) -> None:
+        self.finish({"repos_root": str(self.shelf), "refused": [str(self.shelf / "orders" / "x.sql"), str(self.shelf / "orders" / "y.sql")]})
+        rules = setup.status(self.root, {"found": "/x"})["rules"]
+        self.assertEqual(rules, [{"repo": "orders", "rule": "x.sql"}, {"repo": "orders", "rule": "y.sql"}])
+        self.assertEqual(self.finish({"repos_root": str(self.shelf), "rules": rules[:1]})["repos"]["orders"]["refused_paths"], [".git/**", "x.sql"])
+        self.assertNotIn("orders", self.finish({"repos_root": str(self.shelf), "rules": []}).get("repos") or {})
+
+    def test_a_repository_on_another_branch_says_which(self) -> None:
+        git = self.shelf / "orders" / ".git"
+        (git / "HEAD").write_text("ref: refs/heads/trunk\n", encoding="utf-8")
+        self.assertEqual(self.finish({"repos_root": str(self.shelf)})["repos"]["orders"], {"base_ref": "trunk"})
+        (git / "refs" / "heads").mkdir(parents=True)
+        (git / "refs" / "heads" / "main").write_text("0\n", encoding="utf-8")
+        setup.write(self.root, "target", {"repos": {}})
+        self.assertNotIn("orders", self.finish({"repos_root": str(self.shelf)}).get("repos") or {})
+
+    def test_this_harness_and_its_knowledge_base_are_no_code_repository(self) -> None:
+        (self.root / ".git").mkdir()
+        (self.root / "knowledge-base" / ".git").mkdir(parents=True)
+        for path in (self.root, self.root / "knowledge-base"):
+            with self.assertRaises(ValueError):
+                setup.add_repo(path, "", [], self.root)
+        self.assertEqual(setup.add_repo(self.base, "", [], self.root)["repos"][0]["off"], messages.text("setup.repos.own"))
+
+    def test_a_repository_with_no_commit_cannot_be_ticked(self) -> None:
+        (self.shelf / "orders" / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+        self.assertEqual(setup.add_repo(self.shelf)["repos"][0]["off"], messages.text("setup.repos.nocommit"))
+
+    def test_a_count_holds_only_names_that_can_be_targets(self) -> None:
+        (self.shelf / ".hidden" / ".git").mkdir(parents=True)
+        (self.shelf / "bad name" / ".git").mkdir(parents=True)
+        self.assertEqual(setup.repositories(self.shelf)["n"], 1)
+
+    def test_a_file_is_told_from_a_missing_folder(self) -> None:
+        file = self.base / "a.txt"
+        file.write_text("x", encoding="utf-8")
+        with self.assertRaises(ValueError) as told:
+            setup.add_repo(file)
+        self.assertEqual(str(told.exception), messages.text("setup.repos.file"))
+
+    def test_finish_does_not_overwrite_a_change_made_elsewhere(self) -> None:
+        opened = setup.stamp(self.root)
+        self.finish({"repos_root": str(self.shelf)})
+        with mock.patch.dict(os.environ):
+            os.environ.pop(messages.ENVIRONMENT, None)
+            with self.assertRaises(ValueError) as told:
+                setup.check(self.root, {"name": "A", "language": "en", "stamp": opened})
+            setup.check(self.root, {"name": "A", "language": "en", "stamp": setup.stamp(self.root)})
+        self.assertIn(messages.text("setup.changed"), str(told.exception))
+
+    def test_the_install_command_is_shown_and_an_empty_box_takes_it_off(self) -> None:
+        shelf = {"repos_root": str(self.shelf)}
+        self.finish({**shelf, "install_command": "pip install x"})
+        self.assertEqual(setup.status(self.root, {"found": "/x"})["install_command"], "pip install x")
+        self.finish({**shelf, "install_command": ""})
+        self.assertEqual(setup.status(self.root, {"found": "/x"})["install_command"], "")
+        self.finish({**shelf, "install_command": "pip install y"})
+        self.finish(shelf)
+        self.assertEqual(setup.status(self.root, {"found": "/x"})["install_command"], "pip install y")
+
+    def test_a_language_set_by_the_environment_is_shown_and_not_written(self) -> None:
+        setup.write(self.root, "user", {"language": "en"})
+        with mock.patch.dict(os.environ, {messages.ENVIRONMENT: "zh"}):
+            found = setup.status(self.root, {"found": "/x"})
+            self.assertEqual((found["language"], found["language_forced"]), ("zh", True))
+            setup.check(self.root, {"name": "A", "language": "zh"})
+            for _key, step in setup.steps(self.root, {"name": "A", "language": "zh"})[:1]:
+                step()
+        self.assertEqual(setup.kept(self.root, "user")["language"], "en")
 
 
 class KnowledgeBaseTests(unittest.TestCase):
@@ -260,10 +354,83 @@ class KnowledgeBaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             setupjob.copy_folder(self.root, self.source)
 
+    def test_a_copy_that_fails_leaves_nothing_and_can_be_run_again(self) -> None:
+        (self.source / "secret.md").write_text("x", encoding="utf-8")
+        with mock.patch("shutil.copytree", side_effect=OSError("no way")):
+            with self.assertRaises(ValueError) as told:
+                setupjob.copy_folder(self.root, self.source)
+        self.assertIn("no way", str(told.exception))
+        self.assertEqual([item.name for item in (self.root / "knowledge-base").iterdir()], ["README.md"])
+        self.assertEqual(setupjob.copy_folder(self.root, self.source), messages.text("setup.kb.copied", n=3))
+
+    def test_replacing_moves_the_old_one_to_a_backup_first(self) -> None:
+        setupjob.copy_folder(self.root, self.source)
+        new = Path(self.temp.name) / "new"
+        (new / "domains" / "billing").mkdir(parents=True)
+        told = setupjob.copy_folder(self.root, new, True)
+        self.assertTrue((self.root / "knowledge-base" / "domains" / "billing").is_dir())
+        self.assertFalse((self.root / "knowledge-base" / "domains" / "sales").exists())
+        self.assertTrue(list((self.root / ".harness" / "runtime" / "kb-backup").glob("*/domains/sales")))
+        self.assertIn("kb-backup", told)
+
+    def test_replacing_keeps_the_readme_of_the_old_one_and_two_runs_keep_two_backups(self) -> None:
+        setupjob.copy_folder(self.root, self.source)
+        (self.root / "knowledge-base" / "README.md").write_text("mine\n", encoding="utf-8")
+        new = Path(self.temp.name) / "new"
+        (new / "domains" / "billing").mkdir(parents=True)
+        with mock.patch("time.strftime", return_value="same"):
+            setupjob.copy_folder(self.root, new, True)
+            setupjob.copy_folder(self.root, self.source, True)
+        backups = self.root / ".harness" / "runtime" / "kb-backup"
+        self.assertEqual((backups / "same" / "README.md").read_text(encoding="utf-8"), "mine\n")
+        self.assertTrue((backups / "same-1" / "domains" / "billing").is_dir())
+
+    def test_a_replace_that_fails_halfway_puts_the_old_one_back(self) -> None:
+        setupjob.copy_folder(self.root, self.source)
+        real, count = setupjob.shutil.move, [0]
+        def move(*args: str) -> str:
+            count[0] += 1
+            if count[0] == 3:
+                raise OSError("no way")
+            return real(*args)
+        new = Path(self.temp.name) / "new"
+        (new / "domains" / "billing").mkdir(parents=True)
+        (new / "a.md").write_text("x", encoding="utf-8")
+        with mock.patch.object(setupjob.shutil, "move", side_effect=move), self.assertRaises(ValueError):
+            setupjob.copy_folder(self.root, new, True)
+        self.assertEqual(sorted(item.name for item in (self.root / "knowledge-base").iterdir()), ["README.md", "domains"])
+        self.assertTrue((self.root / "knowledge-base" / "domains" / "sales").is_dir())
+        self.assertEqual([item.name for item in (self.root / ".harness" / "runtime").iterdir() if item.name.startswith("kb-copy")], [])
+
+    def test_a_folder_that_holds_the_harness_or_lies_in_the_knowledge_base_is_refused(self) -> None:
+        self.assertEqual(setupjob.probe_folder(self.root, self.root.parent)["why"], messages.text("setup.kb.holds"))
+        (self.root / "knowledge-base" / "domains").mkdir()
+        self.assertEqual(setupjob.probe_folder(self.root, self.root / "knowledge-base" / "domains")["why"], messages.text("setup.kb.inside"))
+        self.assertEqual(setupjob.probe_folder(self.root, self.root / "knowledge-base")["why"], messages.text("setup.kb.same"))
+
+    def test_what_a_folder_cannot_be_is_said_at_once(self) -> None:
+        (self.root / ".harness" / "engine").mkdir(parents=True)
+        (self.source / "x.txt").write_text("x", encoding="utf-8")
+        self.assertEqual(setupjob.probe_folder(self.root, self.root)["why"], messages.text("setup.kb.harness"))
+        self.assertEqual(setupjob.probe_folder(self.root, self.source / "x.txt")["why"], messages.text("setup.repos.file"))
+        (self.source / "empty").mkdir()
+        self.assertEqual(setupjob.probe_folder(self.root, self.source / "empty")["why"], messages.text("setup.kb.nothing"))
+        setupjob.copy_folder(self.root, self.source)
+        self.assertTrue(setupjob.probe_folder(self.root, self.source)["full"])
+        with self.assertRaises(ValueError):
+            setupjob.ahead(self.root, {"kb_mode": "folder", "kb_path": str(self.source)})
+        setupjob.ahead(self.root, {"kb_mode": "folder", "kb_path": str(self.source), "kb_replace": True})
+
+    def test_company_content_that_was_not_copied_is_not_called_copied(self) -> None:
+        with mock.patch.object(setupjob.company, "sync_after", return_value={"error": "no prefix"}):
+            step = dict(setupjob.steps(self.root, {"kb_mode": "none"}))["sync"]
+            with self.assertRaises(ValueError):
+                step()
+
     def test_the_folder_is_looked_at_before_anything_is_written(self) -> None:
-        self.assertTrue(setupjob.probe_folder(self.source)["ok"])
-        self.assertTrue(setupjob.probe_folder(self.source / "domains")["why"])
-        self.assertFalse(setupjob.probe_folder(self.source / "none")["ok"])
+        self.assertTrue(setupjob.probe_folder(self.root, self.source)["ok"])
+        self.assertTrue(setupjob.probe_folder(self.root, self.source / "domains")["why"])
+        self.assertFalse(setupjob.probe_folder(self.root, self.source / "none")["ok"])
 
 
 class GuideTests(unittest.TestCase):

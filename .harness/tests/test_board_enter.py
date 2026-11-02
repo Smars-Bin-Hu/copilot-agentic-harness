@@ -138,11 +138,11 @@ class ReadinessTests(TaskCase):
         self.assertEqual(found["errors"], 0)
         self.assertIn("no answer", found["failed"])
         cli.write_text("print('[OK]    fine')\nprint('[ERROR] first problem')\nprint('[ERROR] second')\nprint('{\"errors\": 2}')\nraise SystemExit(1)\n", encoding="utf-8")
-        self.assertEqual(ready.run_doctor(self.root), {"errors": 2, "first": "first problem", "failed": ""})
+        self.assertEqual(ready.run_doctor(self.root), {"errors": 2, "first": "first problem", "failed": "", "lines": ["first problem", "second"], "warned": 0, "warning": ""})
         cli.write_text("import sys\nsys.stderr.write('Traceback\\nValueError: boom\\n')\nraise SystemExit(1)\n", encoding="utf-8")
         self.assertEqual(ready.run_doctor(self.root)["failed"], "ValueError: boom")
         cli.write_text("print('[OK] fine')\nprint('{\"errors\": 0}')\n", encoding="utf-8")
-        self.assertEqual(ready.run_doctor(self.root), {"errors": 0, "first": "", "failed": ""})
+        self.assertEqual(ready.run_doctor(self.root), {"errors": 0, "first": "", "failed": "", "lines": [], "warned": 0, "warning": ""})
 
     def test_vscode_states(self) -> None:
         cases = {"none": ("fail", True), "off": ("fail", False), "no-cli": ("fail", False), "cli-failed": ("fail", False), "many": ("fail", False), "starting": ("wait", True), "lost": ("wait", True), "error": ("wait", True)}

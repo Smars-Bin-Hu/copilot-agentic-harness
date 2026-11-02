@@ -92,6 +92,13 @@ class CheckTests(CheckCase):
         self.assertEqual(result["objects"], 2)
         self.assertEqual(kbstd.check(self.root)["exit_code"], 0)
 
+    def test_a_folder_whose_name_is_no_domain_name_is_an_error_not_silence(self) -> None:
+        (self.folder.parent / "with space").mkdir()
+        (self.folder.parent / ".hidden").mkdir()
+        result = kbstd.check(self.root)
+        self.assertEqual([item["domain"] for item in result["problems"]], ["with space"])
+        self.assertEqual(result["exit_code"], 1)
+
     def test_a_domain_name_matches_in_any_case(self) -> None:
         self.folder.rename(self.folder.with_name("Orders"))  # domain.yaml still says `orders`
         self.folder = self.folder.with_name("Orders")

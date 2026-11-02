@@ -192,6 +192,8 @@ def check(root: Path, only: Optional[List[str]] = None) -> Dict[str, Any]:
     wanted = [name for name in known if not only or name in asked.values()]
     missing = [name for name, found in asked.items() if found is None]
     results = [check_domain(root, known[name]) for name in wanted]
+    if not only:
+        results += [{"domain": name, "objects": 0, "errors": [say("kb.domain.folder_name")], "warnings": []} for name in domainskills.bad_names(root)]
     errors = sum(len(item["errors"]) for item in results)
     return {
         "domains": len(results), "errors": errors, "warnings": sum(len(item["warnings"]) for item in results),

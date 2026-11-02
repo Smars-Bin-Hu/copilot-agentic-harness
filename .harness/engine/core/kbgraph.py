@@ -350,7 +350,7 @@ def near(root: Path, query: str, depth: int = 1, direction: str = "both") -> Dic
     if len(found) != 1:
         if not found:
             raise MapError(say("kbmap.near.none", query=query))
-        return {"query": query, "matches": found[:50], "next": say("kbmap.near.many")}
+        return {"query": query, "matches": found[:50], "total": len(found), "next": say("kbmap.near.many")}
     node = graph.nodes[found[0]]
     result: Dict[str, Any] = {key: node[key] for key in ("id", "type", "repo", "path", "line", "dynamic")}
     if direction in ("both", "up"):

@@ -19,8 +19,11 @@ class MessageTests(unittest.TestCase):
         self.assertEqual(self.make(skill="harness-rookie-wondering", words="how does the gate work", lang="zh"), "/harness-rookie-wondering how does the gate work [ZH]")
         self.assertEqual(self.make(skill="harness-rookie-quick-start"), "/harness-rookie-quick-start")
 
+    def test_a_tab_or_a_line_break_of_a_paste_is_a_space_so_the_words_stay_one_line(self) -> None:
+        self.assertEqual(self.make(skill="harness-rookie-wondering", words="a\tb\r\nc\n"), "/harness-rookie-wondering a b c")
+
     def test_what_is_refused(self) -> None:
-        for data in ({"skill": "no-such-skill"}, {"skill": "../../etc"}, {"skill": "harness-rookie-wondering", "words": "a\nb"}, {"skill": "harness-rookie-wondering", "words": "x" * 2001}, {"skill": "harness-rookie-wondering", "lang": "fr"}):
+        for data in ({"skill": "no-such-skill"}, {"skill": "../../etc"}, {"skill": "harness-rookie-wondering", "words": "a\x07b"}, {"skill": "harness-rookie-wondering", "words": "x" * 2001}, {"skill": "harness-rookie-wondering", "lang": "fr"}):
             with self.assertRaises(CommandError, msg=str(data)):
                 skillsend.message(support.REPO, data)
 

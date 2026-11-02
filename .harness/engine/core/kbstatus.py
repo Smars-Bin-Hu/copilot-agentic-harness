@@ -158,7 +158,11 @@ def status(root: Path, deep: bool = True) -> Dict[str, Any]:
     """`kb status`: each step, done or not, and the next one."""
     code, kb = knowledge_base(root)
     steps: Dict[str, Dict[str, Any]] = {name: {"done": False} for name in STEPS}
-    steps["targets"].update(done=bool(code), repos=[repo.name for repo in code])
+    try:
+        problems = targets.load(root).problems
+    except Exception:  # noqa: BLE001 - a broken policy is doctor's to report
+        problems = []
+    steps["targets"].update(done=bool(code), repos=[repo.name for repo in code], **({"problems": problems} if problems else {}))
     steps["kb_repo"].update(done=kb is not None, **({"repo": kb.name} if kb else {}))
     domains: List[Dict[str, Any]] = []
     if kb is not None:
@@ -192,7 +196,7 @@ def status(root: Path, deep: bool = True) -> Dict[str, Any]:
                               **({"note": say("kbstatus.audit.old")} if text and kit is not None and kit.signature not in text else {}))
         folder = kb.path / "domains"
         try:
-            names = sorted(item for item in folder.iterdir() if item.is_dir()) if folder.is_dir() else []
+            names = sorted(item for item in folder.iterdir() if item.is_dir() and not item.name.startswith(".")) if folder.is_dir() else []
         except OSError:
             names = []
         learning = learning_tasks(root, kb.name)

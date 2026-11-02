@@ -5,6 +5,7 @@ Everything goes into the person's own `*.override.json`, next to what is already
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -17,7 +18,10 @@ from core import config, messages, shortcmd, state as files, targets
 
 MAX_NAME = 100
 MAX_PATH = 1024
+MAX_INSTALL = 500
 GIT_WAIT = 5.0
+GIT_RULE = ".git/**"
+BRANCH_LINE = "ref: refs/heads/"
 PREFIX = re.compile(r"[a-z][a-z0-9]{0,30}")
 
 
@@ -41,7 +45,11 @@ def kept(root: Path, name: str) -> Dict[str, Any]:
 def write(root: Path, name: str, values: Dict[str, Any]) -> None:
     found = kept(root, name)
     found.update(values)
-    files.atomic_write(config.override_path(root, name), found)
+    path = config.override_path(root, name)
+    try:
+        files.atomic_write(path, found)
+    except OSError as error:
+        raise ValueError(say("setup.file.nowrite", file=str(path), error=error.strerror or error)) from None
 
 
 def git_name() -> str:
@@ -59,6 +67,26 @@ def clean_path(text: Any) -> str:
     return os.path.expanduser(value)
 
 
+def forced_language() -> str:
+    """The language the environment sets, when it is one the harness has."""
+    value = os.environ.get(messages.ENVIRONMENT, "").strip().lower()
+    return value if value in messages.LANGUAGES else ""
+
+
+def has_git(path: Path) -> bool:
+    try:
+        return (path / ".git").exists()
+    except OSError:
+        return False
+
+
+def own_folders(root: Optional[Path]) -> Dict[Path, str]:
+    """This harness and its knowledge base: never a code repository of its own. {folder: the message that says why}."""
+    if root is None:
+        return {}
+    return {root.resolve(): "setup.repos.self", (root / targets.KB_DIR).resolve(): "setup.repos.kb"}
+
+
 def repositories(text: Any) -> Dict[str, Any]:
     """What is in the folder of code repositories: `{ok, n, names, why}`. Read only. Empty: a person may set it later."""
     value = clean_path(text)
@@ -68,34 +96,38 @@ def repositories(text: Any) -> Dict[str, Any]:
     if len(value) > MAX_PATH or "\x00" in value or not path.is_absolute():
         return {"ok": False, "n": 0, "names": [], "why": say("setup.repos.absolute")}
     if not path.is_dir():
-        return {"ok": False, "n": 0, "names": [], "why": say("setup.repos.missing")}
+        return {"ok": False, "n": 0, "names": [], "why": say("setup.repos.file" if path.is_file() else "setup.repos.missing")}
     try:
-        names = sorted(item.name for item in path.iterdir() if (item / ".git").exists())
+        names = sorted(item.name for item in path.iterdir() if targets.REPO_NAME.match(item.name) and has_git(item))
     except OSError as error:
         return {"ok": False, "n": 0, "names": [], "why": str(error)[:200]}
     return {"ok": True, "n": len(names), "names": names[:3], "why": "" if names else say("setup.repos.none")}
 
 
-def add_repo(text: Any, root_text: Any = "", singles: Any = ()) -> Dict[str, Any]:
+def add_repo(text: Any, root_text: Any = "", singles: Any = (), root: Optional[Path] = None) -> Dict[str, Any]:
     """What a path added to the code repositories is: one git repository, or a folder with the repositories to pick from. ValueError: why it cannot be added."""
     value = clean_path(text).rstrip("/\\") or clean_path(text)
     path = Path(value)
     if len(value) > MAX_PATH or "\x00" in value or not path.is_absolute():
         raise ValueError(say("setup.repos.absolute"))
     if not path.is_dir():
-        raise ValueError(say("setup.repos.missing"))
+        raise ValueError(say("setup.repos.file" if path.is_file() else "setup.repos.missing"))
+    own = own_folders(root)
+    if path.resolve() in own:
+        raise ValueError(say(own[path.resolve()]))
     base = clean_path(root_text)
     held = {Path(clean_path(item)).name for item in singles}
     if base and Path(base).is_dir():
-        held |= {item.name for item in Path(base).iterdir() if (item / ".git").exists()}
-    if not (path / ".git").exists():
+        held |= {item.name for item in Path(base).iterdir() if has_git(item)}
+    if not has_git(path):
         try:
-            names = sorted((item.name for item in path.iterdir() if (item / ".git").exists() and targets.REPO_NAME.match(item.name)), key=str.lower)
+            names = sorted((item.name for item in path.iterdir() if has_git(item) and targets.REPO_NAME.match(item.name)), key=str.lower)
         except OSError as error:
             raise ValueError(str(error)[:200]) from None
         if not names:
             raise ValueError(say("setup.repos.none"))
-        return {"kind": "folder", "path": value, "n": len(names), "names": names[:3], "repos": [{"name": name, "path": str(path / name), "held": name in held} for name in names]}
+        rows = [{"name": name, "path": str(path / name), "held": name in held, **({"off": say("setup.repos.own")} if (path / name).resolve() in own else {"off": say("setup.repos.nocommit")} if head_branch(path / name) and not has_ref(path / name, head_branch(path / name)) else {})} for name in names]
+        return {"kind": "folder", "path": value, "n": len(names), "names": names[:3], "repos": rows}
     if not targets.REPO_NAME.match(path.name):
         raise ValueError(say("setup.repos.name", name=path.name))
     if path.name in held:
@@ -137,25 +169,89 @@ def refused(root_text: Any, text: Any, singles: Any = ()) -> Dict[str, str]:
     return {"repo": parts[0], "rule": rule + "/**" if path.is_dir() else rule, "path": value}
 
 
+def head_branch(path: Path) -> str:
+    """The branch a repository is on. Read from the file: a folder of 300 repositories must not start 300 programs."""
+    try:
+        text = (path / ".git" / "HEAD").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    return text[len(BRANCH_LINE):] if text.startswith(BRANCH_LINE) else ""
+
+
+def has_ref(path: Path, name: str) -> bool:
+    """Does the repository have this branch, local or of a remote? Read from the files. Cannot tell (a worktree): yes, and doctor checks it."""
+    folder = path / ".git"
+    if not folder.is_dir():
+        return True
+    wanted = [f"refs/heads/{name}", f"refs/remotes/{name}", f"refs/tags/{name}"]
+    if any((folder / ref).is_file() for ref in wanted):
+        return True
+    try:
+        packed = (folder / "packed-refs").read_text(encoding="utf-8", errors="replace").split()
+    except OSError:
+        return False
+    return any(ref in packed for ref in wanted)
+
+
 def is_single(entry: Any) -> bool:
     """A repository added by itself: not one found in `repos_root`, and not a knowledge base."""
     return isinstance(entry, dict) and bool(str(entry.get("path") or "").strip()) and not entry.get("knowledge_base")
 
 
-def status(root: Path, short_found: Optional[str] = None) -> Dict[str, Any]:
+def short_state(root: Path) -> Dict[str, Any]:
+    """Whether a new terminal finds the short command. It asks a login shell: the board keeps the answer a while."""
+    path = shortcmd.fresh_path()
+    found = shortcmd.found(path)
+    return {"found": found, "command": "" if found else shortcmd.command_for(root, path), "windows": os.name == "nt"}
+
+
+def stamp(root: Path) -> str:
+    """Changes when what the form shows changes. Finish sends the one it opened with: what a terminal wrote meanwhile is not overwritten."""
+    try:
+        user, target, tools = kept(root, "user"), kept(root, "target"), kept(root, "tools")
+    except ValueError:
+        return ""
+    shown = [user.get("name"), user.get("language"), user.get("skill_prefix"), target.get("repos_root"), target.get("repos"), (tools.get("python") or {}).get("install_command")]
+    return hashlib.sha256(json.dumps(shown, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
+
+
+def rules_of(target: Dict[str, Any]) -> List[Dict[str, str]]:
+    """The paths not to touch that the person's file holds. `.git/**` goes with every rule, so it is not one to choose."""
+    return [{"repo": name, "rule": rule} for name, entry in sorted((target.get("repos") or {}).items()) if isinstance(entry, dict) and isinstance(entry.get("refused_paths"), list) for rule in entry["refused_paths"] if rule != GIT_RULE]
+
+
+def kb_state(root: Path) -> Dict[str, Any]:
+    """What is in place: the form says so, and does not ask for a knowledge base a person already has."""
+    for _name, path in targets.knowledge_bases(root):
+        if targets.knowledge_base_content(path):
+            try:
+                domains = sum(1 for item in (path / "domains").iterdir() if item.is_dir())
+            except OSError:
+                domains = 0
+            found: Dict[str, Any] = {}
+            try:
+                found = json.loads((path / targets.COMPANY_DIR / "company.json").read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError):
+                pass
+            return {"here": True, "domains": domains, "prefix": str(found.get("skill_prefix") or "") if isinstance(found, dict) else ""}
+    return {"here": False, "domains": 0, "prefix": ""}
+
+
+def status(root: Path, short: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """What the page needs. Reading a broken override file is told, not raised: the page must open to say so."""
     problem = ""
     user: Dict[str, Any] = {}
     target: Dict[str, Any] = {}
+    tools: Dict[str, Any] = {}
     try:
-        user, target = kept(root, "user"), kept(root, "target")
+        user, target, tools = kept(root, "user"), kept(root, "target"), kept(root, "tools")
     except ValueError as error:
         problem = str(error)
     singles = [str(entry["path"]) for entry in (target.get("repos") or {}).values() if is_single(entry)]
-    path = shortcmd.fresh_path()
-    found = shortcmd.found(path) if short_found is None else short_found
-    return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "language": str(user.get("language") or messages.language()), "repos_root": str(target.get("repos_root") or ""), "root": repositories(target.get("repos_root")), "singles": singles, "broken": [path for path in singles if not (Path(path) / ".git").exists()], "skill_prefix": str(user.get("skill_prefix") or ""),
-            "short": {"found": found, "command": "" if found else shortcmd.command_for(root, path), "windows": os.name == "nt"}, "example": r"C:\Users\me\repos\orders\deploy" if os.name == "nt" else "/Users/me/repos/orders/deploy"}
+    forced = forced_language()
+    return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "language": forced or str(user.get("language") or messages.language()), "language_forced": bool(forced), "repos_root": str(target.get("repos_root") or ""), "root": repositories(target.get("repos_root")), "singles": singles, "broken": [path for path in singles if not has_git(Path(path))], "skill_prefix": str(user.get("skill_prefix") or ""),
+            "install_command": str((tools.get("python") or {}).get("install_command") or ""), "rules": rules_of(target), "kb": kb_state(root), "stamp": stamp(root),
+            "short": short_state(root) if short is None else short, "example": r"C:\Users\me\repos\orders\deploy" if os.name == "nt" else "/Users/me/repos/orders/deploy"}
 
 
 def try_short(root: Path) -> Dict[str, Any]:
@@ -180,12 +276,27 @@ def check(root: Path, data: Dict[str, Any]) -> None:
     held: List[str] = []
     for item in single_list(data):
         try:
-            if add_repo(item, data.get("repos_root"), held)["kind"] != "repo":
+            if add_repo(item, data.get("repos_root"), held, root)["kind"] != "repo":
                 wrong.append(say("setup.repos.none"))
             held.append(item)
         except ValueError as error:
+            wrong.append(f"{item}: {error}")
+    for item in data.get("refused") if isinstance(data.get("refused"), list) else []:
+        try:
+            refused(data.get("repos_root"), item, single_list(data))
+        except ValueError as error:
+            wrong.append(f"{item}: {error}")
+    if len(str(data.get("install_command") or "")) > MAX_INSTALL:
+        wrong.append(say("setup.install.long", limit=MAX_INSTALL))
+    now = stamp(root)
+    if not now:
+        try:
+            kept(root, "user"), kept(root, "target"), kept(root, "tools")
+        except ValueError as error:
             wrong.append(str(error))
-    forced = os.environ.get(messages.ENVIRONMENT, "").strip().lower()
+    elif data.get("stamp") and data["stamp"] != now:
+        wrong.append(say("setup.changed"))
+    forced = forced_language()
     if forced and forced != language:
         wrong.append(say("serve.language.env", name=messages.ENVIRONMENT))
     mode = str(data.get("kb_mode") or "none")
@@ -205,27 +316,45 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
 
     def user() -> str:
         name = " ".join(str(data.get("name") or "").split())
-        write(root, "user", {"name": name, "language": str(data.get("language")).strip().lower(), "skill_prefix": str(data.get("skill_prefix") or "").strip()})
+        write(root, "user", {"name": name, "skill_prefix": str(data.get("skill_prefix") or "").strip(), **({} if forced_language() else {"language": str(data.get("language")).strip().lower()})})
         return name
 
     def target() -> str:
         value = clean_path(data.get("repos_root"))
         singles = single_list(data)
+        held = kept(root, "target")
+        was = held.get("repos") or {}
+        named = {clean_path(entry["path"]): name for name, entry in was.items() if is_single(entry)}  # a name a person gave stays: one path, one entry
+        name_of = lambda path: named.get(path, Path(path).name)  # noqa: E731
+        by_folder = {Path(path).name: name_of(path) for path in singles}
         rules: Dict[str, Any] = {}
         for path in data.get("refused") if isinstance(data.get("refused"), list) else []:
             found = refused(value, path, singles)
-            rules.setdefault(found["repo"], {".git/**"}).add(found["rule"])
-        held = kept(root, "target")
-        was = held.get("repos") or {}
-        repos = {name: entry for name, entry in was.items() if not is_single(entry) or clean_path(entry["path"]) in singles}  # one taken off the list on the page goes
+            rules.setdefault(by_folder.get(found["repo"], found["repo"]), {GIT_RULE}).add(found["rule"])
+        repos = {name: dict(entry) for name, entry in was.items() if not is_single(entry) or clean_path(entry["path"]) in singles}  # one taken off the list on the page goes
         if not value and not singles and not was and not held.get("repos_root"):
             return say("setup.line.later")
         for path in singles:
-            repos[Path(path).name] = {**(repos.get(Path(path).name) or {}), "path": path}
+            repos[name_of(path)] = {**(repos.get(name_of(path)) or {}), "path": path}
+        if isinstance(data.get("rules"), list):  # the form shows every rule: the ones it no longer sends were taken off
+            for entry in repos.values():
+                entry.pop("refused_paths", None)
+            for item in data["rules"]:
+                rules.setdefault(str(item.get("repo")), {GIT_RULE}).add(str(item.get("rule")))
+        inside = {item.name for item in Path(value).iterdir() if has_git(item)} if value and Path(value).is_dir() else set()
         for name, wanted in rules.items():
-            entry = dict(repos.get(name) or {})
-            entry["refused_paths"] = sorted(set(entry.get("refused_paths") or []) | wanted)
-            repos[name] = entry
+            if name in repos or name in inside:
+                entry = dict(repos.get(name) or {})
+                entry["refused_paths"] = sorted(set(entry.get("refused_paths") or []) | wanted)
+                repos[name] = entry
+        base = str(config.policy_or_empty(root, targets.POLICY_NAME).get("base_ref") or "main")
+        for name in inside:  # a repository on another branch than the common one says which, or doctor stops the setup
+            if "base_ref" not in (repos.get(name) or {}) and not has_ref(Path(value) / name, base) and head_branch(Path(value) / name):
+                repos[name] = {**(repos.get(name) or {}), "base_ref": head_branch(Path(value) / name)}
+        for path in singles:
+            if "base_ref" not in repos[name_of(path)] and not has_ref(Path(path), base) and head_branch(Path(path)):
+                repos[name_of(path)]["base_ref"] = head_branch(Path(path))
+        repos = {name: entry for name, entry in repos.items() if entry and (str(entry.get("path") or "").strip() or name in inside)}  # an entry with no path lives in the folder: the folder went, so it goes too
         write(root, "target", {"repos_root": value, **({"repos": repos} if repos or was else {})})
         total = repositories(value)["n"] + len(singles)
         return say("setup.line.repos", n=total) if total else say("setup.line.later")
@@ -233,8 +362,11 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
     def tools() -> str:
         python = dict(kept(root, "tools").get("python") or {})
         python.setdefault("interpreter", sys.executable)
-        if str(data.get("install_command") or "").strip():
-            python["install_command"] = str(data["install_command"]).strip()
+        command = str(data.get("install_command") or "").strip()
+        if command:
+            python["install_command"] = command
+        elif "install_command" in data:
+            python.pop("install_command", None)  # the form shows it: an empty box takes it off
         write(root, "tools", {"python": python})
         return str(python["interpreter"])
 

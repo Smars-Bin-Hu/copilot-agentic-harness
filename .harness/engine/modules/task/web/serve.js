@@ -8,6 +8,7 @@ const SERVE = (function () {
   const serve = DATA.serve;
   const free = (action) => action === "pause" || action === "resume";
   let busy = false;
+  const stack = [];  // the windows open now, the top one last
   // After an action the page asks the server again and draws what changed (the board registers how); a page without that reloads. A reload would draw the
   // board from nothing, so no robot would slide or spring: an action is the very moment the person wants to see the change.
   let after = null;
@@ -67,17 +68,35 @@ const SERVE = (function () {
 
   function dialog(children) {
     busy = true;
-    const box = h("div", {class: "dialog card"}, children);
+    const box = h("div", {class: "dialog card", tabindex: "-1"}, children);
     const shade = h("div", {class: "shade"}, box);
+    const before = document.activeElement;
     document.body.append(shade);
-    const close = () => { document.removeEventListener("keydown", onKey); shade.remove(); busy = false; };
-    const onKey = (event) => {  // Esc is Cancel, as long as it would not throw away what the person typed here
-      if (event.key !== "Escape") return;
-      const typed = [...box.querySelectorAll("textarea, input:not([type=file]):not([type=checkbox]):not([type=radio])")].some((node) => node.value.trim());
+    stack.push(box);
+    const close = () => {
+      if (!stack.includes(box)) return;  // a late answer may close a window the person closed already
+      document.removeEventListener("keydown", onKey);
+      shade.remove();
+      stack.splice(stack.indexOf(box), 1);
+      busy = stack.length > 0;
+      if (before && before.isConnected) before.focus({preventScroll: true});
+    };
+    const onKey = (event) => {
+      if (stack[stack.length - 1] !== box) return;  // a window over a window: the top one answers
+      if (event.key === "Tab") {  // the keys stay in the window, not on the page behind it
+        const stops = [...box.querySelectorAll("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary")].filter((node) => node.offsetParent !== null);
+        const edge = stops[event.shiftKey ? 0 : stops.length - 1];
+        if (!stops.length || !box.contains(document.activeElement) || document.activeElement === box || document.activeElement === edge) { event.preventDefault(); (stops[event.shiftKey ? stops.length - 1 : 0] || box).focus(); }
+        return;
+      }
+      if (event.key !== "Escape") return;  // Esc is Cancel, as long as it would not throw away what the person typed here. A form that starts filled says so itself (`holds`)
+      const typed = view.holds ? view.holds() : [...box.querySelectorAll("textarea, input:not([type=file]):not([type=checkbox]):not([type=radio])")].some((node) => node.value.trim());
       if (!typed) close();
     };
     document.addEventListener("keydown", onKey);
-    return {box, close};
+    (box.querySelector("input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea") || box).focus({preventScroll: true});  // never a button: Enter must not act by surprise
+    const view = {box, close, holds: null};
+    return view;
   }
 
   // A refusal may list reasons, one "- reason" a line: the lines are drawn as lines, not run together.
@@ -205,7 +224,7 @@ const SERVE = (function () {
           (error) => { said.replaceChildren(...reasons(error.message)); yes.disabled = false; yes.textContent = t("board.serve.confirm"); });
       };
       yes.addEventListener("click", send);
-      input.addEventListener("keydown", (event) => { if (event.key === "Enter") send(); });
+      input.addEventListener("keydown", (event) => { if (isEnter(event)) send(); });
       input.focus();
     }).catch((error) => { back(); failed(error); });  // an error while drawing the dialog is told too, not lost
   }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import support
 
@@ -43,12 +44,40 @@ class BoardTests(unittest.TestCase):
         self.assertEqual([item["name"] for item in found], ["acme-b", "acme-a"])
         self.assertEqual({item["group"] for item in found}, {"task"})
 
+    def test_a_copy_edited_by_hand_with_a_wrong_value_stays_on_the_board(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / ".github" / "skills" / "acme-a"
+            path.mkdir(parents=True)
+            (path / "SKILL.md").write_text("---\nname: acme-a\ndescription: 'About.'\nboard-opens: task\nboard-group: moon\nboard-step: moon\nboard-kind: moon\n---\n", encoding="utf-8")
+            item = skillboard.skills(Path(folder))[0]
+        self.assertEqual((item["group"], item["step"], item["kind"]), ("task", "", ""))
+
+    def test_a_long_description_is_cut_at_a_word_and_says_so(self) -> None:
+        about = skillboard.first_sentence("word " * 100)
+        self.assertLessEqual(len(about), skillboard.ABOUT + 3)
+        self.assertTrue(about.endswith("word..."))
+        self.assertEqual(skillboard.first_sentence("Short one. And more"), "Short one")
+
+    def test_a_company_skill_taken_out_of_the_knowledge_base_is_marked(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "knowledge-base" / "company" / "skills" / "acme-kept").mkdir(parents=True)
+            for name in ("acme-kept", "acme-out", "other-mine"):
+                path = root / ".github" / "skills" / name
+                path.mkdir(parents=True)
+                (path / "SKILL.md").write_text(f"---\nname: {name}\ndescription: 'About.'\nboard-opens: chat\n---\n", encoding="utf-8")
+            with mock.patch.object(skillboard.skillcheck, "company_prefix", return_value="acme"):
+                found = {item["name"]: item["gone"] for item in skillboard.skills(root)}
+        self.assertEqual(found, {"acme-kept": False, "acme-out": True, "other-mine": False})
+
     def test_a_wrong_value_is_a_problem(self) -> None:
         self.assertEqual(skillboard.problems({"board-opens": "chat", "board-place": "kb, all"}), [])
         self.assertEqual(skillboard.problems({"board-opens": "fly"}), ["board-opens"])
         self.assertEqual(skillboard.problems({"board-place": "moon"}), ["board-place"])
         self.assertEqual(skillboard.problems({"board-color": "red"}), ["board-color"])
         self.assertEqual(skillboard.problems({"board-group": "x", "board-order": "first", "board-step": "x"}), ["board-group", "board-order", "board-step"])
+        self.assertEqual(skillboard.problems({"board-kind": "qa"}), [])
+        self.assertEqual(skillboard.problems({"board-kind": "moon"}), ["board-kind"])
 
 
 if __name__ == "__main__":

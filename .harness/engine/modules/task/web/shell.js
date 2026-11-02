@@ -288,7 +288,7 @@ const SHELL = (function () {
       return;
     }
     if (open()) {
-      if (event.key === "Escape") { event.preventDefault(); closePalette(); }
+      if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); closePalette(); }  // a window under the palette stays
       else if (event.key === "ArrowDown") { event.preventDefault(); at = items.length ? (at + 1) % items.length : 0; mark(); }
       else if (event.key === "ArrowUp") { event.preventDefault(); at = items.length ? (at - 1 + items.length) % items.length : 0; mark(); }
       else if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); run(at); }

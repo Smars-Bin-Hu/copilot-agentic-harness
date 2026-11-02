@@ -57,7 +57,7 @@ const REPLY = (function () {
     if (skillRow.dataset.done) return;
     skillRow.dataset.done = "1";
     SERVE.post("/api/skill", {step: "list"}).then((data) => {
-      const items = data.result.skills.filter((item) => item.opens === "reply" && item.place.includes("task"));
+      const items = data.result.skills.filter((item) => item.opens === "reply" && (item.place.includes("task") || item.place.includes("all")));
       skillRow.replaceChildren(...items.map((item) => {
         const chip = h("button", {type: "button", class: "chip", title: item.about}, item.label);
         chip.addEventListener("click", () => { box.value = "/" + item.name + " " + box.value; box.dispatchEvent(new Event("input", {bubbles: true})); box.focus(); });

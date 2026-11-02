@@ -69,6 +69,8 @@ from . import ready as readiness
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
+SHORT_KEEP = 60.0  # seconds the answer "the short command is found" is good for
+SHORT_RETRY = 5.0  # and "not found": the person is about to run the line
 COOKIE = "harness_board"
 MAX_BODY = 4096
 MAX_SEND_BODY = 64 * 1024  # `/api/answer`: the person's own words
@@ -176,6 +178,8 @@ class Board:
         self.runner = taskrun.Runner(root)
         self.short_missing = False
         self.setup_job = setupjob.Job()
+        self.short_kept: Optional[Dict[str, Any]] = None
+        self.short_at = 0.0
         self.kb_view = kbview.View(root)
         self.refresh = refresh
         self.link = link or vslink.VsLink(root, enabled=False)  # a board made without a link (the tests) has none
@@ -547,13 +551,21 @@ class Board:
             out["recorded"] = False
         return out
 
+    def short_now(self) -> Dict[str, Any]:
+        """Is the short command found? The answer comes from a login shell, which is slow on a work computer and the page asks every few seconds: it is kept a while, longer once found."""
+        now = time.monotonic()
+        held = self.short_kept
+        if held is None or now - self.short_at > (SHORT_KEEP if held["found"] else SHORT_RETRY):
+            self.short_kept, self.short_at = core_setup.short_state(self.root), now
+        return self.short_kept
+
     def setup(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Get ready (`core/setup.py`). `step`: state, probe or act. When the short command appears while VS Code is open, the agent's terminals do not have it yet:
         the Enter screen waits until VS Code was closed and came back."""
         step = str(data.get("step", ""))
         if step == "probe":
             kind = str(data.get("kind") or "repos")
-            return setupjob.probe_package(self.root, data.get("path")) if kind == "package" else setupjob.probe_folder(data.get("path"))
+            return setupjob.probe_package(self.root, data.get("path")) if kind == "package" else setupjob.probe_folder(self.root, data.get("path"))
         if step == "act":
             return self.setup_job.start(self.root, data)
         if step == "job":
@@ -561,15 +573,16 @@ class Board:
             if found["done"]:
                 self.language_stamp = []
                 self.sync_language()
-            return found
+            return dict(found, stamp=core_setup.stamp(self.root))
         if step == "pick":
             return {"path": wallpaper.pick(say("setup.pick.prompt"), file=str(data.get("kind")) == "file").rstrip("/\\") or ""}
         if step == "refuse":
             return core_setup.refused(data.get("repos_root"), data.get("path"), core_setup.single_list(data))
         if step == "repo":
-            return core_setup.add_repo(data.get("path"), data.get("repos_root"), core_setup.single_list(data))
+            return core_setup.add_repo(data.get("path"), data.get("repos_root"), core_setup.single_list(data), self.root)
         if step == "short":
             problem = shortcmd.install(self.root)
+            self.short_kept = None
             if problem:
                 raise CommandError(problem)
             return {"done": True}
@@ -583,7 +596,7 @@ class Board:
             return reinstall.run(self.root, str(data.get("path", "")), bool(data.get("apply")), True if data.get("apply") else None)
         if step != "state":
             raise CommandError(say("serve.refused.request"))
-        found = core_setup.status(self.root)
+        found = core_setup.status(self.root, self.short_now())
         linked = bool(self.link.status().get("ready"))
         if not found["short"]["found"]:
             self.short_missing = True

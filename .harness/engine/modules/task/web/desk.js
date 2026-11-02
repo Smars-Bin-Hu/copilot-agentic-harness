@@ -621,7 +621,7 @@
     const add = h("button", {type: "button", class: "act", disabled: drafts.busy || !drafts.add.trim() || items.length >= drafts.max ? "disabled" : null}, t("desk.drafts.add"));
     const submit = () => { if (!drafts.add.trim() || drafts.busy) return; const text = drafts.add; draftCall({op: "add", text}).then((ok) => { if (ok) { drafts.add = ""; paintDrafts(); } }); };
     input.addEventListener("input", () => { drafts.add = input.value; add.disabled = drafts.busy || !drafts.add.trim() || items.length >= drafts.max; });
-    input.addEventListener("keydown", (event) => { if (event.key === "Enter") submit(); });
+    input.addEventListener("keydown", (event) => { if (isEnter(event)) submit(); });
     add.addEventListener("click", submit);
     const rows = items.map((item) => {
       const tick = h("input", {type: "checkbox", checked: item.use ? "" : null, disabled: drafts.busy ? "disabled" : null, title: t("desk.drafts.use.tip"), "aria-label": t("desk.drafts.use.tip")});
@@ -633,7 +633,7 @@
         const cancel = h("button", {type: "button", class: "act"}, t("desk.drafts.cancel"));
         box.addEventListener("input", () => { drafts.text = box.value; save.disabled = !drafts.text.trim(); });
         const commit = () => { if (!drafts.text.trim()) return; draftCall({op: "edit", id: item.id, text: drafts.text}).then((ok) => { if (ok) { drafts.editing = ""; paintDrafts(); } }); };
-        box.addEventListener("keydown", (event) => { if (event.key === "Enter") commit(); else if (event.key === "Escape") { drafts.editing = ""; paintDrafts(); } });
+        box.addEventListener("keydown", (event) => { if (isEnter(event)) commit(); else if (event.key === "Escape") { drafts.editing = ""; paintDrafts(); } });
         save.addEventListener("click", commit);
         cancel.addEventListener("click", () => { drafts.editing = ""; paintDrafts(); });
         return h("li", {class: "draft-row editing"}, tick, box, save, cancel);

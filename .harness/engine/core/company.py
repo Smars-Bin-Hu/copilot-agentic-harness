@@ -136,7 +136,7 @@ def sync(root: Path) -> Dict[str, Any]:
             shutil.copy2(source, target)
         done.append(name)
     return {"found": True, "company": str(folder), "copied": done, "already_same": len(plan["pairs"]) - len(done), "refused": plan["refused"], "only_here": plan["only_here"],
-            "next": say("company.sync.problems" if plan["refused"] else "company.sync.done"), "exit_code": 1 if plan["refused"] else 0}
+            "next": " ".join([say("company.sync.problems" if plan["refused"] else "company.sync.done"), *([say("company.sync.only_here", names=", ".join(plan["only_here"]))] if plan["only_here"] else [])]), "exit_code": 1 if plan["refused"] else 0}
 
 
 def sync_after(root: Path) -> Optional[Dict[str, Any]]:

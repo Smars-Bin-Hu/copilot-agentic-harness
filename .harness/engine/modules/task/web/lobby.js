@@ -228,7 +228,7 @@ const Lobby = (function () {
         if (touchy()) { if (current === entry && card.classList.contains("on")) hide(); else show(entry); } else go();
       });
       slot.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") go();
+        if (isEnter(event)) go();
         else if (event.key === "Tab" && !event.shiftKey && current === entry && card.classList.contains("on")) {
           const items = focusable();
           if (items.length) { event.preventDefault(); items[0].focus(); }

@@ -10,6 +10,36 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.82 (2026-11-02)
+
+The knowledge base window, the question mark and the setup window were tested with a simulated knowledge base and repositories, changed over and over.
+
+### Added
+
+- Knowledge base window: **Refresh** and when it was checked. Each step says what it is and, when the status knows, why it is not done: a broken toolkit, facts the map does not find, repositories the toolkit does not read.
+- **Look up** shows what an object uses and what uses it, as text, with a button to search. An id is a link to that object.
+- The setup window shows what is set now: the install command, the paths not to touch (each can be taken off), and the knowledge base. **Folder** can replace a knowledge base; the old one moves to `.harness/runtime/kb-backup/`.
+- A chat that cannot start because VS Code is away has **Check again** and **Copy the message**.
+- The list of repositories of a folder shows which ones cannot be ticked: this harness, its knowledge base, a repository with no commit.
+
+### Changed
+
+- The knowledge base window works out a view again the first time it is asked in a window. Before, it could be 10 minutes old, with no sign.
+- A slow answer no longer paints over another tab. Back returns to the tab you left, and Look up keeps its words.
+- `harness kb check` and Health report a domain folder with a name no domain can have. Before, it was skipped in silence while the Domains tab listed it. So `kb check` fails on such a folder.
+- Setup: taking off the folder of repositories takes its rules with it. Before, every later Finish failed on the left entry.
+- Setup: a repository on another branch than `main` gets its own `base_ref` by itself, read from its files.
+- Setup: a knowledge base is copied aside first, so a copy that fails leaves nothing behind and can be run again; a replace that fails puts the old one back. The path is checked before anything is written.
+- Setup: a repository entry keeps the name a person gave it, with no second entry for the same path.
+- Setup: Save refuses when the setup was changed elsewhere while the window was open, and offers the new values. Close asks once when there are changes; Esc closes when there are none. After Save the window says what was done.
+- Setup: `Company content` says so when nothing could be copied, and doctor shows up to 6 errors, and its warnings. `HARNESS_LANGUAGE` is shown and not written to your file.
+- Setup: the page asks for its state less often, and a login shell runs once a minute at most, not every 2 seconds.
+- `harness company sync` names the skills that are no longer in `company/`, and the window of skills marks them.
+- `board-kind` must be a task kind (`skill check`). A value that is not allowed in a copy edited by hand no longer hides a skill or shows a raw name.
+- `board-place: all`, or none, offers a skill everywhere, as documented.
+- Dialogs take the focus and keep Tab inside. Only the top one answers Esc. A click outside closes the question mark panel, and Ask needs words.
+- Enter that picks a word in a Chinese input method no longer sends. A tab or line break in pasted words is a space. Search in the window of skills matches each word, also in the hint.
+
 ## 1.6.81 (2026-11-02)
 
 ### Added

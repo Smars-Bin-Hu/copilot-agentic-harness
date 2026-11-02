@@ -2425,5 +2425,7 @@
   "dock.kb.health.nogaps": "No gap found.",
   "dock.kb.health.missing": "Used, but no repository defines them: {n}",
   "dock.kb.health.obsolete": "Obsolete, but still used: {n}",
-  "dock.kb.health.cut": "{n} more. See them with `harness kb stale` and `harness kb gaps`."
+  "dock.kb.health.cut": "{n} more. See them with `harness kb stale` and `harness kb gaps`.",
+  "dock.title.task": "Go on with this task?",
+  "dock.hint.task": "The board makes a new chat in VS Code that picks up the task {task}. No new task is made."
 }

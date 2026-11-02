@@ -18,7 +18,7 @@ const DOCK = (function () {
     return button;
   };
 
-  function start(skill, words, back) {
+  function start(skill, words, back, task) {  // `task`: the chat goes on with this task, and no new one is made
     const lang = document.documentElement.lang === "zh" ? "zh" : "en";
     const body = {skill, words: words || "", lang};
     const preview = h("pre", {class: "send-preview"}, "...");
@@ -27,7 +27,7 @@ const DOCK = (function () {
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const copy = h("button", {type: "button", class: "act", "data-label": t("dock.copy"), hidden: ""}, t("dock.copy"));  // with VS Code away, the words can still go into a chat by hand
     const again = h("button", {type: "button", class: "act", hidden: ""}, t("dock.again"));
-    const view = SERVE.dialog([h("h2", null, t("dock.title")), h("p", {class: "sub"}, t("dock.hint")), preview, said, h("div", {class: "row"}, go, again, copy, no)]);
+    const view = SERVE.dialog([h("h2", null, t(task ? "dock.title.task" : "dock.title")), h("p", {class: "sub"}, task ? t("dock.hint.task", {task}) : t("dock.hint")), preview, said, h("div", {class: "row"}, go, again, copy, no)]);
     no.addEventListener("click", view.close);
     if (back) no.before(backButton(view, back));
     copy.addEventListener("click", () => copyCommand(copy, preview.textContent));
@@ -155,10 +155,10 @@ const DOCK = (function () {
     const chatGlyph = () => { const node = drawn(["M4 5h16v11h-8l-4 3.5V16H4z"]); node.classList.add("kb-chat"); return node; };
     const chatButton = (label, run, hot) => { const go = h("button", {type: "button", class: "act" + (hot ? " hot" : "")}, chatGlyph(), label); go.addEventListener("click", leave(run)); return go; };
     const backHere = () => kbWindow(current);
-    const taskChat = (skill, domain) => CHAT.create({kind: "kb", text: "Use the skill " + skill + ". Domain: " + domain + ".", note: t("dock.task.note"), back: backHere});
-    const goOn = (item) => start("generic-kb-learn-batch", item.task, backHere);
-    const learn = (item) => taskChat("generic-kb-learn-plan", item.domain);
-    const refresh = (item) => taskChat("generic-kb-refresh", item.domain);
+    const taskChat = (skill, domain, word) => CHAT.create({kind: "kb", name: word + "-" + domain.toLowerCase().replace(/[^a-z0-9_-]+/g, "-"), domains: [domain], text: "Use the skill " + skill + ". Domain: " + domain + ".", note: t("dock.task.note"), back: backHere});
+    const goOn = (item) => start("generic-kb-learn-batch", item.task, backHere, item.task);
+    const learn = (item) => taskChat("generic-kb-learn-plan", item.domain, "learn");
+    const refresh = (item) => taskChat("generic-kb-refresh", item.domain, "refresh");
     // What a domain asks for, by what is known of it: learning first, then its stale cards. A task that waits for its plan to be approved is the person's, on its own page.
     function action(item) {
       if (item.task) return item.plan && item.to_learn ? [t("dock.kb.go"), goOn] : null;

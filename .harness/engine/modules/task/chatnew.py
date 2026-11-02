@@ -72,7 +72,8 @@ def validate(root: Any, data: Dict[str, Any], models: List[Dict[str, Any]], wait
         raise refusal("permission")
     model = model_of(data, models)
     return {"name": name, "kind": kind, "source": source, "text": text, "lang": lang, "permission": permission, "approve": PERMISSIONS[permission], "model": model,
-            "domains": domains_of(root, data), "domain_choice": bool(intake.kb_domains(root))}
+            "domains": domains_of(root, data), "domain_choice": bool(intake.kb_domains(root)),
+            "new_domains": [item for item in domains_of(root, data) if not domainskills.find(domainskills.domains(root), item)]}
 
 
 def domains_of(root: Any, data: Dict[str, Any]) -> List[str]:
@@ -83,7 +84,7 @@ def domains_of(root: Any, data: Dict[str, Any]) -> List[str]:
     if not isinstance(raw, list) or len(raw) > MAX_DOMAINS or not all(isinstance(item, str) for item in raw):
         raise refusal("field", field="domains")
     try:
-        return tasklife.known_domains(root, [item for item in raw if item.strip()])
+        return tasklife.known_domains(root, [item for item in raw if item.strip()], new_ok=data.get("kind") == "kb")  # a `kb` task may learn a domain the knowledge base has no folder for yet
     except CommandError:
         known = ", ".join(intake.kb_domains(root)) or "-"
         raise refusal("domain", names=", ".join(item.strip()[:80] for item in raw if item.strip() and not domainskills.find(domainskills.domains(root), item.strip())), known=known) from None
@@ -104,8 +105,8 @@ def preview(root: Any, data: Dict[str, Any], models: List[Dict[str, Any]], waiti
     wanted = data.get("domains") if isinstance(data.get("domains"), list) else []
     plan = {"name": word("name")[:80] or "<task name>", "kind": word("kind") if word("kind") in tasks.KINDS else "<kind>", "source": word("source") if word("source") in known_names(root) else "",
             "text": word("text")[:MAX_TEXT] or "<what to do>", "lang": word("lang") if word("lang") in chatsend.LANGS else "en",
-            "domains": list(dict.fromkeys(found for found in (domainskills.find(known, item.strip()) for item in wanted if isinstance(item, str)) if found))[:MAX_DOMAINS],
-            "domain_choice": bool(known)}
+            "domains": list(dict.fromkeys(found for found in (domainskills.find(known, item.strip()) or (item.strip() if word("kind") == "kb" and domainskills.NAME.match(item.strip()) else None) for item in wanted if isinstance(item, str)) if found))[:MAX_DOMAINS],
+            "domain_choice": bool(known), "new_domains": [item for item in wanted if isinstance(item, str) and not domainskills.find(known, item.strip())]}
     return {"text": first_message(plan), "problem": problem, "model": {}, "permission": DEFAULT_PERMISSION}
 
 
@@ -141,6 +142,8 @@ def first_message(plan: Dict[str, Any]) -> str:
 
 def domain_line(plan: Dict[str, Any]) -> str:
     """The knowledge base line of the first message. Nothing when the knowledge base has no domain to choose from; `none` when it has and the person chose none (the agent then does not ask)."""
+    if plan.get("new_domains"):  # `task set-domain` knows only the folders that exist: a new one goes with `task new`
+        return f"\n- Knowledge base domains: {', '.join(plan['domains'])} (give each to harness task new with --domain; do not ask which)"
     if plan.get("domains"):
         return f"\n- Knowledge base domains: {', '.join(plan['domains'])} (set them with harness task set-domain once the task is open; do not ask which)"
     return "\n- Knowledge base domains: none (do not set a domain and do not ask which)" if plan.get("domain_choice") else ""

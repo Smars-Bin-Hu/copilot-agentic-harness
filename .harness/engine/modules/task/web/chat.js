@@ -179,7 +179,7 @@ const CHAT = (function () {
 
   // "New task" (B73): a chat is made in VS Code and told to open the task. The server checks every field again and makes the first message (a fixed English text, then what the person wrote);
   // this dialog only collects the fields and shows that message. The mode (interactive) and the folder (no worktree) are fixed and not on the form.
-  function create(preset) {  // preset: `true` for the sample of the lesson, or {kind, text, note, back} for a skill; `back` opens the place the person came from
+  function create(preset) {  // preset: `true` for the sample of the lesson, or {name, kind, domains, text, note, back} for a skill; `back` opens the place the person came from
     const state = {lang: "en", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set()};
     const field = (label, control, extra) => h("label", {class: "new-field" + (extra ? " " + extra : "")}, h("span", {class: "sub label"}, label), control);
     const name = h("input", {type: "text", class: "send-body", maxlength: 80, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.name.ph")});
@@ -288,6 +288,12 @@ const CHAT = (function () {
       if (filled) {
         if (filled.name) name.value = filled.name;
         if (filled.kind) kind.value = filled.kind;
+        for (const domain of filled.domains || []) {  // a domain that has no folder yet is offered here too: a `kb` task may learn it
+          const same = state.domainList.find((item) => item.toLowerCase() === domain.toLowerCase());
+          if (!same) state.domainList.push(domain);
+          state.domains.add(same || domain);
+        }
+        drawKb();
         text.value = filled.text || "";
         if (filled.note) blocked.after(h("p", {class: "sub"}, filled.note));
       }

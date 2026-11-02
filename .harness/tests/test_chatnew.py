@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import json
 import re
+import tempfile
 import time
 import unittest
+from pathlib import Path
 from typing import Any, Dict, List
 
 import support  # noqa: F401 - HARNESS_VSCODE_CLI=off
@@ -57,7 +59,7 @@ class ValidationTests(TaskCase):
 
     def test_the_mode_and_the_folder_cannot_be_asked_for(self) -> None:
         found = self.plan(mode="autopilot", isolation="worktree", provider="claude", workingDirectories=["file:///etc"])
-        self.assertEqual(sorted(found), ["approve", "domain_choice", "domains", "kind", "lang", "model", "name", "permission", "source", "text"])  # nothing of them is carried
+        self.assertEqual(sorted(found), ["approve", "domain_choice", "domains", "kind", "lang", "model", "name", "new_domains", "permission", "source", "text"])  # nothing of them is carried
 
     def test_the_name_follows_the_rules_of_task_new_and_is_not_taken(self) -> None:
         for name in ("", "  ", "a/b", "a\\b", ".hidden", "a b", "x" * 81, "..", "a;b", "$(x)", "-x"):
@@ -606,6 +608,20 @@ class SettingsRuleTests(unittest.TestCase):
             self.assertFalse(self.approved(command), command)  # and the rule would not have approved them
         for command in ("harness task new x --kind dev --session-id s", "harness task list", "./.harness/bin/harness task fork a --from b --kind dev --session-id s"):
             self.assertFalse(person.search(command), command)  # the approved forms are not what the gate refuses
+
+
+class NewDomainTests(unittest.TestCase):
+    def test_a_kb_task_may_name_a_domain_with_no_folder_and_says_how_to_set_it(self) -> None:
+        line = chatnew.domain_line({"domains": ["inventory"], "new_domains": ["inventory"], "domain_choice": True})
+        self.assertIn("--domain", line)
+        self.assertNotIn("set-domain", line)
+        self.assertIn("set-domain", chatnew.domain_line({"domains": ["orders"], "new_domains": [], "domain_choice": True}))
+
+    def test_a_task_of_another_kind_may_not(self) -> None:
+        with tempfile.TemporaryDirectory() as folder, self.assertRaises(Exception):
+            chatnew.domains_of(Path(folder), {"kind": "dev", "domains": ["nowhere"]})
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(chatnew.domains_of(Path(folder), {"kind": "kb", "domains": ["nowhere"]}), ["nowhere"])
 
 
 if __name__ == "__main__":

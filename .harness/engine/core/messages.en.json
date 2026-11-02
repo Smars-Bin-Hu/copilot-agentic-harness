@@ -2150,6 +2150,7 @@
   "setup.layout.skills": "Company skills: {n}.",
   "setup.layout.skills.word": "Company skills are here, but {file} has no skill_prefix: they cannot be copied.",
   "setup.layout.skills.names": "Not copied, the name must start with {word}-: {names}.",
+  "board.kb.mark": "Company Context",
   "board.kb.found": "Found in your knowledge base:",
   "term.title": "Terminal",
   "term.open": "Terminal: run commands here",

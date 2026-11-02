@@ -2150,6 +2150,7 @@
   "setup.layout.skills": "Company skills：{n} 个。",
   "setup.layout.skills.word": "有 company skills，但 {file} 里没有 skill_prefix，所以无法复制。",
   "setup.layout.skills.names": "这些没有被复制，名字必须以 {word}- 开头：{names}。",
+  "board.kb.mark": "公司 Context",
   "board.kb.found": "知识库中已检测到：",
   "term.title": "终端窗口",
   "term.open": "Terminal：在这里运行命令",

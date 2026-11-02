@@ -196,7 +196,7 @@ knowledge-base/
 
 Copilot finds skills and instructions in `.github/` only. So `harness company sync` copies them there. It touches no other file and is safe to run again. A company skill that is no longer in `company/` moves to `.harness/runtime/company-backup/`. Change the files in `company/`, never the copies: the next sync replaces them.
 
-When you choose a folder in **Get ready**, the form checks it against this layout. It marks what is right in green and warns about the rest. The board shows the same parts in a green line once the knowledge base is in place.
+When you choose a folder in **Get ready**, the form checks it against this layout. It marks what is right in green and warns about the rest. Once the knowledge base is in place, **Company Context** beside **Paired** on the board lists the same parts when you hold the pointer on it.
 
 `harness company diff` shows what a sync would add, change or remove. The board compares them every 2 minutes: when they differ, the book button turns yellow and moves, its tip lists the differences, and the Knowledge base window has a **Sync now** button. An instructions file taken out of `company/` is the one change it cannot see. `doctor` warns when a copy is behind.
 

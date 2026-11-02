@@ -378,20 +378,27 @@
     newSlot.replaceChildren(...[rows.length ? newTask() : null].filter(Boolean));
     paintFound(DATA.serve && DATA.serve.kb_found);
     paintSetup(DATA.serve && DATA.serve.setup);
-    statusBox.replaceChildren(...[SHELL.vsPill(vscode), typeof SERVE !== "undefined" ? SERVE.pairMark() : null].filter(Boolean));
+    statusBox.replaceChildren(...[SHELL.vsPill(vscode), typeof SERVE !== "undefined" ? SERVE.pairMark() : null, kbMark].filter(Boolean));
   }
   // The big warning (1.6.59): what this copy lacks before it can do real work. It stays until that is set; a click opens the setup guide.
   const setupBar = h("a", {class: "setup-bar", href: "/setup", hidden: ""});
   setupBar.addEventListener("click", (event) => { if (typeof DOCK === "undefined") return; event.preventDefault(); DOCK.setupWindow(); });
-  const kbGood = h("div", {class: "setup-good", hidden: ""});
-  function paintFound(list) {  // the green line: what the knowledge base in place has; it stands beside the warning, which lists what is still missing
+  const kbTip = h("span", {class: "kb-tip"});
+  const kbMark = h("span", {class: "kb-mark", tabindex: "0", hidden: ""}, h("i"), t("board.kb.mark"), kbTip);
+  function placeTip() {  // fixed: the header cuts off what leaves it
+    const at = kbMark.getBoundingClientRect();
+    kbTip.style.top = at.bottom + 8 + "px";
+    kbTip.style.left = Math.max(16, Math.min(at.left, innerWidth - kbTip.offsetWidth - 16)) + "px";
+  }
+  kbMark.addEventListener("mouseenter", placeTip);
+  kbMark.addEventListener("focus", placeTip);
+  function paintFound(list) {  // the mark beside Paired: what the knowledge base in place has, listed on hover; the warning below says what is still missing
     const items = list || [];
-    if (!kbGood.isConnected) { const top = document.querySelector(".lb-top"); if (top) top.after(kbGood); }
-    kbGood.hidden = !items.length;
+    kbMark.hidden = !items.length;
     const sig = items.join();
-    if (kbGood.dataset.sig === sig) return;
-    kbGood.dataset.sig = sig;
-    kbGood.replaceChildren(h("i"), h("span", null, t("board.kb.found")), ...items.map((text) => h("b", null, text)));
+    if (kbMark.dataset.sig === sig) return;
+    kbMark.dataset.sig = sig;
+    kbTip.replaceChildren(h("b", null, t("board.kb.found")), h("ul", null, items.map((text) => h("li", null, text.replace(/[.\u3002]$/, "")))));
   }
   function paintSetup(list) {
     const items = list || [];

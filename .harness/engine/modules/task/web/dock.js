@@ -148,7 +148,7 @@ const DOCK = (function () {
       stage.classList.remove("ka-stage");
       stage.replaceChildren(h("p", {class: "sub"}, t("dock.kb.working")));
       if (key === "lookup") lookup();
-      else if (key === "atlas") load("atlas", (found) => ATLAS.draw(stage, found));
+      else if (key === "atlas") load("atlas", (found) => { if (view.box.classList.contains("ka-open")) ATLAS.draw(stage, found); });
       else if (key === "health") load("health", health);
       else load("status", key === "overview" ? overview : domains);
     }

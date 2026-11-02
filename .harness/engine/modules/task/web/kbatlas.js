@@ -8,6 +8,7 @@ const ATLAS = (function () {
   const NS = "http://www.w3.org/2000/svg";
   const WIDE = 176, HIGH = 62, STEP_X = 232, STEP_Y = 82, ROOMY = 136, EDGE = 18, SMALLEST = .62;
   const number = (value) => Number(value).toLocaleString();
+  let shown = "";  // what is on the page: a poll that brings the same answer keeps the person's place
 
   // The columns. A line that closes a circle (A uses B, B uses A) gets no weight here: it is drawn dashed, against the flow.
   function columns(names, links) {
@@ -45,6 +46,9 @@ const ATLAS = (function () {
   }
 
   function draw(stage, data) {
+    const same = JSON.stringify(data);
+    if (same === shown && stage.querySelector(".ka-body")) return;
+    shown = same;
     const st = {pick: "", mode: "uses", shared: false};
     const all = data.domains.map((item) => item.name);
     const byName = new Map(data.domains.map((item) => [item.name, item]));
@@ -119,7 +123,7 @@ const ATLAS = (function () {
       const parts = [];
       if (chips.length) parts.push(h("span", {class: "sub"}, t("dock.atlas.common")), ...chips);
       if (common.size) {
-        const toggle = h("button", {type: "button", class: "first-link"}, t(st.shared ? "dock.atlas.hide" : "dock.atlas.show"));
+        const toggle = h("button", {type: "button", class: "ka-toggle"}, t(st.shared ? "dock.atlas.hide" : "dock.atlas.show"));
         toggle.addEventListener("click", () => { st.shared = !st.shared; layout(); paint(); });
         parts.push(toggle);
       }
@@ -224,6 +228,13 @@ const ATLAS = (function () {
     if (!all.length) { stage.replaceChildren(h("p", {class: "sub"}, t("dock.kb.nodomains"))); return; }
     layout();
     paint();
+    let size = [canvas.offsetWidth, canvas.offsetHeight].join();
+    const watch = new ResizeObserver(() => {  // a window made smaller: the picture fits again
+      if (!canvas.isConnected) { watch.disconnect(); return; }
+      const now = [canvas.offsetWidth, canvas.offsetHeight].join();
+      if (now !== size) { size = now; layout(); paint(); }
+    });
+    watch.observe(canvas);
   }
   return {draw};
 })();

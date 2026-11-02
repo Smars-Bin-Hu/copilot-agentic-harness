@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.6.80",
+  "version": "1.6.81",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -33,6 +33,7 @@
       ".harness/tests/test_kblearn.py",
       ".harness/tests/test_kbaudit.py",
       ".harness/tests/test_kbstatus.py",
+      ".harness/tests/test_kbatlas.py",
       ".harness/tests/test_reply.py",
       ".harness/INDEX.md",
       ".harness/registry.json",

@@ -65,6 +65,18 @@ The skills behind the steps: `generic-kb-toolkit-design`, `/generic-kb-toolkit-b
 - **One task per domain, one batch at a time**: a batch is objects of one type, at most 20 and about 1500 lines of code in all (`--batch`, `--lines` of `kb order`). An object longer than that is a batch of its own and is read in parts. The cards stay in the task until the whole domain is written back, so the knowledge base never holds half a domain.
 - **The model decides the words, under checks.** A card's relations line must equal the map's uses (`kb cardcheck`). Each rule cites the lines it is in (`L120-L145`), and the check makes sure they fall inside that object's code.
 
+## See how the domains hang together
+
+Open the knowledge base window (the book at the bottom right of the board) and press **Map**. It shows which domain uses which. What others build on stands left, and what comes last stands right. An arrow means "uses".
+
+- **Who uses what**: click a domain to see what it uses and what uses it. Click a row to see the objects behind it.
+- **If this changes**: click a domain to see which domains a change can reach, step by step.
+- **Find a domain or an object**: an object tells you which domain it is in.
+
+A domain that many use and that uses no other (a calendar, a log) stands in a row below the picture, with no lines, until you ask for them. Dashed lines show two domains that use each other. Objects a domain uses and no domain owns are listed too: a boundary, or a gap in what was learned.
+
+The picture comes from the map (`kb map`) and the index of each domain, so it can miss what the map cannot see, such as dynamic SQL. It warns you when the map has not passed its audit.
+
 ## How you know the map is right
 
 No map of code is complete, and the harness cannot promise yours is. It can measure it, and say where it is blind.

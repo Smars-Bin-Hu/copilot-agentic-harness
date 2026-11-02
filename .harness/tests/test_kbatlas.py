@@ -60,6 +60,14 @@ class AtlasTests(unittest.TestCase):
         self.assertEqual(found["twice"], ["sp:c"])
         self.assertEqual(found["owners"], {"sp:c": "billing"})
 
+    def test_bad_files_lose_a_line_not_the_map(self) -> None:
+        folder = self.domain("orders", ["job:a"])
+        with (folder / "objects" / "index.jsonl").open("a", encoding="utf-8") as file:
+            file.write('{"type": "no id"}\n')
+        (folder / "domain.yaml").write_text("domain: orders\nentry_points: job:a\nopen_questions: none\n", encoding="utf-8")
+        found = self.run_atlas({"orders": folder}, {}, ["job:a"])["domains"][0]
+        self.assertEqual((found["objects"], found["entries"], found["questions"]), (1, [], 0))
+
     def test_a_domain_with_nothing_learned_yet_is_on_the_map(self) -> None:
         empty = self.folder / "new"
         empty.mkdir()

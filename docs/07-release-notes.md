@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.81 (2026-11-02)
+
+### Added
+
+- The knowledge base window has a **Map** tab: which domain uses which, what a change can reach, and which domain an object is in. See [The knowledge base](08-knowledge-base.md#see-how-the-domains-hang-together).
+
 ## 1.6.80 (2026-11-02)
 
 ### Changed

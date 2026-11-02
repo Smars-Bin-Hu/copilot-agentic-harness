@@ -44,8 +44,8 @@ def atlas(root: Path) -> Dict[str, Any]:
     domains: List[Dict[str, Any]] = []
     for name in sorted(known, key=str.lower):
         try:
-            rows, _bad = kbstd.read_index(known[name] / kbstd.INDEX_FILE)
-        except OSError:
+            rows = [row for row in kbstd.read_index(known[name] / kbstd.INDEX_FILE)[0] if isinstance(row.get("id"), str)]  # a bad line is `kb check`'s to report
+        except (OSError, ValueError):
             rows = []  # listed, nothing learned yet
         for row in rows:
             if row["id"] in owners:
@@ -53,8 +53,9 @@ def atlas(root: Path) -> Dict[str, Any]:
             else:
                 owners[row["id"]] = name
         about, state = spec(known[name]), states.get(name, {})
+        entries, questions = about.get("entry_points"), about.get("open_questions")
         domains.append({"name": name, "about": str(about.get("description") or ""), "objects": len(rows), "types": dict(Counter(str(row.get("type") or "") for row in rows)),
-                        "entries": [str(item) for item in about.get("entry_points") or []], "questions": len(about.get("open_questions") or []), "done": bool(state.get("done")),
+                        "entries": [str(item) for item in entries] if isinstance(entries, list) else [], "questions": len(questions) if isinstance(questions, list) else 0, "done": bool(state.get("done")),
                         "left": int(state.get("to_learn") or 0), "requests": int(state.get("requests_open") or 0), "outdated": outdated(root, name)})
     counts: Counter = Counter()
     pairs: Dict[Any, List[List[str]]] = {}

@@ -1,5 +1,5 @@
 /* The map of the domains (kbatlas.js). */
-.dialog.kb-window.ka-open{max-width:min(1500px,calc(100vw - 32px))}.dock-list.ka-stage{flex:0 1 auto;max-height:none;overflow:hidden;display:flex;flex-direction:column;gap:10px;min-height:0;margin:8px 0}
+.dock-list.ka-stage{flex:0 1 auto;max-height:none;overflow:hidden;display:flex;flex-direction:column;gap:10px;min-height:0;margin:8px 0}
 .ka-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.ka-find{flex:0 1 280px;min-width:0;margin:0}.ka-found{min-width:0;overflow-wrap:anywhere}
 .ka-body{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;height:min(66vh,760px);min-height:0}.ka-main{display:flex;flex-direction:column;gap:8px;min-width:0;min-height:0}
 .ka-canvas{flex:1;display:flex;min-height:0;overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--bg)}.ka-world{position:relative;margin:auto}.ka-world>svg{position:absolute;inset:0;width:100%;height:100%;max-width:none;overflow:visible;pointer-events:none}

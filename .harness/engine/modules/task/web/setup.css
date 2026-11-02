@@ -6,7 +6,7 @@
 .su-cmd{display:flex;align-items:flex-start;gap:10px;margin:8px 0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}.su-cmd code{flex:1;min-width:0;font:12.5px/1.55 var(--mono);overflow-wrap:anywhere}
 .su-row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px 14px;margin:10px 0}.su-k{padding-top:7px;color:var(--soft)}.su-v{min-width:0}.su-line{display:flex;gap:10px;align-items:center;min-width:0}.su-line .chips{display:flex;gap:6px;flex:none}
 .su-in{box-sizing:border-box;width:100%;min-width:0;padding:7px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}.su-mono{font-family:var(--mono);font-size:13px}
-.su-note{margin:6px 0 0;color:var(--soft);font-size:12.5px;overflow-wrap:anywhere}.su-note.good{color:var(--good)}.su-note.bad,.su-said .bad{color:var(--bad)}.su-warn{margin:6px 0 0;color:var(--hot);overflow-wrap:anywhere}
+.su-loading .su{visibility:hidden}.su-note{margin:6px 0 0;color:var(--soft);font-size:12.5px;overflow-wrap:anywhere}.su-note.good{color:var(--good)}.su-note.bad,.su-said .bad{color:var(--bad)}.su-warn{margin:6px 0 0;color:var(--hot);overflow-wrap:anywhere}
 .su-end{display:flex;align-items:center;gap:14px;margin-top:16px}.su-said{margin-top:10px}
 @media (max-width:600px){.su-row{grid-template-columns:minmax(0,1fr)}.su-k{padding-top:0}.su-line{flex-wrap:wrap}.su-end{flex-wrap:wrap}}
 .su-short{max-width:220px}.su-modes{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.su-more{margin:12px 0 0}.su-more summary{cursor:pointer}.su-link{padding:0;border:0;background:none;color:var(--soft);font:inherit;text-decoration:underline;cursor:pointer}

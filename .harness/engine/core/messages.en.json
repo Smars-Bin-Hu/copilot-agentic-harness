@@ -2173,6 +2173,8 @@
   "dock.company.hint.stuck": "A sync cannot fix this. It needs a change in the knowledge base:",
   "dock.company.chat": "Fix it in a chat",
   "dock.company.chat.words": "Fix this company content in the knowledge base so that a sync can copy it: {items}",
+  "dock.kb.next.words": "Go on with this step: {step}",
+  "dock.kb.health.nocards": "This domain has no cards yet.",
   "dock.company.fix": "Use {word} and sync",
   "dock.kb.nomap": "There is no map yet.",
   "dock.kb.near.none": "No object in the map is called `{query}`. If the code changed, the map needs a new run.",

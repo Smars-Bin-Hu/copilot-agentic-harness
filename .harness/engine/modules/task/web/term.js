@@ -14,7 +14,7 @@ const TERM = (() => {
   const current = () => memory.tabs[memory.at] || null;
   const newTab = () => { memory.tabs.push({label: "", text: "", job: "", since: 0}); memory.at = memory.tabs.length - 1; return current(); };
   const folderOf = (path) => path.split(/[\\/]/).filter(Boolean).pop() || path;  // the whole path is the tip: the line is for typing
-  const labelOf = (line) => line.replace(/^harness\s+/, "").split(/\s+/).slice(0, 2).join(" ").slice(0, 22);
+  const labelOf = (line) => line.replace(/^harness\s+/, "").split(/[|;&<>]/)[0].trim().split(/\s+/).slice(0, 2).join(" ").slice(0, 22);
 
   function paint() {
     if (!ui) return;

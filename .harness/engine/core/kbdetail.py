@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict
 
-from . import domainskills, kbgraph, kbmap, kbreads, kbstd
+from . import domainskills, kbgraph, kbmap, kbreads, kbstd, messages
 
 MAX_LIST = 50  # lines of one list in the Health tab; the commands give the rest
 
@@ -20,6 +20,8 @@ def stale_of(root: Path) -> Dict[str, Dict[str, Any]]:
     for name in sorted(domainskills.domains(root), key=str.lower):
         try:
             found[name] = kbstd.stale(root, name)
+        except FileNotFoundError:  # a domain with no cards yet is no failure, and a person has no use for a path and an errno
+            found[name] = {"error": messages.text("dock.kb.health.nocards")}
         except Exception as error:  # noqa: BLE001 - told in the window
             found[name] = {"error": str(error)[:300]}
     return found

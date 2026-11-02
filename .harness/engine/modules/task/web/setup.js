@@ -313,6 +313,7 @@ const SETUP = (function () {
     function paint(found) {
       paintShort(found);
       if (!st.form) fill(found);
+      app.classList.remove("su-loading");
       st.latest = found;
       changed.hidden = !found.stamp || found.stamp === st.stamp || st.busy || st.saved;
       broken.textContent = found.problem;  // a poll tells it too: the file can break while the form is open
@@ -324,7 +325,7 @@ const SETUP = (function () {
     function load() {
       clearTimeout(st.timer);
       if (!app.isConnected) return Promise.resolve();
-      return ask("state").then(paint, (error) => { said.replaceChildren(...SERVE.reasons(error.message || error)); }).then(() => { if (!document.hidden) st.timer = setTimeout(load, st.ready ? SLOW : POLL); else st.timer = 0; });
+      return ask("state").then(paint, (error) => { app.classList.remove("su-loading"); said.replaceChildren(...SERVE.reasons(error.message || error)); }).then(() => { if (!document.hidden) st.timer = setTimeout(load, st.ready ? SLOW : POLL); else st.timer = 0; });
     }
 
     const paintLines = (found) => said.replaceChildren(...found.lines.map((line) => h("p", {class: line.ok ? "su-note good" : "su-note bad"}, (line.ok ? "\u2713 " : "\u2717 ") + t("setup.line." + line.key) + ": " + line.detail)));
@@ -426,6 +427,7 @@ const SETUP = (function () {
     }
     loadGuide();
     const more = h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row([t("setup.install"), question("python")], install, h("p", {class: "su-note"}, t("setup.install.example"))), row([t("setup.refused"), question("repos")], h("div", {class: "su-line"}, refusedBox, refusedAdd), refusedNote, refusedList, h("p", {class: "su-note"}, t("setup.refused.hint"))));
+    app.classList.add("su-loading");  // an empty form that jumps when its data comes is worse than a moment of nothing
     app.replaceChildren(h("div", {class: "su"}, h("h1", null, t(first ? "setup.title" : "setup.guide")), h("p", {class: "su-lead"}, t(finished ? "setup.lead.again" : "setup.lead"), " ", olderLink), shortBox,
       h("section", {class: "su-card"}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "2"), h("h2", null, t("setup.form.title"))),
         changed, broken, row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "chips su-modes"}, chips), langNote), row([t("setup.repos"), question("repos")], h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))),

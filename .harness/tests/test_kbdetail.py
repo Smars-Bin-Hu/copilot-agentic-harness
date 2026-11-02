@@ -46,6 +46,10 @@ class DetailTests(unittest.TestCase):
         self.assertEqual(len(found["good"]["changed"]), 1)
         self.assertLessEqual(len(found["bad"]["error"]), 300)
 
+    def test_a_domain_with_no_cards_says_so_in_words(self) -> None:
+        with mock.patch.object(kbdetail.domainskills, "domains", return_value={"new": Path("n")}), mock.patch.object(kbdetail.kbstd, "stale", side_effect=FileNotFoundError(2, "gone", "/x/objects/index.jsonl")):
+            self.assertNotIn("Errno", kbdetail.stale_of(self.root)["new"]["error"])
+
     def test_health_lists_only_what_asks_for_something_and_cuts_a_long_list(self) -> None:
         many = {"long": {"changed": [{"id": f"job:{n}"} for n in range(300)], "gone": []}, "clean": {"changed": [], "gone": []}}
         with mock.patch.object(kbdetail, "stale_of", return_value=many), mock.patch.object(kbdetail.kbstd, "check", return_value={"errors": 0, "domains": 2}), mock.patch.object(kbdetail, "gaps", return_value={}):

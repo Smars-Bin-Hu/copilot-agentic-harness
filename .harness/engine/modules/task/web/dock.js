@@ -29,8 +29,7 @@ const DOCK = (function () {
     const copy = h("button", {type: "button", class: "act", "data-label": t("dock.copy"), hidden: ""}, t("dock.copy"));  // with VS Code away, the words can still go into a chat by hand
     const again = h("button", {type: "button", class: "act", hidden: ""}, t("dock.again"));
     const view = SERVE.dialog([h("h2", null, t(task ? "dock.title.task" : "dock.title")), h("p", {class: "sub"}, task ? t("dock.hint.task", {task}) : t("dock.hint")), preview, runs, said, h("div", {class: "row"}, go, again, copy, no)]);
-    no.addEventListener("click", view.close);
-    if (back) no.before(backButton(view, back));
+    no.addEventListener("click", () => { view.close(); if (back) back(); });  // Cancel goes back to where the person came from
     copy.addEventListener("click", () => copyCommand(copy, preview.textContent));
     const check = () => ask("preview", body).then((found) => {
       preview.textContent = found.text;
@@ -189,7 +188,7 @@ const DOCK = (function () {
     const nextButton = (stageName) => {  // the first two steps are done in the setup, not in a chat
       const inSetup = ["targets", "kb_repo"].includes(stageName);
       const go = h("button", {type: "button", class: "act hot"}, t(inSetup ? "dock.setup" : "dock.kb.next"));
-      go.addEventListener("click", leave(inSetup ? setupWindow : () => start("harness-rookie-new-knowledgebase", "", () => kbWindow(current))));
+      go.addEventListener("click", leave(inSetup ? setupWindow : () => start("harness-rookie-new-knowledgebase", t("dock.kb.next.words", {step: stageName}), () => kbWindow(current))));
       return go;
     };
     // Why a step is not done, when the status knows: a broken toolkit, facts the map does not find, repositories it does not cover.
@@ -275,7 +274,7 @@ const DOCK = (function () {
         const mine = ++ticket;
         const shown = () => box.isConnected && mine === ticket;  // only the newest search is drawn
         out.replaceChildren(h("p", {class: "sub"}, t("dock.kb.working")));
-        post({op: "near", query: text}).then((found) => { if (shown()) out.replaceChildren(...near(found, find)); }, (error) => { if (shown()) out.replaceChildren(h("p", {class: "bad"}, error.message || String(error))); });
+        post({op: "near", query: text}).then((found) => { if (shown()) out.replaceChildren(...near(found, find)); }, (error) => { if (shown()) out.replaceChildren(h("p", {class: "bad kb-alarm"}, h("span", null, error.message || String(error)), ...(error.message === t("dock.kb.nomap") ? [nextButton("map")] : []))); });
       };
       box.value = word;
       box.addEventListener("input", () => { word = box.value; });

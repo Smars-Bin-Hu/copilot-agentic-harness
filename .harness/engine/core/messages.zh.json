@@ -2173,6 +2173,8 @@
   "dock.company.hint.stuck": "同步解决不了，需要修改知识库：",
   "dock.company.chat": "在 chat 里修复",
   "dock.company.chat.words": "修复知识库里的这些公司内容，让同步可以复制它们：{items}",
+  "dock.kb.next.words": "继续这一步：{step}",
+  "dock.kb.health.nocards": "这个 domain 还没有 cards。",
   "dock.company.fix": "使用 {word} 并同步",
   "dock.kb.nomap": "还没有地图。",
   "dock.kb.near.none": "地图里没有叫 `{query}` 的对象。如果代码变了，需要重新生成地图。",

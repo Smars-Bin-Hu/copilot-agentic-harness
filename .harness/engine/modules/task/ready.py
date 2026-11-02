@@ -75,6 +75,7 @@ class Ready:
         self.reopen = False  # the short command is new: VS Code must be closed and opened again before its terminals have it
         self.root = root
         self.link = link
+        self.drops_then = 0  # the losses of the link when the wait began
         self.doctor = doctor or run_doctor
         self.clock = clock
         self.lock = threading.Lock()
@@ -162,6 +163,16 @@ class Ready:
             self.folders = {"at": now, "lines": lines}
         return lines
 
+    def wait_reopen(self) -> None:
+        self.drops_then = self.link.drops()
+        self.reopen = True
+
+    def still_reopen(self) -> bool:
+        """The wait ends when the link was lost once, whichever page is open and however fast VS Code came back."""
+        if self.reopen and self.link.drops() != self.drops_then:
+            self.reopen = False
+        return self.reopen
+
     def answer(self, paired: bool) -> Dict[str, Any]:
         """`{ready, checks: [{id, blocking, state, why, ...}]}`. `state`: ok, wait (it comes by itself), fail (needs the person), check (not known yet), note (grey, never blocks)."""
         checks: List[Dict[str, Any]] = []
@@ -175,7 +186,7 @@ class Ready:
             checks.append(line)
             return line
 
-        add("setup", True, lambda: {"state": "fail", "why": "new"} if not setup_done(self.root) else {"state": "wait", "why": "reopen"} if self.reopen else {"state": "ok", "why": "ok"})
+        add("setup", True, lambda: {"state": "fail", "why": "new"} if not setup_done(self.root) else {"state": "wait", "why": "reopen"} if self.still_reopen() else {"state": "ok", "why": "ok"})
         vscode = add("vscode", True, self.vscode)
         add("copilot", True, lambda: self.copilot(vscode))
         add("doctor", True, self.doctor_line)

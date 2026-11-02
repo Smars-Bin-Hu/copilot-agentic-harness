@@ -7,6 +7,7 @@ import re
 import tempfile
 import threading
 import time
+import types
 import unittest
 from pathlib import Path
 from typing import Any, Dict, List
@@ -357,6 +358,18 @@ class CornerTests(unittest.TestCase):
         self.assertIn("html.en-open .sh-pill{right:var(--en-hi,16px)}", css)
         self.assertNotIn("margin-right:176px", css)
         self.assertIn('root.style.setProperty("--en-hi"', script)
+
+
+class ReopenTests(unittest.TestCase):
+    def test_the_wait_ends_when_vs_code_went_away_whatever_page_is_open(self) -> None:
+        link = types.SimpleNamespace(count=2, drops=lambda: link.count)
+        checks = ready.Ready(Path("."), link)
+        self.assertFalse(checks.still_reopen())
+        checks.wait_reopen()
+        self.assertTrue(checks.still_reopen())
+        link.count = 3
+        self.assertFalse(checks.still_reopen())
+        self.assertFalse(checks.still_reopen())
 
 
 if __name__ == "__main__":

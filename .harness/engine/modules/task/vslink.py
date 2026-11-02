@@ -122,6 +122,7 @@ class VsLink:
         self.jobs: "queue.Queue[Any]" = queue.Queue()  # "open", or a Job
         self.thread: Optional[threading.Thread] = None
         self.ready = False
+        self.losses = 0  # how many times a working link went away: VS Code was closed, however soon it came back
         self.why = "off" if not enabled else "starting"
         self.sessions: Dict[str, Dict[str, Any]] = {}  # the chats of this folder, by resource
         self.sdk: Dict[str, Set[str]] = {}
@@ -150,6 +151,10 @@ class VsLink:
         self.wake.set()
         if self.thread is not None:
             self.thread.join(5)
+
+    def drops(self) -> int:
+        with self.lock:
+            return self.losses
 
     def status(self) -> Dict[str, Any]:
         """`{ready, bound, unbound, why}`: for `/api/status` and `/api/board`. `bound` and `unbound` count the open tasks."""
@@ -360,6 +365,7 @@ class VsLink:
 
     def _set(self, ready: bool, why: str) -> None:
         with self.lock:
+            self.losses += 1 if self.ready and not ready else 0
             self.ready, self.why = ready, why
 
     def _wait(self, seconds: float) -> None:
@@ -387,6 +393,7 @@ class VsLink:
             finally:
                 link.close()
                 with self.lock:
+                    self.losses += 1 if self.ready else 0
                     self.ready, self.why = False, "lost"
                     self.chats.clear()
                     self.sess.clear()

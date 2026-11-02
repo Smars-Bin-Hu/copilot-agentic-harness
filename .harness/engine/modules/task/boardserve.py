@@ -606,10 +606,9 @@ class Board:
             self.short_missing = True
         elif self.short_missing:
             self.short_missing = False
-            self.ready.reopen = linked
-        if self.ready.reopen and not linked:
-            self.ready.reopen = False
-        return dict(found, reopen=self.ready.reopen)
+            if linked:
+                self.ready.wait_reopen()
+        return dict(found, reopen=self.ready.still_reopen())
 
     def skill(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """A one-click skill (`skillsend.py`): `step` preview or act. The message is made here, each time, from the skill name and the words."""

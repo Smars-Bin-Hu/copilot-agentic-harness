@@ -2427,5 +2427,7 @@
   "dock.kb.health.obsolete": "Obsolete, but still used: {n}",
   "dock.kb.health.cut": "{n} more. See them with `harness kb stale` and `harness kb gaps`.",
   "dock.title.task": "Go on with this task?",
-  "dock.hint.task": "The board makes a new chat in VS Code that picks up the task {task}. No new task is made."
+  "dock.hint.task": "The board makes a new chat in VS Code that picks up the task {task}. No new task is made.",
+  "report.why": "Ask why",
+  "report.why.hint": "Opens a chat: the agent explains where the time and the usage of this task went."
 }

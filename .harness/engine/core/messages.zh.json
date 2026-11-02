@@ -2427,5 +2427,7 @@
   "dock.kb.health.obsolete": "已废弃但仍被使用：{n}",
   "dock.kb.health.cut": "还有 {n} 条。用 `harness kb stale` 和 `harness kb gaps` 查看。",
   "dock.title.task": "要继续这个任务吗？",
-  "dock.hint.task": "看板会在 VS Code 里新建一个 chat，接着做任务 {task}，不会新开任务。"
+  "dock.hint.task": "看板会在 VS Code 里新建一个 chat，接着做任务 {task}，不会新开任务。",
+  "report.why": "问问为什么",
+  "report.why.hint": "打开一个 chat：agent 解释这个任务的时间和用量花在哪里。"
 }

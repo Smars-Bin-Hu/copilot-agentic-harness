@@ -34,11 +34,17 @@
   const served = () => typeof SERVE !== "undefined" && Boolean(DATA.serve);
 
   // Served by the board: the way back to the task page and to the board, and a link to save this page as one file. A file on disk has no server to go back to.
+  function askWhy() {  // the numbers are here; why they are so is the agent's to find (the skill harness-task-report)
+    const go = h("button", {type: "button", class: "first-link report-why", title: t("report.why.hint")}, t("report.why"));
+    go.addEventListener("click", () => DOCK.start("harness-task-report", info.name));
+    return go;
+  }
+
   function crumbs() {
     if (!/^https?:$/.test(location.protocol)) return null;
     return h("div", {class: "crumbs sub"}, h("a", {href: "/"}, "\u2190 " + t("desk.back")), " \u00b7 ",
       h("a", {href: "/task/" + encodeURIComponent(info.name)}, t("report.back")),
-      served() ? [" \u00b7 ", h("a", {href: "/report-save/" + encodeURIComponent(info.name), download: "", title: t("report.save.hint")}, t("report.save"))] : null);
+      served() ? [" \u00b7 ", h("a", {href: "/report-save/" + encodeURIComponent(info.name), download: "", title: t("report.save.hint")}, t("report.save")), " \u00b7 ", askWhy()] : null);
   }
 
   function header() {

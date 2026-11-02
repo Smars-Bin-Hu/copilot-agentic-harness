@@ -72,7 +72,7 @@ This section is all of 1.6 in one place. Every small step, 1.6.0 to 1.6.85, is f
 - **Files**: CSV and Excel open as tables, and code is coloured by type. The Changes tab compares side by side or in one column.
 - **Ask agent** and **Run** on a shell code block: send the command to the chat, or run it yourself on the page.
 - **Agent actions**: a tree of prompts, with what the agent did for each and what was blocked or failed.
-- **Task analysis**: a Gate blocks card where you judge each block, export of wrong blocks as eval samples, and **Save page**.
+- **Task analysis**: a Gate blocks card where you judge each block, export of wrong blocks as eval samples, **Save page**, and **Ask why**: a chat that explains where the time and usage of the task went.
 - **Health warnings** on a task: stuck, repeated command, idle turns, cost, full context.
 - **The look**: one black and white design with light and dark themes, a gear for theme, language, Glass or Lite, a `Cmd+K` palette, a background of your own pictures, and a 3D background. The browser tab and the header show the robot icon.
 - `harness task upgrade --kind <kind>` turns a Q&A task into other work.

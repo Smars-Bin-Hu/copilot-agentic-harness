@@ -16,3 +16,4 @@ html.en-open .dock-btn,html.en-open .dock-panel{display:none}
 .dock-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;box-sizing:border-box;border-radius:8px;background:var(--hot-dot);color:#000;font:600 10px/16px var(--sans);text-align:center}.dock-count[hidden]{display:none}
 @media (max-width:760px){.kb-steps{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:8px}.kb-steps li:nth-child(4)::after{display:none}.kb-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.kb-next{flex-wrap:wrap}}
 @media (max-width:480px){.kb-bar{gap:6px}.kb-bar .dock-tabs{flex:1 0 100%;flex-wrap:nowrap;overflow-x:auto}.kb-bar .chip{flex:none}}
+.dialog [hidden]{display:none!important}.crumbs .report-why{display:inline;margin:0;padding:0;border:0;background:none;color:inherit;font:inherit;text-decoration:none;cursor:pointer}.crumbs .report-why:hover{color:var(--ink)}

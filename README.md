@@ -11,7 +11,7 @@
 
 **Make GitHub Copilot carry a task from start to finish the way your team works: it follows the rules, stays inside its boundaries, and leaves a record you can review.**
 
-[What you get](#what-you-get) · [Get started](#get-started) · [See it](#see-it) · [What you must plug in](#what-you-must-plug-in) · [Docs](#docs) · [Release notes](docs/07-release-notes.md)
+[Talk to the agent on the board](#talk-to-the-agent-on-the-board) · [What you get](#what-you-get) · [Get started](#get-started) · [See it](#see-it) · [What you must plug in](#what-you-must-plug-in) · [Docs](#docs) · [Release notes](docs/07-release-notes.md)
 
 <p align="center">
   <img alt="The task board as a lobby: each open task is a small agent on the floor, at work, waiting for you, or resting. Point at one for its stages and buttons" src="docs/images/board.png" width="760">
@@ -21,13 +21,31 @@
 
 ---
 
+## Talk to the agent on the board
+
+**You no longer have to work in the chat window.** The board is linked to VS Code: every task has its chat on the page, and you talk to the agent from there.
+
+<table>
+<tr>
+<td width="50%"><a href="docs/images/talk-live.png"><img alt="The Live tab of a task: what you said, each tool call and the agent's answer, as they happen" src="docs/images/talk-live.png"></a><br><sub><b>Watch it work.</b> The agent's words, tool calls and times, as they happen.</sub></td>
+<td width="50%"><a href="docs/images/talk-to-agent.png"><img alt="The reply panel over the Live tab: a message, skills, files, the reply language, the model and the thinking level" src="docs/images/talk-to-agent.png"></a><br><sub><b>Talk to it.</b> Press <code>R</code> on any tab. Text, files, skills, the model and the thinking level.</sub></td>
+</tr>
+</table>
+
+- **Start** a task and its chat with **New task**, and see the first message before it is sent.
+- **Reply** with text, screenshots and files. While the agent works, your words join the same turn.
+- **Stop** it at any time, or **take back** your last message: the agent forgets it.
+- **Answer** what it asks, and **allow or deny** a command, without leaving the page.
+- **Read back** every earlier prompt and answer, also what the chat window folds away.
+
+The rules still hold: the gate checks every call, and approvals stay yours.
+
 ## What you get
 
 - **Set up in the browser.** Double-click **Start Harness** and fill in **Get ready**: the short command, your code repositories, your knowledge base. No agent runs and you edit no file.
 - **Led step by step.** **How can I help?** on the board starts the lesson you need, and **Everything you can ask for** lists every skill by what you want to do.
 - **A task, not a chat.** Every piece of work is a folder: the requirement, the plan, the steps, the log and the changes are files. A new chat reads `TASK.md` and goes on. Kinds: question, root cause analysis, design, development, testing, knowledge base update.
 - **A board you follow in the browser.** Every open task, what it waits for you for, and since when. The lobby shows each one as a small agent: at work, waiting for you, resting. A click opens the task as pages: stages, requirement, plan, TODO, changes, checks, test results, history.
-- **Linked to VS Code.** Start a task, watch the agent live, reply with text and files, allow a command, answer a question, steer or stop: all from the page.
 - **A knowledge base you can see.** Lessons lead you through building it from your code. The **Knowledge base** window shows the steps, the domains, how they hang together, and what a change can reach.
 - **Approvals only you can give.** The requirement, the plan and the write-back to a repository each wait for a code you type on the page or in your terminal. The agent cannot approve for you, and `push` can never be approved.
 - **Business documents in, no tokens spent.** Drop Word or Excel files on the **Intake** tab (old Excel and PDF need one Python package): a program turns them into Markdown and CSV, and reports what it left out (hidden sheets, comments, pictures). You trim them; the agent reads the small files and asks only what does not fit.

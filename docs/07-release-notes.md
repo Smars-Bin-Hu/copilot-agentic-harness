@@ -12,7 +12,7 @@ To see which version you have: `harness --version`.
 
 ## 1.6.86 (2026-11-02)
 
-**Version 1.6 rewrites how you meet and use the harness.** Setup used to happen in the Copilot chat, with skills and files you edited by hand. Now you double-click to start, set up in the browser, learn from the board step by step, and build your knowledge base with lessons and its own window. The board is linked to VS Code, so a task can be started, followed and steered from the page.
+**Version 1.6 rewrites how you meet and use the harness.** The core of it: **you talk to the agent on the task board.** The board is linked to VS Code, so you start a task, watch the agent live, reply, answer, allow and stop from the page. Around that, setup moved out of the chat too: you double-click to start, set up in the browser, learn from the board step by step, and build your knowledge base with lessons and its own window.
 
 This section is all of 1.6 in one place. Every small step, 1.6.0 to 1.6.85, is folded at the end of this section.
 
@@ -25,6 +25,15 @@ This section is all of 1.6 in one place. Every small step, 1.6.0 to 1.6.85, is f
 | **Daily work** | Answer in VS Code, read the result on the page | Start, answer, steer and stop on the page |
 
 ### Added
+
+**Talk to the agent on the board**
+
+- **The board links to VS Code** by a socket on macOS and a named pipe on Windows. It lists the chats of this folder and finds which chat belongs to which task. A pill says whether VS Code is linked, and why not.
+- **New task from the board**: name, kind, domains, model, thinking level, files, and **Ask me first**. The first message is shown before it is sent.
+- **Live**: the agent's stream on the task page, with its words, tool calls and times. **Earlier rounds** reads back every prompt, also what the chat window folds away.
+- **Reply from the page**: the reply panel takes text, files, the model, the thinking level, the reply language and drafts. **Stop** stays in reach, and **Withdraw and edit** takes back your last message.
+- **Answer from the page**: allow or deny a command, answer the agent's question, and send the agent on after an approval. A bubble on the waiting card shows what is asked.
+- **Compact** and a context card like the one in VS Code: what the context holds, and a warning at 50% and at 70%.
 
 **Start and setup**
 
@@ -55,15 +64,6 @@ This section is all of 1.6 in one place. Every small step, 1.6.0 to 1.6.85, is f
   - **Look up**: what an object uses and what uses it.
   - **Health**: form errors, stale cards by domain, and the gaps of the map.
 - **New task asks for the domains** of the knowledge base, so the agent need not ask.
-
-**The board and VS Code**
-
-- **The board links to VS Code** by a socket on macOS and a named pipe on Windows. It lists the chats of this folder and finds which chat belongs to which task. A pill says whether VS Code is linked, and why not.
-- **New task from the board**: name, kind, domains, model, thinking level, files, and **Ask me first**. The first message is shown before it is sent.
-- **Live**: the agent's stream on the task page, with its words, tool calls and times. **Earlier rounds** reads back every prompt, also what the chat window folds away.
-- **Reply from the page**: the reply panel takes text, files, the model, the thinking level, the reply language and drafts. **Stop** stays in reach, and **Withdraw and edit** takes back your last message.
-- **Answer from the page**: allow or deny a command, answer the agent's question, and send the agent on after an approval. A bubble on the waiting card shows what is asked.
-- **Compact** and a context card like the one in VS Code: what the context holds, and a warning at 50% and at 70%.
 
 **The board and the task page**
 

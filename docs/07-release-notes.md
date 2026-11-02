@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.67 (2026-11-02)
+
+### Changed
+
+- Get ready: required fields carry a red `*`. **Finish setup** stays off, and says why, until they are filled; **Add** stays off while its box is empty.
+
 ## 1.6.66 (2026-11-01)
 
 ### Changed

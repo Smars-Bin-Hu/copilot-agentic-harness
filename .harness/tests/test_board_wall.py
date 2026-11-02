@@ -400,9 +400,9 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("fetch(", source("space.js"))
         self.assertNotIn("SERVE", source("space.js"))
 
-    def test_the_shell_still_makes_only_its_own_two_calls_and_hands_the_background_to_wall(self) -> None:
+    def test_the_shell_still_makes_only_its_own_three_calls_and_hands_the_background_to_wall(self) -> None:
         shell = source("shell.js")
-        self.assertEqual(sorted(set(re.findall(r'SERVE\.post\("(/api/[a-z]+)"', shell))), ["/api/board", "/api/language"])
+        self.assertEqual(sorted(set(re.findall(r'SERVE\.post\("(/api/[a-z]+)"', shell))), ["/api/board", "/api/language", "/api/restart"])
         self.assertIn("WALL.section()", shell)
         self.assertNotIn("fetch(", shell)
 

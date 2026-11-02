@@ -3,6 +3,10 @@ name: generic-workflow-design
 description: 'Design an agentic workflow from a repeated manual development routine, without building it: learn from the user''s description, 2-3 finished examples and the knowledge base, sort each step into deterministic, semantic, human or verification, and write WORKFLOW-DESIGN.md for the user to approve. Use when the user describes a standard routine to be repeated ("every time we add a pipeline we do these steps"), or asks to turn a process into a skill or standardise a workflow. Keywords: workflow, SOP, standard process, ETL steps, repeatable, orchestration.'
 type: workflow
 specificTo: generic
+board-opens: task
+board-place: all
+board-kind: design
+board-label: 'Design a workflow'
 ---
 
 # Design a workflow from a repeated routine

@@ -179,7 +179,7 @@ const CHAT = (function () {
 
   // "New task" (B73): a chat is made in VS Code and told to open the task. The server checks every field again and makes the first message (a fixed English text, then what the person wrote);
   // this dialog only collects the fields and shows that message. The mode (interactive) and the folder (no worktree) are fixed and not on the form.
-  function create(useSample) {
+  function create(preset) {  // preset: `true` for the sample of the lesson, or {kind, text, note} for a skill
     const state = {lang: "en", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set()};
     const field = (label, control, extra) => h("label", {class: "new-field" + (extra ? " " + extra : "")}, h("span", {class: "sub label"}, label), control);
     const name = h("input", {type: "text", class: "send-body", maxlength: 80, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.name.ph")});
@@ -277,11 +277,12 @@ const CHAT = (function () {
       state.domainList = Array.isArray(found.domains) ? found.domains : [];
       drawKb();
       levels();
-      if (useSample && found.sample && found.sample.name) {
-        name.value = found.sample.name;
-        kind.value = found.sample.kind;
-        text.value = found.sample.text;
-        blocked.after(h("p", {class: "sub"}, t("board.new.sample")));
+      const filled = preset === true ? (found.sample && found.sample.name ? {...found.sample, note: t("board.new.sample")} : null) : preset;
+      if (filled) {
+        if (filled.name) name.value = filled.name;
+        if (filled.kind) kind.value = filled.kind;
+        text.value = filled.text || "";
+        if (filled.note) blocked.after(h("p", {class: "sub"}, filled.note));
       }
       if (!found.ready) blocked.replaceChildren(h("p", null, t("board.new.off")), h("p", {class: "sub"}, t("board.vs.why." + (found.why || "starting"))));
       refresh();

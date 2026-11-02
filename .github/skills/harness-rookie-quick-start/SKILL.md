@@ -3,6 +3,9 @@ name: harness-rookie-quick-start
 description: 'A first lesson for someone new to the harness: one true story from a request to a branch, what the harness gives you, the two places you work in (the Chat window and the board in the browser), and one practice task. Assumes the user only knows that Copilot completes code. Use when the user types /harness-rookie-quick-start, or says "how do I use the harness", "get me started", "first time", "what can it do", "teach me". Keywords: quick start, first lesson, tutorial, beginner, introduction.'
 type: workflow
 specificTo: generic
+board-opens: chat
+board-place: ask
+board-label: 'First lesson'
 ---
 
 # The harness first lesson

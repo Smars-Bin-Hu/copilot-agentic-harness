@@ -3,11 +3,19 @@ name: generic-build-new-skill
 description: 'Build a new skill from the template, then check and test it; or repair the form of an existing skill without changing what it says. Use when the user asks to create, write or scaffold a skill (a domain-* skill of the company included), to check or test a skill, or to repair a skill or bring it to the template. Keywords: new skill, SKILL.md, domain skill, skill check, skill trigger, repair skill.'
 type: unit
 specificTo: generic
+board-opens: task
+board-place: all
+board-kind: other
+board-label: 'Build a new skill'
 ---
 
 # Build a new skill
 
 Build a skill from the template, check its form and test that it loads.
+
+## On the board
+
+To show the new skill on the board, add the `board-*` keys to its frontmatter: see "Showing a skill on the board" in `docs/10-skills.md`.
 
 ## When to Use This Skill
 

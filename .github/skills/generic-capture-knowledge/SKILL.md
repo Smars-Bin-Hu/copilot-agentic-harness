@@ -3,6 +3,9 @@ name: generic-capture-knowledge
 description: 'Pick out of a task what a future agent would get wrong without it, and draft it as knowledge base entries or skill gotchas for the user to approve. It only drafts: nothing is written into the knowledge base or a skill. Use when a task is done or nearly done, when LOG.md notes knowledge base cards that are wrong, stale or missing, when the independent check found something the author missed, or the user says "write this down", "add this to the knowledge base", "lessons learned", "what did we learn". Keywords: capture knowledge, lessons learned, knowledge base update, stale card, gotcha.'
 type: workflow
 specificTo: generic
+board-opens: reply
+board-place: task
+board-label: 'Capture what was learned'
 ---
 
 # Capture knowledge from a task

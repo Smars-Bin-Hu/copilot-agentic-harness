@@ -3,6 +3,9 @@ name: harness-rookie-wondering
 description: 'The deep course: an interactive explanation of how coding agents and this harness work and how they are built. Topics: the agent loop, instructions, skills, agents, tools, hooks, guardrails, permissions, tasks, subagents, checks, observe, commands, internals, design choices, the knowledge base from code. Use when the user wants to go deep, asks "why is it designed this way", "how does the hook work", or types /harness-rookie-wondering. A beginner new to the harness uses harness-rookie-quick-start first. Keywords: wondering, how it works, deep dive, internals, architecture, tutorial.'
 type: workflow
 specificTo: generic
+board-opens: chat
+board-place: ask
+board-label: 'How the harness works'
 ---
 
 # The harness deep course

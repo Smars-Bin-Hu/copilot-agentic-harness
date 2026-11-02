@@ -5,6 +5,9 @@ argument-hint: 'The task that holds the approved TOOLKIT-DESIGN.md (the open tas
 disable-model-invocation: true
 type: workflow
 specificTo: generic
+board-opens: chat
+board-place: kb
+board-label: 'Build the toolkit'
 ---
 
 # Build the toolkit

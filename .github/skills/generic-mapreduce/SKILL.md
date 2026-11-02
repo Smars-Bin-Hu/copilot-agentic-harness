@@ -5,6 +5,10 @@ argument-hint: 'The question to read or research in parallel'
 disable-model-invocation: true
 type: workflow
 specificTo: generic
+board-opens: chat
+board-place: all
+board-cost: high
+board-label: 'Map and reduce over many files'
 ---
 
 # MapReduce: reading in parallel chunks

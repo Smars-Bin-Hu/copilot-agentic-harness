@@ -4,6 +4,10 @@ description: 'Measure how right the repository map is before anything is learned
 argument-hint: 'Types to audit, and how many objects each (default: every type that uses something, 5 each)'
 type: workflow
 specificTo: generic
+board-opens: task
+board-place: kb
+board-kind: kb
+board-label: 'Audit the toolkit'
 ---
 
 # Audit the repository map

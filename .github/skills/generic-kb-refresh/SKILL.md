@@ -4,6 +4,10 @@ description: 'Bring the cards of a knowledge base domain back in line with the c
 argument-hint: 'The domain to refresh'
 type: workflow
 specificTo: generic
+board-opens: task
+board-place: kb
+board-kind: kb
+board-label: 'Refresh stale cards'
 ---
 
 # Refresh the stale cards of a domain

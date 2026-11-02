@@ -9,6 +9,20 @@ Two things to know first:
 
 Skills of your own business domains are not in this list. They sit in the knowledge base: see [the last section](#6-your-own-skills).
 
+## Showing a skill on the board
+
+A skill appears in **Everything you can ask for** when its frontmatter says so. No change to the board is needed, so a company skill works the same way.
+
+```yaml
+board-opens: chat          # chat, task or reply. Without it the skill is not on the board
+board-place: all           # ask, kb, task, all; several with commas
+board-kind: design         # with task: the kind of the task
+board-cost: high           # the window marks it costly
+board-label: 'Short name'
+```
+
+`harness skill check` checks these values. A click shows the whole message first, also for a skill only you may start.
+
 ## 1. Start here (once, and when you upgrade)
 
 You type these. They are lessons and setup.

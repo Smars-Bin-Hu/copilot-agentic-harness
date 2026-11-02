@@ -5,6 +5,9 @@ argument-hint: 'A task name, or "which tasks are waiting for me"'
 disable-model-invocation: true
 type: workflow
 specificTo: generic
+board-opens: chat
+board-place: all
+board-label: 'Why a task took so long'
 ---
 
 # Task board and task analysis

@@ -4,6 +4,10 @@ description: 'Plan the learning of one knowledge base domain from zero, in one k
 argument-hint: 'The domain, and its entry points if you know them'
 type: workflow
 specificTo: generic
+board-opens: task
+board-place: kb
+board-kind: kb
+board-label: 'Plan learning a domain'
 ---
 
 # Plan the learning of a domain

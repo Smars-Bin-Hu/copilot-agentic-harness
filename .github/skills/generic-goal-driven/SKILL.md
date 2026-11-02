@@ -5,6 +5,9 @@ argument-hint: 'A description of the new goal, or "continue"'
 disable-model-invocation: true
 type: workflow
 specificTo: generic
+board-opens: chat
+board-place: all
+board-label: 'Work towards a goal'
 ---
 
 # Goal-Driven: a long task that does not forget

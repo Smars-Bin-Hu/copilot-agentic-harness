@@ -4,6 +4,10 @@ description: 'Move a knowledge base domain built before the harness standard (do
 argument-hint: 'The domain to migrate'
 type: workflow
 specificTo: generic
+board-opens: task
+board-place: kb
+board-kind: kb
+board-label: 'Migrate old cards'
 ---
 
 # Migrate a domain to the knowledge base standard

@@ -56,7 +56,7 @@ from urllib.request import Request, urlopen
 from core import config, messages, registry, state, tasks, user
 from core.paths import board_serve_file, board_serve_port, utc_now
 
-from core import reinstall, setup as core_setup
+from core import reinstall, setup as core_setup, skillboard
 
 from . import chatrounds
 from . import setupjob
@@ -582,6 +582,8 @@ class Board:
     def skill(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """A one-click skill (`skillsend.py`): `step` preview or act. The message is made here, each time, from the skill name and the words."""
         step = str(data.get("step", ""))
+        if step == "list":
+            return {"skills": skillboard.skills(self.root)}
         text = skillsend.message(self.root, data)
         why = self.link.create_blocked()
         if step == "preview":

@@ -3,6 +3,9 @@ name: generic-req-review
 description: 'Read the intake a person put in REQ/ (INTAKE.md and the converted business files), write REQ.md from it, check it against the knowledge base, and list what is unclear, wrong or missing, until the person confirms. Use when a task has files in REQ/ or an INTAKE.md and the user says to read the requirement, analyse it, check it for gaps or conflicts, or update REQ.md after the files or the answers changed. Keywords: intake, REQ, requirement, BRD, docx, xlsx, mapping, ambiguity, not clear yet.'
 type: workflow
 specificTo: generic
+board-opens: reply
+board-place: task
+board-label: 'Read the requirement'
 ---
 
 # Review a requirement that came as documents

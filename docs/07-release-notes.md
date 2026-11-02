@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.62 (2026-11-01)
+
+### Added
+
+- **Everything you can ask for**: a window of all skills, from the question mark or `Cmd+K`, with search. A skill appears when its frontmatter has `board-opens`, so a company skill needs no change to the board. `harness skill check` checks these keys.
+
 ## 1.6.61 (2026-11-01)
 
 ### Added

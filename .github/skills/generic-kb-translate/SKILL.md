@@ -4,6 +4,10 @@ description: 'Translate a knowledge base (or part of it) from Simplified Chinese
 argument-hint: 'Which domains or folders of the knowledge base to translate'
 type: workflow
 specificTo: generic
+board-opens: task
+board-place: kb
+board-kind: kb
+board-label: 'Translate cards'
 ---
 
 # Translate the knowledge base into English

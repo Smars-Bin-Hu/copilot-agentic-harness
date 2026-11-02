@@ -5,6 +5,9 @@ argument-hint: 'The task that holds the approved WORKFLOW-DESIGN.md (the open ta
 disable-model-invocation: true
 type: workflow
 specificTo: generic
+board-opens: chat
+board-place: all
+board-label: 'Build a designed workflow'
 ---
 
 # Build the skills of an approved workflow design

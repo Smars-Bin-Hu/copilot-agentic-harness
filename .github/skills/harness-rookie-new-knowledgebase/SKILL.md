@@ -4,6 +4,9 @@ description: 'Guide a user who knows nothing about knowledge bases through build
 argument-hint: 'Nothing, or "continue"'
 type: workflow
 specificTo: generic
+board-opens: chat
+board-place: kb
+board-label: 'Build a knowledge base'
 ---
 
 # Build your knowledge base

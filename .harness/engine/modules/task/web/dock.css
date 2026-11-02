@@ -4,3 +4,5 @@ html.en-open .dock-btn,html.en-open .dock-panel{display:none}
 .dock-panel{position:fixed;right:76px;bottom:20px;z-index:161;box-sizing:border-box;width:min(380px,calc(100vw - 92px));padding:14px;border:1px solid var(--line2);border-radius:14px;background:var(--card);box-shadow:var(--shadow)}.dock-panel[hidden]{display:none}.dock-panel h3{margin:0 0 10px;font-size:14px}
 .dock-line{display:flex;gap:8px;margin-top:8px;min-width:0}.dock-panel .su-in{flex:1;box-sizing:border-box;min-width:0;padding:6px 9px;border:1px solid var(--line2);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
 @media (max-width:480px){.dock-panel{right:8px;left:8px;width:auto;bottom:124px}}
+.dialog.dock-window{max-width:760px}.dock-list{flex:0 1 auto;min-height:120px;max-height:60vh;overflow:auto;margin:8px 0}.dock-list h3{margin:12px 0 4px;font-size:13px;color:var(--soft)}
+.dock-skill{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}.dock-about{flex:1;min-width:0}.dock-about p{margin:2px 0 0;overflow-wrap:anywhere}.dock-about .code{margin:6px 0 0}.dock-about b{margin-right:8px;overflow-wrap:anywhere}

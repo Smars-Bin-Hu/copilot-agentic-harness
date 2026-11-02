@@ -3,6 +3,9 @@ name: generic-code-standards
 description: 'Check the code of a task against the company''s code standards and fix what does not comply. The standards are written by the company in <knowledge base>/company/standards/code-standards.md, else .harness/standards/code-standards.md; this skill only reads them. Use before the promote dry-run of a task that changed code, or when the user asks to check or fix code style, naming or conventions. Keywords: code standards, coding conventions, style check, lint, naming rules, comply with the rules.'
 type: workflow
 specificTo: generic
+board-opens: reply
+board-place: task
+board-label: 'Check code standards'
 ---
 
 # Check the code against the company's standards

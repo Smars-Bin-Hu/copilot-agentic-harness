@@ -4,6 +4,9 @@ description: 'After a development task is written back and the PR is up: open a 
 argument-hint: 'The development task to test, or nothing for the latest written-back one'
 type: workflow
 specificTo: generic
+board-opens: reply
+board-place: task
+board-label: 'Write the test guide'
 ---
 
 # Test guide: from the PR to the results of each environment

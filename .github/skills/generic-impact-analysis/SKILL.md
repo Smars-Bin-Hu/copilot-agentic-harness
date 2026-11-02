@@ -3,6 +3,9 @@ name: generic-impact-analysis
 description: 'Find everything a change touches before the plan is written: one search of every target repository and the knowledge base for the names being changed, then sort the hits into must change, must check, no effect. Use when a task changes, renames or removes a table, column, procedure, job, config key, file or function that other code may use, or the user asks "what else does this affect", "who uses this", "dependencies", "lineage", before PLAN.md is written. Keywords: impact analysis, references, who uses, rename, drop column, downstream.'
 type: workflow
 specificTo: generic
+board-opens: reply
+board-place: task
+board-label: 'What this change touches'
 ---
 
 # Impact analysis

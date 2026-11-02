@@ -117,6 +117,9 @@ def check(folder: Path, company: str = "") -> Dict[str, Any]:
     if not fields:
         errors.append(say("skill.no_frontmatter"))
         return result
+    from . import skillboard  # noqa: PLC0415 - it reads frontmatter through this module
+
+    errors.extend(say("skill.board.value", key=key) for key in skillboard.problems(fields))
     name = fields.get("name", "")
     if not name:
         errors.append(say("skill.name.missing"))

@@ -5,6 +5,9 @@ argument-hint: 'Task name (optional; the current task by default)'
 disable-model-invocation: true
 type: workflow
 specificTo: generic
+board-opens: reply
+board-place: task
+board-label: 'Prepare autorun'
 ---
 
 # autorun: working down the list (beta)

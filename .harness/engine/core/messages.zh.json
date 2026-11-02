@@ -1973,7 +1973,7 @@
   "setup.refused.hint": "一次写一个绝对完整路径，要在代码仓库里面。每写一个按一次添加。",
   "setup.refused.remove": "去掉这个路径",
   "setup.refused.add": "添加",
-  "setup.install.example": "公司有代理时，例如：python -m pip install {package} --proxy http://proxy.example.com:8080 --trusted-host pypi.org --trusted-host files.pythonhosted.org",
+  "setup.install.example": "公司有代理时，例如：python -m pip install {package} --proxy proxy.example.com:8080 --trusted-host pypi.org --trusted-host files.pythonhosted.org",
   "setup.language": "首选语言",
   "board.new.grill": "先问我：agent 开始前先问清不明确的地方",
   "dock.kb": "知识库",

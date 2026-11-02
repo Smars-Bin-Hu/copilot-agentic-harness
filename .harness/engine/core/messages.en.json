@@ -1973,7 +1973,7 @@
   "setup.refused.hint": "One absolute full path at a time, inside a code repository. Press Add for each.",
   "setup.refused.remove": "Remove this path",
   "setup.refused.add": "Add",
-  "setup.install.example": "Behind a company proxy, for example: python -m pip install {package} --proxy http://proxy.example.com:8080 --trusted-host pypi.org --trusted-host files.pythonhosted.org",
+  "setup.install.example": "Behind a company proxy, for example: python -m pip install {package} --proxy proxy.example.com:8080 --trusted-host pypi.org --trusted-host files.pythonhosted.org",
   "setup.language": "Preferred language",
   "board.new.grill": "Ask me first: the agent asks what is unclear before it starts",
   "dock.kb": "Knowledge base",

@@ -8,6 +8,8 @@ specificTo: generic
 board-opens: reply
 board-place: task
 board-label: 'Prepare autorun'
+board-group: task
+board-order: 7
 ---
 
 # autorun: working down the list (beta)

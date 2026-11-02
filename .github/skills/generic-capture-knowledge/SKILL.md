@@ -6,6 +6,9 @@ specificTo: generic
 board-opens: reply
 board-place: task
 board-label: 'Capture what was learned'
+board-group: kb
+board-order: 11
+board-step: keep
 ---
 
 # Capture knowledge from a task

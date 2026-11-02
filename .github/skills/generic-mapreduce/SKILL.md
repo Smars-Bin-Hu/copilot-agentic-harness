@@ -9,6 +9,8 @@ board-opens: chat
 board-place: all
 board-cost: high
 board-label: 'Map and reduce over many files'
+board-group: task
+board-order: 4
 ---
 
 # MapReduce: reading in parallel chunks

@@ -6,6 +6,8 @@ specificTo: generic
 board-opens: reply
 board-place: task
 board-label: 'What this change touches'
+board-group: task
+board-order: 2
 ---
 
 # Impact analysis

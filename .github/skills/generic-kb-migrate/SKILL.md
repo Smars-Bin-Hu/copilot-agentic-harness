@@ -8,6 +8,9 @@ board-opens: task
 board-place: kb
 board-kind: kb
 board-label: 'Migrate old cards'
+board-group: kb
+board-order: 12
+board-step: keep
 ---
 
 # Migrate a domain to the knowledge base standard

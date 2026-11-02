@@ -8,6 +8,9 @@ board-opens: task
 board-place: kb
 board-kind: kb
 board-label: 'Audit the toolkit'
+board-group: kb
+board-order: 5
+board-step: toolkit
 ---
 
 # Audit the repository map

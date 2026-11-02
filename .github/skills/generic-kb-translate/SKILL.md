@@ -8,6 +8,9 @@ board-opens: task
 board-place: kb
 board-kind: kb
 board-label: 'Translate cards'
+board-group: kb
+board-order: 13
+board-step: keep
 ---
 
 # Translate the knowledge base into English

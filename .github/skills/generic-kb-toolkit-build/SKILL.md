@@ -8,6 +8,9 @@ specificTo: generic
 board-opens: chat
 board-place: kb
 board-label: 'Build the toolkit'
+board-group: kb
+board-order: 4
+board-step: toolkit
 ---
 
 # Build the toolkit

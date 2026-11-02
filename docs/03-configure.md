@@ -6,6 +6,8 @@ The harness itself holds no business content. To plug it into a company environm
 
 Double-click `Start Harness.command` (macOS) or `Start Harness.cmd` (Windows) and press **Get ready**. If the double-click is blocked, run `sh .harness/bin/harness task board` (Windows: `.harness\bin\harness.cmd task board`).
 
+The page holds no long text. The question mark beside a row opens a window with the part of this page that belongs to it, and Skills and Code standards have a **We have none** box there.
+
 **Code repositories.** Add one git repository, or a folder and tick the repositories in it. A folder with all of them ticked becomes `repos_root`, so repositories added to it later count too; there is one such folder. Anything else is written one by one as `repos.<name>.path`. Two repositories cannot share a name.
 
 **The short command.** `harness` must be on PATH, because every command an agent is given starts with it. The page shows the one line, and **Set it up** runs it. You can copy it and run it yourself. Reopen VS Code after it, or the agent's terminals do not see it.

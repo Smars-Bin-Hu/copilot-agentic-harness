@@ -4,6 +4,11 @@ description: 'Move closed tasks out of .workspace/sandbox/tasks/ into an archive
 argument-hint: 'Task names, "all closed tasks", or nothing to see what can go'
 type: workflow
 specificTo: generic
+board-opens: chat
+board-place: all
+board-label: 'Archive closed tasks'
+board-group: harness
+board-order: 5
 ---
 
 # Archive closed tasks

@@ -6,6 +6,8 @@ specificTo: generic
 board-opens: reply
 board-place: task
 board-label: 'Read the requirement'
+board-group: task
+board-order: 1
 ---
 
 # Review a requirement that came as documents

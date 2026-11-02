@@ -8,6 +8,8 @@ specificTo: generic
 board-opens: chat
 board-place: all
 board-label: 'Build a designed workflow'
+board-group: harness
+board-order: 9
 ---
 
 # Build the skills of an approved workflow design

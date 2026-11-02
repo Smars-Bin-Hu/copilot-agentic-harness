@@ -6,6 +6,8 @@ specificTo: generic
 board-opens: reply
 board-place: task
 board-label: 'Check code standards'
+board-group: task
+board-order: 5
 ---
 
 # Check the code against the company's standards

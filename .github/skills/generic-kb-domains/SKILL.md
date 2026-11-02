@@ -4,6 +4,13 @@ description: 'Map the target repositories by script (every job, package, procedu
 argument-hint: 'The repositories to map (default: all target repositories)'
 type: workflow
 specificTo: generic
+board-opens: task
+board-place: kb
+board-kind: kb
+board-label: 'Find the domains'
+board-group: kb
+board-order: 6
+board-step: domains
 ---
 
 # Propose the domains of a code base

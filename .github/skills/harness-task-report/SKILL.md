@@ -8,6 +8,8 @@ specificTo: generic
 board-opens: chat
 board-place: all
 board-label: 'Why a task took so long'
+board-group: harness
+board-order: 4
 ---
 
 # Task board and task analysis

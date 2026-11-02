@@ -7,6 +7,8 @@ board-opens: task
 board-place: all
 board-kind: other
 board-label: 'Build a new skill'
+board-group: harness
+board-order: 7
 ---
 
 # Build a new skill

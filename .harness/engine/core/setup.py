@@ -245,6 +245,15 @@ SECTIONS = (("repos", "Target repositories"), ("kb", "Knowledge base"), ("instru
 CAN_DECLARE = ("skills", "standards")  # a team may have none of these
 
 
+def no_such(root: Path) -> List[str]:
+    """What the person said the team has none of."""
+    try:
+        found = kept(root, "user").get("none")
+    except ValueError:
+        return []
+    return found if isinstance(found, list) else []
+
+
 def missing(root: Path) -> List[str]:
     """What the big warning of the board lists: repos, domains, instructions, skills, standards. Quick: a few file looks, nothing that runs."""
     user = {}
@@ -252,7 +261,7 @@ def missing(root: Path) -> List[str]:
         user = kept(root, "user")
     except ValueError:
         pass
-    declared = user.get("none") if isinstance(user.get("none"), list) else []
+    declared = no_such(root)
     company = targets.company_folder(root)
     out: List[str] = []
     try:
@@ -293,7 +302,7 @@ def guide(root: Path) -> Dict[str, Any]:
         text = ""
     parts = re.split(r"^## ", text, flags=re.M)
     found = {part.split("\n", 1)[0].strip(): part.split("\n", 1)[1] if "\n" in part else "" for part in parts[1:]}
-    return {"sections": [{"key": key, "title": title, "blocks": mdtree.parse(found.get(title, ""))["blocks"], "can_declare": key in CAN_DECLARE} for key, title in SECTIONS], "missing": missing(root)}
+    return {"sections": [{"key": key, "title": title, "blocks": mdtree.parse(found.get(title, ""))["blocks"], "can_declare": key in CAN_DECLARE} for key, title in SECTIONS], "missing": missing(root), "declared": no_such(root)}
 
 
 def sample(root: Path) -> Dict[str, str]:

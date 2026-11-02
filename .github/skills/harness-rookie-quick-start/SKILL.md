@@ -6,6 +6,8 @@ specificTo: generic
 board-opens: chat
 board-place: ask
 board-label: 'First lesson'
+board-group: harness
+board-order: 1
 ---
 
 # The harness first lesson

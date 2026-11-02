@@ -19,6 +19,9 @@ board-place: all           # ask, kb, task, all; several with commas
 board-kind: design         # with task: the kind of the task
 board-cost: high           # the window marks it costly
 board-label: 'Short name'
+board-group: kb            # harness, kb or task: the part of the window. Without it: task
+board-order: 3             # the place in its part, small first. Without it: last
+board-step: toolkit        # start, toolkit, domains, learn or keep: a heading in the knowledge base part
 ```
 
 `harness skill check` checks these values. A click shows the whole message first, also for a skill only you may start.

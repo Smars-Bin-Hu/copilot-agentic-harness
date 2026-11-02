@@ -1,5 +1,5 @@
 // Get ready (1.6.57): one command, then one form. No agent runs. The server does the work (core/setup.py): this page shows and sends.
-// Needs common.js (h, t, copyCommand), serve.js (SERVE).
+// Needs common.js (h, t, copyCommand), serve.js (SERVE), dock.js (DOCK: the knowledge base tip opens its window).
 (function () {
   const app = document.getElementById("app");
   const POLL = 2000;
@@ -16,6 +16,8 @@
   const repos = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: t("setup.repos.ph")});
   const kbPath = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", hidden: ""});
   const kbNote = h("p", {class: "su-note"});
+  const kbLearn = h("button", {type: "button", class: "su-link"}, t("setup.kb.learn"));
+  kbLearn.addEventListener("click", () => DOCK.allSkills("kb"));
   const kbPick = h("button", {type: "button", class: "act"}, t("setup.browse"));
   kbPick.addEventListener("click", () => {
     kbPick.disabled = true;
@@ -122,7 +124,7 @@
     kbPick.dataset.kind = mode === "package" ? "file" : "folder";
     kbPath.placeholder = mode === "package" ? t("setup.kb.package.ph") : t("setup.kb.folder.ph");
     kbNote.className = "su-note";
-    kbNote.textContent = mode === "none" ? t("setup.kb.none.hint") : "";
+    kbNote.replaceChildren(...(mode === "none" ? [t("setup.kb.none.hint"), " ", kbLearn] : []));
     if (mode !== "none" && kbPath.value.trim()) checkKb();
     gate();
   };
@@ -149,6 +151,22 @@
   const star = () => h("b", {class: "su-star", "aria-hidden": "true"}, " *");
   const kbStar = star();
   kbStar.hidden = true;
+  const companyState = h("p", {class: "su-state"});
+  const standardsState = h("p", {class: "su-state"});
+  const needs = (key) => st.guide.missing.includes(key) || (key === "kb" && st.guide.missing.includes("domains"));
+  function paintStates() {
+    const state = (node, need, text) => node.replaceChildren(h("span", {class: "su-dot " + (need ? "need" : "ok")}), text);
+    state(companyState, needs("instructions"), t(needs("instructions") ? "setup.company.need" : "setup.company.ok"));
+    state(standardsState, needs("standards"), t(needs("standards") ? "setup.standards.need" : st.guide.declared.includes("standards") ? "setup.standards.none" : "setup.standards.ok"));
+  }
+  function loadGuide() {
+    return ask("guide").then((found) => { st.guide = found; paintStates(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message || error)); });
+  }
+  const question = (key) => {
+    const button = h("button", {type: "button", class: "su-q", "aria-label": t("setup.help"), title: t("setup.help")}, "?");
+    button.addEventListener("click", () => help(key));
+    return button;
+  };
   const row = (label, ...nodes) => h("div", {class: "su-row"}, h("span", {class: "su-k"}, label), h("div", {class: "su-v"}, nodes));
 
   const testOut = h("div");
@@ -257,35 +275,58 @@
   const olderLink = h("button", {type: "button", class: "su-link"}, t("setup.older.title"));
   olderLink.addEventListener("click", older);
   const first = new URLSearchParams(location.search).has("first");
-  const plain = (spans) => (spans || []).map((span) => (span.v !== undefined ? span.v : plain(span.c))).join("");
-  function doc(list) {  // the words of docs/03-configure.md, as text
+  const words = (spans) => (spans || []).map((span) => {  // the page builds every node: nothing of the file is markup
+    if (span.t === "code") return h("code", null, span.v);
+    if (span.t === "b") return h("b", null, words(span.c));
+    if (span.t === "i") return h("i", null, words(span.c));
+    if (span.t === "br") return h("br");
+    if (span.t === "a" && /^https?:/i.test(span.href)) return h("a", {href: span.href, target: "_blank", rel: "noopener noreferrer"}, words(span.c));
+    return span.v !== undefined ? span.v : words(span.c);
+  });
+  function doc(list) {  // the words of docs/03-configure.md
     return list.map((block) => {
-      if (block.t === "h") return h("h4", null, plain(block.spans));
-      if (block.t === "p") return h("p", {class: "su-doc"}, plain(block.spans));
+      if (block.t === "h") return h("h4", null, words(block.spans));
+      if (block.t === "p") return h("p", {class: "su-doc"}, words(block.spans));
       if (block.t === "code") return h("pre", {class: "su-cmd"}, block.text);
-      if (block.t === "ul" || block.t === "ol") return h(block.t, {class: "su-doc"}, block.items.map((item) => h("li", null, plain(item.spans))));
-      if (block.t === "table") return h("div", {class: "scroll"}, h("table", {class: "md"}, h("thead", null, h("tr", null, block.head.map((cell) => h("th", null, plain(cell))))), h("tbody", null, block.rows.map((cells) => h("tr", null, cells.map((cell) => h("td", null, plain(cell))))))));
+      if (block.t === "ul" || block.t === "ol") return h(block.t, {class: "su-doc"}, block.items.map((item) => h("li", null, words(item.spans))));
+      if (block.t === "table") return h("div", {class: "scroll"}, h("table", {class: "md"}, h("thead", null, h("tr", null, block.head.map((cell) => h("th", null, words(cell))))), h("tbody", null, block.rows.map((cells) => h("tr", null, cells.map((cell) => h("td", null, words(cell))))))));
       return null;
     });
   }
-  const guideBox = h("div", {class: "su-guide"});
-  function guide() {
-    ask("guide").then((found) => {
-      guideBox.replaceChildren(...found.sections.map((part) => {
-        const open = found.missing.includes(part.key) || (part.key === "kb" && found.missing.includes("domains"));
-        const none = part.can_declare ? h("label", {class: "su-none"}, h("input", {type: "checkbox"}), h("span", null, t("setup.none"))) : null;
-        if (none) none.firstChild.addEventListener("change", () => ask("none", {key: part.key, on: none.firstChild.checked}).then(guide));
-        return h("details", {class: "su-part", open: open ? "" : null}, h("summary", null, h("span", {class: "su-dot" + (open ? " need" : " ok")}), part.title), none, doc(part.blocks));
-      }));
-    }, () => {});
+  // One window for every question mark, with a tab for each part: the words link to each other.
+  function help(key) {
+    if (!st.guide) { loadGuide().then(() => { if (st.guide) help(key); }); return; }
+    const stage = h("div", {class: "dock-list su-help"});
+    const close = h("button", {type: "button", class: "act"}, t("board.new.close"));
+    const dot = (part) => h("span", {class: "su-dot " + (needs(part.key) ? "need" : "ok")});
+    const tabs = st.guide.sections.map((part) => {
+      const tab = h("button", {type: "button", class: "chip", "data-key": part.key}, dot(part), part.title);
+      tab.addEventListener("click", () => show(part));
+      return tab;
+    });
+    const view = SERVE.dialog([h("h2", null, t("setup.help.title")), h("div", {class: "chips dock-tabs"}, tabs), stage, h("div", {class: "row"}, close)]);
+    view.box.classList.add("dock-window");
+    close.addEventListener("click", view.close);
+    function show(part) {
+      tabs.forEach((tab) => tab.classList.toggle("on", tab.dataset.key === part.key));
+      let none = null;
+      if (part.can_declare) {
+        const box = h("input", {type: "checkbox", checked: st.guide.declared.includes(part.key) ? "" : null});
+        box.addEventListener("change", () => ask("none", {key: part.key, on: box.checked}).then(loadGuide).then(() => tabs.forEach((tab, index) => tab.firstChild.replaceWith(dot(st.guide.sections[index])))));
+        none = h("label", {class: "su-none"}, box, h("span", null, t("setup.none")));
+      }
+      stage.replaceChildren(...[none, ...doc(part.blocks)].filter(Boolean));
+      stage.scrollTop = 0;
+    }
+    show(st.guide.sections.find((part) => part.key === key) || st.guide.sections[0]);
   }
-  if (!first) guide();
+  loadGuide();
   app.replaceChildren(h("div", {class: "su"}, h("h1", null, t(first ? "setup.title" : "setup.guide")), h("p", {class: "su-lead"}, t("setup.lead"), " ", olderLink), shortBox,
     h("section", {class: "su-card"}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "2"), h("h2", null, t("setup.form.title"))),
-      row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "chips su-modes"}, chips)), row(t("setup.repos"), h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))),
-      row([t("setup.kb"), kbStar], h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote), row(t("setup.prefix"), prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))),
-      h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row(t("setup.install"), install, h("p", {class: "su-note"}, t("setup.install.example"))), row(t("setup.refused"), h("div", {class: "su-line"}, refusedBox, refusedAdd), refusedNote, refusedList, h("p", {class: "su-note"}, t("setup.refused.hint")))),
-      h("div", {class: "su-end"}, go, goNote), said), first ? null : guideBox));
+      row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "chips su-modes"}, chips)), row([t("setup.repos"), question("repos")], h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))),
+      row([t("setup.kb"), kbStar, question("kb")], h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote), row([t("setup.company"), question("instructions")], companyState), row([t("setup.prefix"), question("skills")], prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))), row([t("setup.standards"), question("standards")], standardsState),
+      h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row([t("setup.install"), question("python")], install, h("p", {class: "su-note"}, t("setup.install.example"))), row([t("setup.refused"), question("repos")], h("div", {class: "su-line"}, refusedBox, refusedAdd), refusedNote, refusedList, h("p", {class: "su-note"}, t("setup.refused.hint")))),
+      h("div", {class: "su-end"}, go, goNote), said)));
   gate();
   load();
 })();

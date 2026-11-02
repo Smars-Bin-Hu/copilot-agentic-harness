@@ -8,6 +8,9 @@ board-opens: task
 board-place: kb
 board-kind: kb
 board-label: 'Plan learning a domain'
+board-group: kb
+board-order: 7
+board-step: learn
 ---
 
 # Plan the learning of a domain

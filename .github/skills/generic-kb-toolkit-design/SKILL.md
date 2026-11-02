@@ -4,6 +4,13 @@ description: 'Design the toolkit that lets harness kb map read this company''s o
 argument-hint: 'The repositories the toolkit is for (default: all target repositories)'
 type: workflow
 specificTo: generic
+board-opens: task
+board-place: kb
+board-kind: kb
+board-label: 'Design the toolkit'
+board-group: kb
+board-order: 3
+board-step: toolkit
 ---
 
 # Design a toolkit for the repository map

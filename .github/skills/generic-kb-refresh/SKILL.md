@@ -8,6 +8,9 @@ board-opens: task
 board-place: kb
 board-kind: kb
 board-label: 'Refresh stale cards'
+board-group: kb
+board-order: 10
+board-step: keep
 ---
 
 # Refresh the stale cards of a domain

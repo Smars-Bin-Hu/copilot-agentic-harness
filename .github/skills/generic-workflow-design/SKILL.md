@@ -7,6 +7,8 @@ board-opens: task
 board-place: all
 board-kind: design
 board-label: 'Design a workflow'
+board-group: harness
+board-order: 8
 ---
 
 # Design a workflow from a repeated routine

@@ -4,6 +4,12 @@ description: 'Learn the next batch of a domain in its learn task (plan approved)
 argument-hint: 'The domain or its learn task; nothing to take the next batch'
 type: workflow
 specificTo: generic
+board-opens: reply
+board-place: kb
+board-label: 'Learn the next batch'
+board-group: kb
+board-order: 8
+board-step: learn
 ---
 
 # Learn the next batch

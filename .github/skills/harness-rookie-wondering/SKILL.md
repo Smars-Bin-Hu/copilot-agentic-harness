@@ -6,6 +6,8 @@ specificTo: generic
 board-opens: chat
 board-place: ask
 board-label: 'How the harness works'
+board-group: harness
+board-order: 3
 ---
 
 # The harness deep course

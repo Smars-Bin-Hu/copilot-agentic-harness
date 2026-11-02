@@ -126,7 +126,7 @@ SNAPSHOT_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsaf
 
 def setup_page(serve: Dict[str, Any]) -> str:
     """Get ready, as the board server sends it. It has no Enter screen: it is where a new copy goes from there."""
-    return build("setup.html", ["common.js", "serve.js", "setup.js"], say("setup.title"), {"serve": serve}, 0, ["page.css", "setup.css"])
+    return build("setup.html", ["common.js", "serve.js", "chat.js", "dock.js", "setup.js"], say("setup.title"), {"serve": serve}, 0, ["page.css", "setup.css"])
 
 
 def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None) -> str:

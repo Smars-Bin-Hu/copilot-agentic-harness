@@ -4,6 +4,11 @@ description: 'After the user got a new copy of the harness (an upgrade, a fresh 
 argument-hint: 'The full path of the old copy of the harness'
 type: workflow
 specificTo: generic
+board-opens: chat
+board-place: ask
+board-label: 'Move to a new copy'
+board-group: harness
+board-order: 6
 ---
 
 # Reinstall: carry the old copy over to the new one

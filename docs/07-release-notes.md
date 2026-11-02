@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.72 (2026-11-02)
+
+### Changed
+
+- Get ready: the long guide under the form is gone. A question mark beside each row opens a window with that part, including **We have none**. Company content and Code standards have a row of their own that says what was found.
+- Get ready: with no knowledge base, a tip says you can build one once the code repositories are set, and links to the skills that do it.
+- **Everything you can ask for** has three parts: the harness (with the full course), the knowledge base in the order you build it, and work on a task. New keys in a skill: `board-group`, `board-order`, `board-step`.
+- The window lists skills that are offered inside a task too, marked **In a task**, and six more skills.
+
 ## 1.6.71 (2026-11-02)
 
 ### Changed

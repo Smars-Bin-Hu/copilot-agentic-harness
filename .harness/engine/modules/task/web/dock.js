@@ -1,6 +1,7 @@
 // The buttons at the bottom right (1.6.61): the question mark and the one-click chats. The gear is shell.js's. The brain comes with the knowledge base window.
 // DOCK.start asks with the whole message in view, sends, and brings VS Code forward. Needs common.js (h, t), serve.js (SERVE).
 const DOCK = (function () {
+  const BOOK = "https://smarshu.com/book/";
   const ask = (step, body) => SERVE.post("/api/skill", {step, ...body}).then((data) => data.result);
 
   function done() {
@@ -41,26 +42,34 @@ const DOCK = (function () {
     const start = (item, words) => {
       view.close();
       if (item.opens === "task") CHAT.create({kind: item.kind, text: "Use the skill " + item.name + "." + (words ? " " + words : ""), note: t("dock.task.note")});
-      else DOCK.start(item.name, words);
+      else DOCK.start(item.name, words || item.words);
     };
     const row = (item) => {
       const words = item.hint ? h("input", {type: "text", class: "code", maxlength: 2000, placeholder: item.hint, "aria-label": item.hint}) : null;
-      const go = h("button", {type: "button", class: "act"}, t("dock.start"));
-      go.addEventListener("click", () => start(item, words ? words.value : ""));
+      const go = item.href ? h("a", {class: "act", href: item.href, target: "_blank", rel: "noopener noreferrer"}, t("dock.open")) : item.opens === "reply" ? h("span", {class: "tag", title: t("dock.intask.hint")}, t("dock.intask")) : h("button", {type: "button", class: "act"}, t("dock.start"));
+      if (go.tagName === "BUTTON") go.addEventListener("click", () => start(item, words ? words.value : ""));
       return h("div", {class: "dock-skill"}, h("div", {class: "dock-about"}, h("b", null, item.label), item.costly ? h("span", {class: "tag hot"}, t("dock.costly")) : null, h("p", {class: "sub"}, item.about), words), go);
     };
     function paint() {
       const word = search.value.trim().toLowerCase();
-      const shown = found.filter((item) => item.opens !== "reply" && (!only || item.place.includes(only)) && (!word || (item.label + " " + item.name + " " + item.about).toLowerCase().includes(word)));
-      const groups = [["own", (item) => item.own], ["work", (item) => !item.own && !item.place.includes("kb")], ["kb", (item) => !item.own && item.place.includes("kb")]];
+      const shown = found.filter((item) => (!only || item.group === only || item.place.includes(only)) && (!word || (item.label + " " + item.name + " " + item.about).toLowerCase().includes(word)));
+      const groups = [["own", (item) => item.own], ...["harness", "kb", "task"].map((key) => [key, (item) => !item.own && item.group === key])];
       list.replaceChildren(...groups.flatMap(([key, test]) => {
         const items = shown.filter(test);
-        return items.length ? [h("h3", null, t("dock.group." + key)), ...items.map(row)] : [];
+        const out = items.length && !only ? [h("h3", null, t("dock.group." + key))] : [];  // a window of one part has its name as its title
+        items.forEach((item, index) => {
+          if (item.step && (!index || items[index - 1].step !== item.step)) out.push(h("h4", null, t("dock.step." + item.step)));
+          out.push(row(item));
+        });
+        return out;
       }));
       if (!shown.length) list.append(h("p", {class: "sub"}, t("dock.skills.none")));
     }
     search.addEventListener("input", paint);
-    ask("list", {}).then((data) => { found = data.skills; paint(); }, (error) => list.replaceChildren(h("p", {class: "bad"}, error.message || String(error))));
+    const extra = [  // two that are not a skill of their own
+      {name: "book", label: t("dock.book"), about: t("dock.book.about"), href: BOOK, opens: "link", place: ["ask"], group: "harness", order: 2},
+      {name: "harness-rookie-wondering", label: t("dock.kbwhy"), about: t("dock.kbwhy.about"), words: "Topic 16: the knowledge base from code", opens: "chat", place: ["kb"], group: "kb", order: 1, step: "start"}];
+    ask("list", {}).then((data) => { found = [...data.skills, ...extra].sort((one, two) => one.order - two.order); paint(); }, (error) => list.replaceChildren(h("p", {class: "bad"}, error.message || String(error))));
   }
 
   // The knowledge base window: a page over the page, read only; a button with "chat" in it opens a chat (kbview.py, core/kbstatus.py).

@@ -8,6 +8,8 @@ specificTo: generic
 board-opens: chat
 board-place: all
 board-label: 'Work towards a goal'
+board-group: task
+board-order: 3
 ---
 
 # Goal-Driven: a long task that does not forget

@@ -7,6 +7,9 @@ specificTo: generic
 board-opens: chat
 board-place: kb
 board-label: 'Build a knowledge base'
+board-group: kb
+board-order: 2
+board-step: start
 ---
 
 # Build your knowledge base

@@ -6,6 +6,9 @@ Keys, all optional, one line each:
   board-kind:  <task kind>            with `task`
   board-cost:  high                   the window says it costs more
   board-label: <short name>
+  board-group: harness, kb or task    the part of the window; none: task
+  board-order: <number>               the place in its part, small first; none: last
+  board-step:  start, toolkit, domains, learn or keep    the step of building a knowledge base, a heading in the window
 """
 
 from __future__ import annotations
@@ -18,7 +21,10 @@ from . import skillcheck
 OPENS = ("chat", "task", "reply")
 PLACES = ("ask", "kb", "task", "all")
 COSTS = ("high",)
-KEYS = ("board-opens", "board-place", "board-kind", "board-cost", "board-label")
+GROUPS = ("harness", "kb", "task")
+STEPS = ("start", "toolkit", "domains", "learn", "keep")
+LAST = 999
+KEYS = ("board-opens", "board-place", "board-kind", "board-cost", "board-label", "board-group", "board-order", "board-step")
 
 
 def problems(fields: Dict[str, str]) -> List[str]:
@@ -30,6 +36,12 @@ def problems(fields: Dict[str, str]) -> List[str]:
         wrong.append("board-place")
     if fields.get("board-cost") and fields["board-cost"] not in COSTS:
         wrong.append("board-cost")
+    if fields.get("board-group") and fields["board-group"] not in GROUPS:
+        wrong.append("board-group")
+    if fields.get("board-order") and not fields["board-order"].isdigit():
+        wrong.append("board-order")
+    if fields.get("board-step") and fields["board-step"] not in STEPS:
+        wrong.append("board-step")
     if any(key.startswith("board-") and key not in KEYS for key in fields):
         wrong.extend(key for key in fields if key.startswith("board-") and key not in KEYS)
     return wrong
@@ -53,5 +65,6 @@ def skills(root: Path) -> List[Dict[str, Any]]:
             continue
         out.append({"name": path.parent.name, "label": fields.get("board-label") or path.parent.name, "about": first_sentence(fields.get("description", "")), "opens": opens,
                     "place": [place.strip() for place in fields.get("board-place", "all").split(",") if place.strip()], "kind": fields.get("board-kind", ""), "costly": fields.get("board-cost") == "high",
-                    "hint": fields.get("argument-hint", ""), "own": path.parent.name.split("-")[0] not in ("harness", "generic")})
-    return out
+                    "hint": fields.get("argument-hint", ""), "own": path.parent.name.split("-")[0] not in ("harness", "generic"),
+                    "group": fields.get("board-group") or "task", "order": int(fields["board-order"]) if fields.get("board-order", "").isdigit() else LAST, "step": fields.get("board-step", "")})
+    return sorted(out, key=lambda item: (item["order"], item["name"]))

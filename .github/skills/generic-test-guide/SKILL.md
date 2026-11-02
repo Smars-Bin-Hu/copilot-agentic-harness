@@ -7,6 +7,8 @@ specificTo: generic
 board-opens: reply
 board-place: task
 board-label: 'Write the test guide'
+board-group: task
+board-order: 6
 ---
 
 # Test guide: from the PR to the results of each environment

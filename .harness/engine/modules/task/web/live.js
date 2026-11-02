@@ -246,6 +246,7 @@ const LIVE = (function () {
   // The calm states: no chat, a chat that has not said anything, a link that dropped. One line says what and why.
   function paintCalm(data, items) {
     let title = "", why = "", button = false;
+    link.hidden = !data || !data.bound;  // no chat: the window alone is the button of the calm state
     if (!data) { title = t("desk.live.reading"); }
     else if (!data.bound) {
       title = LINK_DOWN.includes(data.why) ? t("desk.live.down") : t("desk.live.none");
@@ -255,11 +256,13 @@ const LIVE = (function () {
     else if (!items.length) { title = t("desk.live.quiet"); why = t("desk.live.quiet.why"); }
     calm.hidden = !title;
     if (!title) { calm.replaceChildren(); calm.dataset.sig = ""; return; }
-    const sig = title + "|" + why + "|" + button;
+    const fresh = Boolean(data && !data.bound && st.task && st.off === "" && ["", "no-chat", "no-session"].includes(data.why || ""));
+    const sig = title + "|" + why + "|" + button + "|" + fresh;
     if (calm.dataset.sig === sig) return;
     calm.dataset.sig = sig;
-    const open = button ? h("button", {type: "button", class: "act hot live big"}, t("desk.live.open")) : null;
-    if (open) open.addEventListener("click", () => { open.disabled = true; SERVE.post("/api/open", {}).then(() => { setTimeout(() => { open.disabled = false; }, 1500); }, (error) => { open.disabled = false; SERVE.failed(error, st.chat && st.chat.title); }); });
+    const open = button ? h("button", {type: "button", class: "act hot live big"}, t(fresh ? "board.go.new" : "desk.live.open")) : null;
+    if (open && fresh) open.addEventListener("click", () => chatGoOn(st.task.split("/").pop()));
+    else if (open) open.addEventListener("click", () => { open.disabled = true; SERVE.post("/api/open", {}).then(() => { setTimeout(() => { open.disabled = false; }, 1500); }, (error) => { open.disabled = false; SERVE.failed(error, st.chat && st.chat.title); }); });
     calm.replaceChildren(...[robot(), h("h3", null, title), why ? h("p", null, why) : null, open].filter(Boolean));
   }
 

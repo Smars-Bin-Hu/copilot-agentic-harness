@@ -174,6 +174,7 @@
     const talk = items.filter((item) => TALK.includes(item.action));
     const rest = items.filter((item) => !direct.includes(item) && !talk.includes(item));
     const nodes = direct.map((item) => actionButton(row, item));
+    if (items.some((item) => ["send", "answer"].includes(item.action)) && chatNew(row)) nodes.push(goOnButton(row.name));
     nodes.push(h("span", {class: "act-talk"}, talk.map((item) => actionButton(row, item))));
     if (rest.length) {
       const more = h("button", {type: "button", class: "act act-more", title: t("board.menu.more"), "aria-haspopup": "menu", "aria-label": t("board.menu.more")}, "\u22ef");

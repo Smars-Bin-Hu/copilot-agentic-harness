@@ -24,7 +24,10 @@ const SERVE = (function () {
 
   let reloading = false;
 
-  function post(path, body) {
+  // Every call of the page waits for the pairing of this load: asked before it, a paired browser would be refused and told it is not paired.
+  const post = (path, body) => ready.then(() => send(path, body));
+
+  function send(path, body) {
     return fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json", "X-Harness-Board": "1"}, body: JSON.stringify(body)})
       .then((response) => response.json().then((data) => {
         if (response.ok) {
@@ -261,6 +264,7 @@ const SERVE = (function () {
   const mark = h("span", {class: "vs-pill", hidden: ""}, h("i"), h("span"));  // the same state in two words, next to the VS Code pill; the tip has the sentence
   let markShort = false;
   function showPaired() {
+    if (paired) document.querySelector(".unpaired-note")?.remove();  // paired in the meantime: the bar is no longer true
     for (const node of banners) {
       node.replaceChildren(paired === null || (paired && node.dataset.quiet) ? "" : t(paired ? "board.serve.paired" : "board.serve.unpaired"),
         stale ? h("span", {class: "bad"}, " " + t("board.serve.stale", stale)) : "");
@@ -279,9 +283,9 @@ const SERVE = (function () {
     if (code) history.replaceState(null, "", location.pathname);  // the code leaves the address bar and the history
     // A browser that has the cookie of an earlier pairing does not need the code again: a second tab, a tab the browser restored
     // or loaded twice would otherwise find the code used up and say so.
-    const already = post("/api/status", {}).then((data) => data.paired, () => false);
-    return already.then((yes) => (code && !yes ? post("/api/pair", {code}).catch(failed) : null))
-      .then(() => post("/api/status", {})).then((data) => { paired = note(data).paired; showPaired(); }, () => { paired = false; showPaired(); });
+    const already = send("/api/status", {}).then((data) => data.paired, () => false);
+    return already.then((yes) => (code && !yes ? send("/api/pair", {code}).catch(failed) : null))
+      .then(() => send("/api/status", {})).then((data) => { paired = note(data).paired; showPaired(); }, () => { paired = false; showPaired(); });
   }
   const ready = trade();
   // A link pasted into a tab that already shows the board changes only what follows the #: the page does not load again, and without this the code would never be read.

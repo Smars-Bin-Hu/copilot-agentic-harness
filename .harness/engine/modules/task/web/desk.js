@@ -306,11 +306,13 @@
 
   // The row an action button is made for (what `actionButton` and the dialogs read of the task).
   function actionRow() {
-    return {name: desk.name, waiting: desk.waiting, state: desk.state, ask: desk.ask, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed,
+    return {name: desk.name, waiting: desk.waiting, state: desk.state, chat: desk.chat, ask: desk.ask, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed,
       result_missing: FILES[desk.kind] && ["design", "rca"].includes(desk.kind) && !doc(FILES[desk.kind]) ? FILES[desk.kind] : ""};  // a design or an RCA task without its result file: the close dialog warns
   }
   const OPTIONAL = ["pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
-  const hintOf = (item) => (item.action === "approve-promote" && desk.promote_direct ? t("desk.hint.approve-promote.kb") : t("desk.hint." + item.action.replace(" ", "-")));
+  const offersChat = (item) => ["send", "answer"].includes(item.action) && chatNew(actionRow());
+  const talkButtons = (row, item) => [actionButton(row, item, "big"), offersChat(item) ? goOnButton(row.name, "big") : null];
+  const hintOf = (item) => (offersChat(item) ? t("desk.hint.newchat") : item.action === "approve-promote" && desk.promote_direct ? t("desk.hint.approve-promote.kb") : t("desk.hint." + item.action.replace(" ", "-")));
   const canAct = () => desk.status === "open" && !desk.past && !saved;
 
   // How full the context is: a label, a thin bar, the percent. Unknown is "-" and no bar, never 0.
@@ -763,7 +765,7 @@
       desk.req_unconfirmed && desk.req_placeholders ? h("p", {class: "hint bad"}, t("desk.req.placeholders", {n: desk.req_placeholders})) : null,
       desk.test && desk.test.reopen ? h("p", {class: "hint bad"}, t("desk.test.reopen", {dev: desk.test.reopen, envs: desk.test.failed.join(", ")})) : null,
       desk.state === "working" && served() ? h("p", {class: "hint"}, t(desk.chat && desk.chat.bound ? "desk.busy.note" : "desk.busy.note.nochat")) : null,
-      desk.state === "waiting" && !desk.held ? h("p", {class: "hint"}, t("desk.unheld.note")) : null,
+      desk.state === "waiting" && !desk.held && !chatNew(actionRow()) ? h("p", {class: "hint"}, t("desk.unheld.note")) : null,
     ];
   }
 
@@ -792,7 +794,7 @@
     return h("section", {class: "tk-need strong", "data-action": item.action},
       h("div", {class: "tk-need-h"}, tag(CARD_WORDS[item.action] ? t(CARD_WORDS[item.action]) : desk.waiting ? waitText(desk) : t("desk.actions.title"), "hot"), waitedLine()),
       h("p", {class: "tk-need-p"}, hintOf(item)), notes,
-      h("div", {class: "tk-need-go"}, actionButton(row, item, "big"), jumpButton(tab, t("desk.jump." + tab))));
+      h("div", {class: "tk-need-go"}, talkButtons(row, item), jumpButton(tab, t("desk.jump." + tab))));
   }
 
   // The next step of a card that names it is a button on that card, not only in the menu: resume a task put aside, close one that was committed.
@@ -829,7 +831,7 @@
       h("div", {class: "tk-need-h"}, h("div", {class: "tk-need-t"}, h("h2", null, idle ? idle.title : t("desk.actions.title")), askBubble()), items.length || desk.waiting ? waitedLine() : null),
       notes,
       idle ? [h("p", {class: "hint"}, idle.hint), resumeButton(), idle.prompt ? promptLine(idle.prompt) : null, jump]
-        : h("div", {class: "tk-acts"}, items.map((item) => h("div", {class: "tk-act"}, actionButton(row, item, "big"), h("p", {class: "hint"}, hintOf(item))))));
+        : h("div", {class: "tk-acts"}, items.map((item) => h("div", {class: "tk-act"}, talkButtons(row, item), h("p", {class: "hint"}, hintOf(item))))));
   }
 
   function waitBand() {

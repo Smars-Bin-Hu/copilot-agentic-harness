@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.87 (2026-11-02)
+
+### Changed
+
+- **A task with no chat can go on from the board.** A **go on in a new chat** button is on the board, on the task page and on the Live tab. The new chat picks the task up from its files and links to it. You see the whole message first.
+- **Buttons that need a chat are grey without one**, with the reason in their tip. **Send** stays clickable, so you can still copy its message. **Whole chat in VS Code** is hidden when there is no chat.
+- **No false "Not paired" bar after Start Harness.** A call of the page now waits until this browser has paired. Before, the Knowledge base button could ask first, be refused, and leave the bar on a paired page.
+
 ## 1.6.86 (2026-11-02)
 
 **Version 1.6 rewrites how you meet and use the harness.** The core of it: **you talk to the agent on the task board.** The board is linked to VS Code, so you start a task, watch the agent live, reply, answer, allow and stop from the page. Around that, setup moved out of the chat too: you double-click to start, set up in the browser, learn from the board step by step, and build your knowledge base with lessons and its own window.

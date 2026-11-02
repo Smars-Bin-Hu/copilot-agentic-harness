@@ -70,7 +70,7 @@ global.location = {hash: "", pathname: "/", reload() { reloaded++; }};
 global.history = {replaceState() { location.hash = ""; }};
 global.window = {addEventListener(name, fn) { if (name === "hashchange") hashchange = fn; }};
 const showPaired = () => {}, note = (data) => data, failed = () => {};
-const post = (path, body) => {
+const send = (path, body) => {
   posted.push(path);
   if (path === "/api/pair") { if (body.code !== right) return Promise.reject(new Error("wrong")); paired = true; right = ""; }
   return Promise.resolve({paired});
@@ -556,6 +556,21 @@ class WalkThroughTests(unittest.TestCase):
         self.assertIn('"gone": True', (ENGINE / "modules" / "task" / "boardserve.py").read_text(encoding="utf-8"))
         self.assertIn("error.data.gone", (WEB / "desk.js").read_text(encoding="utf-8"))
         self.assertIn(".stopped-note,.unpaired-note{z-index:120;background:var(--pop)", (WEB / "ui.css").read_text(encoding="utf-8"))
+
+    def test_a_paired_browser_is_never_told_it_is_not_paired(self) -> None:
+        serve = (WEB / "serve.js").read_text(encoding="utf-8")
+        self.assertIn("const post = (path, body) => ready.then(() => send(path, body));", serve)  # a call of the page waits for the pairing
+        self.assertIn('const already = send("/api/status", {})', serve)  # the pairing itself cannot wait for itself
+        self.assertIn('if (paired) document.querySelector(".unpaired-note")?.remove();', serve)
+
+    def test_a_task_with_no_chat_has_grey_chat_buttons_and_a_new_chat_button(self) -> None:
+        common = (WEB / "common.js").read_text(encoding="utf-8")
+        self.assertIn('DOCK.start("harness-my-task", t("board.go.words", {task: name}), null, name);', common)
+        self.assertIn('chatGone(row) && ["", "no-chat", "no-session"].includes(row.chat.why || "")', common)
+        self.assertIn('nodes.push(goOnButton(row.name))', (WEB / "board.js").read_text(encoding="utf-8"))
+        self.assertIn('CHAT_ACTIONS.includes(item.action) && item.action !== "send"', common)
+        self.assertIn("chat: desk.chat, ask: desk.ask", (WEB / "desk.js").read_text(encoding="utf-8"))
+        self.assertIn("link.hidden = !data || !data.bound;", (WEB / "live.js").read_text(encoding="utf-8"))
 
     def test_a_narrow_window_keeps_things_on_the_page(self) -> None:
         desk = (WEB / "desk.css").read_text(encoding="utf-8")

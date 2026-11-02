@@ -150,6 +150,17 @@ const TALK = ["steer", "stop"];  // said to the agent while it works: the one th
 const isHot = (row, item) => Boolean(row.waiting) && !CONTROLS.includes(item.action) && item.action !== "review dismiss";
 
 // The button of one action ({action, command}) of a task row: it acts when the board server runs that action, else it copies the command.
+// A served task with no chat to talk to: the chat buttons are grey with the reason, and with VS Code up a button beside them makes a new chat that picks the task up.
+const chatGone = (row) => typeof SERVE !== "undefined" && Boolean(row.chat) && !row.chat.bound;
+const chatNew = (row) => chatGone(row) && ["", "no-chat", "no-session"].includes(row.chat.why || "");
+function chatGoOn(name) {
+  DOCK.start("harness-my-task", t("board.go.words", {task: name}), null, name);
+}
+function goOnButton(name, extra) {
+  const button = h("button", {class: "act hot live chat-act" + (extra ? " " + extra : ""), type: "button"}, t("board.go.new"));
+  button.addEventListener("click", () => chatGoOn(name));
+  return button;
+}
 function actionButton(row, item, extra) {
   const label = t("board.action." + item.action.replace(" ", "-"));
   const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page
@@ -159,6 +170,11 @@ function actionButton(row, item, extra) {
   const locked = typeof SERVE !== "undefined" && row.state === "working" && item.action !== "archive" && !TALK.includes(item.action);
   const button = h("button", {class: "act" + (CHAT_ACTIONS.includes(item.action) ? " chat-act" : "") + (hot ? " hot" : "") + (live ? " live" : "") + (locked ? " locked" : "") + (extra ? " " + extra : ""), type: "button", title: locked ? t("board.action.busy") : live ? "" : item.command, "data-label": label}, label);
   if (locked) button.disabled = true;
+  if (chatGone(row) && CHAT_ACTIONS.includes(item.action) && item.action !== "send") {  // Send stays: its panel lets the person copy the message
+    button.disabled = true;
+    button.classList.remove("hot");  // it asks for nothing now, and the button beside it is the one to press
+    button.title = t("board.vs.why." + (row.chat.why || "no-chat"));
+  }
   button.addEventListener("click", () => (locked ? null : live ? SERVE.act(button, row, item) : copyCommand(button, item.command)));
   return button;
 }

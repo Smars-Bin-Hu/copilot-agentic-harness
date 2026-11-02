@@ -23,7 +23,7 @@ def fresh_path() -> str:
         return windows_path() or os.environ.get("PATH", "")
     shell = os.environ.get("SHELL") or "/bin/sh"
     try:
-        done = subprocess.run([shell, "-lic", f'printf "{MARK}%s" "$PATH"'], capture_output=True, timeout=SHELL_WAIT, stdin=subprocess.DEVNULL, check=False)
+        done = subprocess.run([shell, "-lic", f'printf "{MARK}%s" "$PATH"'], capture_output=True, timeout=SHELL_WAIT, stdin=subprocess.DEVNULL, check=False, start_new_session=True)  # its own session: an interactive shell takes the terminal, and the board in it would stop
     except (OSError, subprocess.SubprocessError):
         return os.environ.get("PATH", "")
     text = done.stdout.decode("utf-8", errors="replace")

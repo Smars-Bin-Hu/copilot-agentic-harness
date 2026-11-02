@@ -576,7 +576,8 @@ class VsLink:
         stub = {"resource": resource, "provider": ahp.LOCAL_PROVIDER, "title": "", "status": ahp.IN_PROGRESS, "defaultChat": chat, "chats": [{"resource": chat}],
                 "workingDirectories": [ahp.folder_uri(self.root)], "modifiedAt": ahp.utc_stamp()}
         with self.lock:
-            self.created.append(made)  # before the message: a chat that was made is never lost track of
+            if made["name"]:  # a chat with no task (a one-click skill) has nothing to bind
+                self.created.append(made)  # before the message: a chat that was made is never lost track of
             self.expect[resource] = {"stub": stub, "until": time.monotonic() + EXPECT_FOR}  # the host lists it only once the first turn runs: until then the cache holds the stub
             self.chats[chat] = held
             self.sess[resource] = {"channel": resource, "state": ahp.trimmed_session(state), "seen": {}}

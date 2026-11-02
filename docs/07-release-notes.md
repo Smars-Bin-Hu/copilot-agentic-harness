@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.61 (2026-11-01)
+
+### Added
+
+- A question mark at the bottom right: ask how the harness works, or start the deep course or the first lesson. The board opens a new chat in VS Code, after showing the whole message. An empty board has **Take the 20-minute lesson**.
+
+### Changed
+
+- Get ready's look at the PATH runs in its own session, so an interactive shell no longer stops the board in its terminal.
+
 ## 1.6.60 (2026-11-01)
 
 ### Added

@@ -60,6 +60,7 @@ from core import reinstall, setup as core_setup
 
 from . import chatrounds
 from . import setupjob
+from . import skillsend
 from . import taskrun
 from . import wallpaper
 from . import autorun, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
@@ -578,6 +579,29 @@ class Board:
             self.ready.reopen = False
         return dict(found, reopen=self.ready.reopen)
 
+    def skill(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """A one-click skill (`skillsend.py`): `step` preview or act. The message is made here, each time, from the skill name and the words."""
+        step = str(data.get("step", ""))
+        text = skillsend.message(self.root, data)
+        why = self.link.create_blocked()
+        if step == "preview":
+            return {"text": text, "blocked": say(f"create.refused.{why}") if why else ""}
+        if step != "act":
+            raise CommandError(say("serve.refused.request"))
+        if why:
+            raise CommandError(say(f"create.refused.{why}"))
+        try:
+            listed = {item["id"] for item in self.link.model_list()}
+            wanted = str(data.get("model") or "")
+            done = self.link.create(dict(skillsend.plan(str(data.get("lang") or "en")), model={"id": wanted} if wanted in listed else None), text)
+        except vslink.Refused as error:
+            raise CommandError(say(f"create.refused.{error.why}")) from None
+        except Exception as error:  # noqa: BLE001 - the name of the error only, never its text
+            raise CommandError(say("create.refused.host", error=type(error).__name__)) from None
+        skillsend.record(self.root, str(data.get("skill")), "chat", done)
+        self.link.open_window()
+        return {"sent": True}
+
     def run(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """The Run button (`taskrun.py`). `op`: start, read, stop or latest (the run of a task under way, for a page opened meanwhile). A paired browser only."""
         op = str(data.get("op", ""))
@@ -1062,6 +1086,16 @@ def handler_for(board: Board) -> type:
                 except ValueError as error:  # a field not right: told on the page, nothing written
                     return self.answer(409, {"error": str(error)})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/skill":  # one click starts a chat with a skill: the paired browser only, and the page has shown the whole message
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.skill(data)
+                    if str(data.get("step", "")) == "act":
+                        print(say("serve.did", action="skill " + str(data.get("skill")), task="-"), flush=True)
+                    return self.answer(200, {"result": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown in the dialog
                     return self.answer(409, {"error": str(error)})
             if path == "/api/language":  # the language of the harness (settings panel): the paired browser only; it writes the person's own `user.override.json`
                 if not board.paired(self.token()):

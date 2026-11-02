@@ -119,7 +119,8 @@ const DOCK = (function () {
   const COMPANY_EVERY = 120000;  // ms
   const COMPANY_LINES = 6;  // lines of the tip
   let drift = null;
-  const changeWord = (row) => t("dock.company." + row.change) + " " + row.path;
+  const CHANGES = {add: "dock.company.add", change: "dock.company.change", remove: "dock.company.remove"};
+  const changeWord = (row) => t(CHANGES[row.change]) + " " + row.path;
   function showDrift(found) {
     drift = found && found.found && !found.in_sync ? found : null;
     const book = document.querySelector(".dock-book");

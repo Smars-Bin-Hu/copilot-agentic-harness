@@ -157,18 +157,18 @@ If you'd rather not read docs, the board and the lessons above are enough.
 
 | Doc | What you will find |
 | --- | --- |
-| [00 Overview](docs/00-overview.md) | **Read this first.** The problem, the task way of working, the board, the Intake, Test and Review pages in pictures, how it is built, and what is not solved yet |
-| [01 Quickstart](docs/01-quickstart.md) | **Run it by hand.** Requirements, setting up the `harness` short command, the `doctor` self-check, a first task, and what to say day to day |
-| [02 Features](docs/02-features.md) | **What it can do.** Tasks, the gate, the two approvals, independent checks with `[review]=n`, logs and reports |
-| [03 Configuration](docs/03-configure.md) | **Plug in your own material.** Overrides, target repositories, the knowledge base, domain skills, choosing a model |
-| [04 Reference](docs/04-reference.md) | **For lookup.** All commands, policy fields, task file templates and hook events |
-| [05 Design](docs/05-design.md) | **Why it is built this way.** The layers, and which work goes to code and which to the model |
-| [06 Cost](docs/06-cost-optimization.md) | **How it saves time and money**, and where it is still expensive |
-| [07 Release notes](docs/07-release-notes.md) | **What changed in each version.** Additions, changes and retirements |
-| [08 Knowledge base](docs/08-knowledge-base.md) | **Build it from your code and keep it true.** The idea, the steps, how you know the map is right, what you can change |
-| [09 Preparing an intake](docs/09-intake.md) | **Business documents as files the agent can read.** Word and Excel to Markdown and CSV without AI, `INTAKE.md`, trimming, pasting a table, the review of the requirement |
-| [10 Skills](docs/10-skills.md) | **Which skill is for what.** All 32 skills sorted by who uses them: the ones you start, the ones the agent picks, the knowledge base ones |
-| [11 Tool calling check](docs/11-tool-calling-check.md) | **Before the agent reaches outside systems.** A probe folder and a list of checks for your work computer: do hooks run, can an MCP server start, do MCP, extension and terminal calls reach a hook, can a hook refuse them |
+| [00 Overview](docs/00-overview.md) | [**Read this first.**](docs/00-overview.md) The problem, the task way of working, the board, the Intake, Test and Review pages in pictures, how it is built, and what is not solved yet |
+| [01 Quickstart](docs/01-quickstart.md) | [**Run it by hand.**](docs/01-quickstart.md) Requirements, setting up the `harness` short command, the `doctor` self-check, a first task, and what to say day to day |
+| [02 Features](docs/02-features.md) | [**What it can do.**](docs/02-features.md) Tasks, the gate, the two approvals, independent checks with `[review]=n`, logs and reports |
+| [03 Configuration](docs/03-configure.md) | [**Plug in your own material.**](docs/03-configure.md) Overrides, target repositories, the knowledge base, domain skills, choosing a model |
+| [04 Reference](docs/04-reference.md) | [**For lookup.**](docs/04-reference.md) All commands, policy fields, task file templates and hook events |
+| [05 Design](docs/05-design.md) | [**Why it is built this way.**](docs/05-design.md) The layers, and which work goes to code and which to the model |
+| [06 Cost](docs/06-cost-optimization.md) | [**How it saves time and money**](docs/06-cost-optimization.md), and where it is still expensive |
+| [07 Release notes](docs/07-release-notes.md) | [**What changed in each version.**](docs/07-release-notes.md) Additions, changes and retirements |
+| [08 Knowledge base](docs/08-knowledge-base.md) | [**Build it from your code and keep it true.**](docs/08-knowledge-base.md) The idea, the steps, how you know the map is right, what you can change |
+| [09 Preparing an intake](docs/09-intake.md) | [**Business documents as files the agent can read.**](docs/09-intake.md) Word and Excel to Markdown and CSV without AI, `INTAKE.md`, trimming, pasting a table, the review of the requirement |
+| [10 Skills](docs/10-skills.md) | [**Which skill is for what.**](docs/10-skills.md) All 32 skills sorted by who uses them: the ones you start, the ones the agent picks, the knowledge base ones |
+| [11 Tool calling check](docs/11-tool-calling-check.md) | [**Before the agent reaches outside systems.**](docs/11-tool-calling-check.md) A probe folder and a list of checks for your work computer: do hooks run, can an MCP server start, do MCP, extension and terminal calls reach a hook, can a hook refuse them |
 
 ## Directory layout
 

@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.64 (2026-11-01)
+
+### Added
+
+- The reply panel has a row of skills that work on a task. A click puts the command in the box; you press Send.
+- New task has **Ask me first**.
+
 ## 1.6.63 (2026-11-01)
 
 ### Added

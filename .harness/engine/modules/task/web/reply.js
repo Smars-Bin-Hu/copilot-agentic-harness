@@ -51,9 +51,24 @@ const REPLY = (function () {
   const kbd = h("kbd", null, (MAC ? "⌘" : "Ctrl") + " ↵");
   const save = h("button", {type: "button", class: "act", title: t("desk.reply.draft.tip")}, t("desk.reply.draft"));
   const go = h("button", {type: "button", class: "act hot live big"}, t("desk.reply.send"));
+  // The skills that work on this task (1.6.64): a click puts the slash command in the box, and the person presses Send. Nothing goes by itself.
+  const skillRow = h("div", {class: "rp-skills", hidden: ""});
+  function fillSkills() {
+    if (skillRow.dataset.done) return;
+    skillRow.dataset.done = "1";
+    SERVE.post("/api/skill", {step: "list"}).then((data) => {
+      const items = data.result.skills.filter((item) => item.opens === "reply" && item.place.includes("task"));
+      skillRow.replaceChildren(...items.map((item) => {
+        const chip = h("button", {type: "button", class: "chip", title: item.about}, item.label);
+        chip.addEventListener("click", () => { box.value = "/" + item.name + " " + box.value; box.dispatchEvent(new Event("input", {bubbles: true})); box.focus(); });
+        return chip;
+      }));
+      skillRow.hidden = !items.length;
+    }, () => { delete skillRow.dataset.done; });
+  }
   const panel = h("div", {class: "rp", role: "dialog", "aria-label": t("desk.reply.title"), hidden: ""},
     h("div", {class: "rp-h"}, h("b", null, t("desk.reply.title")), close), box, files.tray,
-    h("div", {class: "rp-lang"}, files.attach, files.picker, h("span", {class: "sub"}, t("desk.send.lang")), h("span", {class: "chips"}, chips)),
+    skillRow, h("div", {class: "rp-lang"}, files.attach, files.picker, h("span", {class: "sub"}, t("desk.send.lang")), h("span", {class: "chips"}, chips)),
     settingsSlot, draftBox, whole, said, h("div", {class: "rp-f"}, hint, kbd, save, go));
   document.body.append(h("div", {class: "rp-bar"}, pill, halt), panel);
 
@@ -146,6 +161,7 @@ const REPLY = (function () {
   }
 
   function open() {
+    fillSkills();
     if (!info.show || mine.open) return;
     mine.open = true;
     panel.hidden = false;

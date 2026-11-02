@@ -191,6 +191,8 @@ const CHAT = (function () {
     const model = h("select", {class: "send-body"});
     const thinking = h("select", {class: "send-body"});
     const preview = h("pre", {class: "send-preview"}, "...");
+    const grill = h("input", {type: "checkbox"});  // Ask me first: the opening of the task, not a thing of its own
+    grill.addEventListener("change", () => refresh());
     const problem = h("div", {class: "sub"});  // what is not right yet: shown quietly while the person types
     const blocked = h("div", {class: "bad"});
     const kbBox = h("div", {class: "new-kb"});  // the knowledge base domains a task may be about: ticks, and "None" (a choice of its own). Drawn when the options come.
@@ -209,12 +211,12 @@ const CHAT = (function () {
           h("div", {class: "new-field"}, h("span", {class: "sub label"}, t("board.new.kb")), kbBox),
           field(t("board.new.text"), text), h("div", {class: "new-files"}, files.attach, files.picker, files.tray),
           h("div", {class: "new-grid three"}, field(t("board.new.model"), model), field(t("board.new.thinking"), thinking), field(t("board.new.lang"), h("div", {class: "chips"}, langChips))),
-          h("p", {class: "sub"}, t("board.new.fixed"))),
+          h("label", {class: "new-grill"}, grill, h("span", null, t("board.new.grill"))), h("p", {class: "sub"}, t("board.new.fixed"))),
         h("div", {class: "new-side"}, h("div", {class: "sub label"}, t("board.new.first")), h("p", {class: "sub"}, t("board.new.first.hint")), preview)),  // beside the fields, so a low window need not scroll to read it
       h("div", {class: "new-actions"}, problem, said, h("div", {class: "row send-actions"}, go, no))]);  // the bar stays in view: the reason the button is dim is read there, not below the long message
     view.box.classList.add("new-wide");
     files.zone(view.box);
-    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: text.value, model: model.value, thinking: thinking.value, lang: state.lang, domains: Array.from(state.domains)});
+    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: grill.checked ? text.value.trimEnd() + "\n\nFirst use the skill generic-grill-me: ask me what is unclear." : text.value, model: model.value, thinking: thinking.value, lang: state.lang, domains: Array.from(state.domains)});
     // The knowledge base: the domains this repository's knowledge bases have. None ticked is a valid choice. When there are no domains the box says so and the dialog goes on.
     function drawKb() {
       const list = state.domainList;

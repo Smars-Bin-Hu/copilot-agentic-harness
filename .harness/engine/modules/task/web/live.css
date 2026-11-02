@@ -163,3 +163,4 @@ html.lite .rp{-webkit-backdrop-filter:none;backdrop-filter:none;background:var(-
 /* motion: off for people who asked for less of it (Lite is off in shell.css) */
 @media (prefers-reduced-motion:reduce){.lv *,.lv *::before,.rp,.rp-pill{animation:none!important;transition:none!important}.fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}.caret{opacity:1}}
 html.lite .fi.is-run .in{background:none;-webkit-text-fill-color:currentColor}
+.rp-skills{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.rp-skills[hidden]{display:none}.rp-skills .chip{max-width:100%}

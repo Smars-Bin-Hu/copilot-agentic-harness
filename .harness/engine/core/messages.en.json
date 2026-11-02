@@ -1965,6 +1965,7 @@
   "board.enter.ready": "Harness ready",
   "board.enter.notready": "Not ready",
   "board.enter.go": "Enter",
+  "board.new.grill": "Ask me first: the agent asks what is unclear before it starts",
   "dock.kb": "Knowledge base",
   "dock.kb.overview": "Overview",
   "dock.kb.domains": "{n} domains",

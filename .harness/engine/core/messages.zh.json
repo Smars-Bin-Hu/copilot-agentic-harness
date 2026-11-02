@@ -1965,6 +1965,7 @@
   "board.enter.ready": "Harness 就绪",
   "board.enter.notready": "还没就绪",
   "board.enter.go": "进入",
+  "board.new.grill": "先问我：agent 开始前先问清不明确的地方",
   "dock.kb": "知识库",
   "dock.kb.overview": "概览",
   "dock.kb.domains": "{n} 个 domain",

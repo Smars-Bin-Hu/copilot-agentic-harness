@@ -287,6 +287,8 @@ Under the stages, **what waits for you** comes first, each button with a line on
 
 ### The tabs
 
+**Live** starts with the earlier rounds of the chat: open one to read the prompt and all the agent wrote for it ([what is kept](04-reference.md#earlier-rounds)). A closed task has them too.
+
 A shell code block on the page has **Ask agent** (the chat runs it; the gate holds) and **Run** (you run it at once; the gate does not check it; [how](04-reference.md#run-from-the-board)).
 
 The page shows the tabs its kind needs. They are in groups: **Live**, **Overview** (Overview, Requirement, Intake, Design, RCA, Plan, TODO), **Deliver** (Changes, Test, Review), **Records** (Log, Task Record, Agent actions) and **Files** (Docs, Files). The open group has a second row; a group with one tab goes straight to it; a `!` on a tab (a requirement or plan that waits for you) shows on its group. The page remembers the last tab of each group.

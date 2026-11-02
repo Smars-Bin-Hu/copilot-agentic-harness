@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.55 (2026-11-01)
+
+### Added
+
+- **Earlier rounds** on the Live tab: one line for each prompt, opened to read the prompt and all the agent wrote for it, also the text the chat window folds away. Scroll up for older rounds. It reads Copilot's own record, so VS Code may be closed. Thinking and tool output stay in VS Code.
+- When a task closes, its rounds are saved in `.task/transcript.jsonl`. That file is deleted `transcript.keep_days` (30) days after the task is archived; 0 keeps it. The audit files stay.
+
+### Changed
+
+- The VS Code banner says what is wrong once, not twice. New task gives the model more room.
+
 ## 1.6.54 (2026-11-01)
 
 ### Changed

@@ -30,12 +30,12 @@ Move the rules to INBOUND.
 
 - [T1] the patch has exactly the ledger cells
 
-### Shown by a run the user does before the write-back
+### Shown by a run the user does before the promote
 
 - [R1] DEV: before/after counts match PROD
 - [R2] `dev`: PSCM shows INBOUND
 
-### Shown after the write-back
+### Shown after the promote
 
 - [A1] UAT: the monthly report shows INBOUND
 

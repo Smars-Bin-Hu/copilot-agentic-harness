@@ -59,6 +59,7 @@ const LIVE = (function () {
   const lifeLabel = h("span", {class: "lt-l"}), lifeSep = h("span", {class: "lt-s"}, " \u00b7 "), lifeRun = h("b", {class: "lt-r"}, h("span", {class: "st-time"}));
   const life = h("div", {class: "lv-life calm"}, robot(), h("span", {class: "eq", "aria-hidden": "true"}, h("i"), h("i"), h("i"), h("i")), h("span", {class: "lt"}, lifeLabel, lifeSep, lifeRun));
   const root = h("section", {class: "lv", hidden: ""}, head, stale, earlier, feed, calm, life);
+  const roundsHere = (box) => { if (box.parentNode !== root) root.insertBefore(box, stale); };
 
   link.addEventListener("click", () => {
     link.disabled = true;
@@ -304,6 +305,7 @@ const LIVE = (function () {
         st.nodes.clear();
         show(null);
       }
+      if (typeof ROUNDS !== "undefined") { if (!info.off) roundsHere(ROUNDS.node); ROUNDS.follow(info.task); }
       st.chat = info.chat || null;
       st.off = info.off || "";
       const nothing = st.chat && !st.chat.bound ? st.chat.why || "" : "";

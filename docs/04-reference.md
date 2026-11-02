@@ -137,6 +137,15 @@ This is how a served board (`task board --serve`) talks to the chats of VS Code.
 
 **Credits.** The usage Copilot records itself (what older text called AIU) is called **Credits** on the board, in the totals and in the task report.
 
+### Earlier rounds
+
+The Live tab lists each prompt of the chat, oldest first. Scroll up for older rounds, and open one to read it. `/api/rounds` takes a paired browser only.
+
+- **Kept:** the prompt, all the text the agent wrote in that round, the names of the tools. **Left out:** thinking, tool output and what a subagent wrote. Those stay in VS Code.
+- **Where it comes from:** Copilot's own `events.jsonl`, read only, so it works with VS Code closed. The harness never deletes Copilot's files.
+- **When a task closes** the rounds are saved in `.task/transcript.jsonl`, and a closed task reads that file.
+- **After an archive** the file is deleted once `transcript.keep_days` in `task.json` has passed (30; 0 keeps it). This runs at each archive and when the board starts, for the folder in `archive_to`. The other files of the task stay.
+
 ### Run from the board
 
 A shell code block on a task page of an open task has **Ask agent** and **Run**. A block in another language has only **Copy**.
@@ -183,6 +192,7 @@ The defaults are in `.harness/policies/<file>`; overrides go in the `.override.j
 | task.json | `review.extra_checks` | For a task with `[review]=n`, how many checks beyond the n are possible. When they are used up, you have to decide in the terminal |
 | task.json | `review.max_n` | The largest n that `[review]=n` takes |
 | task.json | `review.free_invalid` | How many invalid FAILs a round of the task gets back (default 2). A FAIL is invalid when the script drops all its findings: a finding with no `file:line`, one whose file or line does not exist, one whose basis is only `[A…]` items of `REQ.md` (checked after the write-back) |
+| task.json | `transcript.keep_days` | How many days after the archive a task's saved chat is kept (0: always) |
 | task.json | `snapshots.keep_days` | How many days the snapshots at the gates are kept |
 | task.json | `snapshots.max_file_mb` | For a file above this size, a snapshot records only the sha256 and does not copy it |
 | task.json | `autorun.max_steps` | How many times at most a hook pushes the agent on during autorun |

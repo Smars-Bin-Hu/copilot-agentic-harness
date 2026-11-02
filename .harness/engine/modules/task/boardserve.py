@@ -24,6 +24,7 @@ Who may do what:
 - New task (1.6, B73): `/api/create` (paired POST only; `step` options, preview or act) makes a chat in VS Code for a task the agent opens (`chatnew` checks every field again, `vslink.create` does it). It fails
   with a clear reason when VS Code is not ready; nothing is made then.
 - Run (1.6.50): `/api/run` (paired POST only) starts, reads and stops a command of the person (`taskrun.py`).
+- Rounds (1.6.55): `/api/rounds` (paired POST only) lists the rounds of a task's chat and gives one whole (`chatrounds.py`).
 - Confirm and answer (1.6, B75): `/api/confirm` (allow or deny one tool call) and `/api/answer` (answer one question) are paired POSTs only. The page names the item (`id`, the `toolCallId` or request id,
   and the `digest` of what it showed); the link's thread reads the host again and refuses when the item is gone or changed (`chatask`). Each decision goes to the history and `.task/sent.jsonl`, the command
   redacted and cut.
@@ -54,6 +55,7 @@ from urllib.parse import quote, unquote, urlparse
 from core import config, messages, registry, state, tasks, user
 from core.paths import board_serve_file, utc_now
 
+from . import chatrounds
 from . import taskrun
 from . import wallpaper
 from . import autorun, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
@@ -994,6 +996,19 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
+            if path == "/api/rounds":  # the earlier rounds of the chat: what the person typed and what the agent wrote, so the paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    row = taskdesk.row_of(board.root, task_ops.name_of(str(data.get("task", ""))))  # Live knows a task by its folder
+                    if row is None:
+                        raise CommandError(say("desk.unknown", name=str(data.get("task", ""))))
+                    if str(data.get("op", "")) == "list":
+                        return self.answer(200, {"result": {"rounds": chatrounds.listing(board.root, row["task"])}})
+                    found = chatrounds.one(board.root, row["task"], data.get("n"))
+                    return self.answer(200, {"result": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
             if path == "/api/language":  # the language of the harness (settings panel): the paired browser only; it writes the person's own `user.override.json`
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
@@ -1112,6 +1127,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         server = http.server.ThreadingHTTPServer(("127.0.0.1", board.port), handler_for(board))
     except OSError as error:
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
+    taskarchive.prune_transcripts(root, taskarchive.remembered(root))
     link.start()  # the thread only; the board does not wait for VS Code
     path = board_serve_file(root)
     path.parent.mkdir(parents=True, exist_ok=True)

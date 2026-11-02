@@ -340,6 +340,12 @@ def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "",
     if left:
         result["todo_not_ticked"] = len(left)
     try:
+        from . import chatrounds  # it needs this module
+
+        result["transcript_rounds"] = chatrounds.save(root, task)
+    except Exception:  # noqa: BLE001 - the task is closed; the rounds are still in Copilot's own record
+        result["transcript_rounds"] = 0
+    try:
         from . import task_report  # it needs this module
 
         result["report"] = task_report.generate(root, task)["report"]

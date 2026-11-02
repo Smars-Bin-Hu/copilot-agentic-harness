@@ -42,6 +42,7 @@ POLICY_SCHEMA = {
             },
         },
         "commit": {"type": "object", "properties": {"coauthor": {"type": "string"}}},
+        "transcript": {"type": "object", "properties": {"keep_days": {"type": "number", "minimum": 0}}},
         "snapshots": {
             "type": "object",
             "properties": {"keep_days": {"type": "number", "minimum": 0}, "max_file_mb": {"type": "number", "minimum": 0}},

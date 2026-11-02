@@ -309,7 +309,7 @@ const SHELL = (function () {
     root.classList.toggle("vs-down", down);
     if (status.ready && !wasUp) { wasUp = true; tabKeep.set("harness.vs.up", "1"); }
     const show = down && wasUp && status.why !== "off";
-    const text = show ? t("board.shell.vs.down") + " " + t("board.vs.why." + (status.why || "lost")) : "";
+    const text = show ? t("board.shell.vs.down") + (status.why && status.why !== "lost" ? " " + t("board.vs.why." + status.why) : "") : "";
     if (banner) {
       if (bannerText.textContent !== text) bannerText.textContent = text;
       if (banner.hidden === show) banner.hidden = !show;

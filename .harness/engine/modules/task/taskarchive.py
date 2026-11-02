@@ -9,6 +9,7 @@ one whose promote stopped halfway or whose autorun is on. All are checked before
 
 Each task folder moves whole to `DIR/<name>/`, its report folder (`.workspace/reports/tasks/<name>/`) to
 `DIR/<name>/_report/`. `DIR/ARCHIVE.md` (for people) and `DIR/archive.json` (for scripts) get one entry per task.
+The saved chat of a task (`.task/transcript.jsonl`) is deleted `transcript.keep_days` after its archive; nothing else in DIR is.
 `--remember` keeps DIR in `user.override.json` (`archive_to`), a file of this computer only, that git does not keep.
 """
 
@@ -16,20 +17,22 @@ from __future__ import annotations
 
 import json
 import shutil
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, messages, render, state, tasks
+from core import config, copilot_events, messages, render, state, tasks
 from core.paths import utc_now
 from core.registry import harness_version
 
-from . import common, task as task_ops
+from . import chatrounds, common, task as task_ops
 from .common import CommandError
 
 INDEX_MD = "ARCHIVE.md"
 INDEX_JSON = "archive.json"
 REPORT_FOLDER = "_report"
 SETTING = "archive_to"
+KEEP_DAYS = 30  # `transcript.keep_days` of task.json
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -147,7 +150,29 @@ def archive(root: Path, names: List[str], everything: bool = False, to: str = ""
         write_index(folder, known + entries, [entry])  # after each move: a later failure leaves no task out of the index
     if keep:
         remember(root, folder)
+    prune_transcripts(root, str(folder))
     return {"archived": [entry["name"] for entry in entries], "to": str(folder), "remembered": keep, "next": say("archive.next.done", index=str(folder / INDEX_MD))}
+
+
+def prune_transcripts(root: Path, folder: str, now: Optional[float] = None) -> List[str]:
+    """Delete the saved chat of the tasks archived in `folder` more than `transcript.keep_days` ago (0: never). The audit files stay. Never raises: it must not stop an archive or the board."""
+    removed: List[str] = []
+    try:
+        days = float((config.policy_or_empty(root, "task").get("transcript") or {}).get("keep_days", KEEP_DAYS))
+        if not folder or days <= 0:
+            return removed
+        limit = (time.time() if now is None else now) - days * 86400
+        place = Path(folder)
+        for entry in read_index(place):
+            at = copilot_events.seconds(entry.get("archived_at"))
+            name = str(entry.get("name") or "")
+            path = place / name / tasks.STATE_DIR / chatrounds.FILE_NAME
+            if at and at < limit and name and "/" not in name and "\\" not in name and name != ".." and path.is_file():
+                path.unlink()
+                removed.append(name)
+    except (OSError, ValueError, TypeError, CommandError):
+        pass
+    return removed
 
 
 def read_index(folder: Path) -> List[Dict[str, Any]]:

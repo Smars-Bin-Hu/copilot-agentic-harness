@@ -21,11 +21,11 @@
 
 - [T1] <checked by the reviewer in the task files>
 
-### Shown by a run the user does before the write-back
+### Shown by a run the user does before the promote
 
 - [R1] <ENV>: <what the user runs and what the result must show; the result is saved in RUNS/<ENV>/>
 
-### Shown after the write-back
+### Shown after the promote
 
 - [A1] <checked in the environments after deployment (generic-test-guide); the reviewer does not judge it>
 

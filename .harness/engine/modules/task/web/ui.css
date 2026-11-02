@@ -53,7 +53,7 @@ noscript{color:var(--bad)}
 .shift-said:not(:empty){display:block}
 .pairing{display:flex;align-items:center;gap:8px;margin:12px 0 0;width:fit-content;font-size:12px;color:var(--soft)}
 .pairing::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--good-dot)}
-.pairing.good{color:var(--soft)}
+.pairing.good{color:var(--soft)}.pairing:not(.good)::before{background:var(--wait,var(--bad))}
 .stopped-note,.unpaired-note{z-index:120;background:var(--pop);color:var(--hot);border-bottom:1px solid var(--hot-line);backdrop-filter:none}  /* over the sticky header, and not see-through: it is why nothing moves any more */
 .stopped-note{color:var(--bad);border-bottom-color:var(--bad-line)}
 

@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.54 (2026-11-01)
+
+### Changed
+
+- The template of `REQ.md` says promote in its two "Done when" headings.
+- A task card with many domains scrolls inside the window. The line of a browser that is not paired no longer has a green dot.
+
 ## 1.6.53 (2026-11-01)
 
 ### Changed

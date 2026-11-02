@@ -82,3 +82,4 @@
 .st-wrap .st-s-stage{width:100px}.st-wrap .st-s-model{width:auto;max-width:130px}.st-wrap .st-s-todo,.st-wrap .st-s-run{width:auto}.st-wrap .st-s-run{overflow:visible}
 .lb-card .st-chip{max-width:130px}
 @media (prefers-reduced-motion:reduce){.st-live,.st-d,.st-d.seg,.st-ribbon .st-l::after{animation:none!important}}
+.st-card{max-height:calc(100vh - 24px);overflow:auto;overscroll-behavior:contain}

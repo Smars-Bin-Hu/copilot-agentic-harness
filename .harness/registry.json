@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.6.82",
+  "version": "1.6.83",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -18,6 +18,8 @@
       ".harness/policies/user.json",
       ".harness/bin/harness",
       ".harness/bin/harness.cmd",
+      ".harness/bin/harness.icns",
+      ".harness/bin/harness.ico",
       "Start Harness.command",
       "Start Harness.cmd",
       ".github/skills/harness-vscode-updates/",
@@ -34,6 +36,7 @@
       ".harness/tests/test_kbaudit.py",
       ".harness/tests/test_kbstatus.py",
       ".harness/tests/test_kbatlas.py",
+      ".harness/tests/test_starticon.py",
       ".harness/tests/test_reply.py",
       ".harness/INDEX.md",
       ".harness/registry.json",

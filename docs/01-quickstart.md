@@ -17,7 +17,7 @@ There are two ways to get the harness, both fine: `git clone`, or downloading th
 
 Every command is written `harness <command>`: in the docs, in the rules the agent receives, and in refusal reasons. So the terminal has to know `harness` first. This is done once.
 
-The quickest way: double-click `Start Harness.command` (macOS) or `Start Harness.cmd` (Windows) and press **Get ready**. Below is how to do it by hand.
+The quickest way: double-click `Start Harness.command` (macOS) or `Start Harness.cmd` (Windows) and press **Get ready**. The first start gives it the robot icon: on macOS the file itself changes; on Windows a `.cmd` cannot hold an icon, so a `Start Harness` shortcut with the icon appears beside it. Use either. Below is how to do it by hand.
 
 The launchers are in `.harness/bin/`: `harness` on macOS/Linux, `harness.cmd` on Windows. There is one thing to do: get it on PATH.
 

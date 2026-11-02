@@ -83,7 +83,8 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.harness/engine/modules/task/health.py`, `tasktrace.py` | The health warning on the board and the Agent actions tab of a task page. `health.py`: four rules (stuck, repeated command, idle turns, cost) from the tail of the hook log and Copilot's `events.jsonl`, never the conversation; thresholds in `policies/task.json` `health`. `tasktrace.py`: the tool calls and gate decisions of the session, and those of its subagents (found in Copilot's record, read from their own hook logs). A finished call (PostToolUse) records `target.paths`, and a terminal call a short `cmd` hash, in the hook log |
 | `.harness/engine/` | `hook.py` (the hook entry), `cli.py` (the command entry), `modules/` (task, gate, observe, evalcheck), `adapters/` (runtime differences), `core/messages.<language>.json` (every text the engine prints) |
 | `.vscode/` | `settings.json` (turns on hooks, `AGENTS.md` and instruction files in Copilot Chat) and `mcp.json` (MCP servers; none shipped) |
-| `.harness/bin/` | The launchers of the short command: `harness` (macOS/Linux), `harness.cmd` (Windows) |
+| `.harness/bin/` | The launchers of the short command: `harness` (macOS/Linux), `harness.cmd` (Windows); `harness.icns`, `harness.ico`: the icon of Start Harness |
+| `.harness/engine/core/starticon.py` | The icon of Start Harness (1.6.83): the first start puts it on `Start Harness.command` (macOS) or makes the shortcut `Start Harness.lnk` (Windows), which is not in git |
 | `.harness/eval/` | Fixed scenarios (`scenarios/`) and recorded samples of real hook input (`fixtures/`) |
 | `.harness/tests/` | All the tests: `python -m unittest discover -s .harness/tests` (`python3` on macOS/Linux) |
 

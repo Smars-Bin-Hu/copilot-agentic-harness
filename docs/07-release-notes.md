@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.83 (2026-11-02)
+
+### Added
+
+- **Start Harness has the robot icon**, from the first start on. On macOS it goes on `Start Harness.command`. On Windows a `.cmd` cannot hold an icon, so a shortcut `Start Harness.lnk` with the icon appears beside it; it is made again when the folder moves. Neither is in git, so a fresh copy shows the plain file until its first start. When the icon cannot be made, nothing else changes.
+
 ## 1.6.82 (2026-11-02)
 
 The knowledge base window, the question mark and the setup window were tested with a simulated knowledge base and repositories, changed over and over.

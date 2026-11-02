@@ -30,6 +30,9 @@ __pycache__/
 # OS
 .DS_Store
 
+# The Start Harness shortcut of this Windows computer (it holds full paths)
+/Start Harness.lnk
+
 # Logs / env
 *.log
 .env

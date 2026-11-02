@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 from typing import Any, Dict
 
-from core import approval, render, targets, tasks
+from core import approval, render, starticon, targets, tasks
 from core.paths import repo_root
 
 from . import autorun, boardserve, common, intake, kbsetup, taskarchive, refs, task, runrecord, task_report, taskboard, taskfork, tasklife, taskqueue, taskreview, tasksnap, testdefects, testrecord
@@ -92,6 +92,7 @@ def list_text(result: Dict[str, Any]) -> str:
 def cmd_board(args: argparse.Namespace) -> Dict[str, Any]:
     person = approval.is_person()
     if args.serve or (person and not args.once and args.refresh is None and not args.no_serve):  # a person gets the server by default
+        starticon.later(repo_root())
         return boardserve.serve(repo_root(), True, args.port)
     refresh = taskboard.refresh_seconds(args.refresh, args.once, person)
     if refresh > 0:

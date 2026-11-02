@@ -41,7 +41,7 @@ The gate is a hook module that checks before every tool call. It guards writes o
 
 | What it stops | Notes |
 | --- | --- |
-| Guardrail files | `.github/hooks/`, `.harness/engine/`, `.harness/policies/`, `.harness/bin/`, `.harness/registry.json`, `.harness/runtime/`, `.vscode/settings.json`, `LICENSE`, `NOTICE`. They cannot be changed, and an override cannot remove them. The one exception is a session in admin mode (see "admin" below) |
+| Guardrail files | `.github/hooks/`, `.harness/engine/`, `.harness/policies/`, `.harness/bin/`, `Start Harness.command`, `Start Harness.cmd`, `.harness/registry.json`, `.harness/runtime/`, `.vscode/settings.json`, `LICENSE`, `NOTICE`. They cannot be changed, and an override cannot remove them. The one exception is a session in admin mode (see "admin" below) |
 | Writes outside the task | A session with a task can write the task folder only. `DEV/` waits for you to approve the plan; `REQ/` and `REF/` cannot be written |
 | The working tree of a target repository | Files in a target repository cannot be changed directly; only promote writes them |
 | Files of the CLI | A task's `.task/`, `REVIEW/`, `SNAPSHOT/`, the two `.diff` files and the reports can be changed only by commands |
@@ -226,7 +226,7 @@ Ask in your own words; the agent picks the skill (it asks first for the ones mar
 | Move closed tasks out to an archive | `harness-task-archive` (asks first) |
 | Test in DEV, IST and UAT after the PR: a guide you read on the board, the results you bring back | `generic-test-guide` (asks first; the write-back message offers it) |
 | Carry your tasks, runtime and knowledge base to a new copy of the harness | `/harness-reinstall` (you run the copy in your terminal) |
-| Learn the harness | `/harness-rookie-quick-start`, `/harness-rookie-wondering`; setup: `/harness-rookie-get-me-ready` |
+| Learn the harness | `/harness-rookie-quick-start`, `/harness-rookie-wondering`; setup: Get ready on the board |
 
 ## The task page in the browser
 

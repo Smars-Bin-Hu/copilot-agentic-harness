@@ -90,7 +90,7 @@ This is the fallback, and it is a normal one. The point is that the agent gets a
 
 ## Python packages
 
-Word and Excel (`.xlsx`) files need nothing installed. Old `.xls` and PDF files need a Python package. Many companies need extra arguments to install a package (an internal index, a proxy). The harness never runs an install and never guesses the command: you tell it once. `/harness-rookie-get-me-ready` has you install both packages (`xlrd`, `pypdf`) during setup and `harness doctor` warns while one is missing. If the install command fails, ask your administrator and send them the error.
+Word and Excel (`.xlsx`) files need nothing installed. Old `.xls` and PDF files need a Python package. Many companies need extra arguments to install a package (an internal index, a proxy). The harness never runs an install and never guesses the command: you tell it once. The setup guide on the board shows how to install both packages (`xlrd`, `pypdf`) and `harness doctor` warns while one is missing. If the install command fails, ask your administrator and send them the error.
 
 - Ask your platform team for the approved command. Put it in `.harness/policies/tools.override.json`:
 
@@ -98,9 +98,9 @@ Word and Excel (`.xlsx`) files need nothing installed. Old `.xls` and PDF files 
 { "python": { "install_command": "python -m pip install --index-url https://pypi.example.com/simple --trusted-host pypi.example.com {package}" } }
 ```
 
-  `{package}` is where the package name goes. The skill `/harness-rookie-get-me-ready` asks for it.
+  `{package}` is where the package name goes. Get ready asks for it.
 - `harness task intake setup` lists each optional package, whether it is installed, and the exact command to run for the ones that are not. You run it; an agent cannot (the gate refuses package installs).
-- **Pin the Python once.** `harness` runs on the first `python3` of the PATH of the terminal that starts it, which can differ from terminal to terminal. Name the one to use in `tools.override.json`: `{ "python": { "interpreter": "/full/path/to/python3" } }` (the skill `/harness-rookie-get-me-ready` asks). A `harness` command that finds itself on another Python then starts again on that one, so the terminal and the board always agree. Start the install command with the same path.
+- **Pin the Python once.** `harness` runs on the first `python3` of the PATH of the terminal that starts it, which can differ from terminal to terminal. Name the one to use in `tools.override.json`: `{ "python": { "interpreter": "/full/path/to/python3" } }` (Get ready writes it). A `harness` command that finds itself on another Python then starts again on that one, so the terminal and the board always agree. Start the install command with the same path.
 - **Install into the Python the harness runs on.** `setup` prints which one it runs on (`python`) and which is pinned (`pinned`). A package installed into another Python is not found, and `setup` warns when the command names a different one. Some Pythons, such as Homebrew's, refuse a plain `pip install` ("externally managed"): use a virtual environment, or the extra argument your company approves. Two terminals can have different PATHs, so the board and the terminal you installed from should run on the same Python.
 
 ## After the files are in: talk to the agent

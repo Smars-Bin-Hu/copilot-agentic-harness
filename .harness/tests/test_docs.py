@@ -98,46 +98,6 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(len(names), 12, names)
 
 
-class InitializeSkillTests(unittest.TestCase):
-    """The CLI prints UTF-8 on a Windows pipe by itself. The skill only acts when that reads as garbage: it writes `native`."""
-
-    def steps(self) -> Dict[str, str]:
-        skill = text(REPO / ".github" / "skills" / "harness-rookie-get-me-ready" / "SKILL.md")
-        body = skill[skill.index("## Step-by-Step Workflows"):skill.index("## Gotchas")]
-        return {number: chunk for number, chunk in re.findall(r"^(\d)\. (.+?)(?=^\d\. |\Z)", body, re.M | re.S)}
-
-    def test_step_9_does_nothing_when_the_sample_line_reads_fine_and_writes_native_when_it_is_garbage(self) -> None:
-        check = self.steps()["9"]
-        self.assertIn("the sample line of Chinese", check)
-        self.assertIn("If you can read it, do nothing", check)
-        self.assertIn("If it is garbage, write `.harness/policies/cli.override.json` yourself", check)
-        self.assertIn("run `harness doctor` once more", check)
-
-    def test_step_8_does_not_ask_the_user_about_the_encoding(self) -> None:
-        step = self.steps()["8"]
-        self.assertIn("Do not ask the user about Chinese text", step)
-        self.assertNotIn("Two common ones", step)
-
-    def test_the_json_the_skill_tells_the_agent_to_write_is_what_doctor_accepts(self) -> None:
-        written = json.loads(re.search(r"`(\{\"output\": \{\"encoding\": \"native\"\}\})`", self.steps()["9"]).group(1))
-        sys.path.insert(0, str(ENGINE))
-        try:
-            from core import output
-        finally:
-            sys.path.remove(str(ENGINE))
-        self.assertEqual(written["output"]["encoding"], output.NATIVE)
-
-    def test_the_overrides_that_are_about_this_machine_are_ignored_by_git(self) -> None:
-        ignored = text(REPO / ".gitignore").splitlines()
-        for name in ("target", "user", "cli"):
-            self.assertIn(f".harness/policies/{name}.override.json", ignored, name)
-
-    def test_step_1_on_windows_checks_the_path_that_stays_and_not_only_the_one_of_this_window(self) -> None:
-        """Windows round, W13: VS Code kept a PATH the person had removed, and the skill said the command was set up."""
-        step = self.steps()["1"]
-        self.assertIn("(Get-Command harness).Source", step)
-        self.assertIn('[Environment]::GetEnvironmentVariable("Path", "User")', step)
-
 
 class RequirementConfirmedTests(unittest.TestCase):
     """Only the person fills in the "用户确认" line of REQ.md. Every file that speaks of it says the same."""
@@ -159,7 +119,7 @@ class ReadmeStructureTests(unittest.TestCase):
         self.assertTrue(readme.startswith("# GitHub Copilot Agentic Harness on VS Code\n"))
         self.assertEqual(re.findall(r"^## (.+)$", readme, re.M), ["What you get", "What it is", "Get started", "What it does", "See it", "What you must plug in", "Docs", "Directory layout", "License"])
         start = section(readme, "Get started")
-        for skill in ("harness-rookie-get-me-ready", "harness-rookie-quick-start", "harness-rookie-wondering"):
+        for skill in ("harness-rookie-quick-start", "harness-rookie-wondering"):
             self.assertIn(f"`/{skill}`", start, skill)
             self.assertTrue((REPO / ".github" / "skills" / skill / "SKILL.md").is_file(), skill)
         self.assertIn("What the harness does", section(readme, "What it does"))

@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.59 (2026-11-01)
+
+### Added
+
+- A big warning on the board while the copy lacks target repositories, domains, knowledge base instructions, company skills or code standards. Hover it for the list; a click opens the setup guide (`/setup`). It cannot be closed. "We have none" takes company skills or code standards off the list.
+- The setup guide explains each part from `docs/03-configure.md`, next to the form.
+
+### Retired
+
+- The skill `harness-rookie-get-me-ready`. Get ready and the setup guide on the board do all of it, with no agent. Its troubleshooting table is in `docs/03-configure.md`.
+
 ## 1.6.58 (2026-11-01)
 
 ### Added

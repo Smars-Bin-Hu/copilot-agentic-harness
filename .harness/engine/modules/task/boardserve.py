@@ -269,11 +269,11 @@ class Board:
         for row in result["tasks"]:  # the agent is at work in the chat: say something to it, or stop it
             if row.get("status") == "open" and (row.get("chat") or {}).get("state") == "busy" and "steer" in self.served:
                 row["actions"] = [item for item in row["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
-        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status()}
+        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "setup": core_setup.missing(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status()}
 
     def page(self) -> str:
         found = self.rows()
-        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"]}, self.refresh), hidden=found["hidden"])
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "setup": found["setup"]}, self.refresh), hidden=found["hidden"])
 
     def desk(self, name: str, trace_tree: bool = False) -> Dict[str, Any]:
         found = taskdesk.desk(self.root, name, self.served, trace_tree)  # the tree reads whole logs: only for a Trace tab that is open
@@ -559,6 +559,10 @@ class Board:
                 self.language_stamp = []
                 self.sync_language()
             return found
+        if step == "guide":
+            return core_setup.guide(self.root)
+        if step == "none":
+            return {"none": core_setup.declare(self.root, data.get("key"), data.get("on"))}
         if step == "older":
             return reinstall.run(self.root, str(data.get("path", "")), bool(data.get("apply")), True if data.get("apply") else None)
         if step != "state":

@@ -121,11 +121,35 @@
 
   const olderLink = h("button", {type: "button", class: "su-link"}, t("setup.older.title"));
   olderLink.addEventListener("click", older);
-  app.replaceChildren(h("div", {class: "su"}, h("h1", null, t("setup.title")), h("p", {class: "su-lead"}, t("setup.lead"), " ", olderLink), shortBox,
+  const first = new URLSearchParams(location.search).has("first");
+  const plain = (spans) => (spans || []).map((span) => (span.v !== undefined ? span.v : plain(span.c))).join("");
+  function doc(list) {  // the words of docs/03-configure.md, as text
+    return list.map((block) => {
+      if (block.t === "h") return h("h4", null, plain(block.spans));
+      if (block.t === "p") return h("p", {class: "su-doc"}, plain(block.spans));
+      if (block.t === "code") return h("pre", {class: "su-cmd"}, block.text);
+      if (block.t === "ul" || block.t === "ol") return h(block.t, {class: "su-doc"}, block.items.map((item) => h("li", null, plain(item.spans))));
+      if (block.t === "table") return h("div", {class: "scroll"}, h("table", {class: "md"}, h("thead", null, h("tr", null, block.head.map((cell) => h("th", null, plain(cell))))), h("tbody", null, block.rows.map((cells) => h("tr", null, cells.map((cell) => h("td", null, plain(cell))))))));
+      return null;
+    });
+  }
+  const guideBox = h("div", {class: "su-guide"});
+  function guide() {
+    ask("guide").then((found) => {
+      guideBox.replaceChildren(...found.sections.map((part) => {
+        const open = found.missing.includes(part.key) || (part.key === "kb" && found.missing.includes("domains"));
+        const none = part.can_declare ? h("label", {class: "su-none"}, h("input", {type: "checkbox"}), h("span", null, t("setup.none"))) : null;
+        if (none) none.firstChild.addEventListener("change", () => ask("none", {key: part.key, on: none.firstChild.checked}).then(guide));
+        return h("details", {class: "su-part", open: open ? "" : null}, h("summary", null, h("span", {class: "su-dot" + (open ? " need" : " ok")}), part.title), none, doc(part.blocks));
+      }));
+    }, () => {});
+  }
+  if (!first) guide();
+  app.replaceChildren(h("div", {class: "su"}, h("h1", null, t(first ? "setup.title" : "setup.guide")), h("p", {class: "su-lead"}, t("setup.lead"), " ", olderLink), shortBox,
     h("section", {class: "su-card"}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "2"), h("h2", null, t("setup.form.title"))),
       row(t("setup.name"), h("div", {class: "su-line"}, name, h("span", {class: "chips"}, chips))), row(t("setup.repos"), repos, repoNote),
       row(t("setup.kb"), h("div", {class: "chips su-modes"}, modes), kbPath, kbNote), row(t("setup.prefix"), prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))),
       h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row(t("setup.install"), install), row(t("setup.refused"), refused)),
-      h("div", {class: "su-end"}, go, h("span", {class: "su-note"}, t("setup.finish.note"))), said)));
+      h("div", {class: "su-end"}, go, h("span", {class: "su-note"}, t("setup.finish.note"))), said), first ? null : guideBox));
   load();
 })();

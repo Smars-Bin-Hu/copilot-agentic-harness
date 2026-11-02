@@ -1,7 +1,7 @@
 # GitHub Copilot Agentic Harness on VS Code
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.6.58-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.6.59-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
@@ -60,7 +60,6 @@ Clone this repository, or download the zip from GitHub and extract it (git is op
 
 | Type | What it walks you through |
 | --- | --- |
-| `/harness-rookie-get-me-ready` | **Setup**: the short command, knowledge base, company skills and target repositories, then a self-check. Do this first |
 | `/harness-rookie-quick-start` | **Introductory lesson**: a story from a request to a branch, what the harness gives you, the two places you work in (the Chat window and the board), and one practice task. About 20 minutes |
 | `/harness-rookie-new-knowledgebase` | **Build your knowledge base from your code**: the agent leads you step by step, you give a few facts only you know and approve each step. Come back any time with "continue the knowledge base" |
 | `/harness-rookie-wondering` | **Understand it first**: an interactive explanation of the principles and implementation, 16 topics, ask anything |
@@ -110,7 +109,7 @@ More pictures, in the order of a task's life, are in the [overview](docs/00-over
 
 ## What you must plug in
 
-The harness is generic and carries no business content. **Without the two items below it cannot do your daily work.** `/harness-rookie-get-me-ready` helps you set them up.
+The harness is generic and carries no business content. **Without the two items below it cannot do your daily work.** The setup guide on the board helps you set them up.
 
 - **Company knowledge base.** Put the knowledge base in `knowledge-base/`, and put the **instructions that come with it** in [.github/instructions/knowledgebase.instructions.md](.github/instructions/knowledgebase.instructions.md). This file ships empty. Without it the agent doesn't know how to read the knowledge base through its index. `doctor` reminds you.
 - **Target repositories.** In `target.override.json`, set `repos_root` to the folder that holds your code repositories. Until this is set, the agent cannot change your code. Once it is set, a target repository can be written only through a promote that you approve.
@@ -185,4 +184,4 @@ Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENS
 
 ---
 
-Version 1.6.58 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.6.59 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

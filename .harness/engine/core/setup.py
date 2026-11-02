@@ -147,3 +147,59 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
         return str(python["interpreter"])
 
     return [("user", user), ("target", target), ("tools", tools)]
+
+
+SECTIONS = (("repos", "Target repositories"), ("kb", "Knowledge base"), ("instructions", "Company content"), ("skills", "Skills"), ("standards", "Code standards"), ("python", "Python packages"))  # the headings of docs/03-configure.md: a test holds them
+CAN_DECLARE = ("skills", "standards")  # a team may have none of these
+
+
+def missing(root: Path) -> List[str]:
+    """What the big warning of the board lists: repos, domains, instructions, skills, standards. Quick: a few file looks, nothing that runs."""
+    from core import targets  # noqa: PLC0415 - targets reads policies through config, and only this needs it
+
+    user = {}
+    try:
+        user = kept(root, "user")
+    except ValueError:
+        pass
+    declared = user.get("none") if isinstance(user.get("none"), list) else []
+    company = targets.company_folder(root)
+    out: List[str] = []
+    try:
+        if not targets.load(root).repos:
+            out.append("repos")
+    except Exception:  # noqa: BLE001 - a broken policy is doctor's to report
+        out.append("repos")
+    if not any(targets.knowledge_base_content(path) for _name, path in targets.knowledge_bases(root)):
+        out.append("domains")
+    if not (company and (company / "instructions" / "knowledgebase.instructions.md").is_file()):
+        out.append("instructions")
+    if not str(user.get("skill_prefix") or "").strip() and "skills" not in declared:
+        out.append("skills")
+    if not (company and any((company / "standards").glob("*.md"))) and "standards" not in declared:
+        out.append("standards")
+    return out
+
+
+def declare(root: Path, key: Any, on: Any) -> List[str]:
+    """`We have none` of the guide: it goes in `none` of `user.override.json`."""
+    if key not in CAN_DECLARE:
+        raise ValueError(say("serve.refused.request"))
+    held = kept(root, "user").get("none")
+    found = set(held if isinstance(held, list) else [])
+    found.add(key) if on else found.discard(key)
+    write(root, "user", {"none": sorted(found)})
+    return sorted(found)
+
+
+def guide(root: Path) -> Dict[str, Any]:
+    """The explanation of each section, cut out of docs/03-configure.md: the page keeps no copy of it. A heading that moved shows no text; the test catches it first."""
+    from modules.task import mdtree  # noqa: PLC0415 - a module of the board; core is imported by it
+
+    try:
+        text = (root / "docs" / "03-configure.md").read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    parts = re.split(r"^## ", text, flags=re.M)
+    found = {part.split("\n", 1)[0].strip(): part.split("\n", 1)[1] if "\n" in part else "" for part in parts[1:]}
+    return {"sections": [{"key": key, "title": title, "blocks": mdtree.parse(found.get(title, ""))["blocks"], "can_declare": key in CAN_DECLARE} for key, title in SECTIONS], "missing": missing(root)}

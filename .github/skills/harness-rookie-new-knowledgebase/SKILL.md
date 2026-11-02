@@ -20,7 +20,7 @@ The user does not need to read a document. You lead: `harness kb status` says, f
 
 ## Prerequisites
 
-- `harness kb status`: steps `targets` and `kb_repo` are done. If not, say that the code repositories and the knowledge base repository are set up first, and use `harness-rookie-get-me-ready`.
+- `harness kb status`: steps `targets` and `kb_repo` are done. If not, say that the code repositories and the knowledge base repository are set up first, and send the user to the setup guide on the board.
 
 ## Step-by-Step Workflows
 
@@ -63,7 +63,7 @@ When `stage` is `maintain`, or the user stops after a first domain is learned:
 
 | Issue | Solution |
 |-------|----------|
-| `kb status` says `kb_repo` | The knowledge base is not a target repository: `harness-rookie-get-me-ready` |
+| `kb status` says `kb_repo` | The knowledge base is not a target repository: the setup guide on the board |
 | The user has no known uses to give | Ask them to open two or three files they know and say what each runs or reads; you check each in the code before it goes into `facts.jsonl` |
 | A step keeps failing (the map misses facts, the audit is below the bar) | Show the examples; the fix is `/generic-kb-toolkit-build` with them. Do not lower the bar to pass |
 | The user wants several domains at once | One learn plan per domain; they can run in parallel tasks, but finish one first to see the whole road |

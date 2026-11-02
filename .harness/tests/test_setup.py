@@ -126,5 +126,21 @@ class KnowledgeBaseTests(unittest.TestCase):
         self.assertFalse(setupjob.probe_folder(self.source / "none")["ok"])
 
 
+class GuideTests(unittest.TestCase):
+    def test_every_section_of_the_guide_is_a_heading_of_the_docs(self) -> None:
+        found = setup.guide(support.REPO)
+        for part in found["sections"]:
+            self.assertTrue(part["blocks"], part["title"])
+
+    def test_a_team_may_declare_it_has_no_skills_but_not_no_repositories(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            self.assertEqual(setup.declare(root, "skills", True), ["skills"])
+            self.assertEqual(setup.declare(root, "skills", False), [])
+            with self.assertRaises(ValueError):
+                setup.declare(root, "repos", True)
+
+
 if __name__ == "__main__":
     unittest.main()

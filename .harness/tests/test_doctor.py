@@ -21,6 +21,8 @@ def copy_repo(destination: Path) -> None:
     ignore = shutil.ignore_patterns("__pycache__", "runtime", "*.pyc", "*.override.json")
     shutil.copytree(REPO / ".github", destination / ".github", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))  # the skills' own template *.override.json files stay
     shutil.copytree(REPO / ".harness", destination / ".harness", ignore=ignore)
+    for name in ("Start Harness.command", "Start Harness.cmd"):
+        shutil.copy2(REPO / name, destination / name)
     shutil.copytree(REPO / "docs", destination / "docs")  # skills link to it, and doctor checks those links
     (destination / ".workspace").mkdir()
     shutil.copy(REPO / ".workspace" / "README.md", destination / ".workspace" / "README.md")  # a module lists it
@@ -431,7 +433,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(missing.returncode, 1)
         self.assertIn("[ERROR] PATH 里找不到短命令 `harness`", missing.stdout)
         self.assertIn(str(self.root / ".harness" / "bin"), missing.stdout)  # the folder to add
-        self.assertIn("harness-rookie-get-me-ready", missing.stdout)
+        self.assertIn("看板的配置教程页", missing.stdout)
 
     @unittest.skipIf(os.name == "nt", "a shell script as a stand-in launcher")
     def test_a_launcher_of_another_copy_is_a_warning(self) -> None:

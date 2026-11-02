@@ -25,7 +25,6 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.github/skills/harness-task-report/` | The task board; where the time and usage of one task went. Started only by the user, with `/harness-task-report` |
 | `.github/skills/harness-rookie-quick-start/` | The first lesson. The user starts it with `/harness-rookie-quick-start` |
 | `.github/skills/harness-rookie-wondering/` | The deep course: how it works and how it is built. The user starts it with `/harness-rookie-wondering` |
-| `.github/skills/harness-rookie-get-me-ready/` | First setup: the short command, the knowledge base, company skills, target repositories, the user's name, the language. The user starts it with `/harness-rookie-get-me-ready` |
 | `.github/skills/harness-reinstall/` | After a new copy of the harness: carries the tasks, reports, goals, `.harness/runtime`, `*.override.json` and the knowledge base of the old copy over (`harness reinstall --from <old path>`), skips what exists, then `doctor`. The copy is run by the user in a terminal |
 | `.github/skills/harness-vscode-updates/` | Reads the newest VS Code release notes and advises what of the harness to retire, change or add; writes to `.local/vscode-updates/`. Started only by the user, with `/harness-vscode-updates` |
 | `.github/skills/harness-autorun/` | Getting ready for autorun (beta), and the rules while it runs. Started only by the user, with `/harness-autorun` |

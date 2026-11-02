@@ -2,6 +2,22 @@
 
 The harness itself holds no business content. To plug it into a company environment, you add four things: target repositories, a knowledge base, policy overrides, and skills.
 
+## Getting ready
+
+Double-click `Start Harness.command` (macOS) or `Start Harness.cmd` (Windows) and press **Get ready**. If the double-click is blocked, run `sh .harness/bin/harness task board` (Windows: `.harness\bin\harness.cmd task board`).
+
+**The short command.** `harness` must be on PATH, because every command an agent is given starts with it. The page gives you the one line to run. Reopen VS Code after it, or the agent's terminals do not see it.
+
+If your company does not let you change PATH, ask the helpdesk to add one user PATH entry: `C:\Users\<user name>\bin`.
+
+| Issue | What to do |
+| --- | --- |
+| `harness` is still not found | Reopen VS Code, then look at `echo $PATH` (Windows: `echo $env:Path`) in a new terminal |
+| `doctor` says the `harness` on PATH is not this copy's | There is another copy on this computer. It works, but PATH had better point at the copy you use most |
+| The knowledge base step fails on the first commit | Git has no name or email: set `user.name` and `user.email` with `git config --global`, then press Finish setup again |
+| `doctor` reports broken links in the knowledge base README | Links must be relative paths to files that exist in `knowledge-base/` |
+| Chinese text from the CLI is garbage | Write `.harness/policies/cli.override.json`: `{"output": {"encoding": "native"}}` |
+
 ## Overrides: write only what you change
 
 Every policy `.harness/policies/<name>.json` can have a `<name>.override.json` of the same name. There is one layer only; it sits next to the default file, which stays unchanged.
@@ -96,7 +112,7 @@ Create `.harness/policies/target.override.json`:
 
 1. Put the knowledge base into `knowledge-base/`. **The entry is `knowledge-base/README.md`**: it is the index and holds only topics and relative links; the agent reads it first and then goes further as needed, not everything at once.
 2. Put the instructions that come with the knowledge base, the ones that say how to read and write it, into `.github/instructions/knowledgebase.instructions.md` (replacing the empty placeholder), with `applyTo: '**'` in the frontmatter. `applyTo: 'knowledge-base/**'` alone is not enough: it has no effect before the agent reads a knowledge base file.
-3. Make it a git repository tasks can update, and register it: see "Letting a task update the knowledge base" below. The setup skill `/harness-rookie-get-me-ready` does this for you.
+3. Make it a git repository tasks can update, and register it: see "Letting a task update the knowledge base" below. The setup guide on the board does this for you.
 4. Run `doctor`. It checks: whether there is a README, whether every link in the README leads to a file, whether `knowledge-base/` is a git repository and registered as a target repository (a warning when not), whether `.gitignore` ignores `knowledge-base/`, and whether the instructions get loaded.
 5. The writing rules of the knowledge base have one main source: the instructions that come with the knowledge base.
 
@@ -181,7 +197,7 @@ A team with no git server shares the content as a package:
 |---|---|---|
 | The owner | Changes committed in the knowledge base | `harness company pack --out <folder>` checks it (`kb check`, the skills, nothing uncommitted) and makes `<word>-kb-<date>.zip`. Put the zip where your company allows, never in a public repository |
 | A colleague | A new package | `harness company update --from <zip>` says what would change; add `--apply`, in your own terminal, to do it. Files changed on this computer are saved in `.harness/runtime/company-backup/` and replaced: send the ones to keep to the owner. Then `company sync` runs |
-| A new colleague | First setup | Give `/harness-rookie-get-me-ready` the zip |
+| A new colleague | First setup | Give Get ready the zip |
 | Anyone | A new copy of the harness | `harness reinstall --from <old copy> --apply` carries the knowledge base and runs `company sync` |
 
 To share the harness itself, never zip your folder: it holds your tasks and overrides. Use `git clone`, or `git archive --format=zip -o harness.zip HEAD`, and do not commit company content to it. `git archive` keeps only what is committed.
@@ -193,7 +209,7 @@ A skill is `.github/skills/<name>/SKILL.md`; the rules are in [skills.instructio
 - The folder name and `name` must be the same, with a prefix: `harness-<name>` (comes with the harness), `generic-<name>` (general), `<skill_prefix>-<name>` (the skills your company writes for every domain, see below) and `domain-<domain>-<name>` (your business skills).
 - `description` says clearly "when to use it": it is the only ground on which the agent decides whether to read the whole text.
 - Business skills use the prefix `domain-`, apart from the ones that come with the harness, so that a later upgrade of the harness does not conflict.
-- **Your company's own skills for every domain** (a system it works with, such as the ticket tracker or a server) start with one word you choose, for example the company's short name. Write it once in `user.override.json`: `{ "skill_prefix": "<word>" }` (lowercase letters and digits; the setup skill `/harness-rookie-get-me-ready` asks for it in step 6). Such a skill is `.github/skills/<word>-<name>/`. The word tells it from the skills that come with the harness, so an upgrade does not touch it. `skill check` and `doctor` accept the word, `harness user` shows it, `generic-build-new-skill` uses it for a new one, and `/harness-reinstall` carries these skills to a new copy. The file is yours and git does not keep it: the harness itself never holds your company's word.
+- **Your company's own skills for every domain** (a system it works with, such as the ticket tracker or a server) start with one word you choose, for example the company's short name. Write it once in `user.override.json`: `{ "skill_prefix": "<word>" }` (lowercase letters and digits; Get ready asks for it). Such a skill is `.github/skills/<word>-<name>/`. The word tells it from the skills that come with the harness, so an upgrade does not touch it. `skill check` and `doctor` accept the word, `harness user` shows it, `generic-build-new-skill` uses it for a new one, and `/harness-reinstall` carries these skills to a new copy. The file is yours and git does not keep it: the harness itself never holds your company's word.
 - A new skill can be made with `generic-build-new-skill`. `harness skill check` tells whether a skill is well formed (name, description, size, links), and `doctor` runs it for every skill. The skill also says how to test that Copilot loads yours. To bring a skill that is off the template back to it, ask the agent to repair it (the same skill): it repairs the form and leaves what the skill says alone.
 
 ## Agents and models
@@ -221,7 +237,7 @@ On Windows behind a proxy, the same idea with the `py` launcher (the proxy addre
 
 `py` can start another Python than the `python` that runs the harness. `task intake setup` asks the launcher which one it starts and warns when it is not the one the harness runs on.
 
-The harness never runs an install and never guesses the command (an agent cannot: the gate refuses package installs). The command must install into the Python the harness runs on (`task intake setup` prints it and warns when the command names another). `harness task intake setup` lists what is installed and prints the command for the rest. The setup skill `/harness-rookie-get-me-ready` asks for it. How the files are used: [09 Preparing an intake](09-intake.md).
+The harness never runs an install and never guesses the command (an agent cannot: the gate refuses package installs). The command must install into the Python the harness runs on (`task intake setup` prints it and warns when the command names another). `harness task intake setup` lists what is installed and prints the command for the rest. Get ready asks for it. How the files are used: [09 Preparing an intake](09-intake.md).
 
 ## Task settings
 

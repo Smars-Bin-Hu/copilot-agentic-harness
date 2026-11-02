@@ -375,7 +375,19 @@
     // replaceChildren writes a null as the word "null": on a page on disk, with no server, "New task" and the VS Code pill are not there (N4, 1.6.11).
     shift.replaceChildren(...[button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint")]);
     newSlot.replaceChildren(...[rows.length ? newTask() : null].filter(Boolean));
+    paintSetup(DATA.serve && DATA.serve.setup);
     statusBox.replaceChildren(...[SHELL.vsPill(vscode), typeof SERVE !== "undefined" ? SERVE.pairMark() : null].filter(Boolean));
+  }
+  // The big warning (1.6.59): what this copy lacks before it can do real work. It stays until that is set; a click opens the setup guide.
+  const setupBar = h("a", {class: "setup-bar", href: "/setup", hidden: ""});
+  function paintSetup(list) {
+    const items = list || [];
+    if (!setupBar.isConnected) { const top = document.querySelector(".lb-top"); if (top) top.after(setupBar); }
+    setupBar.hidden = !items.length;
+    const sig = items.join();
+    if (setupBar.dataset.sig === sig) return;
+    setupBar.dataset.sig = sig;
+    setupBar.replaceChildren(h("i"), h("span", null, t("board.setup.warn", {n: items.length})), h("span", {class: "setup-more"}, items.map((key) => h("span", null, t("board.setup." + key)))));
   }
   // "New task" (1.6, B73): a served board only (it makes a chat in VS Code). The dialog is in chat.js.
   function newTask() {
@@ -461,6 +473,7 @@
     asOf = data.as_of;
     archiveTo = data.archive_to || "";
     SHELL.vs(data.vscode);
+    if (DATA.serve) { DATA.serve.setup = data.setup; paintSetup(data.setup); }
     const text = JSON.stringify([data.rows, data.hidden, data.vscode || null]);
     if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else paintStamp();
   }

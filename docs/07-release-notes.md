@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.71 (2026-11-02)
+
+### Changed
+
+- Get ready: a green dot marks a valid git repository. A folder lists the repositories it holds, with tick boxes.
+
 ## 1.6.70 (2026-11-02)
 
 ### Changed

@@ -77,7 +77,7 @@ def repositories(text: Any) -> Dict[str, Any]:
 
 
 def add_repo(text: Any, root_text: Any = "", singles: Any = ()) -> Dict[str, Any]:
-    """What a path added to the code repositories is: one git repository, or a folder that holds some (`repos_root`, of which there is one). ValueError: why it cannot be added."""
+    """What a path added to the code repositories is: one git repository, or a folder with the repositories to pick from. ValueError: why it cannot be added."""
     value = clean_path(text).rstrip("/\\") or clean_path(text)
     path = Path(value)
     if len(value) > MAX_PATH or "\x00" in value or not path.is_absolute():
@@ -85,20 +85,19 @@ def add_repo(text: Any, root_text: Any = "", singles: Any = ()) -> Dict[str, Any
     if not path.is_dir():
         raise ValueError(say("setup.repos.missing"))
     base = clean_path(root_text)
-    if not (path / ".git").exists():
-        found = repositories(value)
-        if not found["ok"]:
-            raise ValueError(found["why"])
-        if not found["n"]:
-            raise ValueError(say("setup.repos.none"))
-        if base and base != value:
-            raise ValueError(say("setup.repos.one"))
-        return {"kind": "folder", "path": value, "n": found["n"], "names": found["names"]}
-    if not targets.REPO_NAME.match(path.name):
-        raise ValueError(say("setup.repos.name", name=path.name))
     held = {Path(clean_path(item)).name for item in singles}
     if base and Path(base).is_dir():
         held |= {item.name for item in Path(base).iterdir() if (item / ".git").exists()}
+    if not (path / ".git").exists():
+        try:
+            names = sorted((item.name for item in path.iterdir() if (item / ".git").exists() and targets.REPO_NAME.match(item.name)), key=str.lower)
+        except OSError as error:
+            raise ValueError(str(error)[:200]) from None
+        if not names:
+            raise ValueError(say("setup.repos.none"))
+        return {"kind": "folder", "path": value, "n": len(names), "names": names[:3], "repos": [{"name": name, "path": str(path / name), "held": name in held} for name in names]}
+    if not targets.REPO_NAME.match(path.name):
+        raise ValueError(say("setup.repos.name", name=path.name))
     if path.name in held:
         raise ValueError(say("setup.repos.twice", name=path.name))
     return {"kind": "repo", "name": path.name, "path": value}
@@ -152,9 +151,10 @@ def status(root: Path, short_found: Optional[str] = None) -> Dict[str, Any]:
         user, target = kept(root, "user"), kept(root, "target")
     except ValueError as error:
         problem = str(error)
+    singles = [str(entry["path"]) for entry in (target.get("repos") or {}).values() if is_single(entry)]
     path = shortcmd.fresh_path()
     found = shortcmd.found(path) if short_found is None else short_found
-    return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "language": str(user.get("language") or messages.language()), "repos_root": str(target.get("repos_root") or ""), "root": repositories(target.get("repos_root")), "singles": [str(entry["path"]) for entry in (target.get("repos") or {}).values() if is_single(entry)], "skill_prefix": str(user.get("skill_prefix") or ""),
+    return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "language": str(user.get("language") or messages.language()), "repos_root": str(target.get("repos_root") or ""), "root": repositories(target.get("repos_root")), "singles": singles, "broken": [path for path in singles if not (Path(path) / ".git").exists()], "skill_prefix": str(user.get("skill_prefix") or ""),
             "short": {"found": found, "command": "" if found else shortcmd.command_for(root, path), "windows": os.name == "nt"}, "example": r"C:\Users\me\repos\orders\deploy" if os.name == "nt" else "/Users/me/repos/orders/deploy"}
 
 

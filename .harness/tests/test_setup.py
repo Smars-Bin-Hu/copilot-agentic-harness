@@ -217,8 +217,9 @@ class RepositoryListTests(unittest.TestCase):
 
     def test_one_folder_and_no_name_twice(self) -> None:
         far, other = str(self.base / "far" / "billing"), str(self.base / "other" / "billing")
-        with self.assertRaises(ValueError):
-            setup.add_repo(self.base / "far", str(self.shelf))
+        found = setup.add_repo(self.shelf, "", [far, str(self.base / "x" / "orders")])
+        self.assertEqual(found["repos"], [{"name": "orders", "path": str(self.shelf / "orders"), "held": True}])
+        self.assertFalse(setup.add_repo(self.base / "far", str(self.shelf))["repos"][0]["held"])
         with self.assertRaises(ValueError):
             setup.add_repo(other, "", [far])
         with self.assertRaises(ValueError):
@@ -238,6 +239,7 @@ class RepositoryListTests(unittest.TestCase):
         self.assertEqual(self.finish({"repos_root": "", "singles": [far]})["repos"], {"billing": {"path": far}})
         setup.write(self.root, "target", {"repos": {"billing": {"path": far}, "kb": {"path": "knowledge-base", "knowledge_base": True}}})
         self.assertEqual(setup.status(self.root, "/x")["singles"], [far])
+        self.assertEqual(setup.status(self.root, "/x")["broken"], [])
         self.assertEqual(self.finish({"repos_root": ""})["repos"], {"kb": {"path": "knowledge-base", "knowledge_base": True}})
 
 

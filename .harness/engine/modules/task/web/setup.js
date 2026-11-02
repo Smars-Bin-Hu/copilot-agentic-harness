@@ -3,13 +3,14 @@
 (function () {
   const app = document.getElementById("app");
   const POLL = 2000;
-  const st = {form: null, timer: 0, probe: 0, refused: [], busy: false, ready: false, mode: "none", root: "", rootFound: null, singles: []};
+  const st = {form: null, timer: 0, probe: 0, refused: [], busy: false, ready: false, mode: "none", root: "", rootFound: null, singles: [], broken: []};
   const ask = (step, body) => SERVE.post("/api/setup", {step, ...(body || {})}).then((data) => data.result);
 
   const shortBox = h("section", {class: "su-card"});
   const said = h("div", {class: "su-said"});
   const repoNote = h("p", {class: "su-note bad", hidden: ""});
   const repoList = h("div", {class: "su-list"});
+  const repoPick = h("div");
   const repoAdd = h("button", {type: "button", class: "act"}, t("setup.refused.add"));
   const name = h("input", {type: "text", class: "su-in", maxlength: 100, autocomplete: "name", spellcheck: "false", required: ""});
   const repos = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: t("setup.repos.ph")});
@@ -27,15 +28,43 @@
   const refusedList = h("div", {class: "su-list"});
   const refusedNote = h("p", {class: "su-note bad", hidden: ""});
   function paintRepos() {
-    const item = (text, off) => {
+    const item = (text, ok, why, off) => {
       const button = h("button", {type: "button", class: "su-x", "aria-label": t("setup.repos.remove")}, "\u00d7");
       button.addEventListener("click", () => { off(); paintRepos(); });
-      return h("span", {class: "su-item"}, h("code", null, text), button);
+      return h("span", {class: "su-item"}, h("span", {class: "su-dot " + (ok ? "ok" : "bad"), title: why}), h("span", {class: "su-repo"}, h("code", null, text), h("span", {class: "su-note" + (ok ? " good" : " bad")}, why)), button);
     };
     const parts = [];
-    if (st.root) parts.push(item(st.root + "  \u00b7  " + t("setup.repos.found", {n: st.rootFound.n, names: st.rootFound.names.join(", ")}), () => { st.root = ""; st.rootFound = null; }));
-    st.singles.forEach((path) => parts.push(item(path, () => { st.singles = st.singles.filter((held) => held !== path); })));
+    if (st.root) parts.push(item(st.root, st.rootFound.n > 0, st.rootFound.n ? t("setup.repos.found", {n: st.rootFound.n, names: st.rootFound.names.join(", ")}) : st.rootFound.why, () => { st.root = ""; st.rootFound = null; }));
+    st.singles.forEach((path) => { const ok = !st.broken.includes(path); parts.push(item(path, ok, t(ok ? "setup.repos.valid" : "setup.repos.invalid"), () => { st.singles = st.singles.filter((held) => held !== path); })); });
     repoList.replaceChildren(...parts);
+  }
+  function pickRepos(found) {
+    const take = h("button", {type: "button", class: "act hot"}, t("setup.repos.take"));
+    const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const rows = found.repos.map((repo) => {
+      const box = h("input", {type: "checkbox", disabled: repo.held ? "" : null});
+      box.addEventListener("change", sync);
+      return {repo, box, node: h("label", {class: "su-tick"}, box, h("code", null, repo.name), repo.held ? h("span", {class: "su-note"}, t("setup.repos.held")) : null)};
+    });
+    const free = rows.filter((row) => !row.repo.held);
+    const all = h("input", {type: "checkbox"});
+    all.addEventListener("change", () => { free.forEach((row) => { row.box.checked = all.checked; }); sync(); });
+    function sync() {
+      const chosen = free.filter((row) => row.box.checked).length;
+      all.checked = chosen > 0 && chosen === free.length;
+      take.disabled = !chosen;
+    }
+    take.addEventListener("click", () => {
+      const chosen = free.filter((row) => row.box.checked);
+      if (chosen.length === rows.length && !st.root) { st.root = found.path; st.rootFound = found; }  // the whole folder: repositories added to it later count too
+      else chosen.forEach((row) => st.singles.push(row.repo.path));
+      repoPick.replaceChildren();
+      paintRepos();
+    });
+    no.addEventListener("click", () => repoPick.replaceChildren());
+    sync();
+    repoPick.replaceChildren(h("div", {class: "su-pick"}, h("p", {class: "su-note good"}, h("span", {class: "su-dot ok"}), " ", t("setup.repos.pick", {n: found.n})), h("code", {class: "su-note"}, found.path),
+      h("label", {class: "su-tick su-all"}, all, h("span", null, t("setup.repos.all"))), h("div", {class: "su-ticks"}, rows.map((row) => row.node)), h("div", {class: "su-end"}, take, no)));
   }
   function addRepo() {
     if (!repos.value.trim()) return;
@@ -43,9 +72,8 @@
       repoNote.hidden = true;
       repos.value = "";
       repoAdd.disabled = true;
-      if (found.kind === "repo") st.singles.push(found.path);
-      else { st.root = found.path; st.rootFound = found; }
-      paintRepos();
+      if (found.kind === "repo") { st.singles.push(found.path); repoPick.replaceChildren(); paintRepos(); }
+      else pickRepos(found);
     }, (error) => { repoNote.hidden = false; repoNote.textContent = error.message || String(error); });
   }
   repoAdd.disabled = true;
@@ -174,6 +202,7 @@
       st.root = found.repos_root;
       st.rootFound = found.root;
       st.singles = found.singles.slice();
+      st.broken = found.broken;
       paintRepos();
       setLang(found.language);
       setMode("none");
@@ -253,7 +282,7 @@
   if (!first) guide();
   app.replaceChildren(h("div", {class: "su"}, h("h1", null, t(first ? "setup.title" : "setup.guide")), h("p", {class: "su-lead"}, t("setup.lead"), " ", olderLink), shortBox,
     h("section", {class: "su-card"}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "2"), h("h2", null, t("setup.form.title"))),
-      row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "chips su-modes"}, chips)), row(t("setup.repos"), h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))),
+      row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "chips su-modes"}, chips)), row(t("setup.repos"), h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))),
       row([t("setup.kb"), kbStar], h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote), row(t("setup.prefix"), prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))),
       h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row(t("setup.install"), install, h("p", {class: "su-note"}, t("setup.install.example"))), row(t("setup.refused"), h("div", {class: "su-line"}, refusedBox, refusedAdd), refusedNote, refusedList, h("p", {class: "su-note"}, t("setup.refused.hint")))),
       h("div", {class: "su-end"}, go, goNote), said), first ? null : guideBox));

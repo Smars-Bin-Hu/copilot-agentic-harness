@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.84 (2026-11-02)
+
+### Changed
+
+- The numbers at the top of a page: every row starts at the same place. With more than five numbers, as in Time and usage, the second row stood further right than the first, with a line beside it. With a wallpaper in a narrow window, the first number stood further right than the rest.
+
 ## 1.6.83 (2026-11-02)
 
 ### Added

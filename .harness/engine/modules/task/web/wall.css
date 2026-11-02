@@ -20,7 +20,7 @@ html.has-wall .lb-top,html.has-wall .tk-head{top:0;margin:12px 0 0;padding:12px 
 html.has-wall .tk-head{padding:10px 16px}
 html.has-wall main{padding-top:0}
 html.has-wall .kpis{margin-top:14px}
-html.has-wall .kpi:first-child{padding-left:22px}
+@media (min-width:901px){html.has-wall .kpi:nth-child(5n+1){padding-left:22px}}
 html.has-wall .board-list{margin-top:14px;padding:6px 14px 4px;overflow:hidden}
 html.has-wall .board-list td:first-child,html.has-wall .board-list th:first-child{padding-left:4px}
 html.has-wall .lb-scene{background-image:none;margin-top:14px}

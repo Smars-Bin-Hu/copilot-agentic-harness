@@ -564,6 +564,12 @@ class WalkThroughTests(unittest.TestCase):
         self.assertIn("@media (max-width:900px){.kpis{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}", (WEB / "ui.css").read_text(encoding="utf-8"))
         self.assertIn(".md{overflow-wrap:break-word}", (WEB / "page.css").read_text(encoding="utf-8"))
 
+    def test_every_row_of_numbers_starts_at_the_same_place(self) -> None:
+        ui = (WEB / "ui.css").read_text(encoding="utf-8")
+        self.assertIn("grid-template-columns:1.25fr 1fr 1fr 1fr 1fr", ui)  # five to a row, so the sixth number starts the next one
+        self.assertIn(".kpi:nth-child(5n+1){border-left:0;padding-left:0}", ui)
+        self.assertNotIn(".kpi:first-child", ui + (WEB / "wall.css").read_text(encoding="utf-8"))
+
     def test_the_review_prompt_is_not_what_a_person_is_told_to_write(self) -> None:
         en = messages.table("en")
         self.assertIn("Independent review on the task page", en["autorun.need.review"])

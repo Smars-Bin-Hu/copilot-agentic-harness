@@ -179,6 +179,17 @@ class ServeTests(ServeCase):
         self.assertIn("not needed", todo.read_text(encoding="utf-8").splitlines()[-1])
         self.assertIn("- [ ] open one", todo.read_text(encoding="utf-8"))
 
+    def test_a_second_start_opens_the_browser_with_a_new_code_and_never_hands_it_out(self) -> None:
+        before = len(self.links)
+        status, data, _ = self.request("POST", "/api/reopen", {})
+        self.assertEqual(status, 200)
+        self.assertEqual(len(self.links), before + 1)
+        code = self.links[-1].split("#pair=")[1]
+        self.assertNotIn(code, json.dumps(data))
+        self.assertEqual(self.request("POST", "/api/pair", {"code": code})[0], 200)
+        self.request("POST", "/api/reopen", {})  # not twice in a moment
+        self.assertEqual(len(self.links), before + 1)
+
     def test_a_close_with_no_reason_keeps_the_pages_own_words(self) -> None:
         cookie = self.pair()
         self.assertEqual(self.request("POST", "/api/close", {"task": "job1"}, cookie=cookie)[0], 200)

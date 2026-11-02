@@ -117,16 +117,54 @@ const DOCK = (function () {
       setTimeout(watchStale, data.result.running ? 5000 : STALE_EVERY);
     }, () => setTimeout(watchStale, UNPAIRED_EVERY));
   }
+  // The picker on the page: the server reads one folder at a time, and no program starts. The window of the system stays as the second way.
+  function chooseOnPage(kind, start, done) {
+    const file = kind === "file";
+    const here = h("code", {class: "su-pick-path"});
+    const list = h("div", {class: "su-pick-list"});
+    const note = h("p", {class: "su-note"});
+    const drives = h("div", {class: "chips"});
+    const up = h("button", {type: "button", class: "act"}, t("setup.pick.up"));
+    const use = h("button", {type: "button", class: "act hot"}, t("setup.pick.use"));
+    const system = h("button", {type: "button", class: "su-link"}, t("setup.pick.system"));
+    const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const view = SERVE.dialog([h("h2", null, t(file ? "setup.pick.file" : "setup.pick.folder")), here, drives, list, note, h("div", {class: "row"}, up, file ? "" : use, no, system)]);
+    let now = null;
+    const pickIt = (path) => { view.close(); done(path); };
+    const row = (name, click) => { const node = h("button", {type: "button", class: "su-pick-row"}, name); node.addEventListener("click", click); return node; };
+    const join = (name) => now.path.replace(/[\\/]+$/, "") + (now.path.includes("\\") ? "\\" : "/") + name;
+    function open(path) {
+      note.textContent = t("setup.pick.reading");
+      SERVE.call("/api/setup", {step: "folders", path, kind}, 20).then((data) => {
+        now = data.result;
+        here.textContent = now.path;
+        up.disabled = !now.parent;
+        drives.replaceChildren(...now.drives.map((drive) => { const chip = h("button", {type: "button", class: "chip"}, drive); chip.addEventListener("click", () => open(drive)); return chip; }));
+        list.replaceChildren(...now.folders.map((name) => row(name, () => open(join(name)))), ...now.zips.map((name) => row(name, () => pickIt(join(name)))));
+        note.textContent = now.error ? t("setup.pick.bad", {error: now.error}) : now.cut ? t("setup.pick.cut") : list.firstChild ? "" : t("setup.pick.empty");
+      }, (error) => { note.textContent = error.message; });
+    }
+    up.addEventListener("click", () => open(now.parent));
+    use.addEventListener("click", () => pickIt(now.path));
+    no.addEventListener("click", view.close);
+    system.addEventListener("click", () => {
+      system.disabled = true;
+      note.textContent = t("setup.pick.opening");
+      SERVE.post("/api/setup", {step: "pick", kind}).then((data) => { const found = data.result; system.disabled = false; note.textContent = ""; if (found.path) pickIt(found.path); }, (error) => { system.disabled = false; note.textContent = error.message || String(error); });
+    });
+    open(start || "");
+  }
   // The company content against its copies in `.github/`: the book button turns yellow and moves, and the window says what a sync would change (core/company.py).
   const COMPANY_EVERY = 120000;  // ms
   const COMPANY_LINES = 6;  // lines of the tip
-  let drift = null;
+  let drift = null, hasCompany = false;
   const CHANGES = {add: "dock.company.add", change: "dock.company.change", remove: "dock.company.remove"};
   const CHAT_WORDS = 1800;  // under `skillsend.MAX_WORDS`, the limit of a one-click message
   const stuckWord = (item) => plainWords(item.skill + ": " + item.why);
   const changeWord = (row) => t(CHANGES[row.change]) + " " + row.path;
   function showDrift(found) {
     drift = found && found.found && !found.in_sync ? found : null;
+    hasCompany = Boolean(found && found.found);
     const book = document.querySelector(".dock-book");
     if (!book) return;
     book.classList.toggle("dock-warn", Boolean(drift));
@@ -164,7 +202,16 @@ const DOCK = (function () {
     const alarm = h("p", {class: "bad kb-alarm", hidden: ""});  // outside the stage: a drawn view stays as it is
     const synced = h("section", {class: "kb-sync", hidden: ""});
     driftCard(synced);
-    const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "kb-bar"}, h("div", {class: "chips dock-tabs"}, tabs), age, rebuild, again), alarm, synced, stage, h("div", {class: "row"}, no)]);
+    const packed = h("p", {class: "su-note kb-packed", hidden: ""});
+    const pack = h("button", {type: "button", class: "act", title: t("dock.pack.hint"), hidden: hasCompany ? null : ""}, t("dock.pack"));
+    pack.addEventListener("click", () => chooseOnPage("folder", "", (out) => {
+      pack.disabled = true;
+      packed.hidden = false;
+      packed.classList.remove("bad");
+      packed.textContent = t("dock.pack.working");
+      SERVE.post("/api/company", {op: "pack", out}).then((data) => { packed.textContent = t("dock.pack.done", {file: data.result.package, files: data.result.files}); }, (error) => { packed.classList.add("bad"); packed.textContent = error.message; }).then(() => { pack.disabled = false; });
+    }));
+    const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "kb-bar"}, h("div", {class: "chips dock-tabs"}, tabs), age, rebuild, again), alarm, synced, stage, packed, h("div", {class: "row"}, pack, no)]);
     view.box.classList.add("dock-window", "kb-window");
     view.holds = () => false;  // it only reads: nothing here can be lost
     let timer = 0, current = "", seenView = "", word = "", searched = "", ticket = 0, extra = null, painted = null, detailTimer = 0;  // word, searched: what was typed in Look up, kept while the tab changes; ticket: the newest search
@@ -424,5 +471,5 @@ const DOCK = (function () {
   }
 
   if (typeof DATA !== "undefined" && DATA.serve) build();
-  return {start, allSkills, kbWindow, setupWindow, enterScreen};
+  return {start, allSkills, kbWindow, setupWindow, enterScreen, chooseOnPage};
 })();

@@ -21,45 +21,8 @@ const SETUP = (function () {
     const kbParts = h("div", {class: "su-parts", hidden: ""});
     const kbLearn = h("button", {type: "button", class: "su-link"}, t("setup.kb.learn"));
     kbLearn.addEventListener("click", () => DOCK.allSkills("kb"));
-    // The picker on the page: the server reads one folder at a time, and no program starts. The window of the system stays as the second way.
-    function chooseOnPage(kind, start, done) {
-      const file = kind === "file";
-      const here = h("code", {class: "su-pick-path"});
-      const list = h("div", {class: "su-pick-list"});
-      const note = h("p", {class: "su-note"});
-      const drives = h("div", {class: "chips"});
-      const up = h("button", {type: "button", class: "act"}, t("setup.pick.up"));
-      const use = h("button", {type: "button", class: "act hot"}, t("setup.pick.use"));
-      const system = h("button", {type: "button", class: "su-link"}, t("setup.pick.system"));
-      const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
-      const view = SERVE.dialog([h("h2", null, t(file ? "setup.pick.file" : "setup.pick.folder")), here, drives, list, note, h("div", {class: "row"}, up, file ? "" : use, no, system)]);
-      let now = null;
-      const pickIt = (path) => { view.close(); done(path); };
-      const row = (name, click) => { const node = h("button", {type: "button", class: "su-pick-row"}, name); node.addEventListener("click", click); return node; };
-      const join = (name) => now.path.replace(/[\\/]+$/, "") + (now.path.includes("\\") ? "\\" : "/") + name;
-      function open(path) {
-        note.textContent = t("setup.pick.reading");
-        SERVE.call("/api/setup", {step: "folders", path, kind}, 20).then((data) => {
-          now = data.result;
-          here.textContent = now.path;
-          up.disabled = !now.parent;
-          drives.replaceChildren(...now.drives.map((drive) => { const chip = h("button", {type: "button", class: "chip"}, drive); chip.addEventListener("click", () => open(drive)); return chip; }));
-          list.replaceChildren(...now.folders.map((name) => row(name, () => open(join(name)))), ...now.zips.map((name) => row(name, () => pickIt(join(name)))));
-          note.textContent = now.error ? t("setup.pick.bad", {error: now.error}) : now.cut ? t("setup.pick.cut") : list.firstChild ? "" : t("setup.pick.empty");
-        }, (error) => { note.textContent = error.message; });
-      }
-      up.addEventListener("click", () => open(now.parent));
-      use.addEventListener("click", () => pickIt(now.path));
-      no.addEventListener("click", view.close);
-      system.addEventListener("click", () => {
-        system.disabled = true;
-        note.textContent = t("setup.pick.opening");
-        ask("pick", {kind}).then((found) => { system.disabled = false; note.textContent = ""; if (found.path) pickIt(found.path); }, (error) => { system.disabled = false; note.textContent = error.message || String(error); });
-      });
-      open(start || "");
-    }
     const kbPick = h("button", {type: "button", class: "act"}, t("setup.browse"));
-    kbPick.addEventListener("click", () => chooseOnPage(kbPick.dataset.kind, kbPath.value.trim(), (path) => { kbPath.value = path; checkKb(); gate(); }));
+    kbPick.addEventListener("click", () => DOCK.chooseOnPage(kbPick.dataset.kind, kbPath.value.trim(), (path) => { kbPath.value = path; checkKb(); gate(); }));
     const kbReplaceBox = h("input", {type: "checkbox"});
     const kbReplace = h("label", {class: "su-tick", hidden: ""}, kbReplaceBox, h("span", null, t("setup.kb.replace")));
     kbReplaceBox.addEventListener("change", () => { st.replace = kbReplaceBox.checked; gate(); });
@@ -153,7 +116,7 @@ const SETUP = (function () {
     refusedBox.addEventListener("keydown", (event) => { if (isEnter(event)) addRefused(); });
     const browse = (input, kind, after) => {
       const button = h("button", {type: "button", class: "act"}, t("setup.browse"));
-      button.addEventListener("click", () => chooseOnPage(kind, input.value.trim(), (path) => { input.value = path; after(); }));
+      button.addEventListener("click", () => DOCK.chooseOnPage(kind, input.value.trim(), (path) => { input.value = path; after(); }));
       return button;
     };
     const modes = ["package", "folder", "none"].map((mode) => {

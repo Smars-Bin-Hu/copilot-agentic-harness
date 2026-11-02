@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.95 (2026-11-02)
+
+### Added
+
+- **Pack for colleagues.** A button in the Knowledge base window checks the knowledge base and makes the zip of `harness company pack` in a folder you choose. It shows when the knowledge base has a `company/` folder.
+
+### Changed
+
+- **A second `harness task board` pairs the browser.** The running board opens your default browser with a new code, so you need not find its window. Another browser still needs the link from Enter in that window.
+
 ## 1.6.94 (2026-11-02)
 
 ### Changed

@@ -79,6 +79,7 @@ MAX_FILES_BODY = (chatsend.MAX_FILES_TOTAL * 4) // 3 + chatsend.MAX_FILES * 1024
 MAX_INBOX_BODY = 40 * 1024 * 1024  # `/api/inbox` carries pictures (base64); the other calls stay small
 MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
+REOPEN_EVERY = 3.0  # seconds
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
 BUILTIN = ("send", "answer", "steer", "stop", "create", "confirm", "question")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
@@ -205,6 +206,8 @@ class Board:
         self.code = os.environ.pop(RESTART_CODE, "") or secrets.token_urlsafe(12)  # after Restart board the page brings this code back; a new process holds no session
         self.next_code = ""
         self.server: Any = None
+        self.opener: Callable[[str], Any] = webbrowser.open
+        self.reopened = -REOPEN_EVERY
         self.sessions: set = set()
         self.lock = threading.Lock()
         self.wall_window = threading.Lock()  # one folder window at a time
@@ -257,6 +260,17 @@ class Board:
     def served(self) -> List[str]:
         """What the page may run: the settings' actions and the ones that talk to the chat."""
         return self.actions + [item for item in BUILTIN if item not in self.actions]
+
+    def open_page(self) -> bool:
+        """The browser of this computer, with a new code. Not more than once in REOPEN_EVERY seconds: a request must not be able to flood the screen with tabs."""
+        with self.lock:
+            if time.monotonic() - self.reopened < REOPEN_EVERY:
+                return False
+            self.reopened = time.monotonic()
+        try:
+            return bool(self.opener(f"http://127.0.0.1:{self.port}/#pair={self.new_code()}"))
+        except Exception:  # noqa: BLE001 - the second start opens the plain address then
+            return False
 
     def new_code(self) -> str:
         with self.lock:
@@ -1082,6 +1096,8 @@ def handler_for(board: Board) -> type:
                     return self.answer(403, {"error": say("serve.pair.wrong")})
                 cookie = f"{board.cookie}={token}; HttpOnly; SameSite=Strict; Path=/"
                 return self.answer(200, {"paired": True}, {"Set-Cookie": cookie})
+            if path == "/api/reopen":  # a second `harness task board`: this server opens the browser with a new code. The answer never holds the code, so no pairing is needed
+                return self.answer(200, {"opened": board.open_page()})
             if path == "/api/status":
                 return self.answer(200, {"paired": board.paired(self.token()), "started": board.version, "now": disk_version(board.root), "vscode": board.link.status()})
             if path == "/api/ready":  # the Enter screen: what is in place, one line each. A read, as /api/board is: the cache of the link and of the one doctor run; it waits for nothing
@@ -1191,6 +1207,8 @@ def handler_for(board: Board) -> type:
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
+                    if data.get("op") == "pack":
+                        return self.answer(200, {"result": company.pack(board.root, str(data.get("out", "")))})
                     if data.get("op") == "prefix":  # the word of the company content goes in the person's file, then the sync it was stopping
                         folder = targets.company_folder(board.root)
                         board.keep_override("skill_prefix", company.wanted_prefix(folder) if folder else "")
@@ -1307,6 +1325,15 @@ def handler_for(board: Board) -> type:
     return Handler
 
 
+def open_again(port: int) -> bool:
+    """A second start: the running board opens the browser with a new code. The code stays in that process: this call only hears that it was done."""
+    try:
+        with urlopen(Request(f"http://127.0.0.1:{port}/api/reopen", data=b"{}", headers={HEADER: "1", "Content-Type": "application/json"}), timeout=3) as answer:
+            return answer.status == 200 and json.load(answer).get("opened") is True
+    except (OSError, ValueError):
+        return False
+
+
 def already_serving(root: Path, port: int) -> bool:
     """The board of this same copy has this port and answers: a second double-click opens its page and leaves it running."""
     if board_serve_port(root) != port:
@@ -1326,12 +1353,14 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     found = settings(root)
     link = link if link is not None else vslink.VsLink(root, enabled=vslink.enabled_by_policy(root))
     board = Board(root, everything, port or found["port"], found["actions"], link, found["refresh"])
+    board.opener = opener
     try:
         server = board.server = http.server.ThreadingHTTPServer(("127.0.0.1", board.port), handler_for(board))
     except OSError as error:
         if already_serving(root, board.port):
             print(say("serve.already", url=f"http://127.0.0.1:{board.port}/"), file=out, flush=True)
-            opener(f"http://127.0.0.1:{board.port}/")
+            if not open_again(board.port):
+                opener(f"http://127.0.0.1:{board.port}/")
             return {"served": f"http://127.0.0.1:{board.port}/", "stopped": False, "already": True}
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
     taskarchive.prune_transcripts(root, taskarchive.remembered(root))

@@ -204,7 +204,7 @@ A team with no git server shares the content as a package:
 
 | Who | When | What |
 |---|---|---|
-| The owner | Changes committed in the knowledge base | `harness company pack --out <folder>` checks it (`kb check`, the skills, nothing uncommitted) and makes `<word>-kb-<date>.zip`. Put the zip where your company allows, never in a public repository |
+| The owner | Changes committed in the knowledge base | **Pack for colleagues** in the Knowledge base window, or `harness company pack --out <folder>`, checks it (`kb check`, the skills, nothing uncommitted) and makes `<word>-kb-<date>.zip`. Put the zip where your company allows, never in a public repository |
 | A colleague | A new package | `harness company update --from <zip>` says what would change; add `--apply`, in your own terminal, to do it. Files changed on this computer are saved in `.harness/runtime/company-backup/` and replaced: send the ones to keep to the owner. Then `company sync` runs |
 | A new colleague | First setup | Give Get ready the zip |
 | Anyone | A new copy of the harness | `harness reinstall --from <old copy> --apply` carries the knowledge base and runs `company sync` |

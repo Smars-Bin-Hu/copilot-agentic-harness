@@ -100,7 +100,7 @@ class BannerTests(unittest.TestCase):
     def test_blocks_on_a_pipe_have_no_colour(self) -> None:
         text = registry.version_banner(self.ROOT, self.stream("UTF-8", False))
         self.assertIn("\u2588", text)
-        self.assertIn("\u25cf", text)
+        self.assertIn("\u2593", text)
         self.assertNotIn("\033", text)
         self.assertIn("version " + registry.harness_version(self.ROOT), text)
 
@@ -115,8 +115,15 @@ class BannerTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"TERM": "xterm-256color"}), mock.patch.object(registry.shutil, "get_terminal_size", return_value=os.terminal_size((60, 24))):
             os.environ.pop("NO_COLOR", None)
             lines = registry.version_banner(self.ROOT, self.stream("utf-8", True)).split("\n")
-        self.assertNotIn("\u2588", lines[0])
-        self.assertIn("\u2588", lines[12])
+        self.assertNotIn("\u2557", lines[0])
+        self.assertIn("\u2557", lines[15])
+
+    def test_the_robot_is_even_and_each_line_fits_its_column(self) -> None:
+        rows = registry.ROBOT.strip("\n").split("\n")
+        self.assertEqual(len({len(row) for row in rows}), 1)
+        self.assertEqual(len(rows) % 2, 0)
+        self.assertEqual(set("".join(rows)) - {"."}, set(registry.PIXELS))
+        self.assertEqual({len(line) for line in registry.robot_lines(False)}, {len(rows[0])})
 
     def test_the_lines_of_the_blocks_are_one_width(self) -> None:
         self.assertEqual(len({len(line) for line in registry.BLOCKS.strip("\n").split("\n")}), 1)

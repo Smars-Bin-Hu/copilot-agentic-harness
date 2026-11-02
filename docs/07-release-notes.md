@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.78 (2026-11-02)
+
+### Changed
+
+- The robot of `harness --version` is drawn solid, in blocks: a white body, a dark visor and green eyes. Without colour its visor is a hole.
+
 ## 1.6.77 (2026-11-02)
 
 ### Added

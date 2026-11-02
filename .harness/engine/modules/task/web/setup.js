@@ -180,9 +180,9 @@ const SETUP = (function () {
         if (found.why) parts.push(h("p", {class: "su-note bad"}, found.why));
         if (found.output) {
           const art = found.ok && found.output.includes("\u2588");
-          const line = (text) => {  // the robot fills the first 20 columns
-            const robot = text.slice(0, 20).split("\u25cf").flatMap((part, at) => (at ? [h("b", {class: "su-eye"}, "\u25cf"), part] : [part]));
-            const right = text.slice(20);
+          const line = (text) => {  // the robot fills the first 22 columns; its green is the shade character
+            const robot = text.slice(0, 22).split(/(\u2593+)/).map((part) => (part.startsWith("\u2593") ? h("b", {class: "su-eye"}, "\u2588".repeat(part.length)) : part));
+            const right = text.slice(22);
             return [...robot, /[\u2500-\u259f]/.test(right) ? h("span", {class: "su-art"}, right) : right, "\n"];
           };
           parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad") + (art ? " art" : "")}, art ? found.output.split("\n").map(line) : found.output));

@@ -76,19 +76,35 @@ BLOCKS = """
 ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝╚══════╝╚══════╝
 """
 ROBOT = """
-        ●
-        │
-   ╭─────────╮
-   │╭───────╮│
-   ││ ●   ● ││
-   │╰───────╯│
-   ╰───┬─┬───╯
-╭─╮╭───┴─┴───╮╭─╮
-│ ││         ││ │
-│ ││    ●    ││ │
-╰─╯│         │╰─╯
-   ╰─────────╯
-"""
+.........gg.........
+.........gg.........
+.........oo.........
+.........oo.........
+....oooooooooooo....
+...owwwwwwwwwwwwo...
+..owwkkkkkkkkkkwwo..
+..owkkkkkkkkkkkkwo..
+..owkkggkkkkggkkwo..
+..owkkggkkkkggkkwo..
+..owkkkkkkkkkkkkwo..
+..owwkkkkkkkkkkwwo..
+..owwwwwwwwwwwwwso..
+...owwwwwwwwwwwso...
+....oooooooooooo....
+.....owwwwwwwwo.....
+.oo..owwwwwwwwo..oo.
+owwo.owwwwwwwwo.owwo
+owwo.owwwwwwwwo.owwo
+owwo.owwwwwwwwo.owwo
+owwo.owwwggwwwo.owwo
+owwo.owwwggwwwo.owwo
+owwo.owwwwwwwso.owwo
+owso.owwwwwwwso.owso
+.oo..owwwwwwsso..oo.
+.....owwwwwwsso.....
+......oooooooo......
+....................
+"""  # pixels: two rows make one line of text. o outline, w white, s shade, k visor, g green
 ROBOT_ASCII = r"""
       o
       |
@@ -100,9 +116,9 @@ ROBOT_ASCII = r"""
 |_||     ||_|
    '-----'
 """
-GAP = "   "
+GAP = "  "
 SHADES = (51, 45, 39, 33, 63, 99, 135, 171, 207)  # 256 colours, left to right: Terminal.app has no true colour
-GREEN = 41
+PIXELS = {"o": 240, "w": 255, "s": 250, "k": 235, "g": 41}
 
 
 def unicode_stream(stream: Any) -> bool:
@@ -130,21 +146,37 @@ def painted(line: str) -> str:
     return "".join(parts) + "\033[0m"
 
 
-def beside(robot: str, lines: List[str], width: int, colour: bool) -> str:
-    """The robot to the left of the text. A terminal too narrow for both has it above."""
-    left = robot.strip("\n").split("\n")
-    room = max(len(line) for line in left)
+def cell(top: str, bottom: str, colour: bool) -> str:
+    """Two pixels, one above the other, as one character. Without colour the visor is a hole, the green shows as a shade, and the page paints that shade green."""
     if colour:
-        columns = shutil.get_terminal_size((80, 24)).columns
-        if columns < room + len(GAP) + width:
-            return "\n".join([*(paint_robot(line) for line in left), *lines])
+        high, low = PIXELS.get(top), PIXELS.get(bottom)
+        if high is None and low is None:
+            return " "
+        if high == low:
+            return f"\033[38;5;{high}m█\033[0m"
+        if low is None:
+            return f"\033[38;5;{high}m▀\033[0m"
+        if high is None:
+            return f"\033[38;5;{low}m▄\033[0m"
+        return f"\033[38;5;{high};48;5;{low}m▀\033[0m"
+    if "g" in (top, bottom):
+        return "▓"
+    high, low = top in "ows", bottom in "ows"
+    return "█" if high and low else "▀" if high else "▄" if low else " "
+
+
+def robot_lines(colour: bool) -> List[str]:
+    rows = ROBOT.strip("\n").split("\n")
+    return ["".join(cell(top, bottom, colour) for top, bottom in zip(rows[at], rows[at + 1])) for at in range(0, len(rows), 2)]
+
+
+def beside(left: List[str], room: int, lines: List[str], width: int, colour: bool) -> str:
+    """The robot to the left of the text. A terminal too narrow for both has it above."""
+    if colour and shutil.get_terminal_size((80, 24)).columns < room + len(GAP) + width:
+        return "\n".join([*left, *lines])
     size = max(len(left), len(lines))
-    rows = zip(left + [""] * (size - len(left)), lines + [""] * (size - len(lines)))
-    return "\n".join(((paint_robot(one.ljust(room)) if colour else one.ljust(room)) + GAP + two).rstrip() for one, two in rows)
-
-
-def paint_robot(line: str) -> str:
-    return line.replace("●", f"\033[1;38;5;{GREEN}m●\033[0m")
+    rows = zip(left + [" " * room] * (size - len(left)), lines + [""] * (size - len(lines)))
+    return "\n".join((one + GAP + two).rstrip() for one, two in rows)
 
 
 def version_banner(root: Path, stream: Any = None) -> str:
@@ -157,7 +189,7 @@ def version_banner(root: Path, stream: Any = None) -> str:
         word = f"version {registry['version']}"
         width = max(len(line) for line in art)
         lines = [*(painted(line) for line in art), f"\033[1m{word}\033[0m"] if colour else [*art, word]
-        lines += ["", "Copilot Agentic Harness"]
+        lines = ["", *lines, "", "Copilot Agentic Harness"]  # the robot is two lines taller: the text sits in its middle
     else:
         lines = [*BANNER.strip("\n").format(version=registry["version"]).split("\n"), "", "Copilot Agentic Harness"]
         width = max(len(line) for line in lines)
@@ -170,7 +202,11 @@ def version_banner(root: Path, stream: Any = None) -> str:
     others = registry.get("contributors") or []
     if others:
         lines.append("Contributors: " + ", ".join(others))
-    return beside(ROBOT if fancy else ROBOT_ASCII, lines, width, colour)
+    if fancy:
+        return beside(robot_lines(colour), len(ROBOT.strip("\n").split("\n")[0]), lines, width, colour)
+    plain = ROBOT_ASCII.strip("\n").split("\n")
+    room = max(len(line) for line in plain)
+    return beside([line.ljust(room) for line in plain], room, lines, width, False)
 
 
 def modules_for(registry: Dict[str, Any], event_name: str) -> List[str]:

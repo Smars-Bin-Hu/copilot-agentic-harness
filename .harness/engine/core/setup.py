@@ -87,6 +87,11 @@ def own_folders(root: Optional[Path]) -> Dict[Path, str]:
     return {root.resolve(): "setup.repos.self", (root / targets.KB_DIR).resolve(): "setup.repos.kb"}
 
 
+def kb_like(path: Path) -> bool:
+    """A knowledge base offered as code: as a code repository the map would read it, find nothing, and warn about it for ever."""
+    return (path / "domains").is_dir() and ((path / targets.COMPANY_DIR).is_dir() or (path / "toolkit" / "toolkit.json").is_file())
+
+
 def repositories(text: Any) -> Dict[str, Any]:
     """What is in the folder of code repositories: `{ok, n, names, why}`. Read only. Empty: a person may set it later."""
     value = clean_path(text)
@@ -115,6 +120,8 @@ def add_repo(text: Any, root_text: Any = "", singles: Any = (), root: Optional[P
     own = own_folders(root)
     if path.resolve() in own:
         raise ValueError(say(own[path.resolve()]))
+    if kb_like(path):
+        raise ValueError(say("setup.repos.kb.like"))
     base = clean_path(root_text)
     held = {Path(clean_path(item)).name for item in singles}
     if base and Path(base).is_dir():
@@ -126,7 +133,7 @@ def add_repo(text: Any, root_text: Any = "", singles: Any = (), root: Optional[P
             raise ValueError(str(error)[:200]) from None
         if not names:
             raise ValueError(say("setup.repos.none"))
-        rows = [{"name": name, "path": str(path / name), "held": name in held, **({"off": say("setup.repos.own")} if (path / name).resolve() in own else {"off": say("setup.repos.nocommit")} if head_branch(path / name) and not has_ref(path / name, head_branch(path / name)) else {})} for name in names]
+        rows = [{"name": name, "path": str(path / name), "held": name in held, **({"off": say("setup.repos.own")} if (path / name).resolve() in own else {"off": say("setup.repos.kb.like")} if kb_like(path / name) else {"off": say("setup.repos.nocommit")} if head_branch(path / name) and not has_ref(path / name, head_branch(path / name)) else {})} for name in names]
         return {"kind": "folder", "path": value, "n": len(names), "names": names[:3], "repos": rows}
     if not targets.REPO_NAME.match(path.name):
         raise ValueError(say("setup.repos.name", name=path.name))

@@ -8,6 +8,7 @@ and the one extractor the harness ships, `regex`, whose rules are written in too
 from __future__ import annotations
 
 import importlib.util
+import sys
 import re
 from hashlib import sha256
 from pathlib import Path
@@ -42,10 +43,14 @@ def load(file: Path, function: str) -> Extractor:
     if spec is None or spec.loader is None:
         raise ToolkitError(f"{file} cannot be loaded")
     module = importlib.util.module_from_spec(spec)
+    writes = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True  # a toolkit lives in the knowledge base: a `__pycache__` there is an uncommitted change nobody made
     try:
         spec.loader.exec_module(module)
     except Exception as error:  # noqa: BLE001 - the error of someone else's code, shown as it is
         raise ToolkitError(f"{file}: {type(error).__name__}: {error}") from None
+    finally:
+        sys.dont_write_bytecode = writes
     found = getattr(module, function, None)
     if not callable(found):
         raise ToolkitError(f"{file} has no function {function}()")

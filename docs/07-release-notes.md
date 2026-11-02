@@ -35,6 +35,8 @@ To see which version you have: `harness --version`.
 - **On Get ready, Company content and Code standards follow the folder you chose**, also when it lacks them. A knowledge base already in place is no longer shown as an error. The folder picker opens the nearest folder of a path that is not there.
 - **A board button that used to copy a command now runs it in the Terminal window.** A saved page has no server, so it still copies.
 - **The 3D robot of the Enter screen has no outline.** On a dark page it has a lacquer shine instead, so it stands out from the page.
+- **A map leaves no `__pycache__` in the knowledge base**, and one that is there no longer stops **Pack for colleagues**. Real uncommitted changes get two buttons: **See the changes** and **Commit them**.
+- **Get ready does not take a knowledge base as a code repository.**
 - **A chat on Copilot Fusion says so.** The task page and the board show `Copilot Fusion · <model>`, with the model the latest request ran on. Task settings keep Copilot Fusion and its level as the choice.
 - **Company Context beside Paired** replaces the green line of the board. Hold the pointer on it for all that your knowledge base has.
 - **"Quit VS Code and open it again" ends by itself on the Enter screen too.** The wait follows the link to VS Code. Before, it ended only on the setup page, and could stay until the board restarted.

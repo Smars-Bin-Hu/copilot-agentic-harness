@@ -44,6 +44,14 @@ class CompanyError(Exception):
     pass
 
 
+class DirtyError(CompanyError):
+    """The knowledge base has changes git does not hold. The board offers to show and commit them."""
+
+    def __init__(self, kb: Path) -> None:
+        super().__init__(say("company.pack.dirty", path=str(kb)))
+        self.path = str(kb)
+
+
 def say(key: str, /, **values: Any) -> str:
     return messages.text(key, **values)
 
@@ -277,6 +285,11 @@ def found_in_place(root: Path) -> List[str]:
     return []
 
 
+def changed_lines(status: bytes) -> List[str]:
+    """The lines of `git status --porcelain` that count. A `__pycache__` is no change of a person's, and a package holds only what git has anyway."""
+    return [line for line in status.decode("utf-8", "replace").splitlines() if line.strip() and "__pycache__" not in line and not line.endswith(".pyc")]
+
+
 def check_for_pack(root: Path, kb: Path) -> str:
     """The word of the company's skills, once what would go in the package passes the same checks a colleague's copy will run."""
     if not (kb / ".git").exists():
@@ -284,8 +297,8 @@ def check_for_pack(root: Path, kb: Path) -> str:
     state = git(kb, "status", "--porcelain")
     if state.returncode != 0:
         raise CompanyError(say("company.git_failed", error=state.stderr.decode("utf-8", "replace").strip()))
-    if state.stdout.strip():
-        raise CompanyError(say("company.pack.dirty", path=str(kb)))
+    if changed_lines(state.stdout):
+        raise DirtyError(kb)
     word = skillcheck.usable(read_json(kb / targets.COMPANY_DIR / CONFIG_FILE).get("skill_prefix", ""))
     if not word:
         raise CompanyError(say("company.pack.no_word", path=f"{targets.COMPANY_DIR}/{CONFIG_FILE}"))

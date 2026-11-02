@@ -12,7 +12,8 @@ from unittest import mock
 
 from support import GIT, HarnessTestCase, make_repo, make_root, run_git
 
-from core import company, reinstall, standards, targets
+from core import company, kbextract, reinstall, standards, targets
+from core import setup as core_setup
 from core.company import CompanyError
 from modules.task import setupjob
 
@@ -357,6 +358,29 @@ class LayoutTests(unittest.TestCase):
             found = company.diff(self.kb)
         self.assertEqual(found["fix"], "bns")
         self.assertNotIn("harness company", found["problem"])
+
+
+class PackStateTests(unittest.TestCase):
+    def test_python_bytecode_is_no_change(self) -> None:
+        self.assertEqual(company.changed_lines(b"?? toolkit/__pycache__/\n?? a.pyc\n"), [])
+        self.assertEqual(company.changed_lines(b" M README.md\n?? toolkit/__pycache__/\n"), [" M README.md"])
+
+    def test_a_knowledge_base_is_not_taken_for_code(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)
+            (path / "domains").mkdir()
+            self.assertFalse(core_setup.kb_like(path))  # code may have a folder of that name
+            (path / "company").mkdir()
+            self.assertTrue(core_setup.kb_like(path))
+            with self.assertRaises(ValueError):
+                core_setup.add_repo(str(path))
+
+    def test_a_toolkit_leaves_no_bytecode_in_its_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kit = Path(folder) / "extract.py"
+            kit.write_text("def run():\n    return 1\n", encoding="utf-8")
+            kbextract.load(kit, "run")
+            self.assertFalse((Path(folder) / "__pycache__").exists())
 
 
 class PickerTests(unittest.TestCase):

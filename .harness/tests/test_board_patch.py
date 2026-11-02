@@ -536,7 +536,7 @@ class WalkThroughTests(unittest.TestCase):
     def test_the_model_has_its_full_name_and_the_tier_says_it_is_a_tier(self) -> None:
         self.assertIn("chat.model_name || shortModel(chat.model)", (WEB / "status.js").read_text(encoding="utf-8"))
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
-        self.assertIn('infoItem("tk-model", chat.model_name || chat.model', desk)
+        self.assertIn('infoItem("tk-model", modelWords(chat, chat.model_name || chat.model)', desk)
         self.assertIn('t("desk.fact.tier.short", {tier: t("task.tier." + desk.tier)})', desk)
         self.assertEqual(messages.table("en")["desk.fact.tier.short"], "{tier} tier")
 

@@ -204,12 +204,21 @@ const DOCK = (function () {
     driftCard(synced);
     const packed = h("p", {class: "su-note kb-packed", hidden: ""});
     const pack = h("button", {type: "button", class: "act", title: t("dock.pack.hint"), hidden: hasCompany ? null : ""}, t("dock.pack"));
+    function paintPackError(error) {  // changes git does not hold: they are the person's, so the way on shows them and commits them in the person's own Terminal window
+      const folder = error.data && error.data.dirty;
+      if (!folder) { packed.textContent = plainWords(error.message); return; }
+      const see = h("button", {type: "button", class: "act kb-mini"}, t("dock.pack.see"));
+      const commit = h("button", {type: "button", class: "act kb-mini"}, t("dock.pack.commit"));
+      see.addEventListener("click", () => TERM.run(`git -C "${folder}" status --short`));
+      commit.addEventListener("click", () => TERM.run(`git -C "${folder}" add -A; git -C "${folder}" commit -m "Update the knowledge base"`));
+      packed.replaceChildren(t("dock.pack.dirty"), " ", see, " ", commit);
+    }
     pack.addEventListener("click", () => chooseOnPage("folder", "", (out) => {
       pack.disabled = true;
       packed.hidden = false;
       packed.classList.remove("bad");
       packed.textContent = t("dock.pack.working");
-      SERVE.post("/api/company", {op: "pack", out}).then((data) => { packed.textContent = t("dock.pack.done", {file: data.result.package, files: data.result.files}); }, (error) => { packed.classList.add("bad"); packed.textContent = error.message; }).then(() => { pack.disabled = false; });
+      SERVE.post("/api/company", {op: "pack", out}).then((data) => { packed.textContent = t("dock.pack.done", {file: data.result.package, files: data.result.files}); }, (error) => { packed.classList.add("bad"); paintPackError(error); }).then(() => { pack.disabled = false; });
     }));
     const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "kb-bar"}, h("div", {class: "chips dock-tabs"}, tabs), age, rebuild, again), alarm, synced, stage, packed, h("div", {class: "row"}, pack, no)]);
     view.box.classList.add("dock-window", "kb-window");
@@ -246,7 +255,7 @@ const DOCK = (function () {
       return go;
     };
     // Why a step is not done, when the status knows: a broken toolkit, facts the map does not find, repositories it does not cover.
-    const notes = (found) => found.steps.flatMap((item) => [...(item.problems || []), item.problem, item.note, item.no_toolkit ? t("dock.kb.map.notoolkit", {names: item.no_toolkit.join(", ")}) : "", item.step === "map" && item.facts && !item.done ? t("dock.kb.map.facts", {facts: item.facts}) : ""].filter(Boolean)).map((line) => h("p", {class: "su-warn"}, line));
+    const notes = (found) => found.steps.flatMap((item) => [...(item.problems || []), item.problem, item.note, item.no_toolkit ? t("dock.kb.map.notoolkit", {names: item.no_toolkit.join(", ")}) : "", item.step === "map" && item.facts && !item.done ? t("dock.kb.map.facts", {facts: item.facts}) : ""].filter(Boolean)).map((line) => h("p", {class: "su-warn"}, plainWords(line)));
     const chatGlyph = () => { const node = drawn(["M4 5h16v11h-8l-4 3.5V16H4z"]); node.classList.add("kb-chat"); return node; };
     const chatButton = (label, run, hot) => { const go = h("button", {type: "button", class: "act" + (hot ? " hot" : "")}, chatGlyph(), label); go.addEventListener("click", leave(run)); return go; };
     const backHere = () => kbWindow(current);

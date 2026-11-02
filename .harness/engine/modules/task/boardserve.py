@@ -553,7 +553,7 @@ class Board:
         step = str(data.get("step", ""))
         if step == "probe":
             kind = str(data.get("kind") or "repos")
-            return setupjob.probe_package(self.root, data.get("path")) if kind == "package" else setupjob.probe_folder(data.get("path")) if kind == "folder" else core_setup.repositories(data.get("repos_root"))
+            return setupjob.probe_package(self.root, data.get("path")) if kind == "package" else setupjob.probe_folder(data.get("path"))
         if step == "act":
             return self.setup_job.start(self.root, data)
         if step == "job":
@@ -565,7 +565,9 @@ class Board:
         if step == "pick":
             return {"path": wallpaper.pick(say("setup.pick.prompt"), file=str(data.get("kind")) == "file").rstrip("/\\") or ""}
         if step == "refuse":
-            return core_setup.refused(data.get("repos_root"), data.get("path"))
+            return core_setup.refused(data.get("repos_root"), data.get("path"), core_setup.single_list(data))
+        if step == "repo":
+            return core_setup.add_repo(data.get("path"), data.get("repos_root"), core_setup.single_list(data))
         if step == "short":
             problem = shortcmd.install(self.root)
             if problem:

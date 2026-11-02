@@ -6,6 +6,8 @@ The harness itself holds no business content. To plug it into a company environm
 
 Double-click `Start Harness.command` (macOS) or `Start Harness.cmd` (Windows) and press **Get ready**. If the double-click is blocked, run `sh .harness/bin/harness task board` (Windows: `.harness\bin\harness.cmd task board`).
 
+**Code repositories.** Add the folder that holds your git repositories, or add repositories one at a time from anywhere, or both. There can be one such folder: it is `repos_root`, and single repositories are `repos.<name>.path`. Two repositories cannot share a name.
+
 **The short command.** `harness` must be on PATH, because every command an agent is given starts with it. The page shows the one line, and **Set it up** runs it. You can copy it and run it yourself. Reopen VS Code after it, or the agent's terminals do not see it.
 
 If your company does not let you change PATH, ask the helpdesk to add one user PATH entry: `C:\Users\<user name>\bin`.

@@ -188,6 +188,59 @@ class FinishTests(unittest.TestCase):
         self.assertEqual(self.data(self.policies / "target.override.json"), {"repos_root": str(shelf)})
 
 
+class RepositoryListTests(unittest.TestCase):
+    def setUp(self) -> None:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.base = Path(folder.name)
+        self.root = self.base / "harness"
+        (self.root / ".harness" / "policies").mkdir(parents=True)
+        self.shelf = self.base / "shelf"
+        for path in (self.shelf / "orders", self.base / "far" / "billing", self.base / "other" / "billing", self.base / "plain"):
+            (path / ".git").mkdir(parents=True) if path.name != "plain" else path.mkdir()
+
+    def finish(self, data: dict) -> dict:
+        full = {"name": "A", "language": "en", **data}
+        with mock.patch.dict(os.environ):
+            os.environ.pop(messages.ENVIRONMENT, None)
+            setup.check(self.root, full)
+        for _key, step in setup.steps(self.root, full):
+            step()
+        return json.loads((self.root / ".harness" / "policies" / "target.override.json").read_text(encoding="utf-8"))
+
+    def test_a_path_is_told_for_what_it_is(self) -> None:
+        self.assertEqual(setup.add_repo(self.shelf)["kind"], "folder")
+        self.assertEqual(setup.add_repo(str(self.shelf / "orders") + "/"), {"kind": "repo", "name": "orders", "path": str(self.shelf / "orders")})
+        for path in (self.base / "plain", "relative/path", self.base / "gone"):
+            with self.assertRaises(ValueError):
+                setup.add_repo(path)
+
+    def test_one_folder_and_no_name_twice(self) -> None:
+        far, other = str(self.base / "far" / "billing"), str(self.base / "other" / "billing")
+        with self.assertRaises(ValueError):
+            setup.add_repo(self.base / "far", str(self.shelf))
+        with self.assertRaises(ValueError):
+            setup.add_repo(other, "", [far])
+        with self.assertRaises(ValueError):
+            setup.add_repo(self.shelf / "orders", str(self.shelf))
+        with self.assertRaises(ValueError):
+            setup.check(self.root, {"name": "A", "language": "en", "singles": [far, other]})
+
+    def test_a_folder_and_single_ones_together(self) -> None:
+        far = str(self.base / "far" / "billing")
+        found = self.finish({"repos_root": str(self.shelf), "singles": [far], "refused": [far + "/deploy.sh", str(self.shelf / "orders" / "x.sql")]})
+        self.assertEqual(found["repos_root"], str(self.shelf))
+        self.assertEqual(found["repos"]["billing"], {"path": far, "refused_paths": [".git/**", "deploy.sh"]})
+        self.assertEqual(found["repos"]["orders"]["refused_paths"], [".git/**", "x.sql"])
+
+    def test_single_ones_alone_and_taking_one_off_keeps_a_knowledge_base(self) -> None:
+        far = str(self.base / "far" / "billing")
+        self.assertEqual(self.finish({"repos_root": "", "singles": [far]})["repos"], {"billing": {"path": far}})
+        setup.write(self.root, "target", {"repos": {"billing": {"path": far}, "kb": {"path": "knowledge-base", "knowledge_base": True}}})
+        self.assertEqual(setup.status(self.root, "/x")["singles"], [far])
+        self.assertEqual(self.finish({"repos_root": ""})["repos"], {"kb": {"path": "knowledge-base", "knowledge_base": True}})
+
+
 class KnowledgeBaseTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()

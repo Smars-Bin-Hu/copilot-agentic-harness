@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.70 (2026-11-02)
+
+### Changed
+
+- Get ready: **Code repositories** takes a folder of repositories, single repositories added one at a time, or both. Single ones go to `repos.<name>.path`, and **Paths not to touch** works for them too.
+
 ## 1.6.69 (2026-11-02)
 
 ### Changed

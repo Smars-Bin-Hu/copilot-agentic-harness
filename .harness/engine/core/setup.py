@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core import config, messages, shortcmd, state as files
+from core import config, messages, shortcmd, state as files, targets
 
 MAX_NAME = 100
 MAX_PATH = 1024
@@ -76,15 +76,58 @@ def repositories(text: Any) -> Dict[str, Any]:
     return {"ok": True, "n": len(names), "names": names[:3], "why": "" if names else say("setup.repos.none")}
 
 
-def refused(root_text: Any, text: Any) -> Dict[str, str]:
+def add_repo(text: Any, root_text: Any = "", singles: Any = ()) -> Dict[str, Any]:
+    """What a path added to the code repositories is: one git repository, or a folder that holds some (`repos_root`, of which there is one). ValueError: why it cannot be added."""
+    value = clean_path(text).rstrip("/\\") or clean_path(text)
+    path = Path(value)
+    if len(value) > MAX_PATH or "\x00" in value or not path.is_absolute():
+        raise ValueError(say("setup.repos.absolute"))
+    if not path.is_dir():
+        raise ValueError(say("setup.repos.missing"))
+    base = clean_path(root_text)
+    if not (path / ".git").exists():
+        found = repositories(value)
+        if not found["ok"]:
+            raise ValueError(found["why"])
+        if not found["n"]:
+            raise ValueError(say("setup.repos.none"))
+        if base and base != value:
+            raise ValueError(say("setup.repos.one"))
+        return {"kind": "folder", "path": value, "n": found["n"], "names": found["names"]}
+    if not targets.REPO_NAME.match(path.name):
+        raise ValueError(say("setup.repos.name", name=path.name))
+    held = {Path(clean_path(item)).name for item in singles}
+    if base and Path(base).is_dir():
+        held |= {item.name for item in Path(base).iterdir() if (item / ".git").exists()}
+    if path.name in held:
+        raise ValueError(say("setup.repos.twice", name=path.name))
+    return {"kind": "repo", "name": path.name, "path": value}
+
+
+def single_list(data: Dict[str, Any]) -> List[str]:
+    found = data.get("singles")
+    return [clean_path(item) for item in found] if isinstance(found, list) else []
+
+
+def refused(root_text: Any, text: Any, singles: Any = ()) -> Dict[str, str]:
     """A path the agent must not touch, written whole, as the rule of its repository (`refused_paths` is relative to a repository). ValueError: why it cannot be one."""
     value = clean_path(text)
     base = clean_path(root_text)
-    if not base:
+    if not base and not singles:
         raise ValueError(say("setup.refused.first"))
     path = Path(value)
     if not value or not path.is_absolute():
         raise ValueError(say("setup.repos.absolute"))
+    for item in singles:
+        try:
+            parts = path.relative_to(clean_path(item)).parts
+        except ValueError:
+            continue
+        if parts:
+            rule = "/".join(parts)
+            return {"repo": Path(clean_path(item)).name, "rule": rule + "/**" if path.is_dir() else rule, "path": value}
+    if not base:
+        raise ValueError(say("setup.refused.inside"))
     try:
         parts = path.relative_to(base).parts
     except ValueError:
@@ -93,6 +136,11 @@ def refused(root_text: Any, text: Any) -> Dict[str, str]:
         raise ValueError(say("setup.refused.inside"))
     rule = "/".join(parts[1:])
     return {"repo": parts[0], "rule": rule + "/**" if path.is_dir() else rule, "path": value}
+
+
+def is_single(entry: Any) -> bool:
+    """A repository added by itself: not one found in `repos_root`, and not a knowledge base."""
+    return isinstance(entry, dict) and bool(str(entry.get("path") or "").strip()) and not entry.get("knowledge_base")
 
 
 def status(root: Path, short_found: Optional[str] = None) -> Dict[str, Any]:
@@ -106,7 +154,7 @@ def status(root: Path, short_found: Optional[str] = None) -> Dict[str, Any]:
         problem = str(error)
     path = shortcmd.fresh_path()
     found = shortcmd.found(path) if short_found is None else short_found
-    return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "language": str(user.get("language") or messages.language()), "repos_root": str(target.get("repos_root") or ""), "skill_prefix": str(user.get("skill_prefix") or ""),
+    return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "language": str(user.get("language") or messages.language()), "repos_root": str(target.get("repos_root") or ""), "root": repositories(target.get("repos_root")), "singles": [str(entry["path"]) for entry in (target.get("repos") or {}).values() if is_single(entry)], "skill_prefix": str(user.get("skill_prefix") or ""),
             "short": {"found": found, "command": "" if found else shortcmd.command_for(root, path), "windows": os.name == "nt"}, "example": r"C:\Users\me\repos\orders\deploy" if os.name == "nt" else "/Users/me/repos/orders/deploy"}
 
 
@@ -129,6 +177,14 @@ def check(root: Path, data: Dict[str, Any]) -> None:
         wrong.append(say("setup.language.need"))
     if not repos["ok"]:
         wrong.append(repos["why"])
+    held: List[str] = []
+    for item in single_list(data):
+        try:
+            if add_repo(item, data.get("repos_root"), held)["kind"] != "repo":
+                wrong.append(say("setup.repos.none"))
+            held.append(item)
+        except ValueError as error:
+            wrong.append(str(error))
     forced = os.environ.get(messages.ENVIRONMENT, "").strip().lower()
     if forced and forced != language:
         wrong.append(say("serve.language.env", name=messages.ENVIRONMENT))
@@ -154,19 +210,25 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
 
     def target() -> str:
         value = clean_path(data.get("repos_root"))
+        singles = single_list(data)
         rules: Dict[str, Any] = {}
         for path in data.get("refused") if isinstance(data.get("refused"), list) else []:
-            found = refused(value, path)
+            found = refused(value, path, singles)
             rules.setdefault(found["repo"], {".git/**"}).add(found["rule"])
-        if not value:
+        held = kept(root, "target")
+        was = held.get("repos") or {}
+        repos = {name: entry for name, entry in was.items() if not is_single(entry) or clean_path(entry["path"]) in singles}  # one taken off the list on the page goes
+        if not value and not singles and not was and not held.get("repos_root"):
             return say("setup.line.later")
-        repos = dict(kept(root, "target").get("repos") or {})
+        for path in singles:
+            repos[Path(path).name] = {**(repos.get(Path(path).name) or {}), "path": path}
         for name, wanted in rules.items():
             entry = dict(repos.get(name) or {})
             entry["refused_paths"] = sorted(set(entry.get("refused_paths") or []) | wanted)
             repos[name] = entry
-        write(root, "target", {"repos_root": value, **({"repos": repos} if rules else {})})
-        return say("setup.line.repos", n=repositories(value)["n"]) if value else say("setup.line.later")
+        write(root, "target", {"repos_root": value, **({"repos": repos} if repos or was else {})})
+        total = repositories(value)["n"] + len(singles)
+        return say("setup.line.repos", n=total) if total else say("setup.line.later")
 
     def tools() -> str:
         python = dict(kept(root, "tools").get("python") or {})
@@ -185,8 +247,6 @@ CAN_DECLARE = ("skills", "standards")  # a team may have none of these
 
 def missing(root: Path) -> List[str]:
     """What the big warning of the board lists: repos, domains, instructions, skills, standards. Quick: a few file looks, nothing that runs."""
-    from core import targets  # noqa: PLC0415 - targets reads policies through config, and only this needs it
-
     user = {}
     try:
         user = kept(root, "user")

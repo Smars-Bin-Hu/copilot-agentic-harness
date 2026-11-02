@@ -5,6 +5,7 @@ const TERM = (() => {
   const KEY = "harness.term";
   const KEEP = 20000;  // characters of a tab kept when the page changes
   const POLL = 400;
+  const MIN_WIDTH = 320, MIN_HEIGHT = 180;
   const memory = {open: false, tabs: [], at: 0};
   let ui = null;
   const save = () => { try { sessionStorage.setItem(KEY, JSON.stringify({...memory, tabs: memory.tabs.map((tab) => ({...tab, text: tab.text.slice(-KEEP)}))})); } catch (error) { /* a convenience only */ } };
@@ -12,7 +13,7 @@ const TERM = (() => {
   const post = (body) => SERVE.post("/api/term", body).then((data) => data.result);
   const current = () => memory.tabs[memory.at] || null;
   const newTab = () => { memory.tabs.push({label: "", text: "", job: "", since: 0}); memory.at = memory.tabs.length - 1; return current(); };
-  const shortPath = (path) => (path.length > 34 ? path.slice(0, 12) + "\u2026" + path.slice(-20) : path);
+  const folderOf = (path) => path.split(/[\\/]/).filter(Boolean).pop() || path;  // the whole path is the tip: the line is for typing
   const labelOf = (line) => line.replace(/^harness\s+/, "").split(/\s+/).slice(0, 2).join(" ").slice(0, 22);
 
   function paint() {
@@ -30,7 +31,7 @@ const TERM = (() => {
     ui.out.textContent = tab ? tab.text : "";
     ui.out.scrollTop = ui.out.scrollHeight;
     ui.stop.hidden = !(tab && tab.job);
-    ui.mark.textContent = (tab && tab.cwd ? shortPath(tab.cwd) + " " : "") + "$";
+    ui.mark.textContent = (tab && tab.cwd ? folderOf(tab.cwd) + " " : "") + "$";
     ui.mark.title = (tab && tab.cwd) || "";
     save();
   }
@@ -83,6 +84,23 @@ const TERM = (() => {
     const hide = h("button", {type: "button", class: "term-x", "aria-label": t("term.hide"), title: t("term.hide")}, "−");
     const box = h("section", {class: "term", hidden: "", "aria-label": t("term.title")}, h("div", {class: "term-bar"}, tabs, hide), out, h("div", {class: "term-line"}, mark, input, stop));
     ui = {box, toggle, tabs, add, out, input, stop, mark};
+    const grip = h("span", {class: "term-grip", title: t("term.resize")});
+    const sized = () => { box.style.width = memory.size ? memory.size[0] + "px" : ""; box.style.height = memory.size ? memory.size[1] + "px" : ""; };
+    // The window hangs from the top right, so it grows from its bottom left corner.
+    grip.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      grip.setPointerCapture(event.pointerId);
+      const from = {x: event.clientX, y: event.clientY, width: box.offsetWidth, height: box.offsetHeight};
+      const move = (step) => {
+        memory.size = [Math.round(Math.max(MIN_WIDTH, from.width + from.x - step.clientX)), Math.round(Math.max(MIN_HEIGHT, from.height + step.clientY - from.y))];
+        sized();
+      };
+      const stop = () => { grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", stop); grip.removeEventListener("pointercancel", stop); save(); };
+      grip.addEventListener("pointermove", move);
+      grip.addEventListener("pointerup", stop);
+      grip.addEventListener("pointercancel", stop);
+    });
+    grip.addEventListener("dblclick", () => { memory.size = null; sized(); save(); });
     const said = [];
     let back = 0;
     toggle.addEventListener("click", () => { memory.open = !memory.open; paint(); if (memory.open) input.focus(); });
@@ -100,7 +118,9 @@ const TERM = (() => {
         input.value = back ? said[said.length - back] : "";
       }
     });
+    box.append(grip);
     document.body.append(toggle, box);
+    sized();
     paint();
     memory.tabs.forEach((tab) => { follow(tab); if (!tab.cwd) move(tab, ""); });
   }

@@ -2164,6 +2164,7 @@
   "term.refused.line": "这个窗口无法运行这条命令（一行，最多 {limit} 个字符）。",
   "term.refused.other": "这个窗口只运行 harness 命令，请以 harness 开头。",
   "term.refused.board": "Board 已经在运行。",
+  "term.resize": "拖动调整大小，双击恢复默认大小。",
   "term.refused.folder": "没有这个文件夹：{path}",
   "term.refused.many": "已有 {limit} 条命令在运行，请等待或停止其中一条。",
   "term.refused.start": "命令无法启动：{error}",

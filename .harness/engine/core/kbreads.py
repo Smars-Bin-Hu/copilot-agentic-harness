@@ -135,6 +135,19 @@ def reads_by_task(root: Path, days: Optional[int] = None) -> Dict[str, Dict[str,
     return found
 
 
+def last_by_domain(root: Path) -> Dict[str, str]:
+    """domain, in lower case -> the time a tool call last read a file of it."""
+    found: Dict[str, str] = {}
+    for _surface, path in session_files(root):
+        for row in read_lines(path):
+            for name in row.get("kb") or []:
+                parts = str(name).split("/")
+                if len(parts) > 2 and parts[1] == "domains" and parts[2]:
+                    key = parts[2].lower()
+                    found[key] = max(found.get(key, ""), str(row.get("at", "")))
+    return found
+
+
 def of_task(root: Path, task: str) -> List[Dict[str, Any]]:
     """The knowledge base files one task read, most read first."""
     name = task_name(task)

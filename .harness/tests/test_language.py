@@ -83,7 +83,7 @@ class TableTests(unittest.TestCase):
 
     def test_the_pages_have_no_chinese_text_outside_the_tables(self) -> None:
         web = ENGINE / "modules" / "task" / "web"
-        self.assertEqual([path.name for path in sorted(web.iterdir()) if path.is_file() and HAN.search(path.read_text(encoding="utf-8"))], [])
+        self.assertEqual([path.name for path in sorted(web.iterdir()) if path.is_file() and path.suffix != ".png" and HAN.search(path.read_text(encoding="utf-8"))], [])
 
 
 class SwitchTests(unittest.TestCase):

@@ -101,6 +101,20 @@ const DOCK = (function () {
 
   // The knowledge base window: a page over the page, read only; a button with "chat" in it opens a chat (kbview.py, core/kbstatus.py).
   // A view asked for the first time in a window is worked out again, so what changed since shows; the kept one stays on the page until the new one is there.
+  const STALE_EVERY = 600000;  // ms; the view is kept as long (kbview.py)
+  const UNPAIRED_EVERY = 30000;  // a page opened before its browser is paired asks again soon
+  function badge(n) {
+    const mark = document.querySelector(".dock-count");
+    if (!mark) return;
+    mark.hidden = !n;
+    mark.textContent = n > 99 ? "99+" : String(n);
+  }
+  function watchStale() {
+    SERVE.post("/api/kb", {op: "detail", fresh: false}).then((data) => {
+      if (data.result.result) badge(data.result.result.stale);
+      setTimeout(watchStale, data.result.running ? 5000 : STALE_EVERY);
+    }, () => setTimeout(watchStale, UNPAIRED_EVERY));
+  }
   function kbWindow(tab) {
     const stage = h("div", {class: "dock-list kb-body"});
     const no = h("button", {type: "button", class: "act"}, t("board.new.close"));
@@ -111,7 +125,7 @@ const DOCK = (function () {
     const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "kb-bar"}, h("div", {class: "chips dock-tabs"}, tabs), age, again), alarm, stage, h("div", {class: "row"}, no)]);
     view.box.classList.add("dock-window", "kb-window");
     view.holds = () => false;  // it only reads: nothing here can be lost
-    let timer = 0, current = "", drawn = "", word = "", searched = "", ticket = 0;  // word, searched: what was typed in Look up, kept while the tab changes; ticket: the newest search
+    let timer = 0, current = "", seenView = "", word = "", searched = "", ticket = 0, extra = null, painted = null, detailTimer = 0;  // word, searched: what was typed in Look up, kept while the tab changes; ticket: the newest search
     const asked = new Set();
     no.addEventListener("click", view.close);
     const post = (body) => SERVE.post("/api/kb", body).then((data) => data.result);
@@ -123,7 +137,7 @@ const DOCK = (function () {
         if (!view.box.isConnected || key !== current) return;  // a late answer belongs to a tab that is gone
         age.textContent = found.running ? t("dock.kb.updating") : found.age === null ? "" : ago(found.age);
         const seen = JSON.stringify(found.result);
-        if (found.result && seen !== drawn) { drawn = seen; paint(found.result); }
+        if (found.result && seen !== seenView) { seenView = seen; painted = () => paint(found.result); painted(); }
         alarm.textContent = found.error;
         alarm.hidden = !found.error || found.running;
         if (!found.result) stage.replaceChildren(...(found.running || !found.error ? [h("p", {class: "sub"}, t("dock.kb.working"))] : []));
@@ -138,19 +152,77 @@ const DOCK = (function () {
     };
     // Why a step is not done, when the status knows: a broken toolkit, facts the map does not find, repositories it does not cover.
     const notes = (found) => found.steps.flatMap((item) => [...(item.problems || []), item.problem, item.note, item.no_toolkit ? t("dock.kb.map.notoolkit", {names: item.no_toolkit.join(", ")}) : "", item.step === "map" && item.facts && !item.done ? t("dock.kb.map.facts", {facts: item.facts}) : ""].filter(Boolean)).map((line) => h("p", {class: "su-warn"}, line));
-    function overview(found) {
+    const chatGlyph = () => { const node = drawn(["M4 5h16v11h-8l-4 3.5V16H4z"]); node.classList.add("kb-chat"); return node; };
+    const chatButton = (label, run, hot) => { const go = h("button", {type: "button", class: "act" + (hot ? " hot" : "")}, chatGlyph(), label); go.addEventListener("click", leave(run)); return go; };
+    const backHere = () => kbWindow(current);
+    const taskChat = (skill, domain) => CHAT.create({kind: "kb", text: "Use the skill " + skill + ". Domain: " + domain + ".", note: t("dock.task.note"), back: backHere});
+    const goOn = (item) => start("generic-kb-learn-batch", item.task, backHere);
+    const learn = (item) => taskChat("generic-kb-learn-plan", item.domain);
+    const refresh = (item) => taskChat("generic-kb-refresh", item.domain);
+    // What a domain asks for, by what is known of it: learning first, then its stale cards. A task that waits for its plan to be approved is the person's, on its own page.
+    function action(item) {
+      if (item.task) return item.plan && item.to_learn ? [t("dock.kb.go"), goOn] : null;
+      if (!item.done) return [t("dock.kb.learn"), learn];
+      const known = extra && extra.domains[item.domain];
+      return known && known.stale ? [t("dock.kb.refresh.cards"), refresh] : null;
+    }
+    const staleOf = (item) => { if (!extra) return undefined; const known = extra.domains[item.domain]; return known ? known.stale : 0; };  // a domain only listed has no folder yet, so no card
+    const percent = (item) => { const left = item.to_learn || 0, cards = item.cards || 0; return item.done ? 100 : cards + left ? Math.round(100 * cards / (cards + left)) : 0; };
+    function readText(item) {
+      if (!extra) return "\u2026";
+      const known = extra.domains[item.domain];
+      if (!known || !known.read) return t("dock.kb.read.never");
+      const days = Math.floor((Date.now() - Date.parse(known.read)) / 86400000);
+      return !(days > 0) ? t("dock.kb.read.today") : t("dock.kb.read.days", {n: days});
+    }
+    const state = (item) => (item.task ? [t("dock.kb.state.task") + " ", h("a", {href: "/task/" + encodeURIComponent(item.task)}, item.task)] : t(item.done ? "dock.kb.state.done" : item.listed ? "dock.kb.state.listed" : "dock.kb.state.open"));
+    function domainTable(list, full) {
+      const heads = ["domain", ...(full ? ["state"] : []), "cards", "learned", "stale", "requests", "read", ""];
+      const row = (item) => {
+        const stale = staleOf(item), todo = action(item);
+        const bar = h("span", {class: "kb-bar-line", title: percent(item) + "%"}, h("i", {style: "width:" + percent(item) + "%"}));
+        const button = todo ? h("button", {type: "button", class: "act kb-mini"}, chatGlyph(), todo[0]) : null;
+        if (button) button.addEventListener("click", leave(() => todo[1](item)));
+        return h("tr", null, h("td", {class: "kb-name"}, h("b", null, item.domain)), full ? h("td", null, state(item)) : null, h("td", {class: "kb-num"}, String(item.cards || 0)), h("td", null, bar, item.to_learn ? h("span", {class: "sub kb-left"}, t("dock.kb.left", {n: item.to_learn})) : null),
+          h("td", {class: "kb-num" + (stale ? " kb-hot" : "")}, stale === undefined ? "…" : stale === null ? "?" : stale ? String(stale) : "-"), h("td", {class: "kb-num"}, String(item.requests_open || 0)), h("td", {class: "kb-num"}, readText(item)), h("td", {class: "kb-do"}, button));
+      };
+      return h("div", {class: "scroll"}, h("table", {class: "md kb-table"}, h("thead", null, h("tr", null, heads.map((key) => h("th", null, key ? t("dock.kb.col." + key) : "")))), h("tbody", null, list.map(row))));
+    }
+    // The next step in words for a person, with the button that does it; `kb status` writes its own `next` for the agent.
+    function nextCard(found) {
       const built = found.stage === "maintain" && found.steps.every((item) => item.done);
-      stage.replaceChildren(...[h("ol", {class: "kb-steps"}, found.steps.map((item) => h("li", {class: item.done ? "done" : item.step === found.stage ? "now" : ""}, (item.done ? "\u2713 " : "") + t("dock.kb.step." + item.step)))),
-        h("p", {class: "kb-what"}, t("dock.kb.what." + (built ? "built" : found.stage))), ...notes(found),
-        h("div", {class: "kb-nums"}, h("span", null, t("dock.kb.domains", {n: found.domains.length})), h("span", null, t("dock.kb.requests", {n: found.requests_open}))), built ? null : nextButton(found.stage)].filter(Boolean));
+      if (found.stage === "learn") {
+        const item = found.domains.find((one) => !one.done);
+        if (item) {
+          const words = !item.task ? [t("dock.kb.next.plan", {domain: item.domain}), chatButton(t("dock.kb.learn"), () => learn(item), true)]
+            : !item.plan ? [t("dock.kb.next.approve", {domain: item.domain, task: item.task}), null]
+            : item.to_learn ? [t("dock.kb.next.batch", {domain: item.domain, left: item.to_learn, batches: item.batches_left || 0, task: item.task}), chatButton(t("dock.kb.go.chat"), () => goOn(item), true)]
+            : [t("dock.kb.next.finish", {domain: item.domain, task: item.task}), null];
+          return h("div", {class: "kb-next"}, h("p", null, words[0]), words[1]);
+        }
+      }
+      return h("div", {class: "kb-next"}, h("p", null, t("dock.kb.what." + (built ? "built" : found.stage))), built ? null : nextButton(found.stage));
+    }
+    function tiles(found) {
+      const tile = (value, label, mark) => h("div", {class: "kb-tile" + (mark ? " " + mark : "")}, h("b", null, value), h("span", null, label));
+      const waiting = "…";
+      return h("div", {class: "kb-tiles"}, tile(String(found.domains.length), t("dock.kb.tile.domains")), tile(String(found.domains.reduce((sum, item) => sum + (item.cards || 0), 0)), t("dock.kb.tile.cards")),
+        tile(extra ? String(extra.stale) : waiting, t("dock.kb.tile.stale"), extra && extra.stale ? "hot" : ""), tile(String(found.requests_open), t("dock.kb.tile.requests")), tile(extra ? String(extra.form_errors) : waiting, t("dock.kb.tile.errors"), extra && extra.form_errors ? "bad" : ""));
+    }
+    const legend = () => h("p", {class: "sub kb-legend"}, chatGlyph(), t("dock.kb.legend"));
+    const FIRST = 6;  // the rows of Overview; the rest are in Domains. What asks for something comes first
+    function overview(found) {
+      const list = [...found.domains].sort((one, two) => Number(Boolean(action(two))) - Number(Boolean(action(one))));
+      const more = h("button", {type: "button", class: "first-link"}, t("dock.kb.all", {n: list.length}));
+      more.addEventListener("click", () => show("domains"));
+      stage.replaceChildren(...[h("ol", {class: "kb-steps"}, found.steps.map((item) => h("li", {class: item.done ? "done" : item.step === found.stage ? "here" : ""}, t("dock.kb.step." + item.step)))),
+        nextCard(found), ...notes(found), found.domains.length ? tiles(found) : null, found.domains.length ? domainTable(list.slice(0, FIRST), false) : null, list.length > FIRST ? more : null, found.domains.length ? legend() : null].filter(Boolean));
     }
     function domains(found) {
       if (!found.domains.length) { stage.replaceChildren(h("p", {class: "sub"}, t("dock.kb.nodomains")), nextButton(found.stage)); return; }
       const more = h("button", {type: "button", class: "first-link"}, t("dock.skills.kb"));
       more.addEventListener("click", leave(() => allSkills("kb", () => kbWindow("domains"))));
-      const state = (item) => (item.task ? [t("dock.kb.state.task") + " ", h("a", {href: "/task/" + encodeURIComponent(item.task)}, item.task)] : t(item.done ? "dock.kb.state.done" : item.listed ? "dock.kb.state.listed" : "dock.kb.state.open"));
-      stage.replaceChildren(h("div", {class: "scroll"}, h("table", {class: "md"}, h("thead", null, h("tr", null, ["domain", "state", "left", "requests"].map((key) => h("th", null, t("dock.kb.col." + key))))),
-        h("tbody", null, found.domains.map((item) => h("tr", null, h("td", {class: "kb-name"}, item.domain), h("td", null, state(item)), h("td", null, item.to_learn === undefined ? "-" : String(item.to_learn)), h("td", null, String(item.requests_open || 0))))))), more);
+      stage.replaceChildren(domainTable(found.domains, true), more, legend());
     }
     function lookup() {
       const box = h("input", {type: "text", class: "code", autocomplete: "off", spellcheck: "false", maxlength: 200, placeholder: t("dock.kb.lookup.ph")});
@@ -185,13 +257,22 @@ const DOCK = (function () {
       const items = found.problems || [];
       const lines = (item, key) => (item[key] || []).slice(0, SHOWN).map((line) => h("li", {class: key === "errors" ? "bad" : ""}, typeof line === "string" ? line : JSON.stringify(line)));
       const left = (item) => (item.errors || []).length + (item.warnings || []).length - SHOWN;
-      stage.replaceChildren(h("p", null, found.domains ? t("dock.kb.health.sum", {n: found.domains, errors: found.errors, warnings: found.warnings}) + " " + found.next : t("dock.kb.health.none")),
-        ...items.map((item) => h("section", {class: "kb-problem"}, h("b", null, item.domain || item.name || ""), h("ul", null, lines(item, "errors"), lines(item, "warnings").slice(0, Math.max(0, SHOWN - (item.errors || []).length))), left(item) > 0 ? h("p", {class: "sub"}, t("dock.kb.health.more", {n: left(item)})) : null)));
+      const ids = (rows, label) => (rows.length ? [h("p", {class: "sub"}, label), h("ul", null, rows.map((id) => h("li", null, h("code", null, id))))] : []);
+      const staleRows = found.stale || [], gaps = found.gaps || {};
+      const staleButton = (item) => { const go = h("button", {type: "button", class: "act kb-mini"}, chatGlyph(), t("dock.kb.refresh.cards")); go.addEventListener("click", leave(() => refresh(item))); return go; };
+      const cut = (shown, total) => (total > shown ? h("p", {class: "sub"}, t("dock.kb.health.cut", {n: total - shown})) : null);
+      stage.replaceChildren(...[h("h3", null, t("dock.kb.health.form")), h("p", null, found.domains ? t("dock.kb.health.sum", {n: found.domains, errors: found.errors, warnings: found.warnings}) : t("dock.kb.health.none")),
+        ...items.map((item) => h("section", {class: "kb-problem"}, h("b", null, item.domain || item.name || ""), h("ul", null, lines(item, "errors"), lines(item, "warnings").slice(0, Math.max(0, SHOWN - (item.errors || []).length))), left(item) > 0 ? h("p", {class: "sub"}, t("dock.kb.health.more", {n: left(item)})) : null)),
+        found.domains ? h("h3", null, t("dock.kb.health.stale")) : null, found.domains && !staleRows.length ? h("p", {class: "sub"}, t("dock.kb.health.fresh")) : null,
+        ...staleRows.map((item) => h("section", {class: "kb-problem"}, h("div", {class: "kb-head"}, h("b", null, item.domain + (item.total ? " \u00b7 " + item.total : "")), item.total ? staleButton(item) : null), item.error ? h("p", {class: "bad"}, item.error) : null, ...item.unreadable.map((one) => h("p", {class: "bad"}, one.repo + ": " + one.error)), ...ids(item.changed, t("dock.kb.health.changed")), ...ids(item.gone, t("dock.kb.health.gone")), cut(item.changed.length + item.gone.length, item.total))),
+        gaps.names ? h("h3", null, t("dock.kb.health.gaps")) : null, gaps.names && !gaps.missing && !gaps.obsolete_used ? h("p", {class: "sub"}, t("dock.kb.health.nogaps")) : null,
+        ...(gaps.names ? [h("section", {class: "kb-problem"}, ...ids(gaps.names, t("dock.kb.health.missing", {n: gaps.missing})), cut(gaps.names.length, gaps.missing), ...ids(gaps.obsolete, t("dock.kb.health.obsolete", {n: gaps.obsolete_used})), cut(gaps.obsolete.length, gaps.obsolete_used))] : [])].filter(Boolean));
     }
     function show(key) {
       clearTimeout(timer);
       current = key;
-      drawn = "";
+      seenView = "";
+      painted = null;
       tabs.forEach((tab) => tab.classList.toggle("on", tab.dataset.key === key));
       view.box.classList.toggle("ka-open", key === "atlas");
       stage.classList.remove("ka-stage");
@@ -202,9 +283,19 @@ const DOCK = (function () {
       if (key === "lookup") { lookup(); return; }
       const op = key === "health" || key === "atlas" ? key : "status";
       const paint = key === "health" ? health : key === "atlas" ? (found) => ATLAS.draw(stage, found) : key === "overview" ? overview : domains;
-      again.onclick = () => { clearTimeout(timer); load(op, paint, true); };
+      again.onclick = () => { clearTimeout(timer); load(op, paint, true); loadDetail(true); };
       load(op, paint, !asked.has(op));
       asked.add(op);
+      if (op === "status" && !asked.has("detail")) { asked.add("detail"); loadDetail(true); }
+    }
+    // The stale cards, the form errors and the reads ask git and the logs: they come after the page is drawn, and the rows fill in.
+    function loadDetail(fresh) {
+      clearTimeout(detailTimer);
+      post({op: "detail", fresh}).then((found) => {
+        if (!view.box.isConnected) return;
+        if (found.result) { extra = found.result; badge(extra.stale); if (painted && ["overview", "domains"].includes(current)) painted(); }
+        if (found.running) detailTimer = setTimeout(() => loadDetail(false), 800);
+      }, () => {});
     }
     show(tab || "overview");
   }
@@ -271,7 +362,9 @@ const DOCK = (function () {
     const kb = icon("dock-book", t("dock.kb"), ["M12 6.5C10.2 5 7.5 4.5 3.5 4.5v14c4 0 6.7.5 8.5 2 1.8-1.5 4.5-2 8.5-2v-14c-4 0-6.7.5-8.5 2z", "M12 6.5v14"], kbWindow);
     const setup = icon("dock-setup", t("dock.setup"), ["M4 7h9M17 7h3M13 4.5h4v5h-4zM4 17h3M11 17h9M7 14.5h4v5H7z"], setupWindow);
     const home = icon("dock-home", t("dock.home"), ["M3.5 11.5 12 4.5l8.5 7M6 9.5V20h12V9.5M10 20v-5.5h4V20"], enterScreen);
+    kb.append(h("span", {class: "dock-count", title: t("dock.kb.badge"), hidden: ""}));
     document.body.append(panel, button, kb, setup, home);
+    watchStale();
   }
 
   if (typeof DATA !== "undefined" && DATA.serve) build();

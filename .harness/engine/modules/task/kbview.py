@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict
 
-from core import kbatlas, kbgraph, kbmap, kbstatus, kbstd, messages
+from core import kbatlas, kbdetail, kbgraph, kbmap, kbstatus, messages
 
 KEEP = 600.0  # seconds a view is good for
 MAX_LIST = 200
@@ -23,7 +23,7 @@ class View:
         self.kept: Dict[str, Dict[str, Any]] = {}
 
     def work(self, name: str) -> Callable[[], Dict[str, Any]]:
-        return {"status": lambda: kbstatus.status(self.root, True), "health": lambda: kbstd.check(self.root), "atlas": lambda: kbatlas.atlas(self.root)}[name]
+        return {"status": lambda: kbstatus.status(self.root, True), "detail": lambda: kbdetail.detail(self.root), "health": lambda: kbdetail.health(self.root), "atlas": lambda: kbatlas.atlas(self.root)}[name]
 
     def get(self, name: str, fresh: bool = False) -> Dict[str, Any]:
         """{running, result, at (seconds ago), error}. A view that is missing or old starts on a thread; the page asks again."""

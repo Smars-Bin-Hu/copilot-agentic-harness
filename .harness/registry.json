@@ -36,6 +36,7 @@
       ".harness/tests/test_kbaudit.py",
       ".harness/tests/test_kbstatus.py",
       ".harness/tests/test_kbatlas.py",
+      ".harness/tests/test_kbdetail.py",
       ".harness/tests/test_starticon.py",
       ".harness/tests/test_reply.py",
       ".harness/INDEX.md",

@@ -96,7 +96,7 @@ def open_requests(path: Path) -> int:
 def domain_state(root: Path, folder: Path, deep: bool) -> Dict[str, Any]:
     plan = plan_command(folder / "discovery" / "learn-plan.md")
     state: Dict[str, Any] = {"domain": folder.name, "plan": plan is not None, "architecture": flows_written(folder / "architecture.md"),
-                             "requests_open": open_requests(folder / "requests.md")}
+                             "requests_open": open_requests(folder / "requests.md"), "cards": cards(folder)}
     if deep and plan:
         try:
             order = kblearn.order(root, plan["entries"], plan["stops"], shared_min=plan["shared_min"], folder=folder)

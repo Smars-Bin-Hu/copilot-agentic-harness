@@ -104,7 +104,7 @@ class KeyAndLanguageTests(unittest.TestCase):
 
     def test_no_page_file_holds_chinese_and_the_zh_names_come_from_the_table(self) -> None:
         for path in sorted(WEB.iterdir()):
-            if path.is_file():
+            if path.is_file() and path.suffix != ".png":
                 self.assertFalse(HAN.search(path.read_text(encoding="utf-8")), path.name)
         self.assertIn('t("desk.send.lang.name.zh")', source("shell.js"))
 

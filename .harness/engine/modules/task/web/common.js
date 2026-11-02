@@ -80,7 +80,7 @@ function table(head, rows) {
 
 const th = (text, numeric) => h("th", numeric ? {class: "num"} : null, text || "");
 const num = (text) => h("td", {class: "num"}, text);
-const thinkingLabel = (level) => (level === "medium" ? t("desk.set.thinking.recommended", {level}) : level);
+const thinkingLabel = (level, model) => (model && model.thinking && model.thinking.key === "tier" && model.thinking.labels[level]) || (level === "medium" ? t("desk.set.thinking.recommended", {level}) : level);
 const tag = (text, kind) => h("span", {class: "tag" + (kind ? " " + kind : "")}, text);
 
 // The one state of a task is told by the server (tasklife.state_of): new, closed, paused, waiting, working, quiet, unheld.

@@ -522,7 +522,7 @@
     function fillFor(id, level, size) {
       const found = models.find((item) => item.id === id);
       const levels = found && found.thinking ? found.thinking.levels : [];
-      think.replaceChildren(...[levels.includes(level) ? null : h("option", {value: ""}, t("desk.set.thinking.default")), ...levels.map((item) => h("option", {value: item, selected: item === level ? "" : null}, thinkingLabel(item)))].filter(Boolean));
+      think.replaceChildren(...[levels.includes(level) ? null : h("option", {value: ""}, t("desk.set.thinking.default")), ...levels.map((item) => h("option", {value: item, selected: item === level ? "" : null}, thinkingLabel(item, found)))].filter(Boolean));
       think.disabled = !levels.length;
       const sizes = found && found.context ? found.context.sizes : [];
       const wanted = sizes.some((item) => item.id === size) ? size : found && found.context ? found.context.default : 0;

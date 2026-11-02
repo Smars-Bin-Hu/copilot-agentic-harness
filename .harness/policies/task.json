@@ -33,6 +33,7 @@
     "max_stalls": 3
   },
   "board": {
+    "one_click_fusion": true,
     "port": 8765,
     "refresh_seconds": 3,
     "closed_shown": 50,

@@ -123,7 +123,13 @@ def model_of(data: Dict[str, Any], models: List[Dict[str, Any]]) -> Optional[Dic
     levels = (listed[wanted].get("thinking") or {}).get("levels") or []
     if level and level not in levels:
         raise refusal("thinking")
-    return {"id": wanted, **({"config": {"thinkingLevel": level}} if level else {})}
+    return ahp.model_choice(listed[wanted], level)
+
+
+def one_click_model(models: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """The model of a chat that a click starts and nobody chose a model for: Copilot Fusion at Standard when the host lists it, else None (VS Code's own choice)."""
+    found = next((item for item in models if item["id"] == ahp.FUSION_ID), None)
+    return ahp.model_choice(found, ahp.FUSION_STANDARD if ahp.FUSION_STANDARD in ((found.get("thinking") or {}).get("levels") or []) else "") if found else None
 
 
 def first_message(plan: Dict[str, Any]) -> str:

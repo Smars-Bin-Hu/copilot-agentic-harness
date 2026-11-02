@@ -2138,6 +2138,7 @@
   "dock.deep": "harness 怎么工作",
   "dock.first": "第一课",
   "dock.title": "要开始这个 chat 吗？",
+  "dock.model": "使用 {model}。",
   "dock.hint": "看板会在 VS Code 里新建一个 chat，发送这条消息。",
   "dock.send": "发送",
   "dock.setup": "修改 Setup",

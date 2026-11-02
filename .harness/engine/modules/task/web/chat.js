@@ -235,7 +235,7 @@ const CHAT = (function () {
     function levels() {
       const found = state.models.find((item) => item.id === model.value);
       const list = (found && found.thinking && found.thinking.levels) || [];
-      thinking.replaceChildren(h("option", {value: ""}, t("board.new.thinking.default")), ...list.map((level) => h("option", {value: level}, thinkingLabel(level))));
+      thinking.replaceChildren(h("option", {value: ""}, t("board.new.thinking.default")), ...list.map((level) => h("option", {value: level}, thinkingLabel(level, found))));
       thinking.disabled = !list.length;
     }
     function refresh() {

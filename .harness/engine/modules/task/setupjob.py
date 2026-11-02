@@ -6,7 +6,6 @@ The knowledge base is written here because a person chose it on the page, as `co
 from __future__ import annotations
 
 import ctypes
-import itertools
 import os
 import shutil
 import string
@@ -212,14 +211,16 @@ def browse(raw: Any, zips: bool = False) -> Dict[str, Any]:
         return {**found, "parent": "", "error": say("setup.repos.absolute")}
     try:
         with os.scandir(path) as items:
-            for item in itertools.islice(items, MAX_LISTED + 1):
+            for count, item in enumerate(items):
+                if count >= MAX_LISTED:
+                    found["cut"] = True
+                    break
                 if item.name.startswith("."):
                     continue
                 if item.is_dir():
                     found["folders"].append(item.name)
                 elif zips and item.name.lower().endswith(".zip"):
                     found["zips"].append(item.name)
-            found["cut"] = next(items, None) is not None
     except OSError as error:
         return {**found, "folders": [], "zips": [], "error": type(error).__name__}
     found["folders"].sort(key=str.casefold)

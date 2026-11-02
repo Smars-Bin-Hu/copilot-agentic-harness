@@ -53,7 +53,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
-from core import config, messages, registry, state, tasks, user
+from core import ahp, config, messages, registry, state, tasks, user
 from core.paths import board_serve_file, board_serve_port, utc_now
 
 from core import company, reinstall, setup as core_setup, shortcmd, skillboard
@@ -303,7 +303,7 @@ class Board:
         """The row `Task settings` of the task page: the checks (0 to the cap), and the model and thinking level of the messages the board sends, from the models the host lists."""
         data = tasks.read(self.root, task) or {}
         model = chatsend.model_of(data) or {}
-        return {"n": taskreview.state_of(data)["n"], "max_n": taskreview.settings(self.root)["max_n"], "model": model.get("id", ""), "thinking": (model.get("config") or {}).get("thinkingLevel", ""), "context": (model.get("config") or {}).get("contextSize", 0), "options": self.link.chat_options(task),
+        return {"n": taskreview.state_of(data)["n"], "max_n": taskreview.settings(self.root)["max_n"], "model": model.get("id", ""), "thinking": (model.get("config") or {}).get("thinkingLevel") or (model.get("config") or {}).get("tier", ""), "context": (model.get("config") or {}).get("contextSize", 0), "options": self.link.chat_options(task),
                 "models": self.link.model_list(), "ready": bool(self.link.status()["ready"])}
 
     def keep_override(self, key: str, value: Any) -> None:
@@ -617,16 +617,15 @@ class Board:
             return {"skills": skillboard.skills(self.root)}
         text = skillsend.message(self.root, data)
         why = self.link.create_blocked()
+        model = self.click_model(data)
         if step == "preview":
-            return {"text": text, "blocked": say(f"create.refused.{why}") if why else ""}
+            return {"text": text, "blocked": say(f"create.refused.{why}") if why else "", "model": self.model_words(model)}
         if step != "act":
             raise CommandError(say("serve.refused.request"))
         if why:
             raise CommandError(say(f"create.refused.{why}"))
         try:
-            listed = {item["id"] for item in self.link.model_list()}
-            wanted = str(data.get("model") or "")
-            done = self.link.create(dict(skillsend.plan(str(data.get("lang") or "en")), model={"id": wanted} if wanted in listed else None), text)
+            done = self.link.create(dict(skillsend.plan(str(data.get("lang") or "en")), model=model), text)
         except vslink.Refused as error:
             raise CommandError(say(f"create.refused.{error.why}")) from None
         except Exception as error:  # noqa: BLE001 - the name of the error only, never its text
@@ -634,6 +633,22 @@ class Board:
         skillsend.record(self.root, str(data.get("skill")), "chat", done)
         self.link.open_window()
         return {"sent": True}
+
+    def click_model(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """The model of a chat a click starts: the one the person chose for its task, else Copilot Fusion unless `board.one_click_fusion` in the policy `task` is false."""
+        chosen = chatsend.model_of(self.target(data)[1]) if data.get("task") else None
+        if chosen:
+            return chosen
+        wanted = (config.policy_or_empty(self.root, "task").get("board") or {}).get("one_click_fusion", True)
+        return chatnew.one_click_model(self.link.model_list()) if wanted is not False else None
+
+    def model_words(self, model: Optional[Dict[str, Any]]) -> str:
+        """The model of `click_model` as the page shows it. Empty: VS Code chooses."""
+        found = next((item for item in self.link.model_list() if model and item["id"] == model["id"]), None)
+        if not found:
+            return ""
+        level = next(iter(((model.get("config") or {}).values())), "")
+        return " \u00b7 ".join(part for part in (found["name"], str(((found.get("thinking") or {}).get("labels") or {}).get(level, level))) if part)
 
     def run(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """The Run button (`taskrun.py`). `op`: start, read, stop or latest (the run of a task under way, for a page opened meanwhile). A paired browser only."""
@@ -853,7 +868,7 @@ class Board:
                 raise CommandError(self.refusal("thinking"))
             if size and size not in [item["id"] for item in (listed[wanted].get("context") or {}).get("sizes") or []]:
                 raise CommandError(self.refusal("context"))
-            config = {**({"thinkingLevel": level} if level else {}), **({"contextSize": size} if size else {})}
+            config = {**ahp.model_choice(listed[wanted], level).get("config", {}), **({"contextSize": size} if size else {})}
             model = {"id": wanted, **({"config": config} if config else {})}
         with task_ops.locked(self.root, task) as again:
             kept = dict(again.get("chat") or {})

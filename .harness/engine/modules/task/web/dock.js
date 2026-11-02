@@ -20,19 +20,22 @@ const DOCK = (function () {
 
   function start(skill, words, back, task) {  // `task`: the chat goes on with this task, and no new one is made
     const lang = document.documentElement.lang === "zh" ? "zh" : "en";
-    const body = {skill, words: words || "", lang};
+    const body = {skill, words: words || "", lang, ...(task ? {task} : {})};
     const preview = h("pre", {class: "send-preview"}, "...");
     const said = h("div", {class: "bad"});
+    const runs = h("p", {class: "sub", hidden: ""});
     const go = h("button", {type: "button", class: "act hot", disabled: "disabled"}, t("dock.send"));
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const copy = h("button", {type: "button", class: "act", "data-label": t("dock.copy"), hidden: ""}, t("dock.copy"));  // with VS Code away, the words can still go into a chat by hand
     const again = h("button", {type: "button", class: "act", hidden: ""}, t("dock.again"));
-    const view = SERVE.dialog([h("h2", null, t(task ? "dock.title.task" : "dock.title")), h("p", {class: "sub"}, task ? t("dock.hint.task", {task}) : t("dock.hint")), preview, said, h("div", {class: "row"}, go, again, copy, no)]);
+    const view = SERVE.dialog([h("h2", null, t(task ? "dock.title.task" : "dock.title")), h("p", {class: "sub"}, task ? t("dock.hint.task", {task}) : t("dock.hint")), preview, runs, said, h("div", {class: "row"}, go, again, copy, no)]);
     no.addEventListener("click", view.close);
     if (back) no.before(backButton(view, back));
     copy.addEventListener("click", () => copyCommand(copy, preview.textContent));
     const check = () => ask("preview", body).then((found) => {
       preview.textContent = found.text;
+      runs.hidden = !found.model;
+      runs.textContent = found.model ? t("dock.model", {model: found.model}) : "";
       said.replaceChildren(...(found.blocked ? SERVE.reasons(found.blocked) : []));
       go.disabled = Boolean(found.blocked);
       copy.hidden = again.hidden = !found.blocked;

@@ -38,6 +38,8 @@ CLI_ENV = "HARNESS_VSCODE_CLI"  # a person may point at the `code` command by ha
 # `status` of a session or chat is a set of bits (checked on real sessions)
 IDLE, ERROR, IN_PROGRESS, INPUT_NEEDED, IS_READ, ARCHIVED = 1, 2, 8, 24, 32, 64
 LOCAL_PROVIDER = "copilotcli"  # the chats of GitHub Copilot; other providers (claude, codex) are not ours
+FUSION_ID = "auto"  # Copilot Fusion: Copilot picks the model for each request
+FUSION_STANDARD = "balance"  # its lowest tier
 
 
 class AhpError(Exception):
@@ -537,22 +539,34 @@ def utc_stamp() -> str:
 
 def models_of(root_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     """The models a person may pick, from the root state of the host (`agents[].models` of Copilot, checked on a real VS Code): only those the policy enables (`policyState == "enabled"`;
-    a model with no policyState is not offered: nothing says it is allowed). `thinking`: the levels of `configSchema.properties.thinkingLevel`, or None when the model has none."""
+    a model with no policyState is not offered: nothing says it is allowed). Copilot Fusion is the one exception: the host lists it with no policyState, and any other state keeps it out.
+    `thinking`: the levels of `configSchema.properties.thinkingLevel`, or for Fusion its `tier`, with `key` (the name in `config`) and `labels`; None when the model has none."""
     out: List[Dict[str, Any]] = []
     for agent in root_state.get("agents") or []:
         if not isinstance(agent, dict) or agent.get("provider") != LOCAL_PROVIDER:
             continue
         for model in agent.get("models") or []:
-            if not isinstance(model, dict) or model.get("policyState") != "enabled" or not model.get("id"):
+            if not isinstance(model, dict) or not model.get("id"):
+                continue
+            fusion = model["id"] == FUSION_ID and "policyState" not in model
+            if model.get("policyState") != "enabled" and not fusion:
                 continue
             properties = (model.get("configSchema") or {}).get("properties") or {}
-            level = properties.get("thinkingLevel") or {}
-            levels = [str(item) for item in level.get("enum") or [] if isinstance(item, str)]
+            key = "tier" if model["id"] == FUSION_ID else "thinkingLevel"
+            level = properties.get(key) or {}
+            choices = named(level)
+            levels = [str(item["id"]) for item in choices]
             size = properties.get("contextSize") or {}
             sizes = named(size)
             out.append({"id": str(model["id"]), "name": str(model.get("name") or model["id"]), "price": str((model.get("_meta") or {}).get("priceCategory") or ""),
-                        "thinking": {"levels": levels, "default": level.get("default")} if levels else None, "context": {"sizes": sizes, "default": size.get("default")} if sizes else None})
+                        "thinking": {"levels": levels, "default": level.get("default"), "key": key, "labels": {str(item["id"]): item["label"] for item in choices}} if levels else None, "context": {"sizes": sizes, "default": size.get("default")} if sizes else None})
     return out
+
+
+def model_choice(model: Dict[str, Any], level: str = "") -> Dict[str, Any]:
+    """A model of `models_of` with a level, in the shape of `message.model`."""
+    key = (model.get("thinking") or {}).get("key") or "thinkingLevel"
+    return {"id": model["id"], **({"config": {key: level}} if level else {})}
 
 
 def named(schema: Any) -> List[Dict[str, Any]]:

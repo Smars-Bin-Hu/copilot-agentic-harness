@@ -2138,6 +2138,7 @@
   "dock.deep": "How the harness works",
   "dock.first": "First lesson",
   "dock.title": "Start this chat?",
+  "dock.model": "Runs on {model}.",
   "dock.hint": "The board makes a new chat in VS Code with this message.",
   "dock.send": "Send",
   "dock.setup": "Change the setup",

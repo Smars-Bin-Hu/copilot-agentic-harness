@@ -76,6 +76,25 @@ def repositories(text: Any) -> Dict[str, Any]:
     return {"ok": True, "n": len(names), "names": names[:3], "why": "" if names else say("setup.repos.none")}
 
 
+def refused(root_text: Any, text: Any) -> Dict[str, str]:
+    """A path the agent must not touch, written whole, as the rule of its repository (`refused_paths` is relative to a repository). ValueError: why it cannot be one."""
+    value = clean_path(text)
+    base = clean_path(root_text)
+    if not base:
+        raise ValueError(say("setup.refused.first"))
+    path = Path(value)
+    if not value or not path.is_absolute():
+        raise ValueError(say("setup.repos.absolute"))
+    try:
+        parts = path.relative_to(base).parts
+    except ValueError:
+        raise ValueError(say("setup.refused.outside", folder=base)) from None
+    if len(parts) < 2 or not (Path(base) / parts[0] / ".git").exists():
+        raise ValueError(say("setup.refused.inside"))
+    rule = "/".join(parts[1:])
+    return {"repo": parts[0], "rule": rule + "/**" if path.is_dir() else rule, "path": value}
+
+
 def status(root: Path, short_found: Optional[str] = None) -> Dict[str, Any]:
     """What the page needs. Reading a broken override file is told, not raised: the page must open to say so."""
     problem = ""
@@ -88,11 +107,7 @@ def status(root: Path, short_found: Optional[str] = None) -> Dict[str, Any]:
     path = shortcmd.fresh_path()
     found = shortcmd.found(path) if short_found is None else short_found
     return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "language": str(user.get("language") or messages.language()), "repos_root": str(target.get("repos_root") or ""), "skill_prefix": str(user.get("skill_prefix") or ""),
-            "short": {"found": found, "command": "" if found else shortcmd.command_for(root, path), "windows": os.name == "nt"}}
-
-
-def lines_of(text: Any) -> List[str]:
-    return [line.strip() for line in str(text or "").splitlines() if line.strip()]
+            "short": {"found": found, "command": "" if found else shortcmd.command_for(root, path), "windows": os.name == "nt"}, "example": r"C:\Users\me\repos\orders\deploy" if os.name == "nt" else "/Users/me/repos/orders/deploy"}
 
 
 def check(root: Path, data: Dict[str, Any]) -> None:
@@ -132,10 +147,18 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
 
     def target() -> str:
         value = clean_path(data.get("repos_root"))
-        extra = {"refused_paths": sorted({".git/**", *lines_of(data.get("refused_paths"))})} if lines_of(data.get("refused_paths")) else {}
-        if not value and not extra:
+        rules: Dict[str, Any] = {}
+        for path in data.get("refused") if isinstance(data.get("refused"), list) else []:
+            found = refused(value, path)
+            rules.setdefault(found["repo"], {".git/**"}).add(found["rule"])
+        if not value:
             return say("setup.line.later")
-        write(root, "target", {**({"repos_root": value} if value else {}), **extra})
+        repos = dict(kept(root, "target").get("repos") or {})
+        for name, wanted in rules.items():
+            entry = dict(repos.get(name) or {})
+            entry["refused_paths"] = sorted(set(entry.get("refused_paths") or []) | wanted)
+            repos[name] = entry
+        write(root, "target", {"repos_root": value, **({"repos": repos} if rules else {})})
         return say("setup.line.repos", n=repositories(value)["n"]) if value else say("setup.line.later")
 
     def tools() -> str:

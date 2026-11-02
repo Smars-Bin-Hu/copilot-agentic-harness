@@ -81,9 +81,21 @@ class FinishTests(unittest.TestCase):
         self.run_steps({"name": "A", "language": "en", "install_command": "pip3 install"})
         self.assertEqual(self.data(self.policies / "tools.override.json")["python"], {"interpreter": "/mine/python", "install_command": "pip3 install"})
 
-    def test_paths_not_to_touch_keep_git(self) -> None:
-        self.run_steps({"name": "A", "language": "en", "refused_paths": "secret/**\n\n  prod/** "})
-        self.assertEqual(self.data(self.policies / "target.override.json")["refused_paths"], [".git/**", "prod/**", "secret/**"])
+    def test_a_whole_path_becomes_a_rule_of_its_repository(self) -> None:
+        shelf = Path(self.temp.name) / "repos"
+        (shelf / "orders" / ".git").mkdir(parents=True)
+        (shelf / "orders" / "deploy").mkdir()
+        (shelf / "orders" / "deploy" / "run.yml").write_text("x", encoding="utf-8")
+        self.run_steps({"name": "A", "language": "en", "repos_root": str(shelf), "refused": [str(shelf / "orders" / "deploy"), str(shelf / "orders" / "deploy" / "run.yml")]})
+        found = self.data(self.policies / "target.override.json")
+        self.assertEqual(found["repos"]["orders"]["refused_paths"], [".git/**", "deploy/**", "deploy/run.yml"])
+
+    def test_a_path_outside_a_repository_is_refused(self) -> None:
+        shelf = Path(self.temp.name) / "repos"
+        (shelf / "plain").mkdir(parents=True)
+        for root, path in (("", "/a/b"), (str(shelf), "relative"), (str(shelf), "/elsewhere/x"), (str(shelf), str(shelf / "plain" / "x")), (str(shelf), str(shelf))):
+            with self.assertRaises(ValueError, msg=path):
+                setup.refused(root, path)
 
     def test_one_wrong_field_stops_before_anything_is_written(self) -> None:
         for data in ({"name": "", "language": "en"}, {"name": "A", "language": "fr"}, {"name": "x" * 101, "language": "en"}, {"name": "A", "language": "en", "repos_root": "relative/path"},

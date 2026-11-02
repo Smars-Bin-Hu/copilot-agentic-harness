@@ -562,6 +562,10 @@ class Board:
                 self.language_stamp = []
                 self.sync_language()
             return found
+        if step == "pick":
+            return {"path": wallpaper.pick(say("setup.pick.prompt"), file=str(data.get("kind")) == "file").rstrip("/\\") or ""}
+        if step == "refuse":
+            return core_setup.refused(data.get("repos_root"), data.get("path"))
         if step == "short":
             problem = shortcmd.install(self.root)
             if problem:

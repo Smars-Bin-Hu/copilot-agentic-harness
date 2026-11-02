@@ -32,6 +32,13 @@ WINDOWS_PICK = (
     "$box = New-Object System.Windows.Forms.FolderBrowserDialog; $box.Description = $env:" + PROMPT_VAR + "; "
     "if ($box.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $box.SelectedPath }"
 )
+MAC_FILE = ("on run argv", "activate", 'POSIX path of (choose file with prompt (item 1 of argv) of type {"zip"})', "end run")
+WINDOWS_FILE = (
+    "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; "
+    "$owner = New-Object System.Windows.Forms.Form -Property @{TopMost = $true}; "
+    "$box = New-Object System.Windows.Forms.OpenFileDialog; $box.Filter = 'zip|*.zip'; $box.Title = $env:" + PROMPT_VAR + "; "
+    "if ($box.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $box.FileName }"
+)
 TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 WANT = {".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png", ".webp": "webp"}  # what the first bytes must show for each extension
 MAX_BYTES = 40 * 1024 * 1024  # a picture of 8K can be 20 MB; more than this is not a wallpaper
@@ -81,9 +88,18 @@ def picker(prompt: str) -> Optional[List[str]]:
     return None
 
 
-def pick(prompt: str, timeout: float = PICK_SECONDS) -> str:
+def file_picker(prompt: str) -> Optional[List[str]]:
+    """The same window for one zip file (Get ready)."""
+    if sys.platform == "darwin":
+        return ["osascript", *[part for line in MAC_FILE for part in ("-e", line)], prompt]
+    if sys.platform == "win32":
+        return ["powershell", "-NoProfile", "-NonInteractive", "-STA", "-Command", WINDOWS_FILE]
+    return None
+
+
+def pick(prompt: str, timeout: float = PICK_SECONDS, file: bool = False) -> str:
     """Opens that window and waits for the person: the folder they chose, or "" when they cancelled or took too long. OSError: the window could not be opened, so the path is typed."""
-    command = picker(prompt)
+    command = file_picker(prompt) if file else picker(prompt)
     if command is None:
         raise OSError("no folder window on this system")
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0

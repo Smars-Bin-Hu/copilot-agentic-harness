@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.66 (2026-11-01)
+
+### Changed
+
+- Get ready: **Browse** buttons for the repository folder and the knowledge base; a row of its own for the preferred language; **Skill prefix** with an example; **Python install command** with a proxy example; **Paths not to touch** takes one absolute path at a time and turns it into the rule of its repository.
+
 ## 1.6.65 (2026-11-01)
 
 ### Changed

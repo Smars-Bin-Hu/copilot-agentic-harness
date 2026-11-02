@@ -3,7 +3,7 @@
 (function () {
   const app = document.getElementById("app");
   const POLL = 2000;
-  const st = {form: null, timer: 0, probe: 0};
+  const st = {form: null, timer: 0, probe: 0, refused: []};
   const ask = (step, body) => SERVE.post("/api/setup", {step, ...(body || {})}).then((data) => data.result);
 
   const shortBox = h("section", {class: "su-card"});
@@ -13,9 +13,40 @@
   const repos = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: t("setup.repos.ph")});
   const kbPath = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", hidden: ""});
   const kbNote = h("p", {class: "su-note"});
+  const kbPick = h("button", {type: "button", class: "act"}, t("setup.browse"));
+  kbPick.addEventListener("click", () => {
+    kbPick.disabled = true;
+    ask("pick", {kind: kbPick.dataset.kind}).then((found) => { kbPick.disabled = false; if (found.path) { kbPath.value = found.path; checkKb(); } }, () => { kbPick.disabled = false; });
+  });
   const prefix = h("input", {type: "text", class: "su-in su-short", maxlength: 31, autocomplete: "off", spellcheck: "false"});
   const install = h("input", {type: "text", class: "su-in su-mono", maxlength: 500, autocomplete: "off", spellcheck: "false", placeholder: t("setup.install.ph")});
-  const refused = h("textarea", {class: "su-in su-mono", rows: 3, spellcheck: "false", placeholder: t("setup.refused.ph")});
+  const refusedBox = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false"});
+  const refusedAdd = h("button", {type: "button", class: "act"}, t("setup.refused.add"));
+  const refusedList = h("div", {class: "su-list"});
+  const refusedNote = h("p", {class: "su-note bad", hidden: ""});
+  function addRefused() {
+    ask("refuse", {repos_root: repos.value, path: refusedBox.value}).then((found) => {
+      refusedNote.hidden = true;
+      refusedBox.value = "";
+      if (st.refused.includes(found.path)) return;
+      st.refused.push(found.path);
+      const chip = h("span", {class: "su-item"}, h("code", null, found.path));
+      const off = h("button", {type: "button", class: "su-x", "aria-label": t("setup.refused.remove")}, "\u00d7");
+      off.addEventListener("click", () => { st.refused = st.refused.filter((item) => item !== found.path); chip.remove(); });
+      chip.append(off);
+      refusedList.append(chip);
+    }, (error) => { refusedNote.hidden = false; refusedNote.textContent = error.message || String(error); });
+  }
+  refusedAdd.addEventListener("click", addRefused);
+  refusedBox.addEventListener("keydown", (event) => { if (event.key === "Enter") addRefused(); });
+  const browse = (input, kind, after) => {
+    const button = h("button", {type: "button", class: "act"}, t("setup.browse"));
+    button.addEventListener("click", () => {
+      button.disabled = true;
+      ask("pick", {kind}).then((found) => { button.disabled = false; if (found.path) { input.value = found.path; after(); } }, (error) => { button.disabled = false; said.replaceChildren(...SERVE.reasons(error.message || error)); });
+    });
+    return button;
+  };
   const modes = ["package", "folder", "none"].map((mode) => {
     const chip = h("button", {type: "button", class: "chip", "data-mode": mode}, t("setup.kb." + mode));
     chip.addEventListener("click", () => setMode(mode));
@@ -25,6 +56,8 @@
     st.mode = mode;
     modes.forEach((chip) => { const on = chip.dataset.mode === mode; chip.classList.toggle("on", on); chip.setAttribute("aria-pressed", on ? "true" : "false"); });
     kbPath.hidden = mode === "none";
+    kbPick.hidden = mode === "none";
+    kbPick.dataset.kind = mode === "package" ? "file" : "folder";
     kbPath.placeholder = mode === "package" ? t("setup.kb.package.ph") : t("setup.kb.folder.ph");
     kbNote.className = "su-note";
     kbNote.textContent = mode === "none" ? t("setup.kb.none.hint") : "";
@@ -74,6 +107,7 @@
       repos.value = found.repos_root;
       setLang(found.language);
       setMode("none");
+      refusedBox.placeholder = found.example;
       prefix.value = found.skill_prefix || "";
       if (found.problem) said.replaceChildren(...SERVE.reasons(found.problem));
       checkRepos();
@@ -106,7 +140,7 @@
   go.addEventListener("click", () => {
     go.disabled = true;
     said.replaceChildren();
-    ask("act", {name: name.value, language: st.lang, repos_root: repos.value, kb_mode: st.mode, kb_path: kbPath.value, skill_prefix: prefix.value, install_command: install.value, refused_paths: refused.value}).then(follow,
+    ask("act", {name: name.value, language: st.lang, repos_root: repos.value, kb_mode: st.mode, kb_path: kbPath.value, skill_prefix: prefix.value, install_command: install.value, refused: st.refused}).then(follow,
       (error) => { go.disabled = false; said.replaceChildren(...SERVE.reasons(error.message || error)); });
   });
   function older() {
@@ -156,9 +190,9 @@
   if (!first) guide();
   app.replaceChildren(h("div", {class: "su"}, h("h1", null, t(first ? "setup.title" : "setup.guide")), h("p", {class: "su-lead"}, t("setup.lead"), " ", olderLink), shortBox,
     h("section", {class: "su-card"}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "2"), h("h2", null, t("setup.form.title"))),
-      row(t("setup.name"), h("div", {class: "su-line"}, name, h("span", {class: "chips"}, chips))), row(t("setup.repos"), repos, repoNote),
-      row(t("setup.kb"), h("div", {class: "chips su-modes"}, modes), kbPath, kbNote), row(t("setup.prefix"), prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))),
-      h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row(t("setup.install"), install), row(t("setup.refused"), refused)),
+      row(t("setup.name"), name), row(t("setup.language"), h("span", {class: "chips su-modes"}, chips)), row(t("setup.repos"), h("div", {class: "su-line"}, repos, browse(repos, "folder", checkRepos)), repoNote),
+      row(t("setup.kb"), h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote), row(t("setup.prefix"), prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))),
+      h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row(t("setup.install"), install, h("p", {class: "su-note"}, t("setup.install.example"))), row(t("setup.refused"), h("div", {class: "su-line"}, refusedBox, refusedAdd), refusedNote, refusedList, h("p", {class: "su-note"}, t("setup.refused.hint")))),
       h("div", {class: "su-end"}, go, h("span", {class: "su-note"}, t("setup.finish.note"))), said), first ? null : guideBox));
   load();
 })();

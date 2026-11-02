@@ -15,6 +15,15 @@ function t(key, values) {
   return template.replace(/`/g, "").replace(/\{(\w+)\}/g, (whole, name) => (values && name in values ? String(values[name]) : whole));  // the marks are for a terminal; what a person fills in stays as it is
 }
 
+// The model of a chat as a person reads it. With Copilot Fusion the name alone would say a choice was made: it says who chose, and where the latest request went.
+const fusionChat = (chat) => Boolean(chat) && chat.fusion !== null && chat.fusion !== undefined;
+function modelWords(chat, name) {
+  if (!fusionChat(chat) || chat.model === "auto") return name;
+  return t("board.model.fusion", {model: name});
+}
+function modelTip(chat, tip) {
+  return fusionChat(chat) ? t("board.model.fusion.tip", {model: chat.model_name || chat.model}) : tip;
+}
 const plainWords = (text) => String(text).replace(/`/g, "");  // words of the engine, written for a terminal
 
 // h("td", {class: "num", title: "x"}, child, "text", [more])

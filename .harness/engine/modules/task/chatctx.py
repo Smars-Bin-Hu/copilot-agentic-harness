@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from core import ahp
+
 
 def number(value: Any) -> Optional[float]:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 else None
@@ -93,6 +95,15 @@ def effort(state: Dict[str, Any], model: str = "") -> Optional[str]:
             return level.strip() if not (named and model and named != model) else None
         if chosen.get("id"):
             return None
+    return None
+
+
+def fusion(state: Dict[str, Any]) -> Optional[str]:
+    """The tier when the newest message that named a model asked for Copilot Fusion ("" when it gave none); None for any other model. The chat itself says only what a request was routed to."""
+    for message in messages(state):
+        chosen = message.get("model") if isinstance(message.get("model"), dict) else {}
+        if chosen.get("id"):
+            return str((chosen.get("config") or {}).get("tier") or "") if chosen["id"] == ahp.FUSION_ID else None
     return None
 
 

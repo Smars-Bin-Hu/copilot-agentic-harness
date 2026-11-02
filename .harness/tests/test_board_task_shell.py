@@ -30,6 +30,16 @@ def turn(model: str = "", level: str = "", usage: dict | None = None) -> dict:
     return {"id": "t", "message": message, "usage": usage}
 
 
+class FusionTests(unittest.TestCase):
+    def test_the_newest_message_that_named_a_model_says_it(self) -> None:
+        fusion = {"turns": [{"id": "t", "message": {"text": "go", "model": {"id": "auto", "config": {"tier": "balance"}}}}]}
+        self.assertEqual(chatctx.fusion(fusion), "balance")
+        self.assertEqual(chatctx.fusion({"turns": fusion["turns"] + [turn()]}), "balance")  # a message with no model keeps the last one
+        self.assertIsNone(chatctx.fusion({"turns": fusion["turns"] + [turn("m")]}))
+        self.assertEqual(chatctx.fusion({"turns": [turn("auto")]}), "")  # Fusion at no named tier
+        self.assertIsNone(chatctx.fusion({"turns": []}))
+
+
 class EffortTests(unittest.TestCase):
     def test_the_level_is_what_the_newest_message_that_carried_one_said(self) -> None:
         self.assertEqual(chatctx.effort({"turns": [turn("m", "low"), turn("m", "high")]}, "m"), "high")

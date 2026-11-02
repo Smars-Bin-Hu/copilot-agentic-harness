@@ -1946,6 +1946,8 @@
   "serve.language.bad": "已拒绝：语言只能是 `en` 或 `zh`。",
   "serve.language.env": "环境变量 {name} 已设置，优先于配置文件。先取消它，再在这里改语言。",
   "serve.language.broken": "读不了 {file}（{error}）。请先手动修好：什么都没有改。",
+  "board.model.fusion": "Copilot Fusion（{model}）",
+  "board.model.fusion.tip": "Copilot Fusion 按请求自动选择模型。最近一次用的是 {model}。",
   "board.status.model": "模型：{model}",
   "board.status.context": "上下文：已用 {percent}%（{used} / {window} tokens）",
   "board.status.context.warn": "已超过 {limit}% 的上限",

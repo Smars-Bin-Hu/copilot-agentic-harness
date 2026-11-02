@@ -192,6 +192,7 @@ class VsLink:
                     out["started_at"] = found["started"]  # the run time of the latest turn is counted by the page, only while it runs
                 out["context"] = chatctx.meter(cached["state"], self.limits)  # None: unknown, shown empty
                 out["effort"] = chatctx.effort(cached["state"], found["model"])  # only what a message said; None: not known
+                out["fusion"] = chatctx.fusion(cached["state"])
                 out["window"] = chatctx.capacity(found["model"], self.limits, chatctx.chosen_size(cached["state"], found["model"]))  # None: not listed
                 sub = tasksub.sub_of(found, cached.get("tool_at", "") if found["busy"] else "")
                 if sub:

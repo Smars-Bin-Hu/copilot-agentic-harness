@@ -1946,6 +1946,8 @@
   "serve.language.bad": "Refused: the language must be `en` or `zh`.",
   "serve.language.env": "The environment variable {name} is set and wins over the file. Unset it, then change the language here.",
   "serve.language.broken": "{file} cannot be read ({error}). Fix it by hand first: nothing was changed.",
+  "board.model.fusion": "Copilot Fusion · {model}",
+  "board.model.fusion.tip": "Copilot Fusion picks the model for each request. The latest ran on {model}.",
   "board.status.model": "Model: {model}",
   "board.status.context": "Context: {percent}% full ({used} of {window} tokens)",
   "board.status.context.warn": "Above the limit of {limit}%",

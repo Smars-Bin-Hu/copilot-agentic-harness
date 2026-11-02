@@ -123,8 +123,8 @@ const Status = (function () {
 
   function modelMark(chat, key, focusable) {
     if (!chat || !chat.model) return null;
-    const full = t("board.status.model", {model: chat.model});
-    return marked(h("span", {class: "st-chip"}, chat.model_name || shortModel(chat.model)), key, () => full, full, focusable);
+    const full = modelTip(chat, t("board.status.model", {model: chat.model}));
+    return marked(h("span", {class: "st-chip"}, modelWords(chat, chat.model_name || shortModel(chat.model))), key, () => full, full, focusable);
   }
 
   const finite = (value) => typeof value === "number" && isFinite(value);

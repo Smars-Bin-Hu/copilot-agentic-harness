@@ -484,10 +484,10 @@
     const kindName = t("task.kind." + (desk.kind || "none"));
     const room = bound && chat.window ? chat.window : meter ? meter.window : 0;
     const changed = desk.status === "new" ? "" : agoText(desk.updated_at);
-    ui.infoL.set(JSON.stringify([desk.kind, desk.tier, desk.status, desk.round, desk.created_at, desk.updated_at, changed, desk.domains, desk.autorun, bound && [chat.model, chat.model_name, chat.effort, room]]), () => {
+    ui.infoL.set(JSON.stringify([desk.kind, desk.tier, desk.status, desk.round, desk.created_at, desk.updated_at, changed, desk.domains, desk.autorun, bound && [chat.model, chat.model_name, chat.effort, chat.fusion, room]]), () => {
       const nodes = [];
       if (desk.status !== "new" && desk.kind) nodes.push(Status.card(kindIcon(desk.kind, t("desk.info.kind", {kind: kindName})), factsCard, t("desk.info.kind", {kind: kindName})));
-      if (bound && chat.model) nodes.push(infoItem("tk-model", chat.model_name || chat.model, t("desk.info.model", {model: chat.model})));
+      if (bound && chat.model) nodes.push(infoItem("tk-model", modelWords(chat, chat.model_name || chat.model), modelTip(chat, t("desk.info.model", {model: chat.model}))));
       if (bound && chat.effort) nodes.push(infoItem("tk-effort", t("desk.info.effort", {level: chat.effort}), t("desk.info.effort.tip")));
       if (bound && room) nodes.push(infoItem("tk-win", t("desk.info.window", {size: tokensShort(room)}), t("desk.info.window.tip", {tokens: room.toLocaleString("en-US")})));
       if (desk.status !== "new") {  // a task not started has no kind, no round, no dates
@@ -513,7 +513,8 @@
     const info = desk.settings;
     if (!served() || desk.past || !info || desk.status !== "open") return null;
     const models = info.models || [];
-    const now = info.model || (desk.chat && desk.chat.model) || "";  // the model the chat uses: the board's choice, or what it ran on last
+    const running = fusionChat(desk.chat) ? "auto" : desk.chat && desk.chat.model;  // Copilot Fusion stays the choice, whatever one request was routed to
+    const now = info.model || running || "";  // the model the chat uses: the board's choice, or what it ran on last
     const chosen = models.find((item) => item.id === now);
     const pick = h("select", {"aria-label": t("desk.set.model"), disabled: info.ready && models.length ? null : "disabled", title: info.ready ? "" : t("desk.set.model.off")},
       chosen ? null : h("option", {value: ""}, t("desk.set.model.chat")), models.map((item) => h("option", {value: item.id, selected: item.id === now ? "" : null}, item.name)));
@@ -530,11 +531,11 @@
       room.replaceChildren(...(sizes.length ? sizes.map((item) => h("option", {value: item.id, selected: item.id === wanted ? "" : null}, item.label)) : [h("option", {value: ""}, t("desk.set.thinking.default"))]));
       room.disabled = !sizes.length;
     }
-    fillFor(now, info.thinking || (desk.chat && desk.chat.effort) || "", info.context);
+    fillFor(now, info.thinking || (desk.chat && (desk.chat.fusion || desk.chat.effort)) || "", info.context);
     const save = (id, thinking, context) => SERVE.post("/api/setting", {task: desk.name, id, thinking, context}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
     const switching = h("p", {class: "set-warn", hidden: true});
     const warnSwitch = () => {  // the next message moves the chat to another model: its cache is of no use there
-      const from = desk.chat && desk.chat.model, to = pick.value, name = (id) => (models.find((item) => item.id === id) || {}).name || id;
+      const from = running, to = pick.value, name = (id) => (models.find((item) => item.id === id) || {}).name || id;
       switching.hidden = !(from && to && from !== to);
       switching.textContent = switching.hidden ? "" : t("desk.set.model.switch", {from: name(from), to: name(to)});
     };

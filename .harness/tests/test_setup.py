@@ -53,10 +53,10 @@ class TryTests(unittest.TestCase):
     def test_the_output_of_the_command_is_kept(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             launcher = Path(folder) / "harness"
-            launcher.write_text("#!/bin/sh\necho banner\n", encoding="utf-8")
+            launcher.write_text("#!/bin/sh\necho '  banner'\n", encoding="utf-8")
             launcher.chmod(0o755)
             with mock.patch.object(shortcmd, "fresh_path", return_value=folder + os.pathsep + os.environ["PATH"]):
-                self.assertEqual(shortcmd.test(Path(folder)), {"ok": True, "output": "banner"})
+                self.assertEqual(shortcmd.test(Path(folder)), {"ok": True, "output": "  banner"})
             launcher.write_text("#!/bin/sh\necho broken >&2\nexit 2\n", encoding="utf-8")
             with mock.patch.object(shortcmd, "fresh_path", return_value=folder + os.pathsep + os.environ["PATH"]):
                 self.assertEqual(shortcmd.test(Path(folder)), {"ok": False, "output": "broken"})

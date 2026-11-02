@@ -80,7 +80,7 @@ def test(root: Path) -> Dict[str, Any]:
         done = subprocess.run(command, capture_output=True, timeout=RUN_WAIT, stdin=subprocess.DEVNULL, check=False, cwd=str(root), env={**os.environ, "PATH": path})
     except (OSError, subprocess.SubprocessError) as error:
         return {"ok": False, "output": str(error)[:MAX_OUTPUT]}
-    text = (done.stdout + done.stderr).decode("utf-8", errors="replace").strip()
+    text = (done.stdout + done.stderr).decode("utf-8", errors="replace").strip("\r\n").rstrip()  # the first line of the banner starts with spaces
     return {"ok": done.returncode == 0, "output": text[:MAX_OUTPUT]}
 
 

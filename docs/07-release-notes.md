@@ -14,6 +14,11 @@ To see which version you have: `harness --version`.
 
 ### Changed
 
+- **Long commands run in the background, and show it.** The `>_` button shows how many run, with the window shut too, and marks how the last one ended. A tab shows the time, and a bar when the command counts its steps. A second click finds the run that is going on. A quiet run is reported after 5 minutes and is never stopped for you.
+- **Rebuild map** in the Knowledge base window runs in the background, with a bar by repository. It costs no premium request.
+- **Health shows the audit of the toolkit**, with a button that runs it in a chat.
+- **Restart board** in the settings loads new code and texts, and this browser stays paired. A second double-click on Start Harness only opens the running board.
+- **The tab group Deliver is now Verify.**
 - **The Terminal window runs any command**, not only `harness`: pipes and `&&` too, in the shell of the Run button. It still takes no input, so `vim`, `ssh` and an approval do not work there, and each line has its own shell, so `export` does not last. Only a paired browser can use it, and each line is kept in `.harness/runtime/board-terminal.jsonl`. Set `board.terminal_any_command` to `false` in `task.override.json` to allow `harness` commands only.
 - **The Enter screen has a way on when `harness doctor` stops it:** **Open the setup** and **See all of it**. Before, there was nothing to press.
 - **A company skill that cannot be copied has a way on:** **Fix it in a chat**. The card says that a sync cannot fix it, and it stays on the Overview tab.

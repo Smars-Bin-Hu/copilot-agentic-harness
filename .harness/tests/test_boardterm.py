@@ -76,9 +76,9 @@ class RunTests(unittest.TestCase):
 
     def test_stop_ends_a_run_and_there_is_a_limit(self) -> None:
         term = self.script("import time\ntime.sleep(30)\n")
-        idents = [term.start("harness x")["id"] for _ in range(boardterm.MAX_RUNNING)]
+        idents = [term.start(f"harness x{index}")["id"] for index in range(boardterm.MAX_RUNNING)]
         with self.assertRaises(CommandError):
-            term.start("harness x")
+            term.start("harness y")
         for ident in idents:
             term.stop(ident)
             self.assertTrue(self.wait(term, ident)["done"])
@@ -122,6 +122,27 @@ class RunTests(unittest.TestCase):
             self.assertTrue(term.any_command())
         with mock.patch.object(boardterm.config, "policy_or_empty", return_value={"board": {"terminal_any_command": False}}):
             self.assertFalse(term.any_command())
+
+    def test_a_second_click_finds_the_run_that_is_going_on(self) -> None:
+        term = self.script("import time\ntime.sleep(30)\n")
+        first = term.start("harness x")
+        again = term.start("harness x")
+        self.assertEqual((again["id"], again.get("again")), (first["id"], True))
+        self.assertEqual([item["id"] for item in term.act({"op": "running"})["running"]], [first["id"]])
+
+    def test_a_long_command_counts_its_steps_and_they_are_not_output(self) -> None:
+        job = boardterm.Job("x", mock.Mock())
+        job.add("first\n::progress 2/5 shop_dw\nlast\n")
+        job.ended = True
+        found = job.view(0)
+        self.assertEqual(found["text"], "first\nlast\n")
+        self.assertEqual(found["progress"], {"done": 2, "total": 5, "word": "shop_dw"})
+
+    def test_a_run_says_how_long_it_has_been_quiet_and_keeps_running(self) -> None:
+        job = boardterm.Job("x", mock.Mock())
+        with mock.patch.object(boardterm.time, "monotonic", return_value=job.last + 400):
+            self.assertEqual(job.view(0)["idle"], 400)
+        self.assertFalse(job.ended)
 
     def test_a_run_the_board_forgot_ends_on_the_page(self) -> None:
         self.assertTrue(boardterm.Terminal(self.root).read("nope", 0)["gone"])

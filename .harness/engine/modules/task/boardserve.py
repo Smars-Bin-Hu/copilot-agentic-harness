@@ -43,6 +43,7 @@ import io
 import json
 import os
 import secrets
+import subprocess
 import sys
 import threading
 import re
@@ -170,6 +171,19 @@ def disk_version(root: Path) -> str:
         return ""
 
 
+RESTART_AFTER = 0.3  # seconds for the answer to reach the page
+RESTART_CODE = "HARNESS_BOARD_RESTART"  # the pairing code of the next process: in its environment, never on disk
+
+
+def relaunch(code: str) -> None:
+    """The same command again, so new code and new texts are read. No exec replaces a process on Windows: it runs it and leaves with its answer, as `pinpython` does."""
+    words = [sys.executable, *sys.argv]
+    env = {**os.environ, RESTART_CODE: code}
+    if os.name == "nt":
+        sys.exit(subprocess.call(words, env=env))
+    os.execve(sys.executable, words, env)
+
+
 class Board:
     """What one server holds: the settings, the pairing code and the sessions of paired browsers. Memory only."""
 
@@ -187,7 +201,10 @@ class Board:
         self.everything = everything
         self.port = port
         self.actions = actions
-        self.code = secrets.token_urlsafe(12)
+        self.restarted = bool(os.environ.get(RESTART_CODE))
+        self.code = os.environ.pop(RESTART_CODE, "") or secrets.token_urlsafe(12)  # after Restart board the page brings this code back; a new process holds no session
+        self.next_code = ""
+        self.server: Any = None
         self.sessions: set = set()
         self.lock = threading.Lock()
         self.wall_window = threading.Lock()  # one folder window at a time
@@ -633,6 +650,12 @@ class Board:
         skillsend.record(self.root, str(data.get("skill")), "chat", done)
         self.link.open_window()
         return {"sent": True}
+
+    def restart(self) -> Dict[str, Any]:
+        """Restart board: the code the page pairs with when the new process answers. What runs in the Terminal window stops, as it does whenever the board stops."""
+        self.next_code = secrets.token_urlsafe(12)
+        threading.Timer(RESTART_AFTER, self.server.shutdown).start()
+        return {"code": self.next_code}
 
     def click_model(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """The model of a chat a click starts: the one the person chose for its task, else Copilot Fusion unless `board.one_click_fusion` in the policy `task` is false."""
@@ -1160,6 +1183,10 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": board.terminal.act(data)})
                 except CommandError as error:
                     return self.answer(409, {"error": str(error)})
+            if path == "/api/restart":  # Restart board: the paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                return self.answer(200, {"result": board.restart()})
             if path == "/api/company":  # the company content against its copies (every 2 minutes), and the Sync button: the paired browser only
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
@@ -1300,7 +1327,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     link = link if link is not None else vslink.VsLink(root, enabled=vslink.enabled_by_policy(root))
     board = Board(root, everything, port or found["port"], found["actions"], link, found["refresh"])
     try:
-        server = http.server.ThreadingHTTPServer(("127.0.0.1", board.port), handler_for(board))
+        server = board.server = http.server.ThreadingHTTPServer(("127.0.0.1", board.port), handler_for(board))
     except OSError as error:
         if already_serving(root, board.port):
             print(say("serve.already", url=f"http://127.0.0.1:{board.port}/"), file=out, flush=True)
@@ -1315,7 +1342,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     address = f"http://127.0.0.1:{board.port}/"
     opened = False
     try:
-        opened = bool(opener(f"{address}#pair={board.code}"))
+        opened = board.restarted or bool(opener(f"{address}#pair={board.code}"))  # after a restart the page is there, and asks for itself
     except Exception:  # noqa: BLE001 - the person can pair by hand
         opened = False
     print(say("serve.started", address=address, actions=", ".join(board.actions)), file=out, flush=True)
@@ -1337,6 +1364,8 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
             path.unlink()
         except OSError:
             pass
+    if board.next_code:
+        relaunch(board.next_code)
     return {"served": address, "stopped": True}
 
 

@@ -9,6 +9,7 @@ import os
 import socket
 import threading
 import time
+import types
 import unittest
 from unittest import mock
 from typing import Any, Dict, Optional, Tuple
@@ -122,6 +123,14 @@ class CodeStampTests(unittest.TestCase):
 
 
 class ServeTests(ServeCase):
+    def test_restart_is_for_the_paired_browser_and_gives_the_next_code(self) -> None:
+        self.assertEqual(self.request("POST", "/api/restart", {})[0], 403)
+        board = types.SimpleNamespace(server=mock.Mock(), next_code="")
+        with mock.patch.object(boardserve.threading, "Timer") as timer:
+            code = boardserve.Board.restart(board)["code"]
+        self.assertEqual(code, board.next_code)
+        timer.assert_called_once()
+
     def test_the_page_comes_only_to_this_address(self) -> None:
         status, data, _ = self.request("GET", "/")
         self.assertEqual(status, 200)

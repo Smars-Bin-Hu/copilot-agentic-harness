@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict
 
-from . import domainskills, kbgraph, kbmap, kbreads, kbstd, messages
+from . import domainskills, kbgraph, kbmap, kbreads, kbstatus, kbstd, messages
 
 MAX_LIST = 50  # lines of one list in the Health tab; the commands give the rest
 
@@ -59,6 +59,15 @@ def gaps(root: Path) -> Dict[str, Any]:
             "obsolete_used": len(found["obsolete_used"]), "obsolete": [item["id"] for item in found["obsolete_used"][:MAX_LIST]]}
 
 
+def audit_of(root: Path) -> Dict[str, Any]:
+    """What `kb status` knows of the audit of the toolkit: `{ready, done, note}`. `ready`: there is a map to audit."""
+    try:
+        steps = {item["step"]: item for item in kbstatus.status(root, False)["steps"]}
+    except Exception:  # noqa: BLE001 - the window goes on without it
+        return {"ready": False, "done": False, "note": ""}
+    return {"ready": bool(steps["map"].get("done")), "done": bool(steps["audit"].get("done")), "note": str(steps["audit"].get("note") or "")}
+
+
 def health(root: Path) -> Dict[str, Any]:
     """`kb check`, and beside it the stale cards by domain and the gaps."""
     result = kbstd.check(root)
@@ -68,4 +77,4 @@ def health(root: Path) -> Dict[str, Any]:
         if item.get("error") or count(item) or lost:
             rows.append({"domain": name, "error": item.get("error", ""), "unreadable": lost, "total": count(item),
                          "changed": [entry["id"] for entry in item.get("changed") or []][:MAX_LIST], "gone": [entry["id"] for entry in item.get("gone") or []][:MAX_LIST]})
-    return {**result, "stale": rows, "gaps": gaps(root)}
+    return {**result, "stale": rows, "gaps": gaps(root), "audit": audit_of(root)}

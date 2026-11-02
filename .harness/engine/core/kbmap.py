@@ -15,6 +15,8 @@ map (`kb near`, `kb split`, `kb gaps`) are in core/kbgraph.py.
 from __future__ import annotations
 
 import json
+import os
+import sys
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -222,6 +224,12 @@ def chosen_repos(root: Path, names: Optional[List[str]]) -> List[targets.Repo]:
     return [repo for name, repo in sorted(found.repos.items()) if not repo.knowledge_base]
 
 
+def progress(done: int, total: int, word: str) -> None:
+    """For the Terminal window of the board, which asks for it; a person at a terminal and an agent read the result."""
+    if os.environ.get("HARNESS_PROGRESS"):
+        print(f"::progress {done}/{total} {word}", file=sys.stderr, flush=True)
+
+
 def build(root: Path, names: Optional[List[str]] = None, fresh: bool = False, trial: Optional[Path] = None) -> Dict[str, Any]:
     """`kb map`: map the repositories (all target repositories but the knowledge base, or the ones named), then sum up.
     `trial`: use the toolkit being built in a task instead of the knowledge base's (its map replaces the cached one)."""
@@ -232,7 +240,8 @@ def build(root: Path, names: Optional[List[str]] = None, fresh: bool = False, tr
     if not repos:
         raise MapError(say("kbmap.no_repos"))
     rows = []
-    for repo in repos:
+    for index, repo in enumerate(repos):
+        progress(index, len(repos), repo.name)
         try:
             rows.append(build_one(root, repo, toolkit_for(choices, repo.name), fresh))
         except gitread.GitError as error:  # one repository git cannot read: say so, map the others

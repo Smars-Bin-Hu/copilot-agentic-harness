@@ -160,10 +160,11 @@ const DOCK = (function () {
     const age = h("span", {class: "sub kb-age"});
     const again = h("button", {type: "button", class: "act"}, t("dock.kb.refresh"));
     const tabs = ["overview", "atlas", "domains", "lookup", "health"].map((key) => { const tab = h("button", {type: "button", class: "chip", "data-key": key}, t(key === "domains" ? "dock.kb.domains.tab" : "dock.kb." + key)); tab.addEventListener("click", () => show(key)); return tab; });
+    const rebuild = h("span", {class: "kb-rebuild", hidden: ""});
     const alarm = h("p", {class: "bad kb-alarm", hidden: ""});  // outside the stage: a drawn view stays as it is
     const synced = h("section", {class: "kb-sync", hidden: ""});
     driftCard(synced);
-    const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "kb-bar"}, h("div", {class: "chips dock-tabs"}, tabs), age, again), alarm, synced, stage, h("div", {class: "row"}, no)]);
+    const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "kb-bar"}, h("div", {class: "chips dock-tabs"}, tabs), age, rebuild, again), alarm, synced, stage, h("div", {class: "row"}, no)]);
     view.box.classList.add("dock-window", "kb-window");
     view.holds = () => false;  // it only reads: nothing here can be lost
     let timer = 0, current = "", seenView = "", word = "", searched = "", ticket = 0, extra = null, painted = null, detailTimer = 0;  // word, searched: what was typed in Look up, kept while the tab changes; ticket: the newest search
@@ -179,12 +180,18 @@ const DOCK = (function () {
         age.textContent = found.running ? t("dock.kb.updating") : found.age === null ? "" : ago(found.age);
         const seen = JSON.stringify(found.result);
         if (found.result && seen !== seenView) { seenView = seen; painted = () => paint(found.result); painted(); }
-        alarm.replaceChildren(h("span", null, found.error || ""), ...(found.nomap ? [nextButton("map")] : []));
+        alarm.replaceChildren(h("span", null, found.error || ""), ...(found.nomap ? [found.canmap ? mapButton(true) : nextButton("map")] : []));
+        if (op === "atlas") { rebuild.replaceChildren(mapButton(false)); rebuild.hidden = Boolean(found.error); }
         alarm.hidden = !found.error || found.running;
         if (!found.result) stage.replaceChildren(...(found.running || !found.error ? [h("p", {class: "sub"}, t("dock.kb.working"))] : []));
         if (found.running) timer = setTimeout(() => load(op, paint, false, Math.min((wait || 150) * 2, 1200)), wait || 150);
       }, (error) => { if (view.box.isConnected && key === current) stage.replaceChildren(h("p", {class: "bad"}, error.message || String(error))); });
     }
+    const mapButton = (hot) => {  // the map is a script, in the background: it costs no request, and the view comes back when it is done
+      const go = h("button", {type: "button", class: "act" + (hot ? " hot" : "")}, t("dock.kb.rebuild"));
+      go.addEventListener("click", () => TERM.run("harness kb map", () => { if (view.box.isConnected) again.click(); }));
+      return go;
+    };
     const nextButton = (stageName) => {  // the first two steps are done in the setup, not in a chat
       const inSetup = ["targets", "kb_repo"].includes(stageName);
       const go = h("button", {type: "button", class: "act hot"}, t(inSetup ? "dock.setup" : "dock.kb.next"));
@@ -300,10 +307,14 @@ const DOCK = (function () {
       const left = (item) => (item.errors || []).length + (item.warnings || []).length - SHOWN;
       const ids = (rows, label) => (rows.length ? [h("p", {class: "sub"}, label), h("ul", null, rows.map((id) => h("li", null, h("code", null, id))))] : []);
       const staleRows = found.stale || [], gaps = found.gaps || {};
+      const audit = found.audit || {};
+      const auditGo = h("button", {type: "button", class: "act kb-mini"}, chatGlyph(), t(audit.done ? "dock.kb.audit.again" : "dock.kb.audit.go"));
+      auditGo.addEventListener("click", leave(() => start("generic-kb-toolkit-audit", "", backHere)));
+      const auditBlock = [h("h3", null, t("dock.kb.audit")), h("section", {class: "kb-problem"}, h("div", {class: "kb-head"}, h("span", null, !audit.ready ? t("dock.kb.audit.nomap") : audit.done ? t("dock.kb.audit.done") : audit.note ? plainWords(audit.note) : t("dock.kb.audit.none")), audit.ready ? auditGo : null))];
       const staleButton = (item) => { const go = h("button", {type: "button", class: "act kb-mini"}, chatGlyph(), t("dock.kb.refresh.cards")); go.addEventListener("click", leave(() => refresh(item))); return go; };
       const showAll = (n, line, key) => { const go = h("button", {type: "button", class: "act kb-mini"}, t("dock.kb.health.all")); go.addEventListener("click", () => TERM.run(line)); return h("p", {class: "sub"}, t(key, {n}), " ", go); };
       const cut = (shown, total, line) => (total > shown ? showAll(total - shown, line, "dock.kb.health.cut") : null);
-      stage.replaceChildren(...[h("h3", null, t("dock.kb.health.form")), h("p", null, found.domains ? t("dock.kb.health.sum", {n: found.domains, errors: found.errors, warnings: found.warnings}) : t("dock.kb.health.none")),
+      stage.replaceChildren(...[...auditBlock, h("h3", null, t("dock.kb.health.form")), h("p", null, found.domains ? t("dock.kb.health.sum", {n: found.domains, errors: found.errors, warnings: found.warnings}) : t("dock.kb.health.none")),
         ...items.map((item) => h("section", {class: "kb-problem"}, h("b", null, item.domain || item.name || ""), h("ul", null, lines(item, "errors"), lines(item, "warnings").slice(0, Math.max(0, SHOWN - (item.errors || []).length))), left(item) > 0 ? showAll(left(item), "harness kb check", "dock.kb.health.more") : null)),
         found.domains ? h("h3", null, t("dock.kb.health.stale")) : null, found.domains && !staleRows.length ? h("p", {class: "sub"}, t("dock.kb.health.fresh")) : null,
         ...staleRows.map((item) => h("section", {class: "kb-problem"}, h("div", {class: "kb-head"}, h("b", null, item.domain + (item.total ? " \u00b7 " + item.total : "")), item.total ? staleButton(item) : null), item.error ? h("p", {class: "bad"}, item.error) : null, ...item.unreadable.map((one) => h("p", {class: "bad"}, one.repo + ": " + one.error)), ...ids(item.changed, t("dock.kb.health.changed")), ...ids(item.gone, t("dock.kb.health.gone")), cut(item.changed.length + item.gone.length, item.total, "harness kb stale"))),
@@ -322,6 +333,7 @@ const DOCK = (function () {
       age.textContent = "";
       alarm.hidden = true;
       again.hidden = key === "lookup";
+      rebuild.hidden = true;
       stage.replaceChildren(h("p", {class: "sub"}, t("dock.kb.working")));
       if (key === "lookup") { lookup(); return; }
       const op = key === "health" || key === "atlas" ? key : "status";

@@ -57,6 +57,13 @@ class DetailTests(unittest.TestCase):
         self.assertEqual([row["domain"] for row in found["stale"]], ["long"])
         self.assertEqual((found["stale"][0]["total"], len(found["stale"][0]["changed"])), (300, kbdetail.MAX_LIST))
 
+    def test_health_says_how_the_audit_stands(self) -> None:
+        steps = [{"step": "map", "done": True}, {"step": "audit", "done": False, "note": "old"}]
+        with mock.patch.object(kbdetail.kbstatus, "status", return_value={"steps": steps}):
+            self.assertEqual(kbdetail.audit_of(self.root), {"ready": True, "done": False, "note": "old"})
+        with mock.patch.object(kbdetail.kbstatus, "status", side_effect=ValueError("broken")):
+            self.assertFalse(kbdetail.audit_of(self.root)["ready"])
+
     def test_no_map_yet_is_no_gaps(self) -> None:
         with mock.patch.object(kbdetail.kbgraph, "gaps", side_effect=kbmap.MapError("no map")):
             self.assertEqual(kbdetail.gaps(self.root), {})

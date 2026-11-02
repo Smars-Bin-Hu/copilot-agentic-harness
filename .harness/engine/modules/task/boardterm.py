@@ -6,7 +6,7 @@ This is the person's own action, as in a terminal, so the gate does not see it. 
 - `board.terminal_any_command` in the policy `task` set to false leaves `harness` commands only, with no shell: no pipe, no other program.
 
 A line goes to the shell of the Run button, one shell for each line, so `export` does not last. `cd` is kept by the tab on the page. The harness folder's `bin` comes first on PATH, so `harness` works
-in a board started before the short command. The runs end with the board. Each line is kept in `.harness/runtime/board-terminal.jsonl`.
+in a board started before the short command. A run goes on when the page goes away, and a second click on the same line finds it. Nothing kills a run that is quiet: the page says so, and the person stops it. The runs end with the board. Each line is kept in `.harness/runtime/board-terminal.jsonl`.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ import shlex
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
@@ -34,6 +35,7 @@ MAX_READ = 64 * 1024  # characters of one answer to the page
 MAX_RUNNING = 4
 MAX_DONE = 20  # finished runs held in memory
 REFUSED = (("task", "board"),)  # it would start a second board
+PROGRESS = re.compile(r"^::progress (\d+)/(\d+)[ \t]*(.*)$")  # a line of a long command (`HARNESS_PROGRESS`): it fills the bar of the tab and is not output
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -63,14 +65,24 @@ def words_of(line: Any) -> List[str]:
 
 
 class Job:
-    def __init__(self, line: str, process: "subprocess.Popen[bytes]") -> None:
+    def __init__(self, line: str, process: "subprocess.Popen[bytes]", cwd: str = "") -> None:
         self.id = uuid.uuid4().hex[:12]
-        self.line, self.process = line, process
+        self.line, self.process, self.cwd = line, process, cwd
+        self.begun = self.last = time.monotonic()
+        self.progress: Dict[str, Any] = {}
         self.text, self.dropped, self.code = "", 0, None  # type: ignore[assignment]
         self.ended = False
 
     def add(self, text: str) -> None:
-        self.text += text
+        self.last = time.monotonic()
+        kept = []
+        for line in text.splitlines(True):
+            found = PROGRESS.match(line.rstrip("\r\n"))
+            if found:
+                self.progress = {"done": int(found[1]), "total": int(found[2]), "word": found[3][:60]}
+            else:
+                kept.append(line)
+        self.text += "".join(kept)
         if len(self.text) > MAX_MEMORY:
             self.dropped += len(self.text) - MAX_MEMORY
             self.text = self.text[-MAX_MEMORY:]
@@ -78,7 +90,8 @@ class Job:
     def view(self, since: int) -> Dict[str, Any]:
         start = max(since - self.dropped, 0)
         part = self.text[start:start + MAX_READ]
-        return {"id": self.id, "text": part, "next": self.dropped + start + len(part), "done": self.ended and start + len(part) >= len(self.text), "code": self.code}
+        return {"id": self.id, "text": part, "next": self.dropped + start + len(part), "done": self.ended and start + len(part) >= len(self.text), "code": self.code,
+                "seconds": round(time.monotonic() - self.begun), "idle": 0 if self.ended else round(time.monotonic() - self.last), "progress": self.progress}
 
 
 class Terminal:
@@ -105,15 +118,18 @@ class Terminal:
         command = taskrun.shell_line(text) if self.any_command() else [sys.executable, str(engine / "engine" / "cli.py"), *words_of(text)]
         cwd = self.folder("", here)
         with self.lock:
+            same = next((job for job in self.jobs.values() if not job.ended and job.line == text and job.cwd == str(cwd)), None)
+            if same:  # a second click: the run that is going on, not one more
+                return {"id": same.id, "again": True}
             if sum(1 for job in self.jobs.values() if not job.ended) >= MAX_RUNNING:
                 raise CommandError(say("term.refused.many", limit=MAX_RUNNING))
         extra: Dict[str, Any] = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {"start_new_session": True}
         try:
             process = subprocess.Popen(command, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                       env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "PATH": str(engine / "bin") + os.pathsep + os.environ.get("PATH", "")}, **extra)
+                                       env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "HARNESS_PROGRESS": "1", "PATH": str(engine / "bin") + os.pathsep + os.environ.get("PATH", "")}, **extra)
         except OSError as error:
             raise CommandError(say("term.refused.start", error=error)) from None
-        job = Job(text, process)
+        job = Job(text, process, str(cwd))
         with self.lock:
             self.jobs[job.id] = job
             done = [item.id for item in self.jobs.values() if item.ended]
@@ -192,4 +208,7 @@ class Terminal:
             return self.read(data.get("id"), data.get("since"))
         if op == "stop":
             return self.stop(data.get("id"))
+        if op == "running":
+            with self.lock:
+                return {"running": [{"id": job.id, "line": job.line} for job in self.jobs.values() if not job.ended]}
         raise CommandError(say("serve.refused.request"))

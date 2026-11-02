@@ -1,4 +1,4 @@
-"""The Terminal window of the board (1.6.92): only `harness` commands, no input, a folder for each tab, and the page never loses a run."""
+"""The Terminal window of the board (1.6.92): a shell for each line, no input, a folder for each tab, `harness` only when the policy says so, and the page never loses a run."""
 
 from __future__ import annotations
 
@@ -17,10 +17,16 @@ from modules.task.common import CommandError  # noqa: E402
 
 
 class LineTests(unittest.TestCase):
-    def test_only_harness_runs(self) -> None:
+    def test_with_the_switch_off_only_harness_runs(self) -> None:
         for line in ("rm -rf x", "python3 -c 1", "", "   ", "harnessx doctor", "'unclosed", "harness doctor\nrm x"):
             with self.assertRaises(CommandError, msg=line):
                 boardterm.words_of(line)
+
+    def test_a_line_is_one_line_and_not_a_second_board(self) -> None:
+        self.assertEqual(boardterm.checked("  ls | wc -l "), "ls | wc -l")
+        for line in ("", "a\nb", "x" * (boardterm.MAX_LINE + 1), "harness task board", "cd x && harness task board --serve"):
+            with self.assertRaises(CommandError, msg=line):
+                boardterm.checked(line)
 
     def test_nothing_is_read_by_a_shell(self) -> None:
         self.assertEqual(boardterm.words_of("harness kb near 'a b' ; rm x"), ["kb", "near", "a b", ";", "rm", "x"])
@@ -50,9 +56,10 @@ class RunTests(unittest.TestCase):
         self.root = Path(folder.name)
         (self.root / ".harness" / "engine").mkdir(parents=True)
 
-    def script(self, body: str) -> boardterm.Terminal:
+    def script(self, body: str = "", any_command: bool = False) -> boardterm.Terminal:
         (self.root / ".harness" / "engine" / "cli.py").write_text(body, encoding="utf-8")
         term = boardterm.Terminal(self.root)
+        term.any_command = lambda: any_command  # type: ignore[method-assign]
         self.addCleanup(term.stop_all)
         return term
 
@@ -86,6 +93,35 @@ class RunTests(unittest.TestCase):
         self.assertIn(str((self.root / "sub").resolve().name), self.wait(term, term.act({"op": "start", "line": "harness x", "cwd": here})["id"])["text"])
         with self.assertRaises(CommandError):
             term.act({"op": "cd", "cwd": here, "to": "missing"})
+
+    def test_the_shell_takes_a_pipe_and_a_second_command(self) -> None:
+        term = self.script(any_command=True)
+        self.assertIn("B", self.wait(term, term.start("echo a | tr a b | tr b B && false || echo $0 >/dev/null")["id"])["text"])
+
+    def test_the_harness_of_this_copy_comes_first_on_path(self) -> None:
+        term = self.script(any_command=True)
+        (self.root / ".harness" / "bin").mkdir()
+        tool = self.root / ".harness" / "bin" / "harness"
+        tool.write_text("#!/bin/sh\necho this copy\n", encoding="utf-8")
+        tool.chmod(0o755)
+        self.assertIn("this copy", self.wait(term, term.start("harness x")["id"])["text"])
+
+    def test_a_child_left_behind_does_not_hold_the_tab(self) -> None:
+        term = self.script(any_command=True)
+        self.assertTrue(self.wait(term, term.start("sleep 30 & echo here")["id"])["done"])
+
+    def test_stop_ends_a_shell_and_what_it_started(self) -> None:
+        term = self.script(any_command=True)
+        ident = term.start("sleep 30 | cat")["id"]
+        term.stop(ident)
+        self.assertTrue(self.wait(term, ident)["done"])
+
+    def test_the_policy_decides_and_the_default_is_any_command(self) -> None:
+        term = boardterm.Terminal(self.root)
+        with mock.patch.object(boardterm.config, "policy_or_empty", return_value={}):
+            self.assertTrue(term.any_command())
+        with mock.patch.object(boardterm.config, "policy_or_empty", return_value={"board": {"terminal_any_command": False}}):
+            self.assertFalse(term.any_command())
 
     def test_a_run_the_board_forgot_ends_on_the_page(self) -> None:
         self.assertTrue(boardterm.Terminal(self.root).read("nope", 0)["gone"])

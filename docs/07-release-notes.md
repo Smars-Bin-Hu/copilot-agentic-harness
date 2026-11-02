@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.94 (2026-11-02)
+
+### Changed
+
+- **The Terminal window runs any command**, not only `harness`: pipes and `&&` too, in the shell of the Run button. It still takes no input, so `vim`, `ssh` and an approval do not work there, and each line has its own shell, so `export` does not last. Only a paired browser can use it, and each line is kept in `.harness/runtime/board-terminal.jsonl`. Set `board.terminal_any_command` to `false` in `task.override.json` to allow `harness` commands only.
+- **"Quit VS Code and open it again" ends by itself on the Enter screen too.** The wait follows the link to VS Code. Before, it ended only on the setup page, and could stay until the board restarted.
+
 ## 1.6.92 (2026-11-02)
 
 ### Added

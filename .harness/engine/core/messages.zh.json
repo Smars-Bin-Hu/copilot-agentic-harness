@@ -2152,7 +2152,7 @@
   "setup.layout.skills.names": "这些没有被复制，名字必须以 {word}- 开头：{names}。",
   "board.kb.found": "知识库中已检测到：",
   "term.title": "终端窗口",
-  "term.open": "Terminal：在这里运行 harness 命令",
+  "term.open": "Terminal：在这里运行命令",
   "term.ph": "例如 harness doctor",
   "term.new": "新页签",
   "term.close": "关闭此页签",

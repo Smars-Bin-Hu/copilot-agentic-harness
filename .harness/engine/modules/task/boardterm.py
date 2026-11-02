@@ -1,19 +1,20 @@
-"""The Terminal window of the board (1.6.92): a person types a `harness` command on the page and reads its output, in tabs. It is no real terminal.
+"""The Terminal window of the board (1.6.92): a person types a command on the page and reads its output, in tabs. It is no real terminal.
 
-This is the person's own action, as in a terminal, so the gate does not see it. What keeps it safe:
+This is the person's own action, as in a terminal, so the gate does not see it. What keeps it the person's:
 - only a paired browser may ask (`/api/term`); an agent can reach this address but has no pairing cookie;
-- only `harness ...` runs, with no shell: no pipe, no other program; `cd` moves a tab, and the engine stays the one of this copy;
-- there is no input and no terminal, so a command that needs a person at a real terminal (an approval, autorun on, admin on) is refused as it is anywhere else.
+- there is no input and no terminal, so a command that needs a person at a real terminal (an approval, autorun on, admin on) is refused as it is anywhere else;
+- `board.terminal_any_command` in the policy `task` set to false leaves `harness` commands only, with no shell: no pipe, no other program.
 
-The runs end with the board. Each one leaves a line in `.harness/runtime/board-terminal.jsonl`.
+A line goes to the shell of the Run button, one shell for each line, so `export` does not last. `cd` is kept by the tab on the page. The harness folder's `bin` comes first on PATH, so `harness` works
+in a board started before the short command. The runs end with the board. Each line is kept in `.harness/runtime/board-terminal.jsonl`.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
-import signal
 import subprocess
 import sys
 import threading
@@ -21,10 +22,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 
-from core import messages, paths
+from core import config, messages, paths
 from core.paths import utc_now
 
-from .common import CommandError
+from . import taskrun
+from .common import CommandError, decode_text
 
 MAX_LINE = 2000  # characters of a command
 MAX_MEMORY = 1024 * 1024  # characters held for the page: the end of the output
@@ -38,24 +40,30 @@ def say(key: str, /, **values: Any) -> str:
     return messages.text(key, **values)
 
 
-def words_of(line: Any) -> List[str]:
-    """The arguments after `harness`, or a CommandError. A backslash is kept: on Windows it is part of a path."""
+def checked(line: Any) -> str:
+    """One line a shell may be given, or a CommandError. A second board is refused: it asks for a terminal this window does not have."""
     text = str(line or "").strip()
-    if not text or len(text) > MAX_LINE or any(ord(char) < 32 for char in text):
+    if not text or len(text) > MAX_LINE or any(ord(char) < 32 and char != "\t" for char in text):
         raise CommandError(say("term.refused.line", limit=MAX_LINE))
+    if any(re.search(r"(^|[\s;&|])harness\s+" + r"\s+".join(item) + r"(\s|$)", text) for item in REFUSED):
+        raise CommandError(say("term.refused.board"))
+    return text
+
+
+def words_of(line: Any) -> List[str]:
+    """With `board.terminal_any_command` off: the arguments after `harness`, or a CommandError. A backslash is kept: on Windows it is part of a path."""
+    text = checked(line)
     try:
         words = shlex.split(text.replace("\\", "\\\\"))
     except ValueError:
         raise CommandError(say("term.refused.line", limit=MAX_LINE)) from None
-    if words[0] != "harness":
+    if not words or words[0] != "harness":
         raise CommandError(say("term.refused.other"))
-    if any(tuple(words[1:1 + len(item)]) == item for item in REFUSED):
-        raise CommandError(say("term.refused.board"))
     return words[1:]
 
 
 class Job:
-    def __init__(self, line: str, process: "subprocess.Popen[str]") -> None:
+    def __init__(self, line: str, process: "subprocess.Popen[bytes]") -> None:
         self.id = uuid.uuid4().hex[:12]
         self.line, self.process = line, process
         self.text, self.dropped, self.code = "", 0, None  # type: ignore[assignment]
@@ -88,34 +96,59 @@ class Terminal:
             raise CommandError(say("term.refused.folder", path=text or str(here)))
         return found
 
+    def any_command(self) -> bool:
+        return (config.policy_or_empty(self.root, "task").get("board") or {}).get("terminal_any_command", True) is not False
+
     def start(self, line: Any, here: Any = "") -> Dict[str, Any]:
-        words = words_of(line)
+        text = checked(line)
+        engine = self.root / ".harness"
+        command = taskrun.shell_line(text) if self.any_command() else [sys.executable, str(engine / "engine" / "cli.py"), *words_of(text)]
         cwd = self.folder("", here)
         with self.lock:
             if sum(1 for job in self.jobs.values() if not job.ended) >= MAX_RUNNING:
                 raise CommandError(say("term.refused.many", limit=MAX_RUNNING))
-        extra: Dict[str, Any] = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)} if os.name == "nt" else {"start_new_session": True}
-        command = [sys.executable, str(self.root / ".harness" / "engine" / "cli.py"), *words]
+        extra: Dict[str, Any] = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {"start_new_session": True}
         try:
-            process = subprocess.Popen(command, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
-                                       env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}, **extra)
+            process = subprocess.Popen(command, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "PATH": str(engine / "bin") + os.pathsep + os.environ.get("PATH", "")}, **extra)
         except OSError as error:
             raise CommandError(say("term.refused.start", error=error)) from None
-        job = Job(str(line).strip(), process)
+        job = Job(text, process)
         with self.lock:
             self.jobs[job.id] = job
             done = [item.id for item in self.jobs.values() if item.ended]
             for ident in done[:max(0, len(done) - MAX_DONE)]:
                 del self.jobs[ident]
-        threading.Thread(target=self.follow, args=(job,), daemon=True).start()
+        reader = threading.Thread(target=self.follow, args=(job,), daemon=True)
+        reader.start()
+        threading.Thread(target=self.wait_end, args=(job, reader), daemon=True).start()
         self.note(job.line)
         return {"id": job.id}
 
     def follow(self, job: Job) -> None:
-        for chunk in job.process.stdout or []:
+        """Bytes as they come; decoded at the end of a line, so a character is not cut in two. `decode_text` also reads the code page of a Windows program."""
+        held = b""
+        while True:
+            try:
+                chunk = job.process.stdout.read1(taskrun.CHUNK)
+            except (OSError, ValueError):
+                break
+            if not chunk:
+                break
+            held += chunk
+            end = max(held.rfind(b"\n"), held.rfind(b"\r"))
+            if end >= 0 or len(held) > taskrun.CHUNK * 4:
+                cut = end + 1 if end >= 0 else len(held)
+                with self.lock:
+                    job.add(decode_text(held[:cut]))
+                held = held[cut:]
+        if held:
             with self.lock:
-                job.add(chunk)
+                job.add(decode_text(held))
+
+    def wait_end(self, job: Job, reader: threading.Thread) -> None:
         code = job.process.wait()
+        reader.join(taskrun.DRAIN_SECONDS)  # a command that left a child holding its output has still ended
         with self.lock:
             job.code, job.ended = code, True
 
@@ -139,25 +172,15 @@ class Terminal:
         with self.lock:
             job = self.jobs.get(str(ident))
         if job is not None and not job.ended:
-            self.kill(job)
+            taskrun.Runner.kill(job, True)
         return {"stopped": True}
-
-    @staticmethod
-    def kill(job: Job) -> None:
-        try:
-            if os.name == "nt":
-                job.process.terminate()
-            else:
-                os.killpg(job.process.pid, signal.SIGKILL)
-        except OSError:
-            pass  # it has ended by itself
 
     def stop_all(self) -> None:
         """The board is going away: nothing it started stays behind with no page to stop it."""
         with self.lock:
             left = [job for job in self.jobs.values() if not job.ended]
         for job in left:
-            self.kill(job)
+            taskrun.Runner.kill(job, True)
 
     def act(self, data: Dict[str, Any]) -> Dict[str, Any]:
         op = str(data.get("op", ""))

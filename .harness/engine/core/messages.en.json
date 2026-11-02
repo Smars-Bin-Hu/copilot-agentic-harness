@@ -2152,7 +2152,7 @@
   "setup.layout.skills.names": "Not copied, the name must start with {word}-: {names}.",
   "board.kb.found": "Found in your knowledge base:",
   "term.title": "Terminal",
-  "term.open": "Terminal: run harness commands here",
+  "term.open": "Terminal: run commands here",
   "term.ph": "harness doctor",
   "term.new": "New tab",
   "term.close": "Close this tab",

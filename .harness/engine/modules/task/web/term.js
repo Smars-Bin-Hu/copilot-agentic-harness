@@ -1,5 +1,5 @@
-// The Terminal window (1.6.92): a small window at the top right of a served page, with tabs. A person types a `harness` command and reads the output (`boardterm.py`). It is no real terminal.
-// A tab starts in the harness folder; `cd` moves that tab, a bare `cd` brings it back.
+// The Terminal window (1.6.92): a small window at the top right of a served page, with tabs. A person types a command and reads the output (`boardterm.py`). It is no real terminal.
+// A tab starts in the harness folder; a plain `cd` moves that tab, a bare `cd` brings it back. `cd x && y` goes to the shell: it holds for that line only.
 // TERM.run(line) opens a tab and runs a command: what a button on the page uses. The tabs of this browser tab live in sessionStorage, so they survive going from page to page.
 const TERM = (() => {
   const KEY = "harness.term";
@@ -58,7 +58,7 @@ const TERM = (() => {
     post({op: "cd", cwd: tab.cwd || "", to}).then((found) => { tab.cwd = found.cwd; paint(); }, (error) => { tab.text += (error.message || String(error)) + "\n"; paint(); });
   }
   function submit(tab, line) {
-    const place = line.match(/^cd(?:\s+(.*))?$/);
+    const place = line.match(/^cd(?:\s+([^;&|<>]*))?$/);
     if (place) { tab.text += (tab.text ? "\n" : "") + "$ " + line + "\n"; move(tab, (place[1] || "").trim()); return; }
     tab.label = labelOf(line); tab.text += (tab.text ? "\n" : "") + "$ " + line + "\n"; tab.since = 0;
     paint();

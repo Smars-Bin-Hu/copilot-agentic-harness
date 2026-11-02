@@ -15,7 +15,7 @@ To see which version you have: `harness --version`.
 ### Added
 
 - **`harness company diff`** shows what a sync would add, change or remove.
-- **The board warns when the company content and its copies differ.** It compares them every 2 minutes. The book button turns yellow and moves, its tip lists the differences, and the Knowledge base window shows them with **Sync now**.
+- **The board warns when the company content and its copies differ.** It compares them every 2 minutes. The book button turns yellow and moves, its tip lists the differences, and the Knowledge base window shows them with **Sync now**. An instructions file taken out of `company/` is the one change it cannot see: the copy then looks like the file the harness ships.
 
 ### Changed
 

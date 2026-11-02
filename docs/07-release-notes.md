@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.79 (2026-11-02)
+
+### Changed
+
+- `harness --version`: the robot is smaller and stands to the right of the name. It is painted with coloured spaces, so a terminal with wide lines leaves no gaps in it. A terminal under 74 columns shows no robot.
+
 ## 1.6.78 (2026-11-02)
 
 ### Changed

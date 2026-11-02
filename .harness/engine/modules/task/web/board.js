@@ -380,6 +380,7 @@
   }
   // The big warning (1.6.59): what this copy lacks before it can do real work. It stays until that is set; a click opens the setup guide.
   const setupBar = h("a", {class: "setup-bar", href: "/setup", hidden: ""});
+  setupBar.addEventListener("click", (event) => { if (typeof DOCK === "undefined") return; event.preventDefault(); DOCK.setupWindow(); });
   function paintSetup(list) {
     const items = list || [];
     if (!setupBar.isConnected) { const top = document.querySelector(".lb-top"); if (top) top.after(setupBar); }

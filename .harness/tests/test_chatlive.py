@@ -266,7 +266,7 @@ class ServeLiveTests(base.BoardCase):
 class PageFilesTests(unittest.TestCase):
     def test_the_stream_and_the_reply_panel_are_in_the_served_task_page_only(self) -> None:
         code = Path(taskhtml.__file__).read_text(encoding="utf-8")
-        self.assertIn('"shell.js", "bot3d.js", "enter.js", "dock.js", "live.js", "reply.js", "run.js", "rounds.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}', code)
+        self.assertIn('"shell.js", "bot3d.js", "enter.js", "dock.js", "setup.js", "live.js", "reply.js", "run.js", "rounds.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}', code)
         saved = code.split('page = build("desk.html"')[1].split("\n")[0]
         self.assertNotIn("live.js", saved)  # a saved copy has none: it asks the network for nothing
         self.assertIn('*([LIVE_CSS] if "live.js" in scripts else [])', code)

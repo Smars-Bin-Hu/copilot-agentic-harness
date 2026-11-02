@@ -1,7 +1,8 @@
-// The buttons at the bottom right (1.6.61): the question mark and the one-click chats. The gear is shell.js's. The book opens the knowledge base window.
+// The buttons at the bottom right (1.6.61): the question mark and the one-click chats. The gear is shell.js's. The book opens the knowledge base window, the sliders the setup, the house the Enter screen.
 // DOCK.start asks with the whole message in view, sends, and brings VS Code forward. Needs common.js (h, t), serve.js (SERVE).
 const DOCK = (function () {
   const BOOK = "https://smarshu.com/book/";
+  const ENTERED = "harness.entered";  // enter.js: the Enter screen was seen in this tab
   const ask = (step, body) => SERVE.post("/api/skill", {step, ...body}).then((data) => data.result);
 
   function done() {
@@ -151,6 +152,28 @@ const DOCK = (function () {
     show("overview");
   }
 
+  // The form of Get ready in a window over the page. When it is done the page reads the new settings.
+  function setupWindow() {
+    const box = h("div");
+    const close = h("button", {type: "button", class: "act"}, t("board.new.close"));
+    const view = SERVE.dialog([h("div", {class: "su-winbar"}, close), box]);
+    view.box.classList.add("su-window");
+    close.addEventListener("click", view.close);
+    SETUP.mount(box, () => location.reload());
+  }
+  function enterScreen() {
+    try { sessionStorage.removeItem(ENTERED); } catch (error) { /* then nothing was kept, and the screen comes anyway */ }
+    location.assign("/");
+  }
+
+  const drawn = (paths) => {
+    const NS = "http://www.w3.org/2000/svg", node = document.createElementNS(NS, "svg");
+    node.setAttribute("viewBox", "0 0 24 24");
+    node.setAttribute("aria-hidden", "true");
+    for (const d of paths) { const part = document.createElementNS(NS, "path"); part.setAttribute("d", d); node.append(part); }
+    return node;
+  };
+
   function build() {
     const panel = h("section", {class: "dock-panel", hidden: ""});
     const box = h("input", {type: "text", class: "su-in", maxlength: 2000, placeholder: t("dock.ask.ph"), "aria-label": t("dock.ask")});
@@ -169,19 +192,17 @@ const DOCK = (function () {
     const button = h("button", {type: "button", class: "dock-btn dock-ask", "aria-label": t("dock.help"), title: t("dock.help")}, "?");
     button.addEventListener("click", () => { if (panel.hidden) showPanel(); else panel.hidden = true; });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape") panel.hidden = true; });
-    const book = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    book.setAttribute("viewBox", "0 0 24 24");
-    book.setAttribute("aria-hidden", "true");
-    for (const d of ["M12 6.5C10.2 5 7.5 4.5 3.5 4.5v14c4 0 6.7.5 8.5 2 1.8-1.5 4.5-2 8.5-2v-14c-4 0-6.7.5-8.5 2z", "M12 6.5v14"]) {
-      const part = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      part.setAttribute("d", d);
-      book.append(part);
-    }
-    const kb = h("button", {type: "button", class: "dock-btn dock-book", "aria-label": t("dock.kb"), title: t("dock.kb")}, book);
-    kb.addEventListener("click", kbWindow);
-    document.body.append(panel, button, kb);
+    const icon = (name, label, paths, run) => {
+      const node = h("button", {type: "button", class: "dock-btn dock-icon " + name, "aria-label": label, title: label}, drawn(paths));
+      node.addEventListener("click", run);
+      return node;
+    };
+    const kb = icon("dock-book", t("dock.kb"), ["M12 6.5C10.2 5 7.5 4.5 3.5 4.5v14c4 0 6.7.5 8.5 2 1.8-1.5 4.5-2 8.5-2v-14c-4 0-6.7.5-8.5 2z", "M12 6.5v14"], kbWindow);
+    const setup = icon("dock-setup", t("dock.setup"), ["M4 7h9M17 7h3M13 4.5h4v5h-4zM4 17h3M11 17h9M7 14.5h4v5H7z"], setupWindow);
+    const home = icon("dock-home", t("dock.home"), ["M3.5 11.5 12 4.5l8.5 7M6 9.5V20h12V9.5M10 20v-5.5h4V20"], enterScreen);
+    document.body.append(panel, button, kb, setup, home);
   }
 
   if (typeof DATA !== "undefined" && DATA.serve) build();
-  return {start, allSkills, kbWindow};
+  return {start, allSkills, kbWindow, setupWindow, enterScreen};
 })();

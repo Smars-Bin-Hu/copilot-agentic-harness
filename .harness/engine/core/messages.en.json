@@ -2046,6 +2046,8 @@
   "dock.title": "Start this chat?",
   "dock.hint": "The board makes a new chat in VS Code with this message.",
   "dock.send": "Send",
+  "dock.setup": "Change the setup",
+  "dock.home": "Back to the Enter screen",
   "dock.back": "Back",
   "dock.sent": "Started in VS Code",
   "dock.sent.where": "It is at the top of Sessions.",

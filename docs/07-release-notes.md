@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.77 (2026-11-02)
+
+### Added
+
+- Two buttons at the bottom right of the board and the task page, and in `Cmd+K`: **Change the setup** opens the Get ready form in a window over the page, and **Back to the Enter screen** shows that screen again.
+
 ## 1.6.76 (2026-11-02)
 
 ### Added

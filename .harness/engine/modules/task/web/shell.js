@@ -124,6 +124,8 @@ const SHELL = (function () {
     const lite = root.classList.contains("lite");
     out.push({g: "settings", key: "theme", label: t(dark ? "board.shell.theme.light" : "board.shell.theme.dark"), icon: "sun", kw: "theme dark light mode", run: () => harnessTheme.set(dark ? "light" : "dark")});
     out.push({g: "settings", key: "lite", label: t(lite ? "board.shell.lite.off" : "board.shell.lite.on"), icon: "bolt", kw: "lite glass fast blur motion slow", run: () => harnessTheme.setLite(!lite)});
+    if (typeof DOCK !== "undefined") out.push({g: "settings", key: "setup", label: t("dock.setup"), icon: "gear", kw: "setup get ready repositories prefix", run: () => setTimeout(DOCK.setupWindow, 30)});
+    if (typeof DOCK !== "undefined") out.push({g: "settings", key: "home", label: t("dock.home"), icon: "lobby", kw: "enter home start screen", run: DOCK.enterScreen});
     if (typeof DOCK !== "undefined") out.push({g: "settings", key: "kb", label: t("dock.kb"), icon: "task", kw: "knowledge base domains cards", run: () => setTimeout(DOCK.kbWindow, 30)});
     if (typeof DOCK !== "undefined") out.push({g: "settings", key: "skills", label: t("dock.skills"), icon: "task", kw: "skills ask can do", run: () => setTimeout(() => DOCK.allSkills(""), 30)});
     out.push({g: "settings", key: "settings", label: t("board.shell.open"), icon: "gear", kw: "settings language preferences", run: () => setTimeout(openSettings, 30)});

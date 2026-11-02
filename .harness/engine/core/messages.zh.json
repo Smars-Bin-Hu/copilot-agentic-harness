@@ -2046,6 +2046,8 @@
   "dock.title": "要开始这个 chat 吗？",
   "dock.hint": "看板会在 VS Code 里新建一个 chat，发送这条消息。",
   "dock.send": "发送",
+  "dock.setup": "修改 Setup",
+  "dock.home": "回到 Enter 屏",
   "dock.back": "返回",
   "dock.sent": "已在 VS Code 里开始",
   "dock.sent.where": "它在 Sessions 最上面。",

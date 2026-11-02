@@ -47,12 +47,21 @@
   const row = (label, ...nodes) => h("div", {class: "su-row"}, h("span", {class: "su-k"}, label), h("div", {class: "su-v"}, nodes));
 
   function paintShort(found) {
+    const key = JSON.stringify([found.short, found.reopen]);
+    if (key === st.shortKey) return;  // the poll must not take away the button the person is about to press
+    st.shortKey = key;
     const done = Boolean(found.short.found);
     const parts = [h("div", {class: "su-head"}, h("span", {class: "su-mark" + (done ? " ok" : "")}, done ? "\u2713" : "1"), h("h2", null, t("setup.short.title")), done ? h("code", {class: "su-found"}, found.short.found) : null)];
     if (!done) {
       const copy = h("button", {type: "button", class: "act", "data-label": t("desk.code.copy")}, t("desk.code.copy"));
       copy.addEventListener("click", () => copyCommand(copy, found.short.command));
-      parts.push(h("p", {class: "su-note"}, t("setup.short.do")), h("div", {class: "su-cmd"}, h("code", null, found.short.command), copy), h("p", {class: "su-note"}, t("setup.short.wait")));
+      const run = h("button", {type: "button", class: "act hot"}, t("setup.short.run"));
+      const out = h("p", {class: "su-note bad", hidden: ""});
+      run.addEventListener("click", () => {
+        run.disabled = true;
+        ask("short").then(load, (error) => { run.disabled = false; out.hidden = false; out.textContent = error.message || String(error); });
+      });
+      parts.push(h("p", {class: "su-note"}, t("setup.short.do")), h("div", {class: "su-cmd"}, h("code", null, found.short.command), copy), h("div", {class: "su-end"}, run), out);
     } else if (found.reopen) parts.push(h("p", {class: "su-warn"}, t("setup.short.reopen")));
     shortBox.replaceChildren(...parts);
   }

@@ -65,3 +65,14 @@ def command_for(root: Path, path: Optional[str] = None) -> str:
             return f"ln -sf {launcher} {shown}/harness"
     start = "~/.bashrc" if os.environ.get("SHELL", "").endswith("bash") else "~/.zshrc"
     return f"mkdir -p ~/bin && ln -sf {launcher} ~/bin/harness && echo 'export PATH=\"$HOME/bin:$PATH\"' >> {start}"
+
+
+def install(root: Path) -> str:
+    """Run the line of `command_for`, made here and never taken from a page, for the person who pressed the button. What went wrong, or an empty string."""
+    line = command_for(root)
+    command = ["powershell", "-NoProfile", "-NonInteractive", "-Command", line] if sys.platform == "win32" else ["/bin/sh", "-c", line]
+    try:
+        done = subprocess.run(command, capture_output=True, timeout=SHELL_WAIT * 4, stdin=subprocess.DEVNULL, check=False)
+    except (OSError, subprocess.SubprocessError) as error:
+        return str(error)[:300]
+    return "" if done.returncode == 0 else done.stderr.decode("utf-8", errors="replace").strip()[:300]

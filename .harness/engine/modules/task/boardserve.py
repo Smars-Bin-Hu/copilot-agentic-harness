@@ -56,7 +56,7 @@ from urllib.request import Request, urlopen
 from core import config, messages, registry, state, tasks, user
 from core.paths import board_serve_file, board_serve_port, utc_now
 
-from core import reinstall, setup as core_setup, skillboard
+from core import reinstall, setup as core_setup, shortcmd, skillboard
 
 from . import chatrounds
 from . import kbview
@@ -562,6 +562,11 @@ class Board:
                 self.language_stamp = []
                 self.sync_language()
             return found
+        if step == "short":
+            problem = shortcmd.install(self.root)
+            if problem:
+                raise CommandError(problem)
+            return {"done": True}
         if step == "guide":
             return core_setup.guide(self.root)
         if step == "none":

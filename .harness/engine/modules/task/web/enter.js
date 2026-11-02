@@ -370,6 +370,7 @@
     if (chk0.setup && go.disabled) go.disabled = false;
     setText(go.firstChild, chk0.setup ? t("board.enter.getready") : ready ? t("board.enter.go") : pending && !bad ? t("board.enter.checking") : t("board.enter.notready"));
     const k = go.querySelector("kbd").style, kd = ready ? "" : "none"; if (k.display !== kd) k.display = kd;
+    go.classList.toggle("plain", !ready);  // no key beside the word: it stands in the middle
     fitList();
     return ready;
   }

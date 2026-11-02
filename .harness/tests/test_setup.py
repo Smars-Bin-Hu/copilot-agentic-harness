@@ -41,6 +41,14 @@ class ShortTests(unittest.TestCase):
             self.assertEqual(shortcmd.fresh_path(), "/a:/b")
 
 
+class InstallTests(unittest.TestCase):
+    def test_the_board_runs_the_line_it_made_and_tells_a_failure(self) -> None:
+        with mock.patch.object(shortcmd, "command_for", return_value="true"):
+            self.assertEqual(shortcmd.install(Path("/r")), "")
+        with mock.patch.object(shortcmd, "command_for", return_value="echo nope >&2; exit 3"):
+            self.assertEqual(shortcmd.install(Path("/r")), "nope")
+
+
 class FinishTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()

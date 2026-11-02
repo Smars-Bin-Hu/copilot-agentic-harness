@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.65 (2026-11-01)
+
+### Changed
+
+- Get ready sets up the short command with one button: the board runs the line it shows. Copy stays for a person who wants to run it themselves.
+- The Enter button keeps its word in the middle when it has no key beside it.
+
 ## 1.6.64 (2026-11-01)
 
 ### Added

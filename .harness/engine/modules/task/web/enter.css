@@ -93,6 +93,7 @@ html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5
 .en-legal{margin:10px 0 0;font:11px/1.4 var(--mono);color:var(--en-cap);overflow-wrap:anywhere}
 .en-go{font:600 15px var(--sans);display:inline-flex;align-items:center;gap:12px;height:54px;padding:0 14px 0 30px;border-radius:999px;border:0;cursor:pointer;color:var(--en-btn-ink);background:var(--en-btn);
  box-shadow:0 14px 34px rgba(0,0,0,.3);transition:transform .2s,box-shadow .2s}
+.en-go.plain{padding:0 30px}
 .en-go:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 0 60px rgba(var(--en-fx),.35),0 18px 40px rgba(0,0,0,.35)}
 .en-go kbd{font:500 12px var(--mono);padding:6px 8px;border-radius:6px;background:rgba(128,128,128,.25);border:1px solid rgba(128,128,128,.3);color:inherit}
 .en-go:disabled{cursor:not-allowed;background:var(--en-btn-off);color:var(--en-btn-off-ink);box-shadow:none;padding-left:26px;padding-right:26px}

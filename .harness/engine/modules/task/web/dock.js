@@ -95,7 +95,7 @@ const DOCK = (function () {
   function kbWindow() {
     const stage = h("div", {class: "dock-list kb-body"});
     const no = h("button", {type: "button", class: "act"}, t("board.new.close"));
-    const tabs = ["overview", "domains", "lookup", "health"].map((key) => { const tab = h("button", {type: "button", class: "chip", "data-key": key}, t(key === "domains" ? "dock.kb.domains.tab" : "dock.kb." + key)); tab.addEventListener("click", () => show(key)); return tab; });
+    const tabs = ["overview", "atlas", "domains", "lookup", "health"].map((key) => { const tab = h("button", {type: "button", class: "chip", "data-key": key}, t(key === "domains" ? "dock.kb.domains.tab" : "dock.kb." + key)); tab.addEventListener("click", () => show(key)); return tab; });
     const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "chips dock-tabs"}, tabs), stage, h("div", {class: "row"}, no)]);
     view.box.classList.add("dock-window", "kb-window");
     let timer = 0, gone = false;
@@ -144,8 +144,11 @@ const DOCK = (function () {
     function show(key) {
       clearTimeout(timer);
       tabs.forEach((tab) => tab.classList.toggle("on", tab.dataset.key === key));
+      view.box.classList.toggle("ka-open", key === "atlas");
+      stage.classList.remove("ka-stage");
       stage.replaceChildren(h("p", {class: "sub"}, t("dock.kb.working")));
       if (key === "lookup") lookup();
+      else if (key === "atlas") load("atlas", (found) => ATLAS.draw(stage, found));
       else if (key === "health") load("health", health);
       else load("status", key === "overview" ? overview : domains);
     }

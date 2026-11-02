@@ -18,7 +18,7 @@ import support  # noqa: F401 - the engine on sys.path, HARNESS_VSCODE_CLI=off
 from support import HarnessTestCase
 
 from core import config, copilot_events, logs, messages, redact
-from modules.task import boardserve, chatlive, chatsend, setupjob, taskhtml, tasktrace
+from modules.task import boardserve, chatlive, chatsend, setupjob, taskhtml, tasktrace, wallpaper
 from modules.task import task as task_ops
 
 ENGINE = Path(__file__).resolve().parents[1] / "engine"
@@ -593,6 +593,11 @@ class WalkThroughTests(unittest.TestCase):
             self.assertTrue(setupjob.browse("relative/path")["error"])
             with mock.patch.object(setupjob, "MAX_LISTED", 1):
                 self.assertTrue(setupjob.browse(name)["cut"])
+
+    def test_the_system_window_has_a_shown_owner_on_top_of_the_browser(self) -> None:
+        for script in (wallpaper.WINDOWS_PICK, wallpaper.WINDOWS_FILE):
+            self.assertLess(script.index("TopMost = $true"), script.index("$owner.Show();"))
+            self.assertLess(script.index("$owner.Show();"), script.index("$box.ShowDialog($owner)"))
 
     def test_a_narrow_window_keeps_things_on_the_page(self) -> None:
         desk = (WEB / "desk.css").read_text(encoding="utf-8")

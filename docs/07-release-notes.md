@@ -15,6 +15,7 @@ To see which version you have: `harness --version`.
 ### Changed
 
 - **Browse in Get ready opens a picker on the page.** The board reads one folder at a time and starts no program, which helps on a computer that starts programs slowly. **Use the system window** stays as a second way, and now shows its error.
+- **The system window on Windows comes to the front.** It opened behind the browser, so Browse looked dead.
 
 ## 1.6.89 (2026-11-02)
 

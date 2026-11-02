@@ -26,16 +26,20 @@ KEY = "wallpaper_dir"
 PICK_SECONDS = 300  # how long a person may look for the folder in the window of the system
 PROMPT_VAR = "HARNESS_WALL_PROMPT"
 MAC_PICK = ("on run argv", "activate", "POSIX path of (choose folder with prompt (item 1 of argv) default location (path to pictures folder))", "end run")
-WINDOWS_PICK = (
+# The window asked for belongs to this one: on top and shown, though nothing can be seen of it. An owner that is never shown leaves the window behind the browser.
+WINDOWS_OWNER = (
     "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; "
-    "$owner = New-Object System.Windows.Forms.Form -Property @{TopMost = $true}; "
+    "$owner = New-Object System.Windows.Forms.Form -Property @{TopMost = $true; ShowInTaskbar = $false; Opacity = 0; FormBorderStyle = 'None'}; "
+    "$owner.Show(); $owner.Activate(); "
+)
+WINDOWS_PICK = (
+    WINDOWS_OWNER +
     "$box = New-Object System.Windows.Forms.FolderBrowserDialog; $box.Description = $env:" + PROMPT_VAR + "; "
     "if ($box.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $box.SelectedPath }"
 )
 MAC_FILE = ("on run argv", "activate", 'POSIX path of (choose file with prompt (item 1 of argv) of type {"zip"})', "end run")
 WINDOWS_FILE = (
-    "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Add-Type -AssemblyName System.Windows.Forms; "
-    "$owner = New-Object System.Windows.Forms.Form -Property @{TopMost = $true}; "
+    WINDOWS_OWNER +
     "$box = New-Object System.Windows.Forms.OpenFileDialog; $box.Filter = 'zip|*.zip'; $box.Title = $env:" + PROMPT_VAR + "; "
     "if ($box.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) { $box.FileName }"
 )

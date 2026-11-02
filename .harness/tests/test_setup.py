@@ -49,6 +49,41 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(shortcmd.install(Path("/r")), "nope")
 
 
+class TryTests(unittest.TestCase):
+    def test_the_output_of_the_command_is_kept(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            launcher = Path(folder) / "harness"
+            launcher.write_text("#!/bin/sh\necho banner\n", encoding="utf-8")
+            launcher.chmod(0o755)
+            with mock.patch.object(shortcmd, "fresh_path", return_value=folder + os.pathsep + os.environ["PATH"]):
+                self.assertEqual(shortcmd.test(Path(folder)), {"ok": True, "output": "banner"})
+            launcher.write_text("#!/bin/sh\necho broken >&2\nexit 2\n", encoding="utf-8")
+            with mock.patch.object(shortcmd, "fresh_path", return_value=folder + os.pathsep + os.environ["PATH"]):
+                self.assertEqual(shortcmd.test(Path(folder)), {"ok": False, "output": "broken"})
+
+    def test_a_command_not_found_says_so(self) -> None:
+        with mock.patch.object(shortcmd, "fresh_path", return_value="/nothing/here"):
+            found = setup.try_short(Path("/r"))
+        self.assertFalse(found["ok"])
+        self.assertEqual(found["why"], messages.text("setup.short.bad"))
+
+    def test_python_is_looked_at_on_windows_only(self) -> None:
+        with mock.patch.object(shortcmd.sys, "platform", "darwin"):
+            self.assertEqual(shortcmd.python_problem("/nothing/here"), "")
+        with mock.patch.object(shortcmd.sys, "platform", "win32"):
+            with mock.patch.object(shortcmd.shutil, "which", return_value=None):
+                self.assertEqual(shortcmd.python_problem("/x"), "missing")
+            with mock.patch.object(shortcmd.shutil, "which", return_value="python.exe"), mock.patch.object(shortcmd.subprocess, "run", return_value=mock.Mock(returncode=49)):
+                self.assertEqual(shortcmd.python_problem("/x"), "stub")
+            with mock.patch.object(shortcmd.shutil, "which", return_value="python.exe"), mock.patch.object(shortcmd.subprocess, "run", return_value=mock.Mock(returncode=0)):
+                self.assertEqual(shortcmd.python_problem("/x"), "")
+
+    def test_the_windows_launcher_steps_past_the_store_stub(self) -> None:
+        text = (Path(__file__).resolve().parents[1] / "bin" / "harness.cmd").read_text(encoding="utf-8")
+        self.assertIn("\\WindowsApps\\=", text)
+        self.assertLess(text.index("goto run_py"), text.index(":run_py"))
+
+
 class FinishTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()

@@ -11,9 +11,11 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 SHELL_WAIT = 5.0  # seconds a new shell may take to say its PATH
+RUN_WAIT = 20.0  # seconds `harness --version` may take; a work computer starts programs slowly
+MAX_OUTPUT = 1000
 MARK = "__harness_path__"
 
 
@@ -65,6 +67,35 @@ def command_for(root: Path, path: Optional[str] = None) -> str:
             return f"ln -sf {launcher} {shown}/harness"
     start = "~/.bashrc" if os.environ.get("SHELL", "").endswith("bash") else "~/.zshrc"
     return f"mkdir -p ~/bin && ln -sf {launcher} ~/bin/harness && echo 'export PATH=\"$HOME/bin:$PATH\"' >> {start}"
+
+
+def test(root: Path) -> Dict[str, Any]:
+    """Run `harness --version` as a new terminal would, in this copy: `{ok, output}`. Being on PATH does not prove it runs."""
+    path = fresh_path()
+    where = found(path)
+    if not where:
+        return {"ok": False, "output": ""}
+    command = ["cmd", "/c", where, "--version"] if sys.platform == "win32" else [where, "--version"]
+    try:
+        done = subprocess.run(command, capture_output=True, timeout=RUN_WAIT, stdin=subprocess.DEVNULL, check=False, cwd=str(root), env={**os.environ, "PATH": path})
+    except (OSError, subprocess.SubprocessError) as error:
+        return {"ok": False, "output": str(error)[:MAX_OUTPUT]}
+    text = (done.stdout + done.stderr).decode("utf-8", errors="replace").strip()
+    return {"ok": done.returncode == 0, "output": text[:MAX_OUTPUT]}
+
+
+def python_problem(path: Optional[str] = None) -> str:
+    """Windows only, where hooks run `python`: "missing", "stub" (the Store stub, which runs nothing) or an empty string."""
+    if sys.platform != "win32":
+        return ""
+    where = shutil.which("python", path=fresh_path() if path is None else path)
+    if not where:
+        return "missing"
+    try:
+        done = subprocess.run([where, "-c", ""], capture_output=True, timeout=RUN_WAIT, stdin=subprocess.DEVNULL, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return "stub"
+    return "" if done.returncode == 0 else "stub"
 
 
 def install(root: Path) -> str:

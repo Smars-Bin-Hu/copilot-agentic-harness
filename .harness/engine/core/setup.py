@@ -110,6 +110,13 @@ def status(root: Path, short_found: Optional[str] = None) -> Dict[str, Any]:
             "short": {"found": found, "command": "" if found else shortcmd.command_for(root, path), "windows": os.name == "nt"}, "example": r"C:\Users\me\repos\orders\deploy" if os.name == "nt" else "/Users/me/repos/orders/deploy"}
 
 
+def try_short(root: Path) -> Dict[str, Any]:
+    """What the test button of the short command shows: its output, and on Windows whether hooks can run."""
+    found = shortcmd.test(root)
+    problem = shortcmd.python_problem()
+    return {**found, "why": "" if found["ok"] else say("setup.short.bad"), "python": say("setup.python.stub") if problem == "stub" else say("setup.python.missing") if problem else ""}
+
+
 def check(root: Path, data: Dict[str, Any]) -> None:
     """Every field, before anything is written. ValueError: all that is wrong."""
     name = " ".join(str(data.get("name") or "").split())

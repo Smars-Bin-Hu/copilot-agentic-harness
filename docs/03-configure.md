@@ -13,6 +13,7 @@ If your company does not let you change PATH, ask the helpdesk to add one user P
 | Issue | What to do |
 | --- | --- |
 | `harness` is still not found | Reopen VS Code, then look at `echo $PATH` (Windows: `echo $env:Path`) in a new terminal |
+| Windows: `python` opens the Microsoft Store, or only `py` works | Hooks run `python`, so it must be real. Install Python from python.org with "Add to PATH" on, then turn off `python.exe` and `python3.exe` in Settings > Apps > Advanced app settings > App execution aliases. Get ready tests this |
 | `doctor` says the `harness` on PATH is not this copy's | There is another copy on this computer. It works, but PATH had better point at the copy you use most |
 | The knowledge base step fails on the first commit | Git has no name or email: set `user.name` and `user.email` with `git config --global`, then press Finish setup again |
 | `doctor` reports broken links in the knowledge base README | Links must be relative paths to files that exist in `knowledge-base/` |

@@ -26,11 +26,18 @@ echo harness: not inside a harness repository. cd into one, or set HARNESS_HOME 
 exit /b 1
 :harness_run
 rem Find python.exe in PATH with cmd itself, not with `where`: that is one more program to start, and where security software checks
-rem every start (a work computer) one start costs a second or more. Without python.exe, the py launcher.
+rem every start (a work computer) one start costs a second or more. Without python.exe, the py launcher. A python.exe under
+rem WindowsApps may be the Store stub, which only opens the Store: py goes first then. A real Store Python has no py, so it still runs.
 for %%P in (python.exe) do set "HARNESS_PY=%%~$PATH:P"
 if not defined HARNESS_PY goto run_py
+if /i not "%HARNESS_PY:\WindowsApps\=%"=="%HARNESS_PY%" goto run_py
 "%HARNESS_PY%" "%HARNESS_CLI%" %*
 exit /b %errorlevel%
 :run_py
-py "%HARNESS_CLI%" %*
+for %%P in (py.exe) do set "HARNESS_PYLAUNCHER=%%~$PATH:P"
+if not defined HARNESS_PYLAUNCHER goto run_python
+"%HARNESS_PYLAUNCHER%" "%HARNESS_CLI%" %*
+exit /b %errorlevel%
+:run_python
+python "%HARNESS_CLI%" %*
 exit /b %errorlevel%

@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.68 (2026-11-02)
+
+### Added
+
+- Get ready tests the short command: it runs `harness --version` as a new terminal would and shows the output. On Windows it also warns when `python` is the Store stub or is missing, because hooks run `python`.
+
+### Fixed
+
+- Windows: `harness` no longer picks the Store stub of `python`; it uses `py` then.
+
 ## 1.6.67 (2026-11-02)
 
 ### Changed

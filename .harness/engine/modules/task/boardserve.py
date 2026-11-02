@@ -571,6 +571,8 @@ class Board:
             if problem:
                 raise CommandError(problem)
             return {"done": True}
+        if step == "test":
+            return core_setup.try_short(self.root)
         if step == "guide":
             return core_setup.guide(self.root)
         if step == "none":

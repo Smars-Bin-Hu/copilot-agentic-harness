@@ -15,3 +15,4 @@ textarea.su-in{resize:vertical}
 .su-line .act{flex:none}.su-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}.su-item{display:flex;align-items:center;gap:8px;min-width:0;padding:5px 8px 5px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}.su-item code{flex:1;min-width:0;font:12.5px/1.5 var(--mono);overflow-wrap:anywhere}.su-x{flex:none;border:0;background:none;color:var(--soft);font-size:16px;line-height:1;cursor:pointer}
 .su-star{color:var(--bad);font-weight:700}
 .su [hidden]{display:none}
+.su-out{margin:8px 0 0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font:12px/1.35 var(--mono);overflow-x:auto;white-space:pre}.su-out.bad{color:var(--bad);white-space:pre-wrap;overflow-wrap:anywhere}

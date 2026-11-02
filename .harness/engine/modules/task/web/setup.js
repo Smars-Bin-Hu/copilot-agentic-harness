@@ -95,6 +95,19 @@
   kbStar.hidden = true;
   const row = (label, ...nodes) => h("div", {class: "su-row"}, h("span", {class: "su-k"}, label), h("div", {class: "su-v"}, nodes));
 
+  const testOut = h("div");
+  function testShort(button) {
+    button.disabled = true;
+    ask("test").then((found) => {
+      button.disabled = false;
+      const parts = [];
+      if (found.why) parts.push(h("p", {class: "su-note bad"}, found.why));
+      if (found.output) parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad")}, found.output));
+      if (found.python) parts.push(h("p", {class: "su-warn"}, found.python));
+      testOut.replaceChildren(...parts);
+    }, (error) => { button.disabled = false; testOut.replaceChildren(h("p", {class: "su-note bad"}, error.message || String(error))); });
+  }
+
   function paintShort(found) {
     const key = JSON.stringify([found.short, found.reopen]);
     if (key === st.shortKey) return;  // the poll must not take away the button the person is about to press
@@ -111,7 +124,13 @@
         ask("short").then(load, (error) => { run.disabled = false; out.hidden = false; out.textContent = error.message || String(error); });
       });
       parts.push(h("p", {class: "su-note"}, t("setup.short.do")), h("div", {class: "su-cmd"}, h("code", null, found.short.command), copy), h("div", {class: "su-end"}, run), out);
-    } else if (found.reopen) parts.push(h("p", {class: "su-warn"}, t("setup.short.reopen")));
+    } else {
+      if (found.reopen) parts.push(h("p", {class: "su-warn"}, t("setup.short.reopen")));
+      const test = h("button", {type: "button", class: "act"}, t("setup.short.test"));
+      test.addEventListener("click", () => testShort(test));
+      parts.push(h("div", {class: "su-end"}, test, h("code", {class: "su-note"}, "harness --version")), testOut);
+      if (!st.tested) { st.tested = true; testShort(test); }
+    }
     shortBox.replaceChildren(...parts);
   }
 

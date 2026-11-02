@@ -232,8 +232,9 @@ class PageTests(GateCase):
         self.assertNotIn("X-Harness-Board", text)
         self.assertNotIn("connect-src", text)
         self.assertIn("default-src 'none'", text)
+        inside = text.replace('<link rel="icon" type="image/png" href="data:image/png;base64,', "", 1)  # the icon is in the page; nothing else may be linked
         for banned in ("<script src", "<link ", "<img", "@import"):
-            self.assertNotIn(banned, text)
+            self.assertNotIn(banned, inside)
         for secret in (KEY, PASSWORD):  # the commands in the page are the ones of the log, taken through redact
             self.assertNotIn(secret, text)
         self.assertEqual([item["verdict"] for item in saved["info"]["gate"]["items"] if item["verdict"]], ["right"])

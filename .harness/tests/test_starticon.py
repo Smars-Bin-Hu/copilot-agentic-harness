@@ -1,7 +1,9 @@
-"""The icon of Start Harness (1.6.83): what each system is asked to do, when it is not asked, and that a failure stops nothing."""
+"""The icon of Start Harness (1.6.83): what each system is asked to do, when it is not asked, and that a failure stops nothing. The same robot in the pages (1.6.85)."""
 
 from __future__ import annotations
 
+import base64
+import re
 import struct
 import sys
 import tempfile
@@ -14,6 +16,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / ".harness" / "engine"))
 
 from core import starticon  # noqa: E402
+from modules.task import taskhtml  # noqa: E402
 
 
 class Calls:
@@ -124,6 +127,27 @@ class ShippedTests(unittest.TestCase):
 
     def test_the_shortcut_stays_out_of_git(self) -> None:
         self.assertIn(f"/{starticon.WINDOWS_LINK}", (REPO / ".gitignore").read_text(encoding="utf-8").splitlines())
+
+
+class PageTests(unittest.TestCase):
+    def test_every_page_holds_the_icon_in_itself(self) -> None:
+        for skeleton in ("board.html", "desk.html", "setup.html", "task.html"):
+            page = taskhtml.build(skeleton, [], "title", {})
+            found = re.search(r'<link rel="icon" type="image/png" href="data:image/png;base64,([^"]+)">', page)
+            self.assertIsNotNone(found, skeleton)
+            self.assertEqual(base64.b64decode(found.group(1))[:8], b"\x89PNG\r\n\x1a\n")
+            self.assertIn(":root{--logo:url(data:image/png;base64,", page)
+
+    def test_a_saved_page_may_show_it(self) -> None:
+        self.assertIn("img-src data:", taskhtml.SNAPSHOT_CSP)
+
+    def test_the_header_shows_the_robot(self) -> None:
+        ui = (taskhtml.WEB / "ui.css").read_text(encoding="utf-8")
+        self.assertIn("background:var(--logo) center/contain no-repeat", ui)
+        self.assertNotIn("--mark", ui)
+
+    def test_it_stays_small_because_every_page_carries_it_twice(self) -> None:
+        self.assertLess((taskhtml.WEB / "icon.png").stat().st_size, 16 * 1024)
 
 
 if __name__ == "__main__":

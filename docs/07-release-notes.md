@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.85 (2026-11-02)
+
+### Changed
+
+- The robot icon of Start Harness replaces the H in the header of the board, and is now the icon of the browser tab on every page, a saved page too.
+
 ## 1.6.84 (2026-11-02)
 
 ### Changed

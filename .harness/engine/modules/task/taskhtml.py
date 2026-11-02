@@ -26,6 +26,7 @@ table is the one place for wording; the scripts hold none).
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from html import escape
@@ -36,7 +37,7 @@ from core import messages
 from core.paths import cli_command
 
 WEB = Path(__file__).resolve().parent / "web"
-MARKS = re.compile("|".join(re.escape(mark) for mark in ("<!--REFRESH-->", "<!--TITLE-->", "<!--NOSCRIPT-->", "/*THEME*/", "/*CSS*/", "<!--DATA-->", "/*JS*/")))
+MARKS = re.compile("|".join(re.escape(mark) for mark in ("<!--REFRESH-->", "<!--ICON-->", "<!--TITLE-->", "<!--NOSCRIPT-->", "/*THEME*/", "/*CSS*/", "<!--DATA-->", "/*JS*/")))
 TEXT_PREFIXES = ("report.", "board.", "insight.", "unit.", "task.kind.", "task.tier.", "task.waiting.", "desk.", "stage.", "setup.", "dock.")
 
 
@@ -61,6 +62,12 @@ def read(name: str) -> str:
     return (WEB / name).read_text(encoding="utf-8")
 
 
+def icon() -> str:
+    """The robot for the browser tab and the header, inside the page: a saved page has nothing beside it (1.6.85)."""
+    address = "data:image/png;base64," + base64.b64encode((WEB / "icon.png").read_bytes()).decode("ascii")
+    return f'<link rel="icon" type="image/png" href="{address}">\n<style>:root{{--logo:url({address})}}</style>'
+
+
 LOOK = ["tokens.css", "page.css"]  # first: the tokens and where things go ...
 FINISH = ["ui.css"]  # ... last: how they look, over the rest
 STATUS_CSS = "status.css"  # the pages that have status.js (the board) get the status marks after ui.css
@@ -81,6 +88,7 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
     data = dict(data, text=page_text())
     parts = {
         "<!--REFRESH-->": f'<meta http-equiv="refresh" content="{int(refresh)}">' if refresh else "",
+        "<!--ICON-->": icon(),
         "<!--TITLE-->": escape(title),
         "<!--NOSCRIPT-->": escape(say("report.noscript")),
         "/*THEME*/": read("theme.js"),

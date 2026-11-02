@@ -44,6 +44,14 @@ class CompanyError(Exception):
     pass
 
 
+class BadSkills(CompanyError):
+    """Company skills a package would not carry: each with its reason, so that the words say what to change."""
+
+    def __init__(self, skills: List[str], word: str) -> None:
+        super().__init__(say("company.pack.bad_skills", names="; ".join(skills), word=word))
+        self.skills = skills
+
+
 class DirtyError(CompanyError):
     """The knowledge base has changes git does not hold. The board offers to show and commit them."""
 
@@ -285,6 +293,12 @@ def found_in_place(root: Path) -> List[str]:
     return []
 
 
+def skill_trouble(folder: Path, word: str) -> str:
+    """Why a company skill would not reach a colleague, with its name; "" when it would."""
+    why = say("company.why.prefix", word=word) if not folder.name.startswith(word + "-") else next(iter(skillcheck.check(folder, word)["errors"]), "")
+    return f"{folder.name}: {why}" if why else ""
+
+
 def changed_lines(status: bytes) -> List[str]:
     """The lines of `git status --porcelain` that count. A `__pycache__` is no change of a person's, and a package holds only what git has anyway."""
     return [line for line in status.decode("utf-8", "replace").splitlines() if line.strip() and "__pycache__" not in line and not line.endswith(".pyc")]
@@ -303,9 +317,9 @@ def check_for_pack(root: Path, kb: Path) -> str:
     if not word:
         raise CompanyError(say("company.pack.no_word", path=f"{targets.COMPANY_DIR}/{CONFIG_FILE}"))
     source = kb / targets.COMPANY_DIR / "skills"
-    bad = [item.name for item in sorted(source.iterdir()) if item.is_dir() and (not item.name.startswith(word + "-") or skillcheck.check(item, word)["errors"])] if source.is_dir() else []
+    bad = [why for why in (skill_trouble(item, word) for item in sorted(source.iterdir()) if item.is_dir()) if why] if source.is_dir() else []
     if bad:
-        raise CompanyError(say("company.pack.bad_skills", names=", ".join(bad), word=word))
+        raise BadSkills(bad, word)
     errors = kbstd.check(root)["errors"]
     if errors:
         raise CompanyError(say("company.pack.kb_errors", count=errors))

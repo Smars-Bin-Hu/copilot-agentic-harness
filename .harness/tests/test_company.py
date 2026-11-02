@@ -383,6 +383,17 @@ class PackStateTests(unittest.TestCase):
             self.assertFalse((Path(folder) / "__pycache__").exists())
 
 
+class SkillTroubleTests(unittest.TestCase):
+    def test_a_skill_that_a_package_refuses_says_why(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            skill = Path(folder) / "bns-one"
+            skill.mkdir()
+            (skill / "SKILL.md").write_text("---\nname: demo-one\ndescription: A skill. Use when asked.\n---\n", encoding="utf-8")
+            self.assertIn("demo-one", company.skill_trouble(skill, "bns"))
+            self.assertIn("bns-one: ", company.skill_trouble(skill, "bns"))
+            self.assertIn("acme-", company.skill_trouble(skill, "acme"))
+
+
 class PickerTests(unittest.TestCase):
     def test_a_path_that_is_not_there_opens_its_nearest_folder(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

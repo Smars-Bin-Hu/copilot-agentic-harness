@@ -1217,6 +1217,8 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": company.diff(board.root)})
                 except company.DirtyError as error:
                     return self.answer(409, {"error": str(error), "dirty": error.path})
+                except company.BadSkills as error:
+                    return self.answer(409, {"error": str(error), "skills": error.skills})
                 except (company.CompanyError, OSError) as error:
                     return self.answer(409, {"error": str(error)})
             if path == "/api/language":  # the language of the harness (settings panel): the paired browser only; it writes the person's own `user.override.json`

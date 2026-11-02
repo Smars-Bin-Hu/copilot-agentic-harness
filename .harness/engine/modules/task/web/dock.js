@@ -205,6 +205,14 @@ const DOCK = (function () {
     const packed = h("p", {class: "su-note kb-packed", hidden: ""});
     const pack = h("button", {type: "button", class: "act", title: t("dock.pack.hint"), hidden: hasCompany ? null : ""}, t("dock.pack"));
     function paintPackError(error) {  // changes git does not hold: they are the person's, so the way on shows them and commits them in the person's own Terminal window
+      const skills = error.data && error.data.skills;
+      if (skills) {  // what a skill lacks is written in the skill: that is a change in the knowledge base, so an agent makes it
+        const items = skills.map(plainWords);
+        const fix = h("button", {type: "button", class: "act kb-mini"}, chatGlyph(), t("dock.company.chat"));
+        fix.addEventListener("click", () => start("harness-my-task", t("dock.company.chat.words", {items: items.join(" ")}).slice(0, CHAT_WORDS)));
+        packed.replaceChildren(t("dock.pack.skills"), h("ul", null, items.map((item) => h("li", null, item))), fix);
+        return;
+      }
       const folder = error.data && error.data.dirty;
       if (!folder) { packed.textContent = plainWords(error.message); return; }
       const see = h("button", {type: "button", class: "act kb-mini"}, t("dock.pack.see"));

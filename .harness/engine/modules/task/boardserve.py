@@ -56,9 +56,10 @@ from urllib.request import Request, urlopen
 from core import config, messages, registry, state, tasks, user
 from core.paths import board_serve_file, board_serve_port, utc_now
 
-from core import setup as core_setup
+from core import reinstall, setup as core_setup
 
 from . import chatrounds
+from . import setupjob
 from . import taskrun
 from . import wallpaper
 from . import autorun, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
@@ -172,6 +173,7 @@ class Board:
         self.root = root
         self.runner = taskrun.Runner(root)
         self.short_missing = False
+        self.setup_job = setupjob.Job()
         self.refresh = refresh
         self.link = link or vslink.VsLink(root, enabled=False)  # a board made without a link (the tests) has none
         self.everything = everything
@@ -547,12 +549,18 @@ class Board:
         the Enter screen waits until VS Code was closed and came back."""
         step = str(data.get("step", ""))
         if step == "probe":
-            return core_setup.repositories(data.get("repos_root"))
+            kind = str(data.get("kind") or "repos")
+            return setupjob.probe_package(self.root, data.get("path")) if kind == "package" else setupjob.probe_folder(data.get("path")) if kind == "folder" else core_setup.repositories(data.get("repos_root"))
         if step == "act":
-            result = core_setup.finish(self.root, data)
-            self.language_stamp = []
-            self.sync_language()
-            return result
+            return self.setup_job.start(self.root, data)
+        if step == "job":
+            found = self.setup_job.view()
+            if found["done"]:
+                self.language_stamp = []
+                self.sync_language()
+            return found
+        if step == "older":
+            return reinstall.run(self.root, str(data.get("path", "")), bool(data.get("apply")), True if data.get("apply") else None)
         if step != "state":
             raise CommandError(say("serve.refused.request"))
         found = core_setup.status(self.root)

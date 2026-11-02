@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.58 (2026-11-01)
+
+### Added
+
+- Get ready can bring in the knowledge base (a package or a folder), the company skill word, the install command and the paths the agent must not touch. Finish shows each step; a step that fails can be fixed and run again.
+- **Coming from an older copy?** on Get ready shows what would move, then carries it over.
+
 ## 1.6.57 (2026-11-01)
 
 ### Added

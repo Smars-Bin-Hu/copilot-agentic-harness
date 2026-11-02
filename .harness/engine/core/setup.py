@@ -7,15 +7,18 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
+import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from core import config, messages, shortcmd, state as files
 
 MAX_NAME = 100
 MAX_PATH = 1024
 GIT_WAIT = 5.0
+PREFIX = re.compile(r"[a-z][a-z0-9]{0,30}")
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -84,12 +87,16 @@ def status(root: Path, short_found: Optional[str] = None) -> Dict[str, Any]:
         problem = str(error)
     path = shortcmd.fresh_path()
     found = shortcmd.found(path) if short_found is None else short_found
-    return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "language": str(user.get("language") or messages.language()), "repos_root": str(target.get("repos_root") or ""),
+    return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "language": str(user.get("language") or messages.language()), "repos_root": str(target.get("repos_root") or ""), "skill_prefix": str(user.get("skill_prefix") or ""),
             "short": {"found": found, "command": "" if found else shortcmd.command_for(root, path), "windows": os.name == "nt"}}
 
 
-def finish(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
-    """Check all, then write all. `{lines: [{key, ok, detail}]}`. ValueError: what is wrong; nothing was written."""
+def lines_of(text: Any) -> List[str]:
+    return [line.strip() for line in str(text or "").splitlines() if line.strip()]
+
+
+def check(root: Path, data: Dict[str, Any]) -> None:
+    """Every field, before anything is written. ValueError: all that is wrong."""
     name = " ".join(str(data.get("name") or "").split())
     language = str(data.get("language") or "").strip().lower()
     repos = repositories(data.get("repos_root"))
@@ -103,28 +110,40 @@ def finish(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     forced = os.environ.get(messages.ENVIRONMENT, "").strip().lower()
     if forced and forced != language:
         wrong.append(say("serve.language.env", name=messages.ENVIRONMENT))
+    mode = str(data.get("kb_mode") or "none")
+    if mode not in ("none", "package", "folder"):
+        wrong.append(say("setup.kb.mode"))
+    elif mode != "none" and not clean_path(data.get("kb_path")):
+        wrong.append(say("setup.kb.path"))
+    prefix = str(data.get("skill_prefix") or "").strip()
+    if prefix and not PREFIX.fullmatch(prefix):
+        wrong.append(say("setup.prefix.bad"))
     if wrong:
         raise ValueError(" ".join(wrong))
-    lines: List[Dict[str, Any]] = []
-    steps: List[Callable[[], str]] = []
+
+
+def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]]]:
+    """The writes of the person's own files, in order. Each can be run again."""
 
     def user() -> str:
-        write(root, "user", {"name": name, "language": language})
+        name = " ".join(str(data.get("name") or "").split())
+        write(root, "user", {"name": name, "language": str(data.get("language")).strip().lower(), "skill_prefix": str(data.get("skill_prefix") or "").strip()})
         return name
 
     def target() -> str:
         value = clean_path(data.get("repos_root"))
-        if not value:
+        extra = {"refused_paths": sorted({".git/**", *lines_of(data.get("refused_paths"))})} if lines_of(data.get("refused_paths")) else {}
+        if not value and not extra:
             return say("setup.line.later")
-        write(root, "target", {"repos_root": value})
-        return say("setup.line.repos", n=repos["n"])
+        write(root, "target", {**({"repos_root": value} if value else {}), **extra})
+        return say("setup.line.repos", n=repositories(value)["n"]) if value else say("setup.line.later")
 
-    steps = [user, target]
-    for key, step in zip(("user", "target"), steps):
-        try:
-            lines.append({"key": key, "ok": True, "detail": step()})
-        except (OSError, ValueError) as error:
-            lines.append({"key": key, "ok": False, "detail": str(error)[:300]})
-    if all(line["ok"] for line in lines):
-        write(root, "user", {"setup_done": True})
-    return {"lines": lines, "done": all(line["ok"] for line in lines)}
+    def tools() -> str:
+        python = dict(kept(root, "tools").get("python") or {})
+        python.setdefault("interpreter", sys.executable)
+        if str(data.get("install_command") or "").strip():
+            python["install_command"] = str(data["install_command"]).strip()
+        write(root, "tools", {"python": python})
+        return str(python["interpreter"])
+
+    return [("user", user), ("target", target), ("tools", tools)]

@@ -11,6 +11,32 @@
   const repoNote = h("p", {class: "su-note"});
   const name = h("input", {type: "text", class: "su-in", maxlength: 100, autocomplete: "name", spellcheck: "false"});
   const repos = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: t("setup.repos.ph")});
+  const kbPath = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", hidden: ""});
+  const kbNote = h("p", {class: "su-note"});
+  const prefix = h("input", {type: "text", class: "su-in su-short", maxlength: 31, autocomplete: "off", spellcheck: "false"});
+  const install = h("input", {type: "text", class: "su-in su-mono", maxlength: 500, autocomplete: "off", spellcheck: "false", placeholder: t("setup.install.ph")});
+  const refused = h("textarea", {class: "su-in su-mono", rows: 3, spellcheck: "false", placeholder: t("setup.refused.ph")});
+  const modes = ["package", "folder", "none"].map((mode) => {
+    const chip = h("button", {type: "button", class: "chip", "data-mode": mode}, t("setup.kb." + mode));
+    chip.addEventListener("click", () => setMode(mode));
+    return chip;
+  });
+  const setMode = (mode) => {
+    st.mode = mode;
+    modes.forEach((chip) => { const on = chip.dataset.mode === mode; chip.classList.toggle("on", on); chip.setAttribute("aria-pressed", on ? "true" : "false"); });
+    kbPath.hidden = mode === "none";
+    kbPath.placeholder = mode === "package" ? t("setup.kb.package.ph") : t("setup.kb.folder.ph");
+    kbNote.className = "su-note";
+    kbNote.textContent = mode === "none" ? t("setup.kb.none.hint") : "";
+    if (mode !== "none" && kbPath.value.trim()) checkKb();
+  };
+  function checkKb() {
+    ask("probe", {kind: st.mode, path: kbPath.value}).then((found) => {
+      kbNote.className = "su-note" + (found.ok ? " good" : " bad");
+      kbNote.textContent = !found.ok ? found.why : st.mode === "package" ? t("setup.kb.package.ok", {version: found.version, n: found.new}) : found.why || t("setup.kb.folder.ok");
+      if (found.prefix && !prefix.value) prefix.value = found.prefix;
+    }, () => {});
+  }
   const go = h("button", {type: "button", class: "act hot big"}, t("setup.finish"));
   const chips = ["en", "zh"].map((lang) => {
     const chip = h("button", {type: "button", class: "chip", "data-lang": lang}, t("desk.send.lang." + lang));
@@ -38,6 +64,8 @@
       name.value = found.name;
       repos.value = found.repos_root;
       setLang(found.language);
+      setMode("none");
+      prefix.value = found.skill_prefix || "";
       if (found.problem) said.replaceChildren(...SERVE.reasons(found.problem));
       checkRepos();
     }
@@ -57,21 +85,47 @@
     return ask("state").then(paint, (error) => { said.replaceChildren(...SERVE.reasons(error.message || error)); }).then(() => { if (!document.hidden) st.timer = setTimeout(load, POLL); else st.timer = 0; });
   }
 
-  go.addEventListener("click", () => {
-    go.disabled = true;
-    said.replaceChildren();
-    ask("act", {name: name.value, language: st.lang, repos_root: repos.value}).then((found) => {
-      said.replaceChildren(...found.lines.map((line) => h("p", {class: line.ok ? "su-note good" : "su-note bad"}, (line.ok ? "\u2713 " : "\u2717 ") + t("setup.line." + line.key) + ": " + line.detail)));
+  const paintLines = (found) => said.replaceChildren(...found.lines.map((line) => h("p", {class: line.ok ? "su-note good" : "su-note bad"}, (line.ok ? "\u2713 " : "\u2717 ") + t("setup.line." + line.key) + ": " + line.detail)));
+  function follow() {
+    ask("job").then((found) => {
+      paintLines(found);
+      if (found.running) { setTimeout(follow, 700); return; }
       if (found.done) location.assign("/");
       else go.disabled = false;
     }, (error) => { go.disabled = false; said.replaceChildren(...SERVE.reasons(error.message || error)); });
+  }
+  go.addEventListener("click", () => {
+    go.disabled = true;
+    said.replaceChildren();
+    ask("act", {name: name.value, language: st.lang, repos_root: repos.value, kb_mode: st.mode, kb_path: kbPath.value, skill_prefix: prefix.value, install_command: install.value, refused_paths: refused.value}).then(follow,
+      (error) => { go.disabled = false; said.replaceChildren(...SERVE.reasons(error.message || error)); });
   });
+  function older() {
+    const path = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("setup.older.ph")});
+    const look = h("button", {type: "button", class: "act"}, t("setup.older.look"));
+    const apply = h("button", {type: "button", class: "act hot", hidden: ""}, t("setup.older.apply"));
+    const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const out = h("div", {class: "su-note"});
+    const view = SERVE.dialog([h("h2", null, t("setup.older.title")), h("p", {class: "sub"}, t("setup.older.hint")), path, out, h("div", {class: "row"}, look, apply, no)]);
+    no.addEventListener("click", view.close);
+    look.addEventListener("click", () => ask("older", {path: path.value}).then((found) => {
+      const groups = Object.entries(found.would_copy || {}).map(([group, names]) => group + ": " + names.length);
+      out.textContent = t("setup.older.plan", {from: found.from, groups: groups.join(", ") || "-"});
+      apply.hidden = false;
+    }, (error) => { out.textContent = error.message || String(error); }));
+    apply.addEventListener("click", () => { apply.disabled = true; ask("older", {path: path.value, apply: true}).then(() => { location.assign("/"); }, (error) => { apply.disabled = false; out.textContent = error.message || String(error); }); });
+  }
   repos.addEventListener("input", () => { clearTimeout(st.probe); st.probe = setTimeout(checkRepos, 400); });
+  kbPath.addEventListener("input", () => { clearTimeout(st.probe); st.probe = setTimeout(checkKb, 400); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden && !st.timer) load(); });
 
-  app.replaceChildren(h("div", {class: "su"}, h("h1", null, t("setup.title")), h("p", {class: "su-lead"}, t("setup.lead")), shortBox,
+  const olderLink = h("button", {type: "button", class: "su-link"}, t("setup.older.title"));
+  olderLink.addEventListener("click", older);
+  app.replaceChildren(h("div", {class: "su"}, h("h1", null, t("setup.title")), h("p", {class: "su-lead"}, t("setup.lead"), " ", olderLink), shortBox,
     h("section", {class: "su-card"}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "2"), h("h2", null, t("setup.form.title"))),
       row(t("setup.name"), h("div", {class: "su-line"}, name, h("span", {class: "chips"}, chips))), row(t("setup.repos"), repos, repoNote),
+      row(t("setup.kb"), h("div", {class: "chips su-modes"}, modes), kbPath, kbNote), row(t("setup.prefix"), prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))),
+      h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row(t("setup.install"), install), row(t("setup.refused"), refused)),
       h("div", {class: "su-end"}, go, h("span", {class: "su-note"}, t("setup.finish.note"))), said)));
   load();
 })();

@@ -9,3 +9,5 @@ body{min-height:100vh}.su{max-width:760px;margin:0 auto;padding:40px 16px 60px;b
 .su-note{margin:6px 0 0;color:var(--soft);font-size:12.5px;overflow-wrap:anywhere}.su-note.good{color:var(--good)}.su-note.bad,.su-said .bad{color:var(--bad)}.su-warn{margin:6px 0 0;color:var(--hot);overflow-wrap:anywhere}
 .su-end{display:flex;align-items:center;gap:14px;margin-top:16px}.su-said{margin-top:10px}
 @media (max-width:600px){.su-row{grid-template-columns:minmax(0,1fr)}.su-k{padding-top:0}.su-line{flex-wrap:wrap}.su-end{flex-wrap:wrap}}
+.su-short{max-width:220px}.su-modes{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.su-more{margin:12px 0 0}.su-more summary{cursor:pointer}.su-link{padding:0;border:0;background:none;color:var(--soft);font:inherit;text-decoration:underline;cursor:pointer}
+textarea.su-in{resize:vertical}

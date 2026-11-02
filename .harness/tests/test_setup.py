@@ -11,7 +11,8 @@ from unittest import mock
 
 import support  # noqa: F401
 
-from core import setup, shortcmd
+from core import messages, setup, shortcmd
+from modules.task import setupjob
 
 
 class ShortTests(unittest.TestCase):
@@ -56,23 +57,38 @@ class FinishTests(unittest.TestCase):
     def data(self, path: Path) -> dict:
         return json.loads(path.read_text(encoding="utf-8"))
 
+    def run_steps(self, data: dict) -> list:
+        setup.check(self.root, data)
+        return [(key, step()) for key, step in setup.steps(self.root, data)]
+
     def test_only_name_and_language_are_needed_and_other_keys_stay(self) -> None:
         self.user.write_text('{"archive_to": "/x"}', encoding="utf-8")
-        found = setup.finish(self.root, {"name": "  Alex   Lee ", "language": "zh", "repos_root": ""})
-        self.assertTrue(found["done"])
-        self.assertEqual(self.data(self.user), {"archive_to": "/x", "name": "Alex Lee", "language": "zh", "setup_done": True})
+        self.run_steps({"name": "  Alex   Lee ", "language": "zh", "repos_root": ""})
+        found = self.data(self.user)
+        self.assertEqual((found["archive_to"], found["name"], found["language"]), ("/x", "Alex Lee", "zh"))
         self.assertFalse((self.policies / "target.override.json").exists())
 
-    def test_one_wrong_field_writes_nothing(self) -> None:
-        for data in ({"name": "", "language": "en"}, {"name": "A", "language": "fr"}, {"name": "x" * 101, "language": "en"}, {"name": "A", "language": "en", "repos_root": "relative/path"}, {"name": "A", "language": "en", "repos_root": "/no/such/folder/at/all"}):
-            with self.assertRaises(ValueError):
-                setup.finish(self.root, data)
+    def test_python_is_written_once_and_a_value_of_the_person_stays(self) -> None:
+        (self.policies / "tools.override.json").write_text('{"python": {"interpreter": "/mine/python"}}', encoding="utf-8")
+        self.run_steps({"name": "A", "language": "en", "install_command": "pip3 install"})
+        self.assertEqual(self.data(self.policies / "tools.override.json")["python"], {"interpreter": "/mine/python", "install_command": "pip3 install"})
+
+    def test_paths_not_to_touch_keep_git(self) -> None:
+        self.run_steps({"name": "A", "language": "en", "refused_paths": "secret/**\n\n  prod/** "})
+        self.assertEqual(self.data(self.policies / "target.override.json")["refused_paths"], [".git/**", "prod/**", "secret/**"])
+
+    def test_one_wrong_field_stops_before_anything_is_written(self) -> None:
+        for data in ({"name": "", "language": "en"}, {"name": "A", "language": "fr"}, {"name": "x" * 101, "language": "en"}, {"name": "A", "language": "en", "repos_root": "relative/path"},
+                     {"name": "A", "language": "en", "repos_root": "/no/such/folder/at/all"}, {"name": "A", "language": "en", "kb_mode": "package"}, {"name": "A", "language": "en", "kb_mode": "odd"},
+                     {"name": "A", "language": "en", "skill_prefix": "Bad Word"}):
+            with self.assertRaises(ValueError, msg=str(data)):
+                setup.check(self.root, data)
         self.assertFalse(self.user.exists())
 
     def test_a_broken_file_is_not_overwritten(self) -> None:
         self.user.write_text("{ broken", encoding="utf-8")
-        found = setup.finish(self.root, {"name": "A", "language": "en"})
-        self.assertFalse(found["done"])
+        with self.assertRaises(ValueError):
+            self.run_steps({"name": "A", "language": "en"})
         self.assertEqual(self.user.read_text(encoding="utf-8"), "{ broken")
 
     def test_the_folder_of_repositories_is_counted(self) -> None:
@@ -83,8 +99,31 @@ class FinishTests(unittest.TestCase):
         found = setup.repositories(f'"{shelf}"')
         self.assertEqual((found["ok"], found["n"], found["names"]), (True, 2, ["a", "b"]))
         self.assertFalse(setup.repositories(str(shelf / "plain"))["n"])
-        setup.finish(self.root, {"name": "A", "language": "en", "repos_root": str(shelf)})
+        self.run_steps({"name": "A", "language": "en", "repos_root": str(shelf)})
         self.assertEqual(self.data(self.policies / "target.override.json"), {"repos_root": str(shelf)})
+
+
+class KnowledgeBaseTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name) / "root"
+        (self.root / "knowledge-base").mkdir(parents=True)
+        (self.root / "knowledge-base" / "README.md").write_text("empty\n", encoding="utf-8")
+        self.source = Path(self.temp.name) / "kb"
+        (self.source / "domains" / "sales").mkdir(parents=True)
+        (self.source / "README.md").write_text("# KB\n", encoding="utf-8")
+
+    def test_a_folder_is_copied_over_the_placeholder_only(self) -> None:
+        self.assertEqual(setupjob.copy_folder(self.root, self.source), messages.text("setup.kb.copied", n=2))
+        self.assertEqual((self.root / "knowledge-base" / "README.md").read_text(encoding="utf-8"), "# KB\n")
+        with self.assertRaises(ValueError):
+            setupjob.copy_folder(self.root, self.source)
+
+    def test_the_folder_is_looked_at_before_anything_is_written(self) -> None:
+        self.assertTrue(setupjob.probe_folder(self.source)["ok"])
+        self.assertTrue(setupjob.probe_folder(self.source / "domains")["why"])
+        self.assertFalse(setupjob.probe_folder(self.source / "none")["ok"])
 
 
 if __name__ == "__main__":

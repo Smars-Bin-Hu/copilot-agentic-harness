@@ -34,6 +34,7 @@ from . import chatask, chatctx, chatlink, chatlive, chatnew, chatsend, task as t
 
 TASKS_EVERY = 3.0  # seconds between two looks at the tasks and their chats
 RELIST_EVERY = 180.0  # a whole new list of chats, in case a notification was missed
+MODELS_EVERY = 15.0  # the models again: the host says no event when Copilot signs out or in, it only lists none or some
 EXPECT_EVERY = 2.0  # a chat the board made that the host does not list yet: asked again this often ...
 EXPECT_FOR = 120.0  # ... for this long
 SCAN_PER_TURN = 3  # chats read in one turn to find their Copilot session id
@@ -451,6 +452,7 @@ class VsLink:
         self._models(link)
         self._set(True, "ok")
         last = 0.0
+        read_models = time.monotonic()
         while not self.stop_flag.is_set():
             note = link.next_notice(self.turn)
             while note is not None:
@@ -460,6 +462,10 @@ class VsLink:
             now = time.monotonic()
             if now - self.listed_at >= (EXPECT_EVERY if self.expect else RELIST_EVERY):
                 self._list(link)
+                self._models(link)
+                read_models = now
+            elif now - read_models >= MODELS_EVERY:
+                read_models = now
                 self._models(link)
             if self.dirty or now - last >= TASKS_EVERY:
                 last = now

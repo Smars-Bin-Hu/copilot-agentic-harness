@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.53 (2026-11-01)
+
+### Changed
+
+- The Enter screen sees a Copilot sign-out or sign-in within about 15 seconds. It used to read the models of the host only every 3 minutes.
+
 ## 1.6.52 (2026-11-01)
 
 ### Changed

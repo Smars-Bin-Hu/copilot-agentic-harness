@@ -22,7 +22,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import approval, gitread, kbstd, messages, skillcheck, targets
+from . import approval, gitread, kbstd, messages, skillcheck, standards, targets
 from .paths import runtime_dir
 from .registry import harness_version
 
@@ -92,7 +92,7 @@ def copies(root: Path, folder: Path) -> Dict[str, Any]:
     skills = sorted(item for item in source.iterdir() if item.is_dir()) if source.is_dir() else []
     if skills and not have:
         raise CompanyError(say("company.no_prefix", word=wanted or "<word>"))
-    if wanted and have and wanted != have:
+    if wanted and have and wanted.casefold() != have.casefold():  # `BNS` in the file and `bns` here are one word: the form of a word is the harness's, not the company's
         raise CompanyError(say("company.other_prefix", wanted=wanted, have=have))
     pairs: List[Tuple[str, Path, Path]] = []
     refused: List[Dict[str, str]] = []
@@ -179,6 +179,14 @@ def difference(name: str, source: Path, target: Path) -> List[Dict[str, str]]:
     return [{"path": f"{name}/{path}", "change": "add" if path not in old else "remove" if path not in new else "change"} for path in sorted(set(new) | set(old)) if new.get(path) != old.get(path)]
 
 
+def wanted_prefix(folder: Path) -> str:
+    """The word of `company.json`, in the form the harness takes; "" when it cannot be read."""
+    try:
+        return str(read_json(folder / CONFIG_FILE).get("skill_prefix") or "").strip().lower()
+    except CompanyError:
+        return ""
+
+
 def diff(root: Path) -> Dict[str, Any]:
     """The company content against its copies, and what a sync would change. It reads files only, so the board can ask every 2 minutes.
     An instructions file taken out of the content cannot be seen: the copy then looks like the file the harness ships."""
@@ -188,13 +196,85 @@ def diff(root: Path) -> Dict[str, Any]:
     try:
         plan = copies(root, folder)
     except CompanyError as error:
-        return {"found": True, "in_sync": False, "changes": [], "total": 0, "refused": [], "problem": str(error), "next": str(error)}
+        word = skillcheck.usable(wanted_prefix(folder))
+        return {"found": True, "in_sync": False, "changes": [], "total": 0, "refused": [], "problem": say("company.prefix.board", word=word) if word else str(error), "fix": word, "next": str(error)}
     changes = [row for name, source, target in plan["pairs"] for row in difference(name, source, target)] + [{"path": f"{SKILLS_DIR}/{name}", "change": "remove"} for name in plan["only_here"]]
     same_now = not changes and not plan["refused"]
     return {"found": True, "in_sync": same_now, "changes": changes[:DIFF_SHOWN], "total": len(changes), "refused": plan["refused"], "problem": "", "next": say("company.diff.same" if same_now else "company.diff.differs", count=len(changes))}
 
 
 # --- pack: the owner's zip ----------------------------------------------------------------------------------------------------------------------------------
+
+
+def listed_files(folder: Path) -> List[Path]:
+    """The files right in a folder; none when it cannot be read."""
+    try:
+        return sorted(item for item in folder.iterdir() if item.is_file())
+    except OSError:
+        return []
+
+
+def misplaced(kb: Path, word: str, wanted: str) -> List[str]:
+    """Files in the usual places whose name has `word`, other than the one the harness reads, as paths inside the knowledge base: a person put it in the wrong place or spelled it another way."""
+    places = (kb, kb / targets.COMPANY_DIR, (kb / wanted).parent)
+    found = {item.relative_to(kb).as_posix() for place in places for item in listed_files(place) if word in item.name.casefold() and item.suffix.casefold() == ".md"}
+    return sorted(found - {wanted})[:3]
+
+
+def layout(kb: Path) -> List[Dict[str, Any]]:
+    """How a knowledge base folder stands against the layout the harness reads, part by part: `{key, ok, count, text}`. A look at files; nothing runs and nothing is refused."""
+    company = kb / targets.COMPANY_DIR
+    domains = kb / "domains"
+    try:
+        count = sum(1 for item in domains.iterdir() if item.is_dir() and not item.name.startswith("."))
+    except OSError:
+        count = 0
+    out: List[Dict[str, Any]] = [{"key": "domains", "ok": count > 0, "count": count, "text": say("setup.layout.domains", n=count) if count else say("setup.layout.domains.none")}]
+    if not company.is_dir():
+        out.append({"key": "company", "ok": False, "count": 0, "text": say("setup.layout.company.none")})
+    guide = f"{targets.COMPANY_DIR}/instructions/{INSTRUCTION_FILES[0]}"
+    near = misplaced(kb, "instructions", guide)
+    if (kb / guide).is_file():
+        out.append({"key": "instructions", "ok": True, "count": 1, "text": say("setup.layout.instructions")})
+    elif near or company.is_dir():
+        out.append({"key": "instructions", "ok": False, "count": 0, "text": say("setup.layout.moved", found=near[0], wanted=guide) if near else say("setup.layout.instructions.none", wanted=guide)})
+    rules = f"{targets.COMPANY_DIR}/{standards.COMPANY_FILE}"
+    near = misplaced(kb, "standard", rules)
+    if (kb / rules).is_file():
+        out.append({"key": "standards", "ok": True, "count": 1, "text": say("setup.layout.standards")})
+    elif near or company.is_dir():
+        out.append({"key": "standards", "ok": False, "count": 0, "text": say("setup.layout.moved", found=near[0], wanted=rules) if near else say("setup.layout.standards.none", wanted=rules)})
+    if company.is_dir():
+        out += skills_part(company)
+    return out
+
+
+def skills_part(company: Path) -> List[Dict[str, Any]]:
+    """The company skills of a knowledge base: their word in `company.json`, and each folder under that word. No skills is no fault: a team may have none."""
+    try:
+        word = skillcheck.usable(str(read_json(company / CONFIG_FILE).get("skill_prefix") or "").strip().lower())
+    except Exception:  # noqa: BLE001 - a broken file is told by the sync; here it is a word that is not there
+        word = ""
+    try:
+        names = sorted(item.name for item in (company / "skills").iterdir() if item.is_dir() and not item.name.startswith("."))
+    except OSError:
+        names = []
+    if not names:
+        return []
+    if not word:
+        return [{"key": "skills", "ok": False, "count": 0, "text": say("setup.layout.skills.word", file=f"{targets.COMPANY_DIR}/{CONFIG_FILE}")}]
+    other = [name for name in names if not name.startswith(word + "-")]
+    if other:
+        return [{"key": "skills", "ok": False, "count": len(names) - len(other), "text": say("setup.layout.skills.names", names=", ".join(other[:5]), word=word)}]
+    return [{"key": "skills", "ok": True, "count": len(names), "text": say("setup.layout.skills", n=len(names))}]
+
+
+def found_in_place(root: Path) -> List[str]:
+    """What the board shows in green: the parts of the knowledge base in place that are right. Quick: a few file looks. Empty with no knowledge base."""
+    for _name, path in targets.knowledge_bases(root):
+        if targets.knowledge_base_content(path):
+            return [item["text"] for item in layout(path) if item["ok"]]
+    return []
 
 
 def check_for_pack(root: Path, kb: Path) -> str:

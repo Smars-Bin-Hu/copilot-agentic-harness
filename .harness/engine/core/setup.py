@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core import config, messages, shortcmd, state as files, targets
+from core import config, messages, shortcmd, standards, state as files, targets
 
 MAX_NAME = 100
 MAX_PATH = 1024
@@ -233,7 +233,7 @@ def kb_state(root: Path) -> Dict[str, Any]:
                 found = json.loads((path / targets.COMPANY_DIR / "company.json").read_text(encoding="utf-8-sig"))
             except (OSError, ValueError):
                 pass
-            return {"here": True, "domains": domains, "prefix": str(found.get("skill_prefix") or "") if isinstance(found, dict) else ""}
+            return {"here": True, "domains": domains, "prefix": str(found.get("skill_prefix") or "").strip().lower() if isinstance(found, dict) else ""}
     return {"here": False, "domains": 0, "prefix": ""}
 
 
@@ -408,7 +408,7 @@ def missing(root: Path) -> List[str]:
         out.append("instructions")
     if not str(user.get("skill_prefix") or "").strip() and "skills" not in declared:
         out.append("skills")
-    if not (company and any((company / "standards").glob("*.md"))) and "standards" not in declared:
+    if not (company and (company / standards.COMPANY_FILE).is_file()) and "standards" not in declared:
         out.append("standards")
     return out
 

@@ -506,6 +506,7 @@
     Status.refresh();
   }
 
+  const defectSync = () => { const go = h("button", {type: "button", class: "act kb-mini"}, t("desk.test.defects.sync")); go.addEventListener("click", () => TERM.run("harness task defects sync --task " + desk.name)); return go; };
   // "Task settings" (1.6, B72): the independent checks (0 to the cap), the model and the thinking level of the messages the board sends. Only the person changes them, from a served page;
   // a change is written in the history and holds from the next message. The model goes on every message the board sends and stays in the chat, also for what is typed in VS Code, until it is changed.
   function settingsRow() {
@@ -1019,7 +1020,7 @@
   function defects(d) {
     const one = (item, cls) => h("section", {class: "round " + cls},
       h("div", {class: "round-head"}, h("strong", null, item.id), " ", tag(item.env, item.status === "fixed" ? "good" : "bad"), " ", item.title,
-        item.stale ? [" ", tag(t("desk.test.defects.stale", {env: item.env}), "hot long")] : null),
+        item.stale ? [" ", tag(t("desk.test.defects.stale", {env: item.env}), "hot long"), " ", defectSync()] : null),
       item.doc ? h("article", {class: "md"}, blocks(item.doc.blocks), item.doc.cut ? h("p", {class: "sub"}, t("desk.cut")) : null) : null);
     const parts = d.intro ? [h("article", {class: "md"}, blocks(d.intro.blocks))] : [];
     parts.push(h("h3", null, t("desk.test.defects.open") + " " + d.open.length));

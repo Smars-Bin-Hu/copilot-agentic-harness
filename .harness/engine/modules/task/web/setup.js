@@ -18,6 +18,7 @@ const SETUP = (function () {
     const repos = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", placeholder: t("setup.repos.ph")});
     const kbPath = h("input", {type: "text", class: "su-in su-mono", maxlength: 1024, autocomplete: "off", spellcheck: "false", hidden: ""});
     const kbNote = h("p", {class: "su-note"});
+    const kbParts = h("div", {class: "su-parts", hidden: ""});
     const kbLearn = h("button", {type: "button", class: "su-link"}, t("setup.kb.learn"));
     kbLearn.addEventListener("click", () => DOCK.allSkills("kb"));
     // The picker on the page: the server reads one folder at a time, and no program starts. The window of the system stays as the second way.
@@ -171,6 +172,7 @@ const SETUP = (function () {
       kbPick.dataset.kind = mode === "package" ? "file" : "folder";
       kbPath.placeholder = mode === "package" ? t("setup.kb.package.ph") : t("setup.kb.folder.ph");
       kbNote.className = "su-note";
+      paintParts(null);
       kbNote.replaceChildren(...(mode !== "none" ? [] : st.kb.here ? [t("setup.kb.have", {n: st.kb.domains})] : [t("setup.kb.none.hint"), " ", kbLearn]));
       st.full = false;
       paintReplace();
@@ -181,15 +183,24 @@ const SETUP = (function () {
       kbReplace.hidden = !st.full;
       if (!st.full) { st.replace = false; kbReplaceBox.checked = false; }
     }
+    // The check of a chosen folder (`company.layout`): green for what is right, a warning with the place for the rest. It stops nothing, and it says what the states below will say.
+    function paintParts(parts) {
+      st.parts = parts || null;
+      const off = (parts || []).filter((item) => !item.ok);
+      kbParts.hidden = !parts;
+      kbParts.replaceChildren(...(off.length ? [h("p", {class: "su-note su-warned"}, t("setup.layout.warn"))] : []), ...(parts || []).map((item) => h("p", {class: "su-state"}, h("span", {class: "su-dot " + (item.ok ? "ok" : "need")}), item.text)));
+      paintStates();
+    }
     function checkKb() {
       ask("probe", {kind: st.mode, path: kbPath.value}).then((found) => {
         kbNote.className = "su-note" + (!found.ok ? " bad" : found.why ? "" : " good");
         kbNote.textContent = !found.ok ? found.why : st.mode === "package" ? t("setup.kb.package.ok", {version: found.version, new: found.new, changed: found.changed, removed: found.removed}) + (found.local ? " " + t("setup.kb.package.local", {n: found.local}) : "") : found.why || t("setup.kb.folder.ok");
         st.full = Boolean(found.full);
+        paintParts(found.parts);
         paintReplace();
         if (found.prefix && !prefix.value) prefix.value = found.prefix;
         gate();
-      }, () => {});
+      }, () => { paintParts(null); });
     }
     const go = h("button", {type: "button", class: "act hot big"}, t(finished ? "setup.save" : "setup.finish"));
     const goNote = h("span", {class: "su-note"});
@@ -213,9 +224,11 @@ const SETUP = (function () {
     const standardsState = h("p", {class: "su-state"});
     const needs = (key) => st.guide.missing.includes(key) || (key === "kb" && st.guide.missing.includes("domains"));
     function paintStates() {
+      if (!st.guide) return;
       const state = (node, need, text) => node.replaceChildren(h("span", {class: "su-dot " + (need ? "need" : "ok")}), text);
-      state(companyState, needs("instructions"), t(needs("instructions") ? "setup.company.need" : "setup.company.ok"));
-      state(standardsState, needs("standards"), t(needs("standards") ? "setup.standards.need" : st.guide.declared.includes("standards") ? "setup.standards.none" : "setup.standards.ok"));
+      const has = (key) => st.parts && st.parts.some((item) => item.key === key && item.ok);  // a folder chosen just now counts before it is copied
+      state(companyState, needs("instructions") && !has("instructions"), t(needs("instructions") && !has("instructions") ? "setup.company.need" : "setup.company.ok"));
+      state(standardsState, needs("standards") && !has("standards"), t(needs("standards") && !has("standards") ? "setup.standards.need" : needs("standards") || !st.guide.declared.includes("standards") ? "setup.standards.ok" : "setup.standards.none"));
     }
     function loadGuide() {
       return ask("guide").then((found) => { st.guide = found; paintStates(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message || error)); });
@@ -415,7 +428,7 @@ const SETUP = (function () {
     app.replaceChildren(h("div", {class: "su"}, h("h1", null, t(first ? "setup.title" : "setup.guide")), h("p", {class: "su-lead"}, t(finished ? "setup.lead.again" : "setup.lead"), " ", olderLink), shortBox,
       h("section", {class: "su-card"}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "2"), h("h2", null, t("setup.form.title"))),
         changed, broken, row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "chips su-modes"}, chips), langNote), row([t("setup.repos"), question("repos")], h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))),
-        row([t("setup.kb"), kbStar, question("kb")], h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote, kbReplace), row([t("setup.company"), question("instructions")], companyState), row([t("setup.prefix"), question("skills")], prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))), row([t("setup.standards"), question("standards")], standardsState),
+        row([t("setup.kb"), kbStar, question("kb")], h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote, kbParts, kbReplace), row([t("setup.company"), question("instructions")], companyState), row([t("setup.prefix"), question("skills")], prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))), row([t("setup.standards"), question("standards")], standardsState),
         more, h("div", {class: "su-end"}, go, goNote), said)));
     gate();
     load();

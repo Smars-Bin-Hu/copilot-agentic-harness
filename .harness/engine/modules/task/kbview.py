@@ -33,7 +33,7 @@ class View:
             if old and not held["running"]:
                 held["running"] = True
                 threading.Thread(target=self.fill, args=(name, held), daemon=True).start()
-            return {"running": held["running"], "result": held["result"], "age": round(time.time() - held["good"]) if held["good"] else None, "error": held["error"]}  # the age of the result shown, not of the last try
+            return {"running": held["running"], "result": held["result"], "age": round(time.time() - held["good"]) if held["good"] else None, "error": messages.text("dock.kb.nomap") if held["error"] == messages.text("kbmap.none") else held["error"], "nomap": held["error"] == messages.text("kbmap.none")}  # the age of the result shown, not of the last try
 
     def fill(self, name: str, held: Dict[str, Any]) -> None:
         result, error = None, ""
@@ -53,4 +53,4 @@ class View:
         try:
             return kbgraph.near(self.root, text)
         except kbmap.MapError as error:
-            raise ValueError(str(error)) from None
+            raise ValueError(messages.text("dock.kb.nomap") if str(error) == messages.text("kbmap.none") else messages.text("dock.kb.near.none", query=text) if str(error) == messages.text("kbmap.near.none", query=text) else str(error)) from None

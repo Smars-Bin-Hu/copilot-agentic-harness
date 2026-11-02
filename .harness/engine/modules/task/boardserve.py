@@ -53,7 +53,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
-from core import ahp, config, messages, registry, state, tasks, user
+from core import ahp, company, config, targets, messages, registry, state, tasks, user
 from core.paths import board_serve_file, board_serve_port, utc_now
 
 from core import company, reinstall, setup as core_setup, shortcmd, skillboard
@@ -64,7 +64,7 @@ from . import setupjob
 from . import skillsend
 from . import taskrun
 from . import wallpaper
-from . import autorun, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
+from . import autorun, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
 from .common import CommandError
 
@@ -176,6 +176,7 @@ class Board:
     def __init__(self, root: Path, everything: bool, port: int, actions: List[str], link: Optional[vslink.VsLink] = None, refresh: int = REFRESH) -> None:
         self.root = root
         self.runner = taskrun.Runner(root)
+        self.terminal = boardterm.Terminal(root)
         self.short_missing = False
         self.setup_job = setupjob.Job()
         self.short_kept: Optional[Dict[str, Any]] = None
@@ -276,11 +277,11 @@ class Board:
         for row in result["tasks"]:  # the agent is at work in the chat: say something to it, or stop it
             if row.get("status") == "open" and (row.get("chat") or {}).get("state") == "busy" and "steer" in self.served:
                 row["actions"] = [item for item in row["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
-        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "setup": core_setup.missing(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status()}
+        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "setup": core_setup.missing(self.root), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status()}
 
     def page(self) -> str:
         found = self.rows()
-        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "setup": found["setup"]}, self.refresh), hidden=found["hidden"])
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "kb_found": found["kb_found"], "setup": found["setup"]}, self.refresh), hidden=found["hidden"])
 
     def desk(self, name: str, trace_tree: bool = False) -> Dict[str, Any]:
         found = taskdesk.desk(self.root, name, self.served, trace_tree)  # the tree reads whole logs: only for a Trace tab that is open
@@ -1153,11 +1154,21 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": board.kb_view.near(data.get("query")) if op == "near" else board.kb_view.get(op, bool(data.get("fresh")))})
                 except (KeyError, ValueError) as error:
                     return self.answer(409, {"error": str(error)})
+            if path == "/api/term":  # the Terminal window: a person's own `harness` commands, the paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    return self.answer(200, {"result": board.terminal.act(data)})
+                except CommandError as error:
+                    return self.answer(409, {"error": str(error)})
             if path == "/api/company":  # the company content against its copies (every 2 minutes), and the Sync button: the paired browser only
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
-                    if data.get("op") == "sync":
+                    if data.get("op") == "prefix":  # the word of the company content goes in the person's file, then the sync it was stopping
+                        folder = targets.company_folder(board.root)
+                        board.keep_override("skill_prefix", company.wanted_prefix(folder) if folder else "")
+                    if data.get("op") in ("sync", "prefix"):
                         company.sync(board.root, remove=True)
                     return self.answer(200, {"result": company.diff(board.root)})
                 except (company.CompanyError, OSError) as error:
@@ -1320,6 +1331,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         pass
     finally:
         board.runner.stop_all()
+        board.terminal.stop_all()
         link.stop()
         server.server_close()
         try:

@@ -293,5 +293,70 @@ class KnowledgeBaseTests(CompanyCase):
         self.assertEqual(company.target_kb(self.root), self.kb)
 
 
+class LayoutTests(unittest.TestCase):
+    def setUp(self) -> None:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.kb = Path(folder.name)
+
+    def put(self, *names: str) -> None:
+        for name in names:
+            path = self.kb / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("x\n", encoding="utf-8")
+
+    def word(self, word: str = "acme") -> None:
+        (self.kb / "company").mkdir(exist_ok=True)
+        (self.kb / "company" / "company.json").write_text(json.dumps({"skill_prefix": word}), encoding="utf-8")
+
+    def parts(self) -> dict:
+        return {item["key"]: item for item in company.layout(self.kb)}
+
+    def test_a_standard_folder_is_all_green(self) -> None:
+        self.put("domains/orders/x.md", "company/instructions/knowledgebase.instructions.md", "company/standards/code-standards.md", "company/skills/acme-one/SKILL.md")
+        self.word()
+        found = company.layout(self.kb)
+        self.assertEqual([item["key"] for item in found], ["domains", "instructions", "standards", "skills"])
+        self.assertTrue(all(item["ok"] for item in found))
+
+    def test_no_company_folder_is_one_warning_and_not_three(self) -> None:
+        self.put("domains/orders/x.md")
+        self.assertEqual({key: item["ok"] for key, item in self.parts().items()}, {"domains": True, "company": False})
+
+    def test_a_file_in_the_wrong_place_or_with_another_name_is_named(self) -> None:
+        for name in ("company/code-standard.md", "code-standard.md", "company/standards/code-standard.md"):
+            self.put(name)
+            part = self.parts()["standards"]
+            self.assertFalse(part["ok"])
+            self.assertIn(name, part["text"])
+            self.assertIn("company/standards/code-standards.md", part["text"])
+            (self.kb / name).unlink()
+
+    def test_skills_need_their_word(self) -> None:
+        self.put("company/skills/acme-one/SKILL.md", "company/skills/other/SKILL.md")
+        self.assertFalse(self.parts()["skills"]["ok"])
+        self.word()
+        self.assertIn("other", self.parts()["skills"]["text"])
+
+    def test_no_skills_is_no_fault(self) -> None:
+        self.put("company/standards/code-standards.md")
+        self.assertNotIn("skills", self.parts())
+
+    def test_an_empty_or_unreadable_folder_breaks_nothing(self) -> None:
+        self.assertFalse(self.parts()["domains"]["ok"])
+        self.assertEqual(company.layout(self.kb / "missing")[0]["count"], 0)
+
+    def test_capitals_are_no_difference_and_another_word_comes_with_a_fix(self) -> None:
+        folder = self.kb / "company"
+        self.put("company/skills/bns-one/SKILL.md")
+        self.word("BNS")
+        with mock.patch.object(company.skillcheck, "company_prefix", return_value="bns"), mock.patch.object(company.skillcheck, "check", return_value={"errors": []}):
+            self.assertEqual(company.copies(self.kb, folder)["refused"], [])
+        with mock.patch.object(company.skillcheck, "company_prefix", return_value="other"), mock.patch.object(company.targets, "company_folder", return_value=folder):
+            found = company.diff(self.kb)
+        self.assertEqual(found["fix"], "bns")
+        self.assertNotIn("harness company", found["problem"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -239,7 +239,7 @@ def probe_folder(root: Path, raw: Any) -> Dict[str, Any]:
         return {"ok": False, "why": say("setup.kb.harness")}
     here, kb = path.resolve(), (root / targets.KB_DIR).resolve()
     if here == kb:
-        return {"ok": True, "why": say("setup.kb.same")}
+        return {"ok": True, "why": say("setup.kb.same"), "parts": company.layout(path)}
     if here in root.resolve().parents:
         return {"ok": False, "why": say("setup.kb.holds")}
     if kb in here.parents:
@@ -247,10 +247,10 @@ def probe_folder(root: Path, raw: Any) -> Dict[str, Any]:
     if not targets.knowledge_base_content(path):
         return {"ok": False, "why": say("setup.kb.nothing")}
     if held_in(root):
-        return {"ok": False, "full": True, "why": say("setup.kb.full.here")}
+        return {"ok": False, "full": True, "why": say("setup.kb.full.here"), "parts": company.layout(path)}
     found: Dict[str, Any] = {}
     try:
         found = company.read_json(path / targets.COMPANY_DIR / company.CONFIG_FILE)
     except Exception:  # noqa: BLE001 - no prefix to offer; the copy and the sync say what is wrong
         pass
-    return {"ok": True, "why": "" if (path / "README.md").is_file() else say("setup.kb.noreadme"), "company": (path / "company").is_dir(), "prefix": str(found.get("skill_prefix") or "")}
+    return {"ok": True, "why": "" if (path / "README.md").is_file() else say("setup.kb.noreadme"), "company": (path / "company").is_dir(), "prefix": str(found.get("skill_prefix") or "").strip().lower(), "parts": company.layout(path)}

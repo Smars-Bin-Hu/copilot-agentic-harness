@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.92 (2026-11-02)
+
+### Added
+
+- **Get ready checks a knowledge base folder when you choose it.** It lists each part in green, or with a warning that says where the harness reads it. A file in the wrong place or under another name is named, for example `company/code-standard.md`. A warning stops nothing.
+- **A Terminal window on the board.** The `>_` button at the top right opens a small window with tabs. Type a `harness` command and read its output, without going back to a terminal. It runs `harness` commands only, in a paired browser, with no input: a step that needs a person at a real terminal stays there.
+- **The board shows what your knowledge base has**, in a green line: domains, knowledge base instructions, code standards and company skills. The setup warning beside it lists what is still missing.
+
+### Changed
+
+- **Code standards count only as `company/standards/code-standards.md`.** That is the file the skill reads. Before, any `.md` in `company/standards/` showed as found while the agent read the empty template.
+- **The board no longer asks you to run commands.** No map yet: a button does the next step in a chat. A skill prefix that differs from the company content: **Use <word> and sync**. A long list in Health and a stale defect have their own buttons, which run in the Terminal window. A prefix that differs only in capitals is no longer a difference. Pairing a browser still needs the terminal of the board, on purpose.
+- **Company content and Code standards on the form** go green as soon as the chosen folder has them, not only after the copy.
+
 ## 1.6.91 (2026-11-02)
 
 ### Added

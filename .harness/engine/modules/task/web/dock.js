@@ -137,6 +137,8 @@ const DOCK = (function () {
   function driftCard(node) {
     const said = h("p", {class: "bad"});
     const go = h("button", {type: "button", class: "act hot"}, t("dock.company.go"));
+    const fix = h("button", {type: "button", class: "act hot"}, t("dock.company.fix", {word: drift ? drift.fix || "" : ""}));
+    fix.addEventListener("click", () => { fix.disabled = true; SERVE.post("/api/company", {op: "prefix"}).then((data) => { showDrift(data.result); driftCard(node); }, (error) => { fix.disabled = false; said.textContent = error.message; }); });
     go.addEventListener("click", () => {
       go.disabled = true;
       SERVE.post("/api/company", {op: "sync"}).then((data) => { showDrift(data.result); driftCard(node); }, (error) => { go.disabled = false; said.textContent = error.message; });
@@ -145,7 +147,7 @@ const DOCK = (function () {
     node.replaceChildren(...(!drift ? [] : [h("h3", null, t("dock.company.title")), h("p", {class: "sub"}, t("dock.company.hint")),
       h("ul", null, drift.changes.map((row) => h("li", null, h("code", null, changeWord(row)))), drift.total > drift.changes.length ? h("li", null, t("dock.company.more", {count: drift.total - drift.changes.length})) : null,
         drift.refused.map((item) => h("li", {class: "bad"}, item.skill + ": " + item.why))),
-      drift.problem ? h("p", {class: "bad"}, drift.problem) : "", drift.total ? go : "", said]));
+      drift.problem ? h("p", {class: "bad"}, drift.problem) : "", drift.fix ? fix : "", drift.total ? go : "", said]));
   }
   function kbWindow(tab) {
     const stage = h("div", {class: "dock-list kb-body"});
@@ -172,7 +174,7 @@ const DOCK = (function () {
         age.textContent = found.running ? t("dock.kb.updating") : found.age === null ? "" : ago(found.age);
         const seen = JSON.stringify(found.result);
         if (found.result && seen !== seenView) { seenView = seen; painted = () => paint(found.result); painted(); }
-        alarm.textContent = found.error;
+        alarm.replaceChildren(found.error || "", ...(found.nomap ? [" ", nextButton("map")] : []));
         alarm.hidden = !found.error || found.running;
         if (!found.result) stage.replaceChildren(...(found.running || !found.error ? [h("p", {class: "sub"}, t("dock.kb.working"))] : []));
         if (found.running) timer = setTimeout(() => load(op, paint, false, Math.min((wait || 150) * 2, 1200)), wait || 150);
@@ -294,13 +296,14 @@ const DOCK = (function () {
       const ids = (rows, label) => (rows.length ? [h("p", {class: "sub"}, label), h("ul", null, rows.map((id) => h("li", null, h("code", null, id))))] : []);
       const staleRows = found.stale || [], gaps = found.gaps || {};
       const staleButton = (item) => { const go = h("button", {type: "button", class: "act kb-mini"}, chatGlyph(), t("dock.kb.refresh.cards")); go.addEventListener("click", leave(() => refresh(item))); return go; };
-      const cut = (shown, total) => (total > shown ? h("p", {class: "sub"}, t("dock.kb.health.cut", {n: total - shown})) : null);
+      const showAll = (n, line, key) => { const go = h("button", {type: "button", class: "act kb-mini"}, t("dock.kb.health.all")); go.addEventListener("click", () => TERM.run(line)); return h("p", {class: "sub"}, t(key, {n}), " ", go); };
+      const cut = (shown, total, line) => (total > shown ? showAll(total - shown, line, "dock.kb.health.cut") : null);
       stage.replaceChildren(...[h("h3", null, t("dock.kb.health.form")), h("p", null, found.domains ? t("dock.kb.health.sum", {n: found.domains, errors: found.errors, warnings: found.warnings}) : t("dock.kb.health.none")),
-        ...items.map((item) => h("section", {class: "kb-problem"}, h("b", null, item.domain || item.name || ""), h("ul", null, lines(item, "errors"), lines(item, "warnings").slice(0, Math.max(0, SHOWN - (item.errors || []).length))), left(item) > 0 ? h("p", {class: "sub"}, t("dock.kb.health.more", {n: left(item)})) : null)),
+        ...items.map((item) => h("section", {class: "kb-problem"}, h("b", null, item.domain || item.name || ""), h("ul", null, lines(item, "errors"), lines(item, "warnings").slice(0, Math.max(0, SHOWN - (item.errors || []).length))), left(item) > 0 ? showAll(left(item), "harness kb check", "dock.kb.health.more") : null)),
         found.domains ? h("h3", null, t("dock.kb.health.stale")) : null, found.domains && !staleRows.length ? h("p", {class: "sub"}, t("dock.kb.health.fresh")) : null,
-        ...staleRows.map((item) => h("section", {class: "kb-problem"}, h("div", {class: "kb-head"}, h("b", null, item.domain + (item.total ? " \u00b7 " + item.total : "")), item.total ? staleButton(item) : null), item.error ? h("p", {class: "bad"}, item.error) : null, ...item.unreadable.map((one) => h("p", {class: "bad"}, one.repo + ": " + one.error)), ...ids(item.changed, t("dock.kb.health.changed")), ...ids(item.gone, t("dock.kb.health.gone")), cut(item.changed.length + item.gone.length, item.total))),
+        ...staleRows.map((item) => h("section", {class: "kb-problem"}, h("div", {class: "kb-head"}, h("b", null, item.domain + (item.total ? " \u00b7 " + item.total : "")), item.total ? staleButton(item) : null), item.error ? h("p", {class: "bad"}, item.error) : null, ...item.unreadable.map((one) => h("p", {class: "bad"}, one.repo + ": " + one.error)), ...ids(item.changed, t("dock.kb.health.changed")), ...ids(item.gone, t("dock.kb.health.gone")), cut(item.changed.length + item.gone.length, item.total, "harness kb stale"))),
         gaps.names ? h("h3", null, t("dock.kb.health.gaps")) : null, gaps.names && !gaps.missing && !gaps.obsolete_used ? h("p", {class: "sub"}, t("dock.kb.health.nogaps")) : null,
-        ...(gaps.names ? [h("section", {class: "kb-problem"}, ...ids(gaps.names, t("dock.kb.health.missing", {n: gaps.missing})), cut(gaps.names.length, gaps.missing), ...ids(gaps.obsolete, t("dock.kb.health.obsolete", {n: gaps.obsolete_used})), cut(gaps.obsolete.length, gaps.obsolete_used))] : [])].filter(Boolean));
+        ...(gaps.names ? [h("section", {class: "kb-problem"}, ...ids(gaps.names, t("dock.kb.health.missing", {n: gaps.missing})), cut(gaps.names.length, gaps.missing, "harness kb gaps"), ...ids(gaps.obsolete, t("dock.kb.health.obsolete", {n: gaps.obsolete_used})), cut(gaps.obsolete.length, gaps.obsolete_used, "harness kb gaps"))] : [])].filter(Boolean));
     }
     function show(key) {
       clearTimeout(timer);

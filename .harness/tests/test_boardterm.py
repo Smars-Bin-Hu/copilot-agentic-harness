@@ -1,0 +1,101 @@
+"""The Terminal window of the board (1.6.92): only `harness` commands, no input, and the page never loses a run."""
+
+from __future__ import annotations
+
+import sys
+import tempfile
+import time
+import unittest
+from pathlib import Path
+from unittest import mock
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / ".harness" / "engine"))
+
+from modules.task import boardterm, taskhtml  # noqa: E402
+from modules.task.common import CommandError  # noqa: E402
+
+
+class LineTests(unittest.TestCase):
+    def test_only_harness_runs(self) -> None:
+        for line in ("rm -rf x", "python3 -c 1", "", "   ", "harnessx doctor", "'unclosed", "harness doctor\nrm x"):
+            with self.assertRaises(CommandError, msg=line):
+                boardterm.words_of(line)
+
+    def test_nothing_is_read_by_a_shell(self) -> None:
+        self.assertEqual(boardterm.words_of("harness kb near 'a b' ; rm x"), ["kb", "near", "a b", ";", "rm", "x"])
+
+    def test_a_windows_path_stays_whole(self) -> None:
+        self.assertEqual(boardterm.words_of(r"harness x C:\repo\a"), ["x", r"C:\repo\a"])
+
+    def test_a_second_board_is_refused(self) -> None:
+        with self.assertRaises(CommandError):
+            boardterm.words_of("harness task board --serve")
+
+
+class RunTests(unittest.TestCase):
+    def wait(self, term: boardterm.Terminal, ident: str) -> dict:
+        text, since = "", 0
+        for _ in range(100):
+            found = term.read(ident, since)
+            text, since = text + found["text"], found["next"]
+            if found["done"]:
+                return {**found, "text": text}
+            time.sleep(0.05)
+        self.fail("no end")
+
+    def setUp(self) -> None:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        (self.root / ".harness" / "engine").mkdir(parents=True)
+
+    def script(self, body: str) -> boardterm.Terminal:
+        (self.root / ".harness" / "engine" / "cli.py").write_text(body, encoding="utf-8")
+        term = boardterm.Terminal(self.root)
+        self.addCleanup(term.stop_all)
+        return term
+
+    def test_the_output_and_the_code_reach_the_page_and_a_line_is_kept(self) -> None:
+        term = self.script("import sys\nprint('hello', sys.argv[1:])\nsys.exit(3)\n")
+        found = self.wait(term, term.start("harness a b")["id"])
+        self.assertIn("hello ['a', 'b']", found["text"])
+        self.assertEqual(found["code"], 3)
+        self.assertIn("harness a b", (self.root / ".harness" / "runtime" / "board-terminal.jsonl").read_text(encoding="utf-8"))
+
+    def test_there_is_no_input(self) -> None:
+        term = self.script("import sys\nprint(repr(sys.stdin.read()), sys.stdin.isatty())\n")
+        self.assertIn("'' False", self.wait(term, term.start("harness x")["id"])["text"])
+
+    def test_stop_ends_a_run_and_there_is_a_limit(self) -> None:
+        term = self.script("import time\ntime.sleep(30)\n")
+        idents = [term.start("harness x")["id"] for _ in range(boardterm.MAX_RUNNING)]
+        with self.assertRaises(CommandError):
+            term.start("harness x")
+        for ident in idents:
+            term.stop(ident)
+            self.assertTrue(self.wait(term, ident)["done"])
+
+    def test_a_run_the_board_forgot_ends_on_the_page(self) -> None:
+        self.assertTrue(boardterm.Terminal(self.root).read("nope", 0)["gone"])
+
+    def test_a_long_output_is_read_in_parts_and_only_its_end_is_kept(self) -> None:
+        job = boardterm.Job("x", mock.Mock())
+        job.add("a" * boardterm.MAX_MEMORY + "b" * 100)
+        job.ended = True
+        self.assertEqual(job.dropped, 100)
+        self.assertFalse(job.view(100)["done"])
+        self.assertEqual(job.view(100)["next"], 100 + boardterm.MAX_READ)
+        self.assertTrue(job.view(100 + boardterm.MAX_MEMORY)["done"])
+
+
+class PageTests(unittest.TestCase):
+    def test_every_served_page_has_the_window_and_a_saved_one_has_not(self) -> None:
+        self.assertIn("const TERM =", taskhtml.build("task.html", ["common.js", "serve.js", "chat.js", "dock.js", "term.js", "task.js"], "t", {"info": {}, "serve": {}}))
+        self.assertEqual((taskhtml.WEB / "taskhtml.py").exists(), False)
+        source = (taskhtml.WEB.parent / "taskhtml.py").read_text(encoding="utf-8")
+        self.assertEqual(source.count('"dock.js", "term.js"'), source.count('"dock.js", '))
+
+
+if __name__ == "__main__":
+    unittest.main()

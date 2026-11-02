@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -65,10 +66,53 @@ BANNER = r"""
 """
 
 
-def version_banner(root: Path) -> str:
-    """What `harness --version` prints. ASCII only: it has to show on every terminal, whatever its encoding."""
+BLOCKS = """
+██╗  ██╗ █████╗ ██████╗ ███╗   ██╗███████╗███████╗███████╗
+██║  ██║██╔══██╗██╔══██╗████╗  ██║██╔════╝██╔════╝██╔════╝
+███████║███████║██████╔╝██╔██╗ ██║█████╗  ███████╗███████╗
+██╔══██║██╔══██║██╔══██╗██║╚██╗██║██╔══╝  ╚════██║╚════██║
+██║  ██║██║  ██║██║  ██║██║ ╚████║███████╗███████║███████║
+╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝╚══════╝╚══════╝
+"""
+SHADES = (51, 45, 39, 33, 63, 99, 135, 171, 207)  # 256 colours, left to right: Terminal.app has no true colour
+
+
+def unicode_stream(stream: Any) -> bool:
+    return str(getattr(stream, "encoding", "") or "").lower().replace("-", "").startswith("utf")
+
+
+def colour_stream(stream: Any) -> bool:
+    """A terminal that takes colour codes. A Windows console takes them only in Windows Terminal or VS Code; elsewhere they show as text."""
+    try:
+        terminal = stream.isatty()
+    except (AttributeError, ValueError):
+        return False
+    if not terminal or "NO_COLOR" in os.environ or os.environ.get("TERM") == "dumb":
+        return False
+    return os.name != "nt" or bool(os.environ.get("WT_SESSION") or os.environ.get("TERM_PROGRAM"))
+
+
+def painted(line: str) -> str:
+    """One line of the blocks, in the colours of its columns."""
+    size = len(line)
+    parts = []
+    for start in range(size):
+        shade = SHADES[start * len(SHADES) // size]
+        parts.append(f"\033[38;5;{shade}m{line[start]}")
+    return "".join(parts) + "\033[0m"
+
+
+def version_banner(root: Path, stream: Any = None) -> str:
+    """What `harness --version` prints. Blocks where `stream` is UTF-8, in colour on a terminal; else ASCII, which shows on every terminal."""
     registry = load_registry(root)
-    lines = [BANNER.strip("\n").format(version=registry["version"]), "", "Copilot Agentic Harness"]
+    if unicode_stream(stream):
+        colour = colour_stream(stream)
+        art = BLOCKS.strip("\n").split("\n")
+        word = f"version {registry['version']}"
+        art = [painted(line) for line in art] if colour else art
+        lines = [*art, f"\033[1m{word}\033[0m" if colour else word, "", "Copilot Agentic Harness"]
+    else:
+        lines = [BANNER.strip("\n").format(version=registry["version"]), "", "Copilot Agentic Harness"]
     released = registry.get("released", "")
     if released:
         lines.append(f"Released {released}")

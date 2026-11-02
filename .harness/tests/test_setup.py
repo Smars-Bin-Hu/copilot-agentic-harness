@@ -11,7 +11,7 @@ from unittest import mock
 
 import support  # noqa: F401
 
-from core import messages, setup, shortcmd
+from core import messages, registry, setup, shortcmd
 from modules.task import setupjob
 
 
@@ -82,6 +82,36 @@ class TryTests(unittest.TestCase):
         text = (Path(__file__).resolve().parents[1] / "bin" / "harness.cmd").read_text(encoding="utf-8")
         self.assertIn("\\WindowsApps\\=", text)
         self.assertLess(text.index("goto run_py"), text.index(":run_py"))
+
+
+class BannerTests(unittest.TestCase):
+    ROOT = Path(__file__).resolve().parents[2]
+
+    @staticmethod
+    def stream(encoding: str, terminal: bool) -> mock.Mock:
+        return mock.Mock(encoding=encoding, isatty=lambda: terminal)
+
+    def test_ascii_when_the_stream_is_not_utf8(self) -> None:
+        for stream in (None, self.stream("cp1252", True), self.stream("cp936", False)):
+            text = registry.version_banner(self.ROOT, stream)
+            self.assertTrue(text.isascii())
+            self.assertNotIn("\033", text)
+
+    def test_blocks_on_a_pipe_have_no_colour(self) -> None:
+        text = registry.version_banner(self.ROOT, self.stream("UTF-8", False))
+        self.assertIn("\u2588", text)
+        self.assertNotIn("\033", text)
+        self.assertIn("version " + registry.harness_version(self.ROOT), text)
+
+    def test_colour_on_a_terminal_unless_refused(self) -> None:
+        with mock.patch.dict(os.environ, {"TERM": "xterm-256color"}):
+            os.environ.pop("NO_COLOR", None)
+            self.assertIn("\033[38;5;", registry.version_banner(self.ROOT, self.stream("utf-8", True)))
+            os.environ["NO_COLOR"] = "1"
+            self.assertNotIn("\033", registry.version_banner(self.ROOT, self.stream("utf-8", True)))
+
+    def test_the_lines_of_the_blocks_are_one_width(self) -> None:
+        self.assertEqual(len({len(line) for line in registry.BLOCKS.strip("\n").split("\n")}), 1)
 
 
 class FinishTests(unittest.TestCase):

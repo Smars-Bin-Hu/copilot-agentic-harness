@@ -102,7 +102,11 @@
       button.disabled = false;
       const parts = [];
       if (found.why) parts.push(h("p", {class: "su-note bad"}, found.why));
-      if (found.output) parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad")}, found.output));
+      if (found.output) {
+        const lines = found.output.split("\n");
+        const size = found.ok ? lines.findIndex((line) => !/[\u2500-\u259f]/.test(line)) : 0;  // the drawn letters come first
+        parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad")}, size > 0 ? h("span", {class: "su-art"}, lines.slice(0, size).join("\n")) : null, lines.slice(Math.max(size, 0)).join("\n")));
+      }
       if (found.python) parts.push(h("p", {class: "su-warn"}, found.python));
       testOut.replaceChildren(...parts);
     }, (error) => { button.disabled = false; testOut.replaceChildren(h("p", {class: "su-note bad"}, error.message || String(error))); });

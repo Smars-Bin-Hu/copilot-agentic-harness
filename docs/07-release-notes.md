@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.69 (2026-11-02)
+
+### Changed
+
+- `harness --version` draws the name in large letters, with a colour gradient on a terminal. A terminal that is not UTF-8 keeps the ASCII letters; `NO_COLOR` turns the colour off. Get ready shows the same letters.
+
 ## 1.6.68 (2026-11-02)
 
 ### Added

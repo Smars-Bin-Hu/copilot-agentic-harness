@@ -16,3 +16,4 @@ textarea.su-in{resize:vertical}
 .su-star{color:var(--bad);font-weight:700}
 .su [hidden]{display:none}
 .su-out{margin:8px 0 0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font:12px/1.35 var(--mono);overflow-x:auto;white-space:pre}.su-out.bad{color:var(--bad);white-space:pre-wrap;overflow-wrap:anywhere}
+.su-art{display:block;width:max-content;line-height:1.08;background:linear-gradient(90deg,#00e5ff,#2f8dff 38%,#8b5cf6 68%,#ff5fd7);-webkit-background-clip:text;background-clip:text;color:transparent}

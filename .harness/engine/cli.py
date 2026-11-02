@@ -56,7 +56,7 @@ class ShowVersion(argparse.Action):
             if SHORT_FLAG in (ARGV if ARGV is not None else sys.argv[1:]):
                 print(f"harness {harness_version(repo_root())}")  # one line, for scripts
             else:
-                print(version_banner(repo_root()))
+                print(version_banner(repo_root(), sys.stdout))
         except Exception as error:
             print(messages.text("cli.version.unreadable", error=error), file=sys.stderr)
             parser.exit(1)

@@ -23,7 +23,7 @@ def source(name: str) -> str:
 class DialogTests(unittest.TestCase):
     def test_the_dialog_asks_for_the_domains_and_sends_them_with_every_step(self) -> None:
         chat = source("chat.js")
-        create = chat.split("function create()")[1].split("// \"Allow . deny\"")[0]
+        create = chat.split("function create(useSample)")[1].split("// \"Allow . deny\"")[0]
         self.assertIn("domains: Array.from(state.domains)", create)  # preview and act take the same body: the server checks it again
         self.assertIn("state.domainList = Array.isArray(found.domains) ? found.domains : [];", create)
         self.assertIn("board.new.kb.none", create)  # none is a choice of its own
@@ -34,7 +34,7 @@ class DialogTests(unittest.TestCase):
         self.assertIn("title: full || label", draw)  # a long name is cut by CSS and shown whole on hover
 
     def test_the_preview_is_the_servers_text_and_is_not_a_field(self) -> None:
-        create = source("chat.js").split("function create()")[1].split("// \"Allow . deny\"")[0]
+        create = source("chat.js").split("function create(useSample)")[1].split("// \"Allow . deny\"")[0]
         self.assertIn('const preview = h("pre", {class: "send-preview"}', create)  # a <pre>: read only
         self.assertIn("preview.textContent = found.text;", create)
         self.assertIn("state.ready = !found.blocked && !found.problem;", create)
@@ -47,7 +47,7 @@ class DialogTests(unittest.TestCase):
         self.assertRegex(css, r"\.dialog \.new-actions\{position:sticky;bottom:-18px")
         self.assertIn(".new-kb .kb-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}", css)
         self.assertIn("max-height:98px;overflow:auto", css)  # many domains scroll inside their box
-        create = source("chat.js").split("function create()")[1]
+        create = source("chat.js").split("function create(useSample)")[1]
         self.assertLess(create.index("h(\"div\", {class: \"new-actions\"}, problem, said, h(\"div\", {class: \"row send-actions\"}"), create.index("const body = (step)"))
 
     def test_every_literal_key_of_the_new_pieces_is_in_both_languages(self) -> None:

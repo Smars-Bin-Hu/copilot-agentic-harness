@@ -166,7 +166,8 @@ def missing(root: Path) -> List[str]:
     company = targets.company_folder(root)
     out: List[str] = []
     try:
-        if not targets.load(root).repos:
+        kb = {name for name, _path in targets.knowledge_bases(root)}
+        if not [name for name in targets.load(root).repos if name not in kb]:
             out.append("repos")
     except Exception:  # noqa: BLE001 - a broken policy is doctor's to report
         out.append("repos")
@@ -203,3 +204,20 @@ def guide(root: Path) -> Dict[str, Any]:
     parts = re.split(r"^## ", text, flags=re.M)
     found = {part.split("\n", 1)[0].strip(): part.split("\n", 1)[1] if "\n" in part else "" for part in parts[1:]}
     return {"sections": [{"key": key, "title": title, "blocks": mdtree.parse(found.get(title, ""))["blocks"], "can_declare": key in CAN_DECLARE} for key, title in SECTIONS], "missing": missing(root)}
+
+
+def sample(root: Path) -> Dict[str, str]:
+    """The example task of the empty board: `scenario.override.md` of the lesson if a team wrote one, else `scenario.md`. {} when the table cannot be read; the page then has no sample."""
+    folder = root / ".github" / "skills" / "harness-rookie-quick-start" / "references"
+    for name in ("scenario.override.md", "scenario.md"):
+        try:
+            text = (folder / name).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        rows = {cells[0].strip(): cells[1].strip() for cells in (line.strip().strip("|").split("|") for line in text.splitlines() if line.startswith("|")) if len(cells) >= 2}
+        kind = rows.get("Kind", "").split("`")
+        label = next((key for key in rows if key.startswith("Example prompt")), "")
+        found = {"name": rows.get("Task name", "").strip("`"), "kind": kind[1] if len(kind) > 1 else "", "text": rows.get(label, "")}
+        if all(found.values()):
+            return found
+    return {}

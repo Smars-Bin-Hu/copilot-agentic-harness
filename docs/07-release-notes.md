@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.60 (2026-11-01)
+
+### Added
+
+- An empty board offers **Try the sample** (New task filled in from the lesson's scenario) and **My own task**.
+
+### Changed
+
+- The README starts with the double-click. The lesson `harness-rookie-quick-start` skips its practice task when the sample is already done.
+
 ## 1.6.59 (2026-11-01)
 
 ### Added

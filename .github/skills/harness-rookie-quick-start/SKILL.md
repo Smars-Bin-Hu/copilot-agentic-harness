@@ -54,11 +54,11 @@ Teach from [capabilities.md](references/capabilities.md): six groups, each with 
 
 ### 3. Where you work
 
-Teach from [workplace.md](references/workplace.md): the Chat window and the board. Have the user start the board with `harness task board` now, and look at it with them. The terminal and the task folder are only mentioned; `harness --help` and the reference doc are the pointers.
+Teach from [workplace.md](references/workplace.md): the Chat window and the board. The user reached this chat from the board, so it is open: look at it with them. If it is not running, they double-click `Start Harness`. The terminal and the task folder are only mentioned; `harness --help` and the reference doc are the pointers.
 
 ### 4. Do a practice task
 
-Go step by step from [walkthrough.md](references/walkthrough.md). The scenario is in [scenario.md](references/scenario.md); when `references/scenario.override.md` exists, use only that (it is for a team's own scenario, so the upstream file stays unchanged). This is the main part of the lesson: the user sends messages and presses the buttons on the task's page with their own hands. For every step you do, first say "what I am about to do, and why", after it say "what is new", then stop.
+First run `harness task list --text`. If the sample task of [scenario.md](references/scenario.md) is there, the user already did it with **Try the sample** on the board: skip this part and say so. Otherwise go step by step from [walkthrough.md](references/walkthrough.md). The scenario is in [scenario.md](references/scenario.md); when `references/scenario.override.md` exists, use only that (it is for a team's own scenario, so the upstream file stays unchanged). This is the main part of the lesson: the user sends messages and presses the buttons on the task's page with their own hands. For every step you do, first say "what I am about to do, and why", after it say "what is new", then stop.
 
 ### 5. How to use it every day
 

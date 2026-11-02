@@ -1,7 +1,7 @@
 # GitHub Copilot Agentic Harness on VS Code
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.6.59-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.6.60-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
@@ -56,7 +56,9 @@ The harness carries no business knowledge. It makes the agent safe to use and po
 
 You need VS Code with GitHub Copilot Chat, Python 3.9 or later, and git. Nothing is required to `pip install`: Word and Excel (`.xlsx`) files are read with the standard library. Old Excel (`.xls`) and PDF files need one small package each (`xlrd`, `pypdf`). The setup skill has you install both, and if the install fails you ask your administrator: see [Python packages](docs/03-configure.md#python-packages).
 
-Clone this repository, or download the zip from GitHub and extract it (git is optional; on Windows extract to a short path such as `C:\dev\harness`). Open it in VS Code and type these in Copilot Chat:
+Clone this repository, or download the zip from GitHub and extract it (git is optional; on Windows extract to a short path such as `C:\dev\harness`). **Double-click `Start Harness.command` (macOS) or `Start Harness.cmd` (Windows)**, keep the window open, and press **Get ready** on the page that opens. If the double-click is blocked, run `sh .harness/bin/harness task board` (Windows: `.harness\bin\harness.cmd task board`) in a terminal.
+
+Then, in Copilot Chat:
 
 | Type | What it walks you through |
 | --- | --- |
@@ -64,7 +66,7 @@ Clone this repository, or download the zip from GitHub and extract it (git is op
 | `/harness-rookie-new-knowledgebase` | **Build your knowledge base from your code**: the agent leads you step by step, you give a few facts only you know and approve each step. Come back any time with "continue the knowledge base" |
 | `/harness-rookie-wondering` | **Understand it first**: an interactive explanation of the principles and implementation, 16 topics, ask anything |
 
-The agent leads all four, so you don't need to read the docs first. To do it by hand, see the [quickstart](docs/01-quickstart.md).
+The agent leads all three, so you don't need to read the docs first. To do it by hand, see the [quickstart](docs/01-quickstart.md).
 
 To move to a newer copy of the harness later, type `/harness-reinstall` in the new copy: it carries your tasks, settings and knowledge base over.
 
@@ -184,4 +186,4 @@ Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENS
 
 ---
 
-Version 1.6.59 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.6.60 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

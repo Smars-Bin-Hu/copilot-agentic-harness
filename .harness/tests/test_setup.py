@@ -127,6 +127,12 @@ class KnowledgeBaseTests(unittest.TestCase):
 
 
 class GuideTests(unittest.TestCase):
+    def test_the_sample_comes_from_the_table_of_the_lesson(self) -> None:
+        found = setup.sample(support.REPO)
+        self.assertEqual((found["name"], found["kind"]), ("order-monitor", "design"))
+        self.assertIn("orders", found["text"])
+        self.assertEqual(setup.sample(Path("/no/such/root")), {})
+
     def test_every_section_of_the_guide_is_a_heading_of_the_docs(self) -> None:
         found = setup.guide(support.REPO)
         for part in found["sections"]:

@@ -740,7 +740,7 @@ class Board:
         """`step` options: what the dialog offers. `preview`: the first message, whole, and whether it can go now. `act`: make the chat in VS Code and send it. Every field is checked here again."""
         step = str(data.get("step", "act"))
         if step == "options":
-            return self.create_options()
+            return dict(self.create_options(), sample=core_setup.sample(self.root))
         why = self.link.create_blocked()
         if step == "preview":  # the message grows while the person types: it is made without VS Code, by the same code as the real one; `blocked` is why it cannot go now, `problem` what is not right in the fields
             made = chatnew.preview(self.root, data, [] if why else self.link.model_list(), self.link.waiting_names())

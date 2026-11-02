@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -74,7 +75,34 @@ BLOCKS = """
 ██║  ██║██║  ██║██║  ██║██║ ╚████║███████╗███████║███████║
 ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝╚══════╝╚══════╝
 """
+ROBOT = """
+        ●
+        │
+   ╭─────────╮
+   │╭───────╮│
+   ││ ●   ● ││
+   │╰───────╯│
+   ╰───┬─┬───╯
+╭─╮╭───┴─┴───╮╭─╮
+│ ││         ││ │
+│ ││    ●    ││ │
+╰─╯│         │╰─╯
+   ╰─────────╯
+"""
+ROBOT_ASCII = r"""
+      o
+      |
+  .-------.
+  | [o o] |
+  '-------'
+ _ .-----. _
+| ||  o  || |
+|_||     ||_|
+   '-----'
+"""
+GAP = "   "
 SHADES = (51, 45, 39, 33, 63, 99, 135, 171, 207)  # 256 colours, left to right: Terminal.app has no true colour
+GREEN = 41
 
 
 def unicode_stream(stream: Any) -> bool:
@@ -102,17 +130,37 @@ def painted(line: str) -> str:
     return "".join(parts) + "\033[0m"
 
 
+def beside(robot: str, lines: List[str], width: int, colour: bool) -> str:
+    """The robot to the left of the text. A terminal too narrow for both has it above."""
+    left = robot.strip("\n").split("\n")
+    room = max(len(line) for line in left)
+    if colour:
+        columns = shutil.get_terminal_size((80, 24)).columns
+        if columns < room + len(GAP) + width:
+            return "\n".join([*(paint_robot(line) for line in left), *lines])
+    size = max(len(left), len(lines))
+    rows = zip(left + [""] * (size - len(left)), lines + [""] * (size - len(lines)))
+    return "\n".join(((paint_robot(one.ljust(room)) if colour else one.ljust(room)) + GAP + two).rstrip() for one, two in rows)
+
+
+def paint_robot(line: str) -> str:
+    return line.replace("●", f"\033[1;38;5;{GREEN}m●\033[0m")
+
+
 def version_banner(root: Path, stream: Any = None) -> str:
-    """What `harness --version` prints. Blocks where `stream` is UTF-8, in colour on a terminal; else ASCII, which shows on every terminal."""
+    """What `harness --version` prints: the robot beside the name. Blocks where `stream` is UTF-8, in colour on a terminal; else ASCII, which shows on every terminal."""
     registry = load_registry(root)
-    if unicode_stream(stream):
-        colour = colour_stream(stream)
+    fancy = unicode_stream(stream)
+    colour = fancy and colour_stream(stream)
+    if fancy:
         art = BLOCKS.strip("\n").split("\n")
         word = f"version {registry['version']}"
-        art = [painted(line) for line in art] if colour else art
-        lines = [*art, f"\033[1m{word}\033[0m" if colour else word, "", "Copilot Agentic Harness"]
+        width = max(len(line) for line in art)
+        lines = [*(painted(line) for line in art), f"\033[1m{word}\033[0m"] if colour else [*art, word]
+        lines += ["", "Copilot Agentic Harness"]
     else:
-        lines = [BANNER.strip("\n").format(version=registry["version"]), "", "Copilot Agentic Harness"]
+        lines = [*BANNER.strip("\n").format(version=registry["version"]).split("\n"), "", "Copilot Agentic Harness"]
+        width = max(len(line) for line in lines)
     released = registry.get("released", "")
     if released:
         lines.append(f"Released {released}")
@@ -122,7 +170,7 @@ def version_banner(root: Path, stream: Any = None) -> str:
     others = registry.get("contributors") or []
     if others:
         lines.append("Contributors: " + ", ".join(others))
-    return "\n".join(lines)
+    return beside(ROBOT if fancy else ROBOT_ASCII, lines, width, colour)
 
 
 def modules_for(registry: Dict[str, Any], event_name: str) -> List[str]:

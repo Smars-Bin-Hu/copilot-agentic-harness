@@ -35,9 +35,11 @@ html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; 
  -webkit-mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent 70%);mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent 70%)}
 #en-fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
 
-/* the robot sits on the last S: no legs, no shadow on the floor */
+/* the robot floats over the middle of the word: no legs, no shadow on the floor */
 .en-bot{position:absolute;width:128px;z-index:4;cursor:pointer;transform:translate(-50%,-91%);--c:var(--soft);--ex:0px;--ey:0px;--tilt:0deg}
 .en-bot svg{width:100%;height:auto;overflow:visible;display:block}
+.en-bot3d{display:block;width:100%;aspect-ratio:100/106}.en-bot.solid svg,.en-bot.flat .en-bot3d{display:none}.en-bot.flat svg{display:block}
+.en-bot svg,.en-bot3d{animation:enfloat 4.6s ease-in-out infinite}
 .en-bot .r-body,.en-bot .r-arm{fill:var(--robot-body);stroke:var(--robot-line);stroke-width:1.4}
 .en-bot .r-head{fill:var(--robot-head);stroke:var(--robot-line);stroke-width:1.4}
 .en-bot .r-visor{fill:var(--robot-visor)}
@@ -53,10 +55,11 @@ html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; 
 .en-bot.awake .r-bulb{opacity:1}
 .en-bot.awake .r-headg{transform:rotate(var(--tilt));transition:transform .15s}
 .en-bot.you .r-arm.r-r{transform:rotate(-150deg);animation:enwave .8s ease-in-out infinite alternate}
-.en-bot.hop svg{animation:enhop .6s cubic-bezier(.3,1.5,.5,1)}
-.en-bot.brace svg{animation:enshake .07s linear infinite alternate}
+.en-bot.hop svg,.en-bot.hop .en-bot3d{animation:enhop .6s cubic-bezier(.3,1.5,.5,1)}
+.en-bot.brace svg,.en-bot.brace .en-bot3d{animation:enshake .07s linear infinite alternate}
 @keyframes enblink{0%,94%,100%{transform:scaleY(1)}97%{transform:scaleY(.08)}}
 @keyframes enwave{from{transform:rotate(-165deg)}to{transform:rotate(-125deg)}}
+@keyframes enfloat{50%{transform:translateY(-7px)}}
 @keyframes enhop{0%{transform:translateY(0)}35%{transform:translateY(-26px) rotate(-4deg)}100%{transform:none}}
 @keyframes enshake{from{transform:translate(calc(var(--sh,0px)*-1),0)}to{transform:translate(var(--sh,0px),calc(var(--sh,0px)*.5))}}
 .en-say{position:absolute;z-index:5;transform:translate(-50%,-100%);padding:8px 13px;border-radius:14px 14px 14px 4px;font:500 13px var(--sans);color:var(--en-say-ink);background:var(--en-say);

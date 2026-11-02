@@ -177,9 +177,13 @@
       const parts = [];
       if (found.why) parts.push(h("p", {class: "su-note bad"}, found.why));
       if (found.output) {
-        const lines = found.output.split("\n");
-        const size = found.ok ? lines.findIndex((line) => !/[\u2500-\u259f]/.test(line)) : 0;  // the drawn letters come first
-        parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad")}, size > 0 ? h("span", {class: "su-art"}, lines.slice(0, size).join("\n")) : null, lines.slice(Math.max(size, 0)).join("\n")));
+        const art = found.ok && found.output.includes("\u2588");
+        const line = (text) => {  // the robot fills the first 20 columns
+          const robot = text.slice(0, 20).split("\u25cf").flatMap((part, at) => (at ? [h("b", {class: "su-eye"}, "\u25cf"), part] : [part]));
+          const right = text.slice(20);
+          return [...robot, /[\u2500-\u259f]/.test(right) ? h("span", {class: "su-art"}, right) : right, "\n"];
+        };
+        parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad") + (art ? " art" : "")}, art ? found.output.split("\n").map(line) : found.output));
       }
       if (found.python) parts.push(h("p", {class: "su-warn"}, found.python));
       testOut.replaceChildren(...parts);

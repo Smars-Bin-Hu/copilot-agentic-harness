@@ -1,4 +1,4 @@
-// The Enter screen of a served page (1.6 B86): the wordmark HARNESS, the robot sitting on its last S, the pointer light, hold to charge, and the readiness list.
+// The Enter screen of a served page (1.6 B86): the wordmark HARNESS, the robot floating over its middle (in 3D, bot3d.js; flat when it cannot be), the pointer light, hold to charge, and the readiness list.
 // A page on disk has none (no SERVE). The search and the settings are the global ones of shell.js; this screen adds nothing to the top but the greeting.
 //
 // Readiness: POST /api/ready every 3 s (a read; the server answers from caches and waits for nothing). One line for each check; the lines light up in order. Enter is allowed only when
@@ -103,7 +103,10 @@
     });
   }
 
-  // ---------- the robot: it sits on the last S, no legs, no shadow ----------
+  // ---------- the robot: it floats over the N, the middle of the screen. No legs, no shadow ----------
+  const MIDDLE = 3, FLOAT = 16;  // the letter, and how far over it
+  const pose = {nx: 0, ny: 0, sleep: 1, arm: 0};
+  let solid = null;
   function buildBot() {
     const r = el("svg", {viewBox: "0 0 100 106"});
     const armL = el("g", {"class": "r-arm r-l"}, r), armR = el("g", {"class": "r-arm r-r"}, r);
@@ -115,27 +118,42 @@
     const eyes = el("g", {"class": "r-eyes"}, headG);
     el("circle", {"class": "r-eye", cx: 42, cy: 37, r: 4.2}, eyes); el("circle", {"class": "r-eye", cx: 58, cy: 37, r: 4.2}, eyes);
     bot.append(r);
+    if (still() || typeof BOT3D === "undefined") return;
+    solid = BOT3D.make(bot);
+    if (solid) new MutationObserver(() => solid.colours()).observe(root, {attributes: true, attributeFilter: ["class", "data-theme"]});
   }
   function placeBot() {
     if (!open || !wm.gs.length) return;
-    const r = wm.gs[6].getBoundingClientRect();
+    const r = wm.gs[MIDDLE].getBoundingClientRect();
     if (!r.width) return;
-    const w = Math.max(96, Math.min(170, r.width));
+    const was = parseFloat(stage.style.top) || 0;
+    const w = Math.max(96, Math.min(250, r.width * 1.55, (r.top - was - FLOAT - 62) / .965));
     // The robot must not run up under the search pill or the greeting: when the window is short, the whole wordmark moves down until the antenna is clear (the list below scrolls instead).
-    const was = parseFloat(stage.style.top) || 0, drop = Math.max(0, 62 - (r.top - was + 3 - .93 * w * 1.06));
+    const drop = Math.max(0, 62 - (r.top - was + 3 - FLOAT - .965 * w));
     if (Math.abs(drop - was) > .5) { stage.style.top = drop.toFixed(1) + "px"; stage.style.bottom = (-drop).toFixed(1) + "px"; }
     const top = r.top - was + drop;
     bot.style.width = w + "px";
-    bot.style.left = (r.left + r.width * .5) + "px"; bot.style.top = (top + 3) + "px";
-    say.style.left = Math.min(innerWidth - 90, r.left + r.width * .5 + 20) + "px"; say.style.top = (top - w * 1.0) + "px";
+    bot.style.left = (r.left + r.width * .5) + "px"; bot.style.top = (top + 3 - FLOAT) + "px";
+    say.style.left = Math.min(innerWidth - 90, r.left + r.width * .5 + w * .3) + "px"; say.style.top = (top - FLOAT - w * .95) + "px";
   }
   function lookBot() {
     const b = bot.getBoundingClientRect(), cx = b.left + b.width / 2, cy = b.top + b.height * .35;
     const dx = (wm.px || cx) - cx, dy = (wm.py || cy) - cy, d = Math.max(60, Math.hypot(dx, dy)), nx = dx / d, ny = dy / d;
     bot.style.setProperty("--ex", (nx * 4).toFixed(2) + "px"); bot.style.setProperty("--ey", (ny * 3).toFixed(2) + "px"); bot.style.setProperty("--tilt", (nx * 7).toFixed(1) + "deg");
+    pose.nx = nx; pose.ny = ny;
+  }
+  // The 3D robot turns with the whole picture, more than it (the angles of space.js), and its head and eyes follow the pointer. It wakes as the flat one does.
+  function drawBot(now) {
+    if (!solid) return;
+    const turning = typeof SPACE !== "undefined" && SPACE.on(), angle = (degrees) => degrees * Math.PI / 180;
+    pose.sleep += ((bot.classList.contains("awake") ? 0 : 1) - pose.sleep) * .08;
+    pose.arm += ((bot.classList.contains("you") ? 2.6 + Math.sin(now / 130) * .3 : 0) - pose.arm) * .14;
+    const shut = now % 5000 > 4780 ? .12 : 1;
+    solid.draw({yaw: angle((turning ? SPACE.ay * 3.2 : 0) + Math.sin(now / 2100) * 2.5), pitch: angle((turning ? -SPACE.ax * 2 : 0) + 2), headYaw: pose.nx * .22, headPitch: pose.ny * .14 + pose.sleep * .16, roll: -pose.nx * .1 - pose.sleep * .07,
+      arm: pose.arm, eyeX: pose.nx * 2.6, eyeY: -pose.ny * 2, blink: (1 - pose.sleep) * shut + pose.sleep * .1, glow: 1 - pose.sleep}, now);
   }
   let sayTimer = 0, clicks = 0;
-  const wake = () => { if (!bot.classList.contains("awake")) bot.classList.add("awake"); };
+  const wake = () => { if (bot.classList.contains("awake")) return; bot.classList.add("awake"); if (solid) solid.colours(); };
   function botSay(text) { say.textContent = text; say.classList.add("on"); clearTimeout(sayTimer); sayTimer = setTimeout(() => say.classList.remove("on"), 1900); }
   function hop() { if (still()) return; bot.classList.remove("hop"); void bot.offsetWidth; bot.classList.add("hop"); }
   bot.addEventListener("click", (event) => {
@@ -271,7 +289,7 @@
       else { throwLetters(-1, 0, 0, 0); tremble(Math.sin(now / 17) * 3.2 * ch * ch, Math.cos(now / 23) * 2.2 * ch * ch); }
       fxDraw(holdT, ch, relT, power, at.x, at.y); botReact(ch, Boolean(FX.rel)); wm.dirty = true;
     } else if (wm.dirty) { wm.dirty = false; fxClear(); tremble(0, 0); botReact(0, false); throwLetters(-1, 0, 0, 0); }
-    applyLetters(); lookBot();
+    applyLetters(); lookBot(); drawBot(now);
     wm.raf = requestAnimationFrame(tick);
   }
   function loop() { if (!wm.raf && open && shown && !still() && !document.hidden) { wm.last = 0; wm.raf = requestAnimationFrame(tick); } }

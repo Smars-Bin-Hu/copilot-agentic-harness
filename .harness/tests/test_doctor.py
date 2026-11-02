@@ -213,16 +213,16 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("user.json 的 name 要是一段文字", result.stdout)
 
     def test_version_shows_the_banner_with_the_release_date_and_the_authors(self) -> None:
-        """M9-1. Drawn letters on UTF-8, as this pipe is; the ASCII letters are in test_setup.BannerTests."""
+        """M9-1. The robot and drawn letters on UTF-8, as this pipe is; the ASCII ones are in test_setup.BannerTests."""
         result = self.version("--version")
         self.assertEqual(result.returncode, 0, result.stderr)
-        lines = result.stdout.splitlines()
+        lines = [line[20:] for line in result.stdout.splitlines()]  # to the right of the robot
         self.assertEqual(lines[6], f"version {VERSION}", lines)
         self.assertEqual(lines[8:], ["Copilot Agentic Harness", f"Released {REGISTRY['released']}", f"Copyright (c) {REGISTRY['released'][:4]} {REGISTRY['copyright']}", "Contributors: " + ", ".join(REGISTRY["contributors"])])
         self.assertEqual(self.version("--short", "--version").stdout.strip(), f"harness {VERSION}")  # the order does not matter
         self.edit_json(".harness/registry.json", lambda data: [data.pop(key) for key in ("released", "copyright", "contributors")])
-        bare = self.version("--version").stdout.splitlines()
-        self.assertEqual(bare[8:], ["Copilot Agentic Harness"])  # the three fields are optional
+        bare = [line[20:] for line in self.version("--version").stdout.splitlines()]
+        self.assertEqual([line for line in bare[8:] if line], ["Copilot Agentic Harness"])  # the three fields are optional
         self.edit_json(".harness/registry.json", lambda data: data.update(released="October 2026"))
         self.assertEqual(self.version("--version").returncode, 1)
 

@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.76 (2026-11-02)
+
+### Added
+
+- `harness --version` shows the robot beside the name, and so does Get ready.
+- The Enter screen: the robot is in 3D, floats over the middle of the word and turns with the picture as the pointer moves. It needs no library. Without WebGL, on a software renderer, in Lite and under reduced motion it stays the flat robot.
+
 ## 1.6.75 (2026-11-02)
 
 ### Changed

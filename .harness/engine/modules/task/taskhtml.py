@@ -12,6 +12,7 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   space.js, space.css     the board and the task page: the 3D stage behind the page (picture far back, dust nearer, floor grid and horizon with no picture), turning a little with the pointer; the frame-rate note
   wall.js, wall.css       the wallpaper (the pictures of the folder the person chose, small copies made in the browser), the glass panels over a picture, the Background part of the settings
   shell.js, shell.css     the board and the task page only: the search pill and Cmd+K palette, the gear and the settings panel, the VS Code banner (fixed to the window, outside the page)
+  bot3d.js                the 3D robot of the Enter screen (WebGL, no library); enter.js keeps a flat one when it cannot run
   enter.js, enter.css     a served page only: the Enter screen (wordmark, robot, hold to charge, the readiness list of `/api/ready`); a file on disk has none
   page.css, lobby.css     where things go, shared / the board's lobby
   common.js               helpers shared by both pages
@@ -114,7 +115,7 @@ def board_page(rows: List[Dict[str, Any]], as_of: str, refresh: int = 0, serve: 
     """rows: what `task list` gives, each with `brief` (taskinsight.brief or None) and `report` (the file name of its page or '').
     serve: set when the board server sends the page: the actions it runs, and how often the page asks again.
     hidden: how many older closed tasks are not in the rows."""
-    scripts = ["common.js", "serve.js", "chat.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "enter.js", "dock.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "board.js"]  # a file on disk never calls out
+    scripts = ["common.js", "serve.js", "chat.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "bot3d.js", "enter.js", "dock.js", "board.js"] if serve else ["common.js", "status.js", "lobby.js", "space.js", "wall.js", "shell.js", "board.js"]  # a file on disk never calls out
     return build("board.html", scripts, say("board.brand"), {"rows": rows, "hidden": hidden, "as_of": as_of, "refresh": int(refresh), "serve": serve, "cli": cli_command()}, refresh, ["page.css", "lobby.css"])
 
 
@@ -133,6 +134,6 @@ def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None) -> s
     """One task as the board server sends it (taskdesk.desk): documents, progress, history, changes, actions.
     Without `serve` it is a saved copy: one file with no buttons and no calls to a server, as of the time it was made."""
     if serve is not None:
-        return build("desk.html", ["common.js", "serve.js", "chat.js", "status.js", "highlight.js", "diffview.js", "space.js", "wall.js", "shell.js", "enter.js", "dock.js", "live.js", "reply.js", "run.js", "rounds.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
+        return build("desk.html", ["common.js", "serve.js", "chat.js", "status.js", "highlight.js", "diffview.js", "space.js", "wall.js", "shell.js", "bot3d.js", "enter.js", "dock.js", "live.js", "reply.js", "run.js", "rounds.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "serve": serve}, styles=DESK_STYLES)
     page = build("desk.html", ["common.js", "status.js", "highlight.js", "diffview.js", "space.js", "wall.js", "shell.js", "desk.js"], say("desk.title", name=desk["name"]), {"desk": desk, "snapshot": True}, styles=DESK_STYLES)
     return page.replace("<head>", f'<head>\n<meta http-equiv="Content-Security-Policy" content="{SNAPSHOT_CSP}">', 1)

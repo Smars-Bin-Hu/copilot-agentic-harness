@@ -100,6 +100,7 @@ class BannerTests(unittest.TestCase):
     def test_blocks_on_a_pipe_have_no_colour(self) -> None:
         text = registry.version_banner(self.ROOT, self.stream("UTF-8", False))
         self.assertIn("\u2588", text)
+        self.assertIn("\u25cf", text)
         self.assertNotIn("\033", text)
         self.assertIn("version " + registry.harness_version(self.ROOT), text)
 
@@ -109,6 +110,13 @@ class BannerTests(unittest.TestCase):
             self.assertIn("\033[38;5;", registry.version_banner(self.ROOT, self.stream("utf-8", True)))
             os.environ["NO_COLOR"] = "1"
             self.assertNotIn("\033", registry.version_banner(self.ROOT, self.stream("utf-8", True)))
+
+    def test_a_narrow_terminal_has_the_robot_above(self) -> None:
+        with mock.patch.dict(os.environ, {"TERM": "xterm-256color"}), mock.patch.object(registry.shutil, "get_terminal_size", return_value=os.terminal_size((60, 24))):
+            os.environ.pop("NO_COLOR", None)
+            lines = registry.version_banner(self.ROOT, self.stream("utf-8", True)).split("\n")
+        self.assertNotIn("\u2588", lines[0])
+        self.assertIn("\u2588", lines[12])
 
     def test_the_lines_of_the_blocks_are_one_width(self) -> None:
         self.assertEqual(len({len(line) for line in registry.BLOCKS.strip("\n").split("\n")}), 1)

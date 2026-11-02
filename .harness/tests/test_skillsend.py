@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import time
 import unittest
 
 import support
 
-from modules.task import skillsend
+from modules.task import kbview, skillsend
 from modules.task.common import CommandError
 
 
@@ -25,6 +26,25 @@ class MessageTests(unittest.TestCase):
 
     def test_a_chat_with_no_task_has_no_name_to_bind(self) -> None:
         self.assertEqual(skillsend.plan("en")["name"], "")
+
+
+class ViewTests(unittest.TestCase):
+    def test_a_view_is_worked_out_on_a_thread_and_kept(self) -> None:
+        view = kbview.View(support.REPO)
+        calls = []
+        view.work = lambda name: (lambda: calls.append(name) or {"ok": True})  # type: ignore[method-assign]
+        found = view.get("status")
+        for _ in range(100):
+            if not found["running"] and found["result"]:
+                break
+            time.sleep(0.01)
+            found = view.get("status")
+        self.assertEqual(found["result"], {"ok": True})
+        self.assertEqual(calls, ["status"])
+
+    def test_an_empty_name_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            kbview.View(support.REPO).near("  ")
 
 
 if __name__ == "__main__":

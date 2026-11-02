@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.63 (2026-11-01)
+
+### Added
+
+- A knowledge base button at the bottom right and in `Cmd+K`: a window with the eight steps and the next one, the domains, Look up (what an object uses and what uses it) and Health. It only reads; the one button that opens a chat says so.
+
 ## 1.6.62 (2026-11-01)
 
 ### Added

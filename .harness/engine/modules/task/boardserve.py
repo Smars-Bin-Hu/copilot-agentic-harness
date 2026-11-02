@@ -59,6 +59,7 @@ from core.paths import board_serve_file, board_serve_port, utc_now
 from core import reinstall, setup as core_setup, skillboard
 
 from . import chatrounds
+from . import kbview
 from . import setupjob
 from . import skillsend
 from . import taskrun
@@ -175,6 +176,7 @@ class Board:
         self.runner = taskrun.Runner(root)
         self.short_missing = False
         self.setup_job = setupjob.Job()
+        self.kb_view = kbview.View(root)
         self.refresh = refresh
         self.link = link or vslink.VsLink(root, enabled=False)  # a board made without a link (the tests) has none
         self.everything = everything
@@ -1098,6 +1100,14 @@ def handler_for(board: Board) -> type:
                         print(say("serve.did", action="skill " + str(data.get("skill")), task="-"), flush=True)
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown in the dialog
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/kb":  # the knowledge base window: reads only, but what a team knows is not for any page on this computer, so the paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    op = str(data.get("op", ""))
+                    return self.answer(200, {"result": board.kb_view.near(data.get("query")) if op == "near" else board.kb_view.get(op, bool(data.get("fresh")))})
+                except (KeyError, ValueError) as error:
                     return self.answer(409, {"error": str(error)})
             if path == "/api/language":  # the language of the harness (settings panel): the paired browser only; it writes the person's own `user.override.json`
                 if not board.paired(self.token()):

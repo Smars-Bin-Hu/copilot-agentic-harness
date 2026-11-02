@@ -24,7 +24,7 @@ HOLE = re.compile(r"(?<!\{)\{([a-z_]+)\}(?!\})")
 SESSION = "sess-language"
 # Messages that read the same in Chinese, by rule (exact names, so a new untranslated message still fails): the two render modes are proper names (Glass, Lite: the user's words for them, as in the
 # settings panel in both languages); the product name; and two that are only placeholders or a copyright line.
-SAME_IN_CHINESE = {"dock.group.none", "setup.line.tools", "setup.line.doctor", "setup.title", "setup.finish", "board.enter.getready", "desk.run", "desk.run.ask", "desk.run.stop", "desk.rounds.agent", "board.shell.glass", "board.shell.lite", "board.enter.label", "board.enter.m.repos.problem", "board.enter.legal"}
+SAME_IN_CHINESE = {"dock.kb.col.domain", "dock.kb.domains.tab", "setup.line.tools", "setup.line.doctor", "setup.title", "setup.finish", "board.enter.getready", "desk.run", "desk.run.ask", "desk.run.stop", "desk.rounds.agent", "board.shell.glass", "board.shell.lite", "board.enter.label", "board.enter.m.repos.problem", "board.enter.legal"}
 # Chinese that stays in the code on purpose: the sample line doctor prints, and the labels a task made in Chinese has.
 CHINESE_ALLOWED = {
     "core/output.py": ("SAMPLE = ",),

@@ -3,7 +3,7 @@
 (function () {
   const app = document.getElementById("app");
   const POLL = 2000;
-  const st = {form: null, timer: 0, probe: 0, refused: [], busy: false, ready: false};
+  const st = {form: null, timer: 0, probe: 0, refused: [], busy: false, ready: false, mode: "none"};
   const ask = (step, body) => SERVE.post("/api/setup", {step, ...(body || {})}).then((data) => data.result);
 
   const shortBox = h("section", {class: "su-card"});
@@ -212,5 +212,6 @@
       row([t("setup.kb"), kbStar], h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote), row(t("setup.prefix"), prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))),
       h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row(t("setup.install"), install, h("p", {class: "su-note"}, t("setup.install.example"))), row(t("setup.refused"), h("div", {class: "su-line"}, refusedBox, refusedAdd), refusedNote, refusedList, h("p", {class: "su-note"}, t("setup.refused.hint")))),
       h("div", {class: "su-end"}, go, goNote), said), first ? null : guideBox));
+  gate();
   load();
 })();

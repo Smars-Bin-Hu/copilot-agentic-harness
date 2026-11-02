@@ -175,7 +175,7 @@ function actionButton(row, item, extra) {
     button.classList.remove("hot");  // it asks for nothing now, and the button beside it is the one to press
     button.title = t("board.vs.why." + (row.chat.why || "no-chat"));
   }
-  button.addEventListener("click", () => (locked ? null : live ? SERVE.act(button, row, item) : copyCommand(button, item.command)));
+  button.addEventListener("click", () => (locked ? null : live ? SERVE.act(button, row, item) : typeof TERM !== "undefined" ? TERM.run(item.command) : copyCommand(button, item.command)));  // a served page runs it in the Terminal window; a saved page can only copy
   return button;
 }
 

@@ -334,7 +334,7 @@
   "board.action.resume": "resume",
   "board.action.autorun-on": "autorun on",
   "board.subtitle.served": "Made at {as_of} by `harness task board`; the page loads again every {seconds} s.",
-  "board.copy.hint.served": "A button in bold acts here; the others copy their command for a terminal.",
+  "board.copy.hint.served": "A button in bold acts here; the others run in the Terminal window.",
   "board.copied": "copied ✓",
   "board.copy.manual": "Copy this command and run it in a terminal:",
   "board.copy.hint": "A button in the Do column copies its command: paste it in a terminal to run it.",

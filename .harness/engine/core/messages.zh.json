@@ -334,7 +334,7 @@
   "board.action.resume": "恢复任务",
   "board.action.autorun-on": "开启 autorun",
   "board.subtitle.served": "{as_of} 由 `harness task board` 生成；页面每 {seconds} 秒重新加载。",
-  "board.copy.hint.served": "粗体按钮可直接操作；其他按钮会复制命令，到终端里运行。",
+  "board.copy.hint.served": "粗体按钮在这里直接执行；其他按钮在 Terminal 窗口里运行。",
   "board.copied": "已复制 ✓",
   "board.copy.manual": "复制这条命令，到终端里运行：",
   "board.copy.hint": "“操作”栏的按钮会复制命令，粘贴到终端里运行。",

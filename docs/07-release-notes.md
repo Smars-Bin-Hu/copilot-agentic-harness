@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.56 (2026-11-01)
+
+### Added
+
+- `Start Harness.command` (macOS) and `Start Harness.cmd` (Windows) at the root of the repository: double-click to start the board. A second double-click opens the running board.
+- The Enter screen has a first line, **This copy is set up**. A new copy gets a **Get ready** button. An older copy is not asked.
+
 ## 1.6.55 (2026-11-01)
 
 ### Added

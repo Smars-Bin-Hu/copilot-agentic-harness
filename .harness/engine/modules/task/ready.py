@@ -1,6 +1,6 @@
 """What the Enter screen of the board asks (`/api/ready`, 1.6 B86): is everything the board needs in place? One line for each check, as data; the page says it in words.
 
-Blocking, in this order: VS Code is open and connected; Copilot can answer; `harness doctor` has no error; this browser is paired. Warn only: the knowledge base and the target repositories.
+Blocking, in this order: this copy is set up (Get ready); VS Code is open and connected; Copilot can answer; `harness doctor` has no error; this browser is paired. Warn only: the knowledge base and the target repositories.
 
 Nothing here waits on the outside world, so the server never hangs on it:
 - VS Code and Copilot are read from the cache of the link thread (`vslink`), which owns every `code` command and its timeout.
@@ -12,6 +12,7 @@ A check that goes wrong itself is a line that failed with its reason, never an e
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -20,7 +21,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core import targets
+from core import config, targets, tasks
 
 DOCTOR_TIMEOUT = 90.0  # seconds the child `doctor` may take (a stalled `code` command inside it has its own 25 s)
 RETRY_FAILED = 20.0  # a doctor that failed or found errors is run again no sooner than this
@@ -35,6 +36,17 @@ STUCK = ("off", "no-cli", "cli-failed", "many")  # nothing the person can do by 
 def short(text: Any) -> str:
     one = " ".join(str(text).split())
     return one if len(one) <= REASON_MAX else one[: REASON_MAX - 1] + "…"
+
+
+def setup_done(root: Path) -> bool:
+    """Get ready was finished, or this is an older copy: it has a repository setting or tasks, and its owner is not asked again."""
+    try:
+        kept = json.loads(config.override_path(root, "user").read_text(encoding="utf-8-sig"))
+        if isinstance(kept, dict) and kept.get("setup_done"):
+            return True
+    except (OSError, ValueError):
+        pass
+    return config.override_path(root, "target").exists() or bool(tasks.folders(root))
 
 
 def run_doctor(root: Path, timeout: float = DOCTOR_TIMEOUT) -> Dict[str, Any]:
@@ -160,6 +172,7 @@ class Ready:
             checks.append(line)
             return line
 
+        add("setup", True, lambda: {"state": "ok", "why": "ok"} if setup_done(self.root) else {"state": "fail", "why": "new"})
         vscode = add("vscode", True, self.vscode)
         add("copilot", True, lambda: self.copilot(vscode))
         add("doctor", True, self.doctor_line)

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.6.55",
+  "version": "1.6.56",
   "released": "2026-10-20",
   "copyright": "Smars Hu",
   "contributors": [
@@ -18,6 +18,8 @@
       ".harness/policies/user.json",
       ".harness/bin/harness",
       ".harness/bin/harness.cmd",
+      "Start Harness.command",
+      "Start Harness.cmd",
       ".github/skills/harness-rookie-get-me-ready/",
       ".github/skills/harness-vscode-updates/",
       ".harness/eval/fixtures/hooks/copilot-sdk/",

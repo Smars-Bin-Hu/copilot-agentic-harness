@@ -6,6 +6,8 @@
     ".harness/policies/**",
     ".harness/engine/**",
     ".harness/bin/**",
+    "Start Harness.command",
+    "Start Harness.cmd",
     ".harness/registry.json",
     ".harness/runtime/**",
     ".vscode/settings.json",

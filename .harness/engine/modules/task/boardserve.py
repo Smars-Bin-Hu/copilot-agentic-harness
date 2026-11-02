@@ -51,9 +51,10 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
+from urllib.request import Request, urlopen
 
 from core import config, messages, registry, state, tasks, user
-from core.paths import board_serve_file, utc_now
+from core.paths import board_serve_file, board_serve_port, utc_now
 
 from . import chatrounds
 from . import taskrun
@@ -1115,6 +1116,17 @@ def handler_for(board: Board) -> type:
     return Handler
 
 
+def already_serving(root: Path, port: int) -> bool:
+    """The board of this same copy has this port and answers: a second double-click opens its page and leaves it running."""
+    if board_serve_port(root) != port:
+        return False
+    try:
+        with urlopen(Request(f"http://127.0.0.1:{port}/api/status", data=b"{}", headers={HEADER: "1", "Content-Type": "application/json"}), timeout=3) as answer:
+            return answer.status == 200
+    except (OSError, ValueError):
+        return False
+
+
 def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: Any = None, interactive: Optional[bool] = None, opener: Callable[[str], Any] = webbrowser.open, ready: Optional[Callable[[Any], None]] = None,
           link: Optional[vslink.VsLink] = None) -> Dict[str, Any]:
     """Run until Ctrl+C. `opener`, `ready` and `link` exist for the tests: `ready` gets the server once it listens; `link`, a link made by hand (a fake host, or none)."""
@@ -1126,6 +1138,10 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     try:
         server = http.server.ThreadingHTTPServer(("127.0.0.1", board.port), handler_for(board))
     except OSError as error:
+        if already_serving(root, board.port):
+            print(say("serve.already", url=f"http://127.0.0.1:{board.port}/"), file=out, flush=True)
+            opener(f"http://127.0.0.1:{board.port}/")
+            return {"served": f"http://127.0.0.1:{board.port}/", "stopped": False, "already": True}
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
     taskarchive.prune_transcripts(root, taskarchive.remembered(root))
     link.start()  # the thread only; the board does not wait for VS Code

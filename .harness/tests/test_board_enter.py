@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import tempfile
 import threading
 import time
 import unittest
@@ -20,6 +21,26 @@ from core import ahp, messages
 from modules.task import boardserve, ready, taskhtml, vslink
 
 WEB = taskhtml.WEB
+
+
+class SetupLineTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root / ".harness" / "policies").mkdir(parents=True)
+
+    def test_a_new_copy_is_not_set_up_and_an_older_one_is_not_asked(self) -> None:
+        self.assertFalse(ready.setup_done(self.root))
+        (self.root / ".harness" / "policies" / "target.override.json").write_text("{}", encoding="utf-8")
+        self.assertTrue(ready.setup_done(self.root))
+
+    def test_finishing_get_ready_is_kept_and_a_broken_file_is_no_answer(self) -> None:
+        path = self.root / ".harness" / "policies" / "user.override.json"
+        path.write_text("{ broken", encoding="utf-8")
+        self.assertFalse(ready.setup_done(self.root))
+        path.write_text('{"setup_done": true}', encoding="utf-8")
+        self.assertTrue(ready.setup_done(self.root))
 
 
 class StubLink:
@@ -54,8 +75,8 @@ class ReadinessTests(TaskCase):
     def test_everything_in_place_is_ready_and_the_lines_come_in_the_order_of_the_screen(self) -> None:
         found = settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 1, "unbound": 0, "why": "ok"}), clean))
         self.assertTrue(found["ready"])
-        self.assertEqual([item["id"] for item in found["checks"]], ["vscode", "copilot", "doctor", "paired", "kb", "repos"])
-        self.assertEqual([item["blocking"] for item in found["checks"]], [True, True, True, True, False, False])
+        self.assertEqual([item["id"] for item in found["checks"]], ["setup", "vscode", "copilot", "doctor", "paired", "kb", "repos"])
+        self.assertEqual([item["blocking"] for item in found["checks"]], [True, True, True, True, True, False, False])
         self.assertNotIn("ver", [item["id"] for item in found["checks"]])  # N11: no version line
 
     def test_the_doctor_is_first_unknown_then_run_once_off_the_calling_thread(self) -> None:

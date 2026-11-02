@@ -303,7 +303,7 @@
   }
 
   // ---------- readiness ----------
-  const ORDER = ["vscode", "copilot", "doctor", "paired", "kb", "repos"];
+  const ORDER = ["setup", "vscode", "copilot", "doctor", "paired", "kb", "repos"];
   const chk0 = {t0: 0, last: null, error: "", inflight: false, timer: 0, tick: 0, opened: 0, ready: false, openError: ""};
   const OPENED_FOR = 120000;  // ms in which a VS Code that was just opened is waited for, not blamed
   const setText = (node, text) => { if (node.textContent !== text) node.textContent = text; };
@@ -365,7 +365,10 @@
     if (go.disabled === ready) go.disabled = !ready;
     const tip = ready ? "" : (first || (down ? errLine.textContent : t("board.enter.checking")));
     if (go.title !== tip) go.title = tip.length > 400 ? tip.slice(0, 399) + "…" : tip;
-    setText(go.firstChild, ready ? t("board.enter.go") : pending && !bad ? t("board.enter.checking") : t("board.enter.notready"));
+    const setup = checks.find((x) => x.id === "setup");
+    chk0.setup = Boolean(setup && setup.state !== "ok");  // a new copy: the button goes to Get ready, whatever the other lines say
+    if (chk0.setup && go.disabled) go.disabled = false;
+    setText(go.firstChild, chk0.setup ? t("board.enter.getready") : ready ? t("board.enter.go") : pending && !bad ? t("board.enter.checking") : t("board.enter.notready"));
     const k = go.querySelector("kbd").style, kd = ready ? "" : "none"; if (k.display !== kd) k.display = kd;
     fitList();
     return ready;
@@ -427,7 +430,11 @@
     if (quick || still()) { enter.remove(); return; }
     enter.classList.add("out"); setTimeout(() => enter.remove(), 450);
   }
-  function tryEnter() { if (open && shown && chk0.ready) { finish(false); return true; } return false; }
+  function tryEnter() {
+    if (open && shown && chk0.setup) { location.assign("/setup?first=1"); return true; }
+    if (open && shown && chk0.ready) { finish(false); return true; }
+    return false;
+  }
 
   // Open VS Code: the person-only call that brings the window of this folder forward (the board's own `/api/open`). The line then says it is waiting.
   list.addEventListener("click", (event) => {

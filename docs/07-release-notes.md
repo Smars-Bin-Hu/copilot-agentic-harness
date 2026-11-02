@@ -19,6 +19,7 @@ To see which version you have: `harness --version`.
 - **A company skill that cannot be copied has a way on:** **Fix it in a chat**. The card says that a sync cannot fix it, and it stays on the Overview tab.
 - **On Get ready, Company content and Code standards follow the folder you chose**, also when it lacks them. A knowledge base already in place is no longer shown as an error. The folder picker opens the nearest folder of a path that is not there.
 - **A board button that used to copy a command now runs it in the Terminal window.** A saved page has no server, so it still copies.
+- **The 3D robot of the Enter screen has no outline.** On a dark page it has a lacquer shine instead, so it stands out from the page.
 - **Company Context beside Paired** replaces the green line of the board. Hold the pointer on it for all that your knowledge base has.
 - **"Quit VS Code and open it again" ends by itself on the Enter screen too.** The wait follows the link to VS Code. Before, it ended only on the setup page, and could stay until the board restarted.
 

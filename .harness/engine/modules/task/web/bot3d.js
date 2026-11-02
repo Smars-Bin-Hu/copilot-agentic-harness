@@ -15,7 +15,7 @@ uniform mat3 turn, nod;
 uniform vec2 arm, look;
 uniform float blink, glow;
 uniform vec3 cBody, cHead, cLine, cVisor, cLight;
-const float CAMERA = 260., HIGH = 115., MIDDLE = 4.5, OUTLINE = 1.15, FAR = 330.;
+const float CAMERA = 260., HIGH = 115., MIDDLE = 4.5, FAR = 330.;
 const vec3 NECK = vec3(0., -5., 0.), SHOULDER = vec3(28., -13., 0.);
 
 float box(vec3 p, vec3 half_, float r) { vec3 q = abs(p) - half_ + r; return length(max(q, 0.)) + min(max(q.x, max(q.y, q.z)), 0.) - r; }
@@ -63,9 +63,9 @@ void main() {
     t += hit.x;
   }
   float pixel = HIGH / size.y;
-  if (hit.x >= .03) {  // no hit: only the outline round the shape
-    float a = 1. - smoothstep(OUTLINE - pixel, OUTLINE + pixel, nearest);
-    gl_FragColor = vec4(cLine * a, a);
+  if (hit.x >= .03) {  // no hit: only a soft edge, so the shape has no steps
+    float a = 1. - smoothstep(0., pixel * 1.4, nearest);
+    gl_FragColor = vec4(cBody * a, a);
     return;
   }
   vec3 p = from + ray * t, n = normalAt(p), q = turn * p, h = inHead(q);
@@ -73,6 +73,14 @@ void main() {
   vec3 light = normalize(vec3(-.45, .7, .8)), base = part < 1.5 ? cBody : part < 2.5 ? cHead : part < 3.5 ? cVisor : part < 4.5 ? cLine : cLight;
   float lit = .62 + .42 * max(dot(n, light), 0.) + .08 * n.y;
   vec3 colour = base * lit + vec3(.32) * pow(max(dot(reflect(-light, n), -ray), 0.), part > 2.5 && part < 3.5 ? 26. : 44.) * (part > 2.5 && part < 3.5 ? 1.2 : .5);
+  if (part < 2.5) {  // lacquer, on a dark robot only: it lifts the shape off a dark page, where a light robot needs nothing
+    float dark = 1. - smoothstep(.2, .6, cBody.r);
+    vec3 r = reflect(ray, n);
+    float rim = pow(1. - facing, 3.), sky = smoothstep(-.1, .7, r.y);
+    float spot = pow(max(dot(normalize(light - ray), n), 0.), 110.);
+    float softbox = smoothstep(.42, .5, r.y) * smoothstep(.92, .8, r.y) * smoothstep(.62, .4, abs(r.x + .15));
+    colour += dark * (vec3(.5, .56, .66) * rim * (.3 + .7 * sky) + vec3(1.) * spot * .8 + vec3(.72, .78, .86) * softbox * .16);
+  }
   if (part > 4.5) colour = cLight;
   if (part > 2.5 && part < 3.5) {  // the eyes are on the visor
     float eye = length(vec2(abs(h.x - look.x) - 8., (h.y - 16. - look.y) / max(blink, .08))) - 4.3;
@@ -83,7 +91,6 @@ void main() {
     float core = length(q.xy - vec2(0., -24.)) - 6.;
     colour = mix(colour, cLight, smoothstep(pixel, -pixel, core));
   }
-  if (part < 3.5) colour = mix(cLine, colour, smoothstep(.1, .26, facing));  // the drawn line of the flat robot, on the 3D edges
   gl_FragColor = vec4(colour, 1.);
 }`;
   const PROBE = document.createElement("canvas").getContext("2d", {willReadFrequently: true});

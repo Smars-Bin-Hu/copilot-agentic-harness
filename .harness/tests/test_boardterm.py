@@ -1,4 +1,4 @@
-"""The Terminal window of the board (1.6.92): only `harness` commands, no input, and the page never loses a run."""
+"""The Terminal window of the board (1.6.92): only `harness` commands, no input, a folder for each tab, and the page never loses a run."""
 
 from __future__ import annotations
 
@@ -75,6 +75,17 @@ class RunTests(unittest.TestCase):
         for ident in idents:
             term.stop(ident)
             self.assertTrue(self.wait(term, ident)["done"])
+
+    def test_a_tab_moves_and_comes_back(self) -> None:
+        term = self.script("import os\nprint(os.getcwd())\n")
+        (self.root / "sub").mkdir()
+        here = term.act({"op": "cd", "cwd": "", "to": "sub"})["cwd"]
+        self.assertEqual(Path(here), (self.root / "sub").resolve())
+        self.assertEqual(term.act({"op": "cd", "cwd": here, "to": ".."})["cwd"], str(self.root.resolve()))
+        self.assertEqual(term.act({"op": "cd", "cwd": here, "to": ""})["cwd"], str(self.root.resolve()))
+        self.assertIn(str((self.root / "sub").resolve().name), self.wait(term, term.act({"op": "start", "line": "harness x", "cwd": here})["id"])["text"])
+        with self.assertRaises(CommandError):
+            term.act({"op": "cd", "cwd": here, "to": "missing"})
 
     def test_a_run_the_board_forgot_ends_on_the_page(self) -> None:
         self.assertTrue(boardterm.Terminal(self.root).read("nope", 0)["gone"])

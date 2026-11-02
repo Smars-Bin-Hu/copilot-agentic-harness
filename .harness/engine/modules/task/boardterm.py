@@ -2,7 +2,7 @@
 
 This is the person's own action, as in a terminal, so the gate does not see it. What keeps it safe:
 - only a paired browser may ask (`/api/term`); an agent can reach this address but has no pairing cookie;
-- only `harness ...` runs, with no shell: no pipe, no other program;
+- only `harness ...` runs, with no shell: no pipe, no other program; `cd` moves a tab, and the engine stays the one of this copy;
 - there is no input and no terminal, so a command that needs a person at a real terminal (an approval, autorun on, admin on) is refused as it is anywhere else.
 
 The runs end with the board. Each one leaves a line in `.harness/runtime/board-terminal.jsonl`.
@@ -79,15 +79,25 @@ class Terminal:
         self.lock = threading.Lock()
         self.jobs: Dict[str, Job] = {}
 
-    def start(self, line: Any) -> Dict[str, Any]:
+    def folder(self, here: Any, to: Any = "") -> Path:
+        """The folder of a tab: `to` from `here`, the harness folder when both are empty. `~` works; a folder that is not there is refused."""
+        text = str(to or "").strip().strip("\"'")
+        base = Path(str(here or "")) if here else self.root
+        found = (base / Path(os.path.expanduser(text))).resolve() if text else self.root.resolve()
+        if not found.is_dir():
+            raise CommandError(say("term.refused.folder", path=text or str(here)))
+        return found
+
+    def start(self, line: Any, here: Any = "") -> Dict[str, Any]:
         words = words_of(line)
+        cwd = self.folder("", here)
         with self.lock:
             if sum(1 for job in self.jobs.values() if not job.ended) >= MAX_RUNNING:
                 raise CommandError(say("term.refused.many", limit=MAX_RUNNING))
         extra: Dict[str, Any] = {"creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0)} if os.name == "nt" else {"start_new_session": True}
         command = [sys.executable, str(self.root / ".harness" / "engine" / "cli.py"), *words]
         try:
-            process = subprocess.Popen(command, cwd=str(self.root), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+            process = subprocess.Popen(command, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
                                        env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}, **extra)
         except OSError as error:
             raise CommandError(say("term.refused.start", error=error)) from None
@@ -152,7 +162,9 @@ class Terminal:
     def act(self, data: Dict[str, Any]) -> Dict[str, Any]:
         op = str(data.get("op", ""))
         if op == "start":
-            return self.start(data.get("line"))
+            return self.start(data.get("line"), data.get("cwd"))
+        if op == "cd":
+            return {"cwd": str(self.folder(data.get("cwd"), data.get("to")))}
         if op == "read":
             return self.read(data.get("id"), data.get("since"))
         if op == "stop":

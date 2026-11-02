@@ -15,7 +15,7 @@ To see which version you have: `harness --version`.
 ### Added
 
 - **Get ready checks a knowledge base folder when you choose it.** It lists each part in green, or with a warning that says where the harness reads it. A file in the wrong place or under another name is named, for example `company/code-standard.md`. A warning stops nothing.
-- **A Terminal window on the board.** The `>_` button at the top right opens a small window with tabs. Type a `harness` command and read its output, without going back to a terminal. It runs `harness` commands only, in a paired browser, with no input: a step that needs a person at a real terminal stays there.
+- **A Terminal window on the board.** The `>_` button at the top right opens a small window with tabs. Type a `harness` command and read its output, without going back to a terminal. Each tab starts in the harness folder; `cd` moves that tab. It runs `harness` commands only, in a paired browser, with no input: a step that needs a person at a real terminal stays there.
 - **The board shows what your knowledge base has**, in a green line: domains, knowledge base instructions, code standards and company skills. The setup warning beside it lists what is still missing.
 
 ### Changed

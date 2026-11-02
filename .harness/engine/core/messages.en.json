@@ -2163,6 +2163,7 @@
   "term.refused.line": "That is not a command this window can run ({limit} characters at most, one line).",
   "term.refused.other": "This window runs harness commands only. Start the line with harness.",
   "term.refused.board": "The board is already running.",
+  "term.refused.folder": "No such folder: {path}",
   "term.refused.many": "{limit} commands are running. Wait for one, or stop one.",
   "term.refused.start": "The command could not start: {error}",
   "company.prefix.board": "The company content uses the skill prefix `{word}`, and this copy uses another one, so nothing can be copied.",

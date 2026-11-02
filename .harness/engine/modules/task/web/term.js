@@ -1,4 +1,5 @@
 // The Terminal window (1.6.92): a small window at the top right of a served page, with tabs. A person types a `harness` command and reads the output (`boardterm.py`). It is no real terminal.
+// A tab starts in the harness folder; `cd` moves that tab, a bare `cd` brings it back.
 // TERM.run(line) opens a tab and runs a command: what a button on the page uses. The tabs of this browser tab live in sessionStorage, so they survive going from page to page.
 const TERM = (() => {
   const KEY = "harness.term";
@@ -11,6 +12,7 @@ const TERM = (() => {
   const post = (body) => SERVE.post("/api/term", body).then((data) => data.result);
   const current = () => memory.tabs[memory.at] || null;
   const newTab = () => { memory.tabs.push({label: "", text: "", job: "", since: 0}); memory.at = memory.tabs.length - 1; return current(); };
+  const shortPath = (path) => (path.length > 34 ? path.slice(0, 12) + "\u2026" + path.slice(-20) : path);
   const labelOf = (line) => line.replace(/^harness\s+/, "").split(/\s+/).slice(0, 2).join(" ").slice(0, 22);
 
   function paint() {
@@ -29,6 +31,8 @@ const TERM = (() => {
     ui.out.scrollTop = ui.out.scrollHeight;
     ui.stop.hidden = !(tab && tab.job);
     ui.input.disabled = Boolean(tab && tab.job);
+    ui.mark.textContent = (tab && tab.cwd ? shortPath(tab.cwd) + " " : "") + "$";
+    ui.mark.title = (tab && tab.cwd) || "";
     save();
   }
   function close(index) {
@@ -50,10 +54,15 @@ const TERM = (() => {
       paint();
     }, (error) => { tab.job = ""; tab.text += (error.message || String(error)) + "\n"; paint(); });
   }
+  function move(tab, to) {
+    post({op: "cd", cwd: tab.cwd || "", to}).then((found) => { tab.cwd = found.cwd; paint(); }, (error) => { tab.text += (error.message || String(error)) + "\n"; paint(); });
+  }
   function submit(tab, line) {
+    const place = line.match(/^cd(?:\s+(.*))?$/);
+    if (place) { tab.text += (tab.text ? "\n" : "") + "$ " + line + "\n"; move(tab, (place[1] || "").trim()); return; }
     tab.label = labelOf(line); tab.text += (tab.text ? "\n" : "") + "$ " + line + "\n"; tab.since = 0;
     paint();
-    post({op: "start", line}).then((found) => { tab.job = found.id; paint(); follow(tab); }, (error) => { tab.text += (error.message || String(error)) + "\n"; paint(); });
+    post({op: "start", line, cwd: tab.cwd || ""}).then((found) => { tab.job = found.id; paint(); follow(tab); }, (error) => { tab.text += (error.message || String(error)) + "\n"; paint(); });
   }
   function run(line) {
     memory.open = true;
@@ -70,14 +79,15 @@ const TERM = (() => {
     const out = h("pre", {class: "term-out", tabindex: "0"});
     const input = h("input", {type: "text", class: "term-in", spellcheck: "false", autocomplete: "off", placeholder: t("term.ph"), "aria-label": t("term.title")});
     const stop = h("button", {type: "button", class: "act term-stop", hidden: ""}, t("term.stop"));
+    const mark = h("span", {class: "term-mark"}, "$");
     const hide = h("button", {type: "button", class: "term-x", "aria-label": t("term.hide"), title: t("term.hide")}, "−");
-    const box = h("section", {class: "term", hidden: "", "aria-label": t("term.title")}, h("div", {class: "term-bar"}, tabs, hide), out, h("div", {class: "term-line"}, h("span", {class: "term-mark"}, "$"), input, stop));
-    ui = {box, toggle, tabs, add, out, input, stop};
+    const box = h("section", {class: "term", hidden: "", "aria-label": t("term.title")}, h("div", {class: "term-bar"}, tabs, hide), out, h("div", {class: "term-line"}, mark, input, stop));
+    ui = {box, toggle, tabs, add, out, input, stop, mark};
     const said = [];
     let back = 0;
     toggle.addEventListener("click", () => { memory.open = !memory.open; paint(); if (memory.open) input.focus(); });
     hide.addEventListener("click", () => { memory.open = false; paint(); });
-    add.addEventListener("click", () => { newTab(); paint(); input.focus(); });
+    add.addEventListener("click", () => { move(newTab(), ""); paint(); input.focus(); });
     stop.addEventListener("click", () => { const tab = current(); if (tab && tab.job) post({op: "stop", id: tab.job}).catch(() => {}); });
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && input.value.trim()) {
@@ -92,7 +102,7 @@ const TERM = (() => {
     });
     document.body.append(toggle, box);
     paint();
-    memory.tabs.forEach(follow);
+    memory.tabs.forEach((tab) => { follow(tab); if (!tab.cwd) move(tab, ""); });
   }
   return {mount, run};
 })();

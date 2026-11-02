@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.73 (2026-11-02)
+
+### Changed
+
+- Every card that starts a chat or a task from **How can I help?** or **Everything you can ask for** has a **Back** button. It returns to where you came from, with your search, your scroll and what you typed.
+
 ## 1.6.72 (2026-11-02)
 
 ### Changed

@@ -179,7 +179,7 @@ const CHAT = (function () {
 
   // "New task" (B73): a chat is made in VS Code and told to open the task. The server checks every field again and makes the first message (a fixed English text, then what the person wrote);
   // this dialog only collects the fields and shows that message. The mode (interactive) and the folder (no worktree) are fixed and not on the form.
-  function create(preset) {  // preset: `true` for the sample of the lesson, or {kind, text, note} for a skill
+  function create(preset) {  // preset: `true` for the sample of the lesson, or {kind, text, note, back} for a skill; `back` opens the place the person came from
     const state = {lang: "en", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set()};
     const field = (label, control, extra) => h("label", {class: "new-field" + (extra ? " " + extra : "")}, h("span", {class: "sub label"}, label), control);
     const name = h("input", {type: "text", class: "send-body", maxlength: 80, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.name.ph")});
@@ -257,6 +257,11 @@ const CHAT = (function () {
     }
     const close = () => { clearTimeout(state.timer); view.close(); };
     no.addEventListener("click", close);
+    if (preset && preset.back) {
+      const back = h("button", {type: "button", class: "act"}, t("dock.back"));
+      back.addEventListener("click", () => { close(); preset.back(); });
+      no.before(back);
+    }
     for (const control of [name, text]) control.addEventListener("input", refresh);
     for (const control of [kind, source, thinking]) control.addEventListener("change", refresh);
     model.addEventListener("change", () => { levels(); refresh(); });

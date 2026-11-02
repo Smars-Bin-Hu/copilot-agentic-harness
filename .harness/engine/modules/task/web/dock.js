@@ -10,7 +10,14 @@ const DOCK = (function () {
     close.addEventListener("click", view.close);
   }
 
-  function start(skill, words) {
+  // `back`: what to open again when the person steps back; the place they came from.
+  const backButton = (view, back) => {
+    const button = h("button", {type: "button", class: "act"}, t("dock.back"));
+    button.addEventListener("click", () => { view.close(); back(); });
+    return button;
+  };
+
+  function start(skill, words, back) {
     const lang = document.documentElement.lang === "zh" ? "zh" : "en";
     const body = {skill, words: words || "", lang};
     const preview = h("pre", {class: "send-preview"}, "...");
@@ -19,6 +26,7 @@ const DOCK = (function () {
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const view = SERVE.dialog([h("h2", null, t("dock.title")), h("p", {class: "sub"}, t("dock.hint")), preview, said, h("div", {class: "row"}, go, no)]);
     no.addEventListener("click", view.close);
+    if (back) no.before(backButton(view, back));
     ask("preview", body).then((found) => {
       preview.textContent = found.text;
       if (found.blocked) said.replaceChildren(...SERVE.reasons(found.blocked));
@@ -31,21 +39,31 @@ const DOCK = (function () {
   }
 
   // The window of all skills: what the skills say of themselves (core/skillboard.py). Words of a skill are shown as text.
-  function allSkills(only) {
+  function allSkills(only, back, kept) {  // `kept`: the search, the scroll and the typed words, when the person steps back to this window
+    const memory = kept || {word: "", top: 0, typed: {}};
     const search = h("input", {type: "text", class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("dock.skills.search")});
+    search.value = memory.word;
     const list = h("div", {class: "dock-list"});
     const no = h("button", {type: "button", class: "act"}, t("board.new.close"));
     const view = SERVE.dialog([h("h2", null, t(only === "kb" ? "dock.skills.kb" : "dock.skills")), search, list, h("div", {class: "row"}, no)]);
     view.box.classList.add("dock-window");
     no.addEventListener("click", view.close);
+    if (back) no.before(backButton(view, back));
     let found = [];
     const start = (item, words) => {
       view.close();
-      if (item.opens === "task") CHAT.create({kind: item.kind, text: "Use the skill " + item.name + "." + (words ? " " + words : ""), note: t("dock.task.note")});
-      else DOCK.start(item.name, words || item.words);
+      memory.word = search.value;
+      memory.top = list.scrollTop;
+      const again = () => allSkills(only, back, memory);
+      if (item.opens === "task") CHAT.create({kind: item.kind, text: "Use the skill " + item.name + "." + (words ? " " + words : ""), note: t("dock.task.note"), back: again});
+      else DOCK.start(item.name, words || item.words, again);
     };
     const row = (item) => {
       const words = item.hint ? h("input", {type: "text", class: "code", maxlength: 2000, placeholder: item.hint, "aria-label": item.hint}) : null;
+      if (words) {
+        words.value = memory.typed[item.label] || "";
+        words.addEventListener("input", () => { memory.typed[item.label] = words.value; });
+      }
       const go = item.href ? h("a", {class: "act", href: item.href, target: "_blank", rel: "noopener noreferrer"}, t("dock.open")) : item.opens === "reply" ? h("span", {class: "tag", title: t("dock.intask.hint")}, t("dock.intask")) : h("button", {type: "button", class: "act"}, t("dock.start"));
       if (go.tagName === "BUTTON") go.addEventListener("click", () => start(item, words ? words.value : ""));
       return h("div", {class: "dock-skill"}, h("div", {class: "dock-about"}, h("b", null, item.label), item.costly ? h("span", {class: "tag hot"}, t("dock.costly")) : null, h("p", {class: "sub"}, item.about), words), go);
@@ -69,7 +87,7 @@ const DOCK = (function () {
     const extra = [  // two that are not a skill of their own
       {name: "book", label: t("dock.book"), about: t("dock.book.about"), href: BOOK, opens: "link", place: ["ask"], group: "harness", order: 2},
       {name: "harness-rookie-wondering", label: t("dock.kbwhy"), about: t("dock.kbwhy.about"), words: "Topic 16: the knowledge base from code", opens: "chat", place: ["kb"], group: "kb", order: 1, step: "start"}];
-    ask("list", {}).then((data) => { found = [...data.skills, ...extra].sort((one, two) => one.order - two.order); paint(); }, (error) => list.replaceChildren(h("p", {class: "bad"}, error.message || String(error))));
+    ask("list", {}).then((data) => { found = [...data.skills, ...extra].sort((one, two) => one.order - two.order); paint(); list.scrollTop = memory.top; }, (error) => list.replaceChildren(h("p", {class: "bad"}, error.message || String(error))));
   }
 
   // The knowledge base window: a page over the page, read only; a button with "chat" in it opens a chat (kbview.py, core/kbstatus.py).
@@ -93,7 +111,7 @@ const DOCK = (function () {
     }
     const nextButton = () => {
       const go = h("button", {type: "button", class: "act hot"}, t("dock.kb.next"));
-      go.addEventListener("click", () => { gone = true; view.close(); start("harness-rookie-new-knowledgebase", ""); });
+      go.addEventListener("click", () => { gone = true; view.close(); start("harness-rookie-new-knowledgebase", "", kbWindow); });
       return go;
     };
     function overview(found) {
@@ -103,7 +121,7 @@ const DOCK = (function () {
     function domains(found) {
       if (!found.domains.length) { stage.replaceChildren(h("p", {class: "sub"}, t("dock.kb.nodomains")), nextButton()); return; }
       const more = h("button", {type: "button", class: "first-link"}, t("dock.skills.kb"));
-      more.addEventListener("click", () => { gone = true; view.close(); allSkills("kb"); });
+      more.addEventListener("click", () => { gone = true; view.close(); allSkills("kb", kbWindow); });
       stage.replaceChildren(h("div", {class: "scroll"}, h("table", {class: "md"}, h("thead", null, h("tr", null, ["domain", "state", "left", "requests"].map((key) => h("th", null, t("dock.kb.col." + key))))),
         h("tbody", null, found.domains.map((item) => h("tr", null, h("td", null, item.domain), h("td", null, t(item.done ? "dock.kb.state.done" : item.task ? "dock.kb.state.task" : "dock.kb.state.open")), h("td", null, item.to_learn === undefined ? "-" : String(item.to_learn)), h("td", null, String(item.requests_open || 0))))))), more);
     }
@@ -139,16 +157,17 @@ const DOCK = (function () {
     const send = h("button", {type: "button", class: "act hot"}, t("dock.ask"));
     const deep = h("button", {type: "button", class: "act"}, t("dock.deep"));
     const first = h("button", {type: "button", class: "act"}, t("dock.first"));
-    const askIt = () => { panel.hidden = true; start("harness-rookie-wondering", box.value); };
+    const showPanel = () => { panel.hidden = false; box.focus(); };
+    const askIt = () => { panel.hidden = true; start("harness-rookie-wondering", box.value, showPanel); };
     send.addEventListener("click", askIt);
     box.addEventListener("keydown", (event) => { if (event.key === "Enter") askIt(); });
-    deep.addEventListener("click", () => { panel.hidden = true; start("harness-rookie-wondering", ""); });
-    first.addEventListener("click", () => { panel.hidden = true; start("harness-rookie-quick-start", ""); });
+    deep.addEventListener("click", () => { panel.hidden = true; start("harness-rookie-wondering", "", showPanel); });
+    first.addEventListener("click", () => { panel.hidden = true; start("harness-rookie-quick-start", "", showPanel); });
     const every = h("button", {type: "button", class: "first-link"}, t("dock.skills"));
-    every.addEventListener("click", () => { panel.hidden = true; allSkills(""); });
+    every.addEventListener("click", () => { panel.hidden = true; allSkills("", showPanel); });
     panel.append(h("h3", null, t("dock.help")), h("div", {class: "dock-line"}, box, send), h("div", {class: "dock-line"}, deep, first), every);
     const button = h("button", {type: "button", class: "dock-btn dock-ask", "aria-label": t("dock.help"), title: t("dock.help")}, "?");
-    button.addEventListener("click", () => { panel.hidden = !panel.hidden; if (!panel.hidden) box.focus(); });
+    button.addEventListener("click", () => { if (panel.hidden) showPanel(); else panel.hidden = true; });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape") panel.hidden = true; });
     const brain = h("button", {type: "button", class: "dock-btn dock-brain", "aria-label": t("dock.kb"), title: t("dock.kb")}, "\u25c9");
     brain.addEventListener("click", kbWindow);

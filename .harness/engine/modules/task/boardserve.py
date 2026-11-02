@@ -56,6 +56,8 @@ from urllib.request import Request, urlopen
 from core import config, messages, registry, state, tasks, user
 from core.paths import board_serve_file, board_serve_port, utc_now
 
+from core import setup as core_setup
+
 from . import chatrounds
 from . import taskrun
 from . import wallpaper
@@ -169,6 +171,7 @@ class Board:
     def __init__(self, root: Path, everything: bool, port: int, actions: List[str], link: Optional[vslink.VsLink] = None, refresh: int = REFRESH) -> None:
         self.root = root
         self.runner = taskrun.Runner(root)
+        self.short_missing = False
         self.refresh = refresh
         self.link = link or vslink.VsLink(root, enabled=False)  # a board made without a link (the tests) has none
         self.everything = everything
@@ -539,6 +542,30 @@ class Board:
             out["recorded"] = False
         return out
 
+    def setup(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Get ready (`core/setup.py`). `step`: state, probe or act. When the short command appears while VS Code is open, the agent's terminals do not have it yet:
+        the Enter screen waits until VS Code was closed and came back."""
+        step = str(data.get("step", ""))
+        if step == "probe":
+            return core_setup.repositories(data.get("repos_root"))
+        if step == "act":
+            result = core_setup.finish(self.root, data)
+            self.language_stamp = []
+            self.sync_language()
+            return result
+        if step != "state":
+            raise CommandError(say("serve.refused.request"))
+        found = core_setup.status(self.root)
+        linked = bool(self.link.status().get("ready"))
+        if not found["short"]["found"]:
+            self.short_missing = True
+        elif self.short_missing:
+            self.short_missing = False
+            self.ready.reopen = linked
+        if self.ready.reopen and not linked:
+            self.ready.reopen = False
+        return dict(found, reopen=self.ready.reopen)
+
     def run(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """The Run button (`taskrun.py`). `op`: start, read, stop or latest (the run of a task under way, for a page opened meanwhile). A paired browser only."""
         op = str(data.get("op", ""))
@@ -884,6 +911,8 @@ def handler_for(board: Board) -> type:
                     return self.send(404, str(error).encode("utf-8"), "text/plain; charset=utf-8")
                 except Exception as error:  # noqa: BLE001 - show it instead of a dead page
                     return self.send(500, f"{type(error).__name__}: {error}".encode("utf-8"), "text/plain; charset=utf-8")
+            if path == "/setup":
+                return self.send(200, taskhtml.setup_page(board.serve_info({}, 0)).encode("utf-8"), "text/html; charset=utf-8")
             if path in ("/", "/board.html") or path.startswith("/task/"):
                 try:
                     page = board.page() if not path.startswith("/task/") else board.desk_page(path[len("/task/"):].strip("/"))
@@ -1008,6 +1037,18 @@ def handler_for(board: Board) -> type:
                         return self.answer(200, {"result": {"rounds": chatrounds.listing(board.root, row["task"])}})
                     found = chatrounds.one(board.root, row["task"], data.get("n"))
                     return self.answer(200, {"result": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/setup":  # Get ready: the paired browser only; it writes the person's own override files
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.setup(data)
+                    if str(data.get("step", "")) == "act":
+                        print(say("serve.did", action="setup", task="-"), flush=True)
+                    return self.answer(200, {"result": result})
+                except ValueError as error:  # a field not right: told on the page, nothing written
+                    return self.answer(409, {"error": str(error)})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
             if path == "/api/language":  # the language of the harness (settings panel): the paired browser only; it writes the person's own `user.override.json`

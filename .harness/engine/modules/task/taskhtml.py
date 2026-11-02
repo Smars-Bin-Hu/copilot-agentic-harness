@@ -36,7 +36,7 @@ from core.paths import cli_command
 
 WEB = Path(__file__).resolve().parent / "web"
 MARKS = re.compile("|".join(re.escape(mark) for mark in ("<!--REFRESH-->", "<!--TITLE-->", "<!--NOSCRIPT-->", "/*THEME*/", "/*CSS*/", "<!--DATA-->", "/*JS*/")))
-TEXT_PREFIXES = ("report.", "board.", "insight.", "unit.", "task.kind.", "task.tier.", "task.waiting.", "desk.", "stage.")
+TEXT_PREFIXES = ("report.", "board.", "insight.", "unit.", "task.kind.", "task.tier.", "task.waiting.", "desk.", "stage.", "setup.")
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -122,6 +122,11 @@ DESK_STYLES = ["page.css", "diffview.css", "highlight.css"]
 
 # A saved copy opens from a disk, away from the board: it may run its own script and nothing else, and ask the network for nothing.
 SNAPSHOT_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+
+
+def setup_page(serve: Dict[str, Any]) -> str:
+    """Get ready, as the board server sends it. It has no Enter screen: it is where a new copy goes from there."""
+    return build("setup.html", ["common.js", "serve.js", "setup.js"], say("setup.title"), {"serve": serve}, 0, ["page.css", "setup.css"])
 
 
 def desk_page(desk: Dict[str, Any], serve: Optional[Dict[str, Any]] = None) -> str:

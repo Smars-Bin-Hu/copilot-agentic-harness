@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core import config, targets, tasks
+from core import config, shortcmd, targets, tasks
 
 DOCTOR_TIMEOUT = 90.0  # seconds the child `doctor` may take (a stalled `code` command inside it has its own 25 s)
 RETRY_FAILED = 20.0  # a doctor that failed or found errors is run again no sooner than this
@@ -53,7 +53,7 @@ def run_doctor(root: Path, timeout: float = DOCTOR_TIMEOUT) -> Dict[str, Any]:
     """`doctor` in a child process: `{errors, first, failed}`. `failed`: why it could not be run or read (empty when it ran). Never raises."""
     command = [sys.executable, str(root / ".harness" / "engine" / "cli.py"), "doctor"]
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
-    env = dict(os.environ, PYTHONIOENCODING="utf-8")
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PATH=shortcmd.fresh_path())  # what a new terminal sees: the person may have added the short command after the board started
     try:
         done = subprocess.run(command, cwd=str(root), capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
@@ -70,6 +70,7 @@ def run_doctor(root: Path, timeout: float = DOCTOR_TIMEOUT) -> Dict[str, Any]:
 
 class Ready:
     def __init__(self, root: Path, link: Any, doctor: Optional[Callable[[Path], Dict[str, Any]]] = None, clock: Callable[[], float] = time.monotonic) -> None:
+        self.reopen = False  # the short command is new: VS Code must be closed and opened again before its terminals have it
         self.root = root
         self.link = link
         self.doctor = doctor or run_doctor
@@ -172,7 +173,7 @@ class Ready:
             checks.append(line)
             return line
 
-        add("setup", True, lambda: {"state": "ok", "why": "ok"} if setup_done(self.root) else {"state": "fail", "why": "new"})
+        add("setup", True, lambda: {"state": "fail", "why": "new"} if not setup_done(self.root) else {"state": "wait", "why": "reopen"} if self.reopen else {"state": "ok", "why": "ok"})
         vscode = add("vscode", True, self.vscode)
         add("copilot", True, lambda: self.copilot(vscode))
         add("doctor", True, self.doctor_line)

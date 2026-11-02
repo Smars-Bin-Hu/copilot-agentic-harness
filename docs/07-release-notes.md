@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.57 (2026-11-01)
+
+### Added
+
+- **Get ready** (`/setup`): the board shows the one command for `harness`, sees by itself when it works, and asks for your name, language and code repositories. No agent runs. If VS Code was open, the Enter screen waits until you reopen it.
+
 ## 1.6.56 (2026-11-01)
 
 ### Added

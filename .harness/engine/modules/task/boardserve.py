@@ -575,6 +575,8 @@ class Board:
                 self.language_stamp = []
                 self.sync_language()
             return dict(found, stamp=core_setup.stamp(self.root))
+        if step == "folders":
+            return setupjob.browse(data.get("path"), str(data.get("kind")) == "file")
         if step == "pick":
             return {"path": wallpaper.pick(say("setup.pick.prompt"), file=str(data.get("kind")) == "file").rstrip("/\\") or ""}
         if step == "refuse":

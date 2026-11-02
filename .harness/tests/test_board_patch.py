@@ -18,7 +18,7 @@ import support  # noqa: F401 - the engine on sys.path, HARNESS_VSCODE_CLI=off
 from support import HarnessTestCase
 
 from core import config, copilot_events, logs, messages, redact
-from modules.task import boardserve, chatlive, chatsend, taskhtml, tasktrace
+from modules.task import boardserve, chatlive, chatsend, setupjob, taskhtml, tasktrace
 from modules.task import task as task_ops
 
 ENGINE = Path(__file__).resolve().parents[1] / "engine"
@@ -577,6 +577,22 @@ class WalkThroughTests(unittest.TestCase):
         self.assertIn('DOCK.start("harness-my-task", text, null, row.name)', serve)
         self.assertIn('body: "/harness-my-task " + text', serve)
         self.assertIn('kind: "answer", lang: "", note: "", body: data.result.message', (WEB / "desk.js").read_text(encoding="utf-8"))
+
+    def test_browse_lists_folders_with_no_new_program_and_says_what_it_cannot_read(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            folder = Path(name)
+            (folder / "b").mkdir()
+            (folder / "A").mkdir()
+            (folder / ".hidden").mkdir()
+            (folder / "kb.ZIP").write_text("x", encoding="utf-8")
+            (folder / "note.txt").write_text("x", encoding="utf-8")
+            with mock.patch.object(subprocess, "run", side_effect=AssertionError("no program may start")):
+                self.assertEqual((setupjob.browse(name)["folders"], setupjob.browse(name)["zips"]), (["A", "b"], []))
+                self.assertEqual(setupjob.browse(name, True)["zips"], ["kb.ZIP"])
+            self.assertTrue(setupjob.browse(str(folder / "gone"))["error"])
+            self.assertTrue(setupjob.browse("relative/path")["error"])
+            with mock.patch.object(setupjob, "MAX_LISTED", 1):
+                self.assertTrue(setupjob.browse(name)["cut"])
 
     def test_a_narrow_window_keeps_things_on_the_page(self) -> None:
         desk = (WEB / "desk.css").read_text(encoding="utf-8")

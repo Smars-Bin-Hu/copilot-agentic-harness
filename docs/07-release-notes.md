@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.90 (2026-11-02)
+
+### Changed
+
+- **Browse in Get ready opens a picker on the page.** The board reads one folder at a time and starts no program, which helps on a computer that starts programs slowly. **Use the system window** stays as a second way, and now shows its error.
+
 ## 1.6.89 (2026-11-02)
 
 ### Added

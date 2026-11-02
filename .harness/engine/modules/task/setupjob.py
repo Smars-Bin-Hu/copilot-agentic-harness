@@ -5,7 +5,12 @@ The knowledge base is written here because a person chose it on the page, as `co
 
 from __future__ import annotations
 
+import ctypes
+import itertools
+import os
 import shutil
+import string
+import sys
 import threading
 import time
 from pathlib import Path
@@ -16,6 +21,7 @@ from core import company, messages, paths, setup, targets
 from . import kbsetup, ready
 
 PLACEHOLDER = ("README.md",)  # what `knowledge-base/` ships with
+MAX_LISTED = 2000  # entries of one folder in the picker
 LINE = 1200  # what a line on the page holds; doctor may have several errors
 
 
@@ -186,6 +192,39 @@ def probe_package(root: Path, raw: Any) -> Dict[str, Any]:
     except Exception as error:  # noqa: BLE001 - told beside the field
         return {"ok": False, "why": str(error)[:300]}
     return {"ok": True, "why": "", "version": found.get("version", ""), "new": found.get("new", 0), "changed": found.get("changed", 0), "removed": found.get("removed", 0), "local": found.get("changed_here_count", 0), "prefix": found.get("skill_prefix", "")}
+
+
+def drives() -> List[str]:
+    """The drives of Windows from the system's own list: looking at each one would wait on a network drive that is gone. Elsewhere, none."""
+    if sys.platform != "win32":
+        return []
+    bits = ctypes.windll.kernel32.GetLogicalDrives()  # type: ignore[attr-defined]
+    return [f"{letter}:\\" for index, letter in enumerate(string.ascii_uppercase) if bits & (1 << index)]
+
+
+def browse(raw: Any, zips: bool = False) -> Dict[str, Any]:
+    """One folder for the picker on the page: its folders and, with `zips`, its zip files. No new process starts: on a work computer that is what takes the time.
+    An empty path is the person's home. A folder that cannot be read says so, and the page can still go up."""
+    value = setup.clean_path(raw)
+    path = Path(value) if value else Path.home()
+    found: Dict[str, Any] = {"path": str(path), "parent": str(path.parent) if path.parent != path else "", "drives": drives(), "folders": [], "zips": [], "cut": False, "error": ""}
+    if not path.is_absolute():
+        return {**found, "parent": "", "error": say("setup.repos.absolute")}
+    try:
+        with os.scandir(path) as items:
+            for item in itertools.islice(items, MAX_LISTED + 1):
+                if item.name.startswith("."):
+                    continue
+                if item.is_dir():
+                    found["folders"].append(item.name)
+                elif zips and item.name.lower().endswith(".zip"):
+                    found["zips"].append(item.name)
+            found["cut"] = next(items, None) is not None
+    except OSError as error:
+        return {**found, "folders": [], "zips": [], "error": type(error).__name__}
+    found["folders"].sort(key=str.casefold)
+    found["zips"].sort(key=str.casefold)
+    return found
 
 
 def probe_folder(root: Path, raw: Any) -> Dict[str, Any]:

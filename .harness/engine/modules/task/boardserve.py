@@ -473,7 +473,8 @@ class Board:
         if "close" not in self.actions:
             raise CommandError(say("serve.action.off", action="close"))
         self.idle("close", name)
-        result = task_ops.close(self.root, name, reason.strip()[:500] or say("serve.close.reason"), check_todo=False)
+        words = reason.strip()[:500]
+        result = task_ops.close(self.root, name, words or say("serve.close.reason"), check_todo=False, todo_note=words or say("serve.close.reason"))
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
@@ -1174,6 +1175,8 @@ def handler_for(board: Board) -> type:
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
+                    if data.get("step") == "steps":  # the steps of TODO.md the close dialog lists
+                        return self.answer(200, {"result": {"left": [text[:200] for text in task_ops.todo_left(board.root, task_ops.resolve(board.root, str(data.get("task", ""))))[:30]]}})
                     return self.answer(200, {"result": board.close(str(data.get("task", "")), str(data.get("reason", "")))})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                     return self.answer(409, {"error": str(error)})

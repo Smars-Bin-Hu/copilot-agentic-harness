@@ -572,6 +572,12 @@ class WalkThroughTests(unittest.TestCase):
         self.assertIn("chat: desk.chat, ask: desk.ask", (WEB / "desk.js").read_text(encoding="utf-8"))
         self.assertIn("link.hidden = !data || !data.bound;", (WEB / "live.js").read_text(encoding="utf-8"))
 
+    def test_close_with_open_steps_goes_to_the_agent_and_results_are_sent(self) -> None:
+        serve = (WEB / "serve.js").read_text(encoding="utf-8")
+        self.assertIn('DOCK.start("harness-my-task", text, null, row.name)', serve)
+        self.assertIn('body: "/harness-my-task " + text', serve)
+        self.assertIn('kind: "answer", lang: "", note: "", body: data.result.message', (WEB / "desk.js").read_text(encoding="utf-8"))
+
     def test_a_narrow_window_keeps_things_on_the_page(self) -> None:
         desk = (WEB / "desk.css").read_text(encoding="utf-8")
         self.assertIn(".rv-pop{right:auto;left:0}", desk)

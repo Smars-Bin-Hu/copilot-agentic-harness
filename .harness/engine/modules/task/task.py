@@ -316,9 +316,9 @@ def todo_left(root: Path, task: str) -> List[str]:
     return [step["text"] for step in autorun.steps_of(root, task) if not step["done"]]
 
 
-def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "", check_todo: bool = True) -> Dict[str, Any]:
+def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "", check_todo: bool = True, todo_note: str = "") -> Dict[str, Any]:
     """Close the task. Steps of TODO.md not ticked stop it (`check_todo`) unless `todo_open` says why they stay: tick what is done, or say why not.
-    The person closing on the board page decides for themselves: the page shows how many are left, and passes `check_todo=False`."""
+    The person closing on the board page decides for themselves: the page shows how many are left, and passes `check_todo=False`; `todo_note` keeps their words in TODO.md."""
     task = resolve(root, raw_task)
     left = todo_left(root, task)
     if check_todo and left and not todo_open.strip():
@@ -329,6 +329,9 @@ def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "",
             raise CommandError(say("task.promote.partial.open", task=task))
         data["status"] = "closed"
         note(data, "close", reason.strip() + (f" ({len(left)} TODO step(s) not ticked: {todo_open.strip()})" if left else ""))
+        if left and todo_note.strip():
+            with open(tasks.task_dir(root, task) / tasks.TODO_FILE, "a", encoding="utf-8") as handle:
+                handle.write("\n> " + say("task.close.note", count=len(left), words=" ".join(todo_note.split())) + "\n")
         surface, session_id = data.get("surface", "vscode"), data["session_id"]
     released = False
     if state_path(root, surface, session_id).exists():

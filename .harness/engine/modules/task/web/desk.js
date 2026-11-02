@@ -708,7 +708,10 @@
       .then((images) => SERVE.post("/api/inbox", {task: desk.name, env, text: form.text, ran: form.ran, images}))
       .then((data) => {
         form.images.forEach((item) => URL.revokeObjectURL(item.url));
-        Object.assign(form, {text: "", ran: "", images: [], busy: false, gave: data.result});
+        Object.assign(form, {text: "", ran: "", images: []});
+        if (!(desk.chat && desk.chat.bound)) return Object.assign(form, {busy: false, gave: data.result, told: false});
+        return SERVE.post("/api/send", {task: desk.name, kind: "answer", lang: "", note: "", body: data.result.message, step: "act"})  // not sent: the saved results stay, and the message is there to copy
+          .then(() => Object.assign(form, {busy: false, gave: data.result, told: true}), () => Object.assign(form, {busy: false, gave: data.result, told: false}));
       }, (error) => { form.busy = false; form.error = error.message; })
       .then(() => draw(true));
   }
@@ -731,7 +734,7 @@
     pick.addEventListener("change", () => addImages([...pick.files]));
     const chooser = h("button", {type: "button", class: "act"}, t("desk.inbox.pick"));
     chooser.addEventListener("click", () => pick.click());
-    const save = h("button", {type: "button", class: "act hot", disabled: form.busy ? "" : null}, form.busy ? t("desk.inbox.saving") : t("desk.inbox.save"));
+    const save = h("button", {type: "button", class: "act hot", disabled: form.busy ? "" : null}, form.busy ? t("desk.inbox.saving") : t(desk.chat && desk.chat.bound ? "desk.inbox.send" : "desk.inbox.save"));
     save.addEventListener("click", () => saveResults(where.value.trim()));
     const thumbs = h("div", {class: "thumbs"}, form.images.map((item, index) => {
       const remove = h("button", {type: "button", class: "act", title: t("desk.inbox.remove")}, "×");
@@ -739,7 +742,7 @@
       return h("span", {class: "thumb"}, h("img", {src: item.url, alt: ""}), remove);
     }));
     return h("section", {class: "inbox"}, h("h3", null, t("desk.inbox.title")), h("p", {class: "hint"}, t("desk.inbox.hint")),
-      form.gave ? h("div", {class: "inbox-done"}, h("p", {class: "hint"}, t("desk.inbox.done", {folder: form.gave.folder})), promptLine(form.gave.message)) : null,
+      form.gave ? h("div", {class: "inbox-done"}, h("p", {class: "hint"}, t(form.told ? "desk.inbox.told" : "desk.inbox.done", {folder: form.gave.folder})), form.told ? null : promptLine(form.gave.message)) : null,
       field(t("desk.inbox.env"), where), field(t("desk.inbox.text"), text), field(t("desk.inbox.ran"), ran),
       h("div", {class: "inbox-pictures"}, chooser, pick, thumbs),
       form.error ? h("p", {class: "hint bad"}, form.error) : null, h("div", {class: "inbox-save"}, save));

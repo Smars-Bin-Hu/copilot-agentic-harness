@@ -160,6 +160,16 @@ class ServeTests(ServeCase):
         self.assertEqual(self.data()["status"], "closed")
         self.assertEqual([event["detail"] for event in self.data()["events"] if event["what"] == "close"], ["merged upstream"])
 
+    def test_the_words_of_a_close_with_open_steps_stay_in_todo_and_the_page_lists_the_steps(self) -> None:
+        todo = self.root / ".workspace" / "sandbox" / "tasks" / "job1" / "TODO.md"
+        todo.write_text("- [x] done\n- [ ] open one\n", encoding="utf-8")
+        cookie = self.pair()
+        self.assertEqual(self.request("POST", "/api/close", {"task": "job1", "step": "steps"}, cookie=cookie)[1]["result"]["left"], ["open one"])
+        self.assertEqual(self.data()["status"], "open")
+        self.assertEqual(self.request("POST", "/api/close", {"task": "job1", "reason": "not needed"}, cookie=cookie)[0], 200)
+        self.assertIn("not needed", todo.read_text(encoding="utf-8").splitlines()[-1])
+        self.assertIn("- [ ] open one", todo.read_text(encoding="utf-8"))
+
     def test_a_close_with_no_reason_keeps_the_pages_own_words(self) -> None:
         cookie = self.pair()
         self.assertEqual(self.request("POST", "/api/close", {"task": "job1"}, cookie=cookie)[0], 200)

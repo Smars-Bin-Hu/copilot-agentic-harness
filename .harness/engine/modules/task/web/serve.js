@@ -166,18 +166,34 @@ const SERVE = (function () {
     if (!to.value.trim()) said.replaceChildren(h("p", {class: "sub"}, t("board.archive.need")));
   }
 
-  // Close a task: one confirm. It writes the report and lets the session go; the folder stays, and `task open` opens it again.
+  // Close a task. All steps ticked: one confirm. Steps left: what the person says goes to the agent, which ticks and notes them and closes the task; or the board closes it now and keeps the words in TODO.md.
   function close(row) {
     const said = h("div", {class: "bad"});
-    const reason = h("input", {type: "text", class: "code", maxlength: 500, autocomplete: "off", placeholder: t("board.close.reason.ph")});
-    const go = h("button", {class: "act hot", type: "button"}, t("board.close.go"));
+    const steps = h("ul", {class: "sub"});
+    const go = h("button", {class: "act hot", type: "button"}, t(row.todo_left ? "board.close.direct" : "board.close.go"));
     const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
-    const view = dialog([h("h2", null, t("board.close.title", {name: row.name})), h("p", null, t("board.close.warn")), row.state === "quiet" ? h("p", {class: "bad"}, t("board.close.quiet")) : null, row.todo_left ? h("p", {class: "bad"}, t("board.close.todo", {count: row.todo_left})) : null, row.result_missing ? h("p", {class: "bad"}, t("board.close.result", {file: row.result_missing})) : null,
-      h("label", {class: "sub"}, t("board.close.reason")), reason, h("div", {class: "row"}, go, no), said]);
+    const words = row.todo_left ? h("textarea", {rows: 3, class: "send-body", maxlength: 500, placeholder: t("board.close.reason.ph")}) : null;
+    const canTalk = Boolean(row.chat && row.chat.bound) || chatNew(row);
+    const tell = row.todo_left ? h("button", {class: "act hot", type: "button", disabled: "disabled", title: canTalk ? "" : t("board.close.notalk")}, t("board.close.tell")) : null;
+    if (tell) go.classList.remove("hot");
+    const view = dialog([h("h2", null, t("board.close.title", {name: row.name})), h("p", null, t("board.close.warn")), row.state === "quiet" ? h("p", {class: "bad"}, t("board.close.quiet")) : null, row.result_missing ? h("p", {class: "bad"}, t("board.close.result", {file: row.result_missing})) : null,
+      row.todo_left ? [h("p", {class: "bad"}, t("board.close.todo", {count: row.todo_left})), steps, h("label", {class: "sub"}, t("board.close.reason")), words] : null,
+      h("div", {class: "row"}, tell, go, no), said]);
     no.addEventListener("click", view.close);
+    if (row.todo_left) {
+      post("/api/close", {task: row.name, step: "steps"}).then((data) => steps.replaceChildren(...data.result.left.map((text) => h("li", null, text))), () => {});
+      words.addEventListener("input", () => { tell.disabled = !canTalk || !words.value.trim(); });
+      tell.addEventListener("click", () => {
+        const text = t("board.close.words", {task: row.name, words: words.value.trim().replace(/\s+/g, " ")});
+        if (!row.chat.bound) { view.close(); return DOCK.start("harness-my-task", text, null, row.name); }
+        tell.disabled = true;
+        post("/api/send", {task: row.name, kind: "answer", lang: "", note: "", body: "/harness-my-task " + text, step: "act"}).then(() => { view.close(); done(); },
+          (error) => { said.replaceChildren(...reasons(error.message)); tell.disabled = false; });
+      });
+    }
     go.addEventListener("click", () => {
       go.disabled = true;
-      post("/api/close", {task: row.name, reason: reason.value.trim()}).then(() => { view.close(); done(); },
+      post("/api/close", {task: row.name, reason: words ? words.value.trim() : ""}).then(() => { view.close(); done(); },
         (error) => { said.replaceChildren(...reasons(error.message)); go.disabled = false; });
     });
   }

@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.88 (2026-11-02)
+
+### Changed
+
+- **Close with open steps goes through the agent.** The dialog lists the steps that are not ticked. Say what happened to them, and **Send to the agent and close** has the agent tick what is done, note what is not, and close the task. **Close now** closes it from the board and keeps your words in `TODO.md`. A task with every step ticked closes with one click and no reason.
+- **Give the results sends them too.** With a chat linked, one button saves the results and tells the agent. With no chat, the results are saved and the message is there to copy.
+
 ## 1.6.87 (2026-11-02)
 
 ### Changed

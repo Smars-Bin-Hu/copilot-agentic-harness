@@ -636,7 +636,7 @@ class Board:
 
     def click_model(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """The model of a chat a click starts: the one the person chose for its task, else Copilot Fusion unless `board.one_click_fusion` in the policy `task` is false."""
-        chosen = chatsend.model_of(self.target(data)[1]) if data.get("task") else None
+        chosen = chatsend.model_of(tasks.read(self.root, task_ops.resolve(self.root, str(data["task"]))) or {}) if data.get("task") else None
         if chosen:
             return chosen
         wanted = (config.policy_or_empty(self.root, "task").get("board") or {}).get("one_click_fusion", True)

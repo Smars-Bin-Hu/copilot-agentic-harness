@@ -118,7 +118,7 @@ class DraftTests(DraftCase):
         self.assertIsNone(chatsend.model_of(self.data()))
         self.assertEqual(chatsend.model_of({"chat": {"model": {"id": "m", "config": {"thinkingLevel": "low"}}}}), {"id": "m", "config": {"thinkingLevel": "low"}})
         self.assertEqual(chatsend.model_of({"chat": {"model": {"id": "m"}}}), {"id": "m"})
-        self.assertEqual(ahp.models_of(ROOT_STATE)[0], {"id": "claude-haiku-5.5", "name": "Claude Haiku 5.5", "price": "low", "thinking": {"levels": ["low", "medium"], "default": "medium"}, "context": None})
+        self.assertEqual(ahp.models_of(ROOT_STATE)[0], {"id": "claude-haiku-5.5", "name": "Claude Haiku 5.5", "price": "low", "thinking": {"levels": ["low", "medium"], "default": "medium", "key": "thinkingLevel", "labels": {"low": "low", "medium": "medium"}}, "context": None})
         self.assertEqual([item["id"] for item in ahp.models_of(ROOT_STATE)], ["claude-haiku-5.5", "claude-haiku-4.5"])  # only Copilot's, only those the policy enables
 
 

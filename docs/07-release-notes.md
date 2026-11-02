@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.91 (2026-11-02)
+
+### Added
+
+- **Copilot Fusion on the board.** Copilot Fusion is now in the model lists of New task and Task settings, with its levels Standard, High and Max in place of Thinking. Copilot then picks the model for each request. A person who picks a model keeps it.
+
+### Changed
+
+- **One-click actions run on Fusion at Standard.** A skill started from the board, Ask why and **go on in a new chat** use it when Copilot lists it. A task with its own model keeps that model. The dialog says which model will run. Set `board.one_click_fusion` to `false` in `task.override.json` to leave the choice to VS Code.
+
 ## 1.6.90 (2026-11-02)
 
 ### Changed

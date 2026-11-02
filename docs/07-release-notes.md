@@ -19,26 +19,30 @@ To see which version you have: `harness --version`.
 ### Changed
 
 - **A second `harness task board` pairs the browser.** The running board opens your default browser with a new code, so you need not find its window. Another browser still needs the link from Enter in that window.
+- **A chat on Copilot Fusion says so.** The task page and the board show `Copilot Fusion · <model>`, with the model the latest request ran on. Task settings keep Copilot Fusion and its level as the choice.
+- **A map leaves no `__pycache__` in the knowledge base**, and one that is there no longer stops **Pack for colleagues**. Real uncommitted changes get two buttons: **See the changes** and **Commit them**.
+- **A company skill a package refuses says why**, skill by skill, with **Fix it in a chat**.
+- **Get ready does not take a knowledge base as a code repository.**
 
 ## 1.6.94 (2026-11-02)
 
-### Changed
+### Added
 
 - **Long commands run in the background, and show it.** The `>_` button shows how many run, with the window shut too, and marks how the last one ended. A tab shows the time, and a bar when the command counts its steps. A second click finds the run that is going on. A quiet run is reported after 5 minutes and is never stopped for you.
 - **Rebuild map** in the Knowledge base window runs in the background, with a bar by repository. It costs no premium request.
 - **Health shows the audit of the toolkit**, with a button that runs it in a chat.
 - **Restart board** in the settings loads new code and texts, and this browser stays paired. A second double-click on Start Harness only opens the running board.
+- **The Terminal window can be resized** from its bottom left corner. The input line shows the folder name, and its tip the whole path.
+
+### Changed
+
 - **The tab group Deliver is now Verify.**
-- **The Terminal window runs any command**, not only `harness`: pipes and `&&` too, in the shell of the Run button. It still takes no input, so `vim`, `ssh` and an approval do not work there, and each line has its own shell, so `export` does not last. Only a paired browser can use it, and each line is kept in `.harness/runtime/board-terminal.jsonl`. Set `board.terminal_any_command` to `false` in `task.override.json` to allow `harness` commands only.
+- **The Terminal window runs any command**, not only `harness`: pipes and `&&` too, in the shell of the Run button. It still takes no input, so `vim`, `ssh` and an approval do not work there, and each line has its own shell, so `export` does not last. Only a paired browser can use it, and each line is kept in `.harness/runtime/board-terminal.jsonl`. Set `board.terminal_any_command` to `false` in `task.override.json` to allow `harness` commands only. On Windows the shell is PowerShell, so write `;` in place of `&&` on Windows PowerShell 5.1.
 - **The Enter screen has a way on when `harness doctor` stops it:** **Open the setup** and **See all of it**. Before, there was nothing to press.
 - **A company skill that cannot be copied has a way on:** **Fix it in a chat**. The card says that a sync cannot fix it, and it stays on the Overview tab.
 - **On Get ready, Company content and Code standards follow the folder you chose**, also when it lacks them. A knowledge base already in place is no longer shown as an error. The folder picker opens the nearest folder of a path that is not there.
 - **A board button that used to copy a command now runs it in the Terminal window.** A saved page has no server, so it still copies.
 - **The 3D robot of the Enter screen has no outline.** On a dark page it has a lacquer shine instead, so it stands out from the page.
-- **A map leaves no `__pycache__` in the knowledge base**, and one that is there no longer stops **Pack for colleagues**. Real uncommitted changes get two buttons: **See the changes** and **Commit them**.
-- **A company skill a package refuses says why**, skill by skill, with **Fix it in a chat**.
-- **Get ready does not take a knowledge base as a code repository.**
-- **A chat on Copilot Fusion says so.** The task page and the board show `Copilot Fusion · <model>`, with the model the latest request ran on. Task settings keep Copilot Fusion and its level as the choice.
 - **Company Context beside Paired** replaces the green line of the board. Hold the pointer on it for all that your knowledge base has.
 - **"Quit VS Code and open it again" ends by itself on the Enter screen too.** The wait follows the link to VS Code. Before, it ended only on the setup page, and could stay until the board restarted.
 

@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.74 (2026-11-02)
+
+### Changed
+
+- **Everything you can ask for** marks the knowledge base skills that read a lot of code as **costly**: the guided build, Build and Audit the toolkit, learning a batch, writing up a domain, and translating.
+
 ## 1.6.73 (2026-11-02)
 
 ### Changed

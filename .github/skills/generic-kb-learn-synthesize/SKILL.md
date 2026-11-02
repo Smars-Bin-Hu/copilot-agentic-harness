@@ -7,6 +7,7 @@ specificTo: generic
 board-opens: reply
 board-place: kb
 board-label: 'Write up the domain'
+board-cost: high
 board-group: kb
 board-order: 9
 board-step: learn

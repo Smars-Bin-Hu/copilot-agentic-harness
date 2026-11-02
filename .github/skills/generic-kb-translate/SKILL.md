@@ -8,6 +8,7 @@ board-opens: task
 board-place: kb
 board-kind: kb
 board-label: 'Translate cards'
+board-cost: high
 board-group: kb
 board-order: 13
 board-step: keep

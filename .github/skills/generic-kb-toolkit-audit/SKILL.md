@@ -8,6 +8,7 @@ board-opens: task
 board-place: kb
 board-kind: kb
 board-label: 'Audit the toolkit'
+board-cost: high
 board-group: kb
 board-order: 5
 board-step: toolkit

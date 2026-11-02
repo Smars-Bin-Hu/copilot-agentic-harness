@@ -7,6 +7,7 @@ specificTo: generic
 board-opens: reply
 board-place: kb
 board-label: 'Learn the next batch'
+board-cost: high
 board-group: kb
 board-order: 8
 board-step: learn

@@ -17,6 +17,8 @@ class BoardTests(unittest.TestCase):
         self.assertEqual(names["generic-kb-refresh"]["opens"], "task")
         self.assertEqual(names["generic-kb-refresh"]["kind"], "kb")
         self.assertTrue(names["generic-mapreduce"]["costly"])
+        self.assertTrue(names["generic-kb-learn-batch"]["costly"])
+        self.assertFalse(names["generic-kb-refresh"]["costly"])
         for name in ("harness-admin", "harness-vscode-updates"):
             self.assertNotIn(name, names)
 

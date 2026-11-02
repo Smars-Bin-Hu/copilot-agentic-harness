@@ -123,13 +123,15 @@ const DOCK = (function () {
   const COMPANY_LINES = 6;  // lines of the tip
   let drift = null;
   const CHANGES = {add: "dock.company.add", change: "dock.company.change", remove: "dock.company.remove"};
+  const CHAT_WORDS = 1800;  // under `skillsend.MAX_WORDS`, the limit of a one-click message
+  const stuckWord = (item) => plainWords(item.skill + ": " + item.why);
   const changeWord = (row) => t(CHANGES[row.change]) + " " + row.path;
   function showDrift(found) {
     drift = found && found.found && !found.in_sync ? found : null;
     const book = document.querySelector(".dock-book");
     if (!book) return;
     book.classList.toggle("dock-warn", Boolean(drift));
-    book.title = !drift ? t("dock.kb") : [t("dock.company.tip", {count: drift.total}), ...drift.changes.slice(0, COMPANY_LINES).map(changeWord), drift.problem].filter(Boolean).join("\n");
+    book.title = !drift ? t("dock.kb") : [drift.total ? t("dock.company.tip", {count: drift.total}) : t("dock.company.title.stuck"), ...drift.changes.slice(0, COMPANY_LINES).map(changeWord), ...drift.refused.slice(0, COMPANY_LINES).map(stuckWord), plainWords(drift.problem || "")].filter(Boolean).join("\n");
   }
   function watchCompany() {
     SERVE.post("/api/company", {}).then((data) => { showDrift(data.result); setTimeout(watchCompany, COMPANY_EVERY); }, () => setTimeout(watchCompany, UNPAIRED_EVERY));
@@ -143,11 +145,15 @@ const DOCK = (function () {
       go.disabled = true;
       SERVE.post("/api/company", {op: "sync"}).then((data) => { showDrift(data.result); driftCard(node); }, (error) => { go.disabled = false; said.textContent = error.message; });
     });
+    // What a sync cannot do needs a change in the knowledge base: a person or an agent writes it, so the way on is a chat.
+    const stuck = drift ? [...drift.refused.map(stuckWord), ...(drift.problem && !drift.fix ? [plainWords(drift.problem)] : [])] : [];
+    const chat = h("button", {type: "button", class: "act" + (drift && (drift.total || drift.fix) ? "" : " hot")}, t("dock.company.chat"));
+    chat.addEventListener("click", () => start("harness-my-task", t("dock.company.chat.words", {items: stuck.join(" ")}).slice(0, CHAT_WORDS)));
     node.hidden = !drift;
-    node.replaceChildren(...(!drift ? [] : [h("h3", null, t("dock.company.title")), h("p", {class: "sub"}, t("dock.company.hint")),
-      h("ul", null, drift.changes.map((row) => h("li", null, h("code", null, changeWord(row)))), drift.total > drift.changes.length ? h("li", null, t("dock.company.more", {count: drift.total - drift.changes.length})) : null,
-        drift.refused.map((item) => h("li", {class: "bad"}, item.skill + ": " + item.why))),
-      drift.problem ? h("p", {class: "bad"}, drift.problem) : "", drift.fix ? fix : "", drift.total ? go : "", said]));
+    node.replaceChildren(...(!drift ? [] : [h("h3", null, t(drift.total || drift.fix ? "dock.company.title" : "dock.company.title.stuck")), drift.fix ? "" : h("p", {class: "sub"}, t(drift.total ? "dock.company.hint" : "dock.company.hint.stuck")),
+      drift.total || drift.refused.length ? h("ul", null, drift.changes.map((row) => h("li", null, h("code", null, changeWord(row)))), drift.total > drift.changes.length ? h("li", null, t("dock.company.more", {count: drift.total - drift.changes.length})) : null,
+        drift.refused.map((item) => h("li", {class: "bad"}, stuckWord(item)))) : "",
+      drift.problem ? h("p", {class: "bad"}, plainWords(drift.problem)) : "", h("div", {class: "row kb-sync-go"}, drift.fix ? fix : "", drift.total ? go : "", stuck.length ? chat : ""), said]));
   }
   function kbWindow(tab) {
     const stage = h("div", {class: "dock-list kb-body"});
@@ -174,7 +180,7 @@ const DOCK = (function () {
         age.textContent = found.running ? t("dock.kb.updating") : found.age === null ? "" : ago(found.age);
         const seen = JSON.stringify(found.result);
         if (found.result && seen !== seenView) { seenView = seen; painted = () => paint(found.result); painted(); }
-        alarm.replaceChildren(found.error || "", ...(found.nomap ? [" ", nextButton("map")] : []));
+        alarm.replaceChildren(h("span", null, found.error || ""), ...(found.nomap ? [nextButton("map")] : []));
         alarm.hidden = !found.error || found.running;
         if (!found.result) stage.replaceChildren(...(found.running || !found.error ? [h("p", {class: "sub"}, t("dock.kb.working"))] : []));
         if (found.running) timer = setTimeout(() => load(op, paint, false, Math.min((wait || 150) * 2, 1200)), wait || 150);
@@ -308,6 +314,7 @@ const DOCK = (function () {
     function show(key) {
       clearTimeout(timer);
       current = key;
+      synced.classList.toggle("off", key !== "overview");  // the card asks for one thing: on the first tab, not over every view
       seenView = "";
       painted = null;
       tabs.forEach((tab) => tab.classList.toggle("on", tab.dataset.key === key));

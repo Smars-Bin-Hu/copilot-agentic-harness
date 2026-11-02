@@ -30,7 +30,6 @@ const TERM = (() => {
     ui.out.textContent = tab ? tab.text : "";
     ui.out.scrollTop = ui.out.scrollHeight;
     ui.stop.hidden = !(tab && tab.job);
-    ui.input.disabled = Boolean(tab && tab.job);
     ui.mark.textContent = (tab && tab.cwd ? shortPath(tab.cwd) + " " : "") + "$";
     ui.mark.title = (tab && tab.cwd) || "";
     save();
@@ -52,6 +51,7 @@ const TERM = (() => {
         tab.text += found.gone ? t("term.gone") + "\n" : found.code ? t("term.failed", {code: found.code}) + "\n" : "";
       } else setTimeout(() => follow(tab), POLL);
       paint();
+      if (found.done && tab === current() && memory.open && document.activeElement === document.body) ui.input.focus();  // Stop took the focus; the next line goes here
     }, (error) => { tab.job = ""; tab.text += (error.message || String(error)) + "\n"; paint(); });
   }
   function move(tab, to) {
@@ -87,10 +87,10 @@ const TERM = (() => {
     let back = 0;
     toggle.addEventListener("click", () => { memory.open = !memory.open; paint(); if (memory.open) input.focus(); });
     hide.addEventListener("click", () => { memory.open = false; paint(); });
-    add.addEventListener("click", () => { move(newTab(), ""); paint(); input.focus(); });
+    add.addEventListener("click", () => { move(newTab(), ""); input.value = ""; paint(); input.focus(); });
     stop.addEventListener("click", () => { const tab = current(); if (tab && tab.job) post({op: "stop", id: tab.job}).catch(() => {}); });
     input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && input.value.trim()) {
+      if (event.key === "Enter" && input.value.trim() && !(current() && current().job)) {
         said.push(input.value.trim()); back = 0;
         submit(current(), input.value.trim());
         input.value = "";

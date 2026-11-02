@@ -193,10 +193,10 @@ const SETUP = (function () {
     }
     function checkKb() {
       ask("probe", {kind: st.mode, path: kbPath.value}).then((found) => {
-        kbNote.className = "su-note" + (!found.ok ? " bad" : found.why ? "" : " good");
+        kbNote.className = "su-note" + (found.full ? "" : !found.ok ? " bad" : found.why ? "" : " good");  // a knowledge base in place is a choice to make, not a fault
         kbNote.textContent = !found.ok ? found.why : st.mode === "package" ? t("setup.kb.package.ok", {version: found.version, new: found.new, changed: found.changed, removed: found.removed}) + (found.local ? " " + t("setup.kb.package.local", {n: found.local}) : "") : found.why || t("setup.kb.folder.ok");
         st.full = Boolean(found.full);
-        paintParts(found.parts);
+        paintParts(st.mode === "folder" && kbPath.value.trim() ? found.parts || [] : null);
         paintReplace();
         if (found.prefix && !prefix.value) prefix.value = found.prefix;
         gate();
@@ -226,9 +226,10 @@ const SETUP = (function () {
     function paintStates() {
       if (!st.guide) return;
       const state = (node, need, text) => node.replaceChildren(h("span", {class: "su-dot " + (need ? "need" : "ok")}), text);
-      const has = (key) => st.parts && st.parts.some((item) => item.key === key && item.ok);  // a folder chosen just now counts before it is copied
-      state(companyState, needs("instructions") && !has("instructions"), t(needs("instructions") && !has("instructions") ? "setup.company.need" : "setup.company.ok"));
-      state(standardsState, needs("standards") && !has("standards"), t(needs("standards") && !has("standards") ? "setup.standards.need" : needs("standards") || !st.guide.declared.includes("standards") ? "setup.standards.ok" : "setup.standards.none"));
+      const has = (key) => st.parts.some((item) => item.key === key && item.ok);  // a folder chosen just now speaks for itself, before it is copied
+      const missing = (key) => (st.parts ? !has(key) : needs(key));
+      state(companyState, missing("instructions"), t(missing("instructions") ? "setup.company.need" : "setup.company.ok"));
+      state(standardsState, missing("standards"), t(missing("standards") ? "setup.standards.need" : st.parts || !st.guide.declared.includes("standards") ? "setup.standards.ok" : "setup.standards.none"));
     }
     function loadGuide() {
       return ask("guide").then((found) => { st.guide = found; paintStates(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message || error)); });

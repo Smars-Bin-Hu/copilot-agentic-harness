@@ -14,6 +14,7 @@ from support import GIT, HarnessTestCase, make_repo, make_root, run_git
 
 from core import company, reinstall, standards, targets
 from core.company import CompanyError
+from modules.task import setupjob
 
 SKILL = "---\nname: {name}\ndescription: 'Open a ticket in the tracker. Use when a task needs a ticket.'\ntype: workflow\nspecificTo: generic\n---\n\n# Ticket\n\nOpen one.\n"
 RULE = "### No select star\n\n- **Applies to**: `*.sql`\n- **Rule**: name the columns.\n"
@@ -356,6 +357,13 @@ class LayoutTests(unittest.TestCase):
             found = company.diff(self.kb)
         self.assertEqual(found["fix"], "bns")
         self.assertNotIn("harness company", found["problem"])
+
+
+class PickerTests(unittest.TestCase):
+    def test_a_path_that_is_not_there_opens_its_nearest_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            found = setupjob.browse(str(Path(folder) / "no" / "such" / "place"))
+        self.assertEqual((Path(found["path"]), found["error"]), (Path(folder), ""))
 
 
 if __name__ == "__main__":

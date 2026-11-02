@@ -206,6 +206,8 @@ def browse(raw: Any, zips: bool = False) -> Dict[str, Any]:
     An empty path is the person's home. A folder that cannot be read says so, and the page can still go up."""
     value = setup.clean_path(raw)
     path = Path(value) if value else Path.home()
+    while path.is_absolute() and path.parent != path and not path.exists():  # a typed path that is not there: its nearest folder, as a person would go up
+        path = path.parent
     found: Dict[str, Any] = {"path": str(path), "parent": str(path.parent) if path.parent != path else "", "drives": drives(), "folders": [], "zips": [], "cut": False, "error": ""}
     if not path.is_absolute():
         return {**found, "parent": "", "error": say("setup.repos.absolute")}

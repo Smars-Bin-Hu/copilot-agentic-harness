@@ -589,7 +589,8 @@ class WalkThroughTests(unittest.TestCase):
             with mock.patch.object(subprocess, "run", side_effect=AssertionError("no program may start")):
                 self.assertEqual((setupjob.browse(name)["folders"], setupjob.browse(name)["zips"]), (["A", "b"], []))
                 self.assertEqual(setupjob.browse(name, True)["zips"], ["kb.ZIP"])
-            self.assertTrue(setupjob.browse(str(folder / "gone"))["error"])
+            with mock.patch.object(setupjob.os, "scandir", side_effect=PermissionError):
+                self.assertTrue(setupjob.browse(name)["error"])
             self.assertTrue(setupjob.browse("relative/path")["error"])
             with mock.patch.object(setupjob, "MAX_LISTED", 1):
                 self.assertTrue(setupjob.browse(name)["cut"])

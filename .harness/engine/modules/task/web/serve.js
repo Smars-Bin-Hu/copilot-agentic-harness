@@ -106,7 +106,7 @@ const SERVE = (function () {
   function reasons(text) {
     const out = [];
     let list = null;
-    for (const line of String(text).split("\n")) {
+    for (const line of plainWords(text).split("\n")) {
       if (!line.trim()) continue;
       const item = line.match(/^\s*[-\u2013\u2022]\s+(.*)$/);
       if (item) {

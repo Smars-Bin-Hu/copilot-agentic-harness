@@ -15,6 +15,9 @@ To see which version you have: `harness --version`.
 ### Changed
 
 - **The Terminal window runs any command**, not only `harness`: pipes and `&&` too, in the shell of the Run button. It still takes no input, so `vim`, `ssh` and an approval do not work there, and each line has its own shell, so `export` does not last. Only a paired browser can use it, and each line is kept in `.harness/runtime/board-terminal.jsonl`. Set `board.terminal_any_command` to `false` in `task.override.json` to allow `harness` commands only.
+- **The Enter screen has a way on when `harness doctor` stops it:** **Open the setup** and **See all of it**. Before, there was nothing to press.
+- **A company skill that cannot be copied has a way on:** **Fix it in a chat**. The card says that a sync cannot fix it, and it stays on the Overview tab.
+- **On Get ready, Company content and Code standards follow the folder you chose**, also when it lacks them. A knowledge base already in place is no longer shown as an error. The folder picker opens the nearest folder of a path that is not there.
 - **A board button that used to copy a command now runs it in the Terminal window.** A saved page has no server, so it still copies.
 - **Company Context beside Paired** replaces the green line of the board. Hold the pointer on it for all that your knowledge base has.
 - **"Quit VS Code and open it again" ends by itself on the Enter screen too.** The wait follows the link to VS Code. Before, it ended only on the setup page, and could stay until the board restarted.

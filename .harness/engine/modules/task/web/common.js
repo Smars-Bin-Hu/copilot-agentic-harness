@@ -12,8 +12,10 @@ const isEnter = (event) => event.key === "Enter" && !event.isComposing && event.
 // A message by name with its {placeholders} filled in. An unknown name shows itself.
 function t(key, values) {
   const template = Object.prototype.hasOwnProperty.call(TEXT, key) ? TEXT[key] : key;
-  return template.replace(/\{(\w+)\}/g, (whole, name) => (values && name in values ? String(values[name]) : whole));
+  return template.replace(/`/g, "").replace(/\{(\w+)\}/g, (whole, name) => (values && name in values ? String(values[name]) : whole));  // the marks are for a terminal; what a person fills in stays as it is
 }
+
+const plainWords = (text) => String(text).replace(/`/g, "");  // words of the engine, written for a terminal
 
 // h("td", {class: "num", title: "x"}, child, "text", [more])
 function h(tag, attrs, ...children) {

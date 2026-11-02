@@ -329,7 +329,7 @@
   const slot = (i) => chk0.t0 && Date.now() - chk0.t0 >= FIRST + i * STEP;
   function build() { for (const id of ORDER) list.append(h("li", {"data-id": id}, h("i", {class: "ck"}), h("span", {class: "t"}), h("em"), h("p", {class: "m", hidden: "hidden"}))); }
   function lineView(c) {  // one check -> {state, tag, message, button}; the words are the page's, from the message table
-    const id = c.id, vals = {n: c.n === undefined ? "" : c.n, detail: c.detail || ""};
+    const id = c.id, vals = {n: c.n === undefined ? "" : c.n, detail: plainWords(c.detail || "")};
     let state = c.state, tag = "", message = "", button = false;
     if (state === "fail" && id === "vscode" && c.why === "none" && chk0.opened && Date.now() - chk0.opened < OPENED_FOR) state = "wait";
     if (c.state === "ok") tag = t("board.enter.d." + id + ".ok", vals);
@@ -339,7 +339,7 @@
     if (state === "wait" || state === "fail") {
       const key = id === "vscode" && state === "wait" && c.why === "none" ? "opened" : c.why;
       const named = "board.enter.m." + id + "." + key;
-      message = c.why === "error" ? t("board.enter.m.error", vals) : (TEXT[named] ? t(named, vals) : (c.detail || ""));
+      message = c.why === "error" ? t("board.enter.m.error", vals) : (TEXT[named] ? t(named, vals) : plainWords(c.detail || ""));
       button = id === "vscode" && Boolean(c.open);
     }
     if (state === "note" && (c.why === "error" || c.why === "problem")) message = c.why === "error" ? t("board.enter.m.error", vals) : t("board.enter.m.repos.problem", vals);
@@ -366,6 +366,13 @@
             const b = h("button", {type: "button", class: "en-open", "data-open": "1"}, t("board.enter.open"));
             p.append(h("br"), b);
             if (chk0.openError) p.append(h("br"), h("span", null, chk0.openError));
+          }
+          if (id === "doctor" && view.state === "fail") {  // this line stops the way in, so it holds the way on
+            const setup = h("button", {type: "button", class: "en-open"}, t("board.enter.doctor.setup"));
+            const all = h("button", {type: "button", class: "en-open"}, t("board.enter.doctor.all"));
+            setup.addEventListener("click", () => location.assign("/setup"));
+            all.addEventListener("click", () => TERM.run("harness doctor"));
+            p.append(h("br"), setup, " ", all);
           }
           p.title = view.message.length > 120 ? view.message : ""; p.dataset.k = key;
         }

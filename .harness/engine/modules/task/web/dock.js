@@ -115,6 +115,34 @@ const DOCK = (function () {
       setTimeout(watchStale, data.result.running ? 5000 : STALE_EVERY);
     }, () => setTimeout(watchStale, UNPAIRED_EVERY));
   }
+  // The company content against its copies in `.github/`: the book button turns yellow and moves, and the window says what a sync would change (core/company.py).
+  const COMPANY_EVERY = 120000;  // ms
+  const COMPANY_LINES = 6;  // lines of the tip
+  let drift = null;
+  const changeWord = (row) => t("dock.company." + row.change) + " " + row.path;
+  function showDrift(found) {
+    drift = found && found.found && !found.in_sync ? found : null;
+    const book = document.querySelector(".dock-book");
+    if (!book) return;
+    book.classList.toggle("dock-warn", Boolean(drift));
+    book.title = !drift ? t("dock.kb") : [t("dock.company.tip", {count: drift.total}), ...drift.changes.slice(0, COMPANY_LINES).map(changeWord), drift.problem].filter(Boolean).join("\n");
+  }
+  function watchCompany() {
+    SERVE.post("/api/company", {}).then((data) => { showDrift(data.result); setTimeout(watchCompany, COMPANY_EVERY); }, () => setTimeout(watchCompany, UNPAIRED_EVERY));
+  }
+  function driftCard(node) {
+    const said = h("p", {class: "bad"});
+    const go = h("button", {type: "button", class: "act hot"}, t("dock.company.go"));
+    go.addEventListener("click", () => {
+      go.disabled = true;
+      SERVE.post("/api/company", {op: "sync"}).then((data) => { showDrift(data.result); driftCard(node); }, (error) => { go.disabled = false; said.textContent = error.message; });
+    });
+    node.hidden = !drift;
+    node.replaceChildren(...(!drift ? [] : [h("h3", null, t("dock.company.title")), h("p", {class: "sub"}, t("dock.company.hint")),
+      h("ul", null, drift.changes.map((row) => h("li", null, h("code", null, changeWord(row)))), drift.total > drift.changes.length ? h("li", null, t("dock.company.more", {count: drift.total - drift.changes.length})) : null,
+        drift.refused.map((item) => h("li", {class: "bad"}, item.skill + ": " + item.why))),
+      drift.problem ? h("p", {class: "bad"}, drift.problem) : "", drift.total ? go : "", said]));
+  }
   function kbWindow(tab) {
     const stage = h("div", {class: "dock-list kb-body"});
     const no = h("button", {type: "button", class: "act"}, t("board.new.close"));
@@ -122,7 +150,9 @@ const DOCK = (function () {
     const again = h("button", {type: "button", class: "act"}, t("dock.kb.refresh"));
     const tabs = ["overview", "atlas", "domains", "lookup", "health"].map((key) => { const tab = h("button", {type: "button", class: "chip", "data-key": key}, t(key === "domains" ? "dock.kb.domains.tab" : "dock.kb." + key)); tab.addEventListener("click", () => show(key)); return tab; });
     const alarm = h("p", {class: "bad kb-alarm", hidden: ""});  // outside the stage: a drawn view stays as it is
-    const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "kb-bar"}, h("div", {class: "chips dock-tabs"}, tabs), age, again), alarm, stage, h("div", {class: "row"}, no)]);
+    const synced = h("section", {class: "kb-sync", hidden: ""});
+    driftCard(synced);
+    const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "kb-bar"}, h("div", {class: "chips dock-tabs"}, tabs), age, again), alarm, synced, stage, h("div", {class: "row"}, no)]);
     view.box.classList.add("dock-window", "kb-window");
     view.holds = () => false;  // it only reads: nothing here can be lost
     let timer = 0, current = "", seenView = "", word = "", searched = "", ticket = 0, extra = null, painted = null, detailTimer = 0;  // word, searched: what was typed in Look up, kept while the tab changes; ticket: the newest search
@@ -365,6 +395,7 @@ const DOCK = (function () {
     kb.append(h("span", {class: "dock-count", title: t("dock.kb.badge"), hidden: ""}));
     document.body.append(panel, button, kb, setup, home);
     watchStale();
+    watchCompany();
   }
 
   if (typeof DATA !== "undefined" && DATA.serve) build();

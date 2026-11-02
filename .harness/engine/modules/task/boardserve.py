@@ -56,7 +56,7 @@ from urllib.request import Request, urlopen
 from core import config, messages, registry, state, tasks, user
 from core.paths import board_serve_file, board_serve_port, utc_now
 
-from core import reinstall, setup as core_setup, shortcmd, skillboard
+from core import company, reinstall, setup as core_setup, shortcmd, skillboard
 
 from . import chatrounds
 from . import kbview
@@ -1135,6 +1135,15 @@ def handler_for(board: Board) -> type:
                     op = str(data.get("op", ""))
                     return self.answer(200, {"result": board.kb_view.near(data.get("query")) if op == "near" else board.kb_view.get(op, bool(data.get("fresh")))})
                 except (KeyError, ValueError) as error:
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/company":  # the company content against its copies (every 2 minutes), and the Sync button: the paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    if data.get("op") == "sync":
+                        company.sync(board.root, remove=True)
+                    return self.answer(200, {"result": company.diff(board.root)})
+                except (company.CompanyError, OSError) as error:
                     return self.answer(409, {"error": str(error)})
             if path == "/api/language":  # the language of the harness (settings panel): the paired browser only; it writes the person's own `user.override.json`
                 if not board.paired(self.token()):

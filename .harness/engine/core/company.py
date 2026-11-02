@@ -36,6 +36,7 @@ NOT_CONTENT = {".git", ".DS_Store", "Thumbs.db"}
 PLACEHOLDER = {"README.md", ".gitkeep"}  # what an empty knowledge base ships with
 BACKUP_DIR = "company-backup"
 SHOWN = 20
+DIFF_SHOWN = 200  # lines of `diff`; `total` has them all
 GIT_SECONDS = 60
 
 
@@ -118,7 +119,8 @@ def same(source: Path, target: Path) -> bool:
     return target.is_file() and source.read_bytes() == target.read_bytes()
 
 
-def sync(root: Path) -> Dict[str, Any]:
+def sync(root: Path, remove: bool = False) -> Dict[str, Any]:
+    """Copy the content to `.github/`. `remove`: a skill of the company's word that left the content goes too, into the backup folder (a person asked for this sync; a sync at the end of another command removes nothing)."""
     folder = targets.company_folder(root)
     if folder is None:
         return {"found": False, "next": say("company.sync.none")}
@@ -135,6 +137,13 @@ def sync(root: Path) -> Dict[str, Any]:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
         done.append(name)
+    if remove and plan["only_here"]:
+        backup = runtime_dir(root) / BACKUP_DIR / time.strftime("%Y%m%d-%H%M%S")
+        backup.mkdir(parents=True, exist_ok=True)
+        for name in plan["only_here"]:
+            shutil.move(str(root / SKILLS_DIR / name), str(backup / name))
+            done.append(f"{SKILLS_DIR}/{name}")
+        plan["only_here"] = []
     return {"found": True, "company": str(folder), "copied": done, "already_same": len(plan["pairs"]) - len(done), "refused": plan["refused"], "only_here": plan["only_here"],
             "next": " ".join([say("company.sync.problems" if plan["refused"] else "company.sync.done"), *([say("company.sync.only_here", names=", ".join(plan["only_here"]))] if plan["only_here"] else [])]), "exit_code": 1 if plan["refused"] else 0}
 
@@ -160,6 +169,29 @@ def drift(root: Path) -> Optional[Dict[str, Any]]:
         return {"problem": str(error), "stale": [], "refused": []}
     return {"problem": "", "stale": [name for name, source, target in plan["pairs"] if not same(source, target)],
             "refused": [item["skill"] for item in plan["refused"]], "version": str(read_json(folder / MANIFEST_FILE).get("version") or "")}
+
+
+def difference(name: str, source: Path, target: Path) -> List[Dict[str, str]]:
+    """What a sync would do to one copy, file by file: `add`, `change` or `remove`."""
+    if not source.is_dir():
+        return [] if same(source, target) else [{"path": name, "change": "change" if target.exists() else "add"}]
+    new, old = digests(source), digests(target) if target.is_dir() else {}
+    return [{"path": f"{name}/{path}", "change": "add" if path not in old else "remove" if path not in new else "change"} for path in sorted(set(new) | set(old)) if new.get(path) != old.get(path)]
+
+
+def diff(root: Path) -> Dict[str, Any]:
+    """The company content against its copies, and what a sync would change. It reads files only, so the board can ask every 2 minutes.
+    An instructions file taken out of the content cannot be seen: the copy then looks like the file the harness ships."""
+    folder = targets.company_folder(root)
+    if folder is None:
+        return {"found": False, "in_sync": True, "changes": [], "total": 0, "refused": [], "problem": "", "next": say("company.sync.none")}
+    try:
+        plan = copies(root, folder)
+    except CompanyError as error:
+        return {"found": True, "in_sync": False, "changes": [], "total": 0, "refused": [], "problem": str(error), "next": str(error)}
+    changes = [row for name, source, target in plan["pairs"] for row in difference(name, source, target)] + [{"path": f"{SKILLS_DIR}/{name}", "change": "remove"} for name in plan["only_here"]]
+    same_now = not changes and not plan["refused"]
+    return {"found": True, "in_sync": same_now, "changes": changes[:DIFF_SHOWN], "total": len(changes), "refused": plan["refused"], "problem": "", "next": say("company.diff.same" if same_now else "company.diff.differs", count=len(changes))}
 
 
 # --- pack: the owner's zip ----------------------------------------------------------------------------------------------------------------------------------

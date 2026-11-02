@@ -17,3 +17,8 @@ html.en-open .dock-btn,html.en-open .dock-panel{display:none}
 @media (max-width:760px){.kb-steps{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:8px}.kb-steps li:nth-child(4)::after{display:none}.kb-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.kb-next{flex-wrap:wrap}}
 @media (max-width:480px){.kb-bar{gap:6px}.kb-bar .dock-tabs{flex:1 0 100%;flex-wrap:nowrap;overflow-x:auto}.kb-bar .chip{flex:none}}
 .dialog [hidden]{display:none!important}.crumbs .report-why{display:inline;margin:0;padding:0;border:0;background:none;color:inherit;font:inherit;text-decoration:none;cursor:pointer}.crumbs .report-why:hover{color:var(--ink)}
+.dock-btn.dock-warn{border-color:var(--hot-dot);color:var(--hot-dot);animation:dock-warn 1.4s ease-in-out infinite}
+@keyframes dock-warn{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@media (prefers-reduced-motion:reduce){.dock-btn.dock-warn{animation:none}}
+.kb-sync{margin:0 0 12px;padding:12px 14px;border:1px solid var(--hot-line);border-radius:10px;background:var(--hot-bg)}
+.kb-sync[hidden]{display:none}.kb-sync h3{margin:0 0 4px}.kb-sync ul{margin:8px 0;padding-left:18px;max-height:180px;overflow:auto}.kb-sync code{overflow-wrap:anywhere}

@@ -8,6 +8,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from support import GIT, HarnessTestCase, make_repo, make_root, run_git
 
@@ -70,6 +71,36 @@ class SyncTests(CompanyCase):
         self.assertIn("acme-local", result["next"])
         self.assertTrue((self.root / ".github" / "skills" / "acme-local" / "SKILL.md").is_file())
         self.assertTrue((self.root / ".github" / "skills" / "generic-mine" / "SKILL.md").is_file())
+
+    def test_diff_sees_an_added_a_changed_and_a_removed_file_and_a_sync_clears_them(self) -> None:
+        set_prefix(self.root)
+        company.sync(self.root)
+        self.assertTrue(company.diff(self.root)["in_sync"])
+        copy = self.root / ".github" / "skills" / "acme-ticket"
+        (copy / "extra.md").write_text("only in the copy\n", encoding="utf-8")
+        (copy / "SKILL.md").write_text("edited\n", encoding="utf-8")
+        source = company.targets.company_folder(self.root) / "skills" / "acme-ticket"
+        (source / "new.md").write_text("new\n", encoding="utf-8")
+        found = company.diff(self.root)
+        self.assertFalse(found["in_sync"])
+        self.assertEqual({row["path"].rsplit("/", 1)[1]: row["change"] for row in found["changes"]}, {"SKILL.md": "change", "extra.md": "remove", "new.md": "add"})
+        company.sync(self.root, remove=True)
+        self.assertTrue(company.diff(self.root)["in_sync"])
+
+    def test_a_skill_that_left_the_content_goes_only_when_a_person_asks(self) -> None:
+        set_prefix(self.root)
+        company.sync(self.root)
+        put(self.root, {".github/skills/acme-gone/SKILL.md": "old\n"})
+        self.assertIn({"path": ".github/skills/acme-gone", "change": "remove"}, company.diff(self.root)["changes"])
+        company.sync_after(self.root)
+        self.assertTrue((self.root / ".github" / "skills" / "acme-gone").is_dir())
+        company.sync(self.root, remove=True)
+        self.assertFalse((self.root / ".github" / "skills" / "acme-gone").exists())
+        self.assertEqual([path.name for path in (self.root / ".harness" / "runtime" / "company-backup").glob("*/*")], ["acme-gone"])
+
+    def test_no_company_content_is_no_difference(self) -> None:
+        with mock.patch.object(company.targets, "company_folder", return_value=None):
+            self.assertTrue(company.diff(self.root)["in_sync"])
 
     def test_a_skill_without_the_word_or_with_an_error_is_refused_and_the_rest_goes_on(self) -> None:
         set_prefix(self.root)

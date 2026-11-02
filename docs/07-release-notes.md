@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.89 (2026-11-02)
+
+### Added
+
+- **`harness company diff`** shows what a sync would add, change or remove.
+- **The board warns when the company content and its copies differ.** It compares them every 2 minutes. The book button turns yellow and moves, its tip lists the differences, and the Knowledge base window shows them with **Sync now**.
+
+### Changed
+
+- **`harness company sync` run by hand removes too.** A company skill that left `company/` moves to `.harness/runtime/company-backup/`. A sync at the end of another command still removes nothing.
+- **The setup warning** now says it strongly recommends the missing items, at least a first framework.
+
 ## 1.6.88 (2026-11-02)
 
 ### Changed

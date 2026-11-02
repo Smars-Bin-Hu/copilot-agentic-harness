@@ -194,7 +194,9 @@ knowledge-base/
     instructions/knowledgebase.instructions.md      copied to .github/instructions/
 ```
 
-Copilot finds skills and instructions in `.github/` only. So `harness company sync` copies them there. It touches no other file, deletes nothing, and is safe to run again. It lists a company skill that is no longer in `company/` (`only_here`); delete that one by hand. Change the files in `company/`, never the copies: the next sync replaces them. `doctor` warns when a copy is behind.
+Copilot finds skills and instructions in `.github/` only. So `harness company sync` copies them there. It touches no other file and is safe to run again. A company skill that is no longer in `company/` moves to `.harness/runtime/company-backup/`. Change the files in `company/`, never the copies: the next sync replaces them.
+
+`harness company diff` shows what a sync would add, change or remove. The board compares them every 2 minutes: when they differ, the book button turns yellow and moves, its tip lists the differences, and the Knowledge base window has a **Sync now** button. An instructions file taken out of `company/` is the one change it cannot see. `doctor` warns when a copy is behind.
 
 A team with no git server shares the content as a package:
 

@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.75 (2026-11-02)
+
+### Changed
+
+- The knowledge base button at the bottom right is a book.
+
 ## 1.6.74 (2026-11-02)
 
 ### Changed

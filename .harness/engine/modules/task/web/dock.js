@@ -1,4 +1,4 @@
-// The buttons at the bottom right (1.6.61): the question mark and the one-click chats. The gear is shell.js's. The brain comes with the knowledge base window.
+// The buttons at the bottom right (1.6.61): the question mark and the one-click chats. The gear is shell.js's. The book opens the knowledge base window.
 // DOCK.start asks with the whole message in view, sends, and brings VS Code forward. Needs common.js (h, t), serve.js (SERVE).
 const DOCK = (function () {
   const BOOK = "https://smarshu.com/book/";
@@ -169,9 +169,17 @@ const DOCK = (function () {
     const button = h("button", {type: "button", class: "dock-btn dock-ask", "aria-label": t("dock.help"), title: t("dock.help")}, "?");
     button.addEventListener("click", () => { if (panel.hidden) showPanel(); else panel.hidden = true; });
     document.addEventListener("keydown", (event) => { if (event.key === "Escape") panel.hidden = true; });
-    const brain = h("button", {type: "button", class: "dock-btn dock-brain", "aria-label": t("dock.kb"), title: t("dock.kb")}, "\u25c9");
-    brain.addEventListener("click", kbWindow);
-    document.body.append(panel, button, brain);
+    const book = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    book.setAttribute("viewBox", "0 0 24 24");
+    book.setAttribute("aria-hidden", "true");
+    for (const d of ["M12 6.5C10.2 5 7.5 4.5 3.5 4.5v14c4 0 6.7.5 8.5 2 1.8-1.5 4.5-2 8.5-2v-14c-4 0-6.7.5-8.5 2z", "M12 6.5v14"]) {
+      const part = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      part.setAttribute("d", d);
+      book.append(part);
+    }
+    const kb = h("button", {type: "button", class: "dock-btn dock-book", "aria-label": t("dock.kb"), title: t("dock.kb")}, book);
+    kb.addEventListener("click", kbWindow);
+    document.body.append(panel, button, kb);
   }
 
   if (typeof DATA !== "undefined" && DATA.serve) build();

@@ -10,29 +10,128 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
-## 1.6.85 (2026-11-02)
+## 1.6.86 (2026-11-02)
+
+**Version 1.6 rewrites how you meet and use the harness.** Setup used to happen in the Copilot chat, with skills and files you edited by hand. Now you double-click to start, set up in the browser, learn from the board step by step, and build your knowledge base with lessons and its own window. The board is linked to VS Code, so a task can be started, followed and steered from the page.
+
+This section is all of 1.6 in one place. Every small step, 1.6.0 to 1.6.85, is folded at the end of this section.
+
+| | Before 1.6 | Now |
+| --- | --- | --- |
+| **Start** | Put `harness` on PATH, then run a command | Double-click **Start Harness** |
+| **Set up** | A skill in the Copilot chat, then `*.override.json` by hand | **Get ready**: a form in the browser, no agent |
+| **Learn** | Know which skill to type | **How can I help?** leads you, with skills sorted by what you want to do |
+| **Knowledge base** | Skills and command output | Steps in order, taught by skills, and a **Knowledge base** window with cards |
+| **Daily work** | Answer in VS Code, read the result on the page | Start, answer, steer and stop on the page |
+
+### Added
+
+**Start and setup**
+
+- **Start Harness** at the root: `Start Harness.command` (macOS) and `Start Harness.cmd` (Windows). A second double-click opens the running board. The first start gives it the robot icon: on macOS the file changes; on Windows a `.cmd` cannot hold an icon, so a `Start Harness` shortcut appears beside it.
+- **The Enter screen**: a served page opens on it, with a line for each check (VS Code, Copilot, `harness doctor`, this copy is set up), a 3D robot that follows the pointer, and a **Get ready** button on a new copy.
+- **Get ready** (`/setup`): no agent runs.
+  - It sets up the short command with one button and tests it as a new terminal would.
+  - It asks for your name, language, code repositories and knowledge base. **Code repositories** takes a folder of repositories, single ones, or both; a green dot marks a valid one, and a folder lists its repositories with tick boxes.
+  - It brings in a knowledge base (a package or a folder), company skills, the install command and the paths not to touch. **Finish setup** shows each step, and a step that fails can be fixed and run again.
+  - A question mark beside each row explains that row. **Coming from an older copy?** carries your work over.
+  - On Windows it warns when `python` is the Store stub or is missing, because hooks run `python`.
+- **Change the setup**: the same form in a window over the board, showing what is set now. It is at the bottom right and in `Cmd+K`. So is **Back to the Enter screen**.
+- **A warning on the board** while this copy lacks target repositories, domains, knowledge base instructions, company skills or code standards.
+
+**Learning**
+
+- **How can I help?**: the question mark at the bottom right. Ask how the harness works, or start the first lesson or the full course. The board opens a new chat in VS Code, after showing you the whole message.
+- **Everything you can ask for**: a window of all skills with search, in three parts: the harness, the knowledge base in the order you build it, and work on a task. Skills that read a lot of code are marked **costly**. A company skill appears here when its frontmatter has `board-opens`, with no change to the board.
+- **An empty board** offers **Try the sample**, **My own task** and **Take the 20-minute lesson**.
+- **Skills in the reply panel**: a row of skills that work on the task. A click puts the command in the box.
+
+**Knowledge base**
+
+- **The Knowledge base window**: the book button at the bottom right and `Cmd+K`. The button shows how many cards are stale. The window only reads; a button with a chat mark opens a chat.
+  - **Overview**: the eight steps, the next one in plain words with its button, five numbers (domains, cards, stale cards, open requests, form errors), and the domains that ask for something.
+  - **Domains**: every domain with its cards, learning progress, stale cards, requests and when a task last read it, with **Learn**, **Go on** and **Refresh cards** on the row.
+  - **Map**: which domain uses which, what a change can reach, and which domain an object is in.
+  - **Look up**: what an object uses and what uses it.
+  - **Health**: form errors, stale cards by domain, and the gaps of the map.
+- **New task asks for the domains** of the knowledge base, so the agent need not ask.
+
+**The board and VS Code**
+
+- **The board links to VS Code** by a socket on macOS and a named pipe on Windows. It lists the chats of this folder and finds which chat belongs to which task. A pill says whether VS Code is linked, and why not.
+- **New task from the board**: name, kind, domains, model, thinking level, files, and **Ask me first**. The first message is shown before it is sent.
+- **Live**: the agent's stream on the task page, with its words, tool calls and times. **Earlier rounds** reads back every prompt, also what the chat window folds away.
+- **Reply from the page**: the reply panel takes text, files, the model, the thinking level, the reply language and drafts. **Stop** stays in reach, and **Withdraw and edit** takes back your last message.
+- **Answer from the page**: allow or deny a command, answer the agent's question, and send the agent on after an approval. A bubble on the waiting card shows what is asked.
+- **Compact** and a context card like the one in VS Code: what the context holds, and a warning at 50% and at 70%.
+
+**The board and the task page**
+
+- **A new task page**: a slim header, a stage strip, tabs in groups (Live, Overview, Deliver, Records, Files), and one strong card for a decision that waits for you.
+- **The lobby** shows each task as a robot; hover it for its marks and buttons. **The list** shows the model, a context ring, the run time, checks as dots, and the kind as an icon.
+- **Files**: CSV and Excel open as tables, and code is coloured by type. The Changes tab compares side by side or in one column.
+- **Ask agent** and **Run** on a shell code block: send the command to the chat, or run it yourself on the page.
+- **Agent actions**: a tree of prompts, with what the agent did for each and what was blocked or failed.
+- **Task analysis**: a Gate blocks card where you judge each block, export of wrong blocks as eval samples, and **Save page**.
+- **Health warnings** on a task: stuck, repeated command, idle turns, cost, full context.
+- **The look**: one black and white design with light and dark themes, a gear for theme, language, Glass or Lite, a `Cmd+K` palette, a background of your own pictures, and a 3D background. The browser tab and the header show the robot icon.
+- `harness task upgrade --kind <kind>` turns a Q&A task into other work.
+- When a task closes, its rounds are saved in `.task/transcript.jsonl`, for `transcript.keep_days` (30) days after it is archived.
 
 ### Changed
+
+Take note after upgrading:
+
+- **The harness needs VS Code.** With it closed, the Enter screen waits.
+- **Pair each board once again.** Two boards in one browser now keep their own pairing.
+- **Independent checks** can also be set at the head of the task page. Only a person can set them, in a prompt or there. A failed check with a pass after it can no longer be dismissed.
+- **The agent no longer closes a task that waits for your commit.** You close it after you commit.
+- **`harness kb check` fails on a domain folder** with a name no domain can have. Before, the folder was skipped in silence.
+- **`board-kind` must be a task kind** in `harness skill check`. New frontmatter keys: `board-group`, `board-order`, `board-step`, `board-cost`.
+- **Names:** "AIU" is **Credits**; the tabs History and Trace are **Task Record** and **Agent actions**; the default test environments are DEV, IST and UAT.
+- **The context warns earlier:** `health.context_notice` (50) and `health.context_percent` (70, was 85).
+- **`harness --version`** draws the name in large letters with a colour gradient. `NO_COLOR` turns the colour off.
+- **Windows:** `harness` no longer picks the Store stub of `python`; it uses `py`. Text files in GBK or GB18030 read correctly, such as the plain "CSV" a Chinese Excel saves.
+- **Recover** no longer throws away a file you edited by hand on a half-written branch. It keeps a copy and names the file.
+- **Waits** go on from where they stood after a pause, and a night of Off work no longer counts as waiting.
+- **Messages to a person** give the whole command, such as `harness task board`.
+- **The hook log** records the files a tool call touched, and a hash of a terminal command. More password options are masked.
+
+### Retired
+
+- **The skill `harness-rookie-get-me-ready`.** Get ready does all of it, with no agent.
+- **`default` and `assisted` permissions in New task.** A chat made from the board is always allow all; the gate still holds.
+- **Plan and Autopilot on the board.** A task has its own `PLAN.md`, approved by you, and autorun.
+- **`depends_on`.** `harness task queue` keeps the order of tasks written into one repository.
+- **The kind, tier and updated columns of the board list.** The kind is the icon.
+- **The chat bar, the old stage ribbon, and the answer and steer dialogs.** The reply panel and the Live tab replace them.
+
+<details>
+<summary>Every step of 1.6 (1.6.0 to 1.6.85)</summary>
+
+### 1.6.85 (2026-11-02)
+
+#### Changed
 
 - The robot icon of Start Harness replaces the H in the header of the board, and is now the icon of the browser tab on every page, a saved page too.
 
-## 1.6.84 (2026-11-02)
+### 1.6.84 (2026-11-02)
 
-### Changed
+#### Changed
 
 - The numbers at the top of a page: every row starts at the same place. With more than five numbers, as in Time and usage, the second row stood further right than the first, with a line beside it. With a wallpaper in a narrow window, the first number stood further right than the rest.
 
-## 1.6.83 (2026-11-02)
+### 1.6.83 (2026-11-02)
 
-### Added
+#### Added
 
 - **Start Harness has the robot icon**, from the first start on. On macOS it goes on `Start Harness.command`. On Windows a `.cmd` cannot hold an icon, so a shortcut `Start Harness.lnk` with the icon appears beside it; it is made again when the folder moves. Neither is in git, so a fresh copy shows the plain file until its first start. When the icon cannot be made, nothing else changes.
 
-## 1.6.82 (2026-11-02)
+### 1.6.82 (2026-11-02)
 
 The knowledge base window, the question mark and the setup window were tested with a simulated knowledge base and repositories, changed over and over.
 
-### Added
+#### Added
 
 - Knowledge base window: **Refresh** and when it was checked. Each step says what it is and, when the status knows, why it is not done: a broken toolkit, facts the map does not find, repositories the toolkit does not read.
 - **Look up** shows what an object uses and what uses it, as text, with a button to search. An id is a link to that object.
@@ -40,7 +139,7 @@ The knowledge base window, the question mark and the setup window were tested wi
 - A chat that cannot start because VS Code is away has **Check again** and **Copy the message**.
 - The list of repositories of a folder shows which ones cannot be ticked: this harness, its knowledge base, a repository with no commit.
 
-### Changed
+#### Changed
 
 - The knowledge base window works out a view again the first time it is asked in a window. Before, it could be 10 minutes old, with no sign.
 - A slow answer no longer paints over another tab. Back returns to the tab you left, and Look up keeps its words.
@@ -58,281 +157,281 @@ The knowledge base window, the question mark and the setup window were tested wi
 - Dialogs take the focus and keep Tab inside. Only the top one answers Esc. A click outside closes the question mark panel, and Ask needs words.
 - Enter that picks a word in a Chinese input method no longer sends. A tab or line break in pasted words is a space. Search in the window of skills matches each word, also in the hint.
 
-## 1.6.81 (2026-11-02)
+### 1.6.81 (2026-11-02)
 
-### Added
+#### Added
 
 - The knowledge base window has a **Map** tab: which domain uses which, what a change can reach, and which domain an object is in. See [The knowledge base](08-knowledge-base.md#see-how-the-domains-hang-together).
 
-## 1.6.80 (2026-11-02)
+### 1.6.80 (2026-11-02)
 
-### Changed
+#### Changed
 
 - `harness --version` and Get ready show the name without the robot again. The 3D robot of the Enter screen stays.
 
-## 1.6.79 (2026-11-02)
+### 1.6.79 (2026-11-02)
 
-### Changed
+#### Changed
 
 - `harness --version`: the robot is smaller and stands to the right of the name. It is painted with coloured spaces, so a terminal with wide lines leaves no gaps in it. A terminal under 74 columns shows no robot.
 
-## 1.6.78 (2026-11-02)
+### 1.6.78 (2026-11-02)
 
-### Changed
+#### Changed
 
 - The robot of `harness --version` is drawn solid, in blocks: a white body, a dark visor and green eyes. Without colour its visor is a hole.
 
-## 1.6.77 (2026-11-02)
+### 1.6.77 (2026-11-02)
 
-### Added
+#### Added
 
 - Two buttons at the bottom right of the board and the task page, and in `Cmd+K`: **Change the setup** opens the Get ready form in a window over the page, and **Back to the Enter screen** shows that screen again.
 
-## 1.6.76 (2026-11-02)
+### 1.6.76 (2026-11-02)
 
-### Added
+#### Added
 
 - `harness --version` shows the robot beside the name, and so does Get ready.
 - The Enter screen: the robot is in 3D, floats over the middle of the word and turns with the picture as the pointer moves. It needs no library. Without WebGL, on a software renderer, in Lite and under reduced motion it stays the flat robot.
 
-## 1.6.75 (2026-11-02)
+### 1.6.75 (2026-11-02)
 
-### Changed
+#### Changed
 
 - The knowledge base button at the bottom right is a book.
 
-## 1.6.74 (2026-11-02)
+### 1.6.74 (2026-11-02)
 
-### Changed
+#### Changed
 
 - **Everything you can ask for** marks the knowledge base skills that read a lot of code as **costly**: the guided build, Build and Audit the toolkit, learning a batch, writing up a domain, and translating.
 
-## 1.6.73 (2026-11-02)
+### 1.6.73 (2026-11-02)
 
-### Changed
+#### Changed
 
 - Every card that starts a chat or a task from **How can I help?** or **Everything you can ask for** has a **Back** button. It returns to where you came from, with your search, your scroll and what you typed.
 
-## 1.6.72 (2026-11-02)
+### 1.6.72 (2026-11-02)
 
-### Changed
+#### Changed
 
 - Get ready: the long guide under the form is gone. A question mark beside each row opens a window with that part, including **We have none**. Company content and Code standards have a row of their own that says what was found.
 - Get ready: with no knowledge base, a tip says you can build one once the code repositories are set, and links to the skills that do it.
 - **Everything you can ask for** has three parts: the harness (with the full course), the knowledge base in the order you build it, and work on a task. New keys in a skill: `board-group`, `board-order`, `board-step`.
 - The window lists skills that are offered inside a task too, marked **In a task**, and six more skills.
 
-## 1.6.71 (2026-11-02)
+### 1.6.71 (2026-11-02)
 
-### Changed
+#### Changed
 
 - Get ready: a green dot marks a valid git repository. A folder lists the repositories it holds, with tick boxes.
 
-## 1.6.70 (2026-11-02)
+### 1.6.70 (2026-11-02)
 
-### Changed
+#### Changed
 
 - Get ready: **Code repositories** takes a folder of repositories, single repositories added one at a time, or both. Single ones go to `repos.<name>.path`, and **Paths not to touch** works for them too.
 
-## 1.6.69 (2026-11-02)
+### 1.6.69 (2026-11-02)
 
-### Changed
+#### Changed
 
 - `harness --version` draws the name in large letters, with a colour gradient on a terminal. A terminal that is not UTF-8 keeps the ASCII letters; `NO_COLOR` turns the colour off. Get ready shows the same letters.
 
-## 1.6.68 (2026-11-02)
+### 1.6.68 (2026-11-02)
 
-### Added
+#### Added
 
 - Get ready tests the short command: it runs `harness --version` as a new terminal would and shows the output. On Windows it also warns when `python` is the Store stub or is missing, because hooks run `python`.
 
-### Fixed
+#### Fixed
 
 - Windows: `harness` no longer picks the Store stub of `python`; it uses `py` then.
 
-## 1.6.67 (2026-11-02)
+### 1.6.67 (2026-11-02)
 
-### Changed
+#### Changed
 
 - Get ready: required fields carry a red `*`. **Finish setup** stays off, and says why, until they are filled; **Add** stays off while its box is empty.
 
-## 1.6.66 (2026-11-01)
+### 1.6.66 (2026-11-01)
 
-### Changed
+#### Changed
 
 - Get ready: **Browse** buttons for the repository folder and the knowledge base; a row of its own for the preferred language; **Skill prefix** with an example; **Python install command** with a proxy example; **Paths not to touch** takes one absolute path at a time and turns it into the rule of its repository.
 
-## 1.6.65 (2026-11-01)
+### 1.6.65 (2026-11-01)
 
-### Changed
+#### Changed
 
 - Get ready sets up the short command with one button: the board runs the line it shows. Copy stays for a person who wants to run it themselves.
 - The Enter button keeps its word in the middle when it has no key beside it.
 
-## 1.6.64 (2026-11-01)
+### 1.6.64 (2026-11-01)
 
-### Added
+#### Added
 
 - The reply panel has a row of skills that work on a task. A click puts the command in the box; you press Send.
 - New task has **Ask me first**.
 
-## 1.6.63 (2026-11-01)
+### 1.6.63 (2026-11-01)
 
-### Added
+#### Added
 
 - A knowledge base button at the bottom right and in `Cmd+K`: a window with the eight steps and the next one, the domains, Look up (what an object uses and what uses it) and Health. It only reads; the one button that opens a chat says so.
 
-## 1.6.62 (2026-11-01)
+### 1.6.62 (2026-11-01)
 
-### Added
+#### Added
 
 - **Everything you can ask for**: a window of all skills, from the question mark or `Cmd+K`, with search. A skill appears when its frontmatter has `board-opens`, so a company skill needs no change to the board. `harness skill check` checks these keys.
 
-## 1.6.61 (2026-11-01)
+### 1.6.61 (2026-11-01)
 
-### Added
+#### Added
 
 - A question mark at the bottom right: ask how the harness works, or start the deep course or the first lesson. The board opens a new chat in VS Code, after showing the whole message. An empty board has **Take the 20-minute lesson**.
 
-### Changed
+#### Changed
 
 - Get ready's look at the PATH runs in its own session, so an interactive shell no longer stops the board in its terminal.
 
-## 1.6.60 (2026-11-01)
+### 1.6.60 (2026-11-01)
 
-### Added
+#### Added
 
 - An empty board offers **Try the sample** (New task filled in from the lesson's scenario) and **My own task**.
 
-### Changed
+#### Changed
 
 - The README starts with the double-click. The lesson `harness-rookie-quick-start` skips its practice task when the sample is already done.
 
-## 1.6.59 (2026-11-01)
+### 1.6.59 (2026-11-01)
 
-### Added
+#### Added
 
 - A big warning on the board while the copy lacks target repositories, domains, knowledge base instructions, company skills or code standards. Hover it for the list; a click opens the setup guide (`/setup`). It cannot be closed. "We have none" takes company skills or code standards off the list.
 - The setup guide explains each part from `docs/03-configure.md`, next to the form.
 
-### Retired
+#### Retired
 
 - The skill `harness-rookie-get-me-ready`. Get ready and the setup guide on the board do all of it, with no agent. Its troubleshooting table is in `docs/03-configure.md`.
 
-## 1.6.58 (2026-11-01)
+### 1.6.58 (2026-11-01)
 
-### Added
+#### Added
 
 - Get ready can bring in the knowledge base (a package or a folder), the company skill word, the install command and the paths the agent must not touch. Finish shows each step; a step that fails can be fixed and run again.
 - **Coming from an older copy?** on Get ready shows what would move, then carries it over.
 
-## 1.6.57 (2026-11-01)
+### 1.6.57 (2026-11-01)
 
-### Added
+#### Added
 
 - **Get ready** (`/setup`): the board shows the one command for `harness`, sees by itself when it works, and asks for your name, language and code repositories. No agent runs. If VS Code was open, the Enter screen waits until you reopen it.
 
-## 1.6.56 (2026-11-01)
+### 1.6.56 (2026-11-01)
 
-### Added
+#### Added
 
 - `Start Harness.command` (macOS) and `Start Harness.cmd` (Windows) at the root of the repository: double-click to start the board. A second double-click opens the running board.
 - The Enter screen has a first line, **This copy is set up**. A new copy gets a **Get ready** button. An older copy is not asked.
 
-## 1.6.55 (2026-11-01)
+### 1.6.55 (2026-11-01)
 
-### Added
+#### Added
 
 - **Earlier rounds** on the Live tab: one line for each prompt, opened to read the prompt and all the agent wrote for it, also the text the chat window folds away. Scroll up for older rounds. It reads Copilot's own record, so VS Code may be closed. Thinking and tool output stay in VS Code.
 - When a task closes, its rounds are saved in `.task/transcript.jsonl`. That file is deleted `transcript.keep_days` (30) days after the task is archived; 0 keeps it. The audit files stay.
 
-### Changed
+#### Changed
 
 - The VS Code banner says what is wrong once, not twice. New task gives the model more room.
 
-## 1.6.54 (2026-11-01)
+### 1.6.54 (2026-11-01)
 
-### Changed
+#### Changed
 
 - The template of `REQ.md` says promote in its two "Done when" headings.
 - A task card with many domains scrolls inside the window. The line of a browser that is not paired no longer has a green dot.
 
-## 1.6.53 (2026-11-01)
+### 1.6.53 (2026-11-01)
 
-### Changed
+#### Changed
 
 - The Enter screen sees a Copilot sign-out or sign-in within about 15 seconds. It used to read the models of the host only every 3 minutes.
 
-## 1.6.52 (2026-11-01)
+### 1.6.52 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **Back to Interactive** takes the Mode line away as soon as you press it, not when the host answers.
 
-## 1.6.51 (2026-11-01)
+### 1.6.51 (2026-11-01)
 
-### Changed
+#### Changed
 
 - The pictures in the README and `docs/` are new and show the current board and tabs.
 - A failed check with a pass after it can no longer be dismissed, and the task page no longer says the newest check did not pass.
 
-## 1.6.50 (2026-11-01)
+### 1.6.50 (2026-11-01)
 
-### Added
+#### Added
 
 - A shell code block on the task page has two new buttons. **Ask agent** sends the command to the task's chat: the gate and the confirmations hold, and the agent sees the output. **Run** runs it yourself at once: the board starts it in the task folder, the gate does not check it, and the output is shown live and saved in `INBOX/BOARD/<time>/`. Run takes no input; it is not a terminal.
 
-### Changed
+#### Changed
 
 - `harness task queue` now says to run the dry run again before a promote, because a dry run may be out of date once another task was submitted.
 
-## 1.6.49 (2026-11-01)
+### 1.6.49 (2026-11-01)
 
-### Changed
+#### Changed
 
 - The tab **Task log** is now **Task Record** (zh: 任务记录): the name was too close to **Log**.
 - New task shows the first message beside the fields, so a low window need not scroll to read it. On a narrow window it stays below them.
 - A task whose `task.json` cannot be read shows "task file damaged" on the board, first in the list, not "not started".
 
-## 1.6.48 (2026-11-01)
+### 1.6.48 (2026-11-01)
 
-### Changed
+#### Changed
 
 - Agent actions pairs each call with its own end. A call a person stopped or denied has no end, and it used to shift every later call of that name: wrong times, and one refusal counted twice.
 - Live marks a call stopped with its turn as stopped, not with a tick.
 - The wait on a task card is right as soon as a tab opens, with no old number for a second.
 - The Log tab says newest first, as `LOG.md` is written, and no longer shows the template's comment line.
 
-## 1.6.47 (2026-11-01)
+### 1.6.47 (2026-11-01)
 
-### Changed
+#### Changed
 
 - The task page tabs History and Trace are now **Task log** and **Agent actions**. The third tab of the group, Log, still shows `LOG.md`.
 - The default test environments are DEV, IST and UAT in every rule, skill and template. QAT is gone.
 - Files and the intake editor read a text file in GBK or GB18030 too, such as the plain "CSV" a Chinese Excel saves. Before, its Chinese came out garbled.
 
-## 1.6.46 (2026-11-01)
+### 1.6.46 (2026-11-01)
 
-### Retired
+#### Retired
 
 - **`depends_on` and the mark in the list that showed it.** No command could set it, nothing kept to it, and no task ever had a value. `task queue` is what keeps the order of tasks written into one repository. Tasks that have the field in `task.json` keep it; nothing reads it.
 
-## 1.6.45 (2026-11-01)
+### 1.6.45 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **The docs and messages say what is true: the harness needs VS Code.** They said the board works without it. It does not: Copilot runs in VS Code, so with no VS Code no task can start and no agent can work, and the Enter screen keeps you out of the board and offers **Open VS Code**. With `board.vscode` set to `false`, only `task board --no-serve` shows the board. Nothing in how it behaves changed.
 
-## 1.6.44 (2026-11-01)
+### 1.6.44 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **When every task is closed, the lobby has a big New task button,** in place of "Say what you want done in VS Code". A page saved on disk has no button and keeps the sentence.
 - **Messages to a person give the whole command** in five more places: `harness task archive`, `harness task open`, `harness task defects sync`, `harness task fork` and `harness task set-domain`.
 
-## 1.6.43 (2026-11-01)
+### 1.6.43 (2026-11-01)
 
-### Fixed
+#### Fixed
 
 - **Recover no longer throws away an edit made by hand.** A file you changed on the half-written branch after a promote failed went with `git restore`, and nothing said so. Now the recover screen names such a file, a copy goes to `REF/recovered-<time>/` in the task first (the Files tab lists it), and the history says where. A repository you already left was never touched; that has not changed.
 - **The stage card and the card of waits say one number.** The stage card showed how old the step was, and it counted time put aside, so it could read 18 s more than "It has waited for you", or far more when the agent had worked first. A step that waits now shows the wait, and both move with one clock. A step no longer counts time put aside, and it stands still while the task is paused.
@@ -342,30 +441,30 @@ The knowledge base window, the question mark and the setup window were tested wi
 - **The message about the link to VS Code being off names both switches:** `board.vscode` in `task.override.json`, and `HARNESS_VSCODE_CLI=off`.
 - **Messages to a person say `harness task board`,** the command they can run.
 
-## 1.6.42 (2026-11-01)
+### 1.6.42 (2026-11-01)
 
-### Added
+#### Added
 
 - **CSV and Excel files open as tables in the Files tab.** A `.csv` or `.tsv` file is a table you can search, and **Table** and **Text** switch between it and the coloured text. An Excel workbook (`.xlsx`, `.xlsm`, `.xls`) has a table for each sheet, its sheets in a row above and a link to download it below. It is read as Intake reads it: nothing is installed, and `.xls` needs the same optional reader. A table only reads; to trim rows, use Intake. The page says what a table leaves out: hidden rows, columns and sheets, empty sheets, and the rows past the limit (400,000 characters of text for each sheet). A workbook over 28 MB, or one that cannot be read, is only named, with the link.
 
-### Fixed
+#### Fixed
 
 - **Table and Text show which one is on,** in Intake too. Both looked the same.
 - **A file that failed to load is no longer asked for again and again,** and a file that takes long to load is asked for once.
 - **A very long header no longer makes a table column huge,** and a row with fewer cells than the header keeps its lines.
 - **An empty text file says it is empty,** instead of showing an empty box.
 
-## 1.6.41 (2026-11-01)
+### 1.6.41 (2026-11-01)
 
-### Fixed
+#### Fixed
 
 - **A wait goes on from where it stood after a pause.** A task that waited for you because the agent had stopped went back to 0 when you took it back, by hand or with Back to work: two hours of waiting were lost. A plan or a requirement that waited kept its time, so the same pause read differently from task to task. Now every wait keeps what it had reached, and the time aside is left out.
 - **A night of Off work is no longer counted for a command or a question in the chat.** When Copilot asked before you left, the wait read the whole night the next morning.
 - **Turning autorun on for a paused task ends the pause in the task's history too.** The end was not recorded, so every later wait read 0 and the report counted the time as paused.
 
-## 1.6.40 (2026-11-01)
+### 1.6.40 (2026-11-01)
 
-### Fixed
+#### Fixed
 
 - **The agent no longer closes a task that waits for your commit.** After a promote the harness told it to run `task close`, so the task left "Waiting for you" before the files were committed. Now it stops, and you close the task after your commit. A knowledge base is committed by the promote itself, so there the agent still closes.
 - **The Live tab no longer hides long paths in what the agent says** (`.***`). A key with slashes is still masked.
@@ -374,9 +473,9 @@ The knowledge base window, the question mark and the setup window were tested wi
 - **Esc closes a dialog,** unless you have typed something in it.
 - **The "Promoted" card has a Close button,** and the "As of" time at the foot of a task page keeps moving.
 
-## 1.6.39 (2026-11-01)
+### 1.6.39 (2026-11-01)
 
-### Fixed
+#### Fixed
 
 - **A hover card stayed only a few seconds while a task waited.** The page drew itself again every 3 seconds because the time waited changed. Now only that number changes.
 - **The bubble card no longer covers the button under it.** It opens above the bubble.
@@ -387,13 +486,13 @@ The knowledge base window, the question mark and the setup window were tested wi
 - **The Withdraw dialog names the task,** not its folder path.
 - **Words that still asked for `[review]=n`.** The autorun refusal now points at Independent review on the task page. With no chat linked, the working note no longer mentions a Stop button that is not there.
 
-## 1.6.38 (2026-11-01)
+### 1.6.38 (2026-11-01)
 
-### Added
+#### Added
 
 - **A bubble on the waiting card.** When the agent asks a question or waits to run a command, hover over the bubble by the title. A card shows the question and its options, or the command.
 
-### Changed
+#### Changed
 
 - **A task with no chat says so.** The VS Code icon is grey and its tip says no chat is linked. On the task page the pill reads "VS Code linked, no chat".
 - **The full model name everywhere on the board** (Claude Haiku 5.5). The id is in the tip.
@@ -401,24 +500,24 @@ The knowledge base window, the question mark and the setup window were tested wi
 - **Shorter state words.** "waits for you" and "cancelled, waits for you". The task page still says what happened.
 - **The Changes tab shows one diff when the last dry run holds the same changes.** Two blocks appear only when they differ.
 
-### Retired
+#### Retired
 
 - **The `default` and `assisted` permissions of New task.** A chat made from the board is always allow all: with the others, its first command could wait in VS Code before the task existed, and the board had nothing to show. The harness gate still runs before every tool call. The Permissions setting in the reply panel stays for the turns after that.
 
-## 1.6.37 (2026-11-01)
+### 1.6.37 (2026-11-01)
 
-### Added
+#### Added
 
 - **Your own words under a list of options.** When the agent asks a question with options, the board's answer dialog has a box for your own answer, as VS Code has, unless the question says it takes none.
 
-### Changed
+#### Changed
 
 - **A row of the list has one button of its own.** A second one, such as "waive checks", is behind the three dots. Before, two buttons took their width from the State column of every row.
 - **The paused card has a Resume button.** Before, it was only in the menu.
 - **New task with `default` or `assisted` permissions says what comes next.** The agent may ask before its first command, and the task appears only after that.
 - **An empty file says so** on its tab, instead of an empty box.
 
-### Fixed
+#### Fixed
 
 - **The Live tab and the context of a new chat stopped updating.** The board read every chat of the folder to link an unlinked task, and let go of chats it was following. A chat made from the board then showed only your message until the board restarted.
 - **Trace showed a denied or stopped call as "running".** A call you denied now counts as failed, with the reason, and a call stopped mid-way says "stopped". The numbers agree with the Time and usage page.
@@ -429,38 +528,38 @@ The knowledge base window, the question mark and the setup window were tested wi
 - **The same words twice on a line of the Live tab.**
 - **The Review tab has its own first line again.** 1.6.35 fixed its texts but left the first line showing the words of the review button.
 
-## 1.6.36 (2026-11-01)
+### 1.6.36 (2026-11-01)
 
-### Fixed
+#### Fixed
 
 - **The "Waiting for you" card goes as soon as your message is sent.** It used to stay until the new turn's hook had run, next to "Working".
 
-## 1.6.35 (2026-11-01)
+### 1.6.35 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **The costs are said where they are chosen.** Independent review warns that several rounds of a reviewer subagent can be very expensive. The reply panel warns when the chosen model is not the one the chat runs on, because the whole context is loaded again. Thinking marks `medium` as recommended and says that more thinking takes longer and uses more tokens.
 - **The context warns earlier, in two steps.** From 50% (`health.context_notice`) the bar is amber and says to compact at a natural stop. From 70% (`health.context_percent`, was 85) it is red and the task gets the warning tag. The old 85% came after Copilot's own compaction at about 80%, so it almost never showed.
 
-### Fixed
+#### Fixed
 
 - **The Review tab has its own texts again.** 1.6.33 reused two message names and replaced them. A test now refuses a message written twice.
 
-## 1.6.34 (2026-11-01)
+### 1.6.34 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **The line under a task's name is short.** It shows the tier, the round from the second on, and how long ago the task last changed. Hover or focus it, or the icon of the kind, for all of it: kind, tier, round, the exact times, domains and autorun.
 
-## 1.6.33 (2026-11-01)
+### 1.6.33 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **Independent review is set at the head of the task page.** A button shows whether it is on, and a click picks off or the number of checks to pass. It is a setting of the task, and runs the same command as a terminal, so the 0 to 5 in the reply panel is gone. `[review]=n` in a prompt still works.
 
-## 1.6.32 (2026-11-01)
+### 1.6.32 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **Trace is now a tree of prompts.** One line per prompt, with its text, time and counts; click it to see what the agent did for that prompt, in order: thinking, tool calls, subagents, gate decisions. The newest is open. A long task stays readable, and a prompt's text follows `report.prompt_chars`, as on the Time and usage page.
 - **Trace starts with the numbers of the whole task:** prompts, thinking, tool calls and subagents, with their time and counts.
@@ -468,69 +567,69 @@ The knowledge base window, the question mark and the setup window were tested wi
 
 The time of thinking is shown, not its text: Copilot's record does not keep it.
 
-## 1.6.31 (2026-11-01)
+### 1.6.31 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **History shows the moments that count.** Confirming the requirement, approving the plan, a check that passed or failed, and approving the promote stand out in colour; the other lines stay quiet. A finished check now says in words whether it passed.
 - **A change of kind has its own line in History,** not "tier raised".
 
-## 1.6.30 (2026-11-01)
+### 1.6.30 (2026-11-01)
 
-### Added
+#### Added
 
 - **A Q&A task can become other work.** `task upgrade --kind <kind>` changes its kind, so the board shows the new kind and icon and the task gets that kind's stages. The tier rises to that kind's own if it is lower. Raising only the tier of a Q&A task now says the kind is unchanged. Any other kind stays as it is, and is forked instead.
 
-## 1.6.29 (2026-11-01)
+### 1.6.29 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **Copy command opens beside the menu.** In the menu behind the three dots it is now a second menu, on the side that has room, and no longer adds lines to the first. A line with a long task name is cut on the screen and copied whole.
 
-## 1.6.28 (2026-11-01)
+### 1.6.28 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **The board no longer offers Plan and Autopilot.** A task has its own `PLAN.md`, approved in the terminal, and autorun. Copilot's Plan keeps its plan in the session folder, blocks changes to the workspace, and ends in a menu that can start Autopilot. A chat set to either in VS Code shows it in the reply panel, with **Back to Interactive**. **Permissions** stays.
 
-## 1.6.27 (2026-11-01)
+### 1.6.27 (2026-11-01)
 
-### Fixed
+#### Fixed
 
 - **Changing the model no longer breaks Thinking and Context.** They kept the choices of the old model, so the next change was refused. They now follow the model at once.
 
-## 1.6.26 (2026-11-01)
+### 1.6.26 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **Compact is only in the context card** of the task page: hover the context bar. The second button in the header is gone.
 
-## 1.6.25 (2026-11-01)
+### 1.6.25 (2026-11-01)
 
-### Added
+#### Added
 
 - **New task takes files too**: by the **Attach** button, a paste or a drop, with the same limits as the reply panel. They go with the first message.
 
-## 1.6.24 (2026-11-01)
+### 1.6.24 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **The header of the board says what you need to know**: VS Code and the pairing, next to **Task board**. The time of the numbers moved to a tip on the name; a page on disk still shows it.
 - **The pairing line is gone unless something needs you**: it comes back when the browser is not paired, or when the board runs old code. The task page has the same mark beside the VS Code pill.
 - **+ New task is the main button of the board**, filled, at the far end of the header.
 - **The 3D floor has only lines that run away from you.** The lines across it read as a stripe through the page, so they are gone.
 
-## 1.6.23 (2026-11-01)
+### 1.6.23 (2026-11-01)
 
-### Changed
+#### Changed
 
 - **The 3D floor has no bright line across the page.** The horizon is now a soft band of light that fades both ways, and the long grid lines across the floor are as quiet as the others.
 - **On the Enter screen the greeting has the top right corner**, and Search stands to its left.
 - **The board's header shows the time of the numbers in full.** The sentence it used to hold, which was cut off, is a tip on the time; a page on disk also says it in its footer.
 
-## 1.6.22 (2026-11-01)
+### 1.6.22 (2026-11-01)
 
-### Added
+#### Added
 
 - **Files in a message.** The reply panel takes files by the **Attach** button, a paste or a drop: a screenshot, a text file, a PDF. Up to 10 files, 10 MB each, 20 MB together. VS Code keeps its own copy; `.task/sent.jsonl` keeps only the names.
 - **Mode and permissions from the board.** The reply panel sets the chat's **Mode** (Interactive, Plan, Autopilot) and **Permissions** (the choices VS Code offers), and a **Context** size. They hold from the next message, and both are written in the history.
@@ -539,7 +638,7 @@ The time of thinking is shown, not its text: Copilot's record does not keep it.
 - **Stop is always in reach.** While the agent works, a **Stop** button stays beside the reply pill on every tab.
 - **Save draft** in the reply panel keeps what you typed for later.
 
-### Changed
+#### Changed
 
 - **The Live tab draws the agent's words as Markdown**: headings, lists, tables, and code blocks with a **Copy** button.
 - **The context card matches VS Code**: session cost, the space reserved for the response, and system, tools, skills, tool results and messages as a share of the window. The window is worked out as VS Code does, from the context size the chat runs with. VS Code's own bar reads the size in its model picker, so the two differ until a message names that size.
@@ -547,36 +646,36 @@ The time of thinking is shown, not its text: Copilot's record does not keep it.
 - The reply panel is laid out as a grid, and the drafts fold away.
 - The model, thinking and context fields show what the chat uses now, so they can be changed at once.
 
-### Fixed
+#### Fixed
 
 - A task that waits for you no longer says **Idle** under the stream.
 
-## 1.6.21 (2026-11-01)
+### 1.6.21 (2026-11-01)
 
-### Added
+#### Added
 
 - **Change opens a folder window.** With nothing new typed in the Folder field, **Change** opens your system's window for choosing a folder (Mac and Windows). If that window cannot open, the panel asks you to type the path. A path you type still works, and an emptied field clears the folder. `/api/wallpick` (paired POST) does this.
 
-### Fixed
+#### Fixed
 
 - **The menu behind the three dots in the list is no longer cut off.** The box of the list clipped it; on a board with one task it could not be seen at all. It now hangs from the page, beside its button, and opens upward near the bottom of the window.
 - **The word `null` no longer shows** on the New task result, in a refused reply, or on the Live tab with nothing to open.
 - **The example under Name in New task** is a neutral name.
 
-## 1.6.20 (2026-11-01)
+### 1.6.20 (2026-11-01)
 
-### Fixed
+#### Fixed
 
 - **A saved board or task page is free of network calls again.** The picture download moved into `serve.js`, which only a served page has.
 - **The stage card of a task says why the plan is asked for again.** The note was lost when the task page was rebuilt in 1.6.16. It is back at the bottom of the card.
 
-### Changed
+#### Changed
 
 - Removed 18 message texts that nothing reads any more.
 
-## 1.6.19 (2026-11-01)
+### 1.6.19 (2026-11-01)
 
-### Added
+#### Added
 
 - **A background of your own pictures.** Settings (the gear) has a **Background** part: **None** (the default), a thumbnail of each picture in the folder you chose, the folder's path (a text field with **Change**: a browser cannot choose a folder of the server's computer), and a switch that changes the picture every 10 minutes in random order (it waits while the page is hidden; a 1.5 s crossfade). The pictures stay on your computer and are never shipped or committed. The folder is your setting `wallpaper_dir` in `user.override.json` (git-ignored; only a paired browser writes it, like the language). The server hands out only the jpg, jpeg, png and webp files directly in that folder (real pictures, up to 40 MB; no `..`, no link out of the folder, only this address); a missing or empty folder is a calm line. [Details](04-reference.md#the-wallpaper)
 - **The browser makes the small copies.** The server cannot resize, so the page makes a thumbnail (about 192 px) for each tile and a copy of at most 2560 px wide for the page, and keeps them in the Cache API. Only the tiles in view are made, two at a time: a folder of 500 pictures, or one of 8K and 20 MB, is fine. A picture that cannot be read shows as a crossed tile.
@@ -585,7 +684,7 @@ The time of thinking is shown, not its text: Copilot's record does not keep it.
 - **A slow-computer note.** While the background moves, the page measures its frame time. When it stays below 30 frames a second for a few seconds, a small note offers **Lite** once. It never switches by itself.
 - `/api/wall` (read) and `/wall/<name>` (GET) give the list and one picture; `/api/wallfolder` (paired POST) sets the folder.
 
-### Changed
+#### Changed
 
 - **The light theme's 3D background is easier to see**: a stronger floor grid, a horizon line with a soft glow and clearer dust, so that turning shows without a picture. All of it stays light enough for text to keep its contrast.
 - **Lite is complete**: with a picture, every panel is opaque, with no blur, no motion and no rotation.
@@ -593,24 +692,24 @@ The time of thinking is shown, not its text: Copilot's record does not keep it.
 - The Enter screen is drawn on the 3D background; over a picture its letters and list are light in both themes.
 - Docs: the board's look and settings, the tab groups and the stage colours, `/api/language`, `/api/wall` and the wallpaper.
 
-## 1.6.18 (2026-10-31)
+### 1.6.18 (2026-10-31)
 
-### Added
+#### Added
 
 - **New task asks for the knowledge base.** The dialog lists the knowledge base domains this folder has (the same as the Intake tab: folders under `<knowledge base>/domains/`) as ticks, with **None** as a choice of its own. The choice goes into the first message as one line; the agent sets it on the task with `task set-domain` and does not ask which. With no domain set up the box says so and the dialog goes on. The server checks the names again and refuses one that no knowledge base has.
 - **The first message is shown before it is sent**, and changes as you type. It is made by the board's own code, the same that makes the real message, so the two cannot differ. A field that is not right yet shows as a `<placeholder>`, with what is wrong under it. You cannot type in it; the text field stays where you write. It needs no link to VS Code.
 - **An empty board has a first step.** With no task at all, the list and the lobby show a large **New task** button instead of the sentence "There are no tasks yet". With tasks, the small button in the header stays and the large one is gone. When VS Code is not linked the button still shows and the dialog tells why. A board page saved on disk has no button and says how to run the served board.
 - `/api/create` `options` gives `domains`; `preview` gives `problem` and no longer needs VS Code.
 
-### Changed
+#### Changed
 
 - `Cmd+K` / `Ctrl+K` opens the palette again while you type in a box. It carries a modifier, so it does not collide with typing. The plain `R` key (the reply pill) stays off in a box.
 - A dialog is now above the page header, the search pill and the gear (it was cut at the top by the header); the palette is still above the dialog. The buttons of the New task dialog stay in view in a short window.
 - Chinese: the tab `Live` is `实时`, `thinking` has a level in Chinese, `System prompt` is `系统指令`. The words that stay English in Chinese by design are `Glass` and `Lite` (the render modes), `Harness` and two placeholder messages; the language test lists them by name. The language buttons of the settings panel take their names from the message table, so no page file holds Chinese.
 
-## 1.6.17 (2026-10-31)
+### 1.6.17 (2026-10-31)
 
-### Added
+#### Added
 
 - **Live is a live stream.** The tab shows the latest eight items of the agent's chat, oldest first, newest at the bottom: what the agent writes (the text arrives as it is written), each tool call with an icon, what it does, its target (a path, or the command, masked and cut) and its time, and thinking (the words only when Copilot sent some, else "Thinking" with a timer). The page asks once a second while the tab is open and the page is seen, and stops when it is hidden. An item that is already there is changed in place: nothing is drawn again, no animation starts over, and the page follows the bottom only if you are there; if you scrolled up to read, what you read stays where it is.
 - While the agent works the running tool shimmers and counts its time, and a small robot shows how long the turn has run. When it is idle the page is calm. Both are off under Lite and reduced motion.
@@ -619,7 +718,7 @@ The time of thinking is shown, not its text: Copilot's record does not keep it.
 - `/api/live` (read): the latest items from the memory of the link, with a `rev` so that an unchanged answer is `{rev, same: true}`. It reads no file and asks the host nothing. Every text is redacted; a long one is cut and marked.
 - The Live tab says why in each calm state: no chat is linked, the chat has said nothing yet, the link to VS Code dropped, the task is closed.
 
-### Changed
+#### Changed
 
 - The reply, steer, stop, the task settings and the drafts are no longer on the Live tab: they are in the reply panel. The chat bar and the Recent bar of Live are gone (the stream shows the same). A form for the results of a run (tests, run) stays on Live, under the stream, for as long as that wait lasts.
 - A change made on the task page (a setting, a draft, a message sent) is shown in place; the page is no longer loaded again, so an open panel and what you typed stay.
@@ -627,9 +726,9 @@ The time of thinking is shown, not its text: Copilot's record does not keep it.
 - A steer in Chinese carries `[ZH]` first, as a send does.
 - The link keeps at most 60 parts of a turn in memory, and no result text of a tool call, so a turn of 500 tool calls does not grow.
 
-## 1.6.16 (2026-10-31)
+### 1.6.16 (2026-10-31)
 
-### Added
+#### Added
 
 - The task page has a new shell. One surface instead of stacked cards. A slim header made once and changed in place (so the refresh never closes a card or the menu, or starts an animation again): back, the task name, its state, the stage strip, the independent checks, the context bar, the VS Code button, **Compact** and a menu (time and usage, save as HTML, copy chat title, and the actions you may take any time: pause, resume, autorun, close).
 - The stage strip has no words. Done is green with a tick, running is blue and turning, waiting for you is yellow and blinking, not started is black (dark grey with a ring in the dark theme). A light travels along the line after the running stage. Hover or focus it for a card: every stage with its state and its time (a running stage counts on), a stamp when all is done, and the independent checks. Under Lite and reduced motion nothing moves. A saved copy shows the times as of the day it was saved.
@@ -640,7 +739,7 @@ The time of thinking is shown, not its text: Copilot's record does not keep it.
 - **Live** is the first tab of a served page. For now it shows what exists: the state of the chat, the latest thing the agent did and the first lines of its last reply, the steer and stop buttons, the task settings and the drafts.
 - A decision that waits for you is one strong card above the tabs: approve the plan, confirm the requirement, approve the promote. Each has its action and a link to the tab where you read what you decide on (Plan, Requirement, Changes). Confirm a command, answer a question and every other wait keep their cards; none of them has a word about a code.
 
-### Changed
+#### Changed
 
 - The task page opens on **Live** (a task that is open or not started), else on Overview. A saved copy opens on Overview.
 - Define is gone: Requirement, Intake, Design, RCA, Plan and TODO are in Overview. The Test tab is in Deliver.
@@ -648,48 +747,48 @@ The time of thinking is shown, not its text: Copilot's record does not keep it.
 - The old stage ribbon and its reviewer row are replaced by the strip, its card and the checks button.
 - The pairing line at the foot of a task page says only that the buttons act.
 
-## 1.6.15 (2026-10-31)
+### 1.6.15 (2026-10-31)
 
-### Added
+#### Added
 
 - The Enter screen. A board or task page served by `task board --serve` opens on it, once for each browser tab: the wide HARNESS wordmark with a light that follows the pointer, a small robot sitting on the last S, and `Hi, <name>` at the top right (the name `harness user` reads; no new setting). Hold the pointer down to charge: light streams in, the letters heat up from the pointer outward, the screen trembles; let go and a shockwave throws the letters out and they snap back. A full charge is clearly bigger than a short one. The robot follows the pointer with its eyes and reacts to a click. Nothing moves under Lite or when the system asks for reduced motion; the screen still works. A page saved to disk has no Enter screen.
 - A readiness list on that screen, one line for each check: VS Code is open and connected; Copilot can answer (the host lists an allowed model; it recognises `Provider copilotcli is not ready` and `Client is not connected` and says to sign in to Copilot in VS Code); `harness doctor` has no error; this browser is paired. The knowledge base and the target repositories are grey lines that never block. The last line is the copyright, the author and the version. The lines light up in order and are checked again every 3 s. The Enter button stays off, and no key goes in, until every blocking line is fine; a failing line says why and what to do, and VS Code has an Open VS Code button. A task page opened from a link skips the screen only when everything is ready; otherwise the screen shows and the task is under it.
 - `/api/ready`: the readiness as data. A read like `/api/board` (header and host checked, no pairing needed). It reads the cache of the VS Code thread and one `harness doctor` run that happens in a thread of its own with a 90 s limit, so it never waits on `code`. A doctor with errors or a failure is run again no sooner than every 20 s; a clean one is kept for 10 minutes.
 
-## 1.6.14 (2026-10-31)
+### 1.6.14 (2026-10-31)
 
-### Added
+#### Added
 
 - The list shows small status marks under each task name: the model (a short name such as `sonnet 5.5`, the full name on hover), a context ring (percent and token numbers on hover; it turns amber above `health.context_percent`), the run time of the latest turn (only while a turn runs, ticking, with a small live mark), the stage as a mini ribbon, and a TODO bar such as `3/8`. A mark with no data is left empty and every row keeps its height. Hovering the ribbon lists all stages. Stage colours: done green with a check, running blue and turning, waiting for you yellow and blinking, not started black (dark theme: dark fill with a grey ring).
 - The lobby card: hover a robot (or focus it with the keyboard) to open a card with the kind icon and name (a link to the task page), the VS Code button, the same status marks, Time, Credits, Prompts, and the buttons of the list row. You can move the pointer into the card. The 3 s refresh updates it in place. It stays inside the window, and on a touch screen or a narrow window it opens on a click. Esc closes it.
 - `--run` (blue) and the not-started colour as tokens in both themes. The row data has `todo` (`done`, `total`) and, while a turn runs, `chat.started_at`.
 
-### Changed
+#### Changed
 
 - The line under the task name no longer shows the last tool or reply. The data (`sub`) is still sent: the task page uses it.
 - A long task name in the list is cut with an ellipsis and shown whole on hover.
 
-## 1.6.13 (2026-10-31)
+### 1.6.13 (2026-10-31)
 
-### Added
+#### Added
 
 - A search pill at the top right of the browser window of the board and the task page, with the key hint (Cmd+K, or Ctrl+K). It opens a palette: recent tasks, any task, the list and the lobby, the filters, every tab of a task, the theme, Lite and the settings. Arrows, Enter and Esc work. It only navigates: it never approves, promotes or sends. Recent tasks are kept in this browser.
 - A gear at the bottom right of the same pages. Its panel sets the theme (light, dark), Glass or Lite (Lite removes blur and motion), and the language (EN, 中文). The language is the real `language` setting: a paired browser writes it to `user.override.json`, and the page loads its texts again. Theme and Lite are kept in this browser.
 - When the link to VS Code drops while a page is open, a banner appears in the page under the header (nothing is covered, nobody is thrown out). The header pill, the VS Code button and the buttons that talk to the chat show the same state, and the banner clears by itself when the link returns.
 
-### Changed
+#### Changed
 
 - Below 1480 px wide the page content moves left, so the fixed controls cover nothing.
 - A page on disk has the search, theme, Lite and tab items, but no language change and no jump to a task page (it needs the board server).
 
-## 1.6.12 (2026-10-31)
+### 1.6.12 (2026-10-31)
 
-### Added
+#### Added
 
 - One look for the board and the task pages, in black and white: colour only means state (amber waits for you, green works, red failed). It has a light and a dark theme (`data-theme` on the page). With no choice made, the page follows the system and changes with it; a choice kept in the browser (`harness.theme`) wins. The settings panel that sets it comes in a later block.
 - A line at the bottom left of every page: the copyright, in plain text.
 
-### Changed
+#### Changed
 
 - The board list, the KPIs, the filters, the state tags and the buttons have the new look. One solid button in a row is the thing the task waits for.
 - The lobby has one block for each state, full width and stacked, what waits for you on top. All robots on the page have one size, chosen by the most crowded block (8 or fewer: large; up to 16: medium; more: small). The robots on the dock stand on one line: a name is one line, with the full name on hover.
@@ -697,15 +796,15 @@ The time of thinking is shown, not its text: Copilot's record does not keep it.
 - A task that is not started yet says so on its page, not "the task is closed", and shows no empty kind and dates.
 - The page text colours of code, the code compare and the stage ribbon follow the theme.
 
-## 1.6.11 (2026-10-31)
+### 1.6.11 (2026-10-31)
 
-### Added
+#### Added
 
 - The lobby shows the health warning (a small warning sign) beside a robot, as the list does; the mouse over it says why.
 - The Trace of a task page also lists the calls of its subagents (the reviewer, the mapper), each marked with the agent's name, newest first, in the same limit. Their ids are found in Copilot's record of the session (only the tail is read, and the answer is cached); their calls come from their own hook logs. Where the record is missing, or `report.copilot_events` is false, the Trace is the main session alone.
 - `board.refresh_seconds` in `policies/task.json` (3): how often the served board asks for the rows. The page waits while it is hidden, and skips a round while the last request has not come back. The task page asks every 10 seconds, as before.
 
-### Changed
+#### Changed
 
 - A refresh no longer closes an open "more" menu on the board: the rows are drawn when the menu closes.
 - The VS button shows only the VS Code logo (drawn in the page, no network). It can be pressed while VS Code is not linked (it runs `code <folder>`); it is grey only when no `code` command is found. The words are its tooltip.
@@ -715,110 +814,110 @@ The time of thinking is shown, not its text: Copilot's record does not keep it.
 - The gate text for the user-only commands now names `task review set` (words only; the pattern had it already).
 - `.harness/eval/fixtures/gate/` (samples of wrong gate blocks, written by the board) is ignored by git.
 
-### Fixed
+#### Fixed
 
 - A board file on disk showed `nullnull` beside the Off work buttons: the two parts that exist only on a served board were written as the word "null". They are left out now.
 
-### Retired
+#### Retired
 
 - The "Switch to VS Code" words beside the VS button.
 
-## 1.6.10 (2026-10-31)
+### 1.6.10 (2026-10-31)
 
-### Added
+#### Added
 
-### Changed
+#### Changed
 
 - The Chinese texts (`messages.zh.json`) were reviewed as a whole: written-style wording instead of spoken style, short state tags, labels as nouns, buttons as verbs, one word for one thing. `promote`, `skill`, `chat`, `Hook`, `reviewer` stay in English; "prompt" is always 指令, "confirmation code" is always 确认码, "pause" is 搁置, "recover" is 还原. English texts and message keys are unchanged.
 - A message the host sent in the same read as the answer to a call was dropped (the board could miss a pending confirmation or a status change). It is now kept. A chat whose status says it waits for a person, while the board holds no item for it, is read again at once.
 
-### Retired
+#### Retired
 
 - None.
 
-## 1.6.9 (2026-10-31)
+### 1.6.9 (2026-10-31)
 
-### Added
+#### Added
 
 - Docs: "The board and VS Code" in the reference (how it connects, the reasons on the pill, `HARNESS_VSCODE_CLI`, `board.vscode`, chat states, every call the page may make), in Features, the overview and the design notes. The intro skills now mention the board's VS Code buttons.
 
-### Changed
+#### Changed
 
 - A chat made from the board is tracked as soon as its first turn starts. The host lists a chat only after that turn runs, so the list asked for right after the send did not have it, and the board lost the chat until the next full list (up to 180 seconds): the meter and the binding saw nothing. The board now keeps the chat in its list from the start and asks for the list again every 2 seconds, for up to 2 minutes, until the host has it.
 - Compact has its own words when it is refused (VS Code not linked, no chat, several chats fit, chat changed, timeout), in English and Chinese. They no longer tell you to copy and paste a message.
 
-### Retired
+#### Retired
 
 - Nothing.
 
-## 1.6.8 (2026-10-31)
+### 1.6.8 (2026-10-31)
 
-### Added
+#### Added
 
 - **Context meter in the chat bar of the task page.** The percent and a thin bar; the mouse over it gives the tokens. It is the figure VS Code draws for these chats: input plus output tokens of the newest model call, over the context window of the model (`maxContextWindow` from the host's model list, or the limit the turn itself carries). It is empty, never 0, when the chat has no usage yet or the window is not known. Nothing else is mixed in.
 - **Compact button.** After one confirm, the board sends `/compact` to the chat, only when the chat is idle (paired POST `/api/compact`). It is recorded in the task's history and `.task/sent.jsonl`. It is the only place a control mark goes out, and only for that click.
 - **Health warning for a full context.** `health.context_percent` in `policies/task.json` (default 85): the warning tag shows when the chat is over that percent. No new column.
 - **Copy chat title** in the chat bar and in the VS button's error box: no link opens one chat, so the person opens the window and picks the chat by its title.
 
-### Changed
+#### Changed
 
 - The VS button's hover now says that it opens the window only; the person then picks the chat.
 
-### Retired
+#### Retired
 
 - Nothing.
 
-## 1.6.7 (2026-10-31)
+### 1.6.7 (2026-10-31)
 
-### Added
+#### Added
 
 - **Drafts box on the task page.** Add a note, edit it, delete it, and tick which notes go into the next message the board sends. The send panel shows the ticked ones at the end of the message, after "Notes from the person:". A note is cleared only after a send went; a failed send keeps all of them. The notes live in `.task/drafts.json` on this computer: they are not in the page data, in a saved copy, in a digest, and are never written back. The page reads and writes them through the paired `/api/draft` POST only.
 
-### Changed
+#### Changed
 
 - `core/redact.py` also masks short password options of known database and login tools (`sqlcmd -P x`, `bcp -P x`, `mysql -pSecret`, `mongosh -p x`, `redis-cli -a x`, `sqlplus user/pass@db`). Common flags of other tools (`grep -P`, `mkdir -p`, `ssh -p 22`, `mysql -P 3306`) are left alone. `-Password x` was already masked.
 - Test fix: the engine's standard-library check now allows `statistics` (used by the health warning).
 
-### Retired
+#### Retired
 
 - Nothing.
 
-## 1.6.6 (2026-10-31)
+### 1.6.6 (2026-10-31)
 
-### Added
+#### Added
 
 - **Allow or deny a command from the board.** When Copilot asks in VS Code whether a command may run, the task waits for you on the board: the state says "the agent asks to run: ...", and the orange button **allow · deny** opens a dialog with the command (secrets masked, long text cut) and the id of that one call. Allow lets this call run; deny tells the agent you refused, and it goes on.
 - **Answer the agent's question from the board.** When the agent asks a question (the ask tool), the task waits with "the agent asks: ...", and **answer...** opens a form with the options, a text box, yes or no, or a number, as the question needs. A question the form cannot take is shown as "answer it in VS Code", with no button.
 - Both are paired POSTs (`/api/confirm`, `/api/answer`). The page names the call and shows a digest of what it showed; the board reads the host again and refuses if the call has gone (you answered in VS Code) or has changed. You never confirm "whatever is pending". Each decision is in the task's history and whole in `.task/sent.jsonl`, the command masked and cut. Only these two kinds of wait get buttons; any other wait for input shows nothing new.
 - A waiting item comes first in the "waiting for you" filter and order, before any other wait of the task.
 
-### Changed
+#### Changed
 
 - The board now also reads the session of each bound chat (for what waits for a person), besides the chat itself.
 
-### Retired
+#### Retired
 
 - Nothing.
 
-## 1.6.5 (2026-10-31)
+### 1.6.5 (2026-10-31)
 
-### Added
+#### Added
 
 - **Health warning on the board.** A small ⚠ tag after the state of a task, only when a rule fires; the mouse over it says which. Four rules: **stuck** (the agent is at work and made no tool call for 10 minutes), **repeated command** (the same command 3 times in a row, with no file change between), **idle turns** (4 model turns with no file change), **cost** (Credits at 2 times the median of closed tasks of the same kind; fewer than 3 of them: the rule does not fire). The rules read the tail of the hook log and Copilot's own `events.jsonl`, never the conversation. They are kept per file until it changes, and start no process.
 - `health` in `policies/task.json`: `stuck_minutes`, `repeat_commands`, `idle_turns`, `cost_ratio`. A missing or odd value is the default.
 - **Trace tab** on the task page: a timeline of the tool calls and the gate decisions of the task's session, newest first (tool, files, time, failures, and for a block the rule, the reason and the command). No thinking and no message text. The warnings that fire are on top of it.
 
-### Changed
+#### Changed
 
 - The hook log: a finished tool call (`PostToolUse`) now records `target.paths`, the files it touched (no command), and a terminal call records `cmd`, a ten-character hash of its command. The text of a command is still kept only for a call that was blocked or sent to you.
 
-### Retired
+#### Retired
 
 - Nothing.
 
-## 1.6.4 (2026-10-31)
+### 1.6.4 (2026-10-31)
 
-### Added
+#### Added
 
 - **Gate blocks in the report of a task** (the time-and-usage page, `report.html`). A new **Gate blocks** card lists every `deny` of the task from its hook log (its session and the sessions of its subagents): time, command or file, rule, reason. You give each one a verdict: **Right to block**, **Wrong block**, **Not sure**; the same button again takes it back. A new KPI cell shows how many blocks there were. The rule is the `kind` the gate reported (`task-scope`), else `gate.<tool>`; the reason says which pattern matched.
 - **Verdicts are yours only.** They are kept in the task state (`gate_verdicts`) by `POST /api/verdict` of the board server (paired browser, header, own origin, like `/api/act`). No command sets one, and the gate refuses an agent that writes `.task/`. They are kept for closed tasks too.
@@ -826,52 +925,52 @@ The time of thinking is shown, not its text: Copilot's record does not keep it.
 - **Save page on the report.** A served report has a **Save page** link: one file with the verdicts, no buttons, no calls to a server, and a CSP that allows its own script only. A report file opened from disk shows the verdicts read only. The commands in either are taken through `redact` first.
 - `registry.json` lists `test_chatnew.py` and `test_chatsend.py` (left out in 1.6.2 and 1.6.3).
 
-### Changed
+#### Changed
 
 - The board server draws `/tasks/<name>/report.html` itself (so the verdicts are the latest and the buttons are there); `task report` and the board still write the same page to disk. A verdict or an export writes it again.
 
-### Retired
+#### Retired
 
 - Nothing.
 
-## 1.6.3 (2026-10-31)
+### 1.6.3 (2026-10-31)
 
-### Added
+#### Added
 
 - **New task from the board.** A **New task** button by the Off work buttons opens a dialog: name, kind, a task to fork from (optional), what to do, model, thinking level, reply language (English by default; `[ZH]` only if you pick Chinese) and tool permissions (allow all by default, default, assisted). The board makes a chat in VS Code (this folder, no worktree, mode interactive) and sends it one message: fixed English text that tells the agent to open the task with `harness-my-task` (or `task fork` from the source), with your text last. The model and thinking level go on that message. The board asks VS Code who made the chat and warns if it is not `vscode` (the Agents window could hide it). It fails with a reason, and makes nothing, when VS Code is not linked. Every field is checked again on the server.
 - When the agent has opened the task, the board binds the chat to it (first priority) and keeps the model you chose on the task, so later sends carry it. The first message is in `.task/sent.jsonl` and the history.
 - `.vscode/settings.json`: `chat.tools.terminal.autoApprove` lets `harness task open`, `new`, `fork`, `list` and `status` run without a confirmation box, in the forms `harness`, `harness.cmd`, `./.harness/bin/harness` and `.harness\bin\harness.cmd`. The rules are plain allow rules: a chain, a redirect or a substitution (`&&`, `;`, `|`, `>`, `$(...)`) is not approved, and no other command is.
 
-### Changed
+#### Changed
 
 - `.vscode/settings.json` (a guardrail file) holds the two rules above.
 
-### Retired
+#### Retired
 
 - Nothing.
 
-## 1.6.2 (2026-10-31)
+### 1.6.2 (2026-10-31)
 
-### Added
+#### Added
 
 - **Send to agent.** After you approve the requirement, the plan or the write-back (or the checks or a recover), the orange button on the board and on the task page opens a panel with the whole message: fixed English text with the code you just typed. You choose the reply language (English by default; `[ZH]` is added only when you pick Chinese), may add a note, and send it to the task's chat in VS Code. A stopped agent gets **answer...**, where you write the text. Saved drafts (`.task/drafts.json`) are added at the end after `Notes from the person:`; the panel can save a note as a draft.
 - **Steer and stop.** While the agent works, the row and the task page have **steer** (one more line, read at its next step in the same turn) and **stop** (cancels the turn; what is written stays).
 - The board sends only when the chat is linked for sure and idle (steer and stop: working), and it works the binding out again right before it sends. Otherwise it says why and lets you copy the text. A send, steer and stop is a paired POST; each one is in the task's history, and the whole text is in `.task/sent.jsonl`.
 - **Task settings** on the task page: the independent checks (0 to the cap, one click; `task review set --n N`, a person only, like `review extend` and `review waive`), and the model and thinking level of the messages the board sends (from the model list of VS Code, only the models its policy enables). The model goes on every message the board sends. VS Code keeps it for the chat, so what you type there afterwards uses it too until you change it; the page says so, and the chat bar shows the model of the last turn.
 
-### Changed
+#### Changed
 
 - The rules every prompt gets carry the number of checks, and tell the agent when you switched them off. They no longer print the `[review]=n` mark. The mark still works in a prompt; the task page is the way to set the number now.
 - `AGENTS.md`, `gate.json` and `task.json` (guardrail files): the user sets checks "in a prompt or on the task page"; `review set` is refused to an agent like `review extend`; `review set` is a button the board may run.
 - A binding of a chat to a task keeps the model you chose (`chat.model`).
 
-### Retired
+#### Retired
 
 - Nothing.
 
-## 1.6.1 (2026-10-31)
+### 1.6.1 (2026-10-31)
 
-### Added
+#### Added
 
 - The board connects to VS Code. One background thread reads the agent host of VS Code (`code agent endpoints`; a socket on macOS, a named pipe on Windows), lists the chats of this folder, and finds which chat belongs to which task by the Copilot session id of the task. It is kept in the task state as `chat`. Where it is not sure (no chat has the id yet, two do, two tasks share a session) the task stays unlinked: nothing is guessed. The thread never starts `code` for a page request, never subscribes to a chat that is not linked, and never deletes a chat or its record.
 - A pill by the Off work buttons says whether VS Code is linked, and why not (not open, still starting, no `code` command found, several VS Code programs and none is the one of this folder).
@@ -880,31 +979,33 @@ The time of thinking is shown, not its text: Copilot's record does not keep it.
 - The task page has a chat bar (idle, working or waiting; the model of the last turn; the VS button) and a Recent bar with the last reply, which opens to its first lines.
 - `doctor` says whether VS Code can be reached; never more than a warning.
 
-### Changed
+#### Changed
 
 - `/api/status` and `/api/board` answer with `vscode: {ready, bound, unbound, why}`. Rows carry `chat`, and `sub` has a time, a kind and a text.
 
-### Retired
+#### Retired
 
 - Nothing.
 
-## 1.6.0 (2026-10-31)
+### 1.6.0 (2026-10-31)
 
-### Added
+#### Added
 
 - Board list: each task has a small icon for its kind (development, testing, RCA, Q&A, knowledge base, design, other); the name of the kind shows when you point at it.
 - Board list: the checks are dots, one per check wanted. Green for each pass in a row, red where the last did not pass, hollow for those not run, turning while one runs. Point at them for the numbers.
 - Board list: a menu behind three dots holds the actions that are not what the task waits for now (pause or resume, autorun on, close, dismiss a check, copy a command).
 - The line under a task name is ready for what the agent did last (later versions fill it); until then it shows the tasks a task depends on, or nothing.
 
-### Changed
+#### Changed
 
 - Board list columns are now: tick, task, state, checks, waited, actions, time, Credits, prompts. The actions are in the middle; the button of what the task waits for stays on the row.
 - "AIU" is called **Credits** on the board, in its totals and in the task report. In Chinese, the prompts are called 指令 (English stays Prompts).
 
-### Retired
+#### Retired
 
 - The kind and tier column and the updated column of the board list. The kind is the icon; the tier was a back-end detail. Sorting by them is gone; the kind filter stays.
+
+</details>
 
 ## 1.5.62 (2026-10-31)
 

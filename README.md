@@ -1,7 +1,7 @@
 # GitHub Copilot Agentic Harness on VS Code
 
 <p>
-  <img alt="version" src="https://img.shields.io/badge/version-1.6.85-blue">
+  <img alt="version" src="https://img.shields.io/badge/version-1.6.86-blue">
   <img alt="GitHub Copilot" src="https://img.shields.io/badge/GitHub%20Copilot-VS%20Code-24292f?logo=githubcopilot">
   <img alt="license" src="https://img.shields.io/badge/license-Apache%202.0-blue">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-3776ab?logo=python&logoColor=white">
@@ -23,8 +23,12 @@
 
 ## What you get
 
+- **Set up in the browser.** Double-click **Start Harness** and fill in **Get ready**: the short command, your code repositories, your knowledge base. No agent runs and you edit no file.
+- **Led step by step.** **How can I help?** on the board starts the lesson you need, and **Everything you can ask for** lists every skill by what you want to do.
 - **A task, not a chat.** Every piece of work is a folder: the requirement, the plan, the steps, the log and the changes are files. A new chat reads `TASK.md` and goes on. Kinds: question, root cause analysis, design, development, testing, knowledge base update.
 - **A board you follow in the browser.** Every open task, what it waits for you for, and since when. The lobby shows each one as a small agent: at work, waiting for you, resting. A click opens the task as pages: stages, requirement, plan, TODO, changes, checks, test results, history.
+- **Linked to VS Code.** Start a task, watch the agent live, reply with text and files, allow a command, answer a question, steer or stop: all from the page.
+- **A knowledge base you can see.** Lessons lead you through building it from your code. The **Knowledge base** window shows the steps, the domains, how they hang together, and what a change can reach.
 - **Approvals only you can give.** The requirement, the plan and the write-back to a repository each wait for a code you type on the page or in your terminal. The agent cannot approve for you, and `push` can never be approved.
 - **Business documents in, no tokens spent.** Drop Word or Excel files on the **Intake** tab (old Excel and PDF need one Python package): a program turns them into Markdown and CSV, and reports what it left out (hidden sheets, comments, pictures). You trim them; the agent reads the small files and asks only what does not fit.
 - **Independent checks, counted by code.** Write `[review]=2` and the work must pass two checks in a row by a reviewer that never saw the author's reasoning. Every round, its findings and its verdict are on the **Review** tab.
@@ -54,23 +58,26 @@ The harness carries no business knowledge. It makes the agent safe to use and po
 
 ## Get started
 
-You need VS Code with GitHub Copilot Chat, Python 3.9 or later, and git. Nothing is required to `pip install`: Word and Excel (`.xlsx`) files are read with the standard library. Old Excel (`.xls`) and PDF files need one small package each (`xlrd`, `pypdf`). The setup skill has you install both, and if the install fails you ask your administrator: see [Python packages](docs/03-configure.md#python-packages).
+You need VS Code with GitHub Copilot Chat, Python 3.9 or later, and git. Nothing is required to `pip install`: Word and Excel (`.xlsx`) files are read with the standard library. Old Excel (`.xls`) and PDF files need one small package each (`xlrd`, `pypdf`). Get ready has a row for the install command, and if the install fails you ask your administrator: see [Python packages](docs/03-configure.md#python-packages).
 
-Clone this repository, or download the zip from GitHub and extract it (git is optional; on Windows extract to a short path such as `C:\dev\harness`). **Double-click `Start Harness.command` (macOS) or `Start Harness.cmd` (Windows)**, keep the window open, and press **Get ready** on the page that opens. If the double-click is blocked, run `sh .harness/bin/harness task board` (Windows: `.harness\bin\harness.cmd task board`) in a terminal.
+Clone this repository, or download the zip from GitHub and extract it (git is optional; on Windows extract to a short path such as `C:\dev\harness`). Open the folder in VS Code. Then:
 
-Then, in Copilot Chat:
+1. **Start.** Double-click `Start Harness.command` (macOS) or `Start Harness.cmd` (Windows) and keep the window open. If the double-click is blocked, run `sh .harness/bin/harness task board` (Windows: `.harness\bin\harness.cmd task board`) in a terminal.
+2. **Set up.** Press **Get ready** on the page that opens. The form sets up the short command `harness`, your code repositories and your knowledge base. No agent runs. To change it later, press the sliders button at the bottom right of the board.
+3. **Learn.** Press the question mark at the bottom right of the board, **How can I help?**. Ask how the harness works, or start a lesson; the board opens the chat for you. **Everything you can ask for** lists every skill, with the knowledge base ones in the order you build it.
+4. **Build your knowledge base.** Press the book button to see the steps and the next one. The agent leads you, you give a few facts only you know and approve each step.
 
-| Type | What it walks you through |
+| Start from the board, or type it in Copilot Chat | What it walks you through |
 | --- | --- |
 | `/harness-rookie-quick-start` | **Introductory lesson**: a story from a request to a branch, what the harness gives you, the two places you work in (the Chat window and the board), and one practice task. About 20 minutes |
-| `/harness-rookie-new-knowledgebase` | **Build your knowledge base from your code**: the agent leads you step by step, you give a few facts only you know and approve each step. Come back any time with "continue the knowledge base" |
+| `/harness-rookie-new-knowledgebase` | **Build your knowledge base from your code**, step by step. Come back any time with "continue the knowledge base" |
 | `/harness-rookie-wondering` | **Understand it first**: an interactive explanation of the principles and implementation, 16 topics, ask anything |
 
-The agent leads all three, so you don't need to read the docs first. To do it by hand, see the [quickstart](docs/01-quickstart.md).
+You don't need to read the docs first. To do it by hand, see the [quickstart](docs/01-quickstart.md).
 
-To move to a newer copy of the harness later, type `/harness-reinstall` in the new copy: it carries your tasks, settings and knowledge base over.
+To move to a newer copy of the harness later, press **Coming from an older copy?** on Get ready, or type `/harness-reinstall` in the new copy: it carries your tasks, settings and knowledge base over.
 
-After that, daily use takes one sentence: tell Copilot what you want done, and it asks until the request is clear, then opens a task. You don't write long prompts or paths. See [what to say day to day](docs/01-quickstart.md#7-what-to-say-day-to-day).
+After that, daily use takes one sentence: press **New task** on the board, or tell Copilot what you want done. It asks until the request is clear, then opens a task. You don't write long prompts or paths. See [what to say day to day](docs/01-quickstart.md#7-what-to-say-day-to-day).
 
 ## What it does
 
@@ -94,6 +101,14 @@ All pictures are from a made-up team's tasks, on the real board.
 
 <table>
 <tr>
+<td width="50%"><a href="docs/images/enter.png"><img alt="The Enter screen: the robot over the word HARNESS and a line for each check" src="docs/images/enter.png"></a><br><sub><b>Start.</b> Double-click Start Harness. One line for each thing the harness needs.</sub></td>
+<td width="50%"><a href="docs/images/get-ready.png"><img alt="Get ready: the short command tested, then a form for your name, repositories and knowledge base" src="docs/images/get-ready.png"></a><br><sub><b>Get ready.</b> Set up in the browser. No agent runs.</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="docs/images/how-can-i-help.png"><img alt="The question mark panel on the board: ask, the course, the first lesson, everything you can ask for" src="docs/images/how-can-i-help.png"></a><br><sub><b>How can I help?</b> Ask, start a lesson, or see every skill.</sub></td>
+<td width="50%"><a href="docs/images/kb-overview.png"><img alt="The knowledge base window: the steps, the next one, five numbers and a table of domains" src="docs/images/kb-overview.png"></a><br><sub><b>The knowledge base.</b> The steps, the next one, and each domain with its cards. A <a href="docs/images/kb-map.png">map</a> shows how domains hang together.</sub></td>
+</tr>
+<tr>
 <td width="50%"><a href="docs/images/task-overview.png"><img alt="A task page: the stages, the reviewer's checks, what waits for you and the buttons to answer it" src="docs/images/task-overview.png"></a><br><sub><b>A task page.</b> Stages, the reviewer's checks, and what waits for you with a button for each answer.</sub></td>
 <td width="50%"><a href="docs/images/task-intake.png"><img alt="The Intake tab: drop Word and Excel files, paste a table, pick the files to keep" src="docs/images/task-intake.png"></a><br><sub><b>Intake.</b> Drop Word, Excel and PDF files; paste a table; trim, pick and delete files before the agent reads them.</sub></td>
 </tr>
@@ -111,16 +126,16 @@ More pictures, in the order of a task's life, are in the [overview](docs/00-over
 
 ## What you must plug in
 
-The harness is generic and carries no business content. **Without the two items below it cannot do your daily work.** The setup guide on the board helps you set them up.
+The harness is generic and carries no business content. **Without the two items below it cannot do your daily work.** **Get ready** sets up both.
 
-- **Company knowledge base.** Put the knowledge base in `knowledge-base/`, and put the **instructions that come with it** in [.github/instructions/knowledgebase.instructions.md](.github/instructions/knowledgebase.instructions.md). This file ships empty. Without it the agent doesn't know how to read the knowledge base through its index. `doctor` reminds you.
-- **Target repositories.** In `target.override.json`, set `repos_root` to the folder that holds your code repositories. Until this is set, the agent cannot change your code. Once it is set, a target repository can be written only through a promote that you approve.
+- **Company knowledge base.** Bring it in on Get ready, as a package or a folder, or build one from your code. It goes in `knowledge-base/`, and the **instructions that come with it** go in [.github/instructions/knowledgebase.instructions.md](.github/instructions/knowledgebase.instructions.md). This file ships empty. Without it the agent doesn't know how to read the knowledge base through its index. `doctor` reminds you.
+- **Target repositories.** On Get ready, add the folder that holds your code repositories, or single repositories. They go in `target.override.json`. Until this is set, the agent cannot change your code. Once it is set, a target repository can be written only through a promote that you approve.
 
 The harness is designed for the git repositories of data engineering teams: no entry point, cannot be run on a laptop, and a large number of Python, SQL, `.json`, `.sh` and PowerShell files organised by domain. The agent cannot verify its work by running it, so it depends more on the knowledge base. See [configuration](docs/03-configure.md).
 
 ## Docs
 
-If you'd rather not read docs, the four commands above are enough: the agent leads you.
+If you'd rather not read docs, the board and the lessons above are enough.
 
 | Doc | What you will find |
 | --- | --- |
@@ -134,7 +149,7 @@ If you'd rather not read docs, the four commands above are enough: the agent lea
 | [07 Release notes](docs/07-release-notes.md) | **What changed in each version.** Additions, changes and retirements |
 | [08 Knowledge base](docs/08-knowledge-base.md) | **Build it from your code and keep it true.** The idea, the steps, how you know the map is right, what you can change |
 | [09 Preparing an intake](docs/09-intake.md) | **Business documents as files the agent can read.** Word and Excel to Markdown and CSV without AI, `INTAKE.md`, trimming, pasting a table, the review of the requirement |
-| [10 Skills](docs/10-skills.md) | **Which skill is for what.** All 33 skills sorted by who uses them: the ones you start, the ones the agent picks, the knowledge base ones |
+| [10 Skills](docs/10-skills.md) | **Which skill is for what.** All 32 skills sorted by who uses them: the ones you start, the ones the agent picks, the knowledge base ones |
 | [11 Tool calling check](docs/11-tool-calling-check.md) | **Before the agent reaches outside systems.** A probe folder and a list of checks for your work computer: do hooks run, can an MCP server start, do MCP, extension and terminal calls reach a hook, can a hook refuse them |
 
 ## Directory layout
@@ -147,6 +162,7 @@ This repository (the harness)
 ├── AGENTS.md                      core rules every agent must follow
 ├── README.md, docs/               documentation for people
 ├── LICENSE, NOTICE                Apache License 2.0, and the copyright and third-party notice
+├── Start Harness.command, .cmd    double-click to start the board (macOS, Windows)
 ├── .github/
 │   ├── copilot-instructions.md    repository-level rules
 │   ├── instructions/              rules by category; knowledgebase.instructions.md belongs to the company
@@ -160,7 +176,7 @@ This repository (the harness)
 │   ├── policies/                  policies; companies override with *.override.json,
 │   │                              target repositories are set in target.override.json
 │   ├── contracts/, eval/, tests/  task file templates, fixed scenarios, tests
-│   ├── bin/                       short commands: harness, harness.cmd
+│   ├── bin/                       short commands: harness, harness.cmd; the Start Harness icon
 │   └── runtime/                   state and logs (not in git)
 ├── .workspace/
 │   ├── sandbox/tasks/<task>/      task directory: TASK.md, REQ.md, PLAN.md, results,
@@ -186,4 +202,4 @@ Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENS
 
 ---
 
-Version 1.6.85 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.6.86 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

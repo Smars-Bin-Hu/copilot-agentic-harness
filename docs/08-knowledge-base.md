@@ -4,6 +4,8 @@ For a team that wants its agent to know its code base: how the harness helps you
 
 **The quickest way**: type `/harness-rookie-new-knowledgebase` (or say "build our knowledge base"). The agent checks where you stand (`harness kb status`), explains each step in plain words, asks only for what you know, and leads you through the skills below. You can stop at any step and come back with "continue the knowledge base". This page is for when you want to know what happens underneath, or change it.
 
+**See where it stands**: the book button at the bottom right of the board opens the knowledge base window. It shows the steps and the next one, each domain with its cards, learning progress, stale cards and last read, and the buttons that start the next chat. The number on the book button is the count of stale cards.
+
 ## The idea
 
 - **The code is the source of truth.** The knowledge base is an index and a summary of it, read first because it is cheaper. Where the two disagree, the code wins.

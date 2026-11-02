@@ -1,6 +1,6 @@
 # 10. The skills: which one is for what
 
-A skill is a short instruction file that the agent loads when it fits the job. This repository ships 33 of them, in `.github/skills/`. This page sorts them by who uses them and what for.
+A skill is a short instruction file that the agent loads when it fits the job. This repository ships 32 of them, in `.github/skills/`. This page sorts them by who uses them and what for.
 
 Two things to know first:
 

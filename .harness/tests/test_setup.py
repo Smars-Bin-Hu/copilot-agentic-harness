@@ -100,7 +100,6 @@ class BannerTests(unittest.TestCase):
     def test_blocks_on_a_pipe_have_no_colour(self) -> None:
         text = registry.version_banner(self.ROOT, self.stream("UTF-8", False))
         self.assertIn("\u2588", text)
-        self.assertIn("\u2593", text)
         self.assertNotIn("\033", text)
         self.assertIn("version " + registry.harness_version(self.ROOT), text)
 
@@ -110,23 +109,6 @@ class BannerTests(unittest.TestCase):
             self.assertIn("\033[38;5;", registry.version_banner(self.ROOT, self.stream("utf-8", True)))
             os.environ["NO_COLOR"] = "1"
             self.assertNotIn("\033", registry.version_banner(self.ROOT, self.stream("utf-8", True)))
-
-    def test_the_robot_is_to_the_right_of_the_name_and_a_narrow_terminal_has_none(self) -> None:
-        with mock.patch.dict(os.environ, {"TERM": "xterm-256color"}):
-            os.environ.pop("NO_COLOR", None)
-            with mock.patch.object(registry.shutil, "get_terminal_size", return_value=os.terminal_size((80, 24))):
-                self.assertIn("\033[48;5;", registry.version_banner(self.ROOT, self.stream("utf-8", True)))
-            with mock.patch.object(registry.shutil, "get_terminal_size", return_value=os.terminal_size((70, 24))):
-                self.assertNotIn("\033[48;5;", registry.version_banner(self.ROOT, self.stream("utf-8", True)))
-        lines = registry.version_banner(self.ROOT, self.stream("utf-8", False)).split("\n")
-        self.assertTrue(lines[2].index("\u2593") > 58)
-
-    def test_the_robot_is_as_high_as_the_name_and_paints_no_block(self) -> None:
-        rows = registry.ROBOT.strip("\n").split("\n")
-        self.assertEqual(len(rows), len(registry.BLOCKS.strip("\n").split("\n")))
-        self.assertEqual(len({len(row) for row in rows}), 1)
-        self.assertEqual(set("".join(rows)) - {"."}, set(registry.PIXELS))
-        self.assertNotIn("\u2588", "".join(registry.robot_lines(True)))
 
     def test_the_lines_of_the_blocks_are_one_width(self) -> None:
         self.assertEqual(len({len(line) for line in registry.BLOCKS.strip("\n").split("\n")}), 1)

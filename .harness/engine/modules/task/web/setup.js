@@ -179,13 +179,9 @@ const SETUP = (function () {
         const parts = [];
         if (found.why) parts.push(h("p", {class: "su-note bad"}, found.why));
         if (found.output) {
-          const art = found.ok && found.output.includes("\u2588");
-          const line = (text) => {  // the name fills the first 58 columns, with the robot after it; the green of the robot is the shade character
-            if (!text.includes("\u2557") && !text.includes("\u2551")) return [text, "\n"];
-            const robot = text.slice(58).split(/(\u2593+)/).map((part) => (part.startsWith("\u2593") ? h("b", {class: "su-eye"}, "\u2588".repeat(part.length)) : part));
-            return [h("span", {class: "su-art"}, text.slice(0, 58)), ...robot, "\n"];
-          };
-          parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad") + (art ? " art" : "")}, art ? found.output.split("\n").map(line) : found.output));
+          const lines = found.output.split("\n");
+          const size = found.ok ? lines.findIndex((line) => !/[\u2500-\u259f]/.test(line)) : 0;  // the drawn letters come first
+          parts.push(h("pre", {class: "su-out" + (found.ok ? "" : " bad")}, size > 0 ? h("span", {class: "su-art"}, lines.slice(0, size).join("\n")) : null, lines.slice(Math.max(size, 0)).join("\n")));
         }
         if (found.python) parts.push(h("p", {class: "su-warn"}, found.python));
         testOut.replaceChildren(...parts);

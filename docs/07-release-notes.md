@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.80 (2026-11-02)
+
+### Changed
+
+- `harness --version` and Get ready show the name without the robot again. The 3D robot of the Enter screen stays.
+
 ## 1.6.79 (2026-11-02)
 
 ### Changed

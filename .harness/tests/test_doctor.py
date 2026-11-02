@@ -213,7 +213,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("user.json 的 name 要是一段文字", result.stdout)
 
     def test_version_shows_the_banner_with_the_release_date_and_the_authors(self) -> None:
-        """M9-1. The robot and drawn letters on UTF-8, as this pipe is; the ASCII ones are in test_setup.BannerTests."""
+        """M9-1. Drawn letters on UTF-8, as this pipe is; the ASCII letters are in test_setup.BannerTests."""
         result = self.version("--version")
         self.assertEqual(result.returncode, 0, result.stderr)
         lines = result.stdout.splitlines()

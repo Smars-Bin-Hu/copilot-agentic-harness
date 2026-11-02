@@ -236,6 +236,8 @@ class DoctorTests(HarnessTestCase):
             shutil.copytree(REPO / name, self.root / name, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "runtime", "*.pyc", "*.override.json"))
         (self.root / ".workspace").mkdir(exist_ok=True)
         shutil.copy(REPO / ".workspace" / "README.md", self.root / ".workspace" / "README.md")
+        for name in ("Start Harness.command", "Start Harness.cmd"):
+            shutil.copy2(REPO / name, self.root / name)
         self.repos = self.root / "source" / "repos"
         make_repo(self.repos / "repo_b")
 

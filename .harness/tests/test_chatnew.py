@@ -498,7 +498,7 @@ class PairedOnlyTests(CreateCase):
     def test_the_page_has_the_button_the_dialog_and_the_texts(self) -> None:
         page = self.request("GET", "/")[1]["text"]
         self.assertIn("CHAT.create()", page)
-        self.assertIn("function create()", page)
+        self.assertIn("function create(preset)", page)
         self.assertIn('"board.new.go"', page)
         self.assertIn('"stop", "create"', page)
 

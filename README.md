@@ -220,4 +220,4 @@ Copyright 2026 Smars Hu. Licensed under the [Apache License, Version 2.0](LICENS
 
 ---
 
-Version 1.6.90 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`
+Version 1.6.91 · [Release notes](docs/07-release-notes.md) · Check your installed version with `harness --version`

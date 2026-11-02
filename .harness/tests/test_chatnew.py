@@ -516,7 +516,7 @@ class InitiatorTests(unittest.TestCase):
 class ModelListTests(unittest.TestCase):
     def test_only_copilot_models_the_policy_enables_are_offered_with_their_levels(self) -> None:
         self.assertEqual([item["id"] for item in MODELS], ["claude-haiku-5.5", "claude-haiku-4.5"])
-        self.assertEqual(MODELS[0]["thinking"], {"levels": ["low", "medium"], "default": "medium"})
+        self.assertEqual(MODELS[0]["thinking"], {"levels": ["low", "medium"], "default": "medium", "key": "thinkingLevel", "labels": {"low": "low", "medium": "medium"}})
         self.assertIsNone(MODELS[1]["thinking"])
 
 

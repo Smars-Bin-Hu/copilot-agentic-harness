@@ -169,6 +169,7 @@
         ".harness/tests/test_taskrun.py",
         ".harness/tests/test_setup.py",
         ".harness/tests/test_skillboard.py",
+        ".harness/tests/test_fusion.py",
         ".harness/tests/test_skillsend.py",
         ".harness/tests/test_chatrounds.py",
         ".harness/tests/test_taskfiles.py",

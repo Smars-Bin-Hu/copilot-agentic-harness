@@ -85,9 +85,9 @@ class WholeTextTests(unittest.TestCase):
     """1.6.102: a long question of the agent came to the dialog cut to one line of 200 characters, and long names of code in it were masked as if they were keys."""
 
     def test_the_dialog_gets_all_the_agent_said_with_its_line_breaks(self) -> None:
-        lead = "Rule_Description over 255 is solved.\n[10110 / 10112 / 10114, Completeness] needs to leave out IR Type = 'Privacy Request for Access to Personal Information'. " * 6
-        detail = "If IR Type is NULL, `IR Type <> '...'` is unknown,\nso the row is dropped quietly. " * 4
-        found = chatask.shown(question_item(message=lead, questions=[{"id": "q", "kind": "single-select", "title": "IR Type empty", "message": detail, "options": [{"id": "a", "label": "A"}]}]))
+        lead = "The note over 255 characters is fixed.\n[Rules 4 / 5 / 6, Completeness] must leave out Order Type = 'Return to Supplier for Credit'. " * 6
+        detail = "If Order Type is NULL, `Order Type <> '...'` is unknown,\nso the row is dropped quietly. " * 4
+        found = chatask.shown(question_item(message=lead, questions=[{"id": "q", "kind": "single-select", "title": "Order Type empty", "message": detail, "options": [{"id": "a", "label": "A"}]}]))
         self.assertEqual(found["text"], lead.strip())
         self.assertIn("\n", found["text"])
         self.assertLessEqual(len(found["message"]), chatask.MAX_LINE)  # the one line of a card stays short
@@ -95,7 +95,7 @@ class WholeTextTests(unittest.TestCase):
         self.assertEqual(found["questions"][0]["message"], detail.strip())
 
     def test_names_of_code_stay_and_keys_do_not(self) -> None:
-        sql = "EXEC ETL.ap_Populate_Stage_CRCA_Control_Strength_Risk_Fact_Risks '2026-10-30';\nSUM(CASE WHEN s.AU_Regulatory_Interactions_Received_By_Other_AUs_Regulatory_Exam_Past_Year_Cnt > 0 THEN 1 END) FROM Stage.CRCA_Inherent_Risk_Fact_RegulatorInteraction_Risk s"
+        sql = "EXEC ETL.ap_Load_Stage_Late_Orders_Fact_Lines_By_Warehouse '2026-10-30';\nSUM(CASE WHEN s.Orders_Delivered_Late_By_Other_Warehouses_Past_Year_Cnt > 0 THEN 1 END) FROM Stage.Late_Orders_Fact_Warehouse_Delivery_Lines s"
         self.assertEqual(redact.text(sql), sql)
         for key in ("Kx9aB3zQpL7mN2vR8sT1uW4yX6cD5eF0gHjK2mN4pQ", "3f2a9c8b7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b", "aGVsbG8gd29ybGQgdGhpcyBpcyBhIGxvbmcgYmFzZTY0IHN0cmluZw==",
                     "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8", "abcdefghijklmnopqrstuvwxyzabcdefghijklmnop"):

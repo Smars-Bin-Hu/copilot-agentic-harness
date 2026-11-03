@@ -28,7 +28,7 @@ To see which version you have: `harness --version`.
 ### Changed
 
 - **A long question of the agent is shown whole where you answer it**, with its line breaks, in a box that scrolls. Before, it was cut to one line of 200 characters. The card on the board keeps one short line.
-- **Long names of code are no longer masked as `***`** on the board: a name of words joined by `_`, `-` or capitals, such as `ap_Populate_Stage_CRCA_Control_Strength_Risk_Fact_Risks`, stays. A long run that looks like a key or a hash is still masked, and so are the known kinds of keys.
+- **Long names of code are no longer masked as `***`** on the board: a name of words joined by `_`, `-` or capitals, such as `ap_Load_Stage_Late_Orders_Fact_Lines_By_Warehouse`, stays. A long run that looks like a key or a hash is still masked, and so are the known kinds of keys.
 
 ## 1.6.101 (2026-11-03)
 

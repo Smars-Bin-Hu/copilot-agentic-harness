@@ -17,7 +17,7 @@ _WORD = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])")
 
 
 def _reads_as_name(run: str) -> bool:
-    """A long name of code (`ap_Populate_Stage_CRCA_Control_Strength_Risk_Fact_Risks`, `getAllCheckpointRefsForTheSession`): three words or more a person can read, joined by `_`, `-` or
+    """A long name of code (`ap_Load_Stage_Late_Orders_Fact_Lines_By_Warehouse`, `getAllCheckpointRefsForTheSession`): three words or more a person can read, joined by `_`, `-` or
     capitals, with few digits (1.6.102: such names in an agent's reply were masked). A key or a hash breaks into pieces of one or two letters; base64 with `+`, `/` or `=` is never a name.
     Tried on random keys (url-safe, base64, hex, letters and digits): about one in a thousand reads as a name; the named kinds (GitHub, OpenAI, AWS, a JWT, key=value) have rules of their own."""
     if "+" in run or "/" in run or run.endswith("="):

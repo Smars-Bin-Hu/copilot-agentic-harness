@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -26,6 +27,7 @@ LOG_FILE = "LOG.md"
 REQ_FILE = "REQ.md"  # the requirement as the agent understands it; REQ/ holds the person's own documents
 PLAN_NAME = "PLAN.md"
 DEV_NAME = "DEV"
+MANUAL_NAME = "_manual"  # DEV/_manual/<path>: made under the plan like the rest of DEV/, run by hand by the person, never promoted (1.6.110)
 STATE_DIR = ".task"
 STATE_NAME = "task.json"
 BASE_NAME = "base"
@@ -150,6 +152,20 @@ def plan_approved(root: Path, task: str, data: Optional[Dict[str, Any]] = None) 
     data = data if data is not None else read(root, task)
     current = plan_digest(root, task)
     return bool(data and current) and (data.get("plan") or {}).get("approved_sha256") == current and not plan_req_changed(root, task, data)
+
+
+def is_manual(key: str) -> bool:
+    """Is this file of DEV/ (`<repo>/<path>` or `_manual/<path>`) one the person runs by hand? No repository can have that name: one starts with a letter or digit."""
+    return key.replace("\\", "/").split("/", 1)[0] == MANUAL_NAME
+
+
+def by_hand_only(root: Path, task: str) -> bool:
+    """Does DEV/ hold work to run by hand and nothing for a repository? Only its top is listed: the board asks this for every task."""
+    try:
+        names = [entry.name for entry in os.scandir(str(dev_dir(root, task))) if entry.is_dir() and not entry.name.startswith(".") and entry.name != "_deleted"]
+    except OSError:
+        return False
+    return names == [MANUAL_NAME]
 
 
 def in_dev(root: Path, folder: Path) -> bool:

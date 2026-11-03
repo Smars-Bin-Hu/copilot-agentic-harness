@@ -61,7 +61,7 @@ All four are needed before switching on. `cannot_turn_on` of `harness task autor
 - **Do not ask the user, and do not wait for the user.** Nobody is watching.
 - **Do not change the confirmation line of `REQ.md` yourself.** If it is not confirmed, note it in `LOG.md`.
 - **Do not promote.** Nothing is written back on the way. The write-back plan is made only when everything is done.
-- **When every step is ticked**: as the hook says, first pass the independent check (`harness task review start`, call `reviewer`, fix and check again if it does not pass), then run `harness task promote --dry-run`, give the user the link to `PROMOTE-PLAN.diff`, and stop.
+- **When every step is ticked**: as the hook says, first pass the independent check (`harness task review start`, call `reviewer`, fix and check again if it does not pass), then run `harness task promote --dry-run`, give the user the link to `PROMOTE-PLAN.diff`, and stop. When `DEV/` holds only `DEV/_manual/` (run by hand), there is no promote: hand the run over with `harness task handoff run`, and stop.
 - **When you cannot go on, stop. Do not force it.** Run `harness task autorun off --reason "<where it is stuck, and what the user has to decide>"`, then tell the user in a sentence or two. See [When to stop by yourself](references/when-to-stop.md).
 
 ### C. When it stops

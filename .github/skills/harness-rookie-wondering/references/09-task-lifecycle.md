@@ -95,6 +95,8 @@ Testing in DEV, IST and UAT is **not** another round. It is a new task of kind `
 
 A run you must do **before** the write-back (a job in DEV whose counts the work needs) is handed over the same way inside the development task: `task handoff run --env DEV --what "..."`. The board says "waits for your run", no check can start, and what you send back is saved in `RUNS/DEV/` by `task run record`: the commands, your words and the screenshots. You can give it in the chat or in the form on the task page (**Give the results here**): the page saves it under `INBOX/DEV/`, a folder only you can write, and tells you what to say to the agent.
 
+Code you run **by hand** yourself (a procedure on a dev server, written back later or with others) is still development: the agent writes it in `DEV/_manual/<path>` after you approve the plan, never at the root of the task folder. Promote leaves it, the run is handed over as above, and the stages end with **Run by hand**. Put the file as it is now in `REF/`; the agent takes it with `task fetch _manual/<path> --from <task>/REF/<file>`, so the **Changes** tab shows what changed.
+
 A test task does not start empty: **fork** the development task to it (`task fork <test task> --from <dev task> --kind test`, skill `harness-task-fork`). A copy of the old task's documents, `CHANGES.diff` and `RUNS/` goes into `REF/from-<old>/`, with `FORK.md` saying which branch was written back. Its approvals, checks and `DEV/` stay behind: the new task earns its own. The old task is not touched, so its report and checks still stand; and it is a copy, not a move, because a closed task may later be archived out of the repository.
 
 ### 9.7 Snapshots at the gates

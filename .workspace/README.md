@@ -18,9 +18,10 @@ What a task folder holds:
 | `REQ.md` | The requirement. The agent writes it from the conversation and you confirm it; when the requirement changes, the agent changes this file first | The agent |
 | `REQ/`, `REF/` | Your own requirement documents and reference material | People. Agents only read |
 | `TODO.md`, `LOG.md` | The list of steps; the decisions made, and why | The agent |
-| `PLAN.md` | The plan, when a target repository is to change. `DEV/` can be written only after you approve it in the terminal | The agent |
-| `RCA.md`, `DESIGN.md` and the like | Work that is not written back. At the root of the folder; no approval needed | The agent |
+| `PLAN.md` | The plan, when a target repository is to change or code is to be run by hand. `DEV/` can be written only after you approve it in the terminal | The agent |
+| `RCA.md`, `DESIGN.md` and the like | Work that stays in the task: notes, an RCA, a design, a read-only query. At the root of the folder; no approval needed | The agent |
 | `DEV/<repository>/<path>` | Work to write back to a target repository, at the same path as in the repository | The agent (after the plan is approved) |
+| `DEV/_manual/<path>` | Code you run by hand (on a server, in a database), written back later or by others; promote leaves it | The agent (after the plan is approved) |
 | `TEST/` | Test cases and results | The agent |
 | `REVIEW/round-NNN/` | Only with independent checks on: the review package and the reviewer's verdict | The CLI and the hook |
 | `SNAPSHOT/<gate>-<time>/` | The work as saved when the plan is approved, before every check and before a write-back | The CLI |

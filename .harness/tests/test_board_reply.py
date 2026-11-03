@@ -339,6 +339,18 @@ class NewTaskFileTests(CreateCase):
 
 
 class PageTests(unittest.TestCase):
+    def test_every_dialog_that_sends_to_an_agent_offers_the_model(self) -> None:
+        """1.6.101: a task's chat (go on, New task, Learn) has no Copilot Fusion by default, and the results, Ask agent, an approval and the close message can change the model too."""
+        chat = source("chat.js")
+        self.assertIn("function modelPick(task)", chat)
+        self.assertIn('const pick = (task ? (state.current.id ? state.current : remembered()) : found.small) || {};', chat)  # a task: its own model, else the last one picked; a one-off: the server's default
+        self.assertIn('return ask("/api/setting", {task, id: model.value, thinking: level.value, context})', chat)  # a pick for a task is kept on the task
+        self.assertIn("const last = remembered();", chat)  # New task starts on the model last picked for a task
+        for name, used in (("chat.js", "const pick = modelPick(row.name);"), ("dock.js", 'CHAT.modelPick(task || "")'), ("run.js", "CHAT.modelPick(task)"), ("serve.js", "CHAT.modelPick(row.name)"), ("desk.js", "CHAT.modelPick(desk.name)")):
+            text = source(name)
+            self.assertIn(used, text, name)
+            self.assertIn("pick.apply()", text, name)  # the pick is kept before the message goes
+
     def test_the_persons_words_have_one_place(self) -> None:
         serve = source("serve.js")
         self.assertIn('if (item.action === "answer" || item.action === "steer") return speak(row);', serve)

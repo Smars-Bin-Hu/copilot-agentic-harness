@@ -433,6 +433,15 @@ class CreateTests(CreateCase):
         self.assertEqual((line["kind"], line["text"]), ("create", "/harness-my-task Go on with the task old-job."))
         self.assertEqual(self.data()["chat"]["how"], "sdk")  # the other task is as it was
 
+    def test_a_picker_is_given_the_models_the_tasks_own_and_the_default_of_a_one_off(self) -> None:
+        status, data, _ = self.request("POST", "/api/skill", {"step": "options", "task": "job1"}, cookie=self.cookie)
+        self.assertEqual(status, 200, data)
+        self.assertEqual(([item["id"] for item in data["result"]["models"]], data["result"]["task"], data["result"]["small"]), (["claude-haiku-5.5", "claude-haiku-4.5"], {}, {}))
+        self.assertEqual(self.request("POST", "/api/setting", {"task": "job1", "id": "claude-haiku-4.5", "thinking": ""}, cookie=self.cookie)[0], 200)
+        data = self.request("POST", "/api/skill", {"step": "options", "task": "job1"}, cookie=self.cookie)[1]
+        self.assertEqual(data["result"]["task"], {"id": "claude-haiku-4.5", "thinking": "", "context": 0})
+        self.assertEqual(self.request("POST", "/api/skill", {"step": "options"})[0], 403)  # the paired browser only
+
     def test_a_task_of_another_name_does_not_take_the_chat(self) -> None:
         self.make()
         self.prompt("start", session="sess-x")

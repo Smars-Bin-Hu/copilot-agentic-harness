@@ -176,8 +176,9 @@ const SERVE = (function () {
     const canTalk = Boolean(row.chat && row.chat.bound) || chatNew(row);
     const tell = row.todo_left ? h("button", {class: "act hot", type: "button", disabled: "disabled", title: canTalk ? "" : t("board.close.notalk")}, t("board.close.tell")) : null;
     if (tell) go.classList.remove("hot");
+    const pick = tell && row.chat && row.chat.bound && typeof CHAT !== "undefined" ? CHAT.modelPick(row.name) : null;  // the model of the message to the agent (1.6.101); a chat still to make has its own dialog
     const view = dialog([h("h2", null, t("board.close.title", {name: row.name})), h("p", null, t("board.close.warn")), row.state === "quiet" ? h("p", {class: "bad"}, t("board.close.quiet")) : null, row.result_missing ? h("p", {class: "bad"}, t("board.close.result", {file: row.result_missing})) : null,
-      row.todo_left ? [h("p", {class: "bad"}, t("board.close.todo", {count: row.todo_left})), steps, h("label", {class: "sub"}, t("board.close.reason")), words] : null,
+      row.todo_left ? [h("p", {class: "bad"}, t("board.close.todo", {count: row.todo_left})), steps, h("label", {class: "sub"}, t("board.close.reason")), words, pick ? pick.node : null] : null,
       h("div", {class: "row"}, tell, go, no), said]);
     no.addEventListener("click", view.close);
     if (row.todo_left) {
@@ -187,7 +188,7 @@ const SERVE = (function () {
         const text = t("board.close.words", {task: row.name, words: words.value.trim().replace(/\s+/g, " ")});
         if (!row.chat.bound) { view.close(); return DOCK.start("harness-my-task", text, null, row.name); }
         tell.disabled = true;
-        post("/api/send", {task: row.name, kind: "answer", lang: "", note: "", body: "/harness-my-task " + text, step: "act"}).then(() => { view.close(); done(); },
+        (pick ? pick.apply() : Promise.resolve()).then(() => post("/api/send", {task: row.name, kind: "answer", lang: "", note: "", body: "/harness-my-task " + text, step: "act"})).then(() => { view.close(); done(); },
           (error) => { said.replaceChildren(...reasons(error.message)); tell.disabled = false; });
       });
     }

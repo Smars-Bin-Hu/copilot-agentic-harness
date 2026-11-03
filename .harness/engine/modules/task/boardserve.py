@@ -179,6 +179,14 @@ RESTART_AFTER = 0.3  # seconds for the answer to reach the page
 RESTART_CODE = "HARNESS_BOARD_RESTART"  # the pairing code of the next process: in its environment, never on disk
 
 
+def model_pair(model: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """`message.model` as a picker shows it: `{id, thinking, context}` (the thinking level, or the level of Copilot Fusion); empty: none."""
+    if not model:
+        return {}
+    found = model.get("config") or {}
+    return {"id": model["id"], "thinking": str(found.get("thinkingLevel") or found.get("tier") or ""), "context": found.get("contextSize", 0)}
+
+
 def relaunch(code: str) -> None:
     """The same command again, so new code and new texts are read. No exec replaces a process on Windows: it runs it and leaves with its answer, as `pinpython` does."""
     words = [sys.executable, *sys.argv]
@@ -649,6 +657,10 @@ class Board:
         step = str(data.get("step", ""))
         if step == "list":
             return {"skills": skillboard.skills(self.root)}
+        if step == "options":  # the model picker of a dialog that sends to an agent (1.6.101): the models, the task's own model, and the default of a short one-off chat
+            task = task_ops.resolve(self.root, str(data["task"])) if data.get("task") else ""
+            own = chatsend.model_of(tasks.read(self.root, task) or {}) if task else None
+            return {"models": self.link.model_list(), "task": model_pair(own), "small": {} if task else model_pair(self.click_model({}))}
         text = skillsend.message(self.root, data)
         why = self.link.create_blocked()
         model = self.click_model(data)
@@ -679,9 +691,13 @@ class Board:
         return {"code": self.next_code}
 
     def click_model(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """The model of a chat a click starts: the one the person chose for its task, else Copilot Fusion unless `board.one_click_fusion` in the policy `task` is false."""
+        """The model of a chat a click starts. What the person picked in the dialog comes first (`model`, 1.6.101; empty: VS Code's own choice), then the model of its task. A chat that works on
+        a task gets no other default: it may have much to read, and a cheap model picked for a short first message would read it all again after a switch (1.6.101). A short one-off chat runs on
+        Copilot Fusion unless `board.one_click_fusion` in the policy `task` is false."""
+        if "model" in data:
+            return chatnew.model_of(data, self.link.model_list())
         chosen = chatsend.model_of(tasks.read(self.root, task_ops.resolve(self.root, str(data["task"]))) or {}) if data.get("task") else None
-        if chosen:
+        if chosen or data.get("task"):
             return chosen
         wanted = (config.policy_or_empty(self.root, "task").get("board") or {}).get("one_click_fusion", True)
         return chatnew.one_click_model(self.link.model_list()) if wanted is not False else None

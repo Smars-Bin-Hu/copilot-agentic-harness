@@ -1781,6 +1781,7 @@
   "board.new.text.ph": "用自己的话描述 agent 要做的事",
   "board.new.model": "模型",
   "board.new.model.chat": "沿用 VS Code 的设置",
+  "desk.model.runs": "模型",
   "board.new.thinking": "思考程度",
   "board.new.thinking.default": "默认",
   "board.new.lang": "回复语言",

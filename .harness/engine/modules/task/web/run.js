@@ -27,7 +27,8 @@ const Run = (function () {
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const preview = h("pre", {class: "send-preview"}, "...");
     const said = h("div", {class: "bad"});
-    const view = SERVE.dialog([h("h2", null, t("desk.run.ask.title")), preview, h("p", {class: "sub"}, t("desk.run.ask.note")), said, h("div", {class: "row"}, go, no)]);
+    const pick = typeof CHAT !== "undefined" ? CHAT.modelPick(task) : null;  // 1.6.101
+    const view = SERVE.dialog([h("h2", null, t("desk.run.ask.title")), preview, h("p", {class: "sub"}, t("desk.run.ask.note")), pick ? pick.node : null, said, h("div", {class: "row"}, go, no)]);
     const body = (step) => ({task, kind: "command", body: text, lang: "", note: "", step});
     no.addEventListener("click", view.close);
     SERVE.post("/api/send", body("preview")).then((data) => {
@@ -37,7 +38,7 @@ const Run = (function () {
     }, (error) => { preview.textContent = ""; said.replaceChildren(...SERVE.reasons(error.message || error)); });
     go.addEventListener("click", () => {
       go.disabled = true;
-      SERVE.post("/api/send", body("act")).then(() => { view.close(); SERVE.done(); if (done) done(); },
+      (pick ? pick.apply() : Promise.resolve()).then(() => SERVE.post("/api/send", body("act"))).then(() => { view.close(); SERVE.done(); if (done) done(); },
         (error) => { said.replaceChildren(...SERVE.reasons(error.message || error)); });
     });
   }

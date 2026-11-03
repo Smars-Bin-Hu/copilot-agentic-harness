@@ -712,7 +712,7 @@
         form.images.forEach((item) => URL.revokeObjectURL(item.url));
         Object.assign(form, {text: "", ran: "", images: []});
         if (!(desk.chat && desk.chat.bound)) return Object.assign(form, {busy: false, gave: data.result, told: false});
-        return SERVE.post("/api/send", {task: desk.name, kind: "answer", lang: "", note: "", body: data.result.message, step: "act"})  // not sent: the saved results stay, and the message is there to copy
+        return (form.pick ? form.pick.apply() : Promise.resolve()).then(() => SERVE.post("/api/send", {task: desk.name, kind: "answer", lang: "", note: "", body: data.result.message, step: "act"}))  // not sent: the saved results stay, and the message is there to copy
           .then(() => Object.assign(form, {busy: false, gave: data.result, told: true}), () => Object.assign(form, {busy: false, gave: data.result, told: false}));
       }, (error) => { form.busy = false; form.error = error.message; })
       .then(() => draw(true));
@@ -738,6 +738,7 @@
     chooser.addEventListener("click", () => pick.click());
     const save = h("button", {type: "button", class: "act hot", disabled: form.busy ? "" : null}, form.busy ? t("desk.inbox.saving") : t(desk.chat && desk.chat.bound ? "desk.inbox.send" : "desk.inbox.save"));
     save.addEventListener("click", () => saveResults(where.value.trim()));
+    if (desk.chat && desk.chat.bound && !form.pick && typeof CHAT !== "undefined") form.pick = CHAT.modelPick(desk.name);  // the model the agent reads the results with (1.6.101); made once, kept over redraws
     const thumbs = h("div", {class: "thumbs"}, form.images.map((item, index) => {
       const remove = h("button", {type: "button", class: "act", title: t("desk.inbox.remove")}, "×");
       remove.addEventListener("click", () => { URL.revokeObjectURL(item.url); form.images.splice(index, 1); draw(true); });
@@ -747,7 +748,7 @@
       form.gave ? h("div", {class: "inbox-done"}, h("p", {class: "hint"}, t(form.told ? "desk.inbox.told" : "desk.inbox.done", {folder: form.gave.folder})), form.told ? null : promptLine(form.gave.message)) : null,
       field(t("desk.inbox.env"), where), field(t("desk.inbox.text"), text), field(t("desk.inbox.ran"), ran),
       h("div", {class: "inbox-pictures"}, chooser, pick, thumbs),
-      form.error ? h("p", {class: "hint bad"}, form.error) : null, h("div", {class: "inbox-save"}, save));
+      form.error ? h("p", {class: "hint bad"}, form.error) : null, desk.chat && desk.chat.bound && form.pick ? form.pick.node : null, h("div", {class: "inbox-save"}, save));
   }
 
   // A message the person sends to the agent in VS Code: one click copies it.

@@ -67,9 +67,21 @@ class ClickTests(unittest.TestCase):
         self.models = ahp.models_of(host(PLAIN))
         self.assertIsNone(self.click({}))
 
-    def test_a_task_keeps_the_model_the_person_chose(self) -> None:
+    def test_a_task_keeps_the_model_the_person_chose_and_gets_no_fusion_of_its_own(self) -> None:
         self.assertEqual(self.click({"task": "own"}), {"id": "m"})
-        self.assertEqual(self.click({"task": "plain"}), {"id": "auto", "config": {"tier": "balance"}})
+        self.assertIsNone(self.click({"task": "plain"}))  # 1.6.101: a task's chat may have much to read; the person picks, VS Code chooses otherwise
+
+    def test_what_the_person_picked_in_the_dialog_comes_first(self) -> None:
+        self.assertEqual(self.click({"model": "auto", "thinking": "hydrafusion"}), {"id": "auto", "config": {"tier": "hydrafusion"}})
+        self.assertEqual(self.click({"task": "own", "model": "m", "thinking": "low"}), {"id": "m", "config": {"thinkingLevel": "low"}})
+        self.assertIsNone(self.click({"model": "", "thinking": ""}))  # VS Code's own choice, also for a short one-off chat
+        with self.assertRaises(CommandError):
+            self.click({"model": "not-listed"})
+
+    def test_a_picker_reads_a_model_as_id_level_and_context(self) -> None:
+        self.assertEqual(boardserve.model_pair({"id": "auto", "config": {"tier": "balance"}}), {"id": "auto", "thinking": "balance", "context": 0})
+        self.assertEqual(boardserve.model_pair({"id": "m", "config": {"thinkingLevel": "low", "contextSize": 200000}}), {"id": "m", "thinking": "low", "context": 200000})
+        self.assertEqual(boardserve.model_pair(None), {})
 
     def test_the_page_reads_the_name_and_the_level(self) -> None:
         self.assertEqual(boardserve.Board.model_words(self.board, {"id": "auto", "config": {"tier": "balance"}}), "Copilot Fusion · Standard")

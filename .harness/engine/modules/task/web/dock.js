@@ -1,5 +1,5 @@
 // The buttons at the bottom right (1.6.61): the question mark and the one-click chats. The gear is shell.js's. The book opens the knowledge base window, the sliders the setup, the house the Enter screen.
-// DOCK.start asks with the whole message in view, sends, and brings VS Code forward. Needs common.js (h, t), serve.js (SERVE).
+// DOCK.start asks with the whole message in view and the model it goes with (CHAT.modelPick, 1.6.101), sends, and brings VS Code forward. Needs common.js (h, t), serve.js (SERVE), chat.js (CHAT).
 const DOCK = (function () {
   const BOOK = "https://smarshu.com/book/";
   const ENTERED = "harness.entered";  // enter.js: the Enter screen was seen in this tab
@@ -28,7 +28,8 @@ const DOCK = (function () {
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const copy = h("button", {type: "button", class: "act", "data-label": t("dock.copy"), hidden: ""}, t("dock.copy"));  // with VS Code away, the words can still go into a chat by hand
     const again = h("button", {type: "button", class: "act", hidden: ""}, t("dock.again"));
-    const view = SERVE.dialog([h("h2", null, t(task ? "dock.title.task" : "dock.title")), h("p", {class: "sub"}, task ? t("dock.hint.task", {task}) : t("dock.hint")), preview, runs, said, h("div", {class: "row"}, go, again, copy, no)]);
+    const pick = typeof CHAT !== "undefined" ? CHAT.modelPick(task || "") : null;  // 1.6.101: the person picks the model; a task's chat has no Copilot Fusion by default
+    const view = SERVE.dialog([h("h2", null, t(task ? "dock.title.task" : "dock.title")), h("p", {class: "sub"}, task ? t("dock.hint.task", {task}) : t("dock.hint")), preview, pick ? pick.node : runs, said, h("div", {class: "row"}, go, again, copy, no)]);
     no.addEventListener("click", () => { view.close(); if (back) back(); });  // Cancel goes back to where the person came from
     copy.addEventListener("click", () => copyCommand(copy, preview.textContent));
     const check = () => ask("preview", body).then((found) => {
@@ -43,7 +44,7 @@ const DOCK = (function () {
     check();
     go.addEventListener("click", () => {
       go.disabled = true;
-      ask("act", body).then(() => { view.close(); done(); }, (error) => { go.disabled = false; said.replaceChildren(...SERVE.reasons(error.message || error)); });
+      (pick ? pick.apply() : Promise.resolve({})).then((chosen) => ask("act", {...body, ...chosen})).then(() => { view.close(); done(); }, (error) => { go.disabled = false; said.replaceChildren(...SERVE.reasons(error.message || error)); });
     });
   }
 

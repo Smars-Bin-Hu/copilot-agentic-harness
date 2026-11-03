@@ -1781,6 +1781,7 @@
   "board.new.text.ph": "What the agent should do, in your own words",
   "board.new.model": "Model",
   "board.new.model.chat": "VS Code's own choice",
+  "desk.model.runs": "Model",
   "board.new.thinking": "Thinking",
   "board.new.thinking.default": "default",
   "board.new.lang": "Reply language",

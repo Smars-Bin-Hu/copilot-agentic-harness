@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.101 (2026-11-03)
+
+### Added
+
+- **Every dialog that sends to an agent shows the model, and you can change it there:** go on in a new chat, an approval message, Give the results, Ask agent, the close message, the Learn go on, Fix it in a chat and the one-click skills. For a task, the model you pick is kept on the task (Task settings), so its next messages and Say something use it too.
+
+### Changed
+
+- **A chat for a task no longer starts on Copilot Fusion by itself.** It starts on the task's own model, else on the one you last picked for a task in this browser (New task too), else on VS Code's own choice. A task may have much to read: a cheap model picked for a short first message would read it all again after you switch. A short one-off chat with no task still starts on Copilot Fusion, and you can change it.
+
 ## 1.6.100 (2026-11-03)
 
 ### Added

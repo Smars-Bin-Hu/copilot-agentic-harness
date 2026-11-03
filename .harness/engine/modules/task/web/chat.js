@@ -6,6 +6,52 @@ const CHAT = (function () {
   const ask = (path, body) => SERVE.post(path, body).then((data) => data.result);
   const shown = (error) => (error && error.message) || String(error);
 
+  // The model a message goes with (1.6.101): on every dialog that sends to an agent. A chat that works on a task (`task`): the task's own model (Task settings), else the last one picked for a task in
+  // this browser, never Copilot Fusion by default: a task may have much to read, and a cheap model picked for a short first message would read it all again after a switch. A short one-off chat (no
+  // `task`): Copilot Fusion by default (`board.one_click_fusion`). A pick for a task is kept on the task (`/api/setting`), so its next messages and Say something use it too.
+  const LAST = "harness.model.last";
+  const remembered = () => { try { return JSON.parse(localStorage.getItem(LAST) || "null"); } catch (error) { return null; } };
+  function remember(choice) { try { localStorage.setItem(LAST, JSON.stringify(choice)); } catch (error) { /* kept for this dialog only */ } }
+  function modelPick(task) {
+    const state = {models: [], current: {}, ready: false};
+    const model = h("select", {class: "send-body", "aria-label": t("board.new.model")});
+    const level = h("select", {class: "send-body", "aria-label": t("board.new.thinking")});
+    const node = h("div", {class: "model-pick"}, h("span", {class: "sub"}, t("desk.model.runs")), model, level);
+    const levels = (keep) => {
+      const found = state.models.find((item) => item.id === model.value);
+      const list = (found && found.thinking && found.thinking.levels) || [];
+      level.replaceChildren(h("option", {value: ""}, t("board.new.thinking.default")), ...list.map((one) => h("option", {value: one}, thinkingLabel(one, found))));
+      level.value = list.includes(keep) ? keep : "";
+      level.disabled = !list.length;
+    };
+    const loaded = SERVE.post("/api/skill", {step: "options", ...(task ? {task} : {})}).then((data) => {
+      const found = data.result;
+      state.models = found.models || [];
+      state.current = found.task || {};
+      const pick = (task ? (state.current.id ? state.current : remembered()) : found.small) || {};
+      model.replaceChildren(h("option", {value: ""}, t("board.new.model.chat")), ...state.models.map((item) => h("option", {value: item.id}, item.name)));
+      model.value = state.models.some((item) => item.id === pick.id) ? pick.id : "";
+      levels(pick.thinking || "");
+      state.ready = true;
+    }, () => { node.hidden = true; });  // no list (VS Code away): the message goes as it did before
+    const picked = () => { if (task) remember({id: model.value, thinking: level.value}); };
+    model.addEventListener("change", () => { levels(""); picked(); });
+    level.addEventListener("change", picked);
+    return {
+      node,
+      // Before the message goes: a task keeps the pick when it changed; a one-off chat names it in its own request (the fields to add to it).
+      apply() {
+        return loaded.then(() => {
+          if (!state.ready) return {};
+          if (!task) return {model: model.value, thinking: level.value};
+          if ((state.current.id || "") === model.value && (state.current.thinking || "") === level.value) return {};
+          const context = state.current.id === model.value ? state.current.context || 0 : 0;
+          return ask("/api/setting", {task, id: model.value, thinking: level.value, context}).then(() => { state.current = {id: model.value, thinking: level.value, context}; return {}; });
+        });
+      },
+    };
+  }
+
   // A message the person may copy to VS Code by hand: the way out when the board cannot send.
   function copyButton(getText) {
     const button = h("button", {type: "button", class: "act", "data-label": t("desk.go.copy")}, t("desk.go.copy"));
@@ -94,6 +140,7 @@ const CHAT = (function () {
     });
     const paintChips = (lang) => chips.forEach((item, at) => { const on = ["en", "zh"][at] === lang; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); });
     const send = h("button", {type: "button", class: "act hot"}, t("desk.send.go"));
+    const pick = modelPick(row.name);
     const save = h("button", {type: "button", class: "act", title: t("desk.send.draft.tip")}, t("desk.send.draft"));
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const copy = copyButton(() => state.text);
@@ -101,7 +148,7 @@ const CHAT = (function () {
     const view = SERVE.dialog([h("h2", null, t("board.action." + action) + " · " + row.name),
       h("p", {class: "sub"}, t("desk.send.hint")),
       h("div", {class: "sub label"}, t("desk.send.preview")), preview, drafts,
-      h("div", {class: "send-lang"}, h("span", {class: "sub"}, t("desk.send.lang")), chips),
+      h("div", {class: "send-lang"}, h("span", {class: "sub"}, t("desk.send.lang")), chips), pick.node,
       h("div", null, h("div", {class: "sub label"}, t("desk.send.note")), note),
       blocked, h("div", {class: "row send-actions"}, send, save, copy, no), said]);
     const sync = () => {
@@ -139,7 +186,7 @@ const CHAT = (function () {
     });
     send.addEventListener("click", () => {
       state.busy = true; send.textContent = t("board.serve.working"); sync();
-      ask("/api/send", {task: row.name, kind: "go", lang: state.lang, note: state.note, body: "", step: "act"}).then(() => { close(); SERVE.done(); }, (error) => {
+      pick.apply().then(() => ask("/api/send", {task: row.name, kind: "go", lang: state.lang, note: state.note, body: "", step: "act"})).then(() => { close(); SERVE.done(); }, (error) => {
         state.busy = false; send.textContent = t("desk.send.go"); sync();
         if (error.data && error.data.fallback) state.text = error.data.fallback;  // the text that was refused stays in the copy button
         said.replaceChildren(...SERVE.reasons(shown(error)), h("p", {class: "sub"}, t("desk.send.copy.hint")));
@@ -264,7 +311,8 @@ const CHAT = (function () {
     }
     for (const control of [name, text]) control.addEventListener("input", refresh);
     for (const control of [kind, source, thinking]) control.addEventListener("change", refresh);
-    model.addEventListener("change", () => { levels(); refresh(); });
+    model.addEventListener("change", () => { levels(); remember({id: model.value, thinking: thinking.value}); refresh(); });
+    thinking.addEventListener("change", () => remember({id: model.value, thinking: thinking.value}));
     go.addEventListener("click", () => {
       state.busy = true; go.textContent = t("board.new.working"); sync(); said.replaceChildren();
       ask("/api/create", {...body("act"), attachments: files.list()}).then((found) => {
@@ -281,9 +329,12 @@ const CHAT = (function () {
       kind.replaceChildren(...found.kinds.map((item) => h("option", {value: item, selected: item === "dev" ? "" : null}, t("task.kind." + item))));
       source.replaceChildren(h("option", {value: ""}, t("board.new.source.none")), ...found.sources.map((item) => h("option", {value: item.name}, item.name + (item.kind ? " \u00b7 " + t("task.kind." + item.kind) : "") + (item.status === "closed" ? " \u00b7 " + t("board.filter.closed") : ""))));
       model.replaceChildren(h("option", {value: ""}, t("board.new.model.chat")), ...state.models.map((item) => h("option", {value: item.id}, item.name)));
+      const last = remembered();  // a task's chat starts on the model last picked for a task, not on Copilot Fusion (1.6.101)
+      if (last && state.models.some((item) => item.id === last.id)) model.value = last.id;
       state.domainList = Array.isArray(found.domains) ? found.domains : [];
       drawKb();
       levels();
+      if (last && model.value === last.id && [...thinking.options].some((option) => option.value === last.thinking)) thinking.value = last.thinking;
       const filled = preset === true ? (found.sample && found.sample.name ? {...found.sample, note: t("board.new.sample")} : null) : preset;
       if (filled) {
         if (filled.name) name.value = filled.name;
@@ -388,5 +439,5 @@ const CHAT = (function () {
     no.addEventListener("click", view.close);
   }
 
-  return {panel, stop, withdraw, create, confirm, question, fileTray};
+  return {panel, stop, withdraw, create, confirm, question, fileTray, modelPick};
 })();

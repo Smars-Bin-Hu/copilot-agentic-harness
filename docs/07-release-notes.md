@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.106 (2026-11-03)
+
+### Changed
+
+- **The tab group Verify is now Results.** It holds what the work brought: Changes (the code), Test and Review (what the reviewer found).
+
 ## 1.6.105 (2026-11-03)
 
 ### Added

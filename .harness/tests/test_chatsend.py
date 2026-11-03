@@ -483,6 +483,11 @@ class SettingsTests(SendCase):
         self.assertEqual(self.post("/api/act", {"action": "review set", "n": "2", "step": "act"})[0], 409)
         self.assertEqual(taskreview.state_of(self.data())["n"], 2)
         self.agent_at_work()
+        for item in self.items:  # VS Code says the chat runs a turn too: an idle chat would win over the hook log (1.6.105). The host's list as well, so a list read again says the same
+            item["status"] = ahp.IN_PROGRESS
+        with self.vs.lock:
+            for item in self.vs.sessions.values():
+                item["status"] = ahp.IN_PROGRESS
         self.assertEqual(self.post("/api/act", {"action": "review set", "n": 1, "step": "act"})[0], 409)  # the same wait as the other decisions
         self.assertEqual(taskreview.state_of(self.data())["n"], 2)
 

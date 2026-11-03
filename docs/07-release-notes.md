@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.103 (2026-11-03)
+
+### Added
+
+- **Move and size the Say something panel**, so it does not cover the messages you answer: drag its header to move it, pull any edge or corner to size it. It floats over the page and moves nothing in it. Its place is kept in this browser; a double click on the header puts it back. A larger panel gives the room to the text box. On a narrow screen it stays as it is.
+
 ## 1.6.102 (2026-11-03)
 
 ### Changed

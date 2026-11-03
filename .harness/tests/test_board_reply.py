@@ -340,6 +340,18 @@ class NewTaskFileTests(CreateCase):
 
 
 class PageTests(unittest.TestCase):
+    def test_the_panel_is_moved_by_its_header_and_sized_by_its_edges_and_the_place_is_kept(self) -> None:
+        """1.6.103: the panel covered the messages it answers, so it had to be shut and opened again and again."""
+        reply, css = source("reply.js"), source("live.css")
+        self.assertIn('["n", "s", "e", "w", "ne", "nw", "se", "sw"].map((edge) => h("div", {class: "rp-edge rp-" + edge', reply)
+        self.assertIn('head.addEventListener("pointerdown", (event) => follow(event, ""));', reply)
+        self.assertIn('const left = !edge ? start.left + dx : edge.includes("w") ? start.right - width : start.left;', reply)  # the side not dragged stays
+        self.assertIn("localStorage.setItem(PLACE, JSON.stringify(place))", reply)
+        self.assertIn('head.addEventListener("dblclick"', reply)  # put back
+        self.assertIn(".rp.placed{transform:none;bottom:auto;max-height:none}", css)
+        self.assertIn("display:flex;flex-direction:column;overflow:visible;", css)  # a clip would take the rounded corners away from the grips
+        self.assertIn("@media (max-width:600px){.rp-edge{display:none}", css)
+
     def test_every_dialog_that_sends_to_an_agent_offers_the_model(self) -> None:
         """1.6.101: a task's chat (go on, New task, Learn) has no Copilot Fusion by default, and the results, Ask agent, an approval and the close message can change the model too."""
         chat = source("chat.js")

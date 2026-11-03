@@ -128,9 +128,18 @@
 .rp-pill .bd[hidden]{display:none}
 .has-reply .tk-foot{padding-bottom:84px}  /* the pill never sits on the last line of the page */
 
-.rp{position:fixed;left:50%;bottom:78px;z-index:55;transform:translateX(-50%);box-sizing:border-box;width:min(600px,94vw);max-height:calc(100vh - 150px);overflow:auto;padding:16px;border-radius:20px;color:var(--ink);background:var(--over);border:1px solid var(--glass-line);box-shadow:var(--glass-hi),var(--glass-shadow);animation:palin .16s ease-out}
+.rp{position:fixed;left:50%;bottom:78px;z-index:55;transform:translateX(-50%);box-sizing:border-box;width:min(600px,94vw);max-height:calc(100vh - 150px);display:flex;flex-direction:column;overflow:visible;padding:16px;border-radius:20px;color:var(--ink);background:var(--over);border:1px solid var(--glass-line);box-shadow:var(--glass-hi),var(--glass-shadow);animation:palin .16s ease-out}
 .rp[hidden]{display:none}
-.rp-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-size:13.5px}
+.rp-h{flex:none;display:flex;align-items:center;justify-content:space-between;margin:-6px -6px 10px;padding:6px 6px 0;font-size:13.5px;cursor:move;user-select:none;touch-action:none}
+.rp-scroll{flex:1 1 auto;min-height:0;overflow:auto;margin:0 -16px;padding:0 16px}  /* the header and Send stay; what is between them scrolls */
+.rp.placed{transform:none;bottom:auto;max-height:none}  /* moved or sized by the person (1.6.103): left, top, width and height are set by reply.js */
+.rp.moving{animation:none;user-select:none}
+.rp.placed .rp-scroll{display:flex;flex-direction:column}.rp.placed .rp-scroll>*{flex:none}.rp.placed .rp-scroll>.rp-text{flex:1 1 auto;max-height:none}  /* a larger panel gives the room to the text */
+.rp-edge{position:absolute;z-index:3;touch-action:none}
+.rp-n,.rp-s{left:14px;right:14px;height:7px;cursor:ns-resize}.rp-n{top:-3px}.rp-s{bottom:-3px}
+.rp-e,.rp-w{top:14px;bottom:14px;width:7px;cursor:ew-resize}.rp-e{right:-3px}.rp-w{left:-3px}
+.rp-ne,.rp-nw,.rp-se,.rp-sw{width:16px;height:16px}.rp-ne{top:-3px;right:-3px;cursor:nesw-resize}.rp-sw{bottom:-3px;left:-3px;cursor:nesw-resize}.rp-nw{top:-3px;left:-3px;cursor:nwse-resize}.rp-se{bottom:-3px;right:-3px;cursor:nwse-resize}
+@media (max-width:600px){.rp-edge{display:none}.rp-h{cursor:default}}
 .rp-x{display:inline-grid;place-items:center;width:28px;height:28px;padding:0;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--soft);cursor:pointer}
 .rp-x svg{width:14px;height:14px}
 .rp-x:hover{background:var(--hover);color:var(--ink)}
@@ -156,7 +165,7 @@
 .rp-pre{max-height:12em}
 .rp-said{margin-top:8px}
 .rp-said p{margin:0 0 4px;overflow-wrap:anywhere}
-.rp-f{position:sticky;bottom:-16px;z-index:1;display:flex;align-items:center;gap:10px;margin:12px -16px -16px;padding:10px 16px 16px;min-width:0;background:var(--pop);border-top:1px solid var(--line);border-radius:0 0 20px 20px}  /* Send is always in view, whatever the panel holds */
+.rp-f{flex:none;position:relative;z-index:1;display:flex;align-items:center;gap:10px;margin:12px -16px -16px;padding:10px 16px 16px;min-width:0;background:var(--pop);border-top:1px solid var(--line);border-radius:0 0 20px 20px}  /* Send is always in view, whatever the panel holds */
 .rp-hint{flex:1 1 auto;min-width:0;font-size:12px;overflow-wrap:anywhere}
 .rp-f kbd{flex:none;font:500 10.5px/1 var(--mono);padding:3px 5px;border-radius:5px;background:var(--kbd);color:var(--soft);border:1px solid var(--line)}
 .rp-f kbd[hidden],.rp-f .act[hidden]{display:none}

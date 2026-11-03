@@ -72,11 +72,64 @@ const REPLY = (function () {
       skillRow.hidden = !items.length;
     }, () => { delete skillRow.dataset.done; });
   }
-  const panel = h("div", {class: "rp", role: "dialog", "aria-label": t("desk.reply.title"), hidden: ""},
-    h("div", {class: "rp-h"}, h("b", null, t("desk.reply.title")), close), box, files.tray,
-    skillRow, h("div", {class: "rp-lang"}, files.attach, files.picker, h("span", {class: "sub"}, t("desk.send.lang")), h("span", {class: "chips"}, chips)),
-    settingsSlot, draftBox, whole, waiting, said, h("div", {class: "rp-f"}, hint, kbd, save, later, go));
+  const head = h("div", {class: "rp-h", title: t("desk.reply.move")}, h("b", null, t("desk.reply.title")), close);
+  const edges = ["n", "s", "e", "w", "ne", "nw", "se", "sw"].map((edge) => h("div", {class: "rp-edge rp-" + edge, "data-edge": edge, "aria-hidden": "true"}));
+  const panel = h("div", {class: "rp", role: "dialog", "aria-label": t("desk.reply.title"), hidden: ""}, head,
+    h("div", {class: "rp-scroll"}, box, files.tray,
+      skillRow, h("div", {class: "rp-lang"}, files.attach, files.picker, h("span", {class: "sub"}, t("desk.send.lang")), h("span", {class: "chips"}, chips)),
+      settingsSlot, draftBox, whole, waiting, said), h("div", {class: "rp-f"}, hint, kbd, save, later, go), edges);
   document.body.append(h("div", {class: "rp-bar"}, pill, halt, back, again), panel);
+  // Where the panel stands (1.6.103): the person moves it by its header and sizes it by any edge or corner, so it does not cover the messages it answers. It floats over the page and moves
+  // nothing in it. The place is kept in this browser; a double click on the header puts it back. On a narrow screen it stays where it is made to be.
+  const PLACE = "harness.reply.place";
+  const MIN_W = 340, MIN_H = 260, GAP = 8;
+  let place = null;
+  try { place = JSON.parse(localStorage.getItem(PLACE) || "null"); } catch (error) { place = null; }
+  const narrow = () => window.matchMedia("(max-width: 600px)").matches;
+  function fit(box) {
+    const width = Math.min(Math.max(box.width, MIN_W), innerWidth - 2 * GAP), height = Math.min(Math.max(box.height, MIN_H), innerHeight - 2 * GAP);
+    return {width, height, left: Math.min(Math.max(box.left, GAP), innerWidth - width - GAP), top: Math.min(Math.max(box.top, GAP), innerHeight - height - GAP)};
+  }
+  function placeNow() {
+    const on = Boolean(place) && !narrow();
+    panel.classList.toggle("placed", on);
+    const box = on ? fit(place) : null;
+    for (const key of ["left", "top", "width", "height"]) panel.style[key] = box ? box[key] + "px" : "";
+  }
+  function keepPlace() { try { if (place) localStorage.setItem(PLACE, JSON.stringify(place)); else localStorage.removeItem(PLACE); } catch (error) { /* kept while the page is open */ } }
+  function follow(event, edge) {  // a drag of the header (`edge` "") or of an edge or a corner
+    if (narrow() || event.button !== 0 || (!edge && event.target.closest("button"))) return;
+    event.preventDefault();
+    const start = panel.getBoundingClientRect(), x0 = event.clientX, y0 = event.clientY, grip = event.currentTarget;
+    grip.setPointerCapture(event.pointerId);
+    panel.classList.add("moving");
+    const move = (next) => {
+      const dx = next.clientX - x0, dy = next.clientY - y0;
+      const width = Math.max(MIN_W, start.width + (edge.includes("e") ? dx : edge.includes("w") ? -dx : 0));
+      const height = Math.max(MIN_H, start.height + (edge.includes("s") ? dy : edge.includes("n") ? -dy : 0));
+      const left = !edge ? start.left + dx : edge.includes("w") ? start.right - width : start.left;  // the side not dragged stays where it is
+      const top = !edge ? start.top + dy : edge.includes("n") ? start.bottom - height : start.top;
+      place = {left, top, width, height};
+      placeNow();
+    };
+    const up = () => {
+      grip.removeEventListener("pointermove", move);
+      grip.removeEventListener("pointerup", up);
+      grip.removeEventListener("pointercancel", up);
+      panel.classList.remove("moving");
+      if (place) place = fit(place);
+      keepPlace();
+    };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", up);
+    grip.addEventListener("pointercancel", up);
+  }
+  head.addEventListener("pointerdown", (event) => follow(event, ""));
+  head.addEventListener("dblclick", (event) => { if (event.target.closest("button")) return; place = null; keepPlace(); placeNow(); });
+  for (const node of edges) node.addEventListener("pointerdown", (event) => follow(event, node.dataset.edge));
+  window.addEventListener("resize", () => { if (!panel.hidden) placeNow(); });
+  placeNow();
+
   const liveNow = () => {
     const live = typeof LIVE !== "undefined" ? LIVE.data() : null;
     return live && live.bound ? live : null;
@@ -199,6 +252,7 @@ const REPLY = (function () {
     if (!info.show || mine.open) return;
     mine.open = true;
     panel.hidden = false;
+    placeNow();  // the window may have changed size while the panel was shut
     pill.setAttribute("aria-expanded", "true");
     fillSlots(true);
     if (typeof LIVE !== "undefined") LIVE.want("reply", true);

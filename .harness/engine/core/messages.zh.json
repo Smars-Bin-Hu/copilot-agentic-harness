@@ -2451,6 +2451,7 @@
   "desk.reply.close": "关闭",
   "desk.reply.ph": "写给 agent……",
   "desk.reply.title": "对 agent 说点什么",
+  "desk.reply.move": "拖这里可移动窗口；拖边框或角可缩放；双击恢复原位。",
   "send.refused.setting": "VS Code 没有为这个 chat 提供这个设置。",
   "send.refused.context": "这个模型没有这个上下文大小。",
   "send.refused.file-bad": "有文件读取失败，请重新添加。",

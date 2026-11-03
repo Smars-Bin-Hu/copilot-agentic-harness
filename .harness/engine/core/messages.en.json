@@ -2451,6 +2451,7 @@
   "desk.reply.close": "Close",
   "desk.reply.ph": "Write to the agent...",
   "desk.reply.title": "Say something to the agent",
+  "desk.reply.move": "Drag here to move the panel; pull an edge or a corner to size it; a double click puts it back.",
   "send.refused.setting": "VS Code does not offer that setting for this chat.",
   "send.refused.context": "That context size is not one this model has.",
   "send.refused.file-bad": "A file could not be read. Attach it again.",

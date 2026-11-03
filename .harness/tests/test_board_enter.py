@@ -11,6 +11,7 @@ import types
 import unittest
 from pathlib import Path
 from typing import Any, Dict, List
+from unittest import mock
 
 import support  # noqa: F401 - HARNESS_VSCODE_CLI=off
 from taskcase import TaskCase
@@ -144,6 +145,17 @@ class ReadinessTests(TaskCase):
         self.assertEqual(ready.run_doctor(self.root)["failed"], "ValueError: boom")
         cli.write_text("print('[OK] fine')\nprint('{\"errors\": 0}')\n", encoding="utf-8")
         self.assertEqual(ready.run_doctor(self.root), {"errors": 0, "first": "", "failed": "", "lines": [], "warned": 0, "warning": ""})
+
+    def test_the_doctor_deadline_is_five_minutes_unless_the_policy_says_otherwise(self) -> None:
+        """1.6.104: a work computer took 80 s and more, and 90 s was the limit."""
+        self.assertEqual(ready.doctor_seconds(self.root), 300.0)
+        for value, wanted in ((600, 600.0), (5, 30.0), (99999, 1800.0), ("x", 300.0), (True, 300.0)):
+            with mock.patch.object(ready.config, "policy_or_empty", return_value={"board": {"doctor_seconds": value}}):
+                self.assertEqual(ready.doctor_seconds(self.root), wanted, value)
+
+    def test_a_board_from_a_terminal_starts_doctor_before_a_page_asks(self) -> None:
+        source = (support.REPO / ".harness" / "engine" / "modules" / "task" / "boardserve.py").read_text(encoding="utf-8")
+        self.assertIn("        board.ready.start_doctor()  # the Enter screen waits for it", source)  # only without `ready`: the tests start no doctor of their own
 
     def test_vscode_states(self) -> None:
         cases = {"none": ("fail", True), "off": ("fail", False), "no-cli": ("fail", False), "cli-failed": ("fail", False), "many": ("fail", False), "starting": ("wait", True), "lost": ("wait", True), "error": ("wait", True)}

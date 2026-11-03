@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.104 (2026-11-03)
+
+### Changed
+
+- **The Enter screen gives `harness doctor` 300 seconds**, not 90: a slow work computer took 80 seconds and more. Set `board.doctor_seconds` in `task.override.json` for another limit. The board starts doctor as soon as it starts, so it runs while the browser opens and pairs.
+- **A row of the board shows Steer once.** When the agent worked while the task also waited for something with no button of its own, Steer was drawn twice.
+
 ## 1.6.103 (2026-11-03)
 
 ### Added

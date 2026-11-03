@@ -169,7 +169,7 @@
   function actionStrip(row) {
     const items = row.actions || [];
     if (!items.length) return null;
-    const first = items.find((item) => isHot(row, item));  // the others go behind the three dots: a second button takes its width from the State column of every row
+    const first = items.find((item) => isHot(row, item) && !TALK.includes(item.action));  // the others go behind the three dots; steer and stop have their own place below (1.6.104: one was drawn twice)
     const direct = items.filter((item) => item.action === "archive" || item === first);
     const talk = items.filter((item) => TALK.includes(item.action));
     const rest = items.filter((item) => !direct.includes(item) && !talk.includes(item));

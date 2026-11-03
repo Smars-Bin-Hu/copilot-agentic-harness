@@ -244,7 +244,8 @@ class ServeTests(SendCase):
         self.assertEqual(status, 409, data)
 
     def busy(self, active: Dict[str, Any]) -> None:
-        """The chat of job1 runs a turn, in the host's list and in the memory of the link."""
+        """The chat of job1 runs a turn, in the host's list and in the memory of the link. The link subscribes the chat a moment after it bound it: a busy machine is slower."""
+        self.assertTrue(until(lambda: self.chat in self.vs.chats), "the chat was never subscribed")
         for item in self.items:
             item["status"] = ahp.IN_PROGRESS
         with self.vs.lock:
@@ -340,6 +341,12 @@ class NewTaskFileTests(CreateCase):
 
 
 class PageTests(unittest.TestCase):
+    def test_a_row_draws_steer_once(self) -> None:
+        """1.6.104: a task that waited for something with no button of its own while its agent worked had Steer as its first button and again among the words to the agent."""
+        board = source("board.js")
+        self.assertIn("const first = items.find((item) => isHot(row, item) && !TALK.includes(item.action));", board)
+        self.assertIn("const talk = items.filter((item) => TALK.includes(item.action));", board)
+
     def test_the_panel_is_moved_by_its_header_and_sized_by_its_edges_and_the_place_is_kept(self) -> None:
         """1.6.103: the panel covered the messages it answers, so it had to be shut and opened again and again."""
         reply, css = source("reply.js"), source("live.css")

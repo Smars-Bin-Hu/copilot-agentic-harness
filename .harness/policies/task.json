@@ -39,6 +39,7 @@
     "refresh_seconds": 3,
     "closed_shown": 50,
     "active_seconds": 300,
+    "doctor_seconds": 300,
     "actions": [
       "pause",
       "resume",

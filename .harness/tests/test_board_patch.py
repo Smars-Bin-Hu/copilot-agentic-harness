@@ -487,7 +487,7 @@ class WalkThroughTests(unittest.TestCase):
 
     def test_a_row_has_one_button_of_its_own_and_the_rest_are_in_the_menu(self) -> None:
         strip = between((WEB / "board.js").read_text(encoding="utf-8"), "function actionStrip(row)", "function actionCell(row)")
-        self.assertIn("const first = items.find((item) => isHot(row, item));", strip)
+        self.assertIn("const first = items.find((item) => isHot(row, item) && !TALK.includes(item.action));", strip)  # steer and stop are drawn once, with the words to the agent (1.6.104)
         self.assertIn('item.action === "archive" || item === first', strip)
 
     def test_the_words_of_a_stop_and_of_a_dim_button_are_where_they_are_read(self) -> None:

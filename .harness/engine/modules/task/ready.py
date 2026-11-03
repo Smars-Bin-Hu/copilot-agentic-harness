@@ -4,7 +4,7 @@ Blocking, in this order: this copy is set up (Get ready); VS Code is open and co
 
 Nothing here waits on the outside world, so the server never hangs on it:
 - VS Code and Copilot are read from the cache of the link thread (`vslink`), which owns every `code` command and its timeout.
-- `harness doctor` takes about a second (more with a slow `code`): it runs once in a thread of its own, in a child process with a deadline, and its result is kept. It is run again only
+- `harness doctor` takes about a second (a minute and more on a slow work computer): it runs once in a thread of its own, in a child process with a deadline (`board.doctor_seconds`), and its result is kept. A board started from a terminal starts it at once, before a page asks (1.6.104). It is run again only
   when it failed or found an error (and not sooner than RETRY_FAILED), or very late when it was clean. A poll only reads the kept result.
 - The knowledge base and the repositories are two folder listings, kept for a few seconds.
 A check that goes wrong itself is a line that failed with its reason, never an error of the request.
@@ -24,7 +24,8 @@ from typing import Any, Callable, Dict, List, Optional
 from core import config, shortcmd, targets, tasks
 
 LINES = 6  # errors of doctor shown at the end of the setup
-DOCTOR_TIMEOUT = 90.0  # seconds the child `doctor` may take (a stalled `code` command inside it has its own 25 s)
+DOCTOR_TIMEOUT = 300.0  # seconds the child `doctor` may take; `board.doctor_seconds` in the policy `task` (1.6.104: 90 was too short for a work computer that took 80 s)
+DOCTOR_LIMITS = (30.0, 1800.0)
 RETRY_FAILED = 20.0  # a doctor that failed or found errors is run again no sooner than this
 REFRESH_CLEAN = 600.0  # a clean doctor is looked at again after this long
 FOLDERS_FOR = 10.0  # seconds the two folder checks are kept
@@ -50,8 +51,17 @@ def setup_done(root: Path) -> bool:
     return config.override_path(root, "target").exists() or bool(tasks.folders(root))
 
 
-def run_doctor(root: Path, timeout: float = DOCTOR_TIMEOUT) -> Dict[str, Any]:
+def doctor_seconds(root: Path) -> float:
+    """The deadline of the child `doctor`: `board.doctor_seconds` of the policy `task`, kept between DOCTOR_LIMITS; DOCTOR_TIMEOUT when it is not set or not a number."""
+    value = (config.policy_or_empty(root, "task").get("board") or {}).get("doctor_seconds")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return DOCTOR_TIMEOUT
+    return min(max(float(value), DOCTOR_LIMITS[0]), DOCTOR_LIMITS[1])
+
+
+def run_doctor(root: Path, timeout: Optional[float] = None) -> Dict[str, Any]:
     """`doctor` in a child process: `{errors, first, failed}`. `failed`: why it could not be run or read (empty when it ran). Never raises."""
+    timeout = doctor_seconds(root) if timeout is None else timeout
     command = [sys.executable, str(root / ".harness" / "engine" / "cli.py"), "doctor"]
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PATH=shortcmd.fresh_path())  # what a new terminal sees: the person may have added the short command after the board started

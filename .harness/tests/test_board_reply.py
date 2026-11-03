@@ -378,6 +378,18 @@ class PageTests(unittest.TestCase):
         self.assertIn("again.setSelectionRange(typing.start, typing.end, typing.way)", desk)
         self.assertLess(desk.index("again.setSelectionRange(typing.start"), desk.index("for (const node of app.querySelectorAll(\"[data-keep]\")) if (kept.has"))  # the caret first: the box's own scroll is put back after it
 
+    def test_earlier_rounds_show_the_last_five_and_fold_the_rest(self) -> None:
+        """1.6.108: every earlier round was drawn, and scrolling up drew more, so the Live tab grew with the chat. One button opens the folded ones and folds them again."""
+        rounds = source("rounds.js")
+        self.assertIn("const SHOWN = 5;", rounds)
+        self.assertIn("const list = st.open ? st.list : st.list.slice(-SHOWN);", rounds)
+        self.assertIn('more.addEventListener("click", () => { st.open = !st.open; paint(); });', rounds)
+        self.assertNotIn("IntersectionObserver", rounds)  # scrolling to the button no longer opens more
+        self.assertIn("if (!keep.has(node.dataset.n)) node.remove();", rounds)  # a folded round leaves the page; its node is kept for later
+        self.assertIn('t(st.open ? "desk.rounds.fold" : "desk.rounds.more", {n: older})', rounds)
+        # the browser keeps the reading place itself; moving the page too sent it twice as far
+        self.assertIn("if (above && !ANCHORS) window.scrollBy(", rounds)
+
     def test_a_row_draws_steer_once(self) -> None:
         """1.6.104: a task that waited for something with no button of its own while its agent worked had Steer as its first button and again among the words to the agent."""
         board = source("board.js")

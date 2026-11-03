@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.108 (2026-11-03)
+
+### Changed
+
+- **Earlier rounds on the Live tab shows the last 5.** The older ones are folded under **Show _n_ older**, which opens them and folds them again, so the tab no longer grows with the chat. Before, scrolling up drew more and more of them.
+- **A new or folded round above the stream no longer moves what you read.** The page was moved twice as far as it should, once by the browser and once by the board.
+
 ## 1.6.107 (2026-11-03)
 
 ### Changed

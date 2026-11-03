@@ -1,9 +1,9 @@
 // The earlier rounds of a task's chat, at the top of the Live tab (1.6.55): one line for each prompt of the person, opened to read the prompt and all the agent wrote for it.
-// Scrolling up shows older rounds. The server reads them from Copilot's own record, or from the task's saved transcript (chatrounds.py), so this works with VS Code closed.
+// Only the last 5 are shown (1.6.108): the older ones are folded under one button, so the tab does not grow with the chat. The server reads them from Copilot's own record, or from the task's saved transcript (chatrounds.py), so this works with VS Code closed.
 // Each line ends with what the round took (1.6.98): its time, its credits and its tools, as icons with the words in their tip. The round that still runs counts its time on the page.
 // Needs common.js (h, t, when, clock, amount, lineSvg), serve.js (SERVE), live.js (LIVE), status.js (Status: the one clock of the page). Drawn with DOM nodes and textContent only.
 const ROUNDS = (function () {
-  const STEP = 20;
+  const SHOWN = 5;
   const ICONS = {
     time: [["circle", {cx: 8, cy: 8, r: 6}], ["path", {d: "M8 4.8V8l2.2 1.4"}]],  // clock
     credits: [["ellipse", {cx: 8, cy: 4.6, rx: 5, ry: 2}], ["path", {d: "M3 4.6v6.8c0 1.1 2.2 2 5 2s5-.9 5-2V4.6M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"}]],  // a stack of coins
@@ -18,8 +18,8 @@ const ROUNDS = (function () {
     if (item.tools) parts.push(stat("tools", t("desk.rounds.count", {n: item.tools}), String(item.tools)));
     return parts;
   }
-  const st = {task: "", list: [], shown: STEP, nodes: new Map(), state: "", draw: null};
-  const more = h("button", {type: "button", class: "rd-more", hidden: ""});
+  const st = {task: "", list: [], open: false, nodes: new Map(), state: "", draw: null};
+  const more = h("button", {type: "button", class: "rd-more", hidden: "", "aria-expanded": "false"});
   const rows = h("div", {class: "rd-rows"});
   const box = h("section", {class: "rd", hidden: "", "aria-label": t("desk.rounds.title")}, h("h3", {class: "rd-title"}, t("desk.rounds.title")), more, rows);
 
@@ -40,16 +40,20 @@ const ROUNDS = (function () {
   function make(item) {
     const count = h("span", {class: "sub rd-stats"});
     const body = h("div", {class: "rd-body"});
-    const node = h("details", {class: "rd-row"}, h("summary", null, h("span", {class: "sub rd-at"}, when(item.at)), h("span", {class: "rd-head"}, item.head || t("desk.rounds.empty")), count), body);
+    const node = h("details", {class: "rd-row", "data-n": String(item.n)}, h("summary", null, h("span", {class: "sub rd-at"}, when(item.at)), h("span", {class: "rd-head"}, item.head || t("desk.rounds.empty")), count), body);
     node.addEventListener("toggle", () => { if (node.open) fill(body, item.n); });
     return {node, count};
   }
 
-  // Older rounds go in above what is being read: the page is moved by the same height, so the reading place stays.
+  // Rounds go in or out above what is being read, and the reading place stays: the browser keeps it itself (scroll anchoring, 1.6.108: moving the page too sent it twice as far);
+  // one that cannot is moved here by the same height. A folded round keeps its node, open or not, for when it is shown again.
+  const ANCHORS = typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("overflow-anchor", "auto");
   function paint() {
-    const list = st.list.slice(-st.shown);
+    const list = st.open ? st.list : st.list.slice(-SHOWN);
     const before = document.documentElement.scrollHeight;
     const above = rows.firstChild ? rows.firstChild.getBoundingClientRect().top < 0 : false;
+    const keep = new Set(list.map((item) => String(item.n)));
+    for (const node of [...rows.children]) if (!keep.has(node.dataset.n)) node.remove();
     let next = rows.firstChild;
     const newest = st.list.length ? st.list[st.list.length - 1] : null;
     const began = Date.parse((LIVE.data() || {}).started || "");
@@ -64,12 +68,14 @@ const ROUNDS = (function () {
       if (rec.node === next) next = next.nextSibling;
       else rows.insertBefore(rec.node, next);
     }
-    const left = st.list.length - list.length;
-    more.hidden = !left;
-    more.textContent = t("desk.rounds.more", {n: left});
+    const older = Math.max(0, st.list.length - SHOWN);
+    more.hidden = !older;
+    more.textContent = t(st.open ? "desk.rounds.fold" : "desk.rounds.more", {n: older});
+    more.setAttribute("aria-expanded", String(st.open));
+    more.classList.toggle("is-open", st.open);
     box.hidden = !st.list.length;
     if (busy && typeof Status !== "undefined") Status.clock();
-    if (above) window.scrollBy({top: document.documentElement.scrollHeight - before, behavior: "instant"});
+    if (above && !ANCHORS) window.scrollBy({top: document.documentElement.scrollHeight - before, behavior: "instant"});
   }
 
   function load() {
@@ -82,8 +88,7 @@ const ROUNDS = (function () {
     }, () => {});
   }
 
-  more.addEventListener("click", () => { st.shown += STEP; paint(); });
-  if (typeof IntersectionObserver !== "undefined") new IntersectionObserver((seen) => { if (seen.some((item) => item.isIntersecting) && !more.hidden) { st.shown += STEP; paint(); } }).observe(more);
+  more.addEventListener("click", () => { st.open = !st.open; paint(); });
   let again = 0;
   LIVE.onChange(() => {
     const now = (LIVE.data() || {}).state || "";
@@ -98,7 +103,7 @@ const ROUNDS = (function () {
     drawing(draw) { st.draw = draw; },
     follow(task) {
       if (task === st.task) return;
-      st.task = task; st.list = []; st.shown = STEP; st.state = "";
+      st.task = task; st.list = []; st.open = false; st.state = "";
       st.nodes.clear();
       rows.replaceChildren();
       box.hidden = true;

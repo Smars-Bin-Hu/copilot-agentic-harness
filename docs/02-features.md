@@ -287,7 +287,7 @@ Under the stages, **what waits for you** comes first, each button with a line on
 
 ### The tabs
 
-**Live** starts with the earlier rounds of the chat: open one to read the prompt and all the agent wrote for it ([what is kept](04-reference.md#earlier-rounds)). A closed task has them too.
+**Live** starts with the last 5 earlier rounds of the chat, the older ones folded: open one to read the prompt and all the agent wrote for it ([what is kept](04-reference.md#earlier-rounds)). A closed task has them too.
 
 A shell code block on the page has **Ask agent** (the chat runs it; the gate holds) and **Run** (you run it at once; the gate does not check it; [how](04-reference.md#run-from-the-board)).
 

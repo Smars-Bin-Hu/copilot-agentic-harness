@@ -142,7 +142,7 @@ This is how a served board (`task board --serve`) talks to the chats of VS Code.
 
 ### Earlier rounds
 
-The Live tab lists each prompt of the chat, oldest first. Scroll up for older rounds, and open one to read it. `/api/rounds` takes a paired browser only.
+The Live tab lists the last 5 prompts of the chat, oldest first. **Show _n_ older** above them opens the others, and folds them again. Open a round to read it. `/api/rounds` takes a paired browser only.
 
 - **Kept:** the prompt, all the text the agent wrote in that round, the names of the tools. **Left out:** thinking, tool output and what a subagent wrote. Those stay in VS Code.
 - **Where it comes from:** Copilot's own `events.jsonl`, read only, so it works with VS Code closed. The harness never deletes Copilot's files.

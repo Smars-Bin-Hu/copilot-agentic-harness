@@ -1,6 +1,8 @@
 /* The earlier rounds at the top of the Live tab (rounds.js). */
 .rd{margin:0 0 18px}.rd-title{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--soft)}
-.rd-more{display:block;width:100%;margin:0 0 6px;padding:6px;border:0;background:none;color:var(--soft);font:inherit;font-size:12px;cursor:pointer}
+.rd-more{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin:0 0 6px;padding:6px;border:0;border-radius:8px;background:none;color:var(--soft);font:inherit;font-size:12px;cursor:pointer}
+.rd-more::after{content:"";width:5px;height:5px;margin-top:-3px;border:solid currentColor;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}.rd-more.is-open::after{margin-top:3px;transform:rotate(-135deg)}
+.rd-more:hover{background:var(--hover);color:var(--ink)}.rd-more[hidden]{display:none}
 .rd-row{border-top:1px solid var(--line)}.rd-row:last-child{border-bottom:1px solid var(--line)}
 .rd-row>summary{display:flex;align-items:baseline;gap:10px;min-width:0;padding:7px 2px;cursor:pointer;list-style:none}.rd-row>summary::-webkit-details-marker{display:none}
 .rd-at{flex:none;font-size:12px}.rd-head{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rd-stats{flex:none;display:inline-flex;align-items:center;gap:12px;font-size:12px;font-variant-numeric:tabular-nums}.rd-stats:empty{display:none}

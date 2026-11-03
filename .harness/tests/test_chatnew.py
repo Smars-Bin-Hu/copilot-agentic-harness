@@ -391,6 +391,8 @@ class CreateTests(CreateCase):
         self.assertEqual((line["kind"], line["text"], line["chat"], line["permission"]), ("create", text, self.new_chat, "allow-all"))
         self.assertIn("create", [item["what"] for item in self.data(fresh)["events"]])
         self.assertEqual(self.data()["chat"]["how"], "sdk")  # the other task is as it was
+        titles = [item for item in self.dispatched() if item["action"].get("type") == "session/titleChanged"]
+        self.assertEqual([(item["channel"], item["action"]["title"]) for item in titles], [(self.new_chat, "fresh-load")])  # found in VS Code by the task's name; job1's chat keeps its title
 
     def test_a_chat_the_host_does_not_list_yet_is_tracked_at_once_and_asked_for_again_soon_not_after_the_full_relist(self) -> None:
         self.listed_new = False  # the host lists a chat only once its first turn runs
@@ -426,6 +428,7 @@ class CreateTests(CreateCase):
         found = self.data(old)["chat"]
         self.assertEqual((found["how"], found["session"], found["chat"]), ("board", self.made[0]["channel"], self.new_chat))
         self.assertEqual(self.vs.waiting_names(), [])
+        self.assertTrue(until(lambda: {"type": "session/titleChanged", "title": "old-job"} in [item["action"] for item in self.dispatched() if item["channel"] == self.new_chat]))
         line = json.loads((self.root / old / ".task" / "sent.jsonl").read_text(encoding="utf-8").splitlines()[-1])
         self.assertEqual((line["kind"], line["text"]), ("create", "/harness-my-task Go on with the task old-job."))
         self.assertEqual(self.data()["chat"]["how"], "sdk")  # the other task is as it was

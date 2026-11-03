@@ -30,8 +30,9 @@ Who may do what:
   redacted and cut.
 - Gate review (1.6, B76): the report page (`/tasks/<name>/report.html`) is drawn by the server, with buttons for the verdicts; `/api/verdict` and `/api/export` (paired POST only) keep a verdict in the
   task state and write the samples of the blocks judged wrong (`gatereview`). `/report-save/<name>` gives the report as one file with no buttons and no calls. The report file on disk shows the verdicts, read only.
-- Files, settings and taking back (1.6.22): `/api/send` and `/api/steer` take `attachments`; `/api/chatconfig` sets the mode and the tool permission of a chat; `/api/undo` takes the last message out of an idle
-  chat. All are paired POSTs only.
+- Files, settings and taking back (1.6.22): `/api/send` and `/api/steer` take `attachments`; `/api/chatconfig` sets the mode and the tool permission of a chat; `/api/undo` takes the last message out of
+  the chat (1.6.99: a turn that runs is stopped first). 1.6.99: `/api/queue` (with `attachments`) puts a message after the running turn, `/api/unqueue` takes one back, `/api/resume` runs a turn
+  that ended in an error again. All are paired POSTs only.
 - VS Code (1.6): one background thread (`vslink`) keeps a connection to the chats of VS Code and a cache; a request only reads the cache. Without VS Code
   `vscode.ready` is false: a request gets no error and no wait, and the Enter screen (`ready.py`) does not let a person in. `/api/open` (paired browser) asks the thread to bring the window of this folder forward.
 """
@@ -737,7 +738,8 @@ class Board:
         except ValueError as error:
             raise CommandError(self.refusal(str(error))) from None
 
-    def steer(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def steer(self, data: Dict[str, Any], kind: str = "steer") -> Dict[str, Any]:
+        """A message while the agent works: `steer` goes into the running turn, `queue` (1.6.99) after it, as the next turn Copilot starts itself."""
         task, found = self.target(data)
         text, problem = chatsend.steer_text(str(data.get("text", "")), str(data.get("lang", "")))
         if problem:
@@ -746,12 +748,42 @@ class Board:
         model = chatsend.model_of(found)
         files = self.files_of(data)
         try:
-            done = self.link.dispatch("steer", task, text, model, files)
+            done = self.link.dispatch(kind, task, text, model, files)
         except vslink.Refused as error:
             raise Fallback(self.refusal(error.why), text) from None
         except Exception as error:  # noqa: BLE001
             raise Fallback(ahp_scrub(error), text) from None
-        return self.sent(task, found, "steer", text, done, {"model": model or {}, "files": chatsend.listed(files)})
+        return self.sent(task, found, kind, text, done, {"model": model or {}, "files": chatsend.listed(files)})
+
+    def queue(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return self.steer(data, "queue")
+
+    def unqueue(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Take one queued message back before Copilot sends it; its words come back for the reply box."""
+        task, _found = self.target(data)
+        try:
+            done = self.link.dispatch("unqueue", task, plan={"id": str(data.get("id", ""))[:100]})
+        except vslink.Refused as error:
+            raise CommandError(self.refusal(error.why)) from None
+        except Exception as error:  # noqa: BLE001
+            raise CommandError(ahp_scrub(error)) from None
+        with task_ops.locked(self.root, task) as again:
+            task_ops.note(again, "chat-unqueue", chatsend.summary(done["text"]))
+        chinese = done["text"].startswith(chatsend.ZH_MARK)
+        return {"text": done["text"][len(chatsend.ZH_MARK):].lstrip() if chinese else done["text"], "lang": "zh" if chinese else "en", "files": []}
+
+    def resume(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Try again: the last turn of the chat ended in an error the host can run again (a limit or a broken connection), and it runs again with the same message."""
+        task, _found = self.target(data)
+        try:
+            self.link.dispatch("resume", task)
+        except vslink.Refused as error:
+            raise CommandError(self.refusal(error.why)) from None
+        except Exception as error:  # noqa: BLE001
+            raise CommandError(ahp_scrub(error)) from None
+        with task_ops.locked(self.root, task) as again:
+            task_ops.note(again, "chat-resume", "-")
+        return {"resumed": True}
 
     def stop(self, data: Dict[str, Any]) -> Dict[str, Any]:
         task, found = self.target(data)
@@ -925,7 +957,7 @@ class Board:
         return {"model": model or {}}
 
     def undo(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Take the last message of the person out of the chat, with what answered it, and give back its words for the reply box. The chat must be idle."""
+        """Take the last message of the person out of the chat, with what answered it, and give back its words for the reply box. A turn that runs is stopped first (1.6.99)."""
         task, _found = self.target(data)
         try:
             done = self.link.dispatch("undo", task)
@@ -1085,7 +1117,7 @@ def handler_for(board: Board) -> type:
             origin = self.headers.get("Origin", "")
             if not self.host_ok() or (origin and origin not in allowed_origins) or self.headers.get(HEADER) != "1":
                 return self.answer(403, {"error": say("serve.refused.request")})
-            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_FILES_BODY if urlparse(self.path).path in ("/api/send", "/api/steer", "/api/create") else MAX_SEND_BODY if urlparse(self.path).path == "/api/answer" else MAX_BODY
+            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_FILES_BODY if urlparse(self.path).path in ("/api/send", "/api/steer", "/api/queue", "/api/create") else MAX_SEND_BODY if urlparse(self.path).path == "/api/answer" else MAX_BODY
             try:
                 size = int(self.headers.get("Content-Length", "0"))
                 data = json.loads(self.rfile.read(min(size, limit)).decode("utf-8") or "{}") if 0 <= size <= limit else None
@@ -1128,7 +1160,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown in the dialog
                     return self.answer(409, {"error": str(error)})
-            if path in ("/api/send", "/api/steer", "/api/stop", "/api/compact", "/api/draft", "/api/setting", "/api/chatconfig", "/api/undo", "/api/verdict", "/api/export", "/api/confirm", "/api/answer"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
+            if path in ("/api/send", "/api/steer", "/api/queue", "/api/unqueue", "/api/stop", "/api/resume", "/api/compact", "/api/draft", "/api/setting", "/api/chatconfig", "/api/undo", "/api/verdict", "/api/export", "/api/confirm", "/api/answer"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:

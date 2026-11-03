@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.99 (2026-11-03)
+
+### Added
+
+- **Queue a message while the agent works.** The reply panel has **Queue** beside **Steer**: the message goes after the running turn, and Copilot sends it as the next one. The panel lists what waits, each with **Take back**, which puts its words in the box.
+- **Try again** beside the pill, when the last turn ended in an error Copilot can retry, such as a limit or a broken connection. It runs the turn again with the same message.
+- **A chat the board makes for a task takes the task's name as its title** in VS Code, so you find it there. A chat you made in VS Code keeps its title.
+
+### Changed
+
+- **Withdraw works while the agent works, and is beside the pill.** A message sent by mistake is taken back in one step: the agent stops, the message and all that answered it leave the chat, and its words come back to the box to edit. Before, the chat had to be idle, and Withdraw was only on the card of your newest message. Files the agent already changed stay changed.
+
 ## 1.6.98 (2026-11-03)
 
 ### Added

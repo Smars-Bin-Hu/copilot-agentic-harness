@@ -5,7 +5,9 @@
 // The task settings (model, thinking, checks) and the drafts are drawn by desk.js and shown here; the model chosen there goes on every message the board sends. What was typed is kept in the box:
 // a poll, a redraw of the page and closing the panel do not touch it. A message that was refused keeps its text and offers it to copy. An approval message (go-req, go-plan, go-promote...) is not made here:
 // it has its own button on the card of the wait, which shows the whole message first.
-// Needs common.js, serve.js, chat.js (CHAT.stop), live.js (LIVE: the state of the chat, once a second while the panel is open).
+// 1.6.99: beside Stop, Withdraw takes the newest message back (a turn that runs is stopped first) and puts its words in the box, and Try again runs a turn that ended in an error the host can
+// retry. While the agent works the panel also offers Queue: the message goes after the turn, as the next one. The queued messages are listed in the panel, each one can be taken back to the box.
+// Needs common.js, serve.js, chat.js (CHAT.stop, CHAT.withdraw), live.js (LIVE: the state of the chat, its queued messages and whether Try again fits; once a second while the panel is open).
 "use strict";
 
 const REPLY = (function () {
@@ -27,6 +29,8 @@ const REPLY = (function () {
     icon(["M2.5 3h11v7.5H8L5 13v-2.5H2.5z"], 16), h("span", null, t("desk.reply.pill")), h("kbd", null, "R"), badge);
 
   const halt = h("button", {type: "button", class: "rp-stop chat-act", hidden: "", title: t("desk.reply.stop.tip")}, icon(["M4 4h8v8H4z"], 14), h("span", null, t("board.action.stop")));
+  const back = h("button", {type: "button", class: "rp-stop rp-line chat-act", hidden: "", title: t("desk.reply.back.tip")}, icon(["M6 3.5L2.5 7 6 10.5", "M2.5 7h7a3.5 3.5 0 0 1 0 7H8"], 14), h("span", null, t("desk.reply.back")));
+  const again = h("button", {type: "button", class: "rp-stop rp-line chat-act", hidden: "", title: t("desk.reply.retry.tip")}, icon(["M13 8a5 5 0 1 1-1.6-3.7", "M13.2 2.5v2.8h-2.8"], 14), h("span", null, t("desk.reply.retry")));
 
   // --- the panel ----------------------------------------------------------------------------------------------------------
   const close = h("button", {type: "button", class: "rp-x", title: t("board.serve.cancel"), "aria-label": t("desk.reply.close")}, icon(["M4 4l8 8M12 4l-8 8"], 14));
@@ -51,6 +55,8 @@ const REPLY = (function () {
   const kbd = h("kbd", null, (MAC ? "⌘" : "Ctrl") + " ↵");
   const save = h("button", {type: "button", class: "act", title: t("desk.reply.draft.tip")}, t("desk.reply.draft"));
   const go = h("button", {type: "button", class: "act hot live big"}, t("desk.reply.send"));
+  const later = h("button", {type: "button", class: "act", hidden: "", title: t("desk.reply.queue.tip")}, t("desk.reply.queue"));
+  const waiting = h("div", {class: "rp-q", hidden: ""});  // the queued messages of the chat
   // The skills that work on this task (1.6.64): a click puts the slash command in the box, and the person presses Send. Nothing goes by itself.
   const skillRow = h("div", {class: "rp-skills", hidden: ""});
   function fillSkills() {
@@ -69,8 +75,12 @@ const REPLY = (function () {
   const panel = h("div", {class: "rp", role: "dialog", "aria-label": t("desk.reply.title"), hidden: ""},
     h("div", {class: "rp-h"}, h("b", null, t("desk.reply.title")), close), box, files.tray,
     skillRow, h("div", {class: "rp-lang"}, files.attach, files.picker, h("span", {class: "sub"}, t("desk.send.lang")), h("span", {class: "chips"}, chips)),
-    settingsSlot, draftBox, whole, said, h("div", {class: "rp-f"}, hint, kbd, save, go));
-  document.body.append(h("div", {class: "rp-bar"}, pill, halt), panel);
+    settingsSlot, draftBox, whole, waiting, said, h("div", {class: "rp-f"}, hint, kbd, save, later, go));
+  document.body.append(h("div", {class: "rp-bar"}, pill, halt, back, again), panel);
+  const liveNow = () => {
+    const live = typeof LIVE !== "undefined" ? LIVE.data() : null;
+    return live && live.bound ? live : null;
+  };
 
   const typing = (node) => node instanceof Element && (/^(INPUT|TEXTAREA|SELECT)$/.test(node.tagName) || node.isContentEditable);
   const stateNow = () => {
@@ -96,7 +106,13 @@ const REPLY = (function () {
     go.disabled = mine.busy || now.kind === "off" || !box.value.trim() || files.reading();
     save.disabled = mine.busy || !box.value.trim() || !info.saveDraft;
     if (hint.textContent !== now.hint) hint.textContent = now.hint;
-    halt.hidden = stateNow() !== "busy" || !info.show;
+    const state = stateNow(), live = liveNow();
+    halt.hidden = state !== "busy" || !info.show;
+    back.hidden = !info.show || !live || !["busy", "idle", "input", "error"].includes(state) || !(live.items || []).some((item) => item.k === "me");
+    again.hidden = !info.show || !live || !live.retry;
+    later.hidden = now.kind !== "steer";
+    later.disabled = mine.busy || !box.value.trim() || files.reading();
+    paintQueue(live);
     kbd.hidden = go.disabled;
     whole.hidden = now.kind !== "send";
     pill.classList.toggle("on", mine.open);
@@ -136,15 +152,33 @@ const REPLY = (function () {
     });
   }
 
-  function send() {
+  // The queued messages (1.6.99): Copilot sends each as the next turn when the one that runs ends. Take back: it leaves the queue and its words come into the box.
+  function paintQueue(live) {
+    const list = (live && live.queued) || [];
+    const sig = JSON.stringify(list);
+    if (waiting.dataset.sig === sig) return;
+    waiting.dataset.sig = sig;
+    waiting.hidden = !list.length;
+    waiting.replaceChildren(...(list.length ? [h("div", {class: "sub"}, t("desk.reply.queued", {n: list.length}))] : []), ...list.map((item) => {
+      const take = h("button", {type: "button", class: "act", title: t("desk.reply.unqueue.tip")}, t("desk.reply.unqueue"));
+      take.addEventListener("click", () => {
+        take.disabled = true;
+        SERVE.post("/api/unqueue", {task: info.name, id: item.id}).then((data) => { restore(data.result); }, (error) => { take.disabled = false; said.replaceChildren(...SERVE.reasons((error && error.message) || String(error))); });
+      });
+      return h("div", {class: "rp-qi"}, h("span", {class: "rp-qt", title: item.text}, item.text), take);
+    }));
+  }
+
+  function send(queue) {
     const text = box.value.trim();
     const now = mode();
-    if (!text || mine.busy || now.kind === "off" || files.reading()) return;
+    if (!text || mine.busy || now.kind === "off" || files.reading() || (queue && now.kind !== "steer")) return;
     mine.busy = true;
     said.replaceChildren();
     sync();
     const attachments = files.list();
-    const call = now.kind === "steer" ? SERVE.post("/api/steer", {task: info.name, text, lang: mine.lang, attachments}) : SERVE.post("/api/send", {task: info.name, kind: "answer", lang: mine.lang, note: "", body: text, step: "act", attachments});
+    const call = queue ? SERVE.post("/api/queue", {task: info.name, text, lang: mine.lang, attachments})
+      : now.kind === "steer" ? SERVE.post("/api/steer", {task: info.name, text, lang: mine.lang, attachments}) : SERVE.post("/api/send", {task: info.name, kind: "answer", lang: mine.lang, note: "", body: text, step: "act", attachments});
     call.then(() => {
       mine.busy = false;
       box.value = "";
@@ -196,16 +230,32 @@ const REPLY = (function () {
 
   pill.addEventListener("click", () => (mine.open ? shut(true) : open()));
   close.addEventListener("click", () => shut(true));
-  go.addEventListener("click", send);
+  go.addEventListener("click", () => send(false));
+  later.addEventListener("click", () => send(true));
   save.addEventListener("click", saveDraft);
   halt.addEventListener("click", () => { shut(false); CHAT.stop({name: info.name}); });  // its own confirm dialog; this panel steps aside
+  back.addEventListener("click", () => { shut(false); CHAT.withdraw({name: info.name}, restore); });
+  again.addEventListener("click", () => {
+    again.disabled = true;
+    SERVE.post("/api/resume", {task: info.name}).then(() => { again.disabled = false; SERVE.done(); }, (error) => { again.disabled = false; SERVE.failed(error, t("desk.reply.retry")); });
+  });
   files.zone(panel);
   box.addEventListener("input", () => { sync(); previewSoon(); said.replaceChildren(); });
   box.addEventListener("keydown", (event) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && !event.isComposing) { event.preventDefault(); send(); }
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && !event.isComposing) { event.preventDefault(); send(false); }
   });
   whole.addEventListener("toggle", () => { if (whole.open) previewSoon(); });
   if (typeof LIVE !== "undefined") LIVE.onChange(() => { sync(); });
+
+  // A message that was withdrawn or taken out of the queue: its words are back in the box to change and send again, after what is typed there. Its files are not kept: the panel names them.
+  function restore(found) {
+    const typed = box.value.trim();
+    box.value = typed ? typed + "\n\n" + found.text : found.text;
+    if (found.lang && !typed) language(found.lang);
+    open();
+    sync();
+    if (found.files && found.files.length) said.append(h("p", null, t("desk.reply.files.again", {names: found.files.join(", ")})));
+  }
 
   // R opens it, Esc closes it. R is a letter: it does nothing while the person types in a field, while a dialog or the palette is open, or with Cmd, Ctrl or Alt.
   document.addEventListener("keydown", (event) => {
@@ -238,13 +288,6 @@ const REPLY = (function () {
     isOpen: () => mine.open,
     shown: () => info.show,
     open,
-    // A message that was withdrawn: its words are back in the box to change and send again. Its files are not kept: the panel names them.
-    restore(found) {
-      box.value = found.text;
-      if (found.lang) language(found.lang);
-      open();
-      sync();
-      if (found.files && found.files.length) said.append(h("p", null, t("desk.reply.files.again", {names: found.files.join(", ")})));
-    },
+    restore,
   };
 })();

@@ -111,7 +111,7 @@ This is how a served board (`task board --serve`) talks to the chats of VS Code.
 
 **Which chat belongs to which task.** A chat the board made is bound when the agent has opened the task of that name (`chat.how` is `board` in the task state). Any other chat is bound when the Copilot session id of the task (`session_id`) is found in it; a chat has that id only after its agent has answered once. Where nothing or more than one fits, the task is *unbound* and the reason is shown (`no-chat`, `ambiguous`, `no-session`). Nothing is guessed: a message to the wrong chat costs more than a paste. A chat the board has just made, which the host lists only after its first turn, is kept in the board's list from the start and asked for again every 2 seconds for up to 2 minutes.
 
-**Chat states** (from the status bits of the host): *idle*, *busy* (a turn runs), *input* (Copilot waits for a person: a command to allow, or a question), *error*. A send needs *idle*; steer and stop need *busy*; allow, deny and answer need *input*. The board reads the host again before it acts and refuses when the chat is not in the state the page showed.
+**Chat states** (from the status bits of the host): *idle*, *busy* (a turn runs), *input* (Copilot waits for a person: a command to allow, or a question), *error*. A send needs *idle*; steer, queue and stop need *busy*; allow, deny and answer need *input*; withdraw takes any of them. The board reads the host again before it acts and refuses when the chat is not in the state the page showed.
 
 **What the page may ask.** Every call below is a POST that carries the pairing header and the paired browser's cookie, as `/api/act` does. No command line and no agent can make them; the gate refuses an agent that sends a request to the board. Each is recorded in the history of the task, and a message in whole in `.task/sent.jsonl`.
 
@@ -128,6 +128,8 @@ This is how a served board (`task board --serve`) talks to the chats of VS Code.
 | `/api/open` | Brings the VS Code window of this folder forward (it cannot open one chat) |
 | `/api/send` | `step: preview` gives the whole message; `step: act` sends it. A fixed English text (no confirmation code in it), `[ZH]` only when you chose Chinese, your note and the ticked drafts. Idle chat only |
 | `/api/steer`, `/api/stop` | Say one more thing to a working agent (`lang: zh` puts `[ZH]` first); cancel its turn |
+| `/api/queue`, `/api/unqueue` | A message for after the running turn (`text`, `lang`, `attachments`); take one back by its `id` (its words come back) |
+| `/api/undo`, `/api/resume` | Take the newest message back, stopping a turn that runs first (its words come back); run again a last turn that ended in an error Copilot can retry |
 | `/api/confirm`, `/api/answer` | Allow or deny one named tool call; answer one named question (a list of options also takes your own words, unless the question says it does not). The page's digest must match what the host holds now |
 | `/api/create` | `step: options` (models, kinds, forkable tasks, knowledge base `domains`), `preview` (the first message as it would go now, `problem` for a field not right yet, `blocked` when VS Code is not linked; needs no VS Code), `act`: makes a chat in this folder (mode interactive, no worktree) and sends the fixed first message. `domains`: the knowledge base domains ticked; the server checks them again |
 | `/api/setting` | The model and the thinking level the board puts on each message it sends; the number of independent checks (as `task review set`) |

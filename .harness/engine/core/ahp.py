@@ -619,10 +619,37 @@ def slim(turn: Any) -> Any:
     return dict(turn, responseParts=kept, dropped=int(turn.get("dropped") or 0) + max(0, len(parts) - PARTS_KEEP))
 
 
+QUEUED_CHARS = 2000  # characters of a queued message the board keeps to show
+
+
+def pending(item: Any) -> Optional[Dict[str, Any]]:
+    """One message waiting in a chat (`queuedMessages[]`: `queued` goes after the turn, `steering` into it), cut to its id, kind and the start of its text."""
+    if not isinstance(item, dict) or not item.get("id"):
+        return None
+    message = item.get("message") if isinstance(item.get("message"), dict) else {}
+    return {"id": str(item["id"]), "kind": str(item.get("kind") or "queued"), "text": str(message.get("text") or item.get("text") or "")[:QUEUED_CHARS]}
+
+
 def trimmed(state: Dict[str, Any], keep: int = 2) -> Dict[str, Any]:
-    """A chat snapshot cut to what the board shows: the last turns and the one running. A long chat is big."""
+    """A chat snapshot cut to what the board shows: the last turns and the one running, and the messages that wait. A long chat is big."""
     return {"status": state.get("status"), "title": state.get("title"), "modifiedAt": state.get("modifiedAt"), "config": state.get("config"),
-            "turns": [slim(turn) for turn in list(state.get("turns") or [])[-keep:]], "activeTurn": slim(state.get("activeTurn"))}
+            "turns": [slim(turn) for turn in list(state.get("turns") or [])[-keep:]], "activeTurn": slim(state.get("activeTurn")),
+            "queuedMessages": [found for found in (pending(item) for item in state.get("queuedMessages") or []) if found]}
+
+
+def queued(state: Dict[str, Any]) -> List[Dict[str, str]]:
+    """The messages that go after the running turn, oldest first: `{id, text}`."""
+    return [{"id": item["id"], "text": item["text"]} for item in state.get("queuedMessages") or [] if isinstance(item, dict) and item.get("kind") == "queued"]
+
+
+def resumable_turn(state: Dict[str, Any]) -> str:
+    """The id of the last turn when it ended in an error the host says can be tried again (its last part: `{kind: error, resumable: true}`), and nothing runs. Empty: none."""
+    turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)]
+    if state.get("activeTurn") or not turns or turns[-1].get("state") != "error":
+        return ""
+    parts = turns[-1].get("responseParts") or []
+    last = parts[-1] if parts and isinstance(parts[-1], dict) else {}
+    return str(turns[-1].get("id") or "") if last.get("kind") == "error" and last.get("resumable") is True else ""
 
 
 def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) -> None:
@@ -630,6 +657,25 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
     kind = str(action.get("type") or "")
     if kind == "chat/configChanged":
         state["config"] = {"values": {**config_values(state), **(action.get("config") or {})}}
+        return
+    if kind == "chat/pendingMessageSet":
+        found = pending(action)
+        if found:
+            state["queuedMessages"] = [item for item in state.get("queuedMessages") or [] if item.get("id") != found["id"]] + [found]
+        return
+    if kind == "chat/pendingMessageRemoved":
+        state["queuedMessages"] = [item for item in state.get("queuedMessages") or [] if not (item.get("id") == action.get("id") and item.get("kind", "queued") == (action.get("kind") or "queued"))]
+        return
+    if kind == "chat/queuedMessagesReordered" and isinstance(action.get("order"), list):
+        waiting = {item.get("id"): item for item in state.get("queuedMessages") or []}
+        first = [waiting.pop(ident) for ident in action["order"] if ident in waiting]
+        state["queuedMessages"] = first + list(waiting.values())
+        return
+    if kind == "chat/turnResume":  # Try again: the last turn, ended in an error, runs again
+        turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)]
+        if not state.get("activeTurn") and turns and turns[-1].get("id") == action.get("turnId"):
+            state["activeTurn"] = {key: value for key, value in turns[-1].items() if key not in ("state", "duration")}
+            state["turns"] = turns[:-1]
         return
     if kind == "chat/truncated":  # kept: up to and with `turnId`; no `turnId`: nothing. A turn this cut state no longer holds changes nothing here
         turns = [turn for turn in state.get("turns") or [] if isinstance(turn, dict)]
@@ -680,6 +726,8 @@ def reduce_chat(state: Dict[str, Any], action: Dict[str, Any], keep: int = 2) ->
     elif kind == "chat/usage" and isinstance(action.get("usage"), dict):
         active["usage"] = action["usage"]
     elif kind in ("chat/turnComplete", "chat/turnCancelled", "chat/error"):
+        if kind == "chat/error" and isinstance(action.get("part"), dict):
+            parts.append(action["part"])  # `{kind: error, resumable}`: whether Try again can be offered
         done = dict(active, state={"chat/turnComplete": "complete", "chat/turnCancelled": "cancelled"}.get(kind, "error"), duration=action.get("duration"))
         state["turns"] = (list(state.get("turns") or []) + [done])[-keep:]
         state["activeTurn"] = None

@@ -127,11 +127,11 @@ const LIVE = (function () {
     rec.tx.replaceChildren(...[st.draw && item.blocks ? st.draw(item.blocks) : item.text].flat(Infinity).filter(Boolean));
   }
 
-  // The card of a message of the person. The newest can be taken back while the chat is idle.
+  // The card of a message of the person. The newest can be taken back; a turn that runs is stopped first (1.6.99).
   function saidCard(rec) {
     const item = rec.item;
     if (!item) return null;
-    const last = st.lastSaid === item.id && Boolean(st.data) && st.data.state === "idle";
+    const last = st.lastSaid === item.id && Boolean(st.data) && ["idle", "busy", "input", "error"].includes(st.data.state);
     return {sig: JSON.stringify([item, last]), build: () => {
       const undo = last ? h("button", {type: "button", class: "act"}, t("desk.undo.title")) : null;
       if (undo) undo.addEventListener("click", () => { CHAT.withdraw({name: st.task.split("/").pop()}, (found) => { REPLY.restore(found); kick(); }); });

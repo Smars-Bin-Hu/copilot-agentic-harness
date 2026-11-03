@@ -46,6 +46,7 @@ CREATE_WAIT = 45.0  # a create makes the chat, sends, then waits for the host to
 REREAD_AFTER_ANSWER = 10.0  # seconds after a person answered in which a session that still says "input" is not read again for a missed item
 PROBLEM_FOR = 120.0  # seconds a "Copilot is not usable" answer of the host is still told after it was heard
 INITIATOR_WAIT = 10.0  # seconds after the first message in which the host is asked who made the chat
+UNDO_WAIT = 12.0  # seconds a Withdraw waits for the turn it stopped to end
 
 
 def enabled_by_policy(root: Path) -> bool:
@@ -105,7 +106,8 @@ class Job:
         self.error: Optional[BaseException] = None
 
 
-NEEDS = {"send": "idle", "steer": "busy", "stop": "busy", "confirm": "input", "answer": "input", "config": "", "undo": "idle"}  # "": any state: a setting of the chat holds from its next turn
+# "": any state: a setting of the chat holds from its next turn; a Withdraw stops a running turn first (1.6.99); Try again and taking back a queued message are checked by the thread
+NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "config": "", "undo": "", "resume": "", "unqueue": ""}
 
 
 class VsLink:
@@ -219,7 +221,8 @@ class VsLink:
             if cached is None:  # bound, the chat is being read
                 return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), "items": [], "more": False, "started": "", "loading": True}
             found = chatlive.build(cached["state"], cached.get("marks") or {}, self.root)
-            return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), **found}
+            # `queued`: the messages that go after the running turn; `retry`: the last turn ended in an error that Try again can run again (1.6.99)
+            return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "retry": bool(ahp.resumable_turn(cached["state"]))}
 
     def context_card(self, task: str) -> Dict[str, Any]:
         """For the context card of the task page: `parts` (what the context holds, `chatctx.parts`; None: the chat says nothing) and `cost` (credits of the session; None: not known)."""
@@ -626,6 +629,8 @@ class VsLink:
                 return
             if job.kind == "undo":
                 return self._undo(link, job, chat, held)
+            if job.kind in ("resume", "unqueue"):
+                return self._again(link, job, chat, held)
             if job.kind == "stop":
                 active = held["state"].get("activeTurn") if isinstance(held["state"].get("activeTurn"), dict) else None
                 if not active or not active.get("id"):
@@ -639,8 +644,8 @@ class VsLink:
                     message["attachments"] = job.attachments  # the host keeps a copy of each and lists its own address in the chat
                 if job.kind == "send":
                     action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
-                else:
-                    action = {"type": "chat/pendingMessageSet", "kind": "steering", "id": str(uuid.uuid4()), "message": message}
+                else:  # steer goes into the turn that runs; queue (1.6.99) waits for its end, and Copilot sends it then as the next turn
+                    action = {"type": "chat/pendingMessageSet", "kind": "queued" if job.kind == "queue" else "steering", "id": str(uuid.uuid4()), "message": message}
             link.dispatch(chat, action)
             with self.lock:
                 known = self.sessions.get(resource)
@@ -649,6 +654,9 @@ class VsLink:
                         known["status"] = ahp.IN_PROGRESS | (int(known.get("status") or 0) & (ahp.IS_READ | ahp.ARCHIVED))  # not idle at once: a second send finds it busy
                     ahp.reduce_chat(held["state"], {**action, "message": {key: value for key, value in message.items() if key != "attachments"}})  # the bytes are not kept here
                     chatlive.stamp(held, action, int(time.time() * 1000))
+                    held["rev"] = held.get("rev", 0) + 1
+                elif job.kind == "queue":  # on the page at once; the host pushes the same
+                    ahp.reduce_chat(held["state"], {**action, "message": {"text": job.text}})
                     held["rev"] = held.get("rev", 0) + 1
                 title = str((known or {}).get("title") or binding.get("title") or "")
                 self.dirty = True
@@ -661,15 +669,33 @@ class VsLink:
         finally:
             job.done.set()
 
+    def _settle(self, link: ahp.Connection, held: Dict[str, Any]) -> None:
+        """Wait until the chat has no running turn (a stop takes a moment), reading the host's notices meanwhile; at most `UNDO_WAIT` seconds."""
+        end = time.monotonic() + UNDO_WAIT
+        while time.monotonic() < end:
+            with self.lock:
+                if not held["state"].get("activeTurn"):
+                    return
+            note = link.next_notice(0.3)
+            while note is not None:
+                self._notice(note)
+                note = link.next_notice(0.0)
+
     def _undo(self, link: ahp.Connection, job: Job, chat: str, held: Dict[str, Any]) -> None:
         """Take the last turn out of the chat: the message of the person and all that answered it. The host cuts Copilot's own history too (the model forgets it: checked on a real chat), but files
-        the agent changed stay changed. The chat is read again first, for the whole text and the last turn as it is now."""
+        the agent changed stay changed. A turn that runs is stopped first (1.6.99: a message sent by mistake is taken back in one step). The chat is read again first, for the whole text and the
+        last turn as it is now."""
+        active = held["state"].get("activeTurn") if isinstance(held["state"].get("activeTurn"), dict) else None
+        if active and active.get("id"):
+            link.dispatch(chat, {"type": "chat/turnCancelled", "turnId": active["id"], "duration": elapsed_ms(active.get("startedAt"))})
+            self._settle(link, held)
         link.unsubscribe(chat)
         full = link.subscribe(chat)
         turns = [turn for turn in full.get("turns") or [] if isinstance(turn, dict)]
         if not turns or full.get("activeTurn"):
-            held["state"] = ahp.trimmed(full)
-            raise Refused("no-turn")
+            with self.lock:
+                held["state"] = ahp.trimmed(full)
+            raise Refused("not-stopped" if full.get("activeTurn") else "no-turn")
         message = turns[-1].get("message") if isinstance(turns[-1].get("message"), dict) else {}
         action: Dict[str, Any] = {"type": "chat/truncated"}
         if len(turns) > 1:
@@ -681,6 +707,29 @@ class VsLink:
             held["rev"] = held.get("rev", 0) + 1
             self.dirty = True
         job.result = {"text": str(message.get("text") or ""), "files": [str(item["label"]) for item in message.get("attachments") or [] if isinstance(item, dict) and item.get("label")]}
+
+    def _again(self, link: ahp.Connection, job: Job, chat: str, held: Dict[str, Any]) -> None:
+        """Try again (`resume`): the last turn ended in an error the host can retry, and it runs again. Take back (`unqueue`): one queued message leaves the queue, and its words come back.
+        Both act only on what the chat holds now; anything else is refused."""
+        with self.lock:
+            if job.kind == "resume":
+                turn = ahp.resumable_turn(held["state"])
+                if not turn:
+                    raise Refused("no-retry")
+                action: Dict[str, Any] = {"type": "chat/turnResume", "turnId": turn}
+                job.result = {"chat": chat, "turn": turn}
+            else:
+                ident = str((job.plan or {}).get("id") or "")
+                found = next((item for item in ahp.queued(held["state"]) if item["id"] == ident), None)
+                if found is None:
+                    raise Refused("queue-gone")
+                action = {"type": "chat/pendingMessageRemoved", "kind": "queued", "id": ident}
+                job.result = {"chat": chat, "text": found["text"]}
+        link.dispatch(chat, action)
+        with self.lock:
+            ahp.reduce_chat(held["state"], action)
+            held["rev"] = held.get("rev", 0) + 1
+            self.dirty = True
 
     def _respond(self, link: ahp.Connection, job: Job, binding: Dict[str, Any]) -> None:
         """Allow, deny or answer one waiting item of the chat of a task. The session is read again from the host first, and the item must be there, in this chat, and be what the page
@@ -736,7 +785,7 @@ class VsLink:
     def _look(self, link: ahp.Connection) -> None:
         """Read the tasks, read the chats that are still unknown, bind, and subscribe to the bound chats (and let go of the others)."""
         entries = self._entries()
-        self._adopt(entries)
+        self._adopt(link, entries)
         with self.lock:
             sessions = dict(self.sessions)
         self._scan(link, entries, sessions)
@@ -751,7 +800,7 @@ class VsLink:
                     chatlink.keep(self.root, entry["task"], binding)
         self._subscribe(link)
 
-    def _adopt(self, entries: List[Dict[str, Any]]) -> None:
+    def _adopt(self, link: ahp.Connection, entries: List[Dict[str, Any]]) -> None:
         """A chat the board made is bound to its task as soon as the agent has made the task (an open task of that name): `chat.how = "board"`, and the model of the dialog on the task, so that
         the next messages carry it. The first message goes to `.task/sent.jsonl` and the history. A chat whose task never came is let go after `chatnew.KEEP_PENDING`; the SDK binding (the
         session id of the task, found in the chat) still works for it."""
@@ -777,6 +826,7 @@ class VsLink:
                 continue
             entry["chat"] = found
             self._forget(made)
+            self._name_chat(link, made["chat"], str(entry.get("name") or ""))
             try:
                 chatsend.record(self.root, entry["task"], {"at": utc_now(), "task": entry["task"], "kind": "create", "chat": made["chat"], "text": made["text"], "lang": made["lang"],
                                                            "source": made["source"], "model": made["model"] or {}, "permission": made["permission"], "files": made.get("files") or []})
@@ -784,6 +834,19 @@ class VsLink:
                     task_ops.note(data, "create", chatsend.summary(made["text"]))
             except Exception:  # noqa: BLE001 - the binding is made; a missing line of history must not undo it
                 pass
+
+    @staticmethod
+    def _name_chat(link: ahp.Connection, chat: str, name: str) -> None:
+        """A chat the board made for a task takes the task's name as its title, so the person finds it in VS Code (1.6.99). The host keeps a title a client set and makes none over it.
+        A chat a person made in VS Code keeps the title it has."""
+        if not name:
+            return
+        try:
+            link.dispatch(chat, {"type": "session/titleChanged", "title": name[:120]})
+        except ahp.ConnectionClosed:
+            raise
+        except ahp.AhpError:
+            pass  # a title is a help, not the binding
 
     def _forget(self, made: Dict[str, Any]) -> None:
         with self.lock:

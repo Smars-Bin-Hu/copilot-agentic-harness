@@ -83,6 +83,31 @@ class StateTests(unittest.TestCase):
         ahp.reduce_chat(state, {"type": "chat/truncated"})
         self.assertEqual(state["turns"], [])
 
+    def test_the_queue_of_a_chat_follows_the_host(self) -> None:
+        state: Dict[str, Any] = ahp.trimmed({"turns": [], "queuedMessages": [{"id": "s", "kind": "steering", "message": {"text": "now"}}]})
+        self.assertEqual(ahp.queued(state), [])  # a steer goes into the turn: not a queued message
+        for ident in ("q1", "q2"):
+            ahp.reduce_chat(state, {"type": "chat/pendingMessageSet", "kind": "queued", "id": ident, "message": {"text": "later " + ident, "attachments": [{"data": "big"}]}})
+        ahp.reduce_chat(state, {"type": "chat/queuedMessagesReordered", "order": ["q2", "q1"]})
+        self.assertEqual(ahp.queued(state), [{"id": "q2", "text": "later q2"}, {"id": "q1", "text": "later q1"}])
+        self.assertNotIn("big", json.dumps(state))  # files of a queued message are not kept
+        ahp.reduce_chat(state, {"type": "chat/pendingMessageRemoved", "kind": "queued", "id": "q2"})
+        self.assertEqual([item["id"] for item in ahp.queued(state)], ["q1"])
+        self.assertEqual(len(ahp.trimmed(state)["queuedMessages"]), 2)  # the steer and q1
+
+    def test_only_an_error_the_host_calls_resumable_can_be_tried_again(self) -> None:
+        state: Dict[str, Any] = ahp.trimmed({"turns": [], "activeTurn": None})
+        ahp.reduce_chat(state, {"type": "chat/turnStarted", "turnId": "t1", "message": {"text": "go"}})
+        ahp.reduce_chat(state, {"type": "chat/error", "turnId": "t1", "part": {"kind": "error", "message": "rate limited", "resumable": True}})
+        self.assertEqual(ahp.resumable_turn(state), "t1")
+        ahp.reduce_chat(state, {"type": "chat/turnResume", "turnId": "t1"})
+        self.assertEqual((state["activeTurn"]["id"], state["turns"], ahp.resumable_turn(state)), ("t1", [], ""))
+        ahp.reduce_chat(state, {"type": "chat/error", "turnId": "t1", "part": {"kind": "error", "message": "bad request"}})
+        self.assertEqual(ahp.resumable_turn(state), "")  # not resumable
+        ahp.reduce_chat(state, {"type": "chat/turnStarted", "turnId": "t2", "message": {"text": "again"}})
+        ahp.reduce_chat(state, {"type": "chat/turnComplete", "turnId": "t2"})
+        self.assertEqual(ahp.resumable_turn(state), "")  # the last turn ended well
+
     def test_the_model_list_names_its_context_sizes(self) -> None:
         root = json.loads(json.dumps(ROOT_STATE))
         root["agents"][0]["models"][0]["configSchema"] = {"properties": {"contextSize": {"enum": [100000, 936000], "enumLabels": ["100K", "1M"], "default": 100000}}}
@@ -218,6 +243,80 @@ class ServeTests(SendCase):
         status, data, _ = self.post("/api/undo", {})
         self.assertEqual(status, 409, data)
 
+    def busy(self, active: Dict[str, Any]) -> None:
+        """The chat of job1 runs a turn, in the host's list and in the memory of the link."""
+        for item in self.items:
+            item["status"] = ahp.IN_PROGRESS
+        with self.vs.lock:
+            for item in self.vs.sessions.values():
+                item["status"] = ahp.IN_PROGRESS
+            self.vs.chats[self.chat]["state"]["activeTurn"] = active
+
+    def test_withdraw_stops_a_turn_that_runs_then_takes_it_back(self) -> None:
+        """A message sent by mistake: one Withdraw stops the agent and takes the message out of its context (1.6.99). Before, the chat had to be idle."""
+        first = {"id": "t1", "message": {"text": "first"}, "responseParts": [], "state": "complete"}
+        self.busy({"id": "t2", "startedAt": "2026-11-03T10:00:00Z", "message": {"text": "sent by mistake"}, "responseParts": []})
+        self.state = {**self.state, "turns": [first, dict(first, id="t2", message={"text": "sent by mistake"}, state="cancelled")], "activeTurn": None}  # what the host holds once stopped
+        with mock.patch("modules.task.vslink.UNDO_WAIT", 0.2):
+            status, data, _ = self.post("/api/undo", {})
+        self.assertEqual(status, 200, data)
+        self.assertEqual(data["result"]["text"], "sent by mistake")
+        cancel, cut = self.actions()[-2:]
+        self.assertEqual((cancel["type"], cancel["turnId"], cut), ("chat/turnCancelled", "t2", {"type": "chat/truncated", "turnId": "t1"}))
+        self.assertGreater(cancel["duration"], 0)  # without it the host does nothing
+
+    def test_a_turn_that_does_not_stop_is_not_taken_back(self) -> None:
+        running = {"id": "t2", "startedAt": "2026-11-03T10:00:00Z", "message": {"text": "x"}, "responseParts": []}
+        self.busy(running)
+        self.state = {**self.state, "activeTurn": running}
+        with mock.patch("modules.task.vslink.UNDO_WAIT", 0.2):
+            status, data, _ = self.post("/api/undo", {})
+        self.assertEqual((status, data["error"]), (409, messages.text("send.refused.not-stopped")))
+        self.assertNotIn("chat/truncated", [item["type"] for item in self.actions()])
+
+    def test_a_message_can_wait_for_the_turn_and_be_taken_back(self) -> None:
+        self.busy({"id": "t2", "startedAt": "2026-11-03T10:00:00Z", "message": {"text": "x"}, "responseParts": []})
+        status, data, _ = self.post("/api/queue", {"text": "after this, write the test guide", "lang": "en"})
+        self.assertEqual(status, 200, data)
+        told = self.told()
+        self.assertEqual((told["type"], told["kind"]), ("chat/pendingMessageSet", "queued"))
+        self.assertIn("after this, write the test guide", told["message"]["text"])
+        waiting = self.vs.live(".workspace/sandbox/tasks/job1")["queued"]
+        self.assertEqual([item["id"] for item in waiting], [told["id"]])  # on the page at once
+        self.count = len(self.actions())
+        status, data, _ = self.post("/api/unqueue", {"id": told["id"]})
+        self.assertEqual(status, 200, data)
+        self.assertEqual(self.told(), {"type": "chat/pendingMessageRemoved", "kind": "queued", "id": told["id"]})
+        self.assertIn("write the test guide", data["result"]["text"])
+        self.assertEqual(self.vs.live(".workspace/sandbox/tasks/job1")["queued"], [])
+        status, data, _ = self.post("/api/unqueue", {"id": told["id"]})
+        self.assertEqual((status, data["error"]), (409, messages.text("send.refused.queue-gone")))
+        self.assertIn("queue", [item["what"] for item in tasks.read(self.root, ".workspace/sandbox/tasks/job1")["events"]])
+
+    def test_a_queue_needs_a_turn_that_runs(self) -> None:
+        status, data, _ = self.post("/api/queue", {"text": "later", "lang": "en"})
+        self.assertEqual(status, 409, data)
+        self.assertNotIn("chat/pendingMessageSet", [item["type"] for item in self.actions()])
+
+    def test_try_again_runs_a_turn_that_ended_in_an_error_the_host_can_retry(self) -> None:
+        failed = {"id": "t9", "message": {"text": "go"}, "state": "error", "responseParts": [{"kind": "error", "message": "rate limited", "resumable": False}]}
+        with self.vs.lock:
+            self.vs.chats[self.chat]["state"]["turns"] = [failed]
+        status, data, _ = self.post("/api/resume", {})
+        self.assertEqual((status, data["error"]), (409, messages.text("send.refused.no-retry")))
+        self.assertFalse(self.vs.live(".workspace/sandbox/tasks/job1")["retry"])
+        with self.vs.lock:
+            failed["responseParts"][0]["resumable"] = True
+        self.assertTrue(self.vs.live(".workspace/sandbox/tasks/job1", "")["retry"] if "retry" in self.vs.live(".workspace/sandbox/tasks/job1", "") else False)
+        status, data, _ = self.post("/api/resume", {})
+        self.assertEqual(status, 200, data)
+        self.assertEqual(self.told(), {"type": "chat/turnResume", "turnId": "t9"})
+
+    def test_the_new_routes_need_a_paired_browser(self) -> None:
+        for path in ("/api/queue", "/api/unqueue", "/api/resume"):
+            status, data, _ = self.request("POST", path, {"task": "job1", "text": "x"})
+            self.assertEqual((status, data.get("unpaired")), (403, True), path)
+
 
 class NewTaskFileTests(CreateCase):
     def fields(self, **more: Any) -> Dict[str, Any]:
@@ -246,10 +345,13 @@ class PageTests(unittest.TestCase):
         self.assertIn('sessionStorage.setItem("harness.reply", row.name)', serve)
         self.assertNotIn("function steer(", source("chat.js"))
 
-    def test_stop_is_beside_the_pill_on_every_tab(self) -> None:
+    def test_stop_withdraw_and_try_again_are_beside_the_pill_on_every_tab(self) -> None:
         reply = source("reply.js")
-        self.assertIn('document.body.append(h("div", {class: "rp-bar"}, pill, halt), panel);', reply)
-        self.assertIn('halt.hidden = stateNow() !== "busy"', reply)
+        self.assertIn('document.body.append(h("div", {class: "rp-bar"}, pill, halt, back, again), panel);', reply)
+        self.assertIn('halt.hidden = state !== "busy"', reply)
+        self.assertIn('back.hidden = !info.show || !live || !["busy", "idle", "input", "error"].includes(state)', reply)  # a message sent by mistake is taken back while the agent works too
+        self.assertIn("again.hidden = !info.show || !live || !live.retry;", reply)
+        self.assertIn('later.hidden = now.kind !== "steer";', reply)  # Queue only while the agent works
 
     def test_a_file_comes_by_the_button_a_paste_or_a_drop(self) -> None:
         chat = source("chat.js")

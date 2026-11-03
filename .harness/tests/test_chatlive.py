@@ -314,7 +314,7 @@ class PageFilesTests(unittest.TestCase):
         self.assertIn("compact", source("desk.js"))
         self.assertNotIn("/compact", reply)  # `/compact` goes only by its own button
         self.assertIn("mine.busy", reply)
-        self.assertRegex(reply, r"const call = now\.kind === \"steer\"")
+        self.assertRegex(reply, r"const call = queue \? SERVE\.post\(\"/api/queue\"[^\n]*\n\s*: now\.kind === \"steer\" \? SERVE\.post\(\"/api/steer\"")  # Queue, Steer while it works, Send when idle
 
     def test_the_plain_keys_do_not_fire_while_typing_but_cmd_k_does(self) -> None:
         reply, shell = source("reply.js"), source("shell.js")

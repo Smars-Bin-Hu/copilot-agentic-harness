@@ -15,7 +15,8 @@ from test_chatsend import ROOT_STATE, SendCase
 from test_vslink import until
 
 from core import ahp, messages, tasks
-from modules.task import chatlive, chatsend, taskhtml, tasklife
+from modules.task import boardserve, chatlive, chatsend, taskhtml, tasklife
+from taskcase import TASK
 
 WEB = taskhtml.WEB
 OPTIONS = {"mode": {"enum": ["interactive", "plan", "autopilot"], "enumLabels": ["Interactive", "Plan", "Autopilot"]}, "autoApprove": {"enum": ["default", "assisted", "autoApprove"], "enumLabels": ["Manual", "Assisted", "Allow all"]}}
@@ -313,6 +314,33 @@ class ServeTests(SendCase):
         status, data, _ = self.post("/api/resume", {})
         self.assertEqual(status, 200, data)
         self.assertEqual(self.told(), {"type": "chat/turnResume", "turnId": "t9"})
+
+    def test_an_idle_chat_in_vs_code_wins_over_the_hook_log(self) -> None:
+        """1.6.105: the hook log said the agent was at work (a subagent whose end was never recorded counts for 30 minutes), while VS Code said the chat waited for the person: every
+        button was grey and the server refused, and the person could only wait or use the terminal."""
+        self.agent_at_work()
+        self.assertTrue(tasklife.at_work(self.root, tasks.read(self.root, TASK)))
+        row = next(item for item in self.request("POST", "/api/board", {})[1]["rows"] if item["task"] == TASK)
+        self.assertEqual((row["chat"]["state"], row["active"]), ("idle", False))
+        self.assertNotEqual(row["state"], "working")
+        self.assertEqual(self.request("POST", "/api/act", {"action": "pause", "task": TASK}, cookie=self.cookie)[0], 200)
+        self.assertEqual(self.request("POST", "/api/act", {"action": "resume", "task": TASK}, cookie=self.cookie)[0], 200)
+        self.busy({"id": "t2", "startedAt": "2026-11-03T10:00:00Z", "message": {"text": "x"}, "responseParts": []})  # now VS Code says it works too
+        self.agent_at_work()
+        status, data, _ = self.request("POST", "/api/act", {"action": "pause", "task": TASK}, cookie=self.cookie)
+        self.assertEqual((status, data["error"]), (409, messages.text("serve.busy")))
+
+    def test_a_row_is_put_right_only_by_a_bound_chat_that_runs_no_turn(self) -> None:
+        def row(chat: Dict[str, Any]) -> Dict[str, Any]:
+            return {"state": "working", "active": True, "status": "open", "paused_since": "", "waiting_why": "promote", "held": True, "chat": chat}
+        fixed = row({"bound": True, "state": "idle"})
+        self.assertTrue(boardserve.trust_chat(fixed))
+        self.assertEqual((fixed["state"], fixed["active"]), ("waiting", False))
+        self.assertEqual(boardserve.trust_chat(row({"bound": True, "state": "error"})), True)
+        for chat in ({"bound": True, "state": "busy"}, {"bound": True, "state": "input"}, {"bound": False, "why": "no-chat"}, {}):
+            same = row(chat)
+            self.assertFalse(boardserve.trust_chat(same), chat)
+            self.assertEqual(same["state"], "working")
 
     def test_the_new_routes_need_a_paired_browser(self) -> None:
         for path in ("/api/queue", "/api/unqueue", "/api/resume"):

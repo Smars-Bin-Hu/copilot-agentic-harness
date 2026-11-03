@@ -140,6 +140,31 @@ const LIVE = (function () {
     }};
   }
 
+  // A subagent the tool call started (1.6.105): its latest steps under the call, open while it works and folded when it is done. Once the person opens or folds it, that stays.
+  function subLine(step) {
+    if (step.k === "tool") {
+      const mark = step.st === "run" ? "\u2026" : step.st === "fail" ? "\u2717" : step.st === "wait" ? "?" : "\u2713";
+      return h("li", {class: "sub-tool is-" + (step.st || "done")}, h("span", {class: "sub-mark", "aria-hidden": "true"}, mark), h("span", {class: "sub-say"}, step.say || step.name || step.tool || ""),
+        step.target ? h("code", {class: "tg", title: step.target}, step.target) : null);
+    }
+    if (step.k === "text") return h("li", {class: "sub-text"}, step.text);
+    if (step.k === "think") return h("li", {class: "sub-think"}, step.run ? t("desk.live.thinking") : t("desk.live.thought"));
+    return null;
+  }
+  function paintSub(rec, sub) {
+    if (!sub) { if (rec.sub) { rec.sub.remove(); rec.sub = null; } return; }
+    if (!rec.sub) {
+      rec.subHead = h("summary", {class: "sub-h"});
+      rec.subList = h("ol", {class: "sub-list"});
+      rec.sub = h("details", {class: "fi-subagent"}, rec.subHead, rec.subList);
+      rec.subHead.addEventListener("click", () => { rec.subChosen = true; });
+      rec.body.append(rec.sub);
+    }
+    if (!rec.subChosen) rec.sub.open = sub.st === "run";
+    setText(rec.subHead, t("desk.live.subagent", {title: sub.title || t("desk.live.subagent.untitled")}) + " \u00b7 " + t(sub.st === "run" ? "desk.live.subagent.run" : "desk.live.subagent.done"));
+    rec.subList.replaceChildren(...[...sub.items.map(subLine), sub.more ? h("li", {class: "sub-think"}, t("desk.live.subagent.more")) : null, !sub.items.length ? h("li", {class: "sub-think"}, t("desk.live.subagent.none")) : null].filter(Boolean));
+  }
+
   function paint(rec, item) {
     const sig = JSON.stringify(item);
     if (sig === rec.sig) return;
@@ -163,6 +188,7 @@ const LIVE = (function () {
       rec.tg.hidden = !item.target;
       rec.tg.title = (item.target || "") + (item.cut ? " …" : "");
       for (const name of ["run", "wait", "fail", "done"]) rec.el.classList.toggle("is-" + name, (item.st === "stop" ? "done" : item.st || "done") === name);  // classList: the `enter` class is not lost
+      paintSub(rec, item.sub);
       const time = rec.el2;
       if (item.st === "run" && item.t0) { running(time, item.t0); }
       else {

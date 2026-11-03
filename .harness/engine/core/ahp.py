@@ -744,21 +744,53 @@ def config_values(state: Dict[str, Any]) -> Dict[str, Any]:
     return config.get("values") if isinstance(config.get("values"), dict) else {}
 
 
+SUB_CHATS_KEPT = 20  # the newest chats of subagents a session state keeps
+
+
+def sub_chat(summary: Any) -> Optional[Dict[str, Any]]:
+    """A chat a tool call made in the session, the work of a subagent (`origin: {kind: tool, chat, toolCallId}`, read only; read from the host's code, 1.6.105): `{chat, parent, call, title,
+    status}`. None for any other chat."""
+    if not isinstance(summary, dict) or not summary.get("resource"):
+        return None
+    origin = summary.get("origin") if isinstance(summary.get("origin"), dict) else {}
+    if origin.get("kind") != "tool" or not origin.get("chat") or not origin.get("toolCallId"):
+        return None
+    return {"chat": str(summary["resource"]), "parent": str(origin["chat"]), "call": str(origin["toolCallId"]), "title": str(summary.get("title") or "")[:120], "status": summary.get("status")}
+
+
 def trimmed_session(state: Dict[str, Any]) -> Dict[str, Any]:
-    """A session snapshot cut to what the board reads of it: `inputNeeded[]` (the questions and tool confirmations that wait for a person), and of its settings the two a person may
-    change from the board (`mode`, `autoApprove`): the value and the choices the host offers."""
+    """A session snapshot cut to what the board reads of it: `inputNeeded[]` (the questions and tool confirmations that wait for a person), of its settings the two a person may
+    change from the board (`mode`, `autoApprove`): the value and the choices the host offers, and the chats of its subagents (`subchats`, 1.6.105)."""
     items = state.get("inputNeeded")
     config = state.get("config") if isinstance(state.get("config"), dict) else {}
     schema = (config.get("schema") or {}).get("properties") or {}
     values = config_values(state)
+    chats = state.get("chats") if isinstance(state.get("chats"), list) else []
     return {"inputNeeded": [item for item in items if isinstance(item, dict)] if isinstance(items, list) else [],
-            "config": {"values": {key: values.get(key) for key in CHAT_SETTINGS}, "choices": {key: named(schema.get(key)) for key in CHAT_SETTINGS}}}
+            "config": {"values": {key: values.get(key) for key in CHAT_SETTINGS}, "choices": {key: named(schema.get(key)) for key in CHAT_SETTINGS}},
+            "subchats": [found for found in (sub_chat(item) for item in chats) if found][-SUB_CHATS_KEPT:]}
 
 
 def reduce_session(state: Dict[str, Any], action: Dict[str, Any]) -> None:
-    """Apply `session/inputNeededSet` (an item came, or changed: same `id`) and `session/inputNeededRemoved` to a trimmed session state."""
+    """Apply `session/inputNeededSet` (an item came, or changed: same `id`) and `session/inputNeededRemoved` to a trimmed session state, and the chats of subagents that come, change and go."""
     kind = str(action.get("type") or "")
     items = state.setdefault("inputNeeded", [])
+    if kind == "session/chatAdded":
+        found = sub_chat(action.get("summary"))
+        if found:
+            state["subchats"] = ([item for item in state.get("subchats") or [] if item["chat"] != found["chat"]] + [found])[-SUB_CHATS_KEPT:]
+        return
+    if kind == "session/chatRemoved":
+        state["subchats"] = [item for item in state.get("subchats") or [] if item["chat"] != str(action.get("chat") or "")]
+        return
+    if kind == "session/chatUpdated" and isinstance(action.get("changes"), dict):
+        for item in state.get("subchats") or []:
+            if item["chat"] == str(action.get("chat") or ""):
+                if "title" in action["changes"]:
+                    item["title"] = str(action["changes"]["title"] or "")[:120]
+                if "status" in action["changes"]:
+                    item["status"] = action["changes"]["status"]
+        return
     if kind == "session/configChanged" and isinstance(state.get("config"), dict) and isinstance(action.get("config"), dict):
         state["config"]["values"].update({key: value for key, value in action["config"].items() if key in CHAT_SETTINGS})
     elif kind == "session/inputNeededSet" and isinstance(action.get("request"), dict) and action["request"].get("id"):

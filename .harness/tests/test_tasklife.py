@@ -769,6 +769,13 @@ class MessageTests(unittest.TestCase):
             self.assertIn(f"task.tier.{tier}", known)
             self.assertIn(f"task.next.{tier}", known)
 
+    def test_no_message_key_is_written_twice(self) -> None:
+        """A key written twice in a table is read as the last one: in 1.6.105 a new text took the place of the subtitle of the Live tab."""
+        import collections
+        for language in ("en", "zh"):
+            pairs = json.loads((ENGINE / "core" / f"messages.{language}.json").read_text(encoding="utf-8"), object_pairs_hook=lambda found: found)
+            self.assertEqual([key for key, count in collections.Counter(key for key, _value in pairs).items() if count > 1], [], language)
+
     def test_no_message_is_left_unused(self) -> None:
         source = "\n".join(path.read_text(encoding="utf-8") for path in [*ENGINE.rglob("*.py"), *(ENGINE / "modules" / "task" / "web").glob("*.js")])
         dynamic = (

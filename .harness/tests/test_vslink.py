@@ -219,6 +219,42 @@ class LinkTests(LinkCase):
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
         self.assertEqual((self.row()["chat"]["how"], self.data()["chat"]["session"]), ("sdk", self.resource))
 
+    def test_the_steps_of_a_subagent_show_under_the_tool_call_that_started_it(self) -> None:
+        """1.6.105: Live showed only the main chat; a subagent works in a chat of its own the host makes for the tool call (origin kind tool, read only)."""
+        sub_chat = self.chat + "/subagent/call-9"
+        main = chat_state(SESSION)
+        main["activeTurn"] = {"id": "t2", "message": {"text": "review it", "origin": {"kind": "user"}}, "usage": main["turns"][0]["usage"],
+                              "responseParts": [{"kind": "toolCall", "toolCall": {"toolCallId": "call-9", "toolName": "runSubagent", "displayName": "Run subagent", "status": "running"}}]}
+        self.states[self.chat] = main
+        self.states[sub_chat] = {"status": 8, "turns": [], "activeTurn": {"id": "s1", "message": {"text": "check", "origin": {"kind": "tool"}}, "responseParts": [
+            {"kind": "toolCall", "toolCall": {"toolCallId": "r1", "toolName": "read_file", "status": "completed", "toolInput": json.dumps({"path": "PLAN.md"})}},
+            {"kind": "markdown", "id": "m1", "content": "The plan " + "is fine. " * 100}]}}
+        self.states[self.resource] = {"chats": [{"resource": self.chat}, {"resource": sub_chat, "title": "reviewer", "interactivity": "read-only", "origin": {"kind": "tool", "chat": self.chat, "toolCallId": "call-9"}}]}
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        found = until(lambda: next((item for item in self.link.live(TASK).get("items") or [] if item.get("id") == "call-9" and (item.get("sub") or {}).get("items")), None))
+        self.assertTrue(found, self.link.live(TASK))
+        sub = found["sub"]
+        self.assertEqual((sub["title"], sub["st"], [step["k"] for step in sub["items"]]), ("reviewer", "run", ["tool", "text"]))
+        self.assertEqual(sub["items"][0]["target"], "PLAN.md")
+        self.assertLessEqual(len(sub["items"][1]["text"]), 400)
+        self.assertNotIn("blocks", sub["items"][1])  # plain, small
+        self.assertIn(sub_chat, [message["params"]["channel"] for message in self.host.seen if message.get("method") == "subscribe"])
+        before = self.link.live(TASK)["rev"]
+        self.host.push({"jsonrpc": "2.0", "method": "action", "params": {"channel": sub_chat, "action": {"type": "chat/turnComplete", "turnId": "s1", "duration": 5}}})
+        self.assertTrue(until(lambda: self.link.live(TASK)["rev"] != before))  # a step of the subagent changes the answer: the page asks again
+        done = next(item for item in self.link.live(TASK)["items"] if item["id"] == "call-9")
+        self.assertEqual(done["sub"]["items"][0]["target"], "PLAN.md")
+
+    def test_a_session_keeps_the_chats_of_its_subagents(self) -> None:
+        state = ahp.trimmed_session({"chats": [{"resource": "c0"}, {"resource": "c1", "title": "mapper", "origin": {"kind": "tool", "chat": "c0", "toolCallId": "k1"}}]})
+        self.assertEqual(state["subchats"], [{"chat": "c1", "parent": "c0", "call": "k1", "title": "mapper", "status": None}])
+        ahp.reduce_session(state, {"type": "session/chatAdded", "summary": {"resource": "c2", "origin": {"kind": "tool", "chat": "c0", "toolCallId": "k2"}}})
+        ahp.reduce_session(state, {"type": "session/chatAdded", "summary": {"resource": "c3"}})  # a chat a person made: not a subagent's
+        ahp.reduce_session(state, {"type": "session/chatUpdated", "chat": "c2", "changes": {"title": "reviewer", "status": 1}})
+        ahp.reduce_session(state, {"type": "session/chatRemoved", "chat": "c1"})
+        self.assertEqual(state["subchats"], [{"chat": "c2", "parent": "c0", "call": "k2", "title": "reviewer", "status": 1}])
+
     def test_a_chat_that_has_a_different_id_leaves_the_task_unbound_and_says_why(self) -> None:
         self.states[self.chat] = chat_state("another-session")
         self.link.start()

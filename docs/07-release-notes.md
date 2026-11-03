@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.105 (2026-11-03)
+
+### Added
+
+- **A subagent's work shows on the Live tab**, under the tool call that started it (the reviewer, a mapper): its title, whether it still works, and its latest steps. It is open while the subagent works and folded when it is done; once you open or fold it, that stays.
+
+### Changed
+
+- **When VS Code says the chat waits for you, the board no longer says the agent is at work.** A subagent whose end was not recorded made the hook log count the agent as at work for 30 minutes: the buttons stayed grey and the server refused while the agent waited for you. Now the linked chat's own state wins when it runs no turn.
+
 ## 1.6.104 (2026-11-03)
 
 ### Changed

@@ -12,6 +12,8 @@
   before its first turn; the model must be on that message, `createSession.model` is not honoured), and reads back who the host says made it. The task is made later by the agent: the
   thread remembers the chat (`created`) and, when the task with that name is open, binds it (`chatlink.adopt`) and keeps the model on the task. `disposeSession` is never called.
   A chat made to go on with a task that exists (1.6.97, "go on in a new chat") is bound the same way, at the next look: the board does not wait for its agent to answer.
+- 1.6.105: the chats of the subagents a bound chat started (`ahp.sub_chat`: a chat of the same session made by one of its tool calls) are subscribed too, the newest `SUB_FOLLOW`, and
+  the Live tab shows their latest steps under that tool call.
 - B75: the session of each bound chat is subscribed too, for its `inputNeeded[]` (the host pushes `session/inputNeededSet` and `Removed`). `ask_of` gives a task's oldest tool confirmation or question
   (`chatask`; any other kind is ignored). A person's allow, deny or answer is a job (`respond`): the thread reads the session again, refuses when the item is gone or is not what the page showed, then
   dispatches the actions that `chatask` made.
@@ -47,6 +49,7 @@ REREAD_AFTER_ANSWER = 10.0  # seconds after a person answered in which a session
 PROBLEM_FOR = 120.0  # seconds a "Copilot is not usable" answer of the host is still told after it was heard
 INITIATOR_WAIT = 10.0  # seconds after the first message in which the host is asked who made the chat
 UNDO_WAIT = 12.0  # seconds a Withdraw waits for the turn it stopped to end
+SUB_FOLLOW = 3  # chats of subagents followed for each bound chat, the newest (1.6.105)
 
 
 def enabled_by_policy(root: Path) -> bool:
@@ -215,14 +218,22 @@ class VsLink:
                 return {"rev": rev, "same": True} if rev == last else {"rev": rev, "bound": False, "why": why}
             state = ahp.status_name((self.sessions.get(binding["session"]) or {}).get("status"))
             cached = self.chats.get(binding["chat"])
-            rev = f"{binding['chat']}:{cached.get('rev', 0) if cached else -1}:{state}"
+            subs = self._subs_of(binding)
+            steps = ",".join(f"{sub['call']}.{(self.chats.get(sub['chat']) or {}).get('rev', -1)}.{sub.get('status')}" for sub in subs)  # a subagent's step changes the answer too
+            rev = f"{binding['chat']}:{cached.get('rev', 0) if cached else -1}:{state}:{steps}"
             if rev == last:
                 return {"rev": rev, "same": True}
             if cached is None:  # bound, the chat is being read
                 return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), "items": [], "more": False, "started": "", "loading": True}
             found = chatlive.build(cached["state"], cached.get("marks") or {}, self.root)
+            chatlive.attach_subs(found["items"], [(sub, self.chats.get(sub["chat"])) for sub in subs], self.root)
             # `queued`: the messages that go after the running turn; `retry`: the last turn ended in an error that Try again can run again (1.6.99)
             return {"rev": rev, "bound": True, "state": state, "now": int(time.time() * 1000), **found, "queued": ahp.queued(cached["state"]), "retry": bool(ahp.resumable_turn(cached["state"]))}
+
+    def _subs_of(self, binding: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """The chats of the subagents the bound chat started, the newest `SUB_FOLLOW`, as the session says. The caller holds the lock."""
+        held = self.sess.get(binding["session"]) or {}
+        return [item for item in (held.get("state") or {}).get("subchats") or [] if item.get("parent") == binding["chat"]][-SUB_FOLLOW:]
 
     def context_card(self, task: str) -> Dict[str, Any]:
         """For the context card of the task page: `parts` (what the context holds, `chatctx.parts`; None: the chat says nothing) and `cost` (credits of the session; None: not known)."""
@@ -884,6 +895,7 @@ class VsLink:
         with self.lock:
             wanted = {binding["chat"]: binding["session"] for binding in self.bound.values() if binding.get("chat")}
             wanted.update({item["chat"]: item["session"] for item in self.created})  # a chat the board just made stays subscribed until its task is bound
+            wanted.update({sub["chat"]: binding["session"] for binding in self.bound.values() if binding.get("chat") for sub in self._subs_of(binding)})  # what its subagents do (1.6.105)
             have = set(self.chats)
         for chat in have - set(wanted):
             try:

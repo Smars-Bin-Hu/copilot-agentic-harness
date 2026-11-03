@@ -179,6 +179,20 @@ RESTART_AFTER = 0.3  # seconds for the answer to reach the page
 RESTART_CODE = "HARNESS_BOARD_RESTART"  # the pairing code of the next process: in its environment, never on disk
 
 
+CHAT_STILL = ("idle", "error")  # VS Code says the chat runs no turn: it waits for the person, or its last turn failed
+
+
+def trust_chat(row: Dict[str, Any]) -> bool:
+    """A row (or a task page) whose bound chat runs no turn, as VS Code says, is not at work, whatever the hook log suggests (1.6.105: a subagent whose end was never recorded kept a
+    task "working" for 30 minutes, and nothing on the board could be pressed while the agent waited for the person). True when it was put right."""
+    chat = row.get("chat") or {}
+    if row.get("state") != "working" or not chat.get("bound") or chat.get("state") not in CHAT_STILL:
+        return False
+    row["active"] = False
+    row["state"] = tasklife.state_of(row.get("status", ""), row.get("paused_since", ""), row.get("waiting_why", ""), bool(row.get("held")), False)
+    return True
+
+
 def model_pair(model: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """`message.model` as a picker shows it: `{id, thinking, context}` (the thinking level, or the level of Copilot Fusion); empty: none."""
     if not model:
@@ -312,6 +326,7 @@ class Board:
         result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served)
         self.link.overlay(result["tasks"])
         for row in result["tasks"]:
+            trust_chat(row)
             health.with_context(self.root, row, row.get("chat"))
         asked = [taskboard.with_ask(row, self.link.ask_of(row["task"]), tuple(self.served), self.root) for row in result["tasks"] if row.get("status") == "open"]
         if any(asked):  # the chat waits for a person to allow a command or answer a question: that wait comes first in the order
@@ -333,6 +348,7 @@ class Board:
         if chat.get("bound"):
             chat.update(self.link.context_card(found["task"]))
         found["chat"], found["sub"], found["recent"], found["vscode"] = chat, sub, recent, self.link.status()
+        trust_chat(found)
         health.with_context(self.root, found, chat)
         if found["status"] == "open":
             taskboard.with_ask(found, self.link.ask_of(found["task"]), tuple(self.served), self.root)
@@ -504,11 +520,17 @@ class Board:
             print(say("serve.did", action="archive", task=", ".join(result["archived"])), flush=True)
         return result
 
-    def idle(self, action: str, task: str) -> None:
-        """The page may be ten seconds old: before any action, look again whether the agent is in the middle of a turn (it may be answering a doubt)."""
-        data = tasks.read(self.root, task_ops.resolve(self.root, task))
-        if data is not None and tasklife.at_work(self.root, data):
-            raise CommandError(say("serve.busy"))
+    def idle(self, action: str, task: str) -> bool:
+        """The page may be ten seconds old: before any action, look again whether the agent is in the middle of a turn (it may be answering a doubt). VS Code's own word that the bound chat
+        runs no turn wins over the hook log (1.6.105). True when the agent is not at work by that word only: a check of its own further on is told so."""
+        found = task_ops.resolve(self.root, task)
+        data = tasks.read(self.root, found)
+        if data is None or not tasklife.at_work(self.root, data):
+            return False
+        chat = self.link.chat_of(found)
+        if chat.get("bound") and chat.get("state") in CHAT_STILL:
+            return True
+        raise CommandError(say("serve.busy"))
 
     def close(self, name: str, reason: str = "") -> Dict[str, Any]:
         """Close a task (`task close`): the report is written, the session lets go. The folder stays; `task open` opens it again.
@@ -532,16 +554,19 @@ class Board:
             return result
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
-        self.idle(action, task)
+        still = self.idle(action, task)
         if action == "review set":  # one click, no code: the same function as `task review set`; the cap and the history are its own
             result = taskreview.set_by_person(self.root, task, n if isinstance(n, int) and not isinstance(n, bool) else -1, interactive=True)
             noted(self.root, result.get("task") or task, action)
             return result
         if action in FREE:
-            result = (tasklife.pause if action == "pause" else tasklife.resume)(self.root, task, interactive=True)
+            result = tasklife.pause(self.root, task, interactive=True, force=still) if action == "pause" else tasklife.resume(self.root, task, interactive=True)
             noted(self.root, result.get("task") or task, action)
             return result
         call = runner(self.root, action, task)
+        if action == "autorun on" and still:  # its own check reads the hook log only
+            alone = call
+            call = lambda **kw: alone(force=True, **kw)  # noqa: E731
         if action == "approve-plan" and with_req:
             plain = call
             call = lambda **kw: plain(with_req=True, **kw)  # noqa: E731 - the requirement and the plan, one code

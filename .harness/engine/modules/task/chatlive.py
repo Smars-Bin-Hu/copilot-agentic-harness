@@ -206,3 +206,22 @@ def build(state: Dict[str, Any], marks: Dict[str, List[int]], root: Optional[Pat
         if item["k"] == "think" and not item.get("run") and item.get("t0") and at + 1 < len(items) and items[at + 1].get("t0"):
             item["t1"] = items[at + 1]["t0"]
     return {"items": items, "more": more, "started": str(active.get("startedAt") or "") if active else ""}
+
+
+SUB_LATEST = 6  # steps of a subagent shown under its tool call
+SUB_TEXT = 400  # characters of a subagent's text there
+
+
+def attach_subs(items: List[Dict[str, Any]], subs: List[Tuple[Dict[str, Any], Optional[Dict[str, Any]]]], root: Optional[Path] = None) -> None:
+    """Put the work of each subagent on the tool call that started it (1.6.105): `sub: {title, st, items, more}`, its latest steps, small; a text is plain and cut. `subs`: the chat of
+    each subagent (`ahp.sub_chat`) with its cached state, or None while it is being read. A tool call not among the items shown gets nothing."""
+    calls = {item["id"]: item for item in items if item.get("k") == "tool"}
+    for sub, held in subs:
+        item = calls.get(sub["call"])
+        if item is None:
+            continue
+        state = (held or {}).get("state") or {}
+        built = build(state, (held or {}).get("marks") or {}, root, SUB_LATEST) if held else {"items": [], "more": False}
+        steps = [dict({key: value for key, value in step.items() if key != "blocks"}, text=cut(step["text"], SUB_TEXT)[0]) if step["k"] == "text" else step for step in built["items"] if step["k"] != "me"]
+        running = bool(state.get("activeTurn")) or item.get("st") == "run"
+        item["sub"] = {"title": sub.get("title") or "", "st": "run" if running else "done", "items": steps, "more": bool(built["more"])}

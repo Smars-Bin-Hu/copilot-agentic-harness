@@ -30,6 +30,10 @@ class MessageTests(unittest.TestCase):
     def test_a_chat_with_no_task_has_no_name_to_bind(self) -> None:
         self.assertEqual(skillsend.plan("en")["name"], "")
 
+    def test_a_chat_that_goes_on_with_a_task_names_it_and_keeps_no_model_on_it(self) -> None:
+        found = skillsend.plan("en", "old-job")
+        self.assertEqual((found["name"], found["keep_model"]), ("old-job", False))
+
 
 class ViewTests(unittest.TestCase):
     def test_a_view_is_worked_out_on_a_thread_and_kept(self) -> None:

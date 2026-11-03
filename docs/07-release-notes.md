@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.97 (2026-11-03)
+
+### Changed
+
+- **A chat started with go on in a new chat is linked to its task at once.** Before, the task page said "No chat is linked to this task" until the agent's first answer was over. The same for **Send to the agent and close** on a task with no chat.
+- **A task is linked again when the chat the board made for it is gone** and its agent goes on in another chat. Before, it stayed unlinked.
+
 ## 1.6.96 (2026-11-03)
 
 ### Changed

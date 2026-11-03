@@ -655,8 +655,12 @@ class Board:
             raise CommandError(say("serve.refused.request"))
         if why:
             raise CommandError(say(f"create.refused.{why}"))
+        name = ""
+        if data.get("task"):  # the chat goes on with this task: bound to it at once, not when its agent has answered
+            task, found = self.target(data)
+            name = str(found.get("name") or task_ops.name_of(task))
         try:
-            done = self.link.create(dict(skillsend.plan(str(data.get("lang") or "en")), model=model), text)
+            done = self.link.create(dict(skillsend.plan(str(data.get("lang") or "en"), name), model=model), text)
         except vslink.Refused as error:
             raise CommandError(say(f"create.refused.{error.why}")) from None
         except Exception as error:  # noqa: BLE001 - the name of the error only, never its text

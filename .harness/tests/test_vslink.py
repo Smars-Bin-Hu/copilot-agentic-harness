@@ -212,6 +212,13 @@ class LinkTests(LinkCase):
         self.link._scan(Stub(), [entry(TASK, "a-session-no-chat-has")], {self.resource: self.items[0], other["resource"]: other})
         self.assertEqual(calls, [("subscribe", "ahp-chat:/other"), ("unsubscribe", "ahp-chat:/other")])
 
+    def test_a_task_whose_board_chat_is_gone_is_bound_again_by_its_session_id(self) -> None:
+        """A task still marked with a chat the board made that is gone was never read for again: it stayed unbound while its agent went on in another chat (1.6.97)."""
+        chatlink.keep(self.root, TASK, {"session": "ahp-session:/gone", "chat": "ahp-chat:/gone", "title": "t", "how": "board", "bound_at": "x"})
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertEqual((self.row()["chat"]["how"], self.data()["chat"]["session"]), ("sdk", self.resource))
+
     def test_a_chat_that_has_a_different_id_leaves_the_task_unbound_and_says_why(self) -> None:
         self.states[self.chat] = chat_state("another-session")
         self.link.start()

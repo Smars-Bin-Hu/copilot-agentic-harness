@@ -38,9 +38,10 @@ def message(root: Path, data: Dict[str, Any]) -> str:
     return " ".join(part for part in (f"/{name}", words, "[ZH]" if lang == "zh" else "") if part)
 
 
-def plan(lang: str) -> Dict[str, Any]:
-    """A chat with no task: `vslink` keeps no name for it, so nothing waits for a task to bind."""
-    return {"name": "", "kind": "", "source": "", "text": "", "lang": lang, "permission": "allow-all", "approve": chatnew.PERMISSIONS["allow-all"], "model": None, "domains": []}
+def plan(lang: str, name: str = "") -> Dict[str, Any]:
+    """A chat with no task: `vslink` keeps no name for it, so nothing waits for a task to bind. With the `name` of a task that exists ("go on in a new chat"), the board binds the chat to it
+    at its next look, as it does a chat it made for a new task. The model of a click is not kept on the task: the person did not choose it."""
+    return {"name": name, "kind": "", "source": "", "text": "", "lang": lang, "permission": "allow-all", "approve": chatnew.PERMISSIONS["allow-all"], "model": None, "domains": [], "keep_model": False}
 
 
 def record(root: Path, name: str, opens: str, done: Dict[str, Any]) -> None:

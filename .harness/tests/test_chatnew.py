@@ -412,6 +412,24 @@ class CreateTests(CreateCase):
         self.assertTrue(until(lambda: self.vs.sessions.get(resource, {}).get("title") == "Listed now"), "the real entry did not come within seconds")
         self.assertNotIn(resource, self.vs.expect)
 
+    def test_go_on_in_a_new_chat_binds_the_task_at_once(self) -> None:
+        """The chat of "go on in a new chat" was bound only when its agent's turn ended and the chat was read again: the task page said "No chat is linked" while it worked (1.6.97)."""
+        self.write(".github/skills/harness-my-task/SKILL.md", "---\nname: harness-my-task\n---\n")
+        self.prompt("start", session="sess-old")
+        self.new(name="old-job", session="sess-old")  # no chat has its session id
+        old = f"{tasks.TASKS_DIR}/old-job"
+        self.assertTrue(until(lambda: self.vs.chat_of(old).get("why") == "no-chat"), self.vs.chat_of(old))
+        body = {"skill": "harness-my-task", "words": "Go on with the task old-job.", "lang": "en", "task": "old-job", "step": "act"}
+        status, data, _ = self.request("POST", "/api/skill", body, cookie=self.cookie)
+        self.assertEqual(status, 200, data)
+        self.assertTrue(until(lambda: self.vs.chat_of(old).get("bound")), self.vs.chat_of(old))  # before the agent has opened the task or answered
+        found = self.data(old)["chat"]
+        self.assertEqual((found["how"], found["session"], found["chat"]), ("board", self.made[0]["channel"], self.new_chat))
+        self.assertEqual(self.vs.waiting_names(), [])
+        line = json.loads((self.root / old / ".task" / "sent.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+        self.assertEqual((line["kind"], line["text"]), ("create", "/harness-my-task Go on with the task old-job."))
+        self.assertEqual(self.data()["chat"]["how"], "sdk")  # the other task is as it was
+
     def test_a_task_of_another_name_does_not_take_the_chat(self) -> None:
         self.make()
         self.prompt("start", session="sess-x")
@@ -531,6 +549,14 @@ class AdoptTests(TaskCase):
         chatlink.adopt(self.root, TASK, dict(made, model={"id": "m2"}))
         self.assertEqual(self.data()["chat"]["model"], {"id": "m1"})  # what the task already holds is not overwritten
         self.assertIsNone(chatlink.adopt(self.root, f"{tasks.TASKS_DIR}/nobody", made))
+
+    def test_the_model_of_a_click_is_not_kept_on_the_task(self) -> None:
+        self.new()
+        made = {"session": "ahp-session:/z", "chat": "ahp-chat:/z", "title": "t", "model": {"id": "auto", "config": {"tier": "balance"}}, "keep_model": False}
+        self.assertNotIn("model", chatlink.adopt(self.root, TASK, made))
+        with task_ops.locked(self.root, TASK) as data:
+            data["chat"]["model"] = {"id": "m1"}
+        self.assertEqual(chatlink.adopt(self.root, TASK, made)["model"], {"id": "m1"})  # the person's choice stays
 
 
 class SettingsRuleTests(unittest.TestCase):

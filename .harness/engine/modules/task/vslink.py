@@ -11,6 +11,7 @@
 - B73: `create` makes a chat for a task that does not exist yet (`createSession`, `isolation: folder`, mode `interactive`), sends its first message at once (the host does not list a chat
   before its first turn; the model must be on that message, `createSession.model` is not honoured), and reads back who the host says made it. The task is made later by the agent: the
   thread remembers the chat (`created`) and, when the task with that name is open, binds it (`chatlink.adopt`) and keeps the model on the task. `disposeSession` is never called.
+  A chat made to go on with a task that exists (1.6.97, "go on in a new chat") is bound the same way, at the next look: the board does not wait for its agent to answer.
 - B75: the session of each bound chat is subscribed too, for its `inputNeeded[]` (the host pushes `session/inputNeededSet` and `Removed`). `ask_of` gives a task's oldest tool confirmation or question
   (`chatask`; any other kind is ignored). A person's allow, deny or answer is a job (`respond`): the thread reads the session again, refuses when the item is gone or is not what the page showed, then
   dispatches the actions that `chatask` made.
@@ -580,7 +581,7 @@ class VsLink:
             message["attachments"] = job.attachments
         action = {"type": "chat/turnStarted", "turnId": str(uuid.uuid4()), "startedAt": ahp.utc_stamp(), "message": message}
         made = {"name": plan["name"], "kind": plan["kind"], "source": plan["source"], "lang": plan["lang"], "permission": plan["permission"], "model": job.model, "text": job.text, "files": chatsend.listed(job.attachments or []),
-                "session": resource, "chat": chat, "title": "", "clock": time.monotonic()}
+                "session": resource, "chat": chat, "title": "", "clock": time.monotonic(), "keep_model": plan.get("keep_model", True)}
         stub = {"resource": resource, "provider": ahp.LOCAL_PROVIDER, "title": "", "status": ahp.IN_PROGRESS, "defaultChat": chat, "chats": [{"resource": chat}],
                 "workingDirectories": [ahp.folder_uri(self.root)], "modifiedAt": ahp.utc_stamp()}
         with self.lock:
@@ -791,8 +792,8 @@ class VsLink:
     def _scan(self, link: ahp.Connection, entries: List[Dict[str, Any]], sessions: Dict[str, Dict[str, Any]]) -> None:
         with self.lock:
             done = set(self.bound)
-        if not any(entry["session_id"] and entry["task"] not in done and (entry.get("chat") or {}).get("how") != "board" for entry in entries):
-            return  # every task that can be bound is: no chat needs reading
+        if not any(entry["session_id"] and entry["task"] not in done for entry in entries):
+            return  # every task that can be bound is: no chat needs reading. A task still marked with a chat the board made that is gone is read for too: else it was never bound again
         wanted = sorted(sessions.values(), key=lambda item: str(item.get("modifiedAt") or ""), reverse=True)[:SCAN_MAX]
         todo = []
         for item in wanted:

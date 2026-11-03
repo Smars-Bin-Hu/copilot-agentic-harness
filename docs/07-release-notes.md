@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.100 (2026-11-03)
+
+### Added
+
+- **Change the files of a task on its Files tab.** Edit a text file and save it (Cmd+S or Ctrl+S), add a file or a folder, rename or move one, delete one. A deleted file goes to `.task/trash/` in the task folder, where you can take it back. Nothing is changed while the agent is in the middle of a turn, and a save is refused when the agent changed the file after you opened it. TASK.md, REQ.md, PLAN.md, TODO.md, LOG.md and the top folders can be edited, not renamed or deleted; an earlier round's `DEV_r<n>` is read only. Each change is a line in the task's history.
+
+### Changed
+
+- **The Files tab lists the whole task folder**, not only REQ/, REF/, INBOX/, DEV/ and RUNS/: also the other folders the agent made, an empty folder, and the files at the top. `.task/` and hidden names stay out.
+
 ## 1.6.99 (2026-11-03)
 
 ### Added

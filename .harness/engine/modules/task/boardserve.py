@@ -63,6 +63,7 @@ from core import company, reinstall, setup as core_setup, shortcmd, skillboard
 from . import chatrounds
 from . import kbview
 from . import setupjob
+from . import taskfileedit
 from . import skillsend
 from . import taskrun
 from . import wallpaper
@@ -78,6 +79,7 @@ MAX_BODY = 4096
 MAX_SEND_BODY = 64 * 1024  # `/api/answer`: the person's own words
 MAX_FILES_BODY = (chatsend.MAX_FILES_TOTAL * 4) // 3 + chatsend.MAX_FILES * 1024 + MAX_SEND_BODY  # `/api/send`, `/api/steer` and `/api/create`: the words and their files, as base64
 MAX_INBOX_BODY = 40 * 1024 * 1024  # `/api/inbox` carries pictures (base64); the other calls stay small
+MAX_EDIT_BODY = 3 * 1024 * 1024  # `/api/fileop`: one text file the person edits (1 MB of UTF-8 at most, escaped in JSON)
 MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
 REOPEN_EVERY = 3.0  # seconds
@@ -1117,7 +1119,7 @@ def handler_for(board: Board) -> type:
             origin = self.headers.get("Origin", "")
             if not self.host_ok() or (origin and origin not in allowed_origins) or self.headers.get(HEADER) != "1":
                 return self.answer(403, {"error": say("serve.refused.request")})
-            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_FILES_BODY if urlparse(self.path).path in ("/api/send", "/api/steer", "/api/queue", "/api/create") else MAX_SEND_BODY if urlparse(self.path).path == "/api/answer" else MAX_BODY
+            limit = MAX_INBOX_BODY if urlparse(self.path).path in ("/api/inbox", "/api/intake") else MAX_FILES_BODY if urlparse(self.path).path in ("/api/send", "/api/steer", "/api/queue", "/api/create") else MAX_EDIT_BODY if urlparse(self.path).path == "/api/fileop" else MAX_SEND_BODY if urlparse(self.path).path == "/api/answer" else MAX_BODY
             try:
                 size = int(self.headers.get("Content-Length", "0"))
                 data = json.loads(self.rfile.read(min(size, limit)).decode("utf-8") or "{}") if 0 <= size <= limit else None
@@ -1339,6 +1341,19 @@ def handler_for(board: Board) -> type:
                     result = board.intake(action, row["task"], data)
                     if action != "read":
                         print(say("serve.did", action="intake " + action, task=row["name"]), flush=True)
+                    return self.answer(200, {"result": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/fileop":  # the Files tab changes a file of the task (1.6.100): edit, add, rename, delete; the paired browser only
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    row = taskdesk.row_of(board.root, str(data.get("task", "")))
+                    if row is None:
+                        raise CommandError(say("desk.unknown", name=str(data.get("task", ""))))
+                    result = taskfileedit.act(board.root, row["task"], data)
+                    if str(data.get("op", "")) != "raw":
+                        print(say("serve.did", action="file " + str(data.get("op", "")), task=row["name"]), flush=True)
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})

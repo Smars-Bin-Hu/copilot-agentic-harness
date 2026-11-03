@@ -1264,27 +1264,128 @@
     SERVE.post("/api/file", {task: desk.name, path: item.path}).then((data) => { fileCache[item.path] = data.file; draw(true); }, () => { fileCache[item.path] = null; draw(true); });
   }
 
+  // 1.6.100: the person changes the files of the task here (taskfileedit.py): Edit a text file, New file, New folder, Rename (a new path moves it), Delete (to `.task/trash/`). The server refuses while the
+  // agent is in the middle of a turn, and a save of a file the agent changed since it was opened. The parts the task is made of are edited, not renamed or deleted; DEV_r<n> is read only.
+  const CORE_FILES = ["TASK.MD", "REQ.MD", "PLAN.MD", "TODO.MD", "LOG.MD"];
+  const CORE_DIRS = ["REQ", "REF", "INBOX", "DEV", "RUNS"];
+  const fileEdit = {path: "", text: "", saved: "", stamp: "", busy: false, error: ""};
+  const roundDir = (path) => /^DEV_R\d+(\/|$)/i.test(path);
+  const changeable = () => served() && !desk.past && desk.status === "open";
+  const fixed = (path, folder) => roundDir(path) || (!path.includes("/") && (folder ? CORE_DIRS : CORE_FILES).includes(path.toUpperCase()));
+  const fileOp = (body) => SERVE.post("/api/fileop", {task: desk.name, ...body}).then((data) => data.result);
+  const filesAgain = (open) => intakeRefresh().then(() => { if (open !== undefined) fileOpen = open; draw(true); });
+  function fileDialog(title, hint, value, run, label) {  // a path to type, or only a yes; the dialog stays with the reason when the server says no
+    const input = value === null ? null : h("input", {type: "text", class: "file-path", value, spellcheck: "false", autocomplete: "off", "aria-label": title});
+    const ok = h("button", {type: "button", class: "act hot"}, label || t("desk.files.ok"));
+    const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const said = h("div", {class: "bad"});
+    const view = SERVE.dialog([h("h2", null, title), h("p", {class: "sub"}, hint), input, h("div", {class: "row"}, ok, no), said]);
+    const go = () => {
+      const text = input ? input.value.trim().replace(/^\/+/, "") : "";
+      if (input && !text) return;
+      ok.disabled = true;
+      run(text).then(() => view.close(), (error) => { ok.disabled = false; said.replaceChildren(...SERVE.reasons((error && error.message) || String(error))); });
+    };
+    ok.addEventListener("click", go);
+    no.addEventListener("click", view.close);
+    if (input) {
+      input.addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.isComposing) go(); });
+      setTimeout(() => { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }, 0);
+    }
+  }
+  const folderOf = (path) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "");
+  function newFile(folder) {
+    fileDialog(t("desk.files.new.file"), t("desk.files.new.file.hint"), folder, (path) => fileOp({op: "file", path}).then((found) => filesAgain(found.path)));
+  }
+  function newFolder(folder) {
+    fileDialog(t("desk.files.new.folder"), t("desk.files.new.folder.hint"), folder, (path) => fileOp({op: "folder", path}).then(() => filesAgain()));
+  }
+  function renameFile(path) {
+    fileDialog(t("desk.files.rename.title", {path}), t("desk.files.rename.hint"), path, (to) => fileOp({op: "rename", path, to}).then((found) => {
+      for (const key of Object.keys(fileCache)) if (key === path || key.startsWith(path + "/")) delete fileCache[key];
+      if (fileEdit.path === path) fileEdit.path = "";
+      return filesAgain(fileOpen === path ? found.path : fileOpen.startsWith(path + "/") ? found.path + fileOpen.slice(path.length) : undefined);
+    }), t("desk.files.rename"));
+  }
+  function deleteFile(path) {
+    fileDialog(t("desk.files.delete.title", {path}), t("desk.files.delete.hint"), null, () => fileOp({op: "delete", path}).then(() => {
+      for (const key of Object.keys(fileCache)) if (key === path || key.startsWith(path + "/")) delete fileCache[key];
+      if (fileEdit.path === path) fileEdit.path = "";
+      return filesAgain();
+    }), t("desk.files.delete"));
+  }
+  function editFile(item) {
+    fileEdit.error = "";
+    fileOp({op: "raw", path: item.path}).then((found) => {
+      Object.assign(fileEdit, {path: item.path, text: found.text, saved: found.text, stamp: found.stamp, busy: false, error: ""});
+      draw(true);
+      const area = document.querySelector("textarea.file-editor");
+      if (area) area.focus();
+    }, (error) => { fileEdit.error = (error && error.message) || String(error); draw(true); });
+  }
+  function saveFile() {
+    if (fileEdit.busy || fileEdit.text === fileEdit.saved) return;
+    fileEdit.busy = true;
+    fileEdit.error = "";
+    draw(true);
+    fileOp({op: "write", path: fileEdit.path, text: fileEdit.text, stamp: fileEdit.stamp}).then((found) => {
+      Object.assign(fileEdit, {saved: fileEdit.text, stamp: found.stamp, busy: false});
+      delete fileCache[fileEdit.path];
+      filesAgain();
+    }, (error) => { fileEdit.busy = false; fileEdit.error = (error && error.message) || String(error); draw(true); });
+  }
+  function fileEditor(item) {
+    const area = h("textarea", {rows: 26, class: "editor file-editor", spellcheck: "false", "aria-label": item.path, disabled: fileEdit.busy ? "" : null}, fileEdit.text);
+    const changed = () => fileEdit.text !== fileEdit.saved;
+    const save = h("button", {type: "button", class: "act hot", disabled: fileEdit.busy || !changed() ? "" : null}, fileEdit.busy ? t("board.serve.working") : t("desk.files.save"));
+    const close = h("button", {type: "button", class: "act"}, t("desk.files.close"));
+    const mark = h("span", {class: "sub"}, changed() ? t("desk.intake.unsaved") : t("desk.intake.saved"));
+    area.addEventListener("input", () => {
+      fileEdit.text = area.value;
+      save.disabled = fileEdit.busy || !changed();
+      mark.textContent = changed() ? t("desk.intake.unsaved") : t("desk.intake.saved");
+    });
+    area.addEventListener("keydown", (event) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); saveFile(); } });
+    save.addEventListener("click", saveFile);
+    close.addEventListener("click", () => { if (!changed() || window.confirm(t("desk.intake.discard"))) { fileEdit.path = ""; fileEdit.error = ""; draw(true); } });
+    return [item.path.toUpperCase() === "PLAN.MD" ? h("p", {class: "hint"}, t("desk.files.plan.note")) : null, area,
+      fileEdit.error ? h("div", {class: "bad"}, SERVE.reasons(fileEdit.error)) : null, h("div", {class: "inbox-save"}, save, close, mark)];
+  }
+  const smallButton = (label, call, title, cls) => {
+    const button = h("button", {type: "button", class: "act " + (cls || ""), title: title || null}, label);
+    button.addEventListener("click", (event) => { event.stopPropagation(); call(); });
+    return button;
+  };
+
   function filesTab() {
     const items = desk.files;
-    if (!items.some((item) => item.path === fileOpen)) fileOpen = items[0].path;
-    const open = items.find((item) => item.path === fileOpen);
-    fileLoad(open);
+    const docs = items.filter((item) => item.kind !== "folder");
+    if (!docs.some((item) => item.path === fileOpen)) fileOpen = docs.length ? docs[0].path : "";
+    const open = docs.find((item) => item.path === fileOpen);
+    if (open && fileEdit.path !== open.path) fileLoad(open);
+    const may = changeable(), working = desk.state === "working";
     const list = [];
     const marks = new Map();  // DEV/ file -> "create" | "modify" | "delete" | "unchanged", from the Changes tab
     for (const item of desk.changes.files) marks.set("DEV/" + item.path, item.action);
     for (const path of desk.changes.unchanged_files || []) marks.set("DEV/" + path, "unchanged");
     const ghosts = [...marks].filter(([path, action]) => action === "delete" && !items.some((item) => item.path === path)).map(([path]) => ({path, size: 0, ghost: true}));
-    const roots = new Map();  // root folder -> {dirs: name -> node, files: [item]}
+    const roots = new Map();  // top folder -> {dirs: name -> node, files: [item]}; the files at the top of the task are under ""
+    const node0 = () => ({dirs: new Map(), files: []});
     for (const item of [...items, ...ghosts]) {
       const parts = item.path.split("/");
-      let node = roots.get(parts[0]);
-      if (!node) roots.set(parts[0], node = {dirs: new Map(), files: []});
-      for (const name of parts.slice(1, -1)) {
-        if (!node.dirs.has(name)) node.dirs.set(name, {dirs: new Map(), files: []});
+      const folder = item.kind === "folder";
+      const top = parts.length > 1 || folder ? parts[0] : "";
+      let node = roots.get(top);
+      if (!node) roots.set(top, node = node0());
+      for (const name of parts.slice(top ? 1 : 0, folder ? parts.length : -1)) {
+        if (!node.dirs.has(name)) node.dirs.set(name, node0());
         node = node.dirs.get(name);
       }
-      node.files.push(item);
+      if (!folder) node.files.push(item);
     }
+    // What can be done to a folder, at the end of its line: a file in it, a folder in it, rename, delete.
+    const folderTools = (path) => (may ? h("span", {class: "files-tools"}, smallButton("+", () => newFile(path + "/"), t("desk.files.new.file.in", {path})),
+      fixed(path, true) ? null : [smallButton("✎", () => renameFile(path), t("desk.files.rename")), smallButton("×", () => deleteFile(path), t("desk.files.delete"), "danger")]) : null);
     // Like the VS Code explorer: folders first, a folder that holds only one folder is joined with it (d/e/f/), one file per line.
     const walk = (node, depth, parent) => {
       for (const [name, child] of node.dirs) {
@@ -1293,7 +1394,7 @@
         const id = parent + "/" + label, shut = folded.has(id);
         const row = h("button", {type: "button", class: "files-dir", "aria-expanded": shut ? "false" : "true", style: "padding-left:" + depth * 14 + "px"}, (shut ? "▸ " : "▾ ") + label + "/");
         row.addEventListener("click", () => { if (folded.has(id)) folded.delete(id); else folded.add(id); draw(true); });
-        list.push(row);
+        list.push(h("div", {class: "files-line"}, row, roundDir(id.replace(/^\//, "")) ? null : folderTools(id.replace(/^\//, ""))));
         if (!shut) walk(last, depth + 1, id);
       }
       for (const item of node.files) {
@@ -1302,17 +1403,27 @@
         const tail = mark ? h("span", {class: "tag fmark " + mark}, markText()[mark]) : h("span", {class: "sub"}, " " + size(item.size));
         if (item.ghost) { list.push(h("div", {class: "file ghost", title: item.path, style: "padding-left:" + depth * 14 + "px"}, name, " ", tail)); continue; }
         const button = h("button", {type: "button", class: "file" + (item.path === fileOpen ? " on" : "") + (mark === "unchanged" ? " plain" : ""), title: item.path, style: "padding-left:" + depth * 14 + "px"}, name, " ", tail);
-        button.addEventListener("click", () => { fileOpen = item.path; draw(true); });
+        button.addEventListener("click", () => { fileOpen = item.path; if (!fileEdit.path) fileEdit.error = ""; draw(true); });
         list.push(button);
       }
     };
-    for (const [root, node] of roots) {
-      list.push(h("div", {class: "files-root"}, h("strong", null, root + "/"), h("span", {class: "sub"}, " " + t(rootHint(root)))));
+    for (const [root, node] of [...roots].sort(([a], [b]) => (a === "") - (b === ""))) {  // the files at the top come last
+      const hint = root ? rootHint(root) : "desk.files.root.top";
+      const known = hint !== "desk.files.hint";
+      list.push(h("div", {class: "files-line files-root"}, h("span", null, h("strong", null, root ? root + "/" : t("desk.files.top")), known ? h("span", {class: "sub"}, " " + t(hint)) : null),
+        root ? (roundDir(root) ? null : folderTools(root)) : null));
       walk(node, 1, root);
     }
-    return [h("p", {class: "hint top"}, t("desk.files.hint")),
-      h("div", {class: "files"}, h("nav", {class: "files-list", "data-keep": "files-list"}, list),
-        h("div", {class: "files-view"}, h("div", {class: "round-head"}, h("strong", null, open.path), " ", h("span", {class: "sub"}, size(open.size))), fileView(open)))];
+    const tools = may ? h("div", {class: "files-new"}, smallButton(t("desk.files.new.file"), () => newFile(open ? folderOf(open.path) : "")), smallButton(t("desk.files.new.folder"), () => newFolder(open ? folderOf(open.path) : ""))) : null;
+    const editing = open && fileEdit.path === open.path;
+    const textual = open && ["markdown", "text"].includes(open.kind) && open.size <= 1000000;
+    const head = open ? h("div", {class: "round-head files-head"}, h("strong", null, open.path), " ", h("span", {class: "sub"}, size(open.size)),
+      may && !editing && !roundDir(open.path) ? h("span", {class: "files-tools on"}, textual ? smallButton(t("desk.files.edit"), () => editFile(open)) : null,
+        fixed(open.path, false) ? null : [smallButton(t("desk.files.rename"), () => renameFile(open.path)), smallButton(t("desk.files.delete"), () => deleteFile(open.path), "", "danger")]) : null) : null;
+    return [h("p", {class: "hint top"}, t(may ? "desk.files.hint.edit" : "desk.files.hint")), may && working ? h("p", {class: "hint"}, t("desk.files.busy")) : null,
+      h("div", {class: "files"}, h("nav", {class: "files-list", "data-keep": "files-list"}, tools, list),
+        h("div", {class: "files-view"}, head, !editing && fileEdit.error && fileEdit.path === "" ? h("div", {class: "bad"}, SERVE.reasons(fileEdit.error)) : null,
+          open ? (editing ? fileEditor(open) : fileView(open)) : h("p", {class: "sub"}, t("desk.files.none"))))];
   }
 
   // The Intake tab (1.5.45): the documents of a requirement go into REQ/ here (a program turns Word and Excel into Markdown and CSV: no AI), are trimmed in a text box, and

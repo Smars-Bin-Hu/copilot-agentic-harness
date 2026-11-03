@@ -121,6 +121,13 @@ ol.timeline li{display:grid;grid-template-columns:8.5em minmax(0,1fr);align-item
 .file{font:inherit;font-size:13px;text-align:left;padding-top:3px;padding-bottom:3px;padding-right:8px;border:1px solid transparent;border-radius:6px;background:none;color:var(--ink);cursor:pointer;overflow-wrap:anywhere}
 .file:hover{background:var(--track)}.file.on{border-color:var(--model);font-weight:600}
 .files-view{min-width:0}
+.files-line{display:flex;align-items:center;gap:4px;min-width:0}.files-line>.files-dir{flex:1;min-width:0}.files-line.files-root{justify-content:space-between}
+.files-tools{display:inline-flex;flex:none;gap:2px;opacity:0;transition:opacity .12s}.files-line:hover .files-tools,.files-line:focus-within .files-tools,.files-tools.on{opacity:1}
+.files-tools .act,.files-new .act{height:22px;margin:0;padding:0 7px;font-size:12px;line-height:20px}.files-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}.files-head .files-tools{margin-left:auto}
+.files-new{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.file-path{width:100%;box-sizing:border-box;margin:4px 0 10px;padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--bg);color:var(--ink);font:13px/1.4 var(--mono)}
+textarea.file-editor{width:100%;box-sizing:border-box;min-height:50vh;font:12.5px/1.5 var(--mono);tab-size:4}
+@media (hover:none){.files-tools{opacity:1}}  /* a touch screen has no pointer to show them */
 @media (max-width:720px){.files{grid-template-columns:1fr}.files-list{border-right:none;max-height:240px}}
 .inbox{margin-top:16px;padding-top:12px;border-top:1px dashed var(--line)}
 .inbox h3{margin:0 0 4px;font-size:15px}.inbox .field{display:block;margin:10px 0}.inbox .field>.sub{display:block;margin-bottom:3px}

@@ -1,4 +1,4 @@
-"""1.5.41: the Files tab lists what is in REQ/, REF/, DEV/ and RUNS/ (sub-folders too) and shows one file when it is opened."""
+"""1.5.41: the Files tab lists what is in REQ/, REF/, DEV/ and RUNS/ (sub-folders too) and shows one file when it is opened. 1.6.100: the whole task folder, and the person changes the files there."""
 
 from __future__ import annotations
 
@@ -8,12 +8,13 @@ from unittest import mock
 from test_boardserve import ServeCase
 from test_intake import xlsx
 
-from modules.task import common, intake, taskdesk, taskfiles
+from core import messages, tasks
+from modules.task import common, intake, taskdesk, taskfileedit, taskfiles, tasklife
 from modules.task.common import CommandError
 from taskcase import TASK
 
 
-class FilesTests(ServeCase):
+class FilesCase(ServeCase):
     def setUp(self) -> None:
         super().setUp()
         (self.task / "REQ").mkdir(exist_ok=True)
@@ -29,16 +30,25 @@ class FilesTests(ServeCase):
         (self.task / "DEV-RUN").mkdir()
         (self.task / "DEV-RUN" / "run.sh").write_text("echo hi\n", encoding="utf-8")
 
-    def test_the_list_holds_the_three_folders_with_their_sub_folders(self) -> None:
+
+class FilesTests(FilesCase):
+    def test_the_list_holds_the_whole_task_folder(self) -> None:
+        (self.task / ".task" / "note.txt").write_text("state", encoding="utf-8")
+        (self.task / ".scratch").mkdir()
+        (self.task / ".scratch" / "x.txt").write_text("hidden", encoding="utf-8")
         listed = taskfiles.listing(self.root, TASK)
         self.assertEqual([(item["path"], item["kind"]) for item in listed], [
-            ("REQ/brd.md", "markdown"), ("REQ/chart.png", "image"), ("REF/old.sql", "text"), ("DEV/repo/sql/a.sql", "text"), ("RUNS/DEV/dump.bin", "other"), ("RUNS/DEV/result.md", "markdown")])
+            ("REQ/brd.md", "markdown"), ("REQ/chart.png", "image"), ("REF/old.sql", "text"), ("DEV/repo/sql/a.sql", "text"), ("RUNS/DEV/dump.bin", "other"), ("RUNS/DEV/result.md", "markdown"),
+            ("DEV-RUN/run.sh", "text"), ("TEST", "folder"),  # what the agent made on the way, and an empty folder
+            ("LOG.md", "markdown"), ("PLAN.md", "markdown"), ("REQ.md", "markdown"), ("TASK.md", "markdown"), ("TODO.md", "markdown")])  # the files at the top; never .task/ or a hidden name
         self.assertEqual(taskdesk.desk(self.root, "job1")["files"], listed)
+        self.assertEqual(taskfiles.listing(self.root, TASK, ("DEV",)), [{"path": "DEV/repo/sql/a.sql", "size": 10, "kind": "text"}])  # an earlier round lists only its own folder
 
-    def test_a_task_with_no_such_files_has_none_listed(self) -> None:
+    def test_a_task_with_empty_folders_lists_the_folders(self) -> None:
         for path in sorted((self.task / "REQ").glob("*")) + sorted((self.task / "REF").glob("*")) + sorted((self.task / "RUNS" / "DEV").glob("*")) + sorted((self.task / "DEV").rglob("a.sql")):
             path.unlink()
-        self.assertEqual(taskfiles.listing(self.root, TASK), [])
+        listed = [(item["path"], item["kind"]) for item in taskfiles.listing(self.root, TASK)]
+        self.assertEqual(listed[:5], [("REQ", "folder"), ("REF", "folder"), ("DEV/repo/sql", "folder"), ("RUNS/DEV", "folder"), ("DEV-RUN/run.sh", "text")])
 
     def test_a_file_is_shown_by_what_it_holds(self) -> None:
         shown = taskfiles.view(self.root, TASK, "REQ/brd.md")
@@ -56,14 +66,16 @@ class FilesTests(ServeCase):
         (self.root / "outside.txt").write_text("out", encoding="utf-8")
         (self.task / "REF" / "link.txt").symlink_to(self.root / "outside.txt")
         (self.task / "REF" / "linked").symlink_to(self.root)
-        for path in ("secret.md", "DEV-RUN/run.sh", "../job1/REF/old.sql", "REF/../secret.md", "/etc/passwd", "REF/link.txt", "REF/linked/outside.txt", "REF/.hidden", "C:/x", "REF/missing.txt", ""):
+        self.assertEqual(taskfiles.view(self.root, TASK, "secret.md")["kind"], "markdown")  # 1.6.100: the whole task folder
+        self.assertEqual(taskfiles.view(self.root, TASK, "DEV-RUN/run.sh")["text"], "echo hi\n")
+        for path in (".task/task.json", "../job1/REF/old.sql", "REF/../secret.md", "/etc/passwd", "REF/link.txt", "REF/linked/outside.txt", "REF/.hidden", "C:/x", "REF/missing.txt", "REF", ""):
             self.assertIsNone(taskfiles.view(self.root, TASK, path), path)
         self.assertNotIn("REF/link.txt", [item["path"] for item in taskfiles.listing(self.root, TASK)])
 
     def test_the_page_asks_for_a_file_when_it_is_opened(self) -> None:
         status, data, _headers = self.request("POST", "/api/file", {"task": "job1", "path": "REF/old.sql"})
         self.assertEqual((status, data["file"]["text"]), (200, "select 1;\n"))
-        self.assertEqual(self.request("POST", "/api/file", {"task": "job1", "path": "secret.md"})[0], 404)
+        self.assertEqual(self.request("POST", "/api/file", {"task": "job1", "path": ".task/task.json"})[0], 404)
         self.assertEqual(self.request("POST", "/api/file", {"task": "nope", "path": "REF/old.sql"})[0], 404)
         self.assertEqual(self.request("POST", "/api/file", {"task": "job1", "path": "REF/old.sql"}, header=False)[0], 403)
 
@@ -87,9 +99,105 @@ class FilesTests(ServeCase):
         status, _data, headers = self.request("GET", "/download/job1/REQ/originals/BRD%20%E5%AE%A2%E6%88%B7.docx")
         self.assertEqual(status, 200)
         self.assertIn("attachment", {key.lower(): value for key, value in headers.items()}["content-disposition"])
-        for path in ("secret.md", "REQ/../task.json", "DEV-RUN/run.sh"):
+        for path in ("secret.md", "REQ/../task.json", ".task/task.json"):
             self.assertIsNone(taskdesk.download_file(self.root, "job1", path), path)
+        self.assertIsNotNone(taskdesk.download_file(self.root, "job1", "DEV-RUN/run.sh"))  # 1.6.100: what the tab lists can be saved
         self.assertIsNone(taskdesk.download_file(self.root, "nope", "REQ/brd.md"))
+
+
+class EditTests(FilesCase):
+    """1.6.100: the person changes the files of the task on its page (taskfileedit.py)."""
+
+    def op(self, **body: object) -> dict:
+        return taskfileedit.act(self.root, TASK, body)
+
+    def refusal(self, why: str, **body: object) -> None:
+        with self.assertRaises(CommandError) as caught:
+            self.op(**body)
+        wanted = messages.text(f"fileop.refused.{why}", path="@", size=1000).split("@")[-1][-25:]  # the fixed end of the sentence
+        self.assertIn(wanted, str(caught.exception), (why, body))
+
+    def events(self) -> list:
+        return [(item["what"], item["detail"]) for item in tasks.read(self.root, TASK)["events"] if item["what"].startswith("file-")]
+
+    def test_a_text_file_is_saved_only_over_the_version_it_was_opened_at(self) -> None:
+        opened = self.op(op="raw", path="REF/old.sql")
+        self.assertEqual((opened["text"], opened["crlf"]), ("select 1;\n", False))
+        saved = self.op(op="write", path="REF/old.sql", text="select 3;\n", stamp=opened["stamp"])
+        self.assertEqual((self.task / "REF" / "old.sql").read_text(encoding="utf-8"), "select 3;\n")
+        self.refusal("changed", op="write", path="REF/old.sql", text="select 4;\n", stamp=opened["stamp"])  # the agent wrote it meanwhile: not overwritten
+        self.assertEqual((self.task / "REF" / "old.sql").read_text(encoding="utf-8"), "select 3;\n")
+        self.op(op="write", path="REF/old.sql", text="select 5;\n", stamp=saved["stamp"])
+        (self.task / "REF" / "win.sql").write_bytes(b"\xef\xbb\xbfselect 1;\r\nselect 2;\r\n")  # saved on Windows, with the mark
+        opened = self.op(op="raw", path="REF/win.sql")
+        self.assertEqual((opened["text"], opened["crlf"]), ("select 1;\nselect 2;\n", True))
+        self.op(op="write", path="REF/win.sql", text="select 1;\nselect 9;\n", stamp=opened["stamp"])
+        self.assertEqual((self.task / "REF" / "win.sql").read_bytes(), b"\xef\xbb\xbfselect 1;\r\nselect 9;\r\n")  # its line ends and its mark stay
+        self.assertEqual(self.events()[:1], [("file-edit", "REF/old.sql")])
+
+    def test_files_and_folders_are_added_renamed_moved_and_deleted_into_the_trash(self) -> None:
+        self.assertEqual(self.op(op="file", path="notes/a.md", text="# A\n")["path"], "notes/a.md")
+        self.op(op="folder", path="tmp/checks")
+        self.refusal("exists", op="file", path="notes/a.md")
+        self.assertEqual(self.op(op="rename", path="notes/a.md", to="TEST/a2.md")["path"], "TEST/a2.md")  # a move into another folder of the task
+        self.assertEqual((self.task / "TEST" / "a2.md").read_text(encoding="utf-8"), "# A\n")
+        self.op(op="rename", path="tmp", to="scratch")
+        self.assertTrue((self.task / "scratch" / "checks").is_dir())
+        self.refusal("inside", op="rename", path="scratch", to="scratch/checks/x")
+        done = self.op(op="delete", path="TEST/a2.md")
+        self.assertFalse((self.task / "TEST" / "a2.md").exists())
+        self.assertEqual((self.task / done["kept"]).read_text(encoding="utf-8"), "# A\n")  # kept, not lost
+        self.assertTrue(done["kept"].startswith(".task/trash/") and done["kept"].endswith("/TEST/a2.md"), done)
+        self.op(op="delete", path="scratch")
+        self.assertFalse((self.task / "scratch").exists())
+        self.assertNotIn("scratch", [item["path"] for item in taskfiles.listing(self.root, TASK)])
+        self.assertEqual([what for what, _detail in self.events()], ["file-add", "file-add", "file-rename", "file-rename", "file-delete", "file-delete"])
+
+    def test_the_parts_of_the_task_and_an_earlier_round_stay(self) -> None:
+        for path in ("TASK.md", "PLAN.md", "REQ", "DEV"):
+            self.refusal("core", op="delete", path=path)
+            self.refusal("core", op="rename", path=path, to="other")
+        opened = self.op(op="raw", path="TODO.md")
+        self.op(op="write", path="TODO.md", text=opened["text"] + "- [ ] one more\n", stamp=opened["stamp"])  # edited, yes
+        (self.task / "DEV_r1").mkdir()
+        (self.task / "DEV_r1" / "a.sql").write_text("old\n", encoding="utf-8")
+        opened = self.op(op="raw", path="DEV_r1/a.sql")
+        self.refusal("round", op="write", path="DEV_r1/a.sql", text="x", stamp=opened["stamp"])
+        self.refusal("round", op="delete", path="DEV_r1/a.sql")
+        self.refusal("round", op="file", path="DEV_r1/b.sql")
+        self.refusal("round", op="rename", path="REF/old.sql", to="DEV_r1/old.sql")
+
+    def test_a_place_outside_the_task_or_hidden_is_refused(self) -> None:
+        (self.task / "REF" / "link").symlink_to(self.root)
+        for path in ("../x.md", ".task/task.json", "REF/.hidden", "REF/a<b.md", "/etc/x", "C:/x", "REF/link/x.md", "REF/../../x.md", "node_modules/x.js", "REF/a. ", ""):
+            self.refusal("path", op="file", path=path)
+        self.refusal("path", op="rename", path="REF/old.sql", to=".task/old.sql")
+        self.refusal("path", op="delete", path=".task")
+        self.assertTrue((self.task / ".task" / "task.json").is_file())
+
+    def test_nothing_changes_while_the_agent_works_but_a_file_can_be_read(self) -> None:
+        with mock.patch.object(tasklife, "at_work", return_value=True):
+            self.refusal("busy", op="file", path="notes.md")
+            self.assertEqual(self.op(op="raw", path="REF/old.sql")["text"], "select 1;\n")
+        self.assertFalse((self.task / "notes.md").exists())
+
+    def test_a_binary_or_foreign_file_is_not_edited(self) -> None:
+        (self.task / "REF" / "fake.txt").write_bytes(b"\x00\x00binary")
+        self.refusal("binary", op="raw", path="REF/fake.txt")
+        (self.task / "REF" / "latin.sql").write_bytes("select 'é';\n".encode("latin-1"))
+        self.refusal("encoding", op="raw", path="REF/latin.sql")
+        self.refusal("op", op="chmod", path="REF/old.sql")
+
+    def test_the_route_needs_a_paired_browser(self) -> None:
+        body = {"task": "job1", "op": "file", "path": "notes.md", "text": "hi"}
+        status, data, _ = self.request("POST", "/api/fileop", body)
+        self.assertEqual((status, data.get("unpaired")), (403, True))
+        self.assertFalse((self.task / "notes.md").exists())
+        cookie = self.pair()
+        status, data, _ = self.request("POST", "/api/fileop", body, cookie=cookie)
+        self.assertEqual((status, data["result"]["path"]), (200, "notes.md"))
+        status, data, _ = self.request("POST", "/api/fileop", dict(body, task="nope"), cookie=cookie)
+        self.assertEqual(status, 409, data)
 
 
 def row(number: int, *cells: str) -> str:

@@ -1,4 +1,6 @@
 """The "Files" tab of the task page (1.5.41): what the person put in `REQ/` and `REF/`, the files the agent prepared in `DEV/` and what came back into `RUNS/`, with their sub-folders.
+1.6.100: the whole task folder, also the other folders and the files at the top (what the agent made on the way), and an empty folder; never `.task/` or a hidden name. The person may
+change them there (`taskfileedit.py`).
 
 These are the folders of a task that hold files of any kind (several requirement papers, reference code, the files to write back, the outputs of a run), not only Markdown.
 The page lists them (names and sizes: small) and asks for one file only when the person opens it; a saved copy takes the small text files in.
@@ -19,7 +21,7 @@ from . import common, intakeconvert, mdtree
 
 FOLDERS = ("REQ", "REF", "INBOX", "DEV", "RUNS")  # the order of the list: what the person gave, what the agent made, what came back
 ROUND_DEV = re.compile(r"DEV_R\d+$", re.IGNORECASE)  # DEV_r<n>: the result of an earlier round, read only (M44)
-MAX_LISTED = 400
+MAX_LISTED = 800
 MAX_VIEW_BYTES = 400_000
 MAX_EMBED_BYTES = 150_000  # a saved copy takes a text file in up to this size each, and 2 MB in all
 MAX_EMBED_TOTAL = 2 * 1024 * 1024
@@ -70,26 +72,36 @@ def converted_from(base: Path, out: List[Dict[str, Any]]) -> None:
         item["made"] = [path for path in made if path in have and path != item["path"]]
 
 
-def listing(root: Path, task: str, folders: Tuple[str, ...] = FOLDERS) -> List[Dict[str, Any]]:
-    """Every file under `REQ/`, `REF/`, `DEV/` and `RUNS/` (`folders`: or the DEV_r<n> of an earlier round) as `{path, size, kind}` (path from the task folder, `/` as the separator), folders in that order and
-    names in order inside them. A link and a hidden or tool-made name are left out. At most MAX_LISTED."""
+def hidden(name: str) -> bool:
+    return name.startswith(".") or name in common.SKIP_NAMES
+
+
+def listing(root: Path, task: str, folders: Optional[Tuple[str, ...]] = None) -> List[Dict[str, Any]]:
+    """Every file of the task folder as `{path, size, kind}` (path from the task folder, `/` as the separator): `REQ/`, `REF/`, `INBOX/`, `DEV/` and `RUNS/` first, then the other folders by name,
+    then the files at the top; names in order inside a folder. An empty folder is `{path, size: 0, kind: "folder"}`. `folders`: only these (the DEV_r<n> of an earlier round).
+    A link, `.task/` and a hidden or tool-made name are left out. At most MAX_LISTED."""
     base = folder_of(root, task)
     out: List[Dict[str, Any]] = []
     try:
-        entries = {entry.name.upper(): entry for entry in base.iterdir() if entry.is_dir() and not entry.is_symlink()}
+        top = sorted((entry for entry in base.iterdir() if not entry.is_symlink() and not hidden(entry.name)), key=lambda entry: entry.name.lower())
     except OSError:
         return out
-    for name in folders:
-        top = entries.get(name.upper())
-        if top is None:
-            continue
-        for path in sorted(top.rglob("*"), key=lambda item: [part.lower() for part in item.relative_to(base).parts]):
+    named = {entry.name.upper(): entry for entry in top if entry.is_dir()}
+    order = [named[name.upper()] for name in (folders or FOLDERS) if name.upper() in named]
+    if folders is None:
+        order += [entry for entry in top if entry.is_dir() and entry not in order and not ROUND_DEV.match(entry.name)] + [entry for entry in top if entry.is_file()]  # an earlier round has its own list
+    for start in order:
+        for path in [start] if start.is_file() else sorted(start.rglob("*"), key=lambda item: [part.lower() for part in item.relative_to(base).parts]):
             relative = path.relative_to(base)
-            if any(part.startswith(".") or part in common.SKIP_NAMES for part in relative.parts):
+            if any(hidden(part) for part in relative.parts):
                 continue
-            if path.is_symlink() or not path.is_file() or any(parent.is_symlink() for parent in path.parents if parent != base and base in parent.parents):
+            if path.is_symlink() or any(parent.is_symlink() for parent in path.parents if parent != base and base in parent.parents):
                 continue
             try:
+                if path.is_dir():
+                    if folders is None and not any(True for _ in path.iterdir()):
+                        out.append({"path": relative.as_posix(), "size": 0, "kind": "folder"})
+                    continue
                 size = path.stat().st_size
             except OSError:
                 continue
@@ -97,16 +109,18 @@ def listing(root: Path, task: str, folders: Tuple[str, ...] = FOLDERS) -> List[D
             if len(out) >= MAX_LISTED:
                 converted_from(base, out)
                 return out
+        if folders is None and start.is_dir() and not any(item["path"] == start.name or item["path"].startswith(start.name + "/") for item in out):
+            out.append({"path": start.name, "size": 0, "kind": "folder"})  # a top folder with nothing listed in it
     converted_from(base, out)
     return out
 
 
 def locate(root: Path, task: str, relative: str) -> Optional[Path]:
-    """The file `relative` (from the task folder) when it is one the tab lists: under REQ, REF, DEV or RUNS, inside the task folder, no link on the way. The path comes from a page."""
+    """The file `relative` (from the task folder) when it is one the tab lists: inside the task folder, not `.task/` or a hidden name, no link on the way. The path comes from a page."""
     if not relative or "\x00" in relative or relative.startswith(("/", "\\")) or ":" in relative.split("/")[0]:
         return None
     parts = relative.replace("\\", "/").split("/")
-    if any(part in ("", ".", "..") or part.startswith(".") or part in common.SKIP_NAMES for part in parts) or (parts[0].upper() not in FOLDERS and not ROUND_DEV.match(parts[0])):
+    if any(part in ("", ".", "..") or hidden(part) for part in parts):
         return None
     base = folder_of(root, task)
     walk = base

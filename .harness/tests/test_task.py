@@ -491,7 +491,7 @@ class RoundAndReportTests(TaskCase):
         self.assertTrue(all(event["round"] == 1 for event in past["history"]) and past["history"])
         self.assertEqual(past["branch"], "feature/job1")
         self.assertEqual(past["promote"]["state"], "done")
-        self.assertEqual(page["files"], [])  # the current round's list does not carry the earlier one
+        self.assertFalse([item for item in page["files"] if item["path"].startswith("DEV_r1")])  # the current round's list does not carry the earlier one
         self.assertIsNotNone(taskfiles.view(self.root, TASK, "DEV_r1/repo_b/src/a.sql"))  # served like DEV/
         self.assertIsNone(taskfiles.view(self.root, TASK, "DEV_r1/../TASK.md"))
 

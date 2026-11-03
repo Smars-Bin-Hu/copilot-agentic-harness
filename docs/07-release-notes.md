@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.107 (2026-11-03)
+
+### Changed
+
+- **A text box keeps its place when the page draws itself again.** A picture pasted into the results of a test made the box jump to its top and lose the caret, so a long text had to be scrolled down each time. Now the box keeps where it was, the caret and the focus: you type on where you were. The same holds for the editors of the Files and Intake tabs.
+
 ## 1.6.106 (2026-11-03)
 
 ### Changed

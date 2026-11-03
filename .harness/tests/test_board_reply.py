@@ -369,6 +369,15 @@ class NewTaskFileTests(CreateCase):
 
 
 class PageTests(unittest.TestCase):
+    def test_a_redraw_gives_a_text_box_back_its_place_its_focus_and_its_caret(self) -> None:
+        """1.6.107: a picture pasted into the results redrew the page, and the box started again at its top, with no focus: a long text had to be scrolled down again each time."""
+        desk = source("desk.js")
+        for key in ('"data-keep": "inbox.text"', '"data-keep": "inbox.ran"', '"data-keep": "inbox.env"', '"data-keep": "file-edit." + item.path', '"data-keep": "intake.edit." + edit.path'):
+            self.assertIn(key, desk)
+        self.assertIn("{key: field.dataset.keep, start: field.selectionStart, end: field.selectionEnd", desk)
+        self.assertIn("again.setSelectionRange(typing.start, typing.end, typing.way)", desk)
+        self.assertLess(desk.index("again.setSelectionRange(typing.start"), desk.index("for (const node of app.querySelectorAll(\"[data-keep]\")) if (kept.has"))  # the caret first: the box's own scroll is put back after it
+
     def test_a_row_draws_steer_once(self) -> None:
         """1.6.104: a task that waited for something with no button of its own while its agent worked had Steer as its first button and again among the words to the agent."""
         board = source("board.js")

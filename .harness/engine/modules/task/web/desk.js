@@ -722,15 +722,15 @@
     const handed = desk.handoff || {};
     const env = form.env || handed.env || "";
     const field = (label, node) => h("label", {class: "field"}, h("span", {class: "sub"}, label), node);
-    const text = h("textarea", {rows: 6, placeholder: t("desk.inbox.text.ph"), disabled: form.busy ? "" : null}, form.text);
+    const text = h("textarea", {rows: 6, placeholder: t("desk.inbox.text.ph"), disabled: form.busy ? "" : null, "data-keep": "inbox.text"}, form.text);
     text.addEventListener("input", () => { form.text = text.value; });
     text.addEventListener("paste", (event) => {  // a screenshot pasted into the box becomes a picture; pasted text stays text
       const files = [...(event.clipboardData ? event.clipboardData.files : [])].filter((file) => /^image\//.test(file.type));
       if (files.length) { event.preventDefault(); addImages(files); }
     });
-    const ran = h("textarea", {rows: 3, placeholder: t("desk.inbox.ran.ph"), disabled: form.busy ? "" : null}, form.ran);
+    const ran = h("textarea", {rows: 3, placeholder: t("desk.inbox.ran.ph"), disabled: form.busy ? "" : null, "data-keep": "inbox.ran"}, form.ran);
     ran.addEventListener("input", () => { form.ran = ran.value; });
-    const where = h("input", {type: "text", value: env, maxlength: 12, class: "env-input"});
+    const where = h("input", {type: "text", value: env, maxlength: 12, class: "env-input", "data-keep": "inbox.env"});
     where.addEventListener("input", () => { form.env = where.value; });
     const pick = h("input", {type: "file", accept: "image/png,image/jpeg,image/gif,image/webp", multiple: "", style: "display:none"});
     pick.addEventListener("change", () => addImages([...pick.files]));
@@ -1336,7 +1336,7 @@
     }, (error) => { fileEdit.busy = false; fileEdit.error = (error && error.message) || String(error); draw(true); });
   }
   function fileEditor(item) {
-    const area = h("textarea", {rows: 26, class: "editor file-editor", spellcheck: "false", "aria-label": item.path, disabled: fileEdit.busy ? "" : null}, fileEdit.text);
+    const area = h("textarea", {rows: 26, class: "editor file-editor", spellcheck: "false", "aria-label": item.path, disabled: fileEdit.busy ? "" : null, "data-keep": "file-edit." + item.path}, fileEdit.text);
     const changed = () => fileEdit.text !== fileEdit.saved;
     const save = h("button", {type: "button", class: "act hot", disabled: fileEdit.busy || !changed() ? "" : null}, fileEdit.busy ? t("board.serve.working") : t("desk.files.save"));
     const close = h("button", {type: "button", class: "act"}, t("desk.files.close"));
@@ -1631,7 +1631,7 @@
       const src = edit.picture ? "/file/" + encodeURIComponent(desk.name) + "/REQ/" + edit.path.split("/").map(encodeURIComponent).join("/") : "";
       return h("section", {class: "round editing"}, head, edit.picture ? h("img", {src, alt: edit.path, class: "md-img"}) : h("p", {class: "sub"}, t("desk.intake.noview")));
     }
-    const area = h("textarea", {rows: 22, class: "editor", spellcheck: "false", disabled: intake.busy ? "" : null}, edit.text);
+    const area = h("textarea", {rows: 22, class: "editor", spellcheck: "false", disabled: intake.busy ? "" : null, "data-keep": "intake.edit." + edit.path}, edit.text);
     area.addEventListener("input", () => { edit.text = area.value; });
     const views = edit.rows ? h("div", {class: "inbox-save"}, ...[["table", t("desk.intake.view.table")], ["text", t("desk.intake.view.text")]].map(([view, label]) =>
       pickChip(label, edit.view === view, () => { if (edit.view !== view) { edit.view = view; if (view === "table") csvLoad(edit); draw(true); } })), edit.text !== edit.saved ? button(t("desk.intake.csv.undo"), () => { edit.text = edit.saved; csvLoad(edit); draw(true); }) : null) : null;
@@ -1927,7 +1927,8 @@
   }
 
   // A redraw changes the parts of the page that depend on the data: the header is changed in place (paintHead), the card of waits, the tabs and the open tab are made again. A list or a code window that
-  // scrolls by itself (marked `data-keep`) is put back where it was, and so is the focus on a tab.
+  // scrolls by itself (marked `data-keep`) is put back where it was, and so is the focus on a tab. A text box marked `data-keep` that the person is typing in gets its focus and its caret back too
+  // (1.6.107: a picture pasted into the results made the box start again at its top, with no focus).
   function draw(keepScroll) {
     shell();
     remember(current);
@@ -1935,6 +1936,9 @@
     const kept = new Map([...app.querySelectorAll("[data-keep]")].map((node) => [node.dataset.keep, [node.scrollTop, node.scrollLeft]]));
     const focused = document.activeElement && document.activeElement.closest ? document.activeElement.closest("[data-key]") : null;
     const focusKey = focused && ui.tabs.contains(focused) ? focused.dataset.key : "";
+    const field = document.activeElement;
+    const typing = field && app.contains(field) && field.dataset && field.dataset.keep && typeof field.selectionStart === "number"
+      ? {key: field.dataset.keep, start: field.selectionStart, end: field.selectionEnd, way: field.selectionDirection || "none"} : null;
     paintHead();
     paintLive();
     fill(ui.tabs, nav());
@@ -1944,6 +1948,13 @@
 
       h("footer", null, t(saved ? "desk.snapshot.footer" : "desk.footer", {as_of: when(desk.as_of, 0, 19)}), copyright())]);  // a null would be drawn as the word "null"
     if (focusKey) { const again = ui.tabs.querySelector('[data-key="' + focusKey + '"]'); if (again) again.focus({preventScroll: true}); }
+    if (typing) {
+      const again = [...app.querySelectorAll("[data-keep]")].find((node) => node.dataset.keep === typing.key);
+      if (again && again !== field && typeof again.setSelectionRange === "function") {
+        again.focus({preventScroll: true});
+        try { again.setSelectionRange(typing.start, typing.end, typing.way); } catch (error) { /* a field that takes no range */ }
+      }
+    }
     if (keepScroll) {
       for (const node of app.querySelectorAll("[data-keep]")) if (kept.has(node.dataset.keep)) [node.scrollTop, node.scrollLeft] = kept.get(node.dataset.keep);
       window.scrollTo(0, y);

@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.96 (2026-11-03)
+
+### Changed
+
+- **The header of the board shows VS Code, Paired and Company Context whole over a wallpaper.** A wallpaper made the line under Task board narrower, and it cut them off. On a narrow page they now go on the next line.
+- **The list of Company Context opens under its mark over a wallpaper too.** It opened a little to the right and lower.
+
 ## 1.6.95 (2026-11-02)
 
 ### Added

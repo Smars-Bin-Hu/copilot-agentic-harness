@@ -40,7 +40,6 @@ html.has-wall .tk-tabs{background:var(--card)}  /* solid: what scrolls under the
 html.has-wall .action{background:transparent}
 html.has-wall .act-menu,html.has-wall .tk-menu{background:var(--card)}
 html.has-wall tbody tr:hover td{background:var(--hover)}
-html.has-wall .lb-top .sub{max-width:36ch}
 
 /* Lite: the same panels, opaque, no blur; the picture stays, still */
 html.lite.has-wall .lb-top,html.lite.has-wall .kpis,html.lite.has-wall .board-list,html.lite.has-wall .lb-scene,html.lite.has-wall .tk-head,html.lite.has-wall .tk-surface{

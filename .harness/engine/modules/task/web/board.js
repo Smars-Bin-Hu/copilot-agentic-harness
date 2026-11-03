@@ -385,10 +385,12 @@
   setupBar.addEventListener("click", (event) => { if (typeof DOCK === "undefined") return; event.preventDefault(); DOCK.setupWindow(); });
   const kbTip = h("span", {class: "kb-tip"});
   const kbMark = h("span", {class: "kb-mark", tabindex: "0", hidden: ""}, h("i"), t("board.kb.mark"), kbTip);
-  function placeTip() {  // fixed: the header cuts off what leaves it
+  function placeTip() {  // fixed: the header cuts off what leaves it. Over a wallpaper the header's blur makes the header, not the window, what `fixed` counts from: that offset is measured and taken off
     const at = kbMark.getBoundingClientRect();
-    kbTip.style.top = at.bottom + 8 + "px";
-    kbTip.style.left = Math.max(16, Math.min(at.left, innerWidth - kbTip.offsetWidth - 16)) + "px";
+    kbTip.style.top = "0px"; kbTip.style.left = "0px";
+    const origin = kbTip.getBoundingClientRect();
+    kbTip.style.top = at.bottom + 8 - origin.top + "px";
+    kbTip.style.left = Math.max(16, Math.min(at.left, innerWidth - kbTip.offsetWidth - 16)) - origin.left + "px";
   }
   kbMark.addEventListener("mouseenter", placeTip);
   kbMark.addEventListener("focus", placeTip);
@@ -476,7 +478,7 @@
   }
 
   app.replaceChildren(
-    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: "sub"}, boardName, DATA.serve ? [" \u00b7 ", statusBox] : [" \u00b7 ", stamp])), h("div", {class: "lb-right"}, shift, seg, newSlot)), SHELL.banner(), said,
+    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: DATA.serve ? "sub has-status" : "sub"}, boardName, DATA.serve ? [" \u00b7 ", statusBox] : [" \u00b7 ", stamp])), h("div", {class: "lb-right"}, shift, seg, newSlot)), SHELL.banner(), said,
     kpis, controls, lobby.node,
     pick, tableBox, more,
     h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint"), DATA.serve ? null : " ", DATA.serve ? null : stampNote), copyright());

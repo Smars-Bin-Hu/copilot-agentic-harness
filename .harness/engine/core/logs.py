@@ -10,7 +10,7 @@ import json
 import re
 import traceback
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from .paths import logs_dir, utc_now
 
@@ -95,6 +95,51 @@ def read_tail(path: Path, max_bytes: int) -> List[Dict[str, Any]]:
         if isinstance(row, dict):
             rows.append(row)
     return rows
+
+
+END_BYTES = 64 * 1024  # `ends` reads the start and the end of a log: a line longer than this sends it to the whole file
+END_LINES = 20
+_ends: Dict[str, Tuple[Tuple[int, int], Dict[str, Any], Dict[str, Any]]] = {}  # file -> (mtime and size, its first row, its last row)
+
+
+def _row(line: bytes) -> Optional[Dict[str, Any]]:
+    try:
+        row = json.loads(line.decode("utf-8", errors="replace"))
+    except ValueError:
+        return None
+    return row if isinstance(row, dict) else None
+
+
+def ends(path: Path, info: Any) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """The first and the last row of a JSONL file that parse (`{}` when it has none), as `read_lines` would give them. `info`: its stat.
+    The board asks which logs are a session's children for every open task every few seconds, and logs pile up until `harness logs prune`:
+    reading each whole log each time made the board slower every day (1.6.109). A file is looked at again only when its time or size changed."""
+    stamp = (info.st_mtime_ns, info.st_size)
+    kept = _ends.get(str(path))
+    if kept and kept[0] == stamp:
+        return kept[1], kept[2]
+    first: Optional[Dict[str, Any]] = None
+    last: Optional[Dict[str, Any]] = None
+    try:
+        with path.open("rb") as handle:
+            for _ in range(END_LINES):
+                line = handle.readline()
+                if not line:
+                    break
+                first = _row(line)
+                if first is not None:
+                    break
+            size = handle.seek(0, 2)
+            handle.seek(max(0, size - END_BYTES))
+            lines = handle.read().splitlines()[1 if size > END_BYTES else 0:]  # the first line of a cut is half
+        last = next((row for row in (_row(line) for line in reversed(lines)) if row is not None), None)
+    except OSError:
+        return {}, {}
+    if first is None or last is None:  # no row near an end: the whole file says
+        rows = read_lines(path)
+        first, last = (rows[0], rows[-1]) if rows else ({}, {})
+    _ends[str(path)] = (stamp, first, last)
+    return first, last
 
 
 def read_session(root: Path, surface: str, session_id: str) -> List[Dict[str, Any]]:

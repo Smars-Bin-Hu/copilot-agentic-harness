@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.109 (2026-11-03)
+
+### Changed
+
+- **The board opens fast again when you come back from a task page.** For every task on it, the board read every session log whole, and Copilot's record of each chat, and wrote each task's page to disk. It did this on every load and again every 3 seconds, and it grew with the logs, which are deleted only by `harness logs prune`. With 28 tasks and 300 logs, coming back took 15 seconds; now it takes under half a second. A log or a record is read again only when it changed. A served board writes a task's page only when the task changed: the page is drawn when you open it. `git config user.name`, for the greeting, runs once while the board runs, not once a minute.
+
 ## 1.6.108 (2026-11-03)
 
 ### Changed

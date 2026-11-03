@@ -15,9 +15,11 @@ from __future__ import annotations
 
 import json
 import os
+import pickle
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 FILE_NAME = "events.jsonl"
 HOME_ENV = "COPILOT_HOME"  # Copilot's own variable for its folder; ~/.copilot when it is not set
@@ -136,12 +138,39 @@ def start_of(content: Any, limit: int) -> str:
     return text[:limit] + ("…" if len(text) > limit else "")
 
 
+KEPT = 64  # how many records `read` keeps
+_kept: Dict[Tuple[str, int], Tuple[Tuple[int, int], bytes]] = {}  # (file, text_chars) -> (mtime and size, the record, pickled)
+_kept_lock = threading.Lock()
+
+
 def read(path: Path, text_chars: int = 0) -> Optional[Dict[str, Any]]:
     """What the main agent of the session did, one entry per user message. None when the file gives nothing.
 
     A subagent's own turns and tools are left out (its rows carry an `agentId`): the call that started it is one tool
     of the main agent, and `subagents` holds what Copilot says it used.
+
+    The board reads the record of every open task every few seconds, and a long session's file has megabytes (1.6.109):
+    a file whose time and size did not change gives the record read before. Each caller gets its own copy, to change as it likes.
     """
+    try:
+        info = path.stat()
+    except OSError:
+        return None
+    key, stamp = (str(path), text_chars), (info.st_mtime_ns, info.st_size)
+    with _kept_lock:
+        kept = _kept.get(key)
+    if kept and kept[0] == stamp:
+        return pickle.loads(kept[1])
+    record = _read(path, text_chars)
+    with _kept_lock:
+        _kept.pop(key, None)
+        _kept[key] = (stamp, pickle.dumps(record, pickle.HIGHEST_PROTOCOL))
+        while len(_kept) > KEPT:
+            _kept.pop(next(iter(_kept)))
+    return record
+
+
+def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
     prompts: List[Dict[str, Any]] = []
     current: Optional[Dict[str, Any]] = None
     turn_started: Optional[float] = None

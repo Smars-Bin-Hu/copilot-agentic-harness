@@ -184,16 +184,19 @@ def todo_counts(root: Path, task: str) -> Optional[Dict[str, int]]:
 
 CLOSED_SHOWN = 50  # how many closed tasks the board lists (the newest); `board.closed_shown` in task.json
 _closed: Dict[Tuple[str, str], Tuple[str, Any, str]] = {}  # a closed task does not change: its numbers and page are made once
+_written: Dict[Tuple[str, str], str] = {}  # (root, task) -> the `updated_at` of the task when a served board last wrote its page
 
 
 def closed_shown(root: Path) -> int:
     return config.whole((config.policy_or_empty(root, "task").get("board") or {}).get("closed_shown"), CLOSED_SHOWN)
 
 
-def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = ()) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
+def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (), rewrite: bool = True) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
     """The rows of the board, each with its numbers, the page of the task (written over the one of before) and its actions.
     A task whose numbers cannot be worked out is listed without them. With `everything`, the newest closed tasks come
-    too (`closed_shown`): the page filters and sorts them; `closed_hidden` counts the older ones that are not listed."""
+    too (`closed_shown`): the page filters and sorts them; `closed_hidden` counts the older ones that are not listed.
+    `rewrite` False (the served board, 1.6.109): a task's page on disk is written only when it is missing or the task changed. The served board
+    draws that page when it is asked for, and writing every page every few seconds cost a slow computer much of its time."""
     result = tasklife.list_tasks(root, everything)
     limit = closed_shown(root)
     closed = [row for row in result["tasks"] if row["status"] == "closed"]
@@ -224,7 +227,11 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = ())
         try:
             info, now = insight(root, row["task"], use_events)
             row["brief"] = taskinsight.brief(info)
-            row["report"] = write_task_page(root, row["task"], info, refresh, now).relative_to(root / common.REPORTS_DIR).as_posix()
+            page = common.task_report_file(root, task_ops.name_of(row["task"]), common.REPORT_HTML)
+            if rewrite or _written.get(key) != row["updated_at"] or not page.is_file():
+                write_task_page(root, row["task"], info, refresh, now)
+                _written[key] = row["updated_at"]
+            row["report"] = page.relative_to(root / common.REPORTS_DIR).as_posix()
             if row["status"] == "closed":
                 _closed[key] = (row["updated_at"], row["brief"], row["report"])
         except Exception as error:  # noqa: BLE001 - one bad task must not take the board away

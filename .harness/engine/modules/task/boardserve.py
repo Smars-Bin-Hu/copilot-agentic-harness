@@ -239,21 +239,32 @@ class Board:
         self.language_stamp: List[int] = []
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
         self.ready = readiness.Ready(root, self.link)  # the Enter screen (`/api/ready`)
-        self.who: Tuple[float, str] = (-1e9, "")
+        self.who: Tuple[Any, str] = (None, "")  # (the stamp of the user files, the name) for `user_name`
 
     def user_name(self) -> str:
-        """The name for `Hi, <name>` on the Enter screen: what `harness user` reads (user.override.json, else `git config user.name`). Kept a minute: git may be slow, and a page must not wait on it each time."""
-        now = time.monotonic()
+        """The name for `Hi, <name>` on the Enter screen: what `harness user` reads (user.override.json, else `git config user.name`).
+        Kept until the user files change (1.6.109): every page has it, and git takes seconds to start on a slow computer. Before, a page waited on git once a minute."""
+        stamp = self.user_stamp()
         with self.lock:
-            if now - self.who[0] < 60:
+            if self.who[0] == stamp:
                 return self.who[1]
         try:
             name = user.who(self.root)["name"]
         except Exception:  # noqa: BLE001 - no name is only a plainer greeting
             name = ""
         with self.lock:
-            self.who = (now, name)
+            self.who = (stamp, name)
         return name
+
+    def user_stamp(self) -> List[int]:
+        """The times of `user.json` and its override: what the person may change while the board runs."""
+        stamp = []
+        for path in (config.policies_dir(self.root) / "user.json", config.override_path(self.root, "user")):
+            try:
+                stamp.append(path.stat().st_mtime_ns)
+            except OSError:
+                stamp.append(0)
+        return stamp
 
     def serve_info(self, found: Dict[str, Any], refresh: int) -> Dict[str, Any]:
         """What a served page gets besides the rows: the actions, the refresh, and what the Enter screen shows without asking (the name, the release)."""
@@ -269,12 +280,7 @@ class Board:
         """The language now set in `user.json`. The process reads it once (`messages.language`), so a board that ran on
         while the person changed it would speak the old one: when the file (or its override) changed, it is read again.
         A stat per request is cheap."""
-        stamp = []
-        for path in (config.policies_dir(self.root) / "user.json", config.override_path(self.root, "user")):
-            try:
-                stamp.append(path.stat().st_mtime_ns)
-            except OSError:
-                stamp.append(0)
+        stamp = self.user_stamp()
         with self.lock:
             if stamp != self.language_stamp:
                 self.language_stamp = stamp
@@ -323,7 +329,7 @@ class Board:
 
     def rows(self) -> Dict[str, Any]:
         """The rows of the board as the page draws them, and how many older closed tasks are left out."""
-        result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served)
+        result, _problems = taskboard.board_rows(self.root, self.everything, 0, self.served, rewrite=False)
         self.link.overlay(result["tasks"])
         for row in result["tasks"]:
             trust_chat(row)

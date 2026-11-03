@@ -16,6 +16,7 @@ from support import HarnessTestCase, payload
 from taskcase import NAME, SESSION, TASK, TaskCase
 
 from core import copilot_events, messages, tasks
+from core.paths import logs_dir
 from modules.task import task as task_ops
 from modules.task import common, taskboard, taskhtml, taskinsight, tasklife
 from modules.task.common import CommandError
@@ -164,6 +165,19 @@ class EventsFileTests(unittest.TestCase):
                          [("first", 1000, 0, 990, None), ("warm", 1100, 990, 110, 60.0), ("expired", 1300, 100, 1200, 630.0), ("first", 500, 0, 500, None)])
         self.assertEqual(round(calls[0]["expires"] - calls[0]["at"]), 300)
 
+    def test_an_unchanged_file_is_not_read_again_and_each_caller_gets_its_own_copy(self) -> None:
+        """1.6.109: the board reads the record of every open task every few seconds, and a long session's file has megabytes."""
+        self.write(one_prompt(self.start, 1, 1, 1))
+        with mock.patch.object(copilot_events, "_read", wraps=copilot_events._read) as parsed:
+            first = copilot_events.read(self.path)
+            first["prompts"][0]["mine"] = True  # the report marks the prompts it reads
+            second = copilot_events.read(self.path)
+            self.assertEqual(parsed.call_count, 1)
+            self.assertNotIn("mine", second["prompts"][0])
+            self.write(one_prompt(self.start, 1, 1, 1) + one_prompt(self.start + timedelta(seconds=200), 2, 1, 1))  # Copilot wrote on
+            self.assertEqual(len(copilot_events.read(self.path)["prompts"]), 2)
+            self.assertEqual(parsed.call_count, 2)
+
     def test_the_file_is_looked_for_under_copilot_home(self) -> None:
         folder = self.path.parent / "session-state" / "abc"
         folder.mkdir(parents=True)
@@ -172,6 +186,45 @@ class EventsFileTests(unittest.TestCase):
             self.assertEqual(copilot_events.events_path("abc"), folder / "events.jsonl")
             self.assertIsNone(copilot_events.events_path("missing"))
             self.assertIsNone(copilot_events.events_path("../abc"))
+
+
+class ChildLogTests(unittest.TestCase):
+    """1.6.109: which logs are a session's children was read from every whole log, for every open task, every few seconds; logs pile up until `harness logs prune`."""
+
+    def setUp(self) -> None:
+        import tempfile
+
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.folder = logs_dir(self.root) / "vscode"
+        self.folder.mkdir(parents=True)
+
+    def log(self, name: str, *rows: Dict[str, Any], head: str = "", tail: str = "") -> None:
+        (self.folder / f"{name}.jsonl").write_text(head + "".join(json.dumps(item) + "\n" for item in rows) + tail, encoding="utf-8")
+
+    def children(self, since: str = "") -> List[str]:
+        return sorted(item["session_id"] for item in common.child_sessions(self.root, "vscode", "boss", since))
+
+    def test_only_a_child_is_read_whole(self) -> None:
+        for number in range(5):
+            self.log(f"other{number}", {"at": "2026-11-03T08:00:00Z", "parent_session_id": "someone"}, {"at": "2026-11-03T09:00:00Z"})
+        self.log("kid", {"at": "2026-11-03T08:00:00Z", "parent_session_id": "boss"}, {"at": "2026-11-03T09:00:00Z", "blob": "x" * 100000})  # a last line longer than the end that is read
+        self.log("half", {"at": "2026-11-03T08:00:00Z", "parent_session_id": "boss"}, {"at": "2026-11-03T09:00:00Z"}, head="{not json\n", tail='{"at": "2026-11-03T1')
+        self.log("over", {"at": "2026-10-01T08:00:00Z", "parent_session_id": "boss"}, {"at": "2026-10-01T09:00:00Z"})  # ended before the task began
+        self.log("boss", {"at": "2026-11-03T08:00:00Z", "parent_session_id": "boss"})
+        (self.folder / "empty.jsonl").write_text("", encoding="utf-8")
+        with mock.patch.object(common, "read_lines", wraps=common.read_lines) as whole:
+            self.assertEqual(self.children("2026-11-01T00:00:00Z"), ["half", "kid"])
+            self.assertEqual(whole.call_count, 2)
+        self.assertEqual(self.children(), ["half", "kid", "over"])
+
+    def test_a_log_that_changed_is_looked_at_again(self) -> None:
+        self.log("late", {"at": "2026-11-03T08:00:00Z"})
+        self.assertEqual(self.children(), [])
+        self.log("late", {"at": "2026-11-03T08:00:00Z", "parent_session_id": "boss"}, {"at": "2026-11-03T10:00:00Z"})
+        self.assertEqual(self.children("2026-11-03T09:00:00Z"), ["late"])
+        self.assertEqual(common.child_sessions(self.root, "../vscode", "boss", ""), [])
 
 
 class BoardCase(HarnessTestCase):
@@ -789,6 +842,26 @@ class PageTests(BoardCase):
         self.assertEqual((len([row for row in result["tasks"] if row["status"] == "closed"]), result["closed_hidden"]), (2, 1))
         again, _problems = taskboard.board_rows(self.root, True)  # a closed task's numbers are kept, not worked out again
         self.assertEqual([row["brief"] for row in again["tasks"]], [row["brief"] for row in result["tasks"]])
+
+    def test_a_served_board_writes_a_tasks_page_only_when_the_task_changed(self) -> None:
+        """1.6.109: the served board asks for the rows every few seconds and draws a task's page when it is asked for; writing every page each time only cost time."""
+        self.new("alpha")
+        page = common.task_report_file(self.root, "alpha", common.REPORT_HTML)
+        with mock.patch.object(taskboard, "write_task_page", wraps=taskboard.write_task_page) as wrote:
+            taskboard.board_rows(self.root, True, rewrite=False)
+            result, _problems = taskboard.board_rows(self.root, True, rewrite=False)
+            self.assertEqual(wrote.call_count, 1)
+            self.assertEqual(result["tasks"][0]["report"], page.relative_to(self.root / common.REPORTS_DIR).as_posix())
+            data = self.data("alpha")
+            data["updated_at"] = "2099-01-01T00:00:00+00:00"  # the task changed
+            (self.root / BASE / "alpha" / ".task" / "task.json").write_text(json.dumps(data), encoding="utf-8")
+            taskboard.board_rows(self.root, True, rewrite=False)
+            self.assertEqual(wrote.call_count, 2)
+            page.unlink()  # the task page links to the file: one that is gone is written again
+            taskboard.board_rows(self.root, True, rewrite=False)
+            self.assertEqual(wrote.call_count, 3)
+            taskboard.board_rows(self.root, True)  # a board on disk writes every page each time
+            self.assertEqual(wrote.call_count, 4)
 
     def test_refresh_writes_the_board_again_over_the_same_files_until_it_is_stopped(self) -> None:
         self.new("alpha")

@@ -197,6 +197,18 @@ class RefreshSettingTests(HarnessTestCase):
         self.assertEqual(boardserve.Board(self.root, False, 0, ["pause"]).refresh, 3)  # nothing said: 3
         self.assertEqual(boardserve.DESK_REFRESH, 10)
 
+    def test_the_user_name_is_asked_once_while_the_user_files_do_not_change(self) -> None:
+        """1.6.109: every page has the name, and git takes seconds to start on a slow computer. Before, a page waited on git once a minute."""
+        board = boardserve.Board(self.root, False, 0, ["pause"])
+        with mock.patch.object(boardserve.user, "who", return_value={"name": "Ann"}) as asked:
+            self.assertEqual([board.user_name() for _ in range(3)], ["Ann"] * 3)
+            self.assertEqual(asked.call_count, 1)
+            mine = config.override_path(self.root, "user")
+            mine.write_text(json.dumps({"name": "Bo"}), encoding="utf-8")  # the person set a name
+            os.utime(mine, (1_900_000_000, 1_900_000_000))
+            board.user_name()
+            self.assertEqual(asked.call_count, 2)
+
 
 @unittest.skipUnless(NODE, "node is not installed")
 class VsButtonTests(unittest.TestCase):

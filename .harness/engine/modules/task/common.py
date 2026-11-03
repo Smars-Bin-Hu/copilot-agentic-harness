@@ -16,8 +16,9 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, messages, repo_paths, targets, tasks
-from core.logs import read_lines, read_session, session_files
+from core import config, logs, messages, repo_paths, targets, tasks
+from core.logs import read_lines, read_session
+from core.paths import logs_dir
 
 from .policy import POLICY_NAME
 
@@ -320,13 +321,31 @@ def cell(text: str) -> str:
 
 
 def child_sessions(root: Path, surface: str, session_id: str, since: str) -> List[Dict[str, Any]]:
-    """SDK engine: a subagent runs in a session of its own. Those logs name the session that called them."""
-    found: List[Dict[str, Any]] = []
-    for found_surface, path in session_files(root):
-        if found_surface != surface or path.stem == session_id:
+    """SDK engine: a subagent runs in a session of its own. Those logs name the session that called them, in their first row.
+    A log is picked by its first and last row (`logs.ends`, kept while the file does not change); only a child is read whole. Oldest first, as `session_files` lists them."""
+    if surface in ("", ".", "..") or Path(surface).name != surface:
+        return []
+    picked = []
+    try:
+        entries = list(os.scandir(logs_dir(root) / surface))  # one listing: on Windows its stat comes with it
+    except OSError:
+        return []
+    for entry in entries:
+        if not entry.name.endswith(".jsonl") or entry.name[:-len(".jsonl")] == session_id:
             continue
+        try:
+            if not entry.is_file():
+                continue
+            info = entry.stat()
+        except OSError:
+            continue
+        first, last = logs.ends(Path(entry.path), info)
+        if first.get("parent_session_id") == session_id and last.get("at", "") >= since:
+            picked.append((info.st_mtime, entry.name, Path(entry.path)))
+    found: List[Dict[str, Any]] = []
+    for _at, _name, path in sorted(picked):
         rows = read_lines(path)
-        if rows and rows[0].get("parent_session_id") == session_id and rows[-1].get("at", "") >= since:
+        if rows:
             found.append({"session_id": path.stem, "rows": rows})
     return found
 

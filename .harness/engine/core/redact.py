@@ -13,14 +13,27 @@ MASK = "***"
 
 _NAMES = r"(?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|access[_-]?key|auth(?:orization)?|credential|private[_-]?key|sas|signature|sig)"
 _PATH_PART = re.compile(r"[A-Za-z]?[a-z0-9_-]*|[A-Z0-9_-]+")
+_WORD = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])")
+
+
+def _reads_as_name(run: str) -> bool:
+    """A long name of code (`ap_Populate_Stage_CRCA_Control_Strength_Risk_Fact_Risks`, `getAllCheckpointRefsForTheSession`): three words or more a person can read, joined by `_`, `-` or
+    capitals, with few digits (1.6.102: such names in an agent's reply were masked). A key or a hash breaks into pieces of one or two letters; base64 with `+`, `/` or `=` is never a name.
+    Tried on random keys (url-safe, base64, hex, letters and digits): about one in a thousand reads as a name; the named kinds (GitHub, OpenAI, AWS, a JWT, key=value) have rules of their own."""
+    if "+" in run or "/" in run or run.endswith("="):
+        return False
+    words = _WORD.findall(run)
+    digits = sum(char.isdigit() for char in run)
+    return len(words) >= 3 and digits <= 0.3 * sum(char.isalnum() for char in run) and sum(map(len, words)) / len(words) >= 3.5 and max(map(len, words)) <= 24
 
 
 def _long_run(found: Match[str]) -> str:
-    """A long run with no space is a key or a hash, unless it reads as a path: at least two slashes and words between them. A key that has slashes (base64) mixes its cases inside a part."""
+    """A long run with no space is a key or a hash, unless it reads as a path (at least two slashes and words between them) or as a name of code. A key that has slashes (base64) mixes its cases
+    inside a part."""
     parts = found.group(0).split("/")
     if len(parts) >= 3 and all(_PATH_PART.fullmatch(part) and (len(part) < 32 or "-" in part or "_" in part) for part in parts):
         return found.group(0)
-    return MASK
+    return found.group(0) if _reads_as_name(found.group(0)) else MASK
 
 
 _RULES: List[Tuple[Pattern[str], Union[str, Callable[[Match[str]], str]]]] = [

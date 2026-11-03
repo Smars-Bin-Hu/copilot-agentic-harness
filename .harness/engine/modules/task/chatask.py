@@ -21,6 +21,7 @@ PENDING = "pending-confirmation"
 KINDS = ("single-select", "multi-select", "text", "boolean", "number", "integer")
 MAX_COMMAND = 400  # characters of a command shown on the page and kept in the history
 MAX_LINE = 200  # a question, an option, a line of history
+MAX_TEXT = 8000  # characters of what the agent says with its questions, whole on the page with its line breaks (1.6.102: it was cut to one line of 200)
 MAX_ANSWER = 2000  # characters of a typed answer
 MAX_SOURCE = 20000  # how much of a tool input is read before it is redacted
 MAX_QUESTIONS = 20
@@ -77,7 +78,7 @@ def question_view(question: Any) -> Optional[Dict[str, Any]]:
     options = options_of(question)
     if question["kind"] in ("single-select", "multi-select") and not options:
         return None
-    return {"id": str(question["id"]), "title": one_line(question.get("title") or question.get("message") or question["id"], MAX_LINE), "message": one_line(question.get("message") or "", MAX_LINE),
+    return {"id": str(question["id"]), "title": one_line(question.get("title") or question.get("message") or question["id"], MAX_LINE), "message": clip(question.get("message") or "", MAX_TEXT),
             "kind": question["kind"], "required": bool(question.get("required")), "options": options,
             "free": question["kind"] in ("single-select", "multi-select") and question.get("allowFreeformInput") is not False}  # VS Code's own rule: a list takes typed words unless it says it does not
 
@@ -103,7 +104,8 @@ def shown(item: Any) -> Optional[Dict[str, Any]]:
         supported = bool(raw) and len(raw) <= MAX_QUESTIONS and all(views)
         message = one_line(request.get("message") or "", MAX_LINE)
         first = next((view for view in views if view), None)
-        return {"kind": "question", "id": str(item["id"]), "request_id": str(request["id"]), "message": message or (first["title"] if first else ""), "supported": supported,
+        # `message`: one line for a card or a row; `text`: all of it, with its line breaks, for the dialog where the person answers
+        return {"kind": "question", "id": str(item["id"]), "request_id": str(request["id"]), "message": message or (first["title"] if first else ""), "text": clip(request.get("message") or "", MAX_TEXT), "supported": supported,
                 "questions": [view for view in views if view] if supported else [], "digest": digest_of(item["id"], request["id"], raw)}
     return None
 

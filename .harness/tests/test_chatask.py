@@ -19,7 +19,7 @@ from test_ahp import FakeHost, TOKEN
 from test_chatsend import ROOT_STATE, SendCase, said
 from test_vslink import chat_state, summary, until
 
-from core import ahp, messages, tasks
+from core import ahp, messages, redact, tasks
 from modules.task import chatask, taskboard, tasklife
 
 CHAT, SESSION_URI = "ahp-chat:/abc", "ahp-session:/abc"
@@ -79,6 +79,27 @@ class ShownTests(unittest.TestCase):
         for kind in chatask.KINDS:
             options = [{"id": "o", "label": "O"}] if "select" in kind else []
             self.assertTrue(chatask.shown(question_item(questions=[{"id": "q", "kind": kind, "options": options}]))["supported"], kind)
+
+
+class WholeTextTests(unittest.TestCase):
+    """1.6.102: a long question of the agent came to the dialog cut to one line of 200 characters, and long names of code in it were masked as if they were keys."""
+
+    def test_the_dialog_gets_all_the_agent_said_with_its_line_breaks(self) -> None:
+        lead = "Rule_Description over 255 is solved.\n[10110 / 10112 / 10114, Completeness] needs to leave out IR Type = 'Privacy Request for Access to Personal Information'. " * 6
+        detail = "If IR Type is NULL, `IR Type <> '...'` is unknown,\nso the row is dropped quietly. " * 4
+        found = chatask.shown(question_item(message=lead, questions=[{"id": "q", "kind": "single-select", "title": "IR Type empty", "message": detail, "options": [{"id": "a", "label": "A"}]}]))
+        self.assertEqual(found["text"], lead.strip())
+        self.assertIn("\n", found["text"])
+        self.assertLessEqual(len(found["message"]), chatask.MAX_LINE)  # the one line of a card stays short
+        self.assertNotIn("\n", found["message"])
+        self.assertEqual(found["questions"][0]["message"], detail.strip())
+
+    def test_names_of_code_stay_and_keys_do_not(self) -> None:
+        sql = "EXEC ETL.ap_Populate_Stage_CRCA_Control_Strength_Risk_Fact_Risks '2026-10-30';\nSUM(CASE WHEN s.AU_Regulatory_Interactions_Received_By_Other_AUs_Regulatory_Exam_Past_Year_Cnt > 0 THEN 1 END) FROM Stage.CRCA_Inherent_Risk_Fact_RegulatorInteraction_Risk s"
+        self.assertEqual(redact.text(sql), sql)
+        for key in ("Kx9aB3zQpL7mN2vR8sT1uW4yX6cD5eF0gHjK2mN4pQ", "3f2a9c8b7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b", "aGVsbG8gd29ybGQgdGhpcyBpcyBhIGxvbmcgYmFzZTY0IHN0cmluZw==",
+                    "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8", "abcdefghijklmnopqrstuvwxyzabcdefghijklmnop"):
+            self.assertEqual(redact.text("token " + key), "token " + redact.MASK, key)
 
 
 class ActionShapeTests(unittest.TestCase):

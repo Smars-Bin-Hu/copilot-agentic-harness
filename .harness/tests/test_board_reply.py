@@ -261,6 +261,7 @@ class ServeTests(SendCase):
             status, data, _ = self.post("/api/undo", {})
         self.assertEqual(status, 200, data)
         self.assertEqual(data["result"]["text"], "sent by mistake")
+        self.assertTrue(until(lambda: "chat/truncated" in [item["type"] for item in self.actions()]))  # the host records what it was sent on its own thread
         cancel, cut = self.actions()[-2:]
         self.assertEqual((cancel["type"], cancel["turnId"], cut), ("chat/turnCancelled", "t2", {"type": "chat/truncated", "turnId": "t1"}))
         self.assertGreater(cancel["duration"], 0)  # without it the host does nothing

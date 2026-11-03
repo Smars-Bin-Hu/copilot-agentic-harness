@@ -424,8 +424,9 @@ const CHAT = (function () {
       return input;
     };
     const fields = found.questions.map((item) => h("div", {class: "ask-field"}, h("div", {class: "sub label"}, item.title + (item.required ? " *" : "")),
-      item.message && item.message !== item.title ? h("div", {class: "sub"}, item.message) : null, control(item)));
-    const view = SERVE.dialog([h("h2", null, t("board.action.question") + " \u00b7 " + row.name), found.message ? h("p", null, found.message) : null, ...fields,
+      item.message && item.message !== item.title ? h("div", {class: "sub ask-text"}, item.message) : null, control(item)));
+    const words = found.text || found.message;  // all the agent said, with its line breaks (1.6.102); `message` is the one line of a card
+    const view = SERVE.dialog([h("h2", null, t("board.action.question") + " \u00b7 " + row.name), words ? h("div", {class: "ask-text ask-lead"}, words) : null, ...fields,
       found.count > 1 ? h("p", {class: "sub"}, t("board.ask.more", {count: found.count - 1})) : null, h("div", {class: "row send-actions"}, send, no), said]);
     ready();
     send.addEventListener("click", () => {

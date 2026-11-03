@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.98 (2026-11-03)
+
+### Added
+
+- **Each earlier round on the Live tab says what it took:** its time, its credits and its tools, as three small icons after the prompt. Hold the pointer on one for the words. The round that still runs counts its time. A round saved before this version shows only its tools.
+
 ## 1.6.97 (2026-11-03)
 
 ### Changed

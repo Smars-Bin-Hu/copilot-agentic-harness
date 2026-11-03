@@ -3,7 +3,8 @@
 .rd-more{display:block;width:100%;margin:0 0 6px;padding:6px;border:0;background:none;color:var(--soft);font:inherit;font-size:12px;cursor:pointer}
 .rd-row{border-top:1px solid var(--line)}.rd-row:last-child{border-bottom:1px solid var(--line)}
 .rd-row>summary{display:flex;align-items:baseline;gap:10px;min-width:0;padding:7px 2px;cursor:pointer;list-style:none}.rd-row>summary::-webkit-details-marker{display:none}
-.rd-at{flex:none;font-size:12px}.rd-head{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rd-count{flex:none;font-size:12px}
+.rd-at{flex:none;font-size:12px}.rd-head{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rd-stats{flex:none;display:inline-flex;align-items:center;gap:12px;font-size:12px;font-variant-numeric:tabular-nums}.rd-stats:empty{display:none}
+.rd-stat{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;cursor:default}.rd-stat svg{flex:none;width:13px;height:13px}
 .rd-row[open]>summary .rd-head{font-weight:600}
 .rd-body{padding:2px 2px 14px;min-width:0}.rd-who{margin:10px 0 4px;font-size:12px}.rd-prompt{white-space:pre-wrap;overflow-wrap:anywhere;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .rd-text{min-width:0;overflow-wrap:anywhere}.rd-part+.rd-part{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}.rd-tools{margin-top:10px;overflow-wrap:anywhere}

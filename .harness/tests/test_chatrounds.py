@@ -72,6 +72,29 @@ class ReadTests(RoundCase):
         self.assertNotIn("private thought", json.dumps(found))
         self.assertNotIn("subagent", json.dumps(found))
 
+    def test_each_round_says_its_time_and_its_credits(self) -> None:
+        subagent = json.dumps({"type": "assistant.message", "timestamp": "2026-10-02T10:04:00.000Z", "agentId": "a1", "data": {"content": "late words of a subagent"}}) + "\n"
+        record(Path(self.home.name), SESSION, [
+            event("session.usage_checkpoint", "2026-10-02T09:59:00.000Z", totalNanoAiu=5e9),  # spent before the task's first prompt: no round's
+            event("user.message", "2026-10-02T10:00:00.000Z", content="p1"),
+            event("assistant.turn_start", "2026-10-02T10:00:01.000Z"),
+            event("tool.execution_start", "2026-10-02T10:00:02.000Z", toolName="bash"),
+            event("session.usage_checkpoint", "2026-10-02T10:00:30.000Z", totalNanoAiu=7.5e9),
+            event("assistant.turn_end", "2026-10-02T10:02:45.000Z"),
+            event("session.usage_checkpoint", "2026-10-02T10:02:46.000Z", totalNanoAiu=10.06e9),
+            subagent,
+            event("user.message", "2026-10-02T10:05:00.000Z", content="p2"),
+        ])
+        chatrounds._cache.clear()
+        found = chatrounds.listing(self.root, self.task)
+        self.assertEqual([(item["seconds"], item["aiu"], item["tools"]) for item in found], [(165, 5.1, 1), (0, None, 0)])
+        transcript = chatrounds.transcript(self.root, self.task)
+        transcript.write_text(json.dumps({"at": "2026-10-02T10:00:00.000Z", "prompt": "saved before 1.6.98", "texts": [], "tools": [], "cut": False}) + "\n", encoding="utf-8")
+        data = json.loads(self.path.read_text(encoding="utf-8"))
+        data["status"] = "closed"
+        self.path.write_text(json.dumps(data), encoding="utf-8")
+        self.assertEqual([(item["seconds"], item["aiu"]) for item in chatrounds.listing(self.root, self.task)], [(None, None)])  # not known: the page shows nothing
+
     def test_a_wrong_number_finds_nothing(self) -> None:
         for number in (-1, 2, "0", True, None):
             self.assertIsNone(chatrounds.one(self.root, self.task, number), number)

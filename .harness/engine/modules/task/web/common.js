@@ -200,17 +200,20 @@ const KIND_ICONS = {
   design: [["path", {d: "M2 3h12v10H2zM2 6.5h12M6 6.5V13"}]],  // blueprint
   other: [["circle", {cx: 3.5, cy: 8, r: 1}], ["circle", {cx: 8, cy: 8, r: 1}], ["circle", {cx: 12.5, cy: 8, r: 1}]],  // three dots
 };
-function kindIcon(kind, text) {
-  const wrap = h("span", {class: "kind-icon", title: text, role: "img", "aria-label": text});
+function lineSvg(parts) {  // a 16px line icon from [tag, {attributes}] parts, in the colour of the text
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
-  for (const [name, value] of Object.entries({viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", "stroke-width": "1.4", "stroke-linecap": "round", "stroke-linejoin": "round"})) svg.setAttribute(name, value);
-  for (const [tagName, attrs] of KIND_ICONS[kind] || KIND_ICONS.other) {
+  for (const [name, value] of Object.entries({viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", "stroke-width": "1.4", "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true"})) svg.setAttribute(name, value);
+  for (const [tagName, attrs] of parts) {
     const part = document.createElementNS(ns, tagName);
     for (const [name, value] of Object.entries(attrs)) part.setAttribute(name, String(value));
     svg.append(part);
   }
-  wrap.append(svg);
+  return svg;
+}
+function kindIcon(kind, text) {
+  const wrap = h("span", {class: "kind-icon", title: text, role: "img", "aria-label": text});
+  wrap.append(lineSvg(KIND_ICONS[kind] || KIND_ICONS.other));
   return wrap;
 }
 

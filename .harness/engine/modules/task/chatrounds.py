@@ -1,7 +1,9 @@
 """The rounds of a task's chat (1.6.55): each prompt of the person, with all the text the agent wrote for it, for the Live tab.
 
 The record is Copilot's own `events.jsonl` (`core/copilot_events.py`). It has every model call's text, also what the chat window folds away, and it can be read with VS Code closed.
-Kept: the prompt, the agent's text, the names of the tools. Left out: thinking, tool results, hooks and usage (they are in VS Code), and all a subagent says.
+Kept: the prompt, the agent's text, the names of the tools, when the round's last step ended and the credits it cost (1.6.98: the session's running total of
+`session.usage_checkpoint`, minus what it was before the round; a subagent's credits count with the round that started it). Left out: thinking, tool results, hooks and
+the other usage numbers (they are in VS Code), and all a subagent says.
 
 When a task closes the rounds are saved in `.task/transcript.jsonl`, because Copilot's file is not ours to rely on. A closed task reads that file. `taskarchive.prune_transcripts` deletes
 it `transcript.keep_days` after the archive; the task's audit files stay. Copilot's own files are never touched.
@@ -34,6 +36,7 @@ def transcript(root: Path, task: str) -> Path:
 def read_events(path: Path) -> List[Dict[str, Any]]:
     """The rounds of one events file, oldest first. A line it cannot read is skipped: the file is not ours."""
     rounds: List[Dict[str, Any]] = []
+    spent = 0.0  # the session's credits so far
     with open(path, encoding="utf-8", errors="replace") as handle:
         for line in handle:
             try:
@@ -42,10 +45,22 @@ def read_events(path: Path) -> List[Dict[str, Any]]:
                 continue
             kind = event.get("type") if isinstance(event, dict) else None
             found = event.get("data") if isinstance(event, dict) else None
-            if not isinstance(found, dict) or kind not in ("user.message", "assistant.message", "tool.execution_start"):
+            if not isinstance(found, dict) or not isinstance(kind, str):
+                continue
+            if kind == "session.usage_checkpoint":
+                total = copilot_events.number(found.get("totalNanoAiu"))
+                if total is not None:
+                    if rounds:
+                        rounds[-1]["aiu"] = (rounds[-1]["aiu"] or 0.0) + max(0.0, total / copilot_events.NANO - spent)
+                    spent = total / copilot_events.NANO
+                continue
+            if rounds and kind.startswith(("assistant.", "tool.")) and not event.get("agentId") and event.get("timestamp"):
+                rounds[-1]["end"] = str(event["timestamp"])
+            if kind not in ("user.message", "assistant.message", "tool.execution_start"):
                 continue
             if kind == "user.message":
-                rounds.append({"at": str(event.get("timestamp") or ""), "prompt": str(found.get("content") or ""), "texts": [], "tools": [], "cut": False})
+                at = str(event.get("timestamp") or "")
+                rounds.append({"at": at, "prompt": str(found.get("content") or ""), "texts": [], "tools": [], "cut": False, "end": at, "aiu": None})
             elif rounds and not found.get("parentToolCallId"):  # a subagent's own work is not this conversation
                 last = rounds[-1]
                 if kind == "tool.execution_start":
@@ -104,9 +119,16 @@ def rounds_of(root: Path, task: str) -> List[Dict[str, Any]]:
     return kept if kept is not None else live(data)
 
 
+def took(item: Dict[str, Any]) -> Optional[float]:
+    """The seconds from the prompt to the round's last step; None for a transcript saved before 1.6.98."""
+    start, end = copilot_events.seconds(item.get("at")), copilot_events.seconds(item.get("end"))
+    return round(max(0.0, end - start)) if start is not None and end is not None else None
+
+
 def listing(root: Path, task: str) -> List[Dict[str, Any]]:
-    """For the list: one short line each, oldest first. `n` is the place of the round: the page asks for the whole round by it."""
-    return [{"n": number, "at": item["at"], "head": " ".join(item["prompt"].split())[:HEAD_CHARS], "tools": len(item["tools"]), "replies": len(item["texts"])}
+    """For the list: one short line each, oldest first. `n` is the place of the round: the page asks for the whole round by it. `seconds` and `aiu` (credits) are None when not known."""
+    return [{"n": number, "at": item["at"], "head": " ".join(item["prompt"].split())[:HEAD_CHARS], "tools": len(item["tools"]), "replies": len(item["texts"]),
+             "seconds": took(item), "aiu": round(item["aiu"], 1) if isinstance(item.get("aiu"), (int, float)) else None}
             for number, item in enumerate(rounds_of(root, task))]
 
 

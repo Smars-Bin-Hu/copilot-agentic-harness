@@ -273,8 +273,17 @@ def past_rounds(root: Path, task: str, data: Dict[str, Any], review: Dict[str, A
             "changes": round_diff(root, entry),
             "review": dict(review, n=0, passes=0, used=0, limit=0, pending=None, waived=False, rounds=[item for item in review["rounds"] if item.get("task_round") == number]),
             "history": [event for event in events if event["round"] == number],
+            "marks": past_marks(root, task, data, number),
         })
     return out
+
+
+def past_marks(root: Path, task: str, data: Dict[str, Any], number: int) -> Optional[Dict[str, Any]]:
+    """The checks of an earlier round for the pill beside its ribbon, as they stood when it ended; None when it had none or they cannot be read."""
+    try:
+        return taskstages.reviewer(root, task, data, number)
+    except Exception:  # noqa: BLE001 - a picture of an earlier round must not stop the page
+        return None
 
 
 def intake_view(root: Path, task: str, data: Dict[str, Any], row: Dict[str, Any]) -> Optional[Dict[str, Any]]:

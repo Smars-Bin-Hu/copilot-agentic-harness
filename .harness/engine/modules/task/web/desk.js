@@ -40,7 +40,7 @@
   function pastView(task, number) {
     const found = (task.rounds || []).find((item) => item.round === number);
     if (!found) return task;
-    const stages = task.stages ? Object.assign({}, task.stages, {round: number, review: null, steps: task.stages.steps.map((step) => Object.assign({}, step, {state: "done", flag: ""}))}) : null;  // written back: every step is done
+    const stages = task.stages ? Object.assign({}, task.stages, {round: number, review: found.marks || null, steps: task.stages.steps.map((step) => Object.assign({}, step, {state: "done", flag: ""}))}) : null;  // written back: every step is done
     return Object.assign({}, task, {
       past: found, round: number, status: "closed", state: "", waiting: "", waiting_why: "", waited_s: null, paused_since: "", handoff: null, held: false, autorun: false, active: false,
       branch: found.branch, docs: found.docs, files: found.files, changes: found.changes, review: found.review, history: found.history, stages,

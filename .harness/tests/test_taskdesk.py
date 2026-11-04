@@ -506,6 +506,39 @@ class DeskTests(ServeCase):
         self.assertEqual(by[2]["package"]["blocks"][0]["t"], "h")
         self.assertIsNone(by[1]["package"])
 
+    def test_an_earlier_round_has_the_marks_of_its_own_checks_as_it_ended(self) -> None:
+        from modules.task import taskreview
+
+        with task_ops.locked(self.root, TASK) as data:
+            data["rounds"] = [{"round": 1, "started_at": "", "plan": {}, "promote": {"state": "done"}, "branch": "b1", "dev": "", "diff_file": "", "plan_file": "", "files": [], "deletes": []}]
+            data["round"] = 2
+            review = taskreview.state_of(data)
+            review["n"] = 3  # the person asked for more in round 2
+            review["rounds"] += [
+                {"number": 1, "task_round": 1, "verdict": "FAIL", "digest": "v1"},
+                {"number": 2, "task_round": 1, "verdict": "PASS", "digest": "v2"},
+                {"number": 3, "task_round": 1, "verdict": "PASS", "digest": "v2"},
+            ]
+            data["events"] = [{"at": "", "round": 1, "what": "review", "detail": "n=2"}, {"at": "", "round": 2, "what": "review-set", "detail": "2 -> 3"}]
+        found = taskdesk.desk(self.root, "job1")
+        self.assertEqual(found["rounds"][0]["marks"], {"n": 2, "states": ["pass", "pass"], "waived": False, "stamp": True})  # n of round 1, not n now
+        self.assertEqual(found["stages"]["review"]["states"], ["todo"] * 3)  # the current round starts again
+        self.assertEqual(task_ops.read(self.root, TASK)["round"], 2, "the marks of an earlier round write nothing")
+
+    def test_the_n_of_an_earlier_round_comes_from_the_history(self) -> None:
+        from modules.task import taskreview
+
+        def n(events, number, now=5):
+            return taskreview.n_of_round({"review": {"n": now}, "events": events}, number)
+
+        marks = {"at": "", "what": "review"}
+        self.assertEqual(n([dict(marks, round=1, detail="n=2")], 1), 2)  # set in the round itself
+        self.assertEqual(n([dict(marks, round=1, detail="n=2"), dict(marks, round=2, what="review-set", detail="2 -> 4")], 1), 2)
+        self.assertEqual(n([dict(marks, round=3, what="review-set", detail="1 -> 4")], 2), 1)  # only a later change: what it changed from
+        self.assertEqual(n([dict(marks, round=3, detail="n=4")], 2), 5)  # a later prompt mark does not say what was before: n now
+        self.assertEqual(n([], 1), 5)
+        self.assertEqual(n([dict(marks, round=1, detail="round-001 PASS"), dict(marks, round=1, what="review-set", detail="x -> y")], 1), 5)  # a verdict line or a broken one is no change
+
     def test_the_server_sends_it_with_a_policy_that_keeps_it_from_talking_elsewhere(self) -> None:
         status, data, headers = self.request("GET", "/task/job1")
         self.assertEqual(status, 200)

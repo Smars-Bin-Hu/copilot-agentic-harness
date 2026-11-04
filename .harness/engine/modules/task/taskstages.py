@@ -127,15 +127,21 @@ def tests(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def reviewer(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """The checks the person asked for (`[review]=n`), one mark each for the version of the work as it is now."""
+def reviewer(root: Path, task: str, data: Dict[str, Any], number: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """The checks the person asked for (`[review]=n`), one mark each for the version of the work as it is now.
+    `number`: an earlier round instead, as it ended: its own checks, and the n of that time (from the history)."""
     from . import taskreview
 
     review = taskreview.state_of(data)
-    if not review["n"] and not review["rounds"]:
+    if number is not None:
+        wanted = taskreview.n_of_round(data, number)
+        data = dict(data, round=number, status="closed")  # settled: the checks as they stood, not compared with the files of today
+        if not wanted and not taskreview.done_now(data):
+            return None
+    elif not review["n"] and not review["rounds"]:
         return None
     info = taskreview.summary(root, task, data, settled=True)
-    n = info["n"]
+    n = info["n"] if number is None else wanted
     states = ["pass"] * info["passes"]
     total = max(n, len(states))
     if info["pending_round"] and len(states) < total:

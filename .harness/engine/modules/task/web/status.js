@@ -339,7 +339,7 @@ const Status = (function () {
   function checks(review, onReview) {
     const marks = review.states.map((kind) => dot(kind));
     const passes = review.states.filter((kind) => kind === "done").length;
-    const label = review.n ? t("desk.checks.label", {passes, n: review.states.length}) : t("stage.reviewer.off");
+    const label = !review.n ? t("stage.reviewer.off") : review.stamp ? t("desk.checks.done", {passes, n: review.n}) : t("desk.checks.label", {passes, n: review.states.length});  // passed often enough: it says done
     if (!onReview) return h("span", {class: "st-checks", title: label, role: "img", "aria-label": label}, marks);
     const button = h("button", {type: "button", class: "st-checks", title: label + " \u00b7 " + t("desk.checks.open"), "aria-label": label + ". " + t("desk.checks.open")}, marks);
     button.addEventListener("click", () => { closeCard(); onReview(); });  // the card (if the button is in it) is done

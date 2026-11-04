@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from core import approval, config, messages, tasks
 from core.paths import cli_command, utc_now
@@ -188,6 +188,35 @@ def streak(data: Dict[str, Any]) -> int:
             break
         count += 1
     return count
+
+
+def n_change(event: Dict[str, Any]) -> Optional[Tuple[Optional[int], int]]:
+    """A line of the history that changed n: (n before or None, n after). `review` "n=2" (a prompt's mark), `review-set` "1 -> 2" (the person)."""
+    detail = str(event.get("detail") or "")
+    try:
+        if event.get("what") == "review" and detail.startswith("n="):
+            return None, int(detail[2:])
+        if event.get("what") == "review-set" and "->" in detail:
+            before, after = detail.split("->", 1)
+            return int(before), int(after)
+    except ValueError:
+        return None
+    return None
+
+
+def n_of_round(data: Dict[str, Any], number: int) -> int:
+    """The n wanted when an earlier round ended: the last change in it or before it; else the n before the first change after it; else n now (nothing changed it since).
+    The history keeps its last lines only, so a round long ago can be read as n now."""
+    found: Optional[int] = None
+    for event in data.get("events") or []:
+        change = n_change(event) if isinstance(event, dict) else None
+        if change is None:
+            continue
+        if int(event.get("round") or 1) <= number:
+            found = change[1]
+        else:
+            return found if found is not None else change[0] if change[0] is not None else int(state_of(data)["n"] or 0)
+    return found if found is not None else int(state_of(data)["n"] or 0)
 
 
 def dots(data: Dict[str, Any]) -> Dict[str, Any]:

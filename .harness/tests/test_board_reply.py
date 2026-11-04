@@ -521,6 +521,8 @@ class PageTests(unittest.TestCase):
         self.assertIn('desk.past ? h("p", {class: "set-tip"}, t("desk.rv.current", {round: full.round})) : null', button)
         self.assertIn("if (on) inView(pop);", button)  # behind the round tabs the button can sit mid-row in a narrow window
         self.assertIn("ui.review.set(JSON.stringify([full.settings && [full.settings.n, full.settings.max_n], full.status, desk.past && full.round]), () => reviewButton());", desk)
+        self.assertIn("{round: number, review: found.marks || null, steps:", desk)  # the pill beside the ribbon: the checks of that round, as it ended
+        self.assertIn('review.stamp ? t("desk.checks.done", {passes, n: review.n})', source("status.js"))  # passed often enough: the hover says done
         for language in ("en", "zh"):
             self.assertIn("{round}", messages.table(language)["desk.rv.current"], language)
 

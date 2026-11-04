@@ -2435,6 +2435,7 @@
   "desk.stage.stamp": "DONE",
   "desk.checks.title": "Independent checks",
   "desk.checks.label": "Independent checks: {passes} of {n} passed",
+  "desk.checks.done": "Independent checks done: {passes} passed in a row, {n} wanted",
   "desk.checks.open": "Open the Review tab",
   "desk.menu.more": "More",
   "desk.jump.plan": "Read the plan",

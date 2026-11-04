@@ -2435,6 +2435,7 @@
   "desk.stage.stamp": "完成",
   "desk.checks.title": "独立检查",
   "desk.checks.label": "独立检查：{n} 次里通过 {passes} 次",
+  "desk.checks.done": "独立检查已完成：连续通过 {passes} 次（要求 {n} 次）",
   "desk.checks.open": "打开 Review 标签页",
   "desk.menu.more": "更多",
   "desk.jump.plan": "去看计划",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from support import GIT, HarnessTestCase, make_repo, run_git
@@ -106,6 +107,52 @@ class NothingIsOverwritten(ReinstallCase):
         skipped = {item["what"] for item in result["skipped"]}
         self.assertTrue({"tasks/job1", "policies/user.override.json", "runtime/state"} <= skipped, skipped)
         self.assertTrue(self.exists(".harness/runtime/logs/vscode/s1.jsonl"), "the rest still goes over")
+
+    def test_a_runtime_file_that_differs_only_in_case_is_not_written_over(self) -> None:
+        """1.6.109: what is here is one listing, not a look per file. On a disk that does not tell case apart, `S1.jsonl` would be `s1.jsonl`."""
+        put(self.root, ".harness/runtime/logs/vscode/S1.jsonl", "mine\n")
+        put(self.old, ".harness/runtime/logs/vscode/s2.jsonl", "{}\n")
+        result = self.apply()
+        self.assertEqual((self.root / ".harness/runtime/logs/vscode/S1.jsonl").read_text(encoding="utf-8"), "mine\n")
+        self.assertTrue(self.exists(".harness/runtime/logs/vscode/s2.jsonl"))
+        self.assertIn("runtime/logs", {item["what"] for item in result["skipped"]})
+
+    def test_the_files_of_a_folder_come_from_its_listing(self) -> None:
+        """1.6.109: an old copy of many files took minutes on a work computer that checks each file it is asked about; the knowledge base (its .git too) was counted for nothing."""
+        put(self.old, ".harness/runtime/kbmap/deep/a/b.json", "{}")
+        put(self.old, ".harness/runtime/kbmap/.gitkeep", "")
+        listed = [path.relative_to(self.old / ".harness/runtime/kbmap").as_posix() for path in reinstall.files_under(self.old / ".harness/runtime/kbmap")]
+        self.assertEqual(listed, ["deep/a/b.json", "repo_a.json"])
+        self.assertEqual(reinstall.files_under(self.old / "missing"), [])
+        put(self.old, "knowledge-base/.git/objects/ab/cdef", "x")
+        with unittest.mock.patch.object(reinstall, "files_under", wraps=reinstall.files_under) as walked:
+            self.dry()
+        self.assertNotIn(self.old / "knowledge-base", [call.args[0] for call in walked.call_args_list])
+
+    def test_files_that_cannot_be_copied_are_counted_and_the_first_named_and_the_rest_go_over(self) -> None:
+        """1.6.109: a folder copy said each failed file in one message, a wall of red text on the page; and one bad runtime file stopped the others."""
+        for number in range(25):
+            put(self.old, f".harness/runtime/logs/vscode/bad{number:02d}.jsonl", "{}\n")
+        real = reinstall.shutil.copy2
+
+        def copy(source, target, *args, **kwargs):
+            if Path(source).name.startswith("bad"):
+                raise PermissionError(13, "Permission denied", str(source))
+            return real(source, target, *args, **kwargs)
+
+        with unittest.mock.patch.object(reinstall.shutil, "copy2", side_effect=copy):
+            result = self.apply()
+        (failed,) = result["failed"]
+        self.assertEqual((failed["what"], failed["why"], len(failed["files"]), failed["more"]), ("runtime/logs", reinstall.say("reinstall.why.some_files", count=25), reinstall.FAILED_FILES_SHOWN, 5))
+        self.assertEqual(failed["files"][0], {"path": "vscode/bad00.jsonl", "why": "Permission denied"})
+        self.assertTrue(self.exists(".harness/runtime/logs/vscode/s1.jsonl"), "the good file of the same folder went over")
+
+    def test_a_folder_copy_that_failed_says_its_files_short(self) -> None:
+        step = {"group": "tasks", "name": "job1", "src": self.old / TASK}
+        error = reinstall.shutil.Error([(str(self.old / TASK / "notes.md"), str(self.root / TASK / "notes.md"), f"[Errno 13] Permission denied: '{self.old / TASK / 'notes.md'}'")])
+        self.assertEqual(reinstall.failure(step, error), {"what": "tasks/job1", "why": reinstall.say("reinstall.why.some_files", count=1), "files": [{"path": "notes.md", "why": "Permission denied"}], "more": 0})
+        self.assertEqual(reinstall.failure(step, OSError("disk full")), {"what": "tasks/job1", "why": "disk full"})
+        self.assertEqual(reinstall.short_why("[WinError 5] Access is denied: 'C:\\a\\b.json'"), "Access is denied")
 
     def test_a_second_run_copies_nothing_new(self) -> None:
         self.apply()

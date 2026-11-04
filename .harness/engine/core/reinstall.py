@@ -16,6 +16,8 @@ when git in the old copy says they were changed there. Any other changed file is
 from __future__ import annotations
 
 import json
+import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -35,6 +37,9 @@ RUNTIME_LEFT_OUT = {"capture", "board-serve.json"}
 COMPANY_FILES = (".harness/standards/code-standards.md", ".github/instructions/knowledgebase.instructions.md")
 PLACEHOLDER = {"README.md", ".gitkeep"}  # what an empty knowledge base ships with
 LEFT_ALONE_SHOWN = 20
+FAILED_FILES_SHOWN = 20  # the files of one item that could not be copied, by name; the rest are counted
+ERROR_CODE = re.compile(r"^\[(?:Errno|WinError) -?\d+\]\s*")
+ERROR_PATHS = re.compile(r":\s*'[^']*'(?:\s*->\s*'[^']*')?\s*$")
 GIT_SECONDS = 60
 
 
@@ -91,7 +96,21 @@ def is_placeholder(folder: Path) -> bool:
 
 
 def files_under(folder: Path) -> List[Path]:
-    return sorted(item for item in folder.rglob("*") if item.is_file() and item.name != ".gitkeep")
+    """Every file under `folder` but `.gitkeep`, sorted; a link to a folder is not followed. The listing of a folder says what is a file and what is a folder,
+    so no file is looked at one by one: on a work computer that checks each file access, an old copy of many files took minutes (1.6.109)."""
+    found: List[Path] = []
+    stack = [str(folder)]
+    while stack:
+        try:
+            entries = list(os.scandir(stack.pop()))
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.is_dir(follow_symlinks=False):
+                stack.append(entry.path)
+            elif entry.is_file() and entry.name != ".gitkeep":
+                found.append(Path(entry.path))
+    return sorted(found)
 
 
 class Plan:
@@ -127,7 +146,9 @@ class Plan:
                 continue
             files = files_under(item) if item.is_dir() else [item]
             base = item if item.is_dir() else source
-            new = [path for path in files if not (target / path.relative_to(source)).exists()]
+            here = target / item.name
+            have = {path.relative_to(target).as_posix().casefold() for path in files_under(here)} if here.is_dir() else ({item.name.casefold()} if here.exists() else set())  # one listing, not a look per file; casefold: never over a file that differs only in case
+            new = [path for path in files if path.relative_to(source).as_posix().casefold() not in have]
             if new:
                 self.copy("runtime", item.name, "files", base, target / item.name if item.is_dir() else target, len(new))
                 self.steps[-1]["files"] = new
@@ -152,7 +173,7 @@ class Plan:
         if target.is_dir() and not is_placeholder(target):
             self.skip(KB_DIR, say("reinstall.why.kb_has_content"))
         else:
-            self.copy("knowledge-base", KB_DIR, "dir", source, target, len(files_under(source)))
+            self.copy("knowledge-base", KB_DIR, "dir", source, target)  # copied whole; counting its files (its .git too) only cost time
 
     def company(self, old: Path, root: Path, before: Optional[List[str]], now: Optional[List[str]]) -> None:
         """Shipped files the company changed, and the `domain-*` skills and the `<skill_prefix>-*` skills it added. Carried only when git in the old copy says it changed them."""
@@ -220,10 +241,39 @@ def carry(step: Dict[str, Any]) -> None:
         shutil.copy2(source, target)
     else:
         base, destination = step["root"]
-        for path in step["files"]:
+        errors = []
+        for path in step["files"]:  # one file that cannot be copied does not stop the others, as with copytree
             made = destination / path.relative_to(base)
-            made.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, made)
+            try:
+                made.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, made)
+            except OSError as error:
+                errors.append((str(path), str(made), str(error)))
+        if errors:
+            raise shutil.Error(errors)
+
+
+def short_why(text: str) -> str:
+    """`[Errno 13] Permission denied: '<the whole path>'` as `Permission denied`: the path is shown beside it already."""
+    return ERROR_PATHS.sub("", ERROR_CODE.sub("", text)).strip() or text
+
+
+def failure(step: Dict[str, Any], error: OSError) -> Dict[str, Any]:
+    """What could not be copied, short. A folder copy says it for each file (`shutil.Error`), all in one message: that was a wall of text (1.6.109).
+    Here: how many files, then the first FAILED_FILES_SHOWN by their path in the item, each with its own reason."""
+    what = f"{step['group']}/{step['name']}"
+    rows = error.args[0] if isinstance(error, shutil.Error) and error.args and isinstance(error.args[0], list) else None
+    if rows is None:
+        return {"what": what, "why": str(error)}
+    files = []
+    for row in rows[:FAILED_FILES_SHOWN]:
+        source, _target, why = (list(row) + ["", "", ""])[:3] if isinstance(row, (list, tuple)) else (str(row), "", "")
+        try:
+            shown = Path(source).relative_to(step["src"]).as_posix()
+        except ValueError:
+            shown = str(source)
+        files.append({"path": shown, "why": short_why(str(why))})
+    return {"what": what, "why": say("reinstall.why.some_files", count=len(rows)), "files": files, "more": max(0, len(rows) - FAILED_FILES_SHOWN)}
 
 
 def listed(plan: Plan) -> Dict[str, List[str]]:
@@ -256,7 +306,7 @@ def run(root: Path, raw: str, apply: bool = False, interactive: Optional[bool] =
             carry(step)
             done.steps.append(step)
         except OSError as error:
-            failed.append({"what": f"{step['group']}/{step['name']}", "why": str(error)})
+            failed.append(failure(step, error))
     result.update(copied=listed(done), skipped=plan.skipped, failed=failed, changed_in_old_not_copied=others[:LEFT_ALONE_SHOWN])
     if len(others) > LEFT_ALONE_SHOWN:
         result["changed_in_old_more"] = len(others) - LEFT_ALONE_SHOWN

@@ -320,20 +320,49 @@ const SETUP = (function () {
       const out = h("div", {class: "su-note"});
       const view = SERVE.dialog([h("h2", null, t("setup.older.title")), h("p", {class: "sub"}, t("setup.older.hint")), path, out, h("div", {class: "row"}, look, apply, no)]);
       no.addEventListener("click", view.close);
-      const count = (list) => Object.entries(list || {}).map(([group, names]) => group + ": " + names.length).join(", ") || "-";
-      const told = (key, list) => (list || []).map((item) => h("p", {class: "su-note" + (key === "setup.older.failed" ? " bad" : "")}, t(key, {what: item.what, why: item.why})));
-      look.addEventListener("click", () => ask("older", {path: path.value}).then((found) => {
-        out.replaceChildren(t("setup.older.plan", {from: found.from, groups: count(found.would_copy)}), ...told("setup.older.skipped", found.skipped));
-        apply.hidden = false;
-      }, (error) => { out.textContent = error.message || String(error); }));
+      // What would move, what moved, what failed and what was left alone (1.6.109): a count per group, and the lists folded in a box that scrolls. Before, every failed file was a red line of the window.
+      const groups = (list) => h("div", {class: "chips su-older-groups"}, ...Object.entries(list || {}).map(([group, names]) => h("span", {class: "chip"}, group + " \u00b7 " + names.length)));
+      const folded = (key, items, open, bad) => (items || []).length ? h("details", {class: "su-older-list" + (bad ? " bad" : ""), open: open ? "" : null}, h("summary", null, t(key, {n: items.length})),
+        h("div", {class: "su-older-box"}, ...items.map((item) => h("div", {class: "su-older-row"}, h("code", null, item.what), h("span", {class: "su-note"}, item.why),
+          ...(item.files || []).map((file) => h("div", {class: "su-older-file"}, h("code", null, file.path), h("span", {class: "su-note"}, file.why))),
+          item.more ? h("span", {class: "su-note"}, t("setup.older.more", {n: item.more})) : null)))) : null;
+      function result(found) {
+        const copied = Object.values(found.copied || {}).reduce((sum, names) => sum + names.length, 0);
+        const failed = found.failed || [], skipped = found.skipped || [];
+        const stat = (key, n, kind) => h("div", {class: "su-older-stat" + (kind ? " " + kind : "")}, h("b", null, String(n)), h("span", null, t(key)));
+        const close = h("button", {type: "button", class: "act hot"}, t("board.new.close"));
+        const win = SERVE.dialog([h("h2", null, t("setup.older.result")), h("p", {class: "sub su-older-from"}, t("setup.older.from", {from: found.from})),
+          h("div", {class: "su-older-stats"}, stat("setup.older.count.copied", copied, copied ? "good" : ""), stat("setup.older.count.failed", failed.length, failed.length ? "bad" : ""), stat("setup.older.count.skipped", skipped.length, "")),
+          groups(found.copied), folded("setup.older.failed.n", failed, true, true), folded("setup.older.skipped.n", skipped, false, false), h("div", {class: "row"}, close)]);
+        win.box.classList.add("su-older-win");
+        close.addEventListener("click", () => { win.close(); (finished ? load : leave)(); });  // in the window the note says what changed; what was typed stays
+      }
+      // An old copy of many files takes a while, longer on a computer that checks each file: the buttons wait and a line counts the time (1.6.109). Before, a click showed nothing.
+      const waiting = (key) => {
+        const began = Date.now();
+        const line = h("p", {class: "su-note su-busy", role: "status"});
+        const tick = () => { line.textContent = t(key, {time: clock((Date.now() - began) / 1000)}); };
+        tick();
+        const timer = setInterval(tick, 1000);
+        out.replaceChildren(line);
+        path.disabled = look.disabled = apply.disabled = true;
+        return () => { clearInterval(timer); path.disabled = look.disabled = apply.disabled = false; };
+      };
+      look.addEventListener("click", () => {
+        const done = waiting("setup.older.looking");
+        ask("older", {path: path.value}).then((found) => {
+          done();
+          out.replaceChildren(h("p", {class: "su-note su-older-from"}, t("setup.older.from", {from: found.from})), groups(found.would_copy), folded("setup.older.skipped.n", found.skipped, false, false));
+          apply.hidden = false;
+        }, (error) => { done(); out.textContent = error.message || String(error); });
+      });
       apply.addEventListener("click", () => {
-        apply.disabled = true;
+        const done = waiting("setup.older.carrying");
         ask("older", {path: path.value, apply: true}).then((found) => {
-          out.replaceChildren(t("setup.older.done", {groups: count(found.copied)}), ...told("setup.older.failed", found.failed), ...told("setup.older.skipped", found.skipped));
-          look.hidden = apply.hidden = true;
-          no.textContent = t("board.new.close");
-          no.addEventListener("click", finished ? load : leave);  // in the window the note says what changed; what was typed stays
-        }, (error) => { apply.disabled = false; out.textContent = error.message || String(error); });
+          done();
+          view.close();
+          result(found);
+        }, (error) => { done(); out.textContent = error.message || String(error); });
       });
     }
     name.addEventListener("input", gate);

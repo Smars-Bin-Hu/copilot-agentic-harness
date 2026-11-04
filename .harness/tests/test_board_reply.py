@@ -239,6 +239,69 @@ class ServeTests(SendCase):
         self.assertEqual(self.post("/api/undo", {})[0], 200)
         self.assertEqual(self.told(), {"type": "chat/truncated"})
 
+    def rewound(self, text: str = "plan then") -> Dict[str, Any]:
+        """A restore point of job1 with PLAN.md as `text`, then PLAN.md changed and a file added; the chat: one turn before the message, the message, one after it."""
+        from modules.task import rewind
+
+        base = self.root / TASK
+        (base / "PLAN.md").write_text(text, encoding="utf-8")
+        point = rewind.take(self.root, TASK, tasks.read(self.root, TASK)["session_id"])
+        (base / "PLAN.md").write_text("plan later", encoding="utf-8")
+        (base / "later.md").write_text("came later", encoding="utf-8")
+        at = rewind.seconds(point["at"])
+        stamp = lambda moment: __import__("datetime").datetime.fromtimestamp(moment, __import__("datetime").timezone.utc).isoformat().replace("+00:00", "Z")  # noqa: E731
+        turns = [{"id": "t1", "startedAt": stamp(at - 600), "message": {"text": "first", "origin": {"kind": "user"}}, "responseParts": [], "state": "complete"},
+                 {"id": "t2", "startedAt": stamp(at - 2), "message": {"text": "[ZH] redo this", "origin": {"kind": "user"}, "attachments": [{"label": "a.png"}]}, "responseParts": [], "state": "complete"},
+                 {"id": "t3", "startedAt": stamp(at + 300), "message": {"text": "then this", "origin": {"kind": "user"}}, "responseParts": [], "state": "complete"}]
+        self.state = {**self.state, "turns": turns, "activeTurn": None}
+        return point
+
+    def test_a_rewind_shows_what_changes_then_puts_the_files_back_and_cuts_the_chat_before_the_message(self) -> None:
+        """1.6.109: back to before a message of the person: its restore point for the files, its turn for the chat."""
+        point = self.rewound()
+        status, data, _ = self.post("/api/rewind", {"seq": point["seq"], "step": "preview"})
+        self.assertEqual(status, 200, data)
+        self.assertEqual((data["result"]["turns"], data["result"]["back"], data["result"]["removed"]), (2, ["PLAN.md"], ["later.md"]))
+        self.assertEqual(self.actions(), [], "a preview changes nothing")
+        status, data, _ = self.post("/api/rewind", {"seq": point["seq"], "step": "act"})
+        self.assertEqual(status, 200, data)
+        self.assertEqual({key: data["result"][key] for key in ("text", "lang", "files", "back", "removed")}, {"text": "redo this", "lang": "zh", "files": ["a.png"], "back": 1, "removed": 1})
+        self.assertEqual((self.root / TASK / "PLAN.md").read_text(encoding="utf-8"), "plan then")
+        self.assertFalse((self.root / TASK / "later.md").exists())
+        self.assertEqual(self.told(), {"type": "chat/truncated", "turnId": "t1"})  # the message and what came after it leave; the turn before it stays
+        self.assertEqual(tasks.read(self.root, TASK)["events"][-1]["what"], "rewind")
+
+    def test_a_rewind_whose_message_is_not_in_the_chat_changes_nothing(self) -> None:
+        point = self.rewound()
+        self.state = {**self.state, "turns": self.state["turns"][:1]}  # the message was taken out in VS Code
+        status, data, _ = self.post("/api/rewind", {"seq": point["seq"], "step": "act"})
+        self.assertEqual((status, data["error"]), (409, messages.text("send.refused.rewind-turn")))
+        self.assertEqual((self.root / TASK / "PLAN.md").read_text(encoding="utf-8"), "plan later")
+        self.assertEqual(self.actions(), [])
+
+    def test_a_rewind_past_a_write_back_is_refused_and_the_rounds_say_why(self) -> None:
+        from modules.task import chatrounds, rewind, task as task_ops
+
+        point = self.rewound()
+        with mock.patch.object(chatrounds, "listing", return_value=[{"n": 0, "at": point["at"], "head": "redo this", "tools": 0, "replies": 0, "seconds": None, "aiu": None}]):
+            listed = self.post("/api/rounds", {"op": "list"})[1]["result"]["rounds"]
+        self.assertEqual(listed[0]["rewind"], {"seq": point["seq"], "why": ""})
+        with task_ops.locked(self.root, TASK) as data:
+            task_ops.note(data, "promote", "feature/x")
+        status, data, _ = self.post("/api/rewind", {"seq": point["seq"], "step": "preview"})
+        self.assertEqual((status, data["error"]), (409, messages.text("desk.rewind.why.promote")))
+        self.assertEqual(rewind.why_not(tasks.read(self.root, TASK), point, "another"), "chat")
+
+    def test_the_rounds_have_the_rewind_icon_with_its_reason_as_the_tip(self) -> None:
+        rounds = source("rounds.js")
+        self.assertIn('const back = h("button", {type: "button", class: "rd-rw"}, lineSvg(ICONS.rewind));', rounds)  # an icon, the words in its tip (the person's rule, 2026-11-04)
+        self.assertIn('const why = mark.why ? t("desk.rewind.why." + mark.why) : st.state !== "idle" ? t("desk.rewind.busy") : "";', rounds)
+        self.assertIn('rec.back.classList.toggle("off", Boolean(why));', rounds)  # not `disabled`: a disabled button shows no tip
+        self.assertNotIn("back.disabled", rounds)
+        self.assertIn("event.preventDefault();", rounds)  # in the summary: the click must not open the round
+        self.assertIn('{task, seq: item.rewind.seq, step: "preview"}', rounds)
+        self.assertIn(".rd-rw{position:absolute;right:0;top:3px;margin:0}", source("rounds.css"))  # a narrow window: the icon stays in the corner
+
     def test_a_chat_with_nothing_to_take_back_says_so(self) -> None:
         self.state = {**self.state, "turns": [], "activeTurn": None}
         status, data, _ = self.post("/api/undo", {})

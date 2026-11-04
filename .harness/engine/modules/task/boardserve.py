@@ -66,6 +66,7 @@ from . import setupjob
 from . import taskfileedit
 from . import skillsend
 from . import taskrun
+from . import rewind
 from . import tasksize
 from . import wallpaper
 from . import autorun, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
@@ -1023,6 +1024,44 @@ class Board:
         chinese = done["text"].startswith(chatsend.ZH_MARK)
         return {"text": done["text"][len(chatsend.ZH_MARK):].lstrip() if chinese else done["text"], "lang": "zh" if chinese else "en", "files": done["files"]}
 
+    def rewind(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Go back to before a message of the person (1.6.109): `step` preview says what changes; act puts the task's files back as they were at its restore point and cuts the chat
+        before it, and gives back its words for the reply box. Only the chat linked to the task, idle, in this round, with no write-back since."""
+        task, _found = self.target(data)
+        found = task_ops.read(self.root, task)
+        try:
+            seq = int(data.get("seq"))
+        except (TypeError, ValueError):
+            raise CommandError(say("serve.refused.request")) from None
+        point = next((item for item in rewind.index(self.root, task) if item["seq"] == seq and item.get("kind") == "prompt"), None)
+        session = str(found.get("session_id") or "")
+        why = rewind.why_not(found, point, session)
+        if why:
+            raise CommandError(say(f"desk.rewind.why.{why}"))
+        at = rewind.seconds(point["at"])
+        step = str(data.get("step", "preview"))
+        try:
+            if step == "preview":
+                changes = rewind.preview(self.root, task, seq)
+                chat = self.link.dispatch("rewind", task, plan={"at": at, "dry": True})
+                return {"seq": seq, "at": point["at"], "turns": chat["turns"], "counts": {key: len(changes[key]) for key in ("back", "removed", "lost")},
+                        **{key: changes[key][:rewind.LISTED] for key in ("back", "removed", "lost")}}
+            if step != "act":
+                raise CommandError(say("serve.refused.request"))
+            done = self.link.dispatch("rewind", task, plan={"at": at, "restore": lambda: rewind.restore(self.root, task, seq, session)})
+        except vslink.Refused as error:
+            raise CommandError(self.refusal(error.why)) from None
+        except CommandError:
+            raise
+        except Exception as error:  # noqa: BLE001 - the host or the disk said no
+            raise CommandError(ahp_scrub(error)) from None
+        changed = done.get("changed") or {}
+        with task_ops.locked(self.root, task) as again:
+            task_ops.note(again, "rewind", f"{point['at'][:19]} · {done['turns']} turns · {changed.get('back', 0)} back · {changed.get('removed', 0)} aside")
+        chinese = done["text"].startswith(chatsend.ZH_MARK)
+        return {"text": done["text"][len(chatsend.ZH_MARK):].lstrip() if chinese else done["text"], "lang": "zh" if chinese else "en", "files": done["files"],
+                "back": changed.get("back", 0), "removed": changed.get("removed", 0), "aside": changed.get("aside", ""), "lost": len(changed.get("lost") or [])}
+
     def chatconfig(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """The mode and the tool permission of the chat of the task: told to the host at once, they hold from the next turn. Only a value the host offers;
         the mode only goes back to Interactive, since a task has its own plan and autorun (Plan or Autopilot can only have been set in VS Code)."""
@@ -1213,7 +1252,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown in the dialog
                     return self.answer(409, {"error": str(error)})
-            if path in ("/api/send", "/api/steer", "/api/queue", "/api/unqueue", "/api/stop", "/api/resume", "/api/compact", "/api/draft", "/api/setting", "/api/chatconfig", "/api/undo", "/api/verdict", "/api/export", "/api/confirm", "/api/answer"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
+            if path in ("/api/send", "/api/steer", "/api/queue", "/api/unqueue", "/api/stop", "/api/resume", "/api/compact", "/api/draft", "/api/setting", "/api/chatconfig", "/api/undo", "/api/rewind", "/api/verdict", "/api/export", "/api/confirm", "/api/answer"):  # talk to the chat, its settings, the Gate verdicts: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
@@ -1221,7 +1260,7 @@ def handler_for(board: Board) -> type:
                         result = board.send(data) if str(data.get("step", "act")) == "act" else board.preview(data)
                     else:
                         result = getattr(board, path[len("/api/"):])(data)
-                    if path != "/api/send" or str(data.get("step", "act")) == "act":
+                    if path not in ("/api/send", "/api/rewind") or str(data.get("step", "act")) == "act":
                         print(say("serve.did", action=path[len("/api/"):], task=task_ops.name_of(task_ops.resolve(board.root, str(data.get("task", ""))))), flush=True)
                     return self.answer(200, {"result": result})
                 except Fallback as error:  # not sent: the reason, and the text to copy
@@ -1246,7 +1285,10 @@ def handler_for(board: Board) -> type:
                     if row is None:
                         raise CommandError(say("desk.unknown", name=str(data.get("task", ""))))
                     if str(data.get("op", "")) == "list":
-                        return self.answer(200, {"result": {"rounds": chatrounds.listing(board.root, row["task"])}})
+                        listed = chatrounds.listing(board.root, row["task"])
+                        state_now = task_ops.read(board.root, row["task"])  # each round: may the task go back to before it (1.6.109)
+                        found = rewind.marks(board.root, row["task"], state_now, {str(item["n"]): rewind.seconds(item["at"]) for item in listed}, str(state_now.get("session_id") or ""))
+                        return self.answer(200, {"result": {"rounds": [dict(item, rewind=found.get(str(item["n"]))) for item in listed]}})
                     found = chatrounds.one(board.root, row["task"], data.get("n"))
                     return self.answer(200, {"result": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page

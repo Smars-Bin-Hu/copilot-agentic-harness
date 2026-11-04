@@ -8,7 +8,8 @@
                                    The one other subagent is the read-only `mapper`, and only after the user typed
                                    `/generic-mapreduce`: that prompt gives the session a number of calls (mapreduce.py)
   SubagentStart                    the reviewer is told where its package is; a mapper is told it only reads
-  PostToolUse                      a write inside the task is remembered; the reviewer's answer closes the open check
+  PostToolUse                      a write inside the task is remembered; a write of its REQ.md or PLAN.md is noted with its time (once a prompt
+                                   each, for the stages of the report); the reviewer's answer closes the open check
   Stop                             a task in autorun: the next open step, until a fact says stop (autorun.py);
                                    once per prompt: the result has not passed its checks; task files were written and
                                    TASK.md was not; once per session: the knowledge base is not built yet, offer the
@@ -27,13 +28,15 @@ from typing import Any, Dict, List, Optional
 from core import guardrails, messages, repo_paths, tasks
 from core.context import Context
 from core.events import Decision, HookEvent
-from core.paths import cli_command
+from core.paths import cli_command, utc_now
+from core.state import atomic_write, state_lock
 
 from . import commitmsg, mapreduce
 from .policy import POLICY_NAME, validate_policy
 
 NAME = "task"
 OPEN_TASKS_SHOWN = 5
+DOC_WRITES_KEPT = 100  # the moments REQ.md and PLAN.md were written, newest last
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -253,6 +256,26 @@ def on_task_write(event: HookEvent, ctx: Context) -> None:
             state["wrote"] = True
             if relative.lower() == f"{name}/{tasks.TASK_FILE}".lower():
                 state["task_file"] = True
+            doc = {f"{name}/{tasks.REQ_FILE}".lower(): "req", f"{name}/{tasks.PLAN_NAME}".lower(): "plan"}.get(relative.lower())
+            if doc and doc not in state.setdefault("docs", []):
+                state["docs"].append(doc)
+                note_doc_write(ctx, data["task"], doc)
+
+
+def note_doc_write(ctx: Context, task: str, doc: str) -> None:
+    """REQ.md (`req`) or PLAN.md (`plan`) of the task was written (1.6.109): the moment, once a prompt for each. The report reads the stages from them: the agent began the plan, or
+    went back to the requirement. Kept apart from the events (the history keeps its last lines only) and written without a new `updated_at`, like a binding."""
+    path = tasks.state_file(ctx.root, task)
+    if not path.exists():
+        return
+    with state_lock(path):
+        data = tasks.read(ctx.root, task)
+        if data is None:
+            return
+        writes = data.setdefault("doc_writes", [])
+        writes.append({"at": utc_now(), "doc": doc})
+        del writes[:-DOC_WRITES_KEPT]
+        atomic_write(path, data)
 
 
 def on_review_done(event: HookEvent, ctx: Context) -> Optional[Decision]:

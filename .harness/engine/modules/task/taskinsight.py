@@ -14,6 +14,7 @@ largest ones into sentences and judges nothing.
 
 from __future__ import annotations
 
+import bisect
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -128,8 +129,8 @@ def merge(into: Dict[str, Any], other: Dict[str, Any]) -> None:
     into["end"] = max(into["end"], other["end"])
     for key in ("turns", "model_s", "turn_s", "approval_s", "hook_s", "subagent_s"):
         into[key] += other[key]
-    for key in ("tools", "subagents", "skills", "compactions", "cache_calls", "thinks"):
-        into[key].extend(other[key])
+    for key in ("tools", "subagents", "skills", "compactions", "cache_calls", "thinks", "spends", "docs"):
+        into[key].extend(other.get(key) or [])
     for name in other["models"]:
         if name not in into["models"]:
             into["models"].append(name)
@@ -248,6 +249,129 @@ def prompt_stage(events: List[Tuple[float, str, str]], prompt: Dict[str, Any], k
         if before != "done":
             return before
     return found
+
+
+# The stages of a task that writes back, from its events and from when REQ.md and PLAN.md were written (1.6.109). A prompt often runs through several stages:
+# the agent drafts the requirement and goes on to the plan in one turn, or the person confirms REQ.md while the turn runs, or a turn of developing ends with the
+# dry run. So a prompt is cut at each change and every part counts in its own stage (`shares`).
+#   requirement: the start, a new round, and REQ.md changed again after it was confirmed, or after the plan was written in an earlier prompt
+#   plan:        the first write of PLAN.md in the requirement, or the person confirms REQ.md
+#   developing:  the person approves the plan; a check that does not pass sends the task back to it
+REOPENS = ("plan", "developing", CHECK, "writeback")
+
+
+def task_doc_writes(data: Dict[str, Any], prompts: List[Dict[str, Any]], name: str) -> List[Tuple[float, str]]:
+    """When REQ.md (`req`) and PLAN.md (`plan`) were written: what the hook noted (`doc_writes`), and for an older task what Copilot's record shows of the
+    task's own folder. The same write seen twice (within 2 s) counts once."""
+    found = [(at, str(item.get("doc"))) for item, at in ((item, copilot_events.seconds(item.get("at"))) for item in data.get("doc_writes") or [] if isinstance(item, dict)) if at is not None]
+    found += [(item["at"], item["doc"]) for prompt in prompts for item in prompt.get("docs") or [] if str(item.get("task", "")).lower() == name.lower()]
+    kept: List[Tuple[float, str]] = []
+    for at, doc in sorted(found):
+        if doc in ("req", "plan") and not any(other == doc and abs(at - when) <= 2.0 for when, other in kept[-4:]):
+            kept.append((at, doc))
+    return kept
+
+
+def timeline(marked: List[Tuple[float, str, str]], docs: List[Tuple[float, str]], starts: List[float]) -> List[Tuple[float, str]]:
+    """The stage of a task that writes back from each moment on: `[(at, stage)]`. `starts`: when each of the task's prompts began (a write is in the prompt that began last before it)."""
+    moments = sorted([(at, 0, what, detail) for at, what, detail in marked] + [(at, 1, "doc:" + doc, "") for at, doc in docs], key=lambda item: (item[0], item[1]))
+    stage, confirmed, plan_prompt = "requirement", False, None
+    points: List[Tuple[float, str]] = []
+    for at, _order, what, detail in moments:
+        prompt = bisect.bisect_right(starts, at)
+        if what == "doc:plan":
+            if stage == "requirement":
+                stage = "plan"
+            if stage == "plan" and plan_prompt is None:
+                plan_prompt = prompt
+        elif what == "doc:req":
+            if stage in REOPENS and (confirmed or (plan_prompt is not None and prompt > plan_prompt)):
+                stage, confirmed, plan_prompt = "requirement", False, None  # the requirement changed: back to it, and the plan is made again after it
+        elif what in ("start", "new-round"):
+            stage, confirmed, plan_prompt = "requirement", False, None
+        elif what == "confirm-req":
+            stage, confirmed = "plan", True
+        elif what == "review" and detail.startswith("round-"):
+            words = detail.split()
+            if len(words) > 1 and words[1] != "PASS" and "invalid" not in words:
+                stage = "developing"
+        elif what in STAGE_OF_EVENT:
+            stage = STAGE_OF_EVENT[what]
+            if what == "approve-plan":
+                confirmed, plan_prompt = True, None  # a plan is approved only on a confirmed requirement
+        else:
+            continue
+        points.append((at, stage))
+    return points
+
+
+def stage_of_point(points: List[Tuple[float, str]], moment: float) -> str:
+    found = bisect.bisect_right([at for at, _stage in points], moment)
+    return points[found - 1][1] if found else "requirement"
+
+
+def prompt_parts(prompt: Dict[str, Any], stage_now: Any, cuts: List[float]) -> List[Tuple[str, float, float]]:
+    """The parts of a prompt by stage: `[(stage, from, to)]`, cut at the moments the stage may change (`cuts`). A part after the write-back (done) is still
+    that work when the prompt began before it, and a prompt that begins at done and opens a new round is that round's work from its start; consecutive parts
+    of one stage are one."""
+    begin, end = prompt["at"], max(prompt["at"], prompt["end"])
+    edges = [begin] + sorted(at for at in set(cuts) if begin < at < end) + [end]
+    parts: List[Tuple[str, float, float]] = []
+    for start, stop in zip(edges, edges[1:] or [end]):
+        stage = stage_now(start)
+        if stage == "done" and parts:
+            stage = parts[-1][0]
+        if parts and parts[-1][0] == stage:
+            parts[-1] = (stage, parts[-1][1], stop)
+        else:
+            parts.append((stage, start, stop))
+    if len(parts) > 1 and parts[0][0] == "done":
+        parts[1] = (parts[1][0], parts[0][1], parts[1][2])
+        del parts[0]
+    return parts or [(stage_now(begin), begin, end)]
+
+
+def shares(prompt: Dict[str, Any], entry: Dict[str, Any], parts: List[Tuple[str, float, float]]) -> List[Dict[str, Any]]:
+    """The prompt's numbers given to its parts by when each thing happened: the model's thinking, the tool calls, the subagents and the usage by their own
+    moment; what has no moment (the hook log alone) by the part's share of the time."""
+    whole = sum(stop - start for _stage, start, stop in parts)
+    def index(moment: Any) -> Optional[int]:
+        if not isinstance(moment, (int, float)):
+            return None
+        for number, (_stage, start, stop) in enumerate(parts):
+            if moment < stop or number == len(parts) - 1:
+                return number
+        return None
+    biggest = max(range(len(parts)), key=lambda number: parts[number][2] - parts[number][1])
+    fraction = [((stop - start) / whole) if whole > 0 else (1.0 if number == biggest else 0.0) for number, (_stage, start, stop) in enumerate(parts)]
+    out = [{"n": entry["n"], "stage": stage, "active_s": (entry["active_s"] or 0.0) * fraction[number], "tool_calls": 0, "failed_tool_calls": 0, "subagents": 0,
+            "model_s": None, "subagent_s": None, "aiu": None, "input_tokens": None, "output_tokens": None} for number, (stage, _start, _stop) in enumerate(parts)]
+    def spread(key: str, total: Optional[float], marks: List[Tuple[Any, float]]) -> None:
+        if total is None:
+            return
+        timed = [(index(at), value) for at, value in marks if index(at) is not None]
+        weight = sum(value for _at, value in timed)
+        for number, share in enumerate(out):
+            mine = sum(value for at, value in timed if at == number)
+            share[key] = total * (mine / weight if weight > 0 else fraction[number])
+    spread("model_s", entry.get("model_s"), [(think["at"], think["seconds"]) for think in prompt.get("thinks") or []])
+    spread("subagent_s", entry.get("subagent_s"), [(run["at"], run["seconds"]) for run in prompt.get("subagents") or []])
+    calls = [(mark["at"], (mark.get("input_tokens") or 0) + (mark.get("output_tokens") or 0)) for mark in prompt.get("spends") or [] if "input_tokens" in mark or "output_tokens" in mark]
+    checkpoints = [(mark["at"], mark["aiu"]) for mark in prompt.get("spends") or [] if mark.get("aiu") is not None]
+    spread("aiu", prompt.get("aiu"), calls or checkpoints)  # Copilot adds the usage up at the end of a turn: the model calls say when it was spent
+    for key in ("input_tokens", "output_tokens"):
+        spread(key, prompt.get(key), [(mark["at"], mark[key]) for mark in prompt.get("spends") or [] if mark.get(key) is not None])
+    for tool in prompt.get("tools") or []:
+        share = out[index(tool.get("at")) if index(tool.get("at")) is not None else biggest]
+        share["tool_calls"] += 1
+        share["failed_tool_calls"] += 0 if tool["ok"] else 1
+    for run in prompt.get("subagents") or []:
+        out[index(run.get("at")) if index(run.get("at")) is not None else biggest]["subagents"] += 1
+    for share in out:
+        for key in ("input_tokens", "output_tokens"):
+            if share[key] is not None:
+                share[key] = int(round(share[key]))
+    return out
 
 
 def test_stage_at(events: List[Tuple[float, str, str]], moment: float, envs: Tuple[str, ...]) -> str:
@@ -370,19 +494,20 @@ def env_names(root: Path, task: str) -> List[str]:
         return []
 
 
-def stage_table(prompts: List[Dict[str, Any]], totals: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """The prompts summed by stage, in the order the task first reached each stage."""
+def stage_table(parts: List[Dict[str, Any]], totals: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The parts of the prompts (`shares`) summed by stage, in the order the task first reached each stage. `prompts`: how many prompts worked in the stage
+    (a prompt that ran through two stages counts in both)."""
     order: List[str] = []
-    for entry in prompts:
-        if entry["stage"] not in order:
-            order.append(entry["stage"])
+    for part in parts:
+        if part["stage"] not in order:
+            order.append(part["stage"])
     out = []
     for name in order:
-        inside = [entry for entry in prompts if entry["stage"] == name]
-        time_spent = sum(entry["active_s"] for entry in inside)
-        usage = sum(entry["aiu"] for entry in inside if entry["aiu"] is not None) if totals["aiu"] is not None else None
+        inside = [part for part in parts if part["stage"] == name]
+        time_spent = sum(part["active_s"] for part in inside)
+        usage = sum(part["aiu"] for part in inside if part["aiu"] is not None) if totals["aiu"] is not None else None
         row: Dict[str, Any] = {
-            "stage": name, "label": stage_label(name), "prompts": len(inside), "active_s": round(time_spent, 1),
+            "stage": name, "label": stage_label(name), "prompts": len({part["n"] for part in inside}), "active_s": round(time_spent, 1),
             "aiu": round(usage, 2) if usage is not None else None, "share_time": share(time_spent, totals["active_s"]), "share_aiu": share(usage, totals["aiu"]),
             "tool_calls": sum(entry["tool_calls"] for entry in inside), "failed_tool_calls": sum(entry["failed_tool_calls"] for entry in inside),
             "subagents": sum(entry["subagents"] for entry in inside),
@@ -415,6 +540,13 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True, 
     mine: List[Dict[str, Any]] = sorted((prompt for found in sessions for prompt in found["prompts"] if prompt["mine"]), key=lambda prompt: prompt["at"])
     rows_of = {found["session_id"]: found["rows"] for found in sessions}
     starts = round_starts(data)
+    if kind in taskstages.WRITES_BACK:
+        points = timeline(marked, task_doc_writes(data, mine, str(data.get("name") or task.rsplit("/", 1)[-1])), [prompt["at"] for prompt in mine])
+        stage_now: Any = lambda moment: stage_of_point(points, moment)  # noqa: E731
+        cuts = [at for at, _stage in points]
+    else:
+        stage_now = lambda moment: stage_at(marked, moment, kind, envs)  # noqa: E731
+        cuts = [at for at, _what, _detail in marked]
     items: List[Dict[str, Any]] = []
     for number, prompt in enumerate(mine, 1):
         parts = split(prompt)
@@ -426,7 +558,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True, 
         waited = max(0.0, following - prompt["end"] - put_aside) if following is not None else None  # time aside is not waiting
         slowest = max(prompt["tools"], key=lambda tool: tool["seconds"], default=None)
         entry = {
-            "n": number, "session_id": prompt["session_id"], "at": utc_text(prompt["at"]), "stage": prompt_stage(marked, prompt, kind, envs),
+            "n": number, "session_id": prompt["session_id"], "at": utc_text(prompt["at"]), "stage": "",
             "waited_after_s": round(waited, 1) if waited is not None else None,
             "aiu": round(prompt["aiu"], 2) if prompt["aiu"] is not None else None, "premium_requests": prompt["premium_requests"], "context_tokens": prompt["context_tokens"],
             "turns": prompt["turns"], "tool_calls": len(prompt["tools"]), "failed_tool_calls": len([tool for tool in prompt["tools"] if not tool["ok"]]),
@@ -436,17 +568,21 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True, 
             "compactions": [{key: value for key, value in item.items() if key != "at"} for item in prompt["compactions"]],
             "text": prompt.get("text", ""),  # for the page only: `for_agent` takes it out
         }
-        entry["stage_label"] = stage_label(entry["stage"])
         if steps:
             entry["until"] = utc_text(prompt["next_at"]) if prompt["next_at"] is not None else ""
             entry["thinks"] = [{"at": utc_text(think["at"]), "seconds": round(think["seconds"], 1)} for think in prompt["thinks"]]
             entry["refused"] = [{"at": tool["at"], "seconds": round(tool["seconds"], 1), "error": tool.get("error", "")} for tool in prompt["tools"] if not tool["ok"] and tool.get("at") is not None]
         entry.update({key: round(value, 1) if value is not None else None for key, value in parts.items()})
+        by_stage = shares(prompt, entry, prompt_parts(prompt, stage_now, cuts))  # 1.6.109: a prompt that runs through several stages counts in each
+        entry["stage"] = max(by_stage, key=lambda share: share["active_s"])["stage"]  # where most of its time went
+        entry["stages"] = [share["stage"] for share in by_stage]
+        entry["stage_label"] = stage_label(entry["stage"])
+        entry["stage_labels"] = [stage_label(stage) for stage in entry["stages"]]
         wait = None
         if waited is not None and waited >= 1:
             wait = {"after_prompt": number, "from": utc_text(prompt["end"]), "seconds": round(waited, 1), "reason": wait_reason(events, prompt["end"], following)}
         items.append({
-            "round": round_of(starts, prompt["end"]), "prompt": prompt, "entry": entry, "parts": parts, "put_aside": put_aside, "wait": wait,
+            "round": round_of(starts, prompt["end"]), "prompt": prompt, "entry": entry, "parts": parts, "shares": by_stage, "put_aside": put_aside, "wait": wait,
             "cache_calls": [{
                 "n": number, "at": utc_text(call["at"]), "model": call["model"], "input": call["input"], "read": call["read"], "write": call["write"],
                 "state": call["state"], "gap_s": call["gap_s"], "life_s": round(call["expires"] - call["at"]) if call["expires"] is not None else None,
@@ -538,7 +674,7 @@ def assemble(task: str, data: Dict[str, Any], items: List[Dict[str, Any]], revie
             add(totals, "subagent_tokens", run["tokens"])
             subagents.append(run)
 
-    stages = stage_table(prompts, totals)
+    stages = stage_table([share for item in items for share in item["shares"]], totals)
 
     for key in ("active_s", "waiting_s", "paused_s", "model_s", "tool_s", "approval_s", "subagent_s", "other_s", "aiu"):
         if totals[key] is not None:

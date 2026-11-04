@@ -10,7 +10,7 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
-## 1.7.0 (not released yet)
+## 1.7.0 (2026-11-04)
 
 ### Added
 

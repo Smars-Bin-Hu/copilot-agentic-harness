@@ -293,14 +293,32 @@ class ServeTests(SendCase):
         self.assertEqual(rewind.why_not(tasks.read(self.root, TASK), point, "another"), "chat")
 
     def test_the_rounds_have_the_rewind_icon_with_its_reason_as_the_tip(self) -> None:
-        rounds = source("rounds.js")
-        self.assertIn('const back = h("button", {type: "button", class: "rd-rw"}, lineSvg(ICONS.rewind));', rounds)  # an icon, the words in its tip (the person's rule, 2026-11-04)
-        self.assertIn('const why = mark.why ? t("desk.rewind.why." + mark.why) : st.state !== "idle" ? t("desk.rewind.busy") : "";', rounds)
+        rounds, css = source("rounds.js"), source("rounds.css")
+        self.assertIn('const back = tipped(h("button", {type: "button", class: "rd-rw"}, lineSvg(ICONS.rewind)), "rd-" + item.n + "-rewind", null);', rounds)  # an icon, the words in its tip (the person's rule, 2026-11-04)
+        self.assertIn('const why = mark.why ? t("desk.rewind.why." + mark.why) : chatWhy();', rounds)
         self.assertIn('rec.back.classList.toggle("off", Boolean(why));', rounds)  # not `disabled`: a disabled button shows no tip
         self.assertNotIn("back.disabled", rounds)
         self.assertIn("event.preventDefault();", rounds)  # in the summary: the click must not open the round
         self.assertIn('{task, seq: item.rewind.seq, step: "preview"}', rounds)
-        self.assertIn(".rd-rw{position:absolute;right:0;top:3px;margin:0}", source("rounds.css"))  # a narrow window: the icon stays in the corner
+        self.assertIn(".rd-rw{position:absolute;right:0;top:3px;margin:0}", css)  # a narrow window: the icon stays in the corner
+        self.assertGreater(css.index("@media (max-width:600px)"), css.index(".rd-rw{flex:none;"))  # after the plain rule, or its margin would win
+
+    def test_the_rewind_tip_is_the_pages_card_on_hover_and_focus_and_says_what_goes_back_or_why_not(self) -> None:
+        """Hand test 2026-11-04: the tip was a `title`, which the keyboard never shows and the browser draws late; it is the page's tip card now, as on the other marks.
+        It counts the messages that leave, and says why when the chat is not idle: at work, a question waiting, or VS Code not linked."""
+        rounds, status = source("rounds.js"), source("status.js")
+        self.assertNotIn(".title = ", rounds)
+        self.assertNotIn("title: tip", rounds)  # the time, credits and tools of a round use the card too
+        self.assertIn('const tipped = (node, key, tip) => { node._tip = tip; node.setAttribute("data-tip", key); return node; };', rounds)
+        self.assertIn('rec.back._tip = () => h("div", null, h("div", {class: "st-head"}, head), h("div", {class: "st-tx"}, body));', rounds)
+        self.assertIn('const body = why || t("desk.rewind.tip", {n: after});', rounds)
+        self.assertIn("paintBack(rec, item, newest.n - item.n + 1);", rounds)
+        self.assertIn('if (!(LIVE.data() || {}).bound) return t("desk.rewind.away");', rounds)
+        self.assertIn('st.state === "busy" ? "desk.rewind.busy" : st.state === "input" ? "desk.rewind.input" : "desk.rewind.wait"', rounds)
+        self.assertIn('found.plan === "lost" ? h("p", {class: "rw-plan"}, t("desk.rewind.plan")) : null', rounds)  # said only when it is so
+        self.assertIn('node.style.left = "0px";\n    node.style.top = "0px";\n    const at = anchor.getBoundingClientRect()', status)  # measured at the left edge: never a thin column
+        for key in ("desk.rewind.off", "desk.rewind.input", "desk.rewind.wait", "desk.rewind.away", "desk.rewind.plan", "desk.rewind.outside"):
+            self.assertTrue(messages.text(key), key)
 
     def test_a_chat_with_nothing_to_take_back_says_so(self) -> None:
         self.state = {**self.state, "turns": [], "activeTurn": None}

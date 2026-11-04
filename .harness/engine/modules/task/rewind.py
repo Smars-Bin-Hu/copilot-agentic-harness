@@ -240,7 +240,17 @@ def preview(root: Path, task: str, seq: int) -> Dict[str, Any]:
                 pass
         (back if object_path(store, info["sha"]).exists() else lost).append(relative)
     removed = sorted(relative for relative in now if relative not in found["files"])
-    return {"seq": seq, "at": found.get("at", ""), "back": back, "removed": removed, "lost": lost}
+    return {"seq": seq, "at": found.get("at", ""), "back": back, "removed": removed, "lost": lost, "plan": plan_after(root, task, found)}
+
+
+def plan_after(root: Path, task: str, found: Dict[str, Any]) -> str:
+    """`lost`: the plan is approved now and PLAN.md goes back to another text, so it waits for the person's approval again. Empty: the approval stays as it is."""
+    data = tasks.read(root, task) or {}
+    approved = str((data.get("plan") or {}).get("approved_sha256") or "")
+    then = found["files"].get(tasks.PLAN_NAME) or {}
+    if not approved or then.get("big") or not tasks.plan_approved(root, task, data):
+        return ""
+    return "lost" if then.get("sha") != approved else ""
 
 
 def restore(root: Path, task: str, seq: int, session: str) -> Dict[str, Any]:

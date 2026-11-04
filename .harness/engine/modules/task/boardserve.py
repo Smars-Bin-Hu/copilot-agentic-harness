@@ -1045,7 +1045,7 @@ class Board:
                 changes = rewind.preview(self.root, task, seq)
                 chat = self.link.dispatch("rewind", task, plan={"at": at, "dry": True})
                 return {"seq": seq, "at": point["at"], "turns": chat["turns"], "counts": {key: len(changes[key]) for key in ("back", "removed", "lost")},
-                        **{key: changes[key][:rewind.LISTED] for key in ("back", "removed", "lost")}}
+                        **{key: changes[key][:rewind.LISTED] for key in ("back", "removed", "lost")}, "plan": changes["plan"]}
             if step != "act":
                 raise CommandError(say("serve.refused.request"))
             done = self.link.dispatch("rewind", task, plan={"at": at, "restore": lambda: rewind.restore(self.root, task, seq, session)})

@@ -2,6 +2,7 @@
 // Only the last 5 are shown (1.6.108): the older ones are folded under one button, so the tab does not grow with the chat. The server reads them from Copilot's own record, or from the task's saved transcript (chatrounds.py), so this works with VS Code closed.
 // Each line ends with what the round took (1.6.98): its time, its credits and its tools, as icons with the words in their tip. The round that still runs counts its time on the page.
 // Each line also has the rewind icon (1.6.109): back to before that message, the chat and the task's files; its tip says what it does or why it cannot. A click shows what changes first.
+// The icons' words are in the page's tip card (status.js: `data-tip`), on hover and on keyboard focus, not in a `title` the keyboard never shows.
 // Needs common.js (h, t, when, clock, amount, lineSvg), serve.js (SERVE), live.js (LIVE), status.js (Status: the one clock of the page), reply.js (REPLY). Drawn with DOM nodes and textContent only.
 const ROUNDS = (function () {
   const SHOWN = 5;
@@ -11,13 +12,14 @@ const ROUNDS = (function () {
     tools: [["path", {d: "M9.8 2.4a3.3 3.3 0 0 0-3.9 4.3L2.4 10.2a1.3 1.3 0 0 0 1.8 1.8l3.5-3.5a3.3 3.3 0 0 0 4.3-3.9l-2 2-1.6-.4-.4-1.6z"}]],  // wrench
     rewind: [["path", {d: "M3.6 7.2A4.8 4.8 0 1 1 4.4 11"}], ["path", {d: "M3.4 3.4v3.9h3.9"}]],  // an arrow that turns back
   };
-  const stat = (kind, tip, value) => h("span", {class: "rd-stat", title: tip, "aria-label": tip}, lineSvg(ICONS[kind]), value);
+  const tipped = (node, key, tip) => { node._tip = tip; node.setAttribute("data-tip", key); return node; };
+  const stat = (kind, n, tip, value) => tipped(h("span", {class: "rd-stat", "aria-label": tip}, lineSvg(ICONS[kind]), value), "rd-" + n + "-" + kind, () => tip);
   function stats(item, running) {
     const parts = [];
-    if (running) parts.push(stat("time", t("desk.rounds.time.now"), h("span", {class: "st-run", "data-since": String(Date.parse(item.at))}, h("span", {class: "st-time"}, clock(item.seconds)))));
-    else if (item.seconds !== null && item.seconds !== undefined) parts.push(stat("time", t("desk.rounds.time", {time: clock(item.seconds)}), clock(item.seconds)));
-    if (item.aiu !== null && item.aiu !== undefined) parts.push(stat("credits", t("desk.rounds.credits", {n: amount(item.aiu)}), amount(item.aiu)));
-    if (item.tools) parts.push(stat("tools", t("desk.rounds.count", {n: item.tools}), String(item.tools)));
+    if (running) parts.push(stat("time", item.n, t("desk.rounds.time.now"), h("span", {class: "st-run", "data-since": String(Date.parse(item.at))}, h("span", {class: "st-time"}, clock(item.seconds)))));
+    else if (item.seconds !== null && item.seconds !== undefined) parts.push(stat("time", item.n, t("desk.rounds.time", {time: clock(item.seconds)}), clock(item.seconds)));
+    if (item.aiu !== null && item.aiu !== undefined) parts.push(stat("credits", item.n, t("desk.rounds.credits", {n: amount(item.aiu)}), amount(item.aiu)));
+    if (item.tools) parts.push(stat("tools", item.n, t("desk.rounds.count", {n: item.tools}), String(item.tools)));
     return parts;
   }
   const st = {task: "", list: [], open: false, nodes: new Map(), state: "", draw: null};
@@ -42,7 +44,7 @@ const ROUNDS = (function () {
   function make(item) {
     const count = h("span", {class: "sub rd-stats"});
     const body = h("div", {class: "rd-body"});
-    const back = h("button", {type: "button", class: "rd-rw"}, lineSvg(ICONS.rewind));
+    const back = tipped(h("button", {type: "button", class: "rd-rw"}, lineSvg(ICONS.rewind)), "rd-" + item.n + "-rewind", null);
     const rec = {count, back, item};
     back.addEventListener("click", (event) => {  // inside the summary: the click must not open or fold the round
       event.preventDefault();
@@ -55,15 +57,23 @@ const ROUNDS = (function () {
     return rec;
   }
 
+  // Why the chat cannot go back now, whatever the round: VS Code not linked, the agent at work, a question waiting. Empty: the chat is idle.
+  function chatWhy() {
+    if (!(LIVE.data() || {}).bound) return t("desk.rewind.away");
+    return st.state === "idle" ? "" : t(st.state === "busy" ? "desk.rewind.busy" : st.state === "input" ? "desk.rewind.input" : "desk.rewind.wait");
+  }
+
   // The rewind icon of a round: on when the server found its restore point and nothing stands in the way, and the chat is idle. Not `disabled`: a disabled button shows no tip.
-  function paintBack(rec, item) {
+  // Its tip: what goes back and how many messages leave the chat (`after`: this round and the ones after it; the preview counts the chat's own turns), or why it cannot.
+  function paintBack(rec, item, after) {
     const mark = item.rewind || {seq: null, why: "none"};
-    const why = mark.why ? t("desk.rewind.why." + mark.why) : st.state !== "idle" ? t("desk.rewind.busy") : "";
-    const tip = why || t("desk.rewind.tip");
+    const why = mark.why ? t("desk.rewind.why." + mark.why) : chatWhy();
+    const head = t(why ? "desk.rewind.off" : "desk.rewind.icon");
+    const body = why || t("desk.rewind.tip", {n: after});
     rec.back.classList.toggle("off", Boolean(why));
     rec.back.setAttribute("aria-disabled", why ? "true" : "false");
-    rec.back.title = tip;
-    rec.back.setAttribute("aria-label", t("desk.rewind.icon") + ". " + tip);
+    rec.back.setAttribute("aria-label", head + ". " + body);
+    rec.back._tip = () => h("div", null, h("div", {class: "st-head"}, head), h("div", {class: "st-tx"}, body));
   }
 
   // What going back changes, then the act: the files and the chat go back, the words of the message come back to the reply box.
@@ -79,9 +89,10 @@ const ROUNDS = (function () {
       const go = h("button", {type: "button", class: "act hot"}, t("desk.rewind.go"));
       const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
       const files = found.counts.back + found.counts.removed + found.counts.lost;
-      view.box.replaceChildren(h("h2", null, t("desk.rewind.title")), h("p", {class: "rw-said"}, h("span", {class: "sub"}, when(item.at)), " ", item.head || ""),
+      view.box.replaceChildren(...[h("h2", null, t("desk.rewind.title")), h("p", {class: "rw-said"}, h("span", {class: "sub"}, when(item.at)), " ", item.head || ""),
         h("p", null, t("desk.rewind.turns", {n: found.turns})), files ? h("div", {class: "rw-files"}, list("back"), list("removed"), list("lost")) : h("p", {class: "sub"}, t("desk.rewind.same")),
-        h("p", {class: "sub"}, t("desk.rewind.note")), said, h("div", {class: "row send-actions"}, go, no));
+        found.plan === "lost" ? h("p", {class: "rw-plan"}, t("desk.rewind.plan")) : null,  // only when it is so: the approval of the plan is lost
+        h("p", {class: "sub"}, t("desk.rewind.outside")), said, h("div", {class: "row send-actions"}, go, no)].filter(Boolean));
       no.addEventListener("click", view.close);
       go.addEventListener("click", () => {
         go.disabled = true;
@@ -118,7 +129,7 @@ const ROUNDS = (function () {
       const sig = [item.seconds, item.aiu, item.tools, busy && item.n === last].join();
       if (rec.count.dataset.sig !== sig) { rec.count.dataset.sig = sig; rec.count.replaceChildren(...stats(item, busy && item.n === last)); }
       rec.item = item;
-      paintBack(rec, item);
+      paintBack(rec, item, newest.n - item.n + 1);
       if (rec.node === next) next = next.nextSibling;
       else rows.insertBefore(rec.node, next);
     }

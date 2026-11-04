@@ -102,6 +102,20 @@ class RestoreTests(RewindCase):
         (self.base / "big.bin").write_bytes(b"y" * (1024 * 1024 + 2))
         self.assertEqual(rewind.preview(self.root, TASK, point["seq"])["lost"], ["big.bin"])
 
+    def test_the_preview_says_when_the_approved_plan_goes_back_to_before_its_approval(self) -> None:
+        """The dialog said in general words that approvals stay; now it says it only when a rewind takes the approval away."""
+        self.write("PLAN.md", "plan one")
+        before = rewind.take(self.root, TASK, SESSION)
+        self.write("PLAN.md", "plan two")
+        with task_ops.locked(self.root, TASK) as data:
+            data["plan"] = {"approved_sha256": tasks.plan_digest(self.root, TASK), "approved_at": "2026-11-04T00:00:00Z", "req_sha256": tasks.req_digest(self.root, TASK)}
+        after = rewind.take(self.root, TASK, SESSION)
+        self.write("DEV/a.sql", "select 1")
+        self.assertEqual(rewind.preview(self.root, TASK, before["seq"])["plan"], "lost")
+        self.assertEqual(rewind.preview(self.root, TASK, after["seq"])["plan"], "")  # the same plan: still approved
+        self.write("PLAN.md", "plan three")  # not approved now: there is nothing to lose
+        self.assertEqual(rewind.preview(self.root, TASK, before["seq"])["plan"], "")
+
     def test_a_point_is_refused_after_a_write_back_in_an_earlier_round_or_another_chat(self) -> None:
         point = rewind.take(self.root, TASK, SESSION)
         data = task_ops.read(self.root, TASK)

@@ -49,6 +49,9 @@ The aim is a **base**, not a perfect knowledge base: every card says which commi
    - `cycles`: objects that use each other. They are learned in one batch; say so.
    - `large`: objects of 400 lines or more. Each is a batch of its own and is read in parts; name them in the plan, they take the longest.
    - More than about 30 batches: ask whether to cut the domain smaller (fewer entry points, or a `--stop`).
+   - **Too few objects.** The user expects more than `kb order` found, or an entry point reaches little more than a wrapper. Read the code of the entry point and its first steps: a job or a package started by a name in a string, a loop over the rows of a configuration table, files of a folder the toolkit skips. Then stop before the plan, tell the user the map misses those uses, and offer two roads:
+     - Fix the map first (recommended): a `kb` task with `/generic-kb-toolkit-build` teaches the toolkit the wrappers, the configuration scripts and the skipped files; then `kb map` and this plan again.
+     - Learn now: the batches record each hidden use in `discovery/hidden-uses.jsonl`, in the form of [declared.jsonl](../../../.harness/contracts/kb/map.md#declaredjsonl); the toolkit task takes them later. Cards still name only what the map has, and an object the map does not have cannot be learned yet.
 4. **Research note (when there is one).** Keep it as it came, for `discovery/research.md`: it is a lead, never a fact. Optionally take its claims one by one ("job X loads table Y") and look for each in the map (`kb near`): found, not found, or against the map. One against the map goes into `open_questions` of `domain.yaml` with level `conflict`.
 5. **Write `PLAN.md`** of the task from [learn-plan.md](./templates/learn-plan.md): it is the learn plan. The `kb order` command goes in exactly as run: every batch runs it again.
 6. **Write `TODO.md`**, one step per line, in this order: "Make the empty domain"; one line per batch ("Batch 3: sp, 18 objects, 1420 lines: <the first ids>"); "Architecture (generic-kb-learn-synthesize)"; "Write back the domain".
@@ -75,4 +78,5 @@ The aim is a **base**, not a perfect knowledge base: every card says which commi
 | "No object in the map is called ..." | A name from a note that is not in the code: a `code` request, or ask the user for the right name |
 | One batch holds nearly everything | Something used everywhere is not cut as shared: lower `--shared-min`, or `--stop` at it |
 | `missing` is long | The toolkit may not know a kind of file. Check three of them before writing requests; fix the toolkit with `/generic-kb-toolkit-build` |
+| A job the user knows runs is not in the map | Its file is skipped (a retired folder, an unusual suffix) or it is started by name. `kb index` refuses an id the map does not have: fix the toolkit before that job's batch |
 | "No such domain" from `task new --domain` | The task is not of kind `kb`. Only a `kb` task may name a domain the knowledge base does not have yet |

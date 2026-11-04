@@ -14,6 +14,10 @@ To see which version you have: `harness --version`.
 
 ### Added
 
+- **The map can hold uses no extractor sees.** A use started by a configuration row or in dynamic SQL goes into `toolkit/declared.jsonl` with the line of code that shows it. `kb map` checks that line on every run, adds the use while it holds, and lists under `declared_uses` the lines whose code changed (`stale`), whose ids are not in the map, and those the toolkit finds by itself now. A card may name a declared use; one that leaves it out gets a warning, not an error, so a new use does not break the cards of other domains.
+- **The sample SQL Server toolkit reads jobs and packages started by name.** `sp_start_job @job_name = N'X'` is a use of job X. A team lists its own wrappers in `by_name` of the rule in `toolkit.json` (which argument holds the name, and whether it is a job or a package). A name in a variable marks the object `dynamic`. An extractor now gets its rule in `context["rule"]`.
+- **The knowledge base skills spot a map that finds too little.** The toolkit design asks about wrappers, configuration rows and skipped files that still run. A learn plan whose `kb order` finds far fewer objects than you expect stops and offers to fix the map first or to learn now. Batches then collect each hidden use, with its evidence line, in `discovery/hidden-uses.jsonl`, and the toolkit task takes them as input. The knowledge base guide has a worked example.
+
 - **The board asks you to archive when the task folders grow big.** It measures `.workspace/sandbox/tasks/` once an hour, in the background. Over 500 MB, a line under the header says how much the folders take and names the largest closed tasks. **Pick what to archive** opens the list of closed tasks with the largest ticked, until the rest is under the limit; untick any, then archive as before. **Later** hides it in this browser until the folders grow by another tenth. Set `board.archive_over_mb` in `task.override.json` for another limit, 0 to turn it off. The bar of ticked tasks says how much they free.
 
 ### Changed

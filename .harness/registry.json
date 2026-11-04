@@ -179,6 +179,7 @@
         ".harness/tests/test_basesync.py",
         ".harness/tests/test_taskstages.py",
         ".harness/tests/test_tasksize.py",
+        ".harness/tests/test_rewind.py",
         ".harness/tests/test_testdefects.py",
         ".harness/tests/test_testrecord.py",
         ".harness/tests/test_writeback_loose_ends.py"

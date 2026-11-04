@@ -88,6 +88,11 @@ def cache_file(root: Path, name: str) -> Path:
     return paths.runtime_dir(root) / "kbmap" / f"{name}.json"
 
 
+def declared_file(root: Path) -> Path:
+    """The declared uses whose evidence `kb map` found on the base branch at its last run (core/kbmap.py)."""
+    return paths.runtime_dir(root) / "kbmap-declared.json"
+
+
 def read_cache(root: Path, name: str) -> Dict[str, Any]:
     try:
         data = json.loads(cache_file(root, name).read_text(encoding="utf-8"))
@@ -144,6 +149,7 @@ class Graph:
         self.external: Dict[str, Set[str]] = defaultdict(set)
         self.unresolved: Dict[str, Set[str]] = defaultdict(set)  # bare names that fit no object: an alias, or a use the toolkit misreads
         self.duplicates: List[str] = []
+        self.declared: Set[Tuple[str, str]] = set()  # (from, to) of uses a person declared: the toolkit cannot see them
         self.failed: List[Dict[str, str]] = []
         self.empty: List[str] = []
         self.entry_types: Set[str] = set()
@@ -152,7 +158,7 @@ class Graph:
         self.shared_min = 3
 
     @classmethod
-    def load(cls, root: Path, names: Optional[List[str]] = None) -> "Graph":
+    def load(cls, root: Path, names: Optional[List[str]] = None, declared: bool = True) -> "Graph":
         graph = cls()
         folder = paths.runtime_dir(root) / "kbmap"
         files = [cache_file(root, name) for name in names] if names else sorted(folder.glob("*.json")) if folder.is_dir() else []
@@ -184,7 +190,29 @@ class Graph:
                     pending.append((obj["id"], obj.get("refs") or [], style))
         graph.shared_min = max([int((record.get("rules") or {}).get("shared_min") or 3) for record in records] or [3])
         graph.resolve(pending)
+        if declared:
+            try:
+                rows = json.loads(declared_file(root).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                rows = []
+            graph.add_declared(rows if isinstance(rows, list) else [])
         return graph
+
+    def add_declared(self, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Add the uses of `declared.jsonl` whose two ends are in the map; the rest are given back. A use the map
+        already has is not added twice: the toolkit learned it, and its line can go."""
+        left = []
+        for row in rows:
+            source, target, kind = str(row.get("from") or ""), str(row.get("to") or ""), str(row.get("kind") or "")
+            if source not in self.nodes or target not in self.nodes or not kind:
+                left.append(row)
+                continue
+            if any(other == target for other, _kind in self.out.get(source, [])):
+                continue
+            self.out[source].append((target, kind))
+            self.into[target].append((source, kind))
+            self.declared.add((source, target))
+        return left
 
     def resolve(self, pending: List[Tuple[str, List[Dict[str, Any]], str]]) -> None:
         index: Dict[str, List[str]] = defaultdict(list)
@@ -311,6 +339,7 @@ class Graph:
             "empty_files": len(self.empty), "empty_sample": self.empty[:SAMPLE],
             "failed_files": len(self.failed), "failed_sample": self.failed[:SAMPLE],
             "duplicates": sorted(set(self.duplicates))[:SAMPLE],
+            "declared": len(self.declared),
         }
 
     def lookup(self, query: str) -> List[str]:

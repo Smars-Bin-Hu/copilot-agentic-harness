@@ -144,6 +144,36 @@ class ExtractTests(unittest.TestCase):
             ("calls", "dbo.usp_publish_summary"), ("reads", "[dbo].[summary]"), ("writes", "[dbo].[export_summary]"), ("runs", "Child"),
         })
 
+    def test_a_job_or_a_package_started_by_its_name(self) -> None:
+        text = """CREATE PROCEDURE dbo.usp_nightly AS
+BEGIN
+  -- EXEC dbo.usp_run_job_by_name N'Commented'
+  EXEC msdb.dbo.sp_start_job @job_name = N'Shop_Audit';
+  EXEC dbo.usp_run_job_by_name
+     @wait = 1,
+     @job_name = N'Shop_Customers';
+  EXEC dbo.usp_run_package 'ShopEtl\\Publish.dtsx', 1;
+END
+GO
+"""
+        rule = {"by_name": [{"call": "dbo.usp_run_job_by_name", "param": "@job_name", "as": "job", "kind": "runs"},
+                            {"call": "usp_run_package", "position": 1, "as": "package", "kind": "runs"}]}
+        item = self.tsql(text, {"db": "Shop", "path": "a.sql", "rule": rule})[0]
+        runs = {(ref["name"], ref["as"], ref["line"]) for ref in item["refs"] if ref["kind"] == "runs"}
+        self.assertEqual(runs, {("Shop_Audit", "job", 4), ("Shop_Customers", "job", 5), ("ShopEtl/Publish", "package", 8)})
+        self.assertFalse(item["dynamic"])
+        without = self.tsql(text, {"db": "Shop", "path": "a.sql"})[0]
+        self.assertEqual({ref["name"] for ref in without["refs"] if ref["kind"] == "runs"}, {"Shop_Audit"})  # only the built-in call
+
+    def test_a_name_in_a_variable_is_dynamic(self) -> None:
+        item = self.objects("CREATE PROCEDURE dbo.usp_any @job sysname AS\nEXEC msdb.dbo.sp_start_job @job_name = @job;\n")["sp:Shop.dbo.usp_any"]
+        self.assertTrue(item["dynamic"])
+        self.assertNotIn("runs", {ref["kind"] for ref in item["refs"]})
+
+    def test_a_job_step_starts_another_job(self) -> None:
+        found = self.tsql(job("Shop_Night", tsql_step("EXEC msdb.dbo.sp_start_job @job_name = N''Shop_Audit''")), {"db": "", "path": "j.sql"})
+        self.assertIn(("runs", "Shop_Audit"), self.uses(found[0]))
+
     def test_a_broken_file_gives_nothing_and_does_not_stop(self) -> None:
         self.assertTrue(kbextract.run(self.ssis, b"<not xml", {"stem": "x", "project": "", "path": "x.dtsx"})[0][0]["dynamic"])
         objects, error = kbextract.run(lambda text, context: 1 / 0, b"x", {})
@@ -331,6 +361,50 @@ class MapTests(HarnessTestCase):
         result = self.build()
         self.assertEqual(result["facts"]["missing"], ["job:Shop_Audit -calls-> sp:Shop.dbo.usp_load_orders"])
         self.assertIn("facts", result["next"])
+
+    def declare(self, *rows: dict) -> None:
+        (self.kit / "declared.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    @staticmethod
+    def use(source: str, target: str, path: str, line: int, text: str, kind: str = "runs") -> dict:
+        return {"from": source, "kind": kind, "to": target, "how": "config-row", "evidence": {"repo": "repo_a", "path": path, "line": line, "text": text}}
+
+    def test_declared_uses_go_into_the_map_while_their_evidence_holds(self) -> None:
+        unused = "Shop/dbo/Stored Procedures/usp_unused.sql"
+        self.declare(
+            self.use("sp:Shop.dbo.usp_unused", "job:Shop_Audit", unused, 1, "PROCEDURE dbo.usp_unused"),
+            self.use("sp:Shop.dbo.usp_unused", "job:Shop_Customers", unused, 2, "a text no longer there"),
+            self.use("sp:Shop.dbo.usp_unused", "job:Nowhere", unused, 2, "dbo.log"),
+            self.use("job:Shop_Orders", "sp:Shop.dbo.usp_load_orders", "jobs/Shop_Orders.sql", 4, "usp_load_orders", kind="calls"),
+            {"from": "sp:Shop.dbo.usp_unused", "kind": "runs", "to": "job:Shop_Audit"},
+        )
+        result = self.build()
+        self.assertEqual(result["facts"]["missing"], [])
+        found = result["declared_uses"]
+        self.assertEqual((found["declared"], found["added"]), (4, 1))
+        self.assertEqual(len(found["stale"]), 1)
+        self.assertIn("job:Shop_Customers", found["stale"][0])
+        self.assertIn("job:Nowhere", found["not_in_map"][0])
+        self.assertIn("usp_load_orders", found["already_mapped"][0])
+        self.assertEqual(found["bad_lines"], ["sqlserver/declared.jsonl:5"])
+        self.assertIn("declared.jsonl", result["next"])
+        self.assertEqual(result["declared"], 1)
+        down = kbgraph.near(self.root, "sp:Shop.dbo.usp_unused", depth=1, direction="down")
+        self.assertIn("job:Shop_Audit", {row["id"] for row in down["uses"]})
+        self.assertEqual(kbgraph.Graph.load(self.root).declared, {("sp:Shop.dbo.usp_unused", "job:Shop_Audit")})
+
+    def test_a_declared_use_goes_stale_when_its_code_changes(self) -> None:
+        unused = "Shop/dbo/Stored Procedures/usp_unused.sql"
+        self.declare(self.use("sp:Shop.dbo.usp_unused", "job:Shop_Audit", unused, 2, "FROM dbo.log"))
+        self.assertEqual(self.build()["declared_uses"]["added"], 1)
+        (self.repo / unused).write_text("CREATE PROCEDURE dbo.usp_unused AS\nSELECT 2;\n", encoding="utf-8")
+        run_git(self.repo, "commit", "-qam", "change")
+        result = self.build()
+        self.assertEqual((result["declared_uses"]["added"], len(result["declared_uses"]["stale"])), (0, 1))
+        self.assertEqual(kbgraph.Graph.load(self.root).declared, set())
+        (self.kit / "declared.jsonl").unlink()
+        self.assertNotIn("declared_uses", self.build())
+        self.assertFalse(kbgraph.declared_file(self.root).exists())
 
     def test_changing_the_toolkit_reads_every_file_again(self) -> None:
         self.build()

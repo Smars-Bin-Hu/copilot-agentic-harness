@@ -24,10 +24,22 @@ Entry points: what a scheduler, a user or another system starts (`job`, an endpo
 
 **Pick the unit that owns the starts**, not each start: a controller, not each of its endpoints; a job, not each step. `kb split` takes out what many entry points reach as shared; when many entry points share one owner, the owner is taken out and the cut falls apart (seen on spring-petclinic, see `.harness/examples/kb-toolkits/spring/DESIGN.md`).
 
+## Calls by name and configuration rows
+
+Data code often starts work by a name in a string, not by a use the extractor knows. Ask before you call it a blind spot:
+
+| Question | If yes |
+| --- | --- |
+| Is there a wrapper that starts a job or a package by name (`sp_start_job`, `usp_run_job_by_name @job_name = N'X'`)? | A use: list each wrapper, the argument that holds the name, and what it starts (`by_name` in the sample) |
+| Does a loop run what the rows of a configuration table name? Are those rows in a script of a repository (an `INSERT` in an init script)? | A use when the rows are in a script: read the script, or declare each use (`declared.jsonl`). Rows only in production: a blind spot |
+| Do files the extractors skip still run (a retired folder, a suffix such as `.ignore`)? | Add a glob, or the objects are not in the map and cannot be learned |
+
+The table of what the map can and cannot see: [map.md](../../../../.harness/contracts/kb/map.md#calls-by-name-configuration-rows-and-dynamic-sql).
+
 ## Blind spots
 
-- Known only at run time: dynamic SQL, reflection, injection by configuration, URLs from settings. Mark the object `dynamic`.
-- Outside the repositories: scheduler settings, rows of configuration tables, another team's code. Name them.
+- Known only at run time: dynamic SQL, a name in a variable, reflection, injection by configuration, URLs from settings. Mark the object `dynamic`.
+- Outside the repositories: scheduler settings, rows of configuration tables kept only in production, another team's code. Name them.
 - Retired code kept in folders (`obsolete/`, `archive/`): `obsolete` globs.
 
 ## Production list (for `kb gaps`)

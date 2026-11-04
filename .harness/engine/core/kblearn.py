@@ -353,7 +353,8 @@ def check_cards(graph: Graph, found: Dict[str, Tuple[str, List[str]]], absent: S
                 (warnings if dynamic and field != "called by" and not elsewhere else errors).append(text)
             for other in sorted(has[field] - wrote[field]):
                 text = say("kblearn.check.left_out", id=node, file=file, field=field.capitalize(), other=other)
-                (warnings if field == "called by" else errors).append(text)
+                declared = (other, node) if field == "called by" else (node, other)
+                (warnings if field == "called by" or declared in graph.declared else errors).append(text)
         bad, doubt = check_cites(graph, node, file, lines, (rows or {}).get(node, {}))
         errors += bad
         warnings += doubt

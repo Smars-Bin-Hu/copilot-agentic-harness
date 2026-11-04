@@ -33,13 +33,14 @@ Turn the approved design into `<knowledge base>/toolkit/`: `toolkit.json`, the e
 ## Step-by-Step Workflows
 
 1. **Start from what exists.** A toolkit already in the knowledge base: fetch it (`harness task fetch --task <task> <kb repo>/toolkit`). A stack like a sample: copy `.harness/examples/kb-toolkits/sqlserver/` or `spring/` into `DEV/<kb repo>/toolkit/`, replace its `facts.jsonl` with the design's, and change it. Otherwise start from the built-in `regex` rules, and write Python only where rules are not enough.
-2. **Write `toolkit.json`** from the design: `extractors`, `ignore`, `obsolete`, `markers`, `names`, `entry_types`, `executable_types`, `stop_words`. Then **`facts.jsonl`** from the design's facts, one per line, unchanged.
+2. **Write `toolkit.json`** from the design: `extractors`, `ignore`, `obsolete`, `markers`, `names`, `entry_types`, `executable_types`, `stop_words`, and the settings a rule gives its extractor (the sample's `by_name`: the wrappers that start a job or a package by name). Then **`facts.jsonl`** from the design's facts, one per line, unchanged. Uses the code shows but no extractor can read (a configuration row, a name in dynamic SQL) go into **`declared.jsonl`**, each with its evidence line ([map.md](../../../.harness/contracts/kb/map.md#declaredjsonl)). A learn task may have collected them in `discovery/hidden-uses.jsonl`: take those first, and make the extractor read every one it can.
 3. **Write the extractors** following [extractor-rules.md](./references/extractor-rules.md). One file per stack, small functions.
 4. **Try it**: `harness kb map --toolkit <task>/DEV/<kb repo>/toolkit --json`. Read in this order:
    - `failed_sample`: the error of each failing file. Fix the extractor; never catch it to hide it.
    - `facts.missing`: a known use not found. `harness kb near <from> --down` shows what was found instead. Fix the extractor, not the fact; when you think the fact is wrong, ask the user.
    - `empty_sample`: files given to an extractor that found nothing. Each is either a file that defines nothing (add it to `ignore`) or a form the extractor does not know (fix it).
    - `missing_sample` and `external_sample`: a long `missing` list with names that are surely in the repositories means names are resolved wrong (`names`, `markers`).
+   - `declared_uses`: `stale`, `not_in_map` and `bad_lines` must be empty; a line in `already_mapped` is found by the extractor now, so take it out of `declared.jsonl`.
    Repeat until all facts are found, nothing fails, and every empty file is explained. Write each round in `LOG.md` in one line (facts found, failed, empty).
 5. **The production list**: write the read-only query or export of the design into `inventory/`, with one comment line on who runs it and that it returns names only. Never run it yourself.
 6. **Copy the design** into the toolkit as `DESIGN.md` (with the results of the last round), so the next person knows why it is built so. Where the extractor does something other than the design says (it recognises more or less than a rule of the design: for example the design names one base type and the extractor reads a wider pattern), change that line of `DESIGN.md` to what the toolkit really does, and say so in `LOG.md`. The file must describe the code.
@@ -50,6 +51,8 @@ Turn the approved design into `<knowledge base>/toolkit/`: `toolkit.json`, the e
 - **`kb map --toolkit` replaces the cached map** with the trial's. After the write-back, run `kb map` again.
 - **A fact found is not a map right.** Check also two uses that should not be there (`harness kb near` on an object you know well).
 - **Never connect to production**, never put production rows, connection strings or secrets into the toolkit.
+- **A declared use is the last resort.** Teach the extractor first; `declared.jsonl` is for what no rule can read. Never put a declared use into `facts.jsonl`: facts test the extractors.
+- **New uses reach every domain.** After the write-back, `kb cardcheck` warns on cards of other domains that leave out a declared use; an extractor that finds more uses gives them errors. Run it on each learned domain and tell the user which need a refresh.
 - **Keep extractors from knowing the business.** Rules about the stack (how a job script looks), never about the company's objects (a list of table names). A list of names goes stale and hides what the code says.
 
 ## Troubleshooting

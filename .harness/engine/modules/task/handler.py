@@ -8,6 +8,7 @@
                                    The one other subagent is the read-only `mapper`, and only after the user typed
                                    `/generic-mapreduce`: that prompt gives the session a number of calls (mapreduce.py)
   SubagentStart                    the reviewer is told where its package is; a mapper is told it only reads
+  UserPromptSubmit (rewind)        a message of the person: a restore point of the task folder (rewind.py)
   PostToolUse                      a write inside the task is remembered; a write of its REQ.md or PLAN.md is noted with its time (once a prompt
                                    each, for the stages of the report); the reviewer's answer closes the open check
   Stop                             a task in autorun: the next open step, until a fact says stop (autorun.py);
@@ -194,6 +195,13 @@ def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
             pass
     if data is not None and data.get("waiting"):
         mark_waiting(ctx, data, False)  # the person answered
+    if data is not None:
+        try:  # the restore point a rewind goes back to (1.6.109); a point that cannot be taken never holds up the message
+            from . import rewind
+
+            rewind.take(ctx.root, data["task"], event.session_id)
+        except Exception:  # noqa: BLE001
+            pass
     # `task`: the log says whose prompt this was, so a report can add up the task's time
     return Decision(context=prompt_text(ctx, asked), facts={"kind": "task", "task": data["task"]} if data is not None else {})
 

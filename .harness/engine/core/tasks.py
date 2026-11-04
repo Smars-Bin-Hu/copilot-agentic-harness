@@ -121,6 +121,11 @@ def req_digest(root: Path, task: str) -> str:
         text = (task_dir(root, task) / REQ_FILE).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return ""
+    return req_digest_of(text)
+
+
+def req_digest_of(text: str) -> str:
+    """`req_digest` of a text of REQ.md (a rewind judges the file as it was then)."""
     kept: List[str] = []
     inside = False
     found = False

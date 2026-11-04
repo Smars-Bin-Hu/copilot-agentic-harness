@@ -269,7 +269,10 @@ class ServeTests(SendCase):
         self.assertEqual((self.root / TASK / "PLAN.md").read_text(encoding="utf-8"), "plan then")
         self.assertFalse((self.root / TASK / "later.md").exists())
         self.assertEqual(self.told(), {"type": "chat/truncated", "turnId": "t1"})  # the message and what came after it leave; the turn before it stays
-        self.assertEqual(tasks.read(self.root, TASK)["events"][-1]["what"], "rewind")
+        last = tasks.read(self.root, TASK)["events"][-1]
+        self.assertEqual(last["what"], "rewind")
+        self.assertTrue(last["detail"].endswith("[ZH] redo this · 2 turn(s) · 1 back · 1 aside"), last["detail"])  # the message's words, not a UTC time (hand test 2026-11-04)
+        self.assertNotEqual(messages.text("event.rewind"), "event.rewind")  # the Task Record names it in words
 
     def test_a_rewind_whose_message_is_not_in_the_chat_changes_nothing(self) -> None:
         point = self.rewound()
@@ -312,13 +315,22 @@ class ServeTests(SendCase):
         self.assertIn('const tipped = (node, key, tip) => { node._tip = tip; node.setAttribute("data-tip", key); return node; };', rounds)
         self.assertIn('rec.back._tip = () => h("div", null, h("div", {class: "st-head"}, head), h("div", {class: "st-tx"}, body));', rounds)
         self.assertIn('const body = why || t("desk.rewind.tip", {n: after});', rounds)
-        self.assertIn("paintBack(rec, item, newest.n - item.n + 1);", rounds)
+        self.assertIn("paintBack(rec, item, leave.get(item.n));", rounds)
+        self.assertIn('if (!(st.list[i].rewind && st.list[i].rewind.why === "harness")) count++;', rounds)  # the harness's message at the end of a round does not count
         self.assertIn('if (!(LIVE.data() || {}).bound) return t("desk.rewind.away");', rounds)
         self.assertIn('st.state === "busy" ? "desk.rewind.busy" : st.state === "input" ? "desk.rewind.input" : "desk.rewind.wait"', rounds)
         self.assertIn('found.plan === "lost" ? h("p", {class: "rw-plan"}, t("desk.rewind.plan")) : null', rounds)  # said only when it is so
+        self.assertIn('found.req === "lost" ? h("p", {class: "rw-plan"}, t("desk.rewind.req")) : null', rounds)
         self.assertIn('node.style.left = "0px";\n    node.style.top = "0px";\n    const at = anchor.getBoundingClientRect()', status)  # measured at the left edge: never a thin column
-        for key in ("desk.rewind.off", "desk.rewind.input", "desk.rewind.wait", "desk.rewind.away", "desk.rewind.plan", "desk.rewind.outside"):
+        self.assertIn(".st-pop{position:fixed;z-index:1250;", source("status.css"))  # over the Terminal window (1200): the tip of a round was under it
+        for key in ("desk.rewind.off", "desk.rewind.input", "desk.rewind.wait", "desk.rewind.away", "desk.rewind.plan", "desk.rewind.req", "desk.rewind.outside", "desk.rewind.why.harness"):
             self.assertTrue(messages.text(key), key)
+
+    def test_a_message_sent_after_a_rewind_gets_its_own_line(self) -> None:
+        """Hand test 2026-11-04: after a rewind the next message took the place of the first message cut away, and its line kept the old words and time with the new numbers."""
+        rounds = source("rounds.js")
+        self.assertIn("if (rec && rec.item.at !== item.at) {", rounds)
+        self.assertIn("if (rec.node === next) next = next.nextSibling;\n        rec.node.remove();\n        rec = null;", rounds)
 
     def test_a_chat_with_nothing_to_take_back_says_so(self) -> None:
         self.state = {**self.state, "turns": [], "activeTurn": None}

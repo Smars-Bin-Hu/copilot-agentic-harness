@@ -95,6 +95,32 @@ class RestoreTests(RewindCase):
         rewind.restore(self.root, TASK, undo["seq"], SESSION)
         self.assertEqual((self.read("PLAN.md"), self.read("DEV/new.sql")), ("plan two", "came later"))
 
+    def test_a_folder_that_was_there_stays_and_one_that_came_later_goes(self) -> None:
+        """Hand test 2026-11-04: going back before a file written into the empty DEV/ of a new task took DEV/ away with it."""
+        (self.base / "DEV").mkdir(exist_ok=True)
+        (self.base / "notes").mkdir()
+        point = rewind.take(self.root, TASK, SESSION)
+        self.write("DEV/x.sql", "select 1;")
+        self.write("new/deep/y.sql", "select 2;")
+        (self.base / "notes").rmdir()
+        rewind.restore(self.root, TASK, point["seq"], SESSION)
+        self.assertTrue((self.base / "DEV").is_dir())
+        self.assertEqual(list((self.base / "DEV").iterdir()), [])
+        self.assertFalse((self.base / "new").exists())  # it came later, and the files in it went to _deleted/
+        self.assertTrue((self.base / "notes").is_dir())  # it was there then
+
+    def test_a_point_without_its_folders_takes_no_folder_away(self) -> None:
+        """A point taken before points kept their folders: an empty folder stays rather than a folder that was there going."""
+        point = rewind.take(self.root, TASK, SESSION)
+        kept = rewind.folder(self.root, TASK) / rewind.POINTS / f"{point['seq']}.json"
+        old = json.loads(kept.read_text(encoding="utf-8"))
+        old.pop("dirs")
+        kept.write_text(json.dumps(old), encoding="utf-8")
+        self.write("later/x.sql", "select 1;")
+        rewind.restore(self.root, TASK, point["seq"], SESSION)
+        self.assertTrue((self.base / "later").is_dir())
+        self.assertFalse((self.base / "later/x.sql").exists())
+
     def test_a_file_too_large_to_keep_cannot_come_back_and_says_so(self) -> None:
         self.policy(max_file_mb=1)
         (self.base / "big.bin").write_bytes(b"x" * (1024 * 1024 + 1))
@@ -116,6 +142,21 @@ class RestoreTests(RewindCase):
         self.write("PLAN.md", "plan three")  # not approved now: there is nothing to lose
         self.assertEqual(rewind.preview(self.root, TASK, before["seq"])["plan"], "")
 
+    def test_the_preview_says_when_the_confirmed_requirement_goes_back_to_before_its_confirmation(self) -> None:
+        """Hand test 2026-11-04: a rewind to before REQ.md was written warned only about the plan, and the task went back to the requirement."""
+        empty = "- **User confirmed**: <not yet / confirmed yyyy-mm-dd>\n\n## What to do\n\n<what>\n"
+        self.write("REQ.md", empty)
+        before = rewind.take(self.root, TASK, SESSION)
+        self.write("REQ.md", "- **User confirmed**: confirmed 2026-11-04\n\n## What to do\n\nTest the rewind.\n")
+        with task_ops.locked(self.root, TASK) as data:
+            data["req"] = {"confirmed_sha256": tasks.req_digest(self.root, TASK)}
+        after = rewind.take(self.root, TASK, SESSION)
+        self.write("DEV/a.sql", "select 1")
+        self.assertEqual(rewind.preview(self.root, TASK, before["seq"])["req"], "lost")
+        self.assertEqual(rewind.preview(self.root, TASK, after["seq"])["req"], "")  # confirmed then too
+        self.write("REQ.md", empty)  # not confirmed now: nothing to lose
+        self.assertEqual(rewind.preview(self.root, TASK, before["seq"])["req"], "")
+
     def test_a_point_is_refused_after_a_write_back_in_an_earlier_round_or_another_chat(self) -> None:
         point = rewind.take(self.root, TASK, SESSION)
         data = task_ops.read(self.root, TASK)
@@ -134,6 +175,28 @@ class RestoreTests(RewindCase):
         self.assertEqual(found["m1"], {"seq": point["seq"], "why": ""})
         self.assertEqual(found["m2"], {"seq": None, "why": "none"})
         self.assertEqual(found["m3"], {"seq": None, "why": "none"})
+
+    def test_a_message_right_after_another_has_no_point_of_its_own(self) -> None:
+        """Hand test 2026-11-04: the message the harness sends when it holds a Stop came 5 s after the person's, took the same point, and offered a rewind of its own."""
+        point = rewind.take(self.root, TASK, SESSION)
+        at = rewind.seconds(point["at"])
+        found = rewind.marks(self.root, TASK, task_ops.read(self.root, TASK), {"person": at + 0.1, "harness": at + 4.9}, SESSION)
+        self.assertEqual(found["person"], {"seq": point["seq"], "why": ""})
+        self.assertEqual(found["harness"], {"seq": None, "why": "harness"})
+
+    def test_the_harness_message_the_hook_noted_is_marked_even_long_after_the_persons(self) -> None:
+        """The harness's message came 13 s after the person's, beyond the point's reach, and said "no restore point"; the hook notes its time now."""
+        point = rewind.take(self.root, TASK, SESSION)
+        rewind.note_harness(self.root, TASK, SESSION)
+        at = rewind.seconds(point["at"])
+        listed = rewind.index(self.root, TASK)
+        listed[-1]["at"] = __import__("datetime").datetime.fromtimestamp(at + 13, __import__("datetime").timezone.utc).isoformat()  # the agent's round took 13 s
+        (rewind.folder(self.root, TASK) / rewind.INDEX).write_text(json.dumps(listed), encoding="utf-8")
+        found = rewind.marks(self.root, TASK, task_ops.read(self.root, TASK), {"person": at - 0.1, "harness": at + 13.1}, SESSION)
+        self.assertEqual(found["person"], {"seq": point["seq"], "why": ""})
+        self.assertEqual(found["harness"], {"seq": None, "why": "harness"})
+        again = rewind.take(self.root, TASK, SESSION)  # a note has no files: the next point still reads the last real one
+        self.assertEqual(rewind.manifest(self.root, TASK, again["seq"])["files"].keys(), rewind.manifest(self.root, TASK, point["seq"])["files"].keys())
 
 
 if __name__ == "__main__":

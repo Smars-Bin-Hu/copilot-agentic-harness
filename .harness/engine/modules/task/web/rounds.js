@@ -91,7 +91,8 @@ const ROUNDS = (function () {
       const files = found.counts.back + found.counts.removed + found.counts.lost;
       view.box.replaceChildren(...[h("h2", null, t("desk.rewind.title")), h("p", {class: "rw-said"}, h("span", {class: "sub"}, when(item.at)), " ", item.head || ""),
         h("p", null, t("desk.rewind.turns", {n: found.turns})), files ? h("div", {class: "rw-files"}, list("back"), list("removed"), list("lost")) : h("p", {class: "sub"}, t("desk.rewind.same")),
-        found.plan === "lost" ? h("p", {class: "rw-plan"}, t("desk.rewind.plan")) : null,  // only when it is so: the approval of the plan is lost
+        found.req === "lost" ? h("p", {class: "rw-plan"}, t("desk.rewind.req")) : null,  // only when it is so: the confirmation of the requirement is lost
+        found.plan === "lost" ? h("p", {class: "rw-plan"}, t("desk.rewind.plan")) : null,  // and the approval of the plan
         h("p", {class: "sub"}, t("desk.rewind.outside")), said, h("div", {class: "row send-actions"}, go, no)].filter(Boolean));
       no.addEventListener("click", view.close);
       go.addEventListener("click", () => {
@@ -123,13 +124,25 @@ const ROUNDS = (function () {
     // the newest round still runs: its time is counted here, its credits come with the next list. Only the round of the running turn (Copilot may not have written its prompt yet)
     const busy = ["busy", "input"].includes(st.state) && newest && !(Date.parse(newest.at) < began - 60000);
     const last = newest ? newest.n : -1;
+    // how many messages leave the chat with each round: the person's own. The harness's message at the end of a round is part of that round in the chat (hand test 2026-11-04)
+    const leave = new Map();
+    let count = 0;
+    for (let i = st.list.length - 1; i >= 0; i--) {
+      if (!(st.list[i].rewind && st.list[i].rewind.why === "harness")) count++;
+      leave.set(st.list[i].n, count);
+    }
     for (const item of list) {
       let rec = st.nodes.get(item.n);
+      if (rec && rec.item.at !== item.at) {  // the chat was cut back (rewind, withdraw) and another message has this place now: a line of its own, not the old one's words
+        if (rec.node === next) next = next.nextSibling;
+        rec.node.remove();
+        rec = null;
+      }
       if (!rec) { rec = make(item); st.nodes.set(item.n, rec); }
       const sig = [item.seconds, item.aiu, item.tools, busy && item.n === last].join();
       if (rec.count.dataset.sig !== sig) { rec.count.dataset.sig = sig; rec.count.replaceChildren(...stats(item, busy && item.n === last)); }
       rec.item = item;
-      paintBack(rec, item, newest.n - item.n + 1);
+      paintBack(rec, item, leave.get(item.n));
       if (rec.node === next) next = next.nextSibling;
       else rows.insertBefore(rec.node, next);
     }

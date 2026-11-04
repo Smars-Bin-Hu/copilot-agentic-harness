@@ -172,9 +172,23 @@ def prompt_text(ctx: Context, asked: Optional[int] = None) -> str:
     return "\n".join(lines)
 
 
+def note_harness(ctx: Context, event: HookEvent) -> None:
+    """The time of the message the harness sent when it held a Stop, in the task's rewind index (1.6.109): the board offers no rewind to before it. Never in the way."""
+    try:
+        data = open_task(ctx)
+        if data is not None:
+            from . import rewind
+
+            rewind.note_harness(ctx.root, data["task"], event.session_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.from_subagent or event.continuation:
         # A subagent call message, or the reason of a Stop block fed back by the engine. Not the user.
+        if event.continuation and not ctx.admin:
+            note_harness(ctx, event)
         return None
     asked = user_review(event)
     state = ctx.module_state(NAME)

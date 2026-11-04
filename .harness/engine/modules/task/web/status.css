@@ -56,8 +56,8 @@
 @keyframes stblink{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes stlive{0%,100%{opacity:1}50%{opacity:.25}}
 
-/* the tip: one panel for the page, moved beside the mark that is pointed at */
-.st-pop{position:fixed;z-index:90;left:0;top:0;max-width:min(300px,calc(100vw - 16px));box-sizing:border-box;padding:9px 11px;background:var(--pop);color:var(--ink);border:1px solid var(--line2);border-radius:10px;box-shadow:var(--shadow);font-size:12px;line-height:1.4;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .12s}
+/* the tip: one panel for the page, moved beside the mark that is pointed at; over every window of the page, the Terminal (1200) too */
+.st-pop{position:fixed;z-index:1250;left:0;top:0;max-width:min(300px,calc(100vw - 16px));box-sizing:border-box;padding:9px 11px;background:var(--pop);color:var(--ink);border:1px solid var(--line2);border-radius:10px;box-shadow:var(--shadow);font-size:12px;line-height:1.4;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .12s}
 .st-pop.on{opacity:1;visibility:visible}
 .st-tx{white-space:pre-line;overflow-wrap:anywhere}
 .st-head{font-size:11px;font-weight:550;color:var(--soft);margin-bottom:4px}

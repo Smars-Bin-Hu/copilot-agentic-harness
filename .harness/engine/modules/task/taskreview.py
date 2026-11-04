@@ -96,12 +96,17 @@ def req_confirmed(root: Path, task: str) -> Optional[bool]:
         text = (tasks.task_dir(root, task) / tasks.REQ_FILE).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
+    filled = confirm_line_filled(text)
+    return None if filled is None else filled and not req_changed(root, task)
+
+
+def confirm_line_filled(text: str) -> Optional[bool]:
+    """Is the confirmation line of this text of REQ.md filled in? None: there is no such line."""
     for line in text.splitlines():
         found = _CONFIRM_LABEL.search(line)
         if found:
             value = line[found.end():].lower()
-            filled = bool(_CONFIRMED.search(value)) and not _NOT_CONFIRMED.search(value)  # the template has both on the line
-            return filled and not req_changed(root, task)
+            return bool(_CONFIRMED.search(value)) and not _NOT_CONFIRMED.search(value)  # the template has both on the line
     return None
 
 

@@ -254,6 +254,18 @@ class ContinuationTests(SdkTestCase):
         again, _ = self.feed(sample("Stop.json") | {"session_id": PARENT})
         self.assertEqual(again, {})  # the reminder of this prompt was already given
 
+    def test_the_fed_back_reason_is_noted_for_rewind_and_gets_no_point(self) -> None:
+        """1.6.109 hand test: the board offered a rewind to before the harness's own message; its time is noted now, so the page marks it as the harness's."""
+        from modules.task import rewind
+
+        reason = self.blocked()
+        task = ".workspace/sandbox/tasks/job"
+        before = rewind.index(self.root, task)
+        self.prompt(reason)
+        after = rewind.index(self.root, task)
+        self.assertEqual([item["kind"] for item in after[len(before):]], ["harness"])
+        self.assertFalse((rewind.folder(self.root, task) / rewind.POINTS / f"{after[-1]['seq']}.json").exists())  # no files for it
+
     def test_a_real_next_prompt_still_starts_a_new_window(self) -> None:
         self.blocked()
         output, record = self.prompt("另一件事")

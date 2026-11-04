@@ -1045,7 +1045,7 @@ class Board:
                 changes = rewind.preview(self.root, task, seq)
                 chat = self.link.dispatch("rewind", task, plan={"at": at, "dry": True})
                 return {"seq": seq, "at": point["at"], "turns": chat["turns"], "counts": {key: len(changes[key]) for key in ("back", "removed", "lost")},
-                        **{key: changes[key][:rewind.LISTED] for key in ("back", "removed", "lost")}, "plan": changes["plan"]}
+                        **{key: changes[key][:rewind.LISTED] for key in ("back", "removed", "lost")}, "plan": changes["plan"], "req": changes["req"]}
             if step != "act":
                 raise CommandError(say("serve.refused.request"))
             done = self.link.dispatch("rewind", task, plan={"at": at, "restore": lambda: rewind.restore(self.root, task, seq, session)})
@@ -1057,7 +1057,7 @@ class Board:
             raise CommandError(ahp_scrub(error)) from None
         changed = done.get("changed") or {}
         with task_ops.locked(self.root, task) as again:
-            task_ops.note(again, "rewind", f"{point['at'][:19]} · {done['turns']} turns · {changed.get('back', 0)} back · {changed.get('removed', 0)} aside")
+            task_ops.note(again, "rewind", f"{chatsend.summary(done['text'])} · {done['turns']} turn(s) · {changed.get('back', 0)} back · {changed.get('removed', 0)} aside")  # the message's words, as Withdraw notes them; not a UTC time beside the record's local ones
         chinese = done["text"].startswith(chatsend.ZH_MARK)
         return {"text": done["text"][len(chatsend.ZH_MARK):].lstrip() if chinese else done["text"], "lang": "zh" if chinese else "en", "files": done["files"],
                 "back": changed.get("back", 0), "removed": changed.get("removed", 0), "aside": changed.get("aside", ""), "lost": len(changed.get("lost") or [])}

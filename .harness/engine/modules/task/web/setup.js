@@ -321,7 +321,24 @@ const SETUP = (function () {
       const view = SERVE.dialog([h("h2", null, t("setup.older.title")), h("p", {class: "sub"}, t("setup.older.hint")), path, out, h("div", {class: "row"}, look, apply, no)]);
       no.addEventListener("click", view.close);
       // What would move, what moved, what failed and what was left alone (1.6.109): a count per group, and the lists folded in a box that scrolls. Before, every failed file was a red line of the window.
-      const groups = (list) => h("div", {class: "chips su-older-groups"}, ...Object.entries(list || {}).map(([group, names]) => h("span", {class: "chip"}, group + " \u00b7 " + names.length)));
+      // A number or a group is a button: it opens its list and shows the part (1.6.109).
+      const reveal = (list, part) => {
+        if (!list) return;
+        list.open = true;
+        (part || list).scrollIntoView({block: "nearest", behavior: "smooth"});
+        if (part) { part.classList.remove("su-flash"); void part.offsetWidth; part.classList.add("su-flash"); }
+      };
+      const groupList = (key, list) => {
+        const entries = Object.entries(list || {});
+        const total = entries.reduce((sum, [, names]) => sum + names.length, 0);
+        return total ? h("details", {class: "su-older-list"}, h("summary", null, t(key, {n: total})),
+          h("div", {class: "su-older-box"}, ...entries.map(([group, names]) => h("div", {class: "su-older-row", "data-group": group}, h("b", {class: "su-older-group"}, group + " \u00b7 " + names.length), ...names.map((name) => h("code", null, name)))))) : null;
+      };
+      const groups = (list, box) => h("div", {class: "chips su-older-groups"}, ...Object.entries(list || {}).map(([group, names]) => {
+        const chip = h("button", {type: "button", class: "chip"}, group + " \u00b7 " + names.length);
+        chip.addEventListener("click", () => reveal(box, box && [...box.querySelectorAll("[data-group]")].find((node) => node.dataset.group === group)));
+        return chip;
+      }));
       const folded = (key, items, open, bad) => (items || []).length ? h("details", {class: "su-older-list" + (bad ? " bad" : ""), open: open ? "" : null}, h("summary", null, t(key, {n: items.length})),
         h("div", {class: "su-older-box"}, ...items.map((item) => h("div", {class: "su-older-row"}, h("code", null, item.what), h("span", {class: "su-note"}, item.why),
           ...(item.files || []).map((file) => h("div", {class: "su-older-file"}, h("code", null, file.path), h("span", {class: "su-note"}, file.why))),
@@ -329,11 +346,18 @@ const SETUP = (function () {
       function result(found) {
         const copied = Object.values(found.copied || {}).reduce((sum, names) => sum + names.length, 0);
         const failed = found.failed || [], skipped = found.skipped || [];
-        const stat = (key, n, kind) => h("div", {class: "su-older-stat" + (kind ? " " + kind : "")}, h("b", null, String(n)), h("span", null, t(key)));
+        const carried = groupList("setup.older.copied.n", found.copied);
+        const failedList = folded("setup.older.failed.n", failed, true, true);
+        const skippedList = folded("setup.older.skipped.n", skipped, false, false);
+        const stat = (key, n, kind, list) => {
+          const node = h("button", {type: "button", class: "su-older-stat" + (kind ? " " + kind : ""), disabled: list ? null : ""}, h("b", null, String(n)), h("span", null, t(key)));
+          node.addEventListener("click", () => reveal(list));
+          return node;
+        };
         const close = h("button", {type: "button", class: "act hot"}, t("board.new.close"));
         const win = SERVE.dialog([h("h2", null, t("setup.older.result")), h("p", {class: "sub su-older-from"}, t("setup.older.from", {from: found.from})),
-          h("div", {class: "su-older-stats"}, stat("setup.older.count.copied", copied, copied ? "good" : ""), stat("setup.older.count.failed", failed.length, failed.length ? "bad" : ""), stat("setup.older.count.skipped", skipped.length, "")),
-          groups(found.copied), folded("setup.older.failed.n", failed, true, true), folded("setup.older.skipped.n", skipped, false, false), h("div", {class: "row"}, close)]);
+          h("div", {class: "su-older-stats"}, stat("setup.older.count.copied", copied, copied ? "good" : "", carried), stat("setup.older.count.failed", failed.length, failed.length ? "bad" : "", failedList), stat("setup.older.count.skipped", skipped.length, "", skippedList)),
+          groups(found.copied, carried), failedList, carried, skippedList, h("div", {class: "row"}, close)]);
         win.box.classList.add("su-older-win");
         close.addEventListener("click", () => { win.close(); (finished ? load : leave)(); });  // in the window the note says what changed; what was typed stays
       }
@@ -352,7 +376,8 @@ const SETUP = (function () {
         const done = waiting("setup.older.looking");
         ask("older", {path: path.value}).then((found) => {
           done();
-          out.replaceChildren(h("p", {class: "su-note su-older-from"}, t("setup.older.from", {from: found.from})), groups(found.would_copy), folded("setup.older.skipped.n", found.skipped, false, false));
+          const moves = groupList("setup.older.moves.n", found.would_copy);
+          out.replaceChildren(h("p", {class: "su-note su-older-from"}, t("setup.older.from", {from: found.from})), groups(found.would_copy, moves), moves, folded("setup.older.skipped.n", found.skipped, false, false));
           apply.hidden = false;
         }, (error) => { done(); out.textContent = error.message || String(error); });
       });

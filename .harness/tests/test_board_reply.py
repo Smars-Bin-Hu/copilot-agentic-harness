@@ -391,6 +391,11 @@ class PageTests(unittest.TestCase):
         self.assertIn('folded("setup.older.failed.n", failed, true, true)', setup)
         self.assertIn(".su-older-box{max-height:220px;overflow:auto", source("setup.css"))
         self.assertNotIn("setup.older.failed\"", setup)  # no red line for each failed file
+        # a number opens what it counts, a group opens Carried over at that group
+        self.assertIn('stat("setup.older.count.copied", copied, copied ? "good" : "", carried)', setup)
+        self.assertIn('groups(found.copied, carried)', setup)
+        self.assertIn('h("button", {type: "button", class: "su-older-stat"', setup)
+        self.assertIn('const moves = groupList("setup.older.moves.n", found.would_copy);', setup)
 
     def test_earlier_rounds_show_the_last_five_and_fold_the_rest(self) -> None:
         """1.6.108: every earlier round was drawn, and scrolling up drew more, so the Live tab grew with the chat. One button opens the folded ones and folds them again."""

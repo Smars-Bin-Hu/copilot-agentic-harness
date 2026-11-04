@@ -12,8 +12,14 @@ To see which version you have: `harness --version`.
 
 ## 1.6.109 (2026-11-03)
 
+### Added
+
+- **The board asks you to archive when the task folders grow big.** It measures `.workspace/sandbox/tasks/` once an hour, in the background. Over 500 MB, a line under the header says how much the folders take and names the largest closed tasks. **Pick what to archive** opens the list of closed tasks with the largest ticked, until the rest is under the limit; untick any, then archive as before. **Later** hides it in this browser until the folders grow by another tenth. Set `board.archive_over_mb` in `task.override.json` for another limit, 0 to turn it off. The bar of ticked tasks says how much they free.
+
 ### Changed
 
+- **Files deeper than 260 characters are copied and moved on Windows.** Coming from an older copy? said "No such file or directory" for files that were there, such as the SNAPSHOT files of a task, when the old copy's folder was renamed longer. Archive moves such files to another drive too.
+- **In What came over, the numbers and the groups open their lists.** A number opens what it counts; a group, such as tasks, opens **Carried over** at that group. See what moves lists what would move the same way.
 - **Coming from an older copy? shows that it works.** **See what moves** and **Carry over** grey out and a line counts the time while the old copy is read. Before, a click showed nothing, and an old copy of many files took minutes on a work computer. It is faster too: a folder is read from its listing, not file by file, and the knowledge base is no longer counted file by file (its `.git` too) for a number nobody saw.
 - **What came over is a small window.** Three numbers (carried over, failed, left alone), the groups, and the failures and what was left alone in folded lists that scroll. Before, every file that could not be copied was a red line in the window. A failure says how many files, and the first 20 by their path in the item with a short reason. A runtime file that cannot be copied no longer stops the others.
 - **The board opens fast again when you come back from a task page.** For every task on it, the board read every session log whole, and Copilot's record of each chat, and wrote each task's page to disk. It did this on every load and again every 3 seconds, and it grew with the logs, which are deleted only by `harness logs prune`. With 28 tasks and 300 logs, coming back took 15 seconds; now it takes under half a second. A log or a record is read again only when it changed. A served board writes a task's page only when the task changed: the page is drawn when you open it. `git config user.name`, for the greeting, runs once while the board runs, not once a minute.

@@ -66,6 +66,7 @@ from . import setupjob
 from . import taskfileedit
 from . import skillsend
 from . import taskrun
+from . import tasksize
 from . import wallpaper
 from . import autorun, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
@@ -239,6 +240,7 @@ class Board:
         self.language_stamp: List[int] = []
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
         self.ready = readiness.Ready(root, self.link)  # the Enter screen (`/api/ready`)
+        self.space = tasksize.Watch(root)  # how much room the task folders take, measured once an hour (1.6.109)
         self.who: Tuple[Any, str] = (None, "")  # (the stamp of the user files, the name) for `user_name`
 
     def user_name(self) -> str:
@@ -340,11 +342,12 @@ class Board:
         for row in result["tasks"]:  # the agent is at work in the chat: say something to it, or stop it
             if row.get("status") == "open" and (row.get("chat") or {}).get("state") == "busy" and "steer" in self.served:
                 row["actions"] = [item for item in row["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
-        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "setup": core_setup.missing(self.root), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status()}
+        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "setup": core_setup.missing(self.root), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
+                "space": self.space.view(result["tasks"])}
 
     def page(self) -> str:
         found = self.rows()
-        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "kb_found": found["kb_found"], "setup": found["setup"]}, self.refresh), hidden=found["hidden"])
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "kb_found": found["kb_found"], "setup": found["setup"], "space": found["space"]}, self.refresh), hidden=found["hidden"])
 
     def desk(self, name: str, trace_tree: bool = False) -> Dict[str, Any]:
         found = taskdesk.desk(self.root, name, self.served, trace_tree)  # the tree reads whole logs: only for a Trace tab that is open
@@ -524,6 +527,7 @@ class Board:
         result = taskarchive.archive(self.root, names, False, str(data.get("to", "")).strip(), apply, bool(data.get("remember")) and apply)
         if apply:
             print(say("serve.did", action="archive", task=", ".join(result["archived"])), flush=True)
+            self.space.again()  # the advice to archive goes as soon as the folders are measured again
         return result
 
     def idle(self, action: str, task: str) -> bool:
@@ -1467,6 +1471,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
     taskarchive.prune_transcripts(root, taskarchive.remembered(root))
     link.start()  # the thread only; the board does not wait for VS Code
+    board.space.start()
     path = board_serve_file(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"port": board.port, "pid": os.getpid(), "started": utc_now()}), encoding="utf-8")

@@ -29,10 +29,11 @@ textarea.su-in{resize:vertical}
 html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce){.su-busy::before{animation:none}}
 /* What came over from an older copy (1.6.109): three numbers, the groups, and the lists folded in a box that scrolls */
 .su-older-win{width:min(560px,94vw)}.su-older-from{margin:2px 0 12px;overflow-wrap:anywhere;font-family:var(--mono);font-size:12px}
-.su-older-stats{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}.su-older-stat{flex:1 1 110px;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.su-older-stats{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}.su-older-stat{flex:1 1 110px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;text-align:left;cursor:pointer}.su-older-stat:hover:not(:disabled){border-color:var(--line2);background:var(--hover)}.su-older-stat:disabled{cursor:default}
 .su-older-stat b{font-size:20px;font-variant-numeric:tabular-nums}.su-older-stat span{color:var(--soft);font-size:12px}.su-older-stat.good b{color:var(--good)}.su-older-stat.bad{border-color:var(--bad)}.su-older-stat.bad b{color:var(--bad)}
 .su-older-groups{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}.su-older-groups:empty{display:none}
 .su-older-list{margin:8px 0 0}.su-older-list>summary{cursor:pointer;font-size:13px;color:var(--soft)}.su-older-list.bad>summary{color:var(--bad)}
 .su-older-box{max-height:220px;overflow:auto;margin-top:6px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
 .su-older-row{display:flex;flex-direction:column;gap:2px;padding:6px 0;border-bottom:1px dashed var(--line);min-width:0}.su-older-row:last-child{border-bottom:0}
 .su-older-row code{font-size:12px;overflow-wrap:anywhere}.su-older-row .su-note{margin:0}.su-older-file{display:flex;flex-direction:column;gap:1px;margin:2px 0 0 12px;min-width:0}
+.su-older-row code{display:block}.su-older-group{font-size:12.5px;font-weight:600}.su-flash{animation:suflash 1.2s ease-out}@keyframes suflash{from{background:var(--hover)}to{background:transparent}}html.lite .su-flash{animation:none}@media (prefers-reduced-motion:reduce){.su-flash{animation:none}}

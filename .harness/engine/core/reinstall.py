@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from . import approval, company as company_content, config, messages, skillcheck, tasks
-from .paths import runtime_dir
+from .paths import long_path, runtime_dir, short_path
 from .registry import harness_version
 
 KB_DIR = "knowledge-base"
@@ -99,7 +99,7 @@ def files_under(folder: Path) -> List[Path]:
     """Every file under `folder` but `.gitkeep`, sorted; a link to a folder is not followed. The listing of a folder says what is a file and what is a folder,
     so no file is looked at one by one: on a work computer that checks each file access, an old copy of many files took minutes (1.6.109)."""
     found: List[Path] = []
-    stack = [str(folder)]
+    stack = [long_path(folder)]  # a deep folder on Windows is listed past 260 characters too
     while stack:
         try:
             entries = list(os.scandir(stack.pop()))
@@ -109,7 +109,7 @@ def files_under(folder: Path) -> List[Path]:
             if entry.is_dir(follow_symlinks=False):
                 stack.append(entry.path)
             elif entry.is_file() and entry.name != ".gitkeep":
-                found.append(Path(entry.path))
+                found.append(Path(short_path(entry.path)))
     return sorted(found)
 
 
@@ -233,20 +233,20 @@ def make_plan(root: Path, old: Path) -> tuple:
 
 
 def carry(step: Dict[str, Any]) -> None:
-    kind, source, target = step["kind"], step["src"], step["dst"]
+    kind, source, target = step["kind"], step["src"], step["dst"]  # every path through long_path: a file deeper than 260 characters on Windows is copied too
     if kind == "dir":
-        shutil.copytree(source, target, symlinks=True, dirs_exist_ok=True)
+        shutil.copytree(long_path(source), long_path(target), symlinks=True, dirs_exist_ok=True)
     elif kind == "file":
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
+        Path(long_path(target.parent)).mkdir(parents=True, exist_ok=True)
+        shutil.copy2(long_path(source), long_path(target))
     else:
         base, destination = step["root"]
         errors = []
         for path in step["files"]:  # one file that cannot be copied does not stop the others, as with copytree
             made = destination / path.relative_to(base)
             try:
-                made.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, made)
+                Path(long_path(made.parent)).mkdir(parents=True, exist_ok=True)
+                shutil.copy2(long_path(path), long_path(made))
             except OSError as error:
                 errors.append((str(path), str(made), str(error)))
         if errors:
@@ -269,9 +269,9 @@ def failure(step: Dict[str, Any], error: OSError) -> Dict[str, Any]:
     for row in rows[:FAILED_FILES_SHOWN]:
         source, _target, why = (list(row) + ["", "", ""])[:3] if isinstance(row, (list, tuple)) else (str(row), "", "")
         try:
-            shown = Path(source).relative_to(step["src"]).as_posix()
+            shown = Path(short_path(str(source))).relative_to(step["src"]).as_posix()
         except ValueError:
-            shown = str(source)
+            shown = short_path(str(source))
         files.append({"path": shown, "why": short_why(str(why))})
     return {"what": what, "why": say("reinstall.why.some_files", count=len(rows)), "files": files, "more": max(0, len(rows) - FAILED_FILES_SHOWN)}
 

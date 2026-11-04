@@ -351,7 +351,9 @@
     go.addEventListener("click", () => SERVE.archive(Array.from(selected), archiveTo));
     const none = h("button", {type: "button", class: "act"}, t("board.select.clear"));
     none.addEventListener("click", () => { selected.clear(); drawSelection(); drawTable(); });
-    pick.replaceChildren(h("span", {class: "sub"}, t("board.select.count", {count: selected.size}) + " "), go, none);
+    const space = DATA.serve && DATA.serve.space;
+    const frees = space ? sum(space.closed.filter((item) => selected.has(item.name)).map((item) => item.bytes)) : 0;  // what the ticked tasks free, when the folders were measured (1.6.109)
+    pick.replaceChildren(h("span", {class: "sub"}, t("board.select.count", {count: selected.size}) + (frees ? " \u00b7 " + t("board.select.frees", {size: fileSize(frees)}) : "") + " "), go, none);
   }
 
   // Off work and back to work (M38-2): every open task that is not at work is paused at once, and later only those are taken back.
@@ -378,6 +380,7 @@
     newSlot.replaceChildren(...[rows.length ? newTask() : null].filter(Boolean));
     paintFound(DATA.serve && DATA.serve.kb_found);
     paintSetup(DATA.serve && DATA.serve.setup);
+    paintSpace(DATA.serve && DATA.serve.space);
     statusBox.replaceChildren(...[SHELL.vsPill(vscode), typeof SERVE !== "undefined" ? SERVE.pairMark() : null, kbMark].filter(Boolean));
   }
   // The big warning (1.6.59): what this copy lacks before it can do real work. It stays until that is set; a click opens the setup guide.
@@ -410,6 +413,47 @@
     if (setupBar.dataset.sig === sig) return;
     setupBar.dataset.sig = sig;
     setupBar.replaceChildren(h("i"), h("span", null, t("board.setup.warn", {n: items.length})), h("span", {class: "setup-more"}, items.map((key) => h("span", null, t("board.setup." + key)))));
+  }
+  // The task folders over `board.archive_over_mb` (1.6.109, tasksize.py, measured once an hour): how much, the largest closed tasks, and a button that ticks
+  // the largest closed ones until the rest is under the limit, in the list, where the person unticks any and archives the rest. "Later" hides it in this
+  // browser until the folders grow by another tenth.
+  const spaceBar = h("div", {class: "space-bar", hidden: ""});
+  const SPACE_SHOWN = 3;
+  function paintSpace(space) {
+    if (!spaceBar.isConnected) { const top = setupBar.isConnected ? setupBar : document.querySelector(".lb-top"); if (top) top.after(spaceBar); }
+    const later = Number(keep.get("spaceLater", "0")) || 0;
+    const show = Boolean(space && space.over) && !(later && space.total < later * 1.1);
+    spaceBar.hidden = !show;
+    if (!show) return;
+    const sig = JSON.stringify(space) + rows.filter((row) => row.status === "closed").length;
+    if (spaceBar.dataset.sig === sig) return;
+    spaceBar.dataset.sig = sig;
+    const listed = new Set(rows.filter((row) => row.status === "closed").map((row) => row.name));
+    const closed = space.closed.filter((item) => listed.has(item.name));
+    const freed = sum(closed.map((item) => item.bytes));
+    const words = [h("b", null, t("board.space.over", {total: fileSize(space.total), limit: fileSize(space.limit)})), " ",
+      closed.length ? t("board.space.closed", {closed: fileSize(freed)}) : t("board.space.none")];
+    const biggest = closed.slice(0, SPACE_SHOWN).map((item) => h("span", {class: "space-task"}, h("code", null, item.name), " ", h("span", {class: "space-mb"}, fileSize(item.bytes))));
+    const go = canArchive && closed.length ? h("button", {type: "button", class: "act hot"}, t("board.space.pick")) : null;
+    if (go) go.addEventListener("click", () => pickToArchive(space, closed));
+    const snooze = h("button", {type: "button", class: "act"}, t("board.space.later"));
+    snooze.addEventListener("click", () => { keep.set("spaceLater", String(space.total)); spaceBar.hidden = true; });
+    spaceBar.title = t("board.space.measured", {at: when(space.at, 0, 16)});
+    spaceBar.replaceChildren(h("i"), h("div", {class: "space-words"}, h("span", null, words), biggest.length ? h("span", {class: "space-list"}, t("board.space.largest"), " ", biggest) : null), h("div", {class: "space-acts"}, go, snooze));
+  }
+  function pickToArchive(space, closed) {
+    selected.clear();
+    let left = space.total;
+    for (const item of closed) {
+      if (left <= space.limit) break;
+      selected.add(item.name);
+      left -= item.bytes;
+    }
+    view.filter = "closed"; view.kind = ""; view.query = ""; search.value = "";
+    keep.set("filter", "closed"); keep.set("kind", ""); keep.set("query", "");
+    setMode("list");
+    drawControls(); drawTable(); drawSelection();
+    pick.scrollIntoView({block: "center", behavior: "smooth"});
   }
   // "New task" (1.6, B73): a served board only (it makes a chat in VS Code). The dialog is in chat.js.
   function newTask() {
@@ -503,9 +547,9 @@
     asOf = data.as_of;
     archiveTo = data.archive_to || "";
     SHELL.vs(data.vscode);
-    if (DATA.serve) { DATA.serve.setup = data.setup; DATA.serve.kb_found = data.kb_found; paintFound(data.kb_found); paintSetup(data.setup); }
+    if (DATA.serve) { DATA.serve.setup = data.setup; DATA.serve.kb_found = data.kb_found; DATA.serve.space = data.space; paintFound(data.kb_found); paintSetup(data.setup); }
     const text = JSON.stringify([data.rows, data.hidden, data.vscode || null]);
-    if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else paintStamp();
+    if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else { paintStamp(); paintSpace(data.space); }
   }
   if (typeof SERVE !== "undefined") {
     SERVE.start(app);

@@ -1174,7 +1174,7 @@
   const fileCache = {};
   const ROOT_HINT = {REQ: "desk.files.root.req", REF: "desk.files.root.ref", INBOX: "desk.files.root.inbox", DEV: "desk.files.root.dev", RUNS: "desk.files.root.runs"};
   const rootHint = (root) => ROOT_HINT[root.toUpperCase()] || (/^DEV_R\d+$/i.test(root) ? ROOT_HINT.DEV : "desk.files.hint");  // DEV_r<n>: the files an earlier round wrote back
-  const size = (bytes) => bytes < 1024 ? bytes + " B" : bytes < 1048576 ? Math.round(bytes / 1024) + " KB" : (bytes / 1048576).toFixed(1) + " MB";
+  const size = fileSize;
 
   // One of a few to choose from over a table: Table or Text, a sheet of a workbook.
   const pickChip = (label, on, call, title) => {

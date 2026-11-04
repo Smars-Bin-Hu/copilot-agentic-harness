@@ -154,6 +154,21 @@ class NothingIsOverwritten(ReinstallCase):
         self.assertEqual(reinstall.failure(step, OSError("disk full")), {"what": "tasks/job1", "why": "disk full"})
         self.assertEqual(reinstall.short_why("[WinError 5] Access is denied: 'C:\\a\\b.json'"), "Access is denied")
 
+    def test_on_windows_every_copy_goes_through_the_long_path_prefix(self) -> None:
+        """1.6.109: SNAPSHOT files of a task were "No such file or directory" on Windows, though they were there: the old copy, renamed longer, put them past 260 characters."""
+        seen = []
+        with unittest.mock.patch.object(reinstall, "long_path", side_effect=lambda path: seen.append(str(path)) or str(path)):
+            self.apply()
+        old = self.old.resolve()
+        self.assertIn(str(old / TASK), seen)  # a task folder, copied whole
+        self.assertIn(str(old / ".harness/runtime/logs/vscode/s1.jsonl"), seen)  # a runtime file, one by one
+        self.assertIn(str(old / ".harness/runtime/logs"), seen)  # and listed
+        from core import paths
+        self.assertEqual(paths.long_path("C:\\old\\.workspace\\x\\..\\y.sql", windows=True), "\\\\?\\C:\\old\\.workspace\\y.sql")
+        self.assertEqual(paths.long_path("\\\\host\\share\\a", windows=True), "\\\\?\\UNC\\host\\share\\a")
+        self.assertEqual(paths.short_path(paths.long_path("C:\\a\\b", windows=True)), "C:\\a\\b")
+        self.assertEqual(paths.long_path("/a/b", windows=False), "/a/b")
+
     def test_a_second_run_copies_nothing_new(self) -> None:
         self.apply()
         again = self.apply()

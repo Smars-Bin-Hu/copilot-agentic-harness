@@ -2,14 +2,38 @@
 
 from __future__ import annotations
 
+import ntpath
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 
 def is_windows(windows: Optional[bool] = None) -> bool:
     return os.name == "nt" if windows is None else windows
+
+
+LONG_PREFIX = "\\\\?\\"
+LONG_UNC = LONG_PREFIX + "UNC\\"
+
+
+def long_path(path: Any, windows: Optional[bool] = None) -> str:
+    """An absolute path as Windows opens it past 260 characters: with the `\\\\?\\` prefix (`\\\\?\\UNC\\` for a share). Without it, a deeper file
+    than that is "No such file or directory", though it is there, unless long paths are turned on for the whole machine (1.6.109: the
+    SNAPSHOT files of a task in an old copy whose folder was renamed longer). The prefix turns off Windows' own clean-up, so the path
+    is cleaned here first. Elsewhere the path is given back as it is."""
+    text = str(path)
+    if not is_windows(windows) or text.startswith(LONG_PREFIX):
+        return text
+    text = ntpath.normpath(text)
+    return LONG_UNC + text[2:] if text.startswith("\\\\") else LONG_PREFIX + text
+
+
+def short_path(text: str) -> str:
+    """`long_path` taken off again, for a path a person reads or that is compared with others."""
+    if text.startswith(LONG_UNC):
+        return "\\\\" + text[len(LONG_UNC):]
+    return text[len(LONG_PREFIX):] if text.startswith(LONG_PREFIX) else text
 
 
 def python_command(windows: Optional[bool] = None) -> str:

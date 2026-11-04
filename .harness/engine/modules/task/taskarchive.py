@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core import config, copilot_events, messages, render, state, tasks
-from core.paths import utc_now
+from core.paths import long_path, utc_now
 from core.registry import harness_version
 
 from . import chatrounds, common, task as task_ops
@@ -139,9 +139,9 @@ def archive(root: Path, names: List[str], everything: bool = False, to: str = ""
     for row, step in zip(chosen, plan):
         data = tasks.read(root, row["task"]) or {}
         source, report = root / row["task"], root / common.TASK_REPORTS_DIR / row["name"]
-        shutil.move(str(source), step["to"])
+        shutil.move(long_path(source), long_path(step["to"]))  # to another drive it is a copy: a file deeper than 260 characters on Windows moves too
         if report.is_dir():
-            shutil.move(str(report), str(Path(step["to"]) / REPORT_FOLDER))
+            shutil.move(long_path(report), long_path(Path(step["to"]) / REPORT_FOLDER))
         entry = {
             "name": row["name"], "kind": data.get("kind", ""), "tier": data.get("tier", ""), "closed_at": closed_at(data), "archived_at": utc_now(),
             "from": row["task"], "harness": harness_version(root),

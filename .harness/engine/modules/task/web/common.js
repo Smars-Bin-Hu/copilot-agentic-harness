@@ -50,6 +50,14 @@ function clock(seconds) {
   return t("unit.days", {d: Math.floor(total / 86400), h: Math.floor((total % 86400) / 3600)});
 }
 
+// A size in bytes for a person (the Files tab, the size of the task folders).
+function fileSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1048576) return Math.round(bytes / 1024) + " KB";
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(bytes < 10485760 ? 1 : 0) + " MB";
+  return (bytes / 1073741824).toFixed(1) + " GB";
+}
+
 function amount(value) {
   if (value === null || value === undefined) return "-";
   if (Math.abs(value - Math.round(value)) < 0.05) return Math.round(value).toLocaleString("en-US");

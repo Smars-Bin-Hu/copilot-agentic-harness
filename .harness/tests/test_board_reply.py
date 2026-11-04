@@ -515,6 +515,19 @@ class PageTests(unittest.TestCase):
         self.assertIn('t("desk.ctx.level." + level)', desk)
         self.assertIn('(over ? " bad" : finite(meter.notice) && meter.percent > meter.notice ? " warn" : "")', source("status.js"))
 
+    def test_a_long_chat_can_go_on_in_a_new_chat_beside_compact(self) -> None:
+        """1.6.109: the context card offers both ways out, and only while the chat is idle; the new chat is the one Go on makes, bound to the task at once."""
+        desk = source("desk.js")
+        self.assertIn('box.append(h("div", {class: "tk-cx-go"}, go, newChatButton(chat)));', desk)
+        start = desk.index("function newChatButton(chat)")
+        button = desk[start:desk.index("\n  }\n", start)]
+        self.assertIn('disabled: idle ? null : "disabled"', button)  # two agents must not work on one task at once
+        self.assertIn("chatGoOn(desk.name)", button)
+        for language in ("en", "zh"):
+            table = messages.table(language)
+            for level in ("warm", "hot"):
+                self.assertIn(table["desk.newchat.go"].lower(), table["desk.ctx.level." + level].lower(), language)  # the warning names both ways out
+
     def test_independent_review_is_set_on_the_task_page_and_not_with_a_message(self) -> None:
         desk = source("desk.js")
         self.assertNotIn("set-checks", desk)  # the reply panel has no 0 to 5

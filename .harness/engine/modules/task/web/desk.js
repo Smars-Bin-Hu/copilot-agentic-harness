@@ -291,6 +291,14 @@
     button.addEventListener("click", askCompact);
     return button;
   }
+  // Go on in a new chat (1.6.109): the other way out of a long chat. A new chat in VS Code picks the task up from its files (`harness-my-task`); the board binds it at once and the old chat
+  // stays in VS Code. Only while the chat is idle: two agents must not work on one task at once. What was said only in the old chat and is in no task file does not come along.
+  function newChatButton(chat) {
+    const idle = chat && chat.state === "idle";
+    const button = h("button", {type: "button", class: "act chat-act", disabled: idle ? null : "disabled", title: t(idle ? "desk.newchat.tip" : "desk.newchat.busy")}, t("desk.newchat.go"));
+    button.addEventListener("click", () => chatGoOn(desk.name));
+    return button;
+  }
   const canCompact = (chat) => Boolean(served() && chat && chat.bound && SERVE.runs("send"));
   function tuneCompact(button, chat) {
     const idle = chat && chat.state === "idle";
@@ -351,7 +359,7 @@
         if (rows.length) box.append(h("div", {class: "st-head tk-cx-h"}, t("desk.ctx.group." + group)));
         for (const row of rows) box.append(h("div", {class: "tk-part"}, h("span", {class: "tk-pn"}, row.key ? t("desk.ctx.part." + row.key) : row.label), h("span", {class: "tk-pv"}, row.percent.toFixed(1) + "%")));
       }
-      if (can) { const go = compactButton("tk-cx-go"); tuneCompact(go, chat); box.append(go); }
+      if (can) { const go = compactButton(); tuneCompact(go, chat); box.append(h("div", {class: "tk-cx-go"}, go, newChatButton(chat))); }
       return box;
     }};
   }

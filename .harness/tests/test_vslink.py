@@ -73,12 +73,23 @@ class BindingTests(unittest.TestCase):
         self.assertEqual([two["t1"][0], two["t2"][0]], [None, None])
 
     def test_a_chat_the_board_made_comes_first_and_stands_while_the_chat_exists(self) -> None:
-        made = {"session": "ahp-session:/b", "chat": "ahp-chat:/b", "how": "board", "title": "T", "bound_at": "x"}
+        made = {"session": "ahp-session:/b", "chat": "ahp-chat:/b", "how": "board", "title": "T", "bound_at": "x", "was": "S1"}  # "go on in a new chat": the task was S1's, in chat a
         found = chatlink.decide([entry("t1", "S1", chat=made)], self.chats, {"ahp-session:/a": {"S1"}})
-        self.assertEqual(found["t1"][0]["session"], "ahp-session:/b")
+        self.assertEqual(found["t1"][0]["session"], "ahp-session:/b")  # bound at once: the old chat does not pull it back before the new one picks the task up
         self.assertEqual(found["t1"][0]["how"], "board")
         gone = chatlink.decide([entry("t1", "S1", chat=dict(made, session="ahp-session:/gone"))], self.chats, {"ahp-session:/a": {"S1"}})
         self.assertEqual(gone["t1"][0]["how"], "sdk")  # the chat is gone: the id is looked for
+
+
+    def test_a_board_chat_gives_way_when_another_chat_picks_the_task_up(self) -> None:
+        self.chats["ahp-session:/c"] = summary("ahp-session:/c", "ahp-chat:/c", "/w")
+        made = {"session": "ahp-session:/b", "chat": "ahp-chat:/b", "how": "board", "title": "T", "bound_at": "x", "was": "S2", "model": {"id": "m"}}
+        sdk = {"ahp-session:/a": {"S1"}, "ahp-session:/b": {"S2"}, "ahp-session:/c": {"S3"}}
+        moved, why = chatlink.decide([entry("t1", "S3", chat=made)], self.chats, sdk)["t1"]  # the person went on in chat c: harness-my-task gave the task S3
+        self.assertEqual((why, moved["session"], moved["how"], moved["sdk"]), ("", "ahp-session:/c", "sdk", "S3"))
+        for session, chats in (("S2", sdk), ("S3", {"ahp-session:/b": {"S2", "S3"}, "ahp-session:/c": {"S3"}}), ("S3", {"ahp-session:/b": {"S2"}}), ("S3", dict(sdk, **{"ahp-session:/a": {"S3"}}))):
+            with self.subTest(session=session, chats=chats):  # its own id; an id the board chat holds too; a chat not read yet; two other chats: the board chat stands
+                self.assertEqual(chatlink.decide([entry("t1", session, chat=made)], self.chats, chats)["t1"][0]["how"], "board")
 
 
 class KeepTests(TaskCase):

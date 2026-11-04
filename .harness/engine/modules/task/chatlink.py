@@ -1,8 +1,10 @@
 """Which chat of VS Code belongs to which task (1.6, B71). Never a guess: when it is not sure, the task is unbound.
 
 Two ways to bind, the first wins:
-1. The chat was made by the board for this task (B73: the board remembers the chat it made, and writes `chat.how = "board"` in the task state as soon as the task exists: `adopt`). It stands while the chat exists.
-   The same for a chat made to go on with a task that exists ("go on in a new chat", 1.6.97): bound at once, not when its agent has answered.
+1. The chat was made by the board for this task (B73: the board remembers the chat it made, and writes `chat.how = "board"` in the task state as soon as the task exists: `adopt`). It stands while the chat exists,
+   until another chat picks the task up (1.6.109): the task's session id is then neither the one it had when the board bound the chat (`was`) nor one of the board chat's own, and exactly one
+   other chat has it. The board then follows that chat by rule 2: the person went on with the task elsewhere, in VS Code.
+   The same for a chat made to go on with a task that exists ("go on in a new chat", 1.6.97): bound at once, not when its agent has answered (`was` is the old chat's id, so it does not pull back).
 2. The id Copilot gave the session behind a chat (`sdkSessionId`, found in the chat's turns) is the `session_id` of the task. The hook calls that id `session_id`.
 
 It is not sure, so the task stays unbound, when: no chat has the id (a chat has no id until the model was called once), two chats have it, or two open tasks have the
@@ -49,10 +51,10 @@ def decide(entries: List[Entry], summaries: Dict[str, Dict[str, Any]], sdk: Dict
     for entry in entries:
         task, stored = entry["task"], entry.get("chat") or {}
         listed = listed_as(str(stored.get("session") or ""), summaries) if stored.get("how") == "board" else ""
-        if listed:
+        session = str(entry.get("session_id") or "")
+        if listed and not moved_on(session, stored, listed, sdk, by_sdk):
             out[task] = (dict(stored, session=listed, chat=str(summaries[listed].get("defaultChat") or stored.get("chat") or "")), "")
             continue
-        session = str(entry.get("session_id") or "")
         if not session:
             out[task] = (None, "no-session")
             continue
@@ -67,6 +69,15 @@ def decide(entries: List[Entry], summaries: Dict[str, Dict[str, Any]], sdk: Dict
         summary = summaries[found[0]]
         out[task] = ({"session": found[0], "chat": str(summary.get("defaultChat") or ""), "title": str(summary.get("title") or ""), "how": "sdk", "bound_at": utc_now(), "sdk": session}, "")
     return out
+
+
+def moved_on(session: str, stored: Dict[str, Any], listed: str, sdk: Dict[str, Set[str]], by_sdk: Dict[str, List[str]]) -> bool:
+    """Did another chat pick the task up after the board bound its own chat? Only on sure signs: a session id that is new since the binding (`was`), not the board chat's own, and in exactly
+    one other chat. A chat not read yet says nothing, so the board chat stands."""
+    if not session or session == stored.get("was") or session in sdk.get(listed, set()):
+        return False
+    found = by_sdk.get(session, [])
+    return len(found) == 1 and found[0] != listed
 
 
 def same(left: Optional[Dict[str, Any]], right: Optional[Dict[str, Any]]) -> bool:
@@ -111,7 +122,7 @@ def adopt(root: Any, task: str, made: Dict[str, Any]) -> Optional[Dict[str, Any]
         if data is None:
             return None
         model = (data.get("chat") or {}).get("model") or (made.get("model") if made.get("keep_model", True) else None)
-        found: Dict[str, Any] = {"session": made["session"], "chat": made["chat"], "title": made.get("title", ""), "how": "board", "bound_at": utc_now()}
+        found: Dict[str, Any] = {"session": made["session"], "chat": made["chat"], "title": made.get("title", ""), "how": "board", "bound_at": utc_now(), "was": str(data.get("session_id") or "")}  # `was`: see `moved_on`
         if model:
             found["model"] = model
         data["chat"] = found

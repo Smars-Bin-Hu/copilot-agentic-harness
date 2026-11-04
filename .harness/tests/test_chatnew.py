@@ -569,6 +569,7 @@ class AdoptTests(TaskCase):
         made = {"session": "ahp-session:/z", "chat": "ahp-chat:/z", "title": "t", "model": {"id": "m1"}}
         found = chatlink.adopt(self.root, TASK, made)
         self.assertEqual((found["how"], found["session"], found["model"]), ("board", "ahp-session:/z", {"id": "m1"}))
+        self.assertEqual(found["was"], self.data()["session_id"])  # the session the task had: a later pick-up by another chat moves the binding there
         self.assertEqual(self.data()["updated_at"], before)
         chatlink.adopt(self.root, TASK, dict(made, model={"id": "m2"}))
         self.assertEqual(self.data()["chat"]["model"], {"id": "m1"})  # what the task already holds is not overwritten

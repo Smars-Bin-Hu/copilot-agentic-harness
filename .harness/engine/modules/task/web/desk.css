@@ -43,7 +43,8 @@
 .tk-facts{display:grid;gap:5px;min-width:240px;max-width:340px}.tk-fact{display:flex;align-items:baseline;justify-content:space-between;gap:24px}.tk-fact>span:last-child{text-align:right;overflow-wrap:anywhere}.tk-fact>.sub{flex:none;margin:0}
 .tk-info-l .kind-icon{cursor:help}
 .tk-i{display:inline-block;max-width:28ch;overflow:hidden;text-overflow:ellipsis;cursor:help}
-.tk-model{color:var(--ink);font-size:12.5px}
+.tk-model{display:inline-flex;align-items:center;gap:6px;min-width:0;color:var(--ink);font-size:12.5px;border-radius:6px;cursor:help}.tk-model-name{max-width:16em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-think{display:inline-flex;align-items:flex-end;gap:2px;height:11px}.tk-think i{width:3px;border-radius:1px;background:var(--line2)}.tk-think i:nth-child(1){height:5px}.tk-think i:nth-child(2){height:7px}.tk-think i:nth-child(3){height:9px}.tk-think i:nth-child(n+4){height:11px}.tk-think i.on{background:var(--soft)}
 .tk-rounds,.tk-pill{flex:none}
 .set-warn{margin:0;font-size:11.5px;line-height:1.45;color:var(--hot)}.set-warn[hidden]{display:none}.set-tip{margin:0;font-size:11.5px;line-height:1.45;color:var(--soft)}
 .tk-rv{position:relative;flex:none}

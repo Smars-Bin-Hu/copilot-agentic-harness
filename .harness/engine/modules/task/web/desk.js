@@ -447,15 +447,28 @@
     if (minutes < 60) return t("desk.ago.min", {n: minutes});
     return minutes < 1440 ? t("desk.ago.hour", {n: Math.floor(minutes / 60)}) : t("desk.ago.day", {n: Math.floor(minutes / 1440)});
   }
+  const fact = (label, value) => h("div", {class: "tk-fact"}, h("span", {class: "sub"}, label), h("span", null, value));
   function factsCard() {
-    const fact = (label, value) => h("div", {class: "tk-fact"}, h("span", {class: "sub"}, t("desk.fact." + label)), h("span", null, value));
+    const known = (label, value) => fact(t("desk.fact." + label), value);
     return {sig: JSON.stringify([desk.kind, desk.tier, desk.round, desk.created_at, desk.updated_at, desk.domains, desk.autorun]), build: () => h("div", {class: "tk-facts"},
-      fact("kind", t("task.kind." + (desk.kind || "none"))), fact("tier", t("task.tier." + (desk.tier || "none"))), fact("round", String(desk.round)), fact("opened", when(desk.created_at, 0, 16)), fact("changed", when(desk.updated_at, 0, 16)),
-      desk.domains.length ? fact("domains", desk.domains.join(", ")) : null, desk.autorun ? fact("autorun", t("desk.autorun")) : null)};
+      known("kind", t("task.kind." + (desk.kind || "none"))), known("tier", t("task.tier." + (desk.tier || "none"))), known("round", String(desk.round)), known("opened", when(desk.created_at, 0, 16)), known("changed", when(desk.updated_at, 0, 16)),
+      desk.domains.length ? known("domains", desk.domains.join(", ")) : null, desk.autorun ? known("autorun", t("desk.autorun")) : null)};
   }
 
-  function infoItem(cls, text, title) {
-    return h("span", {class: "tk-i " + cls, title}, text);
+  // The chat's model as one chip (1.6.109): a short name and a gauge of the thinking level, one bar for each level the model has. Its card says the full name, the level and the window.
+  // The line under the task's name stays two short marks: this chip and the time of the last change.
+  function modelChip(chat, room) {
+    const model = ((desk.settings && desk.settings.models) || []).find((item) => item.id === chat.model) || null;
+    const levels = chat.effort && model && model.thinking ? (model.thinking.levels || []).slice(0, 5) : [];
+    const at = levels.indexOf(chat.effort);
+    const level = chat.effort ? (model && model.thinking && model.thinking.labels && model.thinking.labels[chat.effort]) || chat.effort : "";
+    const full = modelWords(chat, chat.model_name || chat.model);
+    const gauge = at >= 0 ? h("span", {class: "tk-think", "aria-hidden": "true"}, levels.map((item, index) => h("i", {class: index <= at ? "on" : null}))) : null;
+    const label = [full, level ? t("desk.info.effort", {level}) : "", room ? t("desk.info.window", {size: tokensShort(room)}) : ""].filter(Boolean).join(" \u00b7 ");
+    const card = () => ({sig: JSON.stringify([full, level, room, chat.fusion]), build: () => h("div", {class: "tk-facts"},
+      fact(t("desk.set.model"), full), level ? fact(t("desk.set.thinking"), level) : null, room ? fact(t("desk.fact.window"), tokensShort(room) + " \u00b7 " + room.toLocaleString("en-US")) : null,
+      fusionChat(chat) ? h("p", {class: "set-tip"}, modelTip(chat, "")) : null, level ? h("p", {class: "set-tip"}, t("desk.info.effort.tip")) : null)});
+    return Status.card(h("span", {class: "tk-i tk-model"}, h("span", {class: "tk-model-name"}, modelWords(chat, String(chat.model_name || chat.model).replace(/^claude\s+/i, ""))), gauge), card, label);
   }
 
   function paintHead() {
@@ -484,15 +497,12 @@
     const kindName = t("task.kind." + (desk.kind || "none"));
     const room = bound && chat.window ? chat.window : meter ? meter.window : 0;
     const changed = desk.status === "new" ? "" : agoText(desk.updated_at);
-    ui.infoL.set(JSON.stringify([desk.kind, desk.tier, desk.status, desk.round, desk.created_at, desk.updated_at, changed, desk.domains, desk.autorun, bound && [chat.model, chat.model_name, chat.effort, chat.fusion, room]]), () => {
+    ui.infoL.set(JSON.stringify([desk.kind, desk.tier, desk.status, desk.round, desk.created_at, desk.updated_at, changed, desk.domains, desk.autorun, bound && [chat.model, chat.model_name, chat.effort, chat.fusion, room], desk.settings && desk.settings.models && desk.settings.models.length]), () => {
       const nodes = [];
       if (desk.status !== "new" && desk.kind) nodes.push(Status.card(kindIcon(desk.kind, t("desk.info.kind", {kind: kindName})), factsCard, t("desk.info.kind", {kind: kindName})));
-      if (bound && chat.model) nodes.push(infoItem("tk-model", modelWords(chat, chat.model_name || chat.model), modelTip(chat, t("desk.info.model", {model: chat.model}))));
-      if (bound && chat.effort) nodes.push(infoItem("tk-effort", t("desk.info.effort", {level: chat.effort}), t("desk.info.effort.tip")));
-      if (bound && room) nodes.push(infoItem("tk-win", t("desk.info.window", {size: tokensShort(room)}), t("desk.info.window.tip", {tokens: room.toLocaleString("en-US")})));
-      if (desk.status !== "new") {  // a task not started has no kind, no round, no dates
-        nodes.push(Status.card(h("span", {class: "tk-meta"}, h("span", null, desk.tier ? t("desk.fact.tier.short", {tier: t("task.tier." + desk.tier)}) : t("task.tier.none")), desk.round > 1 ? h("span", null, t("desk.fact.round.short", {round: desk.round})) : null,
-          h("span", {class: "tk-when"}, icon(CLOCK, 13), changed)), factsCard, t("desk.fact.label")), desk.autorun ? tag(t("desk.autorun"), "good") : null);
+      if (bound && chat.model) nodes.push(modelChip(chat, room));
+      if (desk.status !== "new") {  // a task not started has no kind, no round, no dates. The tier and the round are in the card; the round is on the tabs of the rounds too
+        nodes.push(Status.card(h("span", {class: "tk-meta"}, h("span", {class: "tk-when"}, icon(CLOCK, 13), changed)), factsCard, t("desk.fact.label")), desk.autorun ? tag(t("desk.autorun"), "good") : null);
       }
       return nodes;
     });

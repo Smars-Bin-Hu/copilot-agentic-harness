@@ -545,12 +545,17 @@ class WalkThroughTests(unittest.TestCase):
         self.assertIn('alone ? "board.vscode.nochat"', shell)
         self.assertIn("SHELL.vsPill(desk.vscode, chat)", (WEB / "desk.js").read_text(encoding="utf-8"))
 
-    def test_the_model_has_its_full_name_and_the_tier_says_it_is_a_tier(self) -> None:
+    def test_the_line_under_the_name_is_two_short_marks_and_the_cards_say_the_rest(self) -> None:
         self.assertIn("chat.model_name || shortModel(chat.model)", (WEB / "status.js").read_text(encoding="utf-8"))
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
-        self.assertIn('infoItem("tk-model", modelWords(chat, chat.model_name || chat.model)', desk)
-        self.assertIn('t("desk.fact.tier.short", {tier: t("task.tier." + desk.tier)})', desk)
-        self.assertEqual(messages.table("en")["desk.fact.tier.short"], "{tier} tier")
+        self.assertIn("if (bound && chat.model) nodes.push(modelChip(chat, room));", desk)  # model, thinking and window: one chip
+        self.assertIn('h("span", {class: "tk-think", "aria-hidden": "true"}, levels.map((item, index) => h("i", {class: index <= at ? "on" : null})))', desk)  # the level as a gauge
+        self.assertIn('fact(t("desk.set.model"), full), level ? fact(t("desk.set.thinking"), level) : null, room ? fact(t("desk.fact.window")', desk)  # the card has the words
+        self.assertIn('h("span", {class: "tk-meta"}, h("span", {class: "tk-when"}, icon(CLOCK, 13), changed)), factsCard', desk)  # the tier and the round are in the card only
+        self.assertNotIn("infoItem(", desk)
+        for key in ("desk.fact.tier.short", "desk.fact.round.short", "desk.info.window.tip", "desk.info.model"):
+            self.assertNotIn(key, messages.table("en"), key)
+        self.assertIn(".tk-model-name{max-width:16em;overflow:hidden;text-overflow:ellipsis", (WEB / "desk.css").read_text(encoding="utf-8"))  # a long model name does not push the line
 
     def test_the_short_words_of_a_stopped_agent(self) -> None:
         en, zh = messages.table("en"), messages.table("zh")

@@ -992,10 +992,10 @@ class Board:
             levels = (listed[wanted]["thinking"] or {}).get("levels") or []
             if level and level not in levels:
                 raise CommandError(self.refusal("thinking"))
-            if size and size not in [item["id"] for item in (listed[wanted].get("context") or {}).get("sizes") or []]:
+            size = ahp.context_size(listed[wanted], size)
+            if size is None:
                 raise CommandError(self.refusal("context"))
-            config = {**ahp.model_choice(listed[wanted], level).get("config", {}), **({"contextSize": size} if size else {})}
-            model = {"id": wanted, **({"config": config} if config else {})}
+            model = ahp.model_choice(listed[wanted], level, size)
         with task_ops.locked(self.root, task) as again:
             kept = dict(again.get("chat") or {})
             if model:

@@ -15,7 +15,7 @@ import support  # noqa: F401 - HARNESS_VSCODE_CLI=off
 from support import REPO
 from taskcase import TASK, TaskCase
 from test_ahp import TOKEN
-from test_chatsend import ROOT_STATE, SendCase
+from test_chatsend import HAIKU, ROOT_STATE, SendCase
 from test_vslink import summary, until
 
 from core import ahp, messages, tasks
@@ -112,6 +112,18 @@ class ValidationTests(TaskCase):
         self.bad("thinking", model="", thinking="low")  # a level with no model
         with self.assertRaises(CommandError):
             chatnew.validate(self.root, GOOD, [])  # the host listed nothing: no model can be taken
+
+    def test_a_context_size_is_one_the_model_has_and_goes_in_its_config(self) -> None:
+        sized = dict(HAIKU, configSchema={"properties": {**HAIKU["configSchema"]["properties"], "contextSize": {"enum": [200000, 1000000], "enumLabels": ["200K", "1M"], "default": 200000}}})
+        models = ahp.models_of({"agents": [{"provider": ROOT_STATE["agents"][0]["provider"], "models": [sized, ROOT_STATE["agents"][0]["models"][1]]}]})
+        self.assertEqual(chatnew.model_of({"model": HAIKU["id"], "thinking": "low", "context": "1000000"}, models), {"id": HAIKU["id"], "config": {"thinkingLevel": "low", "contextSize": 1000000}})  # the page sends text; the host's number goes
+        self.assertEqual(chatnew.model_of({"model": HAIKU["id"], "context": ""}, models), {"id": HAIKU["id"]})  # none picked: the model's own default
+        for data in ({"model": HAIKU["id"], "context": "5"}, {"model": "", "context": "1000000"}, {"model": "claude-haiku-4.5", "context": "200000"}):
+            with self.subTest(data=data), self.assertRaises(CommandError) as caught:
+                chatnew.model_of(data, models)
+            self.assertEqual(str(caught.exception), refused("context"))
+        self.assertEqual(chatnew.validate(self.root, {**GOOD, "context": "1000000"}, models)["model"]["config"]["contextSize"], 1000000)  # New task
+        self.assertEqual(ahp.model_choice(models[0], "", 1000000), {"id": HAIKU["id"], "config": {"contextSize": 1000000}})
 
 
 class MessageTests(TaskCase):

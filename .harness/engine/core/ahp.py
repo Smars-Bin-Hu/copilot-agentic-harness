@@ -563,10 +563,18 @@ def models_of(root_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
-def model_choice(model: Dict[str, Any], level: str = "") -> Dict[str, Any]:
-    """A model of `models_of` with a level, in the shape of `message.model`."""
+def model_choice(model: Dict[str, Any], level: str = "", size: Any = 0) -> Dict[str, Any]:
+    """A model of `models_of` with a level and a context size (`contextSize`), in the shape of `message.model`."""
     key = (model.get("thinking") or {}).get("key") or "thinkingLevel"
-    return {"id": model["id"], **({"config": {key: level}} if level else {})}
+    config = {**({key: level} if level else {}), **({"contextSize": size} if size else {})}
+    return {"id": model["id"], **({"config": config} if config else {})}
+
+
+def context_size(model: Dict[str, Any], wanted: Any) -> Any:
+    """The context size of `model` that `wanted` names, as the host spells it (a page sends it as text); None when the model has no such size. 0 or empty: none asked."""
+    if wanted in (None, "", 0, "0"):
+        return 0
+    return next((item["id"] for item in ((model.get("context") or {}).get("sizes") or []) if str(item["id"]) == str(wanted).strip()), None)
 
 
 def named(schema: Any) -> List[Dict[str, Any]]:

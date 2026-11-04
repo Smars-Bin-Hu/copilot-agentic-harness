@@ -439,6 +439,17 @@ class PageTests(unittest.TestCase):
             self.assertIn(used, text, name)
             self.assertIn("pick.apply()", text, name)  # the pick is kept before the message goes
 
+    def test_every_model_pick_offers_the_context_sizes_of_the_model(self) -> None:
+        """1.6.109: New task and every dialog with a model pick have Context, shown only for a model with more than one size; a one-off chat names it, a task keeps it."""
+        chat = source("chat.js")
+        self.assertIn("function sizePick(select, holder)", chat)
+        self.assertIn("holder.hidden = list.length < 2;", chat)
+        self.assertIn("if (!task) return {model: model.value, thinking: level.value, ...(context ? {context} : {})};", chat)
+        self.assertIn("sizes.same(of(model.value), state.current.context)) return {};", chat)  # a task is written to only when the pick changed
+        self.assertIn("model: model.value, thinking: thinking.value, context: sizes.chosen(), lang: state.lang", chat)  # New task
+        self.assertIn('field(t("board.new.context"), room, "new-context")', chat)
+        self.assertIn(".new-field[hidden],.model-pick select[hidden]{display:none}", source("page.css"))
+
     def test_the_persons_words_have_one_place(self) -> None:
         serve = source("serve.js")
         self.assertIn('if (item.action === "answer" || item.action === "steer") return speak(row);', serve)

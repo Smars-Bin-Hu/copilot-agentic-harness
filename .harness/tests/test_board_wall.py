@@ -380,6 +380,13 @@ class PageTests(unittest.TestCase):
                 self.assertLess(page.index("const SERVE = (function"), page.index("const WALL = (function"), name)
         self.assertNotIn("const WALL", taskhtml.task_page({"name": "a"}))  # the report page has no stage
 
+    def test_an_empty_line_under_the_list_is_no_bar_over_the_picture(self) -> None:
+        board = source("board.js")
+        self.assertIn('const more = h("p", {class: "sub", hidden: ""});', board)  # the closed tasks not listed: drawn only when there are some, in the list
+        self.assertIn('more.hidden = mode !== "list" || !hidden;', board)
+        self.assertIn("more.hidden = !asList || !hidden;", board)
+        self.assertIn("html.has-wall main>.sub:not([hidden]):not(:empty){", source("wall.css"))  # and an empty line gets no tint, wherever it is
+
     def test_every_text_of_the_background_is_in_both_languages(self) -> None:
         keys = {key for key in re.findall(r'"(board\.(?:wall|space)\.[a-z.]+)"', source("wall.js") + source("space.js")) if not key.endswith(".")}
         keys |= {"board.wall.state." + state for state in ("none", "missing", "empty", "unreadable", "off")}  # the page builds these names from the state the server gives

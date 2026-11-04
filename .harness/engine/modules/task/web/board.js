@@ -260,7 +260,7 @@
   const tableBox = h("div", {class: "card board-list"});
   tableBox.addEventListener("mouseenter", () => { hovering = true; });
   tableBox.addEventListener("mouseleave", () => { hovering = false; });
-  const more = h("p", {class: "sub"});
+  const more = h("p", {class: "sub", hidden: ""});  // the closed tasks not listed; not drawn when there are none (an empty line is an empty bar over a wallpaper)
   const stamp = h("span");
   const boardName = h("b", null, t("board.title"));
   const newSlot = h("span", {class: "new-slot"});  // the main act of the board: the far end of the header, filled
@@ -311,6 +311,7 @@
     if (canArchive) DATA.serve.archive_to = archiveTo;  // the single-row button reads it
     paintStamp();
     more.textContent = hidden ? t("board.closed.more", {count: hidden}) : "";
+    more.hidden = mode !== "list" || !hidden;
     if (!rows.length) { tableBox.replaceChildren(firstTask()); return; }
     const shownRows = listed();
     const before = rowTops();
@@ -516,7 +517,8 @@
   function drawMode() {
     for (const name of Object.keys(modeButtons)) modeButtons[name].classList.toggle("on", name === mode);
     const asList = mode === "list";
-    for (const part of [kpis, controls, pick, tableBox, more]) part.hidden = !asList;
+    for (const part of [kpis, controls, pick, tableBox]) part.hidden = !asList;
+    more.hidden = !asList || !hidden;
     lobby.node.hidden = asList;
     if (asList) lobby.hide();
   }

@@ -137,6 +137,46 @@ class SyncTests(CompanyCase):
         self.assertEqual(company.drift(self.root)["stale"], [".github/skills/acme-ticket"])
 
 
+class ToolsTests(CompanyCase):
+    """1.7.1: `company/tools/` holds the outside systems (systems.json) and how to start for them (launch/); sync copies them where the gate and the person find them."""
+
+    SYSTEMS = {"systems": {"dev-sql": {"reach": {"cli": "sqlcmd"}, "env": "dev", "verbs": [{"pattern": r"^\s*select\b", "verb": "read"}], "needs": {"probe": "sqlcmd -Q x", "launch": "Start VS Code with launch/start-vscode.cmd."}}}}
+
+    def test_systems_and_launch_scripts_are_copied_and_the_gate_reads_the_copy_under_the_persons_override(self) -> None:
+        set_prefix(self.root)
+        put(self.kb, {"company/tools/systems.json": json.dumps(self.SYSTEMS), "company/tools/launch/start-vscode.cmd": "@echo off\r\nrunas ...\r\n", "company/tools/README.md": "how\n"})
+        result = company.sync(self.root)
+        self.assertEqual(result["copied"][-2:], [".harness/policies/tools.company.json", ".harness/launch"])
+        self.assertTrue((self.root / ".harness" / "launch" / "start-vscode.cmd").is_file())
+        self.assertFalse((self.root / ".harness" / "launch" / "README.md").exists())
+        from core import config
+
+        self.assertEqual(config.load_policy(self.root, "tools")["systems"]["dev-sql"]["env"], "dev")
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": {"dev-sql": {"env": "qat"}}}), encoding="utf-8")
+        merged = config.load_policy(self.root, "tools")["systems"]["dev-sql"]
+        self.assertEqual((merged["env"], merged["reach"]), ("qat", {"cli": "sqlcmd"}))  # the person's file wins, key by key
+        self.assertEqual(company.sync(self.root)["copied"], [])
+        self.assertEqual(company.drift(self.root)["stale"], [])
+
+    def test_the_layout_counts_the_systems_and_names_a_broken_file(self) -> None:
+        self.assertEqual([part["key"] for part in company.layout(self.kb) if part["key"] == "tools"], [])
+        put(self.kb, {"company/tools/systems.json": json.dumps(self.SYSTEMS)})
+        part = next(item for item in company.layout(self.kb) if item["key"] == "tools")
+        self.assertEqual((part["ok"], part["count"]), (True, 1))
+        put(self.kb, {"company/tools/systems.json": json.dumps({"systems": {"Bad Name": {"reach": {"cli": "x"}}}})})
+        part = next(item for item in company.layout(self.kb) if item["key"] == "tools")
+        self.assertEqual((part["ok"], part["count"]), (False, 0))
+        self.assertIn("Bad Name", part["text"])
+
+    def test_doctor_reads_the_company_layer_and_says_what_it_adds(self) -> None:
+        set_prefix(self.root)
+        put(self.kb, {"company/tools/systems.json": json.dumps(self.SYSTEMS)})
+        company.sync(self.root)
+        completed = self.cli("doctor")
+        self.assertIn("tools.company.json", completed.stdout)
+        self.assertIn("dev-sql", completed.stdout)
+
+
 class StandardsTests(CompanyCase):
     def test_the_standards_of_the_knowledge_base_come_first(self) -> None:
         self.assertEqual([item["title"] for item in standards.rules(self.root)], ["No select star"])

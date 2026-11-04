@@ -1,4 +1,5 @@
-"""Policy loading. A policy is .harness/policies/<name>.json; <name>.override.json is merged on top (one layer).
+"""Policy loading. A policy is .harness/policies/<name>.json; <name>.company.json (the company pack, copied there by `company sync`,
+1.7.1) is merged on top, then <name>.override.json (the person's). The person's file wins.
 
 Merge rules: objects merge key by key; anything else in the override replaces the default value (an array is replaced
 as a whole); `"<key>+": [...]` appends to the default array `<key>`.
@@ -13,6 +14,8 @@ from typing import Any, Dict, List, Tuple
 from .paths import policies_dir
 
 OVERRIDE_SUFFIX = ".override.json"
+COMPANY_SUFFIX = ".company.json"
+LAYERS = (COMPANY_SUFFIX, OVERRIDE_SUFFIX)  # in the order they are merged
 APPEND_MARK = "+"
 
 
@@ -73,12 +76,17 @@ def override_path(root: Path, name: str) -> Path:
     return policies_dir(root) / f"{name}{OVERRIDE_SUFFIX}"
 
 
+def company_path(root: Path, name: str) -> Path:
+    return policies_dir(root) / f"{name}{COMPANY_SUFFIX}"
+
+
 def load_policy(root: Path, name: str) -> Dict[str, Any]:
-    base = read_json(policies_dir(root) / f"{name}.json")
-    path = override_path(root, name)
-    if path.exists():
-        return deep_merge(base, read_json(path))
-    return base
+    found = read_json(policies_dir(root) / f"{name}.json")
+    for suffix in LAYERS:
+        path = policies_dir(root) / f"{name}{suffix}"
+        if path.exists():
+            found = deep_merge(found, read_json(path))
+    return found
 
 
 def policy_or_empty(root: Path, name: str) -> Dict[str, Any]:

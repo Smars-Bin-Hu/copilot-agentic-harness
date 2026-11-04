@@ -2,7 +2,7 @@
 // A page on disk has none (no SERVE). The search and the settings are the global ones of shell.js; this screen adds nothing to the top but the greeting.
 //
 // Readiness: POST /api/ready every 3 s (a read; the server answers from caches and waits for nothing). One line for each check; the lines light up in order. Enter is allowed only when
-// every blocking line is ok: the pill is disabled, the Enter key does nothing, and there is no way past it on this page. Warn-only lines (knowledge base, target repositories) are grey.
+// every blocking line is ok: the pill is disabled, the Enter key does nothing, and there is no way past it on this page. Warn-only lines (knowledge base, target repositories, outside systems) are grey.
 // A check that cannot run shows as failed with its reason; a board that does not answer shows a line saying so and the screen goes on asking.
 //
 // Showing it: once for each tab session (sessionStorage, in try/catch), not on a poll, a reload of the board or a way back from a task. A task page opened from a link skips it only when everything
@@ -321,7 +321,7 @@
   }
 
   // ---------- readiness ----------
-  const ORDER = ["setup", "vscode", "copilot", "doctor", "paired", "kb", "repos"];
+  const ORDER = ["setup", "vscode", "copilot", "doctor", "paired", "kb", "repos", "systems"];
   const chk0 = {t0: 0, last: null, error: "", inflight: false, timer: 0, tick: 0, opened: 0, ready: false, openError: ""};
   const OPENED_FOR = 120000;  // ms in which a VS Code that was just opened is waited for, not blamed
   const setText = (node, text) => { if (node.textContent !== text) node.textContent = text; };

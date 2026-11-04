@@ -371,15 +371,16 @@ def check_user(report: Report, root: Path) -> None:
 
 
 def check_overrides(report: Report, root: Path) -> None:
-    """Each `<name>.override.json`: one layer, merges onto an existing policy, and says what it changed."""
+    """Each `<name>.company.json` (the company pack) and `<name>.override.json` (the person's): a layer that merges onto an existing policy, and what it changed."""
     directory = policies_dir(root)
-    found = sorted(directory.glob("*" + config.OVERRIDE_SUFFIX)) if directory.is_dir() else []
+    found = sorted(path for suffix in config.LAYERS for path in directory.glob("*" + suffix)) if directory.is_dir() else []
     if not found:
         report.ok(say("doctor.override.none"))
         return
     for path in found:
-        name = path.name[: -len(config.OVERRIDE_SUFFIX)]
-        if config.OVERRIDE_SUFFIX[:-5] in name or not (directory / f"{name}.json").exists():
+        suffix = next(item for item in config.LAYERS if path.name.endswith(item))
+        name = path.name[: -len(suffix)]
+        if any(layer[:-5] in name for layer in config.LAYERS) or not (directory / f"{name}.json").exists():
             report.error(say("doctor.override.orphan", file=path.name, name=name))
             continue
         try:
@@ -593,13 +594,14 @@ def check_company(report: Report, root: Path) -> None:
 
 
 def check_systems(report: Report, root: Path) -> None:
-    """The outside systems a company listed in tools.override.json (M43-2): is the list well formed? Nothing listed is fine: the harness ships none."""
+    """The outside systems a company listed (M43-2): is the list well formed, and is each system that has a probe reachable from here (1.7.1)? Nothing listed is fine: the harness ships none."""
     try:
         from modules.gate import external
 
         systems = config.load_policy(root, "tools").get("systems") or {}
         errors = external.validate(systems)
         found = external.warnings(systems) if not errors else []
+        reached = external.reach(systems, lambda command: external.run_probe(command, root)) if not errors else {}
     except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
         report.warn(say("doctor.systems.unreadable", error=error))
         return
@@ -613,6 +615,11 @@ def check_systems(report: Report, root: Path) -> None:
     report.ok(say("doctor.systems.ok", count=len(systems), names=", ".join(systems)))
     for text in found:
         report.warn(say("doctor.systems.warn", text=text))
+    for name, line in reached.items():
+        if line["reachable"]:
+            report.ok(say("doctor.systems.reached", name=name))
+        else:
+            report.warn(say("doctor.systems.unreached", name=name, why=line["why"], launch=line["launch"] or say("doctor.systems.no_launch")))
 
 
 def check_standards(report: Report, root: Path) -> None:

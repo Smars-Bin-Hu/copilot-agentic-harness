@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
 import unittest
+from unittest import mock
 from typing import Any, Dict, List
 
 from support import HarnessTestCase, pre_tool
@@ -148,6 +150,9 @@ class ValidateTests(unittest.TestCase):
             "one program for two systems": lambda s: s["tickets"].update({"reach": {"cli": "cloudctl"}}),
             "env and env_from together": lambda s: s["cloud"].update({"env": "dev"}),
             "a name with capitals": lambda s: s.update({"Cloud2": s["tickets"]}),
+            "needs without a probe": lambda s: s["cloud"].update({"needs": {"launch": "x"}}),
+            "needs with an unknown key": lambda s: s["cloud"].update({"needs": {"probe": "x", "password": "y"}}),
+            "an expect that does not compile": lambda s: s["cloud"].update({"needs": {"probe": "x", "expect": "("}}),
         }
         for name, change in cases.items():
             with self.subTest(name):
@@ -159,6 +164,46 @@ class ValidateTests(unittest.TestCase):
         for part in ("no `verbs`", "default_env", "rules.prod.write", "rules.*.destroy"):
             self.assertIn(part, text)
         self.assertEqual(external.warnings(SYSTEMS), [])
+
+
+class ReachTests(unittest.TestCase):
+    """1.7.1: `needs.probe` says whether a system is reachable from this session; the harness keeps no output of it."""
+
+    def test_only_a_system_with_needs_is_probed_and_each_answer_is_judged(self) -> None:
+        systems = {
+            "fine": {"reach": {"cli": "a"}, "needs": {"probe": "a-probe", "expect": r"^CORP\\", "launch": "Start with a.cmd"}},
+            "wrong": {"reach": {"cli": "b"}, "needs": {"probe": "b-probe", "expect": r"^CORP\\"}},
+            "failed": {"reach": {"cli": "c"}, "needs": {"probe": "c-probe", "launch": "Sign in"}},
+            "slow": {"reach": {"cli": "d"}, "needs": {"probe": "d-probe"}},
+            "plain": {"reach": {"cli": "e"}},
+        }
+        answers = {"a-probe": (0, "CORP\\me\n"), "b-probe": (0, "guest\n"), "c-probe": (2, ""), "d-probe": (None, "no answer in 5 s")}
+        found = external.reach(systems, lambda command: answers[command])
+        self.assertEqual(set(found), {"fine", "wrong", "failed", "slow"})
+        self.assertEqual(found["fine"], {"reachable": True, "why": "", "launch": "Start with a.cmd"})
+        self.assertFalse(found["wrong"]["reachable"])
+        self.assertIn("expect", found["wrong"]["why"])
+        self.assertNotIn("guest", json.dumps(found))  # the output of a probe is never kept
+        self.assertEqual((found["failed"]["reachable"], found["failed"]["launch"]), (False, "Sign in"))
+        self.assertIn("exit code 2", found["failed"]["why"])
+        self.assertEqual(found["slow"]["why"], "no answer in 5 s")
+
+    def test_a_real_probe_runs_in_the_shell_with_a_deadline(self) -> None:
+        code, output = external.run_probe(f"{sys.executable} -c \"print('hello')\"")
+        self.assertEqual((code, output.strip()), (0, "hello"))
+        code, output = external.run_probe(f"{sys.executable} -c \"import sys; sys.exit(4)\"")
+        self.assertEqual(code, 4)
+        with mock.patch.object(external, "PROBE_SECONDS", 0.2), mock.patch("core.systems.PROBE_SECONDS", 0.2):
+            code, output = external.run_probe(f"{sys.executable} -c \"import time; time.sleep(3)\"")
+        self.assertEqual(code, None)
+        self.assertIn("no answer", output)
+
+    def test_the_report_has_the_probes_only_when_asked_and_never_with_errors(self) -> None:
+        systems = {"x": {"reach": {"cli": "x"}, "needs": {"probe": "p"}}}
+        self.assertNotIn("reach", external.report(systems))
+        self.assertEqual(external.report(systems, run=lambda command: (0, ""))["reach"], {"x": {"reachable": True, "why": "", "launch": ""}})
+        broken = {"x": {"reach": {"cli": "x"}, "needs": {"probe": "p", "expect": "("}}}
+        self.assertNotIn("reach", external.report(broken, run=lambda command: (0, "")))
 
 
 class GateExternalTests(HarnessTestCase):
@@ -226,6 +271,24 @@ class GateExternalTests(HarnessTestCase):
         self.assertEqual(cloud["decides"]["prod"], "read=allow write=deny destroy=deny exec=deny")
         self.assertEqual(cloud["decides"]["dev"], "read=allow write=task destroy=deny exec=human")
         self.assertEqual(next(item for item in report["systems"] if item["system"] == "tickets")["decides"], {"none": "read=allow write=outbox destroy=deny exec=human"})
+
+    def test_tools_check_probes_the_systems_that_have_needs_and_the_company_layer_is_read(self) -> None:
+        """1.7.1: the company pack's copy (tools.company.json) is a layer under the person's override; `tools check` says which system is reachable."""
+        systems = copy.deepcopy(SYSTEMS)
+        systems["cloud"]["needs"] = {"probe": f"{sys.executable} -c \"print('CORP\\\\me')\"", "expect": r"^CORP\\", "launch": "Start VS Code with start-vscode.cmd."}
+        systems["tickets"]["needs"] = {"probe": f"{sys.executable} -c \"import sys; sys.exit(1)\""}
+        (self.root / ".harness" / "policies" / "tools.company.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
+        completed = self.cli("tools", "check")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        report = json.loads(completed.stdout)
+        self.assertEqual({item["system"] for item in report["systems"]}, {"cloud", "tickets"})
+        self.assertEqual(report["reach"]["cloud"], {"reachable": True, "why": "", "launch": "Start VS Code with start-vscode.cmd."})
+        self.assertEqual(report["reach"]["tickets"]["reachable"], False)
+        self.configure({"tickets": {"needs": {"probe": f"{sys.executable} -c \"print('x')\""}}})  # the person's override is merged on top of the company's, key by key
+        report = json.loads(self.cli("tools", "check").stdout)
+        self.assertEqual({item["system"] for item in report["systems"]}, {"cloud", "tickets"})
+        self.assertTrue(report["reach"]["tickets"]["reachable"])
+        self.assertEqual(self.term("tk show 1"), {})  # the company's `verbs` still hold: a read, allowed
 
     def test_tools_check_with_nothing_listed_is_fine(self) -> None:
         completed = self.cli("tools", "check")

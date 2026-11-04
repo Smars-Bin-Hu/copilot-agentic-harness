@@ -1,6 +1,6 @@
 """External actions (M43-2): the protocol for a call that reaches a system outside this repository (a cloud, a database, a ticket system).
 
-The harness ships no system. A company lists its own under `systems` in `tools.override.json`; each entry says how a call to
+The harness ships no system. A company lists its own under `systems`, in the company pack (`tools.company.json`, copied from the knowledge base) or in `tools.override.json`; each entry says how a call to
 it is recognised (`reach`), in which environment it runs (`env`), what the call does (`verbs`) and what the gate decides
 (`rules`). Every call becomes one action: `{system, env, verb, target}`. This file only turns a terminal command into actions
 and the policy into a decision; the handler applies the decision.
@@ -13,6 +13,11 @@ Two floors, written down here so no company file can lower them by leaving somet
   - a call to a listed system that no `verbs` rule names is a write;
   - an environment that no `env` rule names is prod.
 
+A system may say what it needs before a call can reach it (`needs`, 1.7.1): `probe`, a read-only command that answers only when the
+session has the right identity (a database that takes the identity of the process: `SELECT SUSER_SNAME()`), `expect`, a pattern its
+output must match, and `launch`, the sentence for the person when it does not (how to start VS Code so that the identity is there).
+The harness runs the probe for `tools check`, `doctor` and the board's Enter screen; it never stores a password or an identity.
+
 Only a terminal command (`reach.cli`) is recognised for now. One program may serve several systems (one command line tool can run a ticket board and a cloud):
 give each one a `reach.when` pattern, matched against the arguments after the program; the first system that matches owns the call. Like the git rules, this is a net, not a sandbox: a script that
 starts the program itself is not seen.
@@ -22,108 +27,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core import schema
+from core.systems import (  # noqa: F401 - the names the handler, doctor and the tests use from here
+    ALLOW, DECISIONS, DEFAULT_RULES, DENY, DESTROY, ENVS, EXEC, HUMAN, OUTBOX, PROBE_SECONDS, PROD, PROD_RULES, READ, TASK, VERBS, WRITE, clis, reach, run_probe, validate, warnings,
+)
 
 from .gitcmd import MAX_DEPTH, SHELLS, SHELL_FLAGS, WRAPPERS, _is_environment, _name, split_segments
-
-ALLOW, TASK, OUTBOX, HUMAN, DENY = "allow", "task", "outbox", "human", "deny"
-DECISIONS = (ALLOW, TASK, OUTBOX, HUMAN, DENY)  # from loosest to strictest
-READ, WRITE, DESTROY, EXEC = "read", "write", "destroy", "exec"
-VERBS = (READ, WRITE, DESTROY, EXEC)
-ENVS = ("dev", "ist", "qat", "prod", "none")
-PROD = "prod"
-
-# What the gate decides when the company wrote no rule for that verb. Prod is read only.
-DEFAULT_RULES = {READ: ALLOW, WRITE: OUTBOX, EXEC: HUMAN, DESTROY: DENY}
-PROD_RULES = {READ: ALLOW, WRITE: DENY, EXEC: DENY, DESTROY: DENY}
-
-_NAME = r"^[a-z][a-z0-9_-]*$"
-_RULE_SET = {"type": "object", "properties": {verb: {"type": "string", "enum": list(DECISIONS)} for verb in VERBS}, "additionalProperties": False}
-_PATTERN_RULE = {"type": "object", "required": ["pattern"], "properties": {"pattern": {"type": "string", "minLength": 1}}}
-SYSTEMS_SCHEMA = {
-    "type": "object",
-    "additionalProperties": {
-        "type": "object",
-        "required": ["reach"],
-        "properties": {
-            "reach": {
-                "type": "object",
-                "properties": {
-                    "cli": {"type": ["string", "array"], "items": {"type": "string", "minLength": 1}},
-                    "when": {"type": "string", "minLength": 1},
-                },
-                "additionalProperties": False,
-            },
-            "env": {"type": "string", "enum": list(ENVS)},
-            "default_env": {"type": "string", "enum": list(ENVS)},
-            "env_from": {
-                "type": "array",
-                "items": {"type": "object", "required": ["pattern", "env"], "properties": {"pattern": {"type": "string", "minLength": 1}, "env": {"type": "string", "enum": list(ENVS)}}},
-            },
-            "verbs": {
-                "type": "array",
-                "items": {"type": "object", "required": ["pattern", "verb"], "properties": {"pattern": {"type": "string", "minLength": 1}, "verb": {"type": "string", "enum": list(VERBS)}}},
-            },
-            "target": {"type": "string"},
-            "rules": {"type": "object", "additionalProperties": _RULE_SET},
-        },
-        "additionalProperties": False,
-    },
-}
-
-
-def clis(system: Dict[str, Any]) -> List[str]:
-    """The program names a system is reached with, in lower case."""
-    reach = (system.get("reach") or {}).get("cli") or []
-    return [item.lower() for item in ([reach] if isinstance(reach, str) else reach)]
-
-
-def validate(systems: Any) -> List[str]:
-    """What is wrong with the `systems` of a policy: a list of texts, empty when it is fine. Never raises."""
-    if systems in (None, {}):
-        return []
-    errors = schema.validate(systems, SYSTEMS_SCHEMA, "systems")
-    if errors:
-        return errors
-    owner: Dict[str, str] = {}  # a program that has no `when` yet, and who claimed it
-    for name, system in systems.items():
-        if not re.match(_NAME, name):
-            errors.append(f"systems.{name}: a name is lower case letters, digits, - and _, and starts with a letter")
-        if not clis(system):
-            errors.append(f"systems.{name}.reach: give at least one program in `cli`")
-        when = (system.get("reach") or {}).get("when")
-        for program in clis(system) if not when else ():
-            if program in owner:
-                errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}; give one of them a `when`")
-            owner[program] = name
-        patterns = [("target", system.get("target") or ""), ("reach.when", when or "")] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs") for index, item in enumerate(system.get(key) or [])]
-        for where, pattern in (item for item in patterns if item[1]):
-            try:
-                re.compile(pattern)
-            except re.error as error:
-                errors.append(f"systems.{name}.{where}: bad pattern {pattern!r}: {error}")
-        if "env" in system and system.get("env_from"):
-            errors.append(f"systems.{name}: `env` fixes the environment, so `env_from` is never read; keep one of them")
-    return errors
-
-
-def warnings(systems: Dict[str, Any]) -> List[str]:
-    """What is allowed but is likely a mistake. For `tools check`."""
-    found: List[str] = []
-    for name, system in (systems or {}).items():
-        if not system.get("verbs"):
-            found.append(f"{name}: no `verbs`, so every call counts as a write")
-        if system.get("default_env") not in (None, PROD) and "env" not in system:
-            found.append(f"{name}: `default_env` is {system['default_env']}: a call that names no environment is NOT treated as prod")
-        for env, rules in (system.get("rules") or {}).items():
-            for verb, decision in rules.items():
-                if verb != READ and env in (PROD, "*") and decision in (ALLOW, TASK):
-                    found.append(f"{name}: rules.{env}.{verb} is {decision}: {env if env == PROD else 'every environment, prod too,'} lets an agent {verb} without a person")
-                elif verb == DESTROY and decision == ALLOW:
-                    found.append(f"{name}: rules.{env}.destroy is allow")
-    return found
 
 
 @dataclass(frozen=True)
@@ -233,8 +143,8 @@ def strictest(judged: List[Tuple[Action, str]]) -> Optional[Tuple[Action, str]]:
     return best
 
 
-def report(systems: Any) -> Dict[str, Any]:
-    """For `tools check`: what the policy lists, what the gate decides for each environment, what is wrong, what looks like a mistake."""
+def report(systems: Any, run: Optional[Callable[[str], Tuple[Optional[int], str]]] = None) -> Dict[str, Any]:
+    """For `tools check`: what the policy lists, what the gate decides for each environment, what is wrong, what looks like a mistake; with `run`, the probes too (`reach`)."""
     errors = validate(systems)
     listed: List[Dict[str, Any]] = []
     if not errors:
@@ -249,6 +159,7 @@ def report(systems: Any) -> Dict[str, Any]:
         "systems": listed,
         "errors": errors,
         "warnings": [] if errors else warnings(systems or {}),
+        **({"reach": reach(systems or {}, run)} if run is not None and not errors else {}),
         "ok": not errors,
         **({"exit_code": 1} if errors else {}),
     }

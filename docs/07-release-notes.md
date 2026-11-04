@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.1 (2026-11-04)
+
+### Added
+
+- **A company pack can carry the outside systems.** `company/tools/systems.json` in the knowledge base lists them, in the form of `systems` in tools.json; `harness company sync` copies it to `.harness/policies/tools.company.json`, a layer under your own `tools.override.json`. `company/tools/launch/` (scripts a person runs to start VS Code for a system) is copied to `.harness/launch/`, a guardrail folder. Get ready and the Knowledge base window count the systems with the other parts of the pack. These paths are fixed.
+- **A system can say what it needs.** `needs.probe` is a read-only command that answers only when the session carries the right identity, `needs.expect` a pattern on its answer, `needs.launch` what to tell you when it does not (how to start VS Code so the identity is there). `harness tools check` and `doctor` run the probes and say which system is reachable; the Enter screen of the board has a grey line **Outside systems** with the same, and the launch sentence of each system that is not reachable. A probe has 5 seconds; its answer is never kept.
+- **A sample pack** with made-up names: `.harness/examples/system-packs/sqlserver-sqlcmd/`. A SQL Server reached with `sqlcmd` and Windows authentication: the environment from the server name, read and write verbs, a probe, and a launch script that starts VS Code under another identity with `runas /netonly`.
+
+### Changed
+
+- **`harness doctor` checks `<name>.company.json` as it checks an override**: it must merge onto an existing policy, and the lines say what it adds.
+
 ## 1.7.0 (2026-11-04)
 
 ### Added

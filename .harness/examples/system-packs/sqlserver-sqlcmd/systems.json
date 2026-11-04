@@ -1,0 +1,30 @@
+{
+  "systems": {
+    "sql": {
+      "reach": { "cli": "sqlcmd" },
+      "env_from": [
+        { "pattern": "-S\\s+\"?[^\\s\"]*dev", "env": "dev" },
+        { "pattern": "-S\\s+\"?[^\\s\"]*ist", "env": "ist" },
+        { "pattern": "-S\\s+\"?[^\\s\"]*qat", "env": "qat" }
+      ],
+      "verbs": [
+        { "pattern": "\\binto\\b|\\b(?:insert|update|delete|merge|create|alter|grant|revoke)\\b", "verb": "write" },
+        { "pattern": "\\b(?:drop|truncate)\\b", "verb": "destroy" },
+        { "pattern": "\\bexec(?:ute)?\\b|\\bsp_\\w+", "verb": "exec" },
+        { "pattern": "\\s-i\\s", "verb": "write" },
+        { "pattern": "\\b(?:select|with|set\\s+nocount)\\b", "verb": "read" }
+      ],
+      "target": "\\b(?:from|into|update|join)\\s+([\\w.\\[\\]]+)",
+      "rules": {
+        "dev": { "read": "allow", "write": "task", "exec": "task", "destroy": "deny" },
+        "ist": { "read": "allow", "write": "outbox", "exec": "outbox", "destroy": "deny" },
+        "qat": { "read": "allow", "write": "outbox", "exec": "human", "destroy": "deny" }
+      },
+      "needs": {
+        "probe": "sqlcmd -S sql-dev.example.local,1433 -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT SUSER_SNAME()\"",
+        "expect": "^\\s*EXAMPLE\\\\",
+        "launch": "Start VS Code with .harness/launch/start-vscode.cmd (it asks for your EXAMPLE\\<id> and the password once), then open this folder again."
+      }
+    }
+  }
+}

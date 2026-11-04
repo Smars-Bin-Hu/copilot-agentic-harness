@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from core import config, shortcmd, targets, tasks
+from core import systems as outside
 
 LINES = 6  # errors of doctor shown at the end of the setup
 DOCTOR_TIMEOUT = 300.0  # seconds the child `doctor` may take; `board.doctor_seconds` in the policy `task` (1.6.104: 90 was too short for a work computer that took 80 s)
@@ -169,6 +170,18 @@ class Ready:
                 lines["repos"] = {"state": "note", "why": "none"}
         except Exception as error:  # noqa: BLE001 - a broken policy is doctor's to report; here it is a grey line
             lines["repos"] = {"state": "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
+        try:
+            systems = config.policy_or_empty(self.root, "tools").get("systems") or {}
+            reached = outside.reach(systems, lambda command: outside.run_probe(command, self.root)) if systems and not outside.validate(systems) else {}
+            missing = [f"{name}: {line['launch'] or line['why']}" for name, line in reached.items() if not line["reachable"]]
+            if not systems:
+                lines["systems"] = {"state": "note", "why": "none"}
+            elif missing:
+                lines["systems"] = {"state": "note", "why": "unreached", "n": len(missing), "detail": short("; ".join(missing))}
+            else:
+                lines["systems"] = {"state": "ok", "why": "ok", "n": len(systems)}
+        except Exception as error:  # noqa: BLE001
+            lines["systems"] = {"state": "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
         with self.lock:
             self.folders = {"at": now, "lines": lines}
         return lines
@@ -204,7 +217,7 @@ class Ready:
         try:
             more = self.folder_lines()
         except Exception as error:  # noqa: BLE001
-            more = {name: {"state": "note", "why": "error", "detail": short(error)} for name in ("kb", "repos")}
-        for name in ("kb", "repos"):
+            more = {name: {"state": "note", "why": "error", "detail": short(error)} for name in ("kb", "repos", "systems")}
+        for name in ("kb", "repos", "systems"):
             checks.append(dict(more[name], id=name, blocking=False))
         return {"ready": all(line["state"] == "ok" for line in checks if line["blocking"]), "checks": checks}

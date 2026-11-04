@@ -9,6 +9,7 @@ import threading
 import time
 import types
 import unittest
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 from unittest import mock
@@ -77,8 +78,8 @@ class ReadinessTests(TaskCase):
     def test_everything_in_place_is_ready_and_the_lines_come_in_the_order_of_the_screen(self) -> None:
         found = settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 1, "unbound": 0, "why": "ok"}), clean))
         self.assertTrue(found["ready"])
-        self.assertEqual([item["id"] for item in found["checks"]], ["setup", "vscode", "copilot", "doctor", "paired", "kb", "repos"])
-        self.assertEqual([item["blocking"] for item in found["checks"]], [True, True, True, True, True, False, False])
+        self.assertEqual([item["id"] for item in found["checks"]], ["setup", "vscode", "copilot", "doctor", "paired", "kb", "repos", "systems"])
+        self.assertEqual([item["blocking"] for item in found["checks"]], [True, True, True, True, True, False, False, False])
         self.assertNotIn("ver", [item["id"] for item in found["checks"]])  # N11: no version line
 
     def test_the_doctor_is_first_unknown_then_run_once_off_the_calling_thread(self) -> None:
@@ -197,6 +198,25 @@ class ReadinessTests(TaskCase):
         found = settled(check)
         self.assertEqual((line(found, "kb")["state"], line(found, "kb")["n"]), ("ok", 1))
         self.assertFalse(line(found, "kb")["blocking"])
+        self.assertEqual((line(found, "systems")["state"], line(found, "systems")["why"], line(found, "systems")["blocking"]), ("note", "none", False))
+
+    def test_an_outside_system_is_grey_with_how_to_start_when_its_probe_does_not_answer(self) -> None:
+        """1.7.1: a system with `needs` is probed; one that is not reachable names the company's launch sentence and never blocks the way in."""
+        policies = self.root / ".harness" / "policies"
+        policies.joinpath("tools.json").write_text(json.dumps({"schema_version": 1, "python": {}, "systems": {}}), encoding="utf-8")
+        systems = {"dev-sql": {"reach": {"cli": "sqlcmd"}, "env": "dev", "needs": {"probe": f"{sys.executable} -c \"print('CORP\\\\me')\"", "expect": r"^CORP\\", "launch": "Start VS Code with start-vscode.cmd."}},
+                   "cloud": {"reach": {"cli": "cloudctl"}, "needs": {"probe": f"{sys.executable} -c \"import sys; sys.exit(3)\"", "launch": "Sign in with cloudctl login."}}}
+        policies.joinpath("tools.company.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
+        found = settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), clean))
+        got = line(found, "systems")
+        self.assertEqual((got["state"], got["why"], got["n"], got["blocking"]), ("note", "unreached", 1, False))
+        self.assertIn("cloud: Sign in with cloudctl login.", got["detail"])
+        self.assertNotIn("dev-sql", got["detail"])
+        self.assertTrue(found["ready"])
+        systems["cloud"]["needs"]["probe"] = f"{sys.executable} -c \"print('ok')\""
+        policies.joinpath("tools.company.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
+        found = settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), clean))
+        self.assertEqual((line(found, "systems")["state"], line(found, "systems")["n"]), ("ok", 2))
 
 
 class StalledCommandTests(TaskCase):
@@ -349,7 +369,8 @@ class PageTests(unittest.TestCase):
         for why in ("vscode", "provider", "client", "nomodel"):
             self.assertIn(f"board.enter.m.copilot.{why}", en)
         for key in ("board.enter.m.doctor.errors", "board.enter.m.doctor.failed", "board.enter.m.paired.unpaired", "board.enter.d.vscode.ok", "board.enter.d.copilot.ok", "board.enter.d.doctor.ok",
-                    "board.enter.d.paired.ok", "board.enter.d.kb.ok", "board.enter.d.kb.none", "board.enter.d.repos.ok", "board.enter.d.repos.none"):
+                    "board.enter.d.paired.ok", "board.enter.d.kb.ok", "board.enter.d.kb.none", "board.enter.d.repos.ok", "board.enter.d.repos.none",
+                    "board.enter.d.systems.ok", "board.enter.d.systems.none", "board.enter.d.systems.unreached"):
             self.assertIn(key, en, key)
         self.assertIn("Sign in to Copilot in VS Code", en["board.enter.m.copilot.provider"])
         self.assertIn("Sign in to Copilot in VS Code", en["board.enter.m.copilot.client"])

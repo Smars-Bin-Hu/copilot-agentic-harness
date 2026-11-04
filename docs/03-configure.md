@@ -192,9 +192,11 @@ knowledge-base/
     standards/code-standards.md                     read where it is
     skills/<word>-<name>/                           copied to .github/skills/
     instructions/knowledgebase.instructions.md      copied to .github/instructions/
+    tools/systems.json                              the outside systems; copied to .harness/policies/tools.company.json
+    tools/launch/                                   scripts to start VS Code for them; copied to .harness/launch/
 ```
 
-Copilot finds skills and instructions in `.github/` only. So `harness company sync` copies them there. It touches no other file and is safe to run again. A company skill that is no longer in `company/` moves to `.harness/runtime/company-backup/`. Change the files in `company/`, never the copies: the next sync replaces them.
+These paths are fixed: `company sync`, `company pack` and `company update` count on them. Copilot finds skills and instructions in `.github/` only, and the gate reads policies in `.harness/policies/` only. So `harness company sync` copies them there. It touches no other file and is safe to run again. A company skill that is no longer in `company/` moves to `.harness/runtime/company-backup/`. Change the files in `company/`, never the copies: the next sync replaces them.
 
 When you choose a folder in **Get ready**, the form checks it against this layout. It marks what is right in green and warns about the rest. Once the knowledge base is in place, **Company Context** beside **Paired** on the board lists the same parts when you hold the pointer on it.
 
@@ -210,6 +212,14 @@ A team with no git server shares the content as a package:
 | Anyone | A new copy of the harness | `harness reinstall --from <old copy> --apply` carries the knowledge base and runs `company sync` |
 
 To share the harness itself, never zip your folder: it holds your tasks and overrides. Use `git clone`, or `git archive --format=zip -o harness.zip HEAD`, and do not commit company content to it. `git archive` keeps only what is committed.
+
+### Outside systems
+
+An agent may reach a system outside the repository (a database, a cloud, a ticket board) only through a terminal command the gate recognises. The harness ships no system. The team lists its own in `company/tools/systems.json`, in the form of `systems` in [tools.json](04-reference.md#policies): how a call is recognised (`reach.cli`), its environment (`env`, or `env_from` patterns on the command; a name no pattern matches is prod), what it does (`verbs`: read, write, destroy, exec) and what the gate decides for each environment (`rules`: allow, task, outbox, human, deny). A sample with made-up names is in `.harness/examples/system-packs/`.
+
+After `company sync`, the copy is `.harness/policies/tools.company.json`. Your own `tools.override.json` is merged on top, key by key, so you can try another rule on this computer without changing the pack. `harness tools check` says what is wrong with the list and what the gate decides.
+
+A system may need the session to carry an identity (a database with Windows authentication takes the identity of the process). Then the pack says what the system **needs**: a `probe`, a read-only command that answers only with the right identity; `expect`, a pattern its output must match; and `launch`, the sentence for you when it does not, such as how to start VS Code. The harness runs the probe for `tools check`, `doctor` and the Enter screen of the board, and shows the sentence when a system is not reachable. It never stores a password or an identity: a launch script under `.harness/launch/` asks you itself, and the agent inherits the identity from the process. A system that is not reachable is a grey line, not a stop: the rest of the work goes on.
 
 ## Skills
 

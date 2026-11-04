@@ -188,7 +188,8 @@
       "status": "active",
       "enabled": true,
       "events": [
-        "PreToolUse"
+        "PreToolUse",
+        "UserPromptSubmit"
       ],
       "enforcement": [
         "S",
@@ -205,6 +206,8 @@
         ".harness/tests/test_gate.py",
         ".harness/tests/test_gate_git.py",
         ".harness/tests/test_gate_approval.py",
+        ".harness/tests/test_gate_external.py",
+        ".harness/tests/test_outbox.py",
         ".harness/tests/test_admin.py",
         ".github/skills/harness-admin/",
         ".github/instructions/workspace.instructions.md",

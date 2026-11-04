@@ -6,6 +6,7 @@ denied or sent to a person (`target`), the name of a loaded skill, and the knowl
 Any other call that went through leaves no trace of what it touched, with two exceptions (1.6.5, for the board's health
 rules and Trace tab): a finished call (PostToolUse) records the paths it touched (`target.paths`, never a command), and a
 terminal call records `cmd`, a short hash of its command, so a repeated command can be told without the text being kept.
+A call to an outside system records its system, environment, verb, target and the decision of the policy (`external`, never what it returned).
 """
 
 from __future__ import annotations
@@ -86,7 +87,7 @@ def build(
             record["target"] = {"paths": list(event.paths[:MAX_PATHS]), "command": event.command}
     if denial:
         record["denial"] = denial
-    for key in ("kind", "judge", "verdict", "task", "kb"):  # task: whose prompt it was; kb: the knowledge base files the call read
+    for key in ("kind", "judge", "verdict", "task", "kb", "external"):  # task: whose prompt it was; kb: the knowledge base files the call read; external: an outside call
         if facts.get(key):
             record[key] = facts[key]
     if event.event in ("SessionStart", "SubagentStart", "SubagentStop"):

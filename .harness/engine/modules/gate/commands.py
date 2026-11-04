@@ -1,9 +1,11 @@
 """CLI commands of the gate module.
 
   approve-command    the person approves one git command the gate refused (terminal only)
+  approve-action     the person approves one call to an outside system the gate held in the outbox (terminal only)
   admin on           the person switches admin mode on for one session (terminal only): guardrail files open up for it
   admin off          switch it off again (anyone may: it only takes rights away)
   admin status       the sessions that are in admin mode
+  tools check        the systems listed in tools.json / tools.override.json, and what the gate decides for each of them
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from core import approval, config, guardrails, messages, tasks
 from core.paths import cli_command, repo_root, state_dir, utc_now
 from core.state import admin_on, session, state_path
 
-from . import approvals
+from . import approvals, external, outbox
 from .policy import POLICY_NAME
 
 
@@ -55,6 +57,39 @@ def approve(
     if done is None:
         raise CommandError(say("gate.approve.refused"))
     return {"approved": True, "command": done["command"], "valid_minutes": minutes, "next": say("gate.approve.next")}
+
+
+def approve_action(
+    root: Any,
+    reader: Optional[Callable[[str], str]] = None,
+    interactive: Optional[bool] = None,
+    out: Any = None,
+) -> Dict[str, Any]:
+    """Show the outside calls waiting in the outbox, then approve the one whose code is typed. Terminal only, like `approve-command`."""
+    out = out or sys.stdout
+    if interactive is None:
+        interactive = sys.stdin.isatty() and sys.stdout.isatty()
+    if not interactive:
+        raise CommandError(say("gate.action.terminal_only"))
+    minutes = approvals.minutes(config.load_policy(root, POLICY_NAME))
+    waiting = approvals.pending(root, minutes, file=approvals.ACTIONS)
+    if not waiting:
+        raise CommandError(say("gate.action.none", minutes=minutes))
+    print(say("gate.action.header", minutes=minutes), file=out)
+    for number, item in enumerate(waiting, 1):
+        draft = outbox.draft_of(item)
+        print(say(
+            "gate.action.item", number=number, system=item.get("system", "?"), env=item.get("env", "?"), verb=item.get("verb", "?"),
+            target=f" {item['target']}" if item.get("target") else "", session_id=item["session_id"], created_at=item["created_at"],
+            draft=f"; {draft}" if draft else "",
+        ), file=out)
+        print(f"      {item['command']}", file=out)
+    answer = (reader or input)(say("gate.action.prompt")).strip()
+    done = approvals.approve(root, answer, minutes, file=approvals.ACTIONS) if answer else None
+    if done is None:
+        raise CommandError(say("gate.action.refused"))
+    outbox.mark(Path(root), outbox.draft_of(done), "approved")
+    return {"approved": True, "command": done["command"], "system": done.get("system", ""), "valid_minutes": minutes, "draft": outbox.draft_of(done), "next": say("gate.action.next")}
 
 
 def cmd_approve_command(args: Any) -> Dict[str, Any]:
@@ -131,9 +166,24 @@ def admin_sessions(root: Path) -> List[Dict[str, Any]]:
     return sorted(found, key=lambda item: item["updated_at"], reverse=True)
 
 
+def tools_check(root: Path) -> Dict[str, Any]:
+    try:
+        systems = config.load_policy(root, "tools").get("systems")
+    except Exception as error:  # noqa: BLE001 - a broken file is what this command is for
+        return {"systems": [], "errors": [f"tools.json or tools.override.json cannot be read: {error}"], "warnings": [], "ok": False, "exit_code": 1}
+    return external.report(systems)
+
+
 def register(subparsers: Any) -> None:
+    tools = subparsers.add_parser("tools", help="the outside systems a company listed in tools.override.json")
+    tools_commands = tools.add_subparsers(dest="tools_command", required=True)
+    check = tools_commands.add_parser("check", help="is the list well formed, and what does the gate decide for each system and environment? Exit code 1 when there is an error")
+    check.set_defaults(handler=lambda args: tools_check(repo_root()))
+
     parser = subparsers.add_parser("approve-command", help="the person approves a git command the gate refused (terminal only)")
     parser.set_defaults(handler=cmd_approve_command, person_only=True)
+    action = subparsers.add_parser("approve-action", help="the person approves one call to an outside system the gate held in the outbox (terminal only)")
+    action.set_defaults(handler=lambda _args: approve_action(repo_root()), person_only=True)
 
     admin = subparsers.add_parser("admin", help="admin mode of a session: it may change guardrail files")
     commands = admin.add_subparsers(dest="admin_command", required=True)

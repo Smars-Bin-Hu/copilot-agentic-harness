@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from core import config
+from core import config, redact
 from core.context import Context
 from core.events import Decision, HookEvent
 from core.logs import log_call, safe_name
@@ -45,15 +45,16 @@ def clip(text: Any, limit: int) -> Any:
 
 
 def clip_record(record: Dict[str, Any], limit: int) -> Dict[str, Any]:
+    """The texts of a record cut to `limit`, with the values of passwords and tokens replaced by `***` first (core/redact.py)."""
     clipped = dict(record)
     for key in ("reason", "error"):
         if key in record:
-            clipped[key] = clip(record[key], limit)
+            clipped[key] = clip(redact.text(record[key]), limit)
     target = record.get("target")
     if isinstance(target, dict):
         clipped["target"] = {"paths": [clip(item, limit) for item in target.get("paths", [])]}
         if "command" in target:
-            clipped["target"]["command"] = clip(target.get("command", ""), limit)
+            clipped["target"]["command"] = clip(redact.text(target.get("command", "")), limit)
     return clipped
 
 

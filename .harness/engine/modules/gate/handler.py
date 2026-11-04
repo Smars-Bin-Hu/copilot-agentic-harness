@@ -15,7 +15,7 @@ read is allowed (AGENTS.md). A tool or a shape never seen is kept for `doctor` (
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import json
 import re
@@ -25,7 +25,7 @@ from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent
 
-from . import approvals, gitcmd, rules, terminal
+from . import approvals, external, gitcmd, outbox, rules, terminal
 from .policy import POLICY_NAME, Compiled, validate_policy
 
 NAME = "gate"
@@ -86,7 +86,7 @@ def _within(relative: str, folder: str) -> bool:
     return relative == folder or relative.startswith(folder + "/")
 
 
-def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: dict, guard_git: bool) -> Optional[Decision]:
+def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: dict, guard_git: bool, judged: Optional[Dict[str, Any]] = None) -> Optional[Decision]:
     why = terminal.guardrail_write(event.command, compiled)
     if why:
         return Decision(permission="deny", reason=rules.admin_locked_terminal(why) if ctx.admin else rules.guardrail_terminal(why))
@@ -108,6 +108,9 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     port = asks_board(ctx, event.command)
     if port:
         return Decision(permission="deny", reason=rules.board_request(port))
+    outside = check_external(event, ctx, judged, policy)
+    if outside:
+        return outside
     if git.kind == gitcmd.APPROVE:
         minutes = approvals.minutes(policy)
         if approvals.consume(ctx.root, event.session_id, event.command, minutes):
@@ -119,6 +122,83 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     permission, why = verdict
     reason = rules.terminal_denied(why) if permission == "deny" else rules.terminal_ask(why)
     return Decision(permission=permission, reason=reason)
+
+
+def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
+    """A call to a system the company listed under `systems` (tools.override.json), or None.
+
+    `{action, decision, passes, approved}`. `decision` is what the policy says (external.py); `passes` is whether the call goes
+    through: `allow`, or `task` in a task whose plan the person approved (an `outbox` call passes later, when `check_external`
+    finds the person's approval: then `approved` is set). No list, or a list that does not validate, means no rule here:
+    doctor and `tools check` report the break, and the gate does not guess what a broken policy meant (a hook that fails
+    itself must not hurt normal work).
+    """
+    try:
+        systems = ctx.policy("tools").get("systems") or {}
+        if not systems or external.validate(systems):
+            return None
+        picked = external.strictest(external.classify(event.command, systems))
+    except Exception:  # noqa: BLE001 - see above
+        return None
+    if picked is None:
+        return None
+    action, decision = picked
+    passes = decision == external.ALLOW
+    if decision == external.TASK:
+        data = _open_task(ctx)
+        passes = bool(data and tasks.plan_approved(ctx.root, data["task"], data))
+    return {"action": action, "decision": decision, "passes": passes, "approved": False}
+
+
+def _open_task(ctx: Context) -> Optional[Dict[str, Any]]:
+    task = ctx.state.get("active_task")
+    data = tasks.read(ctx.root, task) if task else None
+    return dict(data, task=task) if data and data.get("status") == "open" else None
+
+
+def external_facts(judged: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """What the log keeps of an outside call: the action and what the policy decided. Never what it returned."""
+    if not judged:
+        return {}
+    found = {**judged["action"].facts(), "decision": judged["decision"]}
+    if judged["approved"]:
+        found["approved"] = True  # an outbox call the person approved: it went through once
+    return {"external": found}
+
+
+def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, Any]], policy: dict) -> Optional[Decision]:
+    if not judged or judged["passes"]:
+        return None
+    action, decision = judged["action"], judged["decision"]
+    command = gitcmd.collapse(event.command)
+    data = _open_task(ctx)
+    facts = {"kind": "external", **external_facts(judged)}
+    if decision in (external.OUTBOX, external.HUMAN) and data and (data.get("autorun") or {}).get("state") == "on":
+        return Decision(permission="deny", reason=rules.external_autorun(action, command), facts=facts)  # nobody is there to approve
+    if decision == external.OUTBOX:
+        minutes = approvals.minutes(policy)
+        used = approvals.consume(ctx.root, event.session_id, event.command, minutes, file=approvals.ACTIONS)
+        if used:
+            judged["approved"] = True
+            outbox.mark(ctx.root, outbox.draft_of(used), "sent")
+            return None  # the person read this command and approved it: it runs once
+        task = data["task"] if data else None
+        code = approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task))
+        draft = outbox.write_draft(ctx.root, task, code, action, command, event.session_id, minutes) if task else ""
+        return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft), facts=dict(facts, kind="external-outbox"))
+    reason = {external.DENY: rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, command)
+    return Decision(permission="deny", reason=reason, facts=facts)
+
+
+def approved_context(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """At a prompt: the outside calls the person approved for this session and that are not used yet, so the agent runs them."""
+    try:
+        waiting = approvals.approved(ctx.root, event.session_id, approvals.minutes(ctx.policy(POLICY_NAME)), file=approvals.ACTIONS)
+    except Exception:  # noqa: BLE001 - a reminder must not get in the way
+        return None
+    if not waiting:
+        return None
+    return Decision(context=rules.external_approved([item["command"] for item in waiting]))
 
 
 def asks_board(ctx: Context, text: str) -> int:
@@ -138,6 +218,8 @@ def load_targets(ctx: Context) -> Optional[targets.Targets]:
 
 
 def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    if event.event == "UserPromptSubmit":
+        return approved_context(event, ctx)
     if event.event == "PreToolUse" and event.tool_kind != "terminal":
         # A web fetch, a browser or an MCP tool, whatever its name: its input names the address of the board server.
         port = asks_board(ctx, json.dumps(event.raw, ensure_ascii=False, default=str))
@@ -153,7 +235,13 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     compiled = Compiled(policy, [(repo.name, repo.path, repo.refused_paths) for repo in found.repos.values()] if found else None, admin=ctx.admin)
     if event.tool_kind == "terminal":
         # Without target repositories the harness behaves as before: only the ask rules in gate.json look at git.
-        return check_terminal(event, ctx, compiled, policy, guard_git=bool(found and found.configured))
+        judged = judge_external(event, ctx)
+        decided = check_terminal(event, ctx, compiled, policy, guard_git=bool(found and found.configured), judged=judged)
+        facts = external_facts(judged)  # after check_terminal: an approved outbox call is marked there
+        if facts:  # every call to a listed system leaves its line, whatever rule decided it and also when it went through
+            decided = decided or Decision()
+            decided.facts.update(facts)
+        return decided
     if not event.paths:
         return Decision(permission="deny", reason=rules.write_no_path(event.tool_name), facts={"kind": "write-no-path"})
     return check_write(event, ctx, compiled)

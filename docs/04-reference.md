@@ -56,6 +56,7 @@ What a command prints: text on a terminal, JSON on a pipe (a script, a redirect)
 | `task report` | Writes the task report again (`.md`: what was done) and the analysis page (`.html`: where the time and usage went). `--open` opens the analysis page in the browser; `--detail` adds the slowest prompts, the tools and every check to the output |
 | `task snapshot list`, `task snapshot prune` | Shows the work saved at the gates of a task; deletes expired ones |
 | `approve-command` | Approves one git command of the agent that was refused. Terminal only, with a typed code |
+| `approve-action` | **You run it, in your own terminal.** A call to an outside system the gate held in the outbox: it lists the calls waiting (system, environment, kind, the exact command, the draft in the task's `OUTBOX/`), you type the code the agent gave you, and the same command may run once, in the same session, within the time limit (`git.approval_minutes` of gate.json). A changed command needs a new approval. The agent hears of the approval at its next prompt |
 | `admin on` | Switches admin mode on for one session: it can change guardrail files. Terminal only, with a typed code |
 | `admin off`, `admin status` | Switches admin mode off for one session; lists the sessions with admin mode on |
 | `target list`, `target show` | Shows the target repositories: path, base branch, commit, whether the working tree is clean |
@@ -184,6 +185,7 @@ The defaults are in `.harness/policies/<file>`; overrides go in the `.override.j
 | tools.json | `python.interpreter` | The one Python the `harness` command runs on, a full path. Left empty, it runs on the first `python3` of the PATH of the terminal that starts it. When set and the command is on another Python, it starts again on this one (once). A path that is not there is said and the command goes on |
 | tools.json | `python.install_command` | The command your company approves for installing a Python package, with `{package}` where the name goes. Empty by default: the harness never guesses one and never runs one |
 | tools.json | `optional_packages` | The packages `task intake convert` can use when they are installed: `module`, `package`, `used_for` |
+| tools.json | `systems` | The outside systems an agent may reach (a cloud, a database, a ticket system). Empty: the harness ships none; a company lists its own in `tools.override.json`. One entry per system: `reach.cli` (and `reach.when` when one program serves several systems), `env` or `env_from` and `default_env`, `verbs`, `target`, `rules`. `harness tools check` says what is wrong and what the gate decides |
 | gate.json | `terminal.guardrail_write` | The rules that recognise a terminal command writing a guardrail. The `why` of a rule is one text, or one per language (`{"en": "...", "zh": "..."}`) |
 | gate.json | `terminal.deny` | The terminal commands that are refused outright |
 | gate.json | `terminal.ask` | The terminal commands you have to confirm |
@@ -268,7 +270,7 @@ All in `.harness/runtime/`, not in git, and not writable by an agent (not in adm
 | Path | What it holds |
 | --- | --- |
 | `state/<surface>/<session>.json` | For every session: which task it holds, subagents, whether it is in admin mode |
-| `logs/<surface>/<session>.jsonl` | The session log |
+| `logs/<surface>/<session>.jsonl` | The session log. A call to an outside system the company listed has an `external` field (system, environment, verb, target, the decision of the policy), whether it went through or not; never what it returned. Passwords and tokens in a logged command are replaced by `***` |
 | `logs/hook-errors.jsonl` | The hook's own errors |
 | `logs/unseen-tools.jsonl` | Tools and input shapes the gate has not seen, each kept once: names and keys only, never a value. `doctor` warns about them |
 | `git-approvals.json` | The git commands waiting for approval and those approved |

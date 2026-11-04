@@ -16,7 +16,7 @@ The folder layout, and what the gate can and cannot guard, are in [.workspace/RE
   - Work that is not written back (RCA, design, notes, one-off scripts) goes at the root of the task folder and needs no approval.
   - Work to write back to a target repository goes in `DEV/<repository>/<path>`. The plan is in `PLAN.md`; `DEV/` can be written only after the user approves it by running `task approve-plan` in the terminal.
 - Files in a target repository cannot be changed directly. Fetch them into `DEV/` with `task fetch`, change them, then run `task promote`: `--dry-run` first, then the user approves in the terminal.
-- Do not write these directly: `.task/`, `REVIEW/`, `SNAPSHOT/`, `CHANGES.diff` and `PROMOTE-PLAN.diff` in a task folder, and `reports/`. The CLI writes them, and a hook refuses.
+- Do not write these directly: `.task/`, `REVIEW/`, `SNAPSHOT/`, `OUTBOX/`, `CHANGES.diff` and `PROMOTE-PLAN.diff` in a task folder, and `reports/`. The CLI writes them, and a hook refuses.
 - A task folder is ignored by git, so search tools do not find the files in it. Read them by path, or use `ls` in the terminal.
 - A parent folder must exist before you create a file in it. Make it in the terminal: `mkdir -p` on macOS/Linux, `mkdir` on Windows.
 - When you need the user's approval, give the link to the file (`PLAN.md`, `PROMOTE-PLAN.diff`) so the user reads it in the editor. Do not paste the whole text into the conversation. Write the link with the path from the repository root, `[PLAN.md](.workspace/sandbox/tasks/<task>/PLAN.md)`: a path from the task folder does not open. When the prompt names the task's page on the board, give that address too.

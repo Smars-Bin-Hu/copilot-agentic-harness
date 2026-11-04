@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.0 (not released yet)
+
+### Added
+
+- **Outside systems have a protocol (the gate part).** A company lists the systems an agent may reach in `tools.override.json`, under `systems`: how a call is recognised (`reach.cli`, and `reach.when` when one program serves several systems), which environment it runs in (`env`, or `env_from` patterns), what it does (`verbs`: read, write, destroy, exec) and what the gate decides (`rules`: allow, task, outbox, human, deny). The harness ships no system: the list is empty. A terminal command that calls a listed program becomes one action, `{system, env, verb, target}`, and the gate decides. Two floors hold whatever the company writes: a call to a listed system that no `verbs` pattern names is a write, and an environment that no `env` pattern names is prod. Without a rule: read allow, write outbox, exec human, destroy deny; prod allows only read. Used in a line with `&&`, a pipe, `sudo`, `bash -c` or `$(...)`, the strictest call decides. `human` means the agent hands the call to the user (`task handoff run`); `task` passes only in a task whose plan was approved.
+- **The outbox: you approve a write to an outside system first.** A call the policy marks `outbox` (by default every write) is refused once and held: in a session with a task, the hook writes a draft into the task's `OUTBOX/<code>-<system>.md` (the action and the exact command; only the harness writes there). You run `harness approve-action` in your own terminal, read the command and type the code. The same command may then run once, in the same session, within the time limit; a changed command needs a new approval. The agent hears of the approval at its next prompt, and the draft records *approved* and *approved and run*. Under autorun a call that needs you stops the run instead of waiting.
+- **Every outside call is logged.** A call to a listed system leaves an `external` field in the session log (system, environment, verb, target, the policy's decision), also when it went through; what the call returned is never kept. The task report counts outside calls and how many were refused.
+- **Secrets stay out of the log.** In a refused command and its reason, the values of passwords and tokens (`-P <password>`, `--password`, `--token`, `NAME_TOKEN=...`, `Password=` in a connection string, `Authorization: Bearer`, `user:password@` in a URL) are replaced by `***` before the line is written. Keep secrets out of commands anyway: this catches the common spellings only.
+- **`harness tools check`** says what is wrong with the list and what the gate decides for each system and environment. `harness doctor` reports a broken list as an error; a list that does not validate is ignored by the gate (a hook that fails itself must not hurt normal work).
+
 ## 1.6.109 (2026-11-03)
 
 ### Added

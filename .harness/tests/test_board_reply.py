@@ -511,6 +511,19 @@ class PageTests(unittest.TestCase):
         self.assertIn('{action: "review set", task: desk.name, n, step: "act"}', desk)  # the command of a terminal, not text in a prompt
         self.assertNotIn("[review]", messages.text("desk.rv.hint"))
 
+    def test_independent_review_stays_at_the_head_of_an_earlier_round(self) -> None:
+        desk = source("desk.js")
+        start = desk.index("function reviewButton()")
+        button = desk[start:desk.index("\n  }\n", start)]
+        self.assertIn('if (!served() || !info || full.status !== "open") return null;', button)  # the task's setting: an earlier round is no reason to hide it
+        self.assertNotIn("desk.past ||", button)
+        self.assertIn("const info = full.settings;", button)  # an earlier round is drawn as closed; the task is not
+        self.assertIn('desk.past ? h("p", {class: "set-tip"}, t("desk.rv.current", {round: full.round})) : null', button)
+        self.assertIn("if (on) inView(pop);", button)  # behind the round tabs the button can sit mid-row in a narrow window
+        self.assertIn("ui.review.set(JSON.stringify([full.settings && [full.settings.n, full.settings.max_n], full.status, desk.past && full.round]), () => reviewButton());", desk)
+        for language in ("en", "zh"):
+            self.assertIn("{round}", messages.table(language)["desk.rv.current"], language)
+
     def test_a_new_model_fills_thinking_and_context_at_once(self) -> None:
         desk = source("desk.js")
         self.assertIn('fillFor(pick.value, "", 0); save(pick.value, "", 0);', desk)  # the row is not drawn again while its control has the focus

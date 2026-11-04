@@ -497,7 +497,7 @@
       return nodes;
     });
     ui.rounds.set(JSON.stringify([full.rounds, full.round, desk.past && desk.past.round]), () => roundSwitch());
-    ui.review.set(JSON.stringify([desk.settings && [desk.settings.n, desk.settings.max_n], desk.status, Boolean(desk.past)]), () => reviewButton());
+    ui.review.set(JSON.stringify([full.settings && [full.settings.n, full.settings.max_n], full.status, desk.past && full.round]), () => reviewButton());
     ui.pill.set(live ? JSON.stringify([desk.vscode, chat && chat.bound]) : "", () => (live ? [SHELL.vsPill(desk.vscode, chat), SERVE.pairMark(true)] : null));
     ui.forks.set(JSON.stringify([desk.forked_from, desk.forked_to]), () => (desk.forked_from || desk.forked_to.length ? [
       desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null, desk.forked_from && desk.forked_to.length ? " · " : null,
@@ -570,15 +570,23 @@
   }
 
   // "Independent review" (1.6.33): a setting of the task, at the head of its page, not of a message. A click runs `task review set`, as at a terminal; `[review]=n` in a prompt still does the same, and is not shown.
+  // It is the task's, like the VS Code pill: it stays at the head of an earlier round too (1.6.109), says there that it sets the current round, and is gone only when the task is closed.
   const SHIELD = ["M8 1.8l4.8 1.9v3.7c0 3-2 5.5-4.8 6.8-2.8-1.3-4.8-3.8-4.8-6.8V3.7L8 1.8z", "M5.8 8l1.6 1.6 2.9-3"];
   let closeReview = null;
   document.addEventListener("click", (event) => { if (closeReview && !event.target.closest(".tk-rv")) closeReview(); });
   document.addEventListener("keydown", (event) => { if (closeReview && event.key === "Escape") closeReview(); });
 
+  // A pop under a button of the head stays in the window: with the round tabs before it the button can sit in the middle of a narrow window, and the pop would run off the edge.
+  function inView(pop) {
+    pop.style.transform = "";
+    const box = pop.getBoundingClientRect(), edge = 16, width = document.documentElement.clientWidth;
+    const shift = box.right > width - edge ? width - edge - box.right : box.left < edge ? edge - box.left : 0;
+    if (shift) pop.style.transform = "translateX(" + Math.round(shift) + "px)";
+  }
   function reviewButton() {
-    const info = desk.settings;
+    const info = full.settings;
     closeReview = null;
-    if (!served() || desk.past || !info || desk.status !== "open") return null;
+    if (!served() || !info || full.status !== "open") return null;
     const can = SERVE.runs("review set");
     const choices = [];
     for (let n = 0; n <= info.max_n; n++) {
@@ -590,10 +598,10 @@
       });
       choices.push(choice);
     }
-    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.rv.button")), h("p", {class: "sub"}, t("desk.rv.hint")), h("p", {class: "set-warn"}, t("desk.rv.cost")), h("div", {class: "chips"}, choices));
+    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.rv.button")), desk.past ? h("p", {class: "set-tip"}, t("desk.rv.current", {round: full.round})) : null, h("p", {class: "sub"}, t("desk.rv.hint")), h("p", {class: "set-warn"}, t("desk.rv.cost")), h("div", {class: "chips"}, choices));
     const button = h("button", {type: "button", class: "rv-btn" + (info.n ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.rv.hint")},
       icon(SHIELD, 14), h("span", {class: "rv-name"}, t("desk.rv.button")), h("b", null, info.n ? String(info.n) : t("desk.rv.off")));
-    const show = (on) => { pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeReview = on ? () => show(false) : null; };
+    const show = (on) => { pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeReview = on ? () => show(false) : null; if (on) inView(pop); };
     button.addEventListener("click", () => show(pop.hidden));
     return [button, pop];
   }

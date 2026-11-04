@@ -640,6 +640,18 @@ class RelayReminderTests(LifeCase):
     def stop(self, session: str = S1, active: bool = False) -> Dict[str, Any]:
         return self.hook(payload("Stop", session, stop_hook_active=active))
 
+    def test_a_write_of_req_or_plan_is_noted_once_a_prompt_and_the_task_time_stays(self) -> None:
+        """1.6.109: the moments the report cuts its stages at (the plan begins, the requirement changes again)."""
+        self.new("job", "dev")
+        before = self.data()["updated_at"]
+        for relative in ("REQ.md", "REQ.md", "PLAN.md", "RCA.md", "PLAN.md"):
+            self.done(f"{BASE}/job/{relative}")
+        self.assertEqual([item["doc"] for item in self.data()["doc_writes"]], ["req", "plan"])
+        self.assertEqual(self.data()["updated_at"], before)  # bookkeeping, not something the person did: the row does not light up
+        self.hook(payload("UserPromptSubmit", S1, prompt="the requirement changed"))
+        self.done(f"{BASE}/job/REQ.md")
+        self.assertEqual([item["doc"] for item in self.data()["doc_writes"]], ["req", "plan", "req"])
+
     def test_a_write_without_the_task_file_is_reminded_once(self) -> None:
         self.new()
         self.done(f"{BASE}/job/RCA.md")
@@ -782,7 +794,7 @@ class MessageTests(unittest.TestCase):
             "task.kind.", "task.tier.", "task.next.light", "task.next.medium", "task.next.full", "task.waiting.", "desk.hint.", "desk.wait.", "desk.go.", "desk.via.", "board.filter.", "board.archive.", "board.select.", "board.close.", "desk.tab.", "desk.changes.", "desk.missing.", "stage.requirement", "stage.plan", "stage.developing", "stage.writeback", "stage.done", "stage.doing", "stage.guide", "stage.check", "fork.why.",
             "insight.stage.", "insight.part.", "insight.wait.", "insight.finding.", "report.source.", "report.status.", "board.state.", "board.queue.", "board.action.", "autorun.why.", "unit.",
             "gate.git.why.", "promote.hint.", "task.resolve.", "log.count.", "path.what", "delete.what", "approval.person_only", "event.", "mdreport.promote.", "doctor.language.source.", "doctor.override.how.", "doctor.target.kind.", "doctor.output.sample", "kbstatus.next.", "rules.reply.", "board.vs.why.", "desk.chat.", "desk.send.lang.", "send.refused.", "ask.refused.answer.", "create.refused.", "fileop.refused.", "board.new.perm.", "report.gate.v.", "board.warn.", "desk.trace.", "compact.refused.",
-            "dock.kb.", "dock.group.", "dock.step.", "dock.atlas.mode.", "setup.line.", "setup.kb.package", "setup.kb.folder", "setup.kb.none", "board.setup.", "stage.partial", "stage.failed", "desk.group.", "desk.jump.", "desk.ctx.part.", "desk.ctx.group.", "desk.ctx.level.", "desk.fact.", "board.wall.state.", "board.enter.t.", "board.enter.d.", "board.enter.m.", "board.enter.say.",
+            "dock.kb.", "dock.group.", "dock.step.", "dock.atlas.mode.", "setup.line.", "setup.kb.package", "setup.kb.folder", "setup.kb.none", "board.setup.", "stage.partial", "stage.failed", "desk.group.", "desk.jump.", "desk.ctx.part.", "desk.ctx.group.", "desk.ctx.level.", "desk.rewind.why.", "desk.fact.", "board.wall.state.", "board.enter.t.", "board.enter.d.", "board.enter.m.", "board.enter.say.",
         )
         source = source.replace('messages.text(\n            "', 'messages.text("')
         unused = [name for name in messages.table("zh") if f'"{name}"' not in source and not name.startswith(dynamic)]

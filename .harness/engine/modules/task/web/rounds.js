@@ -1,13 +1,15 @@
 // The earlier rounds of a task's chat, at the top of the Live tab (1.6.55): one line for each prompt of the person, opened to read the prompt and all the agent wrote for it.
 // Only the last 5 are shown (1.6.108): the older ones are folded under one button, so the tab does not grow with the chat. The server reads them from Copilot's own record, or from the task's saved transcript (chatrounds.py), so this works with VS Code closed.
 // Each line ends with what the round took (1.6.98): its time, its credits and its tools, as icons with the words in their tip. The round that still runs counts its time on the page.
-// Needs common.js (h, t, when, clock, amount, lineSvg), serve.js (SERVE), live.js (LIVE), status.js (Status: the one clock of the page). Drawn with DOM nodes and textContent only.
+// Each line also has the rewind icon (1.6.109): back to before that message, the chat and the task's files; its tip says what it does or why it cannot. A click shows what changes first.
+// Needs common.js (h, t, when, clock, amount, lineSvg), serve.js (SERVE), live.js (LIVE), status.js (Status: the one clock of the page), reply.js (REPLY). Drawn with DOM nodes and textContent only.
 const ROUNDS = (function () {
   const SHOWN = 5;
   const ICONS = {
     time: [["circle", {cx: 8, cy: 8, r: 6}], ["path", {d: "M8 4.8V8l2.2 1.4"}]],  // clock
     credits: [["ellipse", {cx: 8, cy: 4.6, rx: 5, ry: 2}], ["path", {d: "M3 4.6v6.8c0 1.1 2.2 2 5 2s5-.9 5-2V4.6M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"}]],  // a stack of coins
     tools: [["path", {d: "M9.8 2.4a3.3 3.3 0 0 0-3.9 4.3L2.4 10.2a1.3 1.3 0 0 0 1.8 1.8l3.5-3.5a3.3 3.3 0 0 0 4.3-3.9l-2 2-1.6-.4-.4-1.6z"}]],  // wrench
+    rewind: [["path", {d: "M3.6 7.2A4.8 4.8 0 1 1 4.4 11"}], ["path", {d: "M3.4 3.4v3.9h3.9"}]],  // an arrow that turns back
   };
   const stat = (kind, tip, value) => h("span", {class: "rd-stat", title: tip, "aria-label": tip}, lineSvg(ICONS[kind]), value);
   function stats(item, running) {
@@ -40,9 +42,59 @@ const ROUNDS = (function () {
   function make(item) {
     const count = h("span", {class: "sub rd-stats"});
     const body = h("div", {class: "rd-body"});
-    const node = h("details", {class: "rd-row", "data-n": String(item.n)}, h("summary", null, h("span", {class: "sub rd-at"}, when(item.at)), h("span", {class: "rd-head"}, item.head || t("desk.rounds.empty")), count), body);
+    const back = h("button", {type: "button", class: "rd-rw"}, lineSvg(ICONS.rewind));
+    const rec = {count, back, item};
+    back.addEventListener("click", (event) => {  // inside the summary: the click must not open or fold the round
+      event.preventDefault();
+      event.stopPropagation();
+      if (!back.classList.contains("off")) rewindAsk(rec.item);
+    });
+    const node = h("details", {class: "rd-row", "data-n": String(item.n)}, h("summary", null, h("span", {class: "sub rd-at"}, when(item.at)), h("span", {class: "rd-head"}, item.head || t("desk.rounds.empty")), count, back), body);
     node.addEventListener("toggle", () => { if (node.open) fill(body, item.n); });
-    return {node, count};
+    rec.node = node;
+    return rec;
+  }
+
+  // The rewind icon of a round: on when the server found its restore point and nothing stands in the way, and the chat is idle. Not `disabled`: a disabled button shows no tip.
+  function paintBack(rec, item) {
+    const mark = item.rewind || {seq: null, why: "none"};
+    const why = mark.why ? t("desk.rewind.why." + mark.why) : st.state !== "idle" ? t("desk.rewind.busy") : "";
+    const tip = why || t("desk.rewind.tip");
+    rec.back.classList.toggle("off", Boolean(why));
+    rec.back.setAttribute("aria-disabled", why ? "true" : "false");
+    rec.back.title = tip;
+    rec.back.setAttribute("aria-label", t("desk.rewind.icon") + ". " + tip);
+  }
+
+  // What going back changes, then the act: the files and the chat go back, the words of the message come back to the reply box.
+  function rewindAsk(item) {
+    const task = st.task;
+    const said = h("div", {class: "bad"});
+    const view = SERVE.dialog([h("h2", null, t("desk.rewind.title")), h("p", {class: "sub"}, "..."), said]);
+    SERVE.post("/api/rewind", {task, seq: item.rewind.seq, step: "preview"}).then((data) => {
+      const found = data.result;
+      const words = {back: "desk.rewind.back", removed: "desk.rewind.removed", lost: "desk.rewind.lost"};
+      const list = (key) => (found.counts[key] ? h("details", {class: "rw-list"}, h("summary", null, t(words[key], {n: found.counts[key]})),
+        h("ul", null, found[key].map((name) => h("li", null, h("code", null, name))), found.counts[key] > found[key].length ? h("li", {class: "sub"}, "…") : null)) : null);
+      const go = h("button", {type: "button", class: "act hot"}, t("desk.rewind.go"));
+      const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+      const files = found.counts.back + found.counts.removed + found.counts.lost;
+      view.box.replaceChildren(h("h2", null, t("desk.rewind.title")), h("p", {class: "rw-said"}, h("span", {class: "sub"}, when(item.at)), " ", item.head || ""),
+        h("p", null, t("desk.rewind.turns", {n: found.turns})), files ? h("div", {class: "rw-files"}, list("back"), list("removed"), list("lost")) : h("p", {class: "sub"}, t("desk.rewind.same")),
+        h("p", {class: "sub"}, t("desk.rewind.note")), said, h("div", {class: "row send-actions"}, go, no));
+      no.addEventListener("click", view.close);
+      go.addEventListener("click", () => {
+        go.disabled = true;
+        SERVE.post("/api/rewind", {task, seq: item.rewind.seq, step: "act"}).then((done) => {
+          view.close();
+          if (typeof REPLY !== "undefined") REPLY.restore(done.result);
+          SERVE.done();
+          load();
+          setTimeout(load, 2500);  // Copilot rewrites its record a moment later
+        }, (error) => { go.disabled = false; said.replaceChildren(...SERVE.reasons((error && error.message) || String(error))); });
+      });
+      go.focus();
+    }, (error) => { said.replaceChildren(...SERVE.reasons((error && error.message) || String(error))); });
   }
 
   // Rounds go in or out above what is being read, and the reading place stays: the browser keeps it itself (scroll anchoring, 1.6.108: moving the page too sent it twice as far);
@@ -65,6 +117,8 @@ const ROUNDS = (function () {
       if (!rec) { rec = make(item); st.nodes.set(item.n, rec); }
       const sig = [item.seconds, item.aiu, item.tools, busy && item.n === last].join();
       if (rec.count.dataset.sig !== sig) { rec.count.dataset.sig = sig; rec.count.replaceChildren(...stats(item, busy && item.n === last)); }
+      rec.item = item;
+      paintBack(rec, item);
       if (rec.node === next) next = next.nextSibling;
       else rows.insertBefore(rec.node, next);
     }

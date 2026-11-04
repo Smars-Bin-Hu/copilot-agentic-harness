@@ -116,7 +116,7 @@
 .tk-pn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tk-pv{font-variant-numeric:tabular-nums;color:var(--soft)}
 .tk-part .tk-cb{grid-column:1/-1;width:100%}
-.tk-cx-go{margin:12px 0 0}
+.tk-cx-go{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 0}
 .st-wide .st-ln{gap:10px}
 .st-tm{flex:none;min-width:5.5em;text-align:right;color:var(--soft);font-variant-numeric:tabular-nums;white-space:nowrap}
 .st-run.st-tm{display:inline-block;color:var(--run)}

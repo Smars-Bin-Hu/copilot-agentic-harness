@@ -199,6 +199,17 @@ class LearnTests(HarnessTestCase):
         self.assertEqual(result["not_in_map"], ["sp:Shop.dbo.usp_gone"])
         self.assertEqual(result["exit_code"], 1)
 
+    def test_a_declared_use_may_be_written_and_left_out_is_only_a_warning(self) -> None:
+        before = self.right()
+        kbgraph.declared_file(self.root).write_text(json.dumps([{"from": LOAD, "kind": "runs", "to": "job:Shop_Audit"}]), encoding="utf-8")
+        self.card("- " + before)
+        result = kblearn.cardcheck(self.root, self.folder)
+        self.assertEqual((result["errors"], result["warnings"]), (0, 1), result)
+        self.assertIn("job:Shop_Audit", result["warning_list"][0])
+        self.card("- " + self.right())
+        self.assertEqual(kblearn.cardcheck(self.root, self.folder)["errors"], 0)
+        self.assertIn("job:Shop_Audit", self.right())
+
     def test_cardcheck_checks_the_lines_a_card_cites(self) -> None:
         self.card("- " + self.right() + "\n\nMerges staging into orders (L7-L9); logs the run (L11).")
         self.assertEqual(kblearn.cardcheck(self.root, self.folder)["errors"], 0)

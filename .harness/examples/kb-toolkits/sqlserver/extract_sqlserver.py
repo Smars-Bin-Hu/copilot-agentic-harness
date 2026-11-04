@@ -6,8 +6,8 @@ A toolkit is the part of the repository map that depends on the stack. It lives 
     def <function>(text: str, context: dict) -> list[dict]
 
 `text` is the file, decoded (UTF-8 or UTF-16 with a BOM). `context` holds `path`, `stem`, `folder` (the folder the file
-is in), `repo`, and one key per entry of `markers` in toolkit.json: here `db` (the nearest `.sqlproj` above the file)
-and `project` (the nearest `.dtproj`). Each object returned:
+is in), `repo`, `rule` (the entry of `extractors` in toolkit.json that chose the file), and one key per entry of
+`markers`: here `db` (the nearest `.sqlproj` above the file) and `project` (the nearest `.dtproj`). Each object returned:
 
     {"id": "sp:Db.dbo.usp_load", "type": "sp", "name": "Db.dbo.usp_load", "line": 3, "dynamic": False,
      "refs": [{"kind": "calls" | "runs" | "reads" | "writes", "name": "dbo.usp_step", "db": "Db", "line": 9, "as": "package"}]}
@@ -19,7 +19,9 @@ The contract is `.harness/contracts/kb/map.md`. This file uses the standard libr
          A SQL Agent job script (`sp_add_job`, as SSMS scripts it) is read as a job: its steps run procedures and packages
   ssis   `.dtsx`: the SQL of Execute SQL tasks, the tables of data flow sources and destinations, child packages
 
-What is only known at run time (`EXEC(@sql)`, `sp_executesql`, a package from a variable) is marked `dynamic`.
+A job or a package started by its name in a string (`sp_start_job @job_name = N'X'`, or a team's own wrapper named in
+`by_name` of the rule in toolkit.json) is a use of that job or package. When the name is a variable, the object is
+marked `dynamic`, like `EXEC(@sql)`, `sp_executesql` or a package from a variable: known only at run time.
 Written from the public documentation of these formats: check it against your own files (facts.jsonl) and change it.
 """
 
@@ -58,6 +60,10 @@ STEP = re.compile(r"\bsp_add_jobstep\b", re.IGNORECASE)
 SCHEDULE = re.compile(r"\bsp_add_(?:job)?schedule\b|\bsp_attach_schedule\b", re.IGNORECASE)
 ARGUMENT = r"@{name}\s*=\s*N?'((?:[^']|'')*)'"
 PACKAGE = re.compile(r"([^\\/\"';]+)\.dtsx\b", re.IGNORECASE)
+# Calls that start a job or a package by its name, given as a string. A team adds its own wrappers in toolkit.json
+# (`by_name` on the extractor's rule); the name must be a literal there, or the object is marked dynamic.
+BY_NAME = [{"call": "sp_start_job", "param": "@job_name", "position": 1, "as": "job", "kind": "runs"}]
+ARGS = re.compile(r"\s*(?:(@\w+)\s*=\s*)?(N?'(?:[^']|'')*'|@\w+|[\w.\-]+)\s*(,)?", re.IGNORECASE)
 
 
 # --- text -----------------------------------------------------------------------------------------
@@ -193,10 +199,53 @@ def sql_refs(text: str, db: str, offset_line: int = 0, skip: str = "") -> Tuple[
     return refs, bool(DYNAMIC.search(text))
 
 
+def wrappers(context: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The calls that run something by name: the built-in ones and the rule's `by_name` from toolkit.json."""
+    rule = context.get("rule") or {}
+    return BY_NAME + [item for item in rule.get("by_name") or [] if isinstance(item, dict) and item.get("call") and item.get("as")]
+
+
+def named_calls(raw: str, clean: str, db: str, rules: List[Dict[str, Any]], offset_line: int = 0) -> Tuple[List[Dict[str, Any]], bool]:
+    """(what a piece of SQL runs by name through a wrapper, is a name only known at run time). `raw` is the SQL as
+    written, `clean` the same with comments and strings blanked: a call is found in `clean`, its arguments read in `raw`."""
+    refs: List[Dict[str, Any]] = []
+    dynamic = False
+    for match in CALL.finditer(clean):
+        called = [piece.lower() for piece in parts(match.group(1))]
+        for rule in rules:
+            wanted = [piece.lower() for piece in parts(str(rule["call"]))]
+            if called[-len(wanted):] != wanted:
+                continue
+            value, position, at = None, 0, match.end(1)
+            while True:
+                arg = ARGS.match(raw, at)
+                if not arg:
+                    break
+                position += 1
+                name, given = (arg.group(1) or "").lower(), arg.group(2)
+                if (name and name == str(rule.get("param") or "").lower()) or (not name and position == int(rule.get("position") or 0)):
+                    value = given
+                    break
+                if not arg.group(3):
+                    break
+                at = arg.end()
+            if value is None:
+                continue
+            literal = re.fullmatch(r"N?'((?:[^']|'')*)'", value, re.IGNORECASE)
+            if not literal or not literal.group(1).strip():
+                dynamic = True
+                continue
+            target = literal.group(1).replace("''", "'").strip().replace("\\", "/").strip("/")
+            if rule["as"] == "package" and target.lower().endswith(".dtsx"):
+                target = target[:-5]
+            refs.append({"kind": str(rule.get("kind") or "runs"), "name": target, "db": db, "line": offset_line + line_at(clean, match.start()), "as": str(rule["as"])})
+    return refs, dynamic
+
+
 def tsql(text: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
     """The objects a `.sql` file defines: one per batch (`GO`) that starts with CREATE or ALTER."""
     if JOB.search(text):
-        return sqlagent(text, context)
+        return sqlagent(text, context, wrappers(context))
     db = str(context.get("db") or "")
     clean = blank(text)
     found = []
@@ -204,6 +253,7 @@ def tsql(text: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
     bounds = [match.start() for match in GO.finditer(clean)] + [len(clean)]
     for end in bounds:
         batch = clean[start:end]
+        start_at = start
         first_line = line_at(clean, start) - 1
         start = end + 2 if end < len(clean) else end
         match = DEFINITION.search(batch)
@@ -216,6 +266,11 @@ def tsql(text: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
         name = sql_name(raw, db)
         body = batch[match.end():]
         refs, dynamic = ([], False) if kind == "table" else sql_refs(body, db, first_line + line_at(batch, match.end()) - 1, skip=name)
+        if kind != "table":
+            raw_body = text[start_at + match.end():start_at + len(batch)]
+            more, unknown = named_calls(raw_body, body, db, wrappers(context), first_line + line_at(batch, match.end()) - 1)
+            refs += more
+            dynamic = dynamic or unknown
         if kind == "trigger":
             on = re.match(rf"\s*ON\s+({NAME})", body, re.IGNORECASE)
             if on:
@@ -241,7 +296,7 @@ def package_ref(command: str) -> Optional[str]:
     return match.group(1)
 
 
-def sqlagent(text: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+def sqlagent(text: str, context: Dict[str, Any], rules: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
     """A SQL Agent job script (as SSMS scripts it): the job, and what each step runs."""
     jobs: List[Dict[str, Any]] = []
     marks = sorted([(match.start(), "job") for match in JOB.finditer(text)] + [(match.start(), "step") for match in STEP.finditer(text)])
@@ -260,7 +315,11 @@ def sqlagent(text: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
         command = argument(chunk, "command")
         line = line_at(text, position)
         if subsystem == "TSQL":
-            refs, dynamic = sql_refs(blank(command), argument(chunk, "database_name"))
+            database = argument(chunk, "database_name")
+            refs, dynamic = sql_refs(blank(command), database)
+            more, unknown = named_calls(command, blank(command), database, rules or BY_NAME)
+            refs += more
+            dynamic = dynamic or unknown
             for ref in refs:
                 ref["line"] = line
             job["refs"] += refs

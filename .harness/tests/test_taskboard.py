@@ -691,9 +691,9 @@ class InsightTests(BoardCase):
 
     def test_the_stage_table_sums_each_stage_in_the_order_reached(self) -> None:
         prompts = [
-            {"stage": "requirement", "active_s": 10.0, "aiu": 1.0, "tool_calls": 3, "failed_tool_calls": 1, "subagents": 0, "model_s": 6.0, "subagent_s": 0.0, "input_tokens": 100, "output_tokens": 5},
-            {"stage": "check", "active_s": 20.0, "aiu": 2.0, "tool_calls": 2, "failed_tool_calls": 0, "subagents": 1, "model_s": 8.0, "subagent_s": 7.0, "input_tokens": 200, "output_tokens": 9},
-            {"stage": "requirement", "active_s": 5.0, "aiu": 0.5, "tool_calls": 1, "failed_tool_calls": 0, "subagents": 0, "model_s": None, "subagent_s": None, "input_tokens": None, "output_tokens": None},
+            {"n": 1, "stage": "requirement", "active_s": 10.0, "aiu": 1.0, "tool_calls": 3, "failed_tool_calls": 1, "subagents": 0, "model_s": 6.0, "subagent_s": 0.0, "input_tokens": 100, "output_tokens": 5},
+            {"n": 2, "stage": "check", "active_s": 20.0, "aiu": 2.0, "tool_calls": 2, "failed_tool_calls": 0, "subagents": 1, "model_s": 8.0, "subagent_s": 7.0, "input_tokens": 200, "output_tokens": 9},
+            {"n": 3, "stage": "requirement", "active_s": 5.0, "aiu": 0.5, "tool_calls": 1, "failed_tool_calls": 0, "subagents": 0, "model_s": None, "subagent_s": None, "input_tokens": None, "output_tokens": None},
         ]
         rows = taskinsight.stage_table(prompts, {"active_s": 35.0, "aiu": 3.5})
         self.assertEqual([row["stage"] for row in rows], ["requirement", "check"])
@@ -701,6 +701,52 @@ class InsightTests(BoardCase):
         self.assertEqual((first["prompts"], first["active_s"], first["tool_calls"], first["failed_tool_calls"], first["model_s"], first["input_tokens"]), (2, 15.0, 4, 1, 6.0, 100))
         self.assertEqual((rows[1]["subagents"], rows[1]["subagent_s"]), (1, 7.0))
         self.assertIsNone(taskinsight.stage_table(prompts[2:], {"active_s": 5.0, "aiu": 0.5})[0]["input_tokens"], "the hook log alone has no tokens")
+
+    def parts(self, marked, docs=(), prompts=((0.0, 600.0),)):
+        points = taskinsight.timeline(sorted(marked), sorted(docs), [start for start, _end in prompts])
+        return [[(stage, start, stop) for stage, start, stop in taskinsight.prompt_parts({"at": start, "end": end}, lambda moment: taskinsight.stage_of_point(points, moment), [at for at, _stage in points])]
+                for start, end in prompts]
+
+    def test_a_prompt_that_runs_through_stages_is_cut_where_the_stage_changed(self) -> None:
+        """1.6.109: a prompt used to count whole in the stage it ended in, so a stage it ran through was 0."""
+        confirmed_in_the_turn = self.parts([(0.0, "start", ""), (250.0, "confirm-req", "abc")])
+        self.assertEqual(confirmed_in_the_turn, [[("requirement", 0.0, 250.0), ("plan", 250.0, 600.0)]])  # was all plan
+        both_in_one_turn = self.parts([(0.0, "start", ""), (700.0, "confirm-req", "abc"), (700.0, "approve-plan", "")], [(240.0, "plan"), (245.0, "req")])
+        self.assertEqual(both_in_one_turn, [[("requirement", 0.0, 240.0), ("plan", 240.0, 600.0)]])  # was all requirement; REQ.md drafted beside PLAN.md does not go back
+        dry_run_at_the_end = self.parts([(-10.0, "approve-plan", ""), (590.0, "promote-dry-run", "")])
+        self.assertEqual(dry_run_at_the_end, [[("developing", 0.0, 590.0), ("writeback", 590.0, 600.0)]])  # was all writeback
+        new_round = self.parts([(-50.0, "promote", "feature/x"), (100.0, "new-round", "")])
+        self.assertEqual(new_round, [[("requirement", 0.0, 600.0)]])  # the time before the new round opened is its work, not done
+
+    def test_the_requirement_comes_back_when_it_changes_after_it_was_settled(self) -> None:
+        prompts = ((0.0, 100.0), (200.0, 300.0), (400.0, 500.0), (600.0, 700.0))
+        events = [(0.0, "start", ""), (150.0, "confirm-req", "a"), (160.0, "approve-plan", "")]
+        docs = [(50.0, "req"), (80.0, "plan"), (450.0, "req"), (650.0, "plan")]
+        found = self.parts(events, docs, prompts)
+        self.assertEqual([[stage for stage, _start, _stop in parts] for parts in found], [["requirement", "plan"], ["developing"], ["developing", "requirement"], ["requirement", "plan"]])
+        unconfirmed = self.parts([(0.0, "start", "")], [(50.0, "plan"), (450.0, "req")], ((0.0, 100.0), (400.0, 500.0)))
+        self.assertEqual([[stage for stage, _start, _stop in parts] for parts in unconfirmed], [["requirement", "plan"], ["plan", "requirement"]])  # the plan was shown, then the person changed what they want
+
+    def test_the_numbers_of_a_prompt_go_to_the_part_they_happened_in(self) -> None:
+        prompt = {"at": 0.0, "end": 100.0, "aiu": 10.0, "input_tokens": 400, "output_tokens": 100, "thinks": [{"at": 5.0, "seconds": 10.0}, {"at": 60.0, "seconds": 30.0}],
+                  "tools": [{"at": 10.0, "ok": True}, {"at": 70.0, "ok": False}, {"ok": True}], "subagents": [{"at": 80.0, "seconds": 15.0}],
+                  "spends": [{"at": 20.0, "input_tokens": 300, "output_tokens": 50}, {"at": 90.0, "input_tokens": 100, "output_tokens": 50}, {"at": 99.0, "aiu": 10.0}]}
+        entry = {"n": 1, "active_s": 100.0, "model_s": 40.0, "subagent_s": 15.0}
+        first, second = taskinsight.shares(prompt, entry, [("requirement", 0.0, 40.0), ("plan", 40.0, 100.0)])
+        self.assertEqual((first["active_s"], first["model_s"], first["tool_calls"], first["input_tokens"]), (40.0, 10.0, 1, 300))
+        self.assertEqual((second["model_s"], second["tool_calls"], second["failed_tool_calls"], second["subagents"], second["subagent_s"]), (30.0, 2, 1, 1, 15.0))  # a tool with no moment goes to the larger part
+        self.assertAlmostEqual(first["aiu"], 7.0)  # by the model calls (350 of 500 tokens), not by the checkpoint at the end of the turn
+        self.assertAlmostEqual(first["aiu"] + second["aiu"], 10.0)
+
+    def test_the_writes_of_req_and_plan_come_from_the_hook_and_from_copilots_record(self) -> None:
+        data = {"doc_writes": [{"at": "2026-11-04T10:00:00+00:00", "doc": "req"}, {"at": "bad", "doc": "plan"}]}
+        moment = copilot_events.seconds("2026-11-04T10:00:00+00:00")
+        prompts = [{"docs": [{"at": moment + 1, "doc": "req", "task": "Job"}, {"at": moment + 30, "doc": "plan", "task": "job"}, {"at": moment + 40, "doc": "plan", "task": "other"}]}]
+        self.assertEqual(taskinsight.task_doc_writes(data, prompts, "job"), [(moment, "req"), (moment + 30, "plan")])  # the same write seen twice counts once; another task's is not this one's
+        self.assertEqual(copilot_events.task_docs("create", {"path": "/w/.workspace/sandbox/tasks/job/PLAN.md", "file_text": "x"}), [{"doc": "plan", "task": "job"}])
+        self.assertEqual(copilot_events.task_docs("apply_patch", {"input": "*** Update File: C:\\w\\tasks\\job\\REQ.md\n"}), [{"doc": "req", "task": "job"}])
+        self.assertEqual(copilot_events.task_docs("view", {"path": "/w/tasks/job/REQ.md"}), [])  # a read is no write
+        self.assertEqual(copilot_events.task_docs("str_replace_editor", {"command": "view", "path": "/w/tasks/job/REQ.md"}), [])
 
     def test_the_prompt_that_writes_back_is_still_the_write_back(self) -> None:
         events = [(10.0, "promote-dry-run", ""), (20.0, "promote", "feature/x")]

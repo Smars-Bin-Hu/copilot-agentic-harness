@@ -9,6 +9,7 @@ The map lists every object of the target repositories and every use between them
   toolkit.json        what goes to which extractor, and the rules of the stack (below)
   extract_*.py        the extractors: standard library only, no import of the harness
   facts.jsonl         uses a person knows to be true: the acceptance of the toolkit, checked on every `kb map`
+  declared.jsonl      uses no extractor can see, each with the line of code that shows it (optional, below)
   inventory/          the read-only query a person runs on production to list its objects (for `kb gaps`)
   DESIGN.md           the design the user approved
 ```
@@ -40,7 +41,7 @@ def tsql(text: str, context: dict) -> list[dict]:
     ...
 ```
 
-`text` is the file, decoded (UTF-8, or UTF-16 with a BOM). `context`: `path`, `stem`, `folder` (the name of the folder it is in), `repo`, and the `markers`. It returns the objects the file defines:
+`text` is the file, decoded (UTF-8, or UTF-16 with a BOM). `context`: `path`, `stem`, `folder` (the name of the folder it is in), `repo`, `rule` (its entry of `extractors`, so a rule can carry settings of its own), and the `markers`. It returns the objects the file defines:
 
 ```json
 {"id": "sp:Db.dbo.usp_load", "type": "sp", "name": "Db.dbo.usp_load", "line": 3, "dynamic": false,
@@ -60,6 +61,35 @@ An extractor that raises is counted under `failed`, and the file is left out; th
 ## facts.jsonl
 
 One use per line: `{"from": "<id>", "kind": "<kind>", "to": "<id>"}`. 5 to 10 that a person knows from the work, chosen to cover each kind of file. `kb map` checks them every time and lists those not found. A toolkit is ready when all are found and `empty_files` (files an extractor was given but found nothing in) holds only files that really define nothing.
+
+## Calls by name, configuration rows and dynamic SQL
+
+Some uses are not written as a use. Tell them apart before you give up on them:
+
+| How the code runs it | Can the map see it? |
+| --- | --- |
+| A wrapper is given the name as a literal: `EXEC dbo.usp_run_job_by_name @job_name = N'Load_Sales'` | Yes: teach the extractor the wrapper. The sample reads `sp_start_job`, and the wrappers listed in `by_name` of its rule: `{"call": "dbo.usp_run_job_by_name", "param": "@job_name", "position": 1, "as": "job", "kind": "runs"}` |
+| A loop runs what the rows of a configuration table name, and the rows are in a script of a repository (an `INSERT` in an init script) | Yes, when the extractor reads that script; or declare each use with the script line as evidence |
+| Files the extractors are not given (a retired folder, an unusual suffix) that still run | Yes: add a glob. A use of an object that is not in the map cannot go on a card |
+| The name is built at run time (`EXEC(@sql)`, a variable), or the rows live only in production | No. Mark it `dynamic`; it becomes a `runtime` request. Declare it only when a line of code shows the name |
+
+## declared.jsonl
+
+One use per line, for what no extractor can see but a line of code shows:
+
+```json
+{"from": "sp:Db.dbo.usp_run_tasks", "kind": "runs", "to": "package:Etl/Load_Sales", "how": "config-row",
+ "evidence": {"repo": "db-code", "path": "init/etl_task_config.sql", "line": 12, "text": "'Load_Sales'"}}
+```
+
+`how` is `by-name`, `config-row` or `dynamic-sql`. `kb map` looks for `text` on the base branch within 5 lines of `line` (case and spaces aside). Under `declared_uses` it lists:
+
+- `stale`: the text is not there any more. The use is left out of the map until a person reads the code again.
+- `not_in_map`: an end is not an object of the map.
+- `already_mapped`: the toolkit finds the use itself now. Take the line out.
+- `bad_lines`: a line misses a field.
+
+A declared use that holds is a use like any other for `kb near`, `kb order` and `kb flows`. A card may name it. A card that leaves it out gets a warning, not an error, so a new declared use does not break the cards of other domains. Facts are checked before declared uses are added: a declared use never makes a fact pass. Changing this file does not make `kb map` read the code again.
 
 ## Gaps
 

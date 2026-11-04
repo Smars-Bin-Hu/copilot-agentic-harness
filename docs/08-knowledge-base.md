@@ -93,7 +93,38 @@ No map of code is complete, and the harness cannot promise yours is. It can meas
 
 The audit reads a sample **blind**: the agent writes down every use it finds in the code before it looks at the map. Every difference is then looked up again at its line. A misreading is corrected, and only what is left counts against the map. The bar is 0.95 for both, per type. Below it, the differences are the examples the toolkit is fixed with.
 
-**What no map sees**: SQL built at run time (`EXEC(@sql)`), calls driven by a configuration table, a package chosen by a variable, synonyms and linked servers it was not taught. These are marked `dynamic` or `outside`, and become requests, not guesses.
+**What no map sees**: SQL built at run time (`EXEC(@sql)`), a package chosen by a variable, configuration rows kept only in production, synonyms and linked servers it was not taught. These are marked `dynamic` or `outside`, and become requests, not guesses.
+
+### When the map finds too little: work started by name
+
+Many data platforms do not call their work directly. A master job calls a wrapper with a job name in a string. A loop reads a configuration table and runs the package each row names. A folder of "retired" scripts holds jobs that still run. The map then shows the master job and the wrapper, and almost nothing below them. `kb order` gives a short list, and the cards cannot name the real chain, because `kb cardcheck` accepts only uses the map has.
+
+An example, with made-up names. A learn task starts from `job:Nightly_Load`. `kb order` finds 6 objects; the team knows of about 40. The code of the first step shows why:
+
+```sql
+EXEC dbo.usp_run_job_by_name @job_name = N'Load_Sales';     -- a job started by its name
+EXEC dbo.usp_run_tasks;                                      -- runs each package named in dbo.etl_task_config
+```
+
+and the rows of `dbo.etl_task_config` are written by `init/etl_task_config.sql` in the same repository. Three jobs that still run sit in a file ending in `.ignore` that no extractor is given.
+
+Sort each hidden use by what the map can be taught:
+
+| What you see | What to do |
+| --- | --- |
+| A wrapper given a literal name | Teach the toolkit the wrapper (`by_name` in the sample toolkit). The map then has the use for every caller |
+| A loop over configuration rows that a script in a repository writes | Teach the toolkit the script, or declare each use in `toolkit/declared.jsonl` with the script line as evidence |
+| Files no extractor is given | Add a glob. Until then the objects are not in the map, and `kb index` refuses them |
+| A name built at run time, or rows only in production | It stays `dynamic`: a `runtime` request, not a guess |
+
+What the agent does when it meets this:
+
+1. **In the learn plan**, when `kb order` finds far fewer objects than you expect, it reads the first steps, names the pattern, and offers two roads: fix the map first (a toolkit task, then plan again), or learn now and collect the hidden uses.
+2. **While learning**, each hidden use goes into `discovery/hidden-uses.jsonl` of the domain, in the form of `declared.jsonl`: from, kind, to, how, and the evidence line. Cards still name only what the map has.
+3. **In the toolkit task**, those lines are the input: what a rule can read is taught to the extractor, the rest goes into `declared.jsonl`. `kb map` checks every evidence line on each run. A line whose code changed is `stale` and left out until someone reads it again.
+4. **After the write-back**, `kb cardcheck` on the other learned domains shows which cards now leave out a use. A declared use left out is a warning, not an error, so other domains keep working while they catch up.
+
+The rules are in [map.md](../.harness/contracts/kb/map.md#calls-by-name-configuration-rows-and-dynamic-sql).
 
 ## What the code cannot tell
 

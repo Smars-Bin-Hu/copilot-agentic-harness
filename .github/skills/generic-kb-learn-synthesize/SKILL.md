@@ -42,6 +42,7 @@ board-step: learn
 ## Gotchas
 
 - **Never write a step that is not a path of `kb flows`.** A runbook or note may say a step exists; when the map has no such path, it goes into Limits as "said in <note>, not found in the code", not into Flows.
+- **A hidden use is not a flow yet.** A line of `discovery/hidden-uses.jsonl` goes into Limits with its evidence ("runs X by name, <repo>/<path>:<line>; not in the map"), and the hand-over says how many there are: once the toolkit reads them or `declared.jsonl` holds them, `kb flows` draws them.
 - **Traps come from the cards, not from imagination.** A domain just learned from code has few. Write "none known yet; RCAs and tasks add them" rather than general advice.
 - **Who uses the domain is said only when the code shows it** (an endpoint, a job, a caller in the map). Anything else, such as which team or system calls it, goes into Limits as unknown.
 - **Limits are counted, not felt.** The numbers come from the files: `level` of the index lines, rows of `requests.md` with `open`, `source_missing` lines, boundaries.

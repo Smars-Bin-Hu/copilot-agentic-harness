@@ -5,7 +5,9 @@
              (`<knowledge base>/toolkit/`, contract in .harness/contracts/kb/map.md); keep the result per file, by git
              blob sha, in .harness/runtime/kbmap/<repo>.json. A file that did not change is not read again. The map is
              a cache: it can be built again at any time, so it is not knowledge and does not go into the knowledge base.
-             Each run checks the toolkit against the uses a person knows (`facts.jsonl`)
+             Each run checks the toolkit against the uses a person knows (`facts.jsonl`), and adds the uses a
+             person declared (`declared.jsonl`: by a name in a configuration row, in dynamic SQL) whose evidence
+             line is still on the base branch
 
 The harness ships no toolkit: what a procedure or a class looks like in a file depends on the stack and is made by each
 team with /generic-kb-toolkit-design and /generic-kb-toolkit-build. No model reads anything here. The questions on the
@@ -25,11 +27,13 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from . import gitread, kbextract, messages, state, targets, tasks
-from .kbgraph import SAMPLE, SCHEMA_VERSION, Graph, MapError, cache_file, matches, read_cache
+from .kbgraph import SAMPLE, SCHEMA_VERSION, Graph, MapError, cache_file, declared_file, matches, read_cache
 
 TOOLKIT_DIR = "toolkit"
 TOOLKIT_FILE = "toolkit.json"
 FACTS_FILE = "facts.jsonl"
+DECLARED_FILE = "declared.jsonl"
+EVIDENCE_NEAR = 5  # the evidence text may have moved this many lines from the line a person gave
 MAX_FILE_BYTES = 5_000_000  # a bigger file is listed under `skipped`, not read
 GIT_TIMEOUT = 300
 NAME_STYLES = ("sql", "plain")
@@ -81,6 +85,30 @@ class Toolkit:
             if isinstance(fact, dict) and fact.get("from") and fact.get("to"):
                 found.append({"from": str(fact["from"]), "kind": str(fact.get("kind") or ""), "to": str(fact["to"])})
         return found
+
+
+    def declared(self) -> Tuple[List[Dict[str, Any]], List[str]]:
+        """The uses of `declared.jsonl`, and the lines that are not one: each needs from, kind, to and evidence
+        (repo, path, line, text)."""
+        file = self.folder / DECLARED_FILE
+        if not file.is_file():
+            return [], []
+        found, bad = [], []
+        for number, line in enumerate(file.read_text(encoding="utf-8").splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                row = None
+            proof = row.get("evidence") if isinstance(row, dict) else None
+            if not isinstance(row, dict) or not all(row.get(key) for key in ("from", "kind", "to")) or not isinstance(proof, dict) \
+                    or not all(proof.get(key) for key in ("repo", "path", "line", "text")) or not str(proof["line"]).isdigit():
+                bad.append(f"{DECLARED_FILE}:{number}")
+                continue
+            found.append({"from": str(row["from"]), "kind": str(row["kind"]), "to": str(row["to"]), "how": str(row.get("how") or ""),
+                          "evidence": {"repo": str(proof["repo"]), "path": str(proof["path"]), "line": int(proof["line"]), "text": str(proof["text"])}})
+        return found, bad
 
 
 def problems_of(data: Any) -> List[str]:
@@ -214,6 +242,65 @@ def build_one(root: Path, repo: targets.Repo, kit: Optional[Toolkit], fresh: boo
     }
 
 
+def squeeze(text: str) -> str:
+    return " ".join(text.split()).lower()
+
+
+def evidence_holds(root: Path, rows: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """(the declared uses whose evidence text is on the base branch, within EVIDENCE_NEAR lines of its line; the others).
+    A use whose repository or file is gone, or whose text moved away, is stale: the code changed, a person looks again."""
+    found = targets.load(root)
+    by_repo: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        by_repo[row["evidence"]["repo"]].append(row)
+    holds, stale = [], []
+    for name, group in sorted(by_repo.items()):
+        texts: Dict[str, List[str]] = {}
+        try:
+            repo = found.get(name)
+            commit = targets.ref_commit(repo)
+            wanted = sorted({row["evidence"]["path"] for row in group})
+            shas = gitread.blob_shas(repo.path, repo.name, commit, wanted, timeout=GIT_TIMEOUT) if commit else {}
+            data = gitread.blobs(repo.path, repo.name, sorted(set(shas.values())), timeout=GIT_TIMEOUT)
+            texts = {path: kbextract.decode(data.get(sha, b"")).splitlines() for path, sha in shas.items() if sha in data}
+        except (targets.TargetError, gitread.GitError):
+            pass
+        for row in group:
+            proof = row["evidence"]
+            lines = texts.get(proof["path"], [])
+            low = max(0, proof["line"] - 1 - EVIDENCE_NEAR)
+            near = lines[low:proof["line"] + EVIDENCE_NEAR]
+            (holds if any(squeeze(proof["text"]) in squeeze(line) for line in near) else stale).append(row)
+    return holds, stale
+
+
+def show(row: Dict[str, Any]) -> str:
+    proof = row["evidence"]
+    return f"{row['from']} -{row['kind']}-> {row['to']} ({proof['repo']}/{proof['path']}:{proof['line']})"
+
+
+def declare(root: Path, choices: List[Toolkit], graph: Graph) -> Dict[str, Any]:
+    """Check the declared uses of every toolkit, keep those that hold for the questions on the map, add them to `graph`."""
+    rows, bad = [], []
+    for kit in choices:
+        found, wrong = kit.declared()
+        rows += found
+        bad += [f"{kit.name}/{line}" for line in wrong]
+    if not rows and not bad:
+        declared_file(root).unlink(missing_ok=True)
+        return {}
+    holds, stale = evidence_holds(root, rows)
+    state.atomic_write(declared_file(root), holds)
+    before = len(graph.declared)
+    unknown = graph.add_declared(holds)
+    known = [row for row in holds if row not in unknown]
+    return {
+        "declared": len(rows), "added": len(graph.declared) - before,
+        "already_mapped": [show(row) for row in known if (row["from"], row["to"]) not in graph.declared][:SAMPLE],
+        "stale": [show(row) for row in stale][:SAMPLE], "not_in_map": [show(row) for row in unknown][:SAMPLE], "bad_lines": bad[:SAMPLE],
+    }
+
+
 def chosen_repos(root: Path, names: Optional[List[str]]) -> List[targets.Repo]:
     found = targets.load(root)
     if names:
@@ -246,13 +333,16 @@ def build(root: Path, names: Optional[List[str]] = None, fresh: bool = False, tr
             rows.append(build_one(root, repo, toolkit_for(choices, repo.name), fresh))
         except gitread.GitError as error:  # one repository git cannot read: say so, map the others
             rows.append({"repo": repo.name, "toolkit": "-", "note": str(error)})
-    graph = Graph.load(root, [repo.name for repo in repos])
-    facts = graph.check_facts([fact for kit in choices for fact in kit.facts()])
-    result = {"mapped": rows, **graph.summary(), "facts": facts}
+    graph = Graph.load(root, [repo.name for repo in repos], declared=False)
+    facts = graph.check_facts([fact for kit in choices for fact in kit.facts()])  # before the declared uses: they are the toolkit's test
+    declared = declare(root, choices, graph)
+    result = {"mapped": rows, **graph.summary(), "facts": facts, **({"declared_uses": declared} if declared else {})}
     if not graph.nodes:
         result["next"] = say("kbmap.empty")
     elif facts.get("missing") or not facts.get("checked"):
         result["next"] = say("kbmap.next.facts")
+    elif declared.get("stale") or declared.get("not_in_map") or declared.get("bad_lines"):
+        result["next"] = say("kbmap.next.declared")
     else:
         result["next"] = say("kbmap.next")
     return result

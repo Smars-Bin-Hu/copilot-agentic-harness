@@ -111,11 +111,13 @@ def preview(root: Any, data: Dict[str, Any], models: List[Dict[str, Any]], waiti
 
 
 def model_of(data: Dict[str, Any], models: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """The model and thinking level in the shape of `message.model`, or None (the chat keeps VS Code's own choice). Only a model the host lists now, only a level it has."""
-    wanted, level = text_field(data, "model"), text_field(data, "thinking")
+    """The model, thinking level and context size in the shape of `message.model`, or None (the chat keeps VS Code's own choice). Only a model the host lists now, only a level and a size it has."""
+    wanted, level, size = text_field(data, "model"), text_field(data, "thinking"), data.get("context")
     if not wanted:
         if level:
             raise refusal("thinking")
+        if size not in (None, "", 0, "0"):
+            raise refusal("context")
         return None
     listed = {item["id"]: item for item in models}
     if wanted not in listed:
@@ -123,7 +125,10 @@ def model_of(data: Dict[str, Any], models: List[Dict[str, Any]]) -> Optional[Dic
     levels = (listed[wanted].get("thinking") or {}).get("levels") or []
     if level and level not in levels:
         raise refusal("thinking")
-    return ahp.model_choice(listed[wanted], level)
+    found = ahp.context_size(listed[wanted], size)
+    if found is None:
+        raise refusal("context")
+    return ahp.model_choice(listed[wanted], level, found)
 
 
 def one_click_model(models: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

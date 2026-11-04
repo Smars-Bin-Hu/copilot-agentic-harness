@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import pickle
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -79,7 +80,43 @@ def new_prompt(at: float) -> Dict[str, Any]:
         "at": at, "end": at, "turns": 0, "model_s": 0.0, "turn_s": 0.0, "approval_s": 0.0, "hook_s": 0.0, "subagent_s": 0.0,
         "tools": [], "subagents": [], "skills": [], "models": [], "aiu": None, "premium_requests": None, "context_tokens": None,
         "input_tokens": None, "output_tokens": None, "queued": False, "text": "", "compactions": [], "cache_calls": [], "thinks": [],
+        "spends": [], "docs": [],  # when the usage came (`at`, aiu, premium, input, output) and when REQ.md or PLAN.md of a task was written: a report splits a prompt by stage with them
     }
+
+
+# A task's two documents whose writes mark a stage (1.6.109): the agent starts the plan, or changes the requirement again. Only the moment, the file and the folder it is in
+# (the task) are kept; nothing else of the call.
+TASK_DOCS = {"req.md": "req", "plan.md": "plan"}
+WRITE_WORDS = ("create", "edit", "write", "replace", "patch", "insert")
+PATH_KEYS = ("path", "filePath", "file_path")
+PATCH_HEADER = re.compile(r"^\*\*\* (?:Add File|Update File):\s*(.+?)\s*$", re.MULTILINE)
+
+
+def task_docs(name: str, arguments: Any) -> List[Dict[str, str]]:
+    """The REQ.md and PLAN.md a write call names: `[{doc, task}]`, the task being the folder the file is in. A call that only reads names none."""
+    if not isinstance(arguments, dict) or not any(word in name.lower() for word in WRITE_WORDS) or arguments.get("command") == "view":
+        return []
+    paths: List[str] = []
+    def collect(value: Any, depth: int = 0) -> None:
+        if depth > 4:
+            return
+        items = value.items() if isinstance(value, dict) else enumerate(value) if isinstance(value, list) else ()
+        for key, item in items:
+            if isinstance(item, str):
+                if key in PATH_KEYS:
+                    paths.append(item)
+                elif "*** " in item:
+                    paths.extend(PATCH_HEADER.findall(item))
+            else:
+                collect(item, depth + 1)
+    collect(arguments)
+    found = []
+    for path in paths:
+        parts = path.replace("\\", "/").rstrip("/").split("/")
+        doc = TASK_DOCS.get(parts[-1].lower())
+        if doc and len(parts) > 1 and {"doc": doc, "task": parts[-2]} not in found:
+            found.append({"doc": doc, "task": parts[-2]})
+    return found
 
 
 def number(value: Any) -> Optional[float]:
@@ -243,6 +280,7 @@ def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
                 turn_started = message_at = None
             elif kind == "tool.execution_start":
                 tools[str(data.get("toolCallId"))] = {"name": str(data.get("toolName") or ""), "at": at, "asked": 0.0}
+                current["docs"].extend(dict(found, at=at) for found in task_docs(str(data.get("toolName") or ""), data.get("arguments")))
             elif kind == "tool.execution_complete":
                 started = tools.pop(str(data.get("toolCallId")), None)
                 if started is not None:
@@ -279,22 +317,31 @@ def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
                 compacting = {}
             elif kind == "session.usage_record":
                 spent = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+                mark: Dict[str, Any] = {"at": at}
                 for key, name in (("input_tokens", "inputTokens"), ("output_tokens", "outputTokens")):
                     value = number(spent.get(name))
                     if value is not None:
                         current[key] = (current[key] or 0) + int(value)  # one model call of the main agent
+                        mark[key] = int(value)
+                if len(mark) > 1:
+                    current["spends"].append(mark)
                 call = cache_call(spent, at, last_call.get(str(spent.get("model") or "")))
                 if call is not None:
                     current["cache_calls"].append(call)
                     last_call[call["model"]] = call
             elif kind == "session.usage_checkpoint":
                 total_aiu, total_premium = number(data.get("totalNanoAiu")), number(data.get("totalPremiumRequests"))
+                mark = {"at": at}
                 if total_aiu is not None:
-                    current["aiu"] = (current["aiu"] or 0.0) + max(0.0, total_aiu / NANO - usage["aiu"])
+                    mark["aiu"] = max(0.0, total_aiu / NANO - usage["aiu"])
+                    current["aiu"] = (current["aiu"] or 0.0) + mark["aiu"]
                     usage["aiu"] = total_aiu / NANO
                 if total_premium is not None:
-                    current["premium_requests"] = (current["premium_requests"] or 0.0) + max(0.0, total_premium - usage["premium"])
+                    mark["premium_requests"] = max(0.0, total_premium - usage["premium"])
+                    current["premium_requests"] = (current["premium_requests"] or 0.0) + mark["premium_requests"]
                     usage["premium"] = total_premium
+                if len(mark) > 1:
+                    current["spends"].append(mark)
                 tokens = context_tokens(data)
                 if tokens is not None:
                     current["context_tokens"] = tokens

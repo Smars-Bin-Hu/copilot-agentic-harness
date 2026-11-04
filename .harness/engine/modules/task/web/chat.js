@@ -12,13 +12,32 @@ const CHAT = (function () {
   const LAST = "harness.model.last";
   const remembered = () => { try { return JSON.parse(localStorage.getItem(LAST) || "null"); } catch (error) { return null; } };
   function remember(choice) { try { localStorage.setItem(LAST, JSON.stringify(choice)); } catch (error) { /* kept for this dialog only */ } }
+  // The context sizes a model offers (1.6.109), for every dialog that picks a model: a select that shows only when the model has more than one size, at its default unless `keep` names
+  // another. `chosen()`: the size picked, as text, or "" when the model has none to pick. `fill(found, keep)` fills it for a model of the host's list.
+  function sizePick(select, holder) {
+    const sizes = (found) => (found && found.context && found.context.sizes) || [];
+    return {
+      fill(found, keep) {
+        const list = sizes(found);
+        holder.hidden = list.length < 2;
+        const wanted = list.some((item) => String(item.id) === String(keep)) ? keep : found && found.context ? found.context.default : "";
+        select.replaceChildren(...list.map((item) => h("option", {value: String(item.id), selected: String(item.id) === String(wanted) ? "" : null}, item.label)));
+      },
+      chosen: () => (holder.hidden ? "" : select.value),
+      same: (found, size) => String(size || (found && found.context ? found.context.default : "") || "") === String(holder.hidden ? (found && found.context ? found.context.default : "") || "" : select.value),
+    };
+  }
+
   function modelPick(task) {
     const state = {models: [], current: {}, ready: false};
     const model = h("select", {class: "send-body", "aria-label": t("board.new.model")});
     const level = h("select", {class: "send-body", "aria-label": t("board.new.thinking")});
-    const node = h("div", {class: "model-pick"}, h("span", {class: "sub"}, t("desk.model.runs")), model, level);
+    const room = h("select", {class: "send-body", "aria-label": t("board.new.context"), title: t("desk.set.context.tip")});
+    const sizes = sizePick(room, room);
+    const node = h("div", {class: "model-pick"}, h("span", {class: "sub"}, t("desk.model.runs")), model, level, room);
+    const of = (id) => state.models.find((item) => item.id === id);
     const levels = (keep) => {
-      const found = state.models.find((item) => item.id === model.value);
+      const found = of(model.value);
       const list = (found && found.thinking && found.thinking.levels) || [];
       level.replaceChildren(h("option", {value: ""}, t("board.new.thinking.default")), ...list.map((one) => h("option", {value: one}, thinkingLabel(one, found))));
       level.value = list.includes(keep) ? keep : "";
@@ -32,20 +51,22 @@ const CHAT = (function () {
       model.replaceChildren(h("option", {value: ""}, t("board.new.model.chat")), ...state.models.map((item) => h("option", {value: item.id}, item.name)));
       model.value = state.models.some((item) => item.id === pick.id) ? pick.id : "";
       levels(pick.thinking || "");
+      sizes.fill(of(model.value), pick.context);
       state.ready = true;
     }, () => { node.hidden = true; });  // no list (VS Code away): the message goes as it did before
-    const picked = () => { if (task) remember({id: model.value, thinking: level.value}); };
-    model.addEventListener("change", () => { levels(""); picked(); });
+    const picked = () => { if (task) remember({id: model.value, thinking: level.value, context: sizes.chosen()}); };
+    model.addEventListener("change", () => { levels(""); sizes.fill(of(model.value), ""); picked(); });
     level.addEventListener("change", picked);
+    room.addEventListener("change", picked);
     return {
       node,
       // Before the message goes: a task keeps the pick when it changed; a one-off chat names it in its own request (the fields to add to it).
       apply() {
         return loaded.then(() => {
           if (!state.ready) return {};
-          if (!task) return {model: model.value, thinking: level.value};
-          if ((state.current.id || "") === model.value && (state.current.thinking || "") === level.value) return {};
-          const context = state.current.id === model.value ? state.current.context || 0 : 0;
+          const context = sizes.chosen();
+          if (!task) return {model: model.value, thinking: level.value, ...(context ? {context} : {})};
+          if ((state.current.id || "") === model.value && (state.current.thinking || "") === level.value && sizes.same(of(model.value), state.current.context)) return {};
           return ask("/api/setting", {task, id: model.value, thinking: level.value, context}).then(() => { state.current = {id: model.value, thinking: level.value, context}; return {}; });
         });
       },
@@ -237,6 +258,9 @@ const CHAT = (function () {
     const files = fileTray(text, said, () => sync());
     const model = h("select", {class: "send-body"});
     const thinking = h("select", {class: "send-body"});
+    const room = h("select", {class: "send-body", title: t("desk.set.context.tip")});
+    const roomField = field(t("board.new.context"), room, "new-context");
+    const sizes = sizePick(room, roomField);
     const preview = h("pre", {class: "send-preview"}, "...");
     const grill = h("input", {type: "checkbox"});  // Ask me first: the opening of the task, not a thing of its own
     grill.addEventListener("change", () => refresh());
@@ -257,13 +281,13 @@ const CHAT = (function () {
           field(t("board.new.source"), source), h("p", {class: "sub"}, t("board.new.source.hint")),
           h("div", {class: "new-field"}, h("span", {class: "sub label"}, t("board.new.kb")), kbBox),
           field(t("board.new.text"), text), h("div", {class: "new-files"}, files.attach, files.picker, files.tray),
-          h("div", {class: "new-grid three"}, field(t("board.new.model"), model), field(t("board.new.thinking"), thinking), field(t("board.new.lang"), h("div", {class: "chips"}, langChips))),
+          h("div", {class: "new-grid models"}, field(t("board.new.model"), model, "new-model"), field(t("board.new.thinking"), thinking), roomField, field(t("board.new.lang"), h("div", {class: "chips"}, langChips), "new-lang")),
           h("label", {class: "new-grill"}, grill, h("span", null, t("board.new.grill"))), h("p", {class: "sub"}, t("board.new.fixed"))),
         h("div", {class: "new-side"}, h("div", {class: "sub label"}, t("board.new.first")), h("p", {class: "sub"}, t("board.new.first.hint")), preview)),  // beside the fields, so a low window need not scroll to read it
       h("div", {class: "new-actions"}, problem, said, h("div", {class: "row send-actions"}, go, no))]);  // the bar stays in view: the reason the button is dim is read there, not below the long message
     view.box.classList.add("new-wide");
     files.zone(view.box);
-    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: grill.checked ? text.value.trimEnd() + "\n\nFirst use the skill generic-grill-me: ask me what is unclear." : text.value, model: model.value, thinking: thinking.value, lang: state.lang, domains: Array.from(state.domains)});
+    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: grill.checked ? text.value.trimEnd() + "\n\nFirst use the skill generic-grill-me: ask me what is unclear." : text.value, model: model.value, thinking: thinking.value, context: sizes.chosen(), lang: state.lang, domains: Array.from(state.domains)});
     // The knowledge base: the domains this repository's knowledge bases have. None ticked is a valid choice. When there are no domains the box says so and the dialog goes on.
     function drawKb() {
       const list = state.domainList;
@@ -285,6 +309,7 @@ const CHAT = (function () {
       thinking.replaceChildren(h("option", {value: ""}, t("board.new.thinking.default")), ...list.map((level) => h("option", {value: level}, thinkingLabel(level, found))));
       thinking.disabled = !list.length;
     }
+    const keepPick = () => remember({id: model.value, thinking: thinking.value, context: sizes.chosen()});
     function refresh() {
       clearTimeout(state.timer);
       state.timer = setTimeout(() => {
@@ -311,8 +336,9 @@ const CHAT = (function () {
     }
     for (const control of [name, text]) control.addEventListener("input", refresh);
     for (const control of [kind, source, thinking]) control.addEventListener("change", refresh);
-    model.addEventListener("change", () => { levels(); remember({id: model.value, thinking: thinking.value}); refresh(); });
-    thinking.addEventListener("change", () => remember({id: model.value, thinking: thinking.value}));
+    model.addEventListener("change", () => { levels(); sizes.fill(state.models.find((item) => item.id === model.value), ""); keepPick(); refresh(); });
+    thinking.addEventListener("change", keepPick);
+    room.addEventListener("change", keepPick);
     go.addEventListener("click", () => {
       state.busy = true; go.textContent = t("board.new.working"); sync(); said.replaceChildren();
       ask("/api/create", {...body("act"), attachments: files.list()}).then((found) => {
@@ -335,6 +361,7 @@ const CHAT = (function () {
       drawKb();
       levels();
       if (last && model.value === last.id && [...thinking.options].some((option) => option.value === last.thinking)) thinking.value = last.thinking;
+      sizes.fill(state.models.find((item) => item.id === model.value), last && model.value === last.id ? last.context : "");
       const filled = preset === true ? (found.sample && found.sample.name ? {...found.sample, note: t("board.new.sample")} : null) : preset;
       if (filled) {
         if (filled.name) name.value = filled.name;

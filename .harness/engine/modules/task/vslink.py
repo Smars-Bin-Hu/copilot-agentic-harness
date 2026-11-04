@@ -33,7 +33,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from core import ahp, config, tasks
 from core.paths import utc_now
 
-from . import chatask, chatctx, chatlink, chatlive, chatnew, chatsend, task as task_ops, tasklife, tasksub
+from . import chatask, chatctx, chatlink, chatlive, chatnew, chatsend, rewind, task as task_ops, tasklife, tasksub
 
 TASKS_EVERY = 3.0  # seconds between two looks at the tasks and their chats
 RELIST_EVERY = 180.0  # a whole new list of chats, in case a notification was missed
@@ -63,6 +63,25 @@ def elapsed_ms(started: Any) -> int:
         return max(1, int((datetime.datetime.now(datetime.timezone.utc) - begun).total_seconds() * 1000))
     except (ValueError, TypeError):
         return 1000
+
+
+def turn_at(turns: List[Dict[str, Any]], at: Any) -> Optional[int]:
+    """The place of the turn a person started that matches a restore point taken at `at` (seconds): the hook takes it a moment after the message was sent. None: no such turn."""
+    if not isinstance(at, (int, float)):
+        return None
+    near = []
+    for index, turn in enumerate(turns):
+        message = turn.get("message") if isinstance(turn.get("message"), dict) else {}
+        if (message.get("origin") or {}).get("kind") != "user":
+            continue
+        try:
+            started = datetime.datetime.fromisoformat(str(turn.get("startedAt")).replace("Z", "+00:00")).timestamp()
+        except (ValueError, TypeError):
+            continue
+        gap = at - started
+        if -rewind.MATCH_BEFORE <= gap <= rewind.MATCH_AFTER:
+            near.append((abs(gap), index))
+    return min(near)[1] if near else None
 
 
 def choose(found: List[ahp.Endpoint], root: Path, connect: Callable[[ahp.Endpoint], ahp.Connection] = ahp.connect) -> ahp.Connection:
@@ -110,7 +129,7 @@ class Job:
 
 
 # "": any state: a setting of the chat holds from its next turn; a Withdraw stops a running turn first (1.6.99); Try again and taking back a queued message are checked by the thread
-NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "config": "", "undo": "", "resume": "", "unqueue": ""}
+NEEDS = {"send": "idle", "steer": "busy", "queue": "busy", "stop": "busy", "confirm": "input", "answer": "input", "config": "", "undo": "", "resume": "", "unqueue": "", "rewind": "idle"}
 
 
 class VsLink:
@@ -640,6 +659,8 @@ class VsLink:
                 return
             if job.kind == "undo":
                 return self._undo(link, job, chat, held)
+            if job.kind == "rewind":
+                return self._rewind(link, job, chat, held)
             if job.kind in ("resume", "unqueue"):
                 return self._again(link, job, chat, held)
             if job.kind == "stop":
@@ -718,6 +739,36 @@ class VsLink:
             held["rev"] = held.get("rev", 0) + 1
             self.dirty = True
         job.result = {"text": str(message.get("text") or ""), "files": [str(item["label"]) for item in message.get("attachments") or [] if isinstance(item, dict) and item.get("label")]}
+
+    def _rewind(self, link: ahp.Connection, job: Job, chat: str, held: Dict[str, Any]) -> None:
+        """Go back to before a message of the person (1.6.109). `plan.at`: when its restore point was taken; its turn is the one the person started nearest before it. `plan.dry`: only
+        say how many turns would go. Else `plan.restore()` puts the files back (given by the board), and then the chat is cut before that turn; the turn not found, nothing is done.
+        Read again in full first: the board keeps only the last turns."""
+        plan = job.plan or {}
+        link.unsubscribe(chat)
+        full = link.subscribe(chat)
+        with self.lock:
+            held["state"] = ahp.trimmed(full)
+        if full.get("activeTurn"):
+            raise Refused("not-idle")
+        turns = [turn for turn in full.get("turns") or [] if isinstance(turn, dict)]
+        index = turn_at(turns, plan.get("at"))
+        if index is None:
+            raise Refused("rewind-turn")
+        message = turns[index].get("message") if isinstance(turns[index].get("message"), dict) else {}
+        job.result = {"turns": len(turns) - index, "text": str(message.get("text") or ""), "files": [str(item["label"]) for item in message.get("attachments") or [] if isinstance(item, dict) and item.get("label")]}
+        if plan.get("dry"):
+            return
+        job.result["changed"] = plan["restore"]() if callable(plan.get("restore")) else {}
+        action: Dict[str, Any] = {"type": "chat/truncated"}
+        if index > 0:
+            action["turnId"] = turns[index - 1].get("id")
+        link.dispatch(chat, action)
+        ahp.reduce_chat(full, action)
+        with self.lock:
+            held["state"] = ahp.trimmed(full)
+            held["rev"] = held.get("rev", 0) + 1
+            self.dirty = True
 
     def _again(self, link: ahp.Connection, job: Job, chat: str, held: Dict[str, Any]) -> None:
         """Try again (`resume`): the last turn ended in an error the host can retry, and it runs again. Take back (`unqueue`): one queued message leaves the queue, and its words come back.

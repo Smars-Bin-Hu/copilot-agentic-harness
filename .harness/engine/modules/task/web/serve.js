@@ -9,6 +9,7 @@ const SERVE = (function () {
   const free = (action) => action === "pause" || action === "resume";
   let busy = false;
   const stack = [];  // the windows open now, the top one last
+  const quiet = new Set();  // the windows that only tell something: the page under them keeps refreshing (`busy` is false), but keys still wait for them (`open`)
   // After an action the page asks the server again and draws what changed (the board registers how); a page without that reloads. A reload would draw the
   // board from nothing, so no robot would slide or spring: an action is the very moment the person wants to see the change.
   let after = null;
@@ -69,19 +70,23 @@ const SERVE = (function () {
     location.href = "/task/" + encodeURIComponent(row.name);
   }
 
-  function dialog(children) {
-    busy = true;
+  // `informs`: the window has no field and no decision, so it does not stop the refresh of the page under it (and a refresh never redraws it).
+  function dialog(children, informs) {
     const box = h("div", {class: "dialog card", tabindex: "-1"}, children);
     const shade = h("div", {class: "shade"}, box);
     const before = document.activeElement;
     document.body.append(shade);
     stack.push(box);
+    const settle = () => { busy = stack.some((item) => !quiet.has(item)); };
+    if (informs) quiet.add(box);
+    settle();
     const close = () => {
       if (!stack.includes(box)) return;  // a late answer may close a window the person closed already
       document.removeEventListener("keydown", onKey);
       shade.remove();
       stack.splice(stack.indexOf(box), 1);
-      busy = stack.length > 0;
+      quiet.delete(box);
+      settle();
       if (before && before.isConnected) before.focus({preventScroll: true});
     };
     const onKey = (event) => {
@@ -98,7 +103,7 @@ const SERVE = (function () {
     };
     document.addEventListener("keydown", onKey);
     (box.querySelector("input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea") || box).focus({preventScroll: true});  // never a button: Enter must not act by surprise
-    const view = {box, close, holds: null};
+    const view = {box, close, holds: null, inform: () => { quiet.add(box); settle(); }};  // inform: a form that turned into a plain notice (New task, once sent)
     return view;
   }
 
@@ -329,5 +334,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner(true));
   }
 
-  return {call, file, pairMark, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, onChange: (call) => { after = call; }};
+  return {call, file, pairMark, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
 })();

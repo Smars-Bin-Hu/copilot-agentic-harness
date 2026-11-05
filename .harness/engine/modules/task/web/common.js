@@ -180,6 +180,10 @@ function goOnButton(name, extra) {
   button.addEventListener("click", () => chatGoOn(name));
   return button;
 }
+// A button label may end in dots ("answer..."); a dialog title does not.
+function actionTitle(key) {
+  return t("board.action." + key).replace(/\s*(\.{3}|\u2026)$/, "");
+}
 function actionButton(row, item, extra) {
   const label = t("board.action." + item.action.replace(" ", "-"));
   const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page

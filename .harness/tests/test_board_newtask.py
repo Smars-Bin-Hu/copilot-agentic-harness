@@ -21,6 +21,25 @@ def source(name: str) -> str:
 
 
 class DialogTests(unittest.TestCase):
+    def test_a_notice_does_not_stop_the_page_under_it(self) -> None:
+        serve = source("serve.js")
+        self.assertIn("function dialog(children, informs)", serve)
+        self.assertIn("busy = stack.some((item) => !quiet.has(item))", serve)
+        self.assertIn("inform: () =>", serve)
+        self.assertIn('h("div", {class: "row"}, close)], true);', source("dock.js"))  # Started in VS Code only tells
+        self.assertIn("view.inform();", source("chat.js"))  # the New task box once sent
+
+    def test_the_new_task_notice_shows_the_task_when_the_board_brings_it(self) -> None:
+        chat, board = source("chat.js"), source("board.js")
+        self.assertIn("function seen(rows)", chat)
+        self.assertIn("create, seen,", chat)
+        self.assertIn('"/task/" + encodeURIComponent(waiting.name)', chat)
+        self.assertIn("CHAT.seen(data.rows)", board)  # the board's own read, no new poll
+        for lang in ("en", "zh"):
+            table = json.loads((WEB.parents[2] / "core" / f"messages.{lang}.json").read_text(encoding="utf-8"))
+            self.assertIn("board.new.here", table)
+            self.assertIn("board.new.open", table)
+
     def test_the_dialog_asks_for_the_domains_and_sends_them_with_every_step(self) -> None:
         chat = source("chat.js")
         create = chat.split("function create(preset)")[1].split("// \"Allow . deny\"")[0]
@@ -100,7 +119,8 @@ class KeyAndLanguageTests(unittest.TestCase):
 
     def test_the_plain_r_key_stays_off_in_a_box(self) -> None:
         reply = source("reply.js")
-        self.assertIn("if (typing(event.target) || SERVE.busy()", reply)
+        self.assertIn("if (typing(event.target) || SERVE.open()", reply)  # a notice does not stop the refresh (busy), but the key still waits for it (1.6.112)
+        self.assertIn("open: () => stack.length > 0", source("serve.js"))
 
     def test_no_page_file_holds_chinese_and_the_zh_names_come_from_the_table(self) -> None:
         for path in sorted(WEB.iterdir()):

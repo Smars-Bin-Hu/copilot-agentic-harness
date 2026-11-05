@@ -323,6 +323,10 @@ class ServeTests(SendCase):
         self.assertIn('found.req === "lost" ? h("p", {class: "rw-plan"}, t("desk.rewind.req")) : null', rounds)
         self.assertIn('node.style.left = "0px";\n    node.style.top = "0px";\n    const at = anchor.getBoundingClientRect()', status)  # measured at the left edge: never a thin column
         self.assertIn(".st-pop{position:fixed;z-index:1250;", source("status.css"))  # over the Terminal window (1200): the tip of a round was under it
+        self.assertIn("align-items:center;justify-content:center;z-index:170}", source("page.css"))  # dialogs sit over the dock (160) and the reply pill
+        self.assertIn(".tk-foot{padding-bottom:120px}", source("live.css"))  # room for the pill and the dock under the last line
+        self.assertIn('.replace(/\\s*(\\.{3}|\\u2026)$/, "")', source("common.js"))  # a dialog title drops the dots of the button label
+        self.assertIn('actionTitle(action) + " \u00b7 " + row.name'.replace("\u00b7", "·"), source("chat.js"))
         for key in ("desk.rewind.off", "desk.rewind.input", "desk.rewind.wait", "desk.rewind.away", "desk.rewind.plan", "desk.rewind.req", "desk.rewind.outside", "desk.rewind.why.harness"):
             self.assertTrue(messages.text(key), key)
 

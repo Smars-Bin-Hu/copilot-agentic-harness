@@ -7,7 +7,7 @@ const DOCK = (function () {
 
   function done() {
     const close = h("button", {type: "button", class: "act hot"}, t("board.new.close"));
-    const view = SERVE.dialog([h("h2", null, t("dock.sent")), h("p", null, t("dock.sent.where")), h("div", {class: "row"}, close)]);
+    const view = SERVE.dialog([h("h2", null, t("dock.sent")), h("p", null, t("dock.sent.where")), h("div", {class: "row"}, close)], true);
     close.addEventListener("click", view.close);
   }
 

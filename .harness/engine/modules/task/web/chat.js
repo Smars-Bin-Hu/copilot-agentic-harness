@@ -166,7 +166,7 @@ const CHAT = (function () {
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const copy = copyButton(() => state.text);
     const drafts = h("p", {class: "sub"});
-    const view = SERVE.dialog([h("h2", null, t("board.action." + action) + " · " + row.name),
+    const view = SERVE.dialog([h("h2", null, actionTitle(action) + " · " + row.name),
       h("p", {class: "sub"}, t("desk.send.hint")),
       h("div", {class: "sub label"}, t("desk.send.preview")), preview, drafts,
       h("div", {class: "send-lang"}, h("span", {class: "sub"}, t("desk.send.lang")), chips), pick.node,
@@ -247,6 +247,16 @@ const CHAT = (function () {
 
   // "New task" (B73): a chat is made in VS Code and told to open the task. The server checks every field again and makes the first message (a fixed English text, then what the person wrote);
   // this dialog only collects the fields and shows that message. The mode (interactive) and the folder (no worktree) are fixed and not on the form.
+  let waiting = null;  // the New task notice while it is open: {name, line, row}; board.js hands it every board read (CHAT.seen)
+  function seen(rows) {
+    if (!waiting || !waiting.line.isConnected || !rows.some((row) => row.name === waiting.name)) return;
+    const open = h("button", {type: "button", class: "act hot"}, t("board.new.open"));
+    open.addEventListener("click", () => { location.href = "/task/" + encodeURIComponent(waiting.name); });
+    waiting.line.replaceWith(h("p", null, t("board.new.here")));
+    waiting.row.prepend(open);
+    waiting = null;
+  }
+
   function create(preset) {  // preset: `true` for the sample of the lesson, or {name, kind, domains, text, note, back} for a skill; `back` opens the place the person came from
     const state = {lang: "en", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set()};
     const field = (label, control, extra) => h("label", {class: "new-field" + (extra ? " " + extra : "")}, h("span", {class: "sub label"}, label), control);
@@ -327,7 +337,7 @@ const CHAT = (function () {
         });
       }, 250);
     }
-    const close = () => { clearTimeout(state.timer); view.close(); };
+    const close = () => { clearTimeout(state.timer); waiting = null; view.close(); };
     no.addEventListener("click", close);
     if (preset && preset.back) {
       const back = h("button", {type: "button", class: "act"}, t("dock.back"));
@@ -345,8 +355,12 @@ const CHAT = (function () {
         clearTimeout(state.timer);
         const done = h("button", {type: "button", class: "act hot"}, t("board.new.close"));
         done.addEventListener("click", () => { close(); SERVE.done(); });
-        view.box.replaceChildren(...[h("h2", null, t("board.new.title") + " \u00b7 " + found.name), h("p", null, t("board.new.done")),
-          found.warn ? h("p", {class: "bad"}, found.warn) : found.unchecked ? h("p", {class: "sub"}, t("board.new.done.unchecked")) : null, h("div", {class: "row send-actions"}, done)].filter(Boolean));
+        const line = h("p", null, t("board.new.done"));
+        const buttons = h("div", {class: "row send-actions"}, done);
+        view.box.replaceChildren(...[h("h2", null, t("board.new.title") + " \u00b7 " + found.name), line,
+          found.warn ? h("p", {class: "bad"}, found.warn) : found.unchecked ? h("p", {class: "sub"}, t("board.new.done.unchecked")) : null, buttons].filter(Boolean));
+        view.inform();  // only a notice now: the board behind it keeps refreshing and brings the task in
+        waiting = {name: found.name, line, row: buttons};
         done.focus();
       }, (error) => { state.busy = false; go.textContent = t("board.new.go"); sync(); said.replaceChildren(...SERVE.reasons(shown(error))); });
     });
@@ -453,7 +467,7 @@ const CHAT = (function () {
     const fields = found.questions.map((item) => h("div", {class: "ask-field"}, h("div", {class: "sub label"}, item.title + (item.required ? " *" : "")),
       item.message && item.message !== item.title ? h("div", {class: "sub ask-text"}, item.message) : null, control(item)));
     const words = found.text || found.message;  // all the agent said, with its line breaks (1.6.102); `message` is the one line of a card
-    const view = SERVE.dialog([h("h2", null, t("board.action.question") + " \u00b7 " + row.name), words ? h("div", {class: "ask-text ask-lead"}, words) : null, ...fields,
+    const view = SERVE.dialog([h("h2", null, actionTitle("question") + " \u00b7 " + row.name), words ? h("div", {class: "ask-text ask-lead"}, words) : null, ...fields,
       found.count > 1 ? h("p", {class: "sub"}, t("board.ask.more", {count: found.count - 1})) : null, h("div", {class: "row send-actions"}, send, no), said]);
     ready();
     send.addEventListener("click", () => {
@@ -467,5 +481,5 @@ const CHAT = (function () {
     no.addEventListener("click", view.close);
   }
 
-  return {panel, stop, withdraw, create, confirm, question, fileTray, modelPick};
+  return {panel, stop, withdraw, create, seen, confirm, question, fileTray, modelPick};
 })();

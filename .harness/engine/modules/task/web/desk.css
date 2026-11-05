@@ -106,7 +106,7 @@
 .tk-foot footer{margin-top:14px}
 
 /* ---------- the cards over the stage strip and the context bar ---------- */
-.st-card{position:fixed;z-index:95;left:0;top:0;min-width:240px;max-width:min(340px,calc(100vw - 16px));box-sizing:border-box;padding:10px 12px;background:var(--pop);color:var(--ink);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);font-size:12.5px;line-height:1.45;opacity:0;visibility:hidden;transition:opacity .12s}
+.st-card{position:fixed;z-index:175;left:0;top:0;min-width:240px;max-width:min(340px,calc(100vw - 16px));box-sizing:border-box;padding:10px 12px;background:var(--pop);color:var(--ink);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);font-size:12.5px;line-height:1.45;opacity:0;visibility:hidden;transition:opacity .12s}
 .st-card.on{opacity:1;visibility:visible}
 .st-card .st-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .st-card .tk-cx-h{margin-top:12px}

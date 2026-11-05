@@ -133,7 +133,7 @@
 .rp-pill kbd{font:500 10.5px/1 var(--mono);padding:3px 5px;border-radius:5px;background:var(--kbd);color:var(--soft);border:1px solid var(--line)}
 .rp-pill .bd{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--ink);color:var(--bg);font-size:11.5px;font-weight:650}
 .rp-pill .bd[hidden]{display:none}
-.has-reply .tk-foot{padding-bottom:84px}  /* the pill never sits on the last line of the page */
+.tk-foot{padding-bottom:120px}  /* neither the pill nor the dock sits on the last line of the page */
 
 .rp{position:fixed;left:50%;bottom:78px;z-index:55;transform:translateX(-50%);box-sizing:border-box;width:min(600px,94vw);max-height:calc(100vh - 150px);display:flex;flex-direction:column;overflow:visible;padding:16px;border-radius:20px;color:var(--ink);background:var(--over);border:1px solid var(--glass-line);box-shadow:var(--glass-hi),var(--glass-shadow);animation:palin .16s ease-out}
 .rp[hidden]{display:none}

@@ -97,6 +97,11 @@ const SERVE = (function () {
       if (!typed) close();
     };
     document.addEventListener("keydown", onKey);
+    shade.addEventListener("click", (event) => {  // a click beside the window is Cancel, as Esc is, as long as nothing was typed
+      if (event.target !== shade) return;
+      const typed = view.holds ? view.holds() : [...box.querySelectorAll("textarea, input:not([type=file]):not([type=checkbox]):not([type=radio])")].some((node) => node.value.trim());
+      if (!typed) close();
+    });
     (box.querySelector("input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea") || box).focus({preventScroll: true});  // never a button: Enter must not act by surprise
     const view = {box, close, holds: null};
     return view;

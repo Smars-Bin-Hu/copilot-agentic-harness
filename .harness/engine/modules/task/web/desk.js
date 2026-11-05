@@ -1041,22 +1041,26 @@
     const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), callFacts(item), h("p", {class: "sub"}, t("desk.outbox.asked", {at: item.created_at.slice(0, 16).replace("T", " "), code: item.code})),
       h("div", {class: "cmd-scroll"}, commandNodes(item.layout)),
       script ? [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t("desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)] : null,
-      h("p", {class: "sub"}, t("desk.outbox.as_written"), " ", h("code", null, item.command)),
+      h("p", {class: "sub"}, t("desk.outbox.as_written")), h("div", {class: "cmd-scroll one"}, h("pre", {class: "cmd-script"}, item.command)),
       h("div", {class: "row"}, copy, close)]);
     view.box.classList.add("wide");
     close.addEventListener("click", () => { view.close(); draw(true); });
   }
   function outboxCard(item, notes) {
     const can = served() && canAct() && SERVE.runs("approve-action");
-    const input = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: item.code, "aria-label": t("board.serve.code")});
-    const yes = h("button", {type: "button", class: "act hot big", disabled: can && viewedCalls.has(item.code) ? null : "disabled", title: viewedCalls.has(item.code) ? "" : t("desk.outbox.view_first")}, t("desk.outbox.approve"));
+    const input = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("board.serve.code"), "aria-label": t("board.serve.code")});
+    const ready_ = () => can && viewedCalls.has(item.code) && input.value.trim().length > 0;  // the window was opened and a code was typed (the one the agent gave, in the draft's name)
+    const yes = h("button", {type: "button", class: "act hot big", disabled: "disabled", title: t("desk.outbox.view_first")}, t("desk.outbox.approve"));
+    const arm = () => { yes.disabled = !ready_(); yes.title = ready_() ? "" : viewedCalls.has(item.code) ? t("desk.outbox.type_code") : t("desk.outbox.view_first"); };
+    input.addEventListener("input", arm);
     const no = h("button", {type: "button", class: "act", disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
     const view = h("button", {type: "button", class: "act"}, t("desk.outbox.view"));
     const said = h("div", {class: "bad"});
-    view.addEventListener("click", () => { callWindow(item); yes.disabled = !can; yes.title = ""; });
+    view.addEventListener("click", () => { callWindow(item); arm(); });
     const send = () => {
+      if (!ready_()) return;
       yes.disabled = true; yes.textContent = t("board.serve.working");
-      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim() || item.code}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); yes.disabled = false; yes.textContent = t("desk.outbox.approve"); });
+      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
     };
     yes.addEventListener("click", send);
     input.addEventListener("keydown", (event) => { if (isEnter(event) && !yes.disabled) send(); });

@@ -216,9 +216,11 @@ class OutboxOnThePageTests(OutboxCase):
         from modules.task import taskhtml
 
         desk = (taskhtml.WEB / "desk.js").read_text(encoding="utf-8")
-        self.assertIn('SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim() || item.code})', desk)
+        self.assertIn('SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()})', desk)  # the code must be typed (hand test B90-b: an empty box approved)
+        self.assertIn('const ready_ = () => can && viewedCalls.has(item.code) && input.value.trim().length > 0;', desk)
+        self.assertNotIn("placeholder: item.code", desk)  # the box does not show the code
         self.assertIn('SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code})', desk)
-        self.assertIn('disabled: can && viewedCalls.has(item.code) ? null : "disabled"', desk)  # Approve wakes once the window was opened
+        self.assertIn("shade.addEventListener(\"click\"", (taskhtml.WEB / "serve.js").read_text(encoding="utf-8"))  # a click beside the window closes it
         self.assertIn('view.box.classList.add("wide")', desk)
         self.assertIn(".cmd-scroll{max-height:min(50vh,520px);overflow:auto", (taskhtml.WEB / "desk.css").read_text(encoding="utf-8"))  # the window scrolls both ways
         self.assertIn('"outbox"]', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))

@@ -100,6 +100,11 @@ def git_needs_approval(why: str, command: str, code: str, minutes: int) -> str:
     return say("gate.git.needs_approval", why=why, git_command=command, code=code, minutes=minutes)
 
 
+def _verb(verb: str) -> str:
+    """The verb with its article, for the English texts ("a write", "an exec"); the zh texts ignore the article."""
+    return ("an " if verb[:1] in "aeiou" else "a ") + verb
+
+
 def external_denied(action: Any, command: str) -> str:
     """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
     return say("gate.external.denied", system=action.system, env=action.env, verb=action.verb, call=command)
@@ -117,11 +122,11 @@ def external_task(action: Any, command: str) -> str:
 
 def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str) -> str:
     where = say("gate.external.outbox_draft", draft=draft) if draft else say("gate.external.outbox_nodraft")
-    return say("gate.external.outbox", system=action.system, env=action.env, verb=action.verb, call=command, code=code, minutes=minutes, where=where)
+    return say("gate.external.outbox", system=action.system, env=action.env, verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)
 
 
 def external_autorun(action: Any, command: str) -> str:
-    return say("gate.external.autorun", system=action.system, env=action.env, verb=action.verb, call=command)
+    return say("gate.external.autorun", system=action.system, env=action.env, verb=_verb(action.verb), call=command)
 
 
 def external_approved(commands: Any) -> str:

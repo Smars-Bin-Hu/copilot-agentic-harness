@@ -1060,7 +1060,8 @@
     const input = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("desk.outbox.code"), "aria-label": t("board.serve.code")});
     const ready_ = () => can && viewedCalls.has(item.code) && input.value.trim().length > 0;  // the window was opened and a code was typed (the one the agent gave, in the draft's name)
     const yes = h("button", {type: "button", class: "act hot big", disabled: "disabled", title: t("desk.outbox.view_first")}, t("desk.outbox.approve"));
-    const arm = () => { yes.disabled = !ready_(); yes.title = ready_() ? "" : viewedCalls.has(item.code) ? t("desk.outbox.type_code") : t("desk.outbox.view_first"); };
+    const why = h("span", {class: "sub tk-why"});  // why Approve is grey, in words beside it (hand test: the tip alone was not seen)
+    const arm = () => { yes.disabled = !ready_(); const text = ready_() ? "" : !can ? "" : viewedCalls.has(item.code) ? t("desk.outbox.type_code") : t("desk.outbox.view_first"); yes.title = text; why.textContent = text; };
     input.addEventListener("input", arm);
     const no = h("button", {type: "button", class: "act", disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
     const view = h("button", {type: "button", class: "act"}, t("desk.outbox.view"));
@@ -1077,13 +1078,14 @@
       no.disabled = true;
       SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); no.disabled = false; });
     });
+    arm();
     const peek = item.command.length > 110 ? item.command.slice(0, 110) + "…" : item.command;
     return h("section", {class: "tk-need strong tk-call", "data-action": "approve-action", "data-code": item.code},
       h("div", {class: "tk-need-h"}, tag(t("task.waiting.outbox"), "hot"), h("span", {class: "sub"}, t("desk.outbox.since", {at: item.created_at.slice(11, 16)}), item.draft ? [" · ", h("code", null, item.draft)] : null)),
       callFacts(item),
       h("div", {class: "tk-cmd-peek"}, h("code", null, peek), " ", view),
       notes,
-      h("div", {class: "tk-need-go tk-call-go"}, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), no, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));
+      h("div", {class: "tk-need-go tk-call-go"}, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), no, why, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));
   }
 
   // The words for a task that has nothing waiting on it, on the Live tab: closed, not started, quiet, or at work with nothing to decide.

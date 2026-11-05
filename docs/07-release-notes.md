@@ -14,6 +14,7 @@ To see which version you have: `harness --version`.
 
 ### Added
 
+- **A held call waits for you for a day, not ten minutes.** The ten minutes are for the approval once you gave it (the agent runs the command once within them, so a stale approval never fires). The request itself, and its card, stay 24 hours, or until you dismiss it or the task closes. The same holds for a git command the gate held.
 - **The output of a run is laid out in the window.** The results file keeps the output as it came; the window of an evidence chip reads it: a block whose second line is dashes is a table (the dash runs give the columns), a framed or `|` table and a tab-separated block are tables too, `(n rows affected)` and `Msg …` lines are notes (an error red), the rest is text. Several result sets are several tables, each in its own tab, with a Notes tab after them; numbers are right-aligned, `NULL` is dim, the head stays while the rows scroll, and a table longer than 200 rows shows the first 200 and says how many there are. **Table / Text** switches to the output whole. Every box scrolls both ways. The harness knows no program here: the reader is generic.
 
 ## 1.7.8 (2026-11-05)

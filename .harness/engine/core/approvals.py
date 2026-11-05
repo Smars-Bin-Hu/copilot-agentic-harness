@@ -41,8 +41,12 @@ def _read(root: Path, name: str = FILE) -> List[Dict[str, Any]]:
         return []  # a damaged file means no approvals: nothing is let through by accident
 
 
+PENDING_HOURS = 24  # a request that waits for the person stays this long (the person may be away): the approval, once given, is good for `limit` only
+
+
 def _alive(item: Dict[str, Any], limit: float, now: float) -> bool:
-    return now - float(item.get("at", 0)) <= limit
+    """A pending request lives PENDING_HOURS (1.7.9: ten minutes lost the call while the person looked elsewhere); an approval lives `limit` seconds from the approval, so a stale one never fires."""
+    return now - float(item.get("at", 0)) <= (PENDING_HOURS * 3600.0 if item.get("state") == "pending" else limit)
 
 
 def _write(root: Path, entries: List[Dict[str, Any]], name: str = FILE) -> None:

@@ -194,7 +194,7 @@ The defaults are in `.harness/policies/<file>`; overrides go in the `.override.j
 | gate.json | `terminal.guardrail_write` | The rules that recognise a terminal command writing a guardrail. The `why` of a rule is one text, or one per language (`{"en": "...", "zh": "..."}`) |
 | gate.json | `terminal.deny` | The terminal commands that are refused outright |
 | gate.json | `terminal.ask` | The terminal commands you have to confirm |
-| gate.json | `git.approval_minutes` | How many minutes an approval of a git command is valid |
+| gate.json | `git.approval_minutes` | How many minutes an approval (of a git command, or of a call to an outside system) is valid once you gave it: the agent runs the command once within them. A request that waits for you stays 24 hours |
 | gate.json | `circuit_breaker.repeat_limit` | After how many times the same refusal is replaced with one that says to stop retrying |
 | task.json | `fetch.max_files` | How many files one `task fetch` may fetch at most |
 | task.json | `task_file_reminder` | When files were written in a task and `TASK.md` was not updated, the agent is reminded once before it ends |

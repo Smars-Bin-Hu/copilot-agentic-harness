@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from typing import Optional
 
 from support import HarnessTestCase, pre_tool
@@ -95,7 +97,7 @@ class StoreTests(HarnessTestCase):
     def test_it_runs_out(self) -> None:
         code = approvals.request(self.root, "vscode", "s1", "git add .", 10, now=1000)
         self.assertEqual(approvals.pending(self.root, 10, now=1000 + 599), approvals.pending(self.root, 10, now=1000))
-        self.assertIsNone(approvals.approve(self.root, code, 10, now=1000 + 601))
+        self.assertIsNone(approvals.approve(self.root, code, 10, now=1000 + 25 * 3600))  # a request waits a day for the person (1.7.9), not the approval's minutes
         code = approvals.request(self.root, "vscode", "s1", "git add .", 10, now=2000)
         approvals.approve(self.root, code, 10, now=2001)
         self.assertFalse(approvals.consume(self.root, "s1", "git add .", 10, now=2001 + 601))
@@ -251,3 +253,25 @@ class _Sink:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PendingLifeTests(unittest.TestCase):
+    """1.7.9: a request waits for the person for a day; an approval is good for the minutes of the policy from the moment it was given."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root / ".harness" / "runtime").mkdir(parents=True)
+
+    def test_a_request_outlives_the_approval_minutes_and_an_approval_does_not(self) -> None:
+        code = approvals.request(self.root, "vscode", "s1", "git commit -m x", 10, now=1000)
+        self.assertEqual([item["code"] for item in approvals.pending(self.root, 10, now=1000 + 23 * 3600)], [code])  # still there a day later
+        self.assertEqual(approvals.pending(self.root, 10, now=1000 + 25 * 3600), [])  # gone after a day
+        code = approvals.request(self.root, "vscode", "s1", "git commit -m x", 10, now=5000)
+        approvals.approve(self.root, code, 10, now=5000 + 3600)  # approved an hour after the request
+        self.assertTrue(approvals.consume(self.root, "s1", "git commit -m x", 10, now=5000 + 3600 + 500))  # within ten minutes of the approval
+        code = approvals.request(self.root, "vscode", "s1", "git commit -m y", 10, now=9000)
+        approvals.approve(self.root, code, 10, now=9000)
+        self.assertFalse(approvals.consume(self.root, "s1", "git commit -m y", 10, now=9000 + 700))  # the approval ran out
+

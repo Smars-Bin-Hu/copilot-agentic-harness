@@ -1596,6 +1596,7 @@
   "desk.test.waiting": "按 TEST-GUIDE.md 运行 {env} 的测试，把结果带回 VS Code 里的 agent。",
   "desk.outbox.view_first": "先点查看：你批准的是这条命令。",
   "desk.outbox.type_code": "输入 agent 给你的 code（草稿文件名里就是它）。",
+  "desk.outbox.code": "code",
   "desk.outbox.same_as": "等于终端里的 `harness approve-action`",
   "desk.outbox.as_written": "agent 写的原样，一行：",
   "desk.outbox.script.note": "命令要读的文件，{n} 行，任务里现在的内容",

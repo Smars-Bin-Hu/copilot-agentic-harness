@@ -1057,7 +1057,7 @@
   }
   function outboxCard(item, notes) {
     const can = served() && canAct() && SERVE.runs("approve-action");
-    const input = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("board.serve.code"), "aria-label": t("board.serve.code")});
+    const input = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("desk.outbox.code"), "aria-label": t("board.serve.code")});
     const ready_ = () => can && viewedCalls.has(item.code) && input.value.trim().length > 0;  // the window was opened and a code was typed (the one the agent gave, in the draft's name)
     const yes = h("button", {type: "button", class: "act hot big", disabled: "disabled", title: t("desk.outbox.view_first")}, t("desk.outbox.approve"));
     const arm = () => { yes.disabled = !ready_(); yes.title = ready_() ? "" : viewedCalls.has(item.code) ? t("desk.outbox.type_code") : t("desk.outbox.view_first"); };

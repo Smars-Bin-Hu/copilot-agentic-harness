@@ -75,6 +75,7 @@ const SERVE = (function () {
     const shade = h("div", {class: "shade"}, box);
     const before = document.activeElement;
     document.body.append(shade);
+    document.body.classList.add("has-dialog");  // the fixed buttons of the page (the terminal toggle) step back while a window is open
     stack.push(box);
     const close = () => {
       if (!stack.includes(box)) return;  // a late answer may close a window the person closed already
@@ -82,6 +83,7 @@ const SERVE = (function () {
       shade.remove();
       stack.splice(stack.indexOf(box), 1);
       busy = stack.length > 0;
+      if (!stack.length) document.body.classList.remove("has-dialog");
       if (before && before.isConnected) before.focus({preventScroll: true});
     };
     const onKey = (event) => {

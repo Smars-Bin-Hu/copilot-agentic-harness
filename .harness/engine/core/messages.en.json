@@ -1596,6 +1596,7 @@
   "desk.test.waiting": "Run the tests of {env} in TEST-GUIDE.md and bring the results back to the agent in VS Code.",
   "desk.outbox.view_first": "Open View first: the command is what you approve.",
   "desk.outbox.type_code": "Type the code the agent gave you (it is in the draft's name).",
+  "desk.outbox.code": "code",
   "desk.outbox.same_as": "same as `harness approve-action` in your terminal",
   "desk.outbox.as_written": "As written by the agent, one line:",
   "desk.outbox.script.note": "the file the command reads, {n} lines, as it is in the task now",

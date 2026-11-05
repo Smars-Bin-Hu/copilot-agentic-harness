@@ -83,16 +83,14 @@ def moved_on(session: str, stored: Dict[str, Any], listed: str, sdk: Dict[str, S
 def wants_scan(entries: List[Entry], summaries: Dict[str, Dict[str, Any]], sdk: Dict[str, Set[str]], found: Dict[str, Tuple[Optional[Dict[str, Any]], str]]) -> bool:
     """Must chats be read for their Copilot ids? Yes for a task with a session and no chat, and for a task bound to a chat of the board whose session id is new since (1.6.111): another chat
     may have picked it up, and only a read of that chat lets `moved_on` see it. Before, such a task counted as bound, no chat was read, and the board stayed on the old chat for good."""
-    for entry in entries:
-        session = str(entry.get("session_id") or "")
-        binding = found.get(entry["task"], (None, ""))[0]
-        if not session:
-            continue
-        if binding is None:
-            return True
-        if binding.get("how") == "board" and session != binding.get("was") and session not in sdk.get(str(binding.get("session") or ""), set()):
-            return True
-    return False
+    return any(entry.get("session_id") and (found.get(entry["task"], (None, ""))[0] is None or unsettled(entry, found[entry["task"]][0], sdk)) for entry in entries)
+
+
+def unsettled(entry: Entry, binding: Optional[Dict[str, Any]], sdk: Dict[str, Set[str]]) -> bool:
+    """A binding to a chat of the board while the task's session id is new since (not `was`, not the chat's own): another chat may have picked the task up, and it is not read yet.
+    A send then is refused, not made to the old chat: once the chats are read, the board follows the new one or keeps this one for sure (1.6.111)."""
+    session = str(entry.get("session_id") or "")
+    return bool(binding and session and binding.get("how") == "board" and session != binding.get("was") and session not in sdk.get(str(binding.get("session") or ""), set()))
 
 
 def same(left: Optional[Dict[str, Any]], right: Optional[Dict[str, Any]]) -> bool:

@@ -574,6 +574,10 @@ class VsLink:
             raise Refused("unsure" if why == "ambiguous" else "unbound")
         if not chatlink.same(shown, binding):
             raise Refused("changed")  # the page showed another chat (or none): it is looked at again before anything is sent
+        if chatlink.unsettled(next((entry for entry in entries if entry["task"] == task), {}), binding, sdk):
+            with self.lock:
+                self.dirty = True  # the next look reads the chats and settles it
+            raise Refused("changed")  # another chat may have picked the task up a moment ago: nothing goes to the old one
         state = ahp.status_name(sessions[binding["session"]].get("status"))
         if NEEDS[kind] and state != NEEDS[kind]:
             raise Refused("not-" + NEEDS[kind])

@@ -483,6 +483,63 @@ class CreateTests(CreateCase):
         self.assertTrue(until(lambda: self.chat_is(old, "ahp-chat:/vs"), 10.0), self.data(old).get("chat"))
         self.assertEqual(self.data(old)["chat"]["how"], "sdk")
 
+    def go_on_bound(self, own: str = "") -> str:
+        """A task bound to a chat of the board made with "go on in a new chat". `own`: the Copilot id the board's chat shows once its model was called."""
+        if own:
+            old = self.host.answers["subscribe"]
+            self.host.answers["subscribe"] = lambda params: {"snapshot": {"state": chat_state(own)}} if params["channel"] == self.new_chat else old(params)
+        self.write(".github/skills/harness-my-task/SKILL.md", "---\nname: harness-my-task\n---\n")
+        self.prompt("start", session="sess-old")
+        self.new(name="old-job", session="sess-old")
+        task = f"{tasks.TASKS_DIR}/old-job"
+        body = {"skill": "harness-my-task", "words": "Go on.", "lang": "en", "task": "old-job", "step": "act"}
+        self.assertEqual(self.request("POST", "/api/skill", body, cookie=self.cookie)[0], 200)
+        self.assertTrue(until(lambda: self.chat_is(task, self.new_chat) and self.vs.chat_of(task).get("bound")), self.data(task).get("chat"))
+        resource = self.made[0]["channel"]
+        for item in self.items:
+            if item["resource"] == resource:
+                item["status"] = 1  # its turn has ended: a send needs an idle chat
+        self.host.push({"jsonrpc": "2.0", "method": "root/sessionSummaryChanged", "params": {"session": resource, "changes": {"status": 1}}})
+        self.assertTrue(until(lambda: self.vs.chat_of(task).get("state") == "idle"), self.vs.chat_of(task))
+        return task
+
+    def test_a_send_goes_to_the_bound_chat_while_another_chat_has_not_picked_the_task_up(self) -> None:
+        """A new chat in VS Code changes nothing until its agent picks the task up: the board does not guess which chat the person meant."""
+        task = self.go_on_bound()
+        self.vs_code_chat("sess-vs")  # made, at work, but on something else so far
+        time.sleep(1.0)
+        self.assertEqual(self.vs.dispatch("send", task, "Go on.")["chat"], self.new_chat)
+        self.assertTrue(self.chat_is(task, self.new_chat))
+
+    def test_a_send_in_the_moment_after_another_chat_picked_the_task_up_is_refused_not_sent_to_the_old_chat(self) -> None:
+        """Between the pick-up and the board's next read of the chats, the old chat looked bound: a send went there (1.6.111). Now it is refused; after the read it goes to the new chat."""
+        task = self.go_on_bound()
+        self.vs_code_chat("sess-vs")
+        time.sleep(0.5)
+        look = self.vs._look
+        self.vs._look = lambda link: None  # the board does not look again before the send
+        self.prompt("go on", session="sess-vs")
+        self.open(name="old-job", session="sess-vs")
+        before = len(self.dispatched())
+        with self.assertRaises(vslink.Refused) as caught:
+            self.vs.dispatch("send", task, "Go on.")
+        self.assertEqual(caught.exception.why, "changed")
+        self.assertEqual([item for item in self.dispatched()[before:] if item["action"].get("type") == "chat/turnStarted"], [])  # nothing was sent anywhere
+        self.vs._look = look
+        self.assertTrue(until(lambda: self.chat_is(task, "ahp-chat:/vs") and self.vs.chat_of(task).get("bound")), self.data(task).get("chat"))
+        self.items[-1]["status"] = 1  # the new chat's turn ended
+        self.host.push({"jsonrpc": "2.0", "method": "root/sessionSummaryChanged", "params": {"session": "ahp-session:/vs", "changes": {"status": 1}}})
+        self.assertTrue(until(lambda: self.vs.chat_of(task).get("state") == "idle"), self.vs.chat_of(task))
+        self.assertEqual(self.vs.dispatch("send", task, "Go on.")["chat"], "ahp-chat:/vs")
+
+    def test_a_send_goes_to_the_chat_of_the_board_once_its_own_agent_picked_the_task_up(self) -> None:
+        """The board's own chat picking the task up gives the task that chat's id: not a sign of another chat, so a send is not refused."""
+        task = self.go_on_bound(own="sess-board")
+        self.prompt("go on", session="sess-board")
+        self.open(name="old-job", session="sess-board")
+        time.sleep(0.5)
+        self.assertEqual(self.vs.dispatch("send", task, "Go on.")["chat"], self.new_chat)
+
     def test_a_chat_read_before_its_first_model_call_is_read_again_while_it_works(self) -> None:
         """It was read again only when the host changed its `modifiedAt`, which may wait for the end of the turn: the task was unbound for the whole turn (1.6.111)."""
         self.prompt("start", session="sess-lost")

@@ -114,10 +114,11 @@ class RunRecordTests(LifeCase):
         with self.assertRaises(CommandError):
             runrecord.record(self.root, "dev1", "DEV")
 
-    def test_a_test_task_uses_the_test_command(self) -> None:
+    def test_a_test_task_may_record_a_look_up_too(self) -> None:
+        """1.7.3: a test task records its test steps with `task test record`; a look-up that is not a test step goes through `task run record` as in any task."""
         self.new("t1", "test")
-        with self.assertRaises(CommandError):
-            runrecord.record(self.root, "t1", "DEV", str(self.given))
+        found = runrecord.record(self.root, "t1", "DEV", str(self.given))
+        self.assertEqual((found["run"], found["evidence_id"]), (1, "E1"))
 
     def test_the_folder_found_in_any_case_is_used(self) -> None:
         (self.home / "RUNS" / "dev").mkdir(parents=True)

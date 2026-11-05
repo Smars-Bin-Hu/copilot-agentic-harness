@@ -1353,7 +1353,7 @@
   "desk.evidence.run": "位置",
   "desk.evidence.at": "时间（UTC）",
   "desk.evidence.by.person": "你",
-  "desk.evidence.by.agent": "agent",
+  "desk.evidence.by.agent": "agent 自己",
   "desk.evidence.by": "谁跑的",
   "desk.evidence.env": "环境",
   "desk.evidence.hint": "这个任务里保存下来的每次运行和它的编号。用到结果的地方写 [E<n>]；没人引用的那行是灰的。",

@@ -308,7 +308,7 @@ class FailedCallsAndSkillsInTheLogTests(SdkTestCase):
     def test_a_long_error_is_clipped_like_a_reason(self) -> None:
         from modules.observe.handler import clip_record
 
-        self.assertEqual(clip_record({"error": "x" * 50}, 10)["error"], "x" * 10 + "…")
+        self.assertEqual(clip_record({"error": "word " * 20}, 10)["error"], "word word " + "…")  # words, not one long run: a run with no space reads as a key and is masked (redact, 1.7.0)
 
     def test_a_skill_call_goes_through_and_the_log_names_the_skill(self) -> None:
         self.feed(sample("UserPromptSubmit.json"))

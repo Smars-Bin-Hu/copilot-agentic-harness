@@ -7,7 +7,7 @@ import time
 import unittest
 from typing import Any, Dict, List, Optional
 
-from support import FIXTURES, HarnessTestCase
+from support import FIXTURES, HarnessTestCase, slash
 
 import hook
 from adapters import copilot_vscode
@@ -118,6 +118,21 @@ class EngineDetectionTests(unittest.TestCase):
     def test_loading_a_skill_gives_its_name(self) -> None:
         self.assertEqual(copilot_vscode.parse(sample("PreToolUse.skill.json")).skill, "harness-task-level")
         self.assertEqual(copilot_vscode.parse(sample("PreToolUse.Read.json")).skill, "")
+
+    def test_a_slash_command_gives_the_words_the_person_typed_not_the_skill(self) -> None:
+        """Hand test 2026-11-04: `/harness-my-task …` reached the hook as the skill's whole text, and its example `[review]=1` switched checks on."""
+        body = 'End your reply with: "For an independent check, write `[review]=1` in your next message." [ZH] [EN]'
+        cases = {
+            slash("harness-my-task", "Go on with the task probe.", body): "/harness-my-task Go on with the task probe.",
+            slash("harness-rookie-quick-start", "", body): "/harness-rookie-quick-start",
+            slash("harness-my-task", "go on\n[review]=2 [ZH]", body): "/harness-my-task go on\n[review]=2 [ZH]",
+            "[review]=1 a prompt as typed": "[review]=1 a prompt as typed",
+            '<skill-context name="x">a block that does not end [review]=1': "",  # a shape not seen: nothing from inside it counts
+        }
+        for prompt, words in cases.items():
+            with self.subTest(words):
+                event = copilot_vscode.parse({**sample("UserPromptSubmit.json"), "prompt": prompt})
+                self.assertEqual((event.prompt, event.words), (prompt, words))
 
     def test_the_engine_is_told_from_the_payload(self) -> None:
         self.assertEqual(copilot_vscode.engine(sample("PreToolUse.Bash.json")), "cli")
@@ -253,6 +268,18 @@ class ContinuationTests(SdkTestCase):
         self.assertEqual(output, {})  # no rules injected a second time
         again, _ = self.feed(sample("Stop.json") | {"session_id": PARENT})
         self.assertEqual(again, {})  # the reminder of this prompt was already given
+
+    def test_the_fed_back_reason_is_noted_for_rewind_and_gets_no_point(self) -> None:
+        """1.6.109 hand test: the board offered a rewind to before the harness's own message; its time is noted now, so the page marks it as the harness's."""
+        from modules.task import rewind
+
+        reason = self.blocked()
+        task = ".workspace/sandbox/tasks/job"
+        before = rewind.index(self.root, task)
+        self.prompt(reason)
+        after = rewind.index(self.root, task)
+        self.assertEqual([item["kind"] for item in after[len(before):]], ["harness"])
+        self.assertFalse((rewind.folder(self.root, task) / rewind.POINTS / f"{after[-1]['seq']}.json").exists())  # no files for it
 
     def test_a_real_next_prompt_still_starts_a_new_window(self) -> None:
         self.blocked()

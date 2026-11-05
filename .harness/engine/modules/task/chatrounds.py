@@ -125,9 +125,15 @@ def took(item: Dict[str, Any]) -> Optional[float]:
     return round(max(0.0, end - start)) if start is not None and end is not None else None
 
 
+def head_of(prompt: str) -> str:
+    """The prompt on one line, cut at `HEAD_CHARS` with an ellipsis: the rewind dialog and a narrow window show it whole, and a cut must look cut."""
+    text = " ".join(prompt.split())
+    return text if len(text) <= HEAD_CHARS else text[:HEAD_CHARS - 1].rstrip() + "…"
+
+
 def listing(root: Path, task: str) -> List[Dict[str, Any]]:
     """For the list: one short line each, oldest first. `n` is the place of the round: the page asks for the whole round by it. `seconds` and `aiu` (credits) are None when not known."""
-    return [{"n": number, "at": item["at"], "head": " ".join(item["prompt"].split())[:HEAD_CHARS], "tools": len(item["tools"]), "replies": len(item["texts"]),
+    return [{"n": number, "at": item["at"], "head": head_of(item["prompt"]), "tools": len(item["tools"]), "replies": len(item["texts"]),
              "seconds": took(item), "aiu": round(item["aiu"], 1) if isinstance(item.get("aiu"), (int, float)) else None}
             for number, item in enumerate(rounds_of(root, task))]
 

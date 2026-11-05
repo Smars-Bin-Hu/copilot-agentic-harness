@@ -44,6 +44,7 @@ When an agent runs these, the gate refuses; a pipe or a script does not work eit
 | `task upgrade --tier <tier>` | Raises the tier and adds the missing files |
 | `task upgrade --kind <kind>` | Turns a Q&A task into another kind, and raises its tier if that kind needs more |
 | `task fetch <repository>/<path>` | Fetches a file from main of the target repository into `DEV/` |
+| `task fetch _manual/<path> --from <file>` | Takes a file you run by hand (from `REF/`, or a share) as the base of `DEV/_manual/<path>`; never promoted |
 | `task delete <repository>/<path>` | Marks a file for deletion |
 | `task diff` | Writes `CHANGES.diff` |
 | `task review start` / `status` | Starts a check; shows the counts |

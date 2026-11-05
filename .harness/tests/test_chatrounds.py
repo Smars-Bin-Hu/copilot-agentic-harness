@@ -109,6 +109,13 @@ class ReadTests(RoundCase):
         chatrounds._cache.clear()
         self.assertTrue(chatrounds.one(self.root, self.task, 0)["cut"])
 
+    def test_a_long_prompt_is_cut_in_the_list_with_an_ellipsis(self) -> None:
+        """Hand test 2026-11-04: the rewind dialog showed a cut prompt that stopped in the middle of a word, as if it were whole."""
+        self.assertEqual(chatrounds.head_of("fix  the\nload"), "fix the load")
+        long = chatrounds.head_of("word " * 100)
+        self.assertEqual(len(long), chatrounds.HEAD_CHARS)
+        self.assertTrue(long.endswith("…"))
+
     def test_the_route_needs_the_paired_browser(self) -> None:
         status, data, _ = self.request("POST", "/api/rounds", {"op": "list", "task": TASK})
         self.assertEqual(status, 403, data)

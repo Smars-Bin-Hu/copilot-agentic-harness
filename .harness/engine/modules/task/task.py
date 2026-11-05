@@ -244,9 +244,9 @@ def archive_round(root: Path, task: str, data: Dict[str, Any]) -> None:
         plan.rename(old_plan)  # the new round starts without a plan, so the old one cannot be approved again by mistake
     data["rounds"].append({
         "round": number, "started_at": data.get("round_started_at", ""), "plan": data.get("plan", {}), "promote": data["promote"],
-        "branch": data["branch"], "dev": rel(root, kept), "diff_file": diff_file, "plan_file": rel(root, old_plan) if old_plan.exists() else "", "files": sorted(data["target_files"]), "deletes": list(data["deletes"]),
+        "branch": data["branch"], "dev": rel(root, kept), "diff_file": diff_file, "plan_file": rel(root, old_plan) if old_plan.exists() else "", "files": sorted(data["target_files"]) + sorted(data.get("manual_files") or {}), "deletes": list(data["deletes"]),
     })
-    data.update(round=number + 1, round_started_at=utc_now(), targets={}, target_files={}, deletes=[], plan={}, promote={"state": "none"}, branch="")
+    data.update(round=number + 1, round_started_at=utc_now(), targets={}, target_files={}, manual_files={}, deletes=[], plan={}, promote={"state": "none"}, branch="")
 
 
 def page_url(root: Path, task: str) -> str:
@@ -288,7 +288,7 @@ def status(root: Path, raw_task: str = "") -> Dict[str, Any]:
     return {
         "task": task, "status": data["status"], "round": data["round"], "branch": data.get("branch", ""),
         "plan_written": bool(tasks.plan_digest(root, task)), "plan_approved": tasks.plan_approved(root, task, data),
-        "fetched": sorted(data["target_files"]), "deletes": data["deletes"], "promote": data["promote"]["state"],
+        "fetched": sorted(data["target_files"]), "by_hand": sorted(data.get("manual_files") or {}), "deletes": data["deletes"], "promote": data["promote"]["state"],
         "next": next_step(root, task, data) if data["status"] == "open" else "",
     }
 
@@ -523,11 +523,13 @@ def fill_confirmation(root: Path, task: str, path: Path, text: str, data: Dict[s
 # --- fetch, delete, diff -------------------------------------------------------------------------
 
 
-def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False, rebase: bool = False) -> Dict[str, Any]:
+def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False, rebase: bool = False, source: str = "") -> Dict[str, Any]:
     """`overwrite`: take the base version again over a file changed in DEV/. `rebase`: also fix the base again at what main is now (the file changed on main since): the version
-    is the new one, and what was changed in DEV/ is dropped, the agent makes the change again."""
+    is the new one, and what was changed in DEV/ is dropped, the agent makes the change again. `source`: the file a `_manual/<path>` is taken from."""
     if not specs:
         raise CommandError(say("fetch.empty"))
+    if source.strip() or any(tasks.is_manual(spec.strip()) for spec in specs):
+        return fetch_by_hand(root, raw_task, specs, source, overwrite)
     overwrite = overwrite or rebase
     task = resolve(root, raw_task)
     limit = common.policy(root)["fetch"]["max_files"]
@@ -572,6 +574,44 @@ def fetch(root: Path, raw_task: str, specs: List[str], overwrite: bool = False, 
         result["kb_cards"] = cards
         stale = [item["id"] for item in cards if item["stale"]]
         result["kb_note"] = say("fetch.kb.stale", ids=", ".join(stale)) if stale else say("fetch.kb.cards")
+    return result
+
+
+def fetch_by_hand(root: Path, raw_task: str, specs: List[str], source: str, overwrite: bool) -> Dict[str, Any]:
+    """`task fetch _manual/<path> --from <file>` (1.6.110): a file the person runs by hand, as it is now (they put it in REF/, or it is on a share), becomes the base
+    of `DEV/_manual/<path>`, so the Changes tab shows what the task changes in it. No repository is read and nothing of it is promoted."""
+    if len(specs) != 1 or not tasks.is_manual(specs[0].strip()) or not source.strip():
+        raise CommandError(say("fetch.manual.one"))
+    key = common.relative_name(specs[0])
+    if not key.partition("/")[2]:
+        raise CommandError(say("fetch.manual.one"))
+    task = resolve(root, raw_task)
+    origin = Path(source.strip())
+    origin = origin if origin.is_absolute() else root / origin
+    if not origin.is_file():
+        raise CommandError(say("fetch.manual.missing", source=source.strip()))
+    if any(common.inside(folder, origin) is not None for folder in (tasks.dev_dir(root, task), tasks.base_dir(root, task))):
+        raise CommandError(say("fetch.manual.dev", source=source.strip()))
+    shown = common.inside(root, origin) or str(origin)
+    base, dev = tasks.base_dir(root, task) / key, tasks.dev_dir(root, task) / key
+    with locked(root, task) as data:
+        require_open(data)
+        require_plan(root, task, data)
+        content = origin.read_bytes()
+        base.parent.mkdir(parents=True, exist_ok=True)
+        if base.exists():
+            common.writable(base)
+        base.write_bytes(content)
+        digest = common.sha256_file(base)
+        kept = dev.exists() and not overwrite and common.sha256_file(dev) != digest  # the agent's edits stay; `--overwrite` takes the file again
+        if not kept:
+            common.copy_file(base, dev)
+        data.setdefault("manual_files", {})[key] = {"from": shown, "sha256": digest}
+        note(data, "fetch", f"{key} <- {shown}")
+    result: Dict[str, Any] = {"task": task, "fetched": [] if kept else [f"{task}/{tasks.DEV_NAME}/{key}"], "from": shown, "next": say("fetch.manual.next", task=task)}
+    if kept:
+        result["kept"] = [key]
+        result["note"] = say("fetch.kept")
     return result
 
 
@@ -632,7 +672,7 @@ def changes(root: Path, task: str, data: Dict[str, Any]) -> Tuple[List[Dict[str,
     for key, path in dev_files(root, task):
         new = path.read_bytes()
         old_path = base / key
-        old = old_path.read_bytes() if old_path.is_file() and key in data["target_files"] else None
+        old = old_path.read_bytes() if old_path.is_file() and (key in data["target_files"] or key in (data.get("manual_files") or {})) else None
         if old == new:
             items.append({"path": key, "action": "unchanged", "added": 0, "removed": 0})
             continue
@@ -697,17 +737,20 @@ def header(task: str, data: Dict[str, Any]) -> str:
 
 def make_plan(root: Path, task: str, data: Dict[str, Any], sync: bool = False) -> Dict[str, Any]:
     """`sync` (a dry run): the base branches are first brought up to their remotes (basesync)."""
-    if not data.get("target_mode"):
-        raise CommandError(say("promote.no_target"))
     found = dev_files(root, task)
+    if not data.get("target_mode"):
+        manual = [key for key, _path in found if tasks.is_manual(key)]  # run by hand needs no target repository
+        raise CommandError(say("promote.no_target") + (say("promote.nothing.manual", count=len(manual), task=task) if manual else ""))
     loose = [key for key, _path in found if "/" not in key]  # directly in DEV/: under no repository, so it is not written back
-    items: List[Dict[str, Any]] = [{"key": key, "source": path, "sha256": common.sha256_file(path), "delete": False} for key, path in found if "/" in key]
+    by_hand = [key for key, _path in found if tasks.is_manual(key)]  # DEV/_manual/: the person runs it by hand
+    items: List[Dict[str, Any]] = [{"key": key, "source": path, "sha256": common.sha256_file(path), "delete": False} for key, path in found if "/" in key and not tasks.is_manual(key)]
     clash = [item["key"] for item in items if item["key"] in data["deletes"]]
     if clash:
         raise CommandError(say("promote.clash", key=clash[0]))
     items += [{"key": key, "source": None, "sha256": "", "delete": True} for key in data["deletes"]]
     if not items:
-        raise CommandError(say("promote.nothing") + (say("promote.nothing.loose", loose=messages.joined(loose)) if loose else ""))
+        raise CommandError(say("promote.nothing") + (say("promote.nothing.loose", loose=messages.joined(loose)) if loose else "")
+                           + (say("promote.nothing.manual", count=len(by_hand), task=task) if by_hand else ""))
     branch = data.get("branch", "")
     notes: Optional[List[str]] = [] if sync else None
     repos, files = promote_target.plan_files(root, items, data["target_files"], branch, hints(), notes)
@@ -720,6 +763,9 @@ def make_plan(root: Path, task: str, data: Dict[str, Any], sync: bool = False) -
     if loose:
         result["not_promoted"] = loose
         result["not_promoted_note"] = say("promote.loose.note")
+    if by_hand:
+        result["by_hand"] = by_hand
+        result["by_hand_note"] = say("promote.manual.note")
     return result
 
 
@@ -824,6 +870,8 @@ def approve_promote(
     lines += [f"  {item['action']:9} {item['path']}  (+{item['added']} -{item['removed']})" for item in result["files"]]
     if result.get("not_promoted"):
         lines.append(say("promote.screen.loose", loose=messages.joined(result["not_promoted"])))
+    if result.get("by_hand"):
+        lines.append(say("promote.screen.manual", count=len(result["by_hand"])))
     lines.append(say("promote.screen.file", review=review))
     approval.say(out, *lines)
     typed(say("promote.question"), result["plan_sha256"], say("promote.refused"), reader)

@@ -10,6 +10,7 @@ Local session shows up in the log as `legacy` and `doctor` can say so. The outpu
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Optional
 
 from core.events import EVENT_NAMES, Decision, HookEvent
@@ -17,6 +18,13 @@ from core.events import EVENT_NAMES, Decision, HookEvent
 from . import common
 
 SURFACE = "vscode"
+
+# `/name words` reaches UserPromptSubmit as Copilot's line, then the skill's whole text in one block, the person's words
+# last in it after `ARGUMENTS: ` (no such line when there are none). Recorded 2026-11-04 (`@github/copilot` 1.0.103).
+_SKILL_HEAD = re.compile(r'The user explicitly invoked the "/[^"\n]*" skill\. Follow its instructions now\.\s*')
+_SKILL_BLOCK = re.compile(r'<skill-context name="([^"\n]*)">(.*?)</skill-context>', re.DOTALL)
+_SKILL_OPEN = "<skill-context"
+_ARGUMENTS = "\nARGUMENTS: "
 
 # Tool names only the SDK engine uses. The tools a subagent runs there carry older names (`read_file`, `grep_search`).
 _CLI_TOOLS = ("Bash", "bash", "PowerShell", "powershell", "Read", "Write", "Edit", "Grep", "Glob", "Agent", "search_code_subagent", "WebFetch", "skill", "tool_search_tool", "task_complete")
@@ -60,6 +68,22 @@ def _result_text(payload: Dict[str, Any]) -> str:
     return common.text(result)
 
 
+def own_words(prompt: str) -> str:
+    """What the person typed: a slash command as `/name words`, without the skill's text. A skill teaches marks such as
+    `[review]=1`, and they must not count as the person's. A block that does not end is left out from where it starts."""
+    if _SKILL_OPEN not in prompt:
+        return prompt
+
+    def typed(found: "re.Match[str]") -> str:
+        body = found.group(2)
+        at = body.rfind(_ARGUMENTS)  # the last one: the skill's own text is before it
+        words = body[at + len(_ARGUMENTS):].strip() if at >= 0 else ""
+        return f"/{found.group(1)} {words}".strip()
+
+    text = _SKILL_BLOCK.sub(typed, _SKILL_HEAD.sub("", prompt))
+    return text.split(_SKILL_OPEN, 1)[0].strip()
+
+
 def parse(payload: Dict[str, Any]) -> HookEvent:
     event = common.build_event(
         SURFACE,
@@ -72,6 +96,7 @@ def parse(payload: Dict[str, Any]) -> HookEvent:
     event.cwd = common.text(payload.get("cwd"))
     event.timestamp = common.text(payload.get("timestamp"))
     event.prompt = common.text(payload.get("prompt"))
+    event.words = own_words(event.prompt)
     event.tool_response = _result_text(payload)
     event.error = common.text(payload.get("error"))
     event.agent_id = common.text(payload.get("agent_id"))

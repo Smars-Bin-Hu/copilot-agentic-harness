@@ -123,7 +123,7 @@ One agent; you confirm the requirement, you approve the plan, and you approve th
 
 Without the board, the same decisions are commands you run in **your own terminal**: `harness task confirm-req`, `harness task approve-plan` and `harness task approve-promote`, each with the code shown on the screen.
 
-A task that changes no repository (an RCA, a design) has no steps 4 to 6, 8 and 9: the results are written straight to the root of the task folder.
+A task that changes no repository (an RCA, a design) has no steps 4 to 6, 8 and 9: the results are written straight to the root of the task folder. Code you run by hand on a server keeps steps 4 to 7: the agent writes it in `DEV/_manual/<path>`, and instead of steps 8 and 9 it hands the run to you.
 
 ## 6. See which tasks there are
 

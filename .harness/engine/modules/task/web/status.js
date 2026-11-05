@@ -34,7 +34,10 @@ const Status = (function () {
   }
 
   // Put `node` next to the `anchor` element: above it if there is room (`below`: first try under), else the other side; then pushed inside the window.
+  // It is measured at the left edge first: a panel left near the right edge by the last mark would shrink to the room there, and stay a thin column (a narrow window).
   function place(node, anchor, below) {
+    node.style.left = "0px";
+    node.style.top = "0px";
     const at = anchor.getBoundingClientRect(), width = node.offsetWidth, height = node.offsetHeight, gap = 6, edge = 8;
     const fitsAbove = at.top - gap - height >= edge, fitsBelow = at.bottom + gap + height <= window.innerHeight - edge;
     const under = below ? (fitsBelow || !fitsAbove) : !(fitsAbove || !fitsBelow);

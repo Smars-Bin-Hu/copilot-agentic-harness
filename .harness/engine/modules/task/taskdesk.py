@@ -191,7 +191,7 @@ def changed(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
         items, text = [], ""
     lines = text.splitlines()[1:] if items else []  # the first line is the header of the file
     folder = tasks.task_dir(root, task)
-    shown = [dict(item) for item in items if item["action"] != "unchanged"]
+    shown = [dict(item, by_hand=True) if tasks.is_manual(item["path"]) else dict(item) for item in items if item["action"] != "unchanged"]  # DEV/_manual/: run by hand, never promoted
     budget = MAX_CODE_CHARS
     for item in shown:  # the new code of a changed file: the compare rebuilds the lines between the hunks from it
         if item["action"] != "modify":

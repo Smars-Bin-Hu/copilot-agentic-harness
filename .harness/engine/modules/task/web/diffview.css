@@ -9,6 +9,7 @@
 .dv-pick.on{background:var(--bg);box-shadow:inset 3px 0 0 var(--model);font-weight:600}
 .dv-pick code{flex:1 1 0;min-width:0;overflow-wrap:anywhere}
 .dv-act{flex:none;min-width:4.5em;font-size:11.5px;color:var(--soft)}.dv-act.create{color:var(--good)}.dv-act.delete{color:var(--bad)}
+.dv-hand{flex:none;padding:1px 6px;border:1px solid var(--line);border-radius:5px;color:var(--soft);font-size:11px;white-space:nowrap}
 .dv-n{flex:none;font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.dv-n.add{color:var(--good)}.dv-n.del{color:var(--bad)}
 .dv-path{flex:1 1 280px;min-width:0;overflow-wrap:anywhere;font-size:12.5px}
 .dv-modes{margin-left:auto;display:inline-flex}

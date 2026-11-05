@@ -70,10 +70,10 @@ def admin_rules(ctx: Context) -> str:
 
 
 def user_review(event: HookEvent) -> Optional[int]:
-    """The n of `[review]=n` in this prompt, or None when the user wrote none."""
+    """The n of `[review]=n` in the person's words, or None when they wrote none. Never the text of a skill: a slash command brings it in, with its examples (1.6.109)."""
     from . import taskreview
 
-    return taskreview.marker(event.prompt)
+    return taskreview.marker(event.words)
 
 
 def keep_review(ctx: Context, data: Dict[str, Any], number: Optional[int]) -> Dict[str, Any]:
@@ -172,15 +172,29 @@ def prompt_text(ctx: Context, asked: Optional[int] = None) -> str:
     return "\n".join(lines)
 
 
+def note_harness(ctx: Context, event: HookEvent) -> None:
+    """The time of the message the harness sent when it held a Stop, in the task's rewind index (1.6.109): the board offers no rewind to before it. Never in the way."""
+    try:
+        data = open_task(ctx)
+        if data is not None:
+            from . import rewind
+
+            rewind.note_harness(ctx.root, data["task"], event.session_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.from_subagent or event.continuation:
         # A subagent call message, or the reason of a Stop block fed back by the engine. Not the user.
+        if event.continuation and not ctx.admin:
+            note_harness(ctx, event)
         return None
     asked = user_review(event)
     state = ctx.module_state(NAME)
     state["relay"] = {"wrote": False, "task_file": False, "reminded": False}  # a new prompt, a new count
     state["review_n"] = asked  # for a task this prompt goes on to make or open
-    reply = reply_marker(event.prompt)
+    reply = reply_marker(event.words)
     if reply:
         state["reply"] = reply  # `[ZH]` or `[EN]`: the replies of this session; the files keep the language setting
     if not ctx.admin and mapreduce.asked(event.prompt):

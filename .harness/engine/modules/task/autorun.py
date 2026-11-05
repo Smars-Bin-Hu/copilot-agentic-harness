@@ -78,7 +78,7 @@ def wants_promote(root: Path, task: str, data: Dict[str, Any]) -> bool:
     """Is there a result that goes back into a target repository?"""
     if not data.get("target_mode"):
         return False
-    return any("/" in key for key, _path in task_ops.dev_files(root, task)) or bool(data.get("deletes"))
+    return any("/" in key and not tasks.is_manual(key) for key, _path in task_ops.dev_files(root, task)) or bool(data.get("deletes"))  # DEV/_manual/ is run by hand
 
 
 def progress(root: Path, task: str, data: Dict[str, Any], info: Dict[str, Any]) -> List[Any]:

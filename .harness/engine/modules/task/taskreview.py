@@ -96,12 +96,17 @@ def req_confirmed(root: Path, task: str) -> Optional[bool]:
         text = (tasks.task_dir(root, task) / tasks.REQ_FILE).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
+    filled = confirm_line_filled(text)
+    return None if filled is None else filled and not req_changed(root, task)
+
+
+def confirm_line_filled(text: str) -> Optional[bool]:
+    """Is the confirmation line of this text of REQ.md filled in? None: there is no such line."""
     for line in text.splitlines():
         found = _CONFIRM_LABEL.search(line)
         if found:
             value = line[found.end():].lower()
-            filled = bool(_CONFIRMED.search(value)) and not _NOT_CONFIRMED.search(value)  # the template has both on the line
-            return filled and not req_changed(root, task)
+            return bool(_CONFIRMED.search(value)) and not _NOT_CONFIRMED.search(value)  # the template has both on the line
     return None
 
 
@@ -375,7 +380,7 @@ def start(root: Path, raw_task: str = "") -> Dict[str, Any]:
         if waiting is None and used(data) >= limit(root, data):
             raise CommandError(say("review.limit", used=used(data), limit=limit(root, data), task=task))
         diff_file = ""
-        if any(relative.lower().startswith(tasks.DEV_NAME.lower() + "/") for relative, _ in tasksnap.result_files(root, task)) and data.get("target_files"):
+        if any(relative.lower().startswith(tasks.DEV_NAME.lower() + "/") for relative, _ in tasksnap.result_files(root, task)) and (data.get("target_files") or data.get("manual_files")):
             _, text = task_ops.changes(root, task, data)
             path = tasks.task_dir(root, task) / tasks.CHANGES_NAME
             path.write_text(text, encoding="utf-8")

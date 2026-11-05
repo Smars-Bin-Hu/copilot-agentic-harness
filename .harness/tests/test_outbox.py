@@ -78,6 +78,19 @@ class OutboxTests(OutboxCase):
         self.assertEqual(again["permissionDecision"], "deny")  # used up: a new approval with a new code
         self.assertNotEqual(code_of(again["permissionDecisionReason"]), code)
 
+    def test_a_call_held_before_the_task_gets_its_draft_marked_once_the_task_is_open(self) -> None:
+        """1.7.4: the agent tried outside a task, was told to open one, opened it and asked again: the same code, now with a draft; the approval marks that draft."""
+        first = self.term(COMMENT)  # no task yet: a code, no draft
+        code = code_of(first["permissionDecisionReason"])
+        self.new()
+        self.assertEqual(code_of(self.term(COMMENT)["permissionDecisionReason"]), code)
+        (draft,) = self.drafts()
+        self.assertIn(code, draft.name)
+        self.assertTrue(self.approve(code)["approved"])
+        self.assertIn("已于", draft.read_text(encoding="utf-8"))
+        self.assertEqual(self.term(COMMENT), {})
+        self.assertIn("批准并运行", draft.read_text(encoding="utf-8"))
+
     def test_a_changed_command_or_another_session_needs_its_own_approval(self) -> None:
         self.new()
         code = code_of(self.term(COMMENT)["permissionDecisionReason"])

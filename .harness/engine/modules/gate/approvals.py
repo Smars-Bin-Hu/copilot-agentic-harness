@@ -68,6 +68,10 @@ def request(
         entries = [item for item in _read(root, file) if _alive(item, limit, now)]
         for item in entries:
             if item["session_id"] == session_id and item["command"] == text and item["state"] == "pending":
+                missing = {key: value for key, value in (extra or {}).items() if value and not item.get(key)}
+                if missing:  # the same call asked again from a session that now holds a task: the entry learns the task, so its draft is the one that gets marked (1.7.4)
+                    item.update(missing)
+                    _write(root, entries, file)
                 return item["code"]
         taken = {item["code"] for item in entries}
         code = _code(session_id, text, now)

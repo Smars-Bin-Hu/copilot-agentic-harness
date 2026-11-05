@@ -16,6 +16,10 @@ To see which version you have: `harness --version`.
 
 - **A task-level switch for writes in an environment.** `harness task allow --env dev --on`, in your own terminal, opens that environment for one task: the agent's writes and procedures on its listed systems run without a further approval, instead of waiting in the outbox or for a plan. `--off` closes it; the task's close ends it. A destroy is still refused, prod cannot be opened, and every call stays in the log with the mark `opened`. The task's next step tells the agent which environments are open. There is no global switch on purpose: the scope is one task and one environment.
 
+### Changed
+
+- **A call held before a task was open gets its draft marked once the task is open.** The agent tried a write outside a task, was told to open one, opened it and asked again: it got the same code, and after the approval the draft in `OUTBOX/` stayed "waiting". Now the held entry learns the task, so the draft says approved, and approved and run.
+
 ## 1.7.3 (2026-11-05)
 
 ### Added

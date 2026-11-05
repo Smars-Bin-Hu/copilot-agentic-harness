@@ -51,6 +51,16 @@ def payload(event: str, session_id: str, **fields: Any) -> Dict[str, Any]:
     return base
 
 
+def slash(skill: str, words: str = "", body: str = "") -> str:
+    """The `prompt` a hook gets for `/<skill> <words>`: Copilot puts the skill's whole text around the person's words (recorded 2026-11-04)."""
+    text = (
+        f'The user explicitly invoked the "/{skill}" skill. Follow its instructions now.\n\n'
+        f'<skill-context name="{skill}">\nBase directory for this skill: /x/.github/skills/{skill}\n\n'
+        f"# The skill\n\n{body}\n\n"
+    )
+    return text + (f"\nARGUMENTS: {words}\n" if words else "") + "</skill-context>"
+
+
 def pre_tool(session_id: str, tool_name: str, tool_input: Optional[dict] = None) -> Dict[str, Any]:
     return payload("PreToolUse", session_id, tool_name=tool_name, tool_input=tool_input or {})
 

@@ -70,10 +70,10 @@ def admin_rules(ctx: Context) -> str:
 
 
 def user_review(event: HookEvent) -> Optional[int]:
-    """The n of `[review]=n` in this prompt, or None when the user wrote none."""
+    """The n of `[review]=n` in the person's words, or None when they wrote none. Never the text of a skill: a slash command brings it in, with its examples (1.6.109)."""
     from . import taskreview
 
-    return taskreview.marker(event.prompt)
+    return taskreview.marker(event.words)
 
 
 def keep_review(ctx: Context, data: Dict[str, Any], number: Optional[int]) -> Dict[str, Any]:
@@ -194,7 +194,7 @@ def on_user_prompt(event: HookEvent, ctx: Context) -> Optional[Decision]:
     state = ctx.module_state(NAME)
     state["relay"] = {"wrote": False, "task_file": False, "reminded": False}  # a new prompt, a new count
     state["review_n"] = asked  # for a task this prompt goes on to make or open
-    reply = reply_marker(event.prompt)
+    reply = reply_marker(event.words)
     if reply:
         state["reply"] = reply  # `[ZH]` or `[EN]`: the replies of this session; the files keep the language setting
     if not ctx.admin and mapreduce.asked(event.prompt):

@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from support import payload, post_tool, pre_tool, subagent_start, subagent_stop
+from support import payload, post_tool, pre_tool, slash, subagent_start, subagent_stop
 from taskcase import TASK, TaskCase
 from test_tasklife import BASE, S1, S2, LifeCase
 
@@ -121,6 +121,23 @@ class SwitchTests(ReviewCase):
         self.job(0)
         self.hook(subagent_start(S1, "reviewer"))
         self.say("[review]=3 model text", session="child")
+        self.assertEqual(self.review_state()["n"], 0)
+
+    def test_the_example_in_a_skill_does_not_switch_checks_on(self) -> None:
+        """Hand test 2026-11-04: the board's Go on in a new chat sends `/harness-my-task …`; the hook got the skill's text with its `[review]=1` and the task picked it up as n=1."""
+        example = 'End your reply with: "For an independent check, write `[review]=1` in your next message."'
+        self.new()
+        self.say(slash("harness-my-task", "Go on with the task job.", example), session=S2)
+        self.open(session=S2)
+        self.say(slash("harness-my-task", "", example), session=S2)
+        self.assertNotIn("review", self.data())
+        self.assertNotIn("review", [item["what"] for item in self.data()["events"]])
+
+    def test_a_marker_the_person_writes_after_a_slash_command_counts(self) -> None:
+        self.say(slash("harness-my-task", "[review]=2 a new task to check orders", "Write `[review]=1`."))
+        self.new()
+        self.assertEqual(self.review_state()["n"], 2)
+        self.say(slash("harness-my-task", "go on [review]=0", "Write `[review]=1`."))
         self.assertEqual(self.review_state()["n"], 0)
 
     def test_every_prompt_of_the_task_says_where_the_checks_stand(self) -> None:

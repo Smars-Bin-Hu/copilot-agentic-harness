@@ -32,6 +32,9 @@ class HookEvent:
     cwd: str = ""
     timestamp: str = ""
     prompt: str = ""
+    # UserPromptSubmit: what the person typed. Unlike `prompt`, no text of a skill the engine put in for a slash command
+    # (1.6.109). A mark only the person may set, such as `[review]=n`, is read here.
+    words: str = ""
     tool_name: str = ""
     tool_kind: str = ""
     command: str = ""

@@ -201,3 +201,4 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 .tk-call input.pulse{animation:callpulse 1.8s ease-in-out infinite;border-color:var(--hot-dot)}
 @keyframes callpulse{0%,100%{box-shadow:0 0 0 0 var(--hot-line)}50%{box-shadow:0 0 0 6px transparent}}
 html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){.tk-call .pulse{animation:none}}
+.code-chip{font-size:13px;height:24px;padding:0 10px;letter-spacing:1px;border-color:var(--hot-dot);background:var(--hot-bg)}.code-chip:hover{background:var(--hot-dot);color:#fff}

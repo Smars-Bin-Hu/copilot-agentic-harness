@@ -1041,19 +1041,29 @@
       fact(t("desk.outbox.target"), item.target),
       item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t("desk.outbox.lines", {n: item.layout.script.lines}))) : null);
   }
-  function callWindow(item) {
+  // What a person wants to copy out of a call is the body: the query in the quoted block, or the script the command reads; the command line itself only when there is neither.
+  function callBody(item) {
+    const script = item.layout && item.layout.script;
+    if (script && script.text) return script.text;
+    const block = item.layout && item.layout.lines.find((line) => line.kind === "block");
+    return block ? block.text : item.command;
+  }
+  function callWindow(item, onCode) {
     viewedCalls.add(item.code);
     const copy = h("button", {type: "button", class: "act"}, t("desk.outbox.copy"));
-    copy.addEventListener("click", () => { navigator.clipboard.writeText(item.command).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
+    copy.addEventListener("click", () => { navigator.clipboard.writeText(callBody(item)).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
     const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const script = item.layout && item.layout.script;
-    const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), callFacts(item), h("p", {class: "sub"}, t("desk.outbox.asked", {at: item.created_at.slice(0, 16).replace("T", " "), code: item.code})),
+    // The code, as a chip: a click copies it, puts it in the card's box and closes the window, so Approve is the next press.
+    const codeChip = h("button", {type: "button", class: "ev code-chip", title: t("desk.outbox.code_tip")}, item.code);
+    const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), callFacts(item), h("p", {class: "sub"}, t("desk.outbox.asked", {at: item.created_at.slice(0, 16).replace("T", " ")}), " ", codeChip),
       h("div", {class: "cmd-scroll"}, commandNodes(item.layout)),
       script ? [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t("desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)] : null,
       h("p", {class: "sub"}, t("desk.outbox.as_written")), h("div", {class: "cmd-scroll one"}, h("pre", {class: "cmd-script"}, item.command)),
       h("div", {class: "row"}, copy, close)]);
     view.box.classList.add("wide");
     close.addEventListener("click", () => { view.close(); draw(true); });
+    codeChip.addEventListener("click", () => { navigator.clipboard.writeText(item.code).then(() => {}, () => {}); view.close(); if (onCode) onCode(item.code); });
   }
   function outboxCard(item, notes) {
     const can = served() && canAct() && SERVE.runs("approve-action");
@@ -1071,7 +1081,7 @@
     const no = h("button", {type: "button", class: "act", disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
     const view = h("button", {type: "button", class: "act big tk-view"}, t("desk.outbox.view"));
     const said = h("div", {class: "bad"});
-    view.addEventListener("click", () => { callWindow(item); arm(); });
+    view.addEventListener("click", () => { callWindow(item, (code) => { input.value = code; arm(); yes.focus(); }); arm(); });
     input.addEventListener("focus", arm);
     const send = () => {
       if (!ready_()) return;

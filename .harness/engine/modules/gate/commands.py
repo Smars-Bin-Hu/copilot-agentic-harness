@@ -174,11 +174,25 @@ def tools_check(root: Path) -> Dict[str, Any]:
     return external.report(systems, run=lambda command: external.run_probe(command, root))
 
 
+def _wait(root: Path, args: Any) -> Dict[str, Any]:
+    from . import wait  # it imports this module's CommandError
+
+    return wait.run_wait(root, args.run, args.until, args.every, args.timeout, args.out)
+
+
 def register(subparsers: Any) -> None:
     tools = subparsers.add_parser("tools", help="the outside systems a company listed (tools.company.json from the company pack, or tools.override.json)")
     tools_commands = tools.add_subparsers(dest="tools_command", required=True)
     check = tools_commands.add_parser("check", help="is the list well formed, what does the gate decide for each system and environment, and is each system that has a probe reachable from here? Exit code 1 when there is an error")
     check.set_defaults(handler=lambda args: tools_check(repo_root()))
+
+    waiting = subparsers.add_parser("wait", help="wait for an outside system to reach a state in one call: run a read of a listed system every N seconds until its output matches a pattern, or a timeout; the last output goes to a file of the task")
+    waiting.add_argument("--run", required=True, help="the read-only command of a listed system to run each round, whole, in quotes")
+    waiting.add_argument("--until", required=True, help="a pattern (regular expression) the output must match to end the wait")
+    waiting.add_argument("--every", type=int, default=30, help="seconds between rounds (5 to 600; default 30)")
+    waiting.add_argument("--timeout", type=int, default=1800, help="seconds after which the wait ends with exit code 1 (10 to 7200; default 1800)")
+    waiting.add_argument("--out", default="", help="a file inside the task folder where the last output is written whole, to record as evidence (for example RUNS/DEV/wait-job.txt)")
+    waiting.set_defaults(handler=lambda a: _wait(repo_root(), a))
 
     parser = subparsers.add_parser("approve-command", help="the person approves a git command the gate refused (terminal only)")
     parser.set_defaults(handler=cmd_approve_command, person_only=True)

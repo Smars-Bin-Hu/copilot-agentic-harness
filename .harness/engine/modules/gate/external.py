@@ -113,12 +113,29 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                 target = (match.group(1) if match and match.groups() else match.group(0) if match else "")[:120]
             found.append(Action(name, environment(system, line), verb_of(system, " ".join(tokens[start + 1:])), target, " ".join(tokens)))
             continue
+        waited = _wait_run(tokens)
+        if waited is not None and depth < MAX_DEPTH:  # `harness wait --run "<command>"` (1.7.5): the command inside is the call
+            _scan(waited, systems, programs, depth + 1, found)
+            continue
         shell_at = next((i for i, item in enumerate(tokens) if _name(item) in SHELLS), None)
         if shell_at is not None and depth < MAX_DEPTH:
             for i in range(shell_at + 1, len(tokens)):
                 if tokens[i].lower() in SHELL_FLAGS and i + 1 < len(tokens):
                     _scan(" ".join(tokens[i + 1:]) if len(tokens) > i + 2 else tokens[i + 1], systems, programs, depth + 1, found)
                     break
+
+
+def _wait_run(tokens: List[str]) -> Optional[str]:
+    """The command `harness wait --run` is given, when this segment is such a call (`harness`, `harness.cmd` or `cli.py`, then `wait`); else None."""
+    head = [index for index, token in enumerate(tokens) if _program(token) == "harness" or _name(token) == "cli.py"]
+    if not head or len(tokens) <= head[0] + 1 or tokens[head[0] + 1].lower() != "wait":
+        return None
+    for index, token in enumerate(tokens):
+        if token == "--run" and index + 1 < len(tokens):
+            return tokens[index + 1]
+        if token.startswith("--run="):
+            return token[len("--run="):]
+    return None
 
 
 def classify(command: str, systems: Dict[str, Any]) -> List[Tuple[Action, str]]:

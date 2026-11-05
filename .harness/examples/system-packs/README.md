@@ -13,4 +13,4 @@ These paths are fixed: `company sync`, `company pack` and `company update` count
 
 | Sample | What it shows |
 | --- | --- |
-| `sqlserver-sqlcmd/` | A SQL Server reached with `sqlcmd` and the identity of the process (Windows authentication): the environment from the server name, read and write verbs, a probe, and a launch script that starts VS Code under another identity with `runas /netonly` |
+| `sqlserver-sqlcmd/` | A SQL Server reached with `sqlcmd` and the identity of the process (Windows authentication): the environment from the server name, read and write verbs, a probe, and a launch script that starts VS Code under another identity with `runas /netonly`; `skills/acme-sql-jobs/`, a sample company skill: how the team starts a job, waits for it in one call (`harness wait`) and checks it |

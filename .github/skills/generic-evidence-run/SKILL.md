@@ -29,15 +29,16 @@ A fact from an environment is worth something only as a saved run with a number.
 2. **Run the exact command in the terminal**, one command at a time. The gate judges it:
    - a read runs;
    - a write, a procedure or a job is held: the gate says what to do (`task`: a task whose plan the user approved; `outbox`: the user approves this exact command once with `harness approve-action`, the draft is in the task's `OUTBOX/`; `human`: hand it over). Do what it says. Do not look for another way to the same result: no other program, no script that reaches the system itself, no smaller version of the command.
-3. **Save what came back, whole.** The output as the terminal showed it goes into one file (`RUNS/<ENV>/given.txt` in the task, written over each time), the command into `RUNS/<ENV>/ran.txt`. No shortening, no reformatting, no corrected figures. A very long output goes whole into `RUNS/<ENV>/run-<time>.txt` and `given.txt` says so with its first lines and the count.
-4. **Record it:**
+3. **A state that takes time** (a job that was started, a load that runs): wait for it in one call, not by running the query again and again: `harness wait --run "<the read>" --until "<pattern>" --every 30 --timeout 1800 --out RUNS/<ENV>/wait-<what>.txt`. It runs the read every 30 seconds, ends when the output matches (or after the timeout, exit code 1), and writes the last output to the file. Only a read of a listed system may be the probe. No model call happens while it waits.
+4. **Save what came back, whole.** The output as the terminal showed it goes into one file (`RUNS/<ENV>/given.txt` in the task, written over each time), the command into `RUNS/<ENV>/ran.txt`. No shortening, no reformatting, no corrected figures. A very long output goes whole into `RUNS/<ENV>/run-<time>.txt` and `given.txt` says so with its first lines and the count.
+5. **Record it:**
 
    ```
    harness task run record --env <ENV> --given-file RUNS/<ENV>/given.txt --ran-file RUNS/<ENV>/ran.txt --run-by agent --follow-up "<what it shows, one line>"
    ```
 
    It adds `## Run N (E<n>)` to `RUNS/<ENV>/results.md` and prints the number.
-5. **Cite the number** where the fact is used: `[E<n>]` in `REQ.md`, `PLAN.md`, `RCA.md`, `LOG.md` or the report. The task page lists every `E<n>` with who ran it and where it is cited; a number nobody cites is grey.
+6. **Cite the number** where the fact is used: `[E<n>]` in `REQ.md`, `PLAN.md`, `RCA.md`, `LOG.md` or the report. The task page lists every `E<n>` with who ran it and where it is cited; a number nobody cites is grey.
 
 ## Gotchas
 

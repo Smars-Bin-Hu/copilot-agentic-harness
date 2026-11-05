@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.5 (2026-11-05)
+
+### Added
+
+- **`harness wait`: wait for a job in one call.** A job started on a server runs for a while; the agent used to run the same query again and again, each time a model call. Now `harness wait --run "<read>" --until "<pattern>" --every 30 --timeout 1800 --out RUNS/DEV/wait-job.txt` runs the read every 30 seconds until its output matches (or the timeout, exit code 1) and writes the last output whole to the file, to record as evidence. No model call happens while it waits. Only a read of a listed outside system may be the probe: the gate sees the command inside `--run` when the agent runs it, and the command itself refuses a write, a procedure or any other program.
+- **A sample company skill for jobs**, in the sample pack (`skills/acme-sql-jobs/`, made-up names): which procedure starts a job, which table says it is done, how to wait and what to check. The names of your procedures and tables belong in such a skill and in the knowledge base, not in the harness.
+
 ## 1.7.4 (2026-11-05)
 
 ### Added

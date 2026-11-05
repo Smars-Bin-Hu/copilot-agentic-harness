@@ -144,9 +144,10 @@
     const fact = (label, value) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), typeof value === "string" ? h("code", null, value) : value);
     const view = SERVE.dialog([h("h2", null, item.id + " · " + item.env + " · " + (item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run}))),
       h("div", {class: "tk-call-facts"}, fact(t("desk.evidence.by"), item.by === "agent" ? tag(t("desk.evidence.by.agent"), "good") : tag(t("desk.evidence.by.person"), "")), fact(t("desk.evidence.at"), (item.at || "").slice(0, 16).replace("T", " ")), fact(t("desk.evidence.file"), item.file), fact(t("desk.evidence.cited"), h("span", null, cited))),
-      item.layout ? h("div", {class: "cmd-scroll"}, commandNodes(item.layout)) : h("p", {class: "sub"}, t("desk.evidence.nocommand")),
-      outputPane(item),
-      h("div", {class: "row"}, open, copy, close)]);
+      h("div", {class: "win-body"},
+        item.layout ? h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)) : h("p", {class: "sub"}, t("desk.evidence.nocommand")),
+        outputPane(item)),
+      h("div", {class: "row win-foot"}, open, copy, close)]);
     view.box.classList.add("wide");
     open.addEventListener("click", () => { view.close(); openRun(item); });
     close.addEventListener("click", view.close);
@@ -1057,10 +1058,11 @@
     // The code, as a chip: a click copies it, puts it in the card's box and closes the window, so Approve is the next press.
     const codeChip = h("button", {type: "button", class: "ev code-chip", title: t("desk.outbox.code_tip")}, item.code);
     const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), callFacts(item), h("p", {class: "sub"}, t("desk.outbox.asked", {at: item.created_at.slice(0, 16).replace("T", " ")}), " ", codeChip),
-      h("div", {class: "cmd-scroll"}, commandNodes(item.layout)),
-      script ? [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t("desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)] : null,
-      h("p", {class: "sub"}, t("desk.outbox.as_written")), h("div", {class: "cmd-scroll one"}, h("pre", {class: "cmd-script"}, item.command)),
-      h("div", {class: "row"}, copy, close)]);
+      h("div", {class: "win-body"},  // one scrolling body (both ways); the blocks in it scroll sideways only; the buttons stay in view
+        h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)),
+        script ? [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t("desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll flat"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)] : null,
+        h("p", {class: "sub"}, t("desk.outbox.as_written")), h("div", {class: "cmd-scroll one"}, h("pre", {class: "cmd-script"}, item.command))),
+      h("div", {class: "row win-foot"}, copy, close)]);
     view.box.classList.add("wide");
     close.addEventListener("click", () => { view.close(); draw(true); });
     codeChip.addEventListener("click", () => { navigator.clipboard.writeText(item.code).then(() => {}, () => {}); view.close(); if (onCode) onCode(item.code); });

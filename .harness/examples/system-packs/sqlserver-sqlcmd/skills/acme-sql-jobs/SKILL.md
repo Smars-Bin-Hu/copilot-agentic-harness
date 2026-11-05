@@ -27,15 +27,16 @@ A sample for a company pack (made-up names). Copy it to `<knowledge base>/compan
 3. **Wait in one call**, not by asking again and again:
 
    ```
-   harness wait --run "sqlcmd -S sql-dev.example.local,1433 -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT TOP 1 status FROM dbo.job_log WHERE job_name = N'<job name>' ORDER BY started_at DESC\"" --until "SUCCEEDED|FAILED" --every 30 --timeout 1800 --out RUNS/DEV/wait-<job name>.txt
+   harness wait --run "sqlcmd -S sql-dev.example.local,1433 -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT TOP 1 status FROM dbo.job_log WHERE job_name = N'<job name>' ORDER BY started_at DESC\"" --until "SUCCEEDED|FAILED" --every 30 --timeout 540 --out RUNS/DEV/wait-<job name>.txt
    ```
 
-   It returns when the status is final or after 30 minutes (`matched: false`). A read only may be the probe.
+   It returns when the status is final or after 9 minutes (`matched: false`): then call it again, as long as the job is known to run (a nightly load takes an hour: about seven calls, each a model call; a look every 30 seconds would be a hundred and twenty). A read only may be the probe. VS Code hands a terminal call back after 10 minutes, so one call never asks for more.
 4. **Check the result** with the team's checks (row counts, the error column of `dbo.job_log`), each as a read saved whole, and record them: `harness task run record --env DEV --run-by agent ...` (the skill `generic-evidence-run`). Cite the numbers as `[E<n>]`.
 5. A job that FAILED: save the error rows as evidence, do not start it again; tell the user.
 
 ## Gotchas
 
+- **Check the way in first** (`harness tools check`: the system must be reachable). The identity is on the VS Code process: a VS Code that was already running when the person started another one with the identity does not have it, and `sqlcmd` then asks for a password and fails (`liner: function not supported in this terminal`). Stop and tell the person to quit VS Code and start it as the pack's launch script says.
 - `usp_job_start` returns at once; the job runs on the server. "Started" is not "done": only `harness wait` on the log table says done.
 - Waiting costs no model calls; asking the agent to "check again in a minute" costs one each time.
 - Nothing in this skill writes to prod: the gate refuses it, and so does this skill.

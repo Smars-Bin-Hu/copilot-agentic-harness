@@ -385,7 +385,7 @@
   "gate.external.task": "这个对 {system}（{env}）的调用是 {verb}，只有在用户已批准计划的任务里才允许。命令：{call}\n用技能 `harness-my-task` 打开或继续一个任务，让 `PLAN.md` 获得批准，再运行。",
   "gate.external.outbox": "这个对 {system}（{env}）的调用是 {verb}，会出到这个仓库之外，所以要用户先批准。命令：{call}\n{where}用一两句话告诉用户这条命令做什么、为什么，请用户在自己的终端运行 `{command} approve-action`，看清命令后输入验证码 {code}。之后 {minutes} 分钟内，在这个会话里把完全相同的命令再运行一次。命令改了就要重新批准。不要自己运行 approve-action。",
   "gate.external.outbox_draft": "草稿在 {draft}。",
-  "wait.next.timeout": "{seconds} 秒内没匹配。最后一次输出在 {out}。把它说给用户听，问要不要再等；不要重新启动作业。",
+  "wait.next.timeout": "{seconds} 秒内没匹配。最后一次输出在 {out}。作业还在跑就再调一次 `harness wait`（一次一条，每条 10 分钟以内：更长的终端调用 VS Code 会交回给你，你就得自己轮询）；最后输出看着不对就说给用户听。不要重新启动作业。",
   "wait.next.matched": "输出匹配了。最后一次输出在 {out}：用 `task run record --run-by agent` 记下来并引用编号。",
   "wait.round": "第 {n} 轮，{seconds} 秒：还没到",
   "wait.round_slow": "（命令 {seconds} 秒内没有回答）",

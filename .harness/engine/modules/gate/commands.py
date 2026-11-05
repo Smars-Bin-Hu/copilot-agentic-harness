@@ -190,7 +190,7 @@ def register(subparsers: Any) -> None:
     waiting.add_argument("--run", required=True, help="the read-only command of a listed system to run each round, whole, in quotes")
     waiting.add_argument("--until", required=True, help="a pattern (regular expression) the output must match to end the wait")
     waiting.add_argument("--every", type=int, default=30, help="seconds between rounds (5 to 600; default 30)")
-    waiting.add_argument("--timeout", type=int, default=1800, help="seconds after which the wait ends with exit code 1 (10 to 7200; default 1800)")
+    waiting.add_argument("--timeout", type=int, default=540, help="seconds after which the wait ends with exit code 1 (10 to 7200; default 540: VS Code hands a terminal call back after 10 minutes, so a longer job is waited for with one call after another)")
     waiting.add_argument("--out", default="", help="a file inside the task folder where the last output is written whole, to record as evidence (for example RUNS/DEV/wait-job.txt)")
     waiting.set_defaults(handler=lambda a: _wait(repo_root(), a))
 

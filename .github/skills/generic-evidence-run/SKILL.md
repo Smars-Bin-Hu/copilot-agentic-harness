@@ -20,7 +20,7 @@ A fact from an environment is worth something only as a saved run with a number.
 
 ## Prerequisites
 
-- The system is listed by the company: `harness tools check` names it, and for one that has a probe, `reach.<system>.reachable` is `true`. Not reachable: stop and give the user the `launch` sentence it prints (how to start VS Code so that the identity is there). Not listed: hand the run over (`harness task handoff run`), as before.
+- The system is listed by the company: `harness tools check` names it, and for one that has a probe, `reach.<system>.reachable` is `true`. Not reachable: stop and give the user the `launch` sentence it prints (how to start VS Code so that the identity is there). A VS Code that was already running when the user started another with the identity does not have it: a tool that then asks for a password in the terminal fails (`liner: function not supported in this terminal` from sqlcmd); that is the same stop. Not listed: hand the run over (`harness task handoff run`), as before.
 - The command is the one the system's skill or the guide gives (the exact program, server and options). Do not invent a server name, an account or a password; none is ever in a command.
 
 ## Step-by-Step Workflows
@@ -29,7 +29,7 @@ A fact from an environment is worth something only as a saved run with a number.
 2. **Run the exact command in the terminal**, one command at a time. The gate judges it:
    - a read runs;
    - a write, a procedure or a job is held: the gate says what to do (`task`: a task whose plan the user approved; `outbox`: the user approves this exact command once with `harness approve-action`, the draft is in the task's `OUTBOX/`; `human`: hand it over). Do what it says. Do not look for another way to the same result: no other program, no script that reaches the system itself, no smaller version of the command.
-3. **A state that takes time** (a job that was started, a load that runs): wait for it in one call, not by running the query again and again: `harness wait --run "<the read>" --until "<pattern>" --every 30 --timeout 1800 --out RUNS/<ENV>/wait-<what>.txt`. It runs the read every 30 seconds, ends when the output matches (or after the timeout, exit code 1), and writes the last output to the file. Only a read of a listed system may be the probe. No model call happens while it waits.
+3. **A state that takes time** (a job that was started, a load that runs): wait for it in one call, not by running the query again and again: `harness wait --run "<the read>" --until "<pattern>" --every 30 --timeout 540 --out RUNS/<ENV>/wait-<what>.txt`. It runs the read every 30 seconds, ends when the output matches (or after the timeout, exit code 1), and writes the last output to the file. Only a read of a listed system may be the probe. No model call happens while it waits. Keep one call under 10 minutes (VS Code hands a longer terminal call back to you, and then you would be polling it); a job that runs longer is waited for with one call after another.
 4. **Save what came back, whole.** The output as the terminal showed it goes into one file (`RUNS/<ENV>/given.txt` in the task, written over each time), the command into `RUNS/<ENV>/ran.txt`. No shortening, no reformatting, no corrected figures. A very long output goes whole into `RUNS/<ENV>/run-<time>.txt` and `given.txt` says so with its first lines and the count.
 5. **Record it:**
 

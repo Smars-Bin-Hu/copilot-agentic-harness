@@ -4,6 +4,10 @@ A job started on a server runs for a while; the agent would otherwise run the sa
 read-only command of a listed system every `every` seconds until its output matches `until`, or `timeout` seconds pass, and saves the last output
 whole in a file of the task (`--out`), to be recorded as evidence. No model call happens while it waits.
 
+VS Code returns a terminal call to the agent after 10 minutes (hand test 2026-11-05: PreToolUse 16:01:32, PostToolUse 16:11:32); the command goes on in the
+background and the agent reads it with `read_bash` from then on, one model call per look. So the default timeout is 9 minutes: one call, one answer;
+a longer job is waited for with one call after another, each a model call, still far cheaper than a look every 30 seconds.
+
 The command must reach a listed outside system and be a read: the gate classifies it (`external.classify`), as it does when the agent runs
 `harness wait` itself (the hook unwraps `--run`); a write, a procedure or a program that is no listed system is refused here too.
 """
@@ -24,6 +28,7 @@ from .commands import CommandError
 
 EVERY = (5, 600)
 TIMEOUT = (10, 7200)
+DEFAULT_TIMEOUT = 540  # under the 10 minutes after which VS Code returns a terminal call and the agent must poll it
 ROUND_SECONDS = 120  # one run of the command may not take longer than this
 TAIL = 2000
 
@@ -43,7 +48,7 @@ def out_path(root: Path, raw: str) -> Optional[Path]:
     return path
 
 
-def run_wait(root: Path, command: str, until: str, every: int = 30, timeout: int = 1800, out: str = "", runner: Any = None, clock: Any = time.monotonic, sleep: Any = time.sleep) -> Dict[str, Any]:
+def run_wait(root: Path, command: str, until: str, every: int = 30, timeout: int = DEFAULT_TIMEOUT, out: str = "", runner: Any = None, clock: Any = time.monotonic, sleep: Any = time.sleep) -> Dict[str, Any]:
     if not (EVERY[0] <= every <= EVERY[1]) or not (TIMEOUT[0] <= timeout <= TIMEOUT[1]):
         raise CommandError(say("wait.range", every_min=EVERY[0], every_max=EVERY[1], timeout_min=TIMEOUT[0], timeout_max=TIMEOUT[1]))
     try:

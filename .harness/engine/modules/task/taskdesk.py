@@ -140,7 +140,7 @@ def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
         reaches = outside.environments(systems) if systems and not outside.validate(systems) else {}
     except Exception:  # noqa: BLE001 - a broken list is doctor's to report; the field is then not drawn
         reaches = {}
-    opened = data.get("allow_env") if isinstance(data.get("allow_env"), dict) else {}
+    opened = data.get("allow_env") if isinstance(data.get("allow_env"), dict) and data.get("status") == "open" else {}  # the switch ends with the task (hand test B90-a: a closed task said dev was open)
     envs = [{"env": env, "systems": reaches.get(env, []), "open": env in opened, "since": str((opened.get(env) or {}).get("at") or "")} for env in tasklife.ALLOW_ENVS] if reaches else []
     return {"envs": envs, "never": [outside.PROD]}
 

@@ -567,7 +567,7 @@ class WalkThroughTests(unittest.TestCase):
         self.assertIn('ui.envs.set(JSON.stringify([desk.allow, full.status]), () => envButton());', desk)
         status = (WEB / "status.js").read_text(encoding="utf-8")
         self.assertIn('open: (data, key, focus) => openMark(data.open_envs, key, focus)', status)
-        self.assertIn(".st-s-open{width:64px", (WEB / "status.css").read_text(encoding="utf-8"))
+        self.assertIn(".st-s-open{width:88px", (WEB / "status.css").read_text(encoding="utf-8"))
         en, zh = messages.table("en"), messages.table("zh")
         for key in ("desk.set.open", "desk.set.open.none", "desk.set.open.never", "desk.set.open.note", "desk.set.open.off", "desk.set.open.cannot", "board.status.open", "board.status.open.word"):
             self.assertIn(key, en, key)

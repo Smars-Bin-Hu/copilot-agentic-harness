@@ -335,6 +335,7 @@
   "board.col.actions": "Do",
   "board.action.approve-plan": "approve plan",
   "board.action.approve-promote": "approve promote",
+  "board.action.approve-action": "Approve a call",
   "board.action.recover": "recover the repository",
   "board.action.review-extend": "more checks",
   "board.action.review-waive": "waive checks",

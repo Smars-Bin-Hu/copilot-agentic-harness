@@ -335,6 +335,7 @@
   "board.col.actions": "操作",
   "board.action.approve-plan": "批准计划",
   "board.action.approve-promote": "批准 promote",
+  "board.action.approve-action": "批准一条调用",
   "board.action.recover": "还原仓库",
   "board.action.review-extend": "增加检查次数",
   "board.action.review-waive": "放行检查",

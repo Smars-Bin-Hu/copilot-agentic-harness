@@ -699,7 +699,7 @@
       can ? null : h("p", {class: "set-warn"}, t("desk.set.open.cannot")));
     const button = h("button", {type: "button", class: "rv-btn" + (open.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip")},
       icon(DOOR, 14), h("span", {class: "rv-name"}, t("desk.set.open")), h("b", null, open.length ? open.map((item) => item.env).join(", ") : t("desk.set.open.off")));
-    const show = (on) => { pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeEnvs = on ? () => show(false) : null; if (on) inView(pop); };
+    const show = (on) => { if (on && closeReview) closeReview(); pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeEnvs = on ? () => show(false) : null; if (on) inView(pop); };
     button.addEventListener("click", () => show(pop.hidden));
     return [button, pop];
   }
@@ -736,7 +736,7 @@
     const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.rv.button")), desk.past ? h("p", {class: "set-tip"}, t("desk.rv.current", {round: full.round})) : null, h("p", {class: "sub"}, t("desk.rv.hint")), h("p", {class: "set-warn"}, t("desk.rv.cost")), h("div", {class: "chips"}, choices));
     const button = h("button", {type: "button", class: "rv-btn" + (info.n ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.rv.hint")},
       icon(SHIELD, 14), h("span", {class: "rv-name"}, t("desk.rv.button")), h("b", null, info.n ? String(info.n) : t("desk.rv.off")));
-    const show = (on) => { pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeReview = on ? () => show(false) : null; if (on) inView(pop); };
+    const show = (on) => { if (on && closeEnvs) closeEnvs(); pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeReview = on ? () => show(false) : null; if (on) inView(pop); };
     button.addEventListener("click", () => show(pop.hidden));
     return [button, pop];
   }

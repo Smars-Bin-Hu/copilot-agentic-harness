@@ -119,9 +119,9 @@
   const evidenceOf = (id) => (desk.evidence || []).find((item) => item.id === id);
   function evChip(id) {
     const item = evidenceOf(id);
-    const chip = h("button", {type: "button", class: "ev" + (item ? (item.by === "agent" ? " agent" : "") : " missing"),
+    const chip = h("button", {type: "button", class: "ev" + (item ? (item.by === "agent" ? " agent" : "") : " missing"), "data-ev": id,
       title: item ? t("desk.evidence.tip", {env: item.env, by: item.by === "agent" ? t("desk.evidence.by.agent") : t("desk.evidence.by.person"), at: (item.at || "").slice(0, 16).replace("T", " "), kind: item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run})}) : t("desk.evidence.missing", {id})}, id);
-    if (item) chip.addEventListener("click", () => evidenceWindow(item));
+    chip.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); if (item) evidenceWindow(item); });  // inside a link too: the window, not the link
     return chip;
   }
   function withEvidence(text) {
@@ -148,8 +148,17 @@
       outputPane(item),
       h("div", {class: "row"}, open, copy, close)]);
     view.box.classList.add("wide");
-    open.addEventListener("click", () => { view.close(); fileOpen = item.file; goTab("files"); draw(true); });
+    open.addEventListener("click", () => { view.close(); openRun(item); });
     close.addEventListener("click", view.close);
+  }
+  // The results file of a run, in the Files tab, at that run (the run tabs of the file pick it), scrolled into view (hand test B90-c: the last run was shown and the page did not move).
+  function openRun(item) {
+    runPick["file:" + item.file] = item.run;
+    fileOpen = item.file;
+    if (!fileEdit.path) fileEdit.error = "";
+    goTab("files");
+    draw(true);
+    setTimeout(() => { const box = document.querySelector(".files-view"); if (box) box.scrollIntoView({block: "start", behavior: "smooth"}); }, 50);
   }
 
   // The output of a run in the window (1.7.9): the tables the reader found (outview.py), one tab per result set, the notes (an error red), or the text whole. Table / Text is the
@@ -161,7 +170,7 @@
     const head = h("p", null, h("b", null, t("desk.evidence.output")), " ", h("span", {class: "sub"}, view && view.kind === "tables" ? t("desk.evidence.output.sets", {sets: view.sets.length, rows: view.rows}) : t("desk.evidence.output.note")));
     if (!item.output) return [head, h("p", {class: "sub"}, t("desk.evidence.nooutput"))];
     const text = () => h("div", {class: "cmd-scroll"}, h("pre", {class: "cmd-script"}, item.output), item.output_cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
-    if (!view || view.kind !== "tables") return [head, text()];
+    if (!view || (view.kind !== "tables" && !view.notes.some((note) => note.error))) return [head, text()];  // plain text; an error alone still gets its red Notes tab
     const body = h("div", null);
     const draw_ = () => {
       if (outMode === "text") { body.replaceChildren(text()); return; }
@@ -1677,7 +1686,7 @@
       const window_ = h("button", {type: "button", class: "ico", title: t("desk.evidence.see")}, "⤢");
       window_.addEventListener("click", () => evidenceWindow(item));
       const file = h("button", {type: "button", class: "ico", title: t("desk.evidence.open")}, "▤");
-      file.addEventListener("click", () => { fileOpen = item.file; if (!fileEdit.path) fileEdit.error = ""; draw(true); });
+      file.addEventListener("click", () => openRun(item));
       const cited = item.cited_in.length ? item.cited_in.map((name, index) => { const b = h("button", {type: "button", class: "chip"}, name); b.addEventListener("click", () => { fileOpen = name; if (!fileEdit.path) fileEdit.error = ""; draw(true); }); return [index ? " " : null, b]; }) : t("desk.evidence.uncited");
       return h("tr", {class: item.cited_in.length ? "" : "uncited"}, h("td", null, evChip(item.id)), h("td", null, item.env), h("td", null, tag(item.by === "agent" ? t("desk.evidence.by.agent") : t("desk.evidence.by.person"), item.by === "agent" ? "good" : "")),
         h("td", {class: "sub"}, item.at ? item.at.slice(0, 16).replace("T", " ") : ""), h("td", {class: "sub"}, item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run})),

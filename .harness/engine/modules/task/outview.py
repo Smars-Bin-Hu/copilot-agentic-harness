@@ -16,8 +16,8 @@ import re
 from typing import Any, Dict, List, Optional
 
 ROWS_SHOWN = 200
-MAX_CHARS = 20_000  # what is laid out; a longer output is laid out from its head and said to be cut
-_DASHES = re.compile(r"^(?:-{2,}\s*)+$")
+MAX_CHARS = 2_000_000  # what is laid out (the tables are cut to ROWS_SHOWN rows anyway); past this the layout stops and says so
+_DASHES = re.compile(r"^(?:-{1,}\s*)+$")
 _FRAME = re.compile(r"^\+(?:-+\+)+$")
 _NOTE = re.compile(r"^\((\d+|\?) rows? affected\)$|^(Msg \d+|Error|ERROR|Warning|WARNING|Sqlcmd: Error|HResult)\b", re.IGNORECASE)
 _ERROR = re.compile(r"^(Msg \d+|Error|ERROR|Sqlcmd: Error|HResult)\b|\bLevel 1[1-9]\b", re.IGNORECASE)
@@ -44,8 +44,12 @@ def _split_at_dashes(block: List[str]) -> List[List[str]]:
 
 
 def _dash_table(block: List[str]) -> Optional[Dict[str, Any]]:
-    if len(block) < 2 or not _DASHES.match(block[1].strip()):
+    if len(block) < 2 or not _DASHES.match(block[1].strip().replace("\t", " ")):
         return None
+    if "\t" in block[1]:  # the dashes are tab-separated (sqlcmd -s "\t"): the tabs cut the columns, not the places of the dashes
+        cells = [[cell.strip() for cell in line.split("\t")] for line in block if not _NOTE.match(line.strip())]
+        notes = [line.strip() for line in block[2:] if _NOTE.match(line.strip())]
+        return _table(cells[0], [row for row in cells[2:]], notes)
     spans = [(found.start(), found.end()) for found in re.finditer(r"-+", block[1])]
     if not spans:
         return None

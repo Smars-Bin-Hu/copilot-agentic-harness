@@ -38,7 +38,7 @@ def marker(evidence_id: str, by: str, at: str, env: str) -> str:
 
 def section_parts(text: str) -> Dict[str, Any]:
     """The command and the output of one run's section, read from its fenced blocks: `{command, output, output_cut, run_by}`. A part that is not there is empty."""
-    found: Dict[str, Any] = {"command": "", "output": "", "output_cut": False, "run_by": ""}
+    found: Dict[str, Any] = {"command": "", "output": "", "output_cut": False, "output_whole": "", "run_by": ""}
     lines = text.splitlines()
     index = 0
     want = ""
@@ -64,7 +64,7 @@ def section_parts(text: str) -> Dict[str, Any]:
             if want == "command":
                 found["command"] = whole.strip()
             else:
-                found["output"], found["output_cut"] = whole[:OUTPUT_CHARS], len(whole) > OUTPUT_CHARS
+                found["output"], found["output_cut"], found["output_whole"] = whole[:OUTPUT_CHARS], len(whole) > OUTPUT_CHARS, whole  # the tables are read from the whole (hand test B90-c: 500 rows were 129)
             want = ""
         index += 1
     return found
@@ -95,7 +95,7 @@ def listing(root: Path, task: str) -> List[Dict[str, Any]]:
                 "by": mark.group(2) if mark else "person", "at": mark.group(3) if mark else "",
                 "file": path.relative_to(folder).as_posix(), "cited_in": [],
                 "command": parts["command"], "layout": cmdview.layout(parts["command"], folder) if parts["command"] else None, "output": parts["output"], "output_cut": parts["output_cut"], "run_by": parts["run_by"],
-                "output_view": outview.layout(parts["output"]) if parts["output"] else None,  # the tables, the notes (1.7.9); the page shows Text too
+                "output_view": outview.layout(parts["output_whole"]) if parts["output"] else None,  # the tables, the notes (1.7.9); the page shows Text too
             })
     if not found:
         return []

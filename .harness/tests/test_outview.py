@@ -62,11 +62,16 @@ class LayoutTests(unittest.TestCase):
         tsv = outview.layout("id\tname\n1\ta\n2\tb\n")
         self.assertEqual((tsv["sets"][0]["columns"], tsv["sets"][0]["total"]), (["id", "name"], 2))
 
+    def test_a_tab_separated_dash_table_is_cut_at_the_tabs(self) -> None:
+        found = outview.layout("warehouse\tn\n---------\t-----------\nWH-01\t1204\nNULL\t8\n\n(2 rows affected)\n")
+        self.assertEqual((found["sets"][0]["columns"], found["sets"][0]["rows"]), (["warehouse", "n"], [["WH-01", "1204"], ["NULL", "8"]]))
+        self.assertEqual([note["text"] for note in found["notes"]], ["(2 rows affected)"])
+
     def test_a_long_table_is_cut_for_the_page_and_a_long_output_is_said_to_be_cut(self) -> None:
         text = "id\n--\n" + "\n".join(str(i) for i in range(500)) + "\n"
         found = outview.layout(text)
         self.assertEqual((len(found["sets"][0]["rows"]), found["sets"][0]["total"], found["sets"][0]["cut"]), (200, 500, True))
-        self.assertTrue(outview.layout("x" * 30000)["cut"])
+        self.assertFalse(outview.layout("x" * 30000)["cut"])  # the tables are read from the whole output; only a monstrous one is cut
 
 
 if __name__ == "__main__":

@@ -77,6 +77,12 @@ class WindowTests(EvidenceCase):
         self.record("IST")
         second = evidence.listing(self.root, f"{BASE}/job")[1]
         self.assertEqual((len(second["output"]), second["output_cut"], second["command"], second["layout"]), (20000, True, "", None))
+        self.assertEqual(second["output_view"]["kind"], "text")
+        rows = "id\n--\n" + "\n".join(str(i) for i in range(500)) + "\n"
+        self.given.write_text(rows * 4, encoding="utf-8")  # 4 result sets, 2000 rows, well past the text cap
+        third = self.record(run_by="agent")
+        view = evidence.listing(self.root, f"{BASE}/job")[2]["output_view"]
+        self.assertEqual((len(view["sets"]), view["rows"], view["sets"][0]["total"], len(view["sets"][0]["rows"])), (4, 2000, 500, 200))  # the tables come from the whole output
 
     def test_the_output_is_laid_out_for_the_window(self) -> None:
         self.given.write_text("id  name\n--- -----\n1   a\n2   b\n\n(2 rows affected)\n", encoding="utf-8")
@@ -99,7 +105,9 @@ class WindowTests(EvidenceCase):
         self.assertIn('const CITED = /\\[(E\\d+)\\]/g;', desk)
         self.assertIn('if (span.t === "text") return withEvidence(span.v);', desk)
         self.assertIn('class: "ev" + (item ? (item.by === "agent" ? " agent" : "") : " missing")', desk)
-        self.assertIn('open.addEventListener("click", () => { view.close(); fileOpen = item.file; goTab("files"); draw(true); });', desk)
+        self.assertIn('open.addEventListener("click", () => { view.close(); openRun(item); });', desk)
+        self.assertIn('runPick["file:" + item.file] = item.run;', desk)  # the Files tab opens the file at that run (hand test B90-c)
+        self.assertIn('event.preventDefault(); event.stopPropagation(); if (item) evidenceWindow(item);', desk)  # a chip inside a link opens the window only
         self.assertIn(".ev.missing{border-color:var(--bad)", (taskhtml.WEB / "desk.css").read_text(encoding="utf-8"))
         en, zh = messages.table("en"), messages.table("zh")
         for key in ("desk.evidence.tip", "desk.evidence.missing", "desk.evidence.see", "desk.evidence.open", "desk.evidence.output", "desk.evidence.nooutput"):

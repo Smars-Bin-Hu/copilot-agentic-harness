@@ -193,3 +193,4 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 .out-table thead th{position:sticky;top:0;background:var(--card);color:var(--soft);font-weight:500;font-size:12px;z-index:1}.out-table .num{text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.out-table .null{color:var(--soft)}
 .out-notes{border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px;max-height:min(50vh,520px);overflow:auto}.out-note{padding:4px 0}.out-note .pre{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}.out-note.bad{color:var(--bad)}
 .subtab.bad{color:var(--bad)}
+.evidence{max-width:100%;overflow:hidden}.evidence>.scroll{overflow:auto;overscroll-behavior-x:contain}

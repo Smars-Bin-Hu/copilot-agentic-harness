@@ -1069,7 +1069,7 @@
     };
     input.addEventListener("input", arm);
     const no = h("button", {type: "button", class: "act", disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
-    const view = h("button", {type: "button", class: "act"}, t("desk.outbox.view"));
+    const view = h("button", {type: "button", class: "act big tk-view"}, t("desk.outbox.view"));
     const said = h("div", {class: "bad"});
     view.addEventListener("click", () => { callWindow(item); arm(); });
     input.addEventListener("focus", arm);
@@ -1089,9 +1089,9 @@
     return h("section", {class: "tk-need strong tk-call", "data-action": "approve-action", "data-code": item.code},
       h("div", {class: "tk-need-h"}, tag(t("task.waiting.outbox"), "hot"), h("span", {class: "sub"}, t("desk.outbox.since", {at: item.created_at.slice(11, 16)}), item.draft ? [" · ", h("code", null, item.draft)] : null)),
       callFacts(item),
-      h("div", {class: "tk-cmd-peek"}, h("code", null, peek), " ", view),
+      h("div", {class: "tk-cmd-peek"}, h("code", null, peek)),
       notes,
-      h("div", {class: "tk-need-go tk-call-go"}, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), no, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));
+      h("div", {class: "tk-need-go tk-call-go"}, view, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), no, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));  // View first in the row: the eye goes View, code, Approve
   }
 
   // The words for a task that has nothing waiting on it, on the Live tab: closed, not started, quiet, or at work with nothing to decide.

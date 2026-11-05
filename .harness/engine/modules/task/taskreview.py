@@ -380,7 +380,7 @@ def start(root: Path, raw_task: str = "") -> Dict[str, Any]:
         if waiting is None and used(data) >= limit(root, data):
             raise CommandError(say("review.limit", used=used(data), limit=limit(root, data), task=task))
         diff_file = ""
-        if any(relative.lower().startswith(tasks.DEV_NAME.lower() + "/") for relative, _ in tasksnap.result_files(root, task)) and data.get("target_files"):
+        if any(relative.lower().startswith(tasks.DEV_NAME.lower() + "/") for relative, _ in tasksnap.result_files(root, task)) and (data.get("target_files") or data.get("manual_files")):
             _, text = task_ops.changes(root, task, data)
             path = tasks.task_dir(root, task) / tasks.CHANGES_NAME
             path.write_text(text, encoding="utf-8")

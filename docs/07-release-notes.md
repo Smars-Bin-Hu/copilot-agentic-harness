@@ -10,6 +10,21 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.110 (2026-11-03)
+
+### Added
+
+- **Code you run by hand waits for the plan too.** A development task can make code that is not written back by promote: a procedure you run on a dev server yourself and promote later with others. Before, the only place for it was the root of the task folder, which needs no approval, so an agent could write it with no requirement and no plan. Now it goes in `DEV/_manual/<path>`: like the rest of `DEV/`, it opens only after you approve the plan, and closes again when the requirement changes. Promote leaves it, and with nothing else to write back it says to hand the run over (`harness task handoff run`). The **Changes** tab marks such files **by hand**, and the stages of a task with only these end with **Run by hand**, done when the result of your run is recorded.
+- **`harness task fetch _manual/<path> --from <file>`.** For a file that is in no target repository: put its current version in `REF/` (Files tab), and the agent takes it as the base, so the Changes tab shows what the task changed in it.
+
+### Changed
+
+- **The root of the task folder is for what stays in the task**: notes, an RCA, a design, a read-only query. The rules, the hint at every prompt and the refusals no longer say that "work that is not promoted" or "one-off scripts" go there: that wording let an agent put code for a server there.
+- **"DEV" may be an environment.** The rules tell the agent that "DEV" in what you say may mean the DEV environment, not the task's `DEV/` folder, and to ask when it cannot tell.
+- **Opening a task asks whether you will run code from it by hand.** If so, it is a full task, with a plan.
+
+**Introductory material**: `docs/01-quickstart.md` (a task whose code you run by hand), `docs/02-features.md` (where results go) and `docs/04-reference.md` (`task fetch --from`, promote) and `.workspace/README.md` (the task folder) changed; the skills `harness-my-task`, `harness-autorun` and `harness-rookie-wondering` (the task life cycle, the commands) too. `harness-rookie-quick-start` is not changed: its practice task has no `DEV/`.
+
 ## 1.6.109 (2026-11-03)
 
 ### Added

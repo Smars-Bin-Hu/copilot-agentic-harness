@@ -25,6 +25,11 @@ const DiffView = (function () {
 
   // Inside a hunk the counts of its `@@` line say how many lines follow, as in `diffKinds` of desk.js. A created file has no `@@` line
   // (`--- /dev/null`, then only `+` lines) and a deleted one has none either (`+++ /dev/null`, then only `-` lines).
+  // DEV/_manual/: the person runs the file by hand; promote leaves it (1.6.110).
+  function handTag(item) {
+    return item.by_hand ? h("span", {class: "dv-hand", title: t("desk.changes.byhand.tip")}, t("desk.changes.byhand.tag")) : null;
+  }
+
   function parse(lines) {
     const files = [];
     let file = null, hunk = null, old = 0, added = 0, body = "", skip = false;
@@ -286,6 +291,7 @@ const DiffView = (function () {
       const plain = item.action === "unchanged";
       const button = h("button", {type: "button", class: "dv-pick" + (plain ? " same" : ""), title: item.path},
         h("span", {class: "dv-act " + item.action}, plain ? t("desk.changes.unchanged") : t("desk.changes." + item.action)), h("code", null, item.path),
+        handTag(item),
         plain ? null : h("span", {class: "dv-n add"}, "+" + item.added), plain ? null : h("span", {class: "dv-n del"}, "−" + item.removed));
       button.addEventListener("click", () => { store("file." + key, "", item.path); draw(); });
       return button;
@@ -309,7 +315,7 @@ const DiffView = (function () {
       if (source.files && !item.text && item.action === "modify" && mode() !== "raw") notes.push(h("p", {class: "sub"}, t("desk.diff.partial")));
       if (source.cut && mode() !== "raw") notes.push(h("p", {class: "sub"}, t("desk.cut")));
       shown.replaceChildren(
-        h("div", {class: "dv-bar"}, h("code", {class: "dv-path"}, item.path), modes),
+        h("div", {class: "dv-bar"}, h("code", {class: "dv-path"}, item.path), handTag(item), modes),
         ...notes,
         mode() === "raw" ? raw() : compare(file, item.text || null, mode(), key));
     };

@@ -7,6 +7,8 @@ the plan is asked for again, a new round after a write-back) falls back to the r
   rca, design, other    doing, done (done = the task is closed)
   dev, kb               requirement, plan, developing, write-back, done
                         developing: from the approved plan to the approved write-back; done: the write-back is made
+                        DEV/ holds only DEV/_manual/ (1.6.110): requirement, plan, developing, run by hand, done
+                        developing ends when the run is handed over; run by hand, when its result is recorded; done, when the task is closed
   test                  guide, one step per environment of TEST-GUIDE.md (DEV, IST, UAT when it names none), done
                         an environment is done when its results file holds `Verdict for <env>: PASS`
 """
@@ -52,9 +54,25 @@ def write_back(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
     done = promote.get("state") == "done"
     approved = done or "approved_plan_sha256" in promote
     planned = tasks.plan_approved(root, task, data)
+    if not approved and promote.get("state", "none") in ("none", "dry_run") and not data.get("deletes") and tasks.by_hand_only(root, task):
+        return by_hand(root, task, data, planned)
     finished = [task_ops.req_state(root, task) == "confirmed" or planned or approved, planned, approved, done, done]
     flags = {3: "partial"} if promote.get("state") == "partial" else {}
     return steps_of([{"id": name} for name in ("requirement", "plan", "developing", "writeback", "done")], finished, flags)
+
+
+def by_hand(root: Path, task: str, data: Dict[str, Any], planned: bool) -> Dict[str, Any]:
+    """The ribbon of a task whose result the person runs by hand: a run recorded after the plan was approved ends that step."""
+    from . import task as task_ops
+
+    events = [event for event in data.get("events") or [] if isinstance(event, dict)]
+    last_plan = max((index for index, event in enumerate(events) if event.get("what") == "approve-plan"), default=-1)
+    later = [str(event.get("what", "")) for event in events[last_plan + 1:]] if last_plan >= 0 else []
+    ran = "run-record" in later
+    handed = ran or bool(data.get("handoff")) or "handoff" in later
+    closed = data.get("status") == "closed"
+    finished = [task_ops.req_state(root, task) == "confirmed" or planned or ran, planned, handed or closed, ran or closed, closed]
+    return steps_of([{"id": name} for name in ("requirement", "plan", "developing", "byhand", "done")], finished, {})
 
 
 def verdicts_in(text: str) -> List[str]:
@@ -154,8 +172,8 @@ def reviewer(root: Path, task: str, data: Dict[str, Any], number: Optional[int] 
 
 # The event that ends each step, by kind (the first of the names that the current round has): the time of a step is from the end of the one before it to its own end.
 ENDS = {
-    "requirement": ("confirm-req", "approve-plan"), "plan": ("approve-plan",), "developing": ("approve-promote", "promote"),
-    "writeback": ("promote",), "doing": ("close",),
+    "requirement": ("confirm-req", "approve-plan"), "plan": ("approve-plan",), "developing": ("approve-promote", "promote", "handoff"),
+    "writeback": ("promote",), "byhand": ("run-record",), "doing": ("close",),
 }
 
 

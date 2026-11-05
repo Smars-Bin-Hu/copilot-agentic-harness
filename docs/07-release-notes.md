@@ -16,7 +16,7 @@ To see which version you have: `harness --version`.
 
 - **A notice no longer stops the page.** While a window only tells you something ("Started in VS Code" after Go on in a new chat, the New task box once sent), the page under it keeps refreshing: before, it kept showing "waits for you" while the new chat worked, until you closed the window. Keys such as R still wait for the window.
 - **New task shows the task when it is there.** The box says so and offers **Open task**.
-- **Windows sit over the dock and the Say something pill**, and the end of a task page is no longer hidden under them on a narrow screen.
+- **Windows and the Say something panel sit over the dock**, and the end of a task page is no longer hidden under the pill or the dock on a narrow screen.
 - **A window's title has no dots** ("answer · task", not "answer... · task").
 - **The refusal after a change of chat says what to do**: the chat of the task changed (perhaps another chat picked it up), nothing was sent, wait a moment and send again; your text is kept.
 

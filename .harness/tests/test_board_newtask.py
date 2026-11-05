@@ -33,7 +33,7 @@ class DialogTests(unittest.TestCase):
         chat, board = source("chat.js"), source("board.js")
         self.assertIn("function seen(rows)", chat)
         self.assertIn("create, seen,", chat)
-        self.assertIn('"/task/" + encodeURIComponent(waiting.name)', chat)
+        self.assertIn('"/task/" + encodeURIComponent(name)', chat)
         self.assertIn("CHAT.seen(data.rows)", board)  # the board's own read, no new poll
         for lang in ("en", "zh"):
             table = json.loads((WEB.parents[2] / "core" / f"messages.{lang}.json").read_text(encoding="utf-8"))
@@ -121,6 +121,19 @@ class KeyAndLanguageTests(unittest.TestCase):
         reply = source("reply.js")
         self.assertIn("if (typing(event.target) || SERVE.open()", reply)  # a notice does not stop the refresh (busy), but the key still waits for it (1.6.112)
         self.assertIn("open: () => stack.length > 0", source("serve.js"))
+
+    def test_open_task_keeps_the_name_it_was_made_for(self) -> None:
+        """Open task read `waiting.name` at the click, after `seen` had let `waiting` go: the click threw and did nothing (1.6.112, browser test)."""
+        seen = source("chat.js").split("function seen(rows)")[1].split("function create(")[0]
+        self.assertIn("const name = waiting.name;", seen)
+        self.assertNotIn("encodeURIComponent(waiting.name)", seen)
+
+    def test_the_say_something_panel_sits_over_the_dock_and_under_a_dialog(self) -> None:
+        """At 390 px the dock's buttons covered Send of the panel (1.6.112, browser test)."""
+        layer = lambda css, rule: int(re.search(re.escape(rule) + r"\{[^}]*?z-index:(\d+)", css).group(1))  # noqa: E731
+        live, dock, page = source("live.css"), source("dock.css"), source("page.css")
+        self.assertGreater(layer(live, ".rp"), layer(dock, ".dock-panel"))
+        self.assertLess(layer(live, ".rp"), layer(page, ".shade"))
 
     def test_no_page_file_holds_chinese_and_the_zh_names_come_from_the_table(self) -> None:
         for path in sorted(WEB.iterdir()):

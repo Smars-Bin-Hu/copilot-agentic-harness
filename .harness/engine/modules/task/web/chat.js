@@ -250,8 +250,9 @@ const CHAT = (function () {
   let waiting = null;  // the New task notice while it is open: {name, line, row}; board.js hands it every board read (CHAT.seen)
   function seen(rows) {
     if (!waiting || !waiting.line.isConnected || !rows.some((row) => row.name === waiting.name)) return;
+    const name = waiting.name;  // `waiting` is let go below, before the click
     const open = h("button", {type: "button", class: "act hot"}, t("board.new.open"));
-    open.addEventListener("click", () => { location.href = "/task/" + encodeURIComponent(waiting.name); });
+    open.addEventListener("click", () => { location.href = "/task/" + encodeURIComponent(name); });
     waiting.line.replaceWith(h("p", null, t("board.new.here")));
     waiting.row.prepend(open);
     waiting = null;

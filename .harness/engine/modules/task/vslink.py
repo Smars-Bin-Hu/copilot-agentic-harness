@@ -42,6 +42,7 @@ EXPECT_EVERY = 2.0  # a chat the board made that the host does not list yet: ask
 EXPECT_FOR = 120.0  # ... for this long
 SCAN_PER_TURN = 3  # chats read in one turn to find their Copilot session id
 SCAN_MAX = 300  # chats read at most, newest first
+RESCAN_BUSY = 5.0  # seconds between two reads of a chat that is at work and had no Copilot id when read (1.6.111)
 NO_CLI_WAIT = 300.0  # no `code` command: look again only now and then
 JOB_WAIT = 25.0  # seconds a page request waits for the thread to send, steer or stop
 CREATE_WAIT = 45.0  # a create makes the chat, sends, then waits for the host to list it
@@ -152,6 +153,7 @@ class VsLink:
         self.sessions: Dict[str, Dict[str, Any]] = {}  # the chats of this folder, by resource
         self.sdk: Dict[str, Set[str]] = {}
         self.scanned: Dict[str, str] = {}  # resource -> modifiedAt when it was read for its Copilot id
+        self.read_at: Dict[str, float] = {}  # resource -> when it was read with no error (monotonic)
         self.bound: Dict[str, Dict[str, Any]] = {}  # task -> binding
         self.unbound: Dict[str, str] = {}  # task -> why
         self.chats: Dict[str, Dict[str, Any]] = {}  # chat resource -> {state, tool_at}
@@ -438,6 +440,7 @@ class VsLink:
                     self.sdk.clear()
                     self.models = []
                     self.scanned.clear()
+                    self.read_at.clear()
                     self.listed_at = 0.0
                     self.expect.clear()
             self._wait(self.backoff.next())
@@ -850,7 +853,9 @@ class VsLink:
         self._adopt(link, entries)
         with self.lock:
             sessions = dict(self.sessions)
-        self._scan(link, entries, sessions)
+            wanted = chatlink.wants_scan(entries, sessions, self.sdk, chatlink.decide(entries, sessions, self.sdk))  # from the tasks as they are now, not the binding of the last look
+        if wanted:
+            self._scan(link, sessions)
         with self.lock:
             found = chatlink.decide(entries, sessions, self.sdk)
             self.bound = {task: binding for task, (binding, _why) in found.items() if binding}
@@ -914,29 +919,33 @@ class VsLink:
         with self.lock:
             self.created = [item for item in self.created if item is not made]
 
-    def _scan(self, link: ahp.Connection, entries: List[Dict[str, Any]], sessions: Dict[str, Dict[str, Any]]) -> None:
-        with self.lock:
-            done = set(self.bound)
-        if not any(entry["session_id"] and entry["task"] not in done for entry in entries):
-            return  # every task that can be bound is: no chat needs reading. A task still marked with a chat the board made that is gone is read for too: else it was never bound again
+    def _scan(self, link: ahp.Connection, sessions: Dict[str, Dict[str, Any]]) -> None:
+        """Read chats for their Copilot ids, when a task needs one (`chatlink.wants_scan`). A chat with no id is read again when it changed, or every `RESCAN_BUSY` while it is at work:
+        a chat read before its first model call has no id yet, and the host may change its `modifiedAt` only when the turn ends (1.6.111)."""
+        now = time.monotonic()
         wanted = sorted(sessions.values(), key=lambda item: str(item.get("modifiedAt") or ""), reverse=True)[:SCAN_MAX]
         todo = []
         for item in wanted:
             resource = item["resource"]
             if item.get("defaultChat") in self.chats or not item.get("defaultChat"):
                 continue  # a chat held here is left alone: the unsubscribe below would end its updates, and nothing would subscribe it again
-            if resource not in self.scanned or (not self.sdk.get(resource) and self.scanned[resource] != item.get("modifiedAt")):
+            if resource not in self.scanned:
+                todo.append(item)
+            elif not self.sdk.get(resource) and (self.scanned[resource] != item.get("modifiedAt")
+                                                 or (ahp.status_name(item.get("status")) in ("busy", "input") and resource in self.read_at and now - self.read_at[resource] >= RESCAN_BUSY)):
                 todo.append(item)
         for item in todo[:SCAN_PER_TURN]:
             resource, chat = item["resource"], item["defaultChat"]
             try:
                 ids = ahp.sdk_ids(link.subscribe(chat))
                 link.unsubscribe(chat)
+                self.read_at[resource] = time.monotonic()
             except ahp.ConnectionClosed:
                 raise
             except ahp.AhpError as error:
                 self.host_said(error)
                 ids = set()  # this chat cannot be opened now: it is not read again until it changes
+                self.read_at.pop(resource, None)
             with self.lock:
                 self.sdk[resource] = ids
                 self.scanned[resource] = str(item.get("modifiedAt") or "")

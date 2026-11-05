@@ -15,7 +15,7 @@ import support  # noqa: F401 - HARNESS_VSCODE_CLI=off
 from support import REPO
 from taskcase import TASK, TaskCase
 from test_ahp import TOKEN
-from test_chatsend import HAIKU, ROOT_STATE, SendCase
+from test_chatsend import HAIKU, ROOT_STATE, SendCase, chat_state
 from test_vslink import summary, until
 
 from core import ahp, messages, tasks
@@ -444,6 +444,56 @@ class CreateTests(CreateCase):
         line = json.loads((self.root / old / ".task" / "sent.jsonl").read_text(encoding="utf-8").splitlines()[-1])
         self.assertEqual((line["kind"], line["text"]), ("create", "/harness-my-task Go on with the task old-job."))
         self.assertEqual(self.data()["chat"]["how"], "sdk")  # the other task is as it was
+
+    def vs_code_chat(self, sdk: str) -> Dict[str, Any]:
+        """A chat the person makes in VS Code, at work. `read["id"]` False: its first model call has not been made, so its turn has no Copilot id yet."""
+        read = {"id": True}
+        old = self.host.answers["subscribe"]
+
+        def subscribe(params: Dict[str, Any]) -> Dict[str, Any]:
+            if params["channel"] == "ahp-chat:/vs":
+                turn = {"id": "t1", "responseParts": []}
+                return {"snapshot": {"state": chat_state(sdk) if read["id"] else {"status": 9, "turns": [], "activeTurn": turn}}}
+            return old(params)
+
+        self.host.answers["subscribe"] = subscribe
+        item = summary("ahp-session:/vs", "ahp-chat:/vs", self.folder, status=9, title="Made in VS Code")
+        self.items.append(item)
+        self.host.push({"jsonrpc": "2.0", "method": "root/sessionAdded", "params": {"summary": item}})
+        return read
+
+    def chat_is(self, task: str, chat: str) -> bool:
+        return (self.data(task).get("chat") or {}).get("chat") == chat
+
+    def test_a_chat_made_in_vs_code_takes_the_task_over_from_a_chat_of_the_board(self) -> None:
+        """A task bound to a chat of the board counted as bound, so no chat was read: when the person went on in a chat made in VS Code, the board stayed on the old chat for good. A send went
+        there, the task said quiet while that chat worked, and the Live tab did not show the new chat (1.6.111)."""
+        self.write(".github/skills/harness-my-task/SKILL.md", "---\nname: harness-my-task\n---\n")
+        self.prompt("start", session="sess-old")
+        self.new(name="old-job", session="sess-old")
+        old = f"{tasks.TASKS_DIR}/old-job"
+        body = {"skill": "harness-my-task", "words": "Go on.", "lang": "en", "task": "old-job", "step": "act"}
+        self.assertEqual(self.request("POST", "/api/skill", body, cookie=self.cookie)[0], 200)
+        self.assertTrue(until(lambda: self.chat_is(old, self.new_chat)), self.data(old).get("chat"))
+        self.prompt("go on", session="sess-board")
+        self.open(name="old-job", session="sess-board")  # the agent of the board's chat picks it up
+        self.vs_code_chat("sess-vs")
+        self.prompt("go on", session="sess-vs")
+        self.open(name="old-job", session="sess-vs")  # then the person goes on in VS Code
+        self.assertTrue(until(lambda: self.chat_is(old, "ahp-chat:/vs"), 10.0), self.data(old).get("chat"))
+        self.assertEqual(self.data(old)["chat"]["how"], "sdk")
+
+    def test_a_chat_read_before_its_first_model_call_is_read_again_while_it_works(self) -> None:
+        """It was read again only when the host changed its `modifiedAt`, which may wait for the end of the turn: the task was unbound for the whole turn (1.6.111)."""
+        self.prompt("start", session="sess-lost")
+        self.new(name="lost-job", session="sess-lost")  # no chat has its id: the board reads chats
+        read = self.vs_code_chat("sess-vs")
+        read["id"] = False
+        self.assertTrue(until(lambda: "ahp-session:/vs" in self.vs.scanned, 10.0))
+        read["id"] = True  # its first model call is made; the summary did not change
+        self.prompt("go on", session="sess-vs")
+        self.open(session="sess-vs")
+        self.assertTrue(until(lambda: self.chat_is(TASK, "ahp-chat:/vs"), 10.0), self.data().get("chat"))
 
     def test_a_picker_is_given_the_models_the_tasks_own_and_the_default_of_a_one_off(self) -> None:
         status, data, _ = self.request("POST", "/api/skill", {"step": "options", "task": "job1"}, cookie=self.cookie)

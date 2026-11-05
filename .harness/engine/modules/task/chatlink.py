@@ -80,6 +80,21 @@ def moved_on(session: str, stored: Dict[str, Any], listed: str, sdk: Dict[str, S
     return len(found) == 1 and found[0] != listed
 
 
+def wants_scan(entries: List[Entry], summaries: Dict[str, Dict[str, Any]], sdk: Dict[str, Set[str]], found: Dict[str, Tuple[Optional[Dict[str, Any]], str]]) -> bool:
+    """Must chats be read for their Copilot ids? Yes for a task with a session and no chat, and for a task bound to a chat of the board whose session id is new since (1.6.111): another chat
+    may have picked it up, and only a read of that chat lets `moved_on` see it. Before, such a task counted as bound, no chat was read, and the board stayed on the old chat for good."""
+    for entry in entries:
+        session = str(entry.get("session_id") or "")
+        binding = found.get(entry["task"], (None, ""))[0]
+        if not session:
+            continue
+        if binding is None:
+            return True
+        if binding.get("how") == "board" and session != binding.get("was") and session not in sdk.get(str(binding.get("session") or ""), set()):
+            return True
+    return False
+
+
 def same(left: Optional[Dict[str, Any]], right: Optional[Dict[str, Any]]) -> bool:
     """The same binding: the same chat found the same way (the title, the time and the person's model do not make a new one)."""
     left = left if left and left.get("session") else None

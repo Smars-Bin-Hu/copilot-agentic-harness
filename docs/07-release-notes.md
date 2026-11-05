@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.111 (2026-11-05)
+
+### Changed
+
+- **The board follows a chat you make in VS Code.** When you went on with a task in a new chat of VS Code, and the old chat was one the board made (New task or Go on in a new chat), the board stayed on the old chat: Say something went there, the task said quiet while that chat worked, and Live did not show the new chat. Now it moves to the new chat within seconds of its agent picking the task up.
+- **A new chat is found while its first turn runs.** A chat the board read before its first model call was read again only when VS Code changed it, which may be at the end of the turn. A chat at work with no Copilot id yet is now read again every few seconds.
+
+**Introductory material**: `docs/02-features.md` (Linked chats) now says that the board follows the chat that picked the task up last. The quick start and the skills are not changed: they do not describe how a chat is linked.
+
 ## 1.6.110 (2026-11-03)
 
 ### Added

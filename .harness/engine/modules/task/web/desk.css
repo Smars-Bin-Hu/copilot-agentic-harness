@@ -167,3 +167,7 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 @media (max-width:900px){.rv-name{display:none}}
 @media (max-width:640px){.tk-info{flex-wrap:wrap}.tk-info-l{flex-basis:100%;flex-wrap:wrap}.rv-pop{right:auto;left:0}}
 @media (max-width:640px){.tk-pane{padding:14px}.tk-top,.tk-sub{padding-left:8px;padding-right:8px}}
+/* "Open to the agent" (1.7.6): the environment chips in the pop of the head pill. An open one is green; one no system reaches is dim; prod is struck through */
+.rv-pop .env-chips .chip.env.on{border-color:var(--good-line);background:var(--good-bg);color:var(--good)}
+.rv-pop .env-chips .chip.env[disabled]{opacity:.45;cursor:not-allowed}
+.rv-pop .env-chips .chip.env.never{opacity:.45;cursor:not-allowed;text-decoration:line-through}

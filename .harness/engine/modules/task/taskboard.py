@@ -217,6 +217,8 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
         if not row["todo_left"] or not tasks.plan_approved(root, row["task"]):  # `autorun on` is refused then (autorun.need.todo, need.approval): not offered
             row["actions"] = [item for item in row["actions"] if item["action"] != "autorun on"]
         row["req_unconfirmed"] = row["status"] == "open" and task_ops.req_state(root, row["task"]) in ("open", "changed")
+        held = (tasks.read(root, row["task"]) or {}).get("allow_env")
+        row["open_envs"] = sorted(held) if isinstance(held, dict) and row["status"] == "open" else []  # the environments the person opened for the task (1.7.6): a mark under the name
         if row["status"] == "open":
             row["sub"] = tasksub.from_hooklog(root, tasks.read(root, row["task"]) or {})  # the last tool call of the hook log; a board served with VS Code replaces it with the chat's own line
         key = (str(root), row["task"])

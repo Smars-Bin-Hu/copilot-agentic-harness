@@ -435,7 +435,8 @@
     ui.rounds = slot("span", "tk-rounds");
     ui.pill = slot("span", "tk-pill");
     ui.review = slot("span", "tk-rv");
-    ui.info = h("div", {class: "tk-info"}, ui.infoL.node, ui.rounds.node, ui.review.node, ui.pill.node);
+    ui.envs = slot("span", "tk-rv tk-env");
+    ui.info = h("div", {class: "tk-info"}, ui.infoL.node, ui.rounds.node, ui.review.node, ui.envs.node, ui.pill.node);
     ui.forks = slot("div", "tk-forks sub");
     ui.wait = h("div", {class: "tk-wait"});
     ui.tabs = h("div", {class: "tk-tabs"});
@@ -516,6 +517,7 @@
     });
     ui.rounds.set(JSON.stringify([full.rounds, full.round, desk.past && desk.past.round]), () => roundSwitch());
     ui.review.set(JSON.stringify([full.settings && [full.settings.n, full.settings.max_n], full.status, desk.past && full.round]), () => reviewButton());
+    ui.envs.set(JSON.stringify([desk.allow, full.status]), () => envButton());
     ui.pill.set(live ? JSON.stringify([desk.vscode, chat && chat.bound]) : "", () => (live ? [SHELL.vsPill(desk.vscode, chat), SERVE.pairMark(true)] : null));
     ui.forks.set(JSON.stringify([desk.forked_from, desk.forked_to]), () => (desk.forked_from || desk.forked_to.length ? [
       desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null, desk.forked_from && desk.forked_to.length ? " · " : null,
@@ -585,6 +587,40 @@
       h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.model")), pick), h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.thinking")), think),
       h("label", {class: "set-field"}, h("span", {class: "sub"}, t("desk.set.context")), room), switching, h("p", {class: "set-tip"}, t("desk.set.thinking.hint")), otherMode(), hostSetting("autoApprove", t("desk.set.permission")),
       h("p", {class: "sub set-note", title: t("desk.set.note")}, t("desk.set.note")));
+  }
+
+  // "Open to the agent" (1.7.6): a setting of the task at the head of its page, beside Independent review. One chip per environment the protocol knows; clickable only when a
+  // system of the company pack reaches it; prod is never a choice. A click is `harness task allow --env <e> --on` (or --off): no code, it can be closed at once. The agent's writes and
+  // procedures on that environment's listed systems then run without the outbox. Not drawn when no system is listed.
+  const DOOR = ["M3 14V3.5A1.5 1.5 0 0 1 4.5 2h5A1.5 1.5 0 0 1 11 3.5V14", "M11 6h2.5v8H11", "M3 14h10.5", "M8 8.5h.01"];
+  let closeEnvs = null;
+  document.addEventListener("click", (event) => { if (closeEnvs && !event.target.closest(".tk-env")) closeEnvs(); });
+  document.addEventListener("keydown", (event) => { if (closeEnvs && event.key === "Escape") closeEnvs(); });
+  function envButton() {
+    const found = desk.allow;
+    closeEnvs = null;
+    if (!found || !found.envs || !found.envs.length) return null;
+    const open = found.envs.filter((item) => item.open);
+    const can = served() && full.status === "open" && SERVE.runs("task allow");
+    const chips = found.envs.map((item) => {
+      const listed = item.systems.length > 0;
+      const tip = !listed ? t("desk.set.open.none", {env: item.env}) : item.open ? t("desk.set.open.close", {env: item.env, systems: item.systems.join(", ")}) : t("desk.set.open.open", {env: item.env, systems: item.systems.join(", ")});
+      const chip = h("button", {type: "button", class: "chip env" + (item.open ? " on" : ""), "aria-pressed": item.open ? "true" : "false", title: tip, disabled: listed && can ? null : "disabled"}, item.env + (item.open ? " ✓" : ""));
+      chip.addEventListener("click", () => {
+        chips.forEach((node) => { node.disabled = true; });
+        SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: item.open ? "off" : "on", step: "act"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
+      });
+      return chip;
+    });
+    const never = (found.never || []).map((env) => h("span", {class: "chip env never", title: t("desk.set.open.never", {env})}, env));
+    const note = open.length ? h("p", {class: "set-tip"}, t("desk.set.open.note", {envs: open.map((item) => item.env).join(", "), systems: [...new Set(open.flatMap((item) => item.systems))].join(", ")})) : null;
+    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip")), h("div", {class: "chips env-chips"}, chips, never), note,
+      can ? null : h("p", {class: "set-warn"}, t("desk.set.open.cannot")));
+    const button = h("button", {type: "button", class: "rv-btn" + (open.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip")},
+      icon(DOOR, 14), h("span", {class: "rv-name"}, t("desk.set.open")), h("b", null, open.length ? open.map((item) => item.env).join(", ") : t("desk.set.open.off")));
+    const show = (on) => { pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeEnvs = on ? () => show(false) : null; if (on) inView(pop); };
+    button.addEventListener("click", () => show(pop.hidden));
+    return [button, pop];
   }
 
   // "Independent review" (1.6.33): a setting of the task, at the head of its page, not of a message. A click runs `task review set`, as at a terminal; `[review]=n` in a prompt still does the same, and is not shown.

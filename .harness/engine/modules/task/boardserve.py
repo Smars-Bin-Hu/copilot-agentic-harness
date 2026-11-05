@@ -109,7 +109,7 @@ def refresh_seconds(value: Any) -> int:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "autorun on", "recover", "archive", "close"]}
+    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "autorun on", "recover", "archive", "close"]}
 
 
 class Fallback(CommandError):
@@ -566,6 +566,10 @@ class Board:
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
         still = self.idle(action, task)
+        if action == "task allow":  # one click, no code: the person opens an environment for this task, or closes it (1.7.6); the same function as `task allow`
+            result = tasklife.set_allow(self.root, task, str(env_name or ""), str(who or "") == "on", interactive=True)
+            noted(self.root, result.get("task") or task, action)
+            return result
         if action == "test runner":  # one click, no code: the person lets the agent run an environment of the test guide, or takes it back (1.7.2)
             result = testrecord.set_runner(self.root, task, str(env_name or ""), str(who or "") == testrecord.AGENT, interactive=True)
             noted(self.root, result.get("task") or task, action)

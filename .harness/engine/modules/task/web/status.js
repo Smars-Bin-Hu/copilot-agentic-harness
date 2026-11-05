@@ -12,7 +12,7 @@
 const Status = (function () {
   const NS = "http://www.w3.org/2000/svg";
   const PERIOD_MS = 2400;  // every animation of this file has a period that divides this (1.2 s, 2.4 s)
-  const SLOTS = ["model", "context", "run", "stage", "todo"];
+  const SLOTS = ["model", "context", "run", "stage", "todo", "open"];  // open (1.7.6): the environments the person opened for the task, a small green mark
   const COMPACT_FROM = 11;  // more steps than this: segments, not dots, so the ribbon always fits its place
 
   const phase = (node) => { node.style.setProperty("--t", (Date.now() % PERIOD_MS) + "ms"); return node; };
@@ -128,6 +128,13 @@ const Status = (function () {
     if (!chat || !chat.model) return null;
     const full = modelTip(chat, t("board.status.model", {model: chat.model}));
     return marked(h("span", {class: "st-chip"}, modelWords(chat, chat.model_name || shortModel(chat.model))), key, () => full, full, focusable);
+  }
+
+  // The environments the person opened for the task (`task allow`, 1.7.6): "dev open"; the tip lists them.
+  function openMark(envs, key, focusable) {
+    if (!envs || !envs.length) return null;
+    const words = t("board.status.open", {envs: envs.join(", ")});
+    return marked(h("span", {class: "st-chip st-open"}, envs.length === 1 ? envs[0] + " " + t("board.status.open.word") : envs.length + " " + t("board.status.open.word")), key, () => words, words, focusable);
   }
 
   const finite = (value) => typeof value === "number" && isFinite(value);
@@ -364,6 +371,7 @@ const Status = (function () {
       run: (data, key, focus) => runMark(data.chat, key, focus),
       stage: (data, key) => stageMark(data, live, key),
       todo: (data, key, focus) => todoMark(data.todo, key, focus),
+      open: (data, key, focus) => openMark(data.open_envs, key, focus),
     };
     const sigs = {
       model: (data) => data.chat && data.chat.model || "",
@@ -371,6 +379,7 @@ const Status = (function () {
       run: (data) => data.chat && data.chat.state === "busy" ? data.chat.started_at || "" : "",
       stage: (data) => JSON.stringify([data.stages, data.status, stateOf(data, live), data.waiting_why, live]),
       todo: (data) => JSON.stringify(data.todo || null),
+      open: (data) => JSON.stringify(data.open_envs || null),
     };
     function update(data, nextLive) {
       if (nextLive !== undefined) live = Boolean(nextLive);

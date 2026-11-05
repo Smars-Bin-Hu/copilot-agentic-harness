@@ -166,6 +166,16 @@ class ValidateTests(unittest.TestCase):
         self.assertEqual(external.warnings(SYSTEMS), [])
 
 
+class EnvironmentsTests(unittest.TestCase):
+    def test_the_environments_the_listed_systems_reach_never_prod(self) -> None:
+        from core import systems as outside
+
+        found = outside.environments({"cloud": {"reach": {"cli": "c"}, "env_from": [{"pattern": "a", "env": "dev"}, {"pattern": "b", "env": "qat"}], "default_env": "prod"},
+                                      "tickets": {"reach": {"cli": "t"}, "env": "none"}, "db": {"reach": {"cli": "d"}, "env": "dev"}})
+        self.assertEqual(found, {"dev": ["cloud", "db"], "qat": ["cloud"]})
+        self.assertEqual(outside.environments({}), {})
+
+
 class ReachTests(unittest.TestCase):
     """1.7.1: `needs.probe` says whether a system is reachable from this session; the harness keeps no output of it."""
 

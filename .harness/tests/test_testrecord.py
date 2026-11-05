@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from unittest import mock
 
@@ -301,4 +302,35 @@ class RunnerTests(RecordCase):
             self.assertEqual(board.act("test runner", "job", "act", env_name="DEV", who="person")["runner"], "person")
             with self.assertRaises(CommandError):
                 boardserve.Board(self.root, False, 8798, ["pause"]).act("test runner", "job", "act", env_name="DEV", who="agent")  # not among the board's actions
+
+
+class OpenEnvironmentTests(RecordCase):
+    """1.7.6: the Task settings field "Open to the agent": which environments a listed system reaches, which are open, and the one-click action of the board."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.root / ".harness" / "policies" / "tools.company.json").write_text(json.dumps({"systems": {"sql": {"reach": {"cli": "sqlcmd"}, "env_from": [{"pattern": "dev", "env": "dev"}, {"pattern": "qat", "env": "qat"}]}}}), encoding="utf-8")
+
+    def test_the_view_lists_the_environments_with_their_systems_and_what_is_open(self) -> None:
+        from modules.task import taskboard, tasklife
+
+        found = taskdesk.allow_view(self.root, self.data("job"))
+        self.assertEqual([(item["env"], item["systems"], item["open"]) for item in found["envs"]], [("dev", ["sql"], False), ("ist", [], False), ("qat", ["sql"], False)])
+        self.assertEqual(found["never"], ["prod"])
+        tasklife.set_allow(self.root, "job", "dev", True, interactive=True)
+        found = taskdesk.allow_view(self.root, self.data("job"))
+        self.assertTrue(found["envs"][0]["open"] and found["envs"][0]["since"])
+        rows, _problems = taskboard.board_rows(self.root, False, 0, (), rewrite=False)
+        self.assertEqual(next(row for row in rows["tasks"] if row["name"] == "job")["open_envs"], ["dev"])
+        (self.root / ".harness" / "policies" / "tools.company.json").unlink()
+        self.assertEqual(taskdesk.allow_view(self.root, self.data("job"))["envs"], [])  # no system listed: the field is not drawn
+
+    def test_the_board_opens_and_closes_with_one_click(self) -> None:
+        board = boardserve.Board(self.root, False, 8798, ["task allow"])
+        with mock.patch.object(boardserve.Board, "idle", return_value=False):
+            found = board.act("task allow", "job", "act", env_name="dev", who="on")
+            self.assertEqual((found["on"], self.data("job")["allow_env"].keys().__len__()), (True, 1))
+            self.assertEqual(board.act("task allow", "job", "act", env_name="dev", who="off")["on"], False)
+            with self.assertRaises(CommandError):
+                board.act("task allow", "job", "act", env_name="prod", who="on")
 

@@ -125,6 +125,18 @@ def warnings(systems: Dict[str, Any]) -> List[str]:
     return found
 
 
+def environments(systems: Dict[str, Any]) -> Dict[str, List[str]]:
+    """The environments the listed systems reach, `{env: [system names]}`, from `env`, `env_from` and `default_env`; prod and none left out (nothing is opened there).
+    For the task page: which environments a person may open for a task (1.7.6)."""
+    found: Dict[str, List[str]] = {}
+    for name, system in (systems or {}).items():
+        envs = {system["env"]} if system.get("env") else {rule["env"] for rule in system.get("env_from") or []} | ({system["default_env"]} if system.get("default_env") else set())
+        for env in sorted(envs):
+            if env not in (PROD, "none"):
+                found.setdefault(env, []).append(name)
+    return found
+
+
 def run_probe(command: str, cwd: Optional[Path] = None) -> Tuple[Optional[int], str]:
     """(exit code, output) of a probe, run in the shell as a person would type it. (None, why) when it could not run or took too long."""
     try:

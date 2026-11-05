@@ -11,7 +11,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import approval, messages, tasks
+from core import systems as outside
+from core import approval, config, messages, tasks
 from core.paths import cli_command, utc_now
 
 from . import autorun, common, evidence, health, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
@@ -110,6 +111,19 @@ def evidence_pictures(folder: Path, env: str) -> List[str]:
         return sorted(f"TEST/evidence/{env.upper()}/{item.name}" for item in where.iterdir() if item.suffix.lower() in mdtree.IMAGE_TYPES and item.is_file() and not item.is_symlink())
     except OSError:
         return []
+
+
+def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
+    """The Task settings field "Open to the agent" (1.7.6): each environment the protocol knows, with the systems of the company pack that reach it (none: the chip
+    cannot be clicked) and whether the person opened it for this task (`task allow`). Prod is listed as never. Empty `envs` when no system is listed: the field is not drawn."""
+    try:
+        systems = config.policy_or_empty(root, "tools").get("systems") or {}
+        reaches = outside.environments(systems) if systems and not outside.validate(systems) else {}
+    except Exception:  # noqa: BLE001 - a broken list is doctor's to report; the field is then not drawn
+        reaches = {}
+    opened = data.get("allow_env") if isinstance(data.get("allow_env"), dict) else {}
+    envs = [{"env": env, "systems": reaches.get(env, []), "open": env in opened, "since": str((opened.get(env) or {}).get("at") or "")} for env in tasklife.ALLOW_ENVS] if reaches else []
+    return {"envs": envs, "never": [outside.PROD]}
 
 
 def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -349,7 +363,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "forked_from": task_ops.name_of(str(data.get("forked_from"))) if data.get("forked_from") else "",
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
+        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data), "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
         "plan_approval": plan_approval(root, task, data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if needs_req(data) and row.get("status") == "open" else 0, "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),

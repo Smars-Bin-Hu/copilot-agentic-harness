@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.6 (2026-11-05)
+
+### Added
+
+- **Open an environment to the agent from the task page.** The head of the task page has the pill **Open to the agent**, beside Independent review: it opens the environments (dev, ist, qat), one chip each, clickable only when a system of the company pack reaches it, green when open; prod is struck through. A click is `harness task allow --env dev --on`, another click closes it; no code. The line under a task's name on the board shows **dev open** while it is. The field is not drawn when no system is listed.
+
 ## 1.7.5 (2026-11-05)
 
 ### Added

@@ -29,6 +29,15 @@ TAIL_BYTES = 1024 * 1024  # `cancelled_at` reads only the end of the file: the b
 NANO = 1e9
 HOST_DECISION = "host_policy"  # a permission the host answered by itself; anything else waited for a person
 COMPACTION_TRIGGERS = ("threshold", "manual")  # `threshold`: the context was nearly full; an older file gives no trigger
+COMPACT_TEXT = "/compact"  # the text of the prompt a compaction the person asked for stands as: Copilot writes no message for it (1.6.113)
+
+
+def asked_compact(start: Dict[str, Any], in_turn: bool) -> bool:
+    """Did the person ask for this compaction (`/compact`, in VS Code or from the board)? Copilot writes no `user.message` for it and, in the files seen, no trigger;
+    one it makes itself because the context is nearly full is `threshold`, or (an older file) comes inside a turn of the agent. `in_turn`: from a message of the main
+    agent's to the end of its turn (a compaction just after a message, before the first turn, is Copilot's too)."""
+    trigger = start.get("trigger")
+    return trigger == "manual" or (trigger != "threshold" and not in_turn)
 
 
 def home() -> Path:
@@ -258,6 +267,12 @@ def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
                 turn_started = message_at = None
                 asked_in_turn = 0.0
                 continue
+            if kind == "session.compaction_start" and asked_compact(data, turn_started is not None or (current is not None and not current.get("compact") and current["turns"] == 0)):
+                current = new_prompt(at)  # a prompt of its own, with the credits that come after it (1.6.113): before, it went into the prompt before it, with no time
+                current["text"], current["compact"] = COMPACT_TEXT, True
+                prompts.append(current)
+                turn_started = message_at = None
+                asked_in_turn = 0.0
             if current is None:
                 continue
             if kind.startswith(("assistant.", "tool.")):
@@ -315,6 +330,9 @@ def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
             elif kind == "session.compaction_complete":
                 current["compactions"].append(compaction(compacting, data, at))
                 compacting = {}
+                if current.get("compact"):  # its own prompt: the time of the model call that summed up the chat
+                    current["end"] = at
+                    current["model_s"] = current["turn_s"] = max(0.0, at - current["at"])
             elif kind == "session.usage_record":
                 spent = data.get("usage") if isinstance(data.get("usage"), dict) else {}
                 mark: Dict[str, Any] = {"at": at}

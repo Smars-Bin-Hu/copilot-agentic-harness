@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.113 (2026-11-05)
+
+### Changed
+
+- **A `/compact` you send shows on Live and has its own line in Time and usage.** Copilot writes no message for it, so Live showed nothing, and the report put it into the prompt before it, with no time. Now it is a line of its own, from the board's Compact or typed in VS Code: its time, its credits and how many messages were summed up. It has no rewind. The report counts it apart from your prompts. A compaction Copilot makes by itself when the context is nearly full stays in its round, as before.
+- Its credits come from Copilot's next running total. When Copilot writes that total only after your next message, they go to that message, as before.
+
+**Introductory material**: `docs/04-reference.md` (Earlier rounds) says how a `/compact` shows. The quick start and the skills are not changed.
+
 ## 1.6.112 (2026-11-05)
 
 ### Changed

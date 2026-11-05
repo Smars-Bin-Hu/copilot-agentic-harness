@@ -147,6 +147,7 @@ The Live tab lists the last 5 prompts of the chat, oldest first. **Show _n_ olde
 
 - **Kept:** the prompt, all the text the agent wrote in that round, the names of the tools. **Left out:** thinking, tool output and what a subagent wrote. Those stay in VS Code.
 - **Where it comes from:** Copilot's own `events.jsonl`, read only, so it works with VS Code closed. The harness never deletes Copilot's files.
+- **A `/compact` you send** (from the board or typed in VS Code) is a line of its own: its time, its credits and how many messages Copilot summed up. It has no rewind. A compaction Copilot makes by itself, when the context is nearly full, stays in the round it happened in.
 - **When a task closes** the rounds are saved in `.task/transcript.jsonl`, and a closed task reads that file.
 - **After an archive** the file is deleted once `transcript.keep_days` in `task.json` has passed (30; 0 keeps it). This runs at each archive and when the board starts, for the folder in `archive_to`. The other files of the task stay.
 

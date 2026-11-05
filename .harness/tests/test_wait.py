@@ -79,6 +79,15 @@ class WaitTests(HarnessTestCase):
         with self.assertRaises(CommandError):
             self.wait(until="(")
 
+    def test_a_query_with_escaped_quotes_inside_run_is_read_whole(self) -> None:
+        """Hand test 2026-11-05: `-Q \"SET NOCOUNT ON; SELECT ...\"` inside `--run "..."` was cut at the escaped quote and split at the `;`, so the read counted as a write."""
+        systems = {"sql": {"reach": {"cli": "sqlcmd"}, "env": "dev", "verbs": [{"pattern": r"\binto\b|\binsert\b", "verb": "write"}, {"pattern": r"\b(?:select|set\s+nocount)\b", "verb": "read"}]}}
+        command = 'harness wait --run "sqlcmd -S h,1433 -U sa -Q \\"SET NOCOUNT ON; SELECT status FROM dbo.job_log WHERE job_name = N\'x\'\\"" --until "DONE" --every 30'
+        judged = external.classify(command, systems)
+        self.assertEqual([(action.verb, decision) for action, decision in judged], [("read", "allow")])
+        self.assertIn("SELECT status FROM dbo.job_log", judged[0][0].text)
+        self.assertEqual([(action.verb, decision) for action, decision in external.classify(command.replace("SELECT status", "SELECT * INTO dbo.t"), systems)], [("write", "outbox")])
+
     def test_the_gate_sees_through_harness_wait_and_judges_the_inner_command(self) -> None:
         """The agent runs `harness wait --run "..."` in the terminal: the hook classifies the command inside, so a read is allowed and a write is not."""
         read = 'python3 .harness/engine/cli.py wait --run "cloudctl --sub dev show --name j" --until "DONE" --out .workspace/sandbox/tasks/job/RUNS/w.txt'

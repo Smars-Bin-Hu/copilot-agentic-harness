@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.2 (2026-11-04)
+
+### Added
+
+- **The agent can run a test environment itself, when you let it.** The test guide may say `Runner: agent` under an environment (the agent proposes it for an environment whose systems are listed and reachable). On the Test tab, each environment says who runs it, with **Let the agent run DEV** (one click, no code; **Back to me** undoes it), or `harness task test runner --env DEV --agent` in your terminal. Then the gate lets the agent's `task`-level calls to the systems of that environment through for this task (a test task has no plan: this grant is what stands for it), the agent runs the steps in the terminal, saves what came back whole, judges the criteria and records the run with `--run-by agent`: the run says it was the agent's, in the results file and in `LOG.md`. The other environments are handed over to you as before. Without the grant, the gate stops the calls and such a record is refused.
+
 ## 1.7.1 (2026-11-04)
 
 ### Added

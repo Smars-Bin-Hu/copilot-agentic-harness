@@ -128,7 +128,7 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
     """A call to a system the company listed under `systems` (tools.override.json), or None.
 
     `{action, decision, passes, approved}`. `decision` is what the policy says (external.py); `passes` is whether the call goes
-    through: `allow`, or `task` in a task whose plan the person approved (an `outbox` call passes later, when `check_external`
+    through: `allow`, or `task` in a task whose plan the person approved, or in a test task for an environment the person let the agent run (an `outbox` call passes later, when `check_external`
     finds the person's approval: then `approved` is set). No list, or a list that does not validate, means no rule here:
     doctor and `tools check` report the break, and the gate does not guess what a broken policy meant (a hook that fails
     itself must not hurt normal work).
@@ -146,8 +146,14 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
     passes = decision == external.ALLOW
     if decision == external.TASK:
         data = _open_task(ctx)
-        passes = bool(data and tasks.plan_approved(ctx.root, data["task"], data))
+        passes = bool(data and (tasks.plan_approved(ctx.root, data["task"], data) or _test_granted(data, action.env)))
     return {"action": action, "decision": decision, "passes": passes, "approved": False}
+
+
+def _test_granted(data: Dict[str, Any], env: str) -> bool:
+    """A test task has no plan: the person's grant of an environment to the agent (`task test runner --agent`, 1.7.2) is what lets a `task`-level call of that environment through."""
+    found = data.get("test_runner") if isinstance(data.get("test_runner"), dict) else {}
+    return data.get("kind") == "test" and found.get(str(env).upper()) == "agent"
 
 
 def _open_task(ctx: Context) -> Optional[Dict[str, Any]]:

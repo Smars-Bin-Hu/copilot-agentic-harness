@@ -60,7 +60,7 @@ from core.paths import board_serve_file, board_serve_port, utc_now
 
 from core import company, reinstall, setup as core_setup, shortcmd, skillboard
 
-from . import chatrounds
+from . import chatrounds, testrecord
 from . import kbview
 from . import setupjob
 from . import taskfileedit
@@ -109,7 +109,7 @@ def refresh_seconds(value: Any) -> int:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "autorun on", "recover", "archive", "close"]}
+    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "autorun on", "recover", "archive", "close"]}
 
 
 class Fallback(CommandError):
@@ -554,8 +554,8 @@ class Board:
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
-    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None) -> Dict[str, Any]:
-        """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once."""
+    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "") -> Dict[str, Any]:
+        """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only."""
         if action in ALL_AT_ONCE:
             if "pause" not in self.actions:
                 raise CommandError(say("serve.action.off", action=action))
@@ -566,6 +566,10 @@ class Board:
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
         still = self.idle(action, task)
+        if action == "test runner":  # one click, no code: the person lets the agent run an environment of the test guide, or takes it back (1.7.2)
+            result = testrecord.set_runner(self.root, task, str(env_name or ""), str(who or "") == testrecord.AGENT, interactive=True)
+            noted(self.root, result.get("task") or task, action)
+            return result
         if action == "review set":  # one click, no code: the same function as `task review set`; the cap and the history are its own
             result = taskreview.set_by_person(self.root, task, n if isinstance(n, int) and not isinstance(n, bool) else -1, interactive=True)
             noted(self.root, result.get("task") or task, action)
@@ -1464,7 +1468,7 @@ def handler_for(board: Board) -> type:
             if action not in FREE and not board.paired(self.token()):
                 return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
             try:
-                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"))
+                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")))
             except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                 return self.answer(409, {"error": str(error)})
             print(say("serve.did", action=action, task=task_ops.name_of(task) if task else "-"), flush=True)

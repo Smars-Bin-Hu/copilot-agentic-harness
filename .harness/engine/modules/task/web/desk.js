@@ -1184,13 +1184,29 @@
     }));
   }
 
+  // Who runs an environment (1.7.2): the guide may propose the agent; only the person lets it, with one click (no code), and can take it back. Served pages only.
+  function runnerLine(env) {
+    const who = env.runner || {proposed: "person", granted: false};
+    const word = who.granted ? t("desk.test.runner.agent") : who.proposed === "agent" ? t("desk.test.runner.proposed") : t("desk.test.runner.person");
+    const line = h("p", {class: "sub runner"}, tag(word, who.granted ? "good" : who.proposed === "agent" ? "hot" : ""));
+    if (served() && full.status === "open" && SERVE.runs("test runner")) {
+      const button = h("button", {type: "button", class: "chip" + (who.granted ? "" : " on"), title: t("desk.test.runner.hint", {env: env.name})}, who.granted ? t("desk.test.runner.back") : t("desk.test.runner.let", {env: env.name}));
+      button.addEventListener("click", () => {
+        button.disabled = true;
+        SERVE.post("/api/act", {action: "test runner", task: desk.name, env: env.name, runner: who.granted ? "person" : "agent", step: "act"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
+      });
+      line.append(" ", button);
+    }
+    return line;
+  }
+
   function envResults(env) {
     const verdict = env.verdict ? tag(env.verdict, env.verdict === "PASS" ? "good" : env.verdict === "FAIL" ? "bad" : "hot") : tag(env.waits ? t("desk.test.waits") : t("desk.test.noresult"), env.waits ? "hot" : "");
     const body = env.results ? h("article", {class: "md"}, runTabs("env:" + env.name, env.results.blocks, env.runs, false) || blocks(env.results.blocks), env.results.cut ? h("p", {class: "sub"}, t("desk.cut")) : null, evidenceThumbs(env))
       : h("p", {class: "sub"}, env.waits ? t("desk.test.waiting", {env: env.name}) : t("desk.test.noresult"));
     return h("section", {class: "round " + (env.state === "failed" ? "fail" : env.state === "done" ? "pass" : "")},
       h("div", {class: "round-head"}, h("strong", null, env.name), " ", verdict, env.file ? [" ", h("span", {class: "sub"}, "TEST/" + env.file)] : null,
-        env.ignored.length ? [" ", tag(t("desk.test.ignored", {files: env.ignored.join(", ")}), "hot")] : null), body);
+        env.ignored.length ? [" ", tag(t("desk.test.ignored", {files: env.ignored.join(", ")}), "hot")] : null), runnerLine(env), body);
   }
 
   // The Files tab: what is in REQ/, REF/, DEV/ and RUNS/ (sub-folders too). The list is in the page; a file comes when it is opened (a saved copy has the small ones in it).

@@ -373,6 +373,21 @@ class GateExternalTaskTests(TaskCase):
         self.assertEqual(self.term("cloudctl --sub dev create --name x"), {})
         self.assertEqual(self.term("cloudctl --sub dev delete x")["permissionDecision"], "deny")  # task does not open a destroy
 
+    def test_in_a_test_task_the_grant_of_an_environment_stands_for_the_plan(self) -> None:
+        """1.7.2: a test task has no plan; the person letting the agent run DEV (`task test runner`) lets a `task`-level call of dev through, and of dev only."""
+        from modules.task import testrecord
+
+        self.configure()
+        self.new(name="t-test", kind="test")
+        (self.root / ".workspace" / "sandbox" / "tasks" / "t-test" / "TEST-GUIDE.md").write_text("# G\n\n## DEV\n\nRunner: agent\n\n## QAT\n\nrun\n", encoding="utf-8")
+        self.assertEqual(self.term("cloudctl --sub dev create --name x")["permissionDecision"], "deny")  # proposed in the guide is not granted
+        testrecord.set_runner(self.root, "t-test", "DEV", True, interactive=True)
+        self.assertEqual(self.term("cloudctl --sub dev create --name x"), {})
+        self.assertEqual(self.term("cloudctl --sub qat create --name x")["permissionDecision"], "deny")  # another environment: not granted
+        self.assertEqual(self.term("cloudctl --sub dev delete x")["permissionDecision"], "deny")  # the grant opens the task level only, never a destroy
+        testrecord.set_runner(self.root, "t-test", "DEV", False, interactive=True)
+        self.assertEqual(self.term("cloudctl --sub dev create --name x")["permissionDecision"], "deny")
+
 
 if __name__ == "__main__":
     unittest.main()

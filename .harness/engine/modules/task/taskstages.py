@@ -25,6 +25,7 @@ WRITES_BACK = ("dev", "kb")
 DEFAULT_ENVS = ("DEV", "IST", "UAT")
 GUIDE = "TEST-GUIDE.md"
 ENV_HEADING = re.compile(r"^##\s+([A-Za-z][A-Za-z0-9_-]{0,11})\s*$", re.MULTILINE)  # `## DEV`; the template's `## <DEV>` is not one
+RUNNER_LINE = re.compile(r"^\s*\**Runner\**\s*:\s*\**\s*(agent|person)\b", re.IGNORECASE | re.MULTILINE)  # `Runner: agent` in an environment's part of the guide: the agent proposes to run it itself (1.7.2)
 VERDICT = re.compile(r"Verdict for[^:\n]*:\s*\**\s*(PASS|FAIL|NEEDS MORE)", re.IGNORECASE)
 
 
@@ -103,6 +104,30 @@ def test_results(root: Path, task: str) -> tuple:
         if env not in found or stamp >= newest[env]:
             found[env], newest[env] = (verdicts[-1], path), stamp
     return guide, envs, found
+
+
+def guide_parts(guide: str, envs: List[str]) -> Dict[str, str]:
+    """Each environment's part of the guide, `{ENV: text}`: from its `## ENV` heading to the next one. An environment with no heading has no part."""
+    found: Dict[str, str] = {}
+    names = {env.upper() for env in envs}
+    at = None
+    for line in guide.splitlines():
+        heading = ENV_HEADING.match(line)
+        if heading and heading.group(1).upper() in names:
+            at = heading.group(1).upper()
+            found[at] = ""
+        elif at:
+            found[at] += line + "\n"
+    return found
+
+
+def proposed_runners(guide: str, envs: List[str]) -> Dict[str, str]:
+    """The runner each environment's part of the guide proposes (`Runner: agent` or `Runner: person`), `{ENV: runner}`; person when the part says nothing."""
+    out: Dict[str, str] = {}
+    for env, part in guide_parts(guide, envs).items():
+        found = RUNNER_LINE.search(part)
+        out[env] = found.group(1).lower() if found else "person"
+    return out
 
 
 def env_files(root: Path, task: str, envs: List[str]) -> Dict[str, List[Path]]:

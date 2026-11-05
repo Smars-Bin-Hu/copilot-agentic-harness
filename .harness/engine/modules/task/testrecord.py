@@ -5,6 +5,11 @@ works out the verdict of the environment from the rows (any FAIL: FAIL; else any
 evidence), adds a `## Run N` at the END of `TEST/results-<environment>.md` (the board reads the last `Verdict for` line), puts the user's words in
 as they were given, updates `TEST/summary.md` and `LOG.md`, takes the handoff mark of that environment away, and syncs the defects.
 What it does not write is judgement in words: `TASK.md`, `TODO.md`, the defects themselves, the reason in the log.
+
+An environment the agent runs itself (1.7.2): the guide proposes it (`Runner: agent` under the environment's heading), and only the person lets it
+(`task test runner --env DEV --agent`, or the button on the Test tab): `test_runner` in task.json, `{ENV: "agent"}`. Then the gate lets a `task`-level
+call to an outside system of that environment through for this task, and a run recorded with `--run-by agent` is marked as the agent's own.
+Without the grant the agent's calls stop at the gate and such a record is refused.
 """
 
 from __future__ import annotations
@@ -22,6 +27,8 @@ from . import mdtree, task as task_ops, taskstages, testdefects
 from .common import CommandError
 
 VERDICTS = ("PASS", "FAIL", "NEEDS MORE")
+AGENT = "agent"  # the value of `--run-by` that means the agent ran the environment itself, and of `test_runner` in task.json
+RUNNER_KEY = "test_runner"
 MAX_GIVEN_BYTES = 400_000
 MAX_EVIDENCE = 10  # screenshots in one run
 MAX_EVIDENCE_BYTES = 8 * 1024 * 1024
@@ -161,6 +168,44 @@ def log_update(folder: Path, line: str) -> str:
     return "LOG.md"
 
 
+def granted(data: Dict[str, Any], env: str) -> bool:
+    """Did the person let the agent run this environment itself? `env` as the guide names it, or as the gate names it (dev): the names are compared in upper case."""
+    found = data.get(RUNNER_KEY) if isinstance(data.get(RUNNER_KEY), dict) else {}
+    return found.get(str(env).upper()) == AGENT
+
+
+def runners(data: Dict[str, Any], guide: str, envs: List[str]) -> Dict[str, Dict[str, Any]]:
+    """For each environment: what the guide proposes and what the person granted, `{ENV: {proposed, granted, runner}}`; `runner` is agent only with the grant."""
+    proposed = taskstages.proposed_runners(guide, envs)
+    return {env: {"proposed": proposed.get(env.upper(), "person"), "granted": granted(data, env), "runner": AGENT if granted(data, env) else "person"} for env in envs}
+
+
+def set_runner(root: Path, raw_task: str, env: str, agent: bool, interactive: Optional[bool] = None) -> Dict[str, Any]:
+    """The person lets the agent run an environment itself, or takes it back (the chips of the Test tab, `task test runner`). No code is typed: it can be changed back,
+    and the gate still judges every call. The environment must be one of the guide's."""
+    task_ops.person("task test runner", interactive, typed=False)
+    task = task_ops.resolve(root, raw_task)
+    data = tasks.read(root, task)
+    if data.get("kind") != "test":
+        raise CommandError(say("task.test.kind", name=task_ops.name_of(task)))
+    _guide, envs, _found = taskstages.test_results(root, task)
+    chosen = next((name for name in envs if name.upper() == " ".join(str(env).split()).upper()), "")
+    if not chosen:
+        raise CommandError(say("task.test.env", env=env, envs=", ".join(envs)))
+    with task_ops.locked(root, task) as fresh:
+        task_ops.require_open(fresh)
+        before = granted(fresh, chosen)
+        held = fresh.get(RUNNER_KEY) if isinstance(fresh.get(RUNNER_KEY), dict) else {}
+        if agent:
+            held[chosen.upper()] = AGENT
+        else:
+            held.pop(chosen.upper(), None)
+        fresh[RUNNER_KEY] = held
+        if before != agent:
+            task_ops.note(fresh, "test-runner", f"{chosen}: {'agent' if agent else 'person'}")
+    return {"task": task, "env": chosen, "runner": AGENT if agent else "person", "changed": before != agent, "next": say("task.test.runner.agent" if agent else "task.test.runner.person", env=chosen)}
+
+
 def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str], run_by: str = "", follow_up: str = "", ran_file: str = "", evidence: Optional[List[str]] = None) -> Dict[str, Any]:
     task = task_ops.resolve(root, raw_task)
     data = tasks.read(root, task)
@@ -173,6 +218,9 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
         raise CommandError(say("task.test.env", env=env, envs=", ".join(envs)))
     if not rows:
         raise CommandError(say("task.test.rows"))
+    by_agent = run_by.strip().lower() == AGENT
+    if by_agent and not granted(data, chosen):
+        raise CommandError(say("task.test.agent_not_allowed", env=chosen))
     parsed = [parse_row(row) for row in rows]
     given = read_given(root, given_file) if given_file else ""
     if not given and not evidence:
@@ -187,11 +235,12 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
     number = last_run(before) + 1
     now = utc_now()
     pictures = save_evidence(folder, chosen, number, list(evidence or []))
+    who = say("task.test.run_by_agent", env=chosen) if by_agent else cell(run_by) or "the user"
     section = [
         "", f"## Run {number}", "",
-        f"Run by: {cell(run_by) or 'the user'}. Recorded {local_stamp()}.", "",
+        f"Run by: {who}. Recorded {local_stamp()}.", "",
         *(["### What was run", "", *fenced(ran), ""] if ran else []),
-        *(["### As the user gave them", "", *fenced(given), ""] if given else []),
+        *([("### As the agent saved them" if by_agent else "### As the user gave them"), "", *fenced(given), ""] if given else []),
         *(["### Screenshots", "", *[line for item in pictures for line in (f"![{cell(item['caption']).replace(']', ')')}]({item['relative']})", "", f"{cell(item['caption'])} (file `{item['name']}`, sha256 {item['sha'][:12]})", "")]] if pictures else []),
         "### Judgement", "", "| Criterion | Evidence | Verdict |", "| --- | --- | --- |",
         *[f"| {cell(row['criterion'])} | {cell(row['evidence']) or '-'} | {row['verdict']} |" for row in parsed], "",
@@ -206,7 +255,7 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
             warnings.append(say("task.test.order", env=chosen, earlier=earlier))
     count = {word: sum(1 for row in parsed if row["verdict"] == word) for word in VERDICTS}
     summary = summary_update(folder, chosen, verdict, now[:10], name)
-    log = log_update(folder, f"- {now[:10]}: test {chosen}, run {number}: {verdict} ({count['PASS']} of {len(parsed)} criteria pass). Results: TEST/{name}.")
+    log = log_update(folder, f"- {now[:10]}: test {chosen}, run {number}{' (run by the agent)' if by_agent else ''}: {verdict} ({count['PASS']} of {len(parsed)} criteria pass). Results: TEST/{name}.")
     cleared = False
     with task_ops.locked(root, task) as fresh:
         handed = fresh.get("handoff")
@@ -216,7 +265,7 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
             cleared = True
         elif isinstance(handed, dict):
             warnings.append(say("task.test.other_handoff", handed=handed.get("env", ""), env=chosen))
-        task_ops.note(fresh, "test-record", f"{chosen} run {number} {verdict}")
+        task_ops.note(fresh, "test-record", f"{chosen} run {number} {verdict}" + (" by the agent" if by_agent else ""))
     defects = testdefects.sync(root, task)
     warnings += defects["warnings"]
     _guide, _envs, after = taskstages.test_results(root, task)
@@ -228,7 +277,7 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
     else:
         step = say("task.test.next.more", env=chosen)
     return {
-        "task": task, "env": chosen, "run": number, "verdict": verdict, "criteria": {"pass": count["PASS"], "fail": count["FAIL"], "needs_more": count["NEEDS MORE"]},
+        "task": task, "env": chosen, "run": number, "run_by": AGENT if by_agent else "person", "verdict": verdict, "criteria": {"pass": count["PASS"], "fail": count["FAIL"], "needs_more": count["NEEDS MORE"]},
         "file": f"TEST/{name}", "evidence": [f"TEST/{item['relative']}" for item in pictures], "summary": summary, "log": log, "handoff_cleared": cleared, "defects": defects if defects["file"] else None,
         "warnings": warnings, "next": step,
     }

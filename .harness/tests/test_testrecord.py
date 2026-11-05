@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 from test_tasklife import BASE, LifeCase
 
-from core import tasks
-from modules.task import taskdesk, taskstages, testrecord
+from core import messages, tasks
+from modules.task import boardserve, task as task_ops, taskdesk, taskstages, testrecord
 from modules.task.common import CommandError
 
 GUIDE = "# Guide\n\n## DEV\n\nrun\n\n## IST\n\nrun\n\n## UAT\n\nrun\n"
@@ -244,3 +245,60 @@ class CommandLine(RecordCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RunnerTests(RecordCase):
+    """1.7.2: the guide proposes who runs an environment; only the person lets the agent, and a run by the agent is marked as its own."""
+
+    GUIDE = "# Guide\n\n## DEV\n\nRunner: agent\n\nrun\n\n## IST\n\n**Runner**: person\n\nrun\n\n## UAT\n\nrun\n"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.folder().joinpath("TEST-GUIDE.md").write_text(self.GUIDE, encoding="utf-8")
+
+    def test_the_guide_proposes_and_the_page_shows_who_runs_each_environment(self) -> None:
+        self.assertEqual(taskstages.proposed_runners(self.GUIDE, ["DEV", "IST", "UAT"]), {"DEV": "agent", "IST": "person", "UAT": "person"})
+        envs = {item["name"]: item["runner"] for item in taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))["envs"]}
+        self.assertEqual(envs["DEV"], {"proposed": "agent", "granted": False, "runner": "person"})  # a proposal is not a grant
+        self.assertEqual(envs["IST"]["runner"], "person")
+
+    def test_only_a_person_at_a_terminal_grants_and_the_grant_can_be_taken_back(self) -> None:
+        with self.assertRaises(CommandError):
+            testrecord.set_runner(self.root, "job", "DEV", True, interactive=False)  # an agent's terminal
+        found = testrecord.set_runner(self.root, "job", "dev", True, interactive=True)
+        self.assertEqual((found["env"], found["runner"], found["changed"]), ("DEV", "agent", True))
+        self.assertEqual(self.data("job")["test_runner"], {"DEV": "agent"})
+        self.assertEqual(testrecord.set_runner(self.root, "job", "DEV", True, interactive=True)["changed"], False)
+        envs = {item["name"]: item["runner"] for item in taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))["envs"]}
+        self.assertEqual(envs["DEV"], {"proposed": "agent", "granted": True, "runner": "agent"})
+        self.assertIn("DEV", task_ops.next_step(self.root, f"{BASE}/job", self.data("job")))
+        self.assertIn("--run-by agent", task_ops.next_step(self.root, f"{BASE}/job", self.data("job")))
+        back = testrecord.set_runner(self.root, "job", "DEV", False, interactive=True)
+        self.assertEqual((back["runner"], back["changed"], self.data("job")["test_runner"]), ("person", True, {}))
+        with self.assertRaises(CommandError):
+            testrecord.set_runner(self.root, "job", "PROD", True, interactive=True)  # not an environment of the guide
+        self.assertEqual([event["what"] for event in self.data("job")["events"] if event["what"] == "test-runner"], ["test-runner", "test-runner"])
+
+    def test_a_run_by_the_agent_needs_the_grant_and_is_marked_as_its_own(self) -> None:
+        with self.assertRaises(CommandError) as refused:
+            self.record("DEV", run_by="agent")
+        self.assertIn("task test runner --env DEV --agent", str(refused.exception))
+        testrecord.set_runner(self.root, "job", "DEV", True, interactive=True)
+        found = self.record("DEV", run_by="Agent")
+        self.assertEqual((found["run_by"], found["verdict"]), ("agent", "PASS"))
+        text = self.results("DEV")
+        self.assertIn("Run by: " + messages.text("task.test.run_by_agent", env="DEV"), text)
+        self.assertIn("### As the agent saved them", text)
+        self.assertIn("(run by the agent)", self.folder().joinpath("LOG.md").read_text(encoding="utf-8"))
+        self.assertEqual(self.record("IST", run_by="the user, today")["run_by"], "person")  # IST is not granted: a person's run as before
+        self.assertIn("### As the user gave them", self.results("IST"))
+
+    def test_the_board_grants_with_one_click_and_no_code(self) -> None:
+        board = boardserve.Board(self.root, False, 8798, ["test runner"])
+        with mock.patch.object(boardserve.Board, "idle", return_value=False):  # the agent has stopped: the person may change who runs
+            found = board.act("test runner", "job", "act", env_name="DEV", who="agent")
+            self.assertEqual((found["runner"], self.data("job")["test_runner"]), ("agent", {"DEV": "agent"}))
+            self.assertEqual(board.act("test runner", "job", "act", env_name="DEV", who="person")["runner"], "person")
+            with self.assertRaises(CommandError):
+                boardserve.Board(self.root, False, 8798, ["pause"]).act("test runner", "job", "act", env_name="DEV", who="agent")  # not among the board's actions
+

@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import approval, messages, tasks
 from core.paths import cli_command, utc_now
 
-from . import autorun, common, health, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, tasktrace
+from . import autorun, common, health, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
 DECISIONS = ("confirm-req", "approve-plan", "approve-promote")  # the person's decisions that move a task on
@@ -122,11 +122,13 @@ def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, A
         handed = str((data.get("handoff") or {}).get("env") or "").upper()
         out, at = [], False
         files = taskstages.env_files(root, task, envs)
+        runners = testrecord.runners(data, guide, envs)
         for env in envs:
             verdict, path = results.get(env.upper(), ("", None))
             state = "done" if verdict == "PASS" else "failed" if verdict == "FAIL" else "now" if not at else "todo"
             at = at or state == "now"
             out.append({"name": env, "verdict": verdict, "state": state, "file": path.name if path else "", "results": read_doc(path, "TEST") if path else None, "waits": bool(handed) and env.upper() == handed,
+                        "runner": runners[env],  # who runs this environment: what the guide proposes, and whether the person let the agent (1.7.2)
                         "pictures": evidence_pictures(tasks.task_dir(root, task), env),  # the evidence files of the environment, for a row of thumbnails
                         "runs": taskstages.verdicts_in(taskstages.read(path)) if path else [],  # every verdict line of the file, in order
                         "ignored": [other.name for other in files.get(env.upper(), []) if path and other != path]})  # other files of the environment: older, not counted

@@ -113,6 +113,46 @@
     return a;
   }
 
+  // An evidence citation in a document (1.7.8): `[E7]` is a chip (green edge: the agent ran it; grey: the person; red: no such run in this task). Its title has the facts; a click opens
+  // the window with the command, the output and where it is cited. The chips are drawn only where the task's evidence is known (`desk.evidence`).
+  const CITED = /\[(E\d+)\]/g;
+  const evidenceOf = (id) => (desk.evidence || []).find((item) => item.id === id);
+  function evChip(id) {
+    const item = evidenceOf(id);
+    const chip = h("button", {type: "button", class: "ev" + (item ? (item.by === "agent" ? " agent" : "") : " missing"),
+      title: item ? t("desk.evidence.tip", {env: item.env, by: item.by === "agent" ? t("desk.evidence.by.agent") : t("desk.evidence.by.person"), at: (item.at || "").slice(0, 16).replace("T", " "), kind: item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run})}) : t("desk.evidence.missing", {id})}, id);
+    if (item) chip.addEventListener("click", () => evidenceWindow(item));
+    return chip;
+  }
+  function withEvidence(text) {
+    if (!desk.evidence || !text.includes("[E")) return text;
+    const out = [];
+    let from = 0;
+    for (const found of text.matchAll(CITED)) {
+      out.push(text.slice(from, found.index), evChip(found[1]));
+      from = found.index + found[0].length;
+    }
+    out.push(text.slice(from));
+    return out;
+  }
+  function evidenceWindow(item) {
+    const copy = h("button", {type: "button", class: "act", disabled: item.command ? null : "disabled"}, t("desk.outbox.copy"));
+    copy.addEventListener("click", () => { navigator.clipboard.writeText(item.command).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
+    const open = h("button", {type: "button", class: "act hot"}, t("desk.evidence.open"));
+    const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const cited = item.cited_in.length ? item.cited_in.map((name, index) => { const b = h("button", {type: "button", class: "chip"}, name); b.addEventListener("click", () => { view.close(); fileOpen = name; goTab("files"); draw(true); }); return [index ? " " : null, b]; }) : t("desk.evidence.uncited");
+    const fact = (label, value) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), typeof value === "string" ? h("code", null, value) : value);
+    const view = SERVE.dialog([h("h2", null, item.id + " · " + item.env + " · " + (item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run}))),
+      h("div", {class: "tk-call-facts"}, fact(t("desk.evidence.by"), item.by === "agent" ? tag(t("desk.evidence.by.agent"), "good") : tag(t("desk.evidence.by.person"), "")), fact(t("desk.evidence.at"), (item.at || "").slice(0, 16).replace("T", " ")), fact(t("desk.evidence.file"), item.file), fact(t("desk.evidence.cited"), h("span", null, cited))),
+      item.layout ? h("div", {class: "cmd-scroll"}, commandNodes(item.layout)) : h("p", {class: "sub"}, t("desk.evidence.nocommand")),
+      h("p", null, h("b", null, t("desk.evidence.output")), " ", h("span", {class: "sub"}, t("desk.evidence.output.note"))),
+      item.output ? h("div", {class: "cmd-scroll"}, h("pre", {class: "cmd-script"}, item.output), item.output_cut ? h("p", {class: "sub"}, t("desk.cut")) : null) : h("p", {class: "sub"}, t("desk.evidence.nooutput")),
+      h("div", {class: "row"}, open, copy, close)]);
+    view.box.classList.add("wide");
+    open.addEventListener("click", () => { view.close(); fileOpen = item.file; goTab("files"); draw(true); });
+    close.addEventListener("click", view.close);
+  }
+
   function inline(spans) {
     return spans.map((span) => {
       if (placeLinks && span.t === "code") return placeLink(span.v, h("code", null, span.v)) || h("code", null, span.v);
@@ -122,12 +162,12 @@
         for (const found of span.v.matchAll(PLACE_IN_TEXT)) {
           const link = placeLink(found[0], found[0]);
           if (!link) continue;
-          out.push(span.v.slice(from, found.index), link);
+          out.push(withEvidence(span.v.slice(from, found.index)), link);
           from = found.index + found[0].length;
         }
-        return [...out, span.v.slice(from)];
+        return [...out, withEvidence(span.v.slice(from))];
       }
-      if (span.t === "text") return span.v;
+      if (span.t === "text") return withEvidence(span.v);
       if (span.t === "br") return h("br");
       if (span.t === "code") return h("code", null, span.v);
       if (span.t === "b") return h("strong", null, inline(span.c));
@@ -1589,14 +1629,17 @@
     const items = desk.evidence || [];
     if (!items.length) return null;
     const rows = items.map((item) => {
-      const open = h("button", {type: "button", class: "chip", title: item.file}, item.id);
-      open.addEventListener("click", () => { fileOpen = item.file; if (!fileEdit.path) fileEdit.error = ""; draw(true); });
-      return h("tr", null, h("td", null, open), h("td", null, item.env), h("td", null, tag(item.by === "agent" ? t("desk.evidence.by.agent") : t("desk.evidence.by.person"), item.by === "agent" ? "good" : "")),
+      const window_ = h("button", {type: "button", class: "ico", title: t("desk.evidence.see")}, "⤢");
+      window_.addEventListener("click", () => evidenceWindow(item));
+      const file = h("button", {type: "button", class: "ico", title: t("desk.evidence.open")}, "▤");
+      file.addEventListener("click", () => { fileOpen = item.file; if (!fileEdit.path) fileEdit.error = ""; draw(true); });
+      const cited = item.cited_in.length ? item.cited_in.map((name, index) => { const b = h("button", {type: "button", class: "chip"}, name); b.addEventListener("click", () => { fileOpen = name; if (!fileEdit.path) fileEdit.error = ""; draw(true); }); return [index ? " " : null, b]; }) : t("desk.evidence.uncited");
+      return h("tr", {class: item.cited_in.length ? "" : "uncited"}, h("td", null, evChip(item.id)), h("td", null, item.env), h("td", null, tag(item.by === "agent" ? t("desk.evidence.by.agent") : t("desk.evidence.by.person"), item.by === "agent" ? "good" : "")),
         h("td", {class: "sub"}, item.at ? item.at.slice(0, 16).replace("T", " ") : ""), h("td", {class: "sub"}, item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run})),
-        h("td", {class: "sub"}, item.cited_in.length ? item.cited_in.join(", ") : t("desk.evidence.uncited")));
+        h("td", {class: "sub"}, cited), h("td", {class: "ev-tools"}, window_, " ", file));
     });
     return h("details", {class: "evidence", open: ""}, h("summary", null, t("desk.evidence.title", {n: items.length})), h("p", {class: "sub"}, t("desk.evidence.hint")),
-      h("div", {class: "scroll"}, h("table", null, h("thead", null, h("tr", null, h("th", null, "E"), h("th", null, t("desk.evidence.env")), h("th", null, t("desk.evidence.by")), h("th", null, t("desk.evidence.at")), h("th", null, t("desk.evidence.run")), h("th", null, t("desk.evidence.cited")))), h("tbody", null, rows))));
+      h("div", {class: "scroll"}, h("table", null, h("thead", null, h("tr", null, h("th", null, "E"), h("th", null, t("desk.evidence.env")), h("th", null, t("desk.evidence.by")), h("th", null, t("desk.evidence.at")), h("th", null, t("desk.evidence.run")), h("th", null, t("desk.evidence.cited")), h("th", null))), h("tbody", null, rows))));
   }
 
   // The Intake tab (1.5.45): the documents of a requirement go into REQ/ here (a program turns Word and Excel into Markdown and CSV: no AI), are trimmed in a text box, and

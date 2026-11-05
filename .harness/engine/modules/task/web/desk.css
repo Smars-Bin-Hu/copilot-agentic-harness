@@ -181,3 +181,8 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 .cmd-scroll{max-height:min(50vh,520px);overflow:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:8px;background:var(--track);margin:6px 0 10px}
 .cmd-fmt,.cmd-script{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.55;padding:10px 12px;white-space:pre;margin:0;min-width:max-content}
 .cmd-line.in{padding-left:2em}.cmd-prog{font-weight:700}.cmd-opt{color:var(--soft)}.cmd-val{color:var(--ink)}.cmd-block{padding:4px 0 4px 4em;white-space:pre-wrap;color:var(--good)}.cmd-fmt .kw,.cmd-script .kw{font-weight:650}
+/* an evidence citation (1.7.8): a chip in the text, the window on a click; the table's row tools */
+.ev{display:inline-flex;align-items:center;gap:4px;font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:0 7px;height:20px;border-radius:6px;border:1px solid var(--line2);background:var(--track);color:var(--ink);cursor:pointer;vertical-align:1px}
+.ev.agent{border-color:var(--good-line)}.ev.missing{border-color:var(--bad);color:var(--bad);text-decoration:line-through;cursor:default}
+.ico{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--soft);font:inherit;font-size:12px;cursor:pointer;vertical-align:middle}.ico:hover{color:var(--ink);border-color:var(--line2)}
+.evidence tr.uncited td{color:var(--soft)}.evidence .ev-tools{white-space:nowrap}.evidence .chip{height:22px;font-size:12px;padding:0 8px}

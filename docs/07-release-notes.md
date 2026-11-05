@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.8 (2026-11-05)
+
+### Added
+
+- **An evidence citation is a chip.** In every document the task page renders (REQ, PLAN, RCA, LOG, the report), `[E7]` becomes a small chip: a green edge when the agent ran it, grey when you did, red and struck through when no such run is recorded in the task. Its tip says the environment, who ran it, when and which run; a click opens a window with the command laid out line by line, the output as saved (whole, scrolling both ways), the file, and the documents that cite it, each a button that opens it. The Evidence table on the Files tab has the same chips and two icons on each row: the window, and the results file.
+
 ## 1.7.7 (2026-11-05)
 
 ### Added

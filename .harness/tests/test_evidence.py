@@ -61,6 +61,39 @@ class RunTests(EvidenceCase):
         self.assertEqual([item["id"] for item in evidence.listing(self.root, f"{BASE}/job")], ["E1"])
 
 
+class WindowTests(EvidenceCase):
+    """1.7.8: the listing carries each run's command (laid out) and output, for the window of a citation; the page turns [E7] into a chip."""
+
+    def test_the_listing_reads_the_command_and_the_output_of_each_run(self) -> None:
+        ran = self.job / "RUNS" / "DEV" / "ran.txt"
+        ran.write_text('sqlcmd -S h,1433 -E -h -1 -Q "SELECT COUNT(*) FROM dbo.t"\n', encoding="utf-8")
+        self.record(run_by="agent", ran_file=str(ran))
+        found = evidence.listing(self.root, f"{BASE}/job")[0]
+        self.assertEqual(found["command"], 'sqlcmd -S h,1433 -E -h -1 -Q "SELECT COUNT(*) FROM dbo.t"')
+        self.assertEqual(found["layout"]["program"], "sqlcmd")
+        self.assertEqual((found["output"], found["output_cut"]), ("count\n-----\n2310", False))
+        self.assertIn("agent", found["run_by"].lower())
+        self.given.write_text("x" * 25000, encoding="utf-8")
+        self.record("IST")
+        second = evidence.listing(self.root, f"{BASE}/job")[1]
+        self.assertEqual((len(second["output"]), second["output_cut"], second["command"], second["layout"]), (20000, True, "", None))
+
+    def test_the_page_draws_chips_and_the_window(self) -> None:
+        from core import messages
+        from modules.task import taskhtml
+
+        desk = (taskhtml.WEB / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('const CITED = /\\[(E\\d+)\\]/g;', desk)
+        self.assertIn('if (span.t === "text") return withEvidence(span.v);', desk)
+        self.assertIn('class: "ev" + (item ? (item.by === "agent" ? " agent" : "") : " missing")', desk)
+        self.assertIn('open.addEventListener("click", () => { view.close(); fileOpen = item.file; goTab("files"); draw(true); });', desk)
+        self.assertIn(".ev.missing{border-color:var(--bad)", (taskhtml.WEB / "desk.css").read_text(encoding="utf-8"))
+        en, zh = messages.table("en"), messages.table("zh")
+        for key in ("desk.evidence.tip", "desk.evidence.missing", "desk.evidence.see", "desk.evidence.open", "desk.evidence.output", "desk.evidence.nooutput"):
+            self.assertIn(key, en, key)
+            self.assertIn(key, zh, key)
+
+
 class TestRunTests(LifeCase):
     def test_a_test_run_takes_the_same_counter_and_is_listed_as_a_test_run(self) -> None:
         self.new("job", "test")

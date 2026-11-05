@@ -10,6 +10,24 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.4 (2026-11-05)
+
+### Added
+
+- **A task-level switch for writes in an environment.** `harness task allow --env dev --on`, in your own terminal, opens that environment for one task: the agent's writes and procedures on its listed systems run without a further approval, instead of waiting in the outbox or for a plan. `--off` closes it; the task's close ends it. A destroy is still refused, prod cannot be opened, and every call stays in the log with the mark `opened`. The task's next step tells the agent which environments are open. There is no global switch on purpose: the scope is one task and one environment.
+
+## 1.7.3 (2026-11-05)
+
+### Added
+
+- **The agent gets facts from an environment itself, as evidence.** The skill `generic-evidence-run`: when a task needs a count, a sample, a job's state or the output of a test from DEV, IST or another listed system, the agent runs the exact command in the terminal, saves what came back whole in the task's `RUNS/<ENV>/`, records it with `harness task run record --run-by agent` (any kind of task; a read needs no one's leave) and cites the number it gets. A domain skill that said "write a script for the user to run and bring back" can now say "run it".
+- **Every saved run has one number, `E<n>`**: a run you did, a run the agent did, a test run (`task test record`), in the order they were recorded in the task. The heading of the run says it (`## Run 2 (E7)`), the files cite it as `[E7]`, and the Files tab of the task page lists every number with the environment, who ran it, when, where it is, and which files cite it; a number nobody cites is grey.
+
+### Changed
+
+- **Writes and procedures wait for you by default.** The sample pack holds every environment's `write` and `exec` in the outbox: you read the exact command and approve it once (`harness approve-action`). A team that wants one approval per task for dev writes sets `"write": "task"` in its own pack. A read runs everywhere but prod needs no change.
+- **`task run record` works in a test task too**, for a look-up that is not a test step; the test steps still go through `task test record`.
+
 ## 1.7.2 (2026-11-04)
 
 ### Added

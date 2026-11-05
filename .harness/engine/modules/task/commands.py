@@ -332,6 +332,13 @@ def register_task(subparsers: Any) -> None:
     hand_clear = hand_commands.add_parser("clear", help="the results are back: take the mark away, then work on them")
     hand_clear.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
     hand_clear.set_defaults(handler=lambda a: tasklife.handoff_clear(repo_root(), a.task))
+    allow = commands.add_parser("allow", help="the person opens an environment for one task: the agent's writes and procedures on the listed outside systems of that environment run without a further approval (terminal only; a destroy is still refused, prod cannot be opened)")
+    allow.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+    allow.add_argument("--env", required=True, help="dev, ist or qat")
+    allow_side = allow.add_mutually_exclusive_group(required=True)
+    allow_side.add_argument("--on", action="store_true", help="open it for this task")
+    allow_side.add_argument("--off", action="store_true", help="close it again")
+    allow.set_defaults(handler=lambda a: tasklife.set_allow(repo_root(), a.task, a.env, bool(a.on)), person_only=True)
     auto = commands.add_parser("autorun", help="autorun (beta): the agent goes down TODO.md by itself and stops where a person is needed")
     auto_commands = auto.add_subparsers(dest="autorun_command", required=True)
 

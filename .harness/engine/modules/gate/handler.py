@@ -144,10 +144,21 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
         return None
     action, decision = picked
     passes = decision == external.ALLOW
+    opened = False
     if decision == external.TASK:
         data = _open_task(ctx)
         passes = bool(data and (tasks.plan_approved(ctx.root, data["task"], data) or _test_granted(data, action.env)))
-    return {"action": action, "decision": decision, "passes": passes, "approved": False}
+    if decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes:
+        data = _open_task(ctx)
+        opened = bool(data and _env_opened(data, action.env))  # the person opened this environment for this task (`task allow`, 1.7.4): no further approval
+        passes = opened
+    return {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": opened}
+
+
+def _env_opened(data: Dict[str, Any], env: str) -> bool:
+    """The person opened this environment for the task (`task allow --env <E> --on`, 1.7.4: `allow_env` in task.json, written by tasklife.set_allow). A gate module reads the task's data only."""
+    found = data.get("allow_env") if isinstance(data.get("allow_env"), dict) else {}
+    return str(env).lower() in found
 
 
 def _test_granted(data: Dict[str, Any], env: str) -> bool:
@@ -169,6 +180,8 @@ def external_facts(judged: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     found = {**judged["action"].facts(), "decision": judged["decision"]}
     if judged["approved"]:
         found["approved"] = True  # an outbox call the person approved: it went through once
+    if judged.get("opened"):
+        found["opened"] = True  # the person opened this environment for the task: it went through on that
     return {"external": found}
 
 

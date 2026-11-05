@@ -10,7 +10,7 @@ from unittest import mock
 from typing import Any, Dict, List
 
 from support import HarnessTestCase, pre_tool
-from taskcase import SESSION, TaskCase
+from taskcase import NAME, SESSION, TaskCase
 
 from modules.gate import external
 from modules.gate.external import ALLOW, DENY, DESTROY, EXEC, HUMAN, OUTBOX, READ, TASK, WRITE
@@ -387,6 +387,30 @@ class GateExternalTaskTests(TaskCase):
         self.assertEqual(self.term("cloudctl --sub dev delete x")["permissionDecision"], "deny")  # the grant opens the task level only, never a destroy
         testrecord.set_runner(self.root, "t-test", "DEV", False, interactive=True)
         self.assertEqual(self.term("cloudctl --sub dev create --name x")["permissionDecision"], "deny")
+
+    def test_the_person_opens_an_environment_for_one_task_and_the_switch_lets_writes_through_but_never_a_destroy_or_prod(self) -> None:
+        """1.7.4: `task allow --env dev --on` is the task-level switch: task, outbox and human decisions of that environment pass; deny does not; prod cannot be opened."""
+        from modules.task import tasklife
+
+        self.configure()
+        self.new()
+        with self.assertRaises(Exception):
+            tasklife.set_allow(self.root, NAME, "dev", True, interactive=False)  # an agent's terminal
+        with self.assertRaises(Exception):
+            tasklife.set_allow(self.root, NAME, "prod", True, interactive=True)
+        self.assertEqual(self.term("cloudctl --sub dev create --name x")["permissionDecision"], "deny")  # task level, no plan
+        self.assertEqual(self.term("cloudctl --sub qat run --name j")["permissionDecision"], "deny")  # human
+        found = tasklife.set_allow(self.root, NAME, "DEV", True, interactive=True)
+        self.assertEqual((found["env"], found["on"], found["open"]), ("dev", True, ["dev"]))
+        self.assertEqual(self.term("cloudctl --sub dev create --name x"), {})
+        self.assertEqual(self.term("cloudctl --sub dev run --name j"), {})  # human in dev: opened too
+        self.assertEqual(self.term("cloudctl --sub qat run --name j")["permissionDecision"], "deny")  # another environment
+        self.assertEqual(self.term("cloudctl --sub dev delete x")["permissionDecision"], "deny")  # never a destroy
+        rows = [row["external"] for row in self.session_log(SESSION) if row.get("external")]
+        self.assertEqual([(row["env"], row["verb"], row.get("opened")) for row in rows[-4:]], [("dev", "write", True), ("dev", "exec", True), ("qat", "exec", None), ("dev", "destroy", None)])  # the log says what went through on the switch
+        tasklife.set_allow(self.root, NAME, "dev", False, interactive=True)
+        self.assertEqual(self.term("cloudctl --sub dev create --name x")["permissionDecision"], "deny")
+        self.assertEqual([event["detail"] for event in self.data()["events"] if event["what"] == "allow-env"], ["dev: on", "dev: off"])
 
 
 if __name__ == "__main__":

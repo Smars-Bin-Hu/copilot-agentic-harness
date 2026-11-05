@@ -490,6 +490,39 @@ def handoff(root: Path, raw_task: str, what: str, env: str, detail: str = "") ->
     return {"task": task, "handoff": what, "env": env, "next": say("task.handoff.next"), **defects_synced(root, task)}
 
 
+ALLOW_KEY = "allow_env"
+ALLOW_ENVS = ("dev", "ist", "qat")  # the environments a person may open for a task; prod never, and a system with no environment (`none`) has nothing to open
+
+
+def allowed_env(data: Dict[str, Any], env: str) -> bool:
+    """Did the person open this environment for this task (`task allow --env <E> --on`, 1.7.4)? The gate then lets a write or a procedure of a listed system there through, instead of holding it."""
+    found = data.get(ALLOW_KEY) if isinstance(data.get(ALLOW_KEY), dict) else {}
+    return str(env).lower() in found
+
+
+def set_allow(root: Path, raw_task: str, env: str, on: bool, interactive: Optional[bool] = None) -> Dict[str, Any]:
+    """The person opens an environment for one task (the agent's writes and procedures on the listed systems of that environment run without a further approval), or
+    closes it again. Terminal only, no code: the switch ends with the task and can be turned off at once. A destroy is still refused, prod cannot be opened, and
+    every call still leaves its line in the log."""
+    task_ops.person("task allow", interactive, typed=False)
+    env = " ".join(str(env or "").split()).lower()
+    if env not in ALLOW_ENVS:
+        raise CommandError(say("task.allow.env", env=env or "-", allowed=", ".join(ALLOW_ENVS)))
+    task = task_ops.resolve(root, raw_task)
+    with task_ops.locked(root, task) as data:
+        task_ops.require_open(data)
+        held = data.get(ALLOW_KEY) if isinstance(data.get(ALLOW_KEY), dict) else {}
+        before = env in held
+        if on:
+            held[env] = {"at": utc_now()}
+        else:
+            held.pop(env, None)
+        data[ALLOW_KEY] = held
+        if before != on:
+            task_ops.note(data, "allow-env", f"{env}: {'on' if on else 'off'}")
+    return {"task": task, "env": env, "on": on, "changed": before != on, "open": sorted(held), "next": say("task.allow.on" if on else "task.allow.off", env=env.upper())}
+
+
 def handoff_clear(root: Path, raw_task: str) -> Dict[str, Any]:
     """The person came back with the result: the agent takes the mark away before it works on it."""
     task = task_ops.resolve(root, raw_task)

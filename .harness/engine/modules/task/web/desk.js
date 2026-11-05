@@ -15,8 +15,8 @@
   // The tabs are in five groups (1.6.16): the top row has Live and the groups, the open group has a second row. A group with no tab is not there; a group with one goes straight to it.
   const GROUPS = [
     {id: "live", tabs: ["live"]},
-    {id: "overview", tabs: ["overview", "req", "intake", "design", "rca", "plan", "todo"]},
-    {id: "deliver", tabs: ["changes", "test", "evidence", "review"]},
+    {id: "overview", tabs: ["overview", "req", "intake", "plan", "todo"]},
+    {id: "deliver", tabs: ["changes", "test", "rca", "design", "evidence", "review"]},  // what came out: the product of the kind first (a diff, a test, a conclusion), then the proof and the check (1.7.9)
     {id: "records", tabs: ["log", "history", "trace"]},
     {id: "files", tabs: ["docs", "files"]},
   ];
@@ -72,7 +72,7 @@
     if (desk.past && tab === "plan") return Boolean(doc(FILES.plan));
     if (tab === "design" || tab === "rca") return Boolean(doc(FILES[tab])) || (desk.kind === tab && desk.status === "open");  // a closed task that never wrote it has nothing to show
     if (tab === "plan") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && Boolean(doc(FILES.plan)));
-    if (tab === "changes") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && desk.changes.files.length > 0);
+    if (tab === "changes") return WRITES_BACK.includes(desk.kind);  // a diff is the product of a development task only (1.7.9): a script of an RCA is evidence, not a change
     if (tab === "todo" || tab === "log" || tab === "req") return Boolean(doc(FILES[tab]));
     if (tab === "test") return Boolean(desk.test);
     if (tab === "evidence") return Boolean(desk.evidence && desk.evidence.length);  // the saved runs of the task (1.7.3), a tab of Results (1.7.9)

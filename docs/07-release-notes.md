@@ -10,6 +10,28 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.6.112 (2026-11-05)
+
+### Changed
+
+- **A notice no longer stops the page.** While a window only tells you something ("Started in VS Code" after Go on in a new chat, the New task box once sent), the page under it keeps refreshing: before, it kept showing "waits for you" while the new chat worked, until you closed the window. Keys such as R still wait for the window.
+- **New task shows the task when it is there.** The box says so and offers **Open task**.
+- **Windows and the Say something panel sit over the dock**, and the end of a task page is no longer hidden under the pill or the dock on a narrow screen.
+- **A window's title has no dots** ("answer · task", not "answer... · task").
+- **The refusal after a change of chat says what to do**: the chat of the task changed (perhaps another chat picked it up), nothing was sent, wait a moment and send again; your text is kept.
+
+**Introductory material**: not changed; these are fixes of the board's look and wording.
+
+## 1.6.111 (2026-11-05)
+
+### Changed
+
+- **The board follows a chat you make in VS Code.** When you went on with a task in a new chat of VS Code, and the old chat was one the board made (New task or Go on in a new chat), the board stayed on the old chat: Say something went there, the task said quiet while that chat worked, and Live did not show the new chat. Now it moves to the new chat within seconds of its agent picking the task up.
+- **A send never goes to the chat you left.** In the few seconds after another chat picked the task up, before the board has read that chat, Say something and the other sends are refused ("look at the page again"); a moment later they go to the new chat. A chat that is open but has not picked the task up changes nothing.
+- **A new chat is found while its first turn runs.** A chat the board read before its first model call was read again only when VS Code changed it, which may be at the end of the turn. A chat at work with no Copilot id yet is now read again every few seconds.
+
+**Introductory material**: `docs/02-features.md` (Linked chats) now says that the board follows the chat that picked the task up last. The quick start and the skills are not changed: they do not describe how a chat is linked.
+
 ## 1.6.110 (2026-11-03)
 
 ### Added

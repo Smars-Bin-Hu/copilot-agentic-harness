@@ -314,9 +314,9 @@ const REPLY = (function () {
   // R opens it, Esc closes it. R is a letter: it does nothing while the person types in a field, while a dialog or the palette is open, or with Cmd, Ctrl or Alt.
   document.addEventListener("keydown", (event) => {
     if (!info.show || event.isComposing) return;
-    if (event.key === "Escape" && mine.open && !(typing(event.target) && event.target !== box) && !SERVE.busy() && !(typeof SHELL !== "undefined" && SHELL.isOpen())) { event.preventDefault(); shut(true); return; }
+    if (event.key === "Escape" && mine.open && !(typing(event.target) && event.target !== box) && !SERVE.open() && !(typeof SHELL !== "undefined" && SHELL.isOpen())) { event.preventDefault(); shut(true); return; }
     if ((event.key !== "r" && event.key !== "R") || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-    if (typing(event.target) || SERVE.busy() || (typeof SHELL !== "undefined" && SHELL.isOpen())) return;
+    if (typing(event.target) || SERVE.open() || (typeof SHELL !== "undefined" && SHELL.isOpen())) return;
     event.preventDefault();
     open();
   });

@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 from core import tasks
 
-from . import cmdview
+from . import cmdview, outview
 
 KEY = "evidence_n"
 HEADING = re.compile(r"^## Run (\d+)(?:\s*\((E\d+)\))?\s*$", re.MULTILINE)
@@ -95,6 +95,7 @@ def listing(root: Path, task: str) -> List[Dict[str, Any]]:
                 "by": mark.group(2) if mark else "person", "at": mark.group(3) if mark else "",
                 "file": path.relative_to(folder).as_posix(), "cited_in": [],
                 "command": parts["command"], "layout": cmdview.layout(parts["command"], folder) if parts["command"] else None, "output": parts["output"], "output_cut": parts["output_cut"], "run_by": parts["run_by"],
+                "output_view": outview.layout(parts["output"]) if parts["output"] else None,  # the tables, the notes (1.7.9); the page shows Text too
             })
     if not found:
         return []

@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.9 (2026-11-05)
+
+### Added
+
+- **The output of a run is laid out in the window.** The results file keeps the output as it came; the window of an evidence chip reads it: a block whose second line is dashes is a table (the dash runs give the columns), a framed or `|` table and a tab-separated block are tables too, `(n rows affected)` and `Msg …` lines are notes (an error red), the rest is text. Several result sets are several tables, each in its own tab, with a Notes tab after them; numbers are right-aligned, `NULL` is dim, the head stays while the rows scroll, and a table longer than 200 rows shows the first 200 and says how many there are. **Table / Text** switches to the output whole. Every box scrolls both ways. The harness knows no program here: the reader is generic.
+
 ## 1.7.8 (2026-11-05)
 
 ### Added

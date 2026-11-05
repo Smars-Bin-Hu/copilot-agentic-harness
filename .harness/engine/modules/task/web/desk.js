@@ -145,12 +145,53 @@
     const view = SERVE.dialog([h("h2", null, item.id + " · " + item.env + " · " + (item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run}))),
       h("div", {class: "tk-call-facts"}, fact(t("desk.evidence.by"), item.by === "agent" ? tag(t("desk.evidence.by.agent"), "good") : tag(t("desk.evidence.by.person"), "")), fact(t("desk.evidence.at"), (item.at || "").slice(0, 16).replace("T", " ")), fact(t("desk.evidence.file"), item.file), fact(t("desk.evidence.cited"), h("span", null, cited))),
       item.layout ? h("div", {class: "cmd-scroll"}, commandNodes(item.layout)) : h("p", {class: "sub"}, t("desk.evidence.nocommand")),
-      h("p", null, h("b", null, t("desk.evidence.output")), " ", h("span", {class: "sub"}, t("desk.evidence.output.note"))),
-      item.output ? h("div", {class: "cmd-scroll"}, h("pre", {class: "cmd-script"}, item.output), item.output_cut ? h("p", {class: "sub"}, t("desk.cut")) : null) : h("p", {class: "sub"}, t("desk.evidence.nooutput")),
+      outputPane(item),
       h("div", {class: "row"}, open, copy, close)]);
     view.box.classList.add("wide");
     open.addEventListener("click", () => { view.close(); fileOpen = item.file; goTab("files"); draw(true); });
     close.addEventListener("click", view.close);
+  }
+
+  // The output of a run in the window (1.7.9): the tables the reader found (outview.py), one tab per result set, the notes (an error red), or the text whole. Table / Text is the
+  // person's choice, kept while the page is open; a long table shows its first rows and says how many there are. Every box scrolls both ways.
+  let outMode = "table";
+  const outPick = {};
+  function outputPane(item) {
+    const view = item.output_view;
+    const head = h("p", null, h("b", null, t("desk.evidence.output")), " ", h("span", {class: "sub"}, view && view.kind === "tables" ? t("desk.evidence.output.sets", {sets: view.sets.length, rows: view.rows}) : t("desk.evidence.output.note")));
+    if (!item.output) return [head, h("p", {class: "sub"}, t("desk.evidence.nooutput"))];
+    const text = () => h("div", {class: "cmd-scroll"}, h("pre", {class: "cmd-script"}, item.output), item.output_cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
+    if (!view || view.kind !== "tables") return [head, text()];
+    const body = h("div", null);
+    const draw_ = () => {
+      if (outMode === "text") { body.replaceChildren(text()); return; }
+      const ids = [...view.sets.map((_set, index) => "set" + index), ...(view.notes.length ? ["notes"] : [])];
+      if (!ids.includes(outPick[item.id])) outPick[item.id] = ids[0];
+      const nav = h("nav", {class: "subtabs small"}, ids.map((id) => {
+        const label = id === "notes" ? t("desk.evidence.out.notes", {n: view.notes.length}) : t("desk.evidence.out.set", {n: Number(id.slice(3)) + 1, rows: view.sets[Number(id.slice(3))].total});
+        const button = h("button", {type: "button", class: "subtab" + (id === outPick[item.id] ? " on" : "") + (id === "notes" && view.notes.some((note) => note.error) ? " bad" : "")}, label);
+        button.addEventListener("click", () => { outPick[item.id] = id; draw_(); });
+        return button;
+      }));
+      let pane;
+      if (outPick[item.id] === "notes") {
+        pane = h("div", {class: "out-notes"}, view.notes.map((note) => h("div", {class: "out-note" + (note.error ? " bad" : "")}, note.after ? h("span", {class: "sub"}, t("desk.evidence.out.after", {n: note.after}) + " · ") : null, h("span", {class: "pre"}, note.text))));
+      } else {
+        const set = view.sets[Number(outPick[item.id].slice(3))];
+        const cell = (value, index) => h("td", {class: (set.numeric[index] ? "num" : "") + (value === "NULL" ? " null" : "")}, value);
+        pane = [h("div", {class: "cmd-scroll out-table"}, h("table", null, h("thead", null, h("tr", null, set.columns.map((name, index) => h("th", {class: set.numeric[index] ? "num" : ""}, name)))), h("tbody", null, set.rows.map((row) => h("tr", null, row.map(cell)))))),
+          set.cut ? h("p", {class: "sub"}, t("desk.evidence.out.cut", {shown: set.rows.length, total: set.total})) : null];
+      }
+      body.replaceChildren(...[nav, ...[].concat(pane), view.cut ? h("p", {class: "sub"}, t("desk.cut")) : null].filter(Boolean));
+    };
+    const chips = h("span", {class: "out-pick"}, ["table", "text"].map((mode) => {
+      const chip = h("button", {type: "button", class: "chip" + (outMode === mode ? " on" : ""), "aria-pressed": outMode === mode ? "true" : "false"}, t("desk.evidence.out." + mode));
+      chip.addEventListener("click", () => { outMode = mode; [...chips.children].forEach((node) => { node.classList.toggle("on", node === chip); node.setAttribute("aria-pressed", String(node === chip)); }); draw_(); });
+      return chip;
+    }));
+    head.append(" ", chips);
+    draw_();
+    return [head, body];
   }
 
   function inline(spans) {

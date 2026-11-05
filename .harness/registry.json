@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.7.8",
+  "version": "1.7.9",
   "released": "2026-11-05",
   "copyright": "Smars Hu",
   "contributors": [
@@ -185,6 +185,7 @@
         ".harness/tests/test_testdefects.py",
         ".harness/tests/test_testrecord.py",
         ".harness/tests/test_cmdview.py",
+        ".harness/tests/test_outview.py",
         ".harness/tests/test_evidence.py",
         ".harness/tests/test_writeback_loose_ends.py"
       ],

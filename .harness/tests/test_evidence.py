@@ -78,6 +78,19 @@ class WindowTests(EvidenceCase):
         second = evidence.listing(self.root, f"{BASE}/job")[1]
         self.assertEqual((len(second["output"]), second["output_cut"], second["command"], second["layout"]), (20000, True, "", None))
 
+    def test_the_output_is_laid_out_for_the_window(self) -> None:
+        self.given.write_text("id  name\n--- -----\n1   a\n2   b\n\n(2 rows affected)\n", encoding="utf-8")
+        self.record(run_by="agent")
+        found = evidence.listing(self.root, f"{BASE}/job")[0]["output_view"]
+        self.assertEqual((found["kind"], found["sets"][0]["columns"], found["sets"][0]["rows"], found["notes"][0]["text"]), ("tables", ["id", "name"], [["1", "a"], ["2", "b"]], "(2 rows affected)"))
+        from modules.task import taskhtml
+
+        desk = (taskhtml.WEB / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('["table", "text"].map((mode) =>', desk)  # Table / Text
+        self.assertIn('const ids = [...view.sets.map((_set, index) => "set" + index), ...(view.notes.length ? ["notes"] : [])];', desk)  # one tab per result set, the notes
+        self.assertIn(".out-table thead th{position:sticky;top:0", (taskhtml.WEB / "desk.css").read_text(encoding="utf-8"))
+        self.assertIn(".out-table{max-height:min(55vh,560px)}", (taskhtml.WEB / "desk.css").read_text(encoding="utf-8"))  # inside .cmd-scroll: both ways
+
     def test_the_page_draws_chips_and_the_window(self) -> None:
         from core import messages
         from modules.task import taskhtml

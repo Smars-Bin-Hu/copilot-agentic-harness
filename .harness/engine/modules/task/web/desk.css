@@ -186,3 +186,9 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 .ev.agent{border-color:var(--good-line)}.ev.missing{border-color:var(--bad);color:var(--bad);text-decoration:line-through;cursor:default}
 .ico{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--soft);font:inherit;font-size:12px;cursor:pointer;vertical-align:middle}.ico:hover{color:var(--ink);border-color:var(--line2)}
 .evidence tr.uncited td{color:var(--soft)}.evidence .ev-tools{white-space:nowrap}.evidence .chip{height:22px;font-size:12px;padding:0 8px}
+/* the output of a run in the window (1.7.9): a table per result set with a sticky head, numbers right, NULL dim; the notes; Table / Text */
+.out-pick{display:inline-flex;gap:6px;margin-left:8px;vertical-align:middle}.out-pick .chip{height:24px;font-size:12px}
+.out-table{max-height:min(55vh,560px)}.out-table table{border-collapse:collapse;font-size:12.5px;min-width:max-content}.out-table th,.out-table td{text-align:left;padding:5px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+.out-table thead th{position:sticky;top:0;background:var(--card);color:var(--soft);font-weight:500;font-size:12px;z-index:1}.out-table .num{text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.out-table .null{color:var(--soft)}
+.out-notes{border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px;max-height:min(50vh,520px);overflow:auto}.out-note{padding:4px 0}.out-note .pre{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}.out-note.bad{color:var(--bad)}
+.subtab.bad{color:var(--bad)}

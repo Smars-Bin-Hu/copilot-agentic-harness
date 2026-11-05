@@ -37,18 +37,34 @@ def say(key: str, /, **values: Any) -> str:
     return messages.text(key, **values)
 
 
-def out_path(root: Path, raw: str) -> Optional[Path]:
-    """Where the last output goes: a file inside a task folder, or None for none. Anywhere else is refused: a command of the agent writes in its task only."""
+def task_folder(root: Path, task: str) -> Path:
+    """The folder of the task named, or of the one open task when none is named; the root when there is none (the path is then refused as outside a task).
+    Read with core.tasks only: a gate module does not import the task module."""
+    if task:
+        return tasks.task_dir(root, task if "/" in task else f"{tasks.TASKS_DIR}/{task}")
+    open_tasks = [folder for folder in tasks.folders(root) if (tasks.read(root, folder) or {}).get("status") == "open"]
+    return tasks.task_dir(root, open_tasks[0]) if len(open_tasks) == 1 else root
+
+
+def out_path(root: Path, raw: str, task: str = "") -> Optional[Path]:
+    """Where the last output goes: a file inside a task folder, or None for none. A relative path that does not start at `.workspace/` is read from the task folder
+    (`--task`, else the one open task), so `RUNS/DEV/wait-job.txt` means the task's own (hand test 2026-11-05: the agent wrote it so and was refused). Anywhere else
+    is refused: a command of the agent writes in its task only."""
     if not raw:
         return None
-    path = (root / raw).resolve() if not Path(raw).is_absolute() else Path(raw).resolve()
+    if Path(raw).is_absolute():
+        path = Path(raw).resolve()
+    elif raw.replace("\\", "/").startswith(tasks.TASKS_DIR.split("/")[0] + "/"):
+        path = (root / raw).resolve()
+    else:
+        path = (task_folder(root, task) / raw).resolve()
     inside = (root / tasks.TASKS_DIR).resolve()
     if inside not in path.parents or len(path.relative_to(inside).parts) < 2:
         raise CommandError(say("wait.out_place", folder=tasks.TASKS_DIR))
     return path
 
 
-def run_wait(root: Path, command: str, until: str, every: int = 30, timeout: int = DEFAULT_TIMEOUT, out: str = "", runner: Any = None, clock: Any = time.monotonic, sleep: Any = time.sleep) -> Dict[str, Any]:
+def run_wait(root: Path, command: str, until: str, every: int = 30, timeout: int = DEFAULT_TIMEOUT, out: str = "", task: str = "", runner: Any = None, clock: Any = time.monotonic, sleep: Any = time.sleep) -> Dict[str, Any]:
     if not (EVERY[0] <= every <= EVERY[1]) or not (TIMEOUT[0] <= timeout <= TIMEOUT[1]):
         raise CommandError(say("wait.range", every_min=EVERY[0], every_max=EVERY[1], timeout_min=TIMEOUT[0], timeout_max=TIMEOUT[1]))
     try:
@@ -62,7 +78,7 @@ def run_wait(root: Path, command: str, until: str, every: int = 30, timeout: int
     bad = [action for action, _decision in judged if action.verb != external.READ]
     if bad:
         raise CommandError(say("wait.not_read", verb=bad[0].verb, system=bad[0].system))
-    target = out_path(root, out)
+    target = out_path(root, out, task)
     run = runner or (lambda text: subprocess.run(text, shell=True, cwd=str(root), capture_output=True, text=True, errors="replace", timeout=ROUND_SECONDS))
     started = clock()
     rounds = 0

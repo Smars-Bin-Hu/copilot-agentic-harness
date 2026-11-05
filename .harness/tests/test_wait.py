@@ -66,10 +66,23 @@ class WaitTests(HarnessTestCase):
         self.assertEqual(self.calls, [])
 
     def test_the_output_file_must_be_inside_a_task_folder(self) -> None:
-        for bad in (".harness/policies/x.txt", "README.md", ".workspace/sandbox/tasks/wait.txt", "/tmp/wait.txt"):
+        for bad in (".harness/policies/x.txt", "README.md", ".workspace/sandbox/tasks/wait.txt", "/tmp/wait.txt", "RUNS/DEV/wait.txt"):  # the last: no task to read it from here
             with self.assertRaises(CommandError):
                 self.wait(out=bad)
         self.assertEqual(self.wait(out="")["out"], "")  # none is fine
+
+    def test_a_path_from_the_task_folder_means_the_tasks_own_file(self) -> None:
+        """Hand test 2026-11-05: the agent wrote `--out RUNS/DEV/wait-vs.txt`, as the skill says, and was refused because it was read from the root."""
+        data = pre_tool("w", "run_in_terminal", {"command": "ls", "explanation": "t", "isBackground": False})
+        data["cwd"] = str(self.root)
+        self.hook(data)
+        completed = self.cli("task", "new", "job2", "--kind", "rca", "--session-id", "w")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        found = self.wait(out="RUNS/DEV/wait.txt", task="job2")
+        self.assertEqual(found["out"], ".workspace/sandbox/tasks/job2/RUNS/DEV/wait.txt")
+        self.assertTrue((self.root / found["out"]).is_file())
+        with self.assertRaises(CommandError):
+            self.wait(out="../../x.txt", task="job2")  # out of the task
 
     def test_the_bounds_and_the_pattern_are_checked(self) -> None:
         with self.assertRaises(CommandError):

@@ -195,4 +195,7 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 .out-notes{border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px;max-height:min(50vh,520px);overflow:auto}.out-note{padding:4px 0}.out-note .pre{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}.out-note.bad{color:var(--bad)}
 .subtab.bad{color:var(--bad)}
 .evidence{display:block;min-width:0;max-width:100%;overflow:hidden}.evidence>.scroll{display:block;min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}.evidence table{width:max-content;min-width:100%}
-.tk-why{color:var(--hot);font-size:12.5px}.tk-why:empty{display:none}
+/* the next thing to press on a held-call card pulses: View until it was opened, the code box until a code is typed; still under Lite and reduced motion */
+.tk-call .act.pulse,.tk-call input.pulse{animation:callpulse 1.8s ease-in-out infinite;border-color:var(--hot-dot)}
+@keyframes callpulse{0%,100%{box-shadow:0 0 0 0 var(--hot-line)}50%{box-shadow:0 0 0 6px transparent}}
+html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){.tk-call .pulse{animation:none}}

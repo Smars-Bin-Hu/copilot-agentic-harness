@@ -1,0 +1,90 @@
+"""Evidence (1.7.3): every saved run of a task has one number, E<n>, whoever ran it and whichever file holds it; the page lists them with where they are cited."""
+
+from __future__ import annotations
+
+import unittest
+
+from test_tasklife import BASE, LifeCase
+
+from modules.task import evidence, runrecord, testdefects, testrecord
+from modules.task.common import CommandError
+
+
+class EvidenceCase(LifeCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.new("job", "rca")
+        self.job = self.root / BASE / "job"
+        (self.job / "RUNS" / "DEV").mkdir(parents=True)
+        self.given = self.job / "RUNS" / "DEV" / "given.txt"
+        self.given.write_text("count\n-----\n2310\n", encoding="utf-8")
+
+    def record(self, env: str = "DEV", **extra):
+        return runrecord.record(self.root, "job", env, str(self.given), **extra)
+
+
+class RunTests(EvidenceCase):
+    def test_a_run_by_the_agent_is_numbered_and_marked_as_its_own_in_any_kind_of_task(self) -> None:
+        first = self.record(run_by="agent")
+        self.assertEqual((first["evidence_id"], first["run_by"], first["run"]), ("E1", "agent", 1))
+        self.assertIn("[E1]", first["next"])
+        self.assertNotIn("screenshot", " ".join(first["warnings"]).lower())  # the agent's run needs no picture
+        text = (self.job / "RUNS" / "DEV" / "results.md").read_text(encoding="utf-8")
+        self.assertIn("## Run 1 (E1)", text)
+        self.assertIn("<!-- evidence E1 by agent at ", text)
+        self.assertIn("### As the agent saved them", text)
+        self.assertIn("2310", text)
+        second = self.record("IST", run_by="the user, this morning")
+        self.assertEqual((second["evidence_id"], second["run_by"]), ("E2", "person"))  # one counter for the task, whoever ran it
+        self.assertIn("### As the user gave them", (self.job / "RUNS" / "IST" / "results.md").read_text(encoding="utf-8"))
+        self.assertEqual(self.data("job")["evidence_n"], 2)
+        self.assertEqual(testrecord.last_run((self.job / "RUNS" / "DEV" / "results.md").read_text(encoding="utf-8")), 1)  # the number in the heading does not break the count of runs
+        self.assertEqual(self.record(run_by="agent")["run"], 2)
+
+    def test_the_listing_knows_each_run_and_where_it_is_cited(self) -> None:
+        self.record(run_by="agent")
+        self.record("IST")
+        (self.job / "LOG.md").write_text("- 2026-11-05: 2,310 rows [E1]\n", encoding="utf-8")
+        (self.job / "RCA.md").write_text("# RCA\n\nThe count was 2,310 [E1]; see also [E1] and [E9].\n", encoding="utf-8")
+        found = evidence.listing(self.root, f"{BASE}/job")
+        self.assertEqual([(item["id"], item["env"], item["by"], item["kind"], item["run"], item["file"]) for item in found],
+                         [("E1", "DEV", "agent", "run", 1, "RUNS/DEV/results.md"), ("E2", "IST", "person", "run", 1, "RUNS/IST/results.md")])
+        self.assertEqual(found[0]["cited_in"], ["LOG.md", "RCA.md"])
+        self.assertEqual(found[1]["cited_in"], [])
+        self.assertTrue(found[0]["at"].startswith("20"))
+
+    def test_a_results_file_from_before_the_numbers_is_left_out_and_breaks_nothing(self) -> None:
+        (self.job / "RUNS" / "DEV" / "results.md").write_text("# Run results: DEV\n\n## Run 1\n\nRun by: the user.\n", encoding="utf-8")
+        self.assertEqual(evidence.listing(self.root, f"{BASE}/job"), [])
+        found = self.record(run_by="agent")
+        self.assertEqual((found["run"], found["evidence_id"]), (2, "E1"))
+        self.assertEqual([item["id"] for item in evidence.listing(self.root, f"{BASE}/job")], ["E1"])
+
+
+class TestRunTests(LifeCase):
+    def test_a_test_run_takes_the_same_counter_and_is_listed_as_a_test_run(self) -> None:
+        self.new("job", "test")
+        folder = self.root / BASE / "job"
+        folder.joinpath("TEST-GUIDE.md").write_text("# Guide\n\n## DEV\n\nrun\n\n## IST\n\nrun\n", encoding="utf-8")
+        (folder / "TEST").mkdir(exist_ok=True)
+        given = folder / "TEST" / "given.txt"
+        given.write_text("ok\n", encoding="utf-8")
+        (folder / "RUNS" / "DEV").mkdir(parents=True)
+        look = folder / "RUNS" / "DEV" / "given.txt"
+        look.write_text("12 rows\n", encoding="utf-8")
+        first = runrecord.record(self.root, "job", "DEV", str(look), run_by="agent")  # a look-up in a test task: allowed now, same counter
+        self.assertEqual(first["evidence_id"], "E1")
+        second = testrecord.record(self.root, "job", "DEV", str(given), ["c::ok::PASS"])
+        self.assertEqual((second["evidence_id"], second["verdict"]), ("E2", "PASS"))
+        text = folder.joinpath("TEST", "results-DEV.md").read_text(encoding="utf-8")
+        self.assertIn("## Run 1 (E2)", text)
+        self.assertIn("**Verdict for DEV: PASS**", text)
+        found = evidence.listing(self.root, f"{BASE}/job")
+        self.assertEqual([(item["id"], item["kind"], item["env"], item["file"]) for item in found], [("E1", "run", "DEV", "RUNS/DEV/results.md"), ("E2", "test", "DEV", "TEST/results-DEV.md")])
+        self.assertEqual(testdefects.verdicts(self.root, f"{BASE}/job")["DEV"][0], "PASS")  # the verdict is still read from the file
+        with self.assertRaises(CommandError):
+            testrecord.record(self.root, "job", "DEV", str(given), ["c::ok::PASS"], run_by="agent")  # a test run by the agent still needs the grant
+
+
+if __name__ == "__main__":
+    unittest.main()

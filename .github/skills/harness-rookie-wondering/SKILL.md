@@ -42,7 +42,7 @@ How it divides the work with `harness-rookie-quick-start`: quick-start takes a b
 | 2 | instructions | `AGENTS.md`, always-on rules, rules that apply by file, step-by-step disclosure | [02-instructions.md](references/02-instructions.md) |
 | 3 | skills | What a skill is, how it is found and loaded, how to write one | [03-skills.md](references/03-skills.md) |
 | 4 | agents | `.agent.md`, models, tools, why only the default agent is used day to day | [04-agents.md](references/04-agents.md) |
-| 5 | tools | Built-in tools, the terminal, MCP, harness commands | [05-tools.md](references/05-tools.md) |
+| 5 | tools | Built-in tools, the terminal, MCP, harness commands, outside systems and evidence | [05-tools.md](references/05-tools.md) |
 | 6 | hooks | Events, input and output, how they stop a call, what happens on an error | [06-hooks.md](references/06-hooks.md) |
 | 7 | guardrails | Which files cannot be changed, who can change them, how they are guarded | [07-guardrails.md](references/07-guardrails.md) |
 | 8 | Permissions and sandbox | Asking versus refusing, approval in the terminal, the gate is not a sandbox, admin | [08-permission-sandbox.md](references/08-permission-sandbox.md) |

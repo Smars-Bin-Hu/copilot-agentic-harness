@@ -131,7 +131,7 @@ class Writes(RecordCase):
         second = self.record("IST", "c::e::PASS", follow_up="UAT next")
         self.assertEqual((second["run"], second["verdict"]), (2, "PASS"))
         text = self.results()
-        self.assertEqual([line for line in text.splitlines() if line.startswith("## Run")], ["## Run 1", "## Run 2"])
+        self.assertEqual([line for line in text.splitlines() if line.startswith("## Run")], ["## Run 1 (E1)", "## Run 2 (E2)"])  # the evidence number of the task (1.7.3)
         self.assertIn("2,310 rows.\n## not a heading of ours\n**Verdict for IST: PASS**\n", text, "as given, with its fence")
         self.assertTrue(text.rstrip().endswith("**Verdict for IST: PASS**"), "the last line of the file is the verdict the board reads")
         self.assertIn("Run by: the user, 11:05.", text)

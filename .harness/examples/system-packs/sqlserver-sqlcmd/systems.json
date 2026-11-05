@@ -16,7 +16,7 @@
       ],
       "target": "\\b(?:from|into|update|join)\\s+([\\w.\\[\\]]+)",
       "rules": {
-        "dev": { "read": "allow", "write": "task", "exec": "task", "destroy": "deny" },
+        "dev": { "read": "allow", "write": "outbox", "exec": "outbox", "destroy": "deny" },
         "ist": { "read": "allow", "write": "outbox", "exec": "outbox", "destroy": "deny" },
         "qat": { "read": "allow", "write": "outbox", "exec": "human", "destroy": "deny" }
       },

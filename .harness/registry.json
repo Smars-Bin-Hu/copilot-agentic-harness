@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.7.2",
+  "version": "1.7.3",
   "released": "2026-11-04",
   "copyright": "Smars Hu",
   "contributors": [
@@ -119,6 +119,7 @@
         ".github/skills/generic-workflow-build/",
         ".github/skills/generic-code-standards/",
         ".github/skills/generic-test-guide/",
+        ".github/skills/generic-evidence-run/",
         ".github/skills/generic-req-review/",
         ".harness/standards/code-standards.md",
         ".github/agents/reviewer.agent.md",
@@ -182,6 +183,7 @@
         ".harness/tests/test_rewind.py",
         ".harness/tests/test_testdefects.py",
         ".harness/tests/test_testrecord.py",
+        ".harness/tests/test_evidence.py",
         ".harness/tests/test_writeback_loose_ends.py"
       ],
       "retire_when": "Copilot itself offers task state that follows the task and can be handed over between sessions, with an approval that can hold back a delivery. Then only the gate and promote stay"

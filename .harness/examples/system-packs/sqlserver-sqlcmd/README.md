@@ -2,7 +2,7 @@
 
 A SQL Server that takes the identity of the process (Windows authentication). The agent reaches it with `sqlcmd -E`; no password is ever in a command, a file or the chat.
 
-- `systems.json`: the environment comes from the server name in `-S` (`dev`, `ist`, `qat`; any other name is prod, read only). A `SELECT` is a read and runs; in dev a write or a procedure runs inside a task whose plan was approved (`task`); in ist it waits in the outbox for a person; `DROP` and `TRUNCATE` are refused everywhere. A query whose first verb no pattern names counts as a write.
+- `systems.json`: the environment comes from the server name in `-S` (`dev`, `ist`, `qat`; any other name is prod, read only). A `SELECT` is a read and runs, in any task or none. A write or a procedure waits in the outbox in every environment: the person reads the exact command and approves it once (`harness approve-action`). A team that prefers one approval per task for dev writes sets `"write": "task"` there (runs inside a task whose plan was approved, or a test environment the person let the agent run). `DROP` and `TRUNCATE` are refused everywhere. A query whose first verb no pattern names counts as a write.
 - `needs`: the probe asks the server who the session is; `expect` checks the domain; when it fails, `launch` tells the person how to start VS Code so that the identity is there.
 - `launch/start-vscode.cmd`: `runas /netonly` with the account the person types, then VS Code on this folder. Windows only.
 

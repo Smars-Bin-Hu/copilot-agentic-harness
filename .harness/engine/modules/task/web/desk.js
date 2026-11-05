@@ -1150,7 +1150,7 @@
   function runTabs(key, list, verdicts, intro) {
     const parts = {intro: [], runs: []};
     for (const block of list) {
-      const found = block.t === "h" && block.level === 2 ? /^Run (\d+)$/i.exec(plain(block.spans)) : null;
+      const found = block.t === "h" && block.level === 2 ? /^Run (\d+)(?:\s*\(E\d+\))?$/i.exec(plain(block.spans)) : null;  // `Run 2 (E7)`: the evidence number (1.7.3)
       if (found) parts.runs.push({n: Number(found[1]), blocks: []});
       else (parts.runs.length ? parts.runs[parts.runs.length - 1].blocks : parts.intro).push(block);
     }
@@ -1464,9 +1464,25 @@
       may && !editing && !roundDir(open.path) ? h("span", {class: "files-tools on"}, textual ? smallButton(t("desk.files.edit"), () => editFile(open)) : null,
         fixed(open.path, false) ? null : [smallButton(t("desk.files.rename"), () => renameFile(open.path)), smallButton(t("desk.files.delete"), () => deleteFile(open.path), "", "danger")]) : null) : null;
     return [h("p", {class: "hint top"}, t(may ? "desk.files.hint.edit" : "desk.files.hint")), may && working ? h("p", {class: "hint"}, t("desk.files.busy")) : null,
+      evidenceList(),
       h("div", {class: "files"}, h("nav", {class: "files-list", "data-keep": "files-list"}, tools, list),
         h("div", {class: "files-view"}, head, !editing && fileEdit.error && fileEdit.path === "" ? h("div", {class: "bad"}, SERVE.reasons(fileEdit.error)) : null,
           open ? (editing ? fileEditor(open) : fileView(open)) : h("p", {class: "sub"}, t("desk.files.none"))))];
+  }
+
+  // The evidence of the task (1.7.3): every saved run with its number, who ran it and where it is cited. A row opens its results file in the tree.
+  function evidenceList() {
+    const items = desk.evidence || [];
+    if (!items.length) return null;
+    const rows = items.map((item) => {
+      const open = h("button", {type: "button", class: "chip", title: item.file}, item.id);
+      open.addEventListener("click", () => { fileOpen = item.file; if (!fileEdit.path) fileEdit.error = ""; draw(true); });
+      return h("tr", null, h("td", null, open), h("td", null, item.env), h("td", null, tag(item.by === "agent" ? t("desk.evidence.by.agent") : t("desk.evidence.by.person"), item.by === "agent" ? "good" : "")),
+        h("td", {class: "sub"}, item.at ? item.at.slice(0, 16).replace("T", " ") : ""), h("td", {class: "sub"}, item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run})),
+        h("td", {class: "sub"}, item.cited_in.length ? item.cited_in.join(", ") : t("desk.evidence.uncited")));
+    });
+    return h("details", {class: "evidence", open: ""}, h("summary", null, t("desk.evidence.title", {n: items.length})), h("p", {class: "sub"}, t("desk.evidence.hint")),
+      h("div", {class: "scroll"}, h("table", null, h("thead", null, h("tr", null, h("th", null, "E"), h("th", null, t("desk.evidence.env")), h("th", null, t("desk.evidence.by")), h("th", null, t("desk.evidence.at")), h("th", null, t("desk.evidence.run")), h("th", null, t("desk.evidence.cited")))), h("tbody", null, rows))));
   }
 
   // The Intake tab (1.5.45): the documents of a requirement go into REQ/ here (a program turns Word and Excel into Markdown and CSV: no AI), are trimmed in a text box, and

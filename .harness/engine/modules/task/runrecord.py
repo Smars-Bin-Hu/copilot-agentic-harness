@@ -5,6 +5,8 @@ screenshots. This writes them into `RUNS/<ENV>/results.md` the way `task test re
 gave (whole, in a code block) and the screenshots (copied into `RUNS/<ENV>/evidence/`), and takes the handoff mark of that environment away.
 A check of the task judges its `[R…]` items by what is in `RUNS/<ENV>/`. What it does not write is judgement: the agent compares the result with each `[R…]`
 item and says so in `LOG.md` and to the person.
+1.7.3: the agent records a run it did itself the same way, with `--run-by agent` (a read on a listed outside system needs no one's leave; a write ran only
+because the gate let it), in any kind of task; the run gets the task's next evidence number (`evidence.py`), to cite as `[E<n>]`.
 """
 
 from __future__ import annotations
@@ -13,12 +15,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from core import messages, tasks
-from core.paths import cli_command, local_stamp
+from core.paths import cli_command, local_stamp, utc_now
 
-from . import task as task_ops
+from . import evidence as evidence_ids, task as task_ops
 from .common import CommandError
 from .taskinbox import ENV_NAME
-from .testrecord import cell, fenced, last_run, read_given, read_text_file, save_evidence
+from .testrecord import AGENT, cell, fenced, last_run, read_given, read_text_file, save_evidence
 
 RESULTS = "results.md"
 EVIDENCE = "evidence"
@@ -32,8 +34,6 @@ def record(root: Path, raw_task: str, env: str, given_file: str = "", run_by: st
     task = task_ops.resolve(root, raw_task)
     data = tasks.read(root, task)
     task_ops.require_open(data)
-    if data.get("kind") == "test":
-        raise CommandError(say("task.run.kind", name=task_ops.name_of(task)))
     env = " ".join(str(env).split())
     if not ENV_NAME.match(env):
         raise CommandError(say("task.run.env"))
@@ -50,12 +50,16 @@ def record(root: Path, raw_task: str, env: str, given_file: str = "", run_by: st
     path = folder / base / RESULTS
     before = path.read_text(encoding="utf-8-sig", errors="replace") if path.is_file() else f"# Run results: {env}\n"
     number = last_run(before) + 1
+    by_agent = run_by.strip().lower() == AGENT
+    with task_ops.locked(root, task) as fresh:
+        evidence_id = evidence_ids.allocate(fresh)
     pictures = save_evidence(folder, env, number, list(evidence or []), base, EVIDENCE)
+    who = say("task.run.by_agent") if by_agent else cell(run_by) or "the user"
     section = [
-        "", f"## Run {number}", "",
-        f"Run by: {cell(run_by) or 'the user'}. Recorded {local_stamp()}.", "",
+        "", f"## Run {number} ({evidence_id})", "", evidence_ids.marker(evidence_id, AGENT if by_agent else "person", utc_now(), env), "",
+        f"Run by: {who}. Recorded {local_stamp()}.", "",
         *(["### What was run", "", *fenced(ran), ""] if ran else []),
-        *(["### As the user gave them", "", *fenced(given), ""] if given else []),
+        *([("### As the agent saved them" if by_agent else "### As the user gave them"), "", *fenced(given), ""] if given else []),
         *(["### Screenshots", "", *[line for item in pictures for line in (f"![{cell(item['caption']).replace(']', ')')}]({item['relative']})", "", f"{cell(item['caption'])} (file `{item['name']}`, sha256 {item['sha'][:12]})", "")]] if pictures else []),
     ]
     if follow_up.strip():
@@ -69,7 +73,7 @@ def record(root: Path, raw_task: str, env: str, given_file: str = "", run_by: st
             fresh.pop("handoff", None)
             task_ops.note(fresh, "handoff-clear", f"{handed.get('what', '')} {handed.get('env', '')}".strip())
             cleared = True
-        task_ops.note(fresh, "run-record", f"{env} run {number}")
-    warnings = ([] if ran else [say("task.test.missing_ran")]) + ([] if pictures else [say("task.test.missing_screenshot")])
-    return {"task": task, "env": env, "run": number, "file": f"{base}/{RESULTS}", "evidence": [f"{base}/{item['relative']}" for item in pictures], "handoff_cleared": cleared,
-            "warnings": warnings, "next": say("task.run.next", file=f"{base}/{RESULTS}")}
+        task_ops.note(fresh, "run-record", f"{env} run {number} {evidence_id}" + (" by the agent" if by_agent else ""))
+    warnings = ([] if ran else [say("task.test.missing_ran")]) + ([] if pictures or by_agent else [say("task.test.missing_screenshot")])  # the agent's run has no screenshot: its output is the record
+    return {"task": task, "env": env, "run": number, "evidence_id": evidence_id, "run_by": AGENT if by_agent else "person", "file": f"{base}/{RESULTS}", "evidence": [f"{base}/{item['relative']}" for item in pictures], "handoff_cleared": cleared,
+            "warnings": warnings, "next": say("task.run.next", file=f"{base}/{RESULTS}", id=evidence_id)}

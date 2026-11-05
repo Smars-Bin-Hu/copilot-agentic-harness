@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core import messages, tasks
 from core.paths import cli_command, local_stamp, utc_now
 
-from . import mdtree, task as task_ops, taskstages, testdefects
+from . import evidence as evidence_ids, mdtree, task as task_ops, taskstages, testdefects
 from .common import CommandError
 
 VERDICTS = ("PASS", "FAIL", "NEEDS MORE")
@@ -234,10 +234,12 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
     before = path.read_text(encoding="utf-8-sig", errors="replace") if path.is_file() else f"# Results: {chosen}\n"
     number = last_run(before) + 1
     now = utc_now()
+    with task_ops.locked(root, task) as fresh:
+        evidence_id = evidence_ids.allocate(fresh)
     pictures = save_evidence(folder, chosen, number, list(evidence or []))
     who = say("task.test.run_by_agent", env=chosen) if by_agent else cell(run_by) or "the user"
     section = [
-        "", f"## Run {number}", "",
+        "", f"## Run {number} ({evidence_id})", "", evidence_ids.marker(evidence_id, AGENT if by_agent else "person", now, chosen), "",
         f"Run by: {who}. Recorded {local_stamp()}.", "",
         *(["### What was run", "", *fenced(ran), ""] if ran else []),
         *([("### As the agent saved them" if by_agent else "### As the user gave them"), "", *fenced(given), ""] if given else []),
@@ -277,7 +279,7 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
     else:
         step = say("task.test.next.more", env=chosen)
     return {
-        "task": task, "env": chosen, "run": number, "run_by": AGENT if by_agent else "person", "verdict": verdict, "criteria": {"pass": count["PASS"], "fail": count["FAIL"], "needs_more": count["NEEDS MORE"]},
+        "task": task, "env": chosen, "run": number, "evidence_id": evidence_id, "run_by": AGENT if by_agent else "person", "verdict": verdict, "criteria": {"pass": count["PASS"], "fail": count["FAIL"], "needs_more": count["NEEDS MORE"]},
         "file": f"TEST/{name}", "evidence": [f"TEST/{item['relative']}" for item in pictures], "summary": summary, "log": log, "handoff_cleared": cleared, "defects": defects if defects["file"] else None,
         "warnings": warnings, "next": step,
     }

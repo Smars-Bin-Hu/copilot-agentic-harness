@@ -68,7 +68,7 @@ def layout(command: str, folder: Optional[Path] = None) -> Dict[str, Any]:
                     lines.append({"kind": "option", "text": item["text"], "value": ""})
                     lines.append({"kind": "block", "text": nxt["text"]})
                 else:
-                    lines.append({"kind": "option", "text": item["text"], "value": nxt["text"]})
+                    lines.append({"kind": "option", "text": item["text"], "value": nxt["text"], **({"quoted": True} if nxt["quoted"] else {})})  # quoted: the body of the call when there is no block (a short query)
                     if script is None and folder is not None:
                         script = script_of(folder, nxt["text"])
                 index += 2
@@ -77,7 +77,7 @@ def layout(command: str, folder: Optional[Path] = None) -> Dict[str, Any]:
         elif item["quoted"] and (len(item["text"]) >= LONG or "\n" in item["text"]):
             lines.append({"kind": "block", "text": item["text"]})
         else:
-            lines.append({"kind": "arg", "text": item["text"]})
+            lines.append({"kind": "arg", "text": item["text"], **({"quoted": True} if item["quoted"] else {})})
             if script is None and folder is not None:
                 script = script_of(folder, item["text"])
         index += 1

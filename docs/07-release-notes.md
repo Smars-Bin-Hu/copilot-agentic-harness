@@ -15,13 +15,14 @@ To see which version you have: `harness --version`.
 ### Added
 
 - **A held call waits for you for a day, not ten minutes.** The ten minutes are for the approval once you gave it (the agent runs the command once within them, so a stale approval never fires). The request itself, and its card, stay 24 hours, or until you dismiss it or the task closes. The same holds for a git command the gate held.
+- **Evidence is a tab of Results.** The table of saved runs (number, environment, who ran it, when, which run, where cited; the window and the file on each row) sits under Results beside Changes, Test and Review, not on the Files tab. **Copy the query** in the window of a held call or of an evidence chip copies the body: the script the command reads, or the quoted query, also a short one; the command line only when there is neither.
 - **The output of a run is laid out in the window.** The results file keeps the output as it came; the window of an evidence chip reads it: a block whose second line is dashes is a table (the dash runs give the columns), a framed or `|` table and a tab-separated block are tables too, `(n rows affected)` and `Msg …` lines are notes (an error red), the rest is text. Several result sets are several tables, each in its own tab, with a Notes tab after them; numbers are right-aligned, `NULL` is dim, the head stays while the rows scroll, and a table longer than 200 rows shows the first 200 and says how many there are. **Table / Text** switches to the output whole. Every box scrolls both ways. The harness knows no program here: the reader is generic.
 
 ## 1.7.8 (2026-11-05)
 
 ### Added
 
-- **An evidence citation is a chip.** In every document the task page renders (REQ, PLAN, RCA, LOG, the report), `[E7]` becomes a small chip: a green edge when the agent ran it, grey when you did, red and struck through when no such run is recorded in the task. Its tip says the environment, who ran it, when and which run; a click opens a window with the command laid out line by line, the output as saved (whole, scrolling both ways), the file, and the documents that cite it, each a button that opens it. The Evidence table on the Files tab has the same chips and two icons on each row: the window, and the results file.
+- **An evidence citation is a chip.** In every document the task page renders (REQ, PLAN, RCA, LOG, the report), `[E7]` becomes a small chip: a green edge when the agent ran it, grey when you did, red and struck through when no such run is recorded in the task. Its tip says the environment, who ran it, when and which run; a click opens a window with the command laid out line by line, the output as saved (whole, scrolling both ways), the file, and the documents that cite it, each a button that opens it. The Evidence table (on the Files tab then, a tab of Results since 1.7.9) has the same chips and two icons on each row: the window, and the results file.
 
 ## 1.7.7 (2026-11-05)
 
@@ -65,7 +66,7 @@ To see which version you have: `harness --version`.
 ### Added
 
 - **The agent gets facts from an environment itself, as evidence.** The skill `generic-evidence-run`: when a task needs a count, a sample, a job's state or the output of a test from DEV, IST or another listed system, the agent runs the exact command in the terminal, saves what came back whole in the task's `RUNS/<ENV>/`, records it with `harness task run record --run-by agent` (any kind of task; a read needs no one's leave) and cites the number it gets. A domain skill that said "write a script for the user to run and bring back" can now say "run it".
-- **Every saved run has one number, `E<n>`**: a run you did, a run the agent did, a test run (`task test record`), in the order they were recorded in the task. The heading of the run says it (`## Run 2 (E7)`), the files cite it as `[E7]`, and the Files tab of the task page lists every number with the environment, who ran it, when, where it is, and which files cite it; a number nobody cites is grey.
+- **Every saved run has one number, `E<n>`**: a run you did, a run the agent did, a test run (`task test record`), in the order they were recorded in the task. The heading of the run says it (`## Run 2 (E7)`), the files cite it as `[E7]`, and the Evidence tab of the task page (under Results) lists every number with the environment, who ran it, when, where it is, and which files cite it; a number nobody cites is grey.
 
 ### Changed
 

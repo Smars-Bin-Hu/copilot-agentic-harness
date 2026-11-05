@@ -29,7 +29,7 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(lines[1], {"kind": "arg", "text": "wait"})
         self.assertEqual(lines[2]["kind"], "option")
         self.assertEqual(lines[2]["value"], 'sqlcmd -Q "SELECT 1"')
-        self.assertEqual(lines[3], {"kind": "option", "text": "--until", "value": "DONE"})
+        self.assertEqual(lines[3], {"kind": "option", "text": "--until", "value": "DONE", "quoted": True})  # quoted: Copy the query takes this value when there is no block
         self.assertEqual(lines[4], {"kind": "option", "text": "--every", "value": "30"})
         self.assertEqual(cmdview.layout("")["lines"], [])
 

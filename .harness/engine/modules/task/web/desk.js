@@ -16,7 +16,7 @@
   const GROUPS = [
     {id: "live", tabs: ["live"]},
     {id: "overview", tabs: ["overview", "req", "intake", "design", "rca", "plan", "todo"]},
-    {id: "deliver", tabs: ["changes", "test", "review"]},
+    {id: "deliver", tabs: ["changes", "test", "evidence", "review"]},
     {id: "records", tabs: ["log", "history", "trace"]},
     {id: "files", tabs: ["docs", "files"]},
   ];
@@ -75,6 +75,7 @@
     if (tab === "changes") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && desk.changes.files.length > 0);
     if (tab === "todo" || tab === "log" || tab === "req") return Boolean(doc(FILES[tab]));
     if (tab === "test") return Boolean(desk.test);
+    if (tab === "evidence") return Boolean(desk.evidence && desk.evidence.length);  // the saved runs of the task (1.7.3), a tab of Results (1.7.9)
     if (tab === "review") return desk.review.n > 0 || desk.review.rounds.length > 0;
     if (tab === "files") return desk.files.length > 0;
     if (tab === "trace") return Boolean(desk.trace && desk.trace.entries.length);
@@ -137,7 +138,7 @@
   }
   function evidenceWindow(item) {
     const copy = h("button", {type: "button", class: "act", disabled: item.command ? null : "disabled"}, t("desk.outbox.copy"));
-    copy.addEventListener("click", () => { navigator.clipboard.writeText(item.command).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
+    copy.addEventListener("click", () => { navigator.clipboard.writeText(callBody(item)).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });  // the query, as in a held call
     const open = h("button", {type: "button", class: "act hot"}, t("desk.evidence.open"));
     const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const cited = item.cited_in.length ? item.cited_in.map((name, index) => { const b = h("button", {type: "button", class: "chip"}, name); b.addEventListener("click", () => { view.close(); fileOpen = name; goTab("files"); draw(true); }); return [index ? " " : null, b]; }) : t("desk.evidence.uncited");
@@ -1046,8 +1047,9 @@
   function callBody(item) {
     const script = item.layout && item.layout.script;
     if (script && script.text) return script.text;
-    const block = item.layout && item.layout.lines.find((line) => line.kind === "block");
-    return block ? block.text : item.command;
+    const lines = item.layout ? item.layout.lines : [];
+    const block = lines.find((line) => line.kind === "block") || lines.find((line) => line.quoted && (line.kind === "arg" || line.value));  // a long quoted value, or a short one (`-Q "SELECT 1"`)
+    return block ? (block.kind === "option" ? block.value : block.text) : item.command;
   }
   function callWindow(item, onCode) {
     viewedCalls.add(item.code);
@@ -1179,6 +1181,7 @@
     if (tab === "todo") return {name, count: desk.todo.total ? desk.todo.done + "/" + desk.todo.total : ""};
     if (tab === "changes") return {name, count: desk.changes.files.length ? String(desk.changes.files.length) : "", bang: Boolean(desk.commit && !desk.commit.written) || (mine && desk.waiting_why === "promote")};
     if (tab === "test") return {name, count: desk.test.passed + "/" + desk.test.total};
+    if (tab === "evidence") return {name, count: String(desk.evidence.length)};
     if (tab === "review") return {name, count: desk.review.n ? desk.review.passes + "/" + desk.review.n : String(desk.review.rounds.length)};
     if (tab === "history") return {name, count: String(desk.history.length)};
     if (tab === "trace") return {name, count: desk.trace.entries.length + (desk.trace.cut ? "+" : "")};
@@ -1692,27 +1695,25 @@
       may && !editing && !roundDir(open.path) ? h("span", {class: "files-tools on"}, textual ? smallButton(t("desk.files.edit"), () => editFile(open)) : null,
         fixed(open.path, false) ? null : [smallButton(t("desk.files.rename"), () => renameFile(open.path)), smallButton(t("desk.files.delete"), () => deleteFile(open.path), "", "danger")]) : null) : null;
     return [h("p", {class: "hint top"}, t(may ? "desk.files.hint.edit" : "desk.files.hint")), may && working ? h("p", {class: "hint"}, t("desk.files.busy")) : null,
-      evidenceList(),
       h("div", {class: "files"}, h("nav", {class: "files-list", "data-keep": "files-list"}, tools, list),
         h("div", {class: "files-view"}, head, !editing && fileEdit.error && fileEdit.path === "" ? h("div", {class: "bad"}, SERVE.reasons(fileEdit.error)) : null,
           open ? (editing ? fileEditor(open) : fileView(open)) : h("p", {class: "sub"}, t("desk.files.none"))))];
   }
 
-  // The evidence of the task (1.7.3): every saved run with its number, who ran it and where it is cited. A row opens its results file in the tree.
-  function evidenceList() {
+  // The Evidence tab (1.7.3, a tab of Results since 1.7.9): every saved run with its number, who ran it and where it is cited. A row opens the window or its results file in Files.
+  function evidenceTab() {
     const items = desk.evidence || [];
-    if (!items.length) return null;
     const rows = items.map((item) => {
       const window_ = h("button", {type: "button", class: "ico", title: t("desk.evidence.see")}, "⤢");
       window_.addEventListener("click", () => evidenceWindow(item));
       const file = h("button", {type: "button", class: "ico", title: t("desk.evidence.open")}, "▤");
       file.addEventListener("click", () => openRun(item));
-      const cited = item.cited_in.length ? item.cited_in.map((name, index) => { const b = h("button", {type: "button", class: "chip"}, name); b.addEventListener("click", () => { fileOpen = name; if (!fileEdit.path) fileEdit.error = ""; draw(true); }); return [index ? " " : null, b]; }) : t("desk.evidence.uncited");
+      const cited = item.cited_in.length ? item.cited_in.map((name, index) => { const b = h("button", {type: "button", class: "chip"}, name); b.addEventListener("click", () => { fileOpen = name; if (!fileEdit.path) fileEdit.error = ""; goTab("files"); draw(true); }); return [index ? " " : null, b]; }) : t("desk.evidence.uncited");
       return h("tr", {class: item.cited_in.length ? "" : "uncited"}, h("td", null, evChip(item.id)), h("td", null, item.env), h("td", null, tag(item.by === "agent" ? t("desk.evidence.by.agent") : t("desk.evidence.by.person"), item.by === "agent" ? "good" : "")),
         h("td", {class: "sub"}, item.at ? item.at.slice(0, 16).replace("T", " ") : ""), h("td", {class: "sub"}, item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run})),
         h("td", {class: "sub"}, cited), h("td", {class: "ev-tools"}, window_, " ", file));
     });
-    return h("details", {class: "evidence", open: ""}, h("summary", null, t("desk.evidence.title", {n: items.length})), h("p", {class: "sub"}, t("desk.evidence.hint")),
+    return h("div", {class: "evidence"}, h("p", {class: "hint top"}, t("desk.evidence.hint")),
       h("div", {class: "scroll"}, h("table", null, h("thead", null, h("tr", null, h("th", null, "E"), h("th", null, t("desk.evidence.env")), h("th", null, t("desk.evidence.by")), h("th", null, t("desk.evidence.at")), h("th", null, t("desk.evidence.run")), h("th", null, t("desk.evidence.cited")), h("th", null))), h("tbody", null, rows))));
   }
 
@@ -2203,6 +2204,7 @@
     if (current === "changes") return changes();
     if (current === "review") return review();
     if (current === "test" && desk.test) return testing();
+    if (current === "evidence") return evidenceTab();
     if (current === "files") return filesTab();
     if (current === "intake") return intakeTab();
     if (current === "trace") return trace();

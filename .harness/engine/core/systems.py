@@ -61,6 +61,7 @@ SYSTEMS_SCHEMA = {
             },
             "target": {"type": "string"},
             "rules": {"type": "object", "additionalProperties": _RULE_SET},
+            "show": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
             "needs": {
                 "type": "object",
                 "required": ["probe"],
@@ -97,7 +98,7 @@ def validate(systems: Any) -> List[str]:
             if program in owner:
                 errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}; give one of them a `when`")
             owner[program] = name
-        patterns = [("target", system.get("target") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or "")] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs") for index, item in enumerate(system.get(key) or [])]
+        patterns = [("target", system.get("target") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs") for index, item in enumerate(system.get(key) or [])]
         for where, pattern in (item for item in patterns if item[1]):
             try:
                 re.compile(pattern)

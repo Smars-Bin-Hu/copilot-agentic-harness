@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, copilot_events, domainskills, messages, tasks
+from core import config, copilot_events, domainskills, messages, outbox, tasks
 from core.logs import session_log_path
 from core.paths import cli_command, repo_root, utc_now
 from core.state import SUBAGENT_ACTIVE_TTL_SECONDS, admin_on, atomic_write, session, state_lock, state_path
@@ -302,6 +302,9 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
         except OSError:
             written = last_event(data, "confirm-req") or updated
         return {"why": "req", "since": written}  # written, not confirmed: no plan can be approved on it (1.5.30). It waits since the agent wrote it, not since the task was opened
+    held = outbox.pending_for(root, task)
+    if held:
+        return {"why": "outbox", "since": str(held[0].get("created_at") or updated)}  # a call to an outside system waits in the outbox (1.7.7): the agent stopped on it
     handed = data.get("handoff")
     if isinstance(handed, dict) and handed.get("what") in HANDOFFS and handed.get("since"):
         return {"why": str(handed["what"]), "since": str(handed["since"])}  # the agent handed work to the person that only they can do: it stays until the agent clears it

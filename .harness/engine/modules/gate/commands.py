@@ -59,37 +59,12 @@ def approve(
     return {"approved": True, "command": done["command"], "valid_minutes": minutes, "next": say("gate.approve.next")}
 
 
-def approve_action(
-    root: Any,
-    reader: Optional[Callable[[str], str]] = None,
-    interactive: Optional[bool] = None,
-    out: Any = None,
-) -> Dict[str, Any]:
-    """Show the outside calls waiting in the outbox, then approve the one whose code is typed. Terminal only, like `approve-command`."""
-    out = out or sys.stdout
-    if interactive is None:
-        interactive = sys.stdin.isatty() and sys.stdout.isatty()
-    if not interactive:
-        raise CommandError(say("gate.action.terminal_only"))
-    minutes = approvals.minutes(config.load_policy(root, POLICY_NAME))
-    waiting = approvals.pending(root, minutes, file=approvals.ACTIONS)
-    if not waiting:
-        raise CommandError(say("gate.action.none", minutes=minutes))
-    print(say("gate.action.header", minutes=minutes), file=out)
-    for number, item in enumerate(waiting, 1):
-        draft = outbox.draft_of(item)
-        print(say(
-            "gate.action.item", number=number, system=item.get("system", "?"), env=item.get("env", "?"), verb=item.get("verb", "?"),
-            target=f" {item['target']}" if item.get("target") else "", session_id=item["session_id"], created_at=item["created_at"],
-            draft=f"; {draft}" if draft else "",
-        ), file=out)
-        print(f"      {item['command']}", file=out)
-    answer = (reader or input)(say("gate.action.prompt")).strip()
-    done = approvals.approve(root, answer, minutes, file=approvals.ACTIONS) if answer else None
-    if done is None:
-        raise CommandError(say("gate.action.refused"))
-    outbox.mark(Path(root), outbox.draft_of(done), "approved")
-    return {"approved": True, "command": done["command"], "system": done.get("system", ""), "valid_minutes": minutes, "draft": outbox.draft_of(done), "next": say("gate.action.next")}
+def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None) -> Dict[str, Any]:
+    """`harness approve-action`: see core.outbox.approve_action (the board calls the same)."""
+    try:
+        return outbox.approve_action(root, reader, interactive, out)
+    except ValueError as error:
+        raise CommandError(str(error)) from None
 
 
 def cmd_approve_command(args: Any) -> Dict[str, Any]:

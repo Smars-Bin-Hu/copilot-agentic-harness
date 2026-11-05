@@ -905,13 +905,91 @@
   function waitBand() {
     if (desk.past) return pastNote();
     if (!needsCard()) return null;
-    const items = needItems();
+    const items = needItems().filter((item) => item.action !== "approve-action");  // the held calls have cards of their own
     const strong = items.filter((item) => JUMPS[item.action]);
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
-    const cards = strong.map((item, index) => strongCard(item, index ? [] : notes));
-    if (other.length || !strong.length) cards.push(otherCard(other, strong.length ? [] : notes));
+    const cards = (desk.outbox || []).map((item, index) => outboxCard(item, index ? [] : notes));
+    cards.push(...strong.map((item, index) => strongCard(item, index || cards.length ? [] : notes)));
+    if (other.length || (!strong.length && !cards.length)) cards.push(otherCard(other, strong.length || cards.length ? [] : notes));  // the held calls stand for themselves
     return cards;
+  }
+
+  // --- a call to an outside system held in the outbox (1.7.7) -------------------------------------------------------------------------------------------------
+  // The card shows the facts (what, where, the pack's `show` facts, the target) and the first words of the command; View opens the small window with the command laid out line by line
+  // and the file it reads, whole, scrolling. The code is typed on the card, as the design says a person reads the command first: Approve wakes once the window was opened.
+  // Approve is `harness approve-action` with that code (the board's act, no preview); Dismiss takes the call away without running anything.
+  const viewedCalls = new Set();
+  const SQL_WORDS = /\b(select|from|where|insert|into|update|set|delete|merge|exec|execute|create|alter|drop|truncate|table|values|join|on|group by|order by|having|union|with|begin|commit|rollback|tran|declare|if|else|while|top|as|and|or|not|null|is|in|exists|case|when|then|end|nocount)\b/gi;
+  function sqlNodes(text) {
+    const out = [];
+    let last = 0;
+    for (const found of text.matchAll(SQL_WORDS)) {
+      if (found.index > last) out.push(text.slice(last, found.index));
+      out.push(h("b", {class: "kw"}, found[0]));
+      last = found.index + found[0].length;
+    }
+    if (last < text.length) out.push(text.slice(last));
+    return out;
+  }
+  function commandNodes(layout) {
+    const rows = [];
+    for (const line of layout.lines) {
+      if (line.kind === "program") rows.push(h("div", {class: "cmd-line"}, h("span", {class: "cmd-prog"}, line.text)));
+      else if (line.kind === "option") rows.push(h("div", {class: "cmd-line in"}, h("span", {class: "cmd-opt"}, line.text), line.value ? [" ", h("span", {class: "cmd-val"}, line.value)] : null));
+      else if (line.kind === "flag") rows.push(h("div", {class: "cmd-line in"}, h("span", {class: "cmd-opt"}, line.text)));
+      else if (line.kind === "block") rows.push(h("div", {class: "cmd-block"}, sqlNodes(line.text)));
+      else rows.push(h("div", {class: "cmd-line in"}, h("span", {class: "cmd-val"}, line.text)));
+    }
+    return h("div", {class: "cmd-fmt"}, rows);
+  }
+  function callFacts(item) {
+    const fact = (label, value, hot) => (value ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), hot ? tag(value, "hot") : h("code", null, value)) : null);
+    return h("div", {class: "tk-call-facts"},
+      fact(t("desk.outbox.what"), item.verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), " ", tag(item.env, "hot")),
+      ...Object.entries(item.facts || {}).map(([name, value]) => fact(name, value)),
+      fact(t("desk.outbox.target"), item.target),
+      item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t("desk.outbox.lines", {n: item.layout.script.lines}))) : null);
+  }
+  function callWindow(item) {
+    viewedCalls.add(item.code);
+    const copy = h("button", {type: "button", class: "act"}, t("desk.outbox.copy"));
+    copy.addEventListener("click", () => { navigator.clipboard.writeText(item.command).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
+    const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const script = item.layout && item.layout.script;
+    const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), callFacts(item), h("p", {class: "sub"}, t("desk.outbox.asked", {at: item.created_at.slice(0, 16).replace("T", " "), code: item.code})),
+      h("div", {class: "cmd-scroll"}, commandNodes(item.layout)),
+      script ? [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t("desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)] : null,
+      h("p", {class: "sub"}, t("desk.outbox.as_written"), " ", h("code", null, item.command)),
+      h("div", {class: "row"}, copy, close)]);
+    view.box.classList.add("wide");
+    close.addEventListener("click", () => { view.close(); draw(true); });
+  }
+  function outboxCard(item, notes) {
+    const can = served() && canAct() && SERVE.runs("approve-action");
+    const input = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: item.code, "aria-label": t("board.serve.code")});
+    const yes = h("button", {type: "button", class: "act hot big", disabled: can && viewedCalls.has(item.code) ? null : "disabled", title: viewedCalls.has(item.code) ? "" : t("desk.outbox.view_first")}, t("desk.outbox.approve"));
+    const no = h("button", {type: "button", class: "act", disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
+    const view = h("button", {type: "button", class: "act"}, t("desk.outbox.view"));
+    const said = h("div", {class: "bad"});
+    view.addEventListener("click", () => { callWindow(item); yes.disabled = !can; yes.title = ""; });
+    const send = () => {
+      yes.disabled = true; yes.textContent = t("board.serve.working");
+      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim() || item.code}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); yes.disabled = false; yes.textContent = t("desk.outbox.approve"); });
+    };
+    yes.addEventListener("click", send);
+    input.addEventListener("keydown", (event) => { if (isEnter(event) && !yes.disabled) send(); });
+    no.addEventListener("click", () => {
+      no.disabled = true;
+      SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); no.disabled = false; });
+    });
+    const peek = item.command.length > 110 ? item.command.slice(0, 110) + "…" : item.command;
+    return h("section", {class: "tk-need strong tk-call", "data-action": "approve-action", "data-code": item.code},
+      h("div", {class: "tk-need-h"}, tag(t("task.waiting.outbox"), "hot"), h("span", {class: "sub"}, t("desk.outbox.since", {at: item.created_at.slice(11, 16)}), item.draft ? [" · ", h("code", null, item.draft)] : null)),
+      callFacts(item),
+      h("div", {class: "tk-cmd-peek"}, h("code", null, peek), " ", view),
+      notes,
+      h("div", {class: "tk-need-go tk-call-go"}, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), no, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));
   }
 
   // The words for a task that has nothing waiting on it, on the Live tab: closed, not started, quiet, or at work with nothing to decide.

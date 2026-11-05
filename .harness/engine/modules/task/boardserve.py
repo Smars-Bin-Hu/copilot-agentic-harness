@@ -55,7 +55,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
-from core import ahp, company, config, targets, messages, registry, state, tasks, user
+from core import ahp, company, config, targets, messages, registry, state, tasks, user, outbox
 from core.paths import board_serve_file, board_serve_port, utc_now
 
 from core import company, reinstall, setup as core_setup, shortcmd, skillboard
@@ -109,7 +109,7 @@ def refresh_seconds(value: Any) -> int:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "autorun on", "recover", "archive", "close"]}
+    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close"]}
 
 
 class Fallback(CommandError):
@@ -143,6 +143,7 @@ def runner(root: Path, action: str, task: str) -> Callable[..., Dict[str, Any]]:
         "review dismiss": lambda **kw: taskreview.dismiss(root, task, **kw),
         "autorun on": lambda **kw: autorun.turn_on(root, task, **kw),
         "recover": lambda **kw: task_ops.recover(root, task, **kw),
+        "approve-action": lambda **kw: outbox.approve_action(root, **kw),  # a call to an outside system held in the outbox (1.7.7): the person reads the command and types its code
     }  # `review set` is not here: it asks no code (see `Board.act`)
     return table[action]
 
@@ -566,6 +567,13 @@ class Board:
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
         still = self.idle(action, task)
+        if action == "dismiss action":  # the person says no to a held call (1.7.7): the code names it, nothing runs
+            try:
+                result = outbox.dismiss_action(self.root, str(code or ""), interactive=True)
+            except ValueError as error:
+                raise CommandError(str(error)) from None
+            noted(self.root, task, action)
+            return result
         if action == "task allow":  # one click, no code: the person opens an environment for this task, or closes it (1.7.6); the same function as `task allow`
             result = tasklife.set_allow(self.root, task, str(env_name or ""), str(who or "") == "on", interactive=True)
             noted(self.root, result.get("task") or task, action)
@@ -598,8 +606,13 @@ class Board:
                 call(reader=stop, interactive=True, out=out)
             except Preview as asked:
                 return {"screen": [line for line in out.getvalue().splitlines() if line.strip()], "ask": asked.asked}
+            except ValueError as error:
+                raise CommandError(str(error)) from None
             raise CommandError(say("serve.preview.none"))
-        result = call(reader=lambda _asked: code, interactive=True, out=out)
+        try:
+            result = call(reader=lambda _asked: code, interactive=True, out=out)
+        except ValueError as error:  # core.outbox says no with a plain error; the page shows it as a refusal
+            raise CommandError(str(error)) from None
         noted(self.root, result.get("task") or task, action)
         return result
 

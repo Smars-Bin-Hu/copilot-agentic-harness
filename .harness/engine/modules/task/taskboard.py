@@ -114,7 +114,7 @@ def refresh_report(root: Path, task: str) -> None:
         pass
 
 
-ACTIONS_BY_WAIT = {"req": ("confirm-req",), "plan": ("approve-plan",), "promote": ("approve-promote",), "recover": ("recover",), "review": ("review extend", "review waive")}
+ACTIONS_BY_WAIT = {"req": ("confirm-req",), "plan": ("approve-plan",), "promote": ("approve-promote",), "recover": ("recover",), "review": ("review extend", "review waive"), "outbox": ("approve-action",)}
 SEND_WAITS = ("go-req", "go-plan", "go-promote", "go-recover", "go-review")  # an approval was given and the agent has not been told: the board sends the message (1.6, B72)
 
 
@@ -139,7 +139,7 @@ def actions(row: Dict[str, Any], served: Tuple[str, ...] = ()) -> List[Dict[str,
     found.append("resume" if row.get("paused_since") else "pause")
     if "close" in served:
         found.append("close")
-    return [{"action": action, "command": "" if action in ("send", "answer") else f"{cli_command()} task {action} --task {row['name']}"} for action in found]
+    return [{"action": action, "command": "" if action in ("send", "answer") else f"{cli_command()} approve-action" if action == "approve-action" else f"{cli_command()} task {action} --task {row['name']}"} for action in found]
 
 
 def with_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], served: Tuple[str, ...] = (), root: Optional[Path] = None) -> bool:

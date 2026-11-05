@@ -6,10 +6,11 @@ import io
 import json
 import re
 import unittest
+from unittest import mock
 from typing import Any, Dict
 
 from support import HarnessTestCase, payload, pre_tool
-from taskcase import SESSION, TaskCase
+from taskcase import NAME, SESSION, TASK, TaskCase
 
 from modules.gate import approvals, commands
 
@@ -153,3 +154,76 @@ class OutboxWithoutTaskTests(HarnessTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OutboxOnThePageTests(OutboxCase):
+    """1.7.7: a held call is a wait of the task (the board), a card with its facts and the laid-out command (the task page), approved with its code or dismissed from the board."""
+
+    def test_a_held_call_makes_the_task_wait_for_the_person_and_the_page_has_its_card(self) -> None:
+        from core import outbox as core_outbox
+        from modules.task import taskboard, taskdesk, tasklife
+
+        self.new()
+        code = code_of(self.term(COMMENT)["permissionDecisionReason"])
+        data = self.data()
+        self.assertEqual(tasklife.waiting(self.root, TASK, data)["why"], "outbox")
+        held = core_outbox.pending_for(self.root, TASK)
+        self.assertEqual([item["code"] for item in held], [code])
+        rows, _problems = taskboard.board_rows(self.root, False, 0, ("approve-action",), rewrite=False)
+        row = next(item for item in rows["tasks"] if item["task"] == TASK)
+        self.assertEqual(row["waiting_why"], "outbox")
+        self.assertEqual([item["action"] for item in row["actions"]][0], "approve-action")
+        view = taskdesk.outbox_view(self.root, TASK)
+        self.assertEqual((view[0]["code"], view[0]["system"], view[0]["verb"], view[0]["command"]), (code, "tickets", "write", COMMENT))
+        self.assertEqual(view[0]["layout"]["program"], "tk")
+        self.assertTrue(view[0]["draft"].startswith("OUTBOX/"))
+        self.assertEqual(view[0]["facts"], {})
+
+    def test_the_packs_show_patterns_give_the_facts_of_the_card(self) -> None:
+        from modules.task import taskdesk
+
+        systems = json.loads((self.root / ".harness" / "policies" / "tools.override.json").read_text(encoding="utf-8"))["systems"]
+        systems["tickets"]["show"] = {"board": r"^tk\s+(\w+)", "id": r"T-(\d+)"}
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
+        self.new()
+        self.term(COMMENT)
+        view = taskdesk.outbox_view(self.root, TASK)
+        self.assertEqual(view[0]["facts"], {"board": "comment", "id": "7"})
+
+    def test_the_board_approves_with_the_code_and_dismisses_without_running_anything(self) -> None:
+        from modules.task import boardserve, tasklife
+
+        self.new()
+        code = code_of(self.term(COMMENT)["permissionDecisionReason"])
+        board = boardserve.Board(self.root, False, 8798, ["approve-action", "dismiss action"])
+        with mock.patch.object(boardserve.Board, "idle", return_value=False):
+            with self.assertRaises(Exception):
+                board.act("approve-action", NAME, "act", code="ZZZZZZ")
+            done = board.act("approve-action", NAME, "act", code=code)
+            self.assertTrue(done["approved"])
+            self.assertEqual(self.term(COMMENT), {})  # runs once, as after the terminal
+            self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "")
+            second = code_of(self.term(COMMENT)["permissionDecisionReason"])
+            gone = board.act("dismiss action", NAME, "act", code=second)
+            self.assertTrue(gone["dismissed"])
+            self.assertEqual(self.term(COMMENT)["permissionDecision"], "deny")  # not approved: held again, with a new code
+            draft = next(path for path in self.drafts() if second in path.name)
+            self.assertIn("作废", draft.read_text(encoding="utf-8"))
+            self.assertEqual([event["what"] for event in self.data()["events"] if event["what"] == "board"][-2:], ["board", "board"])
+
+    def test_the_page_draws_the_card_and_both_languages_have_its_words(self) -> None:
+        from core import messages
+        from modules.task import taskhtml
+
+        desk = (taskhtml.WEB / "desk.js").read_text(encoding="utf-8")
+        self.assertIn('SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim() || item.code})', desk)
+        self.assertIn('SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code})', desk)
+        self.assertIn('disabled: can && viewedCalls.has(item.code) ? null : "disabled"', desk)  # Approve wakes once the window was opened
+        self.assertIn('view.box.classList.add("wide")', desk)
+        self.assertIn(".cmd-scroll{max-height:min(50vh,520px);overflow:auto", (taskhtml.WEB / "desk.css").read_text(encoding="utf-8"))  # the window scrolls both ways
+        self.assertIn('"outbox"]', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
+        en, zh = messages.table("en"), messages.table("zh")
+        for key in ("task.waiting.outbox", "outbox.state.dismissed", "gate.action.dismissed", "desk.outbox.view", "desk.outbox.approve", "desk.outbox.dismiss", "desk.outbox.window", "desk.outbox.view_first"):
+            self.assertIn(key, en, key)
+            self.assertIn(key, zh, key)
+

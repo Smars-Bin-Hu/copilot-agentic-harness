@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.7 (2026-11-05)
+
+### Added
+
+- **A held call is a card on the task page.** When the gate holds a call to an outside system for your approval, the task waits for you (the board says "a call to an outside system waits for your approval", with an Approve button), and its page has a card beside the other waits: what the call is (write, exec), the system and its environment, the facts the company pack says to show (a server, a port: `show` patterns in `systems.json`), the target, the file the command reads, and the first words of the command. **View** opens a window with the command laid out line by line (the program, each option with its value, a query in a block of its own, the script whole), scrolling both ways, with a Copy button. You type the code on the card and press **Approve** (the same as `harness approve-action`; Approve wakes once the window was opened, since the command is what you approve), or **Dismiss** the call: nothing runs, the draft says dismissed.
+
+### Changed
+
+- The approvals and the outbox moved to the engine's core (the task page reads them); the gate's names stay.
+
 ## 1.7.6 (2026-11-05)
 
 ### Added

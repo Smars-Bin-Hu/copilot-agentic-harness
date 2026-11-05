@@ -171,3 +171,13 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 .rv-pop .env-chips .chip.env.on{border-color:var(--good-line);background:var(--good-bg);color:var(--good)}
 .rv-pop .env-chips .chip.env[disabled]{opacity:.45;cursor:not-allowed}
 .rv-pop .env-chips .chip.env.never{opacity:.45;cursor:not-allowed;text-decoration:line-through}
+/* a call held in the outbox (1.7.7): the facts in one line, the command's first words, the code on the card; the window lays the command out and scrolls both ways */
+.tk-call-facts{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:13px;margin:4px 0 8px}
+.tk-fact{display:inline-flex;align-items:center;gap:6px;min-width:0}.tk-fact .k{color:var(--soft);font-size:12px}.tk-fact code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:var(--track);padding:1px 6px;border-radius:5px;max-width:22em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-cmd-peek{display:flex;align-items:center;gap:8px;min-width:0;margin:0 0 8px}.tk-cmd-peek code{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--soft)}
+.tk-call-go{flex-wrap:wrap;gap:8px}.tk-code-in{display:inline-flex;align-items:center;gap:8px}.tk-code-in input.code{width:9ch;font-family:ui-monospace,Menlo,monospace;letter-spacing:2px;text-transform:uppercase}
+.act.big{font-size:13px;padding:5px 14px}
+.dialog.wide{max-width:min(900px,calc(100% - 32px))}
+.cmd-scroll{max-height:min(50vh,520px);overflow:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:8px;background:var(--track);margin:6px 0 10px}
+.cmd-fmt,.cmd-script{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.55;padding:10px 12px;white-space:pre;margin:0;min-width:max-content}
+.cmd-line.in{padding-left:2em}.cmd-prog{font-weight:700}.cmd-opt{color:var(--soft)}.cmd-val{color:var(--ink)}.cmd-block{padding:4px 0 4px 4em;white-space:pre-wrap;color:var(--good)}.cmd-fmt .kw,.cmd-script .kw{font-weight:650}

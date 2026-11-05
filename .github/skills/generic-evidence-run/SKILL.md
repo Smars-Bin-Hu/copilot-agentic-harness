@@ -44,6 +44,7 @@ A fact from an environment is worth something only as a saved run with a number.
 
 - **A figure with no `[E…]` is a claim.** Write the number of the run beside every fact that came from an environment, including a count you quote in a reply.
 - **The output is saved as it came.** A corrected, rounded or "cleaned" output is not evidence. Judgement goes beside it, in your words, in `LOG.md`.
+- **The query goes in the command itself**, in quotes after the option that takes it (`-Q "SELECT …"`). The gate reads only the command line: a query in a shell variable (`Q="SELECT …"; sqlcmd -Q "$Q"`) or in a file it cannot read has no verb for it, and a call with no verb counts as a write, which waits for the user. One command, one query; several queries go in one quoted block or in several commands.
 - **A refusal is an answer.** The gate refused: say so, give the user the exact command and what the gate said, and stop that step. A write that waits in the outbox runs once the user approves it, in this session, within the time limit; then record it the same way.
 - **Prod is read only, and a read there is still a run to record.** An environment no pattern names counts as prod.
 - **A test task** records its test runs with `task test record` (the environment's criteria, the verdict); use this skill there for a look-up that is not a test step.

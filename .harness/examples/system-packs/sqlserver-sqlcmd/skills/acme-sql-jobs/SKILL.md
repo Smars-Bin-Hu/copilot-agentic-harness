@@ -39,6 +39,7 @@ A sample for a company pack (made-up names). Copy it to `<knowledge base>/compan
 - **Check the way in first** (`harness tools check`: the system must be reachable). The identity is on the VS Code process: a VS Code that was already running when the person started another one with the identity does not have it, and `sqlcmd` then asks for a password and fails (`liner: function not supported in this terminal`). Stop and tell the person to quit VS Code and start it as the pack's launch script says.
 - `usp_job_start` returns at once; the job runs on the server. "Started" is not "done": only `harness wait` on the log table says done.
 - Waiting costs no model calls; asking the agent to "check again in a minute" costs one each time.
+- The query is in the command, in the quotes after `-Q`: a query in a shell variable or a file has no verb the gate can see, and counts as a write.
 - Nothing in this skill writes to prod: the gate refuses it, and so does this skill.
 
 ## Troubleshooting

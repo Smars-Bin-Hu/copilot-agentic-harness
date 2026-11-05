@@ -43,7 +43,7 @@ def write_draft(root: Path, task: str, code: str, action: Any, command: str, ses
         say("outbox.draft.title", code=code, system=action.system, env=action.env),
         "",
         f"- {say('outbox.draft.state')}: {say('outbox.state.waiting')} {STATE_MARK}",
-        f"- {say('outbox.draft.verb')}: {action.verb}",
+        f"- {say('outbox.draft.verb')}: {action.verb}" + ("" if getattr(action, "named", True) else f" ({say('outbox.draft.unnamed')})"),
         f"- {say('outbox.draft.target')}: {action.target or '-'}",
         f"- {say('outbox.draft.session')}: {session_id}",
         f"- {say('outbox.draft.asked_at')}: {utc_now()}",
@@ -76,7 +76,10 @@ def mark(root: Path, relative: Optional[str], state: str) -> None:
 
 def entry_extra(action: Any, task: Optional[str]) -> Dict[str, Any]:
     """What the person sees in `approve-action` besides the command. The draft is `draft_of(entry)`."""
-    return {"system": action.system, "env": action.env, "verb": action.verb, "target": action.target, "task": task or ""}
+    extra = {"system": action.system, "env": action.env, "verb": action.verb, "target": action.target, "task": task or ""}
+    if not getattr(action, "named", True):
+        extra["named"] = False  # no verbs rule matched: the card and the draft say so
+    return extra
 
 
 def draft_of(entry: Dict[str, Any]) -> str:

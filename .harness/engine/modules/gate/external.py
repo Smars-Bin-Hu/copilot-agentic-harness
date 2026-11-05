@@ -43,9 +43,13 @@ class Action:
     verb: str
     target: str
     text: str  # the command it came from, one command of the line
+    named: bool = True  # False: no verbs rule matched, the verb is the write floor (a query in a shell variable or a file the gate cannot read)
 
-    def facts(self) -> Dict[str, str]:
-        return {"system": self.system, "env": self.env, "verb": self.verb, "target": self.target}
+    def facts(self) -> Dict[str, Any]:
+        facts: Dict[str, Any] = {"system": self.system, "env": self.env, "verb": self.verb, "target": self.target}
+        if not self.named:
+            facts["named"] = False  # said only when it matters: the log and the draft stay as they were for a named verb
+        return facts
 
 
 def environment(system: Dict[str, Any], text: str) -> str:
@@ -57,11 +61,16 @@ def environment(system: Dict[str, Any], text: str) -> str:
     return system.get("default_env") or PROD
 
 
-def verb_of(system: Dict[str, Any], text: str) -> str:
+def verb_named(system: Dict[str, Any], text: str) -> Optional[str]:
+    """The verb of the first `verbs` rule that matches; None when none does (the gate then counts a write: the floor)."""
     for rule in system.get("verbs") or []:
         if re.search(rule["pattern"], text, re.IGNORECASE):
             return rule["verb"]
-    return WRITE
+    return None
+
+
+def verb_of(system: Dict[str, Any], text: str) -> str:
+    return verb_named(system, text) or WRITE
 
 
 def decide(system: Dict[str, Any], env: str, verb: str) -> str:
@@ -111,7 +120,8 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             if system.get("target"):
                 match = re.search(system["target"], line, re.IGNORECASE)
                 target = (match.group(1) if match and match.groups() else match.group(0) if match else "")[:120]
-            found.append(Action(name, environment(system, line), verb_of(system, " ".join(tokens[start + 1:])), target, " ".join(tokens)))
+            verb = verb_named(system, " ".join(tokens[start + 1:]))
+            found.append(Action(name, environment(system, line), verb or WRITE, target, " ".join(tokens), named=verb is not None))
             continue
         waited = _wait_run(tokens)
         if waited is not None and depth < MAX_DEPTH:  # `harness wait --run "<command>"` (1.7.5): the command inside is the call

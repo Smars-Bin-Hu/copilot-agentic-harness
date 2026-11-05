@@ -179,6 +179,21 @@ class OutboxOnThePageTests(OutboxCase):
         self.assertTrue(view[0]["draft"].startswith("OUTBOX/"))
         self.assertEqual(view[0]["facts"], {})
 
+    def test_a_call_whose_verb_no_rule_names_says_so_on_the_card_and_in_the_draft(self) -> None:
+        from modules.task import taskdesk
+
+        self.new()
+        systems = {**SYSTEMS, "tickets": {**SYSTEMS["tickets"], "verbs": SYSTEMS["tickets"]["verbs"] + [{"pattern": r"^comment\b", "verb": "write"}]}}
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
+        named = self.term(COMMENT)["permissionDecisionReason"]  # `comment` is now a rule of the tickets system: a write it names
+        unnamed = self.term('Q="comment T-7"; tk "$Q"')["permissionDecisionReason"]  # the verb is in a shell variable: nothing names it
+        view = {item["command"]: item for item in taskdesk.outbox_view(self.root, TASK)}
+        self.assertEqual((view[COMMENT]["named"], view['Q="comment T-7"; tk "$Q"']["named"]), (True, False))
+        drafts = {path.name: path.read_text(encoding="utf-8") for path in self.drafts()}
+        kind_line = lambda text: next(line for line in text.splitlines() if ": write" in line)  # noqa: E731 - the draft is in the user's language
+        self.assertIn("(", kind_line(drafts[f"{code_of(unnamed)}-tickets.md"]))
+        self.assertNotIn("(", kind_line(drafts[f"{code_of(named)}-tickets.md"]))
+
     def test_the_packs_show_patterns_give_the_facts_of_the_card(self) -> None:
         from modules.task import taskdesk
 

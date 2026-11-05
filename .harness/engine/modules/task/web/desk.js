@@ -1038,7 +1038,7 @@
   function callFacts(item) {
     const fact = (label, value, hot) => (value ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), hot ? tag(value, "hot") : h("code", null, value)) : null);
     return h("div", {class: "tk-call-facts"},
-      fact(t("desk.outbox.what"), item.verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), " ", tag(item.env, "hot")),
+      fact(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : item.verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), " ", tag(item.env, "hot")),
       ...Object.entries(item.facts || {}).map(([name, value]) => fact(name, value)),
       fact(t("desk.outbox.target"), item.target),
       item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t("desk.outbox.lines", {n: item.layout.script.lines}))) : null);

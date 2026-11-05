@@ -54,6 +54,13 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(judged("cloudctl --sub dev frobnicate"), [("cloud", "dev", WRITE, TASK)])
         self.assertEqual(judged("cloudctl"), [("cloud", "prod", WRITE, DENY)])
 
+    def test_a_call_with_no_verb_says_so_and_a_named_one_does_not(self) -> None:
+        unnamed = external.classify("cloudctl --sub dev $Q", SYSTEMS)[0][0]
+        self.assertEqual((unnamed.verb, unnamed.named, unnamed.facts()["named"]), (WRITE, False, False))
+        named = external.classify("cloudctl --sub dev list", SYSTEMS)[0][0]
+        self.assertTrue(named.named)
+        self.assertNotIn("named", named.facts())
+
     def test_the_company_rule_wins_and_the_rest_keeps_the_defaults(self) -> None:
         self.assertEqual(judged("cloudctl --sub dev create"), [("cloud", "dev", WRITE, TASK)])  # rules.dev.write
         self.assertEqual(judged("cloudctl --sub dev run job"), [("cloud", "dev", EXEC, HUMAN)])  # default

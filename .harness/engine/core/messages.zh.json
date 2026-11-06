@@ -2783,7 +2783,7 @@
   "connector.mcp.bad": "{rule}：每条是 {{\"pattern\": <正则>, \"verb\": read、write、exec 或 destroy}}",
   "task.link.form": "关联写成 <type>:<id>，比如 ado:12345（收到的是 `{ref}`）",
   "task.link.unknown": "没有装好的 connector 认识类型 `{type}`：看板上只显示文字。",
-  "task.link.suggest": "这个任务关联了 {links}。活做完了，问用户要不要更新它、写什么。不要没问就更新：用户说要，再按 connector 的 skill 起草；写操作等用户批准。",
+  "task.link.suggest": "这个任务关联了 {links}。在给用户的回复正文里（不要只写在思考里）问用户：活做完了，要不要更新它、写什么。不要没问就更新。用户说要：先重新打开任务（`harness task open {name} --session-id <session id>`），按 connector 的 skill 起草（写操作在任务页上等用户批准），之后再关闭任务。",
   "connector.links.bad": "`links`：{{<type>: {{\"label\", \"kind\", \"url\": \"https://...{{id}}\"}}}}，type 是一个小写字母和数字的词",
   "desk.link.nourl": "没有 connector 给出它的网址",
   "machine.conn.update": "更新",

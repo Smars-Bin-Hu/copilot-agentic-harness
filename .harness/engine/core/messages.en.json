@@ -2783,7 +2783,7 @@
   "connector.mcp.bad": "{rule}: each is {{\"pattern\": <regular expression>, \"verb\": read, write, exec or destroy}}",
   "task.link.form": "A link is <type>:<id>, such as ado:12345 (got `{ref}`)",
   "task.link.unknown": "No installed connector knows the type `{type}`: the board shows the text only.",
-  "task.link.suggest": "This task names {links}. Ask the person whether to update it now that the work is done, and what to write. Do not update it unasked: when they say yes, draft it with the connector's skill; the write waits for their approval.",
+  "task.link.suggest": "This task names {links}. In your answer to the person (not only in a thought), ask whether to update it now that the work is done, and what to write. Do not update it unasked. When they say yes: open the task again (`harness task open {name} --session-id <session id>`), draft the change with the connector's skill (the write waits on the task page for their approval), then close the task again.",
   "connector.links.bad": "`links`: {{<type>: {{\"label\", \"kind\", \"url\": \"https://...{{id}}\"}}}}, the type one word of small letters and digits",
   "desk.link.nourl": "No connector gives its address",
   "machine.conn.update": "Update",

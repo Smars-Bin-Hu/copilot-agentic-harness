@@ -100,9 +100,11 @@ def find_code(environ: Optional[Dict[str, str]] = None, platform: Optional[str] 
     return None
 
 
-def run_code(code: str, arguments: List[str], timeout: float = CLI_TIMEOUT) -> str:
-    """Run the `code` command and return what it printed. Called from the background thread of the board only, never from a page request."""
+def run_code(code: str, arguments: List[str], timeout: float = CLI_TIMEOUT, extra: Optional[Dict[str, str]] = None) -> str:
+    """Run the `code` command and return what it printed. Called from the background thread of the board only, never from a page request.
+    `extra`: variables for a VS Code this starts (tool folders, CA bundle: core.launchenv); one that is open already keeps its own."""
     env = {key: value for key, value in os.environ.items() if not key.startswith("VSCODE_IPC") and key != "ELECTRON_RUN_AS_NODE"}  # the shim of a VS Code terminal does not know `agent`
+    env.update(extra or {})
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     try:
         done = subprocess.run([code] + arguments, capture_output=True, timeout=timeout, env=env, creationflags=flags, stdin=subprocess.DEVNULL)

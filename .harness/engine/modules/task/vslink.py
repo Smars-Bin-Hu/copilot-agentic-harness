@@ -30,7 +30,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from core import ahp, config, tasks
+from core import ahp, config, launchenv, tasks
 from core.paths import utc_now
 
 from . import chatask, chatctx, chatlink, chatlive, chatnew, chatsend, rewind, task as task_ops, tasklife, tasksub
@@ -461,7 +461,7 @@ class VsLink:
             code = ahp.find_code()
             if code:
                 try:
-                    ahp.run_code(code, [str(self.root)])  # the folder, no `-r`: a window that has it is brought forward
+                    ahp.run_code(code, [str(self.root)], extra=launchenv.extra(self.root))  # the folder, no `-r`: a window that has it is brought forward
                 except ahp.AhpError:
                     pass
 

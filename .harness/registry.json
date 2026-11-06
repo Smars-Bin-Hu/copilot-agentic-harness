@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.7.10",
+  "version": "1.7.11",
   "released": "2026-11-06",
   "copyright": "Smars Hu",
   "contributors": [
@@ -226,7 +226,8 @@
         ".github/instructions/workspace.instructions.md",
         ".workspace/README.md",
         ".harness/tests/test_reach.py",
-        ".harness/tests/test_servers.py"
+        ".harness/tests/test_servers.py",
+        ".harness/tests/test_launchenv.py"
       ],
       "retire_when": "Copilot itself supports limiting writes by path and can refuse dangerous terminal commands. The guardrails and the write scope of a task do not retire"
     },

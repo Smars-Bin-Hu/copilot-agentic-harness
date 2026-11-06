@@ -233,6 +233,15 @@ In Get ready, **Servers** opens a window: each server, and whether your identity
 
 **Open VS Code with identities** (in that window, and on the Enter screen when a server is not reached): tick the identities this window holds, then open. VS Code must be closed first. A window holds one Windows account, and one value per variable: when you tick two that cannot share it (DEV and IST with different Windows accounts), the window holds one and the other is reached through `harness as <alias> -- <command>`, each such command with that server's identity. The agent is told which at the start of each chat; the gate refuses a call without the prefix, with the line to run, and judges the command inside it as any other. `harness servers` lists the servers, `harness servers test <alias>` tests one from a terminal.
 
+#### This computer: tool folders and a CA bundle
+
+The agent's commands run with the environment VS Code had when it started: a setting of the editor's terminals does not reach them. When a tool is not on PATH, or a proxy inspects TLS, give it in Get ready, **This computer** (1.7.11). The board puts both in VS Code's environment each time it opens VS Code (Open VS Code, or Open VS Code with identities); a VS Code that is open already keeps its own, so close it and open it from the board.
+
+- **Tool folders**: folders put before PATH, one per line. Use it for a tool unpacked in your own folder (the `bin` folder of the Azure CLI zip) when PATH cannot be changed without an administrator. A folder must hold a program.
+- **CA bundle**: a proxy that inspects TLS signs with your company's own CA. The system trusts it, but a tool with its own list of roots (az, pip and other Python tools) fails with `CERTIFICATE_VERIFY_FAILED`. **Make** reads the chain this computer trusts for an outside address, through the proxy (the one this computer names, or type `host:port`), adds it to the tool's public roots, and keeps `.harness/certs/ca-bundle.pem` only when a check with it passes. VS Code gets it as `REQUESTS_CA_BUNDLE`. Certificate checks stay on.
+
+Both are kept in `.harness/.env` and `.harness/certs/`, which `harness reinstall` carries. From a terminal: `harness tools launch-env` shows what VS Code gets, `harness tools ca-bundle [--host <address>] [--proxy host:port]` makes the bundle.
+
 #### What the agent can do on your servers
 
 Tell this to everyone who lets the agent reach a server.

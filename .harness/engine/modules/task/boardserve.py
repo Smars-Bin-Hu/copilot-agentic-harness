@@ -56,6 +56,7 @@ from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from core import ahp, company, config, messages, outbox, reach, registry, state, targets, tasks, user
+from core import launchenv
 from core import servers as servers_core
 from core.paths import board_serve_file, board_serve_port, utc_now
 
@@ -731,6 +732,20 @@ class Board:
             return servers_core.launch(self.root, chosen, primary, [code, str(self.root)])
         raise ValueError(say("serve.refused.request"))
 
+    def machine(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Get ready, This computer (1.7.11): the tool folders and the CA bundle VS Code is started with (`core.launchenv`). `step`: state, paths, bundle, drop."""
+        step = str(data.get("step", ""))
+        if step == "paths":
+            launchenv.save_paths(self.root, [str(item) for item in (data.get("paths") or []) if isinstance(item, str)])
+        elif step == "bundle":
+            made = launchenv.make(self.root, str(data.get("host") or ""), str(data.get("proxy") or ""))
+            return dict(launchenv.state(self.root), made=made, vscode_open=bool(self.link.status().get("ready", False)))
+        elif step == "drop":
+            launchenv.drop_bundle(self.root)
+        elif step != "state":
+            raise ValueError(say("serve.refused.request"))
+        return dict(launchenv.state(self.root), vscode_open=bool(self.link.status().get("ready", False)))
+
     def setup(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Get ready (`core/setup.py`). `step`: state, probe or act. When the short command appears while VS Code is open, the agent's terminals do not have it yet:
         the Enter screen waits until VS Code was closed and came back."""
@@ -1399,6 +1414,16 @@ def handler_for(board: Board) -> type:
                     result = board.servers(data)
                     if str(data.get("step", "")) in ("save", "forget", "open"):
                         print(say("serve.did", action="servers " + str(data.get("step")), task=str(data.get("alias") or "-")), flush=True)  # never a value
+                    return self.answer(200, {"result": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/machine":  # Get ready, This computer (1.7.11): the paired browser only; it writes .harness/.env and .harness/certs/
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.machine(data)
+                    if str(data.get("step", "")) != "state":
+                        print(say("serve.did", action="machine " + str(data.get("step")), task="-"), flush=True)
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})

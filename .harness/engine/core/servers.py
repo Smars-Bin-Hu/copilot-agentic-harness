@@ -431,7 +431,9 @@ def launch(root: Path, chosen: List[str], primary: str, code_argv: List[str]) ->
     """Open VS Code with the chosen identities and keep which are wrapped for its chat. The caller made sure no VS Code of this folder is open."""
     planned = plan(root, chosen, primary)
     servers, known, env = listed(root), kinds(root), read_env(root)
-    extra: Dict[str, str] = {}
+    from . import launchenv  # it reads this module's .env
+
+    extra: Dict[str, str] = launchenv.extra(root)  # tool folders and the CA bundle (1.7.11)
     for alias in planned["direct"]:
         kind, server = known[servers[alias]["kind"]], servers[alias]
         extra.update(variables(kind, server, identity_of(env, alias, kind)))

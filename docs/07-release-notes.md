@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.11 (2026-11-06)
+
+### Added
+
+- **This computer, in Get ready: tool folders and a CA bundle for VS Code.** The agent's commands run with the environment VS Code started with, so a tool unpacked in your own folder, or a proxy that inspects TLS, used to mean starting VS Code from a prepared shell. Now: **Tool folders** are put before PATH, and **Make** builds a CA bundle (the tool's public roots and the chain this computer trusts for an outside address, through the proxy) and keeps it only when a check with it passes. The board gives both to VS Code each time it opens it, as PATH and `REQUESTS_CA_BUNDLE`. `harness tools launch-env`, `harness tools ca-bundle`. `harness reinstall` carries them.
+
 ## 1.7.10 (2026-11-06)
 
 ### Added

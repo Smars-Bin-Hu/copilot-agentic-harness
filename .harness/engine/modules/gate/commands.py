@@ -209,6 +209,22 @@ def _wait(root: Path, args: Any) -> Dict[str, Any]:
     return wait.run_wait(root, args.run, args.until, args.every, args.timeout, args.out, args.task)
 
 
+def _launch_state(root: Path) -> Dict[str, Any]:
+    from core import launchenv
+
+    return dict(launchenv.state(root), extra=sorted(launchenv.extra(root)))
+
+
+def _ca_bundle(root: Path, host: str, proxy: Any) -> Dict[str, Any]:
+    from core import launchenv
+
+    try:
+        made = launchenv.make(root, host, proxy)
+    except ValueError as error:
+        raise CommandError(str(error)) from None
+    return dict(made, exit_code=0 if made["ok"] else 1)
+
+
 def register(subparsers: Any) -> None:
     tools = subparsers.add_parser("tools", help="the outside systems a company listed (tools.company.json from the company pack, or tools.override.json)")
     tools_commands = tools.add_subparsers(dest="tools_command", required=True)
@@ -217,6 +233,13 @@ def register(subparsers: Any) -> None:
     seen = tools_commands.add_parser("reach", help="can the agent reach each environment from VS Code? What the hooks saw: the probes at the start of a chat and the agent's own calls (--probe runs the probes now, in this terminal's identity)")
     seen.add_argument("--probe", action="store_true", help="run the probes now and keep the answers (the hook does this at the start of a chat, in VS Code's identity)")
     seen.set_defaults(handler=lambda args: tools_reach(repo_root(), args.probe))
+
+    machine = tools_commands.add_parser("launch-env", help="what the board gives VS Code when it starts it: the tool folders put before PATH and the CA bundle (Get ready, This computer)")
+    machine.set_defaults(handler=lambda args: _launch_state(repo_root()))
+    bundle = tools_commands.add_parser("ca-bundle", help="make the CA bundle for the tools of this computer: the public roots and the chain this computer trusts for an outside address, through the proxy; kept only when a check with it passes")
+    bundle.add_argument("--host", default="", help="the outside address to reach (default example.com); any address the proxy inspects will do")
+    bundle.add_argument("--proxy", default=None, help="host:port of the proxy; left out, the one this computer names (HTTPS_PROXY or the system setting); \"\" for none")
+    bundle.set_defaults(handler=lambda args: _ca_bundle(repo_root(), args.host, args.proxy))
 
     acting = subparsers.add_parser("as", help="run one command of a server with that server's saved identity (when this window does not hold it): harness as <alias> -- <command>")
     acting.add_argument("alias", help="the server, as Get ready lists it")

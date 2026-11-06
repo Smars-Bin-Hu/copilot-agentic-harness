@@ -2805,7 +2805,8 @@
   "promote.nothing.manual": " DEV/_manual/ 下有 {count} 个文件由用户手动运行，永远不 promote。把运行交给用户：`{command} task handoff run --task {task} --env <ENV> --what \"<要运行什么>\"`。",
   "promote.manual.note": "DEV/_manual/ 下的文件由用户手动运行，不 promote。",
   "promote.screen.manual": "  不 promote（DEV/_manual/，手动运行）：{count} 个文件",
-  "stage.byhand": "手动运行",
+  "stage.byhand": "应用",
+  "stage.byhand.to": "应用到 {envs}",
   "desk.changes.byhand": "DEV/_manual/ 下的文件由你在它该在的地方（服务器、数据库）手动运行：promote 不会动它们。",
   "desk.changes.byhand.tag": "手动",
   "desk.changes.byhand.tip": "这个文件由你手动运行；promote 不会动它"

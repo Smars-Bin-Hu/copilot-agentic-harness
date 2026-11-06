@@ -138,9 +138,11 @@
   }
   // What let the agent's commands through (core.calls, 1.7.9): one tag per way, with the code of an approval; a run with no note is a grey `?`.
   const LEAVE_TONE = {allow: "", plan: "good", runner: "good", opened: "open", approved: "good", unknown: ""};
+  const LEAVE_WORD = {allow: [t("desk.evidence.leave.allow"), t("desk.evidence.leave.allow.tip")], plan: [t("desk.evidence.leave.plan"), t("desk.evidence.leave.plan.tip")], runner: [t("desk.evidence.leave.runner"), t("desk.evidence.leave.runner.tip")],
+    opened: [t("desk.evidence.leave.opened"), t("desk.evidence.leave.opened.tip")], approved: [t("desk.evidence.leave.approved"), t("desk.evidence.leave.approved.tip")], unknown: [t("desk.evidence.leave.unknown"), t("desk.evidence.leave.unknown.tip")]};
   function leaveTags(item) {
     const found = item.leave && item.leave.length ? item.leave : [{how: "unknown", code: ""}];
-    return found.map((one, index) => { const mark = tag(t("desk.evidence.leave." + one.how) + (one.code ? " " + one.code : ""), LEAVE_TONE[one.how] || ""); mark.title = t("desk.evidence.leave." + one.how + ".tip"); return [index ? " " : null, mark]; });
+    return found.map((one, index) => { const word = LEAVE_WORD[one.how] || LEAVE_WORD.unknown; const mark = tag(word[0] + (one.code ? " " + one.code : ""), LEAVE_TONE[one.how] || ""); mark.title = word[1]; return [index ? " " : null, mark]; });
   }
   function evidenceWindow(item) {
     const copy = h("button", {type: "button", class: "act", disabled: item.command ? null : "disabled"}, t("desk.outbox.copy"));

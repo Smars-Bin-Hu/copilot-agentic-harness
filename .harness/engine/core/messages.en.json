@@ -2805,7 +2805,8 @@
   "promote.nothing.manual": " {count} file(s) under DEV/_manual/ are run by hand by the user and never promoted. Hand the run over: `{command} task handoff run --task {task} --env <ENV> --what \"<what to run>\"`.",
   "promote.manual.note": "The files under DEV/_manual/ are run by hand by the user: they are not promoted.",
   "promote.screen.manual": "  Not promoted (DEV/_manual/, run by hand): {count} file(s)",
-  "stage.byhand": "Run by hand",
+  "stage.byhand": "Apply",
+  "stage.byhand.to": "Apply to {envs}",
   "desk.changes.byhand": "Files under DEV/_manual/ are run by hand where they belong (a server, a database): promote does not write them back.",
   "desk.changes.byhand.tag": "by hand",
   "desk.changes.byhand.tip": "You run this file by hand; promote does not write it back"

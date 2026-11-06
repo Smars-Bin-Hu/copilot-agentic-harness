@@ -221,7 +221,8 @@ def leave_lines(root: Path, task: str, ran: str, by_agent: bool) -> List[str]:
     counts: Dict[str, List[str]] = {}
     for item in found:
         counts.setdefault(item["how"], []).append(item.get("code", ""))
-    parts = [say("task.leave." + how, n=len(codes), codes=", ".join(sorted({code for code in codes if code}))) for how, codes in counts.items()]
+    keys = {"allow": "task.leave.allow", "plan": "task.leave.plan", "runner": "task.leave.runner", "opened": "task.leave.opened", "approved": "task.leave.approved", "unknown": "task.leave.unknown"}
+    parts = [say(keys.get(how, "task.leave.unknown"), n=len(codes), codes=", ".join(sorted({code for code in codes if code}))) for how, codes in counts.items()]
     return [say("task.leave.line", parts="; ".join(parts))]
 
 

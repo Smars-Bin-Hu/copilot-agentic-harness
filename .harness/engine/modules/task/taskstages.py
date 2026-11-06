@@ -7,8 +7,9 @@ the plan is asked for again, a new round after a write-back) falls back to the r
   rca, design, other    doing, done (done = the task is closed)
   dev, kb               requirement, plan, developing, write-back, done
                         developing: from the approved plan to the approved write-back; done: the write-back is made
-                        DEV/ holds only DEV/_manual/ (1.6.110): requirement, plan, developing, run by hand, done
-                        developing ends when the run is handed over; run by hand, when its result is recorded; done, when the task is closed
+                        DEV/ holds only DEV/_manual/ (1.6.110): requirement, plan, developing, apply, done
+                        developing ends when the run is handed over; apply, when its result is recorded; done, when the task is closed
+                        apply is named by where it was applied (`Apply to DEV`, 1.7.9): the person may run it, or the agent through the gate; nothing is promoted
   test                  guide, one step per environment of TEST-GUIDE.md (DEV, IST, UAT when it names none), done
                         an environment is done when its results file holds `Verdict for <env>: PASS`
 """
@@ -20,7 +21,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import tasks
+from core import messages, tasks
 
 SIMPLE = ("rca", "design", "other")
 WRITES_BACK = ("dev", "kb")
@@ -29,6 +30,10 @@ GUIDE = "TEST-GUIDE.md"
 ENV_HEADING = re.compile(r"^##\s+([A-Za-z][A-Za-z0-9_-]{0,11})\s*$", re.MULTILINE)  # `## DEV`; the template's `## <DEV>` is not one
 RUNNER_LINE = re.compile(r"^\s*\**Runner\**\s*:\s*\**\s*(agent|person)\b", re.IGNORECASE | re.MULTILINE)  # `Runner: agent` in an environment's part of the guide: the agent proposes to run it itself (1.7.2)
 VERDICT = re.compile(r"Verdict for[^:\n]*:\s*\**\s*(PASS|FAIL|NEEDS MORE)", re.IGNORECASE)
+
+
+def say(key: str, /, **values: Any) -> str:
+    return messages.text(key, **values)
 
 
 def read(path: Path) -> str:
@@ -73,7 +78,17 @@ def by_hand(root: Path, task: str, data: Dict[str, Any], planned: bool) -> Dict[
     handed = ran or bool(data.get("handoff")) or "handoff" in later
     closed = data.get("status") == "closed"
     finished = [task_ops.req_state(root, task) == "confirmed" or planned or ran, planned, handed or closed, ran or closed, closed]
-    return steps_of([{"id": name} for name in ("requirement", "plan", "developing", "byhand", "done")], finished, {})
+    envs: List[str] = []  # where the result was applied: the environments of the runs recorded after the plan (`DEV run 4 E4 by the agent`), else the one handed over
+    for event in events[last_plan + 1:] if last_plan >= 0 else []:
+        if event.get("what") == "run-record":
+            env = str(event.get("detail", "")).split(" ", 1)[0].upper()
+            if env and env not in envs:
+                envs.append(env)
+    handoff = data.get("handoff") if isinstance(data.get("handoff"), dict) else {}
+    if not envs and handoff.get("env"):
+        envs.append(str(handoff["env"]).upper())
+    apply = {"id": "byhand", "label": say("stage.byhand.to", envs=", ".join(envs))} if envs else {"id": "byhand"}
+    return steps_of([{"id": "requirement"}, {"id": "plan"}, {"id": "developing"}, apply, {"id": "done"}], finished, {})
 
 
 def verdicts_in(text: str) -> List[str]:

@@ -23,7 +23,7 @@ import re
 from core import calls, reach, repo_paths, servers, targets, tasks, unseen
 from core.paths import board_serve_port
 from core.context import Context
-from core.events import Decision, HookEvent
+from core.events import Decision, HookEvent, merge
 
 from . import approvals, external, gitcmd, outbox, rules, terminal
 from .policy import POLICY_NAME, Compiled, validate_policy
@@ -229,6 +229,20 @@ def approved_context(event: HookEvent, ctx: Context) -> Optional[Decision]:
     return Decision(context=rules.external_approved([item["command"] for item in waiting]))
 
 
+def named_servers(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """At a prompt that names a server by its alias: a command that reaches it, so the agent does not search for its host and port. Only those named."""
+    text = event.words or event.prompt
+    if not text:
+        return None
+    try:
+        found = [one for one in servers.calls(ctx.root) if re.search(rf"(?<![A-Za-z0-9_-]){re.escape(one['alias'])}(?![A-Za-z0-9_-])", text, re.IGNORECASE)]
+    except Exception:  # noqa: BLE001 - a reminder must not get in the way
+        return None
+    if not found:
+        return None
+    return Decision(context=rules.say("servers.named.context", lines="\n".join(f"- {one['alias']} ({one['env'].upper()}): `{one['call']}`" for one in found)))
+
+
 def asks_board(ctx: Context, text: str) -> int:
     """The port, when `text` sends a request to the board server that runs from this copy: its buttons are the person's."""
     port = board_serve_port(ctx.root)
@@ -330,14 +344,14 @@ def check_wrapped(event: HookEvent, ctx: Context, judged: Optional[Dict[str, Any
 
 
 def wrapped_context(ctx: Context) -> Optional[Decision]:
-    """At the start of a chat: how to reach each server (a command that works, with the prefix where this window needs it), and which go through
-    `harness as`. Without it the agent does not know which host and port an alias is, and searches. Nothing when there is no server."""
+    """At the start of a chat: one line with the servers (alias and environment) and where their commands are, and which go through `harness as`.
+    The command of each is given only at a prompt that names it (`named_servers`): a chat that never touches a server pays for one line."""
     try:
         found = servers.calls(ctx.root)
     except Exception:  # noqa: BLE001 - a server list that cannot be read must not stop the chat
         found = []
     wrapped = servers.state(ctx.root).get("wrap") or []
-    parts = [rules.say("servers.calls.context", lines="\n".join(f"- {one['alias']} ({one['env'].upper()}): `{one['call']}`" for one in found))] if found else []
+    parts = [rules.say("servers.calls.context", servers=", ".join(f"{one['alias']} ({one['env'].upper()})" for one in found))] if found else []
     if wrapped:
         parts.append(rules.say("servers.wrap.context", aliases=", ".join(wrapped), first=wrapped[0]))
     return Decision(context="\n".join(parts)) if parts else None
@@ -348,7 +362,8 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
         watch_reach(event, ctx)
         return wrapped_context(ctx) if event.event == "SessionStart" else None
     if event.event == "UserPromptSubmit":
-        return approved_context(event, ctx)
+        told = merge([approved_context(event, ctx), named_servers(event, ctx)])
+        return None if told.is_empty() else told
     if event.event == "PreToolUse" and event.tool_kind != "terminal":
         # A web fetch, a browser or an MCP tool, whatever its name: its input names the address of the board server.
         port = asks_board(ctx, json.dumps(event.raw, ensure_ascii=False, default=str))

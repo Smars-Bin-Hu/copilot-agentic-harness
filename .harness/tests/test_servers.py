@@ -196,9 +196,17 @@ class GateTests(ServersCase):
         start["cwd"] = str(self.root)
         told = self.hook(start).get("additionalContext", "")
         self.assertIn("harness as db-dev --", told)
-        # each server with a command that reaches it: the agent does not have to search for the host and port of an alias (1.7.10)
-        self.assertIn("- db-ist (IST): `fakedb --host db2:5000", told)
-        self.assertIn("- db-dev (DEV): `harness as db-dev -- fakedb --host db1:5000", told)
+        # the start of a chat names the servers in one line; a prompt that names one gets a command that reaches it (1.7.10)
+        self.assertIn("db-dev (DEV), db-ist (IST)", told)
+        self.assertNotIn("fakedb --host", told)
+        asked = payload("UserPromptSubmit", SESSION, prompt="db-dev和db-ist都查一下")
+        asked["cwd"] = str(self.root)
+        named = self.hook(asked).get("additionalContext", "")
+        self.assertIn("- db-ist (IST): `fakedb --host db2:5000", named)
+        self.assertIn("- db-dev (DEV): `harness as db-dev -- fakedb --host db1:5000", named)
+        other = payload("UserPromptSubmit", SESSION, prompt="look at db-devx and my-db-ist2")  # only a whole alias counts
+        other["cwd"] = str(self.root)
+        self.assertNotIn("fakedb --host", self.hook(other).get("additionalContext", ""))
         self.assertEqual({item["alias"]: item.get("call", "")[:22] for item in self.cli_json("servers")["servers"]},
                          {"db-dev": "harness as db-dev -- f", "db-ist": "fakedb --host db2:5000"})
 

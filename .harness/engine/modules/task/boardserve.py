@@ -233,7 +233,7 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
                      "fields": {field: server.get(field, spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
                      "account": saved.get("account", ""), "saved": bool(saved), "reach": (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")})
     kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
-                 for name, kind in known.items() if not conn_core.kind_problems(kind)}
+                 for name, kind in known.items() if not conn_core.type_problems(kind)}
     return {"connections": rows, "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "windows": os.name == "nt"}
 
 
@@ -698,7 +698,7 @@ class Board:
         own = data.get("own") if isinstance(data.get("own"), dict) else None
         if own is not None:
             own = {key: str(value) for key, value in own.items() if key in ("type", "env", "auth", "label") or key in ((conn_core.types(self.root).get(str(own.get("type"))) or {}).get("fields") or {})}
-            if not conn_core.ALIAS.match(alias) or alias in conn_core.company_servers(config.policy_or_empty(self.root, conn_core.SERVERS_POLICY)):
+            if not conn_core.ALIAS.match(alias) or alias in conn_core.company_connections(config.policy_or_empty(self.root, conn_core.POLICY)):
                 raise ValueError(say("connections.alias.bad", alias=alias))
             if own.get("env") not in ("dev", "ist", "qat", "none"):
                 raise ValueError(say("connections.own.env.none"))
@@ -720,6 +720,8 @@ class Board:
         if step == "forget":
             conn_core.forget(self.root, alias)
             return {"forgot": alias}
+        if step == "export":  # one's own connections in the form of connections.json (Tools, Connections, Export): no identity
+            return conn_core.export(self.root)
         if step == "share":  # into the company pack: the server only, never the identity (knowledge base, Pack for colleagues)
             return conn_core.share(self.root, [str(item) for item in (data.get("aliases") or []) if isinstance(item, str)])
         chosen = [str(item) for item in (data.get("chosen") or []) if isinstance(item, str)]

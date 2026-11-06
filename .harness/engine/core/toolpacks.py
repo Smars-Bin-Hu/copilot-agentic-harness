@@ -480,12 +480,22 @@ def check(root: Path, only: str = "") -> Dict[str, Any]:
         folder = base / name
         errors = problems(root, folder)
         try:
-            needs = manifest(folder).get("needs") or {}
+            found = manifest(folder)
         except ToolpackError:
-            needs = {}
+            found = {}
+        needs = found.get("needs") or {}
+        types_here = []
+        for one in sorted((folder / TYPES).glob("*.json")) if (folder / TYPES).is_dir() else []:
+            try:
+                spec = json.loads(one.read_text(encoding="utf-8-sig"))
+                types_here.append({"type": str(spec.get("type") or one.stem), "label": str(spec.get("label") or spec.get("type") or one.stem), "via": str(spec.get("via") or "cli")})
+            except (OSError, ValueError, AttributeError):
+                continue
         programs = {str(program): bool(shutil.which(str(program), path=path)) for program in needs.get("programs") or []}
         row = {"name": name, "version": (book.get(name) or {}).get("version", ""), "from": (book.get(name) or {}).get("from", ""), "errors": errors,
-               "programs": programs, "trust": bool(needs.get("trust")), "bundle": bool(bundle)}
+               "programs": programs, "trust": bool(needs.get("trust")), "bundle": bool(bundle), "description": str(found.get("description") or ""), "types": types_here,
+               "skills": len(_skills(folder)), "links": sorted((found.get("links") or {}).keys()) if isinstance(found.get("links"), dict) else [],
+               "mcp_rules": len((found.get("mcp") or {}).get("tools") or []) if isinstance(found.get("mcp"), dict) else 0}
         source = Path(str(row["from"])) if row["from"] and row["from"] != COMPANY else None
         row["newer"] = bool(source and source.is_dir() and (source / MANIFEST).is_file() and not _same(source, folder))  # its folder changed since it was installed
         row["ok"] = not errors and all(programs.values())

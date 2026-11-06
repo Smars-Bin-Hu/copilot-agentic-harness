@@ -1,4 +1,4 @@
-// This computer (1.7.11): what VS Code is started with when the board opens it, so that the agent's commands reach the tools here: tool folders put
+// This computer (1.7.11) and Tool packs (1.7.13), two tabs of the Tools window (tools.js). This computer: what VS Code is started with when the board opens it, so that the agent's commands reach the tools here: tool folders put
 // before PATH, and a CA bundle made for a proxy that inspects TLS. A window of its own, opened from Get ready. Needs common.js (h, t), serve.js (SERVE).
 const MACHINE = (function () {
   const ask = (step, body) => SERVE.post("/api/machine", {step, ...(body || {})}).then((data) => data.result);
@@ -17,7 +17,7 @@ const MACHINE = (function () {
       : h("span", {class: "sv-result bad", title: tip}, h("b", null, "✗"), " ", t("machine.ca.made.bad", {why: result.why}));
   }
 
-  function open(done) {
+  function panel(ctx) {
     const paths = h("textarea", {class: "su-in su-mono mc-paths", rows: "3", spellcheck: "false", placeholder: t("machine.paths.placeholder")});
     const pathsSaid = h("span", {class: "sv-said"});
     const savePaths = h("button", {type: "button", class: "act"}, t("machine.paths.save"));
@@ -30,14 +30,13 @@ const MACHINE = (function () {
     const caInfo = h("span", {class: "sv-info", tabindex: "0"}, "\u24d8");
     const caSaid = h("span", {class: "sv-said"});
     const open_ = h("p", {class: "sub", hidden: ""}, t("machine.vscode.open"));
-    const close = h("button", {type: "button", class: "act"}, t("connections.close"));
-    const view = SERVE.dialog([h("h2", null, t("machine.title")), h("p", {class: "sub"}, t("machine.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.lead.tip")}, "ⓘ")),
-      h("div", {class: "win-body"},
-        h("h3", {class: "mc-h"}, t("machine.paths"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.paths.tip")}, "ⓘ")), paths, found, h("div", {class: "sv-acts"}, savePaths, pathsSaid),
-        h("h3", {class: "mc-h"}, t("machine.ca"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.ca.lead.tip")}, "ⓘ"), " ", caState),
-        h("div", {class: "sv-fields"}, field(t("machine.ca.host"), host), field(t("machine.ca.proxy"), proxy)), h("div", {class: "sv-acts"}, make, drop, caSaid), open_),
-      h("div", {class: "row win-foot"}, close)]);
-    view.box.classList.add("wide", "sv-win");
+    const mcp = h("span", {class: "mc-mcp"});
+    const mcpInfo = h("span", {class: "sv-info", tabindex: "0", title: t("machine.mcp.tip")}, "\u24d8");
+    const body = [h("p", {class: "sub"}, t("machine.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.lead.tip")}, "\u24d8")),
+      h("h3", {class: "mc-h"}, t("machine.paths"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.paths.tip")}, "\u24d8")), paths, found, h("div", {class: "sv-acts"}, savePaths, pathsSaid),
+      h("h3", {class: "mc-h"}, t("machine.ca"), " ", caInfo, " ", caState),
+      h("div", {class: "sv-fields"}, field(t("machine.ca.host"), host), field(t("machine.ca.proxy"), proxy)), h("div", {class: "sv-acts"}, make, drop, caSaid),
+      h("h3", {class: "mc-h"}, "MCP ", mcpInfo), mcp, open_];
     const paint = (state) => {
       paths.value = state.paths.map((item) => item.path).join("\n");
       found.replaceChildren(...state.paths.map((item) => h("span", {class: "mc-dir " + (item.found ? "ok" : "bad"), title: item.found ? (item.programs.join("\n") || "-") : t("machine.paths.gone")}, (item.found ? "✓ " : "✗ ") + item.path)));
@@ -48,6 +47,13 @@ const MACHINE = (function () {
       caInfo.title = t("machine.ca.lead.tip", {vars: state.bundle.vars.join(", ")});
       drop.hidden = !state.bundle.path;
       open_.hidden = !state.vscode_open;
+      const on = state.mcp.allowed;
+      const chips = [["allowed", true], ["blocked", false]].map(([word, value]) => {
+        const chip = h("button", {type: "button", class: "chip" + (on === value ? " on" : ""), "aria-pressed": String(on === value)}, t(value ? "machine.mcp.allowed" : "machine.mcp.blocked"));
+        chip.addEventListener("click", () => { if (on !== value) ask("mcp", {allowed: value}).then((next) => { paint(next); if (ctx.changed) ctx.changed(); }, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
+        return chip;
+      });
+      mcp.replaceChildren(h("span", {class: "chips"}, ...chips), state.mcp.detected === "blocked" ? h("span", {class: "sub"}, " " + t("machine.mcp.detected")) : null);
     };
     ask("state").then(paint, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); });
     savePaths.addEventListener("click", () => {
@@ -61,45 +67,50 @@ const MACHINE = (function () {
         (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { make.disabled = false; });
     });
     drop.addEventListener("click", () => { drop.disabled = true; ask("drop").then((state) => { paint(state); caSaid.replaceChildren(); }, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { drop.disabled = false; }); });
-    close.addEventListener("click", view.close);
-    if (done) { const watch = setInterval(() => { if (!view.box.isConnected) { clearInterval(watch); done(); } }, 400); }
+    return {body, foot: []};
+  }
+
+  function open(done) {
+    if (typeof TOOLS !== "undefined") TOOLS.open("computer", done);
   }
 
   // Tool packs (1.7.13): each with a dot, ready or not; the hover says what it has and lacks; a button for each thing that is missing opens where it is set.
-  function toolpacksWindow(done) {
+  function packsPanel(ctx) {
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
-    const close = h("button", {type: "button", class: "act"}, t("connections.close"));
-    const view = SERVE.dialog([h("h2", null, t("machine.conn.title")), h("p", {class: "sub"}, t("machine.conn.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.conn.lead.tip")}, "\u24d8")),
-      h("div", {class: "win-body"}, list), h("div", {class: "row win-foot"}, close)]);
-    view.box.classList.add("wide", "sv-win");
+    const pill = (text, tip) => h("span", {class: "sv-own", title: tip || ""}, text);
     const paint = () => ask("toolpacks").then((found) => {
-      list.replaceChildren(...(found.toolpacks.length ? found.toolpacks.map((row) => {
+      list.replaceChildren(...(found.toolpacks.length ? found.toolpacks.flatMap((row) => {
         const missing = Object.entries(row.programs).filter(([, ok]) => !ok).map(([name]) => name);
         const unsigned = row.connections.filter((item) => !item.saved).map((item) => item.alias);
-        const tip = [...Object.entries(row.programs).map(([name, ok]) => (ok ? "✓ " : "✗ ") + t("machine.conn.program", {name})),
+        const tip = [row.description, ...Object.entries(row.programs).map(([name, ok]) => (ok ? "✓ " : "✗ ") + t("machine.conn.program", {name})),
           row.trust ? (row.bundle ? "✓ " : "· ") + t(row.bundle ? "machine.conn.bundle" : "machine.conn.bundle.none") : null,
           ...row.connections.map((item) => (item.saved ? "✓ " : "✗ ") + t("machine.conn.server", {alias: item.alias})),
           ...row.errors.map((line) => "✗ " + line), row.from ? t("machine.conn.from", {from: row.from === "company" ? t("machine.conn.company") : row.from}) : null].filter(Boolean).join("\n");
         const ready = row.ok && !unsigned.length;
         const acts = [];
-        if (missing.length) acts.push(button(t("machine.paths"), () => { view.close(); open(done); }));
-        if (row.trust && !row.bundle) acts.push(button(t("machine.ca"), () => { view.close(); open(done); }));
-        if (unsigned.length && typeof SERVERS !== "undefined") acts.push(button(t("setup.servers"), () => { view.close(); SERVERS.open(done); }));
+        if (missing.length || (row.trust && !row.bundle)) acts.push(button(t("machine.title"), () => ctx.go("computer")));
+        if (unsigned.length) acts.push(button(t("connections.title"), () => ctx.go("connections")));
         if (row.from !== "company") {  // the company's follow the pack (company sync); one installed here is updated or removed here
           if (row.newer) acts.push(button(t("machine.conn.update"), () => change("toolpack-update", row.name)));
           const drop = button(t("machine.ca.drop"), () => { if (window.confirm(t("machine.conn.remove.ask", {name: row.name}))) change("toolpack-remove", row.name); });
           drop.classList.add("danger");
           acts.push(drop);
+        } else {
+          acts.push(h("span", {class: "sub"}, t("machine.conn.follows")));
         }
-        return h("div", {class: "sv-line mc-conn", title: tip}, h("span", {class: "mc-dot " + (row.errors.length ? "bad" : ready ? "ok" : "warn")}), h("b", {class: "sv-alias"}, row.name),
-          h("span", {class: "sv-kind"}, row.version), row.from === "company" ? h("span", {class: "sv-own"}, t("machine.conn.company")) : null, h("span", {class: "mc-acts"}, ...acts));
+        const brings = [...row.types.map((item) => pill(t("machine.conn.type", {label: item.label}), item.via === "mcp" ? t("machine.conn.type.mcp") : "")),
+          row.skills ? pill(t("machine.conn.skills", {n: row.skills})) : null, ...row.links.map((name) => pill(t("machine.conn.link", {name}))),
+          row.mcp_rules ? pill(t("machine.conn.mcp", {n: row.mcp_rules}), t("machine.conn.mcp.tip")) : null].filter(Boolean);
+        return [h("div", {class: "sv-line mc-conn", title: tip}, h("span", {class: "mc-dot " + (row.errors.length ? "bad" : ready ? "ok" : "warn")}), h("b", {class: "sv-alias"}, row.name),
+          h("span", {class: "sv-kind"}, row.version), pill(t(row.from === "company" ? "machine.conn.company" : "connections.own")), h("span", {class: "mc-acts"}, ...acts)),
+          brings.length ? h("div", {class: "mc-brings"}, ...brings) : null].filter(Boolean);
       }) : [h("p", {class: "sub"}, t("machine.conn.none"))]));
+      if (ctx.changed) ctx.changed();
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
     const change = (step, name) => ask(step, {name}).then(() => paint(), (error) => { list.prepend(h("p", {class: "bad"}, error.message)); });
     const button = (text, go) => { const b = h("button", {type: "button", class: "act kb-mini"}, text); b.addEventListener("click", go); return b; };
-    close.addEventListener("click", view.close);
     paint();
-    if (done) { const watch = setInterval(() => { if (!view.box.isConnected) { clearInterval(watch); done(); } }, 400); }
+    return {body: [h("p", {class: "sub"}, t("machine.conn.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.conn.lead.tip")}, "\u24d8")), list, h("p", {class: "sub"}, t("machine.conn.add"))], foot: []};
   }
 
   function toolpacksSummary() {
@@ -108,8 +119,8 @@ const MACHINE = (function () {
 
   // One line for Get ready: how many tool folders, whether there is a bundle.
   function summary() {
-    return ask("state").then((found) => ({paths: found.paths.length, certs: found.bundle.path ? found.bundle.n : 0}));
+    return ask("state").then((found) => ({paths: found.paths.length, certs: found.bundle.path ? found.bundle.n : 0, mcp: found.mcp.allowed}));
   }
 
-  return {open, summary, toolpacks: toolpacksWindow, toolpacksSummary};
+  return {open, panel, packsPanel, summary, toolpacksSummary};
 })();

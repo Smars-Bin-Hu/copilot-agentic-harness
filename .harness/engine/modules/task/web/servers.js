@@ -21,8 +21,9 @@ const SERVERS = (function () {
   function serverRow(row, redraw) {
     const line = h("button", {type: "button", class: "sv-line" + (row.saved ? " saved" : ""), "aria-expanded": "false",
       title: [row.label, row.type_label + (row.auth_label ? " · " + row.auth_label : ""), where(row)].filter(Boolean).join("\n")},
-      envChip(row.env), h("b", {class: "sv-alias"}, row.alias), h("span", {class: "sv-kind"}, row.type_label), h("code", {class: "sv-where"}, where(row)),
+      envChip(row.env), h("b", {class: "sv-alias"}, row.alias), h("code", {class: "sv-where"}, where(row)),
       row.own ? h("span", {class: "sv-own", title: t("connections.own.tip")}, t("connections.own")) : null,
+      row.toolpack ? h("span", {class: "sv-own sv-from", title: t("connections.from.tip", {pack: row.toolpack})}, row.toolpack) : null,
       h("span", {class: "sv-state " + (row.saved ? "ok" : "none"), title: row.saved ? t("connections.saved.tip", {account: row.account || "-"}) : t("connections.none.tip")}, row.saved ? "✓ " + (row.account || t("connections.saved")) : t("connections.none")));
     const box = h("div", {class: "sv-form", hidden: ""});
     let drawn = false;
@@ -118,24 +119,57 @@ const SERVERS = (function () {
   }
 
   // The Servers window.
-  function open(done) {
+  // The Connections tab of the Tools window (tools.js): the connections grouped by type, each with the tool pack it comes from; one's own added below.
+  function panel(ctx) {
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
     const addBox = h("details", {class: "sv-add"}, h("summary", null, t("connections.own.add")));
     const launch = h("button", {type: "button", class: "act hot"}, t("connections.open"));
-    const close = h("button", {type: "button", class: "act"}, t("connections.close"));
-    const view = SERVE.dialog([h("h2", null, t("connections.title")), h("p", {class: "sub"}, t("connections.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("connections.lead.tip")}, "\u24d8")), h("div", {class: "win-body"}, list, addBox), h("div", {class: "row win-foot"}, launch, close)]);
-    view.box.classList.add("wide", "sv-win");
+    const out = h("button", {type: "button", class: "act", title: t("connections.export.tip")}, t("connections.export"));
     const redraw = () => ask("list").then((found) => {
-      const rows = found.connections.slice().sort((a, b) => ENV_ORDER.indexOf(a.env) - ENV_ORDER.indexOf(b.env) || a.alias.localeCompare(b.alias));
-      list.replaceChildren(...(rows.length ? rows.map((row) => serverRow(row, redraw)) : [h("p", {class: "sub"}, t("connections.empty"))]));
+      const rows = found.connections.slice().sort((a, b) => a.type_label.localeCompare(b.type_label) || ENV_ORDER.indexOf(a.env) - ENV_ORDER.indexOf(b.env) || a.alias.localeCompare(b.alias));
+      const groups = [];
+      rows.forEach((row) => { if (!groups.length || groups[groups.length - 1].label !== row.type_label) groups.push({label: row.type_label, rows: []}); groups[groups.length - 1].rows.push(row); });
+      list.replaceChildren(...(rows.length ? groups.flatMap((group) => [h("div", {class: "sv-grp"}, group.label), ...group.rows.map((row) => serverRow(row, redraw))]) : [h("p", {class: "sub"}, t("connections.empty"))]));
       addBox.replaceChildren(h("summary", null, t("connections.own.add")), ownForm(found.types, redraw));
       launch.disabled = !rows.some((row) => row.saved);
       launch.title = launch.disabled ? t("connections.open.nothing") : "";
+      out.disabled = !rows.some((row) => row.own);
+      if (ctx.changed) ctx.changed();
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
-    launch.addEventListener("click", () => { view.close(); choose(); });
-    close.addEventListener("click", view.close);
+    launch.addEventListener("click", () => { ctx.close(); choose(); });
+    out.addEventListener("click", () => exportWindow());
     redraw();
-    if (done) { const watch = setInterval(() => { if (!view.box.isConnected) { clearInterval(watch); done(); } }, 400); }  // the caller's summary follows what was saved
+    return {body: [h("p", {class: "sub"}, t("connections.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("connections.lead.tip")}, "\u24d8")), list, addBox], foot: [launch, out]};
+  }
+
+  // Export: one's own connections in the form of connections.json (no account, no password): copy it, save it as a file, or put it in the company pack.
+  function exportWindow() {
+    const text = h("pre", {class: "sv-json"}, t("connections.loading"));
+    const copy = h("button", {type: "button", class: "act"}, t("connections.export.copy"));
+    const file = h("button", {type: "button", class: "act"}, t("connections.export.file"));
+    const share = h("button", {type: "button", class: "act hot", title: t("connections.export.share.tip")}, t("connections.export.share"));
+    const said = h("span", {class: "sv-said"});
+    const close = h("button", {type: "button", class: "act"}, t("connections.close"));
+    const view = SERVE.dialog([h("h2", null, t("connections.export")), h("p", {class: "sub"}, t("connections.export.lead")), h("div", {class: "win-body"}, text), h("div", {class: "row win-foot"}, share, copy, file, said, close)]);
+    view.box.classList.add("wide", "sv-win");
+    let found = null;
+    ask("export").then((data) => { found = data; text.textContent = JSON.stringify(data, null, 2); }, (error) => { text.replaceChildren(h("span", {class: "bad"}, error.message)); });
+    copy.addEventListener("click", () => { if (found && navigator.clipboard) navigator.clipboard.writeText(JSON.stringify(found, null, 2) + "\n").then(() => said.replaceChildren(h("span", {class: "sv-result ok"}, "\u2713"))); });
+    file.addEventListener("click", () => {
+      if (!found) return;
+      const link = h("a", {href: URL.createObjectURL(new Blob([JSON.stringify(found, null, 2) + "\n"], {type: "application/json"})), download: "connections.json"});
+      document.body.append(link); link.click(); link.remove();
+    });
+    share.addEventListener("click", () => {
+      if (!found) return;
+      share.disabled = true;
+      ask("share", {aliases: Object.keys(found.connections)}).then((done) => { said.replaceChildren(h("span", {class: "sv-result ok"}, "\u2713 " + done.file)); }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); share.disabled = false; });
+    });
+    close.addEventListener("click", view.close);
+  }
+
+  function open(done) {
+    if (typeof TOOLS !== "undefined") TOOLS.open("connections", done);
   }
 
   // One line for Get ready and the Enter screen: how many servers, how many with the person's identity.
@@ -199,5 +233,5 @@ const SERVERS = (function () {
     close.addEventListener("click", view.close);
   }
 
-  return {open, choose, summary};
+  return {open, panel, choose, summary};
 })();

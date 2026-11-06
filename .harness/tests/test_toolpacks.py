@@ -143,6 +143,17 @@ class Install(ToolpackCase):
         with self.assertRaises(ToolpackError):
             toolpacks.remove(self.root, "tracker")
 
+    def test_check_finds_a_program_on_the_path_when_the_pack_has_types(self) -> None:
+        """A loop over the pack's types once took the name of the search path: no program was ever found (1.7.17, found on the board)."""
+        connections_bin = self.root / "bin2"
+        connections_bin.mkdir()
+        program = connections_bin / ("tracker.cmd" if os.name == "nt" else "tracker")
+        program.write_text("echo\n", encoding="utf-8")
+        program.chmod(program.stat().st_mode | stat.S_IEXEC)
+        launchenv.save_paths(self.root, [str(connections_bin)])
+        toolpacks.add(self.root, str(self.source))
+        self.assertEqual(toolpacks.check(self.root)["toolpacks"][0]["programs"], {"tracker": True})
+
     def test_check_says_a_program_is_missing_and_finds_it_in_a_tool_folder(self) -> None:
         toolpacks.add(self.root, str(self.source))
         row = toolpacks.check(self.root)["toolpacks"][0]
@@ -408,6 +419,17 @@ class BoardActions(ToolpackCase):
             board.machine({"step": step, "paths": []})
         with self.assertRaises(ValueError):
             board.machine({"step": "nonsense"})
+
+    def test_the_tools_window_lists_connections_by_type_with_their_tool_pack_and_exports_ones_own(self) -> None:
+        toolpacks.add(self.root, str(self.source))
+        connections.save(self.root, "mine", {"account": "me", "password": "secret"}, own={"type": "tracker", "env": "none", "auth": "own", "org": "acme"})
+        board = self.board()
+        listed = board.servers({"step": "list"})
+        self.assertEqual([(row["alias"], row["type"], row["type_label"], row["toolpack"]) for row in listed["connections"]], [("mine", "tracker", "Tracker", "tracker")])
+        self.assertIn("tracker", listed["types"])
+        self.assertEqual(board.servers({"step": "export"}), {"connections": {"mine": {"type": "tracker", "env": "none", "auth": "own", "org": "acme"}}})
+        row = board.machine({"step": "toolpacks"})["toolpacks"][0]
+        self.assertEqual((row["types"], row["skills"], row["mcp_rules"]), ([{"type": "tracker", "label": "Tracker", "via": "cli"}], 1, 0))
 
     def test_one_from_the_company_pack_is_not_changed_here(self) -> None:
         toolpacks.add(self.root, str(self.source), origin=toolpacks.COMPANY)

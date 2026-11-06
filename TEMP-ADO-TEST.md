@@ -87,6 +87,39 @@ Get-ChildItem env: | Where-Object { $_.Name -match 'proxy|cert|ca_bundle|ssl|nod
 
 9000 端口是 Zscaler：它拆开 HTTPS 再换上 Zscaler 自己的根证书。这张根证书已经在 Windows 证书库里（浏览器因此不报错），az 自带的 Python 不读证书库，所以要把它导出来放进 az 认的文件。
 
+**3c-0. 证书库里按名字找不到 Zscaler 时：看握手时的整条链，以及 Windows 信不信它（整段粘，自成一体）**
+
+```powershell
+$h = 'dev.azure.com'
+$global:zchain = @(); $global:zerr = ''
+$cb = [Net.Security.RemoteCertificateValidationCallback]{ param($s, $c, $ch, $e) $global:zerr = "$e"; $global:zchain = @($ch.ChainElements | ForEach-Object { $_.Certificate }); $true }
+$tcp = [Net.Sockets.TcpClient]::new('127.0.0.1', 9000); $ns = $tcp.GetStream()
+$req = [Text.Encoding]::ASCII.GetBytes("CONNECT ${h}:443 HTTP/1.1`r`nHost: ${h}:443`r`n`r`n"); $ns.Write($req, 0, $req.Length)
+$one = New-Object byte[] 1; $head = ''
+while (-not $head.EndsWith("`r`n`r`n")) { if ($ns.Read($one, 0, 1) -le 0) { break }; $head += [char]$one[0] }
+$ssl = [Net.Security.SslStream]::new($ns, $false, $cb); $ssl.AuthenticateAsClient($h); $tcp.Close()
+"Windows says: $zerr"
+$zchain | ForEach-Object { "  " + $_.Subject + "`n      issued by: " + $_.Issuer }
+```
+
+- `Windows says: None` = Windows 信任这条链；后面列出的每一层（除第一行网站证书）就是要放进证书文件的。直接做 **3d-0**。
+- `RemoteCertificateChainErrors` = Windows 也不信，告诉我，换路子。
+- 截图时公司名可以打码。
+
+**3d-0. 用握手时的链做证书文件（紧接着 3c-0，同一个窗口）**
+
+```powershell
+$pem = ($zchain | Select-Object -Skip 1 | ForEach-Object { "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64String($_.RawData, 'InsertLineBreaks') + "`n-----END CERTIFICATE-----`n" }) -join "`n"
+"certs added: " + @($zchain | Select-Object -Skip 1).Count
+$certifi = Get-ChildItem "$env:USERPROFILE\tools\azure-cli" -Recurse -Filter cacert.pem | Select-Object -First 1
+$bundle = "$env:USERPROFILE\tools\ca-bundle.pem"
+Get-Content $certifi.FullName -Raw | Set-Content $bundle -Encoding ascii
+Add-Content $bundle $pem -Encoding ascii
+"bundle = $bundle  (" + (Get-Item $bundle).Length + " bytes)"
+```
+
+然后跳到 **3e** 试。
+
 **3c. 从 Windows 证书库找 Zscaler 的证书（根证书和中间证书都找）**
 
 ```powershell

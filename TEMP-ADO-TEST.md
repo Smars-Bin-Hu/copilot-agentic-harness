@@ -143,21 +143,33 @@ Add-Content $bundle $pem -Encoding ascii
 "bundle = $bundle  (" + (Get-Item $bundle).Length + " bytes)"
 ```
 
-**3e. 先在你自己的终端模拟 agent 的环境试一次**
+**3e. 在你自己的终端模拟 agent 的环境试一次（整段粘，第 0 步已含在里面；只改前两行）**
 
 ```powershell
+$org  = '<组织>'
+$proj = '<项目>'
+$env:Path = "$env:Path;$env:USERPROFILE\tools\azure-cli\bin"
+$projUrl = [Uri]::EscapeDataString($proj)
+$ado = '499b84ac-1321-427f-aa17-267ca6975798'
 $env:HTTPS_PROXY = 'http://127.0.0.1:9000'; $env:HTTP_PROXY = 'http://127.0.0.1:9000'
 $env:REQUESTS_CA_BUNDLE = "$env:USERPROFILE\tools\ca-bundle.pem"
+"az = " + (Get-Command az).Source
 az rest --resource $ado --url "https://dev.azure.com/$org/$projUrl/_apis/build/builds" --uri-parameters '$top=5' 'api-version=7.1' --query "value[].{id:id,result:result}" -o table
 ```
 
-（要先粘过第 0 步。）能列出 build 就说明证书文件对了。再把 `REQUESTS_CA_BUNDLE` 那行去掉跑一次，应该报和 agent 一样的证书错误，这样就确认了原因。
+能列出 build 就说明证书文件对了（走的是和 agent 一样的 9000 代理）。想再确认原因：跑 `Remove-Item Env:REQUESTS_CA_BUNDLE`，再跑最后一行，应该报和 agent 一样的证书错误。
 
-然后按第 1 步重启 VS Code（关掉所有 VS Code 窗口），在启动那行之前多粘一行：
+**3f. 带着 az 和证书文件重启 VS Code（新 PowerShell，整段粘）**
+
+先关掉 **所有** VS Code 窗口，然后：
 
 ```powershell
+$env:Path = "$env:Path;$env:USERPROFILE\tools\azure-cli\bin"
 $env:REQUESTS_CA_BUNDLE = "$env:USERPROFILE\tools\ca-bundle.pem"
+& "$env:LOCALAPPDATA\Programs\Microsoft VS Code\Code.exe" C:\copilot-agentic-harness-main
 ```
+
+（不要在这个窗口设 `HTTPS_PROXY`：agent 那边 VS Code 自己会加。）接着做第 6 步。
 
 ---
 
@@ -190,12 +202,21 @@ $env:REQUESTS_CA_BUNDLE = "$env:USERPROFILE\tools\ca-bundle.pem"
 
 ## 6. 证书文件做好、VS Code 重启后
 
-**6a. 给 agent（新 chat）**
+**6a. 给 agent（新 chat，换掉 `<组织>` `<项目>`）**
 
 ```
-在终端跑：
-"REQUESTS_CA_BUNDLE=$env:REQUESTS_CA_BUNDLE"; "HTTPS_PROXY=$env:HTTPS_PROXY"
-然后跑第 4a 的事（用 az rest 读最近 5 次 build……）。
+先在终端跑这一行，把输出贴出来：
+"az=" + (Get-Command az).Source; "REQUESTS_CA_BUNDLE=$env:REQUESTS_CA_BUNDLE"; "HTTPS_PROXY=$env:HTTPS_PROXY"
+然后用 az rest 读 Azure DevOps：组织 <组织>，项目 <项目>。
+规则：--resource 499b84ac-1321-427f-aa17-267ca6975798；网址里不要写 ? 和 &，查询参数一律用 --uri-parameters；不要关证书校验。
+1) 列出最近 5 次 build（queryOrder=finishTimeDescending）；
+2) 找最近一次失败的 build（resultFilter=failed），用 _apis/build/builds/<id>/timeline 找失败的步骤，再读 _apis/build/builds/<id>/logs/<logId> 的最后 40 行，告诉我为什么失败。
 ```
 
-第一行要打印出 `...\tools\ca-bundle.pem`。之后 build 能读到就通了。
+第一行要看到 az 的路径、`...\tools\ca-bundle.pem` 和 `127.0.0.1:9000`。之后 build 能读到就通了。
+
+**6b. release（同一个 chat）**
+
+```
+再看最近 5 次 release 的状态：网址 https://vsrm.dev.azure.com/<组织>/<项目>/_apis/release/releases，同样用 --uri-parameters。
+```

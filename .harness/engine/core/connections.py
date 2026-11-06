@@ -40,6 +40,7 @@ IDENTITIES = ("env", "netonly", "keyfile", "tool")  # tool (1.7.13): the program
 SECRET_FIELDS = ("password",)
 OWN_FIELDS = ("type", "env", "auth", "label")  # what a server of the person's own has besides the kind's fields
 TEST_SECONDS = 15
+VIAS = ("cli", "mcp")  # how a connection of the type is reached: a program in the terminal, or an MCP server VS Code runs (1.7.17)
 ENVS = ("dev", "ist", "qat", "prod", "none")  # none (1.7.13): a ticket board or a pipeline service, which has no environments
 
 
@@ -53,11 +54,16 @@ def types(root: Path) -> Dict[str, Dict[str, Any]]:
     """Every kind this copy knows, `{name: kind}`; a file that cannot be read is left out (`problems` says why)."""
     from . import toolpacks  # it reads this module for its checks
 
+    from . import launchenv  # it reads this module's .env
+
+    mcp = launchenv.mcp_allowed(root)
     found: Dict[str, Dict[str, Any]] = {}
     for path in toolpacks.type_files(root):  # the first tool pack that brings a type keeps it
         try:
             kind = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
+            continue
+        if isinstance(kind, dict) and kind.get("via") == "mcp" and not mcp:  # MCP is not allowed here: the type is not offered
             continue
         if isinstance(kind, dict) and kind.get("type") and str(kind["type"]) not in found:
             found[str(kind["type"])] = dict(kind, toolpack=path.parent.parent.name)  # its connections' systems are the tool pack's: Open to the agent leaves them closed
@@ -65,26 +71,31 @@ def types(root: Path) -> Dict[str, Dict[str, Any]]:
 
 
 def type_problems(kind: Dict[str, Any]) -> List[str]:
-    """What is wrong with a kind file; empty when it is fine."""
+    """What is wrong with a connection type; empty when it is fine. A type `via: "mcp"` is reached through an MCP server VS Code runs: it needs no test
+    command and no way in of its own (the sign-in is VS Code's)."""
     name = kind.get("type", "?")
     out = []
-    if not isinstance(kind.get("fields"), dict) or not kind["fields"]:
-        out.append(f"kinds.{name}: `fields` names what a server of this kind needs (host, port, ...)")
+    if kind.get("via", "cli") not in VIAS:
+        out.append(f"types.{name}: `via` is one of {', '.join(VIAS)}")
+    if not isinstance(kind.get("fields", {}), dict) or (kind.get("via") != "mcp" and not kind.get("fields")):
+        out.append(f"types.{name}: `fields` names what a connection of this type needs (host, port, org, ...)")
+    if kind.get("via") == "mcp":
+        return out
     if not isinstance(kind.get("auth"), dict) or not kind["auth"]:
-        out.append(f"kinds.{name}: `auth` names at least one way in")
+        out.append(f"types.{name}: `auth` names at least one way in")
     for mode, auth in (kind.get("auth") or {}).items():
         if not isinstance(auth, dict) or auth.get("identity") not in IDENTITIES:
-            out.append(f"kinds.{name}.auth.{mode}: `identity` is one of {', '.join(IDENTITIES)}")
+            out.append(f"types.{name}.auth.{mode}: `identity` is one of {', '.join(IDENTITIES)}")
     if not kind.get("test"):
-        out.append(f"kinds.{name}: `test` is the command that tests the way in")
+        out.append(f"types.{name}: `test` is the command that tests the way in")
     texts = [kind.get("test") or "", kind.get("match") or ""] + [str((auth or {}).get("args") or "") for auth in (kind.get("auth") or {}).values()]
     if any("{password}" in text for text in texts):
-        out.append(f"kinds.{name}: a password never goes on a command line; give it through `env` of the auth")
+        out.append(f"types.{name}: a password never goes on a command line; give it through `env` of the auth")
     for key in ("expect", "denied", "down", "match"):
         try:
             re.compile(_fill(kind.get(key) or "", {}, escape=True) if key == "match" else kind.get(key) or "")
         except re.error as error:
-            out.append(f"kinds.{name}.{key}: bad pattern: {error}")
+            out.append(f"types.{name}.{key}: bad pattern: {error}")
     return out
 
 
@@ -257,7 +268,7 @@ def calls(root: Path) -> List[Dict[str, str]]:
     out = []
     for alias, server in listed(root).items():
         kind = known.get(str(server.get("type")))
-        if not kind or type_problems(kind) or server.get("env") not in ENVS or (held and alias not in held):
+        if not kind or kind.get("via") == "mcp" or type_problems(kind) or server.get("env") not in ENVS or (held and alias not in held):
             continue
         call = command(kind, server, identity_of(env, alias, kind))
         out.append({"alias": alias, "env": server["env"], "call": f"harness as {alias} -- {call}" if alias in wrapped else call})
@@ -319,6 +330,8 @@ def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[st
         return {"state": "failed", "why": say("connections.no_kind", kind=server.get("type")), "who": "", "seconds": 0}
     from . import launchenv  # it reads this module's .env
 
+    if kind.get("via") == "mcp":  # VS Code runs the MCP server and holds its sign-in: nothing to test from here
+        return {"state": "mcp", "why": say("connections.mcp.vscode"), "who": "", "seconds": 0}
     identity = {key: value for key, value in given.items() if key in ("account", "password", "keyfile") and value}
     line = command(kind, server, identity)
     launch = launchenv.extra(root)

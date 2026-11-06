@@ -38,6 +38,7 @@ BUNDLE_KEY = "HARNESS_CA_BUNDLE"
 HOST_KEY = "HARNESS_CA_HOST"
 PROXY_KEY = "HARNESS_CA_PROXY"
 MADE_KEY = "HARNESS_CA_MADE"
+MCP_KEY = "HARNESS_MCP"  # allowed | blocked (1.7.17): may tool packs add MCP servers to VS Code here? Blocked unless the person says otherwise
 BUNDLE = Path(".harness") / "certs" / "ca-bundle.pem"
 TRUST_VARS = ("REQUESTS_CA_BUNDLE",)  # Python tools (az, pip's requests); NODE_EXTRA_CA_CERTS and others when a tool pack asks for them
 DEFAULT_HOST = "example.com"
@@ -56,6 +57,53 @@ def settings(root: Path) -> Dict[str, Any]:
     env = conn_core.read_env(root)
     return {"paths": [item for item in env.get(PATH_KEY, "").split(os.pathsep) if item], "bundle": env.get(BUNDLE_KEY, ""), "host": env.get(HOST_KEY, ""),
             "proxy": env.get(PROXY_KEY, ""), "made": env.get(MADE_KEY, "")}
+
+
+def mcp_allowed(root: Path) -> bool:
+    return conn_core.read_env(root).get(MCP_KEY, "") == "allowed"
+
+
+def detect_mcp() -> str:
+    """What this computer's VS Code says about MCP, when it says it: "blocked" (an organization policy or the person's setting turns MCP off), else ""."""
+    found: List[Any] = []
+    if os.name == "nt":
+        try:
+            import winreg  # noqa: PLC0415 - Windows only
+
+            for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+                try:
+                    with winreg.OpenKey(hive, r"SOFTWARE\Policies\Microsoft\VSCode") as key:
+                        index = 0
+                        while True:
+                            try:
+                                name, value, _kind = winreg.EnumValue(key, index)
+                            except OSError:
+                                break
+                            if "mcp" in name.lower():
+                                found.append(value)
+                            index += 1
+                except OSError:
+                    continue
+        except ImportError:
+            pass
+    settings = Path(os.environ.get("APPDATA", "")) / "Code" / "User" / "settings.json" if os.name == "nt" else Path.home() / ("Library/Application Support" if sys.platform == "darwin" else ".config") / "Code" / "User" / "settings.json"
+    try:
+        text = settings.read_text(encoding="utf-8")
+        for key in ("chat.mcp.access", "chat.mcp.enabled"):
+            hit = re.search(r'"' + re.escape(key) + r'"\s*:\s*("?)([\w-]+)\1', text)
+            if hit:
+                found.append(hit.group(2))
+    except OSError:
+        pass
+    return "blocked" if any(str(value).lower() in ("none", "false", "0", "disabled") for value in found) else ""
+
+
+def set_mcp(root: Path, allowed: bool) -> Dict[str, Any]:
+    """The person says whether MCP may be used here; the tool packs' MCP servers are added to `.vscode/mcp.json`, or taken out (core.toolpacks)."""
+    from . import toolpacks  # it reads this module
+
+    conn_core.write_env(root, {MCP_KEY: "allowed" if allowed else "blocked"})
+    return toolpacks.apply_mcp(root)
 
 
 def bundle_path(root: Path) -> Optional[Path]:
@@ -362,4 +410,5 @@ def state(root: Path) -> Dict[str, Any]:
     return {"paths": [{"path": item, "found": Path(item).is_dir(), "programs": programs_in(Path(item))[:8]} for item in kept["paths"]],
             "bundle": {"path": str(bundle) if bundle else "", "n": n, "host": kept["host"], "proxy": kept["proxy"], "made": kept["made"],
                        "vars": trusted_by(root)},
-            "proxy": detect_proxy(), "default_host": DEFAULT_HOST}
+            "proxy": detect_proxy(), "default_host": DEFAULT_HOST, "mcp": {"allowed": mcp_allowed(root), "detected": detect_mcp(),
+            "set": bool(conn_core.read_env(root).get(MCP_KEY))}}

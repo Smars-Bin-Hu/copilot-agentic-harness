@@ -707,7 +707,7 @@ class Board:
             return servers_view(self.root, self.link.status().get("ready", False))
         if step == "test":
             found = conn_core.test(self.root, alias, given, server=dict(own, own=True) if own else None)
-            if found["state"] == "ok":
+            if found["state"] in ("ok", "mcp"):  # an MCP connection has nothing to test here: what is kept is the connection itself
                 self.tested[alias] = (stamp, time.time(), found.get("who", ""))
             return found
         if step == "save":
@@ -745,6 +745,9 @@ class Board:
             return dict(launchenv.state(self.root), made=made, vscode_open=bool(self.link.status().get("ready", False)))
         elif step == "drop":
             launchenv.drop_bundle(self.root)
+        elif step == "mcp":  # the person says whether MCP may be used here (1.7.17); the tool packs' MCP servers follow
+            done = launchenv.set_mcp(self.root, bool(data.get("allowed")))
+            return dict(launchenv.state(self.root), mcp_done=done, vscode_open=bool(self.link.status().get("ready", False)))
         elif step in ("toolpack-update", "toolpack-remove"):  # the paired browser is the person's: what `harness toolpack add --replace` / `remove` do at a terminal
             from core import toolpacks
 

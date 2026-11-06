@@ -3,7 +3,7 @@
   "name": "demotracker",
   "version": "1.0.0",
   "harness": "1.7.17",
-  "description": "A sample connector for a made-up ticket board: the shape of a real one (Azure DevOps, Jira) with nothing to sign up for.",
+  "description": "A sample tool pack for a made-up ticket board, with nothing to sign up for: a program for the terminal, and the same board as an MCP server where MCP is allowed.",
   "needs": {
     "programs": [
       "demotracker"
@@ -20,15 +20,11 @@
   "mcp": {
     "tools": [
       {
-        "pattern": "^mcp_demotracker_(get|list|search)",
+        "pattern": "(get_ticket|list_tickets)$",
         "verb": "read"
       },
       {
-        "pattern": "^mcp_demotracker_delete",
-        "verb": "destroy"
-      },
-      {
-        "pattern": "^mcp_demotracker_",
+        "pattern": "(comment_ticket|set_ticket_state)$",
         "verb": "write"
       }
     ]

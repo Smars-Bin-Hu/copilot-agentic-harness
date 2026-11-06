@@ -38,6 +38,8 @@ FOLDER = Path(".harness") / "toolpacks"
 MANIFEST = "toolpack.json"
 TYPES = "types"  # the connection types it brings
 RULES = "rules.json"  # gate rules written by hand
+MCP_FILE = "mcp.json"  # MCP servers for VS Code, `{"servers": {...}}`: added to .vscode/mcp.json only where MCP is allowed (1.7.17)
+VSCODE_MCP = Path(".vscode") / "mcp.json"
 COMPANY_PACKS = Path("tools") / "packs"  # where the company pack keeps tool packs
 LEDGER = "installed.json"
 SKILLS_DIR = Path(".github") / "skills"
@@ -97,6 +99,13 @@ def problems(root: Path, folder: Path) -> List[str]:
     mcp = found.get("mcp") or {}
     if not isinstance(mcp, dict) or not isinstance(mcp.get("tools", []), list):
         out.append(say("toolpack.mcp.bad", rule="mcp.tools"))
+    if (folder / MCP_FILE).is_file():
+        try:
+            listed = json.loads((folder / MCP_FILE).read_text(encoding="utf-8-sig")).get("servers")
+            if not isinstance(listed, dict) or not listed or not all(isinstance(spec, dict) for spec in listed.values()):
+                raise ValueError("`servers` is an object of servers")
+        except (OSError, ValueError, AttributeError) as error:
+            out.append(f"{MCP_FILE}: {error}")
     links = found.get("links") or {}
     if not isinstance(links, dict) or any(not re.match(r"^[a-z][a-z0-9]{0,15}$", str(key)) or not isinstance(spec, dict) or not str(spec.get("url") or "").startswith("https://") for key, spec in links.items()):
         out.append(say("toolpack.links.bad"))
@@ -269,8 +278,9 @@ def add(root: Path, raw: str, origin: str = "", replace: bool = False) -> Dict[s
                 shutil.rmtree(place)
             shutil.copytree(skill, place, ignore=shutil.ignore_patterns(".git", "__pycache__", ".DS_Store"))
         version = str(manifest(target).get("version"))
-    book[name] = {"version": version, "from": origin or str(source), "at": utc_now(), "skills": [skill.name for skill in skills]}
+    book[name] = {"version": version, "from": origin or str(source), "at": utc_now(), "skills": [skill.name for skill in skills], "mcp": (book.get(name) or {}).get("mcp") or []}
     _write_ledger(root, book)
+    apply_mcp(root)
     return {"installed": name, "version": version, "skills": book[name]["skills"], "next": say("toolpack.added", name=name)}
 
 
@@ -282,6 +292,7 @@ def remove(root: Path, name: str) -> Dict[str, Any]:
         raise ToolpackError(say("toolpack.none", name=name))
     backup = runtime_dir(root) / BACKUP_DIR / time.strftime("%Y%m%d-%H%M%S") / name
     backup.mkdir(parents=True, exist_ok=True)
+    _drop_mcp(root, (book.get(name) or {}).get("mcp") or [])
     moved = []
     for skill in (book.get(name) or {}).get("skills") or []:
         if (root / SKILLS_DIR / skill).is_dir():
@@ -291,6 +302,73 @@ def remove(root: Path, name: str) -> Dict[str, Any]:
     book.pop(name, None)
     _write_ledger(root, book)
     return {"removed": name, "skills": moved, "backup": str(backup)}
+
+
+def _read_mcp(root: Path) -> Dict[str, Any]:
+    try:
+        found = json.loads((root / VSCODE_MCP).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return {"servers": {}}
+    if not isinstance(found, dict):
+        return {"servers": {}}
+    found.setdefault("servers", {})
+    return found
+
+
+def _write_mcp(root: Path, found: Dict[str, Any]) -> None:
+    target = root / VSCODE_MCP
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(found, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _drop_mcp(root: Path, names: List[str]) -> None:
+    if not names or not (root / VSCODE_MCP).is_file():
+        return
+    found = _read_mcp(root)
+    for name in names:
+        found["servers"].pop(name, None)
+    _write_mcp(root, found)
+
+
+def apply_mcp(root: Path) -> Dict[str, Any]:
+    """Where MCP is allowed (This computer), each installed tool pack's MCP servers are in `.vscode/mcp.json`; where it is not, the ones a tool pack put
+    there are taken out. A server of the same name that is not a tool pack's own is never touched (`kept`)."""
+    from . import launchenv  # it reads this module
+
+    allowed = launchenv.mcp_allowed(root)
+    book = ledger(root)
+    found = _read_mcp(root) if (root / VSCODE_MCP).is_file() or allowed else {"servers": {}}
+    mine = {server for item in book.values() for server in item.get("mcp") or []}
+    added: List[str] = []
+    dropped: List[str] = []
+    kept: List[str] = []
+    for name, item in installed(root).items():
+        entry = book.setdefault(name, {})
+        if not allowed:
+            for server in entry.get("mcp") or []:
+                if found["servers"].pop(server, None) is not None:
+                    dropped.append(server)
+            entry["mcp"] = []
+            continue
+        try:
+            wanted = json.loads((item["folder"] / MCP_FILE).read_text(encoding="utf-8-sig")).get("servers") or {}
+        except (OSError, ValueError, AttributeError):
+            wanted = {}
+        own = []
+        for server, spec in wanted.items():
+            if server in found["servers"] and server not in mine:
+                kept.append(server)
+                continue
+            if found["servers"].get(server) != spec:
+                found["servers"][server] = spec
+                added.append(server)
+            own.append(server)
+        entry["mcp"] = own
+    if added or dropped:
+        _write_mcp(root, found)
+    if book:
+        _write_ledger(root, book)
+    return {"mcp": "allowed" if allowed else "blocked", "added": added, "dropped": dropped, "kept": kept}
 
 
 def from_company(root: Path, company: Path) -> Dict[str, Any]:

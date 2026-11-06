@@ -7,7 +7,9 @@ specificTo: generic
 
 # Demo tracker: read a ticket, draft an update
 
-A sample skill of the sample connector `demotracker` (a made-up ticket board). A real connector's skill has this shape: how to read, how to draft a write, what never to do.
+A sample skill of the sample tool pack `demotracker` (a made-up ticket board). A real tool pack's skill has this shape: how to read, how to draft a write, what never to do.
+
+**Two ways in.** Where MCP is allowed, the tools `get_ticket`, `list_tickets`, `comment_ticket` and `set_ticket_state` are there: use them. Where they are not (MCP blocked by the organization), use the `demotracker` program in the terminal, as below. The gate judges both the same way.
 
 ## When to Use This Skill
 

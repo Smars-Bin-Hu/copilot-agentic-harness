@@ -413,3 +413,53 @@ class BoardActions(ToolpackCase):
         toolpacks.add(self.root, str(self.source), origin=toolpacks.COMPANY)
         with self.assertRaises(ValueError):
             self.board().machine({"step": "toolpack-remove", "name": "tracker"})
+
+
+class McpOptional(ToolpackCase):
+    """1.7.17: MCP is optional. Blocked unless the person allows it (a company may block it); then a tool pack's MCP servers go into .vscode/mcp.json,
+    and come out again when it is blocked or the pack is removed. A server that is not a tool pack's own is never touched."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.source / "mcp.json").write_text(json.dumps({"servers": {"tracker": {"type": "stdio", "command": "python3", "args": ["x"]}}}), encoding="utf-8")
+        mcp_type = {"type": "trackermcp", "label": "Tracker (MCP)", "via": "mcp", "fields": {"org": {"label": "Org"}}}
+        (self.source / "types" / "trackermcp.json").write_text(json.dumps(mcp_type), encoding="utf-8")
+        self.vscode = self.root / ".vscode" / "mcp.json"
+
+    def servers(self) -> dict:
+        return json.loads(self.vscode.read_text(encoding="utf-8"))["servers"] if self.vscode.is_file() else {}
+
+    def test_blocked_by_default_then_allowed_then_blocked_again(self) -> None:
+        toolpacks.add(self.root, str(self.source))
+        self.assertEqual(self.servers(), {})
+        self.assertNotIn("trackermcp", connections.types(self.root), "an MCP type is not offered while MCP is blocked")
+        self.assertIn("tracker", connections.types(self.root), "the command-line type still is")
+        done = launchenv.set_mcp(self.root, True)
+        self.assertEqual((done["mcp"], done["added"]), ("allowed", ["tracker"]))
+        self.assertIn("tracker", self.servers())
+        self.assertIn("trackermcp", connections.types(self.root))
+        launchenv.set_mcp(self.root, False)
+        self.assertEqual(self.servers(), {})
+
+    def test_a_server_of_someone_else_is_kept_and_remove_takes_only_its_own(self) -> None:
+        self.vscode.parent.mkdir(parents=True)
+        self.vscode.write_text(json.dumps({"servers": {"mine": {"type": "http", "url": "https://x.example.org"}}}), encoding="utf-8")
+        launchenv.set_mcp(self.root, True)
+        toolpacks.add(self.root, str(self.source))
+        self.assertEqual(sorted(self.servers()), ["mine", "tracker"])
+        toolpacks.remove(self.root, "tracker")
+        self.assertEqual(sorted(self.servers()), ["mine"])
+
+    def test_an_mcp_connection_needs_no_test_and_a_bad_mcp_file_is_refused(self) -> None:
+        launchenv.set_mcp(self.root, True)
+        toolpacks.add(self.root, str(self.source))
+        self.assertEqual(connections.test(self.root, "x", {}, server={"type": "trackermcp", "env": "none", "org": "o", "own": True})["state"], "mcp")
+        bad = make(self.outside / "badmcp", name="badmcp", skills=())
+        (bad / "mcp.json").write_text('{"servers": []}', encoding="utf-8")
+        with self.assertRaises(ToolpackError):
+            toolpacks.add(self.root, str(bad))
+
+    def test_the_agent_cannot_add_an_mcp_server_itself(self) -> None:
+        event = pre_tool("s-mcp", "create_file", {"filePath": str(self.root.resolve() / ".vscode/mcp.json"), "content": "{}"})
+        event["cwd"] = str(self.root.resolve())
+        self.assertEqual(self.hook(event)["permissionDecision"], "deny")

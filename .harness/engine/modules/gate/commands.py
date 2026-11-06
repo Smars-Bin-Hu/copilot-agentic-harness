@@ -232,6 +232,15 @@ def _launch_state(root: Path) -> Dict[str, Any]:
     return dict(launchenv.state(root), extra=sorted(launchenv.extra(root)))
 
 
+def _mcp(root: Path, allow: bool, block: bool) -> Dict[str, Any]:
+    from core import launchenv
+
+    if allow or block:
+        approval.require_person("tools mcp", typed=False)
+        return launchenv.set_mcp(root, allow)
+    return {"mcp": "allowed" if launchenv.mcp_allowed(root) else "blocked", "detected": launchenv.detect_mcp() or "-"}
+
+
 def _ca_bundle(root: Path, host: str, proxy: Any) -> Dict[str, Any]:
     from core import launchenv
 
@@ -257,6 +266,12 @@ def register(subparsers: Any) -> None:
     bundle.add_argument("--host", default="", help="the outside address to reach (default example.com); any address the proxy inspects will do")
     bundle.add_argument("--proxy", default=None, help="host:port of the proxy; left out, the one this computer names (HTTPS_PROXY or the system setting); \"\" for none")
     bundle.set_defaults(handler=lambda args: _ca_bundle(repo_root(), args.host, args.proxy))
+
+    mcp = tools_commands.add_parser("mcp", help="may tool packs add their MCP servers to VS Code here? Shows the setting; --allow or --block changes it (a person at a terminal only; blocked unless you allow it)")
+    mcp_side = mcp.add_mutually_exclusive_group()
+    mcp_side.add_argument("--allow", action="store_true")
+    mcp_side.add_argument("--block", action="store_true")
+    mcp.set_defaults(handler=lambda a: _mcp(repo_root(), a.allow, a.block))
 
     acting = subparsers.add_parser("as", help="run one command of a server with that server's saved identity (when this window does not hold it): harness as <alias> -- <command>")
     acting.add_argument("alias", help="the server, as Get ready lists it")

@@ -4,7 +4,7 @@
 const SERVERS = (function () {
   const ask = (step, body) => SERVE.post("/api/connections", {step, ...(body || {})}).then((data) => data.result);
   const ENV_ORDER = ["dev", "ist", "qat", "prod"];
-  const MARK = {ok: "✓", denied: "✗", down: "✗", failed: "✗", missing: "✗"};
+  const MARK = {ok: "✓", denied: "✗", down: "✗", failed: "✗", missing: "✗", mcp: "\u2192"};
   const keep = (key, value) => { try { localStorage.setItem("harness.servers." + key, JSON.stringify(value)); } catch (error) { /* a convenience only */ } };
   const kept = (key, fallback) => { try { const found = localStorage.getItem("harness.servers." + key); return found ? JSON.parse(found) : fallback; } catch (error) { return fallback; } };
 
@@ -13,8 +13,8 @@ const SERVERS = (function () {
   function where(row) { const f = row.fields || {}; return [f.host, f.port].filter(Boolean).join(":") || Object.values(f).filter(Boolean).join(" · "); }
   function result(found) {  // a test's answer: a mark and a short word, the reason on hover
     const word = t("connections.state." + found.state);
-    const tip = found.state === "ok" ? t("connections.tip.ok", {who: found.who || "-", seconds: found.seconds}) : found.state === "missing" ? found.why : t("connections.tip." + found.state);
-    return h("span", {class: "sv-result " + (found.state === "ok" ? "ok" : "bad"), title: tip}, h("b", null, MARK[found.state] || "?"), " ", word);
+    const tip = found.state === "ok" ? t("connections.tip.ok", {who: found.who || "-", seconds: found.seconds}) : found.state === "missing" || found.state === "mcp" ? found.why : t("connections.tip." + found.state);
+    return h("span", {class: "sv-result " + (found.state === "ok" || found.state === "mcp" ? "ok" : "bad"), title: tip}, h("b", null, MARK[found.state] || "?"), " ", word);
   }
 
   // One server: a line (environment, name, kind, where, what is saved), and when opened, its identity, Test and Save.
@@ -51,7 +51,7 @@ const SERVERS = (function () {
     [account, password, keyfile].filter(Boolean).forEach((input) => input.addEventListener("input", changed));
     test.addEventListener("click", () => {
       test.disabled = true; save.disabled = true; said.replaceChildren(h("span", {class: "sub"}, t("connections.testing")));
-      ask("test", values()).then((found) => { said.replaceChildren(result(found)); save.disabled = found.state !== "ok"; }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); })
+      ask("test", values()).then((found) => { said.replaceChildren(result(found)); save.disabled = !["ok", "mcp"].includes(found.state); }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); })
         .then(() => { test.disabled = false; });
     });
     save.addEventListener("click", () => {

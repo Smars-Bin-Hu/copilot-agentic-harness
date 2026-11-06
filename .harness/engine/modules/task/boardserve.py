@@ -684,7 +684,7 @@ class Board:
         return self.short_kept
 
     def servers(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Get ready, Servers (1.7.10). `step`: list, test, save (only what passed a test in the last 15 minutes, the same values), forget, plan, open
+        """Get ready, Servers (1.7.10). `step`: list, test, save (only what passed a test in the last 15 minutes, the same values), forget, share, plan, open
         (VS Code with the chosen identities; refused while a VS Code of this folder is open: it could not take them). Never a password back to the page."""
         import hashlib
 
@@ -716,6 +716,8 @@ class Board:
         if step == "forget":
             servers_core.forget(self.root, alias)
             return {"forgot": alias}
+        if step == "share":  # into the company pack: the server only, never the identity (knowledge base, Pack for colleagues)
+            return servers_core.share(self.root, [str(item) for item in (data.get("aliases") or []) if isinstance(item, str)])
         chosen = [str(item) for item in (data.get("chosen") or []) if isinstance(item, str)]
         primary = str(data.get("primary") or "")
         if step == "plan":

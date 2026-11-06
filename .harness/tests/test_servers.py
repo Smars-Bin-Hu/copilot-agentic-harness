@@ -224,6 +224,28 @@ class CarryTests(ServersCase):
         self.assertTrue((self.root / ".harness" / "kinds" / "other.json").is_file())
         self.assertIn("o-dev", servers.listed(self.root))
 
+    def test_a_server_of_ones_own_goes_in_the_company_pack_without_the_identity(self) -> None:
+        """Knowledge base, Pack for colleagues: the server and its kind go in the company content; the account and password stay in .env (1.7.10)."""
+        self.company({})
+        with self.assertRaises(ValueError):  # no company content to add to
+            servers.share(self.root, ["mine"])
+        kb = self.root / "knowledge-base" / "company"
+        kb.mkdir(parents=True)
+        (kb / "company.json").write_text("{}", encoding="utf-8")
+        servers.save(self.root, "mine", {"account": "me", "password": "right"}, own={"kind": "fakedb", "env": "dev", "auth": "own", "host": "db9", "port": "5001"})
+        found = servers.share(self.root, ["mine"])
+        written = (kb / "tools" / "servers.json").read_text(encoding="utf-8")
+        self.assertEqual(json.loads(written)["servers"]["mine"], {"kind": "fakedb", "env": "dev", "auth": "own", "host": "db9", "port": "5001"})
+        self.assertNotIn("right", written)
+        self.assertNotIn('"me"', written)
+        self.assertEqual(found["kinds"], ["fakedb.json"])  # the pack had no such kind
+        self.assertTrue((kb / "tools" / "kinds" / "fakedb.json").is_file())
+        here = servers.listed(self.root)["mine"]
+        self.assertFalse(here.get("own"))  # synced: the company's now
+        self.assertEqual(servers.test(self.root, "mine", servers.identity_of(servers.read_env(self.root), "mine", KIND))["state"], "ok")  # the identity still serves it
+        with self.assertRaises(ValueError):  # the company's, not one's own
+            servers.share(self.root, ["mine"])
+
     def test_reinstall_carries_the_identities(self) -> None:
         from core import reinstall
 

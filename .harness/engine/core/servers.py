@@ -329,6 +329,53 @@ def save(root: Path, alias: str, given: Dict[str, str], own: Optional[Dict[str, 
     write_env(root, changes)
 
 
+def share(root: Path, aliases: List[str]) -> Dict[str, Any]:
+    """Put servers of one's own in the company pack (`<knowledge base>/company/tools/servers.json`): the server only, never an account or a password, and
+    the kind file too when the pack has none. Then the company content is synced, so the server is the company's here as well; the identity saved for it
+    stays in `.env` under the same alias. The person commits the knowledge base and packs it for colleagues as usual."""
+    from . import company, targets  # company imports this module
+
+    folder = targets.company_folder(root)
+    if folder is None:
+        raise ValueError(say("servers.share.none"))
+    path = folder / company.TOOLS_DIR / company.SERVERS_FILE
+    try:
+        found = json.loads(path.read_text(encoding="utf-8-sig")) if path.is_file() else {}
+    except (OSError, ValueError):
+        raise ValueError(say("servers.share.bad", path=str(path))) from None
+    if not isinstance(found, dict) or not isinstance(found.get("servers", {}), dict):
+        raise ValueError(say("servers.share.bad", path=str(path)))
+    listed_now, here = found.setdefault("servers", {}), listed(root)
+    added, kinds_added = [], []
+    for alias in aliases:
+        server = here.get(alias)
+        if not server or not server.get("own"):
+            raise ValueError(say("servers.share.notown", alias=alias))
+        if alias in listed_now:
+            raise ValueError(say("servers.share.taken", alias=alias))
+        listed_now[alias] = {key: value for key, value in server.items() if key != "own" and key not in ("account", "password", "keyfile")}
+        added.append(alias)
+        kind = str(server.get("kind"))
+        target = folder / company.TOOLS_DIR / company.KINDS_DIR
+        if not any(_kind_name(item) == kind for item in target.glob("*.json")):  # a folder that is not there globs nothing
+            source = next((item for item in sorted((root / KINDS_DIR).glob("*.json")) if _kind_name(item) == kind), None)
+            if source is not None:
+                target.mkdir(parents=True, exist_ok=True)
+                (target / source.name).write_bytes(source.read_bytes())
+                kinds_added.append(source.name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(found, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    synced = company.sync_after(root) or {}
+    return {"shared": added, "file": str(path), "kinds": kinds_added, "sync_error": synced.get("error", ""), "next": say("servers.share.done")}
+
+
+def _kind_name(path: Path) -> str:
+    try:
+        return str(json.loads(path.read_text(encoding="utf-8-sig")).get("kind", ""))
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
 def forget(root: Path, alias: str) -> None:
     """Take a server's identity (and, for one of the person's own, the server) out of the `.env`."""
     stem = env_key(alias, "")

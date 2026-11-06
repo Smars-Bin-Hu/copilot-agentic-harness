@@ -2,7 +2,7 @@
 
 A new copy of the repository has the shipped files only. What git ignores is the person's: the tasks, the reports, the
 goals, `.harness/runtime/` (which session holds which task, the logs the reports read, the repository map cache), the
-`*.override.json` policies and the knowledge base with its own `.git`. Lose `runtime/` and a chat that goes on in an old
+`*.override.json` policies, the identities for the servers (`.harness/.env`, 1.7.10) and the knowledge base with its own `.git`. Lose `runtime/` and a chat that goes on in an old
 session no longer finds its task. This copies all of it; the old copy is not changed.
 
 Without `--apply` nothing is written (an agent may run that). With it, only a person at a terminal may run it.
@@ -166,6 +166,16 @@ class Plan:
             else:
                 self.copy("policies", item.name, "file", item, root / POLICIES_DIR / item.name)
 
+    def identities(self, old: Path, root: Path) -> None:
+        """The person's identities for the servers (`.harness/.env`, 1.7.10): carried as they are, unless this copy has its own."""
+        source, target = old / ".harness" / ".env", root / ".harness" / ".env"
+        if not source.is_file():
+            return
+        if target.exists():
+            self.skip(".harness/.env", say("reinstall.why.exists"))
+        else:
+            self.copy("identities", ".env", "file", source, target)
+
     def knowledge_base(self, old: Path, root: Path) -> None:
         source, target = old / KB_DIR, root / KB_DIR
         if not source.is_dir() or is_placeholder(source):
@@ -227,6 +237,7 @@ def make_plan(root: Path, old: Path) -> tuple:
     plan.folders("goals", old / GOALS_DIR, root / GOALS_DIR)
     plan.runtime(old, root)
     plan.policies(old, root)
+    plan.identities(old, root)
     plan.knowledge_base(old, root)
     plan.company(old, root, before, now)
     return plan, left_alone(before, plan)

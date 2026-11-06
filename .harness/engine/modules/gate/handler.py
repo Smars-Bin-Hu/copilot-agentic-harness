@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 import json
 import re
 
-from core import calls, reach, repo_paths, targets, tasks, unseen
+from core import calls, reach, repo_paths, servers, targets, tasks, unseen
 from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent
@@ -262,10 +262,85 @@ def watch_reach(event: HookEvent, ctx: Context) -> None:
         return
 
 
+SECRET_FILE = re.compile(r"\.harness[\\/]+\.env(?![\w.-])", re.IGNORECASE)
+DUMP_ALL = re.compile(r"(?:^|[;&|(]\s*)(?:env|printenv|set|export\s+-p|Get-ChildItem\s+env:|gci\s+env:|dir\s+env:|ls\s+env:)\s*(?:$|[;&|)>])", re.IGNORECASE)
+
+
+def secret_names(ctx: Context) -> list:
+    """The variables that carry an identity (the kinds' `auth.env`, and the harness's own keys): no kind is known by name here."""
+    names = {servers.PREFIX}
+    for kind in servers.kinds(ctx.root).values():
+        for auth in (kind.get("auth") or {}).values():
+            names.update(str(name) for name in ((auth or {}).get("env") or {}))
+    return sorted(names)
+
+
+def check_secrets(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """The person's identities stay out of the agent's hands (1.7.10): no read of `.harness/.env`, no print of a variable that carries one, no dump of
+    the whole environment. A net, not a wall: the person's account is the real limit (docs/03-configure.md)."""
+    secret = (ctx.root / servers.ENV_FILE).resolve()
+    for path in event.paths or []:
+        try:
+            target = (ctx.root / path).resolve() if not path.startswith(("/", "\\")) and ":" not in path[:3] else type(ctx.root)(path).resolve()
+        except (OSError, ValueError):
+            continue
+        if target == secret:
+            return Decision(permission="deny", reason=rules.say("gate.servers.secret"), facts={"kind": "secret"})
+    if event.tool_kind == "terminal" and event.command:
+        text = event.command
+        named = {name for name in secret_names(ctx) if re.search(r"(?<![\w])" + re.escape(name), text)}
+        if SECRET_FILE.search(text) or DUMP_ALL.search(text) or (named and not named <= owned_names(event, ctx)):
+            return Decision(permission="deny", reason=rules.say("gate.servers.secret"), facts={"kind": "secret"})
+    return None
+
+
+def owned_names(event: HookEvent, ctx: Context) -> set:
+    """The secret variables a command may name: those of the kinds of the servers it calls, and only when every call in it is one of those servers
+    (curl needs `$TOKEN` on its own command line; `echo $TOKEN` or a call elsewhere does not get it)."""
+    try:
+        listed = ctx.policy("tools").get("systems") or {}
+        found = external.classify(event.command, listed)
+        known, servers_of = servers.kinds(ctx.root), servers.listed(ctx.root)
+        if not found or any(action.system not in servers_of for action, _decision in found):
+            return set()
+        if len(gitcmd.split_segments(event.command)) != len(found):  # another command beside the calls (an `echo`, a pipe to elsewhere): nothing named
+            return set()
+        names: set = set()
+        for action, _decision in found:
+            kind = known.get(str(servers_of[action.system].get("kind"))) or {}
+            for auth in (kind.get("auth") or {}).values():
+                names.update(str(name) for name in ((auth or {}).get("env") or {}))
+        return names
+    except Exception:  # noqa: BLE001 - when in doubt, nothing is allowed
+        return set()
+
+
+def check_wrapped(event: HookEvent, ctx: Context, judged: Optional[Dict[str, Any]]) -> Optional[Decision]:
+    """A server whose identity this window does not hold is reached through `harness as <alias> --` (1.7.10): a call without it, or with another alias, is refused with the line to run."""
+    if not judged:
+        return None
+    alias = judged["action"].system
+    wrapped = set(servers.state(ctx.root).get("wrap") or [])
+    given = next((found for found in (external.as_run(tokens) for tokens in gitcmd.split_segments(event.command)) if found), None)
+    if given and given[0] != alias:
+        return Decision(permission="deny", reason=rules.say("gate.servers.wrap.other", given=given[0], alias=alias), facts={"kind": "wrap"})
+    if alias in wrapped and not given:
+        return Decision(permission="deny", reason=rules.say("gate.servers.wrap", alias=alias, call=f"harness as {alias} -- {gitcmd.collapse(event.command)}"), facts={"kind": "wrap"})
+    return None
+
+
+def wrapped_context(ctx: Context) -> Optional[Decision]:
+    """At the start of a chat: the servers this window reaches through `harness as` only. Nothing when there is none."""
+    wrapped = servers.state(ctx.root).get("wrap") or []
+    if not wrapped:
+        return None
+    return Decision(context=rules.say("servers.wrap.context", aliases=", ".join(wrapped), first=wrapped[0]))
+
+
 def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.event == "SessionStart" or (event.event in ("PostToolUse", "PostToolUseFailure") and event.tool_kind == "terminal"):
         watch_reach(event, ctx)
-        return None
+        return wrapped_context(ctx) if event.event == "SessionStart" else None
     if event.event == "UserPromptSubmit":
         return approved_context(event, ctx)
     if event.event == "PreToolUse" and event.tool_kind != "terminal":
@@ -275,6 +350,9 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
             return Decision(permission="deny", reason=rules.board_request(port))
     if event.event == "PreToolUse":
         unseen.note_call(ctx.root, event)
+        refused = check_secrets(event, ctx)
+        if refused:
+            return refused
     if event.event != "PreToolUse" or event.tool_kind not in WRITE_KINDS + ("terminal",):
         return None
     policy = ctx.policy(POLICY_NAME)
@@ -284,6 +362,9 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.tool_kind == "terminal":
         # Without target repositories the harness behaves as before: only the ask rules in gate.json look at git.
         judged = judge_external(event, ctx)
+        wrong = check_wrapped(event, ctx, judged)
+        if wrong:
+            return wrong
         decided = check_terminal(event, ctx, compiled, policy, guard_git=bool(found and found.configured), judged=judged)
         facts = external_facts(judged)  # after check_terminal: an approved outbox call is marked there
         if facts:  # every call to a listed system leaves its line, whatever rule decided it and also when it went through

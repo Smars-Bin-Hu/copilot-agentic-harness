@@ -343,7 +343,8 @@
       button = id === "vscode" && Boolean(c.open) ? "open" : false;
     }
     if (state === "note" && (c.why === "error" || c.why === "problem")) message = c.why === "error" ? t("board.enter.m.error", vals) : t("board.enter.m.repos.problem", vals);
-    if (id === "systems" && c.launch && (c.why === "unreached" || c.why === "unknown")) { message = t("board.enter.m.systems.launch"); button = "launch"; }  // Windows: the company's launch script (1.7.9)
+    if (id === "systems" && (c.why === "unreached" || c.why === "unknown") && c.identities && typeof SERVERS !== "undefined") { message = t("board.enter.m.systems.launch"); button = "identities"; }  // the identities kept by Servers (1.7.10)
+    else if (id === "systems" && c.launch && (c.why === "unreached" || c.why === "unknown")) { message = t("board.enter.m.systems.launch"); button = "launch"; }  // Windows: the company's launch script (1.7.9)
     const tip = c.tip ? t("board.enter.tip." + id + "." + c.why, vals) : id === "systems" && c.why === "unknown" ? t("board.enter.tip.systems.unknown") : "";  // the long words of a short line: on hover (1.7.9)
     return {state, tag, message, button, tip};
   }
@@ -369,7 +370,7 @@
         if (p.dataset.k !== key) {
           p.replaceChildren(document.createTextNode(view.message));
           if (view.button) {
-            const b = view.button === "launch" ? h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")) : h("button", {type: "button", class: "en-open", "data-open": "1"}, t("board.enter.open"));
+            const b = view.button === "identities" ? h("button", {type: "button", class: "en-open", "data-identities": "1"}, t("board.enter.identities")) : view.button === "launch" ? h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")) : h("button", {type: "button", class: "en-open", "data-open": "1"}, t("board.enter.open"));
             p.append(h("br"), b);
             if (chk0.openError) p.append(h("br"), h("span", null, chk0.openError));
           }
@@ -469,6 +470,9 @@
   }
 
   // Open VS Code: the person-only call that brings the window of this folder forward (the board's own `/api/open`). The line then says it is waiting.
+  list.addEventListener("click", (event) => {  // the identities kept by Servers: pick them, then VS Code opens with them (1.7.10)
+    if (event.target.closest("[data-identities]")) SERVERS.choose();
+  });
   list.addEventListener("click", (event) => {  // Windows: the company's launch script asks for the identity in a window of its own and starts VS Code with it (1.7.9)
     const button = event.target.closest("[data-launch]");
     if (!button || button.disabled) return;
@@ -488,7 +492,7 @@
     if (typeof SHELL !== "undefined" && SHELL.isOpen()) return;  // the palette or the settings own the keys
     if (["Shift", "Control", "Alt", "Meta", "Tab", "Escape", "CapsLock", "Dead", "Process"].includes(event.key) || /^F\d+$/.test(event.key)) return;
     const target = event.target;
-    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[data-open],[data-launch]")) return;
+    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[data-open],[data-launch],[data-identities]")) return;
     if (tryEnter()) event.preventDefault();  // any key goes in, but only when everything is ready
   });
 

@@ -438,9 +438,21 @@ class SamplePackTests(unittest.TestCase):
         import json
         from pathlib import Path
 
-        pack = Path(__file__).resolve().parents[1] / "examples" / "system-packs" / "sqlserver-sqlcmd" / "systems.json"
-        systems = json.loads(pack.read_text(encoding="utf-8"))["systems"]
+        import shutil
+        import tempfile
+
+        from core import config
+
+        pack = Path(__file__).resolve().parents[1] / "examples" / "system-packs" / "sqlserver-sqlcmd"
+        root = Path(tempfile.mkdtemp())
+        shutil.copytree(Path(__file__).resolve().parents[1] / "policies", root / ".harness" / "policies")
+        shutil.copytree(pack / "kinds", root / ".harness" / "kinds")
+        shutil.copy(pack / "servers.json", root / ".harness" / "policies" / "servers.company.json")
+        systems = config.load_policy(root, "tools")["systems"]  # each server of the pack is a system (1.7.10)
+        self.assertEqual(sorted(systems), ["orders-dev", "orders-ist", "orders-qat"])
+        self.assertEqual(external.validate(systems), [])
         verb = lambda query: external.classify(f'sqlcmd -S sql-dev.example.local,1433 -E -Q "{query}"', systems)[0][0].verb  # noqa: E731
+        self.assertEqual(external.classify('sqlcmd -S sql-ist.example.local -E -Q "SELECT 1"', systems)[0][0].system, "orders-ist")  # the default port may be left out
         for query in ("SELECT 1; COMMIT", "SELECT 1; BEGIN TRAN", "SELECT 1; BACKUP DATABASE x TO DISK = 'y'", "SELECT 1; DBCC CHECKDB", "SELECT 1; RECONFIGURE", "SELECT * FROM OPENROWSET('a', 'b', 'c')", "UPDATE t SET a = 1"):
             self.assertEqual(verb(query), WRITE, query)
         for query in ("SELECT 1; KILL 52", "SELECT 1; RESTORE DATABASE x", "DROP TABLE t", "SELECT 1; SHUTDOWN"):

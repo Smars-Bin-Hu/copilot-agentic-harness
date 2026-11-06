@@ -56,6 +56,7 @@ from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from core import ahp, company, config, messages, outbox, reach, registry, state, targets, tasks, user
+from core import servers as servers_core
 from core.paths import board_serve_file, board_serve_port, utc_now
 
 from core import company, reinstall, setup as core_setup, shortcmd, skillboard
@@ -214,6 +215,26 @@ def relaunch(code: str) -> None:
     os.execve(sys.executable, words, env)
 
 
+
+def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
+    """What the Servers window shows (1.7.10): each server with its kind, environment, fields and whether an identity is saved (the account, never the password),
+    what VS Code reached last, the kinds a person may add a server of, and whether VS Code is open now."""
+    known = servers_core.kinds(root)
+    env = servers_core.read_env(root)
+    seen = reach.read(root)
+    rows = []
+    for alias, server in servers_core.listed(root).items():
+        kind = known.get(str(server.get("kind"))) or {}
+        auth = (kind.get("auth") or {}).get(server.get("auth") or next(iter(kind.get("auth") or {}), ""), {}) or {}
+        saved = servers_core.identity_of(env, alias, kind)
+        rows.append({"alias": alias, "label": server.get("label", ""), "kind": server.get("kind", ""), "kind_label": kind.get("label", server.get("kind", "")), "known": bool(kind),
+                     "env": server.get("env", ""), "auth": server.get("auth", ""), "auth_label": auth.get("label", ""), "identity": auth.get("identity", ""), "own": bool(server.get("own")),
+                     "fields": {field: server.get(field, spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
+                     "account": saved.get("account", ""), "saved": bool(saved), "reach": (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")})
+    kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", "")} for mode, spec in (kind.get("auth") or {}).items()}}
+                 for name, kind in known.items() if not servers_core.kind_problems(kind)}
+    return {"servers": rows, "kinds": kinds_out, "state": servers_core.state(root), "vscode_open": bool(vscode_open), "windows": os.name == "nt"}
+
 class Board:
     """What one server holds: the settings, the pairing code and the sessions of paired browsers. Memory only."""
 
@@ -223,6 +244,7 @@ class Board:
         self.terminal = boardterm.Terminal(root)
         self.short_missing = False
         self.setup_job = setupjob.Job()
+        self.tested: Dict[str, Any] = {}  # alias -> (the values that passed a test, when): Servers saves only those (1.7.10)
         self.short_kept: Optional[Dict[str, Any]] = None
         self.short_at = 0.0
         self.kb_view = kbview.View(root)
@@ -660,6 +682,50 @@ class Board:
         if held is None or now - self.short_at > (SHORT_KEEP if held["found"] else SHORT_RETRY):
             self.short_kept, self.short_at = core_setup.short_state(self.root), now
         return self.short_kept
+
+    def servers(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Get ready, Servers (1.7.10). `step`: list, test, save (only what passed a test in the last 15 minutes, the same values), forget, plan, open
+        (VS Code with the chosen identities; refused while a VS Code of this folder is open: it could not take them). Never a password back to the page."""
+        import hashlib
+
+        step = str(data.get("step", ""))
+        alias = str(data.get("alias") or "")
+        given = {key: str(data.get(key) or "") for key in ("account", "password", "keyfile")}
+        own = data.get("own") if isinstance(data.get("own"), dict) else None
+        if own is not None:
+            own = {key: str(value) for key, value in own.items() if key in ("kind", "env", "auth", "label") or key in ((servers_core.kinds(self.root).get(str(own.get("kind"))) or {}).get("fields") or {})}
+            if not servers_core.ALIAS.match(alias) or alias in servers_core.company_servers(config.policy_or_empty(self.root, servers_core.SERVERS_POLICY)):
+                raise ValueError(say("servers.alias.bad", alias=alias))
+        stamp = hashlib.sha256(json.dumps([alias, given, own], sort_keys=True).encode("utf-8")).hexdigest()
+        if step == "list":
+            return servers_view(self.root, self.link.status().get("ready", False))
+        if step == "test":
+            found = servers_core.test(self.root, alias, given, server=dict(own, own=True) if own else None)
+            if found["state"] == "ok":
+                self.tested[alias] = (stamp, time.time())
+            return found
+        if step == "save":
+            passed = self.tested.get(alias)
+            if not passed or passed[0] != stamp or time.time() - passed[1] > 900:
+                raise ValueError(say("servers.save.untested"))
+            servers_core.save(self.root, alias, given, own)
+            self.tested.pop(alias, None)
+            return {"saved": alias}
+        if step == "forget":
+            servers_core.forget(self.root, alias)
+            return {"forgot": alias}
+        chosen = [str(item) for item in (data.get("chosen") or []) if isinstance(item, str)]
+        primary = str(data.get("primary") or "")
+        if step == "plan":
+            return servers_core.plan(self.root, chosen, primary)
+        if step == "open":
+            if self.link.status().get("ready"):
+                raise ValueError(say("servers.open.running"))
+            code = ahp.find_code()
+            if not code:
+                raise ValueError(say("serve.open.no-cli"))
+            return servers_core.launch(self.root, chosen, primary, [code, str(self.root)])
+        raise ValueError(say("serve.refused.request"))
 
     def setup(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Get ready (`core/setup.py`). `step`: state, probe or act. When the short command appears while VS Code is open, the agent's terminals do not have it yet:
@@ -1320,6 +1386,16 @@ def handler_for(board: Board) -> type:
                         return self.answer(200, {"result": {"rounds": [dict(item, rewind=found.get(str(item["n"]))) for item in listed]}})
                     found = chatrounds.one(board.root, row["task"], data.get("n"))
                     return self.answer(200, {"result": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/servers":  # Get ready, Servers (1.7.10): the paired browser only; it writes the person's identities to .harness/.env
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.servers(data)
+                    if str(data.get("step", "")) in ("save", "forget", "open"):
+                        print(say("serve.did", action="servers " + str(data.get("step")), task=str(data.get("alias") or "-")), flush=True)  # never a value
+                    return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
             if path == "/api/setup":  # Get ready: the paired browser only; it writes the person's own override files

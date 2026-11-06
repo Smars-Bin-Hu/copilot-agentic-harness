@@ -75,7 +75,7 @@ def verb_of(system: Dict[str, Any], text: str) -> str:
 
 def decide(system: Dict[str, Any], env: str, verb: str) -> str:
     rules = system.get("rules") or {}
-    for key in (env, "*"):
+    for key in ((env,) if env == PROD else (env, "*")):  # prod takes only a rule written for prod by name: a catch-all never loosens it (1.7.10)
         found = (rules.get(key) or {}).get(verb)
         if found:
             return found
@@ -127,12 +127,24 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
         if waited is not None and depth < MAX_DEPTH:  # `harness wait --run "<command>"` (1.7.5): the command inside is the call
             _scan(waited, systems, programs, depth + 1, found)
             continue
+        wrapped = as_run(tokens)
+        if wrapped is not None and depth < MAX_DEPTH:  # `harness as <alias> -- <command>` (1.7.10): the command inside is the call
+            _scan(wrapped[1], systems, programs, depth + 1, found)
+            continue
         shell_at = next((i for i, item in enumerate(tokens) if _name(item) in SHELLS), None)
         if shell_at is not None and depth < MAX_DEPTH:
             for i in range(shell_at + 1, len(tokens)):
                 if tokens[i].lower() in SHELL_FLAGS and i + 1 < len(tokens):
                     _scan(" ".join(tokens[i + 1:]) if len(tokens) > i + 2 else tokens[i + 1], systems, programs, depth + 1, found)
                     break
+
+
+def as_run(tokens: List[str]) -> Optional[Tuple[str, str]]:
+    """(alias, the command) when this segment is `harness as <alias> -- <command>` (1.7.10); else None."""
+    head = [index for index, token in enumerate(tokens) if _program(token) == "harness" or _name(token) == "cli.py"]
+    if not head or len(tokens) < head[0] + 5 or tokens[head[0] + 1].lower() != "as" or tokens[head[0] + 3] != "--":
+        return None
+    return tokens[head[0] + 2], " ".join(tokens[head[0] + 4:])
 
 
 def _wait_run(tokens: List[str]) -> Optional[str]:

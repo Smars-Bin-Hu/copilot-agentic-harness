@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from core import config, messages, shortcmd, targets, tasks
-from core import reach, systems as outside
+from core import reach, servers as servers_core, systems as outside
 
 LINES = 6  # errors of doctor shown at the end of the setup
 DOCTOR_TIMEOUT = 300.0  # seconds the child `doctor` may take; `board.doctor_seconds` in the policy `task` (1.6.104: 90 was too short for a work computer that took 80 s)
@@ -173,6 +173,7 @@ class Ready:
         try:
             systems = config.policy_or_empty(self.root, "tools").get("systems") or {}
             raw = reach.view(self.root, systems) if systems and not outside.validate(systems) else []  # what VS Code reached (1.7.9), per server and environment
+            saved = len([alias for alias in servers_core.listed(self.root) if any(key.startswith(servers_core.env_key(alias, "")) and key.endswith(("_ACCOUNT", "_PASSWORD", "_KEYFILE")) for key in servers_core.read_env(self.root))])  # identities kept by Servers (1.7.10)
             marks = {reach.OK: "\u2713", reach.DENIED: "\u2717", reach.FAILED: "\u2717", reach.UNKNOWN: "?"}
             servers = list(dict.fromkeys(line["system"] for line in raw))
             worst = lambda states: reach.DENIED if reach.DENIED in states else reach.FAILED if reach.FAILED in states else reach.UNKNOWN if reach.UNKNOWN in states else reach.OK  # noqa: E731
@@ -198,9 +199,9 @@ class Ready:
                     grouped.setdefault(reason(line), []).append(name(line))
                 overview = "\n".join(f"{label}: {env_marks(lines_)}" for label, _state, lines_ in units) if len(servers) > 1 else ""
                 lines["systems"] = {"state": "note", "why": "unreached", "detail": detail, "tip": "\n".join(([overview] if overview else []) + [short(f"{', '.join(names)}: {text}") for text, names in grouped.items()]),
-                                    "launch": any(line["state"] == reach.DENIED for line in bad) and reach.launch_script(self.root) is not None}  # only a refused identity is helped by starting VS Code again
+                                    "launch": any(line["state"] == reach.DENIED for line in bad) and reach.launch_script(self.root) is not None, "identities": saved}  # only a refused identity is helped by starting VS Code again
             elif any(line["state"] == reach.UNKNOWN for line in raw):
-                lines["systems"] = {"state": "note", "why": "unknown", "detail": detail, "launch": reach.launch_script(self.root) is not None}
+                lines["systems"] = {"state": "note", "why": "unknown", "detail": detail, "launch": reach.launch_script(self.root) is not None, "identities": saved}
             else:
                 last = max((line.get("at", "") for line in raw), default="")
                 accounts = " \u00b7 ".join(f"{name(line)} {line['who']}" for line in raw if line["who"])

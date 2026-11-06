@@ -86,6 +86,15 @@ def load_policy(root: Path, name: str) -> Dict[str, Any]:
         path = policies_dir(root) / f"{name}{suffix}"
         if path.exists():
             found = deep_merge(found, read_json(path))
+    if name == "tools" and isinstance(found, dict):  # each server of the company pack or the person's own is a system the gate knows (1.7.10)
+        try:
+            from . import servers
+
+            made = servers.derived(root, found)
+            if made:
+                found = dict(found, systems={**made, **(found.get("systems") or {})})
+        except Exception:  # noqa: BLE001 - a broken server list must not take the gate's hand-written systems away; doctor reports it
+            pass
     return found
 
 

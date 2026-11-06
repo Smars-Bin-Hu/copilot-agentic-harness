@@ -168,7 +168,9 @@ def extra(root: Path, environ: Optional[Dict[str, str]] = None, trust_vars: Opti
     base = dict(os.environ if environ is None else environ)
     kept = settings(root)
     out: Dict[str, str] = {}
-    folders = [item for item in kept["paths"] if Path(item).is_dir()]
+    from . import toolpacks  # it reads this module
+
+    folders = list(dict.fromkeys([item for item in kept["paths"] if Path(item).is_dir()] + toolpacks.bin_folders(root)))  # a tool pack's own programs come with it (1.7.17)
     if folders:
         key = next((name for name in base if name.upper() == "PATH"), "PATH")  # Windows writes `Path`
         rest = [item for item in base.get(key, "").split(os.pathsep) if item and item not in folders]

@@ -2816,6 +2816,7 @@
   "connections.export.lead": "你自己的连接，按公司包的格式（不带账户和密码）。可以放进公司包，也可以把文件给同事。",
   "connections.export.copy": "复制",
   "connections.export.file": "存成文件",
+  "connections.export.shared": "已放进公司包：提交知识库，再 Pack for colleagues",
   "connections.export.share": "放进公司包",
   "connections.export.share.tip": "写进知识库的 company/tools/connections.json，公司包里没有对应工具包时一并放进去；然后提交，再 Pack for colleagues",
   "connections.from.tip": "它的类型来自工具包 {pack}",

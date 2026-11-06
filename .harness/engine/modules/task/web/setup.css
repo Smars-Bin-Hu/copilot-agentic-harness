@@ -61,6 +61,7 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .tl-row .su-line .act{margin-left:auto}
 .sv-grp{font-size:12px;color:var(--soft);margin:10px 0 2px}.sv-grp:first-child{margin-top:0}.sv-from{border-style:dashed}
 .mc-brings{display:flex;gap:6px;flex-wrap:wrap;margin:-1px 0 8px 29px}.mc-mcp{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sv-win .win-foot{flex-wrap:wrap}.sv-win .win-foot .sv-said{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .sv-json{max-height:46vh;overflow:auto;font:12px/1.5 var(--mono);background:var(--track);border-radius:8px;padding:10px 12px;margin:0;white-space:pre}
 .mc-conn{cursor:help}.mc-dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--soft)}.mc-dot.ok{background:var(--good)}.mc-dot.warn{background:var(--hot)}.mc-dot.bad{background:#c0392b}.mc-acts{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .mc-h{font-size:13.5px;margin:14px 0 6px}.mc-h:first-child{margin-top:0}.mc-paths{width:100%;box-sizing:border-box;resize:vertical}

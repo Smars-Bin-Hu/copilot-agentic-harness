@@ -170,6 +170,11 @@ def installed(root: Path) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def bin_folders(root: Path) -> List[str]:
+    """The `bin/` of each installed tool pack that has one: a program the pack brings is on the PATH VS Code gets, with no tool folder to type."""
+    return [str((item["folder"] / "bin").resolve()) for item in installed(root).values() if (item["folder"] / "bin").is_dir()]
+
+
 def type_files(root: Path) -> List[Path]:
     return [path for item in installed(root).values() for path in sorted((item["folder"] / TYPES).glob("*.json"))]
 

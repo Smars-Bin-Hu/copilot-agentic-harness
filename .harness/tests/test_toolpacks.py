@@ -383,7 +383,7 @@ class ShippedSample(ToolpackCase):
             old = os.environ.get(key)
             os.environ[key] = str(home)
             self.addCleanup(lambda key=key, old=old: os.environ.__setitem__(key, old) if old is not None else os.environ.pop(key, None))
-        launchenv.save_paths(self.root, [str(self.root / toolpacks.FOLDER / "demotracker" / "bin")])
+        self.assertIn(str((self.root / toolpacks.FOLDER / "demotracker" / "bin").resolve()), launchenv.extra(self.root, {"PATH": ""})["PATH"], "its own bin/ comes with it: no tool folder to type")
         (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"demo": {"type": "demotracker", "env": "none", "project": "DEMO"}}}), encoding="utf-8")
         self.assertEqual(connections.test(self.root, "demo", {})["state"], "denied")
         self.assertEqual(connections.login(self.root, "demo")[0], 0)

@@ -163,7 +163,7 @@ const SERVERS = (function () {
     share.addEventListener("click", () => {
       if (!found) return;
       share.disabled = true;
-      ask("share", {aliases: Object.keys(found.connections)}).then((done) => { said.replaceChildren(h("span", {class: "sv-result ok"}, "\u2713 " + done.file)); }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); share.disabled = false; });
+      ask("share", {aliases: Object.keys(found.connections)}).then((done) => { said.replaceChildren(h("span", {class: "sv-result ok", title: done.file}, "\u2713 " + t("connections.export.shared"))); }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); share.disabled = false; });
     });
     close.addEventListener("click", view.close);
   }

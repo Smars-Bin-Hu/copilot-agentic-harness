@@ -20,7 +20,7 @@ Three words, used the same way on the board, in commands and in files:
   skills/<name>-*/       optional: skills, each named after the pack
   launch/*.cmd           optional: a script that starts VS Code with an identity (Windows), for a team that does not save identities
   mcp.json               optional: MCP servers for VS Code; used only where MCP is allowed (below)
-  bin/                   optional: a small program of the pack's own (the sample has one); add the folder in This computer
+  bin/                   optional: a small program of the pack's own (the sample has one); it is on the PATH VS Code gets, with nothing to set
   README.md              for people: four steps (install, set up, sign in, try)
 ```
 

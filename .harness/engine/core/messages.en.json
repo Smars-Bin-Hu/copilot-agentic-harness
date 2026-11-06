@@ -2816,6 +2816,7 @@
   "connections.export.lead": "Your own connections, as the company pack lists them (no account, no password). Put them in the company pack, or give the file to a colleague.",
   "connections.export.copy": "Copy",
   "connections.export.file": "Save as file",
+  "connections.export.shared": "Put in the company pack: commit the knowledge base, then Pack for colleagues",
   "connections.export.share": "Put in the company pack",
   "connections.export.share.tip": "Written to company/tools/connections.json of the knowledge base, with the tool pack when the company pack has none; then commit and Pack for colleagues",
   "connections.from.tip": "Its type comes from the tool pack {pack}",

@@ -337,3 +337,32 @@ class TaskLinks(TaskCase):
         bad = make(Path(holder.name) / "other", name="other", skills=(), links={"x": {"url": "http://plain.example.org/{id}"}})
         with self.assertRaises(ConnectorError):
             connectors.add(self.root, str(bad))
+
+
+class ShippedSample(ConnectorCase):
+    """1.7.16: the sample in examples/connectors installs as it is and does what its README says, with its own made-up program."""
+
+    def test_install_sign_in_test_read_and_a_held_write(self) -> None:
+        from support import REPO
+
+        sample = REPO / ".harness" / "examples" / "connectors" / "demotracker"
+        self.assertEqual(connectors.problems(self.root, sample), [])
+        connectors.add(self.root, str(sample))
+        self.assertEqual(skillcheck.check_all(self.root, ["demotracker-ticket"])[0]["errors"], [])
+        home = self.root / "home"
+        home.mkdir()
+        for key in ("HOME", "USERPROFILE"):
+            old = os.environ.get(key)
+            os.environ[key] = str(home)
+            self.addCleanup(lambda key=key, old=old: os.environ.__setitem__(key, old) if old is not None else os.environ.pop(key, None))
+        launchenv.save_paths(self.root, [str(self.root / connectors.FOLDER / "demotracker" / "bin")])
+        (self.root / ".harness/policies/servers.company.json").write_text(json.dumps({"servers": {"demo": {"kind": "demotracker", "env": "none", "project": "DEMO"}}}), encoding="utf-8")
+        self.assertEqual(servers.test(self.root, "demo", {})["state"], "denied")
+        self.assertEqual(servers.login(self.root, "demo")[0], 0)
+        self.assertEqual(servers.test(self.root, "demo", {})["state"], "ok")
+        self.assertTrue(connectors.check(self.root, "demotracker")["connectors"][0]["ok"])
+        decide = lambda line: self.hook(pre_tool("s-demo", "run_in_terminal", {"command": line})).get("permissionDecision", "allow")  # noqa: E731
+        self.assertEqual(decide("demotracker --project DEMO get 1"), "allow")
+        self.assertEqual(decide("demotracker --project DEMO comment 1 checked"), "deny")  # held for the person
+        self.assertEqual(decide("demotracker --project DEMO delete 1"), "deny")
+        self.assertEqual(connectors.link_view(self.root, "demo:1")["url"], "https://tracker.example.org/DEMO/ticket/1")

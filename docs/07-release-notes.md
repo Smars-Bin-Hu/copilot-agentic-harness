@@ -10,6 +10,13 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.16 (2026-11-06)
+
+### Added
+
+- **A sample connector**, `.harness/examples/connectors/demotracker/`: a made-up ticket board with its own little program, a kind with its own sign-in, gate rules, a skill, a link type and MCP tool rules. Its README walks the whole path in four steps.
+- The guide to how the harness works (`harness-rookie-wondering`, tools) has a part on connectors.
+
 ## 1.7.15 (2026-11-06)
 
 ### Added
@@ -20,7 +27,7 @@ To see which version you have: `harness --version`.
 
 ### Added
 
-- **The gate judges the MCP tools a connector names** (`"mcp": {"tools": [{"pattern", "verb"}]}` in `connector.json`): a read goes through, a write or an exec makes Copilot ask you (even with auto-approve), a destroy is refused, and a subagent only reads. Logged as a call to the connector.
+- **The gate judges the MCP tools a connector names** (`"mcp": {"tools": [{"pattern", "verb"}]}` in `connector.json`): a read goes through, a write or an exec makes Copilot ask you, a destroy is refused, and a subagent only reads. Logged as a call to the connector.
 
 ### Changed
 

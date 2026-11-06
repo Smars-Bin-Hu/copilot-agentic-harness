@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""A made-up ticket board for the sample connector: tickets in a JSON file in the user's home folder, a sign-in that is a mark in that file."""
+
+import argparse
+import getpass
+import json
+import sys
+from pathlib import Path
+
+STORE = Path.home() / ".demotracker.json"
+SEED = {"DEMO": {"1": {"title": "Nightly load is late", "state": "Active", "comments": []}, "2": {"title": "Add a column to the sales view", "state": "New", "comments": []}}}
+
+
+def load() -> dict:
+    try:
+        return json.loads(STORE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"signed": "", "projects": SEED}
+
+
+def save(data: dict) -> None:
+    STORE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="demotracker")
+    parser.add_argument("--project", required=True)
+    parser.add_argument("action", choices=["login", "whoami", "list", "get", "comment", "set-state", "delete"])
+    parser.add_argument("rest", nargs="*")
+    args = parser.parse_args()
+    data = load()
+    if args.action == "login":
+        data["signed"] = getpass.getuser() + "@example.org"
+        save(data)
+        print("signed in as " + data["signed"])
+        return 0
+    if not data.get("signed"):
+        print("not signed in: run demotracker --project " + args.project + " login")
+        return 1
+    tickets = data["projects"].setdefault(args.project, {})
+    if args.action == "whoami":
+        print(data["signed"])
+    elif args.action == "list":
+        for number, ticket in sorted(tickets.items()):
+            print(f"{number}\t{ticket['state']}\t{ticket['title']}")
+    else:
+        if not args.rest or args.rest[0] not in tickets:
+            print("no such ticket")
+            return 1
+        ticket = tickets[args.rest[0]]
+        if args.action == "get":
+            print(json.dumps(dict(ticket, id=args.rest[0]), indent=2))
+        elif args.action == "comment":
+            ticket["comments"].append(" ".join(args.rest[1:]))
+        elif args.action == "set-state":
+            ticket["state"] = " ".join(args.rest[1:])
+        elif args.action == "delete":
+            del tickets[args.rest[0]]
+        save(data)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

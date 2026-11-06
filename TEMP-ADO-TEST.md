@@ -87,7 +87,9 @@ Get-ChildItem env: | Where-Object { $_.Name -match 'proxy|cert|ca_bundle|ssl|nod
 
 9000 端口是 Zscaler：它拆开 HTTPS 再换上 Zscaler 自己的根证书。这张根证书已经在 Windows 证书库里（浏览器因此不报错），az 自带的 Python 不读证书库，所以要把它导出来放进 az 认的文件。
 
-**3c-0. 证书库里按名字找不到 Zscaler 时：看握手时的整条链，以及 Windows 信不信它（整段粘，自成一体）**
+**3c-0. ✅ 用这个：经过代理握手，取 Windows 认的整条链（整段粘，自成一体）**
+
+已验证：Windows 信任这条链（`None`），链是：网站证书 ← 公司的 Zscaler 中间 CA ← 公司的离线根证书。它们不叫 Zscaler，所以按名字在证书库里找不到。
 
 ```powershell
 $h = 'dev.azure.com'
@@ -120,7 +122,7 @@ Add-Content $bundle $pem -Encoding ascii
 
 然后跳到 **3e** 试。
 
-**3c. 从 Windows 证书库找 Zscaler 的证书（根证书和中间证书都找）**
+**3c.（作废，按名字找不到）从 Windows 证书库找 Zscaler 的证书**
 
 ```powershell
 Get-ChildItem Cert:\CurrentUser\Root, Cert:\LocalMachine\Root, Cert:\CurrentUser\CA, Cert:\LocalMachine\CA | Where-Object { $_.Subject -match 'Zscaler' } | Format-List Subject, Issuer, PSParentPath, NotAfter
@@ -128,7 +130,7 @@ Get-ChildItem Cert:\CurrentUser\Root, Cert:\LocalMachine\Root, Cert:\CurrentUser
 
 应该至少有一张 `CN=Zscaler Root CA`（在 Root 里），可能还有公司自己的 Zscaler 中间证书。一张都没有就停下告诉我。
 
-**3d. 做一个 az 认得的证书文件（az 原有的证书 + 证书库里所有 Zscaler 证书）**
+**3d.（作废）按名字做证书文件**
 
 ```powershell
 $zs = Get-ChildItem Cert:\CurrentUser\Root, Cert:\LocalMachine\Root, Cert:\CurrentUser\CA, Cert:\LocalMachine\CA | Where-Object { $_.Subject -match 'Zscaler' } | Sort-Object Thumbprint -Unique

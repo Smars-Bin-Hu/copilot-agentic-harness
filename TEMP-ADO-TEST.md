@@ -87,19 +87,20 @@ Get-ChildItem env: | Where-Object { $_.Name -match 'proxy|cert|ca_bundle|ssl|nod
 
 9000 端口是 Zscaler：它拆开 HTTPS 再换上 Zscaler 自己的根证书。这张根证书已经在 Windows 证书库里（浏览器因此不报错），az 自带的 Python 不读证书库，所以要把它导出来放进 az 认的文件。
 
-**3c. 从 Windows 证书库找 Zscaler 根证书**
+**3c. 从 Windows 证书库找 Zscaler 的证书（根证书和中间证书都找）**
 
 ```powershell
-Get-ChildItem Cert:\CurrentUser\Root, Cert:\LocalMachine\Root | Where-Object { $_.Subject -match 'Zscaler' } | Format-List Subject, Thumbprint, NotAfter
+Get-ChildItem Cert:\CurrentUser\Root, Cert:\LocalMachine\Root, Cert:\CurrentUser\CA, Cert:\LocalMachine\CA | Where-Object { $_.Subject -match 'Zscaler' } | Format-List Subject, Issuer, PSParentPath, NotAfter
 ```
 
-应该至少列出一张（`CN=Zscaler Root CA ...`）。一张都没有就停下告诉我。
+应该至少有一张 `CN=Zscaler Root CA`（在 Root 里），可能还有公司自己的 Zscaler 中间证书。一张都没有就停下告诉我。
 
-**3d. 做一个 az 认得的证书文件（az 原有的证书 + Zscaler 根证书）**
+**3d. 做一个 az 认得的证书文件（az 原有的证书 + 证书库里所有 Zscaler 证书）**
 
 ```powershell
-$root = Get-ChildItem Cert:\CurrentUser\Root, Cert:\LocalMachine\Root | Where-Object { $_.Subject -match 'Zscaler' } | Select-Object -First 1
-$pem = "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64String($root.RawData, 'InsertLineBreaks') + "`n-----END CERTIFICATE-----`n"
+$zs = Get-ChildItem Cert:\CurrentUser\Root, Cert:\LocalMachine\Root, Cert:\CurrentUser\CA, Cert:\LocalMachine\CA | Where-Object { $_.Subject -match 'Zscaler' } | Sort-Object Thumbprint -Unique
+"Zscaler certs: " + @($zs).Count
+$pem = ($zs | ForEach-Object { "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64String($_.RawData, 'InsertLineBreaks') + "`n-----END CERTIFICATE-----`n" }) -join "`n"
 $certifi = Get-ChildItem "$env:USERPROFILE\tools\azure-cli" -Recurse -Filter cacert.pem | Select-Object -First 1
 $bundle = "$env:USERPROFILE\tools\ca-bundle.pem"
 Get-Content $certifi.FullName -Raw | Set-Content $bundle -Encoding ascii

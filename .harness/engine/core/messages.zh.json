@@ -13,7 +13,7 @@
   "task.next.light": "先读 {task}/TASK.md。直接做，做完把结果和下一步写进 TASK.md。",
   "task.next.medium": "先读 {task}/TASK.md，再读 REQ.md、REQ/、REF/。把你理解的需求写进 {task}/REQ.md，请用户确认；需求变了就改它。成果写在 {task}/ 根下（例如 RCA.md、DESIGN.md）。做了什么、为什么，追加到 LOG.md。停下前更新 TASK.md。",
   "task.next.full": "先读 {task}/TASK.md，再读 REQ.md、REQ/、REF/。把你理解的需求写进 {task}/REQ.md，请用户确认；需求变了就改它。步骤写进 TODO.md。停下前更新 TASK.md，做过的决定追加到 LOG.md。",
-  "task.next.qa": "不用先问，直接答。在 TASK.md 的 \"## Answer\" 下写答案、出处，以及跑过的每条命令和它返回了什么。然后关闭任务：`{command} task close --task {name}`。用户可以再打开。",
+  "task.next.qa": "不用先问，直接答。在 TASK.md 的 \"## Answer\" 下写答案、出处，以及跑过的每条命令和它返回了什么。TASK.md 保存好以后，单独一步关闭任务（不要和编辑同时发）：`{command} task close --task {name}`。用户可以再打开。",
   "task.next.reopened": "这个任务已关闭，现在按原样重新打开；这类任务没有新一轮。要按改变后的需求重做，从它开一个新任务：`{command} task fork <新任务名> --from {name} --kind <kind> --session-id <会话 id>`。",
   "task.next.switched": "这个会话原来接着 `{other}`，它还开着，没有关闭。要回去：`{command} task open {other_name} --session-id <会话 id>`。",
   "task.waiting.plan": "等你批准计划",

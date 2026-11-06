@@ -2679,6 +2679,7 @@
   "desk.set.open.close": "{env} 已打开（{systems}）。再点一下关闭。",
   "desk.set.open.open": "为这个任务打开 {env}：{systems}。等于 `harness task allow --env {env} --on`。",
   "desk.set.open.warn": "只在把整个测试交给 agent 时开放：之后它会用你账户的权限直接执行，你看不到。reviewer 始终只读。",
+  "desk.reach.pill": "VS Code 连不上 {envs}：见 Enter 页面，或下面的小点。",
   "desk.reach.ok": "{env}：VS Code 已连上，账户 {who}。",
   "desk.reach.bad": "{env}：{launch}",
   "desk.reach.unknown": "{env}：还没检查（在 VS Code 里开 chat，第一步就会检查）。",

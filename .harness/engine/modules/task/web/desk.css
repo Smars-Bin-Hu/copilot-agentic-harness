@@ -183,7 +183,7 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 .tk-call.done{border-color:var(--good-dot)}.tk-call.done .code-chip.still{cursor:default}
 .ev-step{border-top:1px solid var(--line);padding-top:10px;margin-top:12px}.ev-step:first-child{border-top:0;margin-top:0;padding-top:0}.ev-step h3{font-size:14px;margin:0 0 4px;display:flex;align-items:center;gap:8px}.ev-step-n{display:inline-flex;width:20px;height:20px;border-radius:50%;align-items:center;justify-content:center;background:var(--track);font-size:11px;color:var(--soft)}
 .step-cmd{margin:6px 0 8px}.step-cmd .code-bar{display:flex;justify-content:space-between;align-items:center}.step-cmd .cmd-scroll{margin:4px 0 0}.step-out{margin:0 0 14px}.step-out>p:first-child{margin:4px 0}
-.reach-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px;background:var(--line2)}.reach-dot.ok{background:var(--good-dot)}.reach-dot.bad{background:var(--hot-dot)}
+.reach-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px;background:var(--line2)}.reach-dot.ok{background:var(--good-dot)}.reach-dot.bad{background:var(--hot-dot)}.reach-dot.pill{margin:0 0 0 2px;vertical-align:0}
 .tk-call .bad{color:var(--bad);font-size:12.5px;flex:1 1 100%}
 .act.big{font-size:13px;padding:5px 14px}
 .dialog.wide{max-width:min(900px,calc(100% - 32px));max-height:min(88vh,820px)}

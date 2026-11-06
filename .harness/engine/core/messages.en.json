@@ -2679,6 +2679,7 @@
   "desk.set.open.close": "{env} is open ({systems}). Click to close it again.",
   "desk.set.open.open": "Open {env} for this task: {systems}. Same as `harness task allow --env {env} --on`.",
   "desk.set.open.warn": "Only when you hand a whole test over: they then run unseen, with your account's rights. The reviewer stays read only.",
+  "desk.reach.pill": "VS Code cannot reach {envs}: see the Enter screen, or the dots below.",
   "desk.reach.ok": "{env}: reached from VS Code as {who}.",
   "desk.reach.bad": "{env}: {launch}",
   "desk.reach.unknown": "{env}: not checked yet (the first step of a chat in VS Code checks it).",

@@ -283,3 +283,57 @@ class McpTools(ConnectorCase):
         bad = make(self.outside / "bad", name="badmcp", skills=(), mcp={"tools": [{"pattern": "(", "verb": "write"}]})
         with self.assertRaises(ConnectorError):
             connectors.add(self.root, str(bad))
+
+
+from taskcase import NAME, TASK, TaskCase  # noqa: E402
+
+
+class TaskLinks(TaskCase):
+    """1.7.15: a task names an item of an outside tool; the connector of its type gives the address; after close the agent may only offer to update it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        source = make(Path(holder.name) / "tracker", links={"trk": {"label": "Ticket", "kind": "tracker", "url": "https://tracker.example.org/{org}/item/{id}"}})
+        connectors.add(self.root, str(source))
+        self.new()
+
+    def link(self, ref: str, on: bool = True):
+        from modules.task import tasklife
+
+        return tasklife.link(self.root, NAME, ref, on)
+
+    def test_a_link_is_kept_once_drawn_with_its_address_and_taken_away(self) -> None:
+        from modules.task import taskdesk
+
+        self.assertTrue(self.link("trk:42")["changed"])
+        self.assertFalse(self.link("trk:42")["changed"], "once")
+        view = taskdesk.links_view(self.root, self.data())
+        self.assertEqual((view[0]["label"], view[0]["url"]), ("Ticket", ""), "no server of the kind yet: no address with a hole in it")
+        (self.root / ".harness/policies/servers.company.json").write_text(json.dumps({"servers": {"board": {"kind": "tracker", "env": "none", "org": "demo"}}}), encoding="utf-8")
+        self.assertEqual(taskdesk.links_view(self.root, self.data())[0]["url"], "https://tracker.example.org/demo/item/42")
+        self.assertIn("warning", self.link("jira:ABC-1"), "a type no connector knows: kept, text only")
+        self.link("trk:42", on=False)
+        self.assertEqual([item["ref"] for item in self.data()["links"]], ["jira:ABC-1"])
+        self.assertEqual([event["detail"] for event in self.data()["events"] if event["what"] == "link"], ["trk:42: on", "jira:ABC-1: on", "trk:42: off"])
+
+    def test_a_wrong_form_is_refused(self) -> None:
+        for bad in ("12345", "ado:", "ADO:1", "ado:1 2", "a:" + "x" * 80):
+            with self.assertRaises(Exception, msg=bad):
+                self.link(bad)
+
+    def test_closing_a_linked_task_tells_the_agent_to_ask_not_to_update(self) -> None:
+        from modules.task import task as task_ops
+
+        self.link("trk:42")
+        done = task_ops.close(self.root, NAME, check_todo=False)
+        self.assertIn("trk:42", done["next"])
+        self.assertNotEqual(done["next"], "")
+
+    def test_a_connector_with_a_bad_link_address_is_refused(self) -> None:
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        bad = make(Path(holder.name) / "other", name="other", skills=(), links={"x": {"url": "http://plain.example.org/{id}"}})
+        with self.assertRaises(ConnectorError):
+            connectors.add(self.root, str(bad))

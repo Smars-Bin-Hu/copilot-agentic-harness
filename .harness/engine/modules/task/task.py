@@ -345,6 +345,11 @@ def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "",
                 state["active_task"] = None
                 released = True
     result: Dict[str, Any] = {"task": task, "status": "closed", "session_released": released}
+    from . import tasklife  # it imports this module
+
+    hint = tasklife.links_hint(root, tasks.read(root, task) or {})
+    if hint:
+        result["next"] = hint
     if left:
         result["todo_not_ticked"] = len(left)
     try:

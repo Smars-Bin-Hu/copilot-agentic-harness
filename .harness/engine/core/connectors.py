@@ -7,6 +7,8 @@ The harness knows no connector. A connector brings what the harness already read
   kinds/*.json     kinds of server (core.servers): a ticket board is a "server" with an org and a project, reached by the tool's own sign-in
   systems.json     {"systems": {...}}: systems of the tools policy written by hand; layered after the company pack's, before tools.override.json
   skills/<name>-*  skills, copied to `.github/skills/` (Copilot finds them only there). Each starts with the connector's name, so two never clash
+  "links" in connector.json   {<type>: {"label", "kind", "url"}} (1.7.15): a task can name an item of the tool (`<type>:<id>`, `harness task link`);
+                   `url` is filled with `{id}` and the fields of the first server of `kind` (`{org}`, `{project}`). The board shows a chip that opens it
   "mcp" in connector.json   {"tools": [{"pattern": <regular expression on the tool's name>, "verb": read|write|exec|destroy}]} (1.7.14): the gate
                    lets a read through, makes Copilot ask the person before a write or an exec, and refuses a destroy. An MCP tool no connector names is
                    not judged. Not the outbox: the harness cannot run an MCP call again for the person
@@ -92,6 +94,9 @@ def problems(root: Path, folder: Path) -> List[str]:
     mcp = found.get("mcp") or {}
     if not isinstance(mcp, dict) or not isinstance(mcp.get("tools", []), list):
         out.append(say("connector.mcp.bad", rule="mcp.tools"))
+    links = found.get("links") or {}
+    if not isinstance(links, dict) or any(not re.match(r"^[a-z][a-z0-9]{0,15}$", str(key)) or not isinstance(spec, dict) or not str(spec.get("url") or "").startswith("https://") for key, spec in links.items()):
+        out.append(say("connector.links.bad"))
     for index, rule in enumerate((mcp.get("tools") or []) if isinstance(mcp, dict) else []):
         try:
             ok = isinstance(rule, dict) and rule.get("verb") in MCP_VERBS and bool(re.compile(str(rule.get("pattern") or "")).pattern)
@@ -169,6 +174,31 @@ def systems_layer(root: Path) -> Dict[str, Any]:
             if isinstance(spec, dict):
                 out[system] = dict(spec, connector=name)
     return {"systems": out} if out else {}
+
+
+LINK = re.compile(r"^([a-z][a-z0-9]{0,15}):([A-Za-z0-9._#/-]{1,64})$")
+
+
+def link_view(root: Path, ref: str) -> Dict[str, str]:
+    """A task's link as the board draws it: `{ref, type, id, label, url, connector}`; a type no connector knows keeps only its text."""
+    from . import servers  # it reads this module's kinds
+
+    found = LINK.match(ref)
+    out = {"ref": ref, "type": found.group(1) if found else "", "id": found.group(2) if found else ref, "label": "", "url": "", "connector": ""}
+    if not found:
+        return out
+    for name, item in installed(root).items():
+        spec = ((item["manifest"].get("links") or {}).get(out["type"]) or {}) if isinstance(item["manifest"].get("links"), dict) else {}
+        if not isinstance(spec, dict) or not spec:
+            continue
+        out.update(label=str(spec.get("label") or ""), connector=name)
+        server = next((one for one in servers.listed(root).values() if one.get("kind") == spec.get("kind")), {})
+        values = {**{key: str(value) for key, value in server.items() if isinstance(value, (str, int))}, "id": out["id"]}
+        url = re.sub(r"\{(\w+)\}", lambda part: values.get(part.group(1), "\0"), str(spec.get("url") or ""))
+        if url.startswith("https://") and "\0" not in url:  # every field was there: a link that would go to a wrong place is not drawn
+            out["url"] = url
+        break
+    return out
 
 
 def mcp_verb(root: Path, tool: str) -> Optional[Dict[str, str]]:

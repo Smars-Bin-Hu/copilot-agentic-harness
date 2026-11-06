@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.15 (2026-11-06)
+
+### Added
+
+- **A task can name a ticket or work item** (`harness task link add ado:12345`, or the agent links the id you give it). The task page shows a chip; a connector that knows the type (`links` in `connector.json`) makes it open the item. When the task closes, the agent asks you whether to update the item and what to write, and never updates it on its own; a write you agree to is drafted with the connector's skill and waits for your approval (`harness-my-task`).
+
 ## 1.7.14 (2026-11-06)
 
 ### Added

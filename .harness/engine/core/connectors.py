@@ -7,6 +7,9 @@ The harness knows no connector. A connector brings what the harness already read
   kinds/*.json     kinds of server (core.servers): a ticket board is a "server" with an org and a project, reached by the tool's own sign-in
   systems.json     {"systems": {...}}: systems of the tools policy written by hand; layered after the company pack's, before tools.override.json
   skills/<name>-*  skills, copied to `.github/skills/` (Copilot finds them only there). Each starts with the connector's name, so two never clash
+  "mcp" in connector.json   {"tools": [{"pattern": <regular expression on the tool's name>, "verb": read|write|exec|destroy}]} (1.7.14): the gate
+                   lets a read through, makes Copilot ask the person before a write or an exec, and refuses a destroy. An MCP tool no connector names is
+                   not judged. Not the outbox: the harness cannot run an MCP call again for the person
 
 Installed in `.harness/connectors/<name>/`, by a person at a terminal (`harness connector add <folder|zip>`) or by `company sync` from
 `<knowledge base>/company/connectors/<name>/`. `.harness/connectors/installed.json` keeps where each came from and the skills it copied, so
@@ -35,6 +38,7 @@ LEDGER = "installed.json"
 SKILLS_DIR = Path(".github") / "skills"
 NAME = re.compile(r"^[a-z][a-z0-9]{1,30}$")  # one word: it starts the names of the connector's skills (`<name>-...`)
 BACKUP_DIR = "connector-backup"
+MCP_VERBS = ("read", "write", "exec", "destroy")
 COMPANY = "company"
 
 
@@ -85,6 +89,16 @@ def problems(root: Path, folder: Path) -> List[str]:
     needs = found.get("needs") or {}
     if not isinstance(needs, dict) or not all(isinstance(needs.get(key, []), list) for key in ("programs", "trust")):
         out.append(say("connector.needs.bad"))
+    mcp = found.get("mcp") or {}
+    if not isinstance(mcp, dict) or not isinstance(mcp.get("tools", []), list):
+        out.append(say("connector.mcp.bad", rule="mcp.tools"))
+    for index, rule in enumerate((mcp.get("tools") or []) if isinstance(mcp, dict) else []):
+        try:
+            ok = isinstance(rule, dict) and rule.get("verb") in MCP_VERBS and bool(re.compile(str(rule.get("pattern") or "")).pattern)
+        except re.error:
+            ok = False
+        if not ok:
+            out.append(say("connector.mcp.bad", rule=f"mcp.tools[{index}]"))
     for path in sorted((folder / "kinds").glob("*.json")) if (folder / "kinds").is_dir() else []:
         try:
             kind = json.loads(path.read_text(encoding="utf-8-sig"))
@@ -155,6 +169,18 @@ def systems_layer(root: Path) -> Dict[str, Any]:
             if isinstance(spec, dict):
                 out[system] = dict(spec, connector=name)
     return {"systems": out} if out else {}
+
+
+def mcp_verb(root: Path, tool: str) -> Optional[Dict[str, str]]:
+    """What an MCP tool does, by the first rule of an installed connector whose pattern matches its name: `{connector, verb}`; None when none names it."""
+    for name, item in installed(root).items():
+        for rule in ((item["manifest"].get("mcp") or {}).get("tools") or []):
+            try:
+                if isinstance(rule, dict) and rule.get("verb") in MCP_VERBS and re.search(str(rule.get("pattern") or ""), tool, re.IGNORECASE):
+                    return {"connector": name, "verb": rule["verb"]}
+            except re.error:
+                continue
+    return None
 
 
 def trust_vars(root: Path) -> List[str]:

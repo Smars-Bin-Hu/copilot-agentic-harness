@@ -69,9 +69,11 @@ class ServeCase(TaskCase):
         self.server.shutdown()
         self.thread.join(10)
 
-    def request(self, method: str, path: str, body: Optional[Dict[str, Any]] = None, cookie: str = "", header: bool = True, host: str = "", origin: str = "") -> Tuple[int, Dict[str, Any], Dict[str, str]]:
+    def request(self, method: str, path: str, body: Optional[Dict[str, Any]] = None, cookie: str = "", header: bool = True, host: str = "", origin: str = "", agent: str = "") -> Tuple[int, Dict[str, Any], Dict[str, str]]:
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         headers = {"Host": host or f"127.0.0.1:{self.port}", "Content-Type": "application/json"}
+        if agent:
+            headers["User-Agent"] = agent
         if header:
             headers[boardserve.HEADER] = "1"
         if cookie:
@@ -253,6 +255,16 @@ class ServeTests(ServeCase):
             os.utime(policy, ns=(stamp, stamp))
             self.assertEqual(self.request("POST", "/api/status", {})[1]["language"], wanted)
             self.assertIn(f'<html lang="{wanted}">', self.request("GET", "/")[1]["text"])
+
+    def test_a_browser_inside_vs_code_is_never_paired(self) -> None:
+        """1.7.14: the agent can drive VS Code's own browser; the board refuses to pair there, keeps the code, and a cookie carried into it counts for nothing."""
+        inside = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Code/1.145.0 Chrome/138.0.0.0 Electron/37.2.3 Safari/537.36"
+        status, data, _ = self.request("POST", "/api/pair", {"code": self.code()}, agent=inside)
+        self.assertEqual(status, 403)
+        self.assertIn("VS Code", data["error"])
+        cookie = self.pair()  # the code was not used up
+        self.assertTrue(self.request("POST", "/api/status", {}, cookie=cookie)[1]["paired"])
+        self.assertFalse(self.request("POST", "/api/status", {}, cookie=cookie, agent=inside)[1]["paired"])
 
     def test_an_approval_needs_the_paired_browser_and_the_typed_code(self) -> None:
         confirm_requirement(self.root, TASK)

@@ -249,3 +249,37 @@ class ToolIdentity(ConnectorCase):
 
     def test_login_is_refused_for_a_server_without_a_sign_in_of_its_own(self) -> None:
         self.assertEqual(servers.login(self.root, "nowhere")[0], 2)
+
+
+class McpTools(ConnectorCase):
+    """1.7.14: an MCP tool a connector names is judged by its name: a read goes through, a write waits for the person in Copilot, a destroy is refused."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        manifest = json.loads((self.source / "connector.json").read_text(encoding="utf-8"))
+        manifest["mcp"] = {"tools": [{"pattern": "^mcp_tracker_(get|list|search)", "verb": "read"}, {"pattern": "^mcp_tracker_delete", "verb": "destroy"},
+                                     {"pattern": "^mcp_tracker_", "verb": "write"}]}
+        (self.source / "connector.json").write_text(json.dumps(manifest), encoding="utf-8")
+        connectors.add(self.root, str(self.source))
+
+    def call(self, tool: str, **extra) -> dict:
+        event = pre_tool("s-mcp", tool, {"id": "DEMO-1", "fields": {"state": "Done"}})
+        event.update(extra)
+        return self.hook(event)
+
+    def test_read_write_destroy_and_an_unnamed_tool(self) -> None:
+        self.assertNotIn("permissionDecision", self.call("mcp_tracker_get_ticket"))
+        asked = self.call("mcp_tracker_update_ticket")
+        self.assertEqual(asked.get("permissionDecision"), "ask", asked)
+        self.assertIn("tracker", asked.get("permissionDecisionReason", ""))
+        self.assertEqual(self.call("mcp_tracker_delete_ticket").get("permissionDecision"), "deny")
+        self.assertNotIn("permissionDecision", self.call("mcp_other_update_thing"), "no connector names it: not judged")
+
+    def test_a_subagent_may_only_read(self) -> None:
+        self.assertEqual(self.call("mcp_tracker_update_ticket", agent_type="reviewer").get("permissionDecision"), "deny")
+        self.assertNotIn("permissionDecision", self.call("mcp_tracker_list_tickets", agent_type="reviewer"))
+
+    def test_a_bad_rule_keeps_the_connector_out(self) -> None:
+        bad = make(self.outside / "bad", name="badmcp", skills=(), mcp={"tools": [{"pattern": "(", "verb": "write"}]})
+        with self.assertRaises(ConnectorError):
+            connectors.add(self.root, str(bad))

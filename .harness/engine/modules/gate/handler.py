@@ -162,6 +162,25 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
     return {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": opened, "how": how, "code": ""}
 
 
+def check_mcp(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """An MCP tool an installed connector names (1.7.14): a read goes through, a write or an exec waits for the person's yes in Copilot (`ask`), a destroy
+    is refused, and a subagent may only read. Logged as a call to the connector. A tool no connector names is left as it was."""
+    try:
+        from core import connectors
+
+        found = connectors.mcp_verb(ctx.root, event.tool_name)
+    except Exception:  # noqa: BLE001 - a broken connector must not stop a tool call
+        return None
+    if not found:
+        return None
+    facts = {"external": {"system": found["connector"], "env": "none", "verb": found["verb"], "target": event.tool_name, "mcp": True}}
+    if found["verb"] == "read":
+        return Decision(facts=facts)
+    if found["verb"] == "destroy" or event.agent_type.strip():
+        return Decision(permission="deny", reason=rules.say("gate.mcp.deny", tool=event.tool_name, connector=found["connector"], verb=found["verb"]), facts=facts)
+    return Decision(permission="ask", reason=rules.say("gate.mcp.ask", tool=event.tool_name, connector=found["connector"], verb=found["verb"]), facts=facts)
+
+
 def _openable(system: Dict[str, Any]) -> bool:
     """May Open to the agent let this system's held calls through (1.7.13)? A system says so with `openable`; a connector's system (a ticket board, a
     pipeline) is closed unless it says yes: its writes reach people, so the person approves each one."""
@@ -377,6 +396,10 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
         port = asks_board(ctx, json.dumps(event.raw, ensure_ascii=False, default=str))
         if port:
             return Decision(permission="deny", reason=rules.board_request(port))
+        if event.tool_kind == "other":  # an MCP or browser tool: no file and no command line
+            judged = check_mcp(event, ctx)
+            if judged:
+                return judged
     if event.event == "PreToolUse":
         unseen.note_call(ctx.root, event)
         refused = check_secrets(event, ctx)

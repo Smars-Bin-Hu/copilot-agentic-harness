@@ -236,6 +236,9 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
                  for name, kind in known.items() if not servers_core.kind_problems(kind)}
     return {"servers": rows, "kinds": kinds_out, "state": servers_core.state(root), "vscode_open": bool(vscode_open), "windows": os.name == "nt"}
 
+
+EMBEDDED = re.compile(r"\bElectron/\d")  # the user agent of VS Code's own browser (an Electron app); Chrome, Edge and Firefox never send it
+
 class Board:
     """What one server holds: the settings, the pairing code and the sessions of paired browsers. Memory only."""
 
@@ -1239,7 +1242,14 @@ def handler_for(board: Board) -> type:
         def host_ok(self) -> bool:
             return self.headers.get("Host", "") in allowed_hosts
 
+        def embedded(self) -> bool:
+            """A browser inside an editor (VS Code's own, which the agent can drive with its browser tools, 1.7.14): it is never paired, so the agent
+            cannot press a person's button there. Told by the user agent an Electron app sends."""
+            return bool(EMBEDDED.search(self.headers.get("User-Agent", "")))
+
         def token(self) -> str:
+            if self.embedded():
+                return ""
             for part in self.headers.get("Cookie", "").split(";"):
                 name, _, value = part.strip().partition("=")
                 if name == board.cookie:
@@ -1336,6 +1346,8 @@ def handler_for(board: Board) -> type:
                 return self.answer(400, {"error": say("serve.refused.body")})
             path = urlparse(self.path).path
             if path == "/api/pair":
+                if self.embedded():  # checked first: the code is not used up
+                    return self.answer(403, {"error": say("serve.pair.embedded")})
                 token = board.pair(str(data.get("code", "")))
                 if token is None:
                     return self.answer(403, {"error": say("serve.pair.wrong")})

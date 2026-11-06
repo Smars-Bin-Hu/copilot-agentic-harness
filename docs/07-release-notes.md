@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.14 (2026-11-06)
+
+### Added
+
+- **The gate judges the MCP tools a connector names** (`"mcp": {"tools": [{"pattern", "verb"}]}` in `connector.json`): a read goes through, a write or an exec makes Copilot ask you (even with auto-approve), a destroy is refused, and a subagent only reads. Logged as a call to the connector.
+
+### Changed
+
+- **The board is never paired in the browser inside VS Code**: the agent can drive that browser with its browser tools, so it could press your buttons there. Pairing is refused with a line to open the link in Chrome, Edge or Firefox, and a cookie carried into it counts for nothing.
+
 ## 1.7.13 (2026-11-06)
 
 ### Added

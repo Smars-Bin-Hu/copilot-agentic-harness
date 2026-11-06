@@ -359,7 +359,11 @@
       if (view.state === "fail" || view.state === "wait") bad = true;
       const cls = "s-" + view.state + (c && !c.blocking ? " warns" : " blocks");
       setClass(li, cls); setText(li.querySelector(".t"), t("board.enter.t." + id));
-      const em = li.querySelector("em"); setText(em, view.tag); em.title = view.tip || (view.tag.length > 24 ? view.tag : "");
+      const em = li.querySelector("em"); em.title = view.tip || (view.tag.length > 24 ? view.tag : ""); em.classList.toggle("has-tip", Boolean(view.tip));
+      if (id === "systems" && /[\u2713\u2717?]/.test(view.tag)) {  // the marks of each environment in colour (1.7.9): ✓ green, ✗ orange, ? grey
+        if (em.dataset.k !== view.tag) { em.dataset.k = view.tag; em.replaceChildren(...view.tag.split(/([\u2713\u2717?])/).map((part) => part === "\u2713" ? h("b", {class: "mk ok"}, part) : part === "\u2717" ? h("b", {class: "mk bad"}, part) : part === "?" ? h("b", {class: "mk unknown"}, part) : document.createTextNode(part))); }
+      } else { em.dataset.k = ""; setText(em, view.tag); }
+      li.classList.toggle("attn", id === "systems" && c && c.why === "unreached");
       const p = li.querySelector(".m"), key = view.message + "|" + view.button + "|" + chk0.openError + "|" + root.lang;
       if (view.message) {
         if (p.dataset.k !== key) {

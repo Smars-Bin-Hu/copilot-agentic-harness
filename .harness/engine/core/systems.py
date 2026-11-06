@@ -65,7 +65,7 @@ SYSTEMS_SCHEMA = {
             "needs": {  # 1.7.9: `probes` names one probe per environment (another server, another account); `denied` is what a call prints when the identity is not let in
                 "type": "object",
                 "properties": {"probe": {"type": "string", "minLength": 1}, "probes": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
-                               "expect": {"type": "string"}, "denied": {"type": "string", "minLength": 1}, "launch": {"type": "string"}},
+                               "expect": {"type": "string"}, "denied": {"type": "string", "minLength": 1}, "down": {"type": "string", "minLength": 1}, "launch": {"type": "string"}},
                 "additionalProperties": False,
             },
         },
@@ -98,7 +98,7 @@ def validate(systems: Any) -> List[str]:
             if program in owner:
                 errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}; give one of them a `when`")
             owner[program] = name
-        patterns = [("target", system.get("target") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or ""), ("needs.denied", (system.get("needs") or {}).get("denied") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs") for index, item in enumerate(system.get(key) or [])]
+        patterns = [("target", system.get("target") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or ""), ("needs.denied", (system.get("needs") or {}).get("denied") or ""), ("needs.down", (system.get("needs") or {}).get("down") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs") for index, item in enumerate(system.get(key) or [])]
         for where, pattern in (item for item in patterns if item[1]):
             try:
                 re.compile(pattern)

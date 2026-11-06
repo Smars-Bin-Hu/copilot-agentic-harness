@@ -72,8 +72,9 @@
           "qat": "sqlcmd -S sql-qat.example.local,1433 -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT SUSER_SNAME()\""
         },
         "expect": "^\\s*(EXAMPLE\\\\\\S+)",
-        "denied": "Login failed|Login timeout expired|Cannot open server|TCP Provider|Named Pipes Provider|Cannot generate SSPI context|SSL Provider",
-        "launch": "Start VS Code with .harness/launch/start-vscode.cmd (it asks for your EXAMPLE\\<id> and the password once), then open this folder again."
+        "denied": "Login failed|Cannot generate SSPI context|The login is from an untrusted domain",
+        "launch": "Start VS Code with .harness/launch/start-vscode.cmd (it asks for your EXAMPLE\\<id> and the password once), then open this folder again.",
+        "down": "TCP Provider|Named Pipes Provider|Login timeout expired|Cannot open server|network-related or instance-specific error|unable to open tcp connection|connection refused|i/o timeout"
       }
     }
   }

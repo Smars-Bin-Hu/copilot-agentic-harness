@@ -226,9 +226,15 @@ class ReadinessTests(TaskCase):
         reach.probe_all(self.root, two, lambda command: external.run_probe(command, self.root))
         reach.note_call(self.root, "finance", dict(two["finance"], needs=dict(two["finance"]["needs"], denied="Login failed")), "ist", "Login failed", False)
         got = board()
-        self.assertEqual(got["detail"], "DEV \u2713 \u00b7 IST \u2717")  # several servers: one mark per environment
-        self.assertIn("finance IST", got["tip"])  # the hover names the server that failed
-        self.assertNotIn("sql IST", got["tip"])
+        self.assertEqual(got["detail"], "sql \u2713 \u00b7 finance \u2717")  # several servers: one mark per server, the worst of its environments
+        self.assertIn("finance: DEV\u2713 IST\u2717", got["tip"])  # the hover lists each server's environments
+        three = dict(two, hr=dict(two["finance"], reach={"cli": "sqlcmd", "when": "hr"}))
+        policies.joinpath("tools.company.json").write_text(json.dumps({"systems": three}), encoding="utf-8")
+        reach.probe_all(self.root, {"hr": three["hr"]}, lambda command: external.run_probe(command, self.root))
+        self.assertEqual(board()["detail"], messages.text("board.enter.d.systems.count", n=3, marks="2 \u2713 1 \u2717"))  # three or more: a count per mark, the names on hover
+        policies.joinpath("tools.company.json").write_text(json.dumps({"systems": two}), encoding="utf-8")
+        self.assertIn("finance IST:", got["tip"])  # and names the place that failed
+        self.assertNotIn("sql IST:", got["tip"])
         policies.joinpath("tools.company.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
         reach.probe_all(self.root, systems, lambda command: external.run_probe(command, self.root))
         reach.note_call(self.root, "sql", dict(systems["sql"], needs=dict(systems["sql"]["needs"], denied="Login failed")), "ist", "Msg 18456, Login failed for user", False)

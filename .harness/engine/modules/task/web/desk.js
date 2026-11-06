@@ -717,7 +717,8 @@
       const listed = item.systems.length > 0;
       const tip = !listed ? t("desk.set.open.none", {env: item.env}) : item.open ? t("desk.set.open.close", {env: item.env, systems: item.systems.join(", ")}) : t("desk.set.open.open", {env: item.env, systems: item.systems.join(", ")});
       const seen = item.reach;  // reached from VS Code (1.7.9): a dot on the chip, the words on hover
-      const part = (one) => one.state === "ok" ? t("desk.reach.ok", {env: one.system, who: one.who || "-"}) : one.state === "unknown" ? t("desk.reach.unknown", {env: one.system}) : t("desk.reach.bad", {env: one.system, launch: one.launch || one.why || ""});
+      const why = (one) => one.state === "denied" ? (one.launch || t("desk.reach.why.identity")) : one.why === "no-answer" ? t("desk.reach.why.no-answer") : t("desk.reach.why.exit", {why: one.why});
+      const part = (one) => one.state === "ok" ? t("desk.reach.ok", {env: one.system, who: one.who || "-"}) : one.state === "unknown" ? t("desk.reach.unknown", {env: one.system}) : t("desk.reach.bad", {env: one.system, launch: why(one)});
       const seenTip = seen ? (seen.parts || []).map(part).join("\n") : "";  // one line per server of this environment
       const chip = h("button", {type: "button", class: "chip env" + (item.open ? " on" : ""), "aria-pressed": item.open ? "true" : "false", title: tip + (seenTip ? "\n" + seenTip : ""), disabled: listed && can ? null : "disabled"},
         seen ? h("i", {class: "reach-dot " + (seen.state === "ok" ? "ok" : seen.state === "unknown" ? "unknown" : "bad")}) : null, item.env + (item.open ? " ✓" : ""));

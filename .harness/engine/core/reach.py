@@ -9,8 +9,9 @@ probe for it; the hooks can, because VS Code starts them and they inherit its id
   - after a call of a listed system (PostToolUse) the hook reads what the terminal printed: the pack's `needs.denied` pattern means the identity is wrong,
     an answer means the way in works. No process is started for it.
 
-The state is `.harness/runtime/state/reach.json`: `{"<system>:<env>": {state, at, why, who, source}}`. `state`: ok, denied (the identity is not let in),
-failed (no answer, an error), unknown. `who` is what the pack's `expect` pattern captured (its first group), or empty: the board shows only what the
+The state is `.harness/runtime/state/reach.json`: `{"<system>:<env>": {state, at, why, who, source}}`. `state`: ok, denied (the identity is not let in: the
+launch sentence helps), failed (the server did not answer: down, or this computer is off its network; a new identity would not help), unknown.
+`why` is a word the page turns into its own sentence: `identity`, `other-identity`, `no-answer`, `exit-<n>`. `who` is what the pack's `expect` pattern captured (its first group), or empty: the board shows only what the
 company asked it to show. Never a password, never the probe's whole output.
 """
 
@@ -60,15 +61,15 @@ probes = outside.probes
 def _judge(needs: Dict[str, Any], code: Optional[int], output: str) -> Tuple[str, str, str]:
     """(state, why, who) of one probe's answer."""
     if needs.get("denied") and re.search(needs["denied"], output or "", re.IGNORECASE):
-        return DENIED, "the system did not let this identity in", ""
-    if code is None:
-        return FAILED, output, ""
+        return DENIED, "identity", ""
+    if code is None or (needs.get("down") and re.search(needs["down"], output or "", re.IGNORECASE)):
+        return FAILED, "no-answer", ""
     if code != 0:
-        return FAILED, f"the probe ended with exit code {code}", ""
+        return FAILED, f"exit-{code}", ""
     if needs.get("expect"):
         found = re.search(needs["expect"], output or "")
         if not found:
-            return DENIED, "the probe answered, but not as `expect` says: another identity", ""
+            return DENIED, "other-identity", ""
         return OK, "", (found.group(1).strip()[:80] if found.groups() and found.group(1) else "")
     return OK, "", ""
 
@@ -127,7 +128,9 @@ def note_call(root: Path, system_name: str, system: Dict[str, Any], env: str, an
     found = read(root)
     line = found.get(key) or {}
     if needs.get("denied") and re.search(needs["denied"], answer or "", re.IGNORECASE):
-        found[key] = {"state": DENIED, "at": utc_now(), "why": "a call of the agent was not let in", "who": "", "source": "call"}
+        found[key] = {"state": DENIED, "at": utc_now(), "why": "identity", "who": "", "source": "call"}
+    elif needs.get("down") and re.search(needs["down"], answer or "", re.IGNORECASE):
+        found[key] = {"state": FAILED, "at": utc_now(), "why": "no-answer", "who": line.get("who", ""), "source": "call"}  # the server did not answer: no word on the identity
     elif not failed and answer.strip() and line.get("state") != OK:
         found[key] = {"state": OK, "at": utc_now(), "why": "", "who": line.get("who", ""), "source": "call"}
     else:
@@ -160,15 +163,15 @@ def by_env(lines: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         item = merged.setdefault(key, {"env": key, "label": key.upper(), "states": [], "who": [], "launch": [], "why": [], "systems": [], "parts": []})
         item["states"].append(line["state"])
         item["systems"].append(line["system"])
-        item["parts"].append({"system": line["system"], "state": line["state"], "who": line.get("who", ""), "launch": line.get("launch", ""), "why": line.get("why", "")})  # each server of this environment, for the hover
+        item["parts"].append({"system": line["system"], "state": line["state"], "who": line.get("who", ""), "launch": line.get("launch", "") if line["state"] == DENIED else "", "why": line.get("why", ""), "at": line.get("at", "")})  # each server of this environment, for the hover
         for name in ("who", "launch", "why"):
-            if line.get(name) and line[name] not in item[name] and (name == "who" or line["state"] in (DENIED, FAILED)):
+            if line.get(name) and line[name] not in item[name] and (name == "who" or (name == "launch" and line["state"] == DENIED) or (name == "why" and line["state"] in (DENIED, FAILED))):
                 item[name].append(line[name])
     out = []
     for key in sorted(merged, key=lambda env: (ORDER.index(env) if env in ORDER else len(ORDER), env)):
         item = merged[key]
         states = item.pop("states")
-        state = DENIED if any(one in (DENIED, FAILED) for one in states) else UNKNOWN if UNKNOWN in states else OK
+        state = DENIED if DENIED in states else FAILED if FAILED in states else UNKNOWN if UNKNOWN in states else OK
         out.append({**item, "state": state, "who": ", ".join(item["who"]), "launch": "; ".join(item["launch"]), "why": "; ".join(item["why"])})
     return out
 

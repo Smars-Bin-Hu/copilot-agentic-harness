@@ -53,7 +53,7 @@ const MACHINE = (function () {
         chip.addEventListener("click", () => { if (on !== value) ask("mcp", {allowed: value}).then((next) => { paint(next); if (ctx.changed) ctx.changed(); }, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
         return chip;
       });
-      mcp.replaceChildren(h("span", {class: "chips"}, ...chips), state.mcp.detected === "blocked" ? h("span", {class: "sub"}, " " + t("machine.mcp.detected")) : null);
+      mcp.replaceChildren(...[h("span", {class: "chips"}, ...chips), state.mcp.detected === "blocked" ? h("span", {class: "sub"}, " " + t("machine.mcp.detected")) : null].filter(Boolean));
     };
     ask("state").then(paint, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); });
     savePaths.addEventListener("click", () => {

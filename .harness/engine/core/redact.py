@@ -11,7 +11,7 @@ from typing import Any, Callable, List, Match, Pattern, Tuple, Union
 
 MASK = "***"
 
-_NAMES = r"(?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|access[_-]?key|auth(?:orization)?|credential|private[_-]?key|sas|signature|sig)"
+_NAMES = r"(?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|access[_-]?key|auth(?:orization)?|credential|private[_-]?key|sas|signature|sig|pat(?![a-z]))"  # pat: a personal access token (AZURE_DEVOPS_EXT_PAT=...), not path, patch or pattern
 _PATH_PART = re.compile(r"[A-Za-z]?[a-z0-9_-]*|[A-Z0-9_-]+")
 _WORD = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])")
 
@@ -38,7 +38,8 @@ def _long_run(found: Match[str]) -> str:
 
 _RULES: List[Tuple[Pattern[str], Union[str, Callable[[Match[str]], str]]]] = [
     (re.compile(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}"), r"\1 " + MASK),
-    (re.compile(r"(?i)(\b[\w.-]*" + _NAMES + r"[\w.-]*\s*[:=]\s*)(\"[^\"]*\"|'[^']*'|[^\s;&\"',]+)"), r"\1" + MASK),  # key=value, key: value, --password=x
+    (re.compile(r"(?i)(\"[\w.-]*" + _NAMES + r"[\w.-]*\"\s*:\s*\")([^\"]*)(\")"), r"\1" + MASK + r"\3"),  # "token": "x" in a JSON body: the quotes stay
+    (re.compile(r"(?i)(\b[\w.-]*" + _NAMES + r"[\w.-]*\s*[:=]\s*)(?!(?:bearer|basic)\b)(\"[^\"]*\"|'[^']*'|[^\s;&\"',]+)"), r"\1" + MASK),  # key=value, key: value, --password=x (Authorization: Bearer x is the rule above)
     (re.compile(r"(?i)(--?[\w-]*" + _NAMES + r"[\w-]*[ ]+)(\"[^\"]*\"|'[^']*'|[^\s;&|\-][^\s;&|]*)"), r"\1" + MASK),  # --password x
     (re.compile(r"(://[^/\s:@]+:)[^@\s/]+(@)"), r"\1" + MASK + r"\2"),  # user:password@host
     (re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{12,}|xox[abprs]-[A-Za-z0-9-]{10,})\b"), MASK),

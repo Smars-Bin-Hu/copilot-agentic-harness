@@ -25,6 +25,7 @@ What a task folder holds:
 | `TEST/` | Test cases and results | The agent |
 | `REVIEW/round-NNN/` | Only with independent checks on: the review package and the reviewer's verdict | The CLI and the hook |
 | `SNAPSHOT/<gate>-<time>/` | The work as saved when the plan is approved, before every check and before a write-back | The CLI |
+| `OUTBOX/<code>-<system>.md` | A call to an outside system waiting for the user's approval (`approve-action`): the action, the exact command, its state | The hook |
 | `.task/`, `CHANGES.diff`, `PROMOTE-PLAN.diff` | State; the diffs for people to read | The CLI |
 
 A task has one of three tiers, and the files come with the tier: light has only `TASK.md`; medium adds `REQ.md`, `REQ/`, `REF/`, `LOG.md`; full adds `TODO.md`, `DEV/`, `TEST/`.
@@ -40,7 +41,7 @@ How an agent should write is in [workspace.instructions.md](../.github/instructi
 - Admin mode (the session the user ran `admin on` for in the terminal): guardrail files can be changed, except `.harness/runtime/`. The other rules below stay.
 - A session with a task: the edit tools can write this task folder only. `DEV/` can be written only after the user runs `task approve-plan`; when the plan changes, the approval ends. `REQ/` and `REF/` cannot be written.
 - Files in the working tree of a target repository cannot be changed directly (by the edit tools, or by the common terminal spellings with the full path of the repository). Only promote writes them.
-- `.task/`, `REVIEW/`, `SNAPSHOT/` and the two `.diff` files of a task folder, and the reports under `reports/`, are written by the CLI only. A direct write by an agent is refused.
+- `.task/`, `REVIEW/`, `SNAPSHOT/`, `OUTBOX/` and the two `.diff` files of a task folder, and the reports under `reports/`, are written by the CLI only. A direct write by an agent is refused.
 - No `.git` folder and no `refused_paths` of a target repository can be written (terminal spellings included). With a target repository set up, an agent's git write commands need a person's approval, and `push` and the like can never be approved: see [docs/02-features.md](../docs/02-features.md).
 - The gate does not guard reads. Anyone can read skills, instructions and the knowledge base.
 

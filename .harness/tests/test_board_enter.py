@@ -9,6 +9,7 @@ import threading
 import time
 import types
 import unittest
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 from unittest import mock
@@ -77,8 +78,8 @@ class ReadinessTests(TaskCase):
     def test_everything_in_place_is_ready_and_the_lines_come_in_the_order_of_the_screen(self) -> None:
         found = settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 1, "unbound": 0, "why": "ok"}), clean))
         self.assertTrue(found["ready"])
-        self.assertEqual([item["id"] for item in found["checks"]], ["setup", "vscode", "copilot", "doctor", "paired", "kb", "repos"])
-        self.assertEqual([item["blocking"] for item in found["checks"]], [True, True, True, True, True, False, False])
+        self.assertEqual([item["id"] for item in found["checks"]], ["setup", "vscode", "copilot", "doctor", "paired", "kb", "repos", "systems"])
+        self.assertEqual([item["blocking"] for item in found["checks"]], [True, True, True, True, True, False, False, False])
         self.assertNotIn("ver", [item["id"] for item in found["checks"]])  # N11: no version line
 
     def test_the_doctor_is_first_unknown_then_run_once_off_the_calling_thread(self) -> None:
@@ -197,6 +198,49 @@ class ReadinessTests(TaskCase):
         found = settled(check)
         self.assertEqual((line(found, "kb")["state"], line(found, "kb")["n"]), ("ok", 1))
         self.assertFalse(line(found, "kb")["blocking"])
+        self.assertEqual((line(found, "systems")["state"], line(found, "systems")["why"], line(found, "systems")["blocking"]), ("note", "none", False))
+        self.assertEqual(messages.text("board.enter.d.systems.none"), messages.text("board.enter.d.repos.none"))  # the same words as the line above: not set up yet
+
+    def test_the_outside_systems_line_says_what_vs_code_reached_not_what_the_board_reaches(self) -> None:
+        """1.7.9: the identity is on VS Code's process, not the board's: the line reads what the hooks saw (core.reach), per environment, short; the words are on hover.
+        Never checked: grey, unknown. Not reached: grey, with the company's launch sentence. All reached: ok, with the account the pack's `expect` captured."""
+        from core import reach
+        from modules.gate import external
+
+        policies = self.root / ".harness" / "policies"
+        policies.joinpath("tools.json").write_text(json.dumps({"schema_version": 1, "python": {}, "systems": {}}), encoding="utf-8")
+        probe = f"{sys.executable} -c \"print('CORP\\\\me')\""
+        systems = {"sql": {"reach": {"cli": "sqlcmd"}, "env_from": [{"pattern": "dev", "env": "dev"}, {"pattern": "ist", "env": "ist"}],
+                           "needs": {"probes": {"dev": probe, "ist": probe}, "expect": r"^(CORP\\\S+)", "launch": "Start VS Code with start-vscode.cmd."}}}
+        policies.joinpath("tools.company.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
+        board = lambda: line(settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), clean)), "systems")  # noqa: E731
+        got = board()
+        self.assertEqual((got["state"], got["why"], got["detail"], got["blocking"]), ("note", "unknown", "DEV ? \u00b7 IST ?", False))
+        reach.probe_all(self.root, systems, lambda command: external.run_probe(command, self.root))
+        got = board()
+        self.assertEqual((got["state"], got["detail"]), ("ok", "DEV \u2713 \u00b7 IST \u2713"))
+        self.assertIn("CORP\\me", got["tip"])
+        two = dict(systems, finance=dict(systems["sql"], reach={"cli": "sqlcmd", "when": "finance"}))
+        two["sql"] = dict(systems["sql"], reach={"cli": "sqlcmd", "when": "orders"})
+        policies.joinpath("tools.company.json").write_text(json.dumps({"systems": two}), encoding="utf-8")
+        reach.probe_all(self.root, two, lambda command: external.run_probe(command, self.root))
+        reach.note_call(self.root, "finance", dict(two["finance"], needs=dict(two["finance"]["needs"], denied="Login failed")), "ist", "Login failed", False)
+        got = board()
+        self.assertEqual(got["detail"], "sql \u2713 \u00b7 finance \u2717")  # several servers: one mark per server, the worst of its environments
+        self.assertIn("finance: DEV\u2713 IST\u2717", got["tip"])  # the hover lists each server's environments
+        three = dict(two, hr=dict(two["finance"], reach={"cli": "sqlcmd", "when": "hr"}))
+        policies.joinpath("tools.company.json").write_text(json.dumps({"systems": three}), encoding="utf-8")
+        reach.probe_all(self.root, {"hr": three["hr"]}, lambda command: external.run_probe(command, self.root))
+        self.assertEqual(board()["detail"], messages.text("board.enter.d.systems.count", n=3, marks="2 \u2713 1 \u2717"))  # three or more: a count per mark, the names on hover
+        policies.joinpath("tools.company.json").write_text(json.dumps({"systems": two}), encoding="utf-8")
+        self.assertIn("finance IST:", got["tip"])  # and names the place that failed
+        self.assertNotIn("sql IST:", got["tip"])
+        policies.joinpath("tools.company.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
+        reach.probe_all(self.root, systems, lambda command: external.run_probe(command, self.root))
+        reach.note_call(self.root, "sql", dict(systems["sql"], needs=dict(systems["sql"]["needs"], denied="Login failed")), "ist", "Msg 18456, Login failed for user", False)
+        got = board()
+        self.assertEqual((got["state"], got["why"], got["detail"]), ("note", "unreached", "DEV \u2713 \u00b7 IST \u2717"))
+        self.assertIn("start-vscode.cmd", got["tip"])
 
 
 class StalledCommandTests(TaskCase):
@@ -333,7 +377,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("DATA.rows", code)  # status only, no task data
         self.assertNotIn("localStorage", code)  # nothing that lets a person skip it: the only memory is the tab's own session
         for call in re.findall(r'ask\("(/api/[a-z]+)"', code):
-            self.assertIn(call, ("/api/ready", "/api/open"))  # the one read and the one person-only action that already exists
+            self.assertIn(call, ("/api/ready", "/api/open", "/api/launch"))  # the one read and the person-only actions (1.7.9: the company's launch script, Windows)
 
     def test_every_text_of_the_screen_is_in_both_languages(self) -> None:
         code = (WEB / "enter.js").read_text(encoding="utf-8")
@@ -349,7 +393,8 @@ class PageTests(unittest.TestCase):
         for why in ("vscode", "provider", "client", "nomodel"):
             self.assertIn(f"board.enter.m.copilot.{why}", en)
         for key in ("board.enter.m.doctor.errors", "board.enter.m.doctor.failed", "board.enter.m.paired.unpaired", "board.enter.d.vscode.ok", "board.enter.d.copilot.ok", "board.enter.d.doctor.ok",
-                    "board.enter.d.paired.ok", "board.enter.d.kb.ok", "board.enter.d.kb.none", "board.enter.d.repos.ok", "board.enter.d.repos.none"):
+                    "board.enter.d.paired.ok", "board.enter.d.kb.ok", "board.enter.d.kb.none", "board.enter.d.repos.ok", "board.enter.d.repos.none",
+                    "board.enter.d.systems.ok", "board.enter.d.systems.none", "board.enter.d.systems.unreached"):
             self.assertIn(key, en, key)
         self.assertIn("Sign in to Copilot in VS Code", en["board.enter.m.copilot.provider"])
         self.assertIn("Sign in to Copilot in VS Code", en["board.enter.m.copilot.client"])

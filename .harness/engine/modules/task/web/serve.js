@@ -76,6 +76,7 @@ const SERVE = (function () {
     const shade = h("div", {class: "shade"}, box);
     const before = document.activeElement;
     document.body.append(shade);
+    document.body.classList.add("has-dialog");  // the fixed buttons of the page (the terminal toggle) step back while a window is open
     stack.push(box);
     const settle = () => { busy = stack.some((item) => !quiet.has(item)); };
     if (informs) quiet.add(box);
@@ -87,6 +88,7 @@ const SERVE = (function () {
       stack.splice(stack.indexOf(box), 1);
       quiet.delete(box);
       settle();
+      if (!stack.length) document.body.classList.remove("has-dialog");
       if (before && before.isConnected) before.focus({preventScroll: true});
     };
     const onKey = (event) => {
@@ -102,6 +104,11 @@ const SERVE = (function () {
       if (!typed) close();
     };
     document.addEventListener("keydown", onKey);
+    shade.addEventListener("click", (event) => {  // a click beside the window is Cancel, as Esc is, as long as nothing was typed
+      if (event.target !== shade) return;
+      const typed = view.holds ? view.holds() : [...box.querySelectorAll("textarea, input:not([type=file]):not([type=checkbox]):not([type=radio])")].some((node) => node.value.trim());
+      if (!typed) close();
+    });
     (box.querySelector("input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea") || box).focus({preventScroll: true});  // never a button: Enter must not act by surprise
     const view = {box, close, holds: null, inform: () => { quiet.add(box); settle(); }};  // inform: a form that turned into a plain notice (New task, once sent)
     return view;

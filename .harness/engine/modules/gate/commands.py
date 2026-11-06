@@ -1,9 +1,11 @@
 """CLI commands of the gate module.
 
   approve-command    the person approves one git command the gate refused (terminal only)
+  approve-action     the person approves one call to an outside system the gate held in the outbox (terminal only)
   admin on           the person switches admin mode on for one session (terminal only): guardrail files open up for it
   admin off          switch it off again (anyone may: it only takes rights away)
   admin status       the sessions that are in admin mode
+  tools check        the systems listed in tools.json / tools.override.json, and what the gate decides for each of them
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from core import approval, config, guardrails, messages, tasks
 from core.paths import cli_command, repo_root, state_dir, utc_now
 from core.state import admin_on, session, state_path
 
-from . import approvals
+from . import approvals, external, outbox
 from .policy import POLICY_NAME
 
 
@@ -55,6 +57,14 @@ def approve(
     if done is None:
         raise CommandError(say("gate.approve.refused"))
     return {"approved": True, "command": done["command"], "valid_minutes": minutes, "next": say("gate.approve.next")}
+
+
+def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None) -> Dict[str, Any]:
+    """`harness approve-action`: see core.outbox.approve_action (the board calls the same)."""
+    try:
+        return outbox.approve_action(root, reader, interactive, out)
+    except ValueError as error:
+        raise CommandError(str(error)) from None
 
 
 def cmd_approve_command(args: Any) -> Dict[str, Any]:
@@ -131,9 +141,54 @@ def admin_sessions(root: Path) -> List[Dict[str, Any]]:
     return sorted(found, key=lambda item: item["updated_at"], reverse=True)
 
 
+def tools_check(root: Path) -> Dict[str, Any]:
+    try:
+        systems = config.load_policy(root, "tools").get("systems")
+    except Exception as error:  # noqa: BLE001 - a broken file is what this command is for
+        return {"systems": [], "errors": [f"tools.json, tools.company.json or tools.override.json cannot be read: {error}"], "warnings": [], "ok": False, "exit_code": 1}
+    return external.report(systems, run=lambda command: external.run_probe(command, root))
+
+
+def tools_reach(root: Path, probe: bool) -> Dict[str, Any]:
+    from core import reach
+
+    listed = config.policy_or_empty(root, "tools").get("systems") or {}
+    if external.validate(listed):
+        return {"envs": [], "ok": False, "next": "the list of systems has errors: run `harness tools check`"}
+    if probe:
+        reach.probe_all(root, listed, lambda command: external.run_probe(command, root))
+    lines = reach.view(root, listed)
+    return {"envs": lines, "ok": all(line["state"] == reach.OK for line in lines)}
+
+
+def _wait(root: Path, args: Any) -> Dict[str, Any]:
+    from . import wait  # it imports this module's CommandError
+
+    return wait.run_wait(root, args.run, args.until, args.every, args.timeout, args.out, args.task)
+
+
 def register(subparsers: Any) -> None:
+    tools = subparsers.add_parser("tools", help="the outside systems a company listed (tools.company.json from the company pack, or tools.override.json)")
+    tools_commands = tools.add_subparsers(dest="tools_command", required=True)
+    check = tools_commands.add_parser("check", help="is the list well formed, what does the gate decide for each system and environment, and is each system that has a probe reachable from here? Exit code 1 when there is an error")
+    check.set_defaults(handler=lambda args: tools_check(repo_root()))
+    seen = tools_commands.add_parser("reach", help="can the agent reach each environment from VS Code? What the hooks saw: the probes at the start of a chat and the agent's own calls (--probe runs the probes now, in this terminal's identity)")
+    seen.add_argument("--probe", action="store_true", help="run the probes now and keep the answers (the hook does this at the start of a chat, in VS Code's identity)")
+    seen.set_defaults(handler=lambda args: tools_reach(repo_root(), args.probe))
+
+    waiting = subparsers.add_parser("wait", help="wait for an outside system to reach a state in one call: run a read of a listed system every N seconds until its output matches a pattern, or a timeout; the last output goes to a file of the task")
+    waiting.add_argument("--run", required=True, help="the read-only command of a listed system to run each round, whole, in quotes")
+    waiting.add_argument("--until", required=True, help="a pattern (regular expression) the output must match to end the wait")
+    waiting.add_argument("--every", type=int, default=30, help="seconds between rounds (5 to 600; default 30)")
+    waiting.add_argument("--timeout", type=int, default=540, help="seconds after which the wait ends with exit code 1 (10 to 7200; default 540: VS Code hands a terminal call back after 10 minutes, so a longer job is waited for with one call after another)")
+    waiting.add_argument("--out", default="", help="a file inside the task folder where the last output is written whole, to record as evidence: RUNS/DEV/wait-job.txt means the task's own RUNS/")
+    waiting.add_argument("--task", default="", help="the task the file belongs to (or just its name); left out, the one open task")
+    waiting.set_defaults(handler=lambda a: _wait(repo_root(), a))
+
     parser = subparsers.add_parser("approve-command", help="the person approves a git command the gate refused (terminal only)")
     parser.set_defaults(handler=cmd_approve_command, person_only=True)
+    action = subparsers.add_parser("approve-action", help="the person approves one call to an outside system the gate held in the outbox (terminal only)")
+    action.set_defaults(handler=lambda _args: approve_action(repo_root()), person_only=True)
 
     admin = subparsers.add_parser("admin", help="admin mode of a session: it may change guardrail files")
     commands = admin.add_subparsers(dest="admin_command", required=True)

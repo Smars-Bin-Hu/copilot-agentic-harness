@@ -84,6 +84,8 @@ html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5
 .en-chk-l .s-ok .ck{background:var(--good-dot);opacity:1}
 .en-chk-l .s-wait .ck{background:var(--hot-dot);opacity:1;animation:enbeat 1.2s ease-in-out infinite}
 .en-chk-l .s-fail .ck{background:var(--hot-dot);opacity:1;box-shadow:0 0 0 3px var(--hot-line)}
+.en-chk-l .attn .ck{background:var(--hot-dot);opacity:1}.en-chk-l em .mk{font-weight:600}.en-chk-l em .mk.ok{color:var(--good-dot)}.en-chk-l em .mk.bad{color:var(--hot-dot)}.en-chk-l em .mk.unknown{color:var(--soft)}
+.en-chk-l [data-id="systems"] em{white-space:nowrap}.en-chk-l em.has-tip{cursor:help;text-decoration:underline dotted;text-underline-offset:3px;text-decoration-color:var(--soft)}
 .en-chk-l .s-wait em,.en-chk-l .s-fail em{color:var(--hot);opacity:1}
 .en-chk-l .s-note .t,.en-chk-l .warns .t{opacity:.82}
 .en-chk-l .m{grid-column:2/4;margin:2px 0 6px;padding:7px 10px;border-radius:8px;background:var(--hot-bg);border:1px solid var(--hot-line);color:var(--hot);font:12px/1.5 var(--sans);overflow-wrap:anywhere;word-break:break-word}

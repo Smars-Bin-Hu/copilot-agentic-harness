@@ -445,12 +445,15 @@ def split(prompt: Dict[str, Any]) -> Dict[str, Optional[float]]:
 
 
 def count_rows(rows: List[Dict[str, Any]], start: float, end: float) -> Dict[str, int]:
-    found = {"denied": 0, "asked": 0, "stop_blocks": 0}
+    found = {"denied": 0, "asked": 0, "stop_blocks": 0, "external_calls": 0, "external_denied": 0}
     for row in rows:
         at = copilot_events.seconds(row.get("at"))
         if at is None or not start <= at < end:
             continue
         decision = row.get("decision")
+        if row.get("external") and row.get("event") == "PreToolUse":  # a call to an outside system the company listed (M43-3)
+            found["external_calls"] += 1
+            found["external_denied"] += 1 if decision == "deny" else 0
         if decision == "deny":
             found["denied"] += 1
         elif decision == "ask":
@@ -644,7 +647,7 @@ def assemble(task: str, data: Dict[str, Any], items: List[Dict[str, Any]], revie
     """The report of the given prompts: the totals, the tables and the findings. `build` calls it for all prompts and for each round."""
     totals: Dict[str, Any] = {
         "prompts": len([item for item in items if not item["prompt"].get("compact")]), "compacts": len([item for item in items if item["prompt"].get("compact")]), "active_s": 0.0, "waiting_s": 0.0, "paused_s": 0.0, "model_s": None, "tool_s": None, "approval_s": None, "subagent_s": None, "other_s": None,
-        "tool_calls": 0, "failed_tool_calls": 0, "denied": 0, "asked": 0, "stop_blocks": 0,
+        "tool_calls": 0, "failed_tool_calls": 0, "denied": 0, "asked": 0, "stop_blocks": 0, "external_calls": 0, "external_denied": 0,
         "aiu": None, "premium_requests": None, "subagent_tokens": None, "context_tokens_first": None, "context_tokens_max": None, "compactions": 0,
         "cache_input_tokens": None, "cache_read_tokens": None, "cache_write_tokens": None, "cache_cold_calls": 0, "cache_cold_write_tokens": 0,
     }
@@ -657,7 +660,7 @@ def assemble(task: str, data: Dict[str, Any], items: List[Dict[str, Any]], revie
         prompts.append(entry)
         for key, value in item["parts"].items():
             add(totals, key, value)
-        for key in ("tool_calls", "failed_tool_calls", "denied", "asked", "stop_blocks"):
+        for key in ("tool_calls", "failed_tool_calls", "denied", "asked", "stop_blocks", "external_calls", "external_denied"):
             totals[key] += entry[key]
         add(totals, "aiu", prompt["aiu"])
         add(totals, "premium_requests", prompt["premium_requests"])

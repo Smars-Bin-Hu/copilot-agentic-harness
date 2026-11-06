@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, copilot_events, domainskills, messages, tasks
+from core import config, copilot_events, domainskills, messages, outbox, tasks
 from core.logs import session_log_path
 from core.paths import cli_command, repo_root, utc_now
 from core.state import SUBAGENT_ACTIVE_TTL_SECONDS, admin_on, atomic_write, session, state_lock, state_path
@@ -302,6 +302,9 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
         except OSError:
             written = last_event(data, "confirm-req") or updated
         return {"why": "req", "since": written}  # written, not confirmed: no plan can be approved on it (1.5.30). It waits since the agent wrote it, not since the task was opened
+    held = outbox.pending_for(root, task)
+    if held:
+        return {"why": "outbox", "since": str(held[0].get("created_at") or updated)}  # a call to an outside system waits in the outbox (1.7.7): the agent stopped on it
     handed = data.get("handoff")
     if isinstance(handed, dict) and handed.get("what") in HANDOFFS and handed.get("since"):
         return {"why": str(handed["what"]), "since": str(handed["since"])}  # the agent handed work to the person that only they can do: it stays until the agent clears it
@@ -488,6 +491,39 @@ def handoff(root: Path, raw_task: str, what: str, env: str, detail: str = "") ->
     if what == "run":
         return {"task": task, "handoff": what, "env": env, "detail": detail, "next": say("task.handoff.next.run", env=env, folder=f"{task}/RUNS/{env.upper()}/")}
     return {"task": task, "handoff": what, "env": env, "next": say("task.handoff.next"), **defects_synced(root, task)}
+
+
+ALLOW_KEY = "allow_env"
+ALLOW_ENVS = ("dev", "ist", "qat")  # the environments a person may open for a task; prod never, and a system with no environment (`none`) has nothing to open
+
+
+def allowed_env(data: Dict[str, Any], env: str) -> bool:
+    """Did the person open this environment for this task (`task allow --env <E> --on`, 1.7.4)? The gate then lets a write or a procedure of a listed system there through, instead of holding it."""
+    found = data.get(ALLOW_KEY) if isinstance(data.get(ALLOW_KEY), dict) else {}
+    return str(env).lower() in found
+
+
+def set_allow(root: Path, raw_task: str, env: str, on: bool, interactive: Optional[bool] = None) -> Dict[str, Any]:
+    """The person opens an environment for one task (the agent's writes and procedures on the listed systems of that environment run without a further approval), or
+    closes it again. Terminal only, no code: the switch ends with the task and can be turned off at once. A destroy is still refused, prod cannot be opened, and
+    every call still leaves its line in the log."""
+    task_ops.person("task allow", interactive, typed=False)
+    env = " ".join(str(env or "").split()).lower()
+    if env not in ALLOW_ENVS:
+        raise CommandError(say("task.allow.env", env=env or "-", allowed=", ".join(ALLOW_ENVS)))
+    task = task_ops.resolve(root, raw_task)
+    with task_ops.locked(root, task) as data:
+        task_ops.require_open(data)
+        held = data.get(ALLOW_KEY) if isinstance(data.get(ALLOW_KEY), dict) else {}
+        before = env in held
+        if on:
+            held[env] = {"at": utc_now()}
+        else:
+            held.pop(env, None)
+        data[ALLOW_KEY] = held
+        if before != on:
+            task_ops.note(data, "allow-env", f"{env}: {'on' if on else 'off'}")
+    return {"task": task, "env": env, "on": on, "changed": before != on, "open": sorted(held), "next": say("task.allow.on" if on else "task.allow.off", env=env.upper())}
 
 
 def handoff_clear(root: Path, raw_task: str) -> Dict[str, Any]:

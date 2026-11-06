@@ -261,6 +261,11 @@ def next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
     handed = data.get("handoff") if isinstance(data.get("handoff"), dict) else {}
     if handed.get("what"):  # handed to the person: their result comes before any next step
         return say("task.step.handoff", env=handed.get("env", ""), what=handed.get("detail") or handed.get("what", ""), task=task)
+    opened = sorted(data["allow_env"]) if isinstance(data.get("allow_env"), dict) else []
+    page = (say("task.step.allow_env", envs=", ".join(env.upper() for env in opened)) if opened else "") + page
+    if data.get("kind") == "test" and isinstance(data.get("test_runner"), dict) and any(value == "agent" for value in data["test_runner"].values()):
+        mine = ", ".join(sorted(env for env, value in data["test_runner"].items() if value == "agent"))
+        return say("task.step.test_agent", envs=mine, task=task)
     if not tasks.plan_digest(root, task):
         return say("task.step.plan", plan=plan, dev=dev, task=task) + page
     if not tasks.plan_approved(root, task, data):

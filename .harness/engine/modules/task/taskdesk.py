@@ -11,10 +11,12 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import approval, messages, tasks
+from core import systems as outside
+from core import approval, config, messages, outbox, reach, tasks
 from core.paths import cli_command, utc_now
 
-from . import autorun, common, health, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, tasktrace
+from . import autorun, cmdview, common, evidence, health, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
+from . import steps as step_parts
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
 DECISIONS = ("confirm-req", "approve-plan", "approve-promote")  # the person's decisions that move a task on
@@ -56,7 +58,8 @@ def read_doc(path: Path, base: str = "") -> Optional[Dict[str, Any]]:
     except OSError:
         return None
     tree = mdtree.parse(data[:MAX_DOC_BYTES].decode("utf-8", errors="replace"))
-    return {"blocks": mdtree.resolve_images(tree["blocks"], base), "cut": tree["cut"] or len(data) > MAX_DOC_BYTES}
+    return {"blocks": step_parts.laid_out(mdtree.resolve_images(tree["blocks"], base)), "cut": tree["cut"] or len(data) > MAX_DOC_BYTES}
+
 
 
 def reviews(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -112,6 +115,40 @@ def evidence_pictures(folder: Path, env: str) -> List[str]:
         return []
 
 
+def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The calls of this task that wait for the person (1.7.7), oldest first, each with its facts (the pack's `show` patterns), the layout of its command and the file it reads, if any.
+    The page draws a card for each; the code is in the draft's name too."""
+    try:
+        systems = config.policy_or_empty(root, "tools").get("systems") or {}
+        folder = tasks.task_dir(root, task)
+        out = []
+        for item in outbox.pending_for(root, task):
+            system = systems.get(item.get("system", "")) or {}
+            out.append({
+                "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True),
+                "command": item["command"], "created_at": item.get("created_at", ""), "session_id": item.get("session_id", ""), "draft": outbox.draft_of(item).split("/", 4)[-1] if outbox.draft_of(item) else "",
+                "facts": cmdview.facts(item["command"], system.get("show")), "layout": cmdview.layout(item["command"], folder),
+            })
+        return out
+    except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
+        return []
+
+
+def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
+    """The Task settings field "Open to the agent" (1.7.6): each environment the protocol knows, with the systems of the company pack that reach it (none: the chip
+    cannot be clicked) and whether the person opened it for this task (`task allow`). Prod is listed as never. Empty `envs` when no system is listed: the field is not drawn."""
+    try:
+        systems = config.policy_or_empty(root, "tools").get("systems") or {}
+        reaches = outside.environments(systems) if systems and not outside.validate(systems) else {}
+        seen = {line["env"]: line for line in reach.by_env(reach.view(root, systems))} if reaches else {}  # reached from VS Code (1.7.9), across the systems of each environment
+    except Exception:  # noqa: BLE001 - a broken list is doctor's to report; the field is then not drawn
+        reaches, seen = {}, {}
+    opened = data.get("allow_env") if isinstance(data.get("allow_env"), dict) and data.get("status") == "open" else {}  # the switch ends with the task (hand test B90-a: a closed task said dev was open)
+    envs = [{"env": env, "systems": reaches.get(env, []), "open": env in opened, "since": str((opened.get(env) or {}).get("at") or ""),
+             "reach": {"state": seen[env]["state"], "parts": seen[env]["parts"]} if env in seen else None} for env in tasklife.ALLOW_ENVS] if reaches else []
+    return {"envs": envs, "never": [outside.PROD]}
+
+
 def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The Test tab of a test task: its guide, and each environment with the results file and the verdict the agent judged. None for any other kind.
     An environment is done on PASS, failed on FAIL; the first that is neither is the one the task is at (`waits`: the agent handed it to the person)."""
@@ -122,11 +159,13 @@ def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, A
         handed = str((data.get("handoff") or {}).get("env") or "").upper()
         out, at = [], False
         files = taskstages.env_files(root, task, envs)
+        runners = testrecord.runners(data, guide, envs)
         for env in envs:
             verdict, path = results.get(env.upper(), ("", None))
             state = "done" if verdict == "PASS" else "failed" if verdict == "FAIL" else "now" if not at else "todo"
             at = at or state == "now"
             out.append({"name": env, "verdict": verdict, "state": state, "file": path.name if path else "", "results": read_doc(path, "TEST") if path else None, "waits": bool(handed) and env.upper() == handed,
+                        "runner": runners[env],  # who runs this environment: what the guide proposes, and whether the person let the agent (1.7.2)
                         "pictures": evidence_pictures(tasks.task_dir(root, task), env),  # the evidence files of the environment, for a row of thumbnails
                         "runs": taskstages.verdicts_in(taskstages.read(path)) if path else [],  # every verdict line of the file, in order
                         "ignored": [other.name for other in files.get(env.upper(), []) if path and other != path]})  # other files of the environment: older, not counted
@@ -143,6 +182,10 @@ def standout(what: str, detail: str) -> Tuple[str, str]:
     """The lines a person looks for in the trail: the decisions that move a task on, and the verdict of a check. The mark of the line (`good`, `bad` or none) and its message."""
     if what in DECISIONS:
         return "good", f"event.{what}"
+    if what in ("run-record", "test-record") and detail.endswith("by the agent"):
+        return "agent", f"event.{what}"  # the agent ran an environment itself: a person looks for these (1.7.9)
+    if what == "allow-env":
+        return ("open" if detail.endswith(": on") else ""), f"event.{what}"  # the person opened an environment to the agent
     verdict = CHECKED.match(detail) if what == "review" else None
     if not verdict:
         return "", f"event.{what}"
@@ -347,7 +390,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "forked_from": task_ops.name_of(str(data.get("forked_from"))) if data.get("forked_from") else "",
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": taskfiles.listing(root, task), "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
+        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
         "plan_approval": plan_approval(root, task, data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if needs_req(data) and row.get("status") == "open" else 0, "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),

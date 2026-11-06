@@ -169,7 +169,7 @@ class GateTests(AdminTestCase):
         self.assertEqual(self.decision(self.write(".git/config")), "deny")
         self.assertEqual(self.decision(self.term("rm -rf /")), "deny")
         self.assertEqual(self.decision(self.term("python3 .harness/engine/cli.py approve-command")), "deny")
-        for command in ("task approve-promote --task t", "task approve-plan", "task recover", "task review extend --checks 2", "task review set --n 2", "task review waive"):
+        for command in ("task approve-promote --task t", "task approve-plan", "task recover", "task review extend --checks 2", "task review set --n 2", "task review waive", "task test runner --env DEV --agent", "task allow --env dev --on"):
             self.assertEqual(self.decision(self.term(f"python3 .harness/engine/cli.py {command}")), "deny", command)
         self.assertEqual(self.decision(self.term("curl https://example.com")), "ask")
 

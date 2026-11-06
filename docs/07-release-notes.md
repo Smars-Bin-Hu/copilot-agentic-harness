@@ -10,6 +10,111 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.9 (2026-11-05)
+
+### Added
+
+- **A held call waits for you for a day, not ten minutes.** The ten minutes are for the approval once you gave it (the agent runs the command once within them, so a stale approval never fires). The request itself, and its card, stay 24 hours, or until you dismiss it or the task closes. The same holds for a git command the gate held.
+- **One hover card for the whole board.** Every mark, chip and icon with a tip shows it at once in a small card of the board's own look (light and dark), inside the window, line by line, with a short label in bold and ✓ ✗ in colour; keyboard focus shows it too, and Escape hides it. The browser's own slow tooltip no longer shows. The *Open to the agent* button gets an orange dot when VS Code cannot reach one of its environments.
+- **The board shows whether VS Code reaches each environment.** The identity a server needs is on VS Code's process, not the board's, so the board's own probe could say "not reachable" while the agent could reach it, or the other way round. Now the hooks look, in VS Code's identity: at the start of each chat they run the pack's probes in a process of their own (the chat does not wait; not again within 30 minutes once all answered), and after each call of a listed system they read what the terminal printed (`needs.denied`). The Enter screen line says `DEV ✓ · IST ✗` (the account, or the company's launch sentence, on hover); the chips of *Open to the agent* carry the same dot; `harness tools reach` prints it. A pack may give one probe per environment (`needs.probes`). With several servers (one system each in the pack), the line names the servers (`orders ✓ · finance ✗`) or, from three on, counts them (`3 servers · 1 ✓ 2 ✗`), and the hover lists each server's environments and each reason; a server that does not answer (`needs.down`) says so, and is not told to start VS Code again; with none listed it says *not set up yet*, and the hover says where servers are listed. On Windows the Enter screen offers **Start VS Code with my identity**: it runs the company's launch script, which asks for the account itself.
+- **The sample SQL Server pack holds more than writes.** A line with a `SELECT` beside a statement the pack did not name was a read. Now a transaction (`BEGIN TRAN`, `COMMIT`, `ROLLBACK`), `BACKUP`, `DBCC`, `RECONFIGURE`, `DENY`, a trigger switch, `OPENROWSET` and `xp_` procedures wait like a write, and `KILL`, `SHUTDOWN` and `RESTORE` are refused like `DROP`. A company pack made from the old sample should take the new patterns.
+- **What the agent can do on your servers, in words for colleagues.** A new part of *Outside systems* in `docs/03-configure.md`: the agent has your account's rights; reads run, for the reviewer too; writes, procedures, script files and transactions wait for your View and Approve; `DROP`, `TRUNCATE` and prod writes are refused; every call is kept; and what Open to the agent changes and when to use it (rarely). The Open to the agent pop says it in two sentences, the sample pack's README points to it, and `harness-rookie-wondering` (5.6) says the account is the real limit.
+- **Settings work while the agent is at work.** Independent review, Open to the agent and the test runner can be changed on the task page while the agent is in the middle of a turn: it reads them at its next step. Before, the board refused them like the actions that change the task under the agent's hands (close, pause, the approvals of a plan).
+- **A run the agent did is recorded as steps.** `task test record` and `task run record` take `--steps-file`: one step per command, each with its title, a sentence on what it shows, the whole command and its own output. The results file keeps the steps (`#### Step n · <title>`), and the Test tab, the results file and the evidence window show each step with its command laid out and its output as tables, in place of one block of commands and one block of output. The skills `generic-evidence-run` and `generic-test-guide` tell the agent to write steps; `--given-file` and `--ran-file` stay for what you ran and gave back.
+- **Open to the agent is the runner grant too.** In a test task, an environment you open to the agent at the head of the page (`task allow`) lets the agent run and record that environment itself: no second click on the Test tab, which then says *The agent runs it (DEV is open to it)*. **Back to me** there takes both back.
+- **Run by hand is now Apply to <environment>.** A development task whose `DEV/` holds only `DEV/_manual/` ends with a step named by where its result was applied (`Apply to DEV`, from the runs recorded after the plan), since the agent may now apply it itself through the gate; before a run it says **Apply**.
+- **The reviewer checks the evidence on the system itself.** The review package lists the runs the task cites (`[E<n>]`: environment, who ran it, the file, the command), and the reviewer is told to run the reads again on the same environment and compare; a read needs no leave, a write or a procedure is refused to it, and a result that differs is a finding.
+- **The evidence says what let the agent's commands through.** The gate notes every call to a listed system that goes through for the open task (`.task/calls.jsonl`: the command as the gate saw it, the system, the environment, the verb, and how: a read the policy allows, the task level after an approved plan, your grant as the runner of a test environment, an environment you opened to the agent, or your approval with its code). A run the agent records (`task run record --run-by agent`, `task test record --run-by agent`) looks its commands up there and writes it into the results file (the marker's `leave=` and a line under *Run by*). The Evidence tab has a **Let through by** column and the window a fact: `read`, `plan`, `runner`, `open`, `approved <code>`; a run with no note shows `?`. In the Task Record, a run the agent did itself is orange and an environment opened to the agent is yellow.
+- **A separator-joined table is read too.** Output whose dash ruler is joined by one character (`--|-----|---` from `sqlcmd -s "|"`, or `,`, `;`, a tab) is a table cut at that character; a result set with no rows still shows its columns.
+- **After Approve, one button tells the agent.** The agent runs an approved call only when it is prompted. Once you approve on the card, a green card at the top of the page shows the codes and **Tell the agent to run it**: one click sends "Approved: <codes>. Run the exact command now, in this chat." to the task's chat, in place of typing an answer. It stays ten minutes (the approval's life) and goes once sent.
+- **A call with no verb says so.** A query in a shell variable (`Q="SELECT …"; sqlcmd -Q "$Q"`) or in a file the gate cannot read has no verb the gate can see, so it counts as a write (the floor) and waits for you. The card marks such a call with a `?` beside `write` (hover: why, and what the agent should do), the draft says it on its Kind line, and the skill `generic-evidence-run` tells the agent to put the query in the command itself.
+- **Results holds what came out, for every kind.** Its first tab is the product of the kind: Changes (development, knowledge base), Test (testing), RCA, Design; then Evidence and Review. RCA and Design were tabs of Overview. Changes is a tab of development tasks only: a file under `DEV/` of another kind no longer makes one.
+- **Evidence is a tab of Results.** The table of saved runs (number, environment, who ran it, when, which run, where cited; the window and the file on each row) sits under Results beside Changes, Test and Review, not on the Files tab. **Copy the query** in the window of a held call or of an evidence chip copies the body: the script the command reads, or the quoted query, also a short one; the command line only when there is neither.
+- **The output of a run is laid out in the window.** The results file keeps the output as it came; the window of an evidence chip reads it: a block whose second line is dashes is a table (the dash runs give the columns), a framed or `|` table and a tab-separated block are tables too, `(n rows affected)` and `Msg …` lines are notes (an error red), the rest is text. Several result sets are several tables, each in its own tab, with a Notes tab after them; numbers are right-aligned, `NULL` is dim, the head stays while the rows scroll, and a table longer than 200 rows shows the first 200 and says how many there are. **Table / Text** switches to the output whole. Every box scrolls both ways. The harness knows no program here: the reader is generic.
+
+## 1.7.8 (2026-11-05)
+
+### Added
+
+- **An evidence citation is a chip.** In every document the task page renders (REQ, PLAN, RCA, LOG, the report), `[E7]` becomes a small chip: a green edge when the agent ran it, grey when you did, red and struck through when no such run is recorded in the task. Its tip says the environment, who ran it, when and which run; a click opens a window with the command laid out line by line, the output as saved (whole, scrolling both ways), the file, and the documents that cite it, each a button that opens it. The Evidence table (on the Files tab then, a tab of Results since 1.7.9) has the same chips and two icons on each row: the window, and the results file.
+
+## 1.7.7 (2026-11-05)
+
+### Added
+
+- **A held call is a card on the task page.** When the gate holds a call to an outside system for your approval, the task waits for you (the board says "a call to an outside system waits for your approval", with an Approve button), and its page has a card beside the other waits: what the call is (write, exec), the system and its environment, the facts the company pack says to show (a server, a port: `show` patterns in `systems.json`), the target, the file the command reads, and the first words of the command. **View** opens a window with the command laid out line by line (the program, each option with its value, a query in a block of its own, the script whole), scrolling both ways, with a Copy button. You type the code on the card and press **Approve** (the same as `harness approve-action`; Approve wakes once the window was opened, since the command is what you approve), or **Dismiss** the call: nothing runs, the draft says dismissed.
+
+### Changed
+
+- The approvals and the outbox moved to the engine's core (the task page reads them); the gate's names stay.
+
+## 1.7.6 (2026-11-05)
+
+### Added
+
+- **Open an environment to the agent from the task page.** The head of the task page has the pill **Open to the agent**, beside Independent review: it opens the environments (dev, ist, qat), one chip each, clickable only when a system of the company pack reaches it, green when open; prod is struck through. A click is `harness task allow --env dev --on`, another click closes it; no code. The line under a task's name on the board shows **dev open** while it is. The field is not drawn when no system is listed.
+
+## 1.7.5 (2026-11-05)
+
+### Added
+
+- **`harness wait`: wait for a job in one call.** A job started on a server runs for a while; the agent used to run the same query again and again, each time a model call. Now `harness wait --run "<read>" --until "<pattern>" --every 30 --timeout 540 --out RUNS/DEV/wait-job.txt` runs the read every 30 seconds until its output matches (or the timeout, exit code 1) and writes the last output whole to the file, to record as evidence. No model call happens while it waits. One call stays under 10 minutes: VS Code hands a longer terminal call back to the agent, which then has to poll it (hand test 2026-11-05); a longer job is waited for with one call after another, each a model call, still far fewer than a look every 30 seconds. Only a read of a listed outside system may be the probe: the gate sees the command inside `--run` when the agent runs it, and the command itself refuses a write, a procedure or any other program.
+- **A sample company skill for jobs**, in the sample pack (`skills/acme-sql-jobs/`, made-up names): which procedure starts a job, which table says it is done, how to wait and what to check. The names of your procedures and tables belong in such a skill and in the knowledge base, not in the harness.
+
+### Changed
+
+- **A quote escaped with a backslash inside a quoted command is read as part of it.** `sqlcmd -Q \"SELECT ...; ...\"` inside `harness wait --run "..."` (or inside `bash -c "..."`) was cut at the escaped quote and split at the `;`, so the gate took the read for a write and held it (hand test 2026-11-05). Now the inner command keeps its own quotes and is judged whole.
+
+## 1.7.4 (2026-11-05)
+
+### Added
+
+- **A task-level switch for writes in an environment.** `harness task allow --env dev --on`, in your own terminal, opens that environment for one task: the agent's writes and procedures on its listed systems run without a further approval, instead of waiting in the outbox or for a plan. `--off` closes it; the task's close ends it. A destroy is still refused, prod cannot be opened, and every call stays in the log with the mark `opened`. The task's next step tells the agent which environments are open. There is no global switch on purpose: the scope is one task and one environment.
+
+### Changed
+
+- **A call held before a task was open gets its draft marked once the task is open.** The agent tried a write outside a task, was told to open one, opened it and asked again: it got the same code, and after the approval the draft in `OUTBOX/` stayed "waiting". Now the held entry learns the task, so the draft says approved, and approved and run.
+
+## 1.7.3 (2026-11-05)
+
+### Added
+
+- **The agent gets facts from an environment itself, as evidence.** The skill `generic-evidence-run`: when a task needs a count, a sample, a job's state or the output of a test from DEV, IST or another listed system, the agent runs the exact command in the terminal, saves what came back whole in the task's `RUNS/<ENV>/`, records it with `harness task run record --run-by agent` (any kind of task; a read needs no one's leave) and cites the number it gets. A domain skill that said "write a script for the user to run and bring back" can now say "run it".
+- **Every saved run has one number, `E<n>`**: a run you did, a run the agent did, a test run (`task test record`), in the order they were recorded in the task. The heading of the run says it (`## Run 2 (E7)`), the files cite it as `[E7]`, and the Evidence tab of the task page (under Results) lists every number with the environment, who ran it, when, where it is, and which files cite it; a number nobody cites is grey.
+
+### Changed
+
+- **Writes and procedures wait for you by default.** The sample pack holds every environment's `write` and `exec` in the outbox: you read the exact command and approve it once (`harness approve-action`). A team that wants one approval per task for dev writes sets `"write": "task"` in its own pack. A read runs everywhere but prod needs no change.
+- **`task run record` works in a test task too**, for a look-up that is not a test step; the test steps still go through `task test record`.
+
+## 1.7.2 (2026-11-04)
+
+### Added
+
+- **The agent can run a test environment itself, when you let it.** The test guide may say `Runner: agent` under an environment (the agent proposes it for an environment whose systems are listed and reachable). On the Test tab, each environment says who runs it, with **Let the agent run DEV** (one click, no code; **Back to me** undoes it), or `harness task test runner --env DEV --agent` in your terminal. Then the gate lets the agent's `task`-level calls to the systems of that environment through for this task (a test task has no plan: this grant is what stands for it), the agent runs the steps in the terminal, saves what came back whole, judges the criteria and records the run with `--run-by agent`: the run says it was the agent's, in the results file and in `LOG.md`. The other environments are handed over to you as before. Without the grant, the gate stops the calls and such a record is refused.
+
+## 1.7.1 (2026-11-04)
+
+### Added
+
+- **A company pack can carry the outside systems.** `company/tools/systems.json` in the knowledge base lists them, in the form of `systems` in tools.json; `harness company sync` copies it to `.harness/policies/tools.company.json`, a layer under your own `tools.override.json`. `company/tools/launch/` (scripts a person runs to start VS Code for a system) is copied to `.harness/launch/`, a guardrail folder. Get ready and the Knowledge base window count the systems with the other parts of the pack. These paths are fixed.
+- **A system can say what it needs.** `needs.probe` is a read-only command that answers only when the session carries the right identity, `needs.expect` a pattern on its answer, `needs.launch` what to tell you when it does not (how to start VS Code so the identity is there). `harness tools check` and `doctor` run the probes and say which system is reachable; the Enter screen of the board has a grey line **Outside systems** with the same, and the launch sentence of each system that is not reachable. A probe has 5 seconds; its answer is never kept.
+- **A sample pack** with made-up names: `.harness/examples/system-packs/sqlserver-sqlcmd/`. A SQL Server reached with `sqlcmd` and Windows authentication: the environment from the server name, read and write verbs, a probe, and a launch script that starts VS Code under another identity with `runas /netonly`.
+
+### Changed
+
+- **`harness doctor` checks `<name>.company.json` as it checks an override**: it must merge onto an existing policy, and the lines say what it adds.
+
+## 1.7.0 (2026-11-04)
+
+### Added
+
+- **Outside systems have a protocol (the gate part).** A company lists the systems an agent may reach in `tools.override.json`, under `systems`: how a call is recognised (`reach.cli`, and `reach.when` when one program serves several systems), which environment it runs in (`env`, or `env_from` patterns), what it does (`verbs`: read, write, destroy, exec) and what the gate decides (`rules`: allow, task, outbox, human, deny). The harness ships no system: the list is empty. A terminal command that calls a listed program becomes one action, `{system, env, verb, target}`, and the gate decides. Two floors hold whatever the company writes: a call to a listed system that no `verbs` pattern names is a write, and an environment that no `env` pattern names is prod. Without a rule: read allow, write outbox, exec human, destroy deny; prod allows only read. Used in a line with `&&`, a pipe, `sudo`, `bash -c` or `$(...)`, the strictest call decides. `human` means the agent hands the call to the user (`task handoff run`); `task` passes only in a task whose plan was approved.
+- **The outbox: you approve a write to an outside system first.** A call the policy marks `outbox` (by default every write) is refused once and held: in a session with a task, the hook writes a draft into the task's `OUTBOX/<code>-<system>.md` (the action and the exact command; only the harness writes there). You run `harness approve-action` in your own terminal, read the command and type the code. The same command may then run once, in the same session, within the time limit; a changed command needs a new approval. The agent hears of the approval at its next prompt, and the draft records *approved* and *approved and run*. Under autorun a call that needs you stops the run instead of waiting.
+- **Every outside call is logged.** A call to a listed system leaves an `external` field in the session log (system, environment, verb, target, the policy's decision), also when it went through; what the call returned is never kept. The task report counts outside calls and how many were refused.
+- **Secrets stay out of the log.** In a refused command and its reason, the values of passwords and tokens (`-P <password>`, `--password`, `--token`, `NAME_TOKEN=...`, `Password=` in a connection string, `Authorization: Bearer`, `user:password@` in a URL) are replaced by `***` before the line is written. Keep secrets out of commands anyway: this catches the common spellings only.
+- **`harness tools check`** says what is wrong with the list and what the gate decides for each system and environment. `harness doctor` reports a broken list as an error; a list that does not validate is ignored by the gate (a hook that fails itself must not hurt normal work).
+
 ## 1.6.113 (2026-11-05)
 
 ### Changed

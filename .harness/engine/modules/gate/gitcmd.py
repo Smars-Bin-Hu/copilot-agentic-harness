@@ -71,7 +71,9 @@ def collapse(command: str) -> str:
 
 
 def split_segments(text: str) -> List[List[str]]:
-    """The commands of a command line, each as tokens with their quotes removed. Quote-aware: `;` inside quotes splits nothing."""
+    """The commands of a command line, each as tokens with their quotes removed. Quote-aware: `;` inside quotes splits nothing.
+    A quote escaped with a backslash (`\"`, inside double quotes or outside any) is a quote character of the token, not an end of the quoting: the
+    command a tool is given in quotes (`sqlcmd -Q \"SELECT ...\"` inside `harness wait --run "..."`) keeps its own quotes (1.7.5)."""
     segments: List[List[str]] = [[]]
     token: Optional[str] = None
     quote = ""
@@ -85,6 +87,10 @@ def split_segments(text: str) -> List[List[str]]:
 
     while index < len(text):
         char = text[index]
+        if char == "\\" and quote != "'" and index + 1 < len(text) and text[index + 1] == '"':
+            token = (token or "") + '"'
+            index += 2
+            continue
         if quote:
             if char == quote:
                 quote = ""

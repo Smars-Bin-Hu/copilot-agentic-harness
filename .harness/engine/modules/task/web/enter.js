@@ -2,7 +2,7 @@
 // A page on disk has none (no SERVE). The search and the settings are the global ones of shell.js; this screen adds nothing to the top but the greeting.
 //
 // Readiness: POST /api/ready every 3 s (a read; the server answers from caches and waits for nothing). One line for each check; the lines light up in order. Enter is allowed only when
-// every blocking line is ok: the pill is disabled, the Enter key does nothing, and there is no way past it on this page. Warn-only lines (knowledge base, target repositories) are grey.
+// every blocking line is ok: the pill is disabled, the Enter key does nothing, and there is no way past it on this page. Warn-only lines (knowledge base, target repositories, outside systems) are grey.
 // A check that cannot run shows as failed with its reason; a board that does not answer shows a line saying so and the screen goes on asking.
 //
 // Showing it: once for each tab session (sessionStorage, in try/catch), not on a poll, a reload of the board or a way back from a task. A task page opened from a link skips it only when everything
@@ -321,7 +321,7 @@
   }
 
   // ---------- readiness ----------
-  const ORDER = ["setup", "vscode", "copilot", "doctor", "paired", "kb", "repos"];
+  const ORDER = ["setup", "vscode", "copilot", "doctor", "paired", "kb", "repos", "systems"];
   const chk0 = {t0: 0, last: null, error: "", inflight: false, timer: 0, tick: 0, opened: 0, ready: false, openError: ""};
   const OPENED_FOR = 120000;  // ms in which a VS Code that was just opened is waited for, not blamed
   const setText = (node, text) => { if (node.textContent !== text) node.textContent = text; };
@@ -329,7 +329,7 @@
   const slot = (i) => chk0.t0 && Date.now() - chk0.t0 >= FIRST + i * STEP;
   function build() { for (const id of ORDER) list.append(h("li", {"data-id": id}, h("i", {class: "ck"}), h("span", {class: "t"}), h("em"), h("p", {class: "m", hidden: "hidden"}))); }
   function lineView(c) {  // one check -> {state, tag, message, button}; the words are the page's, from the message table
-    const id = c.id, vals = {n: c.n === undefined ? "" : c.n, detail: plainWords(c.detail || "")};
+    const id = c.id, vals = {n: c.n === undefined ? "" : c.n, detail: plainWords(c.detail || ""), tip: plainWords(c.tip || "")};
     let state = c.state, tag = "", message = "", button = false;
     if (state === "fail" && id === "vscode" && c.why === "none" && chk0.opened && Date.now() - chk0.opened < OPENED_FOR) state = "wait";
     if (c.state === "ok") tag = t("board.enter.d." + id + ".ok", vals);
@@ -340,10 +340,12 @@
       const key = id === "vscode" && state === "wait" && c.why === "none" ? "opened" : c.why;
       const named = "board.enter.m." + id + "." + key;
       message = c.why === "error" ? t("board.enter.m.error", vals) : (TEXT[named] ? t(named, vals) : plainWords(c.detail || ""));
-      button = id === "vscode" && Boolean(c.open);
+      button = id === "vscode" && Boolean(c.open) ? "open" : false;
     }
     if (state === "note" && (c.why === "error" || c.why === "problem")) message = c.why === "error" ? t("board.enter.m.error", vals) : t("board.enter.m.repos.problem", vals);
-    return {state, tag, message, button};
+    if (id === "systems" && c.launch && (c.why === "unreached" || c.why === "unknown")) { message = t("board.enter.m.systems.launch"); button = "launch"; }  // Windows: the company's launch script (1.7.9)
+    const tip = c.tip ? t("board.enter.tip." + id + "." + c.why, vals) : id === "systems" && c.why === "unknown" ? t("board.enter.tip.systems.unknown") : "";  // the long words of a short line: on hover (1.7.9)
+    return {state, tag, message, button, tip};
   }
   function render() {  // in place: the lines are made once and only their class and text change, so nothing blinks
     if (!list.children.length) build();
@@ -357,13 +359,17 @@
       if (view.state === "fail" || view.state === "wait") bad = true;
       const cls = "s-" + view.state + (c && !c.blocking ? " warns" : " blocks");
       setClass(li, cls); setText(li.querySelector(".t"), t("board.enter.t." + id));
-      const em = li.querySelector("em"); setText(em, view.tag); em.title = view.tag.length > 24 ? view.tag : "";
+      const em = li.querySelector("em"); em.title = view.tip || (view.tag.length > 24 ? view.tag : ""); em.classList.toggle("has-tip", Boolean(view.tip));
+      if (id === "systems" && /[\u2713\u2717?]/.test(view.tag)) {  // the marks of each environment in colour (1.7.9): ✓ green, ✗ orange, ? grey
+        if (em.dataset.k !== view.tag) { em.dataset.k = view.tag; em.replaceChildren(...view.tag.split(/([\u2713\u2717?])/).map((part) => part === "\u2713" ? h("b", {class: "mk ok"}, part) : part === "\u2717" ? h("b", {class: "mk bad"}, part) : part === "?" ? h("b", {class: "mk unknown"}, part) : document.createTextNode(part))); }
+      } else { em.dataset.k = ""; setText(em, view.tag); }
+      li.classList.toggle("attn", id === "systems" && c && c.why === "unreached");
       const p = li.querySelector(".m"), key = view.message + "|" + view.button + "|" + chk0.openError + "|" + root.lang;
       if (view.message) {
         if (p.dataset.k !== key) {
           p.replaceChildren(document.createTextNode(view.message));
           if (view.button) {
-            const b = h("button", {type: "button", class: "en-open", "data-open": "1"}, t("board.enter.open"));
+            const b = view.button === "launch" ? h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")) : h("button", {type: "button", class: "en-open", "data-open": "1"}, t("board.enter.open"));
             p.append(h("br"), b);
             if (chk0.openError) p.append(h("br"), h("span", null, chk0.openError));
           }
@@ -463,6 +469,12 @@
   }
 
   // Open VS Code: the person-only call that brings the window of this folder forward (the board's own `/api/open`). The line then says it is waiting.
+  list.addEventListener("click", (event) => {  // Windows: the company's launch script asks for the identity in a window of its own and starts VS Code with it (1.7.9)
+    const button = event.target.closest("[data-launch]");
+    if (!button || button.disabled) return;
+    button.disabled = true;
+    ask("/api/launch", {}).then(() => { button.textContent = t("board.enter.launched"); }, (error) => { button.disabled = false; button.textContent = error.message; });
+  });
   list.addEventListener("click", (event) => {
     const button = event.target.closest("[data-open]");
     if (!button || button.disabled) return;
@@ -476,7 +488,7 @@
     if (typeof SHELL !== "undefined" && SHELL.isOpen()) return;  // the palette or the settings own the keys
     if (["Shift", "Control", "Alt", "Meta", "Tab", "Escape", "CapsLock", "Dead", "Process"].includes(event.key) || /^F\d+$/.test(event.key)) return;
     const target = event.target;
-    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[data-open]")) return;
+    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[data-open],[data-launch]")) return;
     if (tryEnter()) event.preventDefault();  // any key goes in, but only when everything is ready
   });
 

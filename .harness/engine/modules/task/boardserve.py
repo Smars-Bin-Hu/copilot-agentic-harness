@@ -55,12 +55,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
-from core import ahp, company, config, targets, messages, registry, state, tasks, user
+from core import ahp, company, config, messages, outbox, reach, registry, state, targets, tasks, user
 from core.paths import board_serve_file, board_serve_port, utc_now
 
 from core import company, reinstall, setup as core_setup, shortcmd, skillboard
 
-from . import chatrounds
+from . import chatrounds, testrecord
 from . import kbview
 from . import setupjob
 from . import taskfileedit
@@ -86,6 +86,7 @@ MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
 REOPEN_EVERY = 3.0  # seconds
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
+SETTINGS = ("review set", "task allow", "test runner")  # settings the agent reads at its next step: they change nothing under its hands, so they work while it is at work (1.7.9)
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
 BUILTIN = ("send", "answer", "steer", "stop", "create", "confirm", "question")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
 DESK_REFRESH = 10  # seconds between two reads of a task page
@@ -109,7 +110,7 @@ def refresh_seconds(value: Any) -> int:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "autorun on", "recover", "archive", "close"]}
+    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close"]}
 
 
 class Fallback(CommandError):
@@ -143,6 +144,7 @@ def runner(root: Path, action: str, task: str) -> Callable[..., Dict[str, Any]]:
         "review dismiss": lambda **kw: taskreview.dismiss(root, task, **kw),
         "autorun on": lambda **kw: autorun.turn_on(root, task, **kw),
         "recover": lambda **kw: task_ops.recover(root, task, **kw),
+        "approve-action": lambda **kw: outbox.approve_action(root, **kw),  # a call to an outside system held in the outbox (1.7.7): the person reads the command and types its code
     }  # `review set` is not here: it asks no code (see `Board.act`)
     return table[action]
 
@@ -554,8 +556,8 @@ class Board:
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
-    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None) -> Dict[str, Any]:
-        """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once."""
+    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "") -> Dict[str, Any]:
+        """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only."""
         if action in ALL_AT_ONCE:
             if "pause" not in self.actions:
                 raise CommandError(say("serve.action.off", action=action))
@@ -565,7 +567,22 @@ class Board:
             return result
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
-        still = self.idle(action, task)
+        still = False if action in SETTINGS else self.idle(action, task)
+        if action == "dismiss action":  # the person says no to a held call (1.7.7): the code names it, nothing runs
+            try:
+                result = outbox.dismiss_action(self.root, str(code or ""), interactive=True)
+            except ValueError as error:
+                raise CommandError(str(error)) from None
+            noted(self.root, task, action)
+            return result
+        if action == "task allow":  # one click, no code: the person opens an environment for this task, or closes it (1.7.6); the same function as `task allow`
+            result = tasklife.set_allow(self.root, task, str(env_name or ""), str(who or "") == "on", interactive=True)
+            noted(self.root, result.get("task") or task, action)
+            return result
+        if action == "test runner":  # one click, no code: the person lets the agent run an environment of the test guide, or takes it back (1.7.2)
+            result = testrecord.set_runner(self.root, task, str(env_name or ""), str(who or "") == testrecord.AGENT, interactive=True)
+            noted(self.root, result.get("task") or task, action)
+            return result
         if action == "review set":  # one click, no code: the same function as `task review set`; the cap and the history are its own
             result = taskreview.set_by_person(self.root, task, n if isinstance(n, int) and not isinstance(n, bool) else -1, interactive=True)
             noted(self.root, result.get("task") or task, action)
@@ -590,8 +607,13 @@ class Board:
                 call(reader=stop, interactive=True, out=out)
             except Preview as asked:
                 return {"screen": [line for line in out.getvalue().splitlines() if line.strip()], "ask": asked.asked}
+            except ValueError as error:
+                raise CommandError(str(error)) from None
             raise CommandError(say("serve.preview.none"))
-        result = call(reader=lambda _asked: code, interactive=True, out=out)
+        try:
+            result = call(reader=lambda _asked: code, interactive=True, out=out)
+        except ValueError as error:  # core.outbox says no with a plain error; the page shows it as a refusal
+            raise CommandError(str(error)) from None
         noted(self.root, result.get("task") or task, action)
         return result
 
@@ -1242,6 +1264,12 @@ def handler_for(board: Board) -> type:
                 if asked != "queued":
                     return self.answer(409, {"error": say("serve.open.off") if asked == "off" else say("serve.open.no-cli")})
                 return self.answer(200, {"result": {"queued": True}})
+            if path == "/api/launch":  # Windows: start the company's launch script (it asks for the identity itself, then starts VS Code); the paired browser only (1.7.9)
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                if not reach.run_launch(board.root):
+                    return self.answer(409, {"error": say("serve.launch.none")})
+                return self.answer(200, {"result": {"started": True}})
             if path == "/api/create":  # a chat in VS Code and a task the agent opens: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
@@ -1465,7 +1493,7 @@ def handler_for(board: Board) -> type:
             if action not in FREE and not board.paired(self.token()):
                 return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
             try:
-                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"))
+                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")))
             except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                 return self.answer(409, {"error": str(error)})
             print(say("serve.did", action=action, task=task_ops.name_of(task) if task else "-"), flush=True)

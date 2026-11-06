@@ -219,3 +219,5 @@ pre.diff .add{background:var(--good-bg)}pre.diff .del{background:var(--bad-bg)}p
 
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+.hover-card{position:fixed;z-index:400;max-width:min(380px,calc(100vw - 24px));padding:7px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--pop);color:var(--ink);box-shadow:0 6px 24px rgba(0,0,0,.18);font:12.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0;text-transform:none;pointer-events:none;overflow-wrap:anywhere}
+.hover-card>div+div{margin-top:3px}.hover-card b{font-weight:600}.hover-card .mk{font-weight:600;margin:0 1px}.hover-card .mk.ok{color:var(--good-dot)}.hover-card .mk.bad{color:var(--hot-dot)}

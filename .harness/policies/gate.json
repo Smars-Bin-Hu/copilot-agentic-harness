@@ -6,6 +6,7 @@
     ".harness/policies/**",
     ".harness/engine/**",
     ".harness/bin/**",
+    ".harness/launch/**",
     "Start Harness.command",
     "Start Harness.cmd",
     ".harness/registry.json",
@@ -25,6 +26,7 @@
     ".workspace/sandbox/tasks/*/CHANGES_r*.diff",
     ".workspace/sandbox/tasks/*/REVIEW/**",
     ".workspace/sandbox/tasks/*/SNAPSHOT/**",
+    ".workspace/sandbox/tasks/*/OUTBOX/**",
     ".workspace/reports/**"
   ],
   "terminal": {
@@ -84,8 +86,8 @@
         "pattern": "\\b(?:chmod|chown|chgrp)\\s+(?:-R\\b|--recursive\\b)|\\bicacls(?:\\.exe)?\\b[^;&|\\n]*\\s/t\\b|\\btakeown(?:\\.exe)?\\b[^;&|\\n]*\\s/r\\b|-recurse\\b[^\\n]*\\bset-acl\\b|\\bdocker(?:\\.exe)?\\s+(?:rm|rmi|system\\s+prune|volume\\s+rm)\\b|\\bkubectl(?:\\.exe)?\\s+delete\\b|\\bterraform(?:\\.exe)?\\s+(?:apply|destroy)\\b"
       },
       {
-        "why": {"en": "only the user may run these, in their own terminal: approving a plan (task approve-plan), confirming the requirement (task confirm-req), approving a write-back (task approve-promote), recovering a promote that failed halfway (task recover), giving more checks, waiving them or dismissing one (task review extend, task review waive, task review dismiss), pausing and resuming a task (task pause, task resume, and all at once: task offwork, task onwork), switching autorun on (task autorun on), serving the board with buttons that act (task board, task board --serve; an agent writes the page with task board --once), approving a git command (approve-command), switching admin mode on (admin on). Setting how many checks a task gets (task review set) is the user's too. Tell the user to run the command; do not run it yourself", "zh": "批准计划（task approve-plan）、批准回写（task approve-promote）、恢复中途出错的 promote（task recover）、再给检查次数、放行或作废一次检查（task review extend、task review waive、task review dismiss）、搁置和恢复任务（task pause、task resume，以及一次全部：task offwork、task onwork）、开 autorun（task autorun on）、启动能操作的看板服务（task board、task board --serve；agent 只能用 task board --once 生成页面）、批准 git 命令（approve-command）、开 admin 模式（admin on）只能由用户在自己的终端里运行。设定任务的检查次数（task review set）也只能由用户来做。告诉用户运行这条命令，不要自己运行"},
-        "pattern": "\\b(?:cli\\.py|harness(?:\\.cmd)?)\\s+(?:task\\s+(?:approve-plan|confirm-req|approve-promote|recover|pause|resume|offwork|onwork|autorun\\s+on|review\\s+(?:set|extend|waive|dismiss)|board\\b(?![^;&|\\n]*\\s--once\\b))|approve-command|admin\\s+on)\\b"
+        "why": {"en": "only the user may run these, in their own terminal: approving a plan (task approve-plan), confirming the requirement (task confirm-req), approving a write-back (task approve-promote), recovering a promote that failed halfway (task recover), giving more checks, waiving them or dismissing one (task review extend, task review waive, task review dismiss), letting the agent run a test environment itself (task test runner), opening an environment for a task (task allow), pausing and resuming a task (task pause, task resume, and all at once: task offwork, task onwork), switching autorun on (task autorun on), serving the board with buttons that act (task board, task board --serve; an agent writes the page with task board --once), approving a git command (approve-command), approving a call to an outside system (approve-action), switching admin mode on (admin on). Setting how many checks a task gets (task review set) is the user's too. Tell the user to run the command; do not run it yourself", "zh": "批准计划（task approve-plan）、批准回写（task approve-promote）、恢复中途出错的 promote（task recover）、再给检查次数、放行或作废一次检查（task review extend、task review waive、task review dismiss）、让 agent 自己跑一个测试环境（task test runner）、为一个任务打开一个环境（task allow）、搁置和恢复任务（task pause、task resume，以及一次全部：task offwork、task onwork）、开 autorun（task autorun on）、启动能操作的看板服务（task board、task board --serve；agent 只能用 task board --once 生成页面）、批准 git 命令（approve-command）、批准外部调用（approve-action）、开 admin 模式（admin on）只能由用户在自己的终端里运行。设定任务的检查次数（task review set）也只能由用户来做。告诉用户运行这条命令，不要自己运行"},
+        "pattern": "\\b(?:cli\\.py|harness(?:\\.cmd)?)\\s+(?:task\\s+(?:approve-plan|confirm-req|approve-promote|recover|pause|resume|offwork|onwork|autorun\\s+on|review\\s+(?:set|extend|waive|dismiss)|test\\s+runner|allow\\s+--env|board\\b(?![^;&|\\n]*\\s--once\\b))|approve-command|approve-action|admin\\s+on)\\b"
       }
     ],
     "ask": [

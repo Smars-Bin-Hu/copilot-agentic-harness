@@ -15,8 +15,8 @@
   // The tabs are in five groups (1.6.16): the top row has Live and the groups, the open group has a second row. A group with no tab is not there; a group with one goes straight to it.
   const GROUPS = [
     {id: "live", tabs: ["live"]},
-    {id: "overview", tabs: ["overview", "req", "intake", "design", "rca", "plan", "todo"]},
-    {id: "deliver", tabs: ["changes", "test", "review"]},
+    {id: "overview", tabs: ["overview", "req", "intake", "plan", "todo"]},
+    {id: "deliver", tabs: ["changes", "test", "rca", "design", "evidence", "review"]},  // what came out: the product of the kind first (a diff, a test, a conclusion), then the proof and the check (1.7.9)
     {id: "records", tabs: ["log", "history", "trace"]},
     {id: "files", tabs: ["docs", "files"]},
   ];
@@ -72,9 +72,10 @@
     if (desk.past && tab === "plan") return Boolean(doc(FILES.plan));
     if (tab === "design" || tab === "rca") return Boolean(doc(FILES[tab])) || (desk.kind === tab && desk.status === "open");  // a closed task that never wrote it has nothing to show
     if (tab === "plan") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && Boolean(doc(FILES.plan)));
-    if (tab === "changes") return WRITES_BACK.includes(desk.kind) || (desk.kind !== "test" && desk.changes.files.length > 0);
+    if (tab === "changes") return WRITES_BACK.includes(desk.kind);  // a diff is the product of a development task only (1.7.9): a script of an RCA is evidence, not a change
     if (tab === "todo" || tab === "log" || tab === "req") return Boolean(doc(FILES[tab]));
     if (tab === "test") return Boolean(desk.test);
+    if (tab === "evidence") return Boolean(desk.evidence && desk.evidence.length);  // the saved runs of the task (1.7.3), a tab of Results (1.7.9)
     if (tab === "review") return desk.review.n > 0 || desk.review.rounds.length > 0;
     if (tab === "files") return desk.files.length > 0;
     if (tab === "trace") return Boolean(desk.trace && desk.trace.entries.length);
@@ -113,6 +114,106 @@
     return a;
   }
 
+  // An evidence citation in a document (1.7.8): `[E7]` is a chip (green edge: the agent ran it; grey: the person; red: no such run in this task). Its title has the facts; a click opens
+  // the window with the command, the output and where it is cited. The chips are drawn only where the task's evidence is known (`desk.evidence`).
+  const CITED = /\[(E\d+)\]/g;
+  const evidenceOf = (id) => (desk.evidence || []).find((item) => item.id === id);
+  function evChip(id) {
+    const item = evidenceOf(id);
+    const chip = h("button", {type: "button", class: "ev" + (item ? (item.by === "agent" ? " agent" : "") : " missing"), "data-ev": id,
+      title: item ? t("desk.evidence.tip", {env: item.env, by: item.by === "agent" ? t("desk.evidence.by.agent") : t("desk.evidence.by.person"), at: (item.at || "").slice(0, 16).replace("T", " "), kind: item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run})}) : t("desk.evidence.missing", {id})}, id);
+    chip.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); if (item) evidenceWindow(item); });  // inside a link too: the window, not the link
+    return chip;
+  }
+  function withEvidence(text) {
+    if (!desk.evidence || !text.includes("[E")) return text;
+    const out = [];
+    let from = 0;
+    for (const found of text.matchAll(CITED)) {
+      out.push(text.slice(from, found.index), evChip(found[1]));
+      from = found.index + found[0].length;
+    }
+    out.push(text.slice(from));
+    return out;
+  }
+  // What let the agent's commands through (core.calls, 1.7.9): one tag per way, with the code of an approval; a run with no note is a grey `?`.
+  const LEAVE_TONE = {allow: "", plan: "good", runner: "good", opened: "open", approved: "good", unknown: ""};
+  const LEAVE_WORD = {allow: [t("desk.evidence.leave.allow"), t("desk.evidence.leave.allow.tip")], plan: [t("desk.evidence.leave.plan"), t("desk.evidence.leave.plan.tip")], runner: [t("desk.evidence.leave.runner"), t("desk.evidence.leave.runner.tip")],
+    opened: [t("desk.evidence.leave.opened"), t("desk.evidence.leave.opened.tip")], approved: [t("desk.evidence.leave.approved"), t("desk.evidence.leave.approved.tip")], unknown: [t("desk.evidence.leave.unknown"), t("desk.evidence.leave.unknown.tip")]};
+  function leaveTags(item) {
+    const found = item.leave && item.leave.length ? item.leave : [{how: "unknown", code: ""}];
+    return found.map((one, index) => { const word = LEAVE_WORD[one.how] || LEAVE_WORD.unknown; const mark = tag(word[0] + (one.code ? " " + one.code : ""), LEAVE_TONE[one.how] || ""); mark.title = word[1]; return [index ? " " : null, mark]; });
+  }
+  function evidenceWindow(item) {
+    const copy = h("button", {type: "button", class: "act", disabled: item.command ? null : "disabled"}, t("desk.outbox.copy"));
+    copy.addEventListener("click", () => { navigator.clipboard.writeText(callBody(item)).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });  // the query, as in a held call
+    const open = h("button", {type: "button", class: "act hot"}, t("desk.evidence.open"));
+    const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const cited = item.cited_in.length ? item.cited_in.map((name, index) => { const b = h("button", {type: "button", class: "chip"}, name); b.addEventListener("click", () => { view.close(); fileOpen = name; goTab("files"); draw(true); }); return [index ? " " : null, b]; }) : t("desk.evidence.uncited");
+    const fact = (label, value) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), typeof value === "string" ? h("code", null, value) : value);
+    const view = SERVE.dialog([h("h2", null, item.id + " · " + item.env + " · " + (item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run}))),
+      h("div", {class: "tk-call-facts"}, fact(t("desk.evidence.by"), item.by === "agent" ? tag(t("desk.evidence.by.agent"), "good") : tag(t("desk.evidence.by.person"), "")), item.by === "agent" ? fact(t("desk.evidence.leave"), h("span", null, leaveTags(item))) : null, fact(t("desk.evidence.at"), (item.at || "").slice(0, 16).replace("T", " ")), fact(t("desk.evidence.file"), item.file), fact(t("desk.evidence.cited"), h("span", null, cited))),
+      h("div", {class: "win-body"}, item.steps && item.steps.length
+        ? item.steps.map((step, index) => h("section", {class: "ev-step"}, h("h3", null, h("span", {class: "ev-step-n"}, String(index + 1)), " ", step.title), step.note ? h("p", {class: "sub"}, step.note) : null,
+            stepCommand(step.command, step.layout), outputPane({...step, id: item.id + "#" + index})))  // a run recorded as steps (1.7.9): each command with its own output
+        : [item.layout ? h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)) : h("p", {class: "sub"}, t("desk.evidence.nocommand")), outputPane(item)]),
+      h("div", {class: "row win-foot"}, open, copy, close)]);
+    view.box.classList.add("wide");
+    open.addEventListener("click", () => { view.close(); openRun(item); });
+    close.addEventListener("click", view.close);
+  }
+  // The results file of a run, in the Files tab, at that run (the run tabs of the file pick it), scrolled into view (hand test B90-c: the last run was shown and the page did not move).
+  function openRun(item) {
+    runPick["file:" + item.file] = item.run;
+    fileOpen = item.file;
+    if (!fileEdit.path) fileEdit.error = "";
+    goTab("files");
+    draw(true);
+    setTimeout(() => { const box = document.querySelector(".files-view"); if (box) box.scrollIntoView({block: "start", behavior: "smooth"}); }, 50);
+  }
+
+  // The output of a run in the window (1.7.9): the tables the reader found (outview.py), one tab per result set, the notes (an error red), or the text whole. Table / Text is the
+  // person's choice, kept while the page is open; a long table shows its first rows and says how many there are. Every box scrolls both ways.
+  let outMode = "table";
+  const outPick = {};
+  function outputPane(item) {
+    const view = item.output_view;
+    const head = h("p", null, h("b", null, t("desk.evidence.output")), " ", h("span", {class: "sub"}, view && view.kind === "tables" ? t("desk.evidence.output.sets", {sets: view.sets.length, rows: view.rows}) : t("desk.evidence.output.note")));
+    if (!item.output) return [head, h("p", {class: "sub"}, t("desk.evidence.nooutput"))];
+    const text = () => h("div", {class: "cmd-scroll"}, h("pre", {class: "cmd-script"}, item.output), item.output_cut ? h("p", {class: "sub"}, t("desk.cut")) : null);
+    if (!view || (view.kind !== "tables" && !view.notes.some((note) => note.error))) return [head, text()];  // plain text; an error alone still gets its red Notes tab
+    const body = h("div", null);
+    const draw_ = () => {
+      if (outMode === "text") { body.replaceChildren(text()); return; }
+      const ids = [...view.sets.map((_set, index) => "set" + index), ...(view.notes.length ? ["notes"] : [])];
+      if (!ids.includes(outPick[item.id])) outPick[item.id] = ids[0];
+      const nav = h("nav", {class: "subtabs small"}, ids.map((id) => {
+        const label = id === "notes" ? t("desk.evidence.out.notes", {n: view.notes.length}) : t("desk.evidence.out.set", {n: Number(id.slice(3)) + 1, rows: view.sets[Number(id.slice(3))].total});
+        const button = h("button", {type: "button", class: "subtab" + (id === outPick[item.id] ? " on" : "") + (id === "notes" && view.notes.some((note) => note.error) ? " bad" : "")}, label);
+        button.addEventListener("click", () => { outPick[item.id] = id; draw_(); });
+        return button;
+      }));
+      let pane;
+      if (outPick[item.id] === "notes") {
+        pane = h("div", {class: "out-notes"}, view.notes.map((note) => h("div", {class: "out-note" + (note.error ? " bad" : "")}, note.after ? h("span", {class: "sub"}, t("desk.evidence.out.after", {n: note.after}) + " · ") : null, h("span", {class: "pre"}, note.text))));
+      } else {
+        const set = view.sets[Number(outPick[item.id].slice(3))];
+        const cell = (value, index) => h("td", {class: (set.numeric[index] ? "num" : "") + (value === "NULL" ? " null" : "")}, value);
+        pane = [h("div", {class: "cmd-scroll out-table"}, h("table", null, h("thead", null, h("tr", null, set.columns.map((name, index) => h("th", {class: set.numeric[index] ? "num" : ""}, name)))), h("tbody", null, set.rows.map((row) => h("tr", null, row.map(cell)))))),
+          set.cut ? h("p", {class: "sub"}, t("desk.evidence.out.cut", {shown: set.rows.length, total: set.total})) : null];
+      }
+      body.replaceChildren(...[nav, ...[].concat(pane), view.cut ? h("p", {class: "sub"}, t("desk.cut")) : null].filter(Boolean));
+    };
+    const chips = h("span", {class: "out-pick"}, ["table", "text"].map((mode) => {
+      const chip = h("button", {type: "button", class: "chip" + (outMode === mode ? " on" : ""), "aria-pressed": outMode === mode ? "true" : "false"}, t("desk.evidence.out." + mode));
+      chip.addEventListener("click", () => { outMode = mode; [...chips.children].forEach((node) => { node.classList.toggle("on", node === chip); node.setAttribute("aria-pressed", String(node === chip)); }); draw_(); });
+      return chip;
+    }));
+    head.append(" ", chips);
+    draw_();
+    return [head, body];
+  }
+
   function inline(spans) {
     return spans.map((span) => {
       if (placeLinks && span.t === "code") return placeLink(span.v, h("code", null, span.v)) || h("code", null, span.v);
@@ -122,12 +223,12 @@
         for (const found of span.v.matchAll(PLACE_IN_TEXT)) {
           const link = placeLink(found[0], found[0]);
           if (!link) continue;
-          out.push(span.v.slice(from, found.index), link);
+          out.push(withEvidence(span.v.slice(from, found.index)), link);
           from = found.index + found[0].length;
         }
-        return [...out, span.v.slice(from)];
+        return [...out, withEvidence(span.v.slice(from))];
       }
-      if (span.t === "text") return span.v;
+      if (span.t === "text") return withEvidence(span.v);
       if (span.t === "br") return h("br");
       if (span.t === "code") return h("code", null, span.v);
       if (span.t === "b") return h("strong", null, inline(span.c));
@@ -163,6 +264,14 @@
     return h("span", {class: "path", title: t("desk.path.hint", {path: href})}, label);
   }
 
+  // The command of a step (1.7.9): laid out line by line, scrolling sideways, with a button that copies the query in it (the whole command when there is none).
+  function stepCommand(text, layout) {
+    const copy = h("button", {type: "button", class: "act copy-code", "data-label": t("desk.outbox.copy")}, t("desk.outbox.copy"));
+    copy.addEventListener("click", () => copyCommand(copy, callBody({command: text, layout})));
+    return h("div", {class: "step-cmd"}, h("div", {class: "code-bar"}, h("span", {class: "code-lang"}, t("desk.steps.command")), copy), layout && layout.lines.length ? h("div", {class: "cmd-scroll flat"}, commandNodes(layout)) : h("pre", {class: "code"}, text));
+  }
+  let docOutputs = 0;  // the output blocks of the documents drawn now: each keeps its own pick of a result set
+
   // A code block of any document has a button that copies it whole: a command or a query is pasted into a terminal or a client, not retyped.
   // `kind`: the language from highlight.js (of the file's type or of the word after the three backticks); "" is plain text.
   function codeBlock(text, kind) {
@@ -176,6 +285,8 @@
       if (block.t === "h") return h("h" + Math.min(block.level + 1, 6), {class: "md-h"}, inline(block.spans));
       if (block.t === "p") return h("p", null, inline(block.spans));
       if (block.t === "hr") return h("hr");
+      if (block.t === "code" && block.lang === "command" && block.layout) return stepCommand(block.text, block.layout);  // a step of a run the agent recorded (1.7.9)
+      if (block.t === "code" && block.lang === "output" && block.view) return h("div", {class: "step-out"}, outputPane({id: "doc" + (docOutputs++) + ":" + block.text.length, output: block.text, output_view: block.view, output_cut: false}));
       if (block.t === "code") return codeBlock(block.text, Highlight.language(block.lang));
       if (block.t === "quote") return h("blockquote", null, blocks(block.blocks));
       if (block.t === "table") {
@@ -435,7 +546,8 @@
     ui.rounds = slot("span", "tk-rounds");
     ui.pill = slot("span", "tk-pill");
     ui.review = slot("span", "tk-rv");
-    ui.info = h("div", {class: "tk-info"}, ui.infoL.node, ui.rounds.node, ui.review.node, ui.pill.node);
+    ui.envs = slot("span", "tk-rv tk-env");
+    ui.info = h("div", {class: "tk-info"}, ui.infoL.node, ui.rounds.node, ui.review.node, ui.envs.node, ui.pill.node);
     ui.forks = slot("div", "tk-forks sub");
     ui.wait = h("div", {class: "tk-wait"});
     ui.tabs = h("div", {class: "tk-tabs"});
@@ -516,6 +628,7 @@
     });
     ui.rounds.set(JSON.stringify([full.rounds, full.round, desk.past && desk.past.round]), () => roundSwitch());
     ui.review.set(JSON.stringify([full.settings && [full.settings.n, full.settings.max_n], full.status, desk.past && full.round]), () => reviewButton());
+    ui.envs.set(JSON.stringify([desk.allow, full.status]), () => envButton());
     ui.pill.set(live ? JSON.stringify([desk.vscode, chat && chat.bound]) : "", () => (live ? [SHELL.vsPill(desk.vscode, chat), SERVE.pairMark(true)] : null));
     ui.forks.set(JSON.stringify([desk.forked_from, desk.forked_to]), () => (desk.forked_from || desk.forked_to.length ? [
       desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null, desk.forked_from && desk.forked_to.length ? " · " : null,
@@ -587,6 +700,46 @@
       h("p", {class: "sub set-note", title: t("desk.set.note")}, t("desk.set.note")));
   }
 
+  // "Open to the agent" (1.7.6): a setting of the task at the head of its page, beside Independent review. One chip per environment the protocol knows; clickable only when a
+  // system of the company pack reaches it; prod is never a choice. A click is `harness task allow --env <e> --on` (or --off): no code, it can be closed at once. The agent's writes and
+  // procedures on that environment's listed systems then run without the outbox. Not drawn when no system is listed.
+  const DOOR = ["M3 14V3.5A1.5 1.5 0 0 1 4.5 2h5A1.5 1.5 0 0 1 11 3.5V14", "M11 6h2.5v8H11", "M3 14h10.5", "M8 8.5h.01"];
+  let closeEnvs = null;
+  document.addEventListener("click", (event) => { if (closeEnvs && !event.target.closest(".tk-env")) closeEnvs(); });
+  document.addEventListener("keydown", (event) => { if (closeEnvs && event.key === "Escape") closeEnvs(); });
+  function envButton() {
+    const found = desk.allow;
+    closeEnvs = null;
+    if (!found || !found.envs || !found.envs.length) return null;
+    const open = found.envs.filter((item) => item.open);
+    const can = served() && full.status === "open" && SERVE.runs("task allow");
+    const chips = found.envs.map((item) => {
+      const listed = item.systems.length > 0;
+      const tip = !listed ? t("desk.set.open.none", {env: item.env}) : item.open ? t("desk.set.open.close", {env: item.env, systems: item.systems.join(", ")}) : t("desk.set.open.open", {env: item.env, systems: item.systems.join(", ")});
+      const seen = item.reach;  // reached from VS Code (1.7.9): a dot on the chip, the words on hover
+      const why = (one) => one.state === "denied" ? (one.launch || t("desk.reach.why.identity")) : one.why === "no-answer" ? t("desk.reach.why.no-answer") : t("desk.reach.why.exit", {why: one.why});
+      const part = (one) => one.state === "ok" ? t("desk.reach.ok", {env: one.system, who: one.who || "-"}) : one.state === "unknown" ? t("desk.reach.unknown", {env: one.system}) : t("desk.reach.bad", {env: one.system, launch: why(one)});
+      const seenTip = seen ? (seen.parts || []).map(part).join("\n") : "";  // one line per server of this environment
+      const chip = h("button", {type: "button", class: "chip env" + (item.open ? " on" : ""), "aria-pressed": item.open ? "true" : "false", title: tip + (seenTip ? "\n" + seenTip : ""), disabled: listed && can ? null : "disabled"},
+        seen ? h("i", {class: "reach-dot " + (seen.state === "ok" ? "ok" : seen.state === "unknown" ? "unknown" : "bad")}) : null, item.env + (item.open ? " ✓" : ""));
+      chip.addEventListener("click", () => {
+        chips.forEach((node) => { node.disabled = true; });
+        SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: item.open ? "off" : "on", step: "act"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
+      });
+      return chip;
+    });
+    const never = (found.never || []).map((env) => h("span", {class: "chip env never", title: t("desk.set.open.never", {env})}, env));
+    const note = open.length ? h("p", {class: "set-tip"}, t("desk.set.open.note", {envs: open.map((item) => item.env).join(", "), systems: [...new Set(open.flatMap((item) => item.systems))].join(", ")})) : null;
+    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip")), h("p", {class: "set-warn"}, t("desk.set.open.warn")), h("div", {class: "chips env-chips"}, chips, never), note,
+      can ? null : h("p", {class: "set-warn"}, t("desk.set.open.cannot")));
+    const unreached = found.envs.filter((item) => item.reach && (item.reach.state === "denied" || item.reach.state === "failed")).map((item) => item.env.toUpperCase());  // VS Code cannot reach these (1.7.9)
+    const button = h("button", {type: "button", class: "rv-btn" + (open.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip") + (unreached.length ? "\n" + t("desk.reach.pill", {envs: unreached.join(", ")}) : "")},
+      icon(DOOR, 14), h("span", {class: "rv-name"}, t("desk.set.open")), h("b", null, open.length ? open.map((item) => item.env).join(", ") : t("desk.set.open.off")), unreached.length ? h("i", {class: "reach-dot bad pill"}) : null);
+    const show = (on) => { if (on && closeReview) closeReview(); pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeEnvs = on ? () => show(false) : null; if (on) inView(pop); };
+    button.addEventListener("click", () => show(pop.hidden));
+    return [button, pop];
+  }
+
   // "Independent review" (1.6.33): a setting of the task, at the head of its page, not of a message. A click runs `task review set`, as at a terminal; `[review]=n` in a prompt still does the same, and is not shown.
   // It is the task's, like the VS Code pill: it stays at the head of an earlier round too (1.6.109), says there that it sets the current round, and is gone only when the task is closed.
   const SHIELD = ["M8 1.8l4.8 1.9v3.7c0 3-2 5.5-4.8 6.8-2.8-1.3-4.8-3.8-4.8-6.8V3.7L8 1.8z", "M5.8 8l1.6 1.6 2.9-3"];
@@ -619,7 +772,7 @@
     const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.rv.button")), desk.past ? h("p", {class: "set-tip"}, t("desk.rv.current", {round: full.round})) : null, h("p", {class: "sub"}, t("desk.rv.hint")), h("p", {class: "set-warn"}, t("desk.rv.cost")), h("div", {class: "chips"}, choices));
     const button = h("button", {type: "button", class: "rv-btn" + (info.n ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.rv.hint")},
       icon(SHIELD, 14), h("span", {class: "rv-name"}, t("desk.rv.button")), h("b", null, info.n ? String(info.n) : t("desk.rv.off")));
-    const show = (on) => { pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeReview = on ? () => show(false) : null; if (on) inView(pop); };
+    const show = (on) => { if (on && closeEnvs) closeEnvs(); pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeReview = on ? () => show(false) : null; if (on) inView(pop); };
     button.addEventListener("click", () => show(pop.hidden));
     return [button, pop];
   }
@@ -868,14 +1021,139 @@
 
   function waitBand() {
     if (desk.past) return pastNote();
-    if (!needsCard()) return null;
-    const items = needItems();
+    const told = approvedCard();
+    if (!needsCard()) return told;
+    const items = needItems().filter((item) => item.action !== "approve-action");  // the held calls have cards of their own
     const strong = items.filter((item) => JUMPS[item.action]);
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
-    const cards = strong.map((item, index) => strongCard(item, index ? [] : notes));
-    if (other.length || !strong.length) cards.push(otherCard(other, strong.length ? [] : notes));
+    const cards = told ? [told] : [];  // the approved calls first: the one step left is to tell the agent
+    cards.push(...(desk.outbox || []).map((item, index) => outboxCard(item, index || told ? [] : notes)));
+    cards.push(...strong.map((item, index) => strongCard(item, index || cards.length ? [] : notes)));
+    if (other.length || (!strong.length && !cards.length)) cards.push(otherCard(other, strong.length || cards.length ? [] : notes));  // the held calls stand for themselves
     return cards;
+  }
+
+  // --- a call to an outside system held in the outbox (1.7.7) -------------------------------------------------------------------------------------------------
+  // The card shows the facts (what, where, the pack's `show` facts, the target) and the first words of the command; View opens the small window with the command laid out line by line
+  // and the file it reads, whole, scrolling. The code is typed on the card, as the design says a person reads the command first: Approve wakes once the window was opened.
+  // Approve is `harness approve-action` with that code (the board's act, no preview); Dismiss takes the call away without running anything.
+  const viewedCalls = new Set();
+  const approvedCalls = new Map();  // code -> {at}: approved on this page and not yet told to the agent; the agent runs an approved call only when it is prompted, so the card offers to tell it
+  const TELL_MINUTES = 10;  // the approval's life (git.approval_minutes by default): past it, telling is no use
+  // After an approval: a green card with the codes and one button that tells the chat to run them (a send to the chat, as an answer), in place of typing it.
+  function approvedCard() {
+    const now = Date.now();
+    for (const [code, found] of approvedCalls) if (now - found.at > TELL_MINUTES * 60000) approvedCalls.delete(code);
+    if (!approvedCalls.size || desk.past) return null;
+    const codes = [...approvedCalls.keys()];
+    const can = served() && canAct();
+    const tell = h("button", {type: "button", class: "act hot big", disabled: can ? null : "disabled"}, t("desk.outbox.tell"));
+    const said = h("div", {class: "bad"});
+    tell.addEventListener("click", () => {
+      tell.disabled = true; tell.textContent = t("board.serve.working");
+      SERVE.post("/api/send", {task: desk.name, kind: "answer", lang: "", note: "", body: t("desk.outbox.tell.body", {codes: codes.join(", ")}), step: "act"})
+        .then(() => { codes.forEach((code) => approvedCalls.delete(code)); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); tell.disabled = false; tell.textContent = t("desk.outbox.tell"); });
+    });
+    return h("section", {class: "tk-need strong tk-call done"},
+      h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good"), codes.map((code) => [" ", h("code", {class: "code-chip still"}, code)])),
+      h("p", {class: "sub"}, t("desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
+      h("div", {class: "tk-need-go tk-call-go"}, tell, said));
+  }
+  const SQL_WORDS = /\b(select|from|where|insert|into|update|set|delete|merge|exec|execute|create|alter|drop|truncate|table|values|join|on|group by|order by|having|union|with|begin|commit|rollback|tran|declare|if|else|while|top|as|and|or|not|null|is|in|exists|case|when|then|end|nocount)\b/gi;
+  function sqlNodes(text) {
+    const out = [];
+    let last = 0;
+    for (const found of text.matchAll(SQL_WORDS)) {
+      if (found.index > last) out.push(text.slice(last, found.index));
+      out.push(h("b", {class: "kw"}, found[0]));
+      last = found.index + found[0].length;
+    }
+    if (last < text.length) out.push(text.slice(last));
+    return out;
+  }
+  function commandNodes(layout) {
+    const rows = [];
+    for (const line of layout.lines) {
+      if (line.kind === "program") rows.push(h("div", {class: "cmd-line"}, h("span", {class: "cmd-prog"}, line.text)));
+      else if (line.kind === "option") rows.push(h("div", {class: "cmd-line in"}, h("span", {class: "cmd-opt"}, line.text), line.value ? [" ", h("span", {class: "cmd-val"}, line.value)] : null));
+      else if (line.kind === "flag") rows.push(h("div", {class: "cmd-line in"}, h("span", {class: "cmd-opt"}, line.text)));
+      else if (line.kind === "block") rows.push(h("div", {class: "cmd-block"}, sqlNodes(line.text)));
+      else rows.push(h("div", {class: "cmd-line in"}, h("span", {class: "cmd-val"}, line.text)));
+    }
+    return h("div", {class: "cmd-fmt"}, rows);
+  }
+  function callFacts(item) {
+    const fact = (label, value, hot) => (value ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), hot ? tag(value, "hot") : h("code", null, value)) : null);
+    return h("div", {class: "tk-call-facts"},
+      fact(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : item.verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), " ", tag(item.env, "hot")),
+      ...Object.entries(item.facts || {}).map(([name, value]) => fact(name, value)),
+      fact(t("desk.outbox.target"), item.target),
+      item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t("desk.outbox.lines", {n: item.layout.script.lines}))) : null);
+  }
+  // What a person wants to copy out of a call is the body: the query in the quoted block, or the script the command reads; the command line itself only when there is neither.
+  function callBody(item) {
+    const script = item.layout && item.layout.script;
+    if (script && script.text) return script.text;
+    const lines = item.layout ? item.layout.lines : [];
+    const block = lines.find((line) => line.kind === "block") || lines.find((line) => line.quoted && (line.kind === "arg" || line.value));  // a long quoted value, or a short one (`-Q "SELECT 1"`)
+    return block ? (block.kind === "option" ? block.value : block.text) : item.command;
+  }
+  function callWindow(item, onCode) {
+    viewedCalls.add(item.code);
+    const copy = h("button", {type: "button", class: "act"}, t("desk.outbox.copy"));
+    copy.addEventListener("click", () => { navigator.clipboard.writeText(callBody(item)).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
+    const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
+    const script = item.layout && item.layout.script;
+    // The code, as a chip: a click copies it, puts it in the card's box and closes the window, so Approve is the next press.
+    const codeChip = h("button", {type: "button", class: "ev code-chip", title: t("desk.outbox.code_tip")}, item.code);
+    const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), callFacts(item), h("p", {class: "sub"}, t("desk.outbox.asked", {at: item.created_at.slice(0, 16).replace("T", " ")}), " ", codeChip),
+      h("div", {class: "win-body"},  // one scrolling body (both ways); the blocks in it scroll sideways only; the buttons stay in view
+        h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)),
+        script ? [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t("desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll flat"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)] : null,
+        h("p", {class: "sub"}, t("desk.outbox.as_written")), h("div", {class: "cmd-scroll one"}, h("pre", {class: "cmd-script"}, item.command))),
+      h("div", {class: "row win-foot"}, copy, close)]);
+    view.box.classList.add("wide");
+    close.addEventListener("click", () => { view.close(); draw(true); });
+    codeChip.addEventListener("click", () => { navigator.clipboard.writeText(item.code).then(() => {}, () => {}); view.close(); if (onCode) onCode(item.code); });
+  }
+  function outboxCard(item, notes) {
+    const can = served() && canAct() && SERVE.runs("approve-action");
+    const input = h("input", {class: "code", autocomplete: "off", spellcheck: "false", placeholder: t("desk.outbox.code"), "aria-label": t("board.serve.code")});
+    const ready_ = () => can && viewedCalls.has(item.code) && input.value.trim().length > 0;  // the window was opened and a code was typed (the one the agent gave, in the draft's name)
+    const yes = h("button", {type: "button", class: "act hot big", disabled: "disabled", title: t("desk.outbox.view_first")}, t("desk.outbox.approve"));
+    // Why Approve is grey is shown by motion, not words: View pulses until it was opened, then the code box until a code is typed (hand test: the tip alone was not seen).
+    const arm = () => {
+      yes.disabled = !ready_();
+      yes.title = ready_() || !can ? "" : viewedCalls.has(item.code) ? t("desk.outbox.type_code") : t("desk.outbox.view_first");
+      view.classList.toggle("pulse", can && !viewedCalls.has(item.code));
+      input.classList.toggle("pulse", can && viewedCalls.has(item.code) && !input.value.trim());
+    };
+    input.addEventListener("input", arm);
+    const no = h("button", {type: "button", class: "act", disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
+    const view = h("button", {type: "button", class: "act big tk-view"}, t("desk.outbox.view"));
+    const said = h("div", {class: "bad"});
+    view.addEventListener("click", () => { callWindow(item, (code) => { input.value = code; arm(); yes.focus(); }); arm(); });
+    input.addEventListener("focus", arm);
+    const send = () => {
+      if (!ready_()) return;
+      yes.disabled = true; yes.textContent = t("board.serve.working");
+      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then(() => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now()}); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
+    };
+    yes.addEventListener("click", send);
+    input.addEventListener("keydown", (event) => { if (isEnter(event) && !yes.disabled) send(); });
+    no.addEventListener("click", () => {
+      no.disabled = true;
+      SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); no.disabled = false; });
+    });
+    arm();
+    const peek = item.command.length > 110 ? item.command.slice(0, 110) + "…" : item.command;
+    return h("section", {class: "tk-need strong tk-call", "data-action": "approve-action", "data-code": item.code},
+      h("div", {class: "tk-need-h"}, tag(t("task.waiting.outbox"), "hot"), h("span", {class: "sub"}, t("desk.outbox.since", {at: item.created_at.slice(11, 16)}), item.draft ? [" · ", h("code", null, item.draft)] : null)),
+      callFacts(item),
+      h("div", {class: "tk-cmd-peek"}, h("code", null, peek)),
+      notes,
+      h("div", {class: "tk-need-go tk-call-go"}, view, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), no, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));  // View first in the row: the eye goes View, code, Approve
   }
 
   // The words for a task that has nothing waiting on it, on the Live tab: closed, not started, quiet, or at work with nothing to decide.
@@ -951,6 +1229,7 @@
     if (tab === "todo") return {name, count: desk.todo.total ? desk.todo.done + "/" + desk.todo.total : ""};
     if (tab === "changes") return {name, count: desk.changes.files.length ? String(desk.changes.files.length) : "", bang: Boolean(desk.commit && !desk.commit.written) || (mine && desk.waiting_why === "promote")};
     if (tab === "test") return {name, count: desk.test.passed + "/" + desk.test.total};
+    if (tab === "evidence") return {name, count: String(desk.evidence.length)};
     if (tab === "review") return {name, count: desk.review.n ? desk.review.passes + "/" + desk.review.n : String(desk.review.rounds.length)};
     if (tab === "history") return {name, count: String(desk.history.length)};
     if (tab === "trace") return {name, count: desk.trace.entries.length + (desk.trace.cut ? "+" : "")};
@@ -1150,7 +1429,7 @@
   function runTabs(key, list, verdicts, intro) {
     const parts = {intro: [], runs: []};
     for (const block of list) {
-      const found = block.t === "h" && block.level === 2 ? /^Run (\d+)$/i.exec(plain(block.spans)) : null;
+      const found = block.t === "h" && block.level === 2 ? /^Run (\d+)(?:\s*\(E\d+\))?$/i.exec(plain(block.spans)) : null;  // `Run 2 (E7)`: the evidence number (1.7.3)
       if (found) parts.runs.push({n: Number(found[1]), blocks: []});
       else (parts.runs.length ? parts.runs[parts.runs.length - 1].blocks : parts.intro).push(block);
     }
@@ -1184,13 +1463,29 @@
     }));
   }
 
+  // Who runs an environment (1.7.2): the guide may propose the agent; only the person lets it, with one click (no code), and can take it back. Served pages only.
+  function runnerLine(env) {
+    const who = env.runner || {proposed: "person", granted: false};
+    const word = who.opened ? t("desk.test.runner.open", {env: env.name}) : who.granted ? t("desk.test.runner.agent") : who.proposed === "agent" ? t("desk.test.runner.proposed") : t("desk.test.runner.person");  // opened at the head of the page: the same leave
+    const line = h("p", {class: "sub runner"}, tag(word, who.granted ? "good" : who.proposed === "agent" ? "hot" : ""));
+    if (served() && full.status === "open" && SERVE.runs("test runner")) {
+      const button = h("button", {type: "button", class: "chip" + (who.granted ? "" : " on"), title: t("desk.test.runner.hint", {env: env.name})}, who.granted ? t("desk.test.runner.back") : t("desk.test.runner.let", {env: env.name}));
+      button.addEventListener("click", () => {
+        button.disabled = true;
+        SERVE.post("/api/act", {action: "test runner", task: desk.name, env: env.name, runner: who.granted ? "person" : "agent", step: "act"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
+      });
+      line.append(" ", button);
+    }
+    return line;
+  }
+
   function envResults(env) {
     const verdict = env.verdict ? tag(env.verdict, env.verdict === "PASS" ? "good" : env.verdict === "FAIL" ? "bad" : "hot") : tag(env.waits ? t("desk.test.waits") : t("desk.test.noresult"), env.waits ? "hot" : "");
     const body = env.results ? h("article", {class: "md"}, runTabs("env:" + env.name, env.results.blocks, env.runs, false) || blocks(env.results.blocks), env.results.cut ? h("p", {class: "sub"}, t("desk.cut")) : null, evidenceThumbs(env))
       : h("p", {class: "sub"}, env.waits ? t("desk.test.waiting", {env: env.name}) : t("desk.test.noresult"));
     return h("section", {class: "round " + (env.state === "failed" ? "fail" : env.state === "done" ? "pass" : "")},
       h("div", {class: "round-head"}, h("strong", null, env.name), " ", verdict, env.file ? [" ", h("span", {class: "sub"}, "TEST/" + env.file)] : null,
-        env.ignored.length ? [" ", tag(t("desk.test.ignored", {files: env.ignored.join(", ")}), "hot")] : null), body);
+        env.ignored.length ? [" ", tag(t("desk.test.ignored", {files: env.ignored.join(", ")}), "hot")] : null), runnerLine(env), body);
   }
 
   // The Files tab: what is in REQ/, REF/, DEV/ and RUNS/ (sub-folders too). The list is in the page; a file comes when it is opened (a saved copy has the small ones in it).
@@ -1451,6 +1746,24 @@
       h("div", {class: "files"}, h("nav", {class: "files-list", "data-keep": "files-list"}, tools, list),
         h("div", {class: "files-view"}, head, !editing && fileEdit.error && fileEdit.path === "" ? h("div", {class: "bad"}, SERVE.reasons(fileEdit.error)) : null,
           open ? (editing ? fileEditor(open) : fileView(open)) : h("p", {class: "sub"}, t("desk.files.none"))))];
+  }
+
+  // The Evidence tab (1.7.3, a tab of Results since 1.7.9): every saved run with its number, who ran it and where it is cited. A row opens the window or its results file in Files.
+  function evidenceTab() {
+    const items = desk.evidence || [];
+    const rows = items.map((item) => {
+      const window_ = h("button", {type: "button", class: "ico", title: t("desk.evidence.see")}, "⤢");
+      window_.addEventListener("click", () => evidenceWindow(item));
+      const file = h("button", {type: "button", class: "ico", title: t("desk.evidence.open")}, "▤");
+      file.addEventListener("click", () => openRun(item));
+      const cited = item.cited_in.length ? item.cited_in.map((name, index) => { const b = h("button", {type: "button", class: "chip"}, name); b.addEventListener("click", () => { fileOpen = name; if (!fileEdit.path) fileEdit.error = ""; goTab("files"); draw(true); }); return [index ? " " : null, b]; }) : t("desk.evidence.uncited");
+      return h("tr", {class: item.cited_in.length ? "" : "uncited"}, h("td", null, evChip(item.id)), h("td", null, item.env), h("td", null, tag(item.by === "agent" ? t("desk.evidence.by.agent") : t("desk.evidence.by.person"), item.by === "agent" ? "good" : "")),
+        h("td", null, item.by === "agent" ? leaveTags(item) : h("span", {class: "sub"}, "\u2014")),
+        h("td", {class: "sub"}, item.at ? item.at.slice(0, 16).replace("T", " ") : ""), h("td", {class: "sub"}, item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run})),
+        h("td", {class: "sub"}, cited), h("td", {class: "ev-tools"}, window_, " ", file));
+    });
+    return h("div", {class: "evidence"}, h("p", {class: "hint top"}, t("desk.evidence.hint")),
+      h("div", {class: "scroll"}, h("table", null, h("thead", null, h("tr", null, h("th", null, "E"), h("th", null, t("desk.evidence.env")), h("th", null, t("desk.evidence.by")), h("th", null, t("desk.evidence.leave")), h("th", null, t("desk.evidence.at")), h("th", null, t("desk.evidence.run")), h("th", null, t("desk.evidence.cited")), h("th", null))), h("tbody", null, rows))));
   }
 
   // The Intake tab (1.5.45): the documents of a requirement go into REQ/ here (a program turns Word and Excel into Markdown and CSV: no AI), are trimmed in a text box, and
@@ -1940,6 +2253,7 @@
     if (current === "changes") return changes();
     if (current === "review") return review();
     if (current === "test" && desk.test) return testing();
+    if (current === "evidence") return evidenceTab();
     if (current === "files") return filesTab();
     if (current === "intake") return intakeTab();
     if (current === "trace") return trace();
@@ -1957,6 +2271,7 @@
   // scrolls by itself (marked `data-keep`) is put back where it was, and so is the focus on a tab. A text box marked `data-keep` that the person is typing in gets its focus and its caret back too
   // (1.6.107: a picture pasted into the results made the box start again at its top, with no focus).
   function draw(keepScroll) {
+    docOutputs = 0;  // the same block keeps the same id from one drawing to the next
     shell();
     remember(current);
     const y = window.scrollY;

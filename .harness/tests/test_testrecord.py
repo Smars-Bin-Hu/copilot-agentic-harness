@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import unittest
+from unittest import mock
 
 from test_tasklife import BASE, LifeCase
 
-from core import tasks
-from modules.task import taskdesk, taskstages, testrecord
+from core import messages, tasks
+from modules.task import boardserve, task as task_ops, taskdesk, taskstages, testrecord
 from modules.task.common import CommandError
 
 GUIDE = "# Guide\n\n## DEV\n\nrun\n\n## IST\n\nrun\n\n## UAT\n\nrun\n"
@@ -130,7 +132,7 @@ class Writes(RecordCase):
         second = self.record("IST", "c::e::PASS", follow_up="UAT next")
         self.assertEqual((second["run"], second["verdict"]), (2, "PASS"))
         text = self.results()
-        self.assertEqual([line for line in text.splitlines() if line.startswith("## Run")], ["## Run 1", "## Run 2"])
+        self.assertEqual([line for line in text.splitlines() if line.startswith("## Run")], ["## Run 1 (E1)", "## Run 2 (E2)"])  # the evidence number of the task (1.7.3)
         self.assertIn("2,310 rows.\n## not a heading of ours\n**Verdict for IST: PASS**\n", text, "as given, with its fence")
         self.assertTrue(text.rstrip().endswith("**Verdict for IST: PASS**"), "the last line of the file is the verdict the board reads")
         self.assertIn("Run by: the user, 11:05.", text)
@@ -244,3 +246,115 @@ class CommandLine(RecordCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RunnerTests(RecordCase):
+    """1.7.2: the guide proposes who runs an environment; only the person lets the agent, and a run by the agent is marked as its own."""
+
+    GUIDE = "# Guide\n\n## DEV\n\nRunner: agent\n\nrun\n\n## IST\n\n**Runner**: person\n\nrun\n\n## UAT\n\nrun\n"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.folder().joinpath("TEST-GUIDE.md").write_text(self.GUIDE, encoding="utf-8")
+
+    def test_the_guide_proposes_and_the_page_shows_who_runs_each_environment(self) -> None:
+        self.assertEqual(taskstages.proposed_runners(self.GUIDE, ["DEV", "IST", "UAT"]), {"DEV": "agent", "IST": "person", "UAT": "person"})
+        envs = {item["name"]: item["runner"] for item in taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))["envs"]}
+        self.assertEqual(envs["DEV"], {"proposed": "agent", "granted": False, "runner": "person", "opened": False})  # a proposal is not a grant
+        self.assertEqual(envs["IST"]["runner"], "person")
+
+    def test_an_environment_opened_to_the_agent_is_the_runner_grant_too_and_back_to_me_closes_both(self) -> None:
+        from modules.task import tasklife
+
+        tasklife.set_allow(self.root, "job", "dev", True, interactive=True)  # the head of the page: Open to the agent, dev
+        self.assertTrue(testrecord.granted(self.data("job"), "DEV"))
+        envs = {item["name"]: item["runner"] for item in taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))["envs"]}
+        self.assertEqual(envs["DEV"], {"proposed": "agent", "granted": True, "runner": "agent", "opened": True})
+        self.assertEqual(envs["IST"]["granted"], False)
+        given = self.folder() / "given.txt"
+        given.write_text("ok\n", encoding="utf-8")
+        testrecord.record(self.root, "job", "DEV", str(given), ["c::ok::PASS"], run_by="agent")  # no second grant needed
+        back = testrecord.set_runner(self.root, "job", "DEV", False, interactive=True)
+        self.assertEqual((back["changed"], self.data("job").get("allow_env")), (True, {}))
+        self.assertFalse(testrecord.granted(self.data("job"), "DEV"))
+
+    def test_only_a_person_at_a_terminal_grants_and_the_grant_can_be_taken_back(self) -> None:
+        with self.assertRaises(CommandError):
+            testrecord.set_runner(self.root, "job", "DEV", True, interactive=False)  # an agent's terminal
+        found = testrecord.set_runner(self.root, "job", "dev", True, interactive=True)
+        self.assertEqual((found["env"], found["runner"], found["changed"]), ("DEV", "agent", True))
+        self.assertEqual(self.data("job")["test_runner"], {"DEV": "agent"})
+        self.assertEqual(testrecord.set_runner(self.root, "job", "DEV", True, interactive=True)["changed"], False)
+        envs = {item["name"]: item["runner"] for item in taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))["envs"]}
+        self.assertEqual(envs["DEV"], {"proposed": "agent", "granted": True, "runner": "agent", "opened": False})
+        self.assertIn("DEV", task_ops.next_step(self.root, f"{BASE}/job", self.data("job")))
+        self.assertIn("--run-by agent", task_ops.next_step(self.root, f"{BASE}/job", self.data("job")))
+        back = testrecord.set_runner(self.root, "job", "DEV", False, interactive=True)
+        self.assertEqual((back["runner"], back["changed"], self.data("job")["test_runner"]), ("person", True, {}))
+        with self.assertRaises(CommandError):
+            testrecord.set_runner(self.root, "job", "PROD", True, interactive=True)  # not an environment of the guide
+        self.assertEqual([event["what"] for event in self.data("job")["events"] if event["what"] == "test-runner"], ["test-runner", "test-runner"])
+
+    def test_a_run_by_the_agent_needs_the_grant_and_is_marked_as_its_own(self) -> None:
+        with self.assertRaises(CommandError) as refused:
+            self.record("DEV", run_by="agent")
+        self.assertIn("task test runner --env DEV --agent", str(refused.exception))
+        testrecord.set_runner(self.root, "job", "DEV", True, interactive=True)
+        found = self.record("DEV", run_by="Agent")
+        self.assertEqual((found["run_by"], found["verdict"]), ("agent", "PASS"))
+        text = self.results("DEV")
+        self.assertIn("Run by: " + messages.text("task.test.run_by_agent", env="DEV"), text)
+        self.assertIn("### As the agent saved them", text)
+        self.assertIn("(run by the agent)", self.folder().joinpath("LOG.md").read_text(encoding="utf-8"))
+        self.assertEqual(self.record("IST", run_by="the user, today")["run_by"], "person")  # IST is not granted: a person's run as before
+        self.assertIn("### As the user gave them", self.results("IST"))
+
+    def test_the_board_grants_with_one_click_and_no_code(self) -> None:
+        board = boardserve.Board(self.root, False, 8798, ["test runner"])
+        with mock.patch.object(boardserve.Board, "idle", return_value=False):  # the agent has stopped: the person may change who runs
+            found = board.act("test runner", "job", "act", env_name="DEV", who="agent")
+            self.assertEqual((found["runner"], self.data("job")["test_runner"]), ("agent", {"DEV": "agent"}))
+            self.assertEqual(board.act("test runner", "job", "act", env_name="DEV", who="person")["runner"], "person")
+            with self.assertRaises(CommandError):
+                boardserve.Board(self.root, False, 8798, ["pause"]).act("test runner", "job", "act", env_name="DEV", who="agent")  # not among the board's actions
+
+
+class OpenEnvironmentTests(RecordCase):
+    """1.7.6: the Task settings field "Open to the agent": which environments a listed system reaches, which are open, and the one-click action of the board."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.root / ".harness" / "policies" / "tools.company.json").write_text(json.dumps({"systems": {"sql": {"reach": {"cli": "sqlcmd"}, "env_from": [{"pattern": "dev", "env": "dev"}, {"pattern": "qat", "env": "qat"}]}}}), encoding="utf-8")
+
+    def test_the_view_lists_the_environments_with_their_systems_and_what_is_open(self) -> None:
+        from modules.task import taskboard, tasklife
+
+        found = taskdesk.allow_view(self.root, self.data("job"))
+        self.assertEqual([(item["env"], item["systems"], item["open"]) for item in found["envs"]], [("dev", ["sql"], False), ("ist", [], False), ("qat", ["sql"], False)])
+        self.assertEqual(found["never"], ["prod"])
+        tasklife.set_allow(self.root, "job", "dev", True, interactive=True)
+        found = taskdesk.allow_view(self.root, self.data("job"))
+        self.assertTrue(found["envs"][0]["open"] and found["envs"][0]["since"])
+        rows, _problems = taskboard.board_rows(self.root, False, 0, (), rewrite=False)
+        self.assertEqual(next(row for row in rows["tasks"] if row["name"] == "job")["open_envs"], ["dev"])
+        (self.root / ".harness" / "policies" / "tools.company.json").unlink()
+        self.assertEqual(taskdesk.allow_view(self.root, self.data("job"))["envs"], [])  # no system listed: the field is not drawn
+
+    def test_the_settings_work_while_the_agent_is_at_work_and_the_rest_waits(self) -> None:
+        board = boardserve.Board(self.root, False, 8798, ["task allow", "review set", "pause", "close"])
+        busy = CommandError("busy")
+        with mock.patch.object(boardserve.Board, "idle", side_effect=busy):
+            self.assertEqual(board.act("task allow", "job", "act", env_name="dev", who="on")["on"], True)  # a setting the agent reads at its next step
+            self.assertEqual(board.act("review set", "job", "act", n=1)["n"], 1)
+            with self.assertRaises(CommandError):
+                board.act("close", "job", "act")  # changes the task under the agent's hands: waits
+
+    def test_the_board_opens_and_closes_with_one_click(self) -> None:
+        board = boardserve.Board(self.root, False, 8798, ["task allow"])
+        with mock.patch.object(boardserve.Board, "idle", return_value=False):
+            found = board.act("task allow", "job", "act", env_name="dev", who="on")
+            self.assertEqual((found["on"], self.data("job")["allow_env"].keys().__len__()), (True, 1))
+            self.assertEqual(board.act("task allow", "job", "act", env_name="dev", who="off")["on"], False)
+            with self.assertRaises(CommandError):
+                board.act("task allow", "job", "act", env_name="prod", who="on")
+

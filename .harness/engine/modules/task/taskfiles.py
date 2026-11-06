@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from core import tasks
 
-from . import common, intakeconvert, mdtree
+from . import common, intakeconvert, mdtree, steps
 
 FOLDERS = ("REQ", "REF", "INBOX", "DEV", "RUNS")  # the order of the list: what the person gave, what the agent made, what came back
 ROUND_DEV = re.compile(r"DEV_R\d+$", re.IGNORECASE)  # DEV_r<n>: the result of an earlier round, read only (M44)
@@ -193,7 +193,7 @@ def view(root: Path, task: str, relative: str) -> Optional[Dict[str, Any]]:
         out["cut"] = size > MAX_VIEW_BYTES
         if kind == "markdown":
             tree = mdtree.parse(text)
-            out["blocks"] = mdtree.resolve_images(tree["blocks"], posixpath.dirname(relative))
+            out["blocks"] = steps.laid_out(mdtree.resolve_images(tree["blocks"], posixpath.dirname(relative)))  # the steps of a run the agent recorded (1.7.9)
             out["cut"] = out["cut"] or tree["cut"]
         else:
             out["text"] = text

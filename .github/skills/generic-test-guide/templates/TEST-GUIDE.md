@@ -6,6 +6,8 @@ Order: DEV, then IST, then UAT. Start the next only when the one before passed. 
 
 ## <DEV>
 
+Runner: <agent | person>
+
 **Known about this environment**: <from environment.md; UNKNOWN where it says nothing>
 
 ### Before you start

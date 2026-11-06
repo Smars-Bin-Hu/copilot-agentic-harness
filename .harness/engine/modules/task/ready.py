@@ -21,7 +21,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from core import config, shortcmd, targets, tasks
+from core import config, messages, shortcmd, targets, tasks
+from core import reach, systems as outside
 
 LINES = 6  # errors of doctor shown at the end of the setup
 DOCTOR_TIMEOUT = 300.0  # seconds the child `doctor` may take; `board.doctor_seconds` in the policy `task` (1.6.104: 90 was too short for a work computer that took 80 s)
@@ -169,6 +170,43 @@ class Ready:
                 lines["repos"] = {"state": "note", "why": "none"}
         except Exception as error:  # noqa: BLE001 - a broken policy is doctor's to report; here it is a grey line
             lines["repos"] = {"state": "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
+        try:
+            systems = config.policy_or_empty(self.root, "tools").get("systems") or {}
+            raw = reach.view(self.root, systems) if systems and not outside.validate(systems) else []  # what VS Code reached (1.7.9), per server and environment
+            marks = {reach.OK: "\u2713", reach.DENIED: "\u2717", reach.FAILED: "\u2717", reach.UNKNOWN: "?"}
+            servers = list(dict.fromkeys(line["system"] for line in raw))
+            worst = lambda states: reach.DENIED if reach.DENIED in states else reach.FAILED if reach.FAILED in states else reach.UNKNOWN if reach.UNKNOWN in states else reach.OK  # noqa: E731
+            reason = lambda line: (line["launch"] or messages.text("desk.reach.why.identity")) if line["state"] == reach.DENIED else messages.text("desk.reach.why.no-answer") if line["why"] == "no-answer" else messages.text("desk.reach.why.exit", why=line["why"])  # noqa: E731
+            env_marks = lambda lines: " ".join(f"{line['env'].upper() if line['env'] != 'any' else ''}{marks[line['state']]}".strip() for line in lines)  # noqa: E731
+            if len(servers) > 1:  # several servers: one mark per server (the worst of its environments); the hover lists each server's environments
+                units = [(name, worst([line["state"] for line in raw if line["system"] == name]), [line for line in raw if line["system"] == name]) for name in servers]
+            else:  # one server: one mark per environment
+                units = [(line["env"].upper() if line["env"] != "any" else line["system"], line["state"], [line]) for line in raw]
+            detail = " \u00b7 ".join(f"{label} {marks[state]}" for label, state, _lines in units)
+            if len(servers) > 2:  # three servers or more: a count per mark keeps the line on one line; the hover names each server
+                counts = [(sum(1 for _l, state, _x in units if marks[state] == mark), mark) for mark in ("\u2713", "\u2717", "?")]
+                detail = messages.text("board.enter.d.systems.count", n=len(servers), marks=" ".join(f"{count} {mark}" for count, mark in counts if count))
+            bad = [line for line in raw if line["state"] in (reach.DENIED, reach.FAILED)]
+            name = lambda line: f"{line['system']} {line['env'].upper()}" if len(servers) > 1 else line["env"].upper()  # noqa: E731
+            if not systems:
+                lines["systems"] = {"state": "note", "why": "none", "tip": "none"}  # not set up yet: the hover says how
+            elif not raw:
+                lines["systems"] = {"state": "ok", "why": "listed", "n": len(systems)}  # listed, with no probe: nothing to look at
+            elif bad:
+                grouped: Dict[str, List[str]] = {}  # one reason, the places it holds for: "finance IST, hr DEV: <sentence>"
+                for line in bad:
+                    grouped.setdefault(reason(line), []).append(name(line))
+                overview = "\n".join(f"{label}: {env_marks(lines_)}" for label, _state, lines_ in units) if len(servers) > 1 else ""
+                lines["systems"] = {"state": "note", "why": "unreached", "detail": detail, "tip": "\n".join(([overview] if overview else []) + [short(f"{', '.join(names)}: {text}") for text, names in grouped.items()]),
+                                    "launch": any(line["state"] == reach.DENIED for line in bad) and reach.launch_script(self.root) is not None}  # only a refused identity is helped by starting VS Code again
+            elif any(line["state"] == reach.UNKNOWN for line in raw):
+                lines["systems"] = {"state": "note", "why": "unknown", "detail": detail, "launch": reach.launch_script(self.root) is not None}
+            else:
+                last = max((line.get("at", "") for line in raw), default="")
+                accounts = " \u00b7 ".join(f"{name(line)} {line['who']}" for line in raw if line["who"])
+                lines["systems"] = {"state": "ok", "why": "ok", "detail": detail, "tip": short(messages.text("desk.reach.ok.tip", accounts=accounts or "-", at=last[11:16]))}
+        except Exception as error:  # noqa: BLE001
+            lines["systems"] = {"state": "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
         with self.lock:
             self.folders = {"at": now, "lines": lines}
         return lines
@@ -204,7 +242,7 @@ class Ready:
         try:
             more = self.folder_lines()
         except Exception as error:  # noqa: BLE001
-            more = {name: {"state": "note", "why": "error", "detail": short(error)} for name in ("kb", "repos")}
-        for name in ("kb", "repos"):
+            more = {name: {"state": "note", "why": "error", "detail": short(error)} for name in ("kb", "repos", "systems")}
+        for name in ("kb", "repos", "systems"):
             checks.append(dict(more[name], id=name, blocking=False))
         return {"ready": all(line["state"] == "ok" for line in checks if line["blocking"]), "checks": checks}

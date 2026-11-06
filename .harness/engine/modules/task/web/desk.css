@@ -137,6 +137,9 @@ ol.timeline.history li.key{margin:2px 0;padding-right:10px;border-radius:8px}
 ol.timeline.history li.key .what b{font-weight:600}
 ol.timeline.history li.good{background:var(--good-bg)}ol.timeline.history li.good .what b{color:var(--good)}
 ol.timeline.history li.bad{background:var(--bad-bg)}ol.timeline.history li.bad .what b{color:var(--bad)}
+ol.timeline.history li.agent{background:var(--hot-bg)}ol.timeline.history li.agent .what b{color:var(--hot)}ol.timeline.history li.agent::before{background:var(--hot-dot);border-color:var(--hot-dot)}
+ol.timeline.history li.open{background:var(--open-bg)}ol.timeline.history li.open .what b{color:var(--open)}ol.timeline.history li.open::before{background:var(--open-dot);border-color:var(--open-dot)}
+.tag.open{background:var(--open-bg);color:var(--open);border-color:var(--open-line)}
 ol.timeline.history li.good::before{background:var(--good-dot);border-color:var(--good-dot)}
 ol.timeline.history li.bad::before{background:var(--bad);border-color:var(--bad)}
 
@@ -167,3 +170,47 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 @media (max-width:900px){.rv-name{display:none}}
 @media (max-width:640px){.tk-info{flex-wrap:wrap}.tk-info-l{flex-basis:100%;flex-wrap:wrap}.rv-pop{right:auto;left:0}}
 @media (max-width:640px){.tk-pane{padding:14px}.tk-top,.tk-sub{padding-left:8px;padding-right:8px}}
+/* "Open to the agent" (1.7.6): the environment chips in the pop of the head pill. An open one is green; one no system reaches is dim; prod is struck through */
+.rv-pop .env-chips .chip.env.on{border-color:var(--good-line);background:var(--good-bg);color:var(--good)}
+.rv-pop .env-chips .chip.env[disabled]{opacity:.45;cursor:not-allowed}
+.rv-pop .env-chips .chip.env.never{opacity:.45;cursor:not-allowed;text-decoration:line-through}
+/* a call held in the outbox (1.7.7): the facts in one line, the command's first words, the code on the card; the window lays the command out and scrolls both ways */
+.tk-fact .unnamed .why{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;background:var(--approval);color:#fff;font-size:10px;font-weight:700;cursor:help}
+.tk-call-facts{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:13px;margin:4px 0 8px}
+.tk-fact{display:inline-flex;align-items:center;gap:6px;min-width:0}.tk-fact .k{color:var(--soft);font-size:12px}.tk-fact code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:var(--track);padding:1px 6px;border-radius:5px;max-width:22em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-cmd-peek{display:flex;align-items:center;gap:8px;min-width:0;margin:0 0 8px}.tk-cmd-peek code{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--soft)}
+.tk-call-go{flex-wrap:wrap;gap:8px}.tk-code-in{display:inline-flex;align-items:center;gap:8px}.tk-code-in input.code{width:11ch;font-family:ui-monospace,Menlo,monospace;letter-spacing:2px;text-transform:uppercase}.tk-code-in input.code::placeholder{text-transform:none;letter-spacing:0;font-family:inherit}
+.tk-call.done{border-color:var(--good-dot)}.tk-call.done .code-chip.still{cursor:default}
+.ev-step{border-top:1px solid var(--line);padding-top:10px;margin-top:12px}.ev-step:first-child{border-top:0;margin-top:0;padding-top:0}.ev-step h3{font-size:14px;margin:0 0 4px;display:flex;align-items:center;gap:8px}.ev-step-n{display:inline-flex;width:20px;height:20px;border-radius:50%;align-items:center;justify-content:center;background:var(--track);font-size:11px;color:var(--soft)}
+.step-cmd{margin:6px 0 8px}.step-cmd .code-bar{display:flex;justify-content:space-between;align-items:center}.step-cmd .cmd-scroll{margin:4px 0 0}.step-out{margin:0 0 14px}.step-out>p:first-child{margin:4px 0}
+.reach-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px;background:var(--line2)}.reach-dot.ok{background:var(--good-dot)}.reach-dot.bad{background:var(--hot-dot)}.reach-dot.pill{margin:0 0 0 2px;vertical-align:0}
+.tk-call .bad{color:var(--bad);font-size:12.5px;flex:1 1 100%}
+.act.big{font-size:13px;padding:5px 14px}
+.dialog.wide{max-width:min(900px,calc(100% - 32px));max-height:min(88vh,820px)}
+.cmd-scroll.one{max-height:6em}.cmd-scroll.one .cmd-script{white-space:pre}
+.cmd-scroll{max-height:min(50vh,520px);overflow:auto;overscroll-behavior:contain;border:1px solid var(--line);border-radius:8px;background:var(--track);margin:6px 0 10px}
+.cmd-fmt,.cmd-script{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.55;padding:10px 12px;white-space:pre;margin:0;min-width:max-content}
+.cmd-line.in{padding-left:2em}.cmd-prog{font-weight:700}.cmd-opt{color:var(--soft)}.cmd-val{color:var(--ink)}.cmd-block{padding:4px 0 4px 4em;white-space:pre-wrap;color:var(--good)}.cmd-fmt .kw,.cmd-script .kw{font-weight:650}
+/* an evidence citation (1.7.8): a chip in the text, the window on a click; the table's row tools */
+.ev{display:inline-flex;align-items:center;gap:4px;font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:0 7px;height:20px;border-radius:6px;border:1px solid var(--line2);background:var(--track);color:var(--ink);cursor:pointer;vertical-align:1px}
+.ev.agent{border-color:var(--good-line)}.ev.missing{border-color:var(--bad);color:var(--bad);text-decoration:line-through;cursor:default}
+.ico{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--soft);font:inherit;font-size:12px;cursor:pointer;vertical-align:middle}.ico:hover{color:var(--ink);border-color:var(--line2)}
+.evidence tr.uncited td{color:var(--soft)}.evidence .ev-tools{white-space:nowrap}.evidence .chip{height:22px;font-size:12px;padding:0 8px}
+/* the output of a run in the window (1.7.9): a table per result set with a sticky head, numbers right, NULL dim; the notes; Table / Text */
+.out-pick{display:inline-flex;gap:6px;margin-left:8px;vertical-align:middle}.out-pick .chip{height:24px;font-size:12px}
+.out-table{max-height:min(55vh,560px)}.out-table table{width:max-content;min-width:0;max-width:none;border-collapse:collapse;font-size:12.5px}.out-table th,.out-table td{text-align:left;padding:5px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+.out-table thead th{position:sticky;top:0;background:var(--card);color:var(--soft);font-weight:500;font-size:12px;z-index:1}.out-table .num{text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.out-table .null{color:var(--soft)}
+.out-notes{border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:13px;max-height:min(50vh,520px);overflow:auto}.out-note{padding:4px 0}.out-note .pre{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}.out-note.bad{color:var(--bad)}
+.subtab.bad{color:var(--bad)}
+.evidence{display:block;min-width:0;max-width:100%;overflow:hidden}.evidence>.scroll{display:block;min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}.evidence table{width:max-content;min-width:100%}
+/* the next thing to press on a held-call card pulses: View until it was opened, the code box until a code is typed; still under Lite and reduced motion */
+.tk-call .tk-view.pulse{background:var(--hot-dot);color:#fff;border-color:var(--hot-dot);font-weight:600;animation:callbeat 1.6s ease-in-out infinite}
+@keyframes callbeat{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(224,138,0,.55)}50%{transform:scale(1.07);box-shadow:0 0 0 10px rgba(224,138,0,0)}}
+.tk-call input.pulse{animation:callpulse 1.8s ease-in-out infinite;border-color:var(--hot-dot)}
+@keyframes callpulse{0%,100%{box-shadow:0 0 0 0 var(--hot-line)}50%{box-shadow:0 0 0 6px transparent}}
+html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){.tk-call .pulse{animation:none}}
+.code-chip{font-size:13px;height:24px;padding:0 10px;letter-spacing:1px;border-color:var(--hot-dot);background:var(--hot-bg)}.code-chip:hover{background:var(--hot-dot);color:#fff}
+/* a wide window: the head and the buttons stay, one body scrolls both ways; a block inside it scrolls sideways only (flat) */
+.dialog.wide{overflow:hidden}.dialog.wide .win-body{flex:0 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;margin:0 -4px;padding:0 4px}
+.dialog.wide .win-foot{flex:none;margin-top:12px}
+.cmd-scroll.flat{max-height:none;overflow-x:auto;overflow-y:hidden}

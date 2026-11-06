@@ -4,6 +4,9 @@
   company/standards/        code-standards.md, read where it is (`standards.py`)
   company/skills/           `<prefix>-<name>/`, copied to `.github/skills/`: Copilot finds a skill there only
   company/instructions/     knowledgebase.instructions.md, copied to `.github/instructions/`, for the same reason
+  company/tools/            systems.json (the outside systems, `{"systems": {...}}`), copied to `.harness/policies/tools.company.json`: the gate
+                            reads it between tools.json and the person's tools.override.json; launch/ (how to start VS Code for them: scripts
+                            a person runs), copied to `.harness/launch/` (1.7.1). These paths are fixed: pack, update and sync count on them
   company/manifest.json     what a package holds; made by `pack`, written last by `update`
 
 `sync` makes the copies, and never touches any other file. `pack` makes a zip of what git has in the knowledge base;
@@ -23,6 +26,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import approval, gitread, kbstd, messages, skillcheck, standards, targets
+from . import systems as outside
 from .paths import runtime_dir
 from .registry import harness_version
 
@@ -32,6 +36,11 @@ MANIFEST_PATH = f"{targets.COMPANY_DIR}/{MANIFEST_FILE}"
 SKILLS_DIR = ".github/skills"
 INSTRUCTIONS_DIR = ".github/instructions"
 INSTRUCTION_FILES = ("knowledgebase.instructions.md",)  # one name only: a copy must never replace a file the harness ships for itself
+TOOLS_DIR = "tools"
+SYSTEMS_FILE = "systems.json"
+SYSTEMS_COPY = ".harness/policies/tools.company.json"
+LAUNCH_DIR = "launch"
+LAUNCH_COPY = ".harness/launch"
 NOT_CONTENT = {".git", ".DS_Store", "Thumbs.db"}
 PLACEHOLDER = {"README.md", ".gitkeep"}  # what an empty knowledge base ships with
 BACKUP_DIR = "company-backup"
@@ -123,6 +132,10 @@ def copies(root: Path, folder: Path) -> Dict[str, Any]:
     for name in INSTRUCTION_FILES:
         if (folder / "instructions" / name).is_file():
             pairs.append((f"{INSTRUCTIONS_DIR}/{name}", folder / "instructions" / name, root / INSTRUCTIONS_DIR / name))
+    if (folder / TOOLS_DIR / SYSTEMS_FILE).is_file():
+        pairs.append((SYSTEMS_COPY, folder / TOOLS_DIR / SYSTEMS_FILE, root / SYSTEMS_COPY))
+    if (folder / TOOLS_DIR / LAUNCH_DIR).is_dir():
+        pairs.append((LAUNCH_COPY, folder / TOOLS_DIR / LAUNCH_DIR, root / LAUNCH_COPY))
     named = {item.name for item in skills}
     here = root / SKILLS_DIR
     only_here = sorted(item.name for item in here.glob(f"{have}-*") if item.is_dir() and item.name not in named) if have else []
@@ -262,7 +275,23 @@ def layout(kb: Path) -> List[Dict[str, Any]]:
         out.append({"key": "standards", "ok": False, "count": 0, "text": say("setup.layout.moved", found=near[0], wanted=rules) if near else say("setup.layout.standards.none", wanted=rules)})
     if company.is_dir():
         out += skills_part(company)
+        out += tools_part(company)
     return out
+
+
+def tools_part(company: Path) -> List[Dict[str, Any]]:
+    """The outside systems of a company pack (`tools/systems.json`): how many, or what is wrong with the file. No file is no fault: a team may reach no system."""
+    path = company / TOOLS_DIR / SYSTEMS_FILE
+    if not path.is_file():
+        return []
+    try:
+        systems = read_json(path).get("systems")
+        errors = outside.validate(systems)
+    except Exception as error:  # noqa: BLE001 - told here, in one line
+        errors = [str(error)]
+    if errors:
+        return [{"key": "tools", "ok": False, "count": 0, "text": say("setup.layout.tools.bad", error=errors[0])}]
+    return [{"key": "tools", "ok": True, "count": len(systems or {}), "text": say("setup.layout.tools", n=len(systems or {}))}]
 
 
 def skills_part(company: Path) -> List[Dict[str, Any]]:

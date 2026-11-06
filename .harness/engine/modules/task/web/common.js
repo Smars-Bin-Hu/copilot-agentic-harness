@@ -107,7 +107,7 @@ const tag = (text, kind) => h("span", {class: "tag" + (kind ? " " + kind : "")},
 function stateOf(row, live) { return row.state === "working" && !live ? "quiet" : row.state || "quiet"; }
 // What a task waits for, in the language of the page. The server words it too (`row.waiting`), but a board that runs while the language is changed may still send the
 // old language for a while; the page's own table is always the one it shows. Waits with a detail in them (a command, a question, an environment) keep the server's words.
-const PLAIN_WAITS = ["plan", "promote", "recover", "review", "req", "commit", "stopped", "cancelled", "go-req", "go-plan", "go-promote", "go-recover", "go-review"];
+const PLAIN_WAITS = ["plan", "promote", "recover", "review", "req", "commit", "stopped", "cancelled", "go-req", "go-plan", "go-promote", "go-recover", "go-review", "outbox"];
 function waitText(row) {
   return PLAIN_WAITS.includes(row.waiting_why) && Object.prototype.hasOwnProperty.call(TEXT, "task.waiting." + row.waiting_why) ? t("task.waiting." + row.waiting_why) : row.waiting;
 }
@@ -261,3 +261,76 @@ function brand() {
 function copyright() {
   return h("p", {class: "copyright"}, t("board.copyright"));
 }
+
+// One hover card for every board page (1.7.9): any element with a `title` shows it in a small card of the board's own look, at once, near the element and inside
+// the window, with its line breaks; the browser's own slow, plain tooltip is kept from showing by moving the title aside while the card is up. Mouse and
+// keyboard focus show it; Escape and leaving hide it. A control that had only its title for a name keeps it as aria-label.
+(function hoverCard() {
+  if (typeof document === "undefined" || window.__hoverCard) return;
+  window.__hoverCard = true;
+  const GAP = 8, EDGE = 12, WAIT = 220;
+  let card = null, owner = null, timer = 0;
+  const box = () => card || (card = Object.assign(document.createElement("div"), {className: "hover-card", role: "tooltip"}));
+  function hide() {
+    clearTimeout(timer); timer = 0;
+    if (owner && owner.dataset.tipKept !== undefined) { if (!owner.getAttribute("title")) owner.setAttribute("title", owner.dataset.tipKept); delete owner.dataset.tipKept; }
+    owner = null;
+    if (card) card.remove();
+  }
+  function place(target) {
+    const node = box(), at = target.getBoundingClientRect(), width = document.documentElement.clientWidth, height = document.documentElement.clientHeight;
+    node.style.left = "0px"; node.style.top = "0px"; node.style.visibility = "hidden";
+    document.body.append(node);
+    const size = node.getBoundingClientRect();
+    let top = at.bottom + GAP;
+    if (top + size.height > height - EDGE && at.top - GAP - size.height > EDGE) top = at.top - GAP - size.height;  // no room below: above
+    const left = Math.min(Math.max(EDGE, at.left + at.width / 2 - size.width / 2), width - EDGE - size.width);
+    node.style.left = Math.round(Math.max(EDGE, left)) + "px"; node.style.top = Math.round(top) + "px"; node.style.visibility = "";
+  }
+  function show(target) {
+    const text = target.getAttribute("title");
+    if (!text || !text.trim()) return;
+    hide();
+    owner = target;
+    target.dataset.tipKept = text;
+    if (!target.getAttribute("aria-label") && !target.textContent.trim()) target.setAttribute("aria-label", text.split("\n")[0]);
+    target.removeAttribute("title");  // the browser's own tooltip stays away while the card is up
+    const node = box();
+    node.replaceChildren(...text.split("\n").filter((line) => line.trim()).map(cardLine));
+    place(target);
+  }
+  // One line of the card: a short label before the first colon is bold ("finance IST: …"); ✓ and ✗ are green and orange.
+  function cardLine(line) {
+    const row = document.createElement("div");
+    const at = line.indexOf(": ");
+    const head = at > 0 && at <= 28 ? line.slice(0, at + 1) : "";
+    if (head) row.append(Object.assign(document.createElement("b"), {textContent: head}), " ");
+    for (const part of (head ? line.slice(at + 2) : line).split(/([\u2713\u2717])/)) {
+      if (part === "\u2713" || part === "\u2717") row.append(Object.assign(document.createElement("span"), {className: part === "\u2713" ? "mk ok" : "mk bad", textContent: part}));
+      else if (part) row.append(part);
+    }
+    return row;
+  }
+  const findTip = (node) => node && node.closest ? node.closest("[title]") : null;
+  let pending = null;  // the element the pointer rests on, waiting for its card
+  document.addEventListener("pointerover", (event) => {
+    if (event.pointerType === "touch") return;
+    const target = findTip(event.target);
+    if (!target || target === owner || target === pending) return;
+    clearTimeout(timer);
+    pending = target;
+    timer = setTimeout(() => { pending = null; show(target); }, WAIT);
+  }, true);
+  document.addEventListener("pointerout", (event) => {
+    const into = event.relatedTarget;
+    const holder = owner || pending;
+    if (!holder || (into && holder.contains(into))) return;  // still inside the element
+    clearTimeout(timer); pending = null;
+    if (owner) hide();
+  }, true);
+  document.addEventListener("focusin", (event) => { const target = findTip(event.target); if (target && target.matches(":focus-visible")) show(target); }, true);
+  document.addEventListener("focusout", () => hide(), true);
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape") hide(); }, true);
+  document.addEventListener("scroll", () => hide(), true);
+  document.addEventListener("pointerdown", () => hide(), true);
+})();

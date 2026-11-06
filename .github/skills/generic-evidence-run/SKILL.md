@@ -28,9 +28,10 @@ A fact from an environment is worth something only as a saved run with a number.
 ## Step-by-Step Workflows
 
 1. **Say what you want to know** in one line, and the environment. In a task, write it in `LOG.md` before you run.
-2. **Run the exact command in the terminal**, one command at a time. The gate judges it:
+2. **Run the exact command in the terminal**, one command at a time; several servers may run side by side. The gate judges it:
    - a read runs;
    - a write, a procedure or a job is held: the gate says what to do (`task`: a task whose plan the user approved; `outbox`: the user approves this exact command once with `harness approve-action`, the draft is in the task's `OUTBOX/`; `human`: hand it over). Do what it says. Do not look for another way to the same result: no other program, no script that reaches the system itself, no smaller version of the command.
+   **Several reads on one server go in one command**: one process, one gate check and one turn instead of one each (`-Q "SELECT ...; SELECT 'marker 2'; SELECT ...;"` for sqlcmd). Put a statement that prints a marker between them, so each output can be cut out whole. Reads only: a write goes alone, as it is held for the user anyway, and with it the reads beside it.
 3. **A state that takes time** (a job that was started, a load that runs): wait for it in one call, not by running the query again and again: `harness wait --run "<the read>" --until "<pattern>" --every 30 --timeout 540 --out RUNS/<ENV>/wait-<what>.txt`. It runs the read every 30 seconds, ends when the output matches (or after the timeout, exit code 1), and writes the last output to the file. Only a read of a listed system may be the probe. No model call happens while it waits. Keep one call under 10 minutes (VS Code hands a longer terminal call back to you, and then you would be polling it); a job that runs longer is waited for with one call after another.
 4. **Save what came back, as steps.** Write `RUNS/<ENV>/steps.md` (written over each time): one step per command, in the order run:
 
@@ -47,6 +48,8 @@ A fact from an environment is worth something only as a saved run with a number.
    <what it printed, whole, as the terminal showed it>
    ```
    ````
+
+   A command that ran several statements is written as one step per statement, in order: its command is the same program, server and options with only that statement, and its words say "run in one call with steps <n>–<m>"; its output is that statement's part, cut at the markers (the lines the marker itself printed left out), otherwise whole. The same holds for the answer in a Q&A `TASK.md`: one row per statement.
 
    No shortening, no reformatting, no corrected figures. A very long output goes whole into `RUNS/<ENV>/run-<time>.txt` and the step's output says so with its first lines and the count.
 5. **Record it:**

@@ -28,6 +28,7 @@ def main() -> int:
     parser.add_argument("action", choices=["login", "whoami", "list", "get", "comment", "set-state", "delete"])
     parser.add_argument("rest", nargs="*")
     args = parser.parse_args()
+    args.project = args.project.upper()  # DEMO and demo are one project
     data = load()
     if args.action == "login":
         data["signed"] = getpass.getuser() + "@example.org"

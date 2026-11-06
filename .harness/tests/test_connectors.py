@@ -337,6 +337,15 @@ class TaskLinks(TaskCase):
         self.assertIn("trk:42", done["next"])
         self.assertNotEqual(done["next"], "")
 
+    def test_a_qa_task_is_not_followed_by_an_offer_to_update(self) -> None:
+        from modules.task import task as task_ops
+
+        self.new(name="look", kind="qa")
+        from modules.task import tasklife
+
+        tasklife.link(self.root, "look", "trk:42", True)
+        self.assertNotIn("next", task_ops.close(self.root, "look", check_todo=False))
+
     def test_a_connector_with_a_bad_link_address_is_refused(self) -> None:
         holder = tempfile.TemporaryDirectory()
         self.addCleanup(holder.cleanup)
@@ -372,3 +381,33 @@ class ShippedSample(ConnectorCase):
         self.assertEqual(decide("demotracker --project DEMO comment 1 checked"), "deny")  # held for the person
         self.assertEqual(decide("demotracker --project DEMO delete 1"), "deny")
         self.assertEqual(connectors.link_view(self.root, "demo:1")["url"], "https://tracker.example.org/DEMO/ticket/1")
+
+
+class BoardActions(ConnectorCase):
+    """Get ready, Connectors: the paired browser updates and removes a connector installed here; the company's follow the pack."""
+
+    def board(self):
+        from modules.task import boardserve
+
+        board = boardserve.Board(self.root, False, 8799, [])
+        self.addCleanup(lambda: board.link.stop() if hasattr(board.link, "stop") else None)
+        return board
+
+    def test_update_when_its_folder_changed_and_remove(self) -> None:
+        connectors.add(self.root, str(self.source))
+        board = self.board()
+        row = board.machine({"step": "connectors"})["connectors"][0]
+        self.assertFalse(row["newer"])
+        make(self.source, version="1.2.0")
+        self.assertTrue(board.machine({"step": "connectors"})["connectors"][0]["newer"])
+        self.assertEqual(board.machine({"step": "connector-update", "name": "tracker"})["connectors"][0]["version"], "1.2.0")
+        self.assertEqual(board.machine({"step": "connector-remove", "name": "tracker"})["connectors"], [])
+        for step in ("state", "paths", "drop"):
+            board.machine({"step": step, "paths": []})
+        with self.assertRaises(ValueError):
+            board.machine({"step": "nonsense"})
+
+    def test_one_from_the_company_pack_is_not_changed_here(self) -> None:
+        connectors.add(self.root, str(self.source), origin=connectors.COMPANY)
+        with self.assertRaises(ValueError):
+            self.board().machine({"step": "connector-remove", "name": "tracker"})

@@ -242,7 +242,7 @@ A sample with a made-up ticket program, to try the whole path: `.harness/example
 
 A task can name an item of a tool (`harness task link add ado:12345`, or ask the agent to link the ticket you name): the task page shows a chip, and when a connector gives the type an address (`"links": {"ado": {"label", "kind", "url": "https://.../{org}/{project}/_workitems/edit/{id}"}}`, filled from the first server of that kind) the chip opens it. A linked item is for people: the agent never updates it on its own. When the work is done it asks you whether to update it and what to write; if you say yes it drafts the change with the connector's skill, and the write waits for your approval.
 
-Get ready shows a **Connectors** row once one is installed: a dot each (ready, or what is missing here: a program, the CA bundle, a sign-in, with a button to where it is set). `harness connector check` says the same from a terminal; `harness connector remove <name>` takes it back, with its skills, into `.harness/runtime/connector-backup/`.
+Get ready shows a **Connectors** row once one is installed: a dot each (ready, or what is missing here: a program, the CA bundle, a sign-in, with a button to where it is set). its **Update** button reinstalls one whose folder changed since, and **Remove** takes it away (one from the company pack follows the pack instead). `harness connector check` says the same from a terminal; `harness connector remove <name>` takes it back, with its skills, into `.harness/runtime/connector-backup/`.
 
 #### This computer: tool folders and a CA bundle
 

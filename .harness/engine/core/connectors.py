@@ -344,6 +344,8 @@ def check(root: Path, only: str = "") -> Dict[str, Any]:
         programs = {str(program): bool(shutil.which(str(program), path=path)) for program in needs.get("programs") or []}
         row = {"name": name, "version": (book.get(name) or {}).get("version", ""), "from": (book.get(name) or {}).get("from", ""), "errors": errors,
                "programs": programs, "trust": bool(needs.get("trust")), "bundle": bool(bundle)}
+        source = Path(str(row["from"])) if row["from"] and row["from"] != COMPANY else None
+        row["newer"] = bool(source and source.is_dir() and (source / MANIFEST).is_file() and not _same(source, folder))  # its folder changed since it was installed
         row["ok"] = not errors and all(programs.values())
         rows.append(row)
     if only and not rows:

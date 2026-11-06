@@ -555,7 +555,7 @@ def link(root: Path, raw_task: str, ref: str, on: bool) -> Dict[str, Any]:
 def links_hint(root: Path, data: Dict[str, Any]) -> str:
     """One line for the agent when a task that names outside items is done: it may offer to update them, never update them unasked."""
     refs = [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]
-    return say("task.link.suggest", links=", ".join(refs)) if refs else ""
+    return say("task.link.suggest", links=", ".join(refs)) if refs and data.get("kind") != "qa" else ""  # a look only reads: nothing to offer
 
 
 def handoff_clear(root: Path, raw_task: str) -> Dict[str, Any]:

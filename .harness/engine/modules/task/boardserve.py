@@ -745,7 +745,19 @@ class Board:
             return dict(launchenv.state(self.root), made=made, vscode_open=bool(self.link.status().get("ready", False)))
         elif step == "drop":
             launchenv.drop_bundle(self.root)
-        elif step == "connectors":  # Get ready, Connectors (1.7.13): what each has and lacks, with the servers of its kinds and whether each is signed in
+        elif step in ("connector-update", "connector-remove"):  # the paired browser is the person's: what `harness connector add --replace` / `remove` do at a terminal
+            from core import connectors
+
+            name = str(data.get("name") or "")
+            kept = connectors.ledger(self.root).get(name) or {}
+            if kept.get("from") == connectors.COMPANY:
+                raise ValueError(say("connector.company.managed", name=name))
+            if step == "connector-remove":
+                connectors.remove(self.root, name)
+            else:
+                connectors.add(self.root, str(kept.get("from") or ""), origin=str(kept.get("from") or ""), replace=True)
+            step = "connectors"
+        if step == "connectors":  # Get ready, Connectors (1.7.13): what each has and lacks, with the servers of its kinds and whether each is signed in
             from core import connectors
 
             found = connectors.check(self.root)
@@ -755,7 +767,7 @@ class Board:
                 row["servers"] = [{"alias": alias, "saved": bool(servers_core.identity_of(env, alias, known.get(str(server.get("kind"))) or {}))}
                                   for alias, server in servers_core.listed(self.root).items() if (known.get(str(server.get("kind"))) or {}).get("connector") == row["name"]]
             return found
-        elif step != "state":
+        if step not in ("state", "paths", "drop"):
             raise ValueError(say("serve.refused.request"))
         return dict(launchenv.state(self.root), vscode_open=bool(self.link.status().get("ready", False)))
 
@@ -1444,7 +1456,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     result = board.machine(data)
-                    if str(data.get("step", "")) not in ("state", "connectors"):  # a read leaves no line
+                    if str(data.get("step", "")) not in ("state", "connectors"):  # a read leaves no line; an update or a removal does
                         print(say("serve.did", action="machine " + str(data.get("step")), task="-"), flush=True)
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page

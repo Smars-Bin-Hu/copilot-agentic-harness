@@ -85,10 +85,17 @@ const MACHINE = (function () {
         if (missing.length) acts.push(button(t("machine.paths"), () => { view.close(); open(done); }));
         if (row.trust && !row.bundle) acts.push(button(t("machine.ca"), () => { view.close(); open(done); }));
         if (unsigned.length && typeof SERVERS !== "undefined") acts.push(button(t("setup.servers"), () => { view.close(); SERVERS.open(done); }));
+        if (row.from !== "company") {  // the company's follow the pack (company sync); one installed here is updated or removed here
+          if (row.newer) acts.push(button(t("machine.conn.update"), () => change("connector-update", row.name)));
+          const drop = button(t("machine.ca.drop"), () => { if (window.confirm(t("machine.conn.remove.ask", {name: row.name}))) change("connector-remove", row.name); });
+          drop.classList.add("danger");
+          acts.push(drop);
+        }
         return h("div", {class: "sv-line mc-conn", title: tip}, h("span", {class: "mc-dot " + (row.errors.length ? "bad" : ready ? "ok" : "warn")}), h("b", {class: "sv-alias"}, row.name),
           h("span", {class: "sv-kind"}, row.version), row.from === "company" ? h("span", {class: "sv-own"}, t("machine.conn.company")) : null, h("span", {class: "mc-acts"}, ...acts));
       }) : [h("p", {class: "sub"}, t("machine.conn.none"))]));
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
+    const change = (step, name) => ask(step, {name}).then(() => paint(), (error) => { list.prepend(h("p", {class: "bad"}, error.message)); });
     const button = (text, go) => { const b = h("button", {type: "button", class: "act kb-mini"}, text); b.addEventListener("click", go); return b; };
     close.addEventListener("click", view.close);
     paint();

@@ -68,7 +68,7 @@ const SERVERS = (function () {
     if (!names.length) return h("p", {class: "sub"}, t("servers.own.nokind"));
     const kind = h("select", {class: "su-in"}, names.map((name) => h("option", {value: name}, kinds[name].label)));
     const alias = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: t("servers.own.alias")});
-    const env = h("select", {class: "su-in"}, ["dev", "ist", "qat"].map((name) => h("option", {value: name}, name.toUpperCase())));
+    const env = h("select", {class: "su-in", required: ""}, h("option", {value: ""}, t("servers.own.env.pick")), ["dev", "ist", "qat"].map((name) => h("option", {value: name}, name.toUpperCase())));  // no environment chosen for you: a wrong one is easy to miss
     const auth = h("select", {class: "su-in"});
     const fields = h("div", {class: "sv-fields"});
     const rest = h("div");

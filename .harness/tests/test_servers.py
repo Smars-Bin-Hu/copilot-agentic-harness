@@ -90,6 +90,18 @@ class GateViewTests(ServersCase):
         (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": {"db-dev": {"reach": {"cli": "fakedb", "when": "db1"}, "env": "dev"}}}), encoding="utf-8")
         self.assertNotIn("needs", config.load_policy(self.root, "tools")["systems"]["db-dev"])  # the person's own wins
 
+    def test_servers_on_one_host_are_told_apart_by_the_port(self) -> None:
+        import shutil
+
+        pack = Path(__file__).resolve().parents[1] / "examples" / "system-packs" / "sqlserver-sqlcmd" / "kinds" / "sqlserver.json"
+        shutil.copy(pack, self.root / ".harness" / "kinds" / "sqlserver.json")
+        self.company({f"s{n}": {"kind": "sqlserver", "env": "dev", "auth": "sql", "host": "127.0.0.1", "port": str(14330 + n)} for n in range(3)})
+        systems = config.load_policy(self.root, "tools")["systems"]
+        owner = lambda line: [action.system for action, _ in external.classify(line, systems)]  # noqa: E731
+        self.assertEqual([owner(f'sqlcmd -S 127.0.0.1,{14330 + n} -C -Q "SELECT 1"') for n in range(3)], [["s0"], ["s1"], ["s2"]])
+        loose = {name: dict(system, reach=dict(system["reach"], when=system["reach"]["when"].replace(",-]", "-]"))) for name, system in systems.items()}  # a pack written loosely
+        self.assertEqual(owner.__call__ if False else [action.system for action, _ in external.classify('sqlcmd -S 127.0.0.1,14332 -Q "SELECT 1"', loose)], ["s2"])  # the most specific match wins
+
     def test_prod_takes_only_a_rule_written_for_prod(self) -> None:
         system = {"rules": {"*": {"write": "allow"}}}
         self.assertEqual(external.decide(system, "dev", "write"), "allow")

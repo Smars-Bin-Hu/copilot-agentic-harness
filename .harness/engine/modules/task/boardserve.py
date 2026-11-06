@@ -696,6 +696,8 @@ class Board:
             own = {key: str(value) for key, value in own.items() if key in ("kind", "env", "auth", "label") or key in ((servers_core.kinds(self.root).get(str(own.get("kind"))) or {}).get("fields") or {})}
             if not servers_core.ALIAS.match(alias) or alias in servers_core.company_servers(config.policy_or_empty(self.root, servers_core.SERVERS_POLICY)):
                 raise ValueError(say("servers.alias.bad", alias=alias))
+            if own.get("env") not in ("dev", "ist", "qat"):
+                raise ValueError(say("servers.own.env.none"))
         stamp = hashlib.sha256(json.dumps([alias, given, own], sort_keys=True).encode("utf-8")).hexdigest()
         if step == "list":
             return servers_view(self.root, self.link.status().get("ready", False))

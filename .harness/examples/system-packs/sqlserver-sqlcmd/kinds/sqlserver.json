@@ -19,7 +19,7 @@
       "optional": true
     }
   },
-  "match": "-S\\s+\"?{host}(?:,{port})?(?![\\w.-])",
+  "match": "-S\\s+\"?{host}(?:,{port})?(?![\\w.,-])",
   "auth": {
     "windows": {
       "label": "Windows account (DOMAIN\\id)",

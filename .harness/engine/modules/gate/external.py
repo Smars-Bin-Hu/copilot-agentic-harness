@@ -101,12 +101,18 @@ def _start(tokens: List[str], programs: Dict[str, List[str]]) -> Optional[int]:
 
 
 def _owner(systems: Dict[str, Any], names: List[str], args: str) -> Optional[str]:
-    """The system a call belongs to: the first of those that use the program whose `when` pattern matches the arguments (none: always)."""
+    """The system a call belongs to, of those that use the program: the one whose `when` pattern matches the most of the arguments (1.7.10: two servers on
+    one host, told apart by the port, both match `-S host`; the one that also matches the port wins); on a tie the first; one with no `when` only when no other matches."""
+    best, best_len, fallback = None, -1, None
     for name in names:
         when = (systems[name].get("reach") or {}).get("when")
-        if not when or re.search(when, args, re.IGNORECASE):
-            return name
-    return None
+        if not when:
+            fallback = fallback or name
+            continue
+        found = re.search(when, args, re.IGNORECASE)
+        if found and len(found.group(0)) > best_len:
+            best, best_len = name, len(found.group(0))
+    return best or fallback
 
 
 def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], depth: int, found: List[Action]) -> None:

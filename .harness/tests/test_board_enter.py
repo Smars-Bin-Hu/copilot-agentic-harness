@@ -199,24 +199,42 @@ class ReadinessTests(TaskCase):
         self.assertEqual((line(found, "kb")["state"], line(found, "kb")["n"]), ("ok", 1))
         self.assertFalse(line(found, "kb")["blocking"])
         self.assertEqual((line(found, "systems")["state"], line(found, "systems")["why"], line(found, "systems")["blocking"]), ("note", "none", False))
+        self.assertEqual(messages.text("board.enter.d.systems.none"), messages.text("board.enter.d.repos.none"))  # the same words as the line above: not set up yet
 
-    def test_an_outside_system_is_grey_with_how_to_start_when_its_probe_does_not_answer(self) -> None:
-        """1.7.1: a system with `needs` is probed; one that is not reachable names the company's launch sentence and never blocks the way in."""
+    def test_the_outside_systems_line_says_what_vs_code_reached_not_what_the_board_reaches(self) -> None:
+        """1.7.9: the identity is on VS Code's process, not the board's: the line reads what the hooks saw (core.reach), per environment, short; the words are on hover.
+        Never checked: grey, unknown. Not reached: grey, with the company's launch sentence. All reached: ok, with the account the pack's `expect` captured."""
+        from core import reach
+        from modules.gate import external
+
         policies = self.root / ".harness" / "policies"
         policies.joinpath("tools.json").write_text(json.dumps({"schema_version": 1, "python": {}, "systems": {}}), encoding="utf-8")
-        systems = {"dev-sql": {"reach": {"cli": "sqlcmd"}, "env": "dev", "needs": {"probe": f"{sys.executable} -c \"print('CORP\\\\me')\"", "expect": r"^CORP\\", "launch": "Start VS Code with start-vscode.cmd."}},
-                   "cloud": {"reach": {"cli": "cloudctl"}, "needs": {"probe": f"{sys.executable} -c \"import sys; sys.exit(3)\"", "launch": "Sign in with cloudctl login."}}}
+        probe = f"{sys.executable} -c \"print('CORP\\\\me')\""
+        systems = {"sql": {"reach": {"cli": "sqlcmd"}, "env_from": [{"pattern": "dev", "env": "dev"}, {"pattern": "ist", "env": "ist"}],
+                           "needs": {"probes": {"dev": probe, "ist": probe}, "expect": r"^(CORP\\\S+)", "launch": "Start VS Code with start-vscode.cmd."}}}
         policies.joinpath("tools.company.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
-        found = settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), clean))
-        got = line(found, "systems")
-        self.assertEqual((got["state"], got["why"], got["n"], got["blocking"]), ("note", "unreached", 1, False))
-        self.assertIn("cloud: Sign in with cloudctl login.", got["detail"])
-        self.assertNotIn("dev-sql", got["detail"])
-        self.assertTrue(found["ready"])
-        systems["cloud"]["needs"]["probe"] = f"{sys.executable} -c \"print('ok')\""
+        board = lambda: line(settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), clean)), "systems")  # noqa: E731
+        got = board()
+        self.assertEqual((got["state"], got["why"], got["detail"], got["blocking"]), ("note", "unknown", "DEV ? \u00b7 IST ?", False))
+        reach.probe_all(self.root, systems, lambda command: external.run_probe(command, self.root))
+        got = board()
+        self.assertEqual((got["state"], got["detail"]), ("ok", "DEV \u2713 \u00b7 IST \u2713"))
+        self.assertIn("CORP\\me", got["tip"])
+        two = dict(systems, finance=dict(systems["sql"], reach={"cli": "sqlcmd", "when": "finance"}))
+        two["sql"] = dict(systems["sql"], reach={"cli": "sqlcmd", "when": "orders"})
+        policies.joinpath("tools.company.json").write_text(json.dumps({"systems": two}), encoding="utf-8")
+        reach.probe_all(self.root, two, lambda command: external.run_probe(command, self.root))
+        reach.note_call(self.root, "finance", dict(two["finance"], needs=dict(two["finance"]["needs"], denied="Login failed")), "ist", "Login failed", False)
+        got = board()
+        self.assertEqual(got["detail"], "DEV \u2713 \u00b7 IST \u2717")  # several servers: one mark per environment
+        self.assertIn("finance IST", got["tip"])  # the hover names the server that failed
+        self.assertNotIn("sql IST", got["tip"])
         policies.joinpath("tools.company.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
-        found = settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), clean))
-        self.assertEqual((line(found, "systems")["state"], line(found, "systems")["n"]), ("ok", 2))
+        reach.probe_all(self.root, systems, lambda command: external.run_probe(command, self.root))
+        reach.note_call(self.root, "sql", dict(systems["sql"], needs=dict(systems["sql"]["needs"], denied="Login failed")), "ist", "Msg 18456, Login failed for user", False)
+        got = board()
+        self.assertEqual((got["state"], got["why"], got["detail"]), ("note", "unreached", "DEV \u2713 \u00b7 IST \u2717"))
+        self.assertIn("start-vscode.cmd", got["tip"])
 
 
 class StalledCommandTests(TaskCase):
@@ -353,7 +371,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("DATA.rows", code)  # status only, no task data
         self.assertNotIn("localStorage", code)  # nothing that lets a person skip it: the only memory is the tab's own session
         for call in re.findall(r'ask\("(/api/[a-z]+)"', code):
-            self.assertIn(call, ("/api/ready", "/api/open"))  # the one read and the one person-only action that already exists
+            self.assertIn(call, ("/api/ready", "/api/open", "/api/launch"))  # the one read and the person-only actions (1.7.9: the company's launch script, Windows)
 
     def test_every_text_of_the_screen_is_in_both_languages(self) -> None:
         code = (WEB / "enter.js").read_text(encoding="utf-8")

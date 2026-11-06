@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 import json
 import re
 
-from core import calls, repo_paths, targets, tasks, unseen
+from core import calls, reach, repo_paths, targets, tasks, unseen
 from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent
@@ -245,7 +245,27 @@ def load_targets(ctx: Context) -> Optional[targets.Targets]:
         return None
 
 
+def watch_reach(event: HookEvent, ctx: Context) -> None:
+    """Can the agent reach each environment from VS Code (core.reach, 1.7.9)? The hook runs in VS Code's identity: at the start of a chat it starts the
+    pack's probes in a process of their own (the chat does not wait); after a call of a listed system it reads what the terminal printed. Never stops anything."""
+    try:
+        listed = ctx.policy("tools").get("systems") or {}
+        if not listed or external.validate(listed):
+            return
+        if event.event == "SessionStart":
+            reach.start(ctx.root, listed)
+            return
+        answer = event.tool_response or str((event.raw or {}).get("tool_response") or "")
+        for action, _decision in external.classify(event.command, listed):
+            reach.note_call(ctx.root, action.system, listed[action.system], action.env, answer, event.event == "PostToolUseFailure")
+    except Exception:  # noqa: BLE001 - a look at the way in must not hurt the chat
+        return
+
+
 def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    if event.event == "SessionStart" or (event.event in ("PostToolUse", "PostToolUseFailure") and event.tool_kind == "terminal"):
+        watch_reach(event, ctx)
+        return None
     if event.event == "UserPromptSubmit":
         return approved_context(event, ctx)
     if event.event == "PreToolUse" and event.tool_kind != "terminal":

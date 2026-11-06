@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from core import config, shortcmd, targets, tasks
-from core import systems as outside
+from core import reach, systems as outside
 
 LINES = 6  # errors of doctor shown at the end of the setup
 DOCTOR_TIMEOUT = 300.0  # seconds the child `doctor` may take; `board.doctor_seconds` in the policy `task` (1.6.104: 90 was too short for a work computer that took 80 s)
@@ -172,14 +172,22 @@ class Ready:
             lines["repos"] = {"state": "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
         try:
             systems = config.policy_or_empty(self.root, "tools").get("systems") or {}
-            reached = outside.reach(systems, lambda command: outside.run_probe(command, self.root)) if systems and not outside.validate(systems) else {}
-            missing = [f"{name}: {line['launch'] or line['why']}" for name, line in reached.items() if not line["reachable"]]
+            seen = reach.by_env(reach.view(self.root, systems)) if systems and not outside.validate(systems) else []  # what VS Code reached (1.7.9), one mark per environment
+            marks = {reach.OK: "\u2713", reach.DENIED: "\u2717", reach.FAILED: "\u2717", reach.UNKNOWN: "?"}
+            detail = " \u00b7 ".join(f"{line['label']} {marks.get(line['state'], '?')}" for line in seen)
+            bad = [line for line in seen if line["state"] in (reach.DENIED, reach.FAILED)]
+            several = len({part["system"] for line in seen for part in line["parts"]}) > 1  # several servers: the hover names each one
+            name = lambda line, part: f"{part['system']} {line['label']}" if several else line["label"]  # noqa: E731
             if not systems:
-                lines["systems"] = {"state": "note", "why": "none"}
-            elif missing:
-                lines["systems"] = {"state": "note", "why": "unreached", "n": len(missing), "detail": short("; ".join(missing))}
+                lines["systems"] = {"state": "note", "why": "none", "tip": "none"}  # not set up yet: the hover says how
+            elif not seen:
+                lines["systems"] = {"state": "ok", "why": "listed", "n": len(systems)}  # listed, with no probe: nothing to look at
+            elif bad:
+                lines["systems"] = {"state": "note", "why": "unreached", "detail": detail, "tip": short("; ".join(f"{name(line, part)}: {part['launch'] or part['why']}" for line in bad for part in line["parts"] if part["state"] in (reach.DENIED, reach.FAILED))), "launch": reach.launch_script(self.root) is not None}
+            elif any(line["state"] == reach.UNKNOWN for line in seen):
+                lines["systems"] = {"state": "note", "why": "unknown", "detail": detail, "launch": reach.launch_script(self.root) is not None}
             else:
-                lines["systems"] = {"state": "ok", "why": "ok", "n": len(systems)}
+                lines["systems"] = {"state": "ok", "why": "ok", "detail": detail, "tip": short(" \u00b7 ".join(f"{name(line, part)}: {part['who']}" for line in seen for part in line["parts"] if part["who"]))}
         except Exception as error:  # noqa: BLE001
             lines["systems"] = {"state": "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
         with self.lock:

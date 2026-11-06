@@ -149,6 +149,18 @@ def tools_check(root: Path) -> Dict[str, Any]:
     return external.report(systems, run=lambda command: external.run_probe(command, root))
 
 
+def tools_reach(root: Path, probe: bool) -> Dict[str, Any]:
+    from core import reach
+
+    listed = config.policy_or_empty(root, "tools").get("systems") or {}
+    if external.validate(listed):
+        return {"envs": [], "ok": False, "next": "the list of systems has errors: run `harness tools check`"}
+    if probe:
+        reach.probe_all(root, listed, lambda command: external.run_probe(command, root))
+    lines = reach.view(root, listed)
+    return {"envs": lines, "ok": all(line["state"] == reach.OK for line in lines)}
+
+
 def _wait(root: Path, args: Any) -> Dict[str, Any]:
     from . import wait  # it imports this module's CommandError
 
@@ -160,6 +172,9 @@ def register(subparsers: Any) -> None:
     tools_commands = tools.add_subparsers(dest="tools_command", required=True)
     check = tools_commands.add_parser("check", help="is the list well formed, what does the gate decide for each system and environment, and is each system that has a probe reachable from here? Exit code 1 when there is an error")
     check.set_defaults(handler=lambda args: tools_check(repo_root()))
+    seen = tools_commands.add_parser("reach", help="can the agent reach each environment from VS Code? What the hooks saw: the probes at the start of a chat and the agent's own calls (--probe runs the probes now, in this terminal's identity)")
+    seen.add_argument("--probe", action="store_true", help="run the probes now and keep the answers (the hook does this at the start of a chat, in VS Code's identity)")
+    seen.set_defaults(handler=lambda args: tools_reach(repo_root(), args.probe))
 
     waiting = subparsers.add_parser("wait", help="wait for an outside system to reach a state in one call: run a read of a listed system every N seconds until its output matches a pattern, or a timeout; the last output goes to a file of the task")
     waiting.add_argument("--run", required=True, help="the read-only command of a listed system to run each round, whole, in quotes")

@@ -62,10 +62,10 @@ SYSTEMS_SCHEMA = {
             "target": {"type": "string"},
             "rules": {"type": "object", "additionalProperties": _RULE_SET},
             "show": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
-            "needs": {
+            "needs": {  # 1.7.9: `probes` names one probe per environment (another server, another account); `denied` is what a call prints when the identity is not let in
                 "type": "object",
-                "required": ["probe"],
-                "properties": {"probe": {"type": "string", "minLength": 1}, "expect": {"type": "string"}, "launch": {"type": "string"}},
+                "properties": {"probe": {"type": "string", "minLength": 1}, "probes": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+                               "expect": {"type": "string"}, "denied": {"type": "string", "minLength": 1}, "launch": {"type": "string"}},
                 "additionalProperties": False,
             },
         },
@@ -98,12 +98,17 @@ def validate(systems: Any) -> List[str]:
             if program in owner:
                 errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}; give one of them a `when`")
             owner[program] = name
-        patterns = [("target", system.get("target") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs") for index, item in enumerate(system.get(key) or [])]
+        patterns = [("target", system.get("target") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or ""), ("needs.denied", (system.get("needs") or {}).get("denied") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs") for index, item in enumerate(system.get(key) or [])]
         for where, pattern in (item for item in patterns if item[1]):
             try:
                 re.compile(pattern)
             except re.error as error:
                 errors.append(f"systems.{name}.{where}: bad pattern {pattern!r}: {error}")
+        if system.get("needs") and not probes(system):
+            errors.append(f"systems.{name}.needs: give a `probe`, or `probes` with one per environment")
+        for env in ((system.get("needs") or {}).get("probes") or {}):
+            if str(env).lower() not in ENVS:
+                errors.append(f"systems.{name}.needs.probes: {env!r} is not an environment ({', '.join(ENVS)})")
         if "env" in system and system.get("env_from"):
             errors.append(f"systems.{name}: `env` fixes the environment, so `env_from` is never read; keep one of them")
     return errors
@@ -149,6 +154,17 @@ def run_probe(command: str, cwd: Optional[Path] = None) -> Tuple[Optional[int], 
     return done.returncode, (done.stdout + done.stderr)[:PROBE_OUTPUT]
 
 
+def probes(system: Dict[str, Any]) -> Dict[str, str]:
+    """`{env: probe}` of a system: `needs.probes` names one per environment; `needs.probe` alone is the probe of every environment the system reaches
+    (`any` for a system with none). Nothing when the system has no `needs`."""
+    needs = system.get("needs") or {}
+    if needs.get("probes"):
+        return {str(env).lower(): str(command) for env, command in needs["probes"].items() if command}
+    if not needs.get("probe"):
+        return {}
+    return {env: needs["probe"] for env in environments({"one": system})} or {"any": needs["probe"]}
+
+
 def reach(systems: Dict[str, Any], run: Callable[[str], Tuple[Optional[int], str]] = run_probe) -> Dict[str, Dict[str, Any]]:
     """For each system that has `needs`: is it reachable from here? `{name: {reachable, why, launch}}`. `why` is short and holds no output
     of the probe (it could name the identity); `launch` is the company's sentence for the person. A system without `needs` is not listed: nothing is known of it."""
@@ -157,14 +173,17 @@ def reach(systems: Dict[str, Any], run: Callable[[str], Tuple[Optional[int], str
         needs = system.get("needs")
         if not needs:
             continue
-        code, output = run(needs["probe"])
-        if code is None:
-            line = {"reachable": False, "why": output}
-        elif code != 0:
-            line = {"reachable": False, "why": f"the probe ended with exit code {code}"}
-        elif needs.get("expect") and not re.search(needs["expect"], output):
-            line = {"reachable": False, "why": "the probe answered, but not as `expect` says"}
-        else:
-            line = {"reachable": True, "why": ""}
-        found[name] = {**line, "launch": needs.get("launch") or ""}
+        lines = []
+        for command in sorted(set(probes(system).values())):  # one run per distinct probe
+            code, output = run(command)
+            if code is None:
+                lines.append({"reachable": False, "why": output})
+            elif code != 0:
+                lines.append({"reachable": False, "why": f"the probe ended with exit code {code}"})
+            elif needs.get("expect") and not re.search(needs["expect"], output):
+                lines.append({"reachable": False, "why": "the probe answered, but not as `expect` says"})
+            else:
+                lines.append({"reachable": True, "why": ""})
+        bad = [line for line in lines if not line["reachable"]]
+        found[name] = {"reachable": not bad, "why": bad[0]["why"] if bad else "", "launch": needs.get("launch") or ""}
     return found

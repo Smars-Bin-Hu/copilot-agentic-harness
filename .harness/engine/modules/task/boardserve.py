@@ -55,7 +55,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
-from core import ahp, company, config, targets, messages, registry, state, tasks, user, outbox
+from core import ahp, company, config, messages, outbox, reach, registry, state, targets, tasks, user
 from core.paths import board_serve_file, board_serve_port, utc_now
 
 from core import company, reinstall, setup as core_setup, shortcmd, skillboard
@@ -1264,6 +1264,12 @@ def handler_for(board: Board) -> type:
                 if asked != "queued":
                     return self.answer(409, {"error": say("serve.open.off") if asked == "off" else say("serve.open.no-cli")})
                 return self.answer(200, {"result": {"queued": True}})
+            if path == "/api/launch":  # Windows: start the company's launch script (it asks for the identity itself, then starts VS Code); the paired browser only (1.7.9)
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                if not reach.run_launch(board.root):
+                    return self.answer(409, {"error": say("serve.launch.none")})
+                return self.answer(200, {"result": {"started": True}})
             if path == "/api/create":  # a chat in VS Code and a task the agent opens: the paired browser, nothing else
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})

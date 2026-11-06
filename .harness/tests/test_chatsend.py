@@ -488,8 +488,8 @@ class SettingsTests(SendCase):
         with self.vs.lock:
             for item in self.vs.sessions.values():
                 item["status"] = ahp.IN_PROGRESS
-        self.assertEqual(self.post("/api/act", {"action": "review set", "n": 1, "step": "act"})[0], 409)  # the same wait as the other decisions
-        self.assertEqual(taskreview.state_of(self.data())["n"], 2)
+        self.assertEqual(self.post("/api/act", {"action": "review set", "n": 1, "step": "act"})[0], 200)  # a setting the agent reads at its next step: it does not wait (1.7.9)
+        self.assertEqual(taskreview.state_of(self.data())["n"], 1)
 
     def test_the_action_is_refused_when_the_settings_do_not_list_it(self) -> None:
         board = boardserve.Board(self.root, False, self.port, ["pause", "resume"])

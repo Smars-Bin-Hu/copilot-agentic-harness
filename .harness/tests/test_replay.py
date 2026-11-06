@@ -74,7 +74,7 @@ class ReplayTests(HarnessTestCase):
         self.assertEqual([output for _, output, _ in results if output.get("permissionDecision")], [])
 
     def test_every_event_goes_to_the_modules_that_listen(self) -> None:
-        expected = {"UserPromptSubmit": ["task", "gate"], "SessionStart": ["task"], "Stop": ["task"], "SubagentStart": ["task"], "SubagentStop": []}
+        expected = {"UserPromptSubmit": ["task", "gate"], "SessionStart": ["task", "gate"], "Stop": ["task"], "SubagentStart": ["task"], "SubagentStop": []}
         seen = set()
         for data, _, record in self.replay(TOOLS):
             if name_of(data) in expected:

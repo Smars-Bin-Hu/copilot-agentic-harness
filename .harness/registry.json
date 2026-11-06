@@ -196,7 +196,10 @@
       "enabled": true,
       "events": [
         "PreToolUse",
-        "UserPromptSubmit"
+        "UserPromptSubmit",
+        "SessionStart",
+        "PostToolUse",
+        "PostToolUseFailure"
       ],
       "enforcement": [
         "S",

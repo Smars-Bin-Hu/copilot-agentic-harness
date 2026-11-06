@@ -66,8 +66,13 @@
         }
       },
       "needs": {
-        "probe": "sqlcmd -S sql-dev.example.local,1433 -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT SUSER_SNAME()\"",
-        "expect": "^\\s*EXAMPLE\\\\",
+        "probes": {
+          "dev": "sqlcmd -S sql-dev.example.local,1433 -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT SUSER_SNAME()\"",
+          "ist": "sqlcmd -S sql-ist.example.local,1433 -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT SUSER_SNAME()\"",
+          "qat": "sqlcmd -S sql-qat.example.local,1433 -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT SUSER_SNAME()\""
+        },
+        "expect": "^\\s*(EXAMPLE\\\\\\S+)",
+        "denied": "Login failed|Login timeout expired|Cannot open server|TCP Provider|Named Pipes Provider|Cannot generate SSPI context|SSL Provider",
         "launch": "Start VS Code with .harness/launch/start-vscode.cmd (it asks for your EXAMPLE\\<id> and the password once), then open this folder again."
       }
     }

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core import systems as outside
-from core import approval, config, messages, outbox, tasks
+from core import approval, config, messages, outbox, reach, tasks
 from core.paths import cli_command, utc_now
 
 from . import autorun, cmdview, common, evidence, health, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
@@ -140,10 +140,12 @@ def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     try:
         systems = config.policy_or_empty(root, "tools").get("systems") or {}
         reaches = outside.environments(systems) if systems and not outside.validate(systems) else {}
+        seen = {line["env"]: line for line in reach.by_env(reach.view(root, systems))} if reaches else {}  # reached from VS Code (1.7.9), across the systems of each environment
     except Exception:  # noqa: BLE001 - a broken list is doctor's to report; the field is then not drawn
-        reaches = {}
+        reaches, seen = {}, {}
     opened = data.get("allow_env") if isinstance(data.get("allow_env"), dict) and data.get("status") == "open" else {}  # the switch ends with the task (hand test B90-a: a closed task said dev was open)
-    envs = [{"env": env, "systems": reaches.get(env, []), "open": env in opened, "since": str((opened.get(env) or {}).get("at") or "")} for env in tasklife.ALLOW_ENVS] if reaches else []
+    envs = [{"env": env, "systems": reaches.get(env, []), "open": env in opened, "since": str((opened.get(env) or {}).get("at") or ""),
+             "reach": {"state": seen[env]["state"], "parts": seen[env]["parts"]} if env in seen else None} for env in tasklife.ALLOW_ENVS] if reaches else []
     return {"envs": envs, "never": [outside.PROD]}
 
 

@@ -160,16 +160,16 @@ class PageFileTests(unittest.TestCase):
         self.assertIn("const CHAT = (function", served)
         self.assertNotIn("const CHAT = (function", saved)  # a saved copy has nothing that talks to a server
 
-    def test_the_tabs_are_in_five_groups_and_each_of_the_16_is_in_one(self) -> None:
+    def test_the_tabs_are_in_five_groups_and_each_of_the_17_is_in_one(self) -> None:
         desk = source("desk.js")
         block = desk[desk.index("const GROUPS = ["):desk.index("const tabs = ")]
         groups = re.findall(r'\{id: "(\w+)", tabs: \[([^\]]*)\]\}', block)
         self.assertEqual([name for name, _tabs in groups], ["live", "overview", "deliver", "records", "files"])
         listed = [tab for _name, tabs in groups for tab in re.findall(r'"(\w+)"', tabs)]
-        self.assertEqual(len(listed), 16)
-        self.assertEqual(len(set(listed)), 16)
-        self.assertEqual(dict((name, re.findall(r'"(\w+)"', tabs)) for name, tabs in groups)["overview"], ["overview", "req", "intake", "design", "rca", "plan", "todo"])
-        self.assertEqual(dict((name, re.findall(r'"(\w+)"', tabs)) for name, tabs in groups)["deliver"], ["changes", "test", "review"])
+        self.assertEqual(len(listed), 17)
+        self.assertEqual(len(set(listed)), 17)
+        self.assertEqual(dict((name, re.findall(r'"(\w+)"', tabs)) for name, tabs in groups)["overview"], ["overview", "req", "intake", "plan", "todo"])  # what to do and how (1.7.9)
+        self.assertEqual(dict((name, re.findall(r'"(\w+)"', tabs)) for name, tabs in groups)["deliver"], ["changes", "test", "rca", "design", "evidence", "review"])  # what came out: the product of the kind first, then the proof and the check (1.7.9)
         for tab in listed:
             for table in (messages.table("en"), messages.table("zh")):
                 self.assertIn("desk.tab." + tab, table)

@@ -77,8 +77,14 @@ const SERVERS = (function () {
     });
     save.addEventListener("click", () => { save.disabled = true; ask("save", values()).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
     if (forget) forget.addEventListener("click", () => { forget.disabled = true; ask("forget", {alias: row.alias}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
-    const signIn = row.login && !own && typeof TERM !== "undefined" ? h("button", {type: "button", class: "act", title: row.login}, t("servers.tool.login")) : null;  // the kind's own sign-in, in the Terminal window
-    if (signIn) signIn.addEventListener("click", () => TERM.run("harness servers login " + row.alias));
+    const signIn = row.login && typeof TERM !== "undefined" ? h("button", {type: "button", class: "act", title: row.login}, t("servers.tool.login")) : null;  // the kind's own sign-in, in the Terminal window
+    const word = (text) => (/^[\w.:@\/-]+$/.test(text) ? text : '"' + String(text).replace(/"/g, "") + '"');
+    if (signIn) signIn.addEventListener("click", () => {
+      if (!own) { TERM.run("harness servers login " + row.alias); return; }
+      const fields = own.fields();  // not saved yet: the kind and the fields typed so far
+      const name = own.alias() || "new";
+      TERM.run(["harness servers login", word(name), "--kind", word(fields.kind), ...Object.entries(fields).filter(([key, value]) => !["kind", "env"].includes(key) && value).map(([key, value]) => "--set " + word(key + "=" + value))].join(" "));
+    });
     return [h("p", {class: "sub sv-tool"}, t(row.saved ? "servers.tool.saved" : "servers.tool.hint", {account: row.account || ""})), h("div", {class: "sv-acts"}, signIn, test, save, forget, said)];
   }
 

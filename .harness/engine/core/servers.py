@@ -333,12 +333,12 @@ def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[st
     return {**judge(kind, code, output), "seconds": round(time.time() - started, 1)}
 
 
-def login(root: Path, alias: str) -> Tuple[int, str]:
+def login(root: Path, alias: str, own: Optional[Dict[str, Any]] = None) -> Tuple[int, str]:
     """Run the sign-in command of a server whose program keeps its own (`auth.login` of a `tool` identity: `az login`), here, with the tool folders and
     the CA bundle VS Code gets (1.7.13). Its output streams to this terminal; the sign-in itself happens in the program's own browser window."""
     from . import launchenv  # it reads this module's .env
 
-    server = listed(root).get(alias)
+    server = own or listed(root).get(alias)  # `own`: a server of the person's own not saved yet (its sign-in comes before its test)
     kind = kinds(root).get(str((server or {}).get("kind")))
     if not server or not kind:
         return 2, say("servers.unknown", alias=alias)

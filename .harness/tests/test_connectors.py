@@ -247,6 +247,12 @@ class ToolIdentity(ConnectorCase):
         self.assertEqual(held.get("permissionDecision"), "deny", held)
         self.assertNotEqual(self.hook(pre_tool("s-conn", "run_in_terminal", {"command": "tracker --org demo get 12"})).get("permissionDecision"), "deny")
 
+    def test_a_server_of_ones_own_signs_in_before_it_is_saved(self) -> None:
+        launchenv.save_paths(self.root, [str(self.tools)])
+        done = self.cli("servers", "login", "mine", "--kind", "tracker", "--set", "org=demo", "--set", "auth=signin")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(servers.test(self.root, "mine", {}, server={"kind": "tracker", "env": "none", "org": "demo", "own": True})["state"], "ok")
+
     def test_login_is_refused_for_a_server_without_a_sign_in_of_its_own(self) -> None:
         self.assertEqual(servers.login(self.root, "nowhere")[0], 2)
 

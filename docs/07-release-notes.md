@@ -37,7 +37,7 @@ To see which version you have: `harness --version`.
 
 ### Added
 
-- **A program that keeps its own sign-in** (identity `tool` in a kind, such as `az login`): nothing is typed or kept but the name its test answered with. **Sign in** in the Servers window runs the kind's `login` in the board's Terminal window (`harness servers login <alias>`), then **Test** and **Save**. A server may have no environment (`env: none`): a ticket board, a pipeline service.
+- **A program that keeps its own sign-in** (identity `tool` in a kind, such as `az login`): nothing is typed or kept but the name its test answered with. **Sign in** in the Servers window runs the kind's `login` in the board's Terminal window (`harness servers login <alias>`; a server of your own not saved yet signs in first with `--kind` and `--set field=value`), then **Test** and **Save**. A server may have no environment (`env: none`): a ticket board, a pipeline service.
 - **Connectors in Get ready**: once one is installed, a row with a dot each; the hover says what it has and lacks (its programs, the CA bundle, a sign-in), and a button opens where each is set.
 
 ### Changed

@@ -203,11 +203,18 @@ def servers_test(root: Path, alias: str) -> Dict[str, Any]:
     return {**found, "alias": alias, "exit_code": 0 if found["state"] == "ok" else 1}
 
 
-def servers_login(root: Path, alias: str) -> Dict[str, Any]:
-    """`harness servers login <alias>`: the sign-in of a program that keeps its own (1.7.13)."""
+def servers_login(root: Path, alias: str, kind: str = "", given: Optional[List[str]] = None) -> Dict[str, Any]:
+    """`harness servers login <alias>`: the sign-in of a program that keeps its own (1.7.13). `--kind` and `--set field=value`: a server not saved yet."""
     from core import servers
 
-    code, said = servers.login(root, alias)
+    own = None
+    if kind:
+        own = {"kind": kind}
+        for item in given or []:
+            field, _, value = str(item).partition("=")
+            if field.strip():
+                own[field.strip()] = value.strip()
+    code, said = servers.login(root, alias, own)
     if code == 2 and said:
         raise CommandError(said)
     return {"alias": alias, "exit_code": code, "next": say("servers.login.after", alias=alias) if code == 0 else ""}
@@ -262,7 +269,9 @@ def register(subparsers: Any) -> None:
     probe.set_defaults(handler=lambda a: servers_test(repo_root(), a.alias))
     sign = listing_commands.add_parser("login", help="sign in to a server whose program keeps its own sign-in (an `auth` of identity `tool`, such as az login), with the tool folders and CA bundle VS Code gets")
     sign.add_argument("alias")
-    sign.set_defaults(handler=lambda a: servers_login(repo_root(), a.alias))
+    sign.add_argument("--kind", default="", help="a server of your own not saved yet: its kind")
+    sign.add_argument("--set", action="append", default=[], metavar="FIELD=VALUE", help="a server of your own not saved yet: one of its fields (more than once)")
+    sign.set_defaults(handler=lambda a: servers_login(repo_root(), a.alias, a.kind, a.set))
     listing.set_defaults(handler=lambda a: servers_list(repo_root()))
 
     waiting = subparsers.add_parser("wait", help="wait for an outside system to reach a state in one call: run a read of a listed system every N seconds until its output matches a pattern, or a timeout; the last output goes to a file of the task")

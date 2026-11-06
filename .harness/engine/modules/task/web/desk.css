@@ -177,6 +177,7 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 .tk-fact{display:inline-flex;align-items:center;gap:6px;min-width:0}.tk-fact .k{color:var(--soft);font-size:12px}.tk-fact code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:var(--track);padding:1px 6px;border-radius:5px;max-width:22em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tk-cmd-peek{display:flex;align-items:center;gap:8px;min-width:0;margin:0 0 8px}.tk-cmd-peek code{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--soft)}
 .tk-call-go{flex-wrap:wrap;gap:8px}.tk-code-in{display:inline-flex;align-items:center;gap:8px}.tk-code-in input.code{width:11ch;font-family:ui-monospace,Menlo,monospace;letter-spacing:2px;text-transform:uppercase}.tk-code-in input.code::placeholder{text-transform:none;letter-spacing:0;font-family:inherit}
+.tk-call.done{border-color:var(--good-dot)}.tk-call.done .code-chip.still{cursor:default}
 .tk-call .bad{color:var(--bad);font-size:12.5px;flex:1 1 100%}
 .act.big{font-size:13px;padding:5px 14px}
 .dialog.wide{max-width:min(900px,calc(100% - 32px));max-height:min(88vh,820px)}

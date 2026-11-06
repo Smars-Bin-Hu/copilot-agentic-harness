@@ -996,12 +996,14 @@
 
   function waitBand() {
     if (desk.past) return pastNote();
-    if (!needsCard()) return null;
+    const told = approvedCard();
+    if (!needsCard()) return told;
     const items = needItems().filter((item) => item.action !== "approve-action");  // the held calls have cards of their own
     const strong = items.filter((item) => JUMPS[item.action]);
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
-    const cards = (desk.outbox || []).map((item, index) => outboxCard(item, index ? [] : notes));
+    const cards = told ? [told] : [];  // the approved calls first: the one step left is to tell the agent
+    cards.push(...(desk.outbox || []).map((item, index) => outboxCard(item, index || told ? [] : notes)));
     cards.push(...strong.map((item, index) => strongCard(item, index || cards.length ? [] : notes)));
     if (other.length || (!strong.length && !cards.length)) cards.push(otherCard(other, strong.length || cards.length ? [] : notes));  // the held calls stand for themselves
     return cards;
@@ -1012,6 +1014,27 @@
   // and the file it reads, whole, scrolling. The code is typed on the card, as the design says a person reads the command first: Approve wakes once the window was opened.
   // Approve is `harness approve-action` with that code (the board's act, no preview); Dismiss takes the call away without running anything.
   const viewedCalls = new Set();
+  const approvedCalls = new Map();  // code -> {at}: approved on this page and not yet told to the agent; the agent runs an approved call only when it is prompted, so the card offers to tell it
+  const TELL_MINUTES = 10;  // the approval's life (git.approval_minutes by default): past it, telling is no use
+  // After an approval: a green card with the codes and one button that tells the chat to run them (a send to the chat, as an answer), in place of typing it.
+  function approvedCard() {
+    const now = Date.now();
+    for (const [code, found] of approvedCalls) if (now - found.at > TELL_MINUTES * 60000) approvedCalls.delete(code);
+    if (!approvedCalls.size || desk.past) return null;
+    const codes = [...approvedCalls.keys()];
+    const can = served() && canAct();
+    const tell = h("button", {type: "button", class: "act hot big", disabled: can ? null : "disabled"}, t("desk.outbox.tell"));
+    const said = h("div", {class: "bad"});
+    tell.addEventListener("click", () => {
+      tell.disabled = true; tell.textContent = t("board.serve.working");
+      SERVE.post("/api/send", {task: desk.name, kind: "answer", lang: "", note: "", body: t("desk.outbox.tell.body", {codes: codes.join(", ")}), step: "act"})
+        .then(() => { codes.forEach((code) => approvedCalls.delete(code)); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); tell.disabled = false; tell.textContent = t("desk.outbox.tell"); });
+    });
+    return h("section", {class: "tk-need strong tk-call done"},
+      h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good"), codes.map((code) => [" ", h("code", {class: "code-chip still"}, code)])),
+      h("p", {class: "sub"}, t("desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
+      h("div", {class: "tk-need-go tk-call-go"}, tell, said));
+  }
   const SQL_WORDS = /\b(select|from|where|insert|into|update|set|delete|merge|exec|execute|create|alter|drop|truncate|table|values|join|on|group by|order by|having|union|with|begin|commit|rollback|tran|declare|if|else|while|top|as|and|or|not|null|is|in|exists|case|when|then|end|nocount)\b/gi;
   function sqlNodes(text) {
     const out = [];
@@ -1090,7 +1113,7 @@
     const send = () => {
       if (!ready_()) return;
       yes.disabled = true; yes.textContent = t("board.serve.working");
-      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
+      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then(() => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now()}); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
     };
     yes.addEventListener("click", send);
     input.addEventListener("keydown", (event) => { if (isEnter(event) && !yes.disabled) send(); });

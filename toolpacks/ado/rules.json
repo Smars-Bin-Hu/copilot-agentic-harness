@@ -1,0 +1,38 @@
+{
+  "systems": {
+    "ado-any": {
+      "reach": {
+        "cli": [
+          "az"
+        ],
+        "when": "(?:dev|vsrm\\.dev)\\.azure\\.com/|\\.visualstudio\\.com/"
+      },
+      "env": "none",
+      "verbs": [
+        {
+          "pattern": "(?:--method|-m)\\s+['\"]?delete\\b",
+          "verb": "destroy"
+        },
+        {
+          "pattern": "(?:--method|-m)\\s+['\"]?(?:post|put|patch)\\b",
+          "verb": "write"
+        },
+        {
+          "pattern": "\\brest\\b",
+          "verb": "read"
+        }
+      ],
+      "show": {
+        "api": "_apis/([\\w/.-]+)"
+      },
+      "rules": {
+        "none": {
+          "read": "allow",
+          "write": "outbox",
+          "exec": "human",
+          "destroy": "deny"
+        }
+      }
+    }
+  }
+}

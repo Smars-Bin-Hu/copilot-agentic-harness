@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "name": "ado",
+  "version": "0.2.0",
+  "harness": "1.7.17",
+  "description": "Azure DevOps through the Azure CLI's az rest: builds and their logs, classic releases, work items. Reads run; a comment, a state change or a queued run waits for the person.",
+  "needs": {
+    "programs": [
+      "az"
+    ],
+    "trust": [
+      "REQUESTS_CA_BUNDLE"
+    ]
+  },
+  "links": {
+    "ado": {
+      "label": "Work item",
+      "type": "azure-devops",
+      "url": "https://dev.azure.com/{org}/{project}/_workitems/edit/{id}"
+    }
+  }
+}

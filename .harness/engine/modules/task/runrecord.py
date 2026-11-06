@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 from core import messages, tasks
 from core.paths import cli_command, local_stamp, utc_now
 
-from . import evidence as evidence_ids, task as task_ops
+from . import evidence as evidence_ids, steps as step_parts, task as task_ops
 from .common import CommandError
 from .taskinbox import ENV_NAME
 from .testrecord import AGENT, cell, fenced, last_run, leave_lines, leave_word, read_given, read_text_file, save_evidence
@@ -30,7 +30,7 @@ def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
 
 
-def record(root: Path, raw_task: str, env: str, given_file: str = "", run_by: str = "", ran_file: str = "", evidence: Optional[List[str]] = None, follow_up: str = "") -> Dict[str, Any]:
+def record(root: Path, raw_task: str, env: str, given_file: str = "", run_by: str = "", ran_file: str = "", evidence: Optional[List[str]] = None, follow_up: str = "", steps_file: str = "") -> Dict[str, Any]:
     task = task_ops.resolve(root, raw_task)
     data = tasks.read(root, task)
     task_ops.require_open(data)
@@ -39,9 +39,10 @@ def record(root: Path, raw_task: str, env: str, given_file: str = "", run_by: st
         raise CommandError(say("task.run.env"))
     env = env.upper()
     given = read_given(root, given_file) if given_file else ""
-    if not given and not evidence:
+    steps = step_parts.parse(read_text_file(steps_file)) if steps_file else []
+    if not given and not evidence and not steps:
         raise CommandError(say("task.run.empty"))
-    ran = read_text_file(ran_file) if ran_file else ""
+    ran = step_parts.commands(steps) if steps else read_text_file(ran_file) if ran_file else ""
     folder = tasks.task_dir(root, task)
     base = f"RUNS/{env}"
     existing = {path.name.upper(): path for path in (folder / "RUNS").iterdir() if path.is_dir()} if (folder / "RUNS").is_dir() else {}
@@ -58,7 +59,8 @@ def record(root: Path, raw_task: str, env: str, given_file: str = "", run_by: st
     section = [
         "", f"## Run {number} ({evidence_id})", "", evidence_ids.marker(evidence_id, AGENT if by_agent else "person", utc_now(), env, leave_word(root, task, ran, by_agent)), "",
         f"Run by: {who}. Recorded {local_stamp()}.", *leave_lines(root, task, ran, by_agent), "",
-        *(["### What was run", "", *fenced(ran), ""] if ran else []),
+        *(step_parts.lines(steps) + [""] if steps else []),  # one step per command: its title, what it shows, the command, the output (1.7.9)
+        *(["### What was run", "", *fenced(ran), ""] if ran and not steps else []),
         *([("### As the agent saved them" if by_agent else "### As the user gave them"), "", *fenced(given), ""] if given else []),
         *(["### Screenshots", "", *[line for item in pictures for line in (f"![{cell(item['caption']).replace(']', ')')}]({item['relative']})", "", f"{cell(item['caption'])} (file `{item['name']}`, sha256 {item['sha'][:12]})", "")]] if pictures else []),
     ]

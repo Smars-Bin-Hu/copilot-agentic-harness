@@ -153,9 +153,10 @@
     const fact = (label, value) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), typeof value === "string" ? h("code", null, value) : value);
     const view = SERVE.dialog([h("h2", null, item.id + " · " + item.env + " · " + (item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run}))),
       h("div", {class: "tk-call-facts"}, fact(t("desk.evidence.by"), item.by === "agent" ? tag(t("desk.evidence.by.agent"), "good") : tag(t("desk.evidence.by.person"), "")), item.by === "agent" ? fact(t("desk.evidence.leave"), h("span", null, leaveTags(item))) : null, fact(t("desk.evidence.at"), (item.at || "").slice(0, 16).replace("T", " ")), fact(t("desk.evidence.file"), item.file), fact(t("desk.evidence.cited"), h("span", null, cited))),
-      h("div", {class: "win-body"},
-        item.layout ? h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)) : h("p", {class: "sub"}, t("desk.evidence.nocommand")),
-        outputPane(item)),
+      h("div", {class: "win-body"}, item.steps && item.steps.length
+        ? item.steps.map((step, index) => h("section", {class: "ev-step"}, h("h3", null, h("span", {class: "ev-step-n"}, String(index + 1)), " ", step.title), step.note ? h("p", {class: "sub"}, step.note) : null,
+            stepCommand(step.command, step.layout), outputPane({...step, id: item.id + "#" + index})))  // a run recorded as steps (1.7.9): each command with its own output
+        : [item.layout ? h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)) : h("p", {class: "sub"}, t("desk.evidence.nocommand")), outputPane(item)]),
       h("div", {class: "row win-foot"}, open, copy, close)]);
     view.box.classList.add("wide");
     open.addEventListener("click", () => { view.close(); openRun(item); });
@@ -263,6 +264,14 @@
     return h("span", {class: "path", title: t("desk.path.hint", {path: href})}, label);
   }
 
+  // The command of a step (1.7.9): laid out line by line, scrolling sideways, with a button that copies the query in it (the whole command when there is none).
+  function stepCommand(text, layout) {
+    const copy = h("button", {type: "button", class: "act copy-code", "data-label": t("desk.outbox.copy")}, t("desk.outbox.copy"));
+    copy.addEventListener("click", () => copyCommand(copy, callBody({command: text, layout})));
+    return h("div", {class: "step-cmd"}, h("div", {class: "code-bar"}, h("span", {class: "code-lang"}, t("desk.steps.command")), copy), layout && layout.lines.length ? h("div", {class: "cmd-scroll flat"}, commandNodes(layout)) : h("pre", {class: "code"}, text));
+  }
+  let docOutputs = 0;  // the output blocks of the documents drawn now: each keeps its own pick of a result set
+
   // A code block of any document has a button that copies it whole: a command or a query is pasted into a terminal or a client, not retyped.
   // `kind`: the language from highlight.js (of the file's type or of the word after the three backticks); "" is plain text.
   function codeBlock(text, kind) {
@@ -276,6 +285,8 @@
       if (block.t === "h") return h("h" + Math.min(block.level + 1, 6), {class: "md-h"}, inline(block.spans));
       if (block.t === "p") return h("p", null, inline(block.spans));
       if (block.t === "hr") return h("hr");
+      if (block.t === "code" && block.lang === "command" && block.layout) return stepCommand(block.text, block.layout);  // a step of a run the agent recorded (1.7.9)
+      if (block.t === "code" && block.lang === "output" && block.view) return h("div", {class: "step-out"}, outputPane({id: "doc" + (docOutputs++) + ":" + block.text.length, output: block.text, output_view: block.view, output_cut: false}));
       if (block.t === "code") return codeBlock(block.text, Highlight.language(block.lang));
       if (block.t === "quote") return h("blockquote", null, blocks(block.blocks));
       if (block.t === "table") {
@@ -2254,6 +2265,7 @@
   // scrolls by itself (marked `data-keep`) is put back where it was, and so is the focus on a tab. A text box marked `data-keep` that the person is typing in gets its focus and its caret back too
   // (1.6.107: a picture pasted into the results made the box start again at its top, with no focus).
   function draw(keepScroll) {
+    docOutputs = 0;  // the same block keeps the same id from one drawing to the next
     shell();
     remember(current);
     const y = window.scrollY;

@@ -16,6 +16,7 @@ from core import approval, config, messages, outbox, tasks
 from core.paths import cli_command, utc_now
 
 from . import autorun, cmdview, common, evidence, health, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
+from . import steps as step_parts
 
 FIRST = (tasks.TASK_FILE, tasks.REQ_FILE, tasks.PLAN_NAME, "TEST-GUIDE.md", tasks.TODO_FILE, tasks.LOG_FILE)  # the order of the tabs
 DECISIONS = ("confirm-req", "approve-plan", "approve-promote")  # the person's decisions that move a task on
@@ -57,7 +58,8 @@ def read_doc(path: Path, base: str = "") -> Optional[Dict[str, Any]]:
     except OSError:
         return None
     tree = mdtree.parse(data[:MAX_DOC_BYTES].decode("utf-8", errors="replace"))
-    return {"blocks": mdtree.resolve_images(tree["blocks"], base), "cut": tree["cut"] or len(data) > MAX_DOC_BYTES}
+    return {"blocks": step_parts.laid_out(mdtree.resolve_images(tree["blocks"], base)), "cut": tree["cut"] or len(data) > MAX_DOC_BYTES}
+
 
 
 def reviews(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, Any]:

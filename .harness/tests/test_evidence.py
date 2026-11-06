@@ -81,6 +81,68 @@ class LeaveTests(EvidenceCase):
         self.assertNotIn("leave=", (self.job / "RUNS" / "DEV" / "results.md").read_text(encoding="utf-8").split(second["evidence_id"], 1)[1].split("-->", 1)[0])
 
 
+STEPS = """## Pre-state
+
+The day was synced once already.
+
+```command
+sqlcmd -S 127.0.0.1,14330 -U sa -C -d c1test -Q "SELECT COUNT(*) AS n FROM dbo.Orders"
+```
+
+```output
+n
+-----
+4
+
+(1 row affected)
+```
+
+## Run the sync
+
+```command
+sqlcmd -S 127.0.0.1,14330 -U sa -C -d c1test -b -Q "EXEC dbo.usp_sync_orders @day = '2026-11-03'"
+```
+
+```output
+```
+"""
+
+
+class StepsTests(EvidenceCase):
+    """1.7.9: a run the agent did is recorded as steps: each command with its title, what it shows and its own output, laid out on the page."""
+
+    def steps_file(self, text: str = STEPS):
+        path = self.root / "steps.md"
+        path.write_text(text, encoding="utf-8")
+        return str(path)
+
+    def test_a_steps_file_is_kept_as_steps_and_read_back_with_each_output_laid_out(self) -> None:
+        from modules.task import steps as step_parts, taskdesk
+
+        found = runrecord.record(self.root, "job", "DEV", "", run_by="agent", steps_file=self.steps_file())
+        text = (self.job / "RUNS" / "DEV" / "results.md").read_text(encoding="utf-8")
+        self.assertIn("#### Step 1 · Pre-state", text)
+        self.assertIn("#### Step 2 · Run the sync", text)
+        self.assertNotIn("### What was run", text)
+        item = next(run for run in evidence.listing(self.root, f"{BASE}/job") if run["id"] == found["evidence_id"])
+        self.assertEqual([step["title"] for step in item["steps"]], ["Pre-state", "Run the sync"])
+        self.assertEqual(item["steps"][0]["note"], "The day was synced once already.")
+        self.assertEqual(item["steps"][0]["output_view"]["sets"][0]["columns"], ["n"])
+        self.assertEqual(item["steps"][1]["output"], step_parts.say("task.steps.no_output"))
+        self.assertEqual(item["steps"][1]["layout"]["program"], "sqlcmd")
+        self.assertIn("EXEC dbo.usp_sync_orders", item["command"])
+        blocks = taskdesk.read_doc(self.job / "RUNS" / "DEV" / "results.md")["blocks"]
+        self.assertEqual([block["lang"] for block in blocks if block.get("t") == "code"], ["command", "output", "command", "output"])
+        self.assertTrue(all("layout" in block for block in blocks if block.get("lang") == "command"))
+        self.assertTrue(all("view" in block for block in blocks if block.get("lang") == "output"))
+
+    def test_a_steps_file_with_no_step_or_a_step_with_no_command_is_refused(self) -> None:
+        with self.assertRaises(CommandError):
+            runrecord.record(self.root, "job", "DEV", "", run_by="agent", steps_file=self.steps_file("just words\n"))
+        with self.assertRaises(CommandError):
+            runrecord.record(self.root, "job", "DEV", "", run_by="agent", steps_file=self.steps_file("## Look\n\nno command here\n"))
+
+
 class WindowTests(EvidenceCase):
     """1.7.8: the listing carries each run's command (laid out) and output, for the window of a citation; the page turns [E7] into a chip."""
 

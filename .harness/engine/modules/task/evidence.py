@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 
 from core import calls, tasks
 
-from . import cmdview, outview
+from . import cmdview, outview, steps as step_parts
 
 KEY = "evidence_n"
 HEADING = re.compile(r"^## Run (\d+)(?:\s*\((E\d+)\))?\s*$", re.MULTILINE)
@@ -67,6 +67,15 @@ def section_parts(text: str) -> Dict[str, Any]:
                 found["output"], found["output_cut"], found["output_whole"] = whole[:OUTPUT_CHARS], len(whole) > OUTPUT_CHARS, whole  # the tables are read from the whole (hand test B90-c: 500 rows were 129)
             want = ""
         index += 1
+    if step_parts.HEAD in lines:  # a run recorded as steps (1.7.9): its parts are the steps' commands and outputs
+        start = lines.index(step_parts.HEAD) + 1
+        end = next((at for at in range(start, len(lines)) if lines[at].startswith("### ")), len(lines))
+        found["steps"] = step_parts.saved("\n".join(lines[start:end]))
+        if found["steps"] and not found["command"]:
+            found["command"] = "\n".join(step["command"] for step in found["steps"])
+        if found["steps"] and not found["output_whole"]:
+            whole = "\n\n".join(step["output"] for step in found["steps"])
+            found["output"], found["output_cut"], found["output_whole"] = whole[:OUTPUT_CHARS], len(whole) > OUTPUT_CHARS, whole
     return found
 
 
@@ -96,7 +105,9 @@ def listing(root: Path, task: str) -> List[Dict[str, Any]]:
                 "leave": calls.parse(mark.group(5)) if mark and mark.group(5) else [],  # what let the commands through; empty: a person's run, or recorded before the gate noted calls
                 "file": path.relative_to(folder).as_posix(), "cited_in": [],
                 "command": parts["command"], "layout": cmdview.layout(parts["command"], folder) if parts["command"] else None, "output": parts["output"], "output_cut": parts["output_cut"], "run_by": parts["run_by"],
-                "output_view": outview.layout(parts["output_whole"]) if parts["output"] else None,  # the tables, the notes (1.7.9); the page shows Text too
+                "output_view": outview.layout(parts["output_whole"]) if parts["output"] and not parts.get("steps") else None,  # the tables, the notes (1.7.9); the page shows Text too
+                "steps": [{"title": step["title"], "note": step["note"], "command": step["command"], "layout": cmdview.layout(step["command"], folder), "output": step["output"][:OUTPUT_CHARS],
+                           "output_cut": len(step["output"]) > OUTPUT_CHARS, "output_view": outview.layout(step["output"])} for step in parts.get("steps") or []],
             })
     if not found:
         return []

@@ -181,6 +181,8 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 .tk-cmd-peek{display:flex;align-items:center;gap:8px;min-width:0;margin:0 0 8px}.tk-cmd-peek code{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--soft)}
 .tk-call-go{flex-wrap:wrap;gap:8px}.tk-code-in{display:inline-flex;align-items:center;gap:8px}.tk-code-in input.code{width:11ch;font-family:ui-monospace,Menlo,monospace;letter-spacing:2px;text-transform:uppercase}.tk-code-in input.code::placeholder{text-transform:none;letter-spacing:0;font-family:inherit}
 .tk-call.done{border-color:var(--good-dot)}.tk-call.done .code-chip.still{cursor:default}
+.ev-step{border-top:1px solid var(--line);padding-top:10px;margin-top:12px}.ev-step:first-child{border-top:0;margin-top:0;padding-top:0}.ev-step h3{font-size:14px;margin:0 0 4px;display:flex;align-items:center;gap:8px}.ev-step-n{display:inline-flex;width:20px;height:20px;border-radius:50%;align-items:center;justify-content:center;background:var(--track);font-size:11px;color:var(--soft)}
+.step-cmd{margin:6px 0 8px}.step-cmd .code-bar{display:flex;justify-content:space-between;align-items:center}.step-cmd .cmd-scroll{margin:4px 0 0}.step-out{margin:0 0 14px}.step-out>p:first-child{margin:4px 0}
 .tk-call .bad{color:var(--bad);font-size:12.5px;flex:1 1 100%}
 .act.big{font-size:13px;padding:5px 14px}
 .dialog.wide{max-width:min(900px,calc(100% - 32px));max-height:min(88vh,820px)}

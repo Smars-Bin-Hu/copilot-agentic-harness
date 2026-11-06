@@ -340,6 +340,15 @@ class OpenEnvironmentTests(RecordCase):
         (self.root / ".harness" / "policies" / "tools.company.json").unlink()
         self.assertEqual(taskdesk.allow_view(self.root, self.data("job"))["envs"], [])  # no system listed: the field is not drawn
 
+    def test_the_settings_work_while_the_agent_is_at_work_and_the_rest_waits(self) -> None:
+        board = boardserve.Board(self.root, False, 8798, ["task allow", "review set", "pause", "close"])
+        busy = CommandError("busy")
+        with mock.patch.object(boardserve.Board, "idle", side_effect=busy):
+            self.assertEqual(board.act("task allow", "job", "act", env_name="dev", who="on")["on"], True)  # a setting the agent reads at its next step
+            self.assertEqual(board.act("review set", "job", "act", n=1)["n"], 1)
+            with self.assertRaises(CommandError):
+                board.act("close", "job", "act")  # changes the task under the agent's hands: waits
+
     def test_the_board_opens_and_closes_with_one_click(self) -> None:
         board = boardserve.Board(self.root, False, 8798, ["task allow"])
         with mock.patch.object(boardserve.Board, "idle", return_value=False):

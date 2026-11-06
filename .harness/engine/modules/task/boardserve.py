@@ -86,6 +86,7 @@ MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
 REOPEN_EVERY = 3.0  # seconds
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
+SETTINGS = ("review set", "task allow", "test runner")  # settings the agent reads at its next step: they change nothing under its hands, so they work while it is at work (1.7.9)
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
 BUILTIN = ("send", "answer", "steer", "stop", "create", "confirm", "question")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
 DESK_REFRESH = 10  # seconds between two reads of a task page
@@ -566,7 +567,7 @@ class Board:
             return result
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
-        still = self.idle(action, task)
+        still = False if action in SETTINGS else self.idle(action, task)
         if action == "dismiss action":  # the person says no to a held call (1.7.7): the code names it, nothing runs
             try:
                 result = outbox.dismiss_action(self.root, str(code or ""), interactive=True)

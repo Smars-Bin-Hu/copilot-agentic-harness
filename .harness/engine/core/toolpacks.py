@@ -401,7 +401,68 @@ def _same(source: Path, target: Path) -> bool:
     return files(source) == files(target)
 
 
+# --- writing one ---------------------------------------------------------------------------------------------------------------------------------------------
+
+SKELETON_SKILL = """---
+name: {name}-use
+description: 'How the agent uses {name}: what to read, how to draft a write for the person to approve, what never to do. Use when a task needs {name}. Keywords: {name}.'
+type: unit
+specificTo: generic
+---
+
+# {name}: read, and draft a write
+
+## When to Use This Skill
+
+- A task needs {name}: say when.
+
+## Step-by-Step Workflows
+
+1. **Find the connection**: `harness connections` shows each one and the command that reaches it (`call`).
+2. **Read**: the commands that only read. They run.
+3. **Write only when the user asked**: show the command first; the gate holds it until the user approves it.
+
+## Gotchas
+
+- What the agent gets wrong with this tool: write each trap here.
+"""
+
+
+def new(root: Path, name: str, out: str = "") -> Dict[str, Any]:
+    """The skeleton of a tool pack (contracts/toolpack/README.md), to fill in: in the company pack when there is one, else where `out` says."""
+    from . import targets  # it reads the policies
+
+    if not NAME.match(name) or name in skillcheck.RESERVED:
+        raise ToolpackError(say("toolpack.name.bad", name=name))
+    company = targets.company_folder(root)
+    target = Path(out).expanduser() / name if out else (company / COMPANY_PACKS / name if company else Path.cwd() / name)
+    if target.exists():
+        raise ToolpackError(say("toolpack.new.exists", path=str(target)))
+    (target / TYPES).mkdir(parents=True)
+    (target / "skills" / f"{name}-use").mkdir(parents=True)
+    (target / MANIFEST).write_text(json.dumps({"schema_version": 1, "name": name, "version": "0.1.0", "harness": harness_version(root),
+                                               "description": f"What {name} lets the agent do.", "needs": {"programs": [name], "trust": []}}, indent=2) + "\n", encoding="utf-8")
+    (target / TYPES / f"{name}.json").write_text(json.dumps({
+        "type": name, "label": name, "fields": {"host": {"label": "Host"}},
+        "auth": {"signin": {"identity": "tool", "label": "Its own sign-in", "login": f"{name} login"}},
+        "test": f"{name} --host {{host}} whoami", "expect": "^(\\S+)\\s*$", "denied": "not signed in",
+        "cli": [name], "match": "--host\\s+{host}\\b",
+        "verbs": [{"pattern": "\\bdelete\\b", "verb": "destroy"}, {"pattern": "\\b(?:create|update)\\b", "verb": "write"}, {"pattern": "\\b(?:get|list|whoami)\\b", "verb": "read"}],
+        "rules": {"none": {"read": "allow", "write": "outbox", "exec": "human", "destroy": "deny"}}}, indent=2) + "\n", encoding="utf-8")
+    (target / "skills" / f"{name}-use" / "SKILL.md").write_text(SKELETON_SKILL.format(name=name), encoding="utf-8")
+    (target / "README.md").write_text(f"# {name}\n\nWhat it is for, in one line.\n\n1. Install: `harness toolpack add <this folder>` (or put it in the knowledge base, `company/tools/packs/{name}/`).\n"
+                                      "2. Set up: Get ready, Tools, This computer (the program's folder, a CA bundle behind a proxy).\n3. Sign in: Get ready, Tools, Connections.\n"
+                                      "4. Try: ask the agent for a read, then for a write: the write waits for you.\n", encoding="utf-8")
+    return {"made": str(target), "next": say("toolpack.new.done", path=str(target))}
+
+
 # --- checking ----------------------------------------------------------------------------------------------------------------------------------------------------
+
+def check_folder(root: Path, folder: Path) -> Dict[str, Any]:
+    """`harness toolpack check <folder>`: a tool pack that is not installed yet, file by file."""
+    found = problems(root, folder)
+    return {"folder": str(folder), "problems": found, "next": say("toolpack.check.ok" if not found else "toolpack.check.bad", n=len(found)), "exit_code": 1 if found else 0}
+
 
 def check(root: Path, only: str = "") -> Dict[str, Any]:
     """Each tool pack: problems with its files, the programs it needs (found on the PATH VS Code gets), and a CA bundle when it names a trust variable."""

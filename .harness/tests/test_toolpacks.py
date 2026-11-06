@@ -463,3 +463,29 @@ class McpOptional(ToolpackCase):
         event = pre_tool("s-mcp", "create_file", {"filePath": str(self.root.resolve() / ".vscode/mcp.json"), "content": "{}"})
         event["cwd"] = str(self.root.resolve())
         self.assertEqual(self.hook(event)["permissionDecision"], "deny")
+
+
+class WriteYourOwn(ToolpackCase):
+    """1.7.17: a team writes its own tool pack from the protocol: the skeleton passes its own check; check names the file and the field; connections export."""
+
+    def test_the_skeleton_checks_clean_and_installs(self) -> None:
+        made = Path(toolpacks.new(self.root, "jira", str(self.outside))["made"])
+        self.assertEqual(toolpacks.check_folder(self.root, made)["problems"], [])
+        self.assertEqual(toolpacks.add(self.root, str(made))["skills"], ["jira-use"])
+        with self.assertRaises(ToolpackError):
+            toolpacks.new(self.root, "jira", str(self.outside))  # there already
+
+    def test_check_names_the_file_and_the_field(self) -> None:
+        (self.source / "types" / "tracker.json").write_text(json.dumps(dict(KIND, auth={"x": {"identity": "magic"}})), encoding="utf-8")
+        found = toolpacks.check_folder(self.root, self.source)
+        self.assertEqual(found["exit_code"], 1)
+        self.assertTrue(any(line.startswith("types/tracker.json") and "identity" in line for line in found["problems"]), found["problems"])
+
+    def test_export_gives_ones_own_connections_without_the_identity(self) -> None:
+        toolpacks.add(self.root, str(self.source))
+        connections.save(self.root, "mine", {"account": "me", "password": "secret"}, own={"type": "tracker", "env": "none", "auth": "own", "org": "acme"})
+        found = connections.export(self.root)
+        self.assertEqual(found, {"connections": {"mine": {"type": "tracker", "env": "none", "auth": "own", "org": "acme"}}})
+        written = self.root / "out.json"
+        self.assertEqual(self.cli("connections", "export", "--out", str(written)).returncode, 0)
+        self.assertNotIn("secret", written.read_text(encoding="utf-8"))

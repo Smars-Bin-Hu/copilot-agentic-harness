@@ -13,6 +13,7 @@
       ".harness/engine/doctor.py",
       ".harness/engine/core/",
       ".harness/contracts/kb/",
+      ".harness/contracts/toolpack/",
       ".github/hooks/harness.json",
       ".harness/policies/cli.json",
       ".harness/policies/user.json",

@@ -232,6 +232,16 @@ def _launch_state(root: Path) -> Dict[str, Any]:
     return dict(launchenv.state(root), extra=sorted(launchenv.extra(root)))
 
 
+def _export(root: Path, out: str) -> Dict[str, Any]:
+    from core import connections
+
+    found = connections.export(root)
+    if not out:
+        return found
+    Path(out).expanduser().write_text(json.dumps(found, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"written": str(Path(out).expanduser()), "connections": sorted(found["connections"])}
+
+
 def _mcp(root: Path, allow: bool, block: bool) -> Dict[str, Any]:
     from core import launchenv
 
@@ -282,6 +292,9 @@ def register(subparsers: Any) -> None:
     probe = listing_commands.add_parser("test", help="test the way in to a server with its saved identity")
     probe.add_argument("alias")
     probe.set_defaults(handler=lambda a: servers_test(repo_root(), a.alias))
+    out = listing_commands.add_parser("export", help="your own connections in the form of connections.json (no account, no password), to give the company pack or a colleague")
+    out.add_argument("--out", default="", help="a file to write it to; left out, it is printed")
+    out.set_defaults(handler=lambda a: _export(repo_root(), a.out))
     sign = listing_commands.add_parser("login", help="sign in to a server whose program keeps its own sign-in (an `auth` of identity `tool`, such as az login), with the tool folders and CA bundle VS Code gets")
     sign.add_argument("alias")
     sign.add_argument("--type", default="", help="a connection of your own not saved yet: its type")

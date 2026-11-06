@@ -412,6 +412,14 @@ def share(root: Path, aliases: List[str]) -> Dict[str, Any]:
     return {"shared": added, "file": str(path), "toolpacks": packs_added, "sync_error": synced.get("error", ""), "next": say("connections.share.done")}
 
 
+def export(root: Path, names: Optional[List[str]] = None) -> Dict[str, Any]:
+    """The person's own connections in the form of `connections.json` (contracts/toolpack/connections.md), to put in the company pack or a file. Never an
+    account, a password or a key file."""
+    picked = {alias: {key: value for key, value in entry.items() if key not in ("own", "account", "password", "keyfile", "alias")}
+              for alias, entry in listed(root).items() if entry.get("own") and (not names or alias in names)}
+    return {"connections": picked}
+
+
 def forget(root: Path, alias: str) -> None:
     """Take a server's identity (and, for one of the person's own, the server) out of the `.env`."""
     stem = env_key(alias, "")

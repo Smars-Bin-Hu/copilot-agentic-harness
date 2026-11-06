@@ -10,7 +10,7 @@ from typing import List, Tuple
 
 from support import HarnessTestCase
 
-from core import launchenv, servers
+from core import launchenv, connections
 
 
 def cert(n: int) -> str:
@@ -52,15 +52,15 @@ class ToolFolders(LaunchEnvCase):
 
     def test_a_folder_gone_since_is_left_out_and_an_empty_list_clears(self) -> None:
         launchenv.save_paths(self.root, [str(self.tools)])
-        servers.write_env(self.root, {launchenv.PATH_KEY: os.pathsep.join([str(self.tools), str(self.root / "gone")])})
+        connections.write_env(self.root, {launchenv.PATH_KEY: os.pathsep.join([str(self.tools), str(self.root / "gone")])})
         self.assertEqual(launchenv.extra(self.root, {"PATH": "/usr/bin"})["PATH"].split(os.pathsep), [str(self.tools), "/usr/bin"])
         launchenv.save_paths(self.root, [])
         self.assertEqual(launchenv.extra(self.root, {"PATH": "/usr/bin"}), {})
 
     def test_the_identities_in_the_same_file_stay(self) -> None:
-        servers.write_env(self.root, {"HARNESS_SERVER_DB_ACCOUNT": "me"})
+        connections.write_env(self.root, {"HARNESS_SERVER_DB_ACCOUNT": "me"})
         launchenv.save_paths(self.root, [str(self.tools)])
-        self.assertEqual(servers.read_env(self.root)["HARNESS_SERVER_DB_ACCOUNT"], "me")
+        self.assertEqual(connections.read_env(self.root)["HARNESS_SERVER_DB_ACCOUNT"], "me")
 
 
 class Bundle(LaunchEnvCase):

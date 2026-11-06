@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from core import approval, company, connectors, domainskills, messages, output, pinpython, reinstall, render, skillcheck, user  # noqa: E402
+from core import approval, company, toolpacks, domainskills, messages, output, pinpython, reinstall, render, skillcheck, user  # noqa: E402
 from core.paths import repo_root  # noqa: E402
 from core.registry import harness_version, version_banner  # noqa: E402
 import doctor  # noqa: E402
@@ -92,14 +92,14 @@ def check_after_reinstall(names):
     return found
 
 
-def _connector_add(source: str, replace: bool) -> dict:
-    approval.require_person("connector add", typed=False)
-    return connectors.add(repo_root(), source, replace=replace)
+def _toolpack_add(source: str, replace: bool) -> dict:
+    approval.require_person("toolpack add", typed=False)
+    return toolpacks.add(repo_root(), source, replace=replace)
 
 
-def _connector_remove(name: str) -> dict:
-    approval.require_person("connector remove", typed=False)
-    return connectors.remove(repo_root(), name)
+def _toolpack_remove(name: str) -> dict:
+    approval.require_person("toolpack remove", typed=False)
+    return toolpacks.remove(repo_root(), name)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -136,20 +136,20 @@ def build_parser() -> argparse.ArgumentParser:
     update.add_argument("--from", dest="source", required=True, help="the zip: an absolute path")
     update.add_argument("--apply", action="store_true", help="do it. A person at a terminal only. Files changed here are copied to .harness/runtime/company-backup/ first; then `company sync` runs")
     update.set_defaults(handler=lambda a: company.update(repo_root(), a.source, a.apply))
-    link = commands.add_parser("connector", help="connectors: what lets the agent work with one outside tool (its kinds, systems, skills), as one folder. Installed by a person, or by `company sync` from <knowledge base>/company/connectors/")
-    link_commands = link.add_subparsers(dest="connector_command", required=True)
-    link_add = link_commands.add_parser("add", help="install a connector from a folder or a zip (a person at a terminal only: its rules are the gate's rules)")
-    link_add.add_argument("source", help="the folder that holds connector.json, or a zip of it: an absolute path")
+    link = commands.add_parser("toolpack", help="toolpacks: what lets the agent work with one outside tool (its kinds, systems, skills), as one folder. Installed by a person, or by `company sync` from <knowledge base>/company/toolpacks/")
+    link_commands = link.add_subparsers(dest="toolpack_command", required=True)
+    link_add = link_commands.add_parser("add", help="install a tool pack from a folder or a zip (a person at a terminal only: its rules are the gate's rules)")
+    link_add.add_argument("source", help="the folder that holds toolpack.json, or a zip of it: an absolute path")
     link_add.add_argument("--replace", action="store_true", help="replace the one installed under the same name (a newer version)")
-    link_add.set_defaults(handler=lambda a: _connector_add(a.source, a.replace), person_only=True)
-    link_list = link_commands.add_parser("list", help="the connectors installed here, and whether each has what it needs: its files, its programs, a CA bundle")
-    link_list.set_defaults(handler=lambda _a: connectors.check(repo_root()))
-    link_check = link_commands.add_parser("check", help="check one connector, or all. Exit code 1 when one is not ready")
+    link_add.set_defaults(handler=lambda a: _toolpack_add(a.source, a.replace), person_only=True)
+    link_list = link_commands.add_parser("list", help="the toolpacks installed here, and whether each has what it needs: its files, its programs, a CA bundle")
+    link_list.set_defaults(handler=lambda _a: toolpacks.check(repo_root()))
+    link_check = link_commands.add_parser("check", help="check one tool pack, or all. Exit code 1 when one is not ready")
     link_check.add_argument("name", nargs="?", default="")
-    link_check.set_defaults(handler=lambda a: connectors.check(repo_root(), a.name))
-    link_remove = link_commands.add_parser("remove", help="take a connector away, with the skills it copied; both go to .harness/runtime/connector-backup/ (a person at a terminal only)")
+    link_check.set_defaults(handler=lambda a: toolpacks.check(repo_root(), a.name))
+    link_remove = link_commands.add_parser("remove", help="take a tool pack away, with the skills it copied; both go to .harness/runtime/toolpack-backup/ (a person at a terminal only)")
     link_remove.add_argument("name")
-    link_remove.set_defaults(handler=lambda a: _connector_remove(a.name), person_only=True)
+    link_remove.set_defaults(handler=lambda a: _toolpack_remove(a.name), person_only=True)
     task_commands.register(commands)
     gate_commands.register(commands)
     observe_commands.register(commands)

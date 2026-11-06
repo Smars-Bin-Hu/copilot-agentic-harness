@@ -83,21 +83,21 @@ def company_path(root: Path, name: str) -> Path:
 def load_policy(root: Path, name: str) -> Dict[str, Any]:
     found = read_json(policies_dir(root) / f"{name}.json")
     for suffix in LAYERS:
-        if name == "tools" and suffix == OVERRIDE_SUFFIX:  # the installed connectors' systems: after the company pack's, before the person's own (1.7.12)
+        if name == "tools" and suffix == OVERRIDE_SUFFIX:  # the installed tool packs' systems: after the company pack's, before the person's own (1.7.12)
             try:
-                from . import connectors
+                from . import toolpacks
 
-                found = deep_merge(found, connectors.systems_layer(root))
-            except Exception:  # noqa: BLE001 - a broken connector must not take the other systems away; `connector check` reports it
+                found = deep_merge(found, toolpacks.rules_layer(root))
+            except Exception:  # noqa: BLE001 - a broken tool pack must not take the other systems away; `tool pack check` reports it
                 pass
         path = policies_dir(root) / f"{name}{suffix}"
         if path.exists():
             found = deep_merge(found, read_json(path))
     if name == "tools" and isinstance(found, dict):  # each server of the company pack or the person's own is a system the gate knows (1.7.10)
         try:
-            from . import servers
+            from . import connections
 
-            made = servers.derived(root, found)
+            made = connections.derived(root, found)
             if made:
                 found = dict(found, systems={**made, **(found.get("systems") or {})})
         except Exception:  # noqa: BLE001 - a broken server list must not take the gate's hand-written systems away; doctor reports it

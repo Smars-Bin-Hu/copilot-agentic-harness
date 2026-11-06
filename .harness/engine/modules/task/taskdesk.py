@@ -150,12 +150,12 @@ def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def links_view(root: Path, data: Dict[str, Any]) -> List[Dict[str, str]]:
-    """The outside items the task names (1.7.15), each with its connector's label and address when one knows the type."""
+    """The outside items the task names (1.7.15), each with its tool pack's label and address when one knows the type."""
     try:
-        from core import connectors
+        from core import toolpacks
 
-        return [connectors.link_view(root, str(item.get("ref"))) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]
-    except Exception:  # noqa: BLE001 - a broken connector: the links are not drawn
+        return [toolpacks.link_view(root, str(item.get("ref"))) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]
+    except Exception:  # noqa: BLE001 - a broken tool pack: the links are not drawn
         return []
 
 

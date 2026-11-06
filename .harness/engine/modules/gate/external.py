@@ -1,6 +1,6 @@
 """External actions (M43-2): the protocol for a call that reaches a system outside this repository (a cloud, a database, a ticket system).
 
-The harness ships no system. A company lists its own under `systems`, in the company pack (`tools.company.json`, copied from the knowledge base) or in `tools.override.json`; each entry says how a call to
+The harness ships no system. A company lists its own under `systems`, in a tool pack (`rules.json`, copied from the knowledge base) or in `tools.override.json`; each entry says how a call to
 it is recognised (`reach`), in which environment it runs (`env`), what the call does (`verbs`) and what the gate decides
 (`rules`). Every call becomes one action: `{system, env, verb, target}`. This file only turns a terminal command into actions
 and the policy into a decision; the handler applies the decision.

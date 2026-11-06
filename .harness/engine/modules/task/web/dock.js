@@ -208,34 +208,34 @@ const DOCK = (function () {
     // The servers set up on this computer (1.7.10): the company's, and one's own, which can go in the company pack (the server only, never the identity).
     const serversRow = h("div", {class: "kb-servers", hidden: ""});
     function paintServers() {
-      SERVE.post("/api/servers", {step: "list"}).then((data) => {
-        const rows = (data.result && data.result.servers) || [];
+      SERVE.post("/api/connections", {step: "list"}).then((data) => {
+        const rows = (data.result && data.result.connections) || [];
         serversRow.hidden = !rows.length;
-        serversRow.replaceChildren(h("span", {class: "kb-sv-head", title: t("dock.servers.tip")}, t("dock.servers")), ...rows.map(serverChip));
+        serversRow.replaceChildren(h("span", {class: "kb-sv-head", title: t("dock.connections.tip")}, t("dock.connections")), ...rows.map(serverChip));
       }, () => { serversRow.hidden = true; });
     }
     function serverChip(row) {
       const env = (row.env || "").toUpperCase(), where = Object.values(row.fields || {}).filter(Boolean).join(", ");
-      const tip = [`${row.alias}: ${env} · ${row.kind_label || row.kind}`, where ? t("dock.servers.where", {where}) : "", t(row.own ? "dock.servers.own" : "dock.servers.company"), t(row.saved ? "dock.servers.saved" : "dock.servers.unsaved")].filter(Boolean).join("\n");
+      const tip = [`${row.alias}: ${env} · ${row.type_label || row.type}`, where ? t("dock.connections.where", {where}) : "", t(row.own ? "dock.connections.own" : "dock.connections.company"), t(row.saved ? "dock.connections.saved" : "dock.connections.unsaved")].filter(Boolean).join("\n");
       const chip = h("span", {class: "kb-sv" + (row.own ? " own" : ""), title: tip, tabindex: "0"}, h("i", {class: "kb-sv-dot"}), h("span", null, row.alias), h("em", null, env));
       if (!row.own || !hasCompany) return chip;
-      const up = h("button", {type: "button", class: "kb-sv-up", title: t("dock.servers.share.tip"), "aria-label": t("dock.servers.share.tip")}, "\u21ea");
+      const up = h("button", {type: "button", class: "kb-sv-up", title: t("dock.connections.share.tip"), "aria-label": t("dock.connections.share.tip")}, "\u21ea");
       up.addEventListener("click", () => shareWindow(row));
       chip.append(up);
       return chip;
     }
     function shareWindow(row) {  // what goes in the pack, shown before it is written: the server's fields, no account, no password
-      const lines = [["kind", row.kind_label || row.kind], ["env", (row.env || "").toUpperCase()], ["auth", row.auth_label || row.auth], ...Object.entries(row.fields || {}).filter(([, value]) => value)];
+      const lines = [["type", row.type_label || row.type], ["env", (row.env || "").toUpperCase()], ["auth", row.auth_label || row.auth], ...Object.entries(row.fields || {}).filter(([, value]) => value)];
       const note = h("p", {class: "su-note"});
-      const go = h("button", {type: "button", class: "act hot"}, t("dock.servers.share.go"));
+      const go = h("button", {type: "button", class: "act hot"}, t("dock.connections.share.go"));
       const no = h("button", {type: "button", class: "act"}, t("board.new.close"));
-      const win = SERVE.dialog([h("h2", null, t("dock.servers.share.title", {alias: row.alias})), h("p", {class: "sub"}, t("dock.servers.share.lead")),
+      const win = SERVE.dialog([h("h2", null, t("dock.connections.share.title", {alias: row.alias})), h("p", {class: "sub"}, t("dock.connections.share.lead")),
         h("ul", {class: "kb-sv-lines"}, lines.map(([key, value]) => h("li", null, h("b", null, key + ": "), h("code", null, String(value))))), note, h("div", {class: "row win-foot"}, go, no)]);
       win.box.classList.add("kb-sv-win");
       no.addEventListener("click", win.close);
       go.addEventListener("click", () => {
         go.disabled = true;
-        SERVE.post("/api/servers", {step: "share", aliases: [row.alias]}).then((data) => {
+        SERVE.post("/api/connections", {step: "share", aliases: [row.alias]}).then((data) => {
           win.close();
           packed.hidden = false; packed.classList.remove("bad");
           packed.textContent = data.result.next + (data.result.sync_error ? " " + plainWords(data.result.sync_error) : "");

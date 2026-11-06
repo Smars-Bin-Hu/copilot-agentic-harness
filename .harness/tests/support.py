@@ -212,3 +212,14 @@ def confirm_requirement(root: Path, task: str, text: str = "给 a.sql 加一列�
     code = hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()[:8]
     task_ops.confirm_req(root, task, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
 
+
+
+def put_type(root: Path, kind: Dict[str, Any], pack: str = "testpack") -> Path:
+    """A connection type, brought by a tool pack installed by hand (1.7.17: types come only from tool packs)."""
+    folder = root / ".harness" / "toolpacks" / pack
+    (folder / "types").mkdir(parents=True, exist_ok=True)
+    if not (folder / "toolpack.json").is_file():
+        (folder / "toolpack.json").write_text(json.dumps({"schema_version": 1, "name": pack, "version": "1.0.0", "description": "test"}), encoding="utf-8")
+    path = folder / "types" / (str(kind.get("type") or "x") + ".json")
+    path.write_text(json.dumps(kind), encoding="utf-8")
+    return path

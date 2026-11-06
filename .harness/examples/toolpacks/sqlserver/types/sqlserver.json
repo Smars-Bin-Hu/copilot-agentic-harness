@@ -1,7 +1,7 @@
 {
-  "kind": "sqlserver",
+  "type": "sqlserver",
   "label": "SQL Server",
-  "description": "A sample kind, not a default: the harness knows no kind. sqlcmd reaches the server; the way in is a Windows account (the network identity of the window, as runas /netonly gives it) or a SQL account (sqlcmd reads it from SQLCMDUSER and SQLCMDPASSWORD). The test asks the server who the session is.",
+  "description": "A sample connection type, brought by the sqlserver tool pack; the harness knows no type. sqlcmd reaches the server; the way in is a Windows account (the network identity of the window, as runas /netonly gives it) or a SQL account (sqlcmd reads it from SQLCMDUSER and SQLCMDPASSWORD). The test asks the server who the session is.",
   "cli": [
     "sqlcmd"
   ],

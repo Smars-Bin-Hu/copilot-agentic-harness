@@ -338,7 +338,7 @@ def register_task(subparsers: Any) -> None:
     link_commands = linking.add_subparsers(dest="link_command", required=True)
     for word, on in (("add", True), ("remove", False)):
         one = link_commands.add_parser(word, help=("add" if on else "take away") + " a link: <type>:<id>")
-        one.add_argument("ref", help="<type>:<id>, the type a connector names (ado, jira, ...)")
+        one.add_argument("ref", help="<type>:<id>, the type a tool pack names (ado, jira, ...)")
         one.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
         one.set_defaults(handler=lambda a, on=on: tasklife.link(repo_root(), a.task, a.ref, on))
     allow = commands.add_parser("allow", help="the person opens an environment for one task: the agent's writes and procedures on the listed outside systems of that environment run without a further approval (terminal only; a destroy is still refused, prod cannot be opened)")

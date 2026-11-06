@@ -177,11 +177,10 @@ def by_env(lines: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def launch_script(root: Path, platform: str = sys.platform) -> Optional[Path]:
-    """The company's script that starts VS Code with the identity (`.harness/launch/`, copied by `company sync`): Windows only, the first `.cmd` or `.bat`."""
+    """A tool pack's script that starts VS Code with the identity (`launch/` of an installed tool pack): Windows only, the first `.cmd` or `.bat`."""
     if not platform.startswith("win"):
         return None
-    folder = root / ".harness" / "launch"
-    found = sorted(item for item in folder.glob("*") if item.suffix.lower() in (".cmd", ".bat")) if folder.is_dir() else []
+    found = sorted(item for item in (root / ".harness" / "toolpacks").glob("*/launch/*") if item.suffix.lower() in (".cmd", ".bat"))
     return found[0] if found else None
 
 

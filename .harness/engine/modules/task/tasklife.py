@@ -530,11 +530,11 @@ def set_allow(root: Path, raw_task: str, env: str, on: bool, interactive: Option
 
 def link(root: Path, raw_task: str, ref: str, on: bool) -> Dict[str, Any]:
     """A task names an item of an outside tool (`ado:12345`, 1.7.15): the board shows it, and once the work is done the agent may ask the person whether
-    to update it. The harness keeps only the type and the id; the connector of the type knows its address."""
-    from core import connectors
+    to update it. The harness keeps only the type and the id; the tool pack of the type knows its address."""
+    from core import toolpacks
 
     ref = str(ref or "").strip()
-    if not connectors.LINK.match(ref):
+    if not toolpacks.LINK.match(ref):
         raise CommandError(say("task.link.form", ref=ref or "-"))
     task = task_ops.resolve(root, raw_task)
     with task_ops.locked(root, task) as data:
@@ -547,9 +547,9 @@ def link(root: Path, raw_task: str, ref: str, on: bool) -> Dict[str, Any]:
         data["links"] = held
         if there != on:
             task_ops.note(data, "link", f"{ref}: {'on' if on else 'off'}")
-    known = connectors.link_view(root, ref)
+    known = toolpacks.link_view(root, ref)
     return {"task": task, "links": [item["ref"] for item in held], "changed": there != on,
-            **({"warning": say("task.link.unknown", type=known["type"])} if on and not known["connector"] else {})}
+            **({"warning": say("task.link.unknown", type=known["type"])} if on and not known["toolpack"] else {})}
 
 
 def links_hint(root: Path, data: Dict[str, Any]) -> str:

@@ -8,7 +8,7 @@ does not reach them. So two things are given when the board opens VS Code (`extr
   CA bundle     `.harness/certs/ca-bundle.pem`, made here (`make`): the public roots a Python tool ships with (`certifi`), and the certificates of
                 the chain this computer builds for an outside address, through the proxy when there is one. A proxy that inspects TLS signs
                 with the company's own CA: the system trusts it, a tool with its own list of roots does not. The file is named by the variables
-                in `TRUST_VARS` (and by those a connector asks for, later). `HARNESS_CA_HOST` and `HARNESS_CA_PROXY` keep what it was made with.
+                in `TRUST_VARS` (and by those a tool pack asks for, later). `HARNESS_CA_HOST` and `HARNESS_CA_PROXY` keep what it was made with.
 
 Nothing here is a secret; it sits in `.harness/.env` beside the identities because `reinstall` carries that file, and the gate keeps the agent from it.
 """
@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import messages
-from . import servers as servers_core
+from . import connections as conn_core
 from .paths import utc_now
 
 PATH_KEY = "HARNESS_TOOL_PATH"
@@ -39,7 +39,7 @@ HOST_KEY = "HARNESS_CA_HOST"
 PROXY_KEY = "HARNESS_CA_PROXY"
 MADE_KEY = "HARNESS_CA_MADE"
 BUNDLE = Path(".harness") / "certs" / "ca-bundle.pem"
-TRUST_VARS = ("REQUESTS_CA_BUNDLE",)  # Python tools (az, pip's requests); NODE_EXTRA_CA_CERTS and others when a connector asks for them
+TRUST_VARS = ("REQUESTS_CA_BUNDLE",)  # Python tools (az, pip's requests); NODE_EXTRA_CA_CERTS and others when a tool pack asks for them
 DEFAULT_HOST = "example.com"
 SECONDS = 20
 PEM = re.compile(r"-----BEGIN CERTIFICATE-----\s+([A-Za-z0-9+/=\s]+?)\s+-----END CERTIFICATE-----")
@@ -53,7 +53,7 @@ def say(key: str, /, **values: Any) -> str:
 # --- what is kept ---------------------------------------------------------------------------------------------------------------------------------------------
 
 def settings(root: Path) -> Dict[str, Any]:
-    env = servers_core.read_env(root)
+    env = conn_core.read_env(root)
     return {"paths": [item for item in env.get(PATH_KEY, "").split(os.pathsep) if item], "bundle": env.get(BUNDLE_KEY, ""), "host": env.get(HOST_KEY, ""),
             "proxy": env.get(PROXY_KEY, ""), "made": env.get(MADE_KEY, "")}
 
@@ -94,7 +94,7 @@ def save_paths(root: Path, raw: List[str]) -> Dict[str, Any]:
         if not programs_in(folder):
             raise ValueError(say("launch.path.empty", path=text))
         paths.append(str(folder))
-    servers_core.write_env(root, {PATH_KEY: os.pathsep.join(paths) or None})
+    conn_core.write_env(root, {PATH_KEY: os.pathsep.join(paths) or None})
     return {"paths": paths}
 
 
@@ -102,17 +102,17 @@ def drop_bundle(root: Path) -> Dict[str, Any]:
     target = root / BUNDLE
     if target.is_file():
         target.unlink()
-    servers_core.write_env(root, {BUNDLE_KEY: None, HOST_KEY: None, PROXY_KEY: None, MADE_KEY: None})
+    conn_core.write_env(root, {BUNDLE_KEY: None, HOST_KEY: None, PROXY_KEY: None, MADE_KEY: None})
     return {"dropped": True}
 
 
 # --- what VS Code is started with ---------------------------------------------------------------------------------------------------------------------------
 
 def trusted_by(root: Path) -> List[str]:
-    """The variables that name the bundle: Python's, and those an installed connector asks for for its own program (1.7.12)."""
-    from . import connectors  # it reads this module for its checks
+    """The variables that name the bundle: Python's, and those an installed tool pack asks for for its own program (1.7.12)."""
+    from . import toolpacks  # it reads this module for its checks
 
-    return list(dict.fromkeys(list(TRUST_VARS) + connectors.trust_vars(root)))
+    return list(dict.fromkeys(list(TRUST_VARS) + toolpacks.trust_vars(root)))
 
 
 def extra(root: Path, environ: Optional[Dict[str, str]] = None, trust_vars: Optional[Tuple[str, ...]] = None) -> Dict[str, str]:
@@ -349,7 +349,7 @@ def make(root: Path, host: str = "", proxy: Optional[str] = None, get_chain: Cal
         trial.unlink()
         return out
     os.replace(trial, target)
-    servers_core.write_env(root, {BUNDLE_KEY: BUNDLE.as_posix(), HOST_KEY: host, PROXY_KEY: proxy or None, MADE_KEY: utc_now()})
+    conn_core.write_env(root, {BUNDLE_KEY: BUNDLE.as_posix(), HOST_KEY: host, PROXY_KEY: proxy or None, MADE_KEY: utc_now()})
     return out
 
 

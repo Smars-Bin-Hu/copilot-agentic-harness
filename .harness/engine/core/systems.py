@@ -62,8 +62,8 @@ SYSTEMS_SCHEMA = {
             "target": {"type": "string"},
             "rules": {"type": "object", "additionalProperties": _RULE_SET},
             "show": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
-            "connector": {"type": "string", "minLength": 1},  # 1.7.12: written by the harness for a system an installed connector brings
-            "openable": {"type": "boolean"},  # 1.7.13: may Open to the agent let its writes through? Default: yes, but not for a connector's system  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
+            "toolpack": {"type": "string", "minLength": 1},  # 1.7.12: written by the harness for a system an installed tool pack brings
+            "openable": {"type": "boolean"},  # 1.7.13: may Open to the agent let its writes through? Default: yes, but not for a tool pack's system  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
             "needs": {  # 1.7.9: `probes` names one probe per environment (another server, another account); `denied` is what a call prints when the identity is not let in
                 "type": "object",
                 "properties": {"probe": {"type": "string", "minLength": 1}, "probes": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},

@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "description": "The connections an agent may make (1.7.17): one place it reaches with the person's sign-in. Empty here: the harness ships none. The company lists its own in the knowledge base, company/tools/connections.json, copied to connections.company.json by `harness company sync`: {\"connections\": {name: {\"type\": <a connection type of an installed tool pack>, \"env\": dev|ist|qat|prod|none, \"auth\": <a way in the type names>, <the type's fields: host, port, org, ...>, \"label\": <words for people>, \"rules\": <optional, as in tools.json>}}}. A name is lower case letters, digits and -. The person's identities, and connections of their own, are kept in .harness/.env by Get ready, never here. Each connection becomes a system of tools.json for the gate. The format: .harness/contracts/toolpack/connections.md.",
+  "connections": {}
+}

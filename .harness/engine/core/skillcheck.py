@@ -52,14 +52,14 @@ def prefix_problem(root: Path) -> str:
 def prefixes(root: Path) -> Tuple[str, ...]:
     """The prefixes a skill of ours or of the company has: the three of the harness, and the company's when it is set."""
     company = company_prefix(root)
-    return PREFIXES + ((company + "-",) if company else ()) + tuple(name + "-" for name in connector_names(root))
+    return PREFIXES + ((company + "-",) if company else ()) + tuple(name + "-" for name in toolpack_names(root))
 
 
-def connector_names(root: Path) -> List[str]:
-    """The installed connectors (1.7.12): a skill a connector brings starts with its name."""
-    from . import connectors  # it checks a connector's skills with this module
+def toolpack_names(root: Path) -> List[str]:
+    """The installed tool packs (1.7.12): a skill a tool pack brings starts with its name."""
+    from . import toolpacks  # it checks a tool pack's skills with this module
 
-    return sorted(connectors.installed(root))
+    return sorted(toolpacks.installed(root))
 
 
 def frontmatter(text: str) -> Tuple[Dict[str, str], str]:
@@ -212,5 +212,5 @@ def check_all(root: Path, only: List[str] | None = None) -> List[Dict[str, Any]]
         folders = [item for item in sorted(base.iterdir()) if item.is_dir()] if base.is_dir() else []
         folders += domainskills.folders(root)  # the skills of the domains, in the knowledge base
     company = company_prefix(root)
-    owners = connector_names(root)
+    owners = toolpack_names(root)
     return [check(folder, next((name for name in owners if folder.name.startswith(name + "-")), company)) for folder in folders]

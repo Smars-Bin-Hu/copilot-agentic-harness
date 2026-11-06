@@ -1,5 +1,5 @@
 ---
-name: acme-sql-jobs
+name: sqlserver-jobs
 description: 'How this team starts, watches and checks a SQL Server job in DEV, IST and QAT: the procedures to call, the log table to read, how long to wait, what counts as done. Use when a task needs a job run (a load, a sync, a nightly batch) or its result checked. Keywords: run the job, start the load, job status, job log, wait for the job.'
 type: unit
 specificTo: generic
@@ -7,7 +7,7 @@ specificTo: generic
 
 # SQL Server jobs: start, wait, check
 
-A sample for a company pack (made-up names). Copy it to `<knowledge base>/company/skills/<word>-sql-jobs/`, put the team's real procedure and table names in, keep the shape. The commands are run with `sqlcmd -E`; the identity is on the process (see the pack's README), never in a command.
+A sample skill of the `sqlserver` tool pack (made-up names). In your copy of the pack, put the team's real procedure and table names in and keep the shape. The commands are run with `sqlcmd -E`; the identity is on the process (see the pack's README), never in a command.
 
 ## When to Use This Skill
 
@@ -16,7 +16,7 @@ A sample for a company pack (made-up names). Copy it to `<knowledge base>/compan
 
 ## Step-by-Step Workflows
 
-1. **Name the job and the environment.** The job names are in the knowledge base (`environment.md` of the domain); UNKNOWN is not a name. The server of each environment is in the pack's `systems.json`.
+1. **Name the job and the environment.** The job names are in the knowledge base (`environment.md` of the domain); UNKNOWN is not a name. The connection of each environment, and its command, is in `harness connections` (`call`).
 2. **Start it.** A procedure is an `exec`: the gate holds it for the user (the outbox) unless the user opened the environment for this task (`harness task allow`). Run exactly:
 
    ```
@@ -36,7 +36,7 @@ A sample for a company pack (made-up names). Copy it to `<knowledge base>/compan
 
 ## Gotchas
 
-- **Check the way in first** (`harness tools check`: the system must be reachable). The identity is on the VS Code process: a VS Code that was already running when the person started another one with the identity does not have it, and `sqlcmd` then asks for a password and fails (`liner: function not supported in this terminal`). Stop and tell the person to quit VS Code and start it as the pack's launch script says.
+- **Check the way in first** (`harness tools reach`: the connection must be reachable). The identity is on the VS Code process: a VS Code that was already running when the person started another one with the identity does not have it, and `sqlcmd` then asks for a password and fails (`liner: function not supported in this terminal`). Stop and tell the person to quit VS Code and start it as the pack's launch script says.
 - `usp_job_start` returns at once; the job runs on the server. "Started" is not "done": only `harness wait` on the log table says done.
 - Waiting costs no model calls; asking the agent to "check again in a minute" costs one each time.
 - The query is in the command, in the quotes after `-Q`: a query in a shell variable or a file has no verb the gate can see, and counts as a write.

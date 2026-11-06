@@ -430,11 +430,11 @@ class GateExternalTaskTests(TaskCase):
         self.assertEqual([event["detail"] for event in self.data()["events"] if event["what"] == "allow-env"], ["dev: on", "dev: off"])
 
 
-    def test_open_to_the_agent_leaves_a_connectors_system_closed(self) -> None:
-        """1.7.13: a connector's system (a ticket board, a pipeline) holds each write for the person, even in an environment the person opened; `openable` says otherwise."""
+    def test_open_to_the_agent_leaves_a_tool_packs_system_closed(self) -> None:
+        """1.7.13: a tool pack's system (a ticket board, a pipeline) holds each write for the person, even in an environment the person opened; `openable` says otherwise."""
         from modules.task import tasklife
 
-        board = dict(SYSTEMS["cloud"], reach={"cli": ["boardctl"]}, connector="tracker")
+        board = dict(SYSTEMS["cloud"], reach={"cli": ["boardctl"]}, toolpack="tracker")
         (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": {**SYSTEMS, "board": board, "open-board": dict(board, reach={"cli": ["openctl"]}, openable=True)}}), encoding="utf-8")
         self.new()
         tasklife.set_allow(self.root, NAME, "dev", True, interactive=True)
@@ -455,12 +455,13 @@ class SamplePackTests(unittest.TestCase):
 
         from core import config
 
-        pack = Path(__file__).resolve().parents[1] / "examples" / "system-packs" / "sqlserver-sqlcmd"
+        examples = Path(__file__).resolve().parents[1] / "examples"
         root = Path(tempfile.mkdtemp())
         shutil.copytree(Path(__file__).resolve().parents[1] / "policies", root / ".harness" / "policies")
-        shutil.copytree(pack / "kinds", root / ".harness" / "kinds")
-        shutil.copy(pack / "servers.json", root / ".harness" / "policies" / "servers.company.json")
-        systems = config.load_policy(root, "tools")["systems"]  # each server of the pack is a system (1.7.10)
+        shutil.copytree(examples / "toolpacks" / "sqlserver", root / ".harness" / "toolpacks" / "sqlserver")
+        listed = json.loads((examples / "connections.json").read_text(encoding="utf-8"))["connections"]
+        (root / ".harness" / "policies" / "connections.company.json").write_text(json.dumps({"connections": {name: item for name, item in listed.items() if item["type"] == "sqlserver"}}), encoding="utf-8")
+        systems = config.load_policy(root, "tools")["systems"]  # each connection of the sample is a system (1.7.10)
         self.assertEqual(sorted(systems), ["orders-dev", "orders-ist", "orders-qat"])
         self.assertEqual(external.validate(systems), [])
         verb = lambda query: external.classify(f'sqlcmd -S sql-dev.example.local,1433 -E -Q "{query}"', systems)[0][0].verb  # noqa: E731

@@ -30,7 +30,7 @@ const MACHINE = (function () {
     const caInfo = h("span", {class: "sv-info", tabindex: "0"}, "\u24d8");
     const caSaid = h("span", {class: "sv-said"});
     const open_ = h("p", {class: "sub", hidden: ""}, t("machine.vscode.open"));
-    const close = h("button", {type: "button", class: "act"}, t("servers.close"));
+    const close = h("button", {type: "button", class: "act"}, t("connections.close"));
     const view = SERVE.dialog([h("h2", null, t("machine.title")), h("p", {class: "sub"}, t("machine.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.lead.tip")}, "ⓘ")),
       h("div", {class: "win-body"},
         h("h3", {class: "mc-h"}, t("machine.paths"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.paths.tip")}, "ⓘ")), paths, found, h("div", {class: "sv-acts"}, savePaths, pathsSaid),
@@ -65,20 +65,20 @@ const MACHINE = (function () {
     if (done) { const watch = setInterval(() => { if (!view.box.isConnected) { clearInterval(watch); done(); } }, 400); }
   }
 
-  // Connectors (1.7.13): each with a dot, ready or not; the hover says what it has and lacks; a button for each thing that is missing opens where it is set.
-  function connectorsWindow(done) {
-    const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("servers.loading")));
-    const close = h("button", {type: "button", class: "act"}, t("servers.close"));
+  // Tool packs (1.7.13): each with a dot, ready or not; the hover says what it has and lacks; a button for each thing that is missing opens where it is set.
+  function toolpacksWindow(done) {
+    const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
+    const close = h("button", {type: "button", class: "act"}, t("connections.close"));
     const view = SERVE.dialog([h("h2", null, t("machine.conn.title")), h("p", {class: "sub"}, t("machine.conn.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.conn.lead.tip")}, "\u24d8")),
       h("div", {class: "win-body"}, list), h("div", {class: "row win-foot"}, close)]);
     view.box.classList.add("wide", "sv-win");
-    const paint = () => ask("connectors").then((found) => {
-      list.replaceChildren(...(found.connectors.length ? found.connectors.map((row) => {
+    const paint = () => ask("toolpacks").then((found) => {
+      list.replaceChildren(...(found.toolpacks.length ? found.toolpacks.map((row) => {
         const missing = Object.entries(row.programs).filter(([, ok]) => !ok).map(([name]) => name);
-        const unsigned = row.servers.filter((item) => !item.saved).map((item) => item.alias);
+        const unsigned = row.connections.filter((item) => !item.saved).map((item) => item.alias);
         const tip = [...Object.entries(row.programs).map(([name, ok]) => (ok ? "✓ " : "✗ ") + t("machine.conn.program", {name})),
           row.trust ? (row.bundle ? "✓ " : "· ") + t(row.bundle ? "machine.conn.bundle" : "machine.conn.bundle.none") : null,
-          ...row.servers.map((item) => (item.saved ? "✓ " : "✗ ") + t("machine.conn.server", {alias: item.alias})),
+          ...row.connections.map((item) => (item.saved ? "✓ " : "✗ ") + t("machine.conn.server", {alias: item.alias})),
           ...row.errors.map((line) => "✗ " + line), row.from ? t("machine.conn.from", {from: row.from === "company" ? t("machine.conn.company") : row.from}) : null].filter(Boolean).join("\n");
         const ready = row.ok && !unsigned.length;
         const acts = [];
@@ -86,8 +86,8 @@ const MACHINE = (function () {
         if (row.trust && !row.bundle) acts.push(button(t("machine.ca"), () => { view.close(); open(done); }));
         if (unsigned.length && typeof SERVERS !== "undefined") acts.push(button(t("setup.servers"), () => { view.close(); SERVERS.open(done); }));
         if (row.from !== "company") {  // the company's follow the pack (company sync); one installed here is updated or removed here
-          if (row.newer) acts.push(button(t("machine.conn.update"), () => change("connector-update", row.name)));
-          const drop = button(t("machine.ca.drop"), () => { if (window.confirm(t("machine.conn.remove.ask", {name: row.name}))) change("connector-remove", row.name); });
+          if (row.newer) acts.push(button(t("machine.conn.update"), () => change("toolpack-update", row.name)));
+          const drop = button(t("machine.ca.drop"), () => { if (window.confirm(t("machine.conn.remove.ask", {name: row.name}))) change("toolpack-remove", row.name); });
           drop.classList.add("danger");
           acts.push(drop);
         }
@@ -102,8 +102,8 @@ const MACHINE = (function () {
     if (done) { const watch = setInterval(() => { if (!view.box.isConnected) { clearInterval(watch); done(); } }, 400); }
   }
 
-  function connectorsSummary() {
-    return ask("connectors").then((found) => ({n: found.connectors.length, ready: found.connectors.filter((row) => row.ok && row.servers.every((item) => item.saved)).length}));
+  function toolpacksSummary() {
+    return ask("toolpacks").then((found) => ({n: found.toolpacks.length, ready: found.toolpacks.filter((row) => row.ok && row.connections.every((item) => item.saved)).length}));
   }
 
   // One line for Get ready: how many tool folders, whether there is a bundle.
@@ -111,5 +111,5 @@ const MACHINE = (function () {
     return ask("state").then((found) => ({paths: found.paths.length, certs: found.bundle.path ? found.bundle.n : 0}));
   }
 
-  return {open, summary, connectors: connectorsWindow, connectorsSummary};
+  return {open, summary, toolpacks: toolpacksWindow, toolpacksSummary};
 })();

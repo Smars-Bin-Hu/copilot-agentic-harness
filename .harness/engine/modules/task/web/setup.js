@@ -445,26 +445,26 @@ const SETUP = (function () {
     loadGuide();
     // Servers (1.7.10): a line here, the work in a window of its own (servers.js), so this form stays short.
     const serversWords = h("span", {class: "su-note"});
-    const serversButton = h("button", {type: "button", class: "act"}, t("setup.servers.button"));
+    const serversButton = h("button", {type: "button", class: "act"}, t("setup.connections.button"));
     const serversState = h("div", {class: "su-line"}, serversWords, serversButton);
-    const showServers = () => { if (typeof SERVERS === "undefined") return; SERVERS.summary().then((found) => { serversWords.textContent = found.n ? t("setup.servers.state", found) : t("setup.servers.none"); }, () => { serversWords.textContent = ""; }); };
+    const showServers = () => { if (typeof SERVERS === "undefined") return; SERVERS.summary().then((found) => { serversWords.textContent = found.n ? t("setup.connections.state", found) : t("setup.connections.none"); }, () => { serversWords.textContent = ""; }); };
     serversButton.addEventListener("click", () => SERVERS.open(showServers));
     showServers();
     // This computer (1.7.11): tool folders and the CA bundle VS Code is started with (machine.js).
     const machineWords = h("span", {class: "su-note"});
-    const machineButton = h("button", {type: "button", class: "act"}, t("setup.servers.button"));
+    const machineButton = h("button", {type: "button", class: "act"}, t("setup.connections.button"));
     const machineState = h("div", {class: "su-line"}, machineWords, machineButton);
     const showMachine = () => { if (typeof MACHINE === "undefined") return; MACHINE.summary().then((found) => { machineWords.textContent = found.paths || found.certs ? t("setup.machine.state", found) : t("setup.machine.none"); }, () => { machineWords.textContent = ""; }); };
     machineButton.addEventListener("click", () => MACHINE.open(showMachine));
     showMachine();
-    // Connectors (1.7.13): a line, the detail in a window (machine.js). Shown only when one is installed: a team without any sees nothing new.
+    // Tool packs (1.7.13): a line, the detail in a window (machine.js). Shown only when one is installed: a team without any sees nothing new.
     const connWords = h("span", {class: "su-note"});
-    const connButton = h("button", {type: "button", class: "act"}, t("setup.servers.button"));
+    const connButton = h("button", {type: "button", class: "act"}, t("setup.connections.button"));
     const connState = h("div", {class: "su-line"}, connWords, connButton);
-    const connRow = row([t("setup.connectors")], connState);
+    const connRow = row([t("setup.toolpacks")], connState);
     connRow.hidden = true;
-    const showConn = () => { if (typeof MACHINE === "undefined") return; MACHINE.connectorsSummary().then((found) => { connRow.hidden = !found.n; connWords.textContent = t("setup.connectors.state", found); }, () => { connRow.hidden = true; }); };
-    connButton.addEventListener("click", () => MACHINE.connectors(() => { showConn(); showMachine(); showServers(); }));
+    const showConn = () => { if (typeof MACHINE === "undefined") return; MACHINE.toolpacksSummary().then((found) => { connRow.hidden = !found.n; connWords.textContent = t("setup.toolpacks.state", found); }, () => { connRow.hidden = true; }); };
+    connButton.addEventListener("click", () => MACHINE.toolpacks(() => { showConn(); showMachine(); showServers(); }));
     showConn();
     const more = h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row([t("setup.install"), question("python")], install, h("p", {class: "su-note"}, t("setup.install.example"))), row([t("setup.refused"), question("repos")], h("div", {class: "su-line"}, refusedBox, refusedAdd), refusedNote, refusedList, h("p", {class: "su-note"}, t("setup.refused.hint"))));
     app.classList.add("su-loading");  // an empty form that jumps when its data comes is worse than a moment of nothing

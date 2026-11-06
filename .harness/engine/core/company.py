@@ -4,12 +4,9 @@
   company/standards/        code-standards.md, read where it is (`standards.py`)
   company/skills/           `<prefix>-<name>/`, copied to `.github/skills/`: Copilot finds a skill there only
   company/instructions/     knowledgebase.instructions.md, copied to `.github/instructions/`, for the same reason
-  company/tools/            systems.json (the outside systems, `{"systems": {...}}`), copied to `.harness/policies/tools.company.json`: the gate
-                            reads it between tools.json and the person's tools.override.json; launch/ (how to start VS Code for them: scripts
-                            a person runs), copied to `.harness/launch/` (1.7.1); servers.json (the servers, by kind: `{"servers": {...}}`),
-                            copied to `.harness/policies/servers.company.json`, and kinds/ (what each kind of server needs and how its way in is
-                            tested), copied to `.harness/kinds/` (1.7.10). These paths are fixed: pack, update and sync count on them
-  company/connectors/       `<name>/`: a connector each (core.connectors), installed into `.harness/connectors/` by `sync` (1.7.12)
+  company/tools/            packs/<name>/: a tool pack each (core.toolpacks), installed into `.harness/toolpacks/` by `sync`; connections.json
+                            (`{"connections": {...}}`), copied to `.harness/policies/connections.company.json` (1.7.17). These paths are fixed:
+                            pack, update and sync count on them
   company/manifest.json     what a package holds; made by `pack`, written last by `update`
 
 `sync` makes the copies, and never touches any other file. `pack` makes a zip of what git has in the knowledge base;
@@ -29,7 +26,6 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import approval, gitread, kbstd, messages, skillcheck, standards, targets
-from . import systems as outside
 from .paths import runtime_dir
 from .registry import harness_version
 
@@ -40,14 +36,8 @@ SKILLS_DIR = ".github/skills"
 INSTRUCTIONS_DIR = ".github/instructions"
 INSTRUCTION_FILES = ("knowledgebase.instructions.md",)  # one name only: a copy must never replace a file the harness ships for itself
 TOOLS_DIR = "tools"
-SYSTEMS_FILE = "systems.json"
-SYSTEMS_COPY = ".harness/policies/tools.company.json"
-LAUNCH_DIR = "launch"
-LAUNCH_COPY = ".harness/launch"
-SERVERS_FILE = "servers.json"
-SERVERS_COPY = ".harness/policies/servers.company.json"
-KINDS_DIR = "kinds"
-KINDS_COPY = ".harness/kinds"
+CONNECTIONS_FILE = "connections.json"
+CONNECTIONS_COPY = ".harness/policies/connections.company.json"
 NOT_CONTENT = {".git", ".DS_Store", "Thumbs.db"}
 PLACEHOLDER = {"README.md", ".gitkeep"}  # what an empty knowledge base ships with
 BACKUP_DIR = "company-backup"
@@ -139,14 +129,8 @@ def copies(root: Path, folder: Path) -> Dict[str, Any]:
     for name in INSTRUCTION_FILES:
         if (folder / "instructions" / name).is_file():
             pairs.append((f"{INSTRUCTIONS_DIR}/{name}", folder / "instructions" / name, root / INSTRUCTIONS_DIR / name))
-    if (folder / TOOLS_DIR / SYSTEMS_FILE).is_file():
-        pairs.append((SYSTEMS_COPY, folder / TOOLS_DIR / SYSTEMS_FILE, root / SYSTEMS_COPY))
-    if (folder / TOOLS_DIR / LAUNCH_DIR).is_dir():
-        pairs.append((LAUNCH_COPY, folder / TOOLS_DIR / LAUNCH_DIR, root / LAUNCH_COPY))
-    if (folder / TOOLS_DIR / SERVERS_FILE).is_file():
-        pairs.append((SERVERS_COPY, folder / TOOLS_DIR / SERVERS_FILE, root / SERVERS_COPY))
-    if (folder / TOOLS_DIR / KINDS_DIR).is_dir():
-        pairs.append((KINDS_COPY, folder / TOOLS_DIR / KINDS_DIR, root / KINDS_COPY))
+    if (folder / TOOLS_DIR / CONNECTIONS_FILE).is_file():
+        pairs.append((CONNECTIONS_COPY, folder / TOOLS_DIR / CONNECTIONS_FILE, root / CONNECTIONS_COPY))
     named = {item.name for item in skills}
     here = root / SKILLS_DIR
     only_here = sorted(item.name for item in here.glob(f"{have}-*") if item.is_dir() and item.name not in named) if have else []
@@ -184,12 +168,12 @@ def sync(root: Path, remove: bool = False) -> Dict[str, Any]:
             shutil.move(str(root / SKILLS_DIR / name), str(backup / name))
             done.append(f"{SKILLS_DIR}/{name}")
         plan["only_here"] = []
-    from . import connectors  # it reads the policies this module's copies feed
+    from . import toolpacks  # it reads the policies this module's copies feed
 
-    linked = connectors.from_company(root, folder)
-    done += [f"{connectors.FOLDER.as_posix()}/{name}" for name in linked["installed"]]
-    plan["refused"] += [{"skill": item["connector"], "why": item["why"]} for item in linked["refused"]]
-    return {"found": True, "company": str(folder), "copied": done, **({"connectors_gone": linked["gone"]} if linked["gone"] else {}), "already_same": len(plan["pairs"]) - len(done), "refused": plan["refused"], "only_here": plan["only_here"],
+    linked = toolpacks.from_company(root, folder)
+    done += [f"{toolpacks.FOLDER.as_posix()}/{name}" for name in linked["installed"]]
+    plan["refused"] += [{"skill": item["toolpack"], "why": item["why"]} for item in linked["refused"]]
+    return {"found": True, "company": str(folder), "copied": done, **({"toolpacks_gone": linked["gone"]} if linked["gone"] else {}), "already_same": len(plan["pairs"]) - len(done), "refused": plan["refused"], "only_here": plan["only_here"],
             "next": " ".join([say("company.sync.problems" if plan["refused"] else "company.sync.done"), *([say("company.sync.only_here", names=", ".join(plan["only_here"]))] if plan["only_here"] else [])]), "exit_code": 1 if plan["refused"] else 0}
 
 
@@ -296,18 +280,31 @@ def layout(kb: Path) -> List[Dict[str, Any]]:
 
 
 def tools_part(company: Path) -> List[Dict[str, Any]]:
-    """The outside systems of a company pack (`tools/systems.json`): how many, or what is wrong with the file. No file is no fault: a team may reach no system."""
-    path = company / TOOLS_DIR / SYSTEMS_FILE
-    if not path.is_file():
+    """The tools of a company pack (`tools/packs/`, `tools/connections.json`): how many tool packs and connections, or what is wrong. None is no fault: a team may reach no tool."""
+    from . import toolpacks  # it installs what this module syncs
+
+    base = company / toolpacks.COMPANY_PACKS
+    packs = sorted(item for item in base.iterdir() if item.is_dir()) if base.is_dir() else []
+    path = company / TOOLS_DIR / CONNECTIONS_FILE
+    if not packs and not path.is_file():
         return []
-    try:
-        systems = read_json(path).get("systems")
-        errors = outside.validate(systems)
-    except Exception as error:  # noqa: BLE001 - told here, in one line
-        errors = [str(error)]
+    errors: List[str] = []
+    for folder in packs:
+        try:
+            toolpacks.manifest(folder)
+        except toolpacks.ToolpackError as error:
+            errors.append(str(error))
+    listed: Dict[str, Any] = {}
+    if path.is_file():
+        try:
+            listed = read_json(path).get("connections") or {}
+            if not isinstance(listed, dict):
+                raise ValueError("`connections` is not an object")
+        except Exception as error:  # noqa: BLE001 - told here, in one line
+            errors.append(f"{CONNECTIONS_FILE}: {error}")
     if errors:
         return [{"key": "tools", "ok": False, "count": 0, "text": say("setup.layout.tools.bad", error=errors[0])}]
-    return [{"key": "tools", "ok": True, "count": len(systems or {}), "text": say("setup.layout.tools", n=len(systems or {}))}]
+    return [{"key": "tools", "ok": True, "count": len(packs) + len(listed), "text": say("setup.layout.tools", packs=len(packs), n=len(listed))}]
 
 
 def skills_part(company: Path) -> List[Dict[str, Any]]:

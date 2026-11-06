@@ -37,6 +37,7 @@ def read_events(path: Path) -> List[Dict[str, Any]]:
     """The rounds of one events file, oldest first. A line it cannot read is skipped: the file is not ours."""
     rounds: List[Dict[str, Any]] = []
     spent = 0.0  # the session's credits so far
+    in_turn = False  # the main agent is in a turn: a compaction then is Copilot's own, not a /compact of the person
     with open(path, encoding="utf-8", errors="replace") as handle:
         for line in handle:
             try:
@@ -53,6 +54,16 @@ def read_events(path: Path) -> List[Dict[str, Any]]:
                     if rounds:
                         rounds[-1]["aiu"] = (rounds[-1]["aiu"] or 0.0) + max(0.0, total / copilot_events.NANO - spent)
                     spent = total / copilot_events.NANO
+                continue
+            if not event.get("agentId") and kind in ("user.message", "assistant.turn_start", "assistant.turn_end"):
+                in_turn = kind != "assistant.turn_end"  # from the message to the end of the turn (copilot_events.asked_compact)
+            if not event.get("agentId") and kind == "session.compaction_start" and copilot_events.asked_compact(found, in_turn):
+                at = str(event.get("timestamp") or "")  # a round of its own (1.6.113): Copilot writes no message for /compact, so Live did not show it
+                rounds.append({"at": at, "prompt": copilot_events.COMPACT_TEXT, "texts": [], "tools": [], "cut": False, "end": at, "aiu": None, "compact": {"removed": None}})
+                continue
+            if rounds and kind == "session.compaction_complete" and rounds[-1].get("compact") and not event.get("agentId"):
+                rounds[-1]["end"] = str(event.get("timestamp") or rounds[-1]["end"])
+                rounds[-1]["compact"] = {"removed": copilot_events.whole_number(found.get("messagesRemoved"))}
                 continue
             if rounds and kind.startswith(("assistant.", "tool.")) and not event.get("agentId") and event.get("timestamp"):
                 rounds[-1]["end"] = str(event["timestamp"])
@@ -134,7 +145,7 @@ def head_of(prompt: str) -> str:
 def listing(root: Path, task: str) -> List[Dict[str, Any]]:
     """For the list: one short line each, oldest first. `n` is the place of the round: the page asks for the whole round by it. `seconds` and `aiu` (credits) are None when not known."""
     return [{"n": number, "at": item["at"], "head": head_of(item["prompt"]), "tools": len(item["tools"]), "replies": len(item["texts"]),
-             "seconds": took(item), "aiu": round(item["aiu"], 1) if isinstance(item.get("aiu"), (int, float)) else None}
+             "seconds": took(item), "aiu": round(item["aiu"], 1) if isinstance(item.get("aiu"), (int, float)) else None, "compact": bool(item.get("compact"))}
             for number, item in enumerate(rounds_of(root, task))]
 
 
@@ -147,7 +158,8 @@ def one(root: Path, task: str, number: Any) -> Optional[Dict[str, Any]]:
     tools: Dict[str, int] = {}
     for name in item["tools"]:
         tools[name] = tools.get(name, 0) + 1
-    return {"n": number, "at": item["at"], "prompt": item["prompt"], "texts": [mdtree.parse(text)["blocks"] for text in item["texts"]], "tools": tools, "cut": bool(item.get("cut"))}
+    return {"n": number, "at": item["at"], "prompt": item["prompt"], "texts": [mdtree.parse(text)["blocks"] for text in item["texts"]], "tools": tools, "cut": bool(item.get("cut")),
+            "compact": item.get("compact")}  # {removed}: the messages Copilot summed up; None for a message
 
 
 def save(root: Path, task: str) -> int:

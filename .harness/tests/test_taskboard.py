@@ -149,8 +149,29 @@ class EventsFileTests(unittest.TestCase):
         older = [row("session.compaction_start", self.start, 61, systemTokens=11080, currentTokens="many"),
                  row("session.compaction_complete", self.start, 62, success=True, preCompactionTokens=2651, postCompactionTokens=678, messagesRemoved=13)]
         self.write(one_prompt(self.start, 1, 1, 1) + older + compacted(self.start, 70, agent="a1"))
-        (found,) = copilot_events.read(self.path)["prompts"][0]["compactions"]
+        (found,) = copilot_events.read(self.path)["prompts"][1]["compactions"]  # after the turn, with no trigger: a /compact of the person, a prompt of its own (1.6.113)
         self.assertEqual((found["trigger"], found["before"], found["after"], found["limit"]), ("", 2651, 678, None))
+
+    def test_a_compact_the_person_asked_for_is_a_prompt_of_its_own_with_its_time_and_credits(self) -> None:
+        """Copilot writes no message for /compact: it went into the prompt before it, with no time, and its credits into whichever prompt came next (1.6.113)."""
+        manual = [row("session.compaction_start", self.start, 70, currentTokens=52000, tokenLimit=100000),
+                  row("session.compaction_complete", self.start, 82, success=True, preCompactionTokens=52000, postCompactionTokens=9000, messagesRemoved=14),
+                  row("session.usage_checkpoint", self.start, 83, totalNanoAiu=int(1.5e9), totalPremiumRequests=2)]
+        self.write(one_prompt(self.start, 1, 1, 1) + manual + one_prompt(self.start + timedelta(seconds=200), 3, 3, 1))
+        first, compact, last = copilot_events.read(self.path)["prompts"]
+        self.assertEqual((first["compactions"], first["aiu"]), ([], 1.0))
+        self.assertEqual((compact["text"], compact["compact"], round(compact["end"] - compact["at"]), compact["model_s"], compact["aiu"], compact["premium_requests"]),
+                         ("/compact", True, 12, 12.0, 0.5, 1.0))
+        self.assertEqual([item["messages_removed"] for item in compact["compactions"]], [14])
+        self.assertEqual((last["aiu"], last.get("compact")), (1.5, None))
+
+    def test_a_compaction_just_after_a_message_or_inside_a_turn_is_copilots_own(self) -> None:
+        early = [row("user.message", self.start, 0, content="go"),
+                 row("session.compaction_start", self.start, 1, currentTokens=95000), row("session.compaction_complete", self.start, 5, success=True, messagesRemoved=40),
+                 row("assistant.turn_start", self.start, 6), row("assistant.message", self.start, 8, model="m1")]
+        self.write(early + compacted(self.start, 9))
+        (prompt,) = copilot_events.read(self.path)["prompts"]
+        self.assertEqual([item["messages_removed"] for item in prompt["compactions"]], [40, 88])
 
     def test_a_model_call_gives_its_cache_numbers_and_whether_the_cache_before_had_run_out(self) -> None:
         self.write(one_prompt(self.start, 1, 1, 1) + [
@@ -563,6 +584,19 @@ class InsightTests(BoardCase):
         shown = json.dumps(taskinsight.for_agent(info, detail=True), ensure_ascii=False)
         self.assertNotIn(SECRET, shown)
         self.assertIn('"compactions": 1', shown)
+
+    def test_a_compact_of_the_person_is_a_line_of_the_report_but_not_one_of_its_prompts(self) -> None:
+        """1.6.113: a /compact has no hook prompt, so it was merged into the prompt before it; now it is a line of its own, counted apart."""
+        self.new()
+        (first,) = self.prompt_times()
+        manual = [row("session.compaction_start", first, 70, currentTokens=52000), row("session.compaction_complete", first, 82, success=True, messagesRemoved=14),
+                  row("session.usage_checkpoint", first, 83, totalNanoAiu=int(12e9), totalPremiumRequests=2)]
+        self.copilot_record(S1, one_prompt(first, 10, 1, 40000) + manual)
+        info = taskinsight.of_task(self.root, f"{BASE}/job")
+        totals = info["totals"]
+        self.assertEqual((totals["prompts"], totals["compacts"], totals["compactions"], totals["aiu"]), (1, 1, 1, 12.0))
+        self.assertEqual([(item["text"] == "/compact", item["compact"], item["aiu"]) for item in info["prompts"]], [(False, False, 10.0), (True, True, 2.0)])
+        self.assertEqual(round(info["prompts"][1]["active_s"]), 12)
 
     def test_the_cache_is_summed_listed_and_told_when_it_ran_out(self) -> None:
         self.new()

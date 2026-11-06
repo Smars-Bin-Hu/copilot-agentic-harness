@@ -16,14 +16,14 @@ A fact from an environment is worth something only as a saved run with a number.
 - A domain skill or a plan says "generate a script for the user to run in DEV and save the result as evidence": do it yourself instead, when the system is listed.
 - The user asks to check, verify, confirm or look at something in DEV, IST or another environment.
 
-**Who starts it: auto.** Use it as soon as a fact from an environment is needed. No task is needed for a read; recording the run needs the task the fact is for.
+**Who starts it: auto.** Use it as soon as a fact from an environment is needed. Recording the run needs the task the fact is for.
 
-**A quick look** (the user asks in the chat to run a read and see what comes back, and no task needs the fact): open no task, write no `LOG.md`, record nothing. Run the command for each server, at once, and answer with what each returned. When the chat start names servers reached through a prefix, use `harness as <alias> --` for those. That is all.
+**A look, in a Q&A task** (the user asks to run a read and see what comes back, and no other task needs the fact): the task is a `qa` task opened with no questions (skill `harness-my-task`). Run the command for each server, at once. When the chat start names servers reached through a prefix, use `harness as <alias> --` for those. Answer with what each returned, and write under `## Answer` in `TASK.md` each command, whole, with what it printed. Write no steps file and record no `E<n>`: that is only when the user asks to keep it as evidence, or the task becomes other work. Then close the task. That is all.
 
 ## Prerequisites
 
 - The system is listed by the company. Do not check the way in before you run: run the command. Only when it fails to log in or to connect, run `harness tools reach` (it reads what the start of the chat found; it probes nothing and answers at once): not reached means stop and give the user its `launch` sentence (how to start VS Code so that the identity is there). `harness tools check` probes every system again; run it only when the user asks. A VS Code that was already running when the user started another with the identity does not have it: a tool that then asks for a password in the terminal fails (`liner: function not supported in this terminal` from sqlcmd); that is the same stop. Not listed: hand the run over (`harness task handoff run`), as before.
-- The command is the one the system's skill or the guide gives (the exact program, server and options). Do not invent a server name, an account or a password; none is ever in a command.
+- The command is the one the system's skill or the guide gives (the exact program, server and options). For a server set up in Get ready, the start of the chat gives a command that reaches it (`harness servers` shows it too, as `call`): keep its program, server and options, change only what it asks. Do not invent a server name, an account or a password; none is ever in a command.
 
 ## Step-by-Step Workflows
 

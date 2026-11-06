@@ -20,7 +20,7 @@ The **kind** decides "what counts as done"; the **tier** decides "which files th
 
 | Kind | Done when | Default tier |
 | --- | --- | --- |
-| `qa` Q&A | The answer has a source | light |
+| `qa` Q&A | The answer has a source; opened without questions, closed when answered | light |
 | `rca` | There is a chain of evidence: what was seen, logs, root cause, verification | medium |
 | `design` design, plan | There are options and trade-offs | medium |
 | `dev` development | The changes match the approved plan, with a record of self-testing | full |
@@ -120,5 +120,5 @@ When a job is so big that it takes many deliveries and the plan keeps changing, 
 
 ## Common questions
 
-- **"Why does not every session have to open a task?"** It would slow down quick Q&A. For plain Q&A that writes nothing, none is opened.
+- **"Why does not every session have to open a task?"** It would slow down quick Q&A. For a plain question that touches no file and no server, none is opened. A look at a server is a light Q&A task: opened without questions, closed when answered, so what was run stays on the board.
 - **"What about the tasks of an old version?"** A task folder of 1.0 has to be moved to `.workspace/sandbox/tasks/` by hand, then `task open`.

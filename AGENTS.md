@@ -44,7 +44,7 @@ To find a file, read [.harness/INDEX.md](.harness/INDEX.md) (the path index). Do
 - Look at the real files before you act. Do not guess a path, a command, a setting or how to test.
 - Keep the changes the user already made. Do not touch unrelated files.
 - Work is done in tasks: one task, one folder, under `.workspace/sandbox/tasks/<task>/`.
-  When the user asks you to produce or change files, or mentions an existing task, first open or pick up the task with the skill `harness-my-task`. Plain questions need no task, and neither does a one-off look the user asks for in the chat (run a read on a server, show the output): do it and answer.
+  When the user asks you to produce or change files, or mentions an existing task, first open or pick up the task with the skill `harness-my-task`. Plain questions need no task. A look that touches a server or a file (run a read, see what comes back) is a Q&A task: open it without asking, answer, close it.
 - With a task, write only inside the task folder. Files in a target repository cannot be changed directly: they are written only by a promote the user approves,
   and the task's `DEV/` can be written only after the user approves the plan (`PLAN.md`) in the terminal.
   How a task folder is used (`TASK.md`, `REQ.md`, `DEV/`, what not to write): [workspace.instructions.md](.github/instructions/workspace.instructions.md).

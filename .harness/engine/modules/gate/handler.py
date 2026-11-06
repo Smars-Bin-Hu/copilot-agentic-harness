@@ -330,11 +330,17 @@ def check_wrapped(event: HookEvent, ctx: Context, judged: Optional[Dict[str, Any
 
 
 def wrapped_context(ctx: Context) -> Optional[Decision]:
-    """At the start of a chat: the servers this window reaches through `harness as` only. Nothing when there is none."""
+    """At the start of a chat: how to reach each server (a command that works, with the prefix where this window needs it), and which go through
+    `harness as`. Without it the agent does not know which host and port an alias is, and searches. Nothing when there is no server."""
+    try:
+        found = servers.calls(ctx.root)
+    except Exception:  # noqa: BLE001 - a server list that cannot be read must not stop the chat
+        found = []
     wrapped = servers.state(ctx.root).get("wrap") or []
-    if not wrapped:
-        return None
-    return Decision(context=rules.say("servers.wrap.context", aliases=", ".join(wrapped), first=wrapped[0]))
+    parts = [rules.say("servers.calls.context", lines="\n".join(f"- {one['alias']} ({one['env'].upper()}): `{one['call']}`" for one in found))] if found else []
+    if wrapped:
+        parts.append(rules.say("servers.wrap.context", aliases=", ".join(wrapped), first=wrapped[0]))
+    return Decision(context="\n".join(parts)) if parts else None
 
 
 def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:

@@ -21,9 +21,14 @@ To see which version you have: `harness --version`.
 
 ### Changed
 
-- **A quick look is not a task.** When you ask in the chat to run a read on a server and see what it returns, the agent runs it and answers: no task, no requirement to confirm, no log, no evidence (`AGENTS.md`, `harness-my-task`, `generic-evidence-run`). And it no longer checks the way in before each run (`harness tools check` probed every server, 18 seconds here): it runs the command, and only when that fails reads `harness tools reach`, which answers at once from what the start of the chat found.
+- **A look at a server is a Q&A task, opened without questions and closed when answered.** When you ask to run a read and see what it returns, the agent opens a `qa` task at once (no "which task, which kind", no requirement to confirm, no log), runs the command, answers, writes each command and what it returned into `TASK.md`, and closes the task. It records no evidence unless you ask. The board keeps the row; open it again, or turn it into other work with `task upgrade --kind` (`AGENTS.md`, `harness-my-task`, `generic-evidence-run`, the output of `task new`). And it no longer checks the way in before each run (`harness tools check` probed every server, 18 seconds here): it runs the command, and only when that fails reads `harness tools reach`, which answers at once from what the start of the chat found.
+- **The start of a chat says how to reach each server**: one line per server, with a command that reaches it (the test command, no password in it, `harness as <alias> --` before it where the window needs it). Before, the agent knew only the aliases and searched for the host and port. `harness servers` shows it as `call`.
 - **Prod takes only a rule written for prod**: a `*` rule of a system no longer loosens prod.
 - **The sample SQL Server pack is a kind and a server list** (`kinds/sqlserver.json`, `servers.json`), ready to copy to the knowledge base; its hand-written `systems.json` is gone (a team's own `systems.json` still works).
+
+### Fixed
+
+- **The browser's own tooltip no longer shows beside the hover card** on a page that refreshes while the card is up (the reach line of the Enter screen): the card moves the new title aside and shows its words.
 
 ## 1.7.9 (2026-11-05)
 

@@ -186,6 +186,10 @@ def servers_list(root: Path) -> Dict[str, Any]:
         saved = servers.identity_of(env, alias, kind)
         out.append({"alias": alias, "kind": server.get("kind"), "env": server.get("env"), "auth": server.get("auth", ""), "own": bool(server.get("own")),
                     "account": saved.get("account", ""), "saved": bool(saved), "known_kind": bool(kind)})
+    calls = {one["alias"]: one["call"] for one in servers.calls(root)}
+    for one in out:
+        if one["alias"] in calls:
+            one["call"] = calls[one["alias"]]
     return {"servers": out, "state": servers.state(root)}
 
 

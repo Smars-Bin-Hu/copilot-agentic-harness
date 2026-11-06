@@ -194,7 +194,13 @@ class GateTests(ServersCase):
 
         start = payload("SessionStart", SESSION)
         start["cwd"] = str(self.root)
-        self.assertIn("harness as db-dev --", self.hook(start).get("additionalContext", ""))
+        told = self.hook(start).get("additionalContext", "")
+        self.assertIn("harness as db-dev --", told)
+        # each server with a command that reaches it: the agent does not have to search for the host and port of an alias (1.7.10)
+        self.assertIn("- db-ist (IST): `fakedb --host db2:5000", told)
+        self.assertIn("- db-dev (DEV): `harness as db-dev -- fakedb --host db1:5000", told)
+        self.assertEqual({item["alias"]: item.get("call", "")[:22] for item in self.cli_json("servers")["servers"]},
+                         {"db-dev": "harness as db-dev -- f", "db-ist": "fakedb --host db2:5000"})
 
 
 class CarryTests(ServersCase):

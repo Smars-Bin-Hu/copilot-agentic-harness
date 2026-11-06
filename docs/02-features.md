@@ -10,7 +10,7 @@ The **kind** decides what counts as done. The **tier** decides which files the f
 
 | Kind | `--kind` | Done when | Default tier |
 | --- | --- | --- | --- |
-| Q&A (looking things up in the knowledge base included) | `qa` | The answer has a source | light |
+| Q&A: a look at a server or files, the knowledge base included | `qa` | The answer has a source; on a server, each command and what it returned. Opened without questions, closed when answered | light |
 | RCA | `rca` | There is a chain of evidence: what was seen, logs, root cause, verification | medium |
 | Design, development plan | `design` | There are options and trade-offs | medium |
 | Development | `dev` | The changes match the approved plan, with a record of self-testing | full |
@@ -32,7 +32,7 @@ The **kind** decides what counts as done. The **tier** decides which files the f
 - **Tasks and sessions are separate**: a session holds one task at a time. It can switch, and the old task need not be closed first. Closing only changes the state; the folder stays where it is, and `task open` opens it again. When a task grows, `task upgrade` raises the tier and only adds the missing files.
 - **Writing the task folder only**: with a task, the edit tools can write this folder only.
 - **The board**: `task list` lists every task that is not closed, what it waits for from you, and for how long. `--watch` refreshes by itself in the terminal; `task board` makes an HTML page and, run in your own terminal, keeps it up to date until Ctrl+C (`--once`: write it once). When the agent stops, a hook notes "waiting for you", so you need not go through session after session.
-- For plain Q&A that writes nothing, no task is opened.
+- For a plain question that touches no file and no server, no task is opened. A look at a server or at files is a Q&A task: the agent opens it without asking and closes it when it has answered.
 - When a job is so big that it spans many days: use `/generic-goal-driven`; see "Long tasks" below.
 
 ## The gate: stopping dangerous writes and commands

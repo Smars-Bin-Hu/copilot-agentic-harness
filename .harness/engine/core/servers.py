@@ -245,6 +245,21 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
     return {alias: system for alias, system in out.items() if alias not in (tools_policy.get("systems") or {})}
 
 
+def calls(root: Path) -> List[Dict[str, str]]:
+    """How the agent reaches each server: `[{alias, env, call}]`, `call` being the server's test command (no password in it), with `harness as <alias> --`
+    before it when this window reaches the server through the prefix. Only the servers the window was opened with, when it was opened from the board."""
+    known, env, opened = kinds(root), read_env(root), state(root)
+    wrapped, held = set(opened.get("wrap") or []), set(opened.get("direct") or []) | set(opened.get("wrap") or [])
+    out = []
+    for alias, server in listed(root).items():
+        kind = known.get(str(server.get("kind")))
+        if not kind or kind_problems(kind) or server.get("env") not in ENVS or (held and alias not in held):
+            continue
+        call = command(kind, server, identity_of(env, alias, kind))
+        out.append({"alias": alias, "env": server["env"], "call": f"harness as {alias} -- {call}" if alias in wrapped else call})
+    return out
+
+
 # --- a test of the way in ----------------------------------------------------------------------------------------------------------------------------------
 
 def judge(kind: Dict[str, Any], code: Optional[int], output: str) -> Dict[str, str]:

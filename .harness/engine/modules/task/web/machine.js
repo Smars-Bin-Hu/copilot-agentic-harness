@@ -65,10 +65,44 @@ const MACHINE = (function () {
     if (done) { const watch = setInterval(() => { if (!view.box.isConnected) { clearInterval(watch); done(); } }, 400); }
   }
 
+  // Connectors (1.7.13): each with a dot, ready or not; the hover says what it has and lacks; a button for each thing that is missing opens where it is set.
+  function connectorsWindow(done) {
+    const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("servers.loading")));
+    const close = h("button", {type: "button", class: "act"}, t("servers.close"));
+    const view = SERVE.dialog([h("h2", null, t("machine.conn.title")), h("p", {class: "sub"}, t("machine.conn.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.conn.lead.tip")}, "\u24d8")),
+      h("div", {class: "win-body"}, list), h("div", {class: "row win-foot"}, close)]);
+    view.box.classList.add("wide", "sv-win");
+    const paint = () => ask("connectors").then((found) => {
+      list.replaceChildren(...(found.connectors.length ? found.connectors.map((row) => {
+        const missing = Object.entries(row.programs).filter(([, ok]) => !ok).map(([name]) => name);
+        const unsigned = row.servers.filter((item) => !item.saved).map((item) => item.alias);
+        const tip = [...Object.entries(row.programs).map(([name, ok]) => (ok ? "✓ " : "✗ ") + t("machine.conn.program", {name})),
+          row.trust ? (row.bundle ? "✓ " : "· ") + t(row.bundle ? "machine.conn.bundle" : "machine.conn.bundle.none") : null,
+          ...row.servers.map((item) => (item.saved ? "✓ " : "✗ ") + t("machine.conn.server", {alias: item.alias})),
+          ...row.errors.map((line) => "✗ " + line), row.from ? t("machine.conn.from", {from: row.from === "company" ? t("machine.conn.company") : row.from}) : null].filter(Boolean).join("\n");
+        const ready = row.ok && !unsigned.length;
+        const acts = [];
+        if (missing.length) acts.push(button(t("machine.paths"), () => { view.close(); open(done); }));
+        if (row.trust && !row.bundle) acts.push(button(t("machine.ca"), () => { view.close(); open(done); }));
+        if (unsigned.length && typeof SERVERS !== "undefined") acts.push(button(t("setup.servers"), () => { view.close(); SERVERS.open(done); }));
+        return h("div", {class: "sv-line mc-conn", title: tip}, h("span", {class: "mc-dot " + (row.errors.length ? "bad" : ready ? "ok" : "warn")}), h("b", {class: "sv-alias"}, row.name),
+          h("span", {class: "sv-kind"}, row.version), row.from === "company" ? h("span", {class: "sv-own"}, t("machine.conn.company")) : null, h("span", {class: "mc-acts"}, ...acts));
+      }) : [h("p", {class: "sub"}, t("machine.conn.none"))]));
+    }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
+    const button = (text, go) => { const b = h("button", {type: "button", class: "act kb-mini"}, text); b.addEventListener("click", go); return b; };
+    close.addEventListener("click", view.close);
+    paint();
+    if (done) { const watch = setInterval(() => { if (!view.box.isConnected) { clearInterval(watch); done(); } }, 400); }
+  }
+
+  function connectorsSummary() {
+    return ask("connectors").then((found) => ({n: found.connectors.length, ready: found.connectors.filter((row) => row.ok && row.servers.every((item) => item.saved)).length}));
+  }
+
   // One line for Get ready: how many tool folders, whether there is a bundle.
   function summary() {
     return ask("state").then((found) => ({paths: found.paths.length, certs: found.bundle.path ? found.bundle.n : 0}));
   }
 
-  return {open, summary};
+  return {open, summary, connectors: connectorsWindow, connectorsSummary};
 })();

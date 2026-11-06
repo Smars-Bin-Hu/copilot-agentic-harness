@@ -203,6 +203,16 @@ def servers_test(root: Path, alias: str) -> Dict[str, Any]:
     return {**found, "alias": alias, "exit_code": 0 if found["state"] == "ok" else 1}
 
 
+def servers_login(root: Path, alias: str) -> Dict[str, Any]:
+    """`harness servers login <alias>`: the sign-in of a program that keeps its own (1.7.13)."""
+    from core import servers
+
+    code, said = servers.login(root, alias)
+    if code == 2 and said:
+        raise CommandError(said)
+    return {"alias": alias, "exit_code": code, "next": say("servers.login.after", alias=alias) if code == 0 else ""}
+
+
 def _wait(root: Path, args: Any) -> Dict[str, Any]:
     from . import wait  # it imports this module's CommandError
 
@@ -250,6 +260,9 @@ def register(subparsers: Any) -> None:
     probe = listing_commands.add_parser("test", help="test the way in to a server with its saved identity")
     probe.add_argument("alias")
     probe.set_defaults(handler=lambda a: servers_test(repo_root(), a.alias))
+    sign = listing_commands.add_parser("login", help="sign in to a server whose program keeps its own sign-in (an `auth` of identity `tool`, such as az login), with the tool folders and CA bundle VS Code gets")
+    sign.add_argument("alias")
+    sign.set_defaults(handler=lambda a: servers_login(repo_root(), a.alias))
     listing.set_defaults(handler=lambda a: servers_list(repo_root()))
 
     waiting = subparsers.add_parser("wait", help="wait for an outside system to reach a state in one call: run a read of a listed system every N seconds until its output matches a pattern, or a timeout; the last output goes to a file of the task")

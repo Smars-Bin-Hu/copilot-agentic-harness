@@ -9,7 +9,7 @@ const SERVERS = (function () {
   const kept = (key, fallback) => { try { const found = localStorage.getItem("harness.servers." + key); return found ? JSON.parse(found) : fallback; } catch (error) { return fallback; } };
 
   const field = (caption, input) => h("label", {class: "sv-field"}, h("span", {class: "sv-cap"}, caption), input);  // a field keeps its name once it is filled
-  function envChip(env) { return h("span", {class: "sv-env sv-env-" + env}, env.toUpperCase()); }
+  function envChip(env) { return env === "none" ? h("span", {class: "sv-env", title: t("servers.env.none.tip")}, "\u2014") : h("span", {class: "sv-env sv-env-" + env}, env.toUpperCase()); }
   function where(row) { const f = row.fields || {}; return [f.host, f.port].filter(Boolean).join(":") || Object.values(f).filter(Boolean).join(" · "); }
   function result(found) {  // a test's answer: a mark and a short word, the reason on hover
     const word = t("servers.state." + found.state);
@@ -37,6 +37,7 @@ const SERVERS = (function () {
 
   // The identity of a server, tested before it is kept. `own`: the fields of a server of the person's own (kind, env, auth, host, ...), or null.
   function identityForm(row, own, redraw) {
+    if (row.identity === "tool") return toolForm(row, own, redraw);
     const needsKey = row.identity === "keyfile";
     const account = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: row.identity === "netonly" ? "DOMAIN\\id" : t("servers.account"), value: row.account || ""});
     const password = h("input", {class: "su-in su-mono", type: "password", autocomplete: "new-password", placeholder: row.saved ? t("servers.password.kept") : t("servers.password")});
@@ -62,13 +63,32 @@ const SERVERS = (function () {
     return [h("div", {class: "sv-fields"}, field(t("servers.account"), account), field(t("servers.password"), password), keyfile ? field(t("servers.keyfile"), keyfile) : null), h("div", {class: "sv-acts"}, test, save, forget, said)];
   }
 
+  // A server whose program keeps its own sign-in (1.7.13): nothing to type. Test runs the kind's check; Save keeps only the name it answered with.
+  function toolForm(row, own, redraw) {
+    const said = h("span", {class: "sv-said"});
+    const test = h("button", {type: "button", class: "act"}, t("servers.test"));
+    const save = h("button", {type: "button", class: "act hot", disabled: ""}, t("servers.save"));
+    const forget = row.saved ? h("button", {type: "button", class: "act danger"}, t("servers.forget")) : null;
+    const values = () => ({alias: own ? own.alias() : row.alias, account: "", password: "", keyfile: "", own: own ? own.fields() : undefined});
+    test.addEventListener("click", () => {
+      test.disabled = true; save.disabled = true; said.replaceChildren(h("span", {class: "sub"}, t("servers.testing")));
+      ask("test", values()).then((found) => { said.replaceChildren(result(found)); save.disabled = found.state !== "ok"; }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); })
+        .then(() => { test.disabled = false; });
+    });
+    save.addEventListener("click", () => { save.disabled = true; ask("save", values()).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
+    if (forget) forget.addEventListener("click", () => { forget.disabled = true; ask("forget", {alias: row.alias}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
+    const signIn = row.login && !own && typeof TERM !== "undefined" ? h("button", {type: "button", class: "act", title: row.login}, t("servers.tool.login")) : null;  // the kind's own sign-in, in the Terminal window
+    if (signIn) signIn.addEventListener("click", () => TERM.run("harness servers login " + row.alias));
+    return [h("p", {class: "sub sv-tool"}, t(row.saved ? "servers.tool.saved" : "servers.tool.hint", {account: row.account || ""})), h("div", {class: "sv-acts"}, signIn, test, save, forget, said)];
+  }
+
   // A server of the person's own: a kind of this copy, its fields, its environment and way in, a name; then the same identity, test and save.
   function ownForm(kinds, redraw) {
     const names = Object.keys(kinds);
     if (!names.length) return h("p", {class: "sub"}, t("servers.own.nokind"));
     const kind = h("select", {class: "su-in"}, names.map((name) => h("option", {value: name}, kinds[name].label)));
     const alias = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: t("servers.own.alias")});
-    const env = h("select", {class: "su-in", required: ""}, h("option", {value: ""}, t("servers.own.env.pick")), ["dev", "ist", "qat"].map((name) => h("option", {value: name}, name.toUpperCase())));  // no environment chosen for you: a wrong one is easy to miss
+    const env = h("select", {class: "su-in", required: ""}, h("option", {value: ""}, t("servers.own.env.pick")), ["dev", "ist", "qat"].map((name) => h("option", {value: name}, name.toUpperCase())), h("option", {value: "none"}, t("servers.env.none")));  // no environment chosen for you: a wrong one is easy to miss
     const auth = h("select", {class: "su-in"});
     const fields = h("div", {class: "sv-fields"});
     const rest = h("div");
@@ -82,7 +102,7 @@ const SERVERS = (function () {
     };
     const drawIdentity = () => {
       const spec = kinds[kind.value];
-      const row = {alias: "", identity: (spec.auth[auth.value] || {}).identity, saved: false, account: ""};
+      const row = {alias: "", identity: (spec.auth[auth.value] || {}).identity, login: (spec.auth[auth.value] || {}).login || "", saved: false, account: ""};
       rest.replaceChildren(...identityForm(row, {alias: () => alias.value.trim(), fields: () => ({kind: kind.value, env: env.value, auth: auth.value, ...Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value.trim()]))})}, redraw));
     };
     kind.addEventListener("change", draw);

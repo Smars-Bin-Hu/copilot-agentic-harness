@@ -36,11 +36,11 @@ ENV_FILE = Path(".harness") / ".env"
 STATE_FILE = Path(".harness") / "runtime" / "state" / "identities.json"
 PREFIX = "HARNESS_SERVER_"
 ALIAS = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
-IDENTITIES = ("env", "netonly", "keyfile")
+IDENTITIES = ("env", "netonly", "keyfile", "tool")  # tool (1.7.13): the program keeps its own sign-in (`az login`); the harness keeps no account, only who the test answered
 SECRET_FIELDS = ("password",)
 OWN_FIELDS = ("kind", "env", "auth", "label")  # what a server of the person's own has besides the kind's fields
 TEST_SECONDS = 15
-ENVS = ("dev", "ist", "qat", "prod")
+ENVS = ("dev", "ist", "qat", "prod", "none")  # none (1.7.13): a ticket board or a pipeline service, which has no environments
 
 
 def say(key: str, /, **values: Any) -> str:
@@ -61,6 +61,8 @@ def kinds(root: Path) -> Dict[str, Dict[str, Any]]:
             kind = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
             continue
+        if path not in own and isinstance(kind, dict):
+            kind = dict(kind, connector=path.parent.parent.name)  # its servers' systems are the connector's: Open to the agent leaves them closed
         if isinstance(kind, dict) and kind.get("kind") and str(kind["kind"]) not in found:
             found[str(kind["kind"])] = kind
     return found
@@ -244,6 +246,9 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
         for key in ("verbs", "target", "show", "rules"):
             if server.get(key) if key == "rules" else kind.get(key):
                 system[key] = server[key] if key == "rules" and server.get(key) else kind[key]
+        for key in ("connector", "openable"):
+            if kind.get(key) is not None:
+                system[key] = kind[key]
         out[alias] = system
     return {alias: system for alias, system in out.items() if alias not in (tools_policy.get("systems") or {})}
 
@@ -281,10 +286,12 @@ def judge(kind: Dict[str, Any], code: Optional[int], output: str) -> Dict[str, s
     return {"state": "ok", "why": "", "who": ""}
 
 
-def run_with(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, str], line: str, cwd: Path, timeout: float = TEST_SECONDS) -> Tuple[Optional[int], str]:
-    """Run a command line with this identity: in the environment (env, keyfile) or with Windows network credentials (netonly)."""
+def run_with(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, str], line: str, cwd: Path, timeout: float = TEST_SECONDS,
+             launch: Optional[Dict[str, str]] = None) -> Tuple[Optional[int], str]:
+    """Run a command line with this identity: in the environment (env, keyfile) or with Windows network credentials (netonly). `launch`: what VS Code is
+    started with (tool folders, CA bundle, 1.7.11), so a test finds what the agent will."""
     how = delivery(kind, server)
-    extra = variables(kind, server, identity)
+    extra = {**(launch or {}), **variables(kind, server, identity)}
     if how["identity"] == "netonly":
         if not identity.get("account") or not identity.get("password"):
             return None, say("servers.test.no_identity")
@@ -298,12 +305,12 @@ def run_with(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, s
     return done.returncode, (done.stdout + done.stderr)[:4000]
 
 
-def missing_program(line: str) -> bool:
-    """The test's program is not on this computer (not on the PATH)."""
+def missing_program(line: str, path: Optional[str] = None) -> bool:
+    """The test's program is not on this computer (not on the PATH, or on `path`)."""
     import shutil
 
     first = shlex.split(line, posix=os.name != "nt")[0] if line.strip() else ""
-    return bool(first) and shutil.which(first) is None
+    return bool(first) and shutil.which(first, path=path) is None
 
 
 def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -314,18 +321,43 @@ def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[st
     kind = kinds(root).get(str(server.get("kind")))
     if not kind:
         return {"state": "failed", "why": say("servers.no_kind", kind=server.get("kind")), "who": "", "seconds": 0}
+    from . import launchenv  # it reads this module's .env
+
     identity = {key: value for key, value in given.items() if key in ("account", "password", "keyfile") and value}
     line = command(kind, server, identity)
-    if missing_program(line):
+    launch = launchenv.extra(root)
+    if missing_program(line, next((value for key, value in launch.items() if key.upper() == "PATH"), None)):
         return {"state": "missing", "why": say("servers.test.missing", program=shlex.split(line, posix=os.name != "nt")[0]), "who": "", "seconds": 0}
     started = time.time()
-    code, output = run_with(kind, server, identity, line, root)
+    code, output = run_with(kind, server, identity, line, root, launch=launch)
     return {**judge(kind, code, output), "seconds": round(time.time() - started, 1)}
 
 
-def save(root: Path, alias: str, given: Dict[str, str], own: Optional[Dict[str, Any]] = None) -> None:
-    """Keep what passed the test in the `.env`. `own`: a server of the person's own (its kind, env, auth and fields) is kept with it."""
+def login(root: Path, alias: str) -> Tuple[int, str]:
+    """Run the sign-in command of a server whose program keeps its own (`auth.login` of a `tool` identity: `az login`), here, with the tool folders and
+    the CA bundle VS Code gets (1.7.13). Its output streams to this terminal; the sign-in itself happens in the program's own browser window."""
+    from . import launchenv  # it reads this module's .env
+
+    server = listed(root).get(alias)
+    kind = kinds(root).get(str((server or {}).get("kind")))
+    if not server or not kind:
+        return 2, say("servers.unknown", alias=alias)
+    modes = kind.get("auth") or {}
+    auth = modes.get(server.get("auth") or next(iter(modes), "")) or {}
+    if auth.get("identity") != "tool" or not auth.get("login"):
+        return 2, say("servers.login.none", alias=alias)
+    values = {field: _quote(str(server.get(field) if server.get(field) not in (None, "") else spec.get("default", ""))) for field, spec in (kind.get("fields") or {}).items()}
+    return subprocess.run(_fill(str(auth["login"]), values), shell=True, cwd=str(root), env={**os.environ, **launchenv.extra(root)}).returncode, ""  # noqa: S602 - the kind's own sign-in, started by the person
+
+
+def save(root: Path, alias: str, given: Dict[str, str], own: Optional[Dict[str, Any]] = None, who: str = "") -> None:
+    """Keep what passed the test in the `.env`. `own`: a server of the person's own (its kind, env, auth and fields) is kept with it. `who`: the name the test
+    answered; for a `tool` identity it is all that is kept, to show (the program holds the sign-in)."""
     changes: Dict[str, Optional[str]] = {env_key(alias, key): (given.get(key) or None) for key in ("account", "password", "keyfile")}
+    server = own or listed(root).get(alias) or {}
+    kind = kinds(root).get(str(server.get("kind"))) or {}
+    if kind and delivery(kind, server)["identity"] == "tool":
+        changes = {env_key(alias, "account"): (who or say("servers.tool.signed")), env_key(alias, "password"): None, env_key(alias, "keyfile"): None}
     if own:
         changes[env_key(alias, "alias")] = alias
         changes.update({env_key(alias, key): str(value) for key, value in own.items() if key not in ("own",) and value not in (None, "")})

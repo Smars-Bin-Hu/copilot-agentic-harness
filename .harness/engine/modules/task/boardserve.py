@@ -228,11 +228,11 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
         kind = known.get(str(server.get("kind"))) or {}
         auth = (kind.get("auth") or {}).get(server.get("auth") or next(iter(kind.get("auth") or {}), ""), {}) or {}
         saved = servers_core.identity_of(env, alias, kind)
-        rows.append({"alias": alias, "label": server.get("label", ""), "kind": server.get("kind", ""), "kind_label": kind.get("label", server.get("kind", "")), "known": bool(kind),
+        rows.append({"alias": alias, "label": server.get("label", ""), "kind": server.get("kind", ""), "kind_label": kind.get("label", server.get("kind", "")), "known": bool(kind), "login": auth.get("login", ""),
                      "env": server.get("env", ""), "auth": server.get("auth", ""), "auth_label": auth.get("label", ""), "identity": auth.get("identity", ""), "own": bool(server.get("own")),
                      "fields": {field: server.get(field, spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
                      "account": saved.get("account", ""), "saved": bool(saved), "reach": (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")})
-    kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", "")} for mode, spec in (kind.get("auth") or {}).items()}}
+    kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
                  for name, kind in known.items() if not servers_core.kind_problems(kind)}
     return {"servers": rows, "kinds": kinds_out, "state": servers_core.state(root), "vscode_open": bool(vscode_open), "windows": os.name == "nt"}
 
@@ -697,7 +697,7 @@ class Board:
             own = {key: str(value) for key, value in own.items() if key in ("kind", "env", "auth", "label") or key in ((servers_core.kinds(self.root).get(str(own.get("kind"))) or {}).get("fields") or {})}
             if not servers_core.ALIAS.match(alias) or alias in servers_core.company_servers(config.policy_or_empty(self.root, servers_core.SERVERS_POLICY)):
                 raise ValueError(say("servers.alias.bad", alias=alias))
-            if own.get("env") not in ("dev", "ist", "qat"):
+            if own.get("env") not in ("dev", "ist", "qat", "none"):
                 raise ValueError(say("servers.own.env.none"))
         stamp = hashlib.sha256(json.dumps([alias, given, own], sort_keys=True).encode("utf-8")).hexdigest()
         if step == "list":
@@ -705,13 +705,13 @@ class Board:
         if step == "test":
             found = servers_core.test(self.root, alias, given, server=dict(own, own=True) if own else None)
             if found["state"] == "ok":
-                self.tested[alias] = (stamp, time.time())
+                self.tested[alias] = (stamp, time.time(), found.get("who", ""))
             return found
         if step == "save":
             passed = self.tested.get(alias)
             if not passed or passed[0] != stamp or time.time() - passed[1] > 900:
                 raise ValueError(say("servers.save.untested"))
-            servers_core.save(self.root, alias, given, own)
+            servers_core.save(self.root, alias, given, own, who=passed[2] if len(passed) > 2 else "")
             self.tested.pop(alias, None)
             return {"saved": alias}
         if step == "forget":
@@ -742,6 +742,16 @@ class Board:
             return dict(launchenv.state(self.root), made=made, vscode_open=bool(self.link.status().get("ready", False)))
         elif step == "drop":
             launchenv.drop_bundle(self.root)
+        elif step == "connectors":  # Get ready, Connectors (1.7.13): what each has and lacks, with the servers of its kinds and whether each is signed in
+            from core import connectors
+
+            found = connectors.check(self.root)
+            found.pop("exit_code", None)
+            known, env = servers_core.kinds(self.root), servers_core.read_env(self.root)
+            for row in found["connectors"]:
+                row["servers"] = [{"alias": alias, "saved": bool(servers_core.identity_of(env, alias, known.get(str(server.get("kind"))) or {}))}
+                                  for alias, server in servers_core.listed(self.root).items() if (known.get(str(server.get("kind"))) or {}).get("connector") == row["name"]]
+            return found
         elif step != "state":
             raise ValueError(say("serve.refused.request"))
         return dict(launchenv.state(self.root), vscode_open=bool(self.link.status().get("ready", False)))
@@ -1422,7 +1432,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     result = board.machine(data)
-                    if str(data.get("step", "")) != "state":
+                    if str(data.get("step", "")) not in ("state", "connectors"):  # a read leaves no line
                         print(say("serve.did", action="machine " + str(data.get("step")), task="-"), flush=True)
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page

@@ -430,6 +430,18 @@ class GateExternalTaskTests(TaskCase):
         self.assertEqual([event["detail"] for event in self.data()["events"] if event["what"] == "allow-env"], ["dev: on", "dev: off"])
 
 
+    def test_open_to_the_agent_leaves_a_connectors_system_closed(self) -> None:
+        """1.7.13: a connector's system (a ticket board, a pipeline) holds each write for the person, even in an environment the person opened; `openable` says otherwise."""
+        from modules.task import tasklife
+
+        board = dict(SYSTEMS["cloud"], reach={"cli": ["boardctl"]}, connector="tracker")
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": {**SYSTEMS, "board": board, "open-board": dict(board, reach={"cli": ["openctl"]}, openable=True)}}), encoding="utf-8")
+        self.new()
+        tasklife.set_allow(self.root, NAME, "dev", True, interactive=True)
+        self.assertEqual(self.term("cloudctl --sub dev create --name x"), {})
+        self.assertEqual(self.term("boardctl --sub dev create --name x")["permissionDecision"], "deny")
+        self.assertEqual(self.term("openctl --sub dev create --name x"), {})
+
 
 class SamplePackTests(unittest.TestCase):
     """The sample SQL Server pack (1.7.9): a SELECT beside a statement it fears does not make the line a read; plain reads stay reads."""

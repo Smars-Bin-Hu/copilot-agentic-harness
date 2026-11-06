@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.13 (2026-11-06)
+
+### Added
+
+- **A program that keeps its own sign-in** (identity `tool` in a kind, such as `az login`): nothing is typed or kept but the name its test answered with. **Sign in** in the Servers window runs the kind's `login` in the board's Terminal window (`harness servers login <alias>`), then **Test** and **Save**. A server may have no environment (`env: none`): a ticket board, a pipeline service.
+- **Connectors in Get ready**: once one is installed, a row with a dot each; the hover says what it has and lacks (its programs, the CA bundle, a sign-in), and a button opens where each is set.
+
+### Changed
+
+- **Open to the agent leaves a connector's systems closed**: each write to a ticket board or a pipeline waits for you, even in an environment you opened (a connector may say `openable: true`).
+- Get ready's **Test** and the board's Terminal window use the tool folders and CA bundle VS Code gets, so a tool found by the agent is found there too.
+
 ## 1.7.12 (2026-11-06)
 
 ### Added

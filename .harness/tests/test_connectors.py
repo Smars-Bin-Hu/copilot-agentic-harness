@@ -194,3 +194,58 @@ class FromCompany(ConnectorCase):
         found = company.sync(self.root)
         self.assertEqual(found["exit_code"], 1)
         self.assertEqual(connectors.ledger(self.root)["tracker"]["version"], "1.0.0")
+
+
+TRACKER = """#!{python}
+import sys
+args = " ".join(sys.argv[1:])
+if "login" in args:
+    open(sys.argv[0] + ".signed", "w").write("yes"); print("signed in")
+elif "whoami" in args:
+    import os
+    if not os.path.exists(sys.argv[0] + ".signed"):
+        print("Please run login first"); sys.exit(1)
+    print("me@example.org")
+else:
+    print("ok")
+"""
+TOOL_KIND = dict(KIND, auth={"signin": {"identity": "tool", "login": "tracker --org {org} login", "label": "Its own sign-in"}},
+                 test="tracker --org {org} whoami", expect="^(\\S+@\\S+)$", denied="run login first")
+
+
+class ToolIdentity(ConnectorCase):
+    """1.7.13: a program that keeps its own sign-in (`az login`): nothing is kept but the name the test answered with; a board of it has no environments."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.tools = self.root / "tools-bin"
+        self.tools.mkdir()
+        program = self.tools / "tracker"
+        program.write_text(TRACKER.replace("{python}", sys.executable), encoding="utf-8")
+        program.chmod(program.stat().st_mode | stat.S_IEXEC)
+        (self.source / "kinds" / "tracker.json").write_text(json.dumps(TOOL_KIND), encoding="utf-8")
+        (self.source / "systems.json").unlink()
+        connectors.add(self.root, str(self.source))
+        (self.root / ".harness/policies/servers.company.json").write_text(json.dumps({"servers": {"board": {"kind": "tracker", "env": "none", "org": "demo"}}}), encoding="utf-8")
+
+    def test_the_test_finds_the_program_in_a_tool_folder_and_save_keeps_only_who(self) -> None:
+        self.assertEqual(servers.test(self.root, "board", {})["state"], "missing")
+        launchenv.save_paths(self.root, [str(self.tools)])
+        self.assertEqual(servers.test(self.root, "board", {})["state"], "denied", "not signed in yet")
+        self.assertEqual(servers.login(self.root, "board")[0], 0)
+        found = servers.test(self.root, "board", {})
+        self.assertEqual((found["state"], found["who"]), ("ok", "me@example.org"))
+        servers.save(self.root, "board", {"account": "typed", "password": "never"}, who=found["who"])
+        env = servers.read_env(self.root)
+        self.assertEqual(servers.identity_of(env, "board", TOOL_KIND), {"account": "me@example.org"})
+        self.assertEqual(servers.plan(self.root, ["board"])["direct"], ["board"])
+
+    def test_a_board_with_no_environment_is_a_system_of_the_connector_and_its_writes_are_held(self) -> None:
+        system = config.load_policy(self.root, "tools")["systems"]["board"]
+        self.assertEqual((system["env"], system["connector"]), ("none", "tracker"))
+        held = self.hook(pre_tool("s-conn", "run_in_terminal", {"command": "tracker --org demo comment 12 'done'"}))
+        self.assertEqual(held.get("permissionDecision"), "deny", held)
+        self.assertNotEqual(self.hook(pre_tool("s-conn", "run_in_terminal", {"command": "tracker --org demo get 12"})).get("permissionDecision"), "deny")
+
+    def test_login_is_refused_for_a_server_without_a_sign_in_of_its_own(self) -> None:
+        self.assertEqual(servers.login(self.root, "nowhere")[0], 2)

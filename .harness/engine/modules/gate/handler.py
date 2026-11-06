@@ -154,12 +154,20 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
             passes, how = True, "runner"
         elif data and tasks.plan_approved(ctx.root, data["task"], data):
             passes, how = True, "plan"
-    if decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes:
+    if decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes and _openable(systems.get(action.system) or {}):
         data = _open_task(ctx)
         opened = bool(data and _env_opened(data, action.env))  # the person opened this environment for this task (`task allow`, 1.7.4): no further approval
         passes = opened
         how = "opened" if opened else ""
     return {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": opened, "how": how, "code": ""}
+
+
+def _openable(system: Dict[str, Any]) -> bool:
+    """May Open to the agent let this system's held calls through (1.7.13)? A system says so with `openable`; a connector's system (a ticket board, a
+    pipeline) is closed unless it says yes: its writes reach people, so the person approves each one."""
+    if isinstance(system.get("openable"), bool):
+        return system["openable"]
+    return not system.get("connector")
 
 
 def _env_opened(data: Dict[str, Any], env: str) -> bool:

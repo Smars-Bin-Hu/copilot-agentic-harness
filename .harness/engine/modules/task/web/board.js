@@ -547,6 +547,7 @@
   }
   function apply(data) {
     asOf = data.as_of;
+    if (typeof CHAT !== "undefined") CHAT.seen(data.rows);  // the New task notice may be waiting for its task
     archiveTo = data.archive_to || "";
     SHELL.vs(data.vscode);
     if (DATA.serve) { DATA.serve.setup = data.setup; DATA.serve.kb_found = data.kb_found; DATA.serve.space = data.space; paintFound(data.kb_found); paintSetup(data.setup); }

@@ -1315,7 +1315,8 @@ def handler_for(board: Board) -> type:
                     if str(data.get("op", "")) == "list":
                         listed = chatrounds.listing(board.root, row["task"])
                         state_now = task_ops.read(board.root, row["task"])  # each round: may the task go back to before it (1.6.109)
-                        found = rewind.marks(board.root, row["task"], state_now, {str(item["n"]): rewind.seconds(item["at"]) for item in listed}, str(state_now.get("session_id") or ""))
+                        found = rewind.marks(board.root, row["task"], state_now, {str(item["n"]): rewind.seconds(item["at"]) for item in listed if not item.get("compact")}, str(state_now.get("session_id") or ""))
+                        found.update({str(item["n"]): {"seq": None, "why": "compact"} for item in listed if item.get("compact")})  # no restore point is taken for /compact: no hook runs (1.6.113)
                         return self.answer(200, {"result": {"rounds": [dict(item, rewind=found.get(str(item["n"]))) for item in listed]}})
                     found = chatrounds.one(board.root, row["task"], data.get("n"))
                     return self.answer(200, {"result": found}) if found else self.answer(404, {"error": say("serve.refused.request")})

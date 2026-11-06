@@ -318,7 +318,7 @@ class PageFilesTests(unittest.TestCase):
 
     def test_the_plain_keys_do_not_fire_while_typing_but_cmd_k_does(self) -> None:
         reply, shell = source("reply.js"), source("shell.js")
-        self.assertIn("if (typing(event.target) || SERVE.busy()", reply)
+        self.assertIn("if (typing(event.target) || SERVE.open()", reply)
         self.assertIn("event.metaKey || event.ctrlKey || event.altKey || event.shiftKey", reply)
         self.assertIn("event.isComposing", reply)
         key = shell.split("document.addEventListener(\"keydown\"")[1].split("if (open()) {")[0]  # Cmd+K / Ctrl+K carries a modifier, so it opens the palette from anywhere, a box too (1.6.18)
@@ -327,7 +327,7 @@ class PageFilesTests(unittest.TestCase):
 
     def test_the_pill_does_not_cover_the_page_or_the_other_fixed_controls(self) -> None:
         css = source("live.css")
-        self.assertIn(".has-reply .tk-foot{padding-bottom:84px}", css)
+        self.assertIn(".tk-foot{padding-bottom:120px}", css)
         self.assertRegex(css, r"\.rp-bar\{position:fixed;left:50%;bottom:22px")
         gear = re.search(r"\.sh-gear\{[^}]*\}", source("shell.css")).group(0)
         self.assertIn("right:20px", gear)  # the gear is at the right, the pill at the middle; the search is at the top

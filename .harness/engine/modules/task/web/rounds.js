@@ -1,6 +1,7 @@
 // The earlier rounds of a task's chat, at the top of the Live tab (1.6.55): one line for each prompt of the person, opened to read the prompt and all the agent wrote for it.
 // Only the last 5 are shown (1.6.108): the older ones are folded under one button, so the tab does not grow with the chat. The server reads them from Copilot's own record, or from the task's saved transcript (chatrounds.py), so this works with VS Code closed.
 // Each line ends with what the round took (1.6.98): its time, its credits and its tools, as icons with the words in their tip. The round that still runs counts its time on the page.
+// A /compact the person asked for is a line too (1.6.113): Copilot writes no message for it; it cannot be rewound to.
 // Each line also has the rewind icon (1.6.109): back to before that message, the chat and the task's files; its tip says what it does or why it cannot. A click shows what changes first.
 // The icons' words are in the page's tip card (status.js: `data-tip`), on hover and on keyboard focus, not in a `title` the keyboard never shows.
 // Needs common.js (h, t, when, clock, amount, lineSvg), serve.js (SERVE), live.js (LIVE), status.js (Status: the one clock of the page), reply.js (REPLY). Drawn with DOM nodes and textContent only.
@@ -32,6 +33,12 @@ const ROUNDS = (function () {
     try {
       const found = (await SERVE.post("/api/rounds", {op: "one", task: st.task, n})).result;
       const tools = Object.entries(found.tools).map(([name, count]) => (count > 1 ? name + " × " + count : name)).join(", ");
+      if (found.compact) {  // a /compact (1.6.113): no message and no answer, only what Copilot did
+        const removed = found.compact.removed;
+        body.replaceChildren(h("div", {class: "rd-who sub"}, t("desk.rounds.you")), h("div", {class: "rd-prompt"}, found.prompt),
+          h("p", {class: "sub"}, removed ? t("desk.rounds.compact", {n: removed}) : t("desk.rounds.compact.some")));
+        return;
+      }
       body.replaceChildren(...[h("div", {class: "rd-who sub"}, t("desk.rounds.you")), h("div", {class: "rd-prompt"}, found.prompt),
         h("div", {class: "rd-who sub"}, t("desk.rounds.agent")),
         found.texts.length ? h("div", {class: "rd-text"}, found.texts.map((blocks) => h("div", {class: "rd-part"}, st.draw ? st.draw(blocks) : null))) : h("p", {class: "sub"}, t("desk.rounds.none")),

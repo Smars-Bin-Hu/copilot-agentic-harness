@@ -222,7 +222,8 @@
         ".harness/tests/test_admin.py",
         ".github/skills/harness-admin/",
         ".github/instructions/workspace.instructions.md",
-        ".workspace/README.md"
+        ".workspace/README.md",
+        ".harness/tests/test_reach.py"
       ],
       "retire_when": "Copilot itself supports limiting writes by path and can refuse dangerous terminal commands. The guardrails and the write scope of a task do not retire"
     },

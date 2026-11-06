@@ -220,7 +220,7 @@ class LinkTests(LinkCase):
 
         self.link.chats[self.chat] = {"state": {}, "tool_at": ""}
         other = summary("ahp-session:/other", "ahp-chat:/other", self.folder)
-        self.link._scan(Stub(), [entry(TASK, "a-session-no-chat-has")], {self.resource: self.items[0], other["resource"]: other})
+        self.link._scan(Stub(), {self.resource: self.items[0], other["resource"]: other})
         self.assertEqual(calls, [("subscribe", "ahp-chat:/other"), ("unsubscribe", "ahp-chat:/other")])
 
     def test_a_task_whose_board_chat_is_gone_is_bound_again_by_its_session_id(self) -> None:

@@ -123,6 +123,33 @@ class ReadTests(RoundCase):
         self.assertEqual((status, len(data["result"]["rounds"])), (200, 2), data)
 
 
+    def test_a_compact_of_the_person_is_a_round_with_its_time_and_credits_and_no_rewind(self) -> None:
+        """1.6.113: Copilot writes no message for /compact, so Live showed nothing of it; a compaction Copilot makes inside a turn stays in that round."""
+        record(Path(self.home.name), SESSION, [
+            event("user.message", "2026-10-02T10:00:00.000Z", content="p1"),
+            event("assistant.turn_start", "2026-10-02T10:00:01.000Z"),
+            event("session.compaction_start", "2026-10-02T10:00:02.000Z", trigger="threshold"),  # Copilot's own: the context was nearly full
+            event("session.compaction_complete", "2026-10-02T10:00:09.000Z", messagesRemoved=30),
+            event("assistant.message", "2026-10-02T10:00:10.000Z", content="done"),
+            event("assistant.turn_end", "2026-10-02T10:00:10.000Z"),
+            event("session.usage_checkpoint", "2026-10-02T10:00:11.000Z", totalNanoAiu=2e9),
+            event("session.compaction_start", "2026-10-02T10:05:00.000Z", currentTokens=52000),  # the person's /compact: no trigger, the chat idle
+            event("session.compaction_complete", "2026-10-02T10:05:13.000Z", messagesRemoved=14),
+            event("session.usage_checkpoint", "2026-10-02T10:05:14.000Z", totalNanoAiu=2.5e9),
+            event("user.message", "2026-10-02T10:06:00.000Z", content="p2"),
+        ])
+        chatrounds._cache.clear()
+        found = chatrounds.listing(self.root, self.task)
+        self.assertEqual([(item["head"], item["seconds"], item["aiu"], item["compact"]) for item in found],
+                         [("p1", 10, 2.0, False), ("/compact", 13, 0.5, True), ("p2", 0, None, False)])
+        self.assertEqual(chatrounds.one(self.root, self.task, 1)["compact"], {"removed": 14})
+        self.assertIsNone(chatrounds.one(self.root, self.task, 0)["compact"])
+        status, data, _ = self.request("POST", "/api/rounds", {"op": "list", "task": Path(TASK).name}, self.pair())
+        self.assertEqual(status, 200, data)
+        self.assertEqual(data["result"]["rounds"][1]["rewind"], {"seq": None, "why": "compact"})  # no restore point is taken for it
+        self.assertNotEqual(data["result"]["rounds"][2]["rewind"]["why"], "compact")
+
+
 class SaveTests(RoundCase):
     def test_a_closed_task_reads_its_saved_rounds_when_the_record_is_gone(self) -> None:
         self.assertEqual(chatrounds.save(self.root, self.task), 2)

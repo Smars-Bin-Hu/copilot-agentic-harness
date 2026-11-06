@@ -115,6 +115,37 @@ To see which version you have: `harness --version`.
 - **Secrets stay out of the log.** In a refused command and its reason, the values of passwords and tokens (`-P <password>`, `--password`, `--token`, `NAME_TOKEN=...`, `Password=` in a connection string, `Authorization: Bearer`, `user:password@` in a URL) are replaced by `***` before the line is written. Keep secrets out of commands anyway: this catches the common spellings only.
 - **`harness tools check`** says what is wrong with the list and what the gate decides for each system and environment. `harness doctor` reports a broken list as an error; a list that does not validate is ignored by the gate (a hook that fails itself must not hurt normal work).
 
+## 1.6.113 (2026-11-05)
+
+### Changed
+
+- **A `/compact` you send shows on Live and has its own line in Time and usage.** Copilot writes no message for it, so Live showed nothing, and the report put it into the prompt before it, with no time. Now it is a line of its own, from the board's Compact or typed in VS Code: its time, its credits and how many messages were summed up. It has no rewind. The report counts it apart from your prompts. A compaction Copilot makes by itself when the context is nearly full stays in its round, as before.
+- Its credits come from Copilot's next running total. When Copilot writes that total only after your next message, they go to that message, as before.
+
+**Introductory material**: `docs/04-reference.md` (Earlier rounds) says how a `/compact` shows. The quick start and the skills are not changed.
+
+## 1.6.112 (2026-11-05)
+
+### Changed
+
+- **A notice no longer stops the page.** While a window only tells you something ("Started in VS Code" after Go on in a new chat, the New task box once sent), the page under it keeps refreshing: before, it kept showing "waits for you" while the new chat worked, until you closed the window. Keys such as R still wait for the window.
+- **New task shows the task when it is there.** The box says so and offers **Open task**.
+- **Windows and the Say something panel sit over the dock**, and the end of a task page is no longer hidden under the pill or the dock on a narrow screen.
+- **A window's title has no dots** ("answer · task", not "answer... · task").
+- **The refusal after a change of chat says what to do**: the chat of the task changed (perhaps another chat picked it up), nothing was sent, wait a moment and send again; your text is kept.
+
+**Introductory material**: not changed; these are fixes of the board's look and wording.
+
+## 1.6.111 (2026-11-05)
+
+### Changed
+
+- **The board follows a chat you make in VS Code.** When you went on with a task in a new chat of VS Code, and the old chat was one the board made (New task or Go on in a new chat), the board stayed on the old chat: Say something went there, the task said quiet while that chat worked, and Live did not show the new chat. Now it moves to the new chat within seconds of its agent picking the task up.
+- **A send never goes to the chat you left.** In the few seconds after another chat picked the task up, before the board has read that chat, Say something and the other sends are refused ("look at the page again"); a moment later they go to the new chat. A chat that is open but has not picked the task up changes nothing.
+- **A new chat is found while its first turn runs.** A chat the board read before its first model call was read again only when VS Code changed it, which may be at the end of the turn. A chat at work with no Copilot id yet is now read again every few seconds.
+
+**Introductory material**: `docs/02-features.md` (Linked chats) now says that the board follows the chat that picked the task up last. The quick start and the skills are not changed: they do not describe how a chat is linked.
+
 ## 1.6.110 (2026-11-03)
 
 ### Added

@@ -145,12 +145,17 @@ def from_events(record: Dict[str, Any], hook_prompts: List[Dict[str, Any]], pick
     """Copilot's record cut into the user's prompts, each with `mine`."""
     found: List[Dict[str, Any]] = []
     for prompt in record["prompts"]:
-        near = [item for item in hook_prompts if abs(item["at"] - prompt["at"]) <= MATCH_SECONDS]
-        if hook_prompts and not near and found:
-            merge(found[-1], prompt)
+        if prompt.get("compact"):  # no hook runs for /compact: it belongs where the prompt before it does (1.6.113)
+            prompt["mine"] = bool(found[-1]["mine"]) if found else bool(picked_up) and prompt["at"] >= picked_up[0]
+            found.append(prompt)
             continue
-        if not hook_prompts and prompt["queued"] and found:
-            merge(found[-1], prompt)
+        near = [item for item in hook_prompts if abs(item["at"] - prompt["at"]) <= MATCH_SECONDS]
+        before = next((item for item in reversed(found) if not item.get("compact")), None)  # a queued message goes on with a message, never with a /compact
+        if hook_prompts and not near and before is not None:
+            merge(before, prompt)
+            continue
+        if not hook_prompts and prompt["queued"] and before is not None:
+            merge(before, prompt)
             continue
         if near:
             prompt["mine"] = bool(near[0]["mine"])
@@ -570,6 +575,7 @@ def build(root: Path, task: str, data: Dict[str, Any], use_events: bool = True, 
             "subagents": len(prompt["subagents"]), "skills": sorted(set(prompt["skills"])), "models": prompt["models"], **counted,
             "compactions": [{key: value for key, value in item.items() if key != "at"} for item in prompt["compactions"]],
             "text": prompt.get("text", ""),  # for the page only: `for_agent` takes it out
+            "compact": bool(prompt.get("compact")),  # a /compact the person asked for, not a message (1.6.113)
         }
         if steps:
             entry["until"] = utc_text(prompt["next_at"]) if prompt["next_at"] is not None else ""
@@ -640,7 +646,7 @@ def round_of(starts: List[Tuple[int, Optional[float]]], moment: float) -> int:
 def assemble(task: str, data: Dict[str, Any], items: List[Dict[str, Any]], reviews: List[Dict[str, Any]], sources: Dict[str, str], created: Optional[float]) -> Dict[str, Any]:
     """The report of the given prompts: the totals, the tables and the findings. `build` calls it for all prompts and for each round."""
     totals: Dict[str, Any] = {
-        "prompts": len(items), "active_s": 0.0, "waiting_s": 0.0, "paused_s": 0.0, "model_s": None, "tool_s": None, "approval_s": None, "subagent_s": None, "other_s": None,
+        "prompts": len([item for item in items if not item["prompt"].get("compact")]), "compacts": len([item for item in items if item["prompt"].get("compact")]), "active_s": 0.0, "waiting_s": 0.0, "paused_s": 0.0, "model_s": None, "tool_s": None, "approval_s": None, "subagent_s": None, "other_s": None,
         "tool_calls": 0, "failed_tool_calls": 0, "denied": 0, "asked": 0, "stop_blocks": 0, "external_calls": 0, "external_denied": 0,
         "aiu": None, "premium_requests": None, "subagent_tokens": None, "context_tokens_first": None, "context_tokens_max": None, "compactions": 0,
         "cache_input_tokens": None, "cache_read_tokens": None, "cache_write_tokens": None, "cache_cold_calls": 0, "cache_cold_write_tokens": 0,

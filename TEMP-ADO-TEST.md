@@ -83,12 +83,20 @@ Get-ChildItem env: | Where-Object { $_.Name -match 'proxy|cert|ca_bundle|ssl|nod
 
 两边截图发回来。
 
-**3c. 看 dev.azure.com 的证书链是谁签的（你的终端）**
+**结论（已查到）**：agent 的进程里有 `HTTP_PROXY` / `HTTPS_PROXY = http://127.0.0.1:9000`，你的终端没有。agent 的请求经过这个本机代理，代理换了证书，az 不认。下面取 **经过这个代理时** 的证书链，再做一个 az 认得的证书文件。
+
+**3c. 经过 127.0.0.1:9000 取 dev.azure.com 的证书链（你的终端，整段粘）**
 
 ```powershell
 $h = 'dev.azure.com'
-$tcp = [Net.Sockets.TcpClient]::new($h, 443)
-$ssl = [Net.Security.SslStream]::new($tcp.GetStream(), $false, { $true })
+$tcp = [Net.Sockets.TcpClient]::new('127.0.0.1', 9000)
+$ns = $tcp.GetStream()
+$req = [Text.Encoding]::ASCII.GetBytes("CONNECT ${h}:443 HTTP/1.1`r`nHost: ${h}:443`r`n`r`n")
+$ns.Write($req, 0, $req.Length)
+$one = New-Object byte[] 1; $head = ''
+while (-not $head.EndsWith("`r`n`r`n")) { if ($ns.Read($one, 0, 1) -le 0) { break }; $head += [char]$one[0] }
+"proxy says: " + $head.Split("`r")[0]
+$ssl = [Net.Security.SslStream]::new($ns, $false, { $true })
 $ssl.AuthenticateAsClient($h)
 $cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($ssl.RemoteCertificate)
 $chain = [Security.Cryptography.X509Certificates.X509Chain]::new(); [void]$chain.Build($cert)
@@ -96,11 +104,12 @@ $chain.ChainElements | ForEach-Object { $_.Certificate.Subject }
 $tcp.Close()
 ```
 
-最后一行（根证书）如果是 **公司自己的名字**，而不是 DigiCert / Microsoft 这类公共机构，说明公司网络在中间换了证书，做 3d。截图时公司名可以打码。
+- 第一行应是 `proxy says: HTTP/1.1 200 ...`。是 `407` 说明代理要登录，停下告诉我。
+- 后面几行是证书链，最后一行是根证书。截图时名字可以打码，告诉我它是不是公共机构（DigiCert、Microsoft 等）。
 
-**3d. 做一个 az 认得的证书文件（只在 3c 显示是公司根证书时做）**
+**3d. 做一个 az 认得的证书文件**
 
-紧接着 3c 粘（要用到 `$chain`）：
+紧接着 3c，在同一个窗口粘（要用到 `$chain`）：
 
 ```powershell
 $root = $chain.ChainElements[$chain.ChainElements.Count - 1].Certificate
@@ -112,7 +121,7 @@ Add-Content $bundle $pem -Encoding ascii
 "bundle = $bundle"
 ```
 
-然后按第 1 步重启 VS Code，只是在启动那行之前多粘一行：
+然后按第 1 步重启 VS Code（关掉所有 VS Code 窗口），在启动那行之前多粘一行：
 
 ```powershell
 $env:REQUESTS_CA_BUNDLE = "$env:USERPROFILE\tools\ca-bundle.pem"
@@ -144,3 +153,17 @@ $env:REQUESTS_CA_BUNDLE = "$env:USERPROFILE\tools\ca-bundle.pem"
 - 第 2 步每条：通 / 报错原文。
 - 第 3 步：两边的环境截图；3c 的证书链（打码）。
 - 第 4 步：agent 用了哪些命令、多久、结论对不对、有没有自作主张关证书校验。
+
+---
+
+## 6. 证书文件做好、VS Code 重启后
+
+**6a. 给 agent（新 chat）**
+
+```
+在终端跑：
+"REQUESTS_CA_BUNDLE=$env:REQUESTS_CA_BUNDLE"; "HTTPS_PROXY=$env:HTTPS_PROXY"
+然后跑第 4a 的事（用 az rest 读最近 5 次 build……）。
+```
+
+第一行要打印出 `...\tools\ca-bundle.pem`。之后 build 能读到就通了。

@@ -67,6 +67,16 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual((found["sets"][0]["columns"], found["sets"][0]["rows"]), (["warehouse", "n"], [["WH-01", "1204"], ["NULL", "8"]]))
         self.assertEqual([note["text"] for note in found["notes"]], ["(2 rows affected)"])
 
+    def test_a_pipe_separated_dash_table_is_cut_at_the_pipes_and_so_is_a_second_set_after_its_note(self) -> None:
+        text = "id|order_day|rows_in|rows_out\n--|---------|-------|--------\n1|2026-11-03|5|4\n\n(1 row affected)\norder_id|warehouse|amount\n--------|---------|------\n1001|WH-01|120.00\n1003|UNKNOWN|15.00\n\n(2 rows affected)\n"
+        found = outview.layout(text)
+        self.assertEqual((found["kind"], len(found["sets"])), ("tables", 2))
+        self.assertEqual((found["sets"][0]["columns"], found["sets"][0]["rows"]), (["id", "order_day", "rows_in", "rows_out"], [["1", "2026-11-03", "5", "4"]]))
+        self.assertEqual((found["sets"][1]["rows"][1], found["sets"][1]["numeric"]), (["1003", "UNKNOWN", "15.00"], [True, False, True]))
+        self.assertEqual([(note["text"], note["after"]) for note in found["notes"]], [("(1 row affected)", 1), ("(2 rows affected)", 2)])
+        empty = outview.layout("t|order_id\n-|--------\n\n(0 rows affected)\n")  # a set with no rows is still a table with its columns
+        self.assertEqual((empty["sets"][0]["columns"], empty["sets"][0]["rows"]), (["t", "order_id"], []))
+
     def test_a_long_table_is_cut_for_the_page_and_a_long_output_is_said_to_be_cut(self) -> None:
         text = "id\n--\n" + "\n".join(str(i) for i in range(500)) + "\n"
         found = outview.layout(text)

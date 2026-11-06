@@ -2,6 +2,7 @@
 with no knowledge of any program:
 
   - a block whose second line is runs of dashes is a table: the dash runs give the columns, the first line the names, the lines after it the rows (sqlcmd, osql, bcp, many CLIs);
+    dash runs joined by one separator character (`|`, `,`, `;`, a tab: `sqlcmd -s "|"`) cut the columns at that character instead;
   - a block framed with `+---+` lines, or whose lines start and end with `|`, is a table (psql, mysql, markdown);
   - a block of lines with the same number of tabs is a table (TSV);
   - `(n rows affected)`, `Msg …`, `Error …`, `Warning …`: notes; an error note is red on the page;
@@ -18,6 +19,7 @@ from typing import Any, Dict, List, Optional
 ROWS_SHOWN = 200
 MAX_CHARS = 2_000_000  # what is laid out (the tables are cut to ROWS_SHOWN rows anyway); past this the layout stops and says so
 _DASHES = re.compile(r"^(?:-{1,}\s*)+$")
+_SEPARATED = re.compile(r"^-+(?:([|,;\t])-+)+$")  # `--|-----|---`: dash runs joined by one separator character
 _FRAME = re.compile(r"^\+(?:-+\+)+$")
 _NOTE = re.compile(r"^\((\d+|\?) rows? affected\)$|^(Msg \d+|Error|ERROR|Warning|WARNING|Sqlcmd: Error|HResult)\b", re.IGNORECASE)
 _ERROR = re.compile(r"^(Msg \d+|Error|ERROR|Sqlcmd: Error|HResult)\b|\bLevel 1[1-9]\b", re.IGNORECASE)
@@ -35,19 +37,30 @@ def _blocks(lines: List[str]) -> List[List[str]]:
     return [block for block in out if block]
 
 
+def _ruler(line: str) -> bool:
+    """A line that underlines a head: runs of dashes, with spaces, tabs or one separator character between them."""
+    stripped = line.strip()
+    return bool(_DASHES.match(stripped.replace("\t", " ")) or _SEPARATED.match(stripped))
+
+
 def _split_at_dashes(block: List[str]) -> List[List[str]]:
     """A block that holds a dash line further down (sqlcmd prints `(n rows affected)` right before the next result set, with no empty line) is cut before the head of that table."""
     for index in range(2, len(block)):
-        if _DASHES.match(block[index].strip()) and not _DASHES.match(block[index - 1].strip()):
+        if _ruler(block[index]) and not _ruler(block[index - 1]):
             return [block[:index - 1], *_split_at_dashes(block[index - 1:])]
     return [block]
 
 
 def _dash_table(block: List[str]) -> Optional[Dict[str, Any]]:
-    if len(block) < 2 or not _DASHES.match(block[1].strip().replace("\t", " ")):
+    if len(block) < 2:
         return None
-    if "\t" in block[1]:  # the dashes are tab-separated (sqlcmd -s "\t"): the tabs cut the columns, not the places of the dashes
-        cells = [[cell.strip() for cell in line.split("\t")] for line in block if not _NOTE.match(line.strip())]
+    ruler = block[1].strip()
+    if not _ruler(ruler):
+        return None
+    separated = _SEPARATED.match(ruler)
+    if separated:  # the dashes are joined by a separator (sqlcmd -s "|" or -s "\t"): it cuts the columns, not the places of the dashes
+        char = separated.group(1)
+        cells = [[cell.strip() for cell in line.split(char)] for line in block if not _NOTE.match(line.strip())]
         notes = [line.strip() for line in block[2:] if _NOTE.match(line.strip())]
         return _table(cells[0], [row for row in cells[2:]], notes)
     spans = [(found.start(), found.end()) for found in re.finditer(r"-+", block[1])]

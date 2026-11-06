@@ -8,6 +8,7 @@
     ".harness/bin/**",
     ".harness/launch/**",
     ".harness/kinds/**",
+    ".harness/connectors/**",
     ".harness/.env",
     "Start Harness.command",
     "Start Harness.cmd",

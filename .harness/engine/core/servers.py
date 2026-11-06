@@ -51,14 +51,17 @@ def say(key: str, /, **values: Any) -> str:
 
 def kinds(root: Path) -> Dict[str, Dict[str, Any]]:
     """Every kind this copy knows, `{name: kind}`; a file that cannot be read is left out (`problems` says why)."""
+    from . import connectors  # it reads this module for its checks
+
     found: Dict[str, Dict[str, Any]] = {}
     folder = root / KINDS_DIR
-    for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
+    own = sorted(folder.glob("*.json")) if folder.is_dir() else []
+    for path in own + connectors.kind_files(root):  # the company's kinds first: a connector's kind of the same name does not replace one (1.7.12)
         try:
             kind = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
             continue
-        if isinstance(kind, dict) and kind.get("kind"):
+        if isinstance(kind, dict) and kind.get("kind") and str(kind["kind"]) not in found:
             found[str(kind["kind"])] = kind
     return found
 

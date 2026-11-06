@@ -196,6 +196,7 @@ knowledge-base/
     tools/servers.json                              the servers, by kind (1.7.10); copied to .harness/policies/servers.company.json
     tools/kinds/                                    what each kind of server needs and how its way in is tested; copied to .harness/kinds/
     tools/launch/                                   scripts to start VS Code for them; copied to .harness/launch/
+    connectors/<name>/                              a connector each (1.7.12); installed into .harness/connectors/
 ```
 
 These paths are fixed: `company sync`, `company pack` and `company update` count on them. Copilot finds skills and instructions in `.github/` only, and the gate reads policies in `.harness/policies/` only. So `harness company sync` copies them there. It touches no other file and is safe to run again. A company skill that is no longer in `company/` moves to `.harness/runtime/company-backup/`. Change the files in `company/`, never the copies: the next sync replaces them.
@@ -232,6 +233,12 @@ Most teams list **servers** instead of writing `systems` by hand (1.7.10). A ser
 In Get ready, **Servers** opens a window: each server, and whether your identity is saved. Open one, type the account and the password, press **Test**; only what passed is kept, by **Save**, in `.harness/.env` on this computer (only you may read it; `harness reinstall` carries it; the example is `.harness/.env.example`). You can add a server of your own there too. The **Knowledge base** window lists the servers set up on this computer (a filled dot: from the company pack; a ring: your own); **⇪** on one of your own puts it in the company pack (`company/tools/servers.json`, and its kind file when the pack has none): the server only, never your account or password. Commit the knowledge base, then **Pack for colleagues**; they type their own account. The password never comes back to the page, and the gate refuses the agent a read of `.harness/.env`, a print of a variable that carries an identity, and a dump of the environment.
 
 **Open VS Code with identities** (in that window, and on the Enter screen when a server is not reached): tick the identities this window holds, then open. VS Code must be closed first. A window holds one Windows account, and one value per variable: when you tick two that cannot share it (DEV and IST with different Windows accounts), the window holds one and the other is reached through `harness as <alias> -- <command>`, each such command with that server's identity. The agent is told which at the start of each chat; the gate refuses a call without the prefix, with the line to run, and judges the command inside it as any other. `harness servers` lists the servers, `harness servers test <alias>` tests one from a terminal.
+
+#### Connectors
+
+A **connector** is what lets the agent work with one outside tool, a ticket board or a pipeline service, as one folder (1.7.12). The harness ships none; a team writes its own or gets one. It holds `connector.json` (`name`: one word, `version`, `harness`: the lowest harness version, `needs`: the `programs` it calls and the `trust` variables that name the CA bundle for them), and what the harness already reads: `kinds/` (a ticket board is a server of a kind, with the tool's own sign-in), `systems.json` (systems written by hand) and `skills/`, each skill named `<name>-...`.
+
+Install one in your own terminal: `harness connector add <folder or zip>` (a newer version: `--replace`). Or put it in the knowledge base, `company/connectors/<name>/`: `company sync` installs it for everyone who imports the pack. It goes to `.harness/connectors/<name>/`, a guardrail: the agent can neither install a connector nor change one, since its rules are the gate's rules. Its systems come after the company pack's and before your `tools.override.json`, so your override still wins. `harness connector check` says whether its programs are found on the PATH VS Code gets; `harness connector remove <name>` takes it back, with its skills, into `.harness/runtime/connector-backup/`.
 
 #### This computer: tool folders and a CA bundle
 

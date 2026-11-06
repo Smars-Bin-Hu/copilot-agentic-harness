@@ -83,6 +83,13 @@ def company_path(root: Path, name: str) -> Path:
 def load_policy(root: Path, name: str) -> Dict[str, Any]:
     found = read_json(policies_dir(root) / f"{name}.json")
     for suffix in LAYERS:
+        if name == "tools" and suffix == OVERRIDE_SUFFIX:  # the installed connectors' systems: after the company pack's, before the person's own (1.7.12)
+            try:
+                from . import connectors
+
+                found = deep_merge(found, connectors.systems_layer(root))
+            except Exception:  # noqa: BLE001 - a broken connector must not take the other systems away; `connector check` reports it
+                pass
         path = policies_dir(root) / f"{name}{suffix}"
         if path.exists():
             found = deep_merge(found, read_json(path))

@@ -108,7 +108,14 @@ def drop_bundle(root: Path) -> Dict[str, Any]:
 
 # --- what VS Code is started with ---------------------------------------------------------------------------------------------------------------------------
 
-def extra(root: Path, environ: Optional[Dict[str, str]] = None, trust_vars: Tuple[str, ...] = TRUST_VARS) -> Dict[str, str]:
+def trusted_by(root: Path) -> List[str]:
+    """The variables that name the bundle: Python's, and those an installed connector asks for for its own program (1.7.12)."""
+    from . import connectors  # it reads this module for its checks
+
+    return list(dict.fromkeys(list(TRUST_VARS) + connectors.trust_vars(root)))
+
+
+def extra(root: Path, environ: Optional[Dict[str, str]] = None, trust_vars: Optional[Tuple[str, ...]] = None) -> Dict[str, str]:
     """The variables the board adds when it starts VS Code: PATH with the tool folders first, and each trust variable naming the bundle (when it is there)."""
     base = dict(os.environ if environ is None else environ)
     kept = settings(root)
@@ -120,7 +127,7 @@ def extra(root: Path, environ: Optional[Dict[str, str]] = None, trust_vars: Tupl
         out[key] = os.pathsep.join(folders + rest)
     bundle = bundle_path(root)
     if bundle:
-        for name in trust_vars:
+        for name in (trust_vars if trust_vars is not None else trusted_by(root)):
             out[name] = str(bundle)
     return out
 
@@ -354,5 +361,5 @@ def state(root: Path) -> Dict[str, Any]:
     n = len(pem_blocks(bundle.read_text(encoding="ascii", errors="ignore"))) if bundle else 0
     return {"paths": [{"path": item, "found": Path(item).is_dir(), "programs": programs_in(Path(item))[:8]} for item in kept["paths"]],
             "bundle": {"path": str(bundle) if bundle else "", "n": n, "host": kept["host"], "proxy": kept["proxy"], "made": kept["made"],
-                       "vars": list(TRUST_VARS)},
+                       "vars": trusted_by(root)},
             "proxy": detect_proxy(), "default_host": DEFAULT_HOST}

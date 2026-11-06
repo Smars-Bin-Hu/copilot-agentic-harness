@@ -61,7 +61,8 @@ SYSTEMS_SCHEMA = {
             },
             "target": {"type": "string"},
             "rules": {"type": "object", "additionalProperties": _RULE_SET},
-            "show": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
+            "show": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+            "connector": {"type": "string", "minLength": 1},  # 1.7.12: written by the harness for a system an installed connector brings  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
             "needs": {  # 1.7.9: `probes` names one probe per environment (another server, another account); `denied` is what a call prints when the identity is not let in
                 "type": "object",
                 "properties": {"probe": {"type": "string", "minLength": 1}, "probes": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},

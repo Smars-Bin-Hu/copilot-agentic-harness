@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.12 (2026-11-06)
+
+### Added
+
+- **Connectors**: what lets the agent work with one outside tool (a ticket board, a pipeline service), as one folder: `connector.json`, kinds of server, systems for the gate, skills named after it. `harness connector add <folder or zip>` installs one (you, in your own terminal), or put it in the knowledge base under `company/connectors/` and `company sync` installs it. Its systems sit after the company pack's and before your `tools.override.json`; `harness connector check` says whether its programs are found; `harness connector remove` takes it back with its skills. `.harness/connectors/` is a guardrail. The harness ships no connector.
+
 ## 1.7.11 (2026-11-06)
 
 ### Added

@@ -9,6 +9,7 @@
                             a person runs), copied to `.harness/launch/` (1.7.1); servers.json (the servers, by kind: `{"servers": {...}}`),
                             copied to `.harness/policies/servers.company.json`, and kinds/ (what each kind of server needs and how its way in is
                             tested), copied to `.harness/kinds/` (1.7.10). These paths are fixed: pack, update and sync count on them
+  company/connectors/       `<name>/`: a connector each (core.connectors), installed into `.harness/connectors/` by `sync` (1.7.12)
   company/manifest.json     what a package holds; made by `pack`, written last by `update`
 
 `sync` makes the copies, and never touches any other file. `pack` makes a zip of what git has in the knowledge base;
@@ -183,7 +184,12 @@ def sync(root: Path, remove: bool = False) -> Dict[str, Any]:
             shutil.move(str(root / SKILLS_DIR / name), str(backup / name))
             done.append(f"{SKILLS_DIR}/{name}")
         plan["only_here"] = []
-    return {"found": True, "company": str(folder), "copied": done, "already_same": len(plan["pairs"]) - len(done), "refused": plan["refused"], "only_here": plan["only_here"],
+    from . import connectors  # it reads the policies this module's copies feed
+
+    linked = connectors.from_company(root, folder)
+    done += [f"{connectors.FOLDER.as_posix()}/{name}" for name in linked["installed"]]
+    plan["refused"] += [{"skill": item["connector"], "why": item["why"]} for item in linked["refused"]]
+    return {"found": True, "company": str(folder), "copied": done, **({"connectors_gone": linked["gone"]} if linked["gone"] else {}), "already_same": len(plan["pairs"]) - len(done), "refused": plan["refused"], "only_here": plan["only_here"],
             "next": " ".join([say("company.sync.problems" if plan["refused"] else "company.sync.done"), *([say("company.sync.only_here", names=", ".join(plan["only_here"]))] if plan["only_here"] else [])]), "exit_code": 1 if plan["refused"] else 0}
 
 

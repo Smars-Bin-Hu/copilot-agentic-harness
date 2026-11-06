@@ -18,9 +18,11 @@ A fact from an environment is worth something only as a saved run with a number.
 
 **Who starts it: auto.** Use it as soon as a fact from an environment is needed. No task is needed for a read; recording the run needs the task the fact is for.
 
+**A quick look** (the user asks in the chat to run a read and see what comes back, and no task needs the fact): open no task, write no `LOG.md`, record nothing. Run the command for each server, at once, and answer with what each returned. When the chat start names servers reached through a prefix, use `harness as <alias> --` for those. That is all.
+
 ## Prerequisites
 
-- The system is listed by the company: `harness tools check` names it, and for one that has a probe, `reach.<system>.reachable` is `true`. Not reachable: stop and give the user the `launch` sentence it prints (how to start VS Code so that the identity is there). A VS Code that was already running when the user started another with the identity does not have it: a tool that then asks for a password in the terminal fails (`liner: function not supported in this terminal` from sqlcmd); that is the same stop. Not listed: hand the run over (`harness task handoff run`), as before.
+- The system is listed by the company. Do not check the way in before you run: run the command. Only when it fails to log in or to connect, run `harness tools reach` (it reads what the start of the chat found; it probes nothing and answers at once): not reached means stop and give the user its `launch` sentence (how to start VS Code so that the identity is there). `harness tools check` probes every system again; run it only when the user asks. A VS Code that was already running when the user started another with the identity does not have it: a tool that then asks for a password in the terminal fails (`liner: function not supported in this terminal` from sqlcmd); that is the same stop. Not listed: hand the run over (`harness task handoff run`), as before.
 - The command is the one the system's skill or the guide gives (the exact program, server and options). Do not invent a server name, an account or a password; none is ever in a command.
 
 ## Step-by-Step Workflows

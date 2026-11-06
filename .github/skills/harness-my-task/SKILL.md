@@ -15,7 +15,7 @@ One task, one folder. The folder is `.workspace/sandbox/tasks/<task name>/`, and
 - The user wants to go on with an existing task, or to switch from one task to another. Pick the task up even when the user only asks "how far is that task": without that, this session is not under the task rules, and independent checks cannot be used.
 - A task grew halfway: it was only Q&A or an RCA, and now it has to change a target repository.
 
-Do not use it for plain Q&A that writes nothing.
+Do not use it for plain Q&A that writes nothing, nor for a one-off look the user asks for in the chat ("run this query on DEV", "what does IST return"): run it, show the output, answer (skill `generic-evidence-run`, a quick look). Open a task only when files are to be kept or changed, or the result is evidence for work.
 
 ## Prerequisites
 
@@ -43,7 +43,7 @@ Do not ask again what the user has already made clear. If you have a question to
    | 4 | Development | `dev` | The changes match the approved plan, with a record of self-testing | full |
    | 5 | Testing | `test` | Cases and results are on disk | full |
    | 6 | Knowledge base update | `kb` | The source is clear; it goes through promote | full |
-   | 7 | Other: a broad question, a one-off look at a situation, none of the above | `other` | No fixed standard: agree on one with the user when opening the task, and write it into "Done when" in `REQ.md` | medium |
+   | 7 | Other: a broad question or a look at a situation whose findings are kept, none of the above | `other` | No fixed standard: agree on one with the user when opening the task, and write it into "Done when" in `REQ.md` | medium |
 
    **Do not force a fit.** The first six are only the common ones. When what the user wants is broad ("have a look at this situation", "is this approach worth doing"), or spans several kinds, or is hard to tell, pick 7. With the wrong kind, the standard for done is wrong.
 

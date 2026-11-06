@@ -21,6 +21,7 @@ To see which version you have: `harness --version`.
 
 ### Changed
 
+- **A quick look is not a task.** When you ask in the chat to run a read on a server and see what it returns, the agent runs it and answers: no task, no requirement to confirm, no log, no evidence (`AGENTS.md`, `harness-my-task`, `generic-evidence-run`). And it no longer checks the way in before each run (`harness tools check` probed every server, 18 seconds here): it runs the command, and only when that fails reads `harness tools reach`, which answers at once from what the start of the chat found.
 - **Prod takes only a rule written for prod**: a `*` rule of a system no longer loosens prod.
 - **The sample SQL Server pack is a kind and a server list** (`kinds/sqlserver.json`, `servers.json`), ready to copy to the knowledge base; its hand-written `systems.json` is gone (a team's own `systems.json` still works).
 

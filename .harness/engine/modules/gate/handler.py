@@ -145,6 +145,8 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
     action, decision = picked
     passes = decision == external.ALLOW
     how = "allow" if passes else ""  # what let it through (core.calls): the evidence says it (1.7.9)
+    if event.agent_type.strip():  # a subagent (the reviewer, the mapper) reads only: the person's leave (a plan, a grant, an open environment, an approval) is the main agent's, never its own (1.7.9)
+        return {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": False, "how": how, "code": "", "subagent": not passes}
     opened = False
     if decision == external.TASK:
         data = _open_task(ctx)
@@ -197,6 +199,8 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
     command = gitcmd.collapse(event.command)
     data = _open_task(ctx)
     facts = {"kind": "external", **external_facts(judged)}
+    if judged.get("subagent"):  # no code, no draft: the person is not asked for a subagent's write
+        return Decision(permission="deny", reason=rules.external_subagent(action, command, event.agent_type.strip()), facts=dict(facts, kind="external-subagent"))
     if decision in (external.OUTBOX, external.HUMAN) and data and (data.get("autorun") or {}).get("state") == "on":
         return Decision(permission="deny", reason=rules.external_autorun(action, command), facts=facts)  # nobody is there to approve
     if decision == external.OUTBOX:

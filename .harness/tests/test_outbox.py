@@ -209,6 +209,20 @@ class OutboxOnThePageTests(OutboxCase):
         self.assertEqual(calls.summary(found), f"allow,approved:{code},unknown")
         self.assertEqual(calls.parse(f"allow,approved:{code}"), [{"how": "allow", "code": ""}, {"how": "approved", "code": code}])
 
+    def test_a_subagent_reads_but_its_write_is_refused_even_in_an_open_environment(self) -> None:
+        from modules.task import tasklife
+
+        self.new()
+        tasklife.set_allow(self.root, TASK, "dev", True, interactive=True)
+        def as_reviewer(command: str) -> Dict[str, Any]:
+            data = pre_tool(SESSION, "run_in_terminal", {"command": command, "explanation": "t", "isBackground": False})
+            data["cwd"], data["agent_type"] = str(self.root), "reviewer"
+            return self.hook(data)
+        self.assertEqual(as_reviewer("tk show T-7"), {})  # a read (the tickets system names `show`)
+        refused = as_reviewer("cloudctl run job-1")
+        self.assertIn("reviewer", refused["permissionDecisionReason"])
+        self.assertEqual(self.term("cloudctl run job-1"), {})  # the main agent: the environment is open
+
     def test_the_packs_show_patterns_give_the_facts_of_the_card(self) -> None:
         from modules.task import taskdesk
 

@@ -31,6 +31,7 @@ Without a review package (a session with no task), the call message must have th
 3. For every item of the requirement, find the matching evidence in the work. For every conclusion in the work, find its source.
 4. When a conclusion depends on the project's rules, skills or knowledge base, read the original yourself. Do not just trust what the review package or the call message says about it.
 5. What a command can confirm, confirm with a command first. Run read-only commands only; write no file. A target repository cannot be run: do not try to execute its code.
+   When the review package lists the runs the task cites (`[E<n>]`), run the reads again yourself on the same environment (a query on a listed outside system needs no leave) and compare with the saved output; a write or a procedure is refused to you: judge it by what was saved.
 6. What you cannot read goes into the output. Do not keep trying. When a tool call is refused, do not try it again.
 
 ## What counts as a finding

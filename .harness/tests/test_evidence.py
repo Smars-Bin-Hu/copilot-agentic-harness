@@ -75,7 +75,7 @@ class LeaveTests(EvidenceCase):
         self.assertIn(" env DEV leave=allow,approved:AB12CD,unknown -->", text)
         line = next(found for found in text.splitlines() if "AB12CD" in found and "<!--" not in found)  # the line under Run by, in the user's language
         self.assertEqual(line.count("1 "), 3)
-        item = next(found for found in evidence.listing(self.root, "job") if found["id"] == first["evidence_id"])
+        item = next(found for found in evidence.listing(self.root, f"{BASE}/job") if found["id"] == first["evidence_id"])
         self.assertEqual(item["leave"], [{"how": "allow", "code": ""}, {"how": "approved", "code": "AB12CD"}, {"how": "unknown", "code": ""}])
         second = self.record("DEV")  # a person's run says nothing about leave
         self.assertNotIn("leave=", (self.job / "RUNS" / "DEV" / "results.md").read_text(encoding="utf-8").split(second["evidence_id"], 1)[1].split("-->", 1)[0])

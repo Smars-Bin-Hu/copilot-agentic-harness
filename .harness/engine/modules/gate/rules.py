@@ -105,6 +105,10 @@ def _verb(verb: str) -> str:
     return ("an " if verb[:1] in "aeiou" else "a ") + verb
 
 
+def external_subagent(action: Any, command: str, agent: str) -> str:
+    return say("gate.external.subagent", agent=agent, system=action.system, env=action.env, verb=action.verb, call=command)
+
+
 def external_denied(action: Any, command: str) -> str:
     """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
     return say("gate.external.denied", system=action.system, env=action.env, verb=action.verb, call=command)

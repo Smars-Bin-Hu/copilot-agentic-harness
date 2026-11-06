@@ -31,7 +31,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from core import approval, config, messages, tasks
 from core.paths import cli_command, utc_now
 
-from . import task as task_ops
+from . import evidence, task as task_ops
 from . import reviewcheck, tasksnap
 from .common import CommandError
 from .policy import POLICY_NAME
@@ -300,6 +300,10 @@ def package_text(root: Path, task: str, data: Dict[str, Any], entry: Dict[str, A
         lines += ["", say("review.package.diff", path=diff_file)]
     lines += ["", say("review.package.files"), "", say("review.package.table"), "| --- | --- | --- |"]
     lines += [f"| {task}/{item['path']} | {item['sha256'][:16]} | {item['bytes']} |" for item in files]
+    runs = evidence.listing(root, task)
+    if runs:  # the runs the task cites (1.7.9): the reviewer may run the reads again itself; a write or a procedure is refused to it
+        lines += ["", say("review.package.evidence"), ""]
+        lines += [f"- {item['id']} · {item['env']} · {say('desk.evidence.by.agent') if item['by'] == 'agent' else say('desk.evidence.by.person')} · {task}/{item['file']}" + (f" · `{item['command'].splitlines()[0][:160]}`" if item["command"] else "") for item in runs]
     if previous is not None and previous.get("refunded"):
         lines += ["", say("review.package.given_back", path=f"{round_dir(task, previous['number'])}/{VERDICT_FILE}"), ""]
         lines += [f"- {why_text(item)}: {item.get('text', '')[:200]}" for item in previous.get("dropped") or []]

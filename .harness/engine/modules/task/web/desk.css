@@ -137,6 +137,9 @@ ol.timeline.history li.key{margin:2px 0;padding-right:10px;border-radius:8px}
 ol.timeline.history li.key .what b{font-weight:600}
 ol.timeline.history li.good{background:var(--good-bg)}ol.timeline.history li.good .what b{color:var(--good)}
 ol.timeline.history li.bad{background:var(--bad-bg)}ol.timeline.history li.bad .what b{color:var(--bad)}
+ol.timeline.history li.agent{background:var(--hot-bg)}ol.timeline.history li.agent .what b{color:var(--hot)}ol.timeline.history li.agent::before{background:var(--hot-dot);border-color:var(--hot-dot)}
+ol.timeline.history li.open{background:var(--open-bg)}ol.timeline.history li.open .what b{color:var(--open)}ol.timeline.history li.open::before{background:var(--open-dot);border-color:var(--open-dot)}
+.tag.open{background:var(--open-bg);color:var(--open);border-color:var(--open-line)}
 ol.timeline.history li.good::before{background:var(--good-dot);border-color:var(--good-dot)}
 ol.timeline.history li.bad::before{background:var(--bad);border-color:var(--bad)}
 

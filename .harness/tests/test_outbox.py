@@ -194,6 +194,21 @@ class OutboxOnThePageTests(OutboxCase):
         self.assertIn("(", kind_line(drafts[f"{code_of(unnamed)}-tickets.md"]))
         self.assertNotIn("(", kind_line(drafts[f"{code_of(named)}-tickets.md"]))
 
+    def test_a_call_that_goes_through_is_noted_for_the_task_with_what_let_it_through(self) -> None:
+        from core import calls
+
+        self.new()
+        self.assertEqual(self.term("tk show T-7"), {})  # a read: allowed
+        code = code_of(self.term(COMMENT)["permissionDecisionReason"])
+        self.approve(code)
+        self.assertEqual(self.term(COMMENT), {})  # approved: runs once
+        noted = calls.read(self.root, TASK)
+        self.assertEqual([(item["how"], item.get("code", ""), item["verb"]) for item in noted], [("allow", "", "read"), ("approved", code, "write")])
+        found = calls.leave_of(self.root, TASK, ["tk show T-7", COMMENT, "tk search x"])
+        self.assertEqual([(item["how"], item["code"]) for item in found], [("allow", ""), ("approved", code), ("unknown", "")])
+        self.assertEqual(calls.summary(found), f"allow,approved:{code},unknown")
+        self.assertEqual(calls.parse(f"allow,approved:{code}"), [{"how": "allow", "code": ""}, {"how": "approved", "code": code}])
+
     def test_the_packs_show_patterns_give_the_facts_of_the_card(self) -> None:
         from modules.task import taskdesk
 

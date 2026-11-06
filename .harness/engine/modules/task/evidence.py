@@ -10,13 +10,13 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
-from core import tasks
+from core import calls, tasks
 
 from . import cmdview, outview
 
 KEY = "evidence_n"
 HEADING = re.compile(r"^## Run (\d+)(?:\s*\((E\d+)\))?\s*$", re.MULTILINE)
-MARKER = re.compile(r"^<!-- evidence (E\d+) by (agent|person) at (\S+) env (\S+) -->$", re.MULTILINE)
+MARKER = re.compile(r"^<!-- evidence (E\d+) by (agent|person) at (\S+) env (\S+)(?: leave=(\S+))? -->$", re.MULTILINE)  # leave: what let the agent's commands through (core.calls, 1.7.9)
 CITATION = re.compile(r"\[(E\d+)\]")
 CITING = ("*.md", "TEST/*.md", "DEV/**/*.md")  # where a citation is looked for: the task's own documents, not the results files
 OUTPUT_CHARS = 20_000  # what the window shows of an output; the file has it whole
@@ -32,8 +32,8 @@ def allocate(data: Dict[str, Any]) -> str:
     return f"E{number}"
 
 
-def marker(evidence_id: str, by: str, at: str, env: str) -> str:
-    return f"<!-- evidence {evidence_id} by {by} at {at} env {env} -->"
+def marker(evidence_id: str, by: str, at: str, env: str, leave: str = "") -> str:
+    return f"<!-- evidence {evidence_id} by {by} at {at} env {env}" + (f" leave={leave}" if leave else "") + " -->"
 
 
 def section_parts(text: str) -> Dict[str, Any]:
@@ -93,6 +93,7 @@ def listing(root: Path, task: str) -> List[Dict[str, Any]]:
                 "id": evidence_id, "run": int(head.group(1)), "kind": "test" if path.parent.name == "TEST" else "run",
                 "env": mark.group(4) if mark else path.parent.name if path.parent.name != "TEST" else path.stem.split("-", 1)[-1],
                 "by": mark.group(2) if mark else "person", "at": mark.group(3) if mark else "",
+                "leave": calls.parse(mark.group(5)) if mark and mark.group(5) else [],  # what let the commands through; empty: a person's run, or recorded before the gate noted calls
                 "file": path.relative_to(folder).as_posix(), "cited_in": [],
                 "command": parts["command"], "layout": cmdview.layout(parts["command"], folder) if parts["command"] else None, "output": parts["output"], "output_cut": parts["output_cut"], "run_by": parts["run_by"],
                 "output_view": outview.layout(parts["output_whole"]) if parts["output"] else None,  # the tables, the notes (1.7.9); the page shows Text too

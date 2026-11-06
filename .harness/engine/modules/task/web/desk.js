@@ -136,6 +136,12 @@
     out.push(text.slice(from));
     return out;
   }
+  // What let the agent's commands through (core.calls, 1.7.9): one tag per way, with the code of an approval; a run with no note is a grey `?`.
+  const LEAVE_TONE = {allow: "", plan: "good", runner: "good", opened: "open", approved: "good", unknown: ""};
+  function leaveTags(item) {
+    const found = item.leave && item.leave.length ? item.leave : [{how: "unknown", code: ""}];
+    return found.map((one, index) => { const mark = tag(t("desk.evidence.leave." + one.how) + (one.code ? " " + one.code : ""), LEAVE_TONE[one.how] || ""); mark.title = t("desk.evidence.leave." + one.how + ".tip"); return [index ? " " : null, mark]; });
+  }
   function evidenceWindow(item) {
     const copy = h("button", {type: "button", class: "act", disabled: item.command ? null : "disabled"}, t("desk.outbox.copy"));
     copy.addEventListener("click", () => { navigator.clipboard.writeText(callBody(item)).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });  // the query, as in a held call
@@ -144,7 +150,7 @@
     const cited = item.cited_in.length ? item.cited_in.map((name, index) => { const b = h("button", {type: "button", class: "chip"}, name); b.addEventListener("click", () => { view.close(); fileOpen = name; goTab("files"); draw(true); }); return [index ? " " : null, b]; }) : t("desk.evidence.uncited");
     const fact = (label, value) => h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), typeof value === "string" ? h("code", null, value) : value);
     const view = SERVE.dialog([h("h2", null, item.id + " · " + item.env + " · " + (item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run}))),
-      h("div", {class: "tk-call-facts"}, fact(t("desk.evidence.by"), item.by === "agent" ? tag(t("desk.evidence.by.agent"), "good") : tag(t("desk.evidence.by.person"), "")), fact(t("desk.evidence.at"), (item.at || "").slice(0, 16).replace("T", " ")), fact(t("desk.evidence.file"), item.file), fact(t("desk.evidence.cited"), h("span", null, cited))),
+      h("div", {class: "tk-call-facts"}, fact(t("desk.evidence.by"), item.by === "agent" ? tag(t("desk.evidence.by.agent"), "good") : tag(t("desk.evidence.by.person"), "")), item.by === "agent" ? fact(t("desk.evidence.leave"), h("span", null, leaveTags(item))) : null, fact(t("desk.evidence.at"), (item.at || "").slice(0, 16).replace("T", " ")), fact(t("desk.evidence.file"), item.file), fact(t("desk.evidence.cited"), h("span", null, cited))),
       h("div", {class: "win-body"},
         item.layout ? h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)) : h("p", {class: "sub"}, t("desk.evidence.nocommand")),
         outputPane(item)),
@@ -1733,11 +1739,12 @@
       file.addEventListener("click", () => openRun(item));
       const cited = item.cited_in.length ? item.cited_in.map((name, index) => { const b = h("button", {type: "button", class: "chip"}, name); b.addEventListener("click", () => { fileOpen = name; if (!fileEdit.path) fileEdit.error = ""; goTab("files"); draw(true); }); return [index ? " " : null, b]; }) : t("desk.evidence.uncited");
       return h("tr", {class: item.cited_in.length ? "" : "uncited"}, h("td", null, evChip(item.id)), h("td", null, item.env), h("td", null, tag(item.by === "agent" ? t("desk.evidence.by.agent") : t("desk.evidence.by.person"), item.by === "agent" ? "good" : "")),
+        h("td", null, item.by === "agent" ? leaveTags(item) : h("span", {class: "sub"}, "\u2014")),
         h("td", {class: "sub"}, item.at ? item.at.slice(0, 16).replace("T", " ") : ""), h("td", {class: "sub"}, item.kind === "test" ? t("desk.evidence.kind.test", {n: item.run}) : t("desk.evidence.kind.run", {n: item.run})),
         h("td", {class: "sub"}, cited), h("td", {class: "ev-tools"}, window_, " ", file));
     });
     return h("div", {class: "evidence"}, h("p", {class: "hint top"}, t("desk.evidence.hint")),
-      h("div", {class: "scroll"}, h("table", null, h("thead", null, h("tr", null, h("th", null, "E"), h("th", null, t("desk.evidence.env")), h("th", null, t("desk.evidence.by")), h("th", null, t("desk.evidence.at")), h("th", null, t("desk.evidence.run")), h("th", null, t("desk.evidence.cited")), h("th", null))), h("tbody", null, rows))));
+      h("div", {class: "scroll"}, h("table", null, h("thead", null, h("tr", null, h("th", null, "E"), h("th", null, t("desk.evidence.env")), h("th", null, t("desk.evidence.by")), h("th", null, t("desk.evidence.leave")), h("th", null, t("desk.evidence.at")), h("th", null, t("desk.evidence.run")), h("th", null, t("desk.evidence.cited")), h("th", null))), h("tbody", null, rows))));
   }
 
   // The Intake tab (1.5.45): the documents of a requirement go into REQ/ here (a program turns Word and Excel into Markdown and CSV: no AI), are trimmed in a text box, and

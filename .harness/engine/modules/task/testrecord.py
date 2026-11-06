@@ -20,7 +20,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core import messages, tasks
+from core import calls, messages, tasks
 from core.paths import cli_command, local_stamp, utc_now
 
 from . import evidence as evidence_ids, mdtree, task as task_ops, taskstages, testdefects
@@ -206,6 +206,25 @@ def set_runner(root: Path, raw_task: str, env: str, agent: bool, interactive: Op
     return {"task": task, "env": chosen, "runner": AGENT if agent else "person", "changed": before != agent, "next": say("task.test.runner.agent" if agent else "task.test.runner.person", env=chosen)}
 
 
+def leave_word(root: Path, task: str, ran: str, by_agent: bool) -> str:
+    """What let the agent's commands through, for the marker (core.calls): empty for a person's run or a run with no commands."""
+    if not by_agent or not ran.strip():
+        return ""
+    return calls.summary(calls.leave_of(root, task, [line for line in ran.splitlines() if line.strip()]))
+
+
+def leave_lines(root: Path, task: str, ran: str, by_agent: bool) -> List[str]:
+    """The line under `Run by:` that says what let the commands through, in words; nothing for a person's run."""
+    if not by_agent or not ran.strip():
+        return []
+    found = calls.leave_of(root, task, [line for line in ran.splitlines() if line.strip()])
+    counts: Dict[str, List[str]] = {}
+    for item in found:
+        counts.setdefault(item["how"], []).append(item.get("code", ""))
+    parts = [say("task.leave." + how, n=len(codes), codes=", ".join(sorted({code for code in codes if code}))) for how, codes in counts.items()]
+    return [say("task.leave.line", parts="; ".join(parts))]
+
+
 def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str], run_by: str = "", follow_up: str = "", ran_file: str = "", evidence: Optional[List[str]] = None) -> Dict[str, Any]:
     task = task_ops.resolve(root, raw_task)
     data = tasks.read(root, task)
@@ -239,8 +258,8 @@ def record(root: Path, raw_task: str, env: str, given_file: str, rows: List[str]
     pictures = save_evidence(folder, chosen, number, list(evidence or []))
     who = say("task.test.run_by_agent", env=chosen) if by_agent else cell(run_by) or "the user"
     section = [
-        "", f"## Run {number} ({evidence_id})", "", evidence_ids.marker(evidence_id, AGENT if by_agent else "person", now, chosen), "",
-        f"Run by: {who}. Recorded {local_stamp()}.", "",
+        "", f"## Run {number} ({evidence_id})", "", evidence_ids.marker(evidence_id, AGENT if by_agent else "person", now, chosen, leave_word(root, task, ran, by_agent)), "",
+        f"Run by: {who}. Recorded {local_stamp()}.", *leave_lines(root, task, ran, by_agent), "",
         *(["### What was run", "", *fenced(ran), ""] if ran else []),
         *([("### As the agent saved them" if by_agent else "### As the user gave them"), "", *fenced(given), ""] if given else []),
         *(["### Screenshots", "", *[line for item in pictures for line in (f"![{cell(item['caption']).replace(']', ')')}]({item['relative']})", "", f"{cell(item['caption'])} (file `{item['name']}`, sha256 {item['sha'][:12]})", "")]] if pictures else []),

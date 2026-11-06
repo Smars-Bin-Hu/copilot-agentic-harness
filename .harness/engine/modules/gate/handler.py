@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 import json
 import re
 
-from core import repo_paths, targets, tasks, unseen
+from core import calls, repo_paths, targets, tasks, unseen
 from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent
@@ -144,15 +144,20 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
         return None
     action, decision = picked
     passes = decision == external.ALLOW
+    how = "allow" if passes else ""  # what let it through (core.calls): the evidence says it (1.7.9)
     opened = False
     if decision == external.TASK:
         data = _open_task(ctx)
-        passes = bool(data and (tasks.plan_approved(ctx.root, data["task"], data) or _test_granted(data, action.env)))
+        if data and _test_granted(data, action.env):
+            passes, how = True, "runner"
+        elif data and tasks.plan_approved(ctx.root, data["task"], data):
+            passes, how = True, "plan"
     if decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes:
         data = _open_task(ctx)
         opened = bool(data and _env_opened(data, action.env))  # the person opened this environment for this task (`task allow`, 1.7.4): no further approval
         passes = opened
-    return {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": opened}
+        how = "opened" if opened else ""
+    return {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": opened, "how": how, "code": ""}
 
 
 def _env_opened(data: Dict[str, Any], env: str) -> bool:
@@ -198,7 +203,7 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
         minutes = approvals.minutes(policy)
         used = approvals.consume(ctx.root, event.session_id, event.command, minutes, file=approvals.ACTIONS)
         if used:
-            judged["approved"] = True
+            judged["approved"], judged["how"], judged["code"] = True, "approved", str(used.get("code", ""))
             outbox.mark(ctx.root, outbox.draft_of(used), "sent")
             return None  # the person read this command and approved it: it runs once
         task = data["task"] if data else None
@@ -260,6 +265,10 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
         if facts:  # every call to a listed system leaves its line, whatever rule decided it and also when it went through
             decided = decided or Decision()
             decided.facts.update(facts)
+        if judged and (judged["passes"] or judged["approved"]) and not (decided and decided.permission == "deny"):
+            data = _open_task(ctx)
+            if data:  # the call goes through now: the task keeps what let it through, so a run the agent records can say it (core.calls, 1.7.9)
+                calls.note(ctx.root, data["task"], event.command, judged["action"].system, judged["action"].env, judged["action"].verb, judged.get("how", ""), judged.get("code", ""))
         return decided
     if not event.paths:
         return Decision(permission="deny", reason=rules.write_no_path(event.tool_name), facts={"kind": "write-no-path"})

@@ -14,7 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import messages, tasks
+from core import calls, messages, tasks
 from core.paths import cli_command, local_stamp, utc_now
 
 from . import evidence as evidence_ids, task as task_ops
@@ -28,6 +28,25 @@ EVIDENCE = "evidence"
 
 def say(key: str, /, **values: Any) -> str:
     return messages.text(key, command=cli_command(), **values)
+
+
+def leave_word(root: Path, task: str, ran: str, by_agent: bool) -> str:
+    """What let the agent's commands through, for the marker (core.calls): empty for a person's run or a run with no commands."""
+    if not by_agent or not ran.strip():
+        return ""
+    return calls.summary(calls.leave_of(root, task, [line for line in ran.splitlines() if line.strip()]))
+
+
+def leave_lines(root: Path, task: str, ran: str, by_agent: bool) -> List[str]:
+    """The line under `Run by:` that says what let the commands through, in words; nothing for a person's run."""
+    if not by_agent or not ran.strip():
+        return []
+    found = calls.leave_of(root, task, [line for line in ran.splitlines() if line.strip()])
+    counts: Dict[str, List[str]] = {}
+    for item in found:
+        counts.setdefault(item["how"], []).append(item.get("code", ""))
+    parts = [say("task.leave." + how, n=len(codes), codes=", ".join(sorted({code for code in codes if code}))) for how, codes in counts.items()]
+    return [say("task.leave.line", parts="; ".join(parts))]
 
 
 def record(root: Path, raw_task: str, env: str, given_file: str = "", run_by: str = "", ran_file: str = "", evidence: Optional[List[str]] = None, follow_up: str = "") -> Dict[str, Any]:
@@ -56,8 +75,8 @@ def record(root: Path, raw_task: str, env: str, given_file: str = "", run_by: st
     pictures = save_evidence(folder, env, number, list(evidence or []), base, EVIDENCE)
     who = say("task.run.by_agent") if by_agent else cell(run_by) or "the user"
     section = [
-        "", f"## Run {number} ({evidence_id})", "", evidence_ids.marker(evidence_id, AGENT if by_agent else "person", utc_now(), env), "",
-        f"Run by: {who}. Recorded {local_stamp()}.", "",
+        "", f"## Run {number} ({evidence_id})", "", evidence_ids.marker(evidence_id, AGENT if by_agent else "person", utc_now(), env, leave_word(root, task, ran, by_agent)), "",
+        f"Run by: {who}. Recorded {local_stamp()}.", *leave_lines(root, task, ran, by_agent), "",
         *(["### What was run", "", *fenced(ran), ""] if ran else []),
         *([("### As the agent saved them" if by_agent else "### As the user gave them"), "", *fenced(given), ""] if given else []),
         *(["### Screenshots", "", *[line for item in pictures for line in (f"![{cell(item['caption']).replace(']', ')')}]({item['relative']})", "", f"{cell(item['caption'])} (file `{item['name']}`, sha256 {item['sha'][:12]})", "")]] if pictures else []),

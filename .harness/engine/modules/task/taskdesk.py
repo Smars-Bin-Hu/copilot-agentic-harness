@@ -178,6 +178,10 @@ def standout(what: str, detail: str) -> Tuple[str, str]:
     """The lines a person looks for in the trail: the decisions that move a task on, and the verdict of a check. The mark of the line (`good`, `bad` or none) and its message."""
     if what in DECISIONS:
         return "good", f"event.{what}"
+    if what in ("run-record", "test-record") and detail.endswith("by the agent"):
+        return "agent", f"event.{what}"  # the agent ran an environment itself: a person looks for these (1.7.9)
+    if what == "allow-env":
+        return ("open" if detail.endswith(": on") else ""), f"event.{what}"  # the person opened an environment to the agent
     verdict = CHECKED.match(detail) if what == "review" else None
     if not verdict:
         return "", f"event.{what}"

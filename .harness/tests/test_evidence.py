@@ -61,6 +61,26 @@ class RunTests(EvidenceCase):
         self.assertEqual([item["id"] for item in evidence.listing(self.root, f"{BASE}/job")], ["E1"])
 
 
+class LeaveTests(EvidenceCase):
+    def test_a_run_the_agent_records_says_what_let_its_commands_through(self) -> None:
+        from core import calls
+
+        calls.note(self.root, f"{BASE}/job", "cloudctl --sub dev list", "cloud", "dev", "read", "allow")  # the gate notes with the task's path, as the session state keeps it
+        calls.note(self.root, f"{BASE}/job", "cloudctl --sub dev run job-1", "cloud", "dev", "exec", "approved", "AB12CD")
+        ran = self.root / "ran.txt"
+        ran.write_text("cloudctl --sub dev list\ncloudctl   --sub dev run job-1\ncloudctl --sub dev frobnicate\n", encoding="utf-8")
+        first = self.record("DEV", run_by="agent", ran_file=str(ran))
+        text = (self.job / "RUNS" / "DEV" / "results.md").read_text(encoding="utf-8")
+        self.assertIn(f"<!-- evidence {first['evidence_id']} by agent at ", text)
+        self.assertIn(" env DEV leave=allow,approved:AB12CD,unknown -->", text)
+        line = next(found for found in text.splitlines() if "AB12CD" in found and "<!--" not in found)  # the line under Run by, in the user's language
+        self.assertEqual(line.count("1 "), 3)
+        item = next(found for found in evidence.listing(self.root, "job") if found["id"] == first["evidence_id"])
+        self.assertEqual(item["leave"], [{"how": "allow", "code": ""}, {"how": "approved", "code": "AB12CD"}, {"how": "unknown", "code": ""}])
+        second = self.record("DEV")  # a person's run says nothing about leave
+        self.assertNotIn("leave=", (self.job / "RUNS" / "DEV" / "results.md").read_text(encoding="utf-8").split(second["evidence_id"], 1)[1].split("-->", 1)[0])
+
+
 class WindowTests(EvidenceCase):
     """1.7.8: the listing carries each run's command (laid out) and output, for the window of a citation; the page turns [E7] into a chip."""
 

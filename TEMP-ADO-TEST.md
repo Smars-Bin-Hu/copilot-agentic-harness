@@ -85,41 +85,37 @@ Get-ChildItem env: | Where-Object { $_.Name -match 'proxy|cert|ca_bundle|ssl|nod
 
 **结论（已查到）**：agent 的进程里有 `HTTP_PROXY` / `HTTPS_PROXY = http://127.0.0.1:9000`，你的终端没有。agent 的请求经过这个本机代理，代理换了证书，az 不认。下面取 **经过这个代理时** 的证书链，再做一个 az 认得的证书文件。
 
-**3c. 经过 127.0.0.1:9000 取 dev.azure.com 的证书链（你的终端，整段粘）**
+9000 端口是 Zscaler：它拆开 HTTPS 再换上 Zscaler 自己的根证书。这张根证书已经在 Windows 证书库里（浏览器因此不报错），az 自带的 Python 不读证书库，所以要把它导出来放进 az 认的文件。
+
+**3c. 从 Windows 证书库找 Zscaler 根证书**
 
 ```powershell
-$h = 'dev.azure.com'
-$tcp = [Net.Sockets.TcpClient]::new('127.0.0.1', 9000)
-$ns = $tcp.GetStream()
-$req = [Text.Encoding]::ASCII.GetBytes("CONNECT ${h}:443 HTTP/1.1`r`nHost: ${h}:443`r`n`r`n")
-$ns.Write($req, 0, $req.Length)
-$one = New-Object byte[] 1; $head = ''
-while (-not $head.EndsWith("`r`n`r`n")) { if ($ns.Read($one, 0, 1) -le 0) { break }; $head += [char]$one[0] }
-"proxy says: " + $head.Split("`r")[0]
-$ssl = [Net.Security.SslStream]::new($ns, $false, { $true })
-$ssl.AuthenticateAsClient($h)
-$cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new($ssl.RemoteCertificate)
-$chain = [Security.Cryptography.X509Certificates.X509Chain]::new(); [void]$chain.Build($cert)
-$chain.ChainElements | ForEach-Object { $_.Certificate.Subject }
-$tcp.Close()
+Get-ChildItem Cert:\CurrentUser\Root, Cert:\LocalMachine\Root | Where-Object { $_.Subject -match 'Zscaler' } | Format-List Subject, Thumbprint, NotAfter
 ```
 
-- 第一行应是 `proxy says: HTTP/1.1 200 ...`。是 `407` 说明代理要登录，停下告诉我。
-- 后面几行是证书链，最后一行是根证书。截图时名字可以打码，告诉我它是不是公共机构（DigiCert、Microsoft 等）。
+应该至少列出一张（`CN=Zscaler Root CA ...`）。一张都没有就停下告诉我。
 
-**3d. 做一个 az 认得的证书文件**
-
-紧接着 3c，在同一个窗口粘（要用到 `$chain`）：
+**3d. 做一个 az 认得的证书文件（az 原有的证书 + Zscaler 根证书）**
 
 ```powershell
-$root = $chain.ChainElements[$chain.ChainElements.Count - 1].Certificate
+$root = Get-ChildItem Cert:\CurrentUser\Root, Cert:\LocalMachine\Root | Where-Object { $_.Subject -match 'Zscaler' } | Select-Object -First 1
 $pem = "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64String($root.RawData, 'InsertLineBreaks') + "`n-----END CERTIFICATE-----`n"
 $certifi = Get-ChildItem "$env:USERPROFILE\tools\azure-cli" -Recurse -Filter cacert.pem | Select-Object -First 1
 $bundle = "$env:USERPROFILE\tools\ca-bundle.pem"
 Get-Content $certifi.FullName -Raw | Set-Content $bundle -Encoding ascii
 Add-Content $bundle $pem -Encoding ascii
-"bundle = $bundle"
+"bundle = $bundle  (" + (Get-Item $bundle).Length + " bytes)"
 ```
+
+**3e. 先在你自己的终端模拟 agent 的环境试一次**
+
+```powershell
+$env:HTTPS_PROXY = 'http://127.0.0.1:9000'; $env:HTTP_PROXY = 'http://127.0.0.1:9000'
+$env:REQUESTS_CA_BUNDLE = "$env:USERPROFILE\tools\ca-bundle.pem"
+az rest --resource $ado --url "https://dev.azure.com/$org/$projUrl/_apis/build/builds" --uri-parameters '$top=5' 'api-version=7.1' --query "value[].{id:id,result:result}" -o table
+```
+
+（要先粘过第 0 步。）能列出 build 就说明证书文件对了。再把 `REQUESTS_CA_BUNDLE` 那行去掉跑一次，应该报和 agent 一样的证书错误，这样就确认了原因。
 
 然后按第 1 步重启 VS Code（关掉所有 VS Code 窗口），在启动那行之前多粘一行：
 

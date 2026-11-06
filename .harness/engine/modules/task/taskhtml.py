@@ -17,8 +17,8 @@ Python gives the numbers and puts the page together; it draws nothing. The front
   page.css, lobby.css     where things go, shared / the board's lobby
   common.js               helpers shared by both pages
   tools.js                a served page only: the Tools window (a tab each for Tool packs, Connections, This computer) and the Tools group of Get ready (1.7.17)
-  machine.js              a served page only: This computer (tool folders and the CA bundle VS Code is started with, 1.7.11)
-  servers.js              a served page only: the Servers window (each server and the person's identity, tested before it is kept) and Open VS Code with identities (1.7.10)
+  machine.js              a served page only: the Tool packs and This computer tabs (tool folders, the CA bundle, MCP) of the Tools window
+  servers.js              a served page only: the Connections tab (each connection and the person's identity, tested before it is kept, Export) and Open VS Code with identities (1.7.10)
   task.js, board.js       how each page is drawn from its data; desk.js the task page, diffview.js the code compare of its Changes tab, highlight.js the colours of code, serve.js the server's buttons, chat.js the send panel, steer and stop
 
 `build` copies the style, the scripts and the data (as JSON) into the skeleton, so the result is still one file that

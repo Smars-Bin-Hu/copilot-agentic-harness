@@ -10,6 +10,28 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.10 (2026-11-06)
+
+### Added
+
+- **Servers and your identities in Get ready.** A company lists its servers in the knowledge base (`company/tools/servers.json`), each of a kind (`company/tools/kinds/<kind>.json`: what a server of that kind needs, its ways in, the command that tests the way in and the words of its answer, and for the gate its program, how a command names one server, the verbs and the rules). The harness knows no kind: SQL Server comes as a sample, and any program with a test command can be another (a web service with a token was tested with curl). Each server becomes a system of the gate by itself. In Get ready, **Servers** opens a window of its own: each server with its environment and kind, your identity typed once, **Test** (connected, not let in, no answer, or the tool missing, the reason on hover) and **Save** only after a test passed. The identity is kept in `.harness/.env` on this computer, only you may read it, `harness reinstall` carries it, and it never comes back to the page. You can add a server of your own.
+- **Open VS Code with identities.** In the Servers window, and on the Enter screen when a server is not reached: tick the identities this window holds, then open (VS Code must be closed first). A Windows account is held as `runas /netonly` holds it, without a prompt (Windows); an account carried by variables is put in VS Code's environment. Two identities that cannot share one window (two Windows accounts, or two values of one variable) are marked: the window holds one, the other is reached through **`harness as <alias> -- <command>`**, each such command with that server's identity. The agent is told at the start of each chat, and the gate refuses a call without the prefix with the line to run.
+- **The gate keeps identities from the agent**: a read of `.harness/.env`, a print of a variable that carries an identity (`echo $SQLCMDPASSWORD`, `$env:…`, `%…%`), and a dump of the environment (`env`, `printenv`, `set`) are refused. A server's own call may name its kind's variable (curl with `$TOKEN`); the same variable sent anywhere else is refused.
+- **Servers in the Knowledge base window, and into the company pack.** The window lists the servers set up on this computer (a filled dot: the company's; a ring: your own; the hover says where, and whether your identity is saved). **⇪** on one of your own shows what will be written, then adds it to `company/tools/servers.json` (with its kind file when the pack has none) and syncs: the server only, never the account or the password, which stay in your `.env` and still serve it. Commit the knowledge base and Pack for colleagues as usual.
+- `harness servers`, `harness servers test <alias>`, `harness as`.
+
+### Changed
+
+- **A look at a server is a Q&A task, opened without questions and closed when answered.** When you ask to run a read and see what it returns, the agent opens a `qa` task at once (no "which task, which kind", no requirement to confirm, no log), runs the command, answers, writes each command and what it returned into `TASK.md`, and closes the task. It records no evidence unless you ask. The board keeps the row; open it again, or turn it into other work with `task upgrade --kind` (`AGENTS.md`, `harness-my-task`, `generic-evidence-run`, the output of `task new`). And it no longer checks the way in before each run (`harness tools check` probed every server, 18 seconds here): it runs the command, and only when that fails reads `harness tools reach`, which answers at once from what the start of the chat found.
+- **The agent is told how to reach a server you name.** The start of a chat names the servers in one line (alias and environment). A prompt that names a server by its alias comes with a command that reaches it (the test command, no password in it, `harness as <alias> --` before it where the window needs it); `harness servers` shows it as `call` for the others. Before, the agent knew only the aliases and searched for the host and port. A chat that never touches a server pays for one line.
+- **Several reads on one server go in one command** (`generic-evidence-run`): one process, one gate check and one turn of the model instead of one each, with a marker printed between the statements. The record still has one step per statement, each with its own command and output. A write goes alone; the gate judges the whole command, so a write inside it is held as before.
+- **Prod takes only a rule written for prod**: a `*` rule of a system no longer loosens prod.
+- **The sample SQL Server pack is a kind and a server list** (`kinds/sqlserver.json`, `servers.json`), ready to copy to the knowledge base; its hand-written `systems.json` is gone (a team's own `systems.json` still works).
+
+### Fixed
+
+- **The browser's own tooltip no longer shows beside the hover card** on a page that refreshes while the card is up (the reach line of the Enter screen): the card moves the new title aside and shows its words.
+
 ## 1.7.9 (2026-11-05)
 
 ### Added

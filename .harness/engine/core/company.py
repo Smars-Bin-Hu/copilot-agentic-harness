@@ -6,7 +6,9 @@
   company/instructions/     knowledgebase.instructions.md, copied to `.github/instructions/`, for the same reason
   company/tools/            systems.json (the outside systems, `{"systems": {...}}`), copied to `.harness/policies/tools.company.json`: the gate
                             reads it between tools.json and the person's tools.override.json; launch/ (how to start VS Code for them: scripts
-                            a person runs), copied to `.harness/launch/` (1.7.1). These paths are fixed: pack, update and sync count on them
+                            a person runs), copied to `.harness/launch/` (1.7.1); servers.json (the servers, by kind: `{"servers": {...}}`),
+                            copied to `.harness/policies/servers.company.json`, and kinds/ (what each kind of server needs and how its way in is
+                            tested), copied to `.harness/kinds/` (1.7.10). These paths are fixed: pack, update and sync count on them
   company/manifest.json     what a package holds; made by `pack`, written last by `update`
 
 `sync` makes the copies, and never touches any other file. `pack` makes a zip of what git has in the knowledge base;
@@ -41,6 +43,10 @@ SYSTEMS_FILE = "systems.json"
 SYSTEMS_COPY = ".harness/policies/tools.company.json"
 LAUNCH_DIR = "launch"
 LAUNCH_COPY = ".harness/launch"
+SERVERS_FILE = "servers.json"
+SERVERS_COPY = ".harness/policies/servers.company.json"
+KINDS_DIR = "kinds"
+KINDS_COPY = ".harness/kinds"
 NOT_CONTENT = {".git", ".DS_Store", "Thumbs.db"}
 PLACEHOLDER = {"README.md", ".gitkeep"}  # what an empty knowledge base ships with
 BACKUP_DIR = "company-backup"
@@ -136,6 +142,10 @@ def copies(root: Path, folder: Path) -> Dict[str, Any]:
         pairs.append((SYSTEMS_COPY, folder / TOOLS_DIR / SYSTEMS_FILE, root / SYSTEMS_COPY))
     if (folder / TOOLS_DIR / LAUNCH_DIR).is_dir():
         pairs.append((LAUNCH_COPY, folder / TOOLS_DIR / LAUNCH_DIR, root / LAUNCH_COPY))
+    if (folder / TOOLS_DIR / SERVERS_FILE).is_file():
+        pairs.append((SERVERS_COPY, folder / TOOLS_DIR / SERVERS_FILE, root / SERVERS_COPY))
+    if (folder / TOOLS_DIR / KINDS_DIR).is_dir():
+        pairs.append((KINDS_COPY, folder / TOOLS_DIR / KINDS_DIR, root / KINDS_COPY))
     named = {item.name for item in skills}
     here = root / SKILLS_DIR
     only_here = sorted(item.name for item in here.glob(f"{have}-*") if item.is_dir() and item.name not in named) if have else []

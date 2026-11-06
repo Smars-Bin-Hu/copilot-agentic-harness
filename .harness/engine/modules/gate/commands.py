@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import argparse
+
 import sys
 import hashlib
 import json
@@ -161,6 +163,46 @@ def tools_reach(root: Path, probe: bool) -> Dict[str, Any]:
     return {"envs": lines, "ok": all(line["state"] == reach.OK for line in lines)}
 
 
+def run_as(root: Path, alias: str, rest: List[str]) -> Dict[str, Any]:
+    """`harness as <alias> -- <command>` (1.7.10): one command of that server with its saved identity; the output as it comes, its exit code."""
+    from core import servers
+
+    words = rest[1:] if rest and rest[0] == "--" else rest
+    if not words:
+        return {"_text": messages.text("servers.as.other", alias=alias), "exit_code": 2}
+    listed = config.policy_or_empty(root, "tools").get("systems") or {}
+    code, output = servers.run_as(root, alias, words, lambda line: external.classify(line, listed))
+    return {"_text": output, "exit_code": code}
+
+
+def servers_list(root: Path) -> Dict[str, Any]:
+    """`harness servers`: every server with its kind, environment and whether an identity is saved; never a password."""
+    from core import servers
+
+    env, known = servers.read_env(root), servers.kinds(root)
+    out = []
+    for alias, server in servers.listed(root).items():
+        kind = known.get(str(server.get("kind"))) or {}
+        saved = servers.identity_of(env, alias, kind)
+        out.append({"alias": alias, "kind": server.get("kind"), "env": server.get("env"), "auth": server.get("auth", ""), "own": bool(server.get("own")),
+                    "account": saved.get("account", ""), "saved": bool(saved), "known_kind": bool(kind)})
+    calls = {one["alias"]: one["call"] for one in servers.calls(root)}
+    for one in out:
+        if one["alias"] in calls:
+            one["call"] = calls[one["alias"]]
+    return {"servers": out, "state": servers.state(root)}
+
+
+def servers_test(root: Path, alias: str) -> Dict[str, Any]:
+    """`harness servers test <alias>`: test the way in with the saved identity, from this terminal."""
+    from core import servers
+
+    server = servers.listed(root).get(alias) or {}
+    kind = servers.kinds(root).get(str(server.get("kind"))) or {}
+    found = servers.test(root, alias, servers.identity_of(servers.read_env(root), alias, kind))
+    return {**found, "alias": alias, "exit_code": 0 if found["state"] == "ok" else 1}
+
+
 def _wait(root: Path, args: Any) -> Dict[str, Any]:
     from . import wait  # it imports this module's CommandError
 
@@ -175,6 +217,17 @@ def register(subparsers: Any) -> None:
     seen = tools_commands.add_parser("reach", help="can the agent reach each environment from VS Code? What the hooks saw: the probes at the start of a chat and the agent's own calls (--probe runs the probes now, in this terminal's identity)")
     seen.add_argument("--probe", action="store_true", help="run the probes now and keep the answers (the hook does this at the start of a chat, in VS Code's identity)")
     seen.set_defaults(handler=lambda args: tools_reach(repo_root(), args.probe))
+
+    acting = subparsers.add_parser("as", help="run one command of a server with that server's saved identity (when this window does not hold it): harness as <alias> -- <command>")
+    acting.add_argument("alias", help="the server, as Get ready lists it")
+    acting.add_argument("rest", nargs=argparse.REMAINDER, help="-- then the command, whole")
+    acting.set_defaults(handler=lambda a: run_as(repo_root(), a.alias, a.rest))
+    listing = subparsers.add_parser("servers", help="the servers of this copy (the company pack's and your own) and whether an identity is saved for each; `test <alias>` tests the way in")
+    listing_commands = listing.add_subparsers(dest="servers_command")
+    probe = listing_commands.add_parser("test", help="test the way in to a server with its saved identity")
+    probe.add_argument("alias")
+    probe.set_defaults(handler=lambda a: servers_test(repo_root(), a.alias))
+    listing.set_defaults(handler=lambda a: servers_list(repo_root()))
 
     waiting = subparsers.add_parser("wait", help="wait for an outside system to reach a state in one call: run a read of a listed system every N seconds until its output matches a pattern, or a timeout; the last output goes to a file of the task")
     waiting.add_argument("--run", required=True, help="the read-only command of a listed system to run each round, whole, in quotes")

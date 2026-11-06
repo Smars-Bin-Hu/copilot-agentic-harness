@@ -13,6 +13,10 @@
 .harness/policies/cli.override.json
 .harness/policies/tools.override.json
 
+# The person's identities for the servers (Get ready, Servers): never in git
+.harness/.env
+.harness/.env.tmp
+
 # Python cache
 __pycache__/
 *.pyc

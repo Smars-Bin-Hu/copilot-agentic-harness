@@ -137,6 +137,8 @@ def check_session(root: Path, session_id: str, surface: str) -> None:
 def next_text(root: Path, task: str, data: Dict[str, Any], left: str) -> str:
     tier = data.get("tier") or "medium"
     text = say(f"task.next.{tier}", task=task)
+    if data.get("kind") == "qa" and tier == "light":  # a Q&A ends when it is answered: no task left waiting on the board
+        text += say("task.next.qa", name=task_ops.name_of(task))
     if tier == "full" or tasks.plan_digest(root, task):
         text += task_ops.next_step(root, task, data)
     if left:

@@ -15,7 +15,9 @@ One task, one folder. The folder is `.workspace/sandbox/tasks/<task name>/`, and
 - The user wants to go on with an existing task, or to switch from one task to another. Pick the task up even when the user only asks "how far is that task": without that, this session is not under the task rules, and independent checks cannot be used.
 - A task grew halfway: it was only Q&A or an RCA, and now it has to change a target repository.
 
-Do not use it for plain Q&A that writes nothing.
+Do not use it for a plain question answered from what you know, which touches no file and no server.
+
+**A look is a Q&A task, with no questions asked.** When the user asks to look at something on a server or in files ("run this query on DEV", "what does IST return"), skip step 2: run `harness task new <name> --kind qa --session-id <session id>` at once, do the look (skill `generic-evidence-run`), write the answer into `TASK.md`, and close the task. Asking which task or kind, a requirement to confirm and a log are for work, not for a look. It is a new task even when an open task has a like name, or a file attached to the chat is from one: pick an open task up only when the user names it.
 
 ## Prerequisites
 
@@ -37,13 +39,13 @@ Do not ask again what the user has already made clear. If you have a question to
 
    | No. | Kind | `--kind` | Done when | Default tier |
    | --- | --- | --- | --- | --- |
-   | 1 | Q&A (looking things up in the knowledge base included) | `qa` | The answer has a source | light |
+   | 1 | Q&A: a look at a server or files, the knowledge base included | `qa` | The answer has a source; a look on a server names each command and what it returned. Closed when answered | light |
    | 2 | RCA | `rca` | There is a chain of evidence: what was seen, logs, root cause, verification | medium |
    | 3 | Design, development plan | `design` | There are options and trade-offs | medium |
    | 4 | Development | `dev` | The changes match the approved plan, with a record of self-testing | full |
    | 5 | Testing | `test` | Cases and results are on disk | full |
    | 6 | Knowledge base update | `kb` | The source is clear; it goes through promote | full |
-   | 7 | Other: a broad question, a one-off look at a situation, none of the above | `other` | No fixed standard: agree on one with the user when opening the task, and write it into "Done when" in `REQ.md` | medium |
+   | 7 | Other: a broad question or a look at a situation whose findings are kept, none of the above | `other` | No fixed standard: agree on one with the user when opening the task, and write it into "Done when" in `REQ.md` | medium |
 
    **Do not force a fit.** The first six are only the common ones. When what the user wants is broad ("have a look at this situation", "is this approach worth doing"), or spans several kinds, or is hard to tell, pick 7. With the wrong kind, the standard for done is wrong.
 
@@ -75,6 +77,7 @@ What each tier has:
 - For a task of kind `kb`: the knowledge base cannot be changed directly. First run `harness target list` and find the repository whose `knowledge_base` is `true` (for example `kb`). If there is one: fetch files with `harness task fetch <repository>/<path>`, change them under `DEV/<repository>/`, and go through the plan and promote as usual; the write-back is committed straight to the main branch of the knowledge base. If there is none: stop and tell the user that the knowledge base is not registered as a target repository yet; how to set it up is in `docs/03-configure.md`, in the part about letting a task update the knowledge base.
 - For a task you go on with: read `REQ.md` first, then see whether `REQ/` has new documents.
 - Update `TASK.md` every time before you stop. Append the decisions you made, and why, to `LOG.md` (when there is one).
+- For a task of kind `qa`: answer, write the answer under `## Answer` in `TASK.md`, then run `harness task close --task <name>` yourself; the output of `task new` says so. The user can open it again, or turn it into other work with `task upgrade --kind`.
 - **After opening a new task, end your reply with this sentence** (not for Q&A): "For an independent check, write `[review]=1` in your next message." Leave it out when the rules at the top of the prompt already say `Independent checks: passes needed in a row`: the user has switched them on. Do not ask it as a question: checks are on only when the user writes the mark, and you cannot switch them on for the user.
 
 ## Gotchas

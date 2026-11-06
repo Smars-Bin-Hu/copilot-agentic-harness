@@ -1,0 +1,31 @@
+{
+  "servers": {
+    "orders-dev": {
+      "kind": "sqlserver",
+      "env": "dev",
+      "auth": "windows",
+      "host": "sql-dev.example.local",
+      "port": "1433",
+      "database": "orders",
+      "label": "Orders, DEV"
+    },
+    "orders-ist": {
+      "kind": "sqlserver",
+      "env": "ist",
+      "auth": "windows",
+      "host": "sql-ist.example.local",
+      "port": "1433",
+      "database": "orders",
+      "label": "Orders, IST"
+    },
+    "orders-qat": {
+      "kind": "sqlserver",
+      "env": "qat",
+      "auth": "windows",
+      "host": "sql-qat.example.local",
+      "port": "1433",
+      "database": "orders",
+      "label": "Orders, QAT"
+    }
+  }
+}

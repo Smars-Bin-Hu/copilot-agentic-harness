@@ -269,10 +269,11 @@ function copyright() {
   if (typeof document === "undefined" || window.__hoverCard) return;
   window.__hoverCard = true;
   const GAP = 8, EDGE = 12, WAIT = 220;
-  let card = null, owner = null, timer = 0;
+  let card = null, owner = null, timer = 0, watch = null;
   const box = () => card || (card = Object.assign(document.createElement("div"), {className: "hover-card", role: "tooltip"}));
   function hide() {
     clearTimeout(timer); timer = 0;
+    if (watch) { watch.disconnect(); watch = null; }
     if (owner && owner.dataset.tipKept !== undefined) { if (!owner.getAttribute("title")) owner.setAttribute("title", owner.dataset.tipKept); delete owner.dataset.tipKept; }
     owner = null;
     if (card) card.remove();
@@ -288,15 +289,27 @@ function copyright() {
     node.style.left = Math.round(Math.max(EDGE, left)) + "px"; node.style.top = Math.round(top) + "px"; node.style.visibility = "";
   }
   function show(target) {
-    const text = target.getAttribute("title");
+    let text = target.getAttribute("title");
     if (!text || !text.trim()) return;
     hide();
     owner = target;
     target.dataset.tipKept = text;
     if (!target.getAttribute("aria-label") && !target.textContent.trim()) target.setAttribute("aria-label", text.split("\n")[0]);
     target.removeAttribute("title");  // the browser's own tooltip stays away while the card is up
-    const node = box();
-    node.replaceChildren(...text.split("\n").filter((line) => line.trim()).map(cardLine));
+    fill(target, text);
+    // A page that refreshes sets the title again while the card is up: move it aside too, and show the new words.
+    watch = new MutationObserver(() => {
+      const fresh = target.getAttribute("title");
+      if (fresh === null) return;
+      target.removeAttribute("title");
+      if (!fresh.trim()) { hide(); target.setAttribute("title", fresh); return; }
+      target.dataset.tipKept = fresh;
+      if (fresh !== text) { text = fresh; fill(target, text); }
+    });
+    watch.observe(target, {attributes: true, attributeFilter: ["title"]});
+  }
+  function fill(target, text) {
+    box().replaceChildren(...text.split("\n").filter((line) => line.trim()).map(cardLine));
     place(target);
   }
   // One line of the card: a short label before the first colon is bold ("finance IST: …"); ✓ and ✗ are green and orange.

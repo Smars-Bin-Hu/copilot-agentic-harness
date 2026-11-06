@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "version": "1.7.9",
-  "released": "2026-11-05",
+  "version": "1.7.10",
+  "released": "2026-11-06",
   "copyright": "Smars Hu",
   "contributors": [
     "Claude Code"
@@ -76,7 +76,9 @@
       ".harness/tests/test_language.py",
       ".harness/tests/test_replay.py",
       ".harness/tests/test_kbextract.py",
-      ".harness/tests/test_reinstall.py"
+      ".harness/tests/test_reinstall.py",
+      ".harness/.env.example",
+      ".harness/policies/servers.json"
     ]
   },
   "modules": {
@@ -223,7 +225,8 @@
         ".github/skills/harness-admin/",
         ".github/instructions/workspace.instructions.md",
         ".workspace/README.md",
-        ".harness/tests/test_reach.py"
+        ".harness/tests/test_reach.py",
+        ".harness/tests/test_servers.py"
       ],
       "retire_when": "Copilot itself supports limiting writes by path and can refuse dangerous terminal commands. The guardrails and the write scope of a task do not retire"
     },

@@ -389,6 +389,15 @@ def launch(root: Path, chosen: List[str], primary: str, code_argv: List[str]) ->
 
 # --- harness as <alias> -- <command> ----------------------------------------------------------------------------------------------------------------------
 
+def _swap(word: str, own: Dict[str, str]) -> str:
+    """One word of a command with the window's value of each of this server's variables replaced by the server's own (only a value of 4 characters or more, so a short one is not found by chance)."""
+    for name, value in own.items():
+        window = os.environ.get(name, "")
+        if window and value and window != value and len(window) >= 4:
+            word = word.replace(window, value)
+    return word
+
+
 def run_as(root: Path, alias: str, argv: List[str], classify: Callable[[str], List[Tuple[Any, str]]]) -> Tuple[int, str]:
     """Run one command of a server with that server's saved identity. Refused (exit 2) when the command is not a call of that server: the identity is for
     its own commands, never for `echo`, `env` or another program. `classify`: the gate's reading of a command line (system, env, verb)."""
@@ -404,6 +413,11 @@ def run_as(root: Path, alias: str, argv: List[str], classify: Callable[[str], Li
     identity = identity_of(read_env(root), alias, kind)
     if not identity:
         return 2, say("servers.as.none", alias=alias)
+    own = variables(kind, server, identity)
+    swapped = [_swap(word, own) for word in argv]  # the window's shell put its own value of a variable in the line ($TOKEN, $env:TOKEN, %TOKEN%): this server's goes there
+    if swapped != argv:
+        argv = swapped
+        line = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
     if delivery(kind, server)["identity"] != "netonly":  # the output streams to the terminal as it comes
         return subprocess.run(line, shell=True, env={**os.environ, **variables(kind, server, identity)}).returncode, ""  # noqa: S602 - the agent's own command, judged by the gate
     code, output = run_with(kind, server, identity, line, Path.cwd(), timeout=3600)

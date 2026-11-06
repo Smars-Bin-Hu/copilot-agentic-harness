@@ -10,6 +10,20 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.10 (2026-11-06)
+
+### Added
+
+- **Servers and your identities in Get ready.** A company lists its servers in the knowledge base (`company/tools/servers.json`), each of a kind (`company/tools/kinds/<kind>.json`: what a server of that kind needs, its ways in, the command that tests the way in and the words of its answer, and for the gate its program, how a command names one server, the verbs and the rules). The harness knows no kind: SQL Server comes as a sample, and any program with a test command can be another (a web service with a token was tested with curl). Each server becomes a system of the gate by itself. In Get ready, **Servers** opens a window of its own: each server with its environment and kind, your identity typed once, **Test** (connected, not let in, no answer, or the tool missing, the reason on hover) and **Save** only after a test passed. The identity is kept in `.harness/.env` on this computer, only you may read it, `harness reinstall` carries it, and it never comes back to the page. You can add a server of your own.
+- **Open VS Code with identities.** In the Servers window, and on the Enter screen when a server is not reached: tick the identities this window holds, then open (VS Code must be closed first). A Windows account is held as `runas /netonly` holds it, without a prompt (Windows); an account carried by variables is put in VS Code's environment. Two identities that cannot share one window (two Windows accounts, or two values of one variable) are marked: the window holds one, the other is reached through **`harness as <alias> -- <command>`**, each such command with that server's identity. The agent is told at the start of each chat, and the gate refuses a call without the prefix with the line to run.
+- **The gate keeps identities from the agent**: a read of `.harness/.env`, a print of a variable that carries an identity (`echo $SQLCMDPASSWORD`, `$env:…`, `%…%`), and a dump of the environment (`env`, `printenv`, `set`) are refused. A server's own call may name its kind's variable (curl with `$TOKEN`); the same variable sent anywhere else is refused.
+- `harness servers`, `harness servers test <alias>`, `harness as`.
+
+### Changed
+
+- **Prod takes only a rule written for prod**: a `*` rule of a system no longer loosens prod.
+- **The sample SQL Server pack is a kind and a server list** (`kinds/sqlserver.json`, `servers.json`), ready to copy to the knowledge base; its hand-written `systems.json` is gone (a team's own `systems.json` still works).
+
 ## 1.7.9 (2026-11-05)
 
 ### Added

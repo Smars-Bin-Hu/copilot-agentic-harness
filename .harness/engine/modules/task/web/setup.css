@@ -50,7 +50,7 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .sv-form{padding:8px 10px 10px 54px}.sv-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:0 0 8px}
 .sv-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sv-said{font-size:12.5px}
 .sv-result b{font-weight:700}.sv-result.ok{color:var(--good)}.sv-result.bad{color:var(--hot)}
-.sv-add{margin-top:12px}.sv-add summary{cursor:pointer;color:var(--soft);font-size:13px}.sv-own-form{padding:10px 0 0}
+.sv-add{margin-top:12px}.sv-add summary{cursor:pointer;color:var(--soft);font-size:13px}.sv-own-form{padding:10px 0 0}.sv-field{display:flex;flex-direction:column;gap:3px;min-width:0}.sv-cap{font-size:11.5px;color:var(--soft)}.sv-cap::first-letter{text-transform:uppercase}.sv-info{cursor:help;color:var(--soft)}
 .sv-pick{cursor:default}.sv-pick input[type=checkbox]{flex:none}.sv-primary{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--soft)}
 .sv-mark{margin-left:auto}.sv-how{font-size:11.5px;padding:1px 8px;border-radius:999px;border:1px solid var(--line2);color:var(--soft);white-space:nowrap}.sv-how.wrap{border-color:var(--hot-line);color:var(--hot);background:var(--hot-bg)}
 .sv-plan{margin-top:8px}

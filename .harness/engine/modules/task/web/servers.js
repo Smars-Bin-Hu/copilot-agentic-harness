@@ -8,6 +8,7 @@ const SERVERS = (function () {
   const keep = (key, value) => { try { localStorage.setItem("harness.servers." + key, JSON.stringify(value)); } catch (error) { /* a convenience only */ } };
   const kept = (key, fallback) => { try { const found = localStorage.getItem("harness.servers." + key); return found ? JSON.parse(found) : fallback; } catch (error) { return fallback; } };
 
+  const field = (caption, input) => h("label", {class: "sv-field"}, h("span", {class: "sv-cap"}, caption), input);  // a field keeps its name once it is filled
   function envChip(env) { return h("span", {class: "sv-env sv-env-" + env}, env.toUpperCase()); }
   function where(row) { const f = row.fields || {}; return [f.host, f.port].filter(Boolean).join(":") || Object.values(f).filter(Boolean).join(" · "); }
   function result(found) {  // a test's answer: a mark and a short word, the reason on hover
@@ -58,7 +59,7 @@ const SERVERS = (function () {
     });
     if (forget) forget.addEventListener("click", () => { forget.disabled = true; ask("forget", {alias: row.alias}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
     password.addEventListener("keydown", (event) => { if (event.key === "Enter" && !test.disabled) test.click(); });
-    return [h("div", {class: "sv-fields"}, account, password, keyfile), h("div", {class: "sv-acts"}, test, save, forget, said)];
+    return [h("div", {class: "sv-fields"}, field(t("servers.account"), account), field(t("servers.password"), password), keyfile ? field(t("servers.keyfile"), keyfile) : null), h("div", {class: "sv-acts"}, test, save, forget, said)];
   }
 
   // A server of the person's own: a kind of this copy, its fields, its environment and way in, a name; then the same identity, test and save.
@@ -76,7 +77,7 @@ const SERVERS = (function () {
       const spec = kinds[kind.value];
       auth.replaceChildren(...Object.entries(spec.auth).map(([mode, item]) => h("option", {value: mode}, item.label)));
       inputs = {};
-      fields.replaceChildren(...Object.entries(spec.fields).map(([field, item]) => (inputs[field] = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: item.label + (item.optional ? " " + t("servers.optional") : ""), value: item.default || ""}))));
+      fields.replaceChildren(...Object.entries(spec.fields).map(([name, item]) => field(item.label + (item.optional ? " " + t("servers.optional") : ""), (inputs[name] = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: item.placeholder || "", value: item.default || ""})))));
       drawIdentity();
     };
     const drawIdentity = () => {
@@ -87,7 +88,7 @@ const SERVERS = (function () {
     kind.addEventListener("change", draw);
     auth.addEventListener("change", drawIdentity);
     draw();
-    return h("div", {class: "sv-own-form"}, h("div", {class: "sv-fields"}, kind, alias, env, auth), fields, rest);
+    return h("div", {class: "sv-own-form"}, h("div", {class: "sv-fields"}, field(t("servers.own.kind"), kind), field(t("servers.own.name"), alias), field(t("servers.own.env"), env), field(t("servers.own.auth"), auth)), fields, rest);
   }
 
   // The Servers window.
@@ -95,8 +96,8 @@ const SERVERS = (function () {
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("servers.loading")));
     const addBox = h("details", {class: "sv-add"}, h("summary", null, t("servers.own.add")));
     const launch = h("button", {type: "button", class: "act hot"}, t("servers.open"));
-    const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
-    const view = SERVE.dialog([h("h2", null, t("servers.title")), h("p", {class: "sub"}, t("servers.lead")), h("div", {class: "win-body"}, list, addBox), h("div", {class: "row win-foot"}, launch, close)]);
+    const close = h("button", {type: "button", class: "act"}, t("servers.close"));
+    const view = SERVE.dialog([h("h2", null, t("servers.title")), h("p", {class: "sub"}, t("servers.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("servers.lead.tip")}, "\u24d8")), h("div", {class: "win-body"}, list, addBox), h("div", {class: "row win-foot"}, launch, close)]);
     view.box.classList.add("wide", "sv-win");
     const redraw = () => ask("list").then((found) => {
       const rows = found.servers.slice().sort((a, b) => ENV_ORDER.indexOf(a.env) - ENV_ORDER.indexOf(b.env) || a.alias.localeCompare(b.alias));
@@ -120,9 +121,10 @@ const SERVERS = (function () {
   function choose() {
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("servers.loading")));
     const said = h("p", {class: "sub sv-plan"});
+    const running = h("p", {class: "bad sv-plan", hidden: ""}, t("servers.open.running"));  // its own line: the plan does not write over it
     const go = h("button", {type: "button", class: "act hot", disabled: ""}, t("servers.open.go"));
     const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
-    const view = SERVE.dialog([h("h2", null, t("servers.open.title")), h("p", {class: "sub"}, t("servers.open.lead")), h("div", {class: "win-body"}, list, said), h("div", {class: "row win-foot"}, go, close)]);
+    const view = SERVE.dialog([h("h2", null, t("servers.open.title")), h("p", {class: "sub"}, t("servers.open.lead")), h("div", {class: "win-body"}, list, said, running), h("div", {class: "row win-foot"}, go, close)]);
     view.box.classList.add("wide", "sv-win");
     let rows = [], picked = kept("chosen", null), primary = kept("primary", ""), found0 = null;
     const marks = {};
@@ -158,7 +160,7 @@ const SERVERS = (function () {
         return h("label", {class: "sv-line sv-pick", title: [row.label, row.kind_label + " · " + row.auth_label, where(row)].filter(Boolean).join("\n")},
           box, envChip(row.env), h("b", {class: "sv-alias"}, row.alias), h("span", {class: "sv-kind"}, row.account), star ? h("span", {class: "sv-primary"}, star, t("servers.primary")) : null, marks[row.alias]);
       }) : [h("p", {class: "sub"}, t("servers.open.nothing"))]));
-      if (found.vscode_open) said.replaceChildren(h("span", {class: "bad"}, t("servers.open.running")));
+      running.hidden = !found.vscode_open;
       replan();
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
     go.addEventListener("click", () => {

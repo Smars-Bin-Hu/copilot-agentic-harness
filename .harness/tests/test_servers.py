@@ -139,6 +139,10 @@ class OneWindowTests(ServersCase):
         done = self.cli("as", "db-dev", "--", "fakedb", "--host", "db1:5000", "--who")
         self.assertEqual((done.returncode, done.stdout.strip()), (0, "alice"))
         self.assertEqual(self.cli("as", "db-dev", "--", "fakedb", "--host", "db2:5000", "--who").returncode, 2)  # another server
+        servers.save(self.root, "db-ist", {"account": "bob", "password": "right"})
+        self.env.update(FAKEDB_USER="alice", FAKEDB_PASS="window-value")  # the window holds another identity of the same variables
+        swapped = self.cli("as", "db-ist", "--", "fakedb", "--host", "db2:5000", "--token=window-value", "--who")  # the window's shell put its value in the line
+        self.assertEqual((swapped.returncode, swapped.stdout.strip()), (0, "bob"))
         refused = self.cli("as", "db-dev", "--", "printenv", "FAKEDB_PASS")
         self.assertEqual(refused.returncode, 2)
         self.assertNotIn("right", refused.stdout + refused.stderr)

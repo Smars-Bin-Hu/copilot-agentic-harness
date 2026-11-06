@@ -1449,7 +1449,7 @@
   // Who runs an environment (1.7.2): the guide may propose the agent; only the person lets it, with one click (no code), and can take it back. Served pages only.
   function runnerLine(env) {
     const who = env.runner || {proposed: "person", granted: false};
-    const word = who.granted ? t("desk.test.runner.agent") : who.proposed === "agent" ? t("desk.test.runner.proposed") : t("desk.test.runner.person");
+    const word = who.opened ? t("desk.test.runner.open", {env: env.name}) : who.granted ? t("desk.test.runner.agent") : who.proposed === "agent" ? t("desk.test.runner.proposed") : t("desk.test.runner.person");  // opened at the head of the page: the same leave
     const line = h("p", {class: "sub runner"}, tag(word, who.granted ? "good" : who.proposed === "agent" ? "hot" : ""));
     if (served() && full.status === "open" && SERVE.runs("test runner")) {
       const button = h("button", {type: "button", class: "chip" + (who.granted ? "" : " on"), title: t("desk.test.runner.hint", {env: env.name})}, who.granted ? t("desk.test.runner.back") : t("desk.test.runner.let", {env: env.name}));

@@ -168,16 +168,25 @@ def log_update(folder: Path, line: str) -> str:
     return "LOG.md"
 
 
+OPEN_KEY = "allow_env"  # the environments the person opened to the agent for this task (tasklife.set_allow, the head of the page): the stronger leave, so it grants the runner too (1.7.9)
+
+
+def opened(data: Dict[str, Any], env: str) -> bool:
+    found = data.get(OPEN_KEY) if isinstance(data.get(OPEN_KEY), dict) else {}
+    return str(env).lower() in found
+
+
 def granted(data: Dict[str, Any], env: str) -> bool:
-    """Did the person let the agent run this environment itself? `env` as the guide names it, or as the gate names it (dev): the names are compared in upper case."""
+    """Did the person let the agent run this environment itself? On the Test tab (`task test runner`), or by opening the environment to the agent (`task allow`): one leave, not two.
+    `env` as the guide names it, or as the gate names it (dev): the names are compared in upper case."""
     found = data.get(RUNNER_KEY) if isinstance(data.get(RUNNER_KEY), dict) else {}
-    return found.get(str(env).upper()) == AGENT
+    return found.get(str(env).upper()) == AGENT or opened(data, env)
 
 
 def runners(data: Dict[str, Any], guide: str, envs: List[str]) -> Dict[str, Dict[str, Any]]:
     """For each environment: what the guide proposes and what the person granted, `{ENV: {proposed, granted, runner}}`; `runner` is agent only with the grant."""
     proposed = taskstages.proposed_runners(guide, envs)
-    return {env: {"proposed": proposed.get(env.upper(), "person"), "granted": granted(data, env), "runner": AGENT if granted(data, env) else "person"} for env in envs}
+    return {env: {"proposed": proposed.get(env.upper(), "person"), "granted": granted(data, env), "runner": AGENT if granted(data, env) else "person", "opened": opened(data, env)} for env in envs}
 
 
 def set_runner(root: Path, raw_task: str, env: str, agent: bool, interactive: Optional[bool] = None) -> Dict[str, Any]:
@@ -200,6 +209,11 @@ def set_runner(root: Path, raw_task: str, env: str, agent: bool, interactive: Op
             held[chosen.upper()] = AGENT
         else:
             held.pop(chosen.upper(), None)
+            open_now = fresh.get(OPEN_KEY) if isinstance(fresh.get(OPEN_KEY), dict) else {}
+            if chosen.lower() in open_now:  # back to the person means back: the environment opened to the agent closes too
+                open_now.pop(chosen.lower(), None)
+                fresh[OPEN_KEY] = open_now
+                task_ops.note(fresh, "allow-env", f"{chosen.lower()}: off")
         fresh[RUNNER_KEY] = held
         if before != agent:
             task_ops.note(fresh, "test-runner", f"{chosen}: {'agent' if agent else 'person'}")

@@ -1640,6 +1640,7 @@
   "desk.test.runner.let": "让 agent 跑 {env}",
   "desk.test.runner.person": "你跑",
   "desk.test.runner.proposed": "agent 提议自己跑",
+  "desk.test.runner.open": "agent 来跑（{env} 已开放给它）",
   "desk.test.runner.agent": "agent 跑（你已允许）",
   "task.defects.odd": "缺陷的标题不是 `## D<n> [open] <环境>: <标题>` 的形式：{line}。看不出它的状态。",
   "task.defects.by_hand": "{id} 被手工标成了 fixed，但 {env} 还没有通过：它重新是 open。只有 `task defects sync` 能在这个环境的结果是 PASS 时把缺陷标成 fixed。",

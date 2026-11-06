@@ -260,8 +260,23 @@ class RunnerTests(RecordCase):
     def test_the_guide_proposes_and_the_page_shows_who_runs_each_environment(self) -> None:
         self.assertEqual(taskstages.proposed_runners(self.GUIDE, ["DEV", "IST", "UAT"]), {"DEV": "agent", "IST": "person", "UAT": "person"})
         envs = {item["name"]: item["runner"] for item in taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))["envs"]}
-        self.assertEqual(envs["DEV"], {"proposed": "agent", "granted": False, "runner": "person"})  # a proposal is not a grant
+        self.assertEqual(envs["DEV"], {"proposed": "agent", "granted": False, "runner": "person", "opened": False})  # a proposal is not a grant
         self.assertEqual(envs["IST"]["runner"], "person")
+
+    def test_an_environment_opened_to_the_agent_is_the_runner_grant_too_and_back_to_me_closes_both(self) -> None:
+        from modules.task import tasklife
+
+        tasklife.set_allow(self.root, "job", "dev", True, interactive=True)  # the head of the page: Open to the agent, dev
+        self.assertTrue(testrecord.granted(self.data("job"), "DEV"))
+        envs = {item["name"]: item["runner"] for item in taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))["envs"]}
+        self.assertEqual(envs["DEV"], {"proposed": "agent", "granted": True, "runner": "agent", "opened": True})
+        self.assertEqual(envs["IST"]["granted"], False)
+        given = self.folder() / "given.txt"
+        given.write_text("ok\n", encoding="utf-8")
+        testrecord.record(self.root, "job", "DEV", str(given), ["c::ok::PASS"], run_by="agent")  # no second grant needed
+        back = testrecord.set_runner(self.root, "job", "DEV", False, interactive=True)
+        self.assertEqual((back["changed"], self.data("job").get("allow_env")), (True, {}))
+        self.assertFalse(testrecord.granted(self.data("job"), "DEV"))
 
     def test_only_a_person_at_a_terminal_grants_and_the_grant_can_be_taken_back(self) -> None:
         with self.assertRaises(CommandError):
@@ -271,7 +286,7 @@ class RunnerTests(RecordCase):
         self.assertEqual(self.data("job")["test_runner"], {"DEV": "agent"})
         self.assertEqual(testrecord.set_runner(self.root, "job", "DEV", True, interactive=True)["changed"], False)
         envs = {item["name"]: item["runner"] for item in taskdesk.testing(self.root, f"{BASE}/job", self.data("job"))["envs"]}
-        self.assertEqual(envs["DEV"], {"proposed": "agent", "granted": True, "runner": "agent"})
+        self.assertEqual(envs["DEV"], {"proposed": "agent", "granted": True, "runner": "agent", "opened": False})
         self.assertIn("DEV", task_ops.next_step(self.root, f"{BASE}/job", self.data("job")))
         self.assertIn("--run-by agent", task_ops.next_step(self.root, f"{BASE}/job", self.data("job")))
         back = testrecord.set_runner(self.root, "job", "DEV", False, interactive=True)

@@ -430,5 +430,24 @@ class GateExternalTaskTests(TaskCase):
         self.assertEqual([event["detail"] for event in self.data()["events"] if event["what"] == "allow-env"], ["dev: on", "dev: off"])
 
 
+
+class SamplePackTests(unittest.TestCase):
+    """The sample SQL Server pack (1.7.9): a SELECT beside a statement it fears does not make the line a read; plain reads stay reads."""
+
+    def test_the_sample_pack_holds_or_refuses_what_is_not_a_plain_read(self) -> None:
+        import json
+        from pathlib import Path
+
+        pack = Path(__file__).resolve().parents[1] / "examples" / "system-packs" / "sqlserver-sqlcmd" / "systems.json"
+        systems = json.loads(pack.read_text(encoding="utf-8"))["systems"]
+        verb = lambda query: external.classify(f'sqlcmd -S sql-dev.example.local,1433 -E -Q "{query}"', systems)[0][0].verb  # noqa: E731
+        for query in ("SELECT 1; COMMIT", "SELECT 1; BEGIN TRAN", "SELECT 1; BACKUP DATABASE x TO DISK = 'y'", "SELECT 1; DBCC CHECKDB", "SELECT 1; RECONFIGURE", "SELECT * FROM OPENROWSET('a', 'b', 'c')", "UPDATE t SET a = 1"):
+            self.assertEqual(verb(query), WRITE, query)
+        for query in ("SELECT 1; KILL 52", "SELECT 1; RESTORE DATABASE x", "DROP TABLE t", "SELECT 1; SHUTDOWN"):
+            self.assertEqual(verb(query), DESTROY, query)
+        for query in ("SELECT order_id, committed_at FROM dbo.Orders", "SELECT backup_date FROM t", "SELECT COUNT(*) FROM dbo.Orders"):
+            self.assertEqual(verb(query), READ, query)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -725,7 +725,7 @@
     });
     const never = (found.never || []).map((env) => h("span", {class: "chip env never", title: t("desk.set.open.never", {env})}, env));
     const note = open.length ? h("p", {class: "set-tip"}, t("desk.set.open.note", {envs: open.map((item) => item.env).join(", "), systems: [...new Set(open.flatMap((item) => item.systems))].join(", ")})) : null;
-    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip")), h("div", {class: "chips env-chips"}, chips, never), note,
+    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip")), h("p", {class: "set-warn"}, t("desk.set.open.warn")), h("div", {class: "chips env-chips"}, chips, never), note,
       can ? null : h("p", {class: "set-warn"}, t("desk.set.open.cannot")));
     const button = h("button", {type: "button", class: "rv-btn" + (open.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip")},
       icon(DOOR, 14), h("span", {class: "rv-name"}, t("desk.set.open")), h("b", null, open.length ? open.map((item) => item.env).join(", ") : t("desk.set.open.off")));

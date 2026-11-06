@@ -2663,6 +2663,7 @@
   "desk.set.open.none": "No system of the company pack reaches {env}.",
   "desk.set.open.close": "{env} is open ({systems}). Click to close it again.",
   "desk.set.open.open": "Open {env} for this task: {systems}. Same as `harness task allow --env {env} --on`.",
+  "desk.set.open.warn": "Open only when you hand a whole test over to the agent: its writes and procedures there then run unseen, with your account's rights. Most tasks need only your approval of a few writes. The reviewer stays read only.",
   "desk.set.open.tip": "An environment you open for this task: the agent's writes and procedures on the listed systems there run without waiting for you. A destroy is still refused. Closes with the task. Prod is never opened.",
   "desk.set.open": "Open to the agent",
   "desk.undo.hint": "If the agent is working, it stops first. This message and everything that answered it leave the chat, and the agent forgets them. Files it changed stay changed. Your words come back to the reply box.",

@@ -1,24 +1,69 @@
 {
   "systems": {
     "sql": {
-      "reach": { "cli": "sqlcmd" },
+      "reach": {
+        "cli": "sqlcmd"
+      },
       "env_from": [
-        { "pattern": "-S\\s+\"?[^\\s\"]*dev", "env": "dev" },
-        { "pattern": "-S\\s+\"?[^\\s\"]*ist", "env": "ist" },
-        { "pattern": "-S\\s+\"?[^\\s\"]*qat", "env": "qat" }
+        {
+          "pattern": "-S\\s+\"?[^\\s\"]*dev",
+          "env": "dev"
+        },
+        {
+          "pattern": "-S\\s+\"?[^\\s\"]*ist",
+          "env": "ist"
+        },
+        {
+          "pattern": "-S\\s+\"?[^\\s\"]*qat",
+          "env": "qat"
+        }
       ],
       "verbs": [
-        { "pattern": "\\binto\\b|\\b(?:insert|update|delete|merge|create|alter|grant|revoke)\\b", "verb": "write" },
-        { "pattern": "\\b(?:drop|truncate)\\b", "verb": "destroy" },
-        { "pattern": "\\bexec(?:ute)?\\b|\\bsp_\\w+", "verb": "exec" },
-        { "pattern": "\\s-i\\s", "verb": "write" },
-        { "pattern": "\\b(?:select|with|set\\s+nocount)\\b", "verb": "read" }
+        {
+          "pattern": "\\binto\\b|\\b(?:insert|update|delete|merge|create|alter|grant|revoke)\\b",
+          "verb": "write"
+        },
+        {
+          "pattern": "\\b(?:begin\\s+tran(?:saction)?|commit|rollback|save\\s+tran(?:saction)?|dbcc|backup|reconfigure|deny|disable\\s+trigger|enable\\s+trigger|openrowset|opendatasource|openquery|bulk|xp_\\w+)\\b",
+          "verb": "write"
+        },
+        {
+          "pattern": "\\b(?:drop|truncate|kill|shutdown|restore)\\b",
+          "verb": "destroy"
+        },
+        {
+          "pattern": "\\bexec(?:ute)?\\b|\\bsp_\\w+",
+          "verb": "exec"
+        },
+        {
+          "pattern": "\\s-i\\s",
+          "verb": "write"
+        },
+        {
+          "pattern": "\\b(?:select|with|set\\s+nocount)\\b",
+          "verb": "read"
+        }
       ],
       "target": "\\b(?:from|into|update|join)\\s+([\\w.\\[\\]]+)",
       "rules": {
-        "dev": { "read": "allow", "write": "outbox", "exec": "outbox", "destroy": "deny" },
-        "ist": { "read": "allow", "write": "outbox", "exec": "outbox", "destroy": "deny" },
-        "qat": { "read": "allow", "write": "outbox", "exec": "human", "destroy": "deny" }
+        "dev": {
+          "read": "allow",
+          "write": "outbox",
+          "exec": "outbox",
+          "destroy": "deny"
+        },
+        "ist": {
+          "read": "allow",
+          "write": "outbox",
+          "exec": "outbox",
+          "destroy": "deny"
+        },
+        "qat": {
+          "read": "allow",
+          "write": "outbox",
+          "exec": "human",
+          "destroy": "deny"
+        }
       },
       "needs": {
         "probe": "sqlcmd -S sql-dev.example.local,1433 -E -h -1 -W -Q \"SET NOCOUNT ON; SELECT SUSER_SNAME()\"",

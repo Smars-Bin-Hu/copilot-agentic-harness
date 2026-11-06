@@ -2663,6 +2663,7 @@
   "desk.set.open.none": "公司包里没有系统能到 {env}。",
   "desk.set.open.close": "{env} 已打开（{systems}）。再点一下关闭。",
   "desk.set.open.open": "为这个任务打开 {env}：{systems}。等于 `harness task allow --env {env} --on`。",
+  "desk.set.open.warn": "只在把整个测试交给 agent 时才开放：开放后它在这个环境里的写和存储过程会直接执行，你看不到，用的是你账户的权限。大多数任务只需要你批准几条写操作。reviewer 始终只读。",
   "desk.set.open.tip": "为这个任务打开的环境：agent 在那里已列系统上的写和执行不再等你批。destroy 仍然拒绝。随任务关闭。prod 永远不开。",
   "desk.set.open": "对 agent 开放",
   "desk.undo.hint": "agent 还在跑的话，会先停下。这条消息和它之后的所有回复都会从 chat 里移除，agent 也会忘记。它已经改过的文件不会还原。你写的内容会回到回复框。",

@@ -134,6 +134,7 @@ const SERVE = (function () {
 
   // `title`: the chat's title, given where the person has to find a chat by hand (the VS button): a button copies it.
   function failed(error, title) {
+    if (error && error.quiet) return;  // the person already answered a window about it (Open VS Code, 1.7.29)
     const close = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
     const copy = title ? h("button", {class: "act", type: "button", "data-label": t("desk.chat.copy")}, t("desk.chat.copy")) : null;
     if (copy) copy.addEventListener("click", () => copyCommand(copy, title));
@@ -282,13 +283,14 @@ const SERVE = (function () {
     return go("/api/open", {}).catch((error) => {
       if (!(error && error.data && error.data.running)) throw error;
       return new Promise((resolve, reject) => {
-        const quit = h("button", {type: "button", class: "act hot"}, t("board.vs.quit_first"));
+        const quit = h("button", {type: "button", class: "act hot live"}, t("board.vs.quit_first"));
         const anyway = h("button", {type: "button", class: "act", title: t("board.vs.anyway.tip")}, t("board.vs.anyway"));
-        const view = dialog([h("h2", null, t("board.vs.running")), h("p", null, error.message), h("div", {class: "row win-foot"}, quit, anyway)]);
+        const view = dialog([h("h2", null, t("board.vs.running")), h("p", null, t("board.vs.running.why")), h("div", {class: "row win-foot"}, quit, anyway)]);
         let done = false;
         const end = (then) => { if (done) return; done = true; clearInterval(watch); view.close(); then(); };
-        const watch = setInterval(() => { if (!view.box.isConnected) end(() => reject(error)); }, 300);
-        quit.addEventListener("click", () => end(() => reject(error)));
+        const no = () => reject(Object.assign(error, {quiet: true}));  // the person chose: no second window with the same words
+        const watch = setInterval(() => { if (!view.box.isConnected) end(no); }, 300);
+        quit.addEventListener("click", () => end(no));
         anyway.addEventListener("click", () => end(() => go("/api/open", {anyway: true}).then(resolve, reject)));
       });
     });

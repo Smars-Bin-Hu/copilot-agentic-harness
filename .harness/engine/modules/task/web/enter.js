@@ -577,7 +577,7 @@
     const button = event.target.closest("[data-open]");
     if (!button || button.disabled) return;
     button.disabled = true; button.textContent = t("board.enter.opening"); chk0.openError = "";
-    SERVE.openVS(ask).then(() => { chk0.opened = Date.now(); setTimeout(() => { poll(); }, 1500); }, (error) => { chk0.openError = t("board.enter.open.failed", {error: error.message}); chk0.opened = 0; })
+    SERVE.openVS(ask).then(() => { chk0.opened = Date.now(); setTimeout(() => { poll(); }, 1500); }, (error) => { chk0.openError = error.quiet ? "" : t("board.enter.open.failed", {error: error.message}); chk0.opened = 0; })
       .then(() => { setTimeout(() => { button.disabled = false; render(); }, 3000); render(); });
   });
   go.addEventListener("click", () => { tryEnter(); });

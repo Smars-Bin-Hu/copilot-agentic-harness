@@ -1829,6 +1829,7 @@
   "board.vscode.tip.ready": "The board reads the chats of VS Code. Open tasks linked to a chat: {bound}; not linked: {unbound}.",
   "board.vs.running": "VS Code is already running",
   "board.vs.quit_first": "I will quit it first",
+  "board.vs.running.why": "It cannot get this computer's settings (tool folders, CA bundle): they are given only to a VS Code the board starts. Quit VS Code completely (every window), then press Open VS Code again.",
   "board.vs.anyway": "Open anyway",
   "board.vs.anyway.tip": "Opens this folder in the VS Code that is running. The agent may then not find the tools or trust the company's certificates (command not found, certificate errors).",
   "board.vs.open": "Bring the VS Code window of this folder to the front. It opens the window only; pick the chat there (its title can be copied from here).",

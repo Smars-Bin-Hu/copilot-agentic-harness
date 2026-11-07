@@ -10,6 +10,19 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.26 (2026-11-07)
+
+### Fixed
+
+- **The Enter screen's list** shows a fade and a small arrow at the foot of its box when lines are below the edge (the Outside systems row and its Check and Open VS Code buttons can be there on a short or narrow window), so it is clear that the box scrolls.
+- **The state pill in the task head** has room for the whole text, and the task name gives way first; a long wait text is one line in a list row (the whole text on hover). The text for a held outside call is shorter: "an outside call waits for your approval".
+- **The task page is read every 3 seconds** (it was 10), so a state set by a hook, such as "waits for your answer", shows within a few seconds.
+- **Words**: a Chinese typo in the note about a question the agent waits on; "Company Context" has a Chinese word; "1 certificate(s)" in Tools, This computer.
+- **A held call's card** no longer shows the draft file's name; it is on the pointer of "asked at ...".
+- **Tools**: the three tabs start at one height, so the window does not jump when you change tab.
+- **Withdraw** shows only when the newest message has no answer yet (the agent is at work, stopped, asked or failed, or the chat is idle with the message still the last line).
+- **New task**: when tickets are named, the Kind is Dev and the text is short, a quiet note says Kind Q&A is lighter. Kind is not changed for you.
+
 ## 1.7.24 (2026-11-07)
 
 ### Fixed

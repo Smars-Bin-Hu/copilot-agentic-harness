@@ -60,7 +60,7 @@ def types(root: Path) -> Dict[str, Dict[str, Any]]:
 
     mcp = launchenv.mcp_allowed(root)
     found: Dict[str, Dict[str, Any]] = {}
-    for path in toolpacks.type_files(root):  # the first tool pack that brings a type keeps it
+    for pack_name, path in toolpacks.type_entries(root):  # the first tool pack that brings a type keeps it
         try:
             kind = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
@@ -68,7 +68,7 @@ def types(root: Path) -> Dict[str, Dict[str, Any]]:
         if isinstance(kind, dict) and kind.get("via") == "mcp" and not mcp:  # MCP is not allowed here: the type is not offered
             continue
         if isinstance(kind, dict) and kind.get("type") and str(kind["type"]) not in found:
-            found[str(kind["type"])] = dict(kind, toolpack=path.parent.parent.name)  # its connections' systems are the tool pack's: Open to the agent leaves them closed
+            found[str(kind["type"])] = dict(kind, toolpack=pack_name)  # its connections' systems are the tool pack's: Open to the agent leaves them closed
     return found
 
 
@@ -229,6 +229,22 @@ def listed(root: Path, policy: Optional[Dict[str, Any]] = None) -> Dict[str, Dic
     return found
 
 
+def unset_fields(root: Path) -> List[Dict[str, Any]]:
+    """The company's connections whose type has a field it needs (no `default`, not `optional`) that the connection leaves empty (1.7.30): `[{alias, type, fields}]`.
+    A connection of a type no active pack brings is not asked about here."""
+    kinds = types(root)
+    out = []
+    for alias, server in listed(root).items():
+        if server.get("own"):
+            continue
+        kind = kinds.get(str(server.get("type"))) or {}
+        gaps = [field for field, spec in (kind.get("fields") or {}).items() if isinstance(spec, dict) and not spec.get("optional") and spec.get("default") in (None, "")
+                and field not in SECRET_FIELDS and server.get(field) in (None, "")]
+        if gaps:
+            out.append({"alias": alias, "type": str(server.get("type")), "fields": gaps})
+    return out
+
+
 def identity_of(env: Dict[str, str], alias: str, kind: Dict[str, Any]) -> Dict[str, str]:
     """What the person saved for this server: account, password, keyfile (what is there)."""
     return {field: env[env_key(alias, field)] for field in IDENTITY_FIELDS if env.get(env_key(alias, field))}
@@ -343,7 +359,8 @@ def brief(root: Path, alias: str, call: str = "") -> Dict[str, Any]:
     fields = {field: str(server.get(field) if server.get(field) not in (None, "") else spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items() if field not in SECRET_FIELDS and isinstance(spec, dict)}
     pack = str(kind.get("toolpack") or "")
     folder = (toolpacks.installed(root).get(pack) or {}).get("folder") if pack else None
-    skills = sorted(item.name for item in (folder / "skills").iterdir() if item.is_dir()) if isinstance(folder, Path) and (folder / "skills").is_dir() else []
+    put = (toolpacks.ledger(root)["packs"].get(pack) or {}).get("skills") or []  # the names in .github/skills/: the company's word leads them (1.7.30)
+    skills = sorted(str(one) for one in put) or (sorted(item.name for item in (folder / "skills").iterdir() if item.is_dir()) if isinstance(folder, Path) and (folder / "skills").is_dir() else [])
     return {"alias": alias, "env": str(server.get("env") or ""), "type": str(server.get("type") or ""), "label": str(kind.get("label") or ""),
             "fields": {key: value for key, value in fields.items() if value}, "toolpack": pack, "skills": skills, "program": str((kind.get("cli") or [""])[0]), "call": call}
 
@@ -508,8 +525,6 @@ def share(root: Path, aliases: List[str]) -> Dict[str, Any]:
     """Put connections of one's own in the company pack (`<knowledge base>/company/tools/connections.json`): the connection only, never an account or a
     password, and its tool pack too when the company pack has none of that name. Then the company content is synced, so the connection is the company's
     here as well; the identity saved for it stays in `.env` under the same name. The person commits the knowledge base and packs it as usual."""
-    import shutil
-
     from . import company, targets, toolpacks  # company imports this module
 
     folder = targets.company_folder(root)
@@ -533,9 +548,7 @@ def share(root: Path, aliases: List[str]) -> Dict[str, Any]:
         listed_now[alias] = {key: value for key, value in entry.items() if key != "own" and key not in IDENTITY_FIELDS}
         added.append(alias)
         pack = str((known.get(str(entry.get("type"))) or {}).get("toolpack") or "")
-        target = folder / toolpacks.COMPANY_PACKS / pack
-        if pack and not target.exists() and (root / toolpacks.FOLDER / pack).is_dir():
-            shutil.copytree(root / toolpacks.FOLDER / pack, target, ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"))
+        if pack and toolpacks.share(root, folder, pack):  # a factory pack goes into `use`; a folder added here is copied to packs/<name>/
             packs_added.append(pack)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(found, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

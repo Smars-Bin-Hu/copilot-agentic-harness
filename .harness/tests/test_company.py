@@ -148,11 +148,13 @@ class ToolsTests(CompanyCase):
         put(self.kb, {"company/tools/packs/sqlpack/toolpack.json": json.dumps(self.PACK), "company/tools/packs/sqlpack/rules.json": json.dumps(self.RULES),
                       "company/tools/packs/sqlpack/launch/start-vscode.cmd": "@echo off\r\nrunas ...\r\n", "company/tools/connections.json": json.dumps({"connections": {}})})
         result = company.sync(self.root)
-        self.assertIn(".harness/toolpacks/sqlpack", result["copied"])
+        from core import toolpacks
+
+        self.assertEqual(toolpacks.listed(self.root)["sqlpack"]["source"], "company", "read where it lies: nothing is copied but skills")
         self.assertIn(".harness/policies/connections.company.json", result["copied"])
         from core import config, reach
 
-        self.assertEqual(reach.launch_script(self.root, "win32"), self.root / ".harness" / "toolpacks" / "sqlpack" / "launch" / "start-vscode.cmd")
+        self.assertEqual(reach.launch_script(self.root, "win32"), self.kb / "company" / "tools" / "packs" / "sqlpack" / "launch" / "start-vscode.cmd")
         self.assertEqual(config.load_policy(self.root, "tools")["systems"]["dev-sql"]["env"], "dev")
         (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": {"dev-sql": {"env": "qat"}}}), encoding="utf-8")
         merged = config.load_policy(self.root, "tools")["systems"]["dev-sql"]

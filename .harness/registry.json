@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.7.29",
+  "version": "1.7.30",
   "released": "2026-11-07",
   "copyright": "Smars Hu",
   "contributors": [
@@ -52,6 +52,7 @@
       ".harness/engine/adapters/common.py",
       ".harness/engine/modules/__init__.py",
       ".harness/examples/",
+      ".harness/toolpacks/",
       ".github/skills/generic-build-new-skill/",
       ".github/skills/generic-goal-driven/",
       ".github/skills/generic-grill-me/",

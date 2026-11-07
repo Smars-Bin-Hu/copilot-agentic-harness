@@ -78,7 +78,7 @@ class HeldCallCard(TaskCase):
         super().setUp()
         from support import REPO
 
-        toolpacks.add(self.root, str(REPO / ".harness" / "examples" / "toolpacks" / "demotracker"))
+        toolpacks.add(self.root, str(REPO / ".harness" / "toolpacks" / "demotracker"))
         (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"demo": {"type": "demotracker", "env": "none", "project": "DEMO"}}}), encoding="utf-8")
         self.new(kind="qa")
         for ref in ("demo:7", "demo:9"):

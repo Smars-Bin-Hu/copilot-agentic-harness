@@ -750,6 +750,20 @@ class Board:
         elif step == "mcp":  # the person says whether MCP may be used here (1.7.17); the tool packs' MCP servers follow
             done = launchenv.set_mcp(self.root, bool(data.get("allowed")))
             return dict(launchenv.state(self.root), mcp_done=done, vscode_open=bool(self.link.status().get("ready", False)))
+        elif step == "toolpack-add":  # a folder or zip the person names (1.7.19): what `harness toolpack add <path>` does; an installed name is replaced only after a second, confirming call
+            from core import toolpacks
+
+            try:
+                found = toolpacks.installed_against(self.root, str(data.get("path") or ""))
+                if found["installed"] and (toolpacks.ledger(self.root).get(found["name"]) or {}).get("from") == toolpacks.COMPANY:
+                    raise ValueError(say("toolpack.company.managed", name=found["name"]))
+                if found["installed"] and not data.get("replace"):
+                    return {"confirm": found}
+                done = toolpacks.add(self.root, str(data.get("path") or ""), replace=bool(data.get("replace")))
+                row = next((item for item in toolpacks.check(self.root, done["installed"])["toolpacks"] if item["name"] == done["installed"]), {})
+            except toolpacks.ToolpackError as error:
+                raise ValueError(str(error)) from None
+            return {"added": done, "missing": [name for name, ok in (row.get("programs") or {}).items() if not ok]}
         elif step in ("toolpack-update", "toolpack-remove"):  # the paired browser is the person's: what `harness toolpack add --replace` / `remove` do at a terminal
             from core import toolpacks
 

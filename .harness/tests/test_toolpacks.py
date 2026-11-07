@@ -427,6 +427,26 @@ class BoardActions(ToolpackCase):
         with self.assertRaises(ValueError):
             board.machine({"step": "nonsense"})
 
+    def test_install_from_a_path_strips_quotes_and_replaces_only_after_a_second_call(self) -> None:
+        board = self.board()
+        quoted = '"%s"' % self.source
+        done = board.machine({"step": "toolpack-add", "path": quoted})
+        self.assertEqual(done["added"]["installed"], "tracker")
+        self.assertEqual(done["added"]["version"], "1.0.0")
+        self.assertIn("tracker", done["missing"])  # the made-up program is not on this computer
+        make(self.source, version="1.1.0")
+        asked = board.machine({"step": "toolpack-add", "path": quoted})
+        self.assertEqual(asked, {"confirm": {"name": "tracker", "version": "1.1.0", "installed": "1.0.0"}})
+        self.assertEqual(board.machine({"step": "toolpacks"})["toolpacks"][0]["version"], "1.0.0")  # nothing changed yet
+        board.machine({"step": "toolpack-add", "path": quoted, "replace": True})
+        self.assertEqual(board.machine({"step": "toolpacks"})["toolpacks"][0]["version"], "1.1.0")
+        for bad in (str(self.outside / "nowhere"), ""):
+            with self.assertRaises(ValueError):
+                board.machine({"step": "toolpack-add", "path": bad})
+        (self.outside / "plain").mkdir()
+        with self.assertRaises(ValueError):  # not a tool pack: the reason is shown as it is
+            board.machine({"step": "toolpack-add", "path": str(self.outside / "plain")})
+
     def test_the_tools_window_lists_connections_by_type_with_their_tool_pack_and_exports_ones_own(self) -> None:
         toolpacks.add(self.root, str(self.source))
         connections.save(self.root, "mine", {"account": "me", "password": "secret"}, own={"type": "tracker", "env": "none", "auth": "own", "org": "acme"})

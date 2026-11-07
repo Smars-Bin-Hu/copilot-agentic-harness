@@ -67,3 +67,4 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .mc-h{font-size:13.5px;margin:14px 0 6px}.mc-h:first-child{margin-top:0}.mc-paths{width:100%;box-sizing:border-box;resize:vertical}
 .mc-found{display:flex;flex-direction:column;gap:2px;margin:4px 0 8px;font:12px var(--mono)}.mc-dir{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help}.mc-dir.ok{color:var(--good)}.mc-dir.bad{color:var(--hot)}
 @media (max-width:600px){.mc-brings{margin-left:0}.sv-where{display:none}.sv-form{padding-left:10px}}
+.mc-install{align-items:center}.mc-install input{flex:1;min-width:0}.mc-said{margin:6px 0;font-size:13px;overflow-wrap:anywhere}.mc-said .ok{color:var(--good)}.mc-said .bad{color:var(--hot)}

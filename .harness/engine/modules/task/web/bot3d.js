@@ -156,6 +156,7 @@ void main() {
       stamp = now;
       if (frames < 60) return;
       if (spent / frames > 40 && scale > .5) { scale *= .75; fit(); }
+      else if (spent / frames < 20 && scale < 1) { scale = Math.min(1, scale / .75); fit(); }  // the computer is free again (a test run or a build ended): the pixels come back (1.7.35)
       frames = spent = 0;
     }
     function draw(view, now) {

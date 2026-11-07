@@ -15,6 +15,8 @@ To see which version you have: `harness --version`.
 ### Fixed
 
 - **The Company tab** no longer repeats the domains: they have their own tab.
+- **The Company tab** lists the read commands too, says Execution for the runs, shows the company name only when `company.json` gives one, and labels the prefix chip. **The dock's Get ready button is the gear**; the board's own panel (theme, wallpaper, language) is the sliders.
+- **The robot** draws fewer pixels while the computer is slow (it did before) and now draws them again when the computer is free.
 - **The Enter screen keeps the gear** (theme, wallpaper, language) under the dock column; 1.7.34 had hidden it there by mistake.
 - **Tool packs tab**: the three lines under "Install from a folder" are now an info mark beside the title; hover shows how a factory or company pack is turned on.
 - **Knowledge base, Connections**: a connection whose env is `none` shows no env label (it showed "ado NONE"). The same rule holds in its hover and the share window.

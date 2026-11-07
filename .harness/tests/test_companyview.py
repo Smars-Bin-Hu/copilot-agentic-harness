@@ -64,7 +64,7 @@ class Sections(ViewCase):
         set_prefix(self.root)
         found = companyview.company(self.root, "en")
         self.assertEqual((found["found"], found["prefix"], found["version"], found["made"], found["domains"]), (True, "acme", "3", "2026-11-01 10:00", ["orders"]))
-        self.assertEqual(found["name"], "knowledge-base")
+        self.assertEqual(found["name"], "")  # no name in company.json: none shown, never the folder name (1.7.35)
         self.assertIn({"file": "naming.md", "first": "Names", "state": "other"}, found["standards"])
         self.assertEqual([row["file"] for row in found["instructions"]], ["knowledgebase.instructions.md"])
         self.assertGreater(found["stale"], 0, "nothing was copied yet")

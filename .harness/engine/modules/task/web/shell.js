@@ -23,6 +23,7 @@ const SHELL = (function () {
     sun: ["M8 5.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6zM8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9L13 13M13 3l-1.1 1.1M4.1 11.9L3 13"],
     bolt: ["M9 1.5L3.5 9h4l-.5 5.5L12.5 7h-4z"],
     gear: ["M8 5.8a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4z", "M8 1.6l1 1.7 2-.4.6 2 1.9.8-.7 1.9 1.3 1.6-1.6 1.3.1 2-2 .3-1 1.8L8 13.6l-1.6 1-1-1.8-2-.3.1-2L2 8.9l1.3-1.6-.7-1.9 1.9-.8.6-2 2 .4z"],
+    sliders: ["M2.7 4.7h6M11.3 4.7h2M8.7 3h2.6v3.3H8.7zM2.7 11.3h2M7.3 11.3h6M4.7 9.7h2.6V13H4.7z"],
   };
   function icon(name) {
     const svg = document.createElementNS(NS, "svg");
@@ -128,7 +129,7 @@ const SHELL = (function () {
     if (typeof DOCK !== "undefined") out.push({g: "settings", key: "home", label: t("dock.home"), icon: "lobby", kw: "enter home start screen", run: DOCK.enterScreen});
     if (typeof DOCK !== "undefined") out.push({g: "settings", key: "kb", label: t("dock.kb"), icon: "task", kw: "knowledge base domains cards", run: () => setTimeout(DOCK.kbWindow, 30)});
     if (typeof DOCK !== "undefined") out.push({g: "settings", key: "skills", label: t("dock.skills"), icon: "task", kw: "skills ask can do", run: () => setTimeout(() => DOCK.allSkills(""), 30)});
-    out.push({g: "settings", key: "settings", label: t("board.shell.open"), icon: "gear", kw: "settings language preferences", run: () => setTimeout(openSettings, 30)});
+    out.push({g: "settings", key: "settings", label: t("board.shell.open"), icon: "sliders", kw: "settings language preferences", run: () => setTimeout(openSettings, 30)});
     return out;
   }
 
@@ -291,7 +292,7 @@ const SHELL = (function () {
   function buildFixed() {
     const pill = h("button", {type: "button", class: "sh-pill", "aria-label": t("board.shell.search") + " " + mod + " K", title: t("board.shell.search") + " (" + mod + " K)"}, icon("search"), h("span", null, t("board.shell.search")), h("kbd", null, mod + " K"));
     pill.addEventListener("click", () => (open() ? closePalette() : openPalette()));
-    gear = h("button", {type: "button", class: "sh-gear", "aria-label": t("board.shell.gear"), title: t("board.shell.gear"), "aria-expanded": "false", "aria-haspopup": "dialog"}, icon("gear"));
+    gear = h("button", {type: "button", class: "sh-gear", "aria-label": t("board.shell.gear"), title: t("board.shell.gear"), "aria-expanded": "false", "aria-haspopup": "dialog"}, icon("sliders"));  // the sliders: theme, wallpaper, language (1.7.35; the dock's Get ready button above it has the gear)
     gear.addEventListener("click", () => (settingsOpen() ? closeSettings() : openSettings()));
     document.body.append(pill, gear);
   }

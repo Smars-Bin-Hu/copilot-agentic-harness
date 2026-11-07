@@ -46,8 +46,8 @@ const COMPANYTAB = (function () {
 
   function company(found) {
     if (!found.found) return h("section", {class: "co-sec"}, head("company"), h("p", {class: "sub"}, t("dock.co.company.none")));
-    const parts = [h("b", {class: "co-name"}, found.name)];
-    if (found.prefix) parts.push(h("span", {class: "co-chip", title: t("dock.co.prefix.tip")}, found.prefix + "-"));
+    const parts = [found.name ? h("b", {class: "co-name"}, found.name) : h("span", {class: "sub", title: t("dock.co.name.none.tip")}, t("dock.co.name.none"))];
+    if (found.prefix) parts.push(h("span", {class: "co-chip", title: t("dock.co.prefix.tip")}, t("dock.co.prefix", {prefix: found.prefix})));
     if (found.version) parts.push(hover(h("span", {class: "co-chip"}, t("dock.co.version", {version: found.version})), () => fact(t("dock.co.made"), found.made) || h("span", null, t("dock.co.version.tip"))));
     if (found.stale) parts.push(h("span", {class: "co-chip warn", title: t("dock.co.stale.tip")}, t("dock.co.stale", {n: found.stale})));
     return h("section", {class: "co-sec"}, head("company"), h("div", {class: "co-line"}, parts));
@@ -70,8 +70,8 @@ const COMPANYTAB = (function () {
     });
     return h("div", {class: "co-pack"},
       h("div", {class: "co-line"}, hover(h("b", {class: "co-name"}, item.name), () => [h("b", null, item.name), item.about ? h("span", null, item.about) : null, ...item.types.map((kind) => h("span", {class: "sub"}, kind.label + " (" + kind.type + (kind.via === "mcp" ? ", MCP" : "") + ")"))]),
-        item.version ? h("span", {class: "co-chip"}, item.version) : null, programs, h("span", {class: "co-reads", title: t("dock.co.reads.tip")}, t("dock.co.reads", {n: item.reads})), missing),
-      kinds(item.writes, "writes"), kinds(item.execs, "execs"), kinds(item.destroys, "destroys"),
+        item.version ? h("span", {class: "co-chip"}, item.version) : null, programs, missing),
+      kinds((item.read_names || []).map((name) => ({text: name})), "reads"), kinds(item.writes, "writes"), kinds(item.execs, "execs"), kinds(item.destroys, "destroys"),
       item.connections.length ? h("div", {class: "co-line co-conns"}, h("span", {class: "sub"}, t("dock.co.conns")), links) : null);
   }
 

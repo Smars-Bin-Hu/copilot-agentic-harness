@@ -107,6 +107,13 @@ def reason(line: Dict[str, Any]) -> str:
     return messages.text("desk.reach.why.exit", why=line.get("why") or "")
 
 
+def _read_names(manifest: Dict[str, Any], kinds: List[Dict[str, Any]]) -> List[str]:
+    """The commands the agent may run without asking, by name: a pack that lists its `commands`, less those a write, exec or destroy verb names (1.7.35)."""
+    commands = [str(one) for one in manifest.get("commands") or [] if isinstance(one, str)]
+    held = {word for kind in kinds for entry in kind.get("verbs") or [] if isinstance(entry, dict) and entry.get("verb") in ("write", "exec", "destroy") for word in _words(str(entry.get("pattern") or ""))}
+    return [one for one in commands if one not in held]
+
+
 def _reads(manifest: Dict[str, Any], kinds: List[Dict[str, Any]]) -> int:
     """How many commands the agent may run without asking. A pack that lists its `commands`: those that no write, exec or destroy verb names (ado: 37 - 6 - 4 = 27).
     One that does not: the command words of its read verbs."""
@@ -148,7 +155,7 @@ def tools(root: Path, lang: str) -> List[Dict[str, Any]]:
             missing.append("untested")
         missing += [f"program:{program['name']}" for program in programs if not program["found"]]
         reads = _reads(manifest, kinds)
-        out.append({"name": name, "version": str(manifest.get("version") or ""), "about": str(manifest.get("description") or ""), "programs": programs, "reads": reads,
+        out.append({"name": name, "version": str(manifest.get("version") or ""), "about": str(manifest.get("description") or ""), "programs": programs, "reads": reads, "read_names": _read_names(manifest, kinds),
                     "writes": _lines(kinds, "write", lang), "execs": _lines(kinds, "exec", lang), "destroys": _lines(kinds, "destroy", lang),
                     "types": [{"type": key, "label": str(kind.get("label") or key), "via": str(kind.get("via") or "cli")} for key, kind in types.items()], "connections": links, "missing": missing})
     return out
@@ -215,7 +222,7 @@ def company(root: Path, lang: str = "") -> Dict[str, Any]:
         return out
     config_file = _json(folder / "company.json")
     kb = folder.parent
-    out.update(name=str(config_file.get("name") or kb.name), version=str(_json(folder / "manifest.json").get("version") or ""), made=str(_json(folder / "manifest.json").get("made") or ""),
+    out.update(name=str(config_file.get("name") or ""), version=str(_json(folder / "manifest.json").get("version") or ""), made=str(_json(folder / "manifest.json").get("made") or ""),
                standards=[dict(row, state=standard_state(row["file"])) for row in files(folder / "standards")],
                instructions=[dict(row, state=instruction_state(root, row["file"], folder / "instructions" / row["file"])) for row in files(folder / "instructions")])
     try:

@@ -457,7 +457,7 @@
     box.dataset.k = key;
     box.replaceChildren(...c.names.map((item) => h("span", {class: "sy-i", title: item.state === "ok" ? "" : (item.missing || []).concat(item.errors || []).join(", ")}, h("i", {class: "sy-d " + (item.state === "ok" ? "ok" : "partly")}), item.name)));
   }
-  const groupNames = (ids, checks) => ids.map((id) => { const c = checks.find((x) => x.id === id); return id === "packs" && c && c.names && c.names.length ? c.names.map((item) => item.name).join(" ") : t("board.enter.n." + id); }).join(" · ");
+  const groupNames = (ids, checks) => ids.map((id) => { const c = checks.find((x) => x.id === id); return id === "packs" && c && c.names && c.names.length ? c.names.map((item) => item.name).join(", ") : t("board.enter.n." + id); }).join(" · ");
   function render() {  // in place: the lines are made once and only their class and text change, so nothing blinks
     if (!list.children.length) build();
     const checks = chk0.last ? chk0.last.checks : [];

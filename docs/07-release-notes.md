@@ -10,6 +10,14 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.36 (2026-11-07)
+
+### Changed
+
+- **Get ready / Change the setup** has three sections: **You** (name, language, code repositories), **From the company** (the knowledge base chooser and a read-only list: company folder, skill prefix, code standards, tool packs, connections, this computer's recipe) and **This computer** (tool folders, CA bundle, MCP, sign-ins, then More). The skill prefix is a fact read from `company.json`; its input box shows only when the knowledge base gives none (the override still works). The Tools group is gone: each fact has Open for its tab. Save and what it writes are unchanged. `?sec=you|company|computer` opens the page at a section.
+- **The Enter screen** has three groups (Harness, From the company, This computer), a dot by level (green, grey, yellow, red), a Company folder line and a Tool packs line (`ado sqlserver`, a yellow dot when a program is missing). **Only "this copy is set up" and "browser paired" block Enter.** VS Code not open, Copilot silent, no knowledge base, unreached systems and a doctor error are information (doctor red). Not ready turns Enter into Get ready, which opens the setup at the section that is missing. Ready shows HARNESS READY and one small line naming the most important grey or yellow line; when every dot is green the list folds into one line a group (hover or click opens it). Open VS Code sits at the end of the VS Code line. `/api/ready` lines carry `group` and `level`.
+- The quickstart (docs/01) and the configure doc (docs/03) describe the new layout; the course skills are unchanged.
+
 ## 1.7.35 (2026-11-07)
 
 ### Fixed

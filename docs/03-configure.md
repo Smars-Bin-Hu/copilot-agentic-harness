@@ -223,7 +223,7 @@ An agent reaches something outside the repository (a database, a ticket board, a
 - **Connection**: one place the agent reaches with your sign-in (`orders-dev`, the Sales project of a ticket board).
 - **This computer**: where the programs are, the CA bundle behind a company proxy, and whether MCP may be used.
 
-In Get ready they are one group, **Tools**, a line each; **Open** shows the Tools window on that tab. Why a tool pack and not only an MCP server: [13](13-tool-packs-and-mcp.md).
+In Get ready they are facts in two sections: the tool packs that are on and the connections the company lists under **From the company**; the tool folders, the CA bundle, MCP and your sign-ins under **This computer**. **Open** on a fact shows the Tools window on that tab. Why a tool pack and not only an MCP server: [13](13-tool-packs-and-mcp.md).
 
 #### Tool packs
 

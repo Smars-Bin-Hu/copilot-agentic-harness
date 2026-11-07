@@ -493,5 +493,39 @@ class GuideTests(unittest.TestCase):
                 setup.declare(root, "repos", True)
 
 
+
+class CompanyFactsTests(unittest.TestCase):
+    """The read-only checklist of the section From the company (1.7.36)."""
+
+    def test_an_empty_copy_has_no_facts_and_never_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            facts = setup.company_facts(Path(folder))
+            self.assertEqual((facts["folder"], facts["instructions"], facts["packs"], facts["connections"]), (False, False, [], []))
+            self.assertEqual(facts["prefix"]["kb"], "")
+            self.assertFalse(facts["recipe"]["present"])
+
+    def test_the_prefix_is_a_fact_when_the_knowledge_base_names_it_else_the_page_shows_a_box(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            company = root / "knowledge-base" / "company"
+            (company / "instructions").mkdir(parents=True)
+            (company / "instructions" / "knowledgebase.instructions.md").write_text("x", encoding="utf-8")
+            (root / "knowledge-base" / "domains" / "d").mkdir(parents=True)
+            facts = setup.company_facts(root)
+            self.assertEqual((facts["folder"], facts["instructions"], facts["prefix"]["kb"]), (True, True, ""))
+            (company / "company.json").write_text(json.dumps({"skill_prefix": "acme"}), encoding="utf-8")
+            self.assertEqual(setup.company_facts(root)["prefix"]["kb"], "acme")
+            self.assertIn("company", setup.status(root))
+
+    def test_the_page_draws_three_sections_and_keeps_every_control(self) -> None:
+        source = (support.REPO / ".harness" / "engine" / "modules" / "task" / "web" / "setup.js").read_text(encoding="utf-8")
+        for key in ("you", "company", "computer"):
+            self.assertIn(f'section("{key}"', source)
+            self.assertIn(f"setup.sec.{key}", json.loads((support.REPO / ".harness" / "engine" / "core" / "messages.en.json").read_text(encoding="utf-8")))
+        for control in ("name", "chips", "repos", "modes", "kbPath", "prefix", "install", "refusedBox", "more", "go"):
+            self.assertIn(control, source)
+
+
 if __name__ == "__main__":
     unittest.main()

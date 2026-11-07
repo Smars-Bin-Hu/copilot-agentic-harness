@@ -78,8 +78,9 @@ class ReadinessTests(TaskCase):
     def test_everything_in_place_is_ready_and_the_lines_come_in_the_order_of_the_screen(self) -> None:
         found = settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 1, "unbound": 0, "why": "ok"}), clean))
         self.assertTrue(found["ready"])
-        self.assertEqual([item["id"] for item in found["checks"]], ["setup", "vscode", "copilot", "doctor", "paired", "kb", "repos", "systems"])
-        self.assertEqual([item["blocking"] for item in found["checks"]], [True, True, True, True, True, False, False, False])
+        self.assertEqual([item["id"] for item in found["checks"]], ["setup", "paired", "doctor", "kb", "folder", "packs", "vscode", "copilot", "repos", "systems"])
+        self.assertEqual([item["blocking"] for item in found["checks"]], [True, True, False, False, False, False, False, False, False, False])  # 1.7.36: only set up and paired block
+        self.assertEqual([item["group"] for item in found["checks"]], ["harness"] * 3 + ["company"] * 3 + ["computer"] * 4)
         self.assertNotIn("ver", [item["id"] for item in found["checks"]])  # N11: no version line
 
     def test_the_doctor_is_first_unknown_then_run_once_off_the_calling_thread(self) -> None:
@@ -94,7 +95,8 @@ class ReadinessTests(TaskCase):
         begun = time.monotonic()
         first = check.answer(True)
         self.assertLess(time.monotonic() - begun, 1.0)  # the request did not wait for it
-        self.assertEqual((line(first, "doctor")["state"], first["ready"]), ("check", False))
+        self.assertEqual((line(first, "doctor")["state"], line(first, "doctor")["level"]), ("check", "grey"))
+        self.assertTrue(first["ready"])  # a doctor still running does not stop the way in (1.7.36)
         for _ in range(5):  # polls while it runs start nothing more
             check.answer(True)
         gate.set()
@@ -113,7 +115,8 @@ class ReadinessTests(TaskCase):
 
         check = ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), doctor, clock=lambda: now[0])
         found = settled(check)
-        self.assertEqual((found["ready"], line(found, "doctor")["why"], line(found, "doctor")["n"], line(found, "doctor")["detail"]), (False, "errors", 2, "policy x is broken"))
+        self.assertEqual((found["ready"], line(found, "doctor")["why"], line(found, "doctor")["n"], line(found, "doctor")["detail"]), (True, "errors", 2, "policy x is broken"))
+        self.assertEqual(line(found, "doctor")["level"], "red")
         check.answer(True)
         self.assertEqual(len(runs), 1)
         now[0] += ready.RETRY_FAILED + 1
@@ -128,7 +131,8 @@ class ReadinessTests(TaskCase):
         found = settled(ready.Ready(self.root, StubLink({"ready": True, "bound": 0, "unbound": 0, "why": "ok"}), broken))
         self.assertEqual((line(found, "doctor")["state"], line(found, "doctor")["why"]), ("fail", "failed"))
         self.assertIn("RuntimeError", line(found, "doctor")["detail"])
-        self.assertFalse(found["ready"])
+        self.assertEqual(line(found, "doctor")["level"], "red")
+        self.assertTrue(found["ready"])  # red, and still not a gate
 
     def test_the_real_doctor_runner_gives_up_at_its_deadline_and_reads_the_error_lines(self) -> None:
         engine = self.root / ".harness" / "engine"
@@ -164,15 +168,44 @@ class ReadinessTests(TaskCase):
             found = settled(ready.Ready(self.root, StubLink({"ready": False, "bound": 0, "unbound": 0, "why": why}), clean))
             self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"], line(found, "vscode")["open"]), (state, why, can_open), why)
             self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"]), ("wait", "vscode"), why)  # Copilot waits for VS Code
-            self.assertFalse(found["ready"], why)
+            self.assertTrue(found["ready"], why)  # VS Code is an optional power: it does not block (1.7.36)
+            self.assertEqual(line(found, "vscode")["level"], "grey", why)
 
     def test_copilot_needs_a_model_and_a_host_that_says_it_is_ready(self) -> None:
         up = {"ready": True, "bound": 0, "unbound": 0, "why": "ok"}
         for copilot, why in (({"models": 0, "problem": ""}, "nomodel"), ({"models": 0, "problem": "provider"}, "provider"), ({"models": 2, "problem": "client"}, "client")):
             found = settled(ready.Ready(self.root, StubLink(up, copilot), clean))
-            self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"], found["ready"]), ("fail", why, False))
+            self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["why"], found["ready"]), ("fail", why, True))
+            self.assertEqual(line(found, "copilot")["level"], "grey")
         found = settled(ready.Ready(self.root, StubLink(up, {"models": 2, "problem": ""}), clean))
         self.assertEqual((line(found, "copilot")["state"], line(found, "copilot")["n"]), ("ok", 2))
+
+    def test_only_set_up_and_paired_block_the_way_in(self) -> None:
+        down = {"ready": False, "bound": 0, "unbound": 0, "why": "none"}
+        def boom(_root: Path) -> Dict[str, Any]:
+            return {"errors": 3, "first": "bad", "failed": ""}
+        check = ready.Ready(self.root, StubLink(down, {"models": 0, "problem": "provider"}), boom)
+        found = settled(check)
+        self.assertTrue(found["ready"])  # VS Code off, Copilot silent, doctor red: all information
+        self.assertEqual([item["id"] for item in found["checks"] if item["blocking"]], ["setup", "paired"])
+        self.assertEqual((line(found, "doctor")["level"], line(found, "vscode")["level"], line(found, "copilot")["level"]), ("red", "grey", "grey"))
+        self.assertFalse(settled(check, paired=False)["ready"])  # the pairing is one of the two
+        self.assertEqual(line(settled(check, paired=False), "paired")["level"], "red")
+
+    def test_the_company_lines_name_the_folder_and_the_packs(self) -> None:
+        up = {"ready": True, "bound": 0, "unbound": 0, "why": "ok"}
+        found = settled(ready.Ready(self.root, StubLink(up), clean))
+        self.assertEqual((line(found, "folder")["level"], line(found, "packs")["level"], line(found, "kb")["level"]), ("grey", "grey", "grey"))  # no knowledge base: all grey
+        kb = self.root / "knowledge-base"
+        (kb / "domains" / "sales").mkdir(parents=True)
+        (kb / "domains" / "hr").mkdir(parents=True)
+        found = settled(ready.Ready(self.root, StubLink(up), clean))
+        self.assertEqual((line(found, "kb")["domains"], line(found, "folder")["level"], line(found, "folder")["why"]), (2, "yellow", "missing"))  # a knowledge base without a company folder
+        (kb / "company" / "instructions").mkdir(parents=True)
+        (kb / "company" / "instructions" / "knowledgebase.instructions.md").write_text("x", encoding="utf-8")
+        (kb / "company" / "company.json").write_text('{"version": "7"}', encoding="utf-8")
+        found = settled(ready.Ready(self.root, StubLink(up), clean))
+        self.assertEqual((line(found, "folder")["level"], line(found, "kb")["version"]), ("ok", "7"))
 
     def test_an_unpaired_browser_blocks_and_the_grey_lines_never_do(self) -> None:
         up = {"ready": True, "bound": 0, "unbound": 0, "why": "ok"}
@@ -187,7 +220,7 @@ class ReadinessTests(TaskCase):
                 raise OSError("the cache is gone")
 
         found = settled(ready.Ready(self.root, Broken({}), clean))
-        self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"]), ("fail", "error"))
+        self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["why"]), ("note", "error"))
         self.assertIn("the cache is gone", line(found, "vscode")["detail"])
 
     def test_the_knowledge_base_and_the_repositories_are_grey_with_their_reason(self) -> None:

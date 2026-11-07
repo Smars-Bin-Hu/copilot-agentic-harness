@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.33 (2026-11-07)
+
+### Changed
+
+- **`skill_prefix` of `company/company.json`** now names the skills of a tool pack, and the skill check accepts it: your `user.override.json` is read first, and when it has no word the knowledge base's word is used. When the two differ, yours wins and `harness doctor` says so. (The company's own SOP skills are still copied only when your own file has the word.)
+- **A company pack with the name of a factory pack** (`company/tools/packs/ado/` next to the factory `ado`) is an error in `toolpack list`, `toolpack check`, `company sync` and `doctor`. The factory pack stays in use. Before, the company's pack took its place silently and the update line read like a downgrade.
+- **A name in `use` that no factory pack has** is now named in the answer of `company sync` too (`doctor` did already).
+- **A broken `computer.json`**: `doctor` names every wrong key, one plain sentence each. The window no longer shows a mangled pattern (`$` was read as "the file"), and shows all faults, not only the first.
+
 ## 1.7.32 (2026-11-07)
 
 ### Added

@@ -32,6 +32,7 @@ class ViewCase(HarnessTestCase):
         source = make(self.outside / name, name=name, skills=skills)
         (source / "types" / "tracker.json").write_text(json.dumps(dict(KIND, say=SAY, verbs=VERBS)), encoding="utf-8")
         toolpacks.add(self.root, str(source))
+        toolpacks.sync_skills(self.root)  # 1.7.30: adding records the folder; the skills are put into .github/skills/ by sync, with the company's prefix when one is set
 
     def connect(self, alias: str = "main", env: str = "none") -> None:
         (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {alias: {"type": "tracker", "env": env, "org": "acme"}}}), encoding="utf-8")
@@ -71,8 +72,7 @@ class Sections(ViewCase):
         put(self.kb, {**FILES, "company/skills/acme-tracker-sop/SKILL.md": SKILL.format(name="acme-tracker-sop")})
         set_prefix(self.root)
         self.install()
-        copy = self.root / ".github/skills/acme-tracker-ticket"
-        (self.root / ".github/skills/tracker-ticket").rename(copy)  # a company that names its pack skills with its prefix
+        self.assertTrue((self.root / ".github/skills/acme-tracker-ticket").is_dir(), "1.7.30: the prefix is put on the pack's skills by sync")
         (self.root / ".github/skills/acme-other").mkdir()
         (self.root / ".github/skills/acme-other/SKILL.md").write_text(SKILL.format(name="acme-other"), encoding="utf-8")
         skills = companyview.company(self.root, "en")["skills"]

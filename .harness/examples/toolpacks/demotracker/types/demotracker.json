@@ -45,5 +45,7 @@
       "exec": "human",
       "destroy": "deny"
     }
-  }
+  },
+  "item": "\\bdemotracker(?:\\.cmd)?\\s+--project\\s+\\S+\\s+(?:comment|set-state)\\s+(\\S+)",
+  "link": "demo"
 }

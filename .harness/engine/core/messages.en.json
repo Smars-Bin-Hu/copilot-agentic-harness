@@ -2752,7 +2752,7 @@
   "toolpack.version.none": "toolpack.json has no `version`",
   "toolpack.harness.old": "it needs harness {wanted} or newer; this copy is {have}",
   "toolpack.needs.bad": "`needs.programs` and `needs.trust` are lists",
-  "toolpack.skill.prefix": "skill `{skill}` must start with `{name}-`",
+  "toolpack.skill.prefix": "skill `{skill}` must start with `{name}-` (or `{company}-{name}-`, with the company's skill prefix)",
   "toolpack.zip.unsafe": "the zip has a path that would land outside: {name}",
   "toolpack.source.none": "No such folder or zip: {source}",
   "toolpack.refused": "Not installed: {problems}",

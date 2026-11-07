@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.18 (2026-11-07)
+
+### Added
+
+- **Open to the agent for linked items.** A tool pack's connection type may say how a write names an item (`item`, `link`), as the Azure DevOps pack does for a work item. A write to an item the task is not linked to is then refused, with the line that links it. On the task page, **Open to the agent** has a chip **linked items** (`harness task allow --links --on`): the agent's writes to the items this task is linked to run without asking you each time; a new item still waits; it ends with the task.
+- A tool pack's skills may lead with the company's skill prefix (`<prefix>-<pack>-…`).
+- The protocol says it: give the agent a program, not a recipe (`.harness/contracts/toolpack/`). The `demotracker` sample scopes its writes to linked tickets.
+
+### Fixed
+
+- **Make** of the CA bundle on Windows read no chain (the address and the proxy did not reach the PowerShell script, and an empty answer read as trusted). It now passes them, and says why when no chain is read.
+
 ## 1.7.17 (2026-11-06)
 
 ### Added

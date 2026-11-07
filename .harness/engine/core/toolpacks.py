@@ -130,10 +130,12 @@ def problems(root: Path, folder: Path) -> List[str]:
         except (OSError, ValueError, AttributeError) as error:
             out.append(f"rules.json: {error}")
     for skill in _skills(folder):
-        if not skill.name.startswith(name + "-"):
-            out.append(say("toolpack.skill.prefix", skill=skill.name, name=name))
+        company = skillcheck.company_prefix(root)
+        owner = name if skill.name.startswith(name + "-") else company if company and skill.name.startswith(f"{company}-{name}-") else ""  # the company's prefix may lead (1.7.18)
+        if not owner:
+            out.append(say("toolpack.skill.prefix", skill=skill.name, name=name, company=company or "<prefix>"))
             continue
-        out.extend(f"skills/{skill.name}: {problem}" for problem in skillcheck.check(skill, name)["errors"])
+        out.extend(f"skills/{skill.name}: {problem}" for problem in skillcheck.check(skill, owner)["errors"])
     return out
 
 

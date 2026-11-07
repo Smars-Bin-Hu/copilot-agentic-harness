@@ -2752,7 +2752,7 @@
   "toolpack.version.none": "toolpack.json 没有 `version`",
   "toolpack.harness.old": "它要 harness {wanted} 或更新；这份是 {have}",
   "toolpack.needs.bad": "`needs.programs` 和 `needs.trust` 要是列表",
-  "toolpack.skill.prefix": "skill `{skill}` 要以 `{name}-` 开头",
+  "toolpack.skill.prefix": "skill `{skill}` 要以 `{name}-` 开头（或带公司的 skill 前缀：`{company}-{name}-`）",
   "toolpack.zip.unsafe": "zip 里有会落到外面的路径：{name}",
   "toolpack.source.none": "没有这个文件夹或 zip：{source}",
   "toolpack.refused": "没有安装：{problems}",

@@ -24,7 +24,9 @@ Three words, used the same way on the board, in commands and in files:
   README.md              for people: four steps (install, set up, sign in, try)
 ```
 
-`<name>`: one word of small letters and digits (`ado`, `sqlserver`), not `harness`, `generic`, `domain` or the company's skill prefix. It starts the name of every skill of the pack, so two packs never clash.
+`<name>`: one word of small letters and digits (`ado`, `sqlserver`), not `harness`, `generic`, `domain` or the company's skill prefix. It starts the name of every skill of the pack (`ado-workitem`), so two packs never clash; a company that names its skills with its prefix may write `<prefix>-<name>-…` (`acme-ado-workitem`).
+
+**Give the agent a program, not a recipe.** Where a tool's commands are long or easy to get wrong (a REST call with versions, quoting, JSON patches), put a small program of the pack's own in `bin/` with one plain command per thing to do, as the samples do: the agent then reads the skill for *what* to do and never has to work out *how*.
 
 ## toolpack.json
 
@@ -57,6 +59,8 @@ Three words, used the same way on the board, in commands and in files:
 | `rules` | no | `{env: {verb: decision}}`; decisions `allow`, `task`, `outbox`, `human`, `deny`; prod takes only rules written for prod |
 | `show` | no | `{fact: pattern}`: what a held call's card shows (server, ticket) |
 | `openable` | no | `true` lets **Open to the agent** open it; a tool pack's connections stay closed otherwise |
+| `item` | no | a pattern on the whole command line whose first group is the id of the item a write names (`\bado\s+(?:comment|update)\s+(\d+)`): such a write must name an item the task is linked to, else it is refused; with the task's **linked items** opened it runs without asking |
+| `link` | with `item` | the link type (`links` of `toolpack.json`) that names those items: `ado` for `ado:12345` |
 
 ## MCP: optional, never required
 

@@ -100,6 +100,13 @@ class Install(ToolpackCase):
                 toolpacks.add(self.root, str(folder))
         self.assertFalse((self.root / toolpacks.FOLDER).exists() and any((self.root / toolpacks.FOLDER).iterdir()))
 
+    def test_a_skill_may_lead_with_the_companys_prefix(self) -> None:
+        (self.root / ".harness/policies/user.override.json").write_text(json.dumps({"skill_prefix": "acme"}), encoding="utf-8")
+        source = make(self.outside / "prefixed", skills=("acme-tracker-ticket",))
+        self.assertEqual(toolpacks.add(self.root, str(source))["skills"], ["acme-tracker-ticket"])
+        with self.assertRaises(ToolpackError):
+            toolpacks.add(self.root, str(make(self.outside / "other", name="other", skills=("acme-tracker-x",))))  # the company's prefix, but another pack's name
+
     def test_again_needs_replace_and_a_skill_the_new_version_dropped_goes(self) -> None:
         make(self.source, skills=("tracker-ticket", "tracker-old"))
         toolpacks.add(self.root, str(self.source))

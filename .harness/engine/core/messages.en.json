@@ -2822,8 +2822,6 @@
   "machine.conn.bundle": "CA bundle",
   "machine.conn.bundle.none": "no CA bundle (only needed behind a proxy that inspects TLS)",
   "machine.conn.server": "signed in: {alias}",
-  "machine.conn.from": "from {from}",
-  "machine.conn.company": "company",
   "machine.conn.none": "No tool pack is on this computer.",
   "gate.mcp.ask": "`{tool}` is a {verb} of {toolpack}: the person says yes or no to it here.",
   "gate.mcp.deny": "`{tool}` is a {verb} of {toolpack}: refused (a destroy, or a subagent, which only reads).",

@@ -2822,8 +2822,6 @@
   "machine.conn.bundle": "证书文件（CA bundle）",
   "machine.conn.bundle.none": "没有 CA bundle（只有代理会拆 TLS 时才要）",
   "machine.conn.server": "已登录：{alias}",
-  "machine.conn.from": "来自 {from}",
-  "machine.conn.company": "公司",
   "machine.conn.none": "这台电脑上没有工具包。",
   "gate.mcp.ask": "`{tool}` 是对 {toolpack} 的 {verb}：由用户在这里决定允许还是拒绝。",
   "gate.mcp.deny": "`{tool}` 是对 {toolpack} 的 {verb}：拒绝（毁坏操作，或 subagent 只能读）。",

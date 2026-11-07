@@ -370,7 +370,7 @@
     for (const row of c.rows || []) {
       const first = row.system !== last;
       last = row.system;
-      body.push(h("tr", {class: first ? "first" : ""}, h("td", {class: "sy-n"}, first ? row.system : ""), h("td", {class: "sy-e"}, row.env ? row.env.toUpperCase() : ""),
+      body.push(h("tr", {class: first ? "first" : ""}, h("td", {class: "sy-n"}, first ? row.system : ""), h("td", {class: "sy-e"}, row.env && row.env !== "none" ? row.env.toUpperCase() : ""),
         h("td", {class: "sy-s " + row.state}, h("i", {class: "sy-d " + row.state}), t("board.enter.sys.state." + row.state)), h("td", {class: "sy-r"}, row.reason || ""),
         h("td", {class: "sy-t"}, row.state === "unknown" ? t("board.enter.sys.never") : ago(row.at)), h("td", {class: "sy-p"}, first ? row.pack || "" : "")));
     }

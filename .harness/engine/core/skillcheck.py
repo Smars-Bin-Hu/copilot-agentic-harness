@@ -6,6 +6,7 @@ dead link; a warning is a skill that loads but will be found or used badly.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -29,8 +30,31 @@ RESOURCE_DIRS = ("references", "templates", "scripts", "assets")
 
 
 def company_prefix(root: Path) -> str:
-    """The first word of the company's own skills (`skill_prefix` of the policy `user`), or "" when it is not set or not valid (`doctor` says which)."""
+    """The first word of the company's own skills (`skill_prefix` of the policy `user`), or "" when it is not set or not valid (`doctor` says which). `company sync` copies company skills only when the person set it."""
     return usable(config.policy_or_empty(root, "user").get("skill_prefix", ""))
+
+
+def effective_prefix(root: Path) -> str:
+    """The word the checks and the pack skills use: the policy's; when the policy has none, `skill_prefix` of the knowledge base's `company.json`."""
+    return company_prefix(root) or usable(knowledge_base_prefix(root))
+
+
+def knowledge_base_prefix(root: Path) -> str:
+    """`skill_prefix` of `company/company.json` in the knowledge base, lowercase; "" when there is none or it cannot be read."""
+    try:
+        from . import targets  # late: targets does not need this module, and a hook calls this for many tool calls
+        folder = targets.company_folder(root)
+        data = json.loads((folder / "company.json").read_text(encoding="utf-8")) if folder else {}
+        return str(data.get("skill_prefix") or "").strip().lower() if isinstance(data, dict) else ""
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def prefix_conflict(root: Path) -> str:
+    """A sentence when the policy and the knowledge base's `company.json` name two different prefixes, else ""."""
+    policy = usable(config.policy_or_empty(root, "user").get("skill_prefix", ""))
+    kb = knowledge_base_prefix(root)
+    return say("skill.prefix.conflict", policy=policy, kb=kb) if policy and kb and policy != kb else ""
 
 
 def usable(value: Any) -> str:
@@ -51,7 +75,7 @@ def prefix_problem(root: Path) -> str:
 
 def prefixes(root: Path) -> Tuple[str, ...]:
     """The prefixes a skill of ours or of the company has: the three of the harness, and the company's when it is set."""
-    company = company_prefix(root)
+    company = effective_prefix(root)
     return PREFIXES + ((company + "-",) if company else ()) + tuple(name + "-" for name in toolpack_names(root))
 
 
@@ -211,6 +235,6 @@ def check_all(root: Path, only: List[str] | None = None) -> List[Dict[str, Any]]
 
         folders = [item for item in sorted(base.iterdir()) if item.is_dir()] if base.is_dir() else []
         folders += domainskills.folders(root)  # the skills of the domains, in the knowledge base
-    company = company_prefix(root)
+    company = effective_prefix(root)
     owners = toolpack_names(root)
     return [check(folder, next((name for name in owners if folder.name.startswith(name + "-")), company)) for folder in folders]

@@ -100,7 +100,7 @@ def problems(root: Path, folder: Path) -> List[str]:
         return [str(error)]
     out: List[str] = []
     name = str(found.get("name") or "")
-    if not NAME.match(name) or name in skillcheck.RESERVED or name == skillcheck.company_prefix(root):
+    if not NAME.match(name) or name in skillcheck.RESERVED or name == skillcheck.effective_prefix(root):
         out.append(say("toolpack.name.bad", name=name or "-"))
     if not found.get("version"):
         out.append(say("toolpack.version.none"))
@@ -147,7 +147,7 @@ def problems(root: Path, folder: Path) -> List[str]:
         except (OSError, ValueError, AttributeError) as error:
             out.append(f"rules.json: {error}")
     for skill in _skills(folder):
-        company = skillcheck.company_prefix(root)
+        company = skillcheck.effective_prefix(root)
         owner = name if skill.name.startswith(name + "-") else company if company and skill.name.startswith(f"{company}-{name}-") else ""  # the company's prefix may lead (1.7.18)
         if not owner:
             out.append(say("toolpack.skill.prefix", skill=skill.name, name=name, company=company or "<prefix>"))
@@ -195,6 +195,21 @@ def paths(root: Path) -> List[str]:
     return ledger(root)["paths"]
 
 
+def clashes(root: Path) -> List[str]:
+    """Names of packs the company wrote in `company/tools/packs/` that a factory pack in `.harness/toolpacks/` already has. The factory pack stays; the company's is not used until it is renamed."""
+    company = targets.company_folder(root)
+    base = company / COMPANY_PACKS if company else None
+    factory = root / FOLDER
+    if base is None or not base.is_dir() or not factory.is_dir():
+        return []
+    have = {item.name for item in factory.iterdir() if item.is_dir()}
+    return sorted(item.name for item in base.iterdir() if item.is_dir() and item.name in have)
+
+
+def clash_lines(root: Path) -> List[str]:
+    return [say("toolpack.clash", name=name) for name in clashes(root)]
+
+
 def listed(root: Path) -> Dict[str, Dict[str, Any]]:
     """Every pack this computer knows, `{name: {folder, manifest, source, active}}`: the company's own, the folders added here, the factory packs. `source` is
     `company`, `harness` or the folder's path. A name found twice is kept once: the company's first, then a folder added here, then the factory's. A folder
@@ -203,7 +218,8 @@ def listed(root: Path) -> Dict[str, Dict[str, Any]]:
     turned_on = set(use_list(root))
     found: List[tuple] = []
     base = company / COMPANY_PACKS if company else None
-    found += [(item, COMPANY, True) for item in (sorted(base.iterdir()) if base is not None and base.is_dir() else []) if item.is_dir()]
+    clash = set(clashes(root))
+    found += [(item, COMPANY, True) for item in (sorted(base.iterdir()) if base is not None and base.is_dir() else []) if item.is_dir() and item.name not in clash]
     found += [(Path(raw), raw, True) for raw in paths(root)]
     factory = root / FOLDER
     found += [(item, HARNESS, None) for item in (sorted(factory.iterdir()) if factory.is_dir() else []) if item.is_dir()]
@@ -422,7 +438,7 @@ def remove(root: Path, name: str) -> Dict[str, Any]:
 
 
 def _final_names(root: Path, name: str, folder: Path) -> List[str]:
-    prefix = skillcheck.company_prefix(root)
+    prefix = skillcheck.effective_prefix(root)
     return [_final(prefix, skill.name) for skill in _skills(folder)]
 
 
@@ -457,7 +473,7 @@ def _on_disk(place: Path) -> Dict[str, bytes]:
 
 def _rendered(root: Path, name: str, folder: Path) -> Dict[str, Dict[str, bytes]]:
     """`{final skill name: files}` of a pack's skills."""
-    prefix = skillcheck.company_prefix(root)
+    prefix = skillcheck.effective_prefix(root)
     skills = _skills(folder)
     names = {skill.name: _final(prefix, skill.name) for skill in skills}
     return {names[skill.name]: _render(skill, names) for skill in skills}
@@ -480,8 +496,9 @@ def _put(place: Path, files: Dict[str, bytes], origin: Path) -> None:
 def skill_plan(root: Path) -> Dict[str, Any]:
     """What `sync_skills` would do, from files only: `{put: [(final, files, origin folder, names)], keep: {pack: [names]}, drop: [(pack, name)], refused: [...], updated: [...]}`."""
     book = ledger(root)["packs"]
-    prefix = skillcheck.company_prefix(root)
+    prefix = skillcheck.effective_prefix(root)
     plan: Dict[str, Any] = {"put": [], "same": [], "drop": [], "refused": [], "updated": [], "entries": {}}
+    plan["refused"] += [{"toolpack": name, "skill": name, "why": say("toolpack.clash", name=name)} for name in clashes(root)]
     on = active(root)
     for name, item in on.items():
         skills = _skills(item["folder"])
@@ -536,8 +553,9 @@ def sync_skills(root: Path) -> Dict[str, Any]:
     new_book = {"packs": plan["entries"], "paths": book["paths"]}
     if new_book != {"packs": book["packs"], "paths": book["paths"]}:
         _write_ledger(root, new_book)
-    lines = [say("toolpack.updated", name=item["toolpack"], old=item["from"], new=item["to"]) for item in plan["updated"]]
-    return {"put": put, "removed": removed, "updated": plan["updated"], "refused": plan["refused"], "lines": lines, **({"backup": str(backup)} if removed else {})}
+    gone = unknown_use(root)
+    lines = clash_lines(root) + ([say("doctor.toolpacks.unknown", names=", ".join(gone))] if gone else []) + [say("toolpack.updated", name=item["toolpack"], old=item["from"], new=item["to"]) for item in plan["updated"]]
+    return {"put": put, "removed": removed, "updated": plan["updated"], "refused": plan["refused"], "unknown_use": gone, "lines": lines, **({"backup": str(backup)} if removed else {})}
 
 
 _CODE = re.compile(r"```.*?```|`[^`\n]+`", re.S)
@@ -546,7 +564,7 @@ _CODE = re.compile(r"```.*?```|`[^`\n]+`", re.S)
 def command_problems(root: Path) -> List[Dict[str, str]]:
     """Skills of the company (`.github/skills/<prefix>-*`) that write `<program> <word>` in code, where `<program>` is the program of an active pack that lists its `commands`
     and `<word>` is not one of them (1.7.30): `[{skill, program, word, pack}]`. A pack with no `commands` is not checked."""
-    prefix = skillcheck.company_prefix(root)
+    prefix = skillcheck.effective_prefix(root)
     if not prefix:
         return []
     programs: Dict[str, tuple] = {}
@@ -779,4 +797,4 @@ def check(root: Path, only: str = "") -> Dict[str, Any]:
         rows.append(row)
     if only and not rows:
         raise ToolpackError(say("toolpack.none", name=only))
-    return {"toolpacks": rows, "unknown_use": unknown_use(root), "exit_code": 0 if all(row["ok"] for row in rows) else 1}
+    return {"toolpacks": rows, "unknown_use": unknown_use(root), "clashes": clash_lines(root), "exit_code": 0 if all(row["ok"] for row in rows) and not clash_lines(root) else 1}

@@ -512,7 +512,7 @@ def check_skills(report: Report, root: Path) -> None:
 
     A third-party skill keeps its own name and form, so only its errors count. Warns only: a bad skill must not stop the harness.
     """
-    problem = skillcheck.prefix_problem(root)
+    problem = skillcheck.prefix_problem(root) or skillcheck.prefix_conflict(root)
     if problem:
         report.warn(problem)
     results = skillcheck.check_all(root)
@@ -596,13 +596,24 @@ def check_company(report: Report, root: Path) -> None:
 def check_toolpacks(report: Report, root: Path) -> None:
     """Tool packs (1.7.30): a leftover of the old layout, a name in `use` no factory pack has, a connection field that is not filled in, a skill that uses a command its pack does not list."""
     try:
-        from core import connections, toolpacks
+        from core import connections, launchenv, toolpacks
 
         if (root / ".harness" / "examples" / "toolpacks").exists():
             report.warn(say("doctor.toolpacks.old_examples"))
         gone = toolpacks.unknown_use(root)
         if gone:
             report.warn(say("doctor.toolpacks.unknown", names=", ".join(gone)))
+        for line in toolpacks.clash_lines(root):
+            report.warn(line)
+        company = targets.company_folder(root)
+        recipe_file = company / "tools" / "computer.json" if company else None
+        if recipe_file is not None and recipe_file.is_file():
+            try:
+                faults = launchenv.recipe_errors(json.loads(recipe_file.read_text(encoding="utf-8-sig")))
+            except ValueError as error:
+                faults = [str(error)]
+            if faults:
+                report.warn(say("doctor.toolpacks.recipe", faults="; ".join(faults)))
         names = sorted(toolpacks.active(root))
         if names:
             report.ok(say("doctor.toolpacks.on", names=", ".join(names)))

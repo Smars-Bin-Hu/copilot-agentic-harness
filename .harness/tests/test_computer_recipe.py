@@ -52,6 +52,20 @@ class SyncAndShow(RecipeCase):
         self.assertIn("ca_bundle.host", shown["error"])
 
 
+class Words(RecipeCase):
+    def test_each_fault_is_a_plain_sentence_and_all_of_them_reach_the_window(self) -> None:
+        bad = {"ca_bundle": {"host": "bad host!", "proxy": "nope"}, "tool_folders": [{"hint": "x"}], "extra": 1}
+        faults = launchenv.recipe_errors(bad)
+        self.assertEqual(len(faults), 4)
+        for fault in faults:
+            self.assertNotIn("^", fault)
+            self.assertNotIn("the file+", fault)
+        (self.root / company.COMPUTER_COPY).write_text(json.dumps(bad), encoding="utf-8")
+        error = launchenv.state(self.root)["recipe"]["error"]
+        for word in ("ca_bundle.host", "ca_bundle.proxy", "label", "extra"):
+            self.assertIn(word, error)
+
+
 class Checks(RecipeCase):
     def test_a_good_file_is_in_the_layout_and_a_bad_one_is_named(self) -> None:
         self.recipe_in_kb(GOOD)

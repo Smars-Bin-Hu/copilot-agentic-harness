@@ -199,11 +199,11 @@ class FromCompany(ToolpackCase):
 
     def test_the_companys_own_pack_is_on_its_skills_are_put_once_and_again_when_the_version_changes_and_taken_back(self) -> None:
         first = company.sync(self.root)
-        self.assertIn(".github/skills/tracker-ticket", first["copied"])
+        self.assertIn(".github/skills/acme-tracker-ticket", first["copied"])
         row = toolpacks.listed(self.root)["tracker"]
         self.assertEqual((row["source"], row["active"]), ("company", True))
         self.assertEqual(toolpacks.ledger(self.root)["packs"]["tracker"]["source"], "company")
-        self.assertNotIn(".github/skills/tracker-ticket", company.sync(self.root)["copied"], "again: nothing to do")
+        self.assertNotIn(".github/skills/acme-tracker-ticket", company.sync(self.root)["copied"], "again: nothing to do")
         make(self.kb / "tools" / "packs" / "tracker", version="2.0.0")
         again = company.sync(self.root)
         self.assertEqual(toolpacks.ledger(self.root)["packs"]["tracker"]["version"], "2.0.0")
@@ -213,9 +213,9 @@ class FromCompany(ToolpackCase):
         shutil.rmtree(self.kb / "tools" / "packs" / "tracker")
         gone = company.sync(self.root)
         self.assertNotIn("tracker", toolpacks.listed(self.root))
-        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists(), "its skills are taken back")
+        self.assertFalse((self.root / ".github/skills/acme-tracker-ticket").exists(), "its skills are taken back")
         self.assertEqual(toolpacks.ledger(self.root)["packs"], {})
-        self.assertIn(".github/skills/tracker-ticket", gone["copied"])
+        self.assertIn(".github/skills/acme-tracker-ticket", gone["copied"])
 
     def test_a_folder_added_here_cannot_take_the_name_of_the_companys_pack(self) -> None:
         with self.assertRaises(ToolpackError):
@@ -996,6 +996,37 @@ class FactoryPacks(ToolpackCase):
         self.assertEqual(toolpacks.unknown_use(self.root), ["nosuch"])
         self.assertEqual(toolpacks.check(self.root)["unknown_use"], ["nosuch"])
 
+    def test_sync_says_a_name_in_use_that_no_pack_has(self) -> None:
+        self.use("tracker", "nosuch")
+        done = toolpacks.sync_skills(self.root)
+        self.assertEqual(done["unknown_use"], ["nosuch"])
+        self.assertTrue(any("nosuch" in line for line in done["lines"]))
+
+    def test_the_company_prefix_of_the_knowledge_base_renames_the_pack_skills_and_the_policy_wins(self) -> None:
+        (self.kb / "company.json").write_text('{"skill_prefix": "acme"}\n', encoding="utf-8")
+        self.use("tracker")
+        toolpacks.sync_skills(self.root)
+        self.assertTrue((self.root / ".github/skills/acme-tracker-ticket").is_dir())
+        self.assertEqual(skillcheck.company_prefix(self.root), "", "company sync still wants the person's own word")
+        self.prefix("other")
+        self.assertEqual(skillcheck.effective_prefix(self.root), "other")
+        self.assertIn("acme", skillcheck.prefix_conflict(self.root))
+        self.prefix("acme")
+        self.assertEqual(skillcheck.prefix_conflict(self.root), "")
+
+    def test_a_company_pack_with_the_name_of_a_factory_pack_is_an_error_everywhere(self) -> None:
+        self.use("tracker")
+        make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
+        self.assertEqual(toolpacks.clashes(self.root), ["tracker"])
+        self.assertEqual(toolpacks.listed(self.root)["tracker"]["source"], "harness")
+        found = toolpacks.check(self.root)
+        self.assertEqual((found["exit_code"], len(found["clashes"])), (1, 1))
+        done = toolpacks.sync_skills(self.root)
+        self.assertEqual([item["toolpack"] for item in done["refused"]], ["tracker"])
+        self.assertFalse(any("updated" in line for line in done["lines"]))
+        self.assertTrue(any("`tracker`" in line for line in done["lines"]))
+        self.assertTrue(any("factory" in line or "出厂" in line for line in DoctorToolpacks.lines_of(self.root)))
+
     def test_with_a_prefix_the_folder_the_name_and_the_references_between_a_packs_skills_are_renamed(self) -> None:
         self.prefix("acme")
         self.use("tracker")
@@ -1021,7 +1052,7 @@ class FactoryPacks(ToolpackCase):
     def test_a_new_version_puts_the_skills_again_and_says_so(self) -> None:
         self.use("tracker")
         toolpacks.sync_skills(self.root)
-        self.assertEqual(toolpacks.sync_skills(self.root), {"put": [], "removed": [], "updated": [], "refused": [], "lines": []}, "again: nothing")
+        self.assertEqual(toolpacks.sync_skills(self.root), {"put": [], "removed": [], "updated": [], "refused": [], "unknown_use": [], "lines": []}, "again: nothing")
         make(self.factory, version="1.1.0", skills=("tracker-ticket",))
         (self.factory / "skills" / "tracker-ticket" / "SKILL.md").write_text(SKILL.format(name="tracker-ticket") + "New.\n", encoding="utf-8")
         shutil.rmtree(self.factory / "skills" / "tracker-note")
@@ -1071,12 +1102,27 @@ class FactoryPacks(ToolpackCase):
 class DoctorToolpacks(ToolpackCase):
     """1.7.30: what `harness doctor` says about tool packs."""
 
-    def lines(self) -> list:
+    @staticmethod
+    def lines_of(root) -> list:
         import doctor
 
         report = doctor.Report()
-        doctor.check_toolpacks(report, self.root)
+        doctor.check_toolpacks(report, root)
         return report.lines
+
+    def lines(self) -> list:
+        return self.lines_of(self.root)
+
+    def test_every_fault_of_the_computer_recipe_is_named_without_a_mangled_pattern(self) -> None:
+        kb = self.root / "knowledge-base" / "company" / "tools"
+        kb.mkdir(parents=True)
+        (self.root / "knowledge-base" / "README.md").write_text("# kb\n", encoding="utf-8")
+        (kb / "computer.json").write_text(json.dumps({"ca_bundle": {"host": "bad host!", "proxy": "nope"}, "tool_folders": [{"hint": "x"}]}), encoding="utf-8")
+        text = " ".join(self.lines())
+        for word in ("ca_bundle.host", "ca_bundle.proxy", "tool_folders[0]", "label"):
+            self.assertIn(word, text)
+        self.assertNotIn("the file+", text)
+        self.assertNotIn("^[", text)
 
     def test_a_leftover_examples_folder_is_to_be_deleted(self) -> None:
         self.assertEqual(self.lines(), [])

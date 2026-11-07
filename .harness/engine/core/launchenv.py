@@ -488,13 +488,36 @@ def make(root: Path, host: str = "", proxy: Optional[str] = None, get_chain: Cal
 
 # --- what Get ready shows ---------------------------------------------------------------------------------------------------------------------------------
 
+_FAULT = re.compile(r"^\$(?P<path>[^:]*): (?P<what>.*)$", re.S)
+_REASONS = {"host": "may hold letters, digits, dots and hyphens only", "proxy": "must look like `host:port`, for example `127.0.0.1:9000`"}
+
+
+def _plain_fault(item: str) -> str:
+    """One sentence for one fault of `schema.validate`: the key, then what is wrong. (The raw text holds a regex; its `$` must stay as it is.)"""
+    found = _FAULT.match(item)
+    if not found:
+        return item
+    path, what = found.group("path").lstrip("."), found.group("what")
+    key = path.replace("[", ".").replace("]", "").split(".")[-1] if path else ""
+    where = f"`{path}`" if path else "the file"
+    if what.startswith("missing required key"):
+        return f"{where} lacks the key {what.split('key', 1)[1].strip().replace(chr(39), chr(96))}"
+    if "does not match" in what:
+        return f"{where} {_REASONS.get(key, 'is not in the form expected')}"
+    if what.startswith("expected"):
+        return f"{where} has the wrong kind of value ({what.replace('expected ', 'wanted ')})"
+    if "characters" in what or "items" in what:
+        return f"{where} is {what}" if "longer" in what or "shorter" in what else f"{where} has {what}"
+    return f"{where}: {what}"
+
+
 def recipe_errors(data: Any) -> List[str]:
     """What is wrong in a `computer.json`, in words that name the key; [] when it is right."""
     from . import schema
 
     if not isinstance(data, dict):
         return ["the file is not a JSON object"]
-    errors = [item.replace("$.", "").replace("$", "the file") for item in schema.validate(data, RECIPE_SCHEMA)]
+    errors = [_plain_fault(item) for item in schema.validate(data, RECIPE_SCHEMA)]
     for key in data:
         if key not in RECIPE_SCHEMA["properties"]:
             errors.append(f"unknown key `{key}` (it holds `ca_bundle` and `tool_folders`)")
@@ -504,7 +527,7 @@ def recipe_errors(data: Any) -> List[str]:
 
 
 def recipe(root: Path) -> Dict[str, Any]:
-    """The company's recipe for this computer: `{"host", "proxy", "tool_folders": [{label, hint}], "error"}`. Empty with no file; a file with faults gives the first fault and no values."""
+    """The company's recipe for this computer: `{"host", "proxy", "tool_folders": [{label, hint}], "error"}`. Empty with no file; a file with faults gives every fault, joined, and no values."""
     out: Dict[str, Any] = {"host": "", "proxy": "", "tool_folders": [], "error": ""}
     path = root / RECIPE
     if not path.is_file():
@@ -516,7 +539,7 @@ def recipe(root: Path) -> Dict[str, Any]:
         return out
     errors = recipe_errors(data)
     if errors:
-        out["error"] = errors[0]
+        out["error"] = "; ".join(errors)
         return out
     out["host"] = str((data.get("ca_bundle") or {}).get("host") or "")
     out["proxy"] = str((data.get("ca_bundle") or {}).get("proxy") or "")

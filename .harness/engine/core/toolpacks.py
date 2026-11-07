@@ -198,6 +198,26 @@ def rules_layer(root: Path) -> Dict[str, Any]:
 LINK = re.compile(r"^([a-z][a-z0-9]{0,15}):([A-Za-z0-9._#/-]{1,64})$")
 
 
+def link_types(root: Path) -> List[Dict[str, str]]:
+    """The kinds of item a task may be linked to, from the installed tool packs (1.7.20): `{type, label, toolpack}`, one per link type, in the order of the packs. A link type is named by a pack's `links`
+    and by the connection types that declare `link`; a type that only a connection declares has no label of its own, and takes the type's."""
+    found: Dict[str, Dict[str, str]] = {}
+    for name, item in installed(root).items():
+        links = item["manifest"].get("links") if isinstance(item["manifest"].get("links"), dict) else {}
+        for key, spec in links.items():
+            if LINK.match(f"{key}:0") and isinstance(spec, dict):
+                found.setdefault(key, {"type": key, "label": str(spec.get("label") or ""), "toolpack": name})
+        for path in sorted((item["folder"] / "types").glob("*.json")) if isinstance(item.get("folder"), Path) and (item["folder"] / "types").is_dir() else []:
+            try:
+                kind = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            key = kind.get("link") if isinstance(kind, dict) else None
+            if isinstance(key, str) and LINK.match(f"{key}:0"):
+                found.setdefault(key, {"type": key, "label": str(kind.get("label") or ""), "toolpack": name})
+    return list(found.values())
+
+
 def link_view(root: Path, ref: str) -> Dict[str, str]:
     """A task's link as the board draws it: `{ref, type, id, label, url, tool pack}`; a type no tool pack knows keeps only its text."""
     from . import connections  # it reads this module's kinds

@@ -55,7 +55,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
-from core import ahp, company, config, messages, outbox, reach, registry, state, targets, tasks, user
+from core import ahp, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
 from core import launchenv
 from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
@@ -88,7 +88,7 @@ MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
 REOPEN_EVERY = 3.0  # seconds
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
-SETTINGS = ("review set", "task allow", "test runner")  # settings the agent reads at its next step: they change nothing under its hands, so they work while it is at work (1.7.9)
+SETTINGS = ("review set", "task allow", "task link", "test runner")  # settings the agent reads at its next step: they change nothing under its hands, so they work while it is at work (1.7.9)
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
 BUILTIN = ("send", "answer", "steer", "stop", "create", "confirm", "question")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
 DESK_REFRESH = 10  # seconds between two reads of a task page
@@ -112,7 +112,7 @@ def refresh_seconds(value: Any) -> int:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close"]}
+    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close"]}
 
 
 class Fallback(CommandError):
@@ -605,6 +605,10 @@ class Board:
             result = tasklife.set_allow(self.root, task, str(env_name or ""), str(who or "") == "on", interactive=True)
             noted(self.root, result.get("task") or task, action)
             return result
+        if action == "task link":  # one click, no code: the person names an item of an outside tool in the task, or takes it away (1.7.20); the same function as `task link add|remove`
+            result = tasklife.link(self.root, task, str(env_name or ""), str(who or "") == "on")
+            noted(self.root, result.get("task") or task, action)
+            return result
         if action == "test runner":  # one click, no code: the person lets the agent run an environment of the test guide, or takes it back (1.7.2)
             result = testrecord.set_runner(self.root, task, str(env_name or ""), str(who or "") == testrecord.AGENT, interactive=True)
             noted(self.root, result.get("task") or task, action)
@@ -1069,7 +1073,7 @@ class Board:
             found = tasks.read(self.root, folder) or {}
             sources.append({"name": task_ops.name_of(folder), "kind": str(found.get("kind") or ""), "status": str(found.get("status") or "")})
         return {"ready": bool(status["ready"]), "why": status["why"], "models": self.link.model_list(), "kinds": list(tasks.KINDS), "sources": sources,
-                "limit": chatnew.MAX_TEXT,
+                "limit": chatnew.MAX_TEXT, "link_types": toolpacks.link_types(self.root),
                 "domains": intake.kb_domains(self.root)}  # the knowledge base domains a task may be about (none is a choice); empty: no knowledge base has one
 
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:

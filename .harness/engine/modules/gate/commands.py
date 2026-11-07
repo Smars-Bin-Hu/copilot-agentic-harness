@@ -185,7 +185,8 @@ def servers_list(root: Path) -> Dict[str, Any]:
         kind = known.get(str(server.get("type"))) or {}
         saved = connections.identity_of(env, alias, kind)
         out.append({"alias": alias, "type": server.get("type"), "env": server.get("env"), "auth": server.get("auth", ""), "own": bool(server.get("own")),
-                    "account": saved.get("account", ""), "saved": bool(saved), "known_kind": bool(kind)})
+                    "account": saved.get("account", ""), "saved": bool(saved), "known_kind": bool(kind),
+                    "fields": {key: str(server.get(key)) for key in (kind.get("fields") or {}) if server.get(key) not in (None, "")}})
     calls = {one["alias"]: one["call"] for one in connections.calls(root)}
     for one in out:
         if one["alias"] in calls:
@@ -287,20 +288,24 @@ def register(subparsers: Any) -> None:
     acting.add_argument("alias", help="the server, as Get ready lists it")
     acting.add_argument("rest", nargs=argparse.REMAINDER, help="-- then the command, whole")
     acting.set_defaults(handler=lambda a: run_as(repo_root(), a.alias, a.rest))
-    listing = subparsers.add_parser("connections", help="the servers of this copy (the company pack's and your own) and whether an identity is saved for each; `test <alias>` tests the way in")
-    listing_commands = listing.add_subparsers(dest="connections_command")
-    probe = listing_commands.add_parser("test", help="test the way in to a server with its saved identity")
-    probe.add_argument("alias")
-    probe.set_defaults(handler=lambda a: servers_test(repo_root(), a.alias))
-    out = listing_commands.add_parser("export", help="your own connections in the form of connections.json (no account, no password), to give the company pack or a colleague")
-    out.add_argument("--out", default="", help="a file to write it to; left out, it is printed")
-    out.set_defaults(handler=lambda a: _export(repo_root(), a.out))
-    sign = listing_commands.add_parser("login", help="sign in to a server whose program keeps its own sign-in (an `auth` of identity `tool`, such as az login), with the tool folders and CA bundle VS Code gets")
-    sign.add_argument("alias")
-    sign.add_argument("--type", default="", help="a connection of your own not saved yet: its type")
-    sign.add_argument("--set", action="append", default=[], metavar="FIELD=VALUE", help="a server of your own not saved yet: one of its fields (more than once)")
-    sign.set_defaults(handler=lambda a: servers_login(repo_root(), a.alias, a.type, a.set))
-    listing.set_defaults(handler=lambda a: servers_list(repo_root()))
+    def connections_parser(name: str, help_text: str, wrap: Callable[[Dict[str, Any]], Dict[str, Any]]) -> None:
+        listing = subparsers.add_parser(name, help=help_text)
+        listing_commands = listing.add_subparsers(dest="connections_command")
+        probe = listing_commands.add_parser("test", help="test the way in to a connection with its saved identity")
+        probe.add_argument("alias")
+        probe.set_defaults(handler=lambda a: wrap(servers_test(repo_root(), a.alias)))
+        out = listing_commands.add_parser("export", help="your own connections in the form of connections.json (no account, no password), to give the company pack or a colleague")
+        out.add_argument("--out", default="", help="a file to write it to; left out, it is printed")
+        out.set_defaults(handler=lambda a: wrap(_export(repo_root(), a.out)))
+        sign = listing_commands.add_parser("login", help="sign in to a connection whose program keeps its own sign-in (an `auth` of identity `tool`, such as az login), with the tool folders and CA bundle VS Code gets")
+        sign.add_argument("alias")
+        sign.add_argument("--type", default="", help="a connection of your own not saved yet: its type")
+        sign.add_argument("--set", action="append", default=[], metavar="FIELD=VALUE", help="a connection of your own not saved yet: one of its fields (more than once)")
+        sign.set_defaults(handler=lambda a: wrap(servers_login(repo_root(), a.alias, a.type, a.set)))
+        listing.set_defaults(handler=lambda a: wrap(servers_list(repo_root())))
+
+    connections_parser("connections", "the connections of this copy (the company pack's and your own) and whether an identity is saved for each; `test <alias>` tests the way in", lambda found: found)
+    connections_parser("servers", "renamed: use `harness connections`. This old name says so, then does the same", lambda found: dict(found, renamed=say("connections.renamed")))  # 1.7.20
 
     waiting = subparsers.add_parser("wait", help="wait for an outside system to reach a state in one call: run a read of a listed system every N seconds until its output matches a pattern, or a timeout; the last output goes to a file of the task")
     waiting.add_argument("--run", required=True, help="the read-only command of a listed system to run each round, whole, in quotes")

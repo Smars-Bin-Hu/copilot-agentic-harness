@@ -44,7 +44,7 @@
     return Object.assign({}, task, {
       past: found, round: number, status: "closed", state: "", waiting: "", waiting_why: "", waited_s: null, paused_since: "", handoff: null, held: false, autorun: false, active: false,
       branch: found.branch, docs: found.docs, files: found.files, changes: found.changes, review: found.review, history: found.history, stages,
-      commit: null, test: null, intake: null, actions: [], todo: {done: 0, total: 0}, todo_left: 0, req_placeholders: 0, req_sections: [], req_unconfirmed: false, req_changed: false, report: "",
+      commit: null, test: null, intake: null, actions: [], todo: {done: 0, total: 0}, todo_left: 0, req_placeholders: 0, req_sections: [], link_types: [], req_unconfirmed: false, req_changed: false, report: "",
     });
   }
   const hashOf = (tab) => "#" + (desk.past ? "r" + desk.past.round + "/" : "") + tab;
@@ -631,19 +631,48 @@
     ui.review.set(JSON.stringify([full.settings && [full.settings.n, full.settings.max_n], full.status, desk.past && full.round]), () => reviewButton());
     ui.envs.set(JSON.stringify([desk.allow, full.status]), () => envButton());
     ui.pill.set(live ? JSON.stringify([desk.vscode, chat && chat.bound]) : "", () => (live ? [SHELL.vsPill(desk.vscode, chat), SERVE.pairMark(true)] : null));
-    const links = desk.links || [];  // outside items the task names (1.7.15): a chip each, the address opens in a new tab
-    ui.forks.set(JSON.stringify([desk.forked_from, desk.forked_to, links]), () => (desk.forked_from || desk.forked_to.length || links.length ? [
-      links.map((item) => linkChip(item)),
+    const links = desk.links || [];  // outside items the task names (1.7.15): a chip each, the address opens in a new tab; on a served open task each can be taken away, and one added (1.7.20)
+    const canLink = served() && full.status === "open" && !desk.past && SERVE.runs("task link");
+    ui.forks.set(JSON.stringify([desk.forked_from, desk.forked_to, links, canLink, canLink && linking.open, canLink && linking.error, desk.link_types]), () => (desk.forked_from || desk.forked_to.length || links.length || canLink ? [
+      links.map((item) => linkChip(item, canLink)), canLink ? linkAdd() : null,
       desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null, desk.forked_from && desk.forked_to.length ? " · " : null,
       desk.forked_to.length ? [t("desk.forked.to") + " ", desk.forked_to.map((name, index) => [index ? ", " : "", taskLink(name)])] : null] : null));
     document.documentElement.style.setProperty("--tkh", ui.head.offsetHeight + "px");  // the tab bar sticks under the header
     Status.refresh();
   }
 
-  function linkChip(item) {
+  const LINK_FORM = /^[a-z][a-z0-9]{0,15}:[A-Za-z0-9._#/-]{1,64}$/;
+  const linking = {open: false, error: "", busy: false};
+  function linkCall(ref, on) {
+    linking.busy = true; linking.error = "";
+    return SERVE.post("/api/act", {action: "task link", task: desk.name, env: ref, runner: on ? "on" : "off", step: "act"}).then(() => { linking.busy = false; if (on) linking.open = false; SERVE.done(); },
+      (error) => { linking.busy = false; linking.error = error && error.message ? error.message : String(error); SERVE.done(); });
+  }
+  function linkChip(item, can) {
     const tip = [item.label ? item.label + " " + item.id : item.ref, item.url || t("desk.link.nourl")].join("\n");
-    return item.url ? h("a", {class: "chip tk-link", href: item.url, target: "_blank", rel: "noopener noreferrer", title: tip}, "\u2197 " + item.ref)
-      : h("span", {class: "chip tk-link", title: tip}, item.ref);
+    const body = item.url ? h("a", {class: "tk-link-a", href: item.url, target: "_blank", rel: "noopener noreferrer", title: tip}, "\u2197 " + item.ref) : h("span", {class: "tk-link-a", title: tip}, item.ref);
+    if (!can) return h("span", {class: "chip tk-link"}, body);
+    const off = h("button", {type: "button", class: "tk-link-x", "aria-label": t("desk.links.remove") + " " + item.ref, title: t("desk.links.remove")}, "\u00d7");
+    off.addEventListener("click", () => { off.disabled = true; linkCall(item.ref, false); });
+    return h("span", {class: "chip tk-link"}, body, off);
+  }
+  // "+ ticket": a small form under the chips. The types are those the installed tool packs give; any `<type>:<id>` is accepted (the CLI keeps an unknown type as text).
+  function linkAdd() {
+    const types = desk.link_types || [];
+    if (!linking.open) {
+      const open = h("button", {type: "button", class: "chip tk-link-add", title: t("desk.links.add.tip")}, "+ " + t("desk.links.add"));
+      open.addEventListener("click", () => { linking.open = true; linking.error = ""; draw(false); });
+      return open;
+    }
+    const input = h("input", {type: "text", class: "tk-link-in", maxlength: 80, autocomplete: "off", spellcheck: "false", placeholder: types.length ? types[0].type + ":300100" : t("desk.links.ph"), "aria-label": t("desk.links.add")});
+    const go = h("button", {type: "button", class: "act"}, t("desk.links.go"));
+    const say = h("span", {class: "bad tk-link-bad"}, linking.error);
+    const submit = () => { const ref = input.value.trim(); if (!LINK_FORM.test(ref)) { say.textContent = t("desk.links.bad"); return; } go.disabled = true; linkCall(ref, true); };
+    go.addEventListener("click", submit);
+    input.addEventListener("keydown", (event) => { if (event.key === "Enter") submit(); if (event.key === "Escape") { linking.open = false; draw(false); } });
+    const kinds = types.map((one) => { const chip = h("button", {type: "button", class: "chip", title: (one.label || one.type) + " \u00b7 " + one.toolpack}, one.type + ":"); chip.addEventListener("click", () => { input.value = one.type + ":"; input.focus(); }); return chip; });
+    setTimeout(() => input.focus(), 0);
+    return h("span", {class: "tk-link-form"}, input, go, kinds, say, kinds.length ? null : h("span", {class: "sub", title: t("desk.links.none")}, "?"));
   }
 
   const defectSync = () => { const go = h("button", {type: "button", class: "act kb-mini"}, t("desk.test.defects.sync")); go.addEventListener("click", () => TERM.run("harness task defects sync --task " + desk.name)); return go; };

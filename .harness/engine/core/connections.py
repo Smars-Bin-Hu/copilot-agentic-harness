@@ -275,6 +275,21 @@ def calls(root: Path) -> List[Dict[str, str]]:
     return out
 
 
+def brief(root: Path, alias: str, call: str = "") -> Dict[str, Any]:
+    """What an agent needs to use a connection that a prompt names (1.7.20): `{alias, env, type, label, fields, toolpack, skills, program, call}`. `fields` are the connection's own (org, project, ...), never the
+    identity; `skills` and `program` come from the tool pack of the type; `call` is the test command, a way to see the program and its options only when no tool pack gives skills."""
+    from . import toolpacks
+
+    server = listed(root).get(alias) or {}
+    kind = types(root).get(str(server.get("type"))) or {}
+    fields = {field: str(server.get(field) if server.get(field) not in (None, "") else spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items() if field not in SECRET_FIELDS and isinstance(spec, dict)}
+    pack = str(kind.get("toolpack") or "")
+    folder = (toolpacks.installed(root).get(pack) or {}).get("folder") if pack else None
+    skills = sorted(item.name for item in (folder / "skills").iterdir() if item.is_dir()) if isinstance(folder, Path) and (folder / "skills").is_dir() else []
+    return {"alias": alias, "env": str(server.get("env") or ""), "type": str(server.get("type") or ""), "label": str(kind.get("label") or ""),
+            "fields": {key: value for key, value in fields.items() if value}, "toolpack": pack, "skills": skills, "program": str((kind.get("cli") or [""])[0]), "call": call}
+
+
 # --- a test of the way in ----------------------------------------------------------------------------------------------------------------------------------
 
 def judge(kind: Dict[str, Any], code: Optional[int], output: str) -> Dict[str, str]:

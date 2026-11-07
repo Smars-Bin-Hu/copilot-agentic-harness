@@ -164,6 +164,16 @@ def links_view(root: Path, data: Dict[str, Any]) -> List[Dict[str, str]]:
         return []
 
 
+def link_types(root: Path) -> List[Dict[str, str]]:
+    """The kinds of ticket a person may add to the task (1.7.20): from the installed tool packs."""
+    try:
+        from core import toolpacks
+
+        return toolpacks.link_types(root)
+    except Exception:  # noqa: BLE001 - a broken tool pack: the page offers a free field
+        return []
+
+
 def testing(root: Path, task: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The Test tab of a test task: its guide, and each environment with the results file and the verdict the agent judged. None for any other kind.
     An environment is done on PASS, failed on FAIL; the first that is neither is the one the task is at (`waits`: the agent handed it to the person)."""
@@ -403,7 +413,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "handoff": {key: str((data.get("handoff") or {}).get(key) or "") for key in ("what", "env", "detail")} if isinstance(data.get("handoff"), dict) else None,
         "created_at": data.get("created_at", ""), "updated_at": data.get("updated_at", ""),
         "forked_from": task_ops.name_of(str(data.get("forked_from"))) if data.get("forked_from") else "",
-        "links": links_view(root, data),
+        "links": links_view(root, data), "link_types": link_types(root),
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
         "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),

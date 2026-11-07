@@ -285,6 +285,21 @@ def approved_context(event: HookEvent, ctx: Context) -> Optional[Decision]:
     return Decision(context=rules.external_approved([item["command"] for item in waiting]))
 
 
+def named_line(ctx: Context, one: Dict[str, str]) -> str:
+    """One connection a prompt names (1.7.20): its fields and the tool pack's skills and program. With no tool pack to point at, the test command is all there is, and it is given as that."""
+    try:
+        info = connections.brief(ctx.root, one["alias"], one["call"])
+    except Exception:  # noqa: BLE001 - a line must not be lost for one broken type
+        info = {"alias": one["alias"], "env": one["env"], "fields": {}, "skills": [], "program": "", "toolpack": "", "label": "", "call": one["call"]}
+    env = "" if info["env"] in ("", "none") else f" ({info['env'].upper()})"
+    fields = ", ".join(f"{key}={value}" for key, value in info["fields"].items())
+    head = f"- {info['alias']}{env}" + (f": {info['label']}" if info["label"] else "") + (f" [{fields}]" if fields else "")
+    wrap = rules.say("connections.named.wrap", alias=info["alias"]) if one["call"].startswith(f"harness as {info['alias']} --") else ""
+    if info["skills"]:
+        return head + rules.say("connections.named.pack", toolpack=info["toolpack"], skills=", ".join(info["skills"]), program=info["program"] or "-") + wrap
+    return head + rules.say("connections.named.test", call=info["call"])
+
+
 def named_servers(event: HookEvent, ctx: Context) -> Optional[Decision]:
     """At a prompt that names a server by its alias: a command that reaches it, so the agent does not search for its host and port. Only those named."""
     text = event.words or event.prompt
@@ -296,7 +311,7 @@ def named_servers(event: HookEvent, ctx: Context) -> Optional[Decision]:
         return None
     if not found:
         return None
-    return Decision(context=rules.say("connections.named.context", lines="\n".join(f"- {one['alias']} ({one['env'].upper()}): `{one['call']}`" for one in found)))
+    return Decision(context=rules.say("connections.named.context", lines="\n".join(named_line(ctx, one) for one in found)))
 
 
 def asks_board(ctx: Context, text: str) -> int:

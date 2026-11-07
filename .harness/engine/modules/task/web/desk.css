@@ -55,7 +55,7 @@
 .rv-pop[hidden]{display:none}.rv-pop p{margin:6px 0 10px}.rv-pop .chips{display:flex;flex-wrap:wrap;gap:6px}.rv-pop .chip{min-width:34px;padding:0 10px}
 .tk-rounds .subtabs{margin:0;border:0}
 .tk-pill .vs-pill{margin:0}
-.tk-forks{padding:2px 0 0;overflow-wrap:anywhere}.tk-link{display:inline-block;max-width:100%;margin:0 6px 2px 0;font:12px var(--mono);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;cursor:pointer}
+.tk-forks{padding:2px 0 0;overflow-wrap:anywhere}.tk-link{display:inline-flex;align-items:center;gap:4px;max-width:100%;margin:0 6px 2px 0;font:12px var(--mono);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;cursor:pointer}
 
 /* ---------- the surface ---------- */
 .tk-surface{margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:var(--r)}
@@ -214,3 +214,8 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 .dialog.wide{overflow:hidden}.dialog.wide .win-body{flex:0 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;margin:0 -4px;padding:0 4px}
 .dialog.wide .win-foot{flex:none;margin-top:12px}
 .cmd-scroll.flat{max-height:none;overflow-x:auto;overflow-y:hidden}
+
+.tk-link-a{color:inherit;text-decoration:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}a.tk-link-a{cursor:pointer}
+.tk-link-x{border:0;background:none;color:inherit;font:inherit;line-height:1;padding:0 2px;opacity:.6;cursor:pointer}.tk-link-x:hover,.tk-link-x:focus-visible{opacity:1}
+.tk-link-add{display:inline-block;margin:0 6px 2px 0;font:12px var(--mono);cursor:pointer;opacity:.8}.tk-link-add:hover{opacity:1}
+.tk-link-form{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0 6px 2px 0;max-width:100%}.tk-link-in{font:12px var(--mono);width:16em;max-width:100%}.tk-link-bad{flex-basis:100%}

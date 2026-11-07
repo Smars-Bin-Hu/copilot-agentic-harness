@@ -104,17 +104,9 @@ const COMPANYTAB = (function () {
       () => [h("b", null, row.file), h("span", null, row.first), h("span", {class: "sub"}, t("dock.co." + row.kind + ".one")), row.state ? h("span", {class: "sub"}, t("dock.co.file." + row.state + ".tip")) : null])) : h("p", {class: "sub"}, t("dock.co.standards.none")));
   }
 
-  function domainsSection(found, goMap) {
-    const shown = found.domains.slice(0, 8);
-    const more = found.domains.length - shown.length;
-    const map = h("button", {type: "button", class: "act"}, t("dock.co.domains.map"));
-    map.addEventListener("click", goMap);
-    return h("section", {class: "co-sec"}, head("domains", found.domains.length), found.domains.length ? h("div", {class: "co-line"}, shown.map((name) => h("span", {class: "co-chip", title: name}, name)), more > 0 ? h("span", {class: "sub"}, t("dock.co.domains.more", {n: more})) : null, map) : h("p", {class: "sub"}, t("dock.co.domains.none")));
-  }
-
   function draw(stage, found, options) {
     stage.classList.add("co-stage");
-    stage.replaceChildren(company(found), toolsSection(found), skillsSection(found), filesSection(found), domainsSection(found, (options && options.goMap) || (() => {})));
+    stage.replaceChildren(company(found), toolsSection(found), skillsSection(found), filesSection(found));  // the domains have their own tab: not repeated here (1.7.35)
   }
   const clear = () => { if (pop) pop.hidden = true; };
   return {draw, clear};

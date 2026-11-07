@@ -14,6 +14,7 @@ To see which version you have: `harness --version`.
 
 ### Fixed
 
+- **The Company tab** no longer repeats the domains: they have their own tab.
 - **Tool packs tab**: the three lines under "Install from a folder" are now an info mark beside the title; hover shows how a factory or company pack is turned on.
 - **Knowledge base, Connections**: a connection whose env is `none` shows no env label (it showed "ado NONE"). The same rule holds in its hover and the share window.
 - **`company sync` after the company prefix changed**: the answer now has `renamed: [{toolpack, from, to}]` and a line such as `ado: skills renamed acme-ado-* → zeta-ado-*`, for the board and doctor. Before, the rename showed nothing.

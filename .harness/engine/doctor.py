@@ -593,6 +593,29 @@ def check_company(report: Report, root: Path) -> None:
         report.ok(say("doctor.company.ok", version=found["version"] or "-"))
 
 
+def check_toolpacks(report: Report, root: Path) -> None:
+    """Tool packs (1.7.30): a leftover of the old layout, a name in `use` no factory pack has, a connection field that is not filled in, a skill that uses a command its pack does not list."""
+    try:
+        from core import connections, toolpacks
+
+        if (root / ".harness" / "examples" / "toolpacks").exists():
+            report.warn(say("doctor.toolpacks.old_examples"))
+        gone = toolpacks.unknown_use(root)
+        if gone:
+            report.warn(say("doctor.toolpacks.unknown", names=", ".join(gone)))
+        names = sorted(toolpacks.active(root))
+        if names:
+            report.ok(say("doctor.toolpacks.on", names=", ".join(names)))
+        for line in toolpacks.recent_updates(root):
+            report.ok(line)
+        for item in connections.unset_fields(root):
+            report.warn(say("doctor.toolpacks.unset", alias=item["alias"], type=item["type"], fields=", ".join(item["fields"])))
+        for item in toolpacks.command_problems(root):
+            report.warn(say("doctor.toolpacks.command", **item))
+    except Exception as error:  # noqa: BLE001 - a check that fails itself must not hurt doctor
+        report.warn(say("doctor.company.failed", error=error))
+
+
 def check_systems(report: Report, root: Path) -> None:
     """The outside systems a company listed (M43-2): is the list well formed, and is each system that has a probe reachable from here (1.7.1)? Nothing listed is fine: the harness ships none."""
     try:
@@ -801,6 +824,7 @@ def run(root: Path) -> int:
     check_knowledge_base(report, root)
     check_skills(report, root)
     check_company(report, root)
+    check_toolpacks(report, root)
     check_standards(report, root)
     check_task_names(report, root)
     check_optional_packages(report, root)

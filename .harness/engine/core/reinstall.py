@@ -228,7 +228,7 @@ def left_alone(before: Optional[List[str]], plan: Plan) -> List[str]:
     if not before:
         return []
     carried = [step["name"] for step in plan.steps if step["group"] == "company"]
-    own = (".workspace/", ".harness/runtime/", f"{KB_DIR}/", f"{KB_DIR}")
+    own = (".workspace/", ".harness/runtime/", ".harness/toolpacks/", f"{KB_DIR}/", f"{KB_DIR}")  # toolpacks/ is shipped (1.7.30), not this machine's state
     return [path for path in before if not path.startswith(own) and not any(path == name or path.startswith(name + "/") for name in carried)]
 
 

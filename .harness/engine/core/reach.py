@@ -217,7 +217,9 @@ def launch_script(root: Path, platform: str = sys.platform) -> Optional[Path]:
     """A tool pack's script that starts VS Code with the identity (`launch/` of an installed tool pack): Windows only, the first `.cmd` or `.bat`."""
     if not platform.startswith("win"):
         return None
-    found = sorted(item for item in (root / ".harness" / "toolpacks").glob("*/launch/*") if item.suffix.lower() in (".cmd", ".bat"))
+    from . import toolpacks  # the active packs only (1.7.30)
+
+    found = sorted(item for pack in toolpacks.active(root).values() for item in (pack["folder"] / "launch").glob("*") if item.suffix.lower() in (".cmd", ".bat"))
     return found[0] if found else None
 
 

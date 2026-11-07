@@ -458,7 +458,10 @@ class SamplePackTests(unittest.TestCase):
         examples = Path(__file__).resolve().parents[1] / "examples"
         root = Path(tempfile.mkdtemp())
         shutil.copytree(Path(__file__).resolve().parents[1] / "policies", root / ".harness" / "policies")
-        shutil.copytree(examples / "toolpacks" / "sqlserver", root / ".harness" / "toolpacks" / "sqlserver")
+        shutil.copytree(examples.parent / "toolpacks" / "sqlserver", root / ".harness" / "toolpacks" / "sqlserver")
+        from support import add_path
+
+        add_path(root, root / ".harness" / "toolpacks" / "sqlserver")  # on: a folder this computer added
         listed = json.loads((examples / "connections.json").read_text(encoding="utf-8"))["connections"]
         (root / ".harness" / "policies" / "connections.company.json").write_text(json.dumps({"connections": {name: item for name, item in listed.items() if item["type"] == "sqlserver"}}), encoding="utf-8")
         systems = config.load_policy(root, "tools")["systems"]  # each connection of the sample is a system (1.7.10)

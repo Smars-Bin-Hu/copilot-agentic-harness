@@ -2,7 +2,7 @@
 // before PATH, and a CA bundle made for a proxy that inspects TLS. A window of its own, opened from Get ready. Needs common.js (h, t), serve.js (SERVE).
 const MACHINE = (function () {
   const ask = (step, body) => SERVE.post("/api/machine", {step, ...(body || {})}).then((data) => data.result);
-  const field = (caption, input) => h("label", {class: "sv-field"}, h("span", {class: "sv-cap"}, caption), input);
+  const field = (caption, input, mark) => h("label", {class: "sv-field"}, h("span", {class: "sv-cap"}, caption, mark ? " " : null, mark || null), input);
 
   function bundleLine(found) {
     const b = found.bundle;
@@ -32,17 +32,28 @@ const MACHINE = (function () {
     const open_ = h("p", {class: "sub", hidden: ""}, t("machine.vscode.open"));
     const mcp = h("span", {class: "mc-mcp"});
     const mcpInfo = h("span", {class: "sv-info", tabindex: "0", title: t("machine.mcp.tip")}, "\u24d8");
+    const recipeBox = h("div", {class: "mc-recipe", hidden: ""});
+    const hostMark = h("span", {class: "sv-own", hidden: ""}, t("machine.recipe.mark"));
+    const proxyMark = h("span", {class: "sv-own", hidden: ""}, t("machine.recipe.mark"));
     const body = [h("p", {class: "sub"}, t("machine.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.lead.tip")}, "\u24d8")),
-      h("h3", {class: "mc-h"}, t("machine.paths"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.paths.tip")}, "\u24d8")), paths, found, h("div", {class: "sv-acts"}, savePaths, pathsSaid),
+      h("h3", {class: "mc-h"}, t("machine.paths"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.paths.tip")}, "\u24d8")), paths, recipeBox, found, h("div", {class: "sv-acts"}, savePaths, pathsSaid),
       h("h3", {class: "mc-h"}, t("machine.ca"), " ", caInfo, " ", caState),
-      h("div", {class: "sv-fields"}, field(t("machine.ca.host"), host), field(t("machine.ca.proxy"), proxy)), h("div", {class: "sv-acts"}, make, drop, caSaid),
+      h("div", {class: "sv-fields"}, field(t("machine.ca.host"), host, hostMark), field(t("machine.ca.proxy"), proxy, proxyMark)), h("div", {class: "sv-acts"}, make, drop, caSaid),
       h("h3", {class: "mc-h"}, "MCP ", mcpInfo), mcp, open_];
     const paint = (state) => {
       paths.value = state.paths.map((item) => item.path).join("\n");
       found.replaceChildren(...state.paths.map((item) => h("span", {class: "mc-dir " + (item.found ? "ok" : "bad"), title: item.found ? (item.programs.join("\n") || "-") : t("machine.paths.gone")}, (item.found ? "✓ " : "✗ ") + item.path)));
       host.placeholder = state.default_host;
-      if (!host.value) host.value = state.bundle.host || "";
-      if (!proxy.value) proxy.value = state.bundle.proxy || state.proxy || "";
+      const rec = state.recipe || {host: "", proxy: "", tool_folders: [], error: ""};  // the company's recipe fills only what the person has not set: a made bundle's own values come first
+      if (!host.value) host.value = state.bundle.host || rec.host || "";
+      if (!proxy.value) proxy.value = state.bundle.proxy || rec.proxy || state.proxy || "";
+      for (const [input, mark, value] of [[host, hostMark, rec.host], [proxy, proxyMark, rec.proxy]]) {  // a value that is still the company's gets the mark; typing over it takes the mark away
+        const sync = () => { const same = !!value && input.value.trim() === value && !(input === host ? state.bundle.host : state.bundle.proxy); mark.hidden = !same; mark.title = same ? t("machine.recipe.from", {value}) : ""; };
+        sync(); input.oninput = sync;
+      }
+      recipeBox.hidden = !rec.error && !rec.tool_folders.length;
+      recipeBox.replaceChildren(...(rec.error ? [h("span", {class: "bad", title: rec.error}, t("machine.recipe.bad", {error: rec.error}))]
+        : [h("span", {class: "sub"}, t("machine.recipe.folders")), ...rec.tool_folders.map((item) => h("span", {class: "mc-dir hint", tabindex: "0", title: t("machine.recipe.folder.tip", {label: item.label, hint: item.hint || "-"})}, h("b", null, item.label), item.hint ? " \u2014 " + item.hint : ""))]));
       caState.replaceChildren(bundleLine(state));
       caInfo.title = t("machine.ca.lead.tip", {vars: state.bundle.vars.join(", ")});
       drop.hidden = !state.bundle.path;
@@ -90,7 +101,7 @@ const MACHINE = (function () {
         const acts = [];
         if (missing.length || (row.trust && !row.bundle)) acts.push(button(t("machine.title"), () => ctx.go("computer")));
         if (unsigned.length) acts.push(button(t("connections.title"), () => ctx.go("connections")));
-        if (row.from !== "company") {  // the company's follow the pack (company sync); one installed here is updated or removed here
+        if (row.removable) {  // only a folder added here is forgotten here; a factory or company pack is turned off in the knowledge base (1.7.30)  // the company's follow the pack (company sync); one installed here is updated or removed here
           if (row.newer) acts.push(button(t("machine.conn.update"), () => change("toolpack-update", row.name)));
           const drop = button(t("machine.ca.drop"), () => { if (window.confirm(t("machine.conn.remove.ask", {name: row.name}))) change("toolpack-remove", row.name); });
           drop.classList.add("danger");

@@ -140,6 +140,21 @@ Two files of each domain hold what only people or environments know:
 - `domain.yaml` holds the commit of each repository the domain was learned at.
 - A source that was deleted keeps its card only with `source_missing` and level `unknown`, so it does not read like checked knowledge.
 
+## What goes into `company/`
+
+`company/` in the knowledge base is what is the company's, not one domain's. `harness company sync` makes the copies Copilot needs.
+
+| Goes in | Where |
+| --- | --- |
+| The skill prefix | `company.json`: `{"skill_prefix": "acme"}` |
+| Which factory tool packs are on | `tools/packs.json`: `{"use": ["ado", "sqlserver"]}` |
+| Tool packs the company wrote | `tools/packs/<name>/` |
+| Connections, without secrets | `tools/connections.json` |
+| SOP skills (no tool: `<prefix>-<name>`) | `skills/` |
+| Code standards | `standards/code-standards.md` |
+
+The SOP skills of a tool pack come with the pack, as `<prefix>-<pack>-<name>`. Never put in `company/`: `.env`, accounts, passwords, tokens, certificates or a CA bundle. They stay on each computer.
+
 ## Make it yours
 
 | What | Where | Notes |

@@ -38,6 +38,7 @@
       ".harness/tests/test_kbstatus.py",
       ".harness/tests/test_kbatlas.py",
       ".harness/tests/test_kbdetail.py",
+      ".harness/tests/test_companyview.py",
       ".harness/tests/test_starticon.py",
       ".harness/tests/test_reply.py",
       ".harness/INDEX.md",
@@ -52,6 +53,7 @@
       ".harness/engine/adapters/common.py",
       ".harness/engine/modules/__init__.py",
       ".harness/examples/",
+      ".harness/toolpacks/",
       ".github/skills/generic-build-new-skill/",
       ".github/skills/generic-goal-driven/",
       ".github/skills/generic-grill-me/",
@@ -79,7 +81,8 @@
       ".harness/tests/test_kbextract.py",
       ".harness/tests/test_reinstall.py",
       ".harness/.env.example",
-      ".harness/policies/connections.json"
+      ".harness/policies/connections.json",
+      ".harness/policies/computer.json"
     ]
   },
   "modules": {
@@ -174,6 +177,7 @@
         ".harness/tests/test_taskdesk.py",
         ".harness/tests/test_taskrun.py",
         ".harness/tests/test_setup.py",
+        ".harness/tests/test_computer_recipe.py",
         ".harness/tests/test_skillboard.py",
         ".harness/tests/test_fusion.py",
         ".harness/tests/test_skillsend.py",

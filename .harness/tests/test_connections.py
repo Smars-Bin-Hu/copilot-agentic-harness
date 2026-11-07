@@ -91,7 +91,7 @@ class GateViewTests(ConnectionsCase):
         self.assertNotIn("needs", config.load_policy(self.root, "tools")["systems"]["db-dev"])  # the person's own wins
 
     def test_servers_on_one_host_are_told_apart_by_the_port(self) -> None:
-        pack = Path(__file__).resolve().parents[1] / "examples" / "toolpacks" / "sqlserver" / "types" / "sqlserver.json"
+        pack = Path(__file__).resolve().parents[1] / "toolpacks" / "sqlserver" / "types" / "sqlserver.json"
         put_type(self.root, json.loads(pack.read_text(encoding="utf-8")), pack="sqlserver")
         self.company({f"s{n}": {"type": "sqlserver", "env": "dev", "auth": "sql", "host": "127.0.0.1", "port": str(14330 + n)} for n in range(3)})
         systems = config.load_policy(self.root, "tools")["systems"]
@@ -253,7 +253,7 @@ class CarryTests(ConnectionsCase):
         (kb / "connections.json").write_text(json.dumps({"connections": {"o-dev": {"type": "other", "env": "dev", "auth": "own", "host": "h"}}}), encoding="utf-8")
         (kb.parent / "company.json").write_text("{}", encoding="utf-8")
         company.sync(self.root)
-        self.assertTrue((self.root / ".harness" / "toolpacks" / "otherpack" / "types" / "other.json").is_file())
+        self.assertEqual(connections.types(self.root)["other"]["toolpack"], "otherpack")  # read where it lies
         self.assertIn("o-dev", connections.listed(self.root))
 
     def test_a_connection_of_ones_own_goes_in_the_company_pack_without_the_identity(self) -> None:

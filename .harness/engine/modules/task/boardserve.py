@@ -768,7 +768,7 @@ class Board:
 
             try:
                 found = toolpacks.installed_against(self.root, str(data.get("path") or ""))
-                if found["installed"] and (toolpacks.ledger(self.root).get(found["name"]) or {}).get("from") == toolpacks.COMPANY:
+                if found["source"] == toolpacks.COMPANY:
                     raise ValueError(say("toolpack.company.managed", name=found["name"]))
                 if found["installed"] and not data.get("replace"):
                     return {"confirm": found}
@@ -781,13 +781,13 @@ class Board:
             from core import toolpacks
 
             name = str(data.get("name") or "")
-            kept = toolpacks.ledger(self.root).get(name) or {}
-            if kept.get("from") == toolpacks.COMPANY:
-                raise ValueError(say("toolpack.company.managed", name=name))
-            if step == "toolpack-remove":
-                toolpacks.remove(self.root, name)
-            else:
-                toolpacks.add(self.root, str(kept.get("from") or ""), origin=str(kept.get("from") or ""), replace=True)
+            try:
+                if step == "toolpack-remove":  # a folder added here; a factory or company pack answers with where to turn it off
+                    toolpacks.remove(self.root, name)
+                else:  # nothing is copied now: the pack is read where it lies, so an update is only its skills again
+                    toolpacks.sync_skills(self.root)
+            except toolpacks.ToolpackError as error:
+                raise ValueError(str(error)) from None
             step = "toolpacks"
         if step == "toolpacks":  # Get ready, Tool packs (1.7.13): what each has and lacks, with the servers of its kinds and whether each is signed in
             from core import toolpacks
@@ -1721,6 +1721,10 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
             return {"served": f"http://127.0.0.1:{board.port}/", "stopped": False, "already": True}
         raise CommandError(say("serve.port.busy", port=board.port, error=error))
     taskarchive.prune_transcripts(root, taskarchive.remembered(root))
+    try:
+        toolpacks.sync_skills(root)  # the skills of the packs the knowledge base turns on are in place when the board opens (1.7.30)
+    except Exception:  # noqa: BLE001 - a broken pack must not keep the board from starting; doctor says why
+        pass
     link.start()  # the thread only; the board does not wait for VS Code
     board.space.start()
     path = board_serve_file(root)

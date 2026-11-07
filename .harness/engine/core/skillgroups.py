@@ -17,11 +17,11 @@ HARNESS_WORDS = ("harness", "generic")
 
 
 def active_packs(root: Path) -> Dict[str, Dict[str, Any]]:
-    """`{name: {folder, manifest}}` of the tool packs the agent can use now. Today: the packs installed in `.harness/toolpacks/`.
-    Re-point this one function when packs are read from somewhere else."""
+    """`{name: {folder, manifest, source, active}}` of the tool packs the agent can use now: the ones that are on (1.7.30: the factory packs `use` names,
+    the company's own, the folders added on this computer)."""
     from . import toolpacks  # it reads the policies, which read this module's rule
 
-    return toolpacks.installed(root)
+    return toolpacks.active(root)
 
 
 def group(name: str, prefix: str, packs: Any) -> Tuple[str, str]:

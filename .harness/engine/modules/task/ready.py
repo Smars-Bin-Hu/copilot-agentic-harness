@@ -250,7 +250,7 @@ class Ready:
     def systems_cached(self) -> Dict[str, Any]:
         """The line again only when what it reads changed (a connection added, a pack installed, an answer written) or after FOLDERS_FOR: adding a connection shows at once."""
         mark = []
-        for path in [*sorted((self.root / ".harness" / "policies").glob("*.json")), self.root / ".harness" / ".env", reach.path(self.root), self.root / ".harness" / "toolpacks" / "installed.json"]:
+        for path in [*sorted((self.root / ".harness" / "policies").glob("*.json")), self.root / ".harness" / ".env", reach.path(self.root), self.root / ".harness" / "runtime" / "toolpacks.json", self.root / ".harness" / "toolpacks"]:
             try:
                 mark.append((path.name, path.stat().st_mtime_ns))
             except OSError:

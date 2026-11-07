@@ -4,9 +4,11 @@
   company/standards/        code-standards.md, read where it is (`standards.py`)
   company/skills/           `<prefix>-<name>/`, copied to `.github/skills/`: Copilot finds a skill there only
   company/instructions/     knowledgebase.instructions.md, copied to `.github/instructions/`, for the same reason
-  company/tools/            packs/<name>/: a tool pack each (core.toolpacks), installed into `.harness/toolpacks/` by `sync`; connections.json
-                            (`{"connections": {...}}`), copied to `.harness/policies/connections.company.json` (1.7.17). These paths are fixed:
+  company/tools/            packs.json (`{"use": ["ado", ...]}`: the factory packs of `.harness/toolpacks/` this company turns on), packs/<name>/: a tool pack
+                            the company wrote (core.toolpacks); both are read where they lie, and `sync` copies only their skills to `.github/skills/` (1.7.30);
+                            connections.json (`{"connections": {...}}`), copied to `.harness/policies/connections.company.json` (1.7.17). These paths are fixed:
                             pack, update and sync count on them
+                            computer.json (`{"ca_bundle": {host, proxy}, "tool_folders": [{label, hint}]}`), copied to `.harness/policies/computer.company.json` (1.7.31)
   company/manifest.json     what a package holds; made by `pack`, written last by `update`
 
 `sync` makes the copies, and never touches any other file. `pack` makes a zip of what git has in the knowledge base;
@@ -38,6 +40,8 @@ INSTRUCTION_FILES = ("knowledgebase.instructions.md",)  # one name only: a copy 
 TOOLS_DIR = "tools"
 CONNECTIONS_FILE = "connections.json"
 CONNECTIONS_COPY = ".harness/policies/connections.company.json"
+COMPUTER_FILE = "computer.json"  # 1.7.31: the recipe for "This computer" (core.launchenv.recipe): CA bundle host and proxy, hints for the tool folders. No secret
+COMPUTER_COPY = ".harness/policies/computer.company.json"
 NOT_CONTENT = {".git", ".DS_Store", "Thumbs.db"}
 PLACEHOLDER = {"README.md", ".gitkeep"}  # what an empty knowledge base ships with
 BACKUP_DIR = "company-backup"
@@ -131,9 +135,14 @@ def copies(root: Path, folder: Path) -> Dict[str, Any]:
             pairs.append((f"{INSTRUCTIONS_DIR}/{name}", folder / "instructions" / name, root / INSTRUCTIONS_DIR / name))
     if (folder / TOOLS_DIR / CONNECTIONS_FILE).is_file():
         pairs.append((CONNECTIONS_COPY, folder / TOOLS_DIR / CONNECTIONS_FILE, root / CONNECTIONS_COPY))
+    if (folder / TOOLS_DIR / COMPUTER_FILE).is_file():
+        pairs.append((COMPUTER_COPY, folder / TOOLS_DIR / COMPUTER_FILE, root / COMPUTER_COPY))
     named = {item.name for item in skills}
     here = root / SKILLS_DIR
-    only_here = sorted(item.name for item in here.glob(f"{have}-*") if item.is_dir() and item.name not in named) if have else []
+    from . import toolpacks  # the skills a tool pack put are not the company's content
+
+    put = {skill for entry in toolpacks.ledger(root)["packs"].values() for skill in entry.get("skills") or []}
+    only_here = sorted(item.name for item in here.glob(f"{have}-*") if item.is_dir() and item.name not in named and item.name not in put) if have else []
     return {"pairs": pairs, "refused": refused, "only_here": only_here}
 
 
@@ -145,9 +154,12 @@ def same(source: Path, target: Path) -> bool:
 
 def sync(root: Path, remove: bool = False) -> Dict[str, Any]:
     """Copy the content to `.github/`. `remove`: a skill of the company's word that left the content goes too, into the backup folder (a person asked for this sync; a sync at the end of another command removes nothing)."""
+    from . import toolpacks  # it reads the policies this module's copies feed
+
     folder = targets.company_folder(root)
     if folder is None:
-        return {"found": False, "next": say("company.sync.none")}
+        packs = toolpacks.sync_skills(root)  # a folder added here for a trial still has skills to put
+        return {"found": False, "next": say("company.sync.none"), **({"toolpacks": packs} if packs["lines"] or packs["put"] or packs["removed"] else {})}
     plan = copies(root, folder)
     done: List[str] = []
     for name, source, target in plan["pairs"]:
@@ -168,12 +180,11 @@ def sync(root: Path, remove: bool = False) -> Dict[str, Any]:
             shutil.move(str(root / SKILLS_DIR / name), str(backup / name))
             done.append(f"{SKILLS_DIR}/{name}")
         plan["only_here"] = []
-    from . import toolpacks  # it reads the policies this module's copies feed
-
-    linked = toolpacks.from_company(root, folder)
-    done += [f"{toolpacks.FOLDER.as_posix()}/{name}" for name in linked["installed"]]
-    plan["refused"] += [{"skill": item["toolpack"], "why": item["why"]} for item in linked["refused"]]
-    return {"found": True, "company": str(folder), "copied": done, **({"toolpacks_gone": linked["gone"]} if linked["gone"] else {}), "already_same": len(plan["pairs"]) - len(done), "refused": plan["refused"], "only_here": plan["only_here"],
+    same_now = len(plan["pairs"]) - len(done)
+    packs = toolpacks.sync_skills(root)  # the skills of the active tool packs: put, renamed with the company's word, taken back, put again when the version changed
+    done += [f"{SKILLS_DIR}/{name}" for name in packs["put"] + packs["removed"]]
+    plan["refused"] += [{"skill": item["skill"], "why": item["why"]} for item in packs["refused"]]
+    return {"found": True, "company": str(folder), "copied": done, "toolpacks": packs, "already_same": same_now, "refused": plan["refused"], "only_here": plan["only_here"],
             "next": " ".join([say("company.sync.problems" if plan["refused"] else "company.sync.done"), *([say("company.sync.only_here", names=", ".join(plan["only_here"]))] if plan["only_here"] else [])]), "exit_code": 1 if plan["refused"] else 0}
 
 
@@ -184,7 +195,7 @@ def sync_after(root: Path) -> Optional[Dict[str, Any]]:
     except (CompanyError, OSError) as error:
         return {"error": str(error)}
     found.pop("exit_code", None)
-    return found if found["found"] else None
+    return found if found["found"] or found.get("toolpacks") else None
 
 
 def drift(root: Path) -> Optional[Dict[str, Any]]:
@@ -196,7 +207,7 @@ def drift(root: Path) -> Optional[Dict[str, Any]]:
         plan = copies(root, folder)
     except CompanyError as error:
         return {"problem": str(error), "stale": [], "refused": []}
-    return {"problem": "", "stale": [name for name, source, target in plan["pairs"] if not same(source, target)],
+    return {"problem": "", "stale": [name for name, source, target in plan["pairs"] if not same(source, target)] + [row["path"] for row in pack_changes(root)],
             "refused": [item["skill"] for item in plan["refused"]], "version": str(read_json(folder / MANIFEST_FILE).get("version") or "")}
 
 
@@ -206,6 +217,19 @@ def difference(name: str, source: Path, target: Path) -> List[Dict[str, str]]:
         return [] if same(source, target) else [{"path": name, "change": "change" if target.exists() else "add"}]
     new, old = digests(source), digests(target) if target.is_dir() else {}
     return [{"path": f"{name}/{path}", "change": "add" if path not in old else "remove" if path not in new else "change"} for path in sorted(set(new) | set(old)) if new.get(path) != old.get(path)]
+
+
+def pack_changes(root: Path) -> List[Dict[str, str]]:
+    """What `sync` would do to the skills of the tool packs: a skill to put, to change, or to take back."""
+    from . import toolpacks
+
+    try:
+        plan = toolpacks.skill_plan(root)
+    except Exception:  # noqa: BLE001 - a broken pack must not stop the comparison
+        return []
+    out = [{"path": f"{SKILLS_DIR}/{final}", "change": "change" if (root / SKILLS_DIR / final).is_dir() else "add"} for final, _files, _origin, _name in plan["put"]]
+    kept = {skill for entry in plan["entries"].values() for skill in entry["skills"]}
+    return out + [{"path": f"{SKILLS_DIR}/{skill}", "change": "remove"} for _pack, skill in plan["drop"] if skill not in kept and (root / SKILLS_DIR / skill).is_dir()]
 
 
 def wanted_prefix(folder: Path) -> str:
@@ -228,6 +252,7 @@ def diff(root: Path) -> Dict[str, Any]:
         word = skillcheck.usable(wanted_prefix(folder))
         return {"found": True, "in_sync": False, "changes": [], "total": 0, "refused": [], "problem": say("company.prefix.board", word=word) if word else str(error), "fix": word, "next": str(error)}
     changes = [row for name, source, target in plan["pairs"] for row in difference(name, source, target)] + [{"path": f"{SKILLS_DIR}/{name}", "change": "remove"} for name in plan["only_here"]]
+    changes += pack_changes(root)
     same_now = not changes and not plan["refused"]
     return {"found": True, "in_sync": same_now, "changes": changes[:DIFF_SHOWN], "total": len(changes), "refused": plan["refused"], "problem": "", "next": say("company.diff.same" if same_now else "company.diff.differs", count=len(changes))}
 
@@ -280,20 +305,39 @@ def layout(kb: Path) -> List[Dict[str, Any]]:
 
 
 def tools_part(company: Path) -> List[Dict[str, Any]]:
-    """The tools of a company pack (`tools/packs/`, `tools/connections.json`): how many tool packs and connections, or what is wrong. None is no fault: a team may reach no tool."""
-    from . import toolpacks  # it installs what this module syncs
+    """The tools of a company pack (`tools/packs.json`, `tools/packs/`, `tools/connections.json`): how many packs and connections, or what is wrong. None is no fault: a team may reach no tool."""
+    from . import toolpacks  # it reads what this module syncs
 
     base = company / toolpacks.COMPANY_PACKS
     packs = sorted(item for item in base.iterdir() if item.is_dir()) if base.is_dir() else []
     path = company / TOOLS_DIR / CONNECTIONS_FILE
-    if not packs and not path.is_file():
+    recipe = company / TOOLS_DIR / COMPUTER_FILE
+    use_file = company / toolpacks.USE_FILE
+    if not packs and not path.is_file() and not recipe.is_file() and not use_file.is_file():
         return []
     errors: List[str] = []
+    if recipe.is_file():
+        from . import launchenv
+
+        try:
+            for fault in launchenv.recipe_errors(json.loads(recipe.read_text(encoding="utf-8-sig"))):
+                errors.append(f"{COMPUTER_FILE}: {fault}")
+        except ValueError as error:
+            errors.append(f"{COMPUTER_FILE}: {error}")
     for folder in packs:
         try:
             toolpacks.manifest(folder)
         except toolpacks.ToolpackError as error:
             errors.append(str(error))
+    used: List[Any] = []
+    if use_file.is_file():
+        try:
+            used = read_json(use_file).get("use") or []
+            if not isinstance(used, list) or not all(isinstance(item, str) for item in used):
+                raise ValueError("`use` is a list of pack names")
+        except Exception as error:  # noqa: BLE001 - told here, in one line
+            errors.append(f"{use_file.name}: {error}")
+            used = []
     listed: Dict[str, Any] = {}
     if path.is_file():
         try:
@@ -304,7 +348,7 @@ def tools_part(company: Path) -> List[Dict[str, Any]]:
             errors.append(f"{CONNECTIONS_FILE}: {error}")
     if errors:
         return [{"key": "tools", "ok": False, "count": 0, "text": say("setup.layout.tools.bad", error=errors[0])}]
-    return [{"key": "tools", "ok": True, "count": len(packs) + len(listed), "text": say("setup.layout.tools", packs=len(packs), n=len(listed))}]
+    return [{"key": "tools", "ok": True, "count": len(packs) + len(used) + len(listed), "text": say("setup.layout.tools", packs=len(packs) + len(used), n=len(listed))}]
 
 
 def skills_part(company: Path) -> List[Dict[str, Any]]:

@@ -135,17 +135,17 @@ const SERVERS = (function () {
   // tool, shared by the connections of its type, and can be made before any connection exists.
   function toolRow(tool, redraw) {
     const signed = Boolean(tool.account);
-    const shared = tool.shared_by.length ? t("signins.shared", {names: tool.shared_by.join(", ")}) : t("signins.shared.none");
+    const shared = tool.shared_by.length ? t("machine.signins.shared", {names: tool.shared_by.join(", ")}) : t("machine.signins.shared.none");
     const line = h("button", {type: "button", class: "sv-line" + (signed ? " saved" : ""), "aria-expanded": "false", title: [tool.program, tool.types.join(", "), shared, tool.login].filter(Boolean).join("\n")},
       h("b", {class: "sv-alias"}, tool.program), h("span", {class: "sv-where"}, shared),
-      h("span", {class: "sv-state " + (signed ? "ok" : "none"), title: signed ? t("signins.tool.saved.tip", {program: tool.program, account: tool.account}) : t("connections.none.tip")}, signed ? "\u2713 " + tool.account : t("connections.none")));
+      h("span", {class: "sv-state " + (signed ? "ok" : "none"), title: signed ? t("machine.signins.tool.saved.tip", {program: tool.program, account: tool.account}) : t("connections.none.tip")}, signed ? "\u2713 " + tool.account : t("connections.none")));
     const box = h("div", {class: "sv-form", hidden: ""});
     const said = h("span", {class: "sv-said"});
     const test = h("button", {type: "button", class: "act"}, t("connections.test"));
     const save = h("button", {type: "button", class: "act hot", disabled: ""}, t("connections.save"));
     const forget = signed ? h("button", {type: "button", class: "act danger"}, t("connections.forget")) : null;
     const first = tool.shared_by[0];
-    if (!first) { test.disabled = true; test.title = t("signins.test.noconn"); }
+    if (!first) { test.disabled = true; test.title = t("machine.signins.test.noconn"); }
     const signIn = typeof TERM !== "undefined" && tool.login ? h("button", {type: "button", class: "act", title: tool.login}, t("connections.tool.login")) : null;
     const blank = {alias: first, account: "", password: "", keyfile: ""};
     const signedIn = () => { test.classList.add("hot", "live"); said.replaceChildren(h("span", {class: "sv-retest"}, t("connections.tool.retest"))); };
@@ -156,7 +156,7 @@ const SERVERS = (function () {
     });
     save.addEventListener("click", () => { save.disabled = true; ask("save", blank).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
     if (forget) forget.addEventListener("click", () => { forget.disabled = true; ask("forget-tool", {program: tool.program}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
-    box.append(h("p", {class: "sub sv-tool"}, t(signed ? "signins.tool.hint.saved" : "signins.tool.hint", {program: tool.program, account: tool.account || ""})), h("div", {class: "sv-acts"}, signIn, test, save, forget, said));
+    box.append(h("p", {class: "sub sv-tool"}, t(signed ? "machine.signins.tool.hint.saved" : "machine.signins.tool.hint", {program: tool.program, account: tool.account || ""})), h("div", {class: "sv-acts"}, signIn, test, save, forget, said));
     line.addEventListener("click", () => { const open = box.hidden; box.hidden = !open; line.setAttribute("aria-expanded", String(open)); });
     return h("div", {class: "sv-row"}, line, box);
   }
@@ -165,7 +165,7 @@ const SERVERS = (function () {
     const forget = h("button", {type: "button", class: "act danger"}, t("connections.forget"));
     const said = h("span", {class: "sv-said"});
     forget.addEventListener("click", () => { forget.disabled = true; ask("forget", {alias: item.name}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
-    return h("div", {class: "sv-row"}, h("div", {class: "sv-line orphan", title: t("signins.orphan.tip", {name: item.name})}, h("b", {class: "sv-alias"}, item.name), h("span", {class: "sv-where"}, t("signins.orphan")),
+    return h("div", {class: "sv-row"}, h("div", {class: "sv-line orphan", title: t("machine.signins.orphan.tip", {name: item.name})}, h("b", {class: "sv-alias"}, item.name), h("span", {class: "sv-where"}, t("machine.signins.orphan")),
       h("span", {class: "sv-state none"}, item.account || "\u2014"), forget, said));
   }
 
@@ -176,7 +176,7 @@ const SERVERS = (function () {
       const s = found.signins;
       const mine = found.connections.filter((row) => s.connections.some((one) => one.alias === row.alias)).sort((a, b) => a.type_label.localeCompare(b.type_label) || ENV_ORDER.indexOf(a.env) - ENV_ORDER.indexOf(b.env) || a.alias.localeCompare(b.alias));
       const parts = [...s.tools.map((tool) => toolRow(tool, redraw)), ...mine.map((row) => serverRow(row, redraw)), ...s.orphans.map((item) => orphanRow(item, redraw))];
-      list.replaceChildren(...(parts.length ? parts : [h("p", {class: "sub"}, t("signins.empty"))]));
+      list.replaceChildren(...(parts.length ? parts : [h("p", {class: "sub"}, t("machine.signins.empty"))]));
       addBox.replaceChildren(h("summary", null, t("connections.own.add")), ownForm(found.types, redraw));
       if (ctx && ctx.changed) ctx.changed();
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });

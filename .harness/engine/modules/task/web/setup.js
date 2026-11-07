@@ -245,7 +245,7 @@ const SETUP = (function () {
           pc.certs ? t("setup.fact.ca.tip", {host: pc.host || "-"}) : t("machine.ca.none.tip")));
       }
       const head = h("div", {class: "su-fact su-fact-open"}, h("span", {class: "su-note"}, t("setup.fact.computer.lead")), openTab("computer"));
-      const people = sv ? sv.tools.reduce(addTool, []).concat(sv.rows.map((row) => ({name: row.alias, kind: row.saved ? "ok" : "none", tip: row.saved ? t("setup.fact.signin.saved", {account: row.account || "-"}) : t("setup.fact.signin.not")})), sv.orphans.map((name) => ({name, kind: "need", tip: t("signins.orphan.tip", {name})}))) : [];
+      const people = sv ? sv.tools.reduce(addTool, []).concat(sv.rows.map((row) => ({name: row.alias, kind: row.saved ? "ok" : "none", tip: row.saved ? t("setup.fact.signin.saved", {account: row.account || "-"}) : t("setup.fact.signin.not")})), sv.orphans.map((name) => ({name, kind: "need", tip: t("machine.signins.orphan.tip", {name})}))) : [];
       mine.push(sv && people.length ? fact(t("setup.fact.signins"), "none", names(people), people.map((row) => (row.kind === "ok" ? "\u2713 " : "\u00b7 ") + row.name).join("\n"), "", openTab("computer")) : fact(t("setup.fact.signins"), "none", sv ? t("setup.fact.signins.none") : "", t("setup.fact.signins.tip")));
       if (pc) mine.push(fact("MCP", pc.mcp ? "ok" : "none", t(pc.mcp ? "tools.mcp.on" : "tools.mcp.off"), t("machine.mcp.tip")));
       computerBox.replaceChildren(head, ...mine);

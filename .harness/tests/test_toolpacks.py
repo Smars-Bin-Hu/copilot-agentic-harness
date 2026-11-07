@@ -1363,7 +1363,7 @@ class SigninsOnTheBoard(ProgramNeeds):
         for word in ('"folder-add"', 'machine.prog.title', 'machine.net.title', 'machine.signins.title', '"MCP "', 'SERVERS.signinsBlock', 'machine.paths.added', 'machine.paths.remove'):
             self.assertIn(word, machine, word)
         self.assertNotIn("machine.paths.placeholder", machine, "no Tool folders text box any more")
-        for word in ("toolRow", "orphanRow", '"forget-tool"', "signins.shared", "signins.orphan", "connections.own.add"):
+        for word in ("toolRow", "orphanRow", '"forget-tool"', "machine.signins.shared", "machine.signins.orphan", "connections.own.add"):
             self.assertIn(word, servers, word)
         for word in ("machine.prog.title", "machine.net.title", "setup.fact.signins"):
             self.assertIn(word, setup, word)

@@ -95,6 +95,8 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
     for mode, auth in (kind.get("auth") or {}).items():
         if not isinstance(auth, dict) or auth.get("identity") not in IDENTITIES:
             out.append(f"types.{name}.auth.{mode}: `identity` is one of {', '.join(IDENTITIES)}")
+        elif auth.get("needs") is not None and (not isinstance(auth["needs"], list) or not all(isinstance(one, str) and re.match(r"^[\w.\-]+$", one) for one in auth["needs"])):
+            out.append(f"types.{name}.auth.{mode}.needs: a list of program names")
     if not test_command(kind):
         out.append(f"types.{name}: `test` is the command that tests the way in (or {{\"command\": ..., \"timeout\": seconds}})")
     if isinstance(kind.get("test"), dict):
@@ -245,9 +247,39 @@ def unset_fields(root: Path) -> List[Dict[str, Any]]:
     return out
 
 
-def identity_of(env: Dict[str, str], alias: str, kind: Dict[str, Any]) -> Dict[str, str]:
-    """What the person saved for this server: account, password, keyfile (what is there)."""
-    return {field: env[env_key(alias, field)] for field in IDENTITY_FIELDS if env.get(env_key(alias, field))}
+TOOL_PREFIX = "HARNESS_TOOL_"  # 1.7.37: the sign-in of a program that keeps its own (`az login`) is one per program: HARNESS_TOOL_<PROGRAM>_USER
+
+
+def tool_program(auth: Dict[str, Any]) -> str:
+    """The program a `tool` identity signs in to: the first word of its `login` command (`az login ...` -> `az`); "" when it names none."""
+    words = str(auth.get("login") or "").split()
+    return re.sub(r"\.(exe|cmd|bat)$", "", words[0].strip("\"'"), flags=re.IGNORECASE).lower() if words else ""
+
+
+def tool_key(program: str) -> str:
+    return TOOL_PREFIX + re.sub(r"[^A-Za-z0-9]", "_", program).upper() + "_USER"
+
+
+def _way(kind: Dict[str, Any], server: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    modes = kind.get("auth") or {}
+    return modes.get((server or {}).get("auth") or next(iter(modes), "")) or {}
+
+
+def tool_ways(kind: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """`(way, program)` of each way in of a type that is a `tool` identity with a sign-in command."""
+    return [(mode, tool_program(auth)) for mode, auth in (kind.get("auth") or {}).items() if isinstance(auth, dict) and auth.get("identity") == "tool" and tool_program(auth)]
+
+
+def identity_of(env: Dict[str, str], alias: str, kind: Dict[str, Any], server: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    """What the person saved for this server: account, password, keyfile (what is there). A `tool` identity is the program's, shared by every connection of the
+    type (`HARNESS_TOOL_<PROGRAM>_USER`); the old per-connection account is read still (1.7.37)."""
+    found = {field: env[env_key(alias, field)] for field in IDENTITY_FIELDS if env.get(env_key(alias, field))}
+    if not found:
+        auth = _way(kind, server) if server is not None else None
+        program = tool_program(auth) if auth is not None and auth.get("identity") == "tool" else (tool_ways(kind)[0][1] if server is None and len(tool_ways(kind)) == 1 else "")
+        if program and env.get(tool_key(program)):
+            return {"account": env[tool_key(program)]}
+    return found
 
 
 def _fill(template: str, values: Dict[str, Any], escape: bool = False) -> str:
@@ -312,7 +344,7 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
         if not kind or not kind.get("cli") or not kind.get("match") or type_problems(kind) or server.get("env") not in ENVS:
             continue
         values = {field: (server.get(field) if server.get(field) not in (None, "") else spec.get("default", "")) for field, spec in kind["fields"].items()}
-        probe = command(kind, server, identity_of(env, alias, kind), alias)
+        probe = command(kind, server, identity_of(env, alias, kind, server), alias)
         if alias in wrapped:
             probe = f"{_quote(sys.executable)} {_quote(str(root / '.harness' / 'engine' / 'cli.py'))} as {alias} -- {probe}"
         system: Dict[str, Any] = {
@@ -344,7 +376,7 @@ def calls(root: Path) -> List[Dict[str, str]]:
         kind = known.get(str(server.get("type")))
         if not kind or kind.get("via") == "mcp" or type_problems(kind) or server.get("env") not in ENVS or (held and alias not in held):
             continue
-        call = command(kind, server, identity_of(env, alias, kind), alias)
+        call = command(kind, server, identity_of(env, alias, kind, server), alias)
         out.append({"alias": alias, "env": server["env"], "call": f"harness as {alias} -- {call}" if alias in wrapped else call})
     return out
 
@@ -358,11 +390,13 @@ def brief(root: Path, alias: str, call: str = "") -> Dict[str, Any]:
     kind = types(root).get(str(server.get("type"))) or {}
     fields = {field: str(server.get(field) if server.get(field) not in (None, "") else spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items() if field not in SECRET_FIELDS and isinstance(spec, dict)}
     pack = str(kind.get("toolpack") or "")
+    lost = toolpacks.missing_for(root, alias)
     folder = (toolpacks.installed(root).get(pack) or {}).get("folder") if pack else None
     put = (toolpacks.ledger(root)["packs"].get(pack) or {}).get("skills") or []  # the names in .github/skills/: the company's word leads them (1.7.30)
     skills = sorted(str(one) for one in put) or (sorted(item.name for item in (folder / "skills").iterdir() if item.is_dir()) if isinstance(folder, Path) and (folder / "skills").is_dir() else [])
     return {"alias": alias, "env": str(server.get("env") or ""), "type": str(server.get("type") or ""), "label": str(kind.get("label") or ""),
-            "fields": {key: value for key, value in fields.items() if value}, "toolpack": pack, "skills": skills, "program": str((kind.get("cli") or [""])[0]), "call": call}
+            "fields": {key: value for key, value in fields.items() if value}, "toolpack": pack, "skills": skills, "program": str((kind.get("cli") or [""])[0]), "call": call, "missing": lost,
+            "signin": bool(_way(kind, server).get("identity") == "tool" and not identity_of(read_env(root), alias, kind, server))}
 
 
 # --- a test of the way in ----------------------------------------------------------------------------------------------------------------------------------
@@ -453,7 +487,7 @@ def probe_keys(root: Path) -> List[str]:
         kind = known.get(str(server.get("type")))
         if not kind or kind.get("via") == "mcp" or not kind.get("cli") or type_problems(kind) or server.get("env") not in ENVS:
             continue
-        if delivery(kind, server)["identity"] != "tool" and not identity_of(env, alias, kind):
+        if delivery(kind, server)["identity"] != "tool" and not identity_of(env, alias, kind, server):
             continue  # VS Code may hold this identity (a launch script, a window opened with it): the board cannot see it, the first chat's hook does
         out.append(f"{alias}:{server['env']}")
     return out
@@ -472,7 +506,7 @@ def probe_all(root: Path, workers: int = 4) -> Dict[str, str]:
 
     def one(job: Tuple[str, Dict[str, Any], Dict[str, Any]]) -> Tuple[str, Dict[str, Any]]:
         alias, server, kind = job
-        identity = identity_of(env, alias, kind)
+        identity = identity_of(env, alias, kind, server)
         line = command(kind, server, identity, alias)
         needs = {key: kind[key] for key in ("expect", "denied", "down") if kind.get(key)}
         if missing_program(line, next((value for key, value in launch.items() if key.upper() == "PATH"), None)):
@@ -495,6 +529,11 @@ def login(root: Path, alias: str, own: Optional[Dict[str, Any]] = None) -> Tuple
     from . import launchenv  # it reads this module's .env
 
     server = own or listed(root).get(alias)  # `own`: a server of the person's own not saved yet (its sign-in comes before its test)
+    if not server and not own:  # 1.7.37: the name of a program (`az`): its sign-in needs no connection
+        for name, found in types(root).items():
+            for mode, program in tool_ways(found):
+                if program == alias.lower():
+                    server = {"type": name, "auth": mode}
     kind = types(root).get(str((server or {}).get("type")))
     if not server or not kind:
         return 2, say("connections.unknown", alias=alias)
@@ -514,11 +553,72 @@ def save(root: Path, alias: str, given: Dict[str, str], own: Optional[Dict[str, 
     given = given_identity(kind, server, given)
     changes: Dict[str, Optional[str]] = {env_key(alias, key): (given.get(key) or None) for key in IDENTITY_FIELDS}
     if kind and delivery(kind, server)["identity"] == "tool":
-        changes = {env_key(alias, "account"): (who or say("connections.tool.signed")), env_key(alias, "password"): None, env_key(alias, "keyfile"): None, env_key(alias, "token"): None}
+        program = tool_program(_way(kind, server))
+        changes = {env_key(alias, "account"): None, env_key(alias, "password"): None, env_key(alias, "keyfile"): None, env_key(alias, "token"): None}
+        if program:  # one per program, shared by every connection of the type (1.7.37)
+            changes[tool_key(program)] = who or say("connections.tool.signed")
+        else:
+            changes[env_key(alias, "account")] = who or say("connections.tool.signed")
     if own:
         changes[env_key(alias, "alias")] = alias
         changes.update({env_key(alias, key): str(value) for key, value in own.items() if key not in ("own",) and value not in (None, "")})
     write_env(root, changes)
+
+
+def forget_tool(root: Path, program: str) -> None:
+    """Take the shared sign-in of a program out of the `.env` (and the old per-connection accounts of the connections that used it)."""
+    known, env = types(root), read_env(root)
+    changes: Dict[str, Optional[str]] = {tool_key(program): None}
+    for alias, server in listed(root).items():
+        auth = _way(known.get(str(server.get("type"))) or {}, server)
+        if auth.get("identity") == "tool" and tool_program(auth) == program.lower():
+            changes[env_key(alias, "account")] = None
+    write_env(root, {key: value for key, value in changes.items() if key in env})
+
+
+def signins(root: Path) -> Dict[str, Any]:
+    """What the Sign-ins block shows (1.7.37). A connection does not depend on a sign-in. A sign-in hangs on a connection or on a tool, never alone:
+    `tools` one row per program that keeps its own sign-in (`az`), shared by the connections of its type; `connections` one row for each connection that
+    is signed in another way (token, password, account), `state` none or saved (and what the last check said); `orphans` an identity kept for a connection
+    this copy no longer has, which only the person forgets."""
+    from . import reach, toolpacks
+
+    known, env, seen = types(root), read_env(root), reach.read(root)
+    servers = listed(root)
+    on = toolpacks.active(root)
+    tools: Dict[str, Dict[str, Any]] = {}
+    for name, kind in known.items():
+        if kind.get("toolpack") not in on or type_problems(kind):
+            continue
+        for mode, program in tool_ways(kind):
+            row = tools.setdefault(program, {"program": program, "account": env.get(tool_key(program), ""), "shared_by": [], "login": (kind["auth"][mode] or {}).get("login", ""), "types": []})
+            if kind.get("label", name) not in row["types"]:
+                row["types"].append(kind.get("label", name))
+    rows = []
+    for alias, server in servers.items():
+        kind = known.get(str(server.get("type"))) or {}
+        auth = _way(kind, server)
+        if kind.get("via") == "mcp":
+            continue
+        if auth.get("identity") == "tool" and tool_program(auth):
+            row = tools.setdefault(tool_program(auth), {"program": tool_program(auth), "account": env.get(tool_key(tool_program(auth)), ""), "shared_by": [], "login": auth.get("login", ""), "types": []})
+            row["shared_by"].append(alias)
+            if not row["account"] and env.get(env_key(alias, "account")):  # the old per-connection account is read still
+                row["account"] = env[env_key(alias, "account")]
+            continue
+        saved = identity_of(env, alias, kind, server)
+        line = seen.get(f"{alias}:{server.get('env', '')}") or {}
+        rows.append({"alias": alias, "env": server.get("env", ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "own": bool(server.get("own")),
+                     "identity": auth.get("identity", ""), "auth_label": auth.get("label", ""), "account": saved.get("account", ""), "state": "saved" if saved else "none",
+                     "reach": line.get("state", "")})
+    stems = {env_key(alias, "") for alias in servers}
+    orphans: Dict[str, str] = {}
+    for key, value in env.items():
+        if key.startswith(PREFIX) and key.endswith(tuple("_" + one.upper() for one in IDENTITY_FIELDS)):
+            stem = key[: key.rindex("_") + 1]
+            if stem not in stems:
+                orphans.setdefault(stem[len(PREFIX):-1].lower().replace("_", "-"), value if key.endswith("_ACCOUNT") else "")
+    return {"tools": sorted(tools.values(), key=lambda one: one["program"]), "connections": rows, "orphans": [{"name": name, "account": account} for name, account in sorted(orphans.items())]}
 
 
 def share(root: Path, aliases: List[str]) -> Dict[str, Any]:
@@ -596,7 +696,7 @@ def plan(root: Path, chosen: List[str], primary: str = "") -> Dict[str, Any]:
         kind = known.get(str((server or {}).get("type")))
         if not server or not kind:
             continue
-        identity = identity_of(env, alias, kind)
+        identity = identity_of(env, alias, kind, server)
         if not identity:
             missing.append(alias)
             continue
@@ -624,7 +724,7 @@ def launch(root: Path, chosen: List[str], primary: str, code_argv: List[str]) ->
     extra: Dict[str, str] = launchenv.extra(root)  # tool folders and the CA bundle (1.7.11)
     for alias in planned["direct"]:
         kind, server = known[servers[alias]["type"]], servers[alias]
-        extra.update(variables(kind, server, identity_of(env, alias, kind)))
+        extra.update(variables(kind, server, identity_of(env, alias, kind, server)))
     target = root / STATE_FILE
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps({"at": utc_now(), "direct": planned["direct"], "wrap": planned["wrap"], "primary": planned["primary"]}, indent=2), encoding="utf-8")
@@ -662,7 +762,7 @@ def run_as(root: Path, alias: str, argv: List[str], classify: Callable[[str], Li
     found = classify(line)
     if not found or any(action.system != alias for action, _decision in found):
         return 2, say("connections.as.other", alias=alias)
-    identity = identity_of(read_env(root), alias, kind)
+    identity = identity_of(read_env(root), alias, kind, server)
     if not identity:
         return 2, say("connections.as.none", alias=alias)
     own = variables(kind, server, identity)

@@ -228,14 +228,14 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
     for alias, server in conn_core.listed(root).items():
         kind = known.get(str(server.get("type"))) or {}
         auth = (kind.get("auth") or {}).get(server.get("auth") or next(iter(kind.get("auth") or {}), ""), {}) or {}
-        saved = conn_core.identity_of(env, alias, kind)
+        saved = conn_core.identity_of(env, alias, kind, server)
         rows.append({"alias": alias, "label": server.get("label", ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "toolpack": kind.get("toolpack", ""), "known": bool(kind), "login": auth.get("login", ""),
                      "env": server.get("env", ""), "auth": server.get("auth", ""), "auth_label": auth.get("label", ""), "identity": auth.get("identity", ""), "own": bool(server.get("own")),
                      "fields": {field: server.get(field, spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
                      "account": saved.get("account", ""), "saved": bool(saved), "reach": (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")})
     kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
                  for name, kind in known.items() if not conn_core.type_problems(kind)}
-    return {"connections": rows, "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "env_wrong": launchenv.seen(root).get("ok") is False, "windows": os.name == "nt"}
+    return {"connections": rows, "signins": conn_core.signins(root), "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "env_wrong": launchenv.seen(root).get("ok") is False, "windows": os.name == "nt"}
 
 
 EMBEDDED = re.compile(r"\bElectron/\d")  # the user agent of VS Code's own browser (an Electron app); Chrome, Edge and Firefox never send it
@@ -728,6 +728,9 @@ class Board:
         if step == "forget":
             conn_core.forget(self.root, alias)
             return {"forgot": alias}
+        if step == "forget-tool":  # the sign-in of a program shared by the connections of a type (1.7.37)
+            conn_core.forget_tool(self.root, str(data.get("program") or ""))
+            return {"forgot": str(data.get("program") or "")}
         if step == "export":  # one's own connections in the form of connections.json (Tools, Connections, Export): no identity
             return conn_core.export(self.root)
         if step == "share":  # into the company pack: the server only, never the identity (knowledge base, Pack for colleagues)
@@ -763,6 +766,9 @@ class Board:
         elif step == "mcp":  # the person says whether MCP may be used here (1.7.17); the tool packs' MCP servers follow
             done = launchenv.set_mcp(self.root, bool(data.get("allowed")))
             return dict(launchenv.state(self.root), mcp_done=done, vscode_open=bool(self.link.status().get("ready", False)))
+        elif step == "folder-add":  # "I installed it here" (1.7.37): the folder goes to HARNESS_TOOL_PATH when it holds the program; the next check finds it
+            launchenv.add_folder(self.root, str(data.get("program") or ""), str(data.get("path") or ""))
+            step = "state"
         elif step == "toolpack-add":  # a folder or zip the person names (1.7.19): what `harness toolpack add <path>` does; an installed name is replaced only after a second, confirming call
             from core import toolpacks
 
@@ -804,7 +810,7 @@ class Board:
             found.pop("exit_code", None)
             known, env = conn_core.types(self.root), conn_core.read_env(self.root)
             for row in found["toolpacks"]:
-                row["connections"] = [{"alias": alias, "saved": bool(conn_core.identity_of(env, alias, known.get(str(server.get("type"))) or {}))}
+                row["connections"] = [{"alias": alias, "saved": bool(conn_core.identity_of(env, alias, known.get(str(server.get("type"))) or {}, server))}
                                   for alias, server in conn_core.listed(self.root).items() if (known.get(str(server.get("type"))) or {}).get("toolpack") == row["name"]]
             return found
         if step not in ("state", "paths", "drop"):
@@ -1495,7 +1501,7 @@ def handler_for(board: Board) -> type:
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     result = board.servers(data)
-                    if str(data.get("step", "")) in ("save", "forget", "open"):
+                    if str(data.get("step", "")) in ("save", "forget", "forget-tool", "open"):
                         print(say("serve.did", action="servers " + str(data.get("step")), task=str(data.get("alias") or "-")), flush=True)  # never a value
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page

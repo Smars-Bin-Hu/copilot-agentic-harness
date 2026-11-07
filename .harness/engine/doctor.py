@@ -619,6 +619,10 @@ def check_toolpacks(report: Report, root: Path) -> None:
             report.ok(say("doctor.toolpacks.on", names=", ".join(names)))
         for line in toolpacks.recent_updates(root):
             report.ok(line)
+        for name, rows in toolpacks.needs_report(root).items():  # a program a pack on needs is not found (1.7.37)
+            lost = list(dict.fromkeys(row["program"] for row in rows if not row["found"]))
+            if lost:
+                report.warn(say("doctor.toolpacks.program", name=name, programs=", ".join(lost)))
         for item in connections.unset_fields(root):
             report.warn(say("doctor.toolpacks.unset", alias=item["alias"], type=item["type"], fields=", ".join(item["fields"])))
         for item in toolpacks.command_problems(root):

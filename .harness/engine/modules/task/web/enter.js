@@ -455,7 +455,7 @@
     const key = JSON.stringify([c.names, root.lang]);
     if (box.dataset.k === key) return;
     box.dataset.k = key;
-    box.replaceChildren(...c.names.map((item) => h("span", {class: "sy-i", title: item.state === "ok" ? "" : (item.missing || []).concat(item.errors || []).join(", ")}, h("i", {class: "sy-d " + (item.state === "ok" ? "ok" : "partly")}), item.name)));
+    box.replaceChildren(...c.names.map((item) => h("span", {class: "sy-i", title: item.state === "ok" ? "" : [(item.missing || []).length ? t("machine.conn.notusable", {programs: item.missing.join(", ")}) : "", ...(item.errors || [])].filter(Boolean).join("\n")}, h("i", {class: "sy-d " + (item.state === "ok" ? "ok" : "partly")}), item.name)));
   }
   const groupNames = (ids, checks) => ids.map((id) => { const c = checks.find((x) => x.id === id); return id === "packs" && c && c.names && c.names.length ? c.names.map((item) => item.name).join(", ") : t("board.enter.n." + id); }).join(" · ");
   function render() {  // in place: the lines are made once and only their class and text change, so nothing blinks

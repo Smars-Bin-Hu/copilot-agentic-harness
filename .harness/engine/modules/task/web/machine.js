@@ -17,11 +17,38 @@ const MACHINE = (function () {
       : h("span", {class: "sv-result bad", title: tip}, h("b", null, "✗"), " ", t("machine.ca.made.bad", {why: result.why}));
   }
 
+  // Programs (1.7.37): one row per program the packs that are on need, who needs it, found (the place on hover) or not found with "I installed it here". The folders added are kept small below.
+  function programsBlock(state, repaint, said) {
+    const rec = state.recipe || {tool_folders: [], error: ""};
+    const who = (row) => row.needed_by.map((item) => item.pack === "harness" ? t("machine.prog.harness") : item.why === "signin" ? t("machine.prog.signin", {pack: item.pack}) : item.pack).filter((x, i, all) => all.indexOf(x) === i).join(", ");
+    const rows = state.programs.map((row) => {
+      const mark = h("span", {class: "mc-pstate " + (row.found ? "ok" : "bad"), title: row.found ? row.path : t("machine.prog.missing.tip", {program: row.program})}, row.found ? "\u2713 " : "\u2717 ", row.found ? t("machine.prog.found") : t("machine.prog.missing"));
+      const head = h("div", {class: "mc-prow"}, h("b", {class: "mc-pname"}, row.program), h("span", {class: "mc-pwho", title: row.needed_by.map((item) => item.pack + (item.conn ? " \u2190 " + item.conn : "")).join("\n")}, "\u2190 ", who(row)), mark);
+      if (row.found) return h("div", {class: "mc-prog"}, head);
+      const input = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", "aria-label": t("machine.prog.here", {program: row.program}), placeholder: t("machine.prog.ph"), value: row.hint || ""});
+      const use = h("button", {type: "button", class: "act"}, t("machine.prog.use"));
+      const go = () => {
+        use.disabled = true; said.replaceChildren();
+        ask("folder-add", {program: row.program, path: input.value.trim()}).then((next) => { repaint(next); }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { use.disabled = false; });
+      };
+      use.addEventListener("click", go);
+      input.addEventListener("keydown", (event) => { if (event.key === "Enter") go(); });
+      return h("div", {class: "mc-prog"}, head, h("div", {class: "mc-phere"}, h("span", {class: "sv-cap"}, t("machine.prog.here", {program: row.program}), row.hint ? " " : null, row.hint ? h("span", {class: "sv-own", title: t("machine.recipe.from", {value: row.hint})}, t("machine.recipe.mark")) : null), input, use));
+    });
+    const general = rec.tool_folders.filter((item) => !item.program);  // an older recipe hint names no program: shown as a hint
+    const added = state.paths.map((item) => {
+      const x = h("button", {type: "button", class: "mc-x", title: t("machine.paths.remove"), "aria-label": t("machine.paths.remove")}, "\u00d7");
+      x.addEventListener("click", () => { ask("paths", {paths: state.paths.filter((one) => one.path !== item.path).map((one) => one.path)}).then(repaint, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
+      return h("span", {class: "mc-dir " + (item.found ? "ok" : "bad"), title: item.found ? (item.programs.join("\n") || "-") : t("machine.paths.gone")}, (item.found ? "" : "\u2717 ") + item.path, " ", x);
+    });
+    return [...rows, ...(rec.error ? [h("span", {class: "bad", title: rec.error}, t("machine.recipe.bad", {error: rec.error}))] : []),
+      ...general.map((item) => h("span", {class: "mc-dir hint", tabindex: "0", title: t("machine.recipe.folder.tip", {label: item.label, hint: item.hint || "-"})}, h("b", null, item.label), item.hint ? " \u2014 " + item.hint : "")),
+      added.length ? h("div", {class: "mc-added"}, h("span", {class: "sub"}, t("machine.paths.added"), " "), ...added) : null].filter(Boolean);
+  }
+
   function panel(ctx) {
-    const paths = h("textarea", {class: "su-in su-mono mc-paths", rows: "3", spellcheck: "false", placeholder: t("machine.paths.placeholder")});
-    const pathsSaid = h("span", {class: "sv-said"});
-    const savePaths = h("button", {type: "button", class: "act"}, t("machine.paths.save"));
-    const found = h("div", {class: "mc-found"});
+    const said = h("span", {class: "sv-said"});
+    const progs = h("div", {class: "mc-progs"});
     const host = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false"});
     const proxy = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: t("machine.proxy.none")});
     const make = h("button", {type: "button", class: "act hot"}, t("machine.ca.make"));
@@ -32,17 +59,18 @@ const MACHINE = (function () {
     const open_ = h("p", {class: "sub", hidden: ""}, t("machine.vscode.open"));
     const mcp = h("span", {class: "mc-mcp"});
     const mcpInfo = h("span", {class: "sv-info", tabindex: "0", title: t("machine.mcp.tip")}, "\u24d8");
-    const recipeBox = h("div", {class: "mc-recipe", hidden: ""});
     const hostMark = h("span", {class: "sv-own", hidden: ""}, t("machine.recipe.mark"));
     const proxyMark = h("span", {class: "sv-own", hidden: ""}, t("machine.recipe.mark"));
-    const body = [h("p", {class: "sub"}, t("machine.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.lead.tip")}, "\u24d8")),
-      h("h3", {class: "mc-h"}, t("machine.paths"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.paths.tip")}, "\u24d8")), paths, recipeBox, found, h("div", {class: "sv-acts"}, savePaths, pathsSaid),
-      h("h3", {class: "mc-h"}, t("machine.ca"), " ", caInfo, " ", caState),
+    const info = (key) => h("span", {class: "sv-info", tabindex: "0", title: t(key)}, "\u24d8");
+    const signs = h("div", {class: "mc-signins"});
+    const body = [h("p", {class: "sub"}, t("machine.lead"), " ", info("machine.lead.tip")),
+      h("h3", {class: "mc-h"}, t("machine.prog.title"), " ", info("machine.prog.tip")), progs, said,
+      h("h3", {class: "mc-h"}, t("machine.net.title"), " ", caInfo, " ", caState),
       h("div", {class: "sv-fields"}, field(t("machine.ca.host"), host, hostMark), field(t("machine.ca.proxy"), proxy, proxyMark)), h("div", {class: "sv-acts"}, make, drop, caSaid),
+      h("h3", {class: "mc-h"}, t("machine.signins.title"), " ", info("machine.signins.tip")), signs,
       h("h3", {class: "mc-h"}, "MCP ", mcpInfo), mcp, open_];
     const paint = (state) => {
-      paths.value = state.paths.map((item) => item.path).join("\n");
-      found.replaceChildren(...state.paths.map((item) => h("span", {class: "mc-dir " + (item.found ? "ok" : "bad"), title: item.found ? (item.programs.join("\n") || "-") : t("machine.paths.gone")}, (item.found ? "✓ " : "✗ ") + item.path)));
+      progs.replaceChildren(...programsBlock(state, (next) => { paint(next); if (ctx.changed) ctx.changed(); }, said));
       host.placeholder = state.default_host;
       const rec = state.recipe || {host: "", proxy: "", tool_folders: [], error: ""};  // the company's recipe fills only what the person has not set: a made bundle's own values come first
       if (!host.value) host.value = state.bundle.host || rec.host || "";
@@ -51,9 +79,6 @@ const MACHINE = (function () {
         const sync = () => { const same = !!value && input.value.trim() === value && !(input === host ? state.bundle.host : state.bundle.proxy); mark.hidden = !same; mark.title = same ? t("machine.recipe.from", {value}) : ""; };
         sync(); input.oninput = sync;
       }
-      recipeBox.hidden = !rec.error && !rec.tool_folders.length;
-      recipeBox.replaceChildren(...(rec.error ? [h("span", {class: "bad", title: rec.error}, t("machine.recipe.bad", {error: rec.error}))]
-        : [h("span", {class: "sub"}, t("machine.recipe.folders")), ...rec.tool_folders.map((item) => h("span", {class: "mc-dir hint", tabindex: "0", title: t("machine.recipe.folder.tip", {label: item.label, hint: item.hint || "-"})}, h("b", null, item.label), item.hint ? " \u2014 " + item.hint : ""))]));
       caState.replaceChildren(bundleLine(state));
       caInfo.title = t("machine.ca.lead.tip", {vars: state.bundle.vars.join(", ")});
       drop.hidden = !state.bundle.path;
@@ -67,11 +92,7 @@ const MACHINE = (function () {
       mcp.replaceChildren(...[h("span", {class: "chips"}, ...chips), state.mcp.detected === "blocked" ? h("span", {class: "sub"}, " " + t("machine.mcp.detected")) : null].filter(Boolean));
     };
     ask("state").then(paint, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); });
-    savePaths.addEventListener("click", () => {
-      savePaths.disabled = true; pathsSaid.replaceChildren();
-      ask("paths", {paths: paths.value.split("\n")}).then((state) => { paint(state); pathsSaid.replaceChildren(h("span", {class: "sv-result ok"}, "✓ " + t("machine.saved"))); },
-        (error) => { pathsSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { savePaths.disabled = false; });
-    });
+    if (typeof SERVERS !== "undefined") signs.replaceChildren(...SERVERS.signinsBlock(ctx));
     make.addEventListener("click", () => {
       make.disabled = true; caSaid.replaceChildren(h("span", {class: "sub"}, t("machine.ca.making")));
       ask("bundle", {host: host.value.trim(), proxy: proxy.value.trim()}).then((state) => { paint(state); caSaid.replaceChildren(made(state.made)); },
@@ -96,7 +117,8 @@ const MACHINE = (function () {
         const src = row.from === "company" ? "company" : row.from === "harness" ? "factory" : "folder";  // where the pack lies (1.7.34): factory (.harness/toolpacks/), the company's own, or a folder added on this computer
         const srcTip = src === "folder" ? t("machine.conn.src.folder.tip", {path: row.from}) : t("machine.conn.src." + src + ".tip");
         const tip = [t(row.active ? "machine.conn.on" : "machine.conn.off") + (row.active ? "" : " - " + t("machine.conn.off.how")), row.description,
-          ...(row.active ? Object.entries(row.programs).map(([name, ok]) => (ok ? "✓ " : "✗ ") + t("machine.conn.program", {name})) : []),
+          ...(row.active ? (row.needs || []).map((item) => (item.found ? "✓ " : "✗ ") + t("machine.conn.program", {name: item.program}) + (item.found ? " \u2014 " + item.path : " \u2014 " + t("machine.conn.notfound"))) : []),
+          row.active && missing.length ? t("machine.conn.notusable", {programs: missing.join(", ")}) : null,
           row.active && row.trust ? (row.bundle ? "✓ " : "· ") + t(row.bundle ? "machine.conn.bundle" : "machine.conn.bundle.none") : null,
           ...(row.active ? row.connections.map((item) => (item.saved ? "✓ " : "✗ ") + t("machine.conn.server", {alias: item.alias})) : []),
           ...row.errors.map((line) => "✗ " + line), srcTip, row.updated && row.updated.to ? t("machine.conn.updated.tip", row.updated) : null].filter(Boolean).join("\n");
@@ -168,9 +190,10 @@ const MACHINE = (function () {
     return ask("toolpacks").then((found) => ({n: on(found).length, ready: on(found).filter(good).length, names: on(found).map((row) => ({name: row.name, ok: good(row)}))}));
   }
 
-  // One line for Get ready: how many tool folders, whether there is a bundle.
+  // Get ready (1.7.37): the four blocks of This computer as facts.
   function summary() {
-    return ask("state").then((found) => ({paths: found.paths.length, found: found.paths.filter((item) => item.found).length, certs: found.bundle.path ? found.bundle.n : 0, host: found.bundle.path ? found.bundle.host || "" : "", mcp: found.mcp.allowed}));
+    return ask("state").then((found) => ({paths: found.paths.length, found: found.paths.filter((item) => item.found).length, certs: found.bundle.path ? found.bundle.n : 0, host: found.bundle.path ? found.bundle.host || "" : "", proxy: found.recipe && found.recipe.proxy || found.proxy || "",
+      programs: found.programs.map((row) => ({program: row.program, found: row.found, path: row.path})), mcp: found.mcp.allowed}));
   }
 
   return {open, panel, packsPanel, summary, toolpacksSummary};

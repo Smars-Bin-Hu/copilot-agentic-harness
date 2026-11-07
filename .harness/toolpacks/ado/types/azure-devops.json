@@ -24,6 +24,9 @@
     "signin": {
       "identity": "tool",
       "label": "az login",
+      "needs": [
+        "az"
+      ],
       "login": "az login --allow-no-subscriptions"
     },
     "token": {

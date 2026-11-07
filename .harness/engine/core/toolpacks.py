@@ -255,6 +255,82 @@ def bin_folders(root: Path) -> List[str]:
     return [str((item["folder"] / "bin").resolve()) for item in active(root).values() if (item["folder"] / "bin").is_dir()]
 
 
+def _path_of(root: Path) -> Optional[str]:
+    from . import launchenv
+
+    extra = launchenv.extra(root)
+    return next((value for key, value in extra.items() if key.upper() == "PATH"), None)
+
+
+def locate(program: str, path: Optional[str]) -> str:
+    """Where `program` is on `path` (the PATH VS Code will get), "" when it is not."""
+    return shutil.which(str(program), path=path) or ""
+
+
+def signin_needs(kind: Dict[str, Any], server: Dict[str, Any]) -> List[str]:
+    """The programs the sign-in way a connection uses asks for (`auth.<way>.needs`, 1.7.37): az for `signin`, nothing for `token`."""
+    modes = kind.get("auth") or {}
+    auth = modes.get(server.get("auth") or next(iter(modes), "")) or {}
+    return [str(one) for one in (auth.get("needs") or []) if isinstance(one, str) and one]
+
+
+def needs_report(root: Path, only: str = "", include_off: bool = False) -> Dict[str, List[Dict[str, Any]]]:
+    """For each active pack, every program it needs, looked for on the PATH VS Code will get (`launchenv.extra`): the pack's `needs.programs`
+    (`why: "pack"`) and the `auth.<way>.needs` of the ways its connections use (`why: "signin:<connection>"`). `[{program, found, path, why}]`."""
+    path = _path_of(root)
+    kinds = connections_types(root)
+    servers = connections_listed(root)
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for name, item in (listed(root) if include_off else active(root)).items():
+        if only and name != only:
+            continue
+        rows: List[Dict[str, Any]] = []
+        for program in (item["manifest"].get("needs") or {}).get("programs") or []:
+            where = locate(program, path)
+            rows.append({"program": str(program), "found": bool(where), "path": where, "why": "pack"})
+        if item["active"]:
+            for alias, server in servers.items():
+                kind = kinds.get(str(server.get("type"))) or {}
+                if kind.get("toolpack") != name:
+                    continue
+                for program in signin_needs(kind, server):
+                    where = locate(program, path)
+                    rows.append({"program": program, "found": bool(where), "path": where, "why": f"signin:{alias}"})
+        out[name] = rows
+    return out
+
+
+def connections_types(root: Path) -> Dict[str, Dict[str, Any]]:
+    from . import connections
+
+    try:
+        return connections.types(root)
+    except Exception:  # noqa: BLE001 - a broken type must not hide the packs
+        return {}
+
+
+def connections_listed(root: Path) -> Dict[str, Dict[str, Any]]:
+    from . import connections
+
+    try:
+        return connections.listed(root)
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def missing_for(root: Path, alias: str) -> List[str]:
+    """The programs a connection cannot be reached without and this computer lacks: its pack's `needs.programs` and its sign-in way's `needs`."""
+    kinds, servers = connections_types(root), connections_listed(root)
+    server = servers.get(alias) or {}
+    kind = kinds.get(str(server.get("type"))) or {}
+    pack = str(kind.get("toolpack") or "")
+    if not pack:
+        return []
+    path = _path_of(root)
+    wanted = list(((listed(root).get(pack) or {}).get("manifest", {}).get("needs") or {}).get("programs") or []) + signin_needs(kind, server)
+    return [str(one) for one in dict.fromkeys(wanted) if not locate(one, path)]
+
+
 def type_entries(root: Path) -> List[tuple]:
     """`(pack name, type file)` of each connection type the active packs bring, in the order of the packs."""
     return [(name, path) for name, item in active(root).items() for path in sorted((item["folder"] / TYPES).glob("*.json"))]
@@ -819,6 +895,7 @@ def check(root: Path, only: str = "") -> Dict[str, Any]:
     bundle = launchenv.bundle_path(root)
     rows = []
     book = ledger(root)["packs"]
+    needs_all = needs_report(root, only)
     for name, item in listed(root).items():
         if only and name != only:
             continue
@@ -832,9 +909,12 @@ def check(root: Path, only: str = "") -> Dict[str, Any]:
                 types_here.append({"type": str(spec.get("type") or one.stem), "label": str(spec.get("label") or spec.get("type") or one.stem), "via": str(spec.get("via") or "cli")})
             except (OSError, ValueError, AttributeError):
                 continue
-        programs = {str(program): bool(shutil.which(str(program), path=path)) for program in needs.get("programs") or []}
+        report = needs_all.get(name) or []
+        programs = {str(program): bool(locate(str(program), path)) for program in needs.get("programs") or []}
+        for one in report:
+            programs[one["program"]] = one["found"] and programs.get(one["program"], True)
         row = {"name": name, "version": str(found.get("version") or ""), "from": item["source"], "source": item["source"], "active": item["active"], "removable": item["source"] not in (COMPANY, HARNESS),
-               "errors": errors, "programs": programs, "trust": bool(needs.get("trust")), "bundle": bool(bundle), "description": str(found.get("description") or ""), "types": types_here,
+               "errors": errors, "programs": programs, "needs": report if item["active"] else [], "trust": bool(needs.get("trust")), "bundle": bool(bundle), "description": str(found.get("description") or ""), "types": types_here,
                "skills": len(_skills(folder)), "links": sorted((found.get("links") or {}).keys()) if isinstance(found.get("links"), dict) else [],
                "mcp_rules": len((found.get("mcp") or {}).get("tools") or []) if isinstance(found.get("mcp"), dict) else 0, "commands": [str(one) for one in found.get("commands") or []],
                "put": list((book.get(name) or {}).get("skills") or []), "newer": False, "updated": _updated(book.get(name) or {}), "toggle": "" if item["source"] != HARNESS else "on" if targets.company_folder(root) else "nocompany"}

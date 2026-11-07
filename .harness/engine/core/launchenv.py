@@ -47,7 +47,8 @@ RECIPE_SCHEMA = {"type": "object", "properties": {
         "host": {"type": "string", "pattern": r"^[A-Za-z0-9.\-]+$", "maxLength": 253},
         "proxy": {"type": "string", "pattern": r"^[A-Za-z0-9.\-\[\]:]+:\d{1,5}$", "maxLength": 260}}},
     "tool_folders": {"type": "array", "maxItems": 20, "items": {"type": "object", "required": ["label"], "properties": {
-        "label": {"type": "string", "minLength": 1, "maxLength": 80}, "hint": {"type": "string", "maxLength": 400}}}}}}
+        "label": {"type": "string", "minLength": 1, "maxLength": 80}, "hint": {"type": "string", "maxLength": 400},
+        "program": {"type": "string", "pattern": r"^[\w.\-]+$", "maxLength": 60}}}}}}
 TRUST_VARS = ("REQUESTS_CA_BUNDLE",)  # Python tools (az, pip's requests); NODE_EXTRA_CA_CERTS and others when a tool pack asks for them
 DEFAULT_HOST = "example.com"
 SECONDS = 20
@@ -152,6 +153,41 @@ def save_paths(root: Path, raw: List[str]) -> Dict[str, Any]:
         paths.append(str(folder))
     conn_core.write_env(root, {PATH_KEY: os.pathsep.join(paths) or None})
     return {"paths": paths}
+
+
+def add_folder(root: Path, program: str, raw: str) -> Dict[str, Any]:
+    """"I installed it here" (1.7.37): add the folder to `HARNESS_TOOL_PATH` when it holds `program`, so the next check finds it. A folder without it is refused."""
+    text = str(raw).strip().strip('"')
+    folder = Path(os.path.expandvars(os.path.expanduser(text)))
+    if not text or not folder.is_absolute():
+        raise ValueError(say("launch.path.relative", path=text or "-"))
+    if not folder.is_dir():
+        raise ValueError(say("launch.path.none", path=text))
+    if not shutil.which(program, path=str(folder)):
+        raise ValueError(say("launch.path.noprogram", program=program, path=text))
+    return save_paths(root, settings(root)["paths"] + [str(folder)])
+
+
+def _program_rows(root: Path) -> List[Dict[str, Any]]:
+    """The Programs block (1.7.37): one row per program a tool pack that is on needs, and who needs it; `python` first. Found on the PATH VS Code will get, with the place;
+    a program not found carries the company recipe's hint for it, when there is one."""
+    from . import toolpacks
+
+    path = next((value for key, value in extra(root).items() if key.upper() == "PATH"), None)
+    hints = {item["program"]: item for item in recipe(root)["tool_folders"] if item.get("program")}
+    wanted: Dict[str, List[Dict[str, str]]] = {}
+    for pack, rows in toolpacks.needs_report(root).items():
+        for row in rows:
+            who = {"pack": pack, "why": "signin" if row["why"].startswith("signin:") else "pack", "conn": row["why"][7:] if row["why"].startswith("signin:") else ""}
+            if who not in wanted.setdefault(row["program"], []):
+                wanted[row["program"]].append(who)
+    python = shutil.which("python3", path=path) or shutil.which("python", path=path) or sys.executable
+    out = [{"program": "python", "found": bool(python), "path": python or "", "needed_by": [{"pack": "harness", "why": "pack", "conn": ""}], "hint": "", "label": ""}]
+    for program, who in sorted(wanted.items()):
+        where = toolpacks.locate(program, path)
+        hint = hints.get(program) or {}
+        out.append({"program": program, "found": bool(where), "path": where, "needed_by": who, "hint": hint.get("hint", ""), "label": hint.get("label", "")})
+    return out
 
 
 def drop_bundle(root: Path) -> Dict[str, Any]:
@@ -527,7 +563,7 @@ def recipe_errors(data: Any) -> List[str]:
 
 
 def recipe(root: Path) -> Dict[str, Any]:
-    """The company's recipe for this computer: `{"host", "proxy", "tool_folders": [{label, hint}], "error"}`. Empty with no file; a file with faults gives every fault, joined, and no values."""
+    """The company's recipe for this computer: `{"host", "proxy", "tool_folders": [{label, hint, program}], "error"}`. Empty with no file; a file with faults gives every fault, joined, and no values."""
     out: Dict[str, Any] = {"host": "", "proxy": "", "tool_folders": [], "error": ""}
     path = root / RECIPE
     if not path.is_file():
@@ -543,7 +579,7 @@ def recipe(root: Path) -> Dict[str, Any]:
         return out
     out["host"] = str((data.get("ca_bundle") or {}).get("host") or "")
     out["proxy"] = str((data.get("ca_bundle") or {}).get("proxy") or "")
-    out["tool_folders"] = [{"label": str(item["label"]), "hint": str(item.get("hint") or "")} for item in data.get("tool_folders") or []]
+    out["tool_folders"] = [{"label": str(item["label"]), "hint": str(item.get("hint") or ""), "program": str(item.get("program") or "")} for item in data.get("tool_folders") or []]
     return out
 
 
@@ -551,7 +587,7 @@ def state(root: Path) -> Dict[str, Any]:
     kept = settings(root)
     bundle = bundle_path(root)
     n = len(pem_blocks(bundle.read_text(encoding="ascii", errors="ignore"))) if bundle else 0
-    return {"paths": [{"path": item, "found": Path(item).is_dir(), "programs": programs_in(Path(item))[:8]} for item in kept["paths"]],
+    return {"programs": _program_rows(root), "paths": [{"path": item, "found": Path(item).is_dir(), "programs": programs_in(Path(item))[:8]} for item in kept["paths"]],
             "bundle": {"path": str(bundle) if bundle else "", "n": n, "host": kept["host"], "proxy": kept["proxy"], "made": kept["made"],
                        "vars": trusted_by(root)},
             "proxy": detect_proxy(), "recipe": recipe(root), "default_host": DEFAULT_HOST, "mcp": {"allowed": mcp_allowed(root), "detected": detect_mcp(),

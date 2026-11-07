@@ -183,7 +183,7 @@ def servers_list(root: Path) -> Dict[str, Any]:
     out = []
     for alias, server in connections.listed(root).items():
         kind = known.get(str(server.get("type"))) or {}
-        saved = connections.identity_of(env, alias, kind)
+        saved = connections.identity_of(env, alias, kind, server)
         out.append({"alias": alias, "type": server.get("type"), "env": server.get("env"), "auth": server.get("auth", ""), "own": bool(server.get("own")),
                     "account": saved.get("account", ""), "saved": bool(saved), "known_kind": bool(kind),
                     "fields": {key: str(server.get(key)) for key in (kind.get("fields") or {}) if server.get(key) not in (None, "")}})
@@ -200,7 +200,7 @@ def servers_test(root: Path, alias: str) -> Dict[str, Any]:
 
     server = connections.listed(root).get(alias) or {}
     kind = connections.types(root).get(str(server.get("type"))) or {}
-    found = connections.test(root, alias, connections.identity_of(connections.read_env(root), alias, kind))
+    found = connections.test(root, alias, connections.identity_of(connections.read_env(root), alias, kind, server))
     return {**found, "alias": alias, "exit_code": 0 if found["state"] == "ok" else 1}
 
 

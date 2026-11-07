@@ -236,15 +236,19 @@ const SETUP = (function () {
       // This computer
       const pc = tools.pc, sv = tools.conns;
       const mine = [];
+      const addTool = (list, tool) => list.concat([{name: tool.program, kind: tool.account ? "ok" : "none", tip: tool.account ? t("setup.fact.signin.saved", {account: tool.account}) : t("setup.fact.signin.not")}]);
       if (pc) {
-        mine.push(fact(t("machine.paths"), pc.paths ? (pc.found === pc.paths ? "ok" : "need") : "none", pc.paths ? t("setup.fact.folders", {n: pc.paths}) : t("setup.fact.folders.none"), pc.paths ? t("setup.fact.folders.tip", {found: pc.found, n: pc.paths}) : t("setup.machine.none")));
-        mine.push(fact(t("setup.fact.ca"), pc.certs ? "ok" : "none", pc.certs ? [t("setup.fact.ca.n", {n: pc.certs}), pc.host].filter(Boolean).join(" \u00b7 ") : t("setup.fact.ca.none"), pc.certs ? t("setup.fact.ca.tip", {host: pc.host || "-"}) : t("machine.ca.none.tip")));
-        mine.push(fact("MCP", pc.mcp ? "ok" : "none", t(pc.mcp ? "tools.mcp.on" : "tools.mcp.off"), t("machine.mcp.tip")));
+        const lacking = pc.programs.filter((row) => !row.found).map((row) => row.program);
+        mine.push(fact(t("machine.prog.title"), "none", names(pc.programs.map((row) => ({name: row.program, kind: row.found ? "ok" : "need", tip: row.found ? row.path : t("machine.prog.missing.tip", {program: row.program})}))),
+          lacking.length ? t("machine.prog.lacking", {programs: lacking.join(", ")}) : t("machine.prog.tip"), "", openTab("computer")));
+        mine.push(fact(t("machine.net.title"), pc.certs ? "ok" : "none", [pc.proxy ? t("setup.fact.net.proxy", {proxy: pc.proxy}) : "", pc.certs ? t("setup.fact.ca.n", {n: pc.certs}) : t("setup.fact.ca.none")].filter(Boolean).join(" \u00b7 "),
+          pc.certs ? t("setup.fact.ca.tip", {host: pc.host || "-"}) : t("machine.ca.none.tip")));
       }
       const head = h("div", {class: "su-fact su-fact-open"}, h("span", {class: "su-note"}, t("setup.fact.computer.lead")), openTab("computer"));
-      const signs = sv && sv.rows.length ? fact(t("setup.fact.signins"), "none", names(sv.rows.map((row) => ({name: row.alias, kind: row.saved ? "ok" : "none", tip: row.saved ? t("setup.fact.signin.saved", {account: row.account || "-"}) : t("setup.fact.signin.not")}))),
-        sv.rows.map((row) => (row.saved ? "\u2713 " : "\u00b7 ") + row.alias).join("\n"), "", openTab("connections")) : fact(t("setup.fact.signins"), "none", sv ? t("setup.fact.signins.none") : "", t("setup.fact.signins.tip"));
-      computerBox.replaceChildren(head, ...mine, signs);
+      const people = sv ? sv.tools.reduce(addTool, []).concat(sv.rows.map((row) => ({name: row.alias, kind: row.saved ? "ok" : "none", tip: row.saved ? t("setup.fact.signin.saved", {account: row.account || "-"}) : t("setup.fact.signin.not")})), sv.orphans.map((name) => ({name, kind: "need", tip: t("signins.orphan.tip", {name})}))) : [];
+      mine.push(sv && people.length ? fact(t("setup.fact.signins"), "none", names(people), people.map((row) => (row.kind === "ok" ? "\u2713 " : "\u00b7 ") + row.name).join("\n"), "", openTab("computer")) : fact(t("setup.fact.signins"), "none", sv ? t("setup.fact.signins.none") : "", t("setup.fact.signins.tip")));
+      if (pc) mine.push(fact("MCP", pc.mcp ? "ok" : "none", t(pc.mcp ? "tools.mcp.on" : "tools.mcp.off"), t("machine.mcp.tip")));
+      computerBox.replaceChildren(head, ...mine);
       computerBox.querySelectorAll(".su-fact").forEach((node) => { if (node.querySelector(".su-names")) node.firstChild.classList.add("none"); });
     }
     const paintStates = paintFacts;

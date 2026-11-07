@@ -131,13 +131,13 @@ def tools(root: Path, lang: str) -> List[Dict[str, Any]]:
     systems = config.policy_or_empty(root, "tools").get("systems") or {}
     seen = reach.view(root, systems) if systems else []
     listed = connections.listed(root)
-    path = launchenv.extra(root).get("PATH") or None
+    needs = toolpacks.needs_report(root)
     out: List[Dict[str, Any]] = []
     for name, item in packs.items():
         manifest, folder = item["manifest"], item["folder"]
         kinds = _kinds(folder)
         types = {str(kind["type"]): kind for kind in kinds}
-        programs = [{"name": str(program), "found": bool(shutil.which(str(program), path=path))} for program in (manifest.get("needs") or {}).get("programs") or []]
+        programs = [{"name": row["program"], "found": row["found"], "path": row["path"], "why": row["why"]} for row in needs.get(name, [])]  # the pack's own and its connections' sign-in ways (1.7.37)
         links: List[Dict[str, Any]] = []
         for alias, server in listed.items():
             if str(server.get("type")) not in types:
@@ -153,7 +153,7 @@ def tools(root: Path, lang: str) -> List[Dict[str, Any]]:
             missing.append("connection")
         if links and all(link["state"] == reach.UNKNOWN for link in links):
             missing.append("untested")
-        missing += [f"program:{program['name']}" for program in programs if not program["found"]]
+        missing += list(dict.fromkeys(f"program:{program['name']}" for program in programs if not program["found"]))
         reads = _reads(manifest, kinds)
         out.append({"name": name, "version": str(manifest.get("version") or ""), "about": str(manifest.get("description") or ""), "programs": programs, "reads": reads, "read_names": _read_names(manifest, kinds),
                     "writes": _lines(kinds, "write", lang), "execs": _lines(kinds, "exec", lang), "destroys": _lines(kinds, "destroy", lang),

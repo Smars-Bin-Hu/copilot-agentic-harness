@@ -329,13 +329,17 @@ def named_line(ctx: Context, one: Dict[str, str]) -> str:
         info = connections.brief(ctx.root, one["alias"], one["call"])
     except Exception:  # noqa: BLE001 - a line must not be lost for one broken type
         info = {"alias": one["alias"], "env": one["env"], "fields": {}, "skills": [], "program": "", "toolpack": "", "label": "", "call": one["call"]}
+    info.setdefault("missing", [])
+    info.setdefault("signin", False)
     env = "" if info["env"] in ("", "none") else f" ({info['env'].upper()})"
     fields = ", ".join(f"{key}={value}" for key, value in info["fields"].items())
     head = f"- {info['alias']}{env}" + (f": {info['label']}" if info["label"] else "") + (f" [{fields}]" if fields else "")
     wrap = rules.say("connections.named.wrap", alias=info["alias"]) if one["call"].startswith(f"harness as {info['alias']} --") else ""
+    lacks = "".join(" " + rules.say("connections.named.missing", program=program) for program in info["missing"])  # 1.7.37: a program the pack needs is not on this computer
+    lacks += " " + rules.say("connections.named.signin", alias=info["alias"]) if info["signin"] else ""
     if info["skills"]:
-        return head + rules.say("connections.named.pack", toolpack=info["toolpack"], skills=", ".join(info["skills"]), program=info["program"] or "-") + wrap
-    return head + rules.say("connections.named.test", call=info["call"])
+        return head + rules.say("connections.named.pack", toolpack=info["toolpack"], skills=", ".join(info["skills"]), program=info["program"] or "-") + wrap + lacks
+    return head + rules.say("connections.named.test", call=info["call"]) + lacks
 
 
 def named_servers(event: HookEvent, ctx: Context) -> Optional[Decision]:

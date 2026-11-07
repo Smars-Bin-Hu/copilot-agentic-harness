@@ -9,7 +9,7 @@ Three words, used the same way on the board, in commands and in files:
 | tool pack | how the agent reaches one tool: its program, the gate's rules for it, its skills | `.harness/toolpacks/<name>/` (factory, on when `use` names it), `company/tools/packs/<name>/` (the company's), a folder added with `toolpack add` |
 | connection type | a kind of place the tool reaches (SQL Server, Azure DevOps project): its fields, its sign-in, its test | `types/<type>.json` of a tool pack |
 | connection | one place, with the person's sign-in (orders-dev, the Sales project) | `company/tools/connections.json` ([connections.md](connections.md)), or the person's own in Get ready |
-| computer recipe | what every colleague's computer needs and holds no secret: the CA bundle address and proxy, hints for the tool folders | `company/tools/computer.json`, copied to `.harness/policies/computer.company.json`; shown in Get ready, This computer |
+| computer recipe | what every colleague's computer needs and holds no secret: the CA bundle address and proxy, hints for where a program is installed (`tool_folders`: `{label, hint, program}`) | `company/tools/computer.json`, copied to `.harness/policies/computer.company.json`; shown in Get ready, This computer |
 
 ## Layout
 
@@ -39,7 +39,7 @@ Three words, used the same way on the board, in commands and in files:
 | `harness` | no | the lowest harness version it works with; an older harness refuses to use it |
 | `description` | yes | one sentence for people |
 | `commands` | no | `["item", "comment", ...]`: the subcommands of the pack's program (`bin/<name>`). `harness doctor` warns about a company skill that writes `<program> <word>` in code where `<word>` is not listed. A pack that lists none is not checked |
-| `needs.programs` | no | programs it calls (`["az"]`): `toolpack check` and Get ready look for them on the PATH VS Code gets (tool folders first) |
+| `needs.programs` | no | programs it calls (`["sqlcmd"]`): looked for on the PATH VS Code gets (the system PATH, `HARNESS_TOOL_PATH`, the packs' `bin/`) as soon as the pack is on. One not found makes the pack "not usable yet: X not found" in the Tools window, the Enter screen, the Company tab, `harness doctor` and the agent's context; Save is not blocked. A way in may need more: `auth.<way>.needs` (below) |
 | `needs.trust` | no | variables that must name the CA bundle for those programs (`REQUESTS_CA_BUNDLE` for Python tools, `NODE_EXTRA_CA_CERTS` for Node) |
 | `links` | no | `{<link type>: {"label", "type": <connection type>, "url": "https://.../{field}/{id}"}}`: `harness task link add <link type>:<id>` gives a task a chip that opens the item; `{id}` and the fields of the first connection of that type fill the address. The address may start with `{url}` (1.7.21): the connection's `url` field, or the type's default when it is left empty |
 | `mcp.tools` | no | `[{"pattern": <regular expression on the MCP tool's name>, "verb": read|write|exec|destroy}]`, first match wins: a read runs, a write or an exec makes Copilot ask the person, a destroy is refused |
@@ -52,7 +52,8 @@ Three words, used the same way on the board, in commands and in files:
 | `label` | yes | words for people |
 | `via` | no | `cli` (default: a program in the terminal) or `mcp` (an MCP server VS Code runs: no test, no `auth`; offered only where MCP is allowed) |
 | `fields` | yes for `cli` | `{field: {"label", "placeholder", "default", "optional"}}`: what one connection of this type is (`host`, `port`; `org`, `project`) |
-| `auth` | yes for `cli` | `{way in: {"identity", "label", ...}}`; `identity` is `env` (variables, `"env": {VAR: field}`), `netonly` (a Windows account held by the VS Code window), `keyfile`, `tool` (the program keeps its own sign-in; `"login"`: the command that signs in), or `token` (1.7.21: one secret, such as a personal access token; the form asks for it under the `label` of the auth entry, it is kept as `..._TOKEN`, and `"env": {VAR: "token"}` gives it to the program) |
+| `auth` | yes for `cli` | `{way in: {"identity", "label", ...}}`; `identity` is `env` (variables, `"env": {VAR: field}`), `netonly` (a Windows account held by the VS Code window), `keyfile`, `tool` (the program keeps its own sign-in; `"login"`: the command that signs in; one sign-in per program, shared by every connection of the type, kept as `HARNESS_TOOL_<PROGRAM>_USER` in `.env`), or `token` (1.7.21: one secret, such as a personal access token; the form asks for it under the `label` of the auth entry, it is kept as `..._TOKEN`, and `"env": {VAR: "token"}` gives it to the program) |
+| `auth.<way>.needs` | no | `["az"]` (1.7.37): programs this way in needs, checked only for a connection that uses it (ado: `signin` needs `az`, `token` needs nothing). Found or not is shown with the pack's own `needs.programs` |
 | `test` | yes for `cli` | the command that tests the way in, with `{field}` and `{auth}` (the way in's `args`); never `{password}`; `{conn}` is the name of the connection (1.7.21). Or `{"command": ..., "timeout": <seconds>}`: the test stops after `timeout` s (default 15; 60 for a type whose sign-in is a `tool` identity) |
 | `expect`, `denied`, `down` | no | patterns on the test's output: who it is (first group), not let in, no answer |
 | `cli` | for the gate | the programs (`["sqlcmd"]`); a Windows `.cmd` path is recognised |

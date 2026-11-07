@@ -65,10 +65,15 @@
   const chk = h("div", {class: "en-chk", "aria-live": "polite"}, body, legal);
   const go = h("button", {type: "button", class: "en-go", disabled: "disabled"}, h("span", null, t("board.enter.checking")), h("kbd", null, "↵"));
   const hint = h("div", {class: "en-cap en-hint"}, t("board.enter.hint"));
-  // A row of small labelled buttons at the bottom right (1.7.32; dock.js loads after this file, so DOCK is looked up when a button is pressed): the settings, the knowledge base, and what this company's agent can do (its Company tab). The dock's round buttons stay hidden here.
+  // The row of round buttons at the bottom right (1.7.32), left of the gear of shell.js (which is the first of the row: the settings): the book opens the knowledge base window, the list opens its Company tab (what the agent can do).
+  // Same look as the dock's buttons; the name is on hover only. dock.js loads after this file, so DOCK is looked up when a button is pressed.
   function tools() {
-    const one = (key, run) => { const b = h("button", {type: "button", class: "en-tool", title: t("board.enter.tool." + key + ".tip")}, t("board.enter.tool." + key)); b.addEventListener("click", run); return b; };
-    return h("div", {class: "en-tools"}, one("settings", () => location.assign("/setup")), one("kb", () => DOCK.kbWindow()), one("can", () => DOCK.kbWindow("company")));
+    const NS = "http://www.w3.org/2000/svg";
+    const icon = (path) => { const svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true"); for (const d of path) { const p = document.createElementNS(NS, "path"); p.setAttribute("d", d); svg.append(p); } return svg; };
+    const one = (key, path, run) => { const b = h("button", {type: "button", class: "en-tool", title: t("board.enter.tool." + key), "aria-label": t("board.enter.tool." + key)}, icon(path)); b.addEventListener("click", run); return b; };
+    return h("div", {class: "en-tools"},
+      one("can", ["M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"], () => DOCK.kbWindow("company")),
+      one("kb", ["M12 6.5C10.2 5 7.5 4.5 3.5 4.5v14c4 0 6.7.5 8.5 2 1.8-1.5 4.5-2 8.5-2v-14c-4 0-6.7.5-8.5 2z", "M12 6.5v14"], () => DOCK.kbWindow()));
   }
   const enter = h("div", {id: "enter", class: isTask ? "pending" : "", role: "dialog", tabindex: "-1", "aria-label": t("board.enter.label")},
     h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, chk, go, hint), tools());
@@ -564,7 +569,7 @@
 
   // Open VS Code: the person-only call that brings the window of this folder forward (the board's own `/api/open`). The line then says it is waiting.
   list.addEventListener("click", (event) => {  // the identities kept by Servers: pick them, then VS Code opens with them (1.7.10)
-    if (event.target.closest("[data-identities],.en-tool")) SERVERS.choose(() => { chk0.opened = Date.now(); setTimeout(poll, 1500); });  // VS Code opened with them: it is waited for, not blamed (1.7.19)
+    if (event.target.closest("[data-identities]")) SERVERS.choose(() => { chk0.opened = Date.now(); setTimeout(poll, 1500); });  // VS Code opened with them: it is waited for, not blamed (1.7.19)
   });
   list.addEventListener("click", (event) => {  // Check: the board looks at the connections now (1.7.19)
     const button = event.target.closest("[data-check]");

@@ -10,6 +10,23 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.20 (2026-11-07)
+
+### Added
+
+- **Tickets from the board.** The **New task** window has an optional **Link tickets** field (`ado:300100`, several allowed; a click on a type puts it in). On a task page, each linked ticket is a chip with an `×` to remove it, and **+ Link a ticket** adds one (it runs `harness task link add|remove`). The types offered come from the installed tool packs.
+- **A held call says what it does.** A connection type may give `say` (a sentence for the card: "Add a comment to ticket 7") and `body` (the text the call writes: a file of the task, or the text as written, also `--body @file`). The card shows the sentence, the text in a block of its own (up to 20000 characters, scrolling) and the raw command folded under **Raw command**. The `demotracker` sample has both (`comment <id> --file`, `--text`). Written in the [protocol](../.harness/contracts/toolpack/README.md).
+- **Requirement not finished.** While `REQ.md` still holds the template's `<...>` text, the task page marks it (the tab, and a line on the Requirement tab that names the sections), and the agent's next-step text says "finish it before you ask the person to confirm".
+- **Confirm requirement in every tier.** Once `REQ.md` is written and not confirmed, the page offers the button in any tier. Only a `full` task waits for it; the rule says a light or medium task needs no confirmation.
+- **Small ticket chores are Q&A tasks** (link, read, comment, change a field): no `REQ.md`, no plan; writes still go through the gate. `task close` says when a write is still held.
+- **A prompt that names a connection** now gets its fields (org, project, ...) and its tool pack's skills and program, not the type's test command.
+
+### Changed
+
+- **`harness servers`** is the old name of `harness connections`: it says so, then does the same.
+- **The held-call card** shows no environment label when the environment is `none`, and the copy button says **Copy the command**.
+- **An agent that waits for the answer to its question** (the ask tool) is not "at work" any more: the board says **waits for your answer**, and **Approve** and **Dismiss** of held calls work meanwhile. The page does not offer to "tell the agent" while it waits, and a chat that waits for input counts as not at work.
+
 ## 1.7.18 (2026-11-07)
 
 ### Added

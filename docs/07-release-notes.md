@@ -10,6 +10,18 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.24 (2026-11-07)
+
+### Fixed
+
+- **A question the agent waits on** has its full text on the pointer of the state pill (task head, board list), and every held call's card says that the agent waits for an answer, not only the first.
+- **An approved call keeps its green card** (and **Tell the agent to run it**) until the command has run, also after the agent answered a question or the page was loaded again; the server keeps that list now. On the Live tab such a call reads *Approved: ... waits for the agent*, and a held one *waits for you*, not "failed".
+- **VS Code started without this computer's settings**: the Enter screen's outside systems line says it in words (quit VS Code completely, then press **Open VS Code** here) instead of asking for accounts; the identities window no longer marks a connection "in the window" then.
+- **Connection names** in Tools, Connections keep their width; only a very long name is cut, and the address gives way first (the full text on hover).
+- **The Enter screen's list** has one width rule on every screen, so a wider window never shows fewer names than a narrower one; under 1100 px the pill goes above the list. The hover table on a narrow screen is a block per system, nothing cut at the right.
+- **Get ready, not ready**: the list scrolls in its own box and the copyright and version line stays in view.
+- Checked in a browser: after **Finish** in setup the board's orange banner counts the items still missing and "Company content" reads the copied files.
+
 ## 1.7.22 (2026-11-07)
 
 ### Fixed

@@ -169,6 +169,7 @@ If you'd rather not read docs, the board and the lessons above are enough.
 | [09 Preparing an intake](docs/09-intake.md) | [**Business documents as files the agent can read.**](docs/09-intake.md) Word and Excel to Markdown and CSV without AI, `INTAKE.md`, trimming, pasting a table, the review of the requirement |
 | [10 Skills](docs/10-skills.md) | [**Which skill is for what.**](docs/10-skills.md) All 32 skills sorted by who uses them: the ones you start, the ones the agent picks, the knowledge base ones |
 | [11 Tool calling check](docs/11-tool-calling-check.md) | [**Before the agent reaches outside systems.**](docs/11-tool-calling-check.md) A probe folder and a list of checks for your work computer: do hooks run, can an MCP server start, do MCP, extension and terminal calls reach a hook, can a hook refuse them |
+| [12 Guardrails and the gate](docs/12-guardrails-and-gate.md) | [**What the agent may do outside, and why.**](docs/12-guardrails-and-gate.md) A guardrail, not a sandbox: what passes, what waits for you, who answers (code, not the model), the two checkpoints and what comes next |
 
 ## Directory layout
 

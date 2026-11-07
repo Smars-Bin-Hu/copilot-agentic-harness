@@ -392,7 +392,7 @@
   "gate.external.denied": "这个对 {place}的调用被拒绝：那里不允许 {verb}。命令：{call}\n不要重试，也不要换个办法达到同样的结果。确实需要的话，停下来告诉用户原因：由用户决定。",
   "gate.external.human": "agent 不能直接运行这个对 {place}的调用：它是 {verb}，规则要求由人来做。命令：{call}\n把整条命令和用途告诉用户。在任务里，用 `{command} task handoff run{handoff_env} --what \"<要运行的内容>\"` 交给用户，结果会留下来。不要用别的办法运行。",
   "gate.external.task": "这个对 {place}的调用是 {verb}，只有在用户已批准计划的任务里才允许。命令：{call}\n用技能 `harness-my-task` 打开或继续一个任务，让 `PLAN.md` 获得批准，再运行。",
-  "gate.external.outbox": "这个对 {place}的调用是 {verb}，会出到这个仓库之外，所以要用户先批准。命令：{call}\n{where}用一两句话告诉用户这条命令做什么、为什么，请用户在任务页批准：这个调用的卡片上有命令，用户看清后输入验证码 {code}，再按 Approve。之后 {minutes} 分钟内，在这个会话里把完全相同的命令再运行一次。命令改了就要重新批准。不要自己运行 approve-action。",
+  "gate.external.outbox": "这个对 {place}的调用是 {verb}，会出到这个仓库之外，所以要用户先批准。命令：{call}\n{where}用一两句话告诉用户这条命令做什么、为什么，请用户在任务页批准：这个调用的卡片上有命令，用户看清后输入验证码 {code}，再按 Approve。之后 {minutes} 分钟内，在这个会话里把完全相同的命令再运行一次。命令改了就要重新批准。不要自己运行 approve-action，也不要换别的路达到同样的结果（别的程序、脚本、服务的网址）。",
   "gate.external.outbox_draft": "草稿在 {draft}。",
   "wait.next.timeout": "{seconds} 秒内没匹配。最后一次输出在 {out}。作业还在跑就再调一次 `harness wait`（一次一条，每条 10 分钟以内：更长的终端调用 VS Code 会交回给你，你就得自己轮询）；最后输出看着不对就说给用户听。不要重新启动作业。",
   "wait.next.matched": "输出匹配了。最后一次输出在 {out}：用 `task run record --run-by agent` 记下来并引用编号。",

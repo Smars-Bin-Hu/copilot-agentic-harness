@@ -12,6 +12,11 @@ To see which version you have: `harness --version`.
 
 ## 1.7.29 (2026-11-07)
 
+### Added
+
+- **[Guardrails and the gate](12-guardrails-and-gate.md)**: a page on why the gate is a guardrail and not a sandbox, what passes and what waits for you, why code answers and not the model, the two checkpoints, and the next steps (record each real write first, then let the tool pack's program check before it writes).
+- **A held call** now also tells the agent not to reach the same result another way (another program, a script, the service's web address).
+
 ### Fixed
 
 - **A held call with several writes** (`comment ...; update ...` in one line) says "2 writes" beside its title. In the green box of approved calls each code now stands in front of its own title. When the agent resends one write of it and the card is rewritten, "asked at" shows the new time.

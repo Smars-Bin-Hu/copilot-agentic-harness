@@ -94,7 +94,7 @@ task promote --dry-run -> you read the diff in the editor and approve in the ter
 task close -> the report is written by itself
 ```
 
-- **This "sandbox" is held by the rules of the gate**, not by isolation at the level of the operating system. Indirect spellings of terminal commands are not all stopped.
+- **This "sandbox" is held by the rules of the gate**, not by isolation at the level of the operating system. Indirect spellings of terminal commands are not all stopped. Why that is the choice, and what comes next: [Guardrails and the gate](12-guardrails-and-gate.md).
 - **Why both approvals happen in the terminal**: a confirmation box in the conversation can be switched off with "allow for this session"; a code in the terminal cannot.
 - **Why the content is read in the editor**: plans and diffs are hard to read in a terminal, so the terminal shows only the file path and the code.
 

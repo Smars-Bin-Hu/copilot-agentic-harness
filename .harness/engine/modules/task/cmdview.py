@@ -109,3 +109,74 @@ def facts(command: str, show: Optional[Dict[str, Any]]) -> Dict[str, str]:
         if match:
             out[str(name)] = (match.group(1) if match.groups() else match.group(0))[:120]
     return out
+
+
+# --- what a held call says in words, and the text it writes (1.7.20) ---------------------------------------------------------------------------------------
+
+BODY_CHARS = 20_000  # how much of the text a call writes is shown
+SAY_CHARS = 200
+
+
+def args_of(command: str, programs: Optional[List[str]] = None) -> str:
+    """What stands after the program of the command: the text the `say` and `body` patterns of a connection type read. The program is the first of `programs` (a name, a path or a Windows
+    `.cmd`) found as a whole word; with none found, the whole command."""
+    for program in programs or []:
+        found = re.search(rf"(?:^|[\s/\\=])({re.escape(program)})(?:\.cmd|\.bat|\.exe)?(?=\s|$)", command, re.IGNORECASE)
+        if found:
+            return command[found.end():].strip()
+    return command.strip()
+
+
+def say_of(args: str, rules: Optional[List[Dict[str, Any]]]) -> str:
+    """The one-line title of the card: the `text` of the first rule whose `pattern` matches, with `{1}`, `{2}`, ... filled from its groups. A group that did not match is empty; a pattern that
+    does not compile is skipped."""
+    for rule in rules or []:
+        try:
+            found = re.search(str(rule.get("pattern")), args, re.IGNORECASE)
+        except (re.error, AttributeError):
+            continue
+        if found:
+            groups = found.groups()
+            return re.sub(r"\{(\d+)\}", lambda part: (groups[int(part.group(1)) - 1] or "") if 0 < int(part.group(1)) <= len(groups) else "", str(rule.get("text") or ""))[:SAY_CHARS].strip()
+    return ""
+
+
+def _unescape(text: str) -> str:
+    return re.sub(r"\\(.)", r"\1", text)
+
+
+def body_of(args: str, rules: Optional[List[Dict[str, Any]]], folder: Optional[Path]) -> Optional[Dict[str, Any]]:
+    """The text the call writes: `{text, from, path?, lines, cut}` or None. For each rule in order: `file` reads the file the first group names, inside the task folder; `text` is the first group as
+    written (a `\\"` in it is a quote). A value that starts with `@` is a file too (`--body @notes.md`). A file that is not there gives `{from: "file", path, missing: true}`."""
+    for rule in rules or []:
+        try:
+            found = re.search(str(rule.get("pattern")), args, re.IGNORECASE)
+        except (re.error, AttributeError):
+            continue
+        if not found or not found.groups() or found.group(1) is None:
+            continue
+        value = found.group(1)
+        if rule.get("from") == "text" and not value.startswith("@"):
+            return _shown({"text": _unescape(value), "from": "text"})
+        path = value[1:] if value.startswith("@") else value
+        return _from_file(folder, path.strip("\"'"))
+    return None
+
+
+def _from_file(folder: Optional[Path], value: str) -> Dict[str, Any]:
+    gone = {"text": "", "from": "file", "path": value[:200], "missing": True, "lines": 0, "cut": False}
+    if folder is None or not value:
+        return gone
+    try:
+        path = (folder / value).resolve()
+        if folder.resolve() not in path.parents or not path.is_file():
+            return gone
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+    except (OSError, ValueError):
+        return gone
+    return _shown({"text": text, "from": "file", "path": value})
+
+
+def _shown(found: Dict[str, Any]) -> Dict[str, Any]:
+    text = found["text"]
+    return dict(found, text=text[:BODY_CHARS], lines=text.count("\n") + (1 if text and not text.endswith("\n") else 0), cut=len(text) > BODY_CHARS)

@@ -115,6 +115,12 @@ def evidence_pictures(folder: Path, env: str) -> List[str]:
         return []
 
 
+def call_words(command: str, system: Dict[str, Any], folder: Path) -> Dict[str, Any]:
+    """What a connection type says of its held calls (1.7.20): `say`, the title in words, and `body`, the text the call writes (inline, or read from a file in the task). Nothing when the type says none."""
+    args = cmdview.args_of(command, outside.clis(system))
+    return {"say": cmdview.say_of(args, system.get("say")), "body": cmdview.body_of(args, system.get("body"), folder)}
+
+
 def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
     """The calls of this task that wait for the person (1.7.7), oldest first, each with its facts (the pack's `show` patterns), the layout of its command and the file it reads, if any.
     The page draws a card for each; the code is in the draft's name too."""
@@ -128,6 +134,7 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
                 "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True),
                 "command": item["command"], "created_at": item.get("created_at", ""), "session_id": item.get("session_id", ""), "draft": outbox.draft_of(item).split("/", 4)[-1] if outbox.draft_of(item) else "",
                 "facts": cmdview.facts(item["command"], system.get("show")), "layout": cmdview.layout(item["command"], folder),
+                **call_words(item["command"], system, folder),
             })
         return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task

@@ -91,6 +91,18 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
     texts = [kind.get("test") or "", kind.get("match") or ""] + [str((auth or {}).get("args") or "") for auth in (kind.get("auth") or {}).values()]
     if any("{password}" in text for text in texts):
         out.append(f"types.{name}: a password never goes on a command line; give it through `env` of the auth")
+    for key in ("say", "body"):  # 1.7.20: what a held call's card says and shows
+        if kind.get(key) is not None and not isinstance(kind.get(key), list):
+            out.append(f"types.{name}.{key}: a list of rules")
+            continue
+        for index, rule in enumerate(kind.get(key) or []):
+            if not isinstance(rule, dict) or not rule.get("pattern") or (key == "say" and not rule.get("text")) or (key == "body" and rule.get("from") not in ("file", "text")):
+                out.append(f"types.{name}.{key}[{index}]: {'`pattern` and `text`' if key == 'say' else '`pattern` and `from` (file or text)'}")
+                continue
+            try:
+                re.compile(str(rule["pattern"]))
+            except re.error as error:
+                out.append(f"types.{name}.{key}[{index}]: bad pattern: {error}")
     for key in ("expect", "denied", "down", "match"):
         try:
             re.compile(_fill(kind.get(key) or "", {}, escape=True) if key == "match" else kind.get(key) or "")
@@ -250,7 +262,7 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
         for key in ("expect", "denied", "down"):
             if kind.get(key):
                 system["needs"][key] = kind[key]
-        for key in ("verbs", "target", "show", "rules"):
+        for key in ("verbs", "target", "show", "rules", "say", "body"):
             if server.get(key) if key == "rules" else kind.get(key):
                 system[key] = server[key] if key == "rules" and server.get(key) else kind[key]
         for key in ("toolpack", "openable", "item", "link"):

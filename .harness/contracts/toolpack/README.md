@@ -58,6 +58,8 @@ Three words, used the same way on the board, in commands and in files:
 | `verbs` | for the gate | `[{"pattern", "verb"}]`, first match wins; a command no pattern names is a write |
 | `rules` | no | `{env: {verb: decision}}`; decisions `allow`, `task`, `outbox`, `human`, `deny`; prod takes only rules written for prod |
 | `show` | no | `{fact: pattern}`: what a held call's card shows (server, ticket) |
+| `say` | no | `[{"pattern", "text"}]` (1.7.20): the title of a held call's card in words. `pattern` is a regular expression on the arguments after the program; the first match wins; `{1}`, `{2}` in `text` are its groups (`"Add a comment to work item {1}"`) |
+| `body` | no | `[{"pattern", "from"}]` (1.7.20): the text a held call writes, shown in a block of its own on the card. `pattern` is on the arguments after the program, its first group is the value; first rule that matches wins. `from: "file"`: the value is a file in the task folder, read whole (at most 20000 characters; a file that is not there is said so). `from: "text"`: the value as written (`\"` is a quote). A value that starts with `@` (`--body @notes.md`) is a file under either. With `say` or `body`, the card folds the raw command under **Raw command** |
 | `openable` | no | `true` lets **Open to the agent** open it; a tool pack's connections stay closed otherwise |
 | `item` | no | a pattern on the whole command line whose first group is the id of the item a write names (`\bado\s+(?:comment|update)\s+(\d+)`): such a write must name an item the task is linked to, else it is refused; with the task's **linked items** opened it runs without asking |
 | `link` | with `item` | the link type (`links` of `toolpack.json`) that names those items: `ado` for `ado:12345` |

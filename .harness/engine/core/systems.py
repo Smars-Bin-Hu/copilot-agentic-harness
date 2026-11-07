@@ -62,6 +62,14 @@ SYSTEMS_SCHEMA = {
             "target": {"type": "string"},
             "rules": {"type": "object", "additionalProperties": _RULE_SET},
             "show": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+            "say": {  # 1.7.20: `[{"pattern": <on the arguments after the program>, "text": "Add a comment to work item {1}"}]`: the first match is the one line a held call's card opens with
+                "type": "array",
+                "items": {"type": "object", "required": ["pattern", "text"], "properties": {"pattern": {"type": "string", "minLength": 1}, "text": {"type": "string", "minLength": 1}}},
+            },
+            "body": {  # 1.7.20: `[{"pattern": <first group is the value>, "from": "file"|"text"}]`: the text a held call writes, shown on its card (a file of the task, or the text as written)
+                "type": "array",
+                "items": {"type": "object", "required": ["pattern", "from"], "properties": {"pattern": {"type": "string", "minLength": 1}, "from": {"type": "string", "enum": ["file", "text"]}}},
+            },
             "toolpack": {"type": "string", "minLength": 1},  # 1.7.12: written by the harness for a system an installed tool pack brings
             "openable": {"type": "boolean"},
             "item": {"type": "string", "minLength": 1},  # 1.7.18: a pattern whose first group is the id of the item a write names (a work item)
@@ -102,7 +110,7 @@ def validate(systems: Any) -> List[str]:
             if program in owner:
                 errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}; give one of them a `when`")
             owner[program] = name
-        patterns = [("target", system.get("target") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or ""), ("needs.denied", (system.get("needs") or {}).get("denied") or ""), ("needs.down", (system.get("needs") or {}).get("down") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs") for index, item in enumerate(system.get(key) or [])]
+        patterns = [("target", system.get("target") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or ""), ("needs.denied", (system.get("needs") or {}).get("denied") or ""), ("needs.down", (system.get("needs") or {}).get("down") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs", "say", "body") for index, item in enumerate(system.get(key) or [])]
         for where, pattern in (item for item in patterns if item[1]):
             try:
                 re.compile(pattern)

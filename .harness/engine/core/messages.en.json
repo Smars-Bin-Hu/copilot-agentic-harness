@@ -1627,7 +1627,7 @@
   "desk.outbox.window": "The command the agent wants to run",
   "desk.outbox.copied": "Copied",
   "desk.steps.command": "Command",
-  "desk.outbox.copy": "Copy the query",
+  "desk.outbox.copy": "Copy the command",
   "desk.outbox.dismiss": "Dismiss",
   "desk.outbox.approved": "Approved",
   "desk.outbox.tell": "Tell the agent to run it",
@@ -3069,5 +3069,11 @@
   "connections.named.pack": ". Use the skill(s) of tool pack {toolpack}: {skills}. Its program is `{program}`; the skill says which command to run.",
   "connections.named.test": ". No tool pack skill is installed for it. Its test command shows the program and options: `{call}`. Change only what you need.",
   "connections.renamed": "`harness servers` is now `harness connections`. This old name still works.",
-  "connections.named.wrap": " Start every command with `harness as {alias} --`."
+  "connections.named.wrap": " Start every command with `harness as {alias} --`.",
+  "desk.outbox.raw": "Raw command",
+  "desk.outbox.body": "The text that will be written",
+  "desk.outbox.body.file": "from {path}",
+  "desk.outbox.body.lines": "{n} lines",
+  "desk.outbox.body.missing": "The file {path} is not in the task folder, so the text cannot be shown. Dismiss this call and ask the agent to write the file first, or read the raw command.",
+  "desk.outbox.body.cut": "Only the first part is shown here; the file is longer."
 }

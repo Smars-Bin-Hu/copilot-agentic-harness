@@ -1124,13 +1124,26 @@
   function callFacts(item) {
     const fact = (label, value, hot) => (value ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), hot ? tag(value, "hot") : h("code", null, value)) : null);
     return h("div", {class: "tk-call-facts"},
-      fact(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : item.verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), " ", tag(item.env, "hot")),
+      fact(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : item.verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), item.env && item.env !== "none" ? [" ", tag(item.env, "hot")] : null),
       ...Object.entries(item.facts || {}).map(([name, value]) => fact(name, value)),
       fact(t("desk.outbox.target"), item.target),
       item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t("desk.outbox.lines", {n: item.layout.script.lines}))) : null);
   }
+  // The card of a call whose type says what it does in words (1.7.20): the title is that sentence, and the text it writes stands in a block of its own (a file of the task, or the text as written).
+  // The raw command is folded: ids, headers and long addresses are not on the face of the card.
+  const sayLine = (item) => (item.say ? h("div", {class: "tk-call-say"}, item.say) : null);
+  function bodyBlock(item) {
+    const body = item.body;
+    if (!body) return null;
+    if (body.missing) return h("div", {class: "tk-call-body missing"}, h("p", {class: "bad"}, t("desk.outbox.body.missing", {path: body.path})));
+    return h("div", {class: "tk-call-body"},
+      h("div", {class: "tk-body-h"}, h("b", null, t("desk.outbox.body")), " ", h("span", {class: "sub"}, [body.path ? t("desk.outbox.body.file", {path: body.path}) : "", body.lines > 1 ? t("desk.outbox.body.lines", {n: body.lines}) : ""].filter(Boolean).join(" \u00b7 "))),
+      h("pre", {class: "tk-body-text", tabindex: "0"}, body.text), body.cut ? h("p", {class: "sub"}, t("desk.outbox.body.cut")) : null);
+  }
+  const rawFold = (item) => h("details", {class: "tk-raw"}, h("summary", null, t("desk.outbox.raw")), h("pre", {class: "cmd-script one"}, item.command));
   // What a person wants to copy out of a call is the body: the query in the quoted block, or the script the command reads; the command line itself only when there is neither.
   function callBody(item) {
+    if (item.body) return item.command;  // the text it writes is on the card; what Copy gives is the command itself
     const script = item.layout && item.layout.script;
     if (script && script.text) return script.text;
     const lines = item.layout ? item.layout.lines : [];
@@ -1145,8 +1158,9 @@
     const script = item.layout && item.layout.script;
     // The code, as a chip: a click copies it, puts it in the card's box and closes the window, so Approve is the next press.
     const codeChip = h("button", {type: "button", class: "ev code-chip", title: t("desk.outbox.code_tip")}, item.code);
-    const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), callFacts(item), h("p", {class: "sub"}, t("desk.outbox.asked", {at: item.created_at.slice(0, 16).replace("T", " ")}), " ", codeChip),
+    const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), sayLine(item), callFacts(item), h("p", {class: "sub"}, t("desk.outbox.asked", {at: item.created_at.slice(0, 16).replace("T", " ")}), " ", codeChip),
       h("div", {class: "win-body"},  // one scrolling body (both ways); the blocks in it scroll sideways only; the buttons stay in view
+        bodyBlock(item),
         h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)),
         script ? [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t("desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll flat"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)] : null,
         h("p", {class: "sub"}, t("desk.outbox.as_written")), h("div", {class: "cmd-scroll one"}, h("pre", {class: "cmd-script"}, item.command))),
@@ -1186,10 +1200,13 @@
     });
     arm();
     const peek = item.command.length > 110 ? item.command.slice(0, 110) + "…" : item.command;
+    const words = Boolean(item.say || item.body);  // the type says it in words: the card shows that and folds the command
     return h("section", {class: "tk-need strong tk-call", "data-action": "approve-action", "data-code": item.code},
       h("div", {class: "tk-need-h"}, tag(t("task.waiting.outbox"), "hot"), h("span", {class: "sub"}, t("desk.outbox.since", {at: item.created_at.slice(11, 16)}), item.draft ? [" · ", h("code", null, item.draft)] : null)),
+      sayLine(item),
       callFacts(item),
-      h("div", {class: "tk-cmd-peek"}, h("code", null, peek)),
+      bodyBlock(item),
+      words ? rawFold(item) : h("div", {class: "tk-cmd-peek"}, h("code", null, peek)),
       notes,
       h("div", {class: "tk-need-go tk-call-go"}, view, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), no, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));  // View first in the row: the eye goes View, code, Approve
   }

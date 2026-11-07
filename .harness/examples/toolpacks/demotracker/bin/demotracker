@@ -27,7 +27,9 @@ def main() -> int:
     parser.add_argument("--project", required=True)
     parser.add_argument("action", choices=["login", "whoami", "list", "get", "comment", "set-state", "delete"])
     parser.add_argument("rest", nargs="*")
-    args = parser.parse_args()
+    parser.add_argument("--file", help="comment: read the text from this file")
+    parser.add_argument("--text", help="comment: the text")
+    args = parser.parse_intermixed_args()
     args.project = args.project.upper()  # DEMO and demo are one project
     data = load()
     if args.action == "login":
@@ -52,7 +54,7 @@ def main() -> int:
         if args.action == "get":
             print(json.dumps(dict(ticket, id=args.rest[0]), indent=2))
         elif args.action == "comment":
-            ticket["comments"].append(" ".join(args.rest[1:]))
+            ticket["comments"].append(Path(args.file).read_text(encoding="utf-8") if args.file else args.text if args.text is not None else " ".join(args.rest[1:]))
         elif args.action == "set-state":
             ticket["state"] = " ".join(args.rest[1:])
         elif args.action == "delete":

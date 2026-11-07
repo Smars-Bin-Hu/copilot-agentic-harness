@@ -1627,7 +1627,7 @@
   "desk.outbox.window": "agent 要运行的命令",
   "desk.outbox.copied": "已复制",
   "desk.steps.command": "命令",
-  "desk.outbox.copy": "复制查询",
+  "desk.outbox.copy": "复制命令",
   "desk.outbox.dismiss": "作废",
   "desk.outbox.approved": "已批准",
   "desk.outbox.tell": "告诉 agent 去跑",
@@ -3069,5 +3069,11 @@
   "connections.named.pack": "。用 tool pack {toolpack} 的 skill：{skills}。它的程序是 `{program}`；skill 会说该跑哪条命令。",
   "connections.named.test": "。它没有装 tool pack 的 skill。它的测试命令能看到程序和参数：`{call}`。只改你需要的部分。",
   "connections.renamed": "`harness servers` 已改名为 `harness connections`。旧名字还能用。",
-  "connections.named.wrap": "每条命令前面加 `harness as {alias} --`。"
+  "connections.named.wrap": "每条命令前面加 `harness as {alias} --`。",
+  "desk.outbox.raw": "原始命令",
+  "desk.outbox.body": "将要写入的正文",
+  "desk.outbox.body.file": "来自 {path}",
+  "desk.outbox.body.lines": "{n} 行",
+  "desk.outbox.body.missing": "文件 {path} 不在任务文件夹里，所以看不到正文。可以先 Dismiss 这个调用，让 agent 先写好文件，或者看原始命令。",
+  "desk.outbox.body.cut": "这里只显示前一部分；文件更长。"
 }

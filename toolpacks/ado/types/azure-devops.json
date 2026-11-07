@@ -64,7 +64,22 @@
     "item": "\\b(?:item|comment|update|comments|history|links|attachments|link|unlink|attach)\\s+(\\d+)",
     "run": "\\b(?:run|why|log|artifacts|tests|changes|cancel|retry)\\s+(\\d+)",
     "pipeline": "\\b(?:pipeline|queue)\\s+(\\S+)",
-    "release": "\\b(?:release|deploy)\\s+(\\d+)"
+    "release": "\\b(?:release|deploy)\\s+(\\d+)",
+    "state": "\\bupdate\\b.*?(?<![\\w-])--state[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "title": "\\b(?:update|create)\\b.*?(?<![\\w-])--title[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "assign": "\\bupdate\\b.*?(?<![\\w-])--assign[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "tag": "\\b(?:update|create)\\b.*?(?<![\\w-])--tag[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "untag": "\\bupdate\\b.*?(?<![\\w-])--untag[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "field": "\\bupdate\\b.*?(?<![\\w-])--field[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "type": "\\bcreate\\b.*?(?<![\\w-])--type[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "parent": "\\bcreate\\b.*?(?<![\\w-])--parent[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "area": "\\b(?:update|create)\\b.*?(?<![\\w-])--area[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "iteration": "\\b(?:update|create)\\b.*?(?<![\\w-])--iteration[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "branch": "\\bqueue\\b.*?(?<![\\w-])--branch[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "param": "\\bqueue\\b.*?(?<![\\w-])--param[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "var": "\\bqueue\\b.*?(?<![\\w-])--var[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "env": "\\bdeploy\\b.*?(?<![\\w-])--env[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)",
+    "stage": "\\bretry\\b.*?(?<![\\w-])--stage[\\s=]+[\"']?((?<=\")[^\"]*|(?<=')[^']*|[^\\s\"']+)"
   },
   "rules": {
     "none": {
@@ -74,7 +89,10 @@
       "destroy": "deny"
     }
   },
-  "item": "\\bado(?:\\.cmd)?[\\\"']?\\s+(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:comment|update|link|unlink|attach)\\s+(\\d+)",
+  "item": [
+    "\\bado(?:\\.cmd)?[\\\"\\']?\\s+(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:comment|update|link|unlink|attach)\\s+(\\d+)",
+    "\\bado(?:\\.cmd)?[\\\"\\']?\\s+(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:link|unlink)\\b.*?--to[\\s=]+[\\\"\\']?(\\d+)"
+  ],
   "link": "ado",
   "say": [
     {

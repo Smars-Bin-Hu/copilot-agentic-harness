@@ -692,7 +692,7 @@ class LayoutTests(unittest.TestCase):
         local = {"core", "adapters", "modules", "doctor", "hook", "cli"}
         stdlib = {
             "__future__", "argparse", "ast", "bisect", "codecs", "signal", "winreg", "statistics", "base64", "csv", "zipfile", "collections", "contextlib", "copy", "ctypes", "dataclasses", "datetime", "difflib", "hashlib", "hmac", "html", "http", "importlib", "io", "secrets", "threading", "xml",
-            "json", "locale", "math", "msvcrt", "ntpath", "os", "pathlib", "pickle", "posixpath", "queue", "random", "re", "select", "shlex", "shutil", "socket", "ssl", "stat", "string", "struct", "subprocess", "sys", "tempfile", "time",
+            "concurrent", "json", "locale", "math", "msvcrt", "ntpath", "os", "pathlib", "pickle", "posixpath", "queue", "random", "re", "select", "shlex", "shutil", "socket", "ssl", "stat", "string", "struct", "subprocess", "sys", "tempfile", "time",
             "traceback", "typing", "unicodedata", "urllib", "uuid", "webbrowser",
         }
         for path in sorted(ENGINE.rglob("*.py")):

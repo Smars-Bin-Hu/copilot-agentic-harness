@@ -39,7 +39,7 @@ Three words, used the same way on the board, in commands and in files:
 | `description` | yes | one sentence for people |
 | `needs.programs` | no | programs it calls (`["az"]`): `toolpack check` and Get ready look for them on the PATH VS Code gets (tool folders first) |
 | `needs.trust` | no | variables that must name the CA bundle for those programs (`REQUESTS_CA_BUNDLE` for Python tools, `NODE_EXTRA_CA_CERTS` for Node) |
-| `links` | no | `{<link type>: {"label", "type": <connection type>, "url": "https://.../{field}/{id}"}}`: `harness task link add <link type>:<id>` gives a task a chip that opens the item; `{id}` and the fields of the first connection of that type fill the address |
+| `links` | no | `{<link type>: {"label", "type": <connection type>, "url": "https://.../{field}/{id}"}}`: `harness task link add <link type>:<id>` gives a task a chip that opens the item; `{id}` and the fields of the first connection of that type fill the address. The address may start with `{url}` (1.7.21): the connection's `url` field, or the type's default when it is left empty |
 | `mcp.tools` | no | `[{"pattern": <regular expression on the MCP tool's name>, "verb": read|write|exec|destroy}]`, first match wins: a read runs, a write or an exec makes Copilot ask the person, a destroy is refused |
 
 ## types/&lt;type&gt;.json
@@ -50,19 +50,23 @@ Three words, used the same way on the board, in commands and in files:
 | `label` | yes | words for people |
 | `via` | no | `cli` (default: a program in the terminal) or `mcp` (an MCP server VS Code runs: no test, no `auth`; offered only where MCP is allowed) |
 | `fields` | yes for `cli` | `{field: {"label", "placeholder", "default", "optional"}}`: what one connection of this type is (`host`, `port`; `org`, `project`) |
-| `auth` | yes for `cli` | `{way in: {"identity", "label", ...}}`; `identity` is `env` (variables, `"env": {VAR: field}`), `netonly` (a Windows account held by the VS Code window), `keyfile`, or `tool` (the program keeps its own sign-in; `"login"`: the command that signs in) |
-| `test` | yes for `cli` | the command that tests the way in, with `{field}` and `{auth}` (the way in's `args`); never `{password}`. Or `{"command": ..., "timeout": <seconds>}`: the test stops after `timeout` s (default 15; 60 for a type whose sign-in is a `tool` identity) |
+| `auth` | yes for `cli` | `{way in: {"identity", "label", ...}}`; `identity` is `env` (variables, `"env": {VAR: field}`), `netonly` (a Windows account held by the VS Code window), `keyfile`, `tool` (the program keeps its own sign-in; `"login"`: the command that signs in), or `token` (1.7.21: one secret, such as a personal access token; the form asks for it under the `label` of the auth entry, it is kept as `..._TOKEN`, and `"env": {VAR: "token"}` gives it to the program) |
+| `test` | yes for `cli` | the command that tests the way in, with `{field}` and `{auth}` (the way in's `args`); never `{password}`; `{conn}` is the name of the connection (1.7.21). Or `{"command": ..., "timeout": <seconds>}`: the test stops after `timeout` s (default 15; 60 for a type whose sign-in is a `tool` identity) |
 | `expect`, `denied`, `down` | no | patterns on the test's output: who it is (first group), not let in, no answer |
 | `cli` | for the gate | the programs (`["sqlcmd"]`); a Windows `.cmd` path is recognised |
 | `match` | for the gate | how a command names one connection, with `{field}` (`-S\\s+{host}`) |
 | `verbs` | for the gate | `[{"pattern", "verb"}]`, first match wins; a command no pattern names is a write |
-| `rules` | no | `{env: {verb: decision}}`; decisions `allow`, `task`, `outbox`, `human`, `deny`; prod takes only rules written for prod |
+| `rules` | no | `{env: {verb: decision}}`; decisions `allow`, `task`, `outbox`, `human`, `deny`; prod takes only rules written for prod. The connection's own `rules` win over the type's (1.7.21). An `exec` set to `outbox` is held like a write and approved on the card |
 | `show` | no | `{fact: pattern}`: what a held call's card shows (server, ticket) |
 | `say` | no | `[{"pattern", "text"}]` (1.7.20): the title of a held call's card in words. `pattern` is a regular expression on the arguments after the program; the first match wins; `{1}`, `{2}` in `text` are its groups (`"Add a comment to work item {1}"`) |
 | `body` | no | `[{"pattern", "from"}]` (1.7.20): the text a held call writes, shown in a block of its own on the card. `pattern` is on the arguments after the program, its first group is the value; first rule that matches wins. `from: "file"`: the value is a file in the task folder, read whole (at most 20000 characters; a file that is not there is said so). `from: "text"`: the value as written (`\"` is a quote). A value that starts with `@` (`--body @notes.md`) is a file under either. With `say` or `body`, the card folds the raw command under **Raw command** |
 | `openable` | no | `true` lets **Open to the agent** open it; a tool pack's connections stay closed otherwise |
-| `item` | no | a pattern on the whole command line whose first group is the id of the item a write names (`\bado\s+(?:comment|update)\s+(\d+)`): such a write must name an item the task is linked to, else it is refused; with the task's **linked items** opened it runs without asking |
+| `item` | no | a pattern whose first group is the id of the item a write names (`\bado\s+(?:comment|update)\s+(\d+)`). It is matched on one command from its program on, and must match from the program's first word (1.7.21: a command line of several commands is judged one command at a time; words after the program, such as a title, name no item): such a write must name an item the task is linked to, else it is refused; with the task's **linked items** opened it runs without asking |
 | `link` | with `item` | the link type (`links` of `toolpack.json`) that names those items: `ado` for `ado:12345` |
+
+## What the harness gives a connection's test and probe (1.7.21)
+
+When the harness runs a connection's `test` or probe (the board's Test, Enter, `connections test`), also for a connection that is not saved yet, the program finds in its environment `HARNESS_CONNECTION_<NAME>_<FIELD>` for each non-secret field (a field left empty has the type's default) and the identity as `_USER`, `_PASSWORD`, `_TOKEN` (and `_KEYFILE`). `NAME` is the connection's name in capitals, `-` as `_`. Two connections with the same organization and project are told apart by `{conn}` in the test command.
 
 ## MCP: optional, never required
 

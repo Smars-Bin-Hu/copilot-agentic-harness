@@ -103,6 +103,15 @@ class HeldCallCard(TaskCase):
         card = self.held('demotracker --project DEMO comment 7 --text "PR \\"12\\" merged"')
         self.assertEqual(card["body"], dict(card["body"], text='PR "12" merged', **{"from": "text"}))
 
+    def test_a_path_from_the_repository_root_and_a_full_path_are_found_and_a_line_break_in_text_is_one(self) -> None:
+        relative = self.task.relative_to(self.root).as_posix() + "/notes.md"  # the agent's terminal starts at the repository root
+        card = self.held(f"demotracker --project DEMO comment 7 --file {relative}")
+        self.assertEqual((card["body"].get("missing"), card["body"]["lines"]), (None, 2))
+        card = self.held(f"demotracker --project DEMO comment 7 --file {self.task / 'notes.md'}")
+        self.assertEqual((card["body"].get("missing"), card["body"]["lines"]), (None, 2))
+        card = self.held('demotracker --project DEMO comment 7 --text "one\\ntwo \\"q\\""')
+        self.assertEqual(card["body"]["text"], 'one\ntwo "q"')
+
     def test_a_file_that_is_not_in_the_task_is_marked_not_read(self) -> None:
         card = self.held("demotracker --project DEMO comment 7 --file ../../outside.md")
         self.assertTrue(card["body"]["missing"])

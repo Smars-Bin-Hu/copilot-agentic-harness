@@ -314,6 +314,27 @@ class McpTools(ToolpackCase):
 from taskcase import NAME, TASK, TaskCase  # noqa: E402
 
 
+class LinkAddress(TaskCase):
+    """1.7.21: the address of a link may use `{url}`, the server address field of the connection, with the type's default when it is left empty."""
+
+    def test_url_is_the_connection_field_or_the_types_default(self) -> None:
+        from modules.task import taskdesk, tasklife
+
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        source = make(Path(holder.name) / "tracker", links={"trk": {"label": "Ticket", "type": "tracker", "url": "{url}/{org}/item/{id}"}})
+        kind = dict(KIND, fields={"org": {"label": "Org"}, "url": {"label": "Address", "default": "https://tracker.example.org", "optional": True}})
+        (source / "types" / "tracker.json").write_text(json.dumps(kind), encoding="utf-8")
+        toolpacks.add(self.root, str(source))
+        self.new()
+        tasklife.link(self.root, NAME, "trk:42", True)
+        policy = self.root / ".harness/policies/connections.company.json"
+        policy.write_text(json.dumps({"connections": {"board": {"type": "tracker", "env": "none", "org": "demo"}}}), encoding="utf-8")
+        self.assertEqual(taskdesk.links_view(self.root, self.data())[0]["url"], "https://tracker.example.org/demo/item/42")
+        policy.write_text(json.dumps({"connections": {"board": {"type": "tracker", "env": "none", "org": "demo", "url": "https://other.example.org"}}}), encoding="utf-8")
+        self.assertEqual(taskdesk.links_view(self.root, self.data())[0]["url"], "https://other.example.org/demo/item/42")
+
+
 class TaskLinks(TaskCase):
     """1.7.15: a task names an item of an outside tool; the tool pack of its type gives the address; after close the agent may only offer to update it."""
 

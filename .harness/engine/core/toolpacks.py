@@ -107,7 +107,7 @@ def problems(root: Path, folder: Path) -> List[str]:
         except (OSError, ValueError, AttributeError) as error:
             out.append(f"{MCP_FILE}: {error}")
     links = found.get("links") or {}
-    if not isinstance(links, dict) or any(not re.match(r"^[a-z][a-z0-9]{0,15}$", str(key)) or not isinstance(spec, dict) or not str(spec.get("url") or "").startswith("https://") for key, spec in links.items()):
+    if not isinstance(links, dict) or any(not re.match(r"^[a-z][a-z0-9]{0,15}$", str(key)) or not isinstance(spec, dict) or not str(spec.get("url") or "").startswith(("https://", "{url}")) for key, spec in links.items()):
         out.append(say("toolpack.links.bad"))
     for index, rule in enumerate((mcp.get("tools") or []) if isinstance(mcp, dict) else []):
         try:
@@ -238,7 +238,8 @@ def link_view(root: Path, ref: str) -> Dict[str, str]:
             continue
         out.update(label=str(spec.get("label") or ""), toolpack=name)
         server = next((one for one in connections.listed(root).values() if one.get("type") == spec.get("type")), {})
-        values = {**{key: str(value) for key, value in server.items() if isinstance(value, (str, int))}, "id": out["id"]}
+        defaults = {field: str(item.get("default")) for field, item in ((connections.types(root).get(str(spec.get("type"))) or {}).get("fields") or {}).items() if isinstance(item, dict) and item.get("default")}  # a field left empty has the type's default: `{url}` is the server address (1.7.21)
+        values = {**defaults, **{key: str(value) for key, value in server.items() if isinstance(value, (str, int)) and value != ""}, "id": out["id"]}
         url = re.sub(r"\{(\w+)\}", lambda part: values.get(part.group(1), "\0"), str(spec.get("url") or ""))
         if url.startswith("https://") and "\0" not in url:  # every field was there: a link that would go to a wrong place is not drawn
             out["url"] = url

@@ -39,6 +39,8 @@ const TOOLS = (function () {
       body.scrollTop = 0;
     }
     close.addEventListener("click", view.close);
+    let tallest = 0;  // the window is centred: a tab shorter or taller than the one before made it jump. The body keeps the tallest height seen in this window (1.7.26).
+    if (typeof ResizeObserver === "function") new ResizeObserver(() => { if (body.offsetHeight > tallest) { tallest = body.offsetHeight; body.style.minHeight = Math.max(0, Math.min(tallest, innerHeight - 232)) + "px"; } }).observe(body);
     show(at);
     repaint();
     if (done) { const watch = setInterval(() => { if (!view.box.isConnected) { clearInterval(watch); done(); } }, 400); }

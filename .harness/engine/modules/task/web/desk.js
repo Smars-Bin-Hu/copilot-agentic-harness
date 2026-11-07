@@ -1225,7 +1225,7 @@
     const peek = item.command.length > 110 ? item.command.slice(0, 110) + "…" : item.command;
     const words = Boolean(item.say || item.body);  // the type says it in words: the card shows that and folds the command
     return h("section", {class: "tk-need strong tk-call", "data-action": "approve-action", "data-code": item.code},
-      h("div", {class: "tk-need-h"}, tag(t("task.waiting.outbox"), "hot"), h("span", {class: "sub"}, t("desk.outbox.since", {at: when(item.created_at, 11, 16)}), item.draft ? [" · ", h("code", null, item.draft)] : null)),
+      h("div", {class: "tk-need-h"}, tag(t("task.waiting.outbox"), "hot"), h("span", {class: "sub", title: item.draft ? t("desk.outbox.draft.tip", {file: item.draft}) : null}, t("desk.outbox.since", {at: when(item.created_at, 11, 16)}))),  // the draft's file name is on hover, not on the card (1.7.26)
       sayLine(item),
       callFacts(item),
       bodyBlock(item),

@@ -161,7 +161,10 @@ const REPLY = (function () {
     if (hint.textContent !== now.hint) hint.textContent = now.hint;
     const state = stateNow(), live = liveNow();
     halt.hidden = state !== "busy" || !info.show;
-    back.hidden = !info.show || !live || !["busy", "idle", "input", "error"].includes(state) || !(live.items || []).some((item) => item.k === "me");
+    // Withdraw only when there is something to take back (1.7.26): a message nobody has answered yet (the agent is at work, stopped, asked, failed, or the chat idles with the message still the last line).
+    // After a finished answer the message stays: the person says the next thing instead.
+    const items = live ? live.items || [] : [], last = items.length ? items[items.length - 1] : null;
+    back.hidden = !info.show || !live || !["busy", "idle", "input", "error"].includes(state) || !items.some((item) => item.k === "me") || (state === "idle" && !(last && last.k === "me"));
     again.hidden = !info.show || !live || !live.retry;
     later.hidden = now.kind !== "steer";
     later.disabled = mine.busy || !box.value.trim() || files.reading();

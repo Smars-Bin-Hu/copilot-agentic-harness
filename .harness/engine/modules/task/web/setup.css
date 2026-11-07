@@ -56,7 +56,7 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .sv-plan{margin-top:8px}.sv-win .win-foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 .tl-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:4px 0 12px;overflow-x:auto}
 .tl-tab{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:13px;padding:7px 12px;border:0;border-bottom:2px solid transparent;background:none;color:var(--soft);cursor:pointer;white-space:nowrap}
-.tl-tab.on{color:var(--ink);border-bottom-color:var(--ink)}.tl-body{min-height:220px}
+.tl-tab.on{color:var(--ink);border-bottom-color:var(--ink)}.tl-body{min-height:220px}.dialog.tl-win .win-body.tl-body{min-height:min(600px,calc(100vh - 232px))}  /* the three tabs start at one height, so the centred window does not jump when the tab changes (1.7.26) */
 .tl-group{border:1px solid var(--line);border-radius:12px;padding:6px 14px 6px;margin:6px 0}.tl-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0 2px}
 .tl-row .su-line .act{margin-left:auto}
 .sv-grp{font-size:12px;color:var(--soft);margin:10px 0 2px}.sv-grp:first-child{margin-top:0}.sv-from{border-style:dashed}

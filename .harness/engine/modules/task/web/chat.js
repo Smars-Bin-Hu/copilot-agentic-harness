@@ -266,6 +266,8 @@ const CHAT = (function () {
     const source = h("select", {class: "send-body"});
     const links = h("input", {type: "text", class: "send-body new-links", maxlength: 400, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.links.ph")});  // tickets to link (1.7.20): `ado:300100`, several split by space or comma
     const linkKinds = h("div", {class: "chips new-link-types"});
+    const smallNote = h("p", {class: "sub new-small", hidden: "", role: "note"}, t("board.new.small"));  // tickets named, a short text, Kind Dev: a small errand is lighter as Q&A (1.7.26). Kind is not changed for the person.
+    const small = () => { const on = kind.value === "dev" && links.value.trim().length > 0 && text.value.trim().length < 140; if (smallNote.hidden === on) smallNote.hidden = !on; };
     const text = h("textarea", {rows: 5, class: "send-body", placeholder: t("board.new.text.ph"), maxlength: 5000});
     const said = h("div", {class: "bad"});
     const files = fileTray(text, said, () => sync());
@@ -293,7 +295,7 @@ const CHAT = (function () {
           h("div", {class: "new-grid"}, field(t("board.new.name"), name), field(t("board.new.kind"), kind)),
           field(t("board.new.source"), source), h("p", {class: "sub"}, t("board.new.source.hint")),
           h("div", {class: "new-field"}, h("span", {class: "sub label"}, t("board.new.kb")), kbBox),
-          h("div", {class: "new-field"}, h("span", {class: "sub label"}, t("board.new.links")), links, linkKinds, h("p", {class: "sub"}, t("board.new.links.hint"))),
+          h("div", {class: "new-field"}, h("span", {class: "sub label"}, t("board.new.links")), links, linkKinds, h("p", {class: "sub"}, t("board.new.links.hint")), smallNote),
           field(t("board.new.text"), text), h("div", {class: "new-files"}, files.attach, files.picker, files.tray),
           h("div", {class: "new-grid models"}, field(t("board.new.model"), model, "new-model"), field(t("board.new.thinking"), thinking), roomField, field(t("board.new.lang"), h("div", {class: "chips"}, langChips), "new-lang")),
           h("label", {class: "new-grill"}, grill, h("span", null, t("board.new.grill"))), h("p", {class: "sub"}, t("board.new.fixed"))),
@@ -325,6 +327,7 @@ const CHAT = (function () {
     }
     const keepPick = () => remember({id: model.value, thinking: thinking.value, context: sizes.chosen()});
     function refresh() {
+      small();
       clearTimeout(state.timer);
       state.timer = setTimeout(() => {
         ask("/api/create", body("preview")).then((found) => {

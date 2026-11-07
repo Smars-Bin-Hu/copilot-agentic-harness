@@ -65,8 +65,13 @@
   const chk = h("div", {class: "en-chk", "aria-live": "polite"}, body, legal);
   const go = h("button", {type: "button", class: "en-go", disabled: "disabled"}, h("span", null, t("board.enter.checking")), h("kbd", null, "↵"));
   const hint = h("div", {class: "en-cap en-hint"}, t("board.enter.hint"));
+  // A row of small labelled buttons at the bottom right (1.7.32; dock.js loads after this file, so DOCK is looked up when a button is pressed): the settings, the knowledge base, and what this company's agent can do (its Company tab). The dock's round buttons stay hidden here.
+  function tools() {
+    const one = (key, run) => { const b = h("button", {type: "button", class: "en-tool", title: t("board.enter.tool." + key + ".tip")}, t("board.enter.tool." + key)); b.addEventListener("click", run); return b; };
+    return h("div", {class: "en-tools"}, one("settings", () => location.assign("/setup")), one("kb", () => DOCK.kbWindow()), one("can", () => DOCK.kbWindow("company")));
+  }
   const enter = h("div", {id: "enter", class: isTask ? "pending" : "", role: "dialog", tabindex: "-1", "aria-label": t("board.enter.label")},
-    h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, chk, go, hint));
+    h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, chk, go, hint), tools());
   document.body.append(enter);
   const stage = enter.querySelector(".en-stage");
   let open = true;
@@ -559,7 +564,7 @@
 
   // Open VS Code: the person-only call that brings the window of this folder forward (the board's own `/api/open`). The line then says it is waiting.
   list.addEventListener("click", (event) => {  // the identities kept by Servers: pick them, then VS Code opens with them (1.7.10)
-    if (event.target.closest("[data-identities]")) SERVERS.choose(() => { chk0.opened = Date.now(); setTimeout(poll, 1500); });  // VS Code opened with them: it is waited for, not blamed (1.7.19)
+    if (event.target.closest("[data-identities],.en-tool")) SERVERS.choose(() => { chk0.opened = Date.now(); setTimeout(poll, 1500); });  // VS Code opened with them: it is waited for, not blamed (1.7.19)
   });
   list.addEventListener("click", (event) => {  // Check: the board looks at the connections now (1.7.19)
     const button = event.target.closest("[data-check]");
@@ -584,9 +589,10 @@
   document.addEventListener("keydown", (event) => {
     if (!open || !shown || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
     if (typeof SHELL !== "undefined" && SHELL.isOpen()) return;  // the palette or the settings own the keys
+    if (document.body.classList.contains("has-dialog")) return;  // a window opened from the row of buttons owns the keys (1.7.32)
     if (["Shift", "Control", "Alt", "Meta", "Tab", "Escape", "CapsLock", "Dead", "Process"].includes(event.key) || /^F\d+$/.test(event.key)) return;
     const target = event.target;
-    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[data-open],[data-launch],[data-identities]")) return;
+    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[data-open],[data-launch],[data-identities],.en-tool")) return;
     if (tryEnter()) event.preventDefault();  // any key goes in, but only when everything is ready
   });
 

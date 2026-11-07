@@ -83,12 +83,12 @@ const DOCK = (function () {
       const wanted = search.value.toLowerCase().split(/\s+/).filter(Boolean);
       const hits = (item) => { const text = [item.label, item.name, item.about, item.hint].join(" ").toLowerCase(); return wanted.every((word) => text.includes(word)); };
       const shown = found.filter((item) => (!only || item.group === only || item.place.includes(only) || item.place.includes("all")) && hits(item));
-      const groups = [["own", (item) => item.own], ...["harness", "kb", "task"].map((key) => [key, (item) => !item.own && item.group === key])];
+      const groups = [["company", (item) => item.own && item.naming !== "pack"], ["pack", (item) => item.own && item.naming === "pack"], ...["harness", "kb", "task"].map((key) => [key, (item) => !item.own && item.group === key])];  // by the naming rule (core/skillgroups.py)
       list.replaceChildren(...groups.flatMap(([key, test]) => {
         const items = shown.filter(test);
         const out = items.length && !only ? [h("h3", null, t("dock.group." + key))] : [];  // a window of one part has its name as its title
         items.forEach((item, index) => {
-          if (key !== "own" && item.step && (!index || items[index - 1].step !== item.step)) out.push(h("h4", null, t("dock.step." + item.step)));
+          if (!["company", "pack"].includes(key) && item.step && (!index || items[index - 1].step !== item.step)) out.push(h("h4", null, t("dock.step." + item.step)));
           out.push(row(item));
         });
         return out;
@@ -198,7 +198,7 @@ const DOCK = (function () {
     const no = h("button", {type: "button", class: "act"}, t("board.new.close"));
     const age = h("span", {class: "sub kb-age"});
     const again = h("button", {type: "button", class: "act"}, t("dock.kb.refresh"));
-    const tabs = ["overview", "atlas", "domains", "lookup", "health"].map((key) => { const tab = h("button", {type: "button", class: "chip", "data-key": key}, t(key === "domains" ? "dock.kb.domains.tab" : "dock.kb." + key)); tab.addEventListener("click", () => show(key)); return tab; });
+    const tabs = ["overview", "atlas", "company", "domains", "lookup", "health"].map((key) => { const tab = h("button", {type: "button", class: "chip", "data-key": key}, t(key === "domains" ? "dock.kb.domains.tab" : "dock.kb." + key)); tab.addEventListener("click", () => show(key)); return tab; });
     const rebuild = h("span", {class: "kb-rebuild", hidden: ""});
     const alarm = h("p", {class: "bad kb-alarm", hidden: ""});  // outside the stage: a drawn view stays as it is
     const synced = h("section", {class: "kb-sync", hidden: ""});
@@ -433,15 +433,16 @@ const DOCK = (function () {
       painted = null;
       tabs.forEach((tab) => tab.classList.toggle("on", tab.dataset.key === key));
       view.box.classList.toggle("ka-open", key === "atlas");
-      stage.classList.remove("ka-stage");
+      stage.classList.remove("ka-stage", "co-stage");
+      COMPANYTAB.clear();
       age.textContent = "";
       alarm.hidden = true;
       again.hidden = key === "lookup";
       rebuild.hidden = true;
       stage.replaceChildren(h("p", {class: "sub"}, t("dock.kb.working")));
       if (key === "lookup") { lookup(); return; }
-      const op = key === "health" || key === "atlas" ? key : "status";
-      const paint = key === "health" ? health : key === "atlas" ? (found) => ATLAS.draw(stage, found) : key === "overview" ? overview : domains;
+      const op = ["health", "atlas", "company"].includes(key) ? key : "status";
+      const paint = key === "health" ? health : key === "atlas" ? (found) => ATLAS.draw(stage, found) : key === "company" ? (found) => COMPANYTAB.draw(stage, found, {goMap: () => show("atlas")}) : key === "overview" ? overview : domains;
       again.onclick = () => { clearTimeout(timer); load(op, paint, true); loadDetail(true); };
       load(op, paint, !asked.has(op));
       asked.add(op);

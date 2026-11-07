@@ -16,7 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List
 
-from . import skillcheck, targets, tasks
+from . import skillcheck, skillgroups, targets, tasks
 
 OPENS = ("chat", "task", "reply")
 PLACES = ("ask", "kb", "task", "all")
@@ -64,6 +64,7 @@ def skills(root: Path) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     folder = root / skillcheck.SKILLS_DIR
     company, prefix = targets.company_folder(root), skillcheck.company_prefix(root)
+    packs = skillgroups.active_packs(root)
     for path in sorted(folder.glob("*/SKILL.md")) if folder.is_dir() else []:
         try:
             fields, _body = skillcheck.frontmatter(path.read_text(encoding="utf-8"))
@@ -76,5 +77,6 @@ def skills(root: Path) -> List[Dict[str, Any]]:
                     "place": [place.strip() for place in fields.get("board-place", "all").split(",") if place.strip()], "kind": fields.get("board-kind", "") if fields.get("board-kind") in tasks.KINDS else "", "costly": fields.get("board-cost") == "high",
                     "hint": fields.get("argument-hint", ""), "own": path.parent.name.split("-")[0] not in ("harness", "generic"),
                     "group": fields.get("board-group") if fields.get("board-group") in GROUPS else "task", "order": int(fields["board-order"]) if fields.get("board-order", "").isdigit() else LAST, "step": fields.get("board-step") if fields.get("board-step") in STEPS else "",
+                    "naming": skillgroups.group(path.parent.name, prefix, packs)[0], "pack": skillgroups.group(path.parent.name, prefix, packs)[1],
                     "gone": bool(company and prefix and path.parent.name.startswith(prefix + "-") and not (company / "skills" / path.parent.name).is_dir())})
     return sorted(out, key=lambda item: (item["order"], item["name"]))

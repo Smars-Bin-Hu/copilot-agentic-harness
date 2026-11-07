@@ -497,7 +497,7 @@ def skill_plan(root: Path) -> Dict[str, Any]:
     """What `sync_skills` would do, from files only: `{put: [(final, files, origin folder, names)], keep: {pack: [names]}, drop: [(pack, name)], refused: [...], updated: [...]}`."""
     book = ledger(root)["packs"]
     prefix = skillcheck.effective_prefix(root)
-    plan: Dict[str, Any] = {"put": [], "same": [], "drop": [], "refused": [], "updated": [], "entries": {}}
+    plan: Dict[str, Any] = {"put": [], "same": [], "drop": [], "refused": [], "updated": [], "renamed": [], "entries": {}}
     plan["refused"] += [{"toolpack": name, "skill": name, "why": say("toolpack.clash", name=name)} for name in clashes(root)]
     on = active(root)
     for name, item in on.items():
@@ -516,6 +516,12 @@ def skill_plan(root: Path) -> Dict[str, Any]:
             got.append(final)
             (plan["same"] if have == files else plan["put"]).append((final, files, skill, name))
         plan["drop"] += [(name, gone) for gone in sorted(mine - set(got))]
+        for gone in sorted(mine - set(got)):  # a skill that only changed its company prefix is renamed, not dropped (1.7.35)
+            for skill in skills:
+                final = names[skill.name]
+                if final in got and final not in mine and (gone == skill.name or gone.endswith("-" + skill.name)):
+                    plan["renamed"].append({"toolpack": name, "from": gone, "to": final, "base": skill.name})
+                    break
         version = str(item["manifest"].get("version") or "")
         entry = {"source": item["source"], "version": version, "skills": sorted(got), "mcp": old.get("mcp") or []}
         if old.get("version") and str(old["version"]) != version:
@@ -532,7 +538,7 @@ def skill_plan(root: Path) -> Dict[str, Any]:
 
 def sync_skills(root: Path) -> Dict[str, Any]:
     """Put the skills of the active packs into `.github/skills/` and take back those of a pack no longer active (they go to the backup folder).
-    Returns `{put, removed, updated, refused, lines}`; `lines` are the sentences the board and doctor show."""
+    Returns `{put, removed, updated, refused, lines}` (and `renamed: [{toolpack, from, to}]` when a changed company prefix renamed skills); `lines` are the sentences the board and doctor show."""
     plan = skill_plan(root)
     book = ledger(root)
     put: List[str] = []
@@ -555,7 +561,15 @@ def sync_skills(root: Path) -> Dict[str, Any]:
         _write_ledger(root, new_book)
     gone = unknown_use(root)
     lines = clash_lines(root) + ([say("doctor.toolpacks.unknown", names=", ".join(gone))] if gone else []) + [say("toolpack.updated", name=item["toolpack"], old=item["from"], new=item["to"]) for item in plan["updated"]]
-    return {"put": put, "removed": removed, "updated": plan["updated"], "refused": plan["refused"], "unknown_use": gone, "lines": lines, **({"backup": str(backup)} if removed else {})}
+    renamed = [{"toolpack": item["toolpack"], "from": item["from"], "to": item["to"]} for item in plan["renamed"] if item["to"] in put or item["from"] in removed]
+    for pack in dict.fromkeys(item["toolpack"] for item in renamed):
+        rows = [item for item in plan["renamed"] if item["toolpack"] == pack]
+        stem = os.path.commonprefix([item["base"] for item in rows])
+        stem = stem[:stem.rfind("-") + 1] if "-" in stem else ""
+        old, new = rows[0]["from"], rows[0]["to"]
+        base = len(rows[0]["base"])
+        lines.append(say("toolpack.renamed", name=pack, old=old[:len(old) - base] + stem + "*", new=new[:len(new) - base] + stem + "*"))
+    return {"put": put, "removed": removed, "updated": plan["updated"], "refused": plan["refused"], "unknown_use": gone, "lines": lines, **({"renamed": renamed} if renamed else {}), **({"backup": str(backup)} if removed else {})}
 
 
 _CODE = re.compile(r"```.*?```|`[^`\n]+`", re.S)

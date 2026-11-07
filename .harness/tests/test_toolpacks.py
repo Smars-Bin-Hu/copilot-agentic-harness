@@ -1086,6 +1086,19 @@ class FactoryPacks(ToolpackCase):
         self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
         self.assertTrue((self.root / ".github/skills/acme-tracker-ticket").is_dir())
 
+    def test_a_changed_company_prefix_says_the_skills_were_renamed(self) -> None:
+        self.prefix("acme")
+        self.use("tracker")
+        toolpacks.sync_skills(self.root)
+        self.prefix("zeta")
+        done = toolpacks.sync_skills(self.root)
+        self.assertIn({"toolpack": "tracker", "from": "acme-tracker-ticket", "to": "zeta-tracker-ticket"}, done["renamed"])
+        self.assertIn("acme-tracker-ticket", done["removed"])
+        self.assertIn("zeta-tracker-ticket", done["put"])
+        self.assertEqual(len(done["lines"]), 1)
+        self.assertIn("acme-tracker-* → zeta-tracker-*", done["lines"][0])
+        self.assertNotIn("renamed", toolpacks.sync_skills(self.root), "again: nothing")
+
     def test_a_new_version_puts_the_skills_again_and_says_so(self) -> None:
         self.use("tracker")
         toolpacks.sync_skills(self.root)

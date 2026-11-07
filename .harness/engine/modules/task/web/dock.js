@@ -217,9 +217,9 @@ const DOCK = (function () {
       }, () => { serversRow.hidden = true; });
     }
     function serverChip(row) {
-      const env = (row.env || "").toUpperCase(), where = Object.values(row.fields || {}).filter(Boolean).join(", ");
-      const tip = [`${row.alias}: ${env} · ${row.type_label || row.type}`, where ? t("dock.connections.where", {where}) : "", t(row.own ? "dock.connections.own" : "dock.connections.company"), t(row.saved ? "dock.connections.saved" : "dock.connections.unsaved")].filter(Boolean).join("\n");
-      const chip = h("span", {class: "kb-sv" + (row.own ? " own" : ""), title: tip, tabindex: "0"}, h("i", {class: "kb-sv-dot"}), h("span", null, row.alias), h("em", null, env));
+      const env = row.env && row.env !== "none" ? row.env.toUpperCase() : "", where = Object.values(row.fields || {}).filter(Boolean).join(", ");
+      const tip = [`${row.alias}: ${env ? env + " · " : ""}${row.type_label || row.type}`, where ? t("dock.connections.where", {where}) : "", t(row.own ? "dock.connections.own" : "dock.connections.company"), t(row.saved ? "dock.connections.saved" : "dock.connections.unsaved")].filter(Boolean).join("\n");
+      const chip = h("span", {class: "kb-sv" + (row.own ? " own" : ""), title: tip, tabindex: "0"}, h("i", {class: "kb-sv-dot"}), h("span", null, row.alias), env ? h("em", null, env) : null);
       if (!row.own || !hasCompany) return chip;
       const up = h("button", {type: "button", class: "kb-sv-up", title: t("dock.connections.share.tip"), "aria-label": t("dock.connections.share.tip")}, "\u21ea");
       up.addEventListener("click", () => shareWindow(row));
@@ -227,7 +227,7 @@ const DOCK = (function () {
       return chip;
     }
     function shareWindow(row) {  // what goes in the pack, shown before it is written: the server's fields, no account, no password
-      const lines = [["type", row.type_label || row.type], ["env", (row.env || "").toUpperCase()], ["auth", row.auth_label || row.auth], ...Object.entries(row.fields || {}).filter(([, value]) => value)];
+      const lines = [["type", row.type_label || row.type], ["env", row.env && row.env !== "none" ? row.env.toUpperCase() : ""], ["auth", row.auth_label || row.auth], ...Object.entries(row.fields || {})].filter(([, value]) => value);
       const note = h("p", {class: "su-note"});
       const go = h("button", {type: "button", class: "act hot"}, t("dock.connections.share.go"));
       const no = h("button", {type: "button", class: "act"}, t("board.new.close"));

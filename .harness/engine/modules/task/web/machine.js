@@ -159,7 +159,7 @@ const MACHINE = (function () {
     path.addEventListener("keydown", (event) => { if (event.key === "Enter") install.click(); });
     paint();
     return {body: [h("p", {class: "sub"}, t("machine.conn.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.conn.lead.tip")}, "\u24d8")), list,
-      h("h3", {class: "mc-h"}, t("machine.conn.install.title")), h("div", {class: "su-line mc-install"}, path, install), said, h("p", {class: "sub"}, t("machine.conn.add"))], foot: []};
+      h("h3", {class: "mc-h"}, t("machine.conn.install.title"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.conn.add")}, "\u24d8")), h("div", {class: "su-line mc-install"}, path, install), said], foot: []};
   }
 
   function toolpacksSummary() {

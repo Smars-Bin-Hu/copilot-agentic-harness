@@ -61,7 +61,8 @@
   const list = h("ul", {class: "en-chk-l"});
   const errLine = h("p", {class: "en-err", role: "status", hidden: "hidden"});
   const legal = h("p", {class: "en-legal"}, t("board.enter.legal", {copyright: t("board.copyright"), version: DATA.serve.version || ""}));
-  const chk = h("div", {class: "en-chk", "aria-live": "polite"}, head, list, errLine, legal);
+  const body = h("div", {class: "en-chk-body"}, head, list, errLine);  // the lines scroll here; the legal line below it stays in view (1.7.24)
+  const chk = h("div", {class: "en-chk", "aria-live": "polite"}, body, legal);
   const go = h("button", {type: "button", class: "en-go", disabled: "disabled"}, h("span", null, t("board.enter.checking")), h("kbd", null, "↵"));
   const hint = h("div", {class: "en-cap en-hint"}, t("board.enter.hint"));
   const enter = h("div", {id: "enter", class: isTask ? "pending" : "", role: "dialog", tabindex: "-1", "aria-label": t("board.enter.label")},
@@ -487,7 +488,8 @@
   function fitList() {  // a short window: the list scrolls inside the room under the wordmark instead of running into it
     const wr = svg.getBoundingClientRect();
     if (!wr.height) return;
-    const room = Math.max(150, innerHeight - (wr.bottom + 16) - 44);
+    const stacked = matchMedia("(max-width:1100px)").matches;  // the pill is above the list then (enter.css)
+    const room = Math.max(150, innerHeight - (wr.bottom + 16) - 44 - (stacked ? go.offsetHeight + 14 : 0));
     const value = Math.round(room) + "px";
     if (chk.style.getPropertyValue("--chk-max") !== value) chk.style.setProperty("--chk-max", value);
   }

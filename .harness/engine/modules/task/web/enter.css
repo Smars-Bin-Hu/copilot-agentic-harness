@@ -68,7 +68,9 @@ html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; 
 
 /* the bottom: the readiness list, the Enter pill, the hint */
 .en-foot{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:end;column-gap:20px;padding:0 32px 44px;z-index:3}  /* clear of the copyright line at the foot */
-.en-chk{justify-self:start;width:min(clamp(420px,36vw,520px),100%);max-height:var(--chk-max,60vh);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:6px;font:12px/1.45 var(--mono);color:var(--en-cap);scrollbar-width:thin}
+.en-chk{justify-self:start;width:min(clamp(420px,40vw,560px),100%);max-height:var(--chk-max,60vh);display:flex;flex-direction:column;font:12px/1.45 var(--mono);color:var(--en-cap)}  /* one width rule for every screen: a wider window never shows less (1.7.24) */
+.en-chk-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:6px;scrollbar-width:thin}
+.en-chk .en-legal{flex:none}
 .en-chk-h{display:flex;align-items:center;gap:9px;margin-bottom:9px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;font-size:11px;color:var(--en-cap)}
 html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5px}
 .en-chk-h i{flex:none;width:7px;height:7px;border-radius:50%;background:var(--soft)}
@@ -110,7 +112,7 @@ html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
 /* a short window: the wordmark rises and the list takes the room under it (enter.js sets --chk-max from where the wordmark ends) */
 @media (max-height:760px){.en-stage{padding-bottom:26vh}.en-chk{font-size:11.5px}.en-chk-h{margin-bottom:6px}.en-chk-l{gap:1px}.en-chk-l .m{padding:5px 9px;font-size:11.5px;line-height:1.4;margin-bottom:4px}.en-foot{padding-bottom:38px}}
 @media (max-height:600px){.en-stage{padding-bottom:27vh}}
-@media (max-width:760px){.en-foot{grid-template-columns:minmax(0,1fr);row-gap:14px;justify-items:center}.en-chk{justify-self:stretch;width:auto}.en-hint{justify-self:center;text-align:center;padding-right:0}.en-go{order:-1}}
+@media (max-width:1100px){.en-foot{grid-template-columns:minmax(0,1fr);row-gap:14px;justify-items:center}.en-chk{justify-self:start}.en-hint{justify-self:center;text-align:center;padding-right:0}.en-go{order:-1}}  /* too narrow for the list, the pill and the hint in a row (1.7.24) */
 
 /* the intro, under 1.5 s: the letters rise one by one, the light comes in, the list lights up */
 #enter.intro .en-word .lg{animation:enrise .75s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i)*70ms + 60ms)}
@@ -142,4 +144,8 @@ html.lite #en-fx{display:none}
 .en-pop table{border-collapse:collapse;width:100%}.en-pop th{position:sticky;top:0;background:var(--card);text-align:left;font-weight:600;color:var(--soft);padding:5px 10px 4px 0;white-space:nowrap}
 .en-pop td{padding:4px 10px 4px 0;vertical-align:top}.en-pop tr.first td{border-top:1px solid var(--line)}.en-pop tbody tr.first:first-child td{border-top:0}
 .en-pop .sy-n{font-weight:600;overflow-wrap:anywhere;max-width:200px}.en-pop .sy-e{white-space:nowrap}.en-pop .sy-s{white-space:nowrap}.en-pop .sy-s .sy-d{margin-right:6px}.en-pop .sy-r{overflow-wrap:anywhere;min-width:120px;max-width:260px}.en-pop .sy-t,.en-pop .sy-p{white-space:nowrap;color:var(--soft)}
-@media (max-width:760px){.en-pop{font-size:11.5px}.en-pop .sy-n,.en-pop .sy-r{overflow-wrap:break-word;word-break:normal}.en-pop .sy-n{min-width:8ch}}
+@media (max-width:760px){.en-pop{font-size:11.5px;width:calc(100vw - 16px)}
+ .en-pop table,.en-pop tbody{display:block}.en-pop thead{display:none}  /* a block for each system: nothing is cut at the right, nothing to scroll sideways (1.7.24) */
+ .en-pop tr{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 12px;padding:5px 0;border-top:1px solid var(--line)}.en-pop tr.first{border-top:1px solid var(--line)}.en-pop tbody tr.first:first-child{border-top:0}
+ .en-pop td,.en-pop tr.first td{display:block;padding:0;border:0}.en-pop .sy-n{order:1;max-width:100%}.en-pop .sy-e{order:2}.en-pop .sy-s{order:3}.en-pop .sy-r{order:5;flex:1 0 100%;min-width:0;max-width:none}.en-pop .sy-t{order:6}.en-pop .sy-p{order:7}.en-pop td:empty{display:none}
+ .en-pop-in{overflow-x:hidden}.en-pop .sy-n,.en-pop .sy-r{overflow-wrap:break-word;word-break:normal}.en-pop .sy-n{min-width:8ch}}

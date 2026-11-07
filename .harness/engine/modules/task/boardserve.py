@@ -608,7 +608,7 @@ class Board:
             noted(self.root, result.get("task") or task, action)
             return result
         if action == "task link":  # one click, no code: the person names an item of an outside tool in the task, or takes it away (1.7.20); the same function as `task link add|remove`
-            result = tasklife.link(self.root, task, str(env_name or ""), str(who or "") == "on")
+            result = tasklife.link(self.root, task, str(env_name or ""), str(who or "") == "on", by_person=True)
             noted(self.root, result.get("task") or task, action)
             return result
         if action == "test runner":  # one click, no code: the person lets the agent run an environment of the test guide, or takes it back (1.7.2)

@@ -552,7 +552,7 @@ class LinkedItems(TaskCase):
         holder = tempfile.TemporaryDirectory()
         self.addCleanup(holder.cleanup)
         source = make(Path(holder.name) / "tracker", links={"trk": {"label": "Ticket", "type": "tracker", "url": "https://tracker.example.org/{org}/item/{id}"}})
-        kind = dict(KIND, item="\\b(?:comment|update)\\s+(\\d+)", link="trk", verbs=KIND["verbs"] + [{"pattern": "\\b(?:create|update)\\b", "verb": "write"}])
+        kind = dict(KIND, item="\\btracker(?:\\s+--org\\s+\\S+)?\\s+(?:comment|update)\\s+(\\d+)", link="trk", verbs=KIND["verbs"] + [{"pattern": "\\b(?:create|update)\\b", "verb": "write"}])
         (source / "types" / "tracker.json").write_text(json.dumps(kind), encoding="utf-8")
         (source / "rules.json").unlink()
         toolpacks.add(self.root, str(source))
@@ -585,6 +585,81 @@ class LinkedItems(TaskCase):
         self.assertNotEqual(self.term("tracker --org demo get 7").get("permissionDecision"), "deny", "a read of any item: free")
         tasklife.set_allow(self.root, NAME, "links", False, interactive=True)
         self.assertEqual(self.term("tracker --org demo comment 42 hi")["permissionDecision"], "deny")
+
+    def open_links(self) -> None:
+        from modules.task import tasklife
+
+        tasklife.link(self.root, NAME, "trk:42", True)
+        tasklife.set_allow(self.root, NAME, "links", True, interactive=True)
+
+    def test_a_command_line_is_judged_one_command_at_a_time(self) -> None:
+        """1.7.21 (T2#1): the second command of a line was never looked at: another item, even a new one, went through behind a linked one."""
+        self.open_links()
+        ok = "tracker --org demo comment 42 hi"
+        self.assertEqual(self.term(ok + "; " + ok), {}, "all linked: through")
+        for glue in (";", "&&", "||", "|", "\n"):
+            other = self.term(f"{ok} {glue} tracker --org demo comment 7 hi")
+            self.assertEqual(other["permissionDecision"], "deny", glue)
+            self.assertIn("task link add", other["permissionDecisionReason"], glue)
+            held = self.term(f"{ok} {glue} tracker --org demo create --title x")
+            self.assertEqual(held["permissionDecision"], "deny", glue)
+            self.assertNotIn("task link add", held["permissionDecisionReason"], glue)
+        for nested in ('echo "$(tracker --org demo comment 7 hi)"', 'echo `tracker --org demo update 7 --state x`', f'{ok} --text "$(tracker --org demo comment 7 hi)"',
+                       'bash -c "tracker --org demo comment 7 hi"', 'eval "tracker --org demo comment 7 hi"'):
+            self.assertEqual(self.term(nested)["permissionDecision"], "deny", nested)
+        self.assertEqual(self.term(f"{ok}; cd ."), {}, "a command of no listed system beside it changes nothing")
+
+    def test_an_item_named_in_the_words_of_a_command_is_not_the_item_it_writes(self) -> None:
+        self.open_links()
+        decoy = self.term('tracker --org demo update 7 --description "tracker comment 42 x"')
+        self.assertEqual(decoy["permissionDecision"], "deny")
+        self.assertIn("task link add trk:7", decoy["permissionDecisionReason"])
+        self.assertEqual(self.term('tracker --org demo create --title "tracker comment 42 x"')["permissionDecision"], "deny")
+
+    def test_variables_set_in_the_line_are_put_in_and_what_cannot_be_read_is_held(self) -> None:
+        self.open_links()
+        self.assertEqual(self.term("A=tracker; $A --org demo comment 42 hi"), {})
+        self.assertIn("task link add trk:7", self.term("export A=tracker; $A --org demo comment 7 hi")["permissionDecisionReason"])
+        unknown = self.term("$A --org demo comment 42 hi")
+        self.assertEqual(unknown["permissionDecision"], "deny")
+        self.assertIn("看不出", unknown["permissionDecisionReason"])
+        self.assertNotIn("write ?", unknown["permissionDecisionReason"])
+        self.assertEqual(self.term("echo $HOME; ls"), {}, "a variable that is not a program is nothing")
+
+    def test_an_item_the_agent_links_while_the_items_are_open_is_not_opened(self) -> None:
+        """1.7.21 (T3#3): the refusal taught the agent to link the item itself, and the next write went through."""
+        from modules.task import tasklife
+
+        self.open_links()
+        tasklife.link(self.root, NAME, "trk:7", True)  # the agent's `harness task link add`
+        held = self.term("tracker --org demo comment 7 hi")
+        self.assertEqual(held["permissionDecision"], "deny")
+        self.assertNotIn("task link add", held["permissionDecisionReason"], "held for approval, not refused as unlinked")
+        self.assertEqual(self.term("tracker --org demo comment 42 hi"), {}, "the first one stays open")
+        tasklife.link(self.root, NAME, "trk:8", True, by_person=True)  # the person on the board
+        self.assertEqual(self.term("tracker --org demo comment 8 hi"), {})
+        tasklife.link(self.root, NAME, "trk:8", False)
+        self.assertEqual(self.term("tracker --org demo comment 8 hi")["permissionDecision"], "deny")
+        tasklife.set_allow(self.root, NAME, "links", False, interactive=True)
+        tasklife.set_allow(self.root, NAME, "links", True, interactive=True)  # opened again: the items named now
+        self.assertEqual(self.term("tracker --org demo comment 7 hi"), {})
+
+    def test_the_refusal_says_what_to_do_in_the_state_it_is_in(self) -> None:
+        from modules.task import tasklife
+
+        one = self.term("tracker --org demo comment 7 hi")["permissionDecisionReason"]
+        self.assertIn("`harness task link add trk:7`", one)
+        self.assertNotIn("--task", one.split("link add")[1][:20])
+        shutil.copytree(self.root / TASK, self.root / TASK.replace(NAME, "second"))  # a second open task
+        many = self.term("tracker --org demo comment 7 hi")["permissionDecisionReason"]
+        self.assertIn("--task", many)
+
+    def test_the_same_number_with_zeros_is_the_same_item(self) -> None:
+        from modules.task import tasklife
+
+        self.open_links()
+        self.assertEqual(self.term("tracker --org demo comment 0042 hi"), {})
+        self.assertEqual(tasklife.link(self.root, NAME, "trk:0042", True)["changed"], False)
 
     def test_the_task_page_offers_the_linked_items_chip_only_when_a_pack_can_scope_them(self) -> None:
         from modules.task import taskdesk, tasklife

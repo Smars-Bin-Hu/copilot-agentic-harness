@@ -383,7 +383,7 @@
   "gate.board.request": "拒绝：这是在请求端口 {port} 上的看板服务，它的按钮只属于用户。不要调用它。看板上有要改的，告诉用户。",
   "gate.terminal.denied": "这条终端命令被拒绝：{why}。不要重试同类命令。需要时，停下来告诉用户原因，由用户自己运行。",
   "gate.external.subagent": "你是 {agent} 子 agent：对外部系统只能读。这个对 {system}（{env}）的 {verb} 被拒绝，不论主 agent 被允许了什么：用户的放行不属于你。命令：{call}\n不要重试。按保存下来的输出判断，并在回答里写明你没能核对的部分。",
-  "gate.external.unlinked": "已拒绝：这条命令要写 {system} 的 {ref}，可这个任务没有关联它。任务只能写它关联的条目：用户要的就是这一个的话，先关联（`harness task link add {ref}`），再重跑。命令：{call}",
+  "gate.external.unlinked": "已拒绝：这条命令要写 {system} 的 {ref}，可这个任务没有关联它。任务只能写它关联的条目。用户要的就是这一个的话：{step}命令：{call}",
   "gate.external.denied": "这个对 {system}（{env}）的调用被拒绝：那里不允许 {verb}。命令：{call}\n不要重试，也不要换个办法达到同样的结果。确实需要的话，停下来告诉用户原因：由用户决定。",
   "gate.external.human": "agent 不能直接运行这个对 {system}（{env}）的调用：它是 {verb}，规则要求由人来做。命令：{call}\n把整条命令和用途告诉用户。在任务里，用 `{command} task handoff run --env <ENV> --what \"<要运行的内容>\"` 交给用户，结果会留下来。不要用别的办法运行。",
   "gate.external.task": "这个对 {system}（{env}）的调用是 {verb}，只有在用户已批准计划的任务里才允许。命令：{call}\n用技能 `harness-my-task` 打开或继续一个任务，让 `PLAN.md` 获得批准，再运行。",
@@ -3113,5 +3113,9 @@
   "desk.outbox.body.cut": "这里只显示前一部分；文件更长。",
   "task.waiting.asking": "等你回答",
   "desk.wait.asking": "agent 问了你一个问题，正在它在 VS Code 里的 chat 等你回答。请在那里回答。这期间可以批准或取消扣下的调用，不会打扰 agent。",
-  "desk.outbox.tell.asking": "agent 正在等你回答它的问题。请先在 chat 里回答；之后它就能运行已批准的命令（批准 {minutes} 分钟内有效）。"
+  "desk.outbox.tell.asking": "agent 正在等你回答它的问题。请先在 chat 里回答；之后它就能运行已批准的命令（批准 {minutes} 分钟内有效）。",
+  "gate.external.unlinked.none": "现在没有打开的任务。先用 skill `harness-my-task` 开一个 Q&A 任务，关联这一条（`harness task link add --task <任务> {ref}`），再重跑命令：之后这次写会等用户批准。",
+  "gate.external.unlinked.one": "先关联它（`harness task link add {ref}`），再重跑命令：之后这次写会等用户批准。",
+  "gate.external.unlinked.some": "先关联它（`harness task link add --task {task} {ref}`），再重跑命令：之后这次写会等用户批准。",
+  "gate.external.unseen": "这一行命令里有一段 gate 看不出跑的是什么程序（变量认不出，或字符串里的命令），所以扣下：它可能连到外部系统。把每条命令写清楚，程序名放在前面，一条一条运行。命令：{call}"
 }

@@ -383,7 +383,7 @@
   "gate.board.request": "Refused: this asks the board server on port {port}, and its buttons are the user's. Do not call it. If something on the board should change, tell the user.",
   "gate.terminal.denied": "This terminal command is refused: {why}. Do not retry with a command of the same kind. If it is needed, stop and tell the user why: the user runs it.",
   "gate.external.subagent": "You are the {agent} subagent: you may only read outside systems. This {verb} on {system} ({env}) is refused, whatever the main agent was allowed: the user's leave is not yours. Command: {call}\nDo not retry it. Judge by the saved output, and say in your answer what you could not check.",
-  "gate.external.unlinked": "Refused: this writes {ref} of {system}, and this task does not name it. A task writes only the items it is linked to: when the user means this one, link it first (`harness task link add {ref}`), then run it again. Command: {call}",
+  "gate.external.unlinked": "Refused: this writes {ref} of {system}, and this task does not name it. A task writes only the items it is linked to. If the user means this one: {step} Command: {call}",
   "gate.external.denied": "This call to {system} ({env}) is refused: the kind {verb} is not allowed there. Command: {call}\nDo not retry it, and do not look for another way to the same result. If it is needed, stop and tell the user why: the user decides.",
   "gate.external.human": "An agent cannot run this call to {system} ({env}) directly: its kind is {verb}, and the rules say a person does it. Command: {call}\nGive the user the whole command and what it is for. In a task, `{command} task handoff run --env <ENV> --what \"<what to run>\"` hands it over and keeps the result. Do not run it another way.",
   "gate.external.task": "This call to {system} ({env}) is of kind {verb}. It is allowed only in a task whose plan the user approved. Command: {call}\nOpen or continue a task with the skill `harness-my-task`, get `PLAN.md` approved, then run it.",
@@ -3113,5 +3113,9 @@
   "desk.outbox.body.cut": "Only the first part is shown here; the file is longer.",
   "task.waiting.asking": "waits for your answer",
   "desk.wait.asking": "The agent asked you a question and waits for your answer in its chat in VS Code. Answer it there. A held call can be approved or dismissed meanwhile; that does not disturb the agent.",
-  "desk.outbox.tell.asking": "The agent is waiting for your answer to its question. Answer it in the chat first; after that it can run the approved command (the approval lasts {minutes} minutes)."
+  "desk.outbox.tell.asking": "The agent is waiting for your answer to its question. Answer it in the chat first; after that it can run the approved command (the approval lasts {minutes} minutes).",
+  "gate.external.unlinked.none": "No task is open. Open a Q&A task first with the skill `harness-my-task`, link the item (`harness task link add --task <task> {ref}`), then run the command again: the write then waits for the user to approve it.",
+  "gate.external.unlinked.one": "link it (`harness task link add {ref}`), then run the command again: the write then waits for the user to approve it.",
+  "gate.external.unlinked.some": "link it (`harness task link add --task {task} {ref}`), then run the command again: the write then waits for the user to approve it.",
+  "gate.external.unseen": "This command line runs a program the gate cannot read the name of (a variable it cannot expand, or a command inside a string), so it is held: it may reach an outside system. Write each command out in plain words, with the program name in front, one at a time. Command: {call}"
 }

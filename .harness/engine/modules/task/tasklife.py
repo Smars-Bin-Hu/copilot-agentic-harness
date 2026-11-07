@@ -543,7 +543,9 @@ def _set_allow_links(root: Path, raw_task: str, on: bool) -> Dict[str, Any]:
         task_ops.require_open(data)
         before = bool(data.get(LINKS_KEY))
         if on:
-            data[LINKS_KEY] = {"at": utc_now()}
+            # the items named now are the ones opened (1.7.21): an item the agent links later is not, and its writes wait for the person as before
+            data[LINKS_KEY] = {"at": utc_now(),
+                               "refs": [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]}
         else:
             data.pop(LINKS_KEY, None)
         if before != on:
@@ -552,7 +554,7 @@ def _set_allow_links(root: Path, raw_task: str, on: bool) -> Dict[str, Any]:
     return {"task": task, "env": LINKS, "on": on, "changed": before != on, "links": refs, "next": say("task.allow.links.on" if on else "task.allow.links.off", links=", ".join(refs) or "-")}
 
 
-def link(root: Path, raw_task: str, ref: str, on: bool) -> Dict[str, Any]:
+def link(root: Path, raw_task: str, ref: str, on: bool, by_person: bool = False) -> Dict[str, Any]:
     """A task names an item of an outside tool (`ado:12345`, 1.7.15): the board shows it, and once the work is done the agent may ask the person whether
     to update it. The harness keeps only the type and the id; the tool pack of the type knows its address."""
     from core import toolpacks
@@ -560,14 +562,21 @@ def link(root: Path, raw_task: str, ref: str, on: bool) -> Dict[str, Any]:
     ref = str(ref or "").strip()
     if not toolpacks.LINK.match(ref):
         raise CommandError(say("task.link.form", ref=ref or "-"))
+    ref = toolpacks.normal_ref(ref)
     task = task_ops.resolve(root, raw_task)
     with task_ops.locked(root, task) as data:
         held = [item for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]
-        there = any(item["ref"] == ref for item in held)
+        there = any(toolpacks.normal_ref(item["ref"]) == ref for item in held)
         if on and not there:
             held.append({"ref": ref, "at": utc_now()})
+            opened = data.get(LINKS_KEY)
+            if by_person and isinstance(opened, dict):  # the person added it on the board while the linked items are open: it is opened too; an agent's `task link add` is not (1.7.21)
+                opened["refs"] = sorted(set(opened.get("refs") or []) | {ref})
         elif not on:
-            held = [item for item in held if item["ref"] != ref]
+            held = [item for item in held if toolpacks.normal_ref(item["ref"]) != ref]
+            opened = data.get(LINKS_KEY)
+            if isinstance(opened, dict):
+                opened["refs"] = [item for item in opened.get("refs") or [] if item != ref]
         data["links"] = held
         if there != on:
             task_ops.note(data, "link", f"{ref}: {'on' if on else 'off'}")

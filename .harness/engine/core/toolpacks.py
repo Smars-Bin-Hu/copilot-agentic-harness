@@ -198,6 +198,12 @@ def rules_layer(root: Path) -> Dict[str, Any]:
 LINK = re.compile(r"^([a-z][a-z0-9]{0,15}):([A-Za-z0-9._#/-]{1,64})$")
 
 
+def normal_ref(ref: str) -> str:
+    """One spelling of a link: an id of digits only has no leading zeros (`ado:0300114` is `ado:300114`, 1.7.21)."""
+    kind, _, ident = str(ref or "").strip().partition(":")
+    return f"{kind}:{ident.lstrip('0') or '0'}" if ident.isdigit() else str(ref or "").strip()
+
+
 def link_types(root: Path) -> List[Dict[str, str]]:
     """The kinds of item a task may be linked to, from the installed tool packs (1.7.20): `{type, label, toolpack}`, one per link type, in the order of the packs. A link type is named by a pack's `links`
     and by the connection types that declare `link`; a type that only a connection declares has no label of its own, and takes the type's."""

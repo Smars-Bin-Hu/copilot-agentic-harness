@@ -19,8 +19,8 @@ output must match, and `launch`, the sentence for the person when it does not (h
 The harness runs the probe for `tools check`, `doctor` and the board's Enter screen; it never stores a password or an identity.
 
 Only a terminal command (`reach.cli`) is recognised for now. One program may serve several systems (one command line tool can run a ticket board and a cloud):
-give each one a `reach.when` pattern, matched against the arguments after the program; the first system that matches owns the call. Like the git rules, this is a net, not a sandbox: a script that
-starts the program itself is not seen.
+give each one a `reach.when` pattern, matched against the arguments after the program; the first system that matches owns the call. Like the git rules, this is a net, not a sandbox. The rule of 1.7.25: every word of a command line that is the name of a listed program must be accounted
+for (a judged call, or an argument of a program in READ_ONLY_PROGRAMS), or the line is held; the files a line runs are read. What is still not seen is in the tool pack protocol.
 """
 
 from __future__ import annotations
@@ -130,7 +130,7 @@ _REDIRECT_WITH_FILE = re.compile(r"^\d*(?:>>?|<<-?|<)[^\s<]")  # `>f`, `2>/dev/n
 # among its arguments makes the line held: the gate cannot tell what the program does with it.
 READ_ONLY_PROGRAMS = frozenset(
     "grep egrep fgrep rg cat tac echo printf head tail less more wc sort uniq cut nl ls dir tree stat file du diff cmp which whereis type pwd cd test [ [[ true false basename dirname "
-    "realpath readlink jq column fold rev md5sum sha1sum sha256sum shasum od xxd strings date sed find git gh harness "
+    "realpath readlink jq column fold rev md5sum sha1sum sha256sum shasum od xxd strings date man apropos whatis sed find git gh harness "
     "get-content gc select-string sls get-childitem gci write-output write-host get-item test-path set-location sl resolve-path measure-object".split()
 )
 _READERS = frozenset("cat tac head tail type get-content gc nl sort uniq less more".split())  # print files: into an interpreter they are its code
@@ -336,6 +336,8 @@ def _data_only(tokens: List[str], at: int) -> bool:
         if "-c" in before or any(item.startswith(("--config-env", "--exec-path", "--ext-diff", "--textconv", "--extcmd", "--exec")) for item in args) or any("=!" in item or item.startswith("!") for item in args):
             return False  # an alias that starts with `!` runs a command; `-c` can set one
         return not (words and words[0].lower() in ("difftool", "mergetool", "bisect", "filter-branch", "submodule", "rebase", "instaweb", "daemon", "credential", "config", "gc"))
+    if name == "man":
+        return not any(item in ("-P", "--pager", "-H", "--html") or item.startswith(("--pager=", "-P")) for item in args)
     if name == "rg":
         return not any(item == "--pre" or item.startswith("--pre=") for item in args)
     if name == "sort":

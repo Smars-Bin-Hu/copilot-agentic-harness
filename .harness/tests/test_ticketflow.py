@@ -143,6 +143,27 @@ class HeldCallCard(TaskCase):
         self.assertTrue(systems.validate({"x": {"reach": {"cli": "x"}, "body": [{"pattern": "(a)", "from": "net"}]}}))
         self.assertEqual(systems.validate({"x": {"reach": {"cli": "x"}, "say": [{"pattern": "(a)", "text": "t {1}"}], "body": [{"pattern": "(a)", "from": "file"}]}}), [])
 
+    def test_a_say_text_may_be_given_in_two_languages(self) -> None:
+        """1.7.23 (H8): `text` is a string or {"en": ..., "zh": ...}; a language that is missing reads en; a bad shape is a problem."""
+        import os
+
+        from core import connections, messages, systems
+        from modules.task import cmdview
+
+        both = [{"pattern": "comment (\\d+)", "text": {"en": "Add a comment to {1}", "zh": "给 {1} 加评论"}}, {"pattern": "get", "text": {"en": "Read it"}}, {"pattern": "plain", "text": "Plain"}]
+        old = os.environ.get(messages.ENVIRONMENT)
+        self.addCleanup(lambda: (os.environ.__setitem__(messages.ENVIRONMENT, old) if old is not None else os.environ.pop(messages.ENVIRONMENT, None), messages.reset()))
+        for language, first, second in (("en", "Add a comment to 7", "Read it"), ("zh", "给 7 加评论", "Read it")):
+            os.environ[messages.ENVIRONMENT] = language
+            messages.reset()
+            self.assertEqual((cmdview.say_of("comment 7", both), cmdview.say_of("get x", both), cmdview.say_of("plain", both)), (first, second, "Plain"), language)
+        kind = dict(connections.types(self.root)["demotracker"])
+        self.assertEqual(connections.type_problems(dict(kind, say=both)), [])
+        for bad in ({"zh": "x"}, {"en": ""}, {"en": "x", "zh": 3}, 5):
+            self.assertTrue(connections.type_problems(dict(kind, say=[{"pattern": "a", "text": bad}])), bad)
+        self.assertEqual(systems.validate({"x": {"reach": {"cli": "x"}, "say": both}}), [])
+        self.assertTrue(systems.validate({"x": {"reach": {"cli": "x"}, "say": [{"pattern": "a", "text": {"zh": "x"}}]}}))
+
 
 def tasks_dir() -> str:
     from core import tasks

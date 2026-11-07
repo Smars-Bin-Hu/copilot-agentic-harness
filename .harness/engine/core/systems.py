@@ -64,7 +64,7 @@ SYSTEMS_SCHEMA = {
             "show": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
             "say": {  # 1.7.20: `[{"pattern": <on the arguments after the program>, "text": "Add a comment to work item {1}"}]`: the first match is the one line a held call's card opens with
                 "type": "array",
-                "items": {"type": "object", "required": ["pattern", "text"], "properties": {"pattern": {"type": "string", "minLength": 1}, "text": {"type": "string", "minLength": 1}}},
+                "items": {"type": "object", "required": ["pattern", "text"], "properties": {"pattern": {"type": "string", "minLength": 1}, "text": {"type": ["string", "object"], "minLength": 1, "required": ["en"], "additionalProperties": {"type": "string", "minLength": 1}}}},  # 1.7.23: `text` is a string, or {"en": "...", "zh": "..."} (a language that is missing reads en)
             },
             "body": {  # 1.7.20: `[{"pattern": <first group is the value>, "from": "file"|"text"}]`: the text a held call writes, shown on its card (a file of the task, or the text as written)
                 "type": "array",

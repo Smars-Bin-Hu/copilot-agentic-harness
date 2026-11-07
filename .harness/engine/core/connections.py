@@ -72,6 +72,13 @@ def types(root: Path) -> Dict[str, Dict[str, Any]]:
     return found
 
 
+def _say_text_ok(text: Any) -> bool:
+    """A `say` text (1.7.23): a string, or `{"en": "...", "zh": "..."}` with `en` and every value a non-empty string."""
+    if isinstance(text, str):
+        return bool(text)
+    return isinstance(text, dict) and isinstance(text.get("en"), str) and bool(text["en"]) and all(isinstance(value, str) and value for value in text.values())
+
+
 def type_problems(kind: Dict[str, Any]) -> List[str]:
     """What is wrong with a connection type; empty when it is fine. A type `via: "mcp"` is reached through an MCP server VS Code runs: it needs no test
     command and no way in of its own (the sign-in is VS Code's)."""
@@ -104,6 +111,9 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
         for index, rule in enumerate(kind.get(key) or []):
             if not isinstance(rule, dict) or not rule.get("pattern") or (key == "say" and not rule.get("text")) or (key == "body" and rule.get("from") not in ("file", "text")):
                 out.append(f"types.{name}.{key}[{index}]: {'`pattern` and `text`' if key == 'say' else '`pattern` and `from` (file or text)'}")
+                continue
+            if key == "say" and not _say_text_ok(rule.get("text")):
+                out.append(f"types.{name}.say[{index}]: `text` is a string, or an object with `en` (and `zh`) as strings")
                 continue
             try:
                 re.compile(str(rule["pattern"]))

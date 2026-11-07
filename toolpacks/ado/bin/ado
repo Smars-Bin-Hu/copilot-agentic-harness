@@ -110,7 +110,7 @@ def pat_of(conn: dict) -> str:
     """A personal access token: ADO_PAT, else HARNESS_CONNECTION_<NAME>_TOKEN/_PASSWORD (a test), else the one Get ready saved in .harness/.env for this connection."""
     if os.environ.get("ADO_PAT"):
         return os.environ["ADO_PAT"]
-    for field in ("TOKEN", "PASSWORD"):  # given by the harness while it tests a connection
+    for field in ("TOKEN", "PASSWORD"):  # (_PASSWORD: the old form) given by the harness while it tests a connection
         if os.environ.get(f"HARNESS_CONNECTION_{env_name(conn['name'])}_{field}"):
             return os.environ[f"HARNESS_CONNECTION_{env_name(conn['name'])}_{field}"]
     try:
@@ -239,6 +239,12 @@ def table(rows, heads) -> str:
     widths = [min(60, max([len(head)] + [len(row[i]) for row in rows])) for i, head in enumerate(heads)]
     line = lambda cells: "  ".join(cell[:60].ljust(widths[i]) for i, cell in enumerate(cells)).rstrip()  # noqa: E731
     return "\n".join([line(heads), line(["-" * width for width in widths]), *map(line, rows)])
+
+
+def unescaped(text: str) -> str:
+    """`--text`/`--description` words as the held card shows them (harness cmdview): a literal `\\n` is a line break, `\\t` a tab, `\\\\` one backslash, `\\"` a quote; so what is written is what the card said.
+    Inside shell double quotes the shell has already turned `\\\\` into one backslash; in single quotes ado sees it as written."""
+    return re.sub(r"\\(.)", lambda found: {"n": "\n", "t": "\t"}.get(found.group(1), found.group(1)), text)
 
 
 def comment_html(text: str) -> str:
@@ -522,7 +528,7 @@ def read_text(args) -> str:
     if args.file and args.text:
         raise Stop("give --text or --file, not both")
     if not args.file:
-        return args.text or ""
+        return unescaped(args.text or "")
     path = Path(args.file)
     if path.is_dir():
         raise Stop(f"{args.file} is a folder, not a file")
@@ -573,7 +579,7 @@ def patch_ops(ado: Ado, args, kind: str, current_tags: str = "") -> list:
     ops, cache = [], {}
     for key, value in (("state", args.state), ("title", args.title), ("assigned", args.assign), ("area", args.area), ("iteration", args.iteration), ("description", args.description)):
         if value:
-            ops.append({"op": "add", "path": f"/fields/{FIELDS[key]}", "value": comment_html(value) if key == "description" else value})
+            ops.append({"op": "add", "path": f"/fields/{FIELDS[key]}", "value": comment_html(unescaped(value)) if key == "description" else value})
     for name, value in pairs(args.field, "--field").items():
         ops.append({"op": "add", "path": "/fields/" + field_ref(ado, kind, name, cache), "value": value})
     if args.tag or args.untag:
@@ -1031,7 +1037,7 @@ def parser() -> argparse.ArgumentParser:
     one.add_argument("--top", type=int, default=50)
     add("tags", "the tags in use")
     one = add("comment", "add a comment (a write: the person approves it)", "id")
-    one.add_argument("--text", default="", help="the words; each line stays a line")
+    one.add_argument("--text", default="", help="the words; each line stays a line; a literal \\n is a line break (\\\\n for backslash n)")
     one.add_argument("--file", default="", help="or a file that holds them")
     for name, helptext in (("update", "change fields of a work item (a write)"), ("create", "a new work item (a write)")):
         change = add(name, helptext, *(["id"] if name == "update" else []))

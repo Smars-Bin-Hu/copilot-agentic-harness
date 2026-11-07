@@ -36,7 +36,10 @@
       "say": [
         {
           "pattern": "(?:--method|-m)\\s+['\\\"]?(?:post|put|patch)\\b",
-          "text": "Change Azure DevOps with az rest"
+          "text": {
+            "en": "Change Azure DevOps with az rest",
+            "zh": "用 az rest 修改 Azure DevOps"
+          }
         }
       ]
     },
@@ -73,7 +76,10 @@
       "say": [
         {
           "pattern": "^\\s*(?:devops|boards|pipelines)\\b",
-          "text": "Change Azure DevOps with az (use the ado program instead)"
+          "text": {
+            "en": "Change Azure DevOps with az (use the ado program instead)",
+            "zh": "用 az 修改 Azure DevOps（请改用 ado 程序）"
+          }
         }
       ],
       "rules": {

@@ -27,10 +27,10 @@
       "login": "az login --allow-no-subscriptions"
     },
     "token": {
-      "identity": "env",
+      "identity": "token",
       "label": "Personal access token",
       "env": {
-        "ADO_PAT": "password"
+        "ADO_PAT": "token"
       }
     }
   },
@@ -79,59 +79,101 @@
   "say": [
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*comment\\s+(\\d+)",
-      "text": "Add a comment to work item {1}"
+      "text": {
+        "en": "Add a comment to work item {1}",
+        "zh": "给 work item {1} 加评论"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*update\\s+(\\d+)",
-      "text": "Update work item {1}"
+      "text": {
+        "en": "Update work item {1}",
+        "zh": "修改 work item {1}"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*create\\b",
-      "text": "Create a new work item"
+      "text": {
+        "en": "Create a new work item",
+        "zh": "新建一个 work item"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*link\\s+(\\d+).*--to\\s+[\\\"']?(\\d+)",
-      "text": "Link work item {1} to work item {2}"
+      "text": {
+        "en": "Link work item {1} to work item {2}",
+        "zh": "把 work item {1} 关联到 work item {2}"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*unlink\\s+(\\d+).*--to\\s+[\\\"']?(\\d+)",
-      "text": "Remove the link between work items {1} and {2}"
+      "text": {
+        "en": "Remove the link between work items {1} and {2}",
+        "zh": "删除 work item {1} 和 {2} 之间的关联"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*attach\\s+(\\d+)",
-      "text": "Attach a file to work item {1}"
+      "text": {
+        "en": "Attach a file to work item {1}",
+        "zh": "给 work item {1} 加附件"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*queue\\s+[\\\"']?([^\\s\\\"']+)",
-      "text": "Start a run of pipeline {1}"
+      "text": {
+        "en": "Start a run of pipeline {1}",
+        "zh": "启动 pipeline {1} 的一次 run"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*cancel\\s+(\\d+)",
-      "text": "Cancel run {1}"
+      "text": {
+        "en": "Cancel run {1}",
+        "zh": "取消 run {1}"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*retry\\s+(\\d+)",
-      "text": "Run {1} again"
+      "text": {
+        "en": "Run {1} again",
+        "zh": "重新跑 run {1}"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*deploy\\s+(\\d+).*--env\\s+[\\\"']?([^\\s\\\"']+)",
-      "text": "Deploy release {1} to {2}"
+      "text": {
+        "en": "Deploy release {1} to {2}",
+        "zh": "把 release {1} 部署到 {2}"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*deploy\\b(?:\\s+--\\w+\\s+\\S+)*\\s+(\\d+)",
-      "text": "Deploy release {1}"
+      "text": {
+        "en": "Deploy release {1}",
+        "zh": "部署 release {1}"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*link\\s+(\\d+)",
-      "text": "Link work item {1} to another work item"
+      "text": {
+        "en": "Link work item {1} to another work item",
+        "zh": "把 work item {1} 关联到另一个 work item"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*unlink\\s+(\\d+)",
-      "text": "Remove a link from work item {1}"
+      "text": {
+        "en": "Remove a link from work item {1}",
+        "zh": "删除 work item {1} 的一个关联"
+      }
     },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*queue\\b",
-      "text": "Start a pipeline run"
+      "text": {
+        "en": "Start a pipeline run",
+        "zh": "启动一次 pipeline run"
+      }
     }
   ],
   "body": [

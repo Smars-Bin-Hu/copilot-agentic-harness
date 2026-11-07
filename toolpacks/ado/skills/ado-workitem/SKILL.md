@@ -34,8 +34,7 @@ ado tags                  the tags in use
 1. Have a task, and link the item to it: no task yet (a small ticket job) → open a Q&A task first (skill `harness-my-task`); then `harness task link add --task <task> ado:<id>` (`--task` when several tasks are open). A write to an item the task is not linked to is refused.
 2. Run one of:
    ```
-   ado comment 12345 --text "line one
-   line two"                       (or --file .workspace/sandbox/tasks/<task>/comment.md: write the text there first, the path from the repository root)
+   ado comment 12345 --text "line one\nline two"   (`\n` is a line break, `\\n` a backslash and n; or --file .workspace/sandbox/tasks/<task>/comment.md: write the text there first, the path from the repository root)
    ado update 12345 --state Resolved --tag urgent --untag old --field priority=2
    ado link 12345 --to 12300 --type parent      --to is the parent of 12345; child | related too
    ado unlink 12345 --to 12300

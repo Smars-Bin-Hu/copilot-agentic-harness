@@ -422,6 +422,21 @@ class PageTests(unittest.TestCase):
         self.assertIn("prefers-reduced-motion: reduce", code)
 
 
+class DockOnEnterTests(unittest.TestCase):
+    """1.7.34: the Enter screen has no gear; the dock comes down; a key counts after a window closed and not while the ? panel is open."""
+
+    def test_the_gear_is_gone_from_the_screen_and_the_dock_takes_its_place(self) -> None:
+        css = (taskhtml.WEB / "dock.css").read_text(encoding="utf-8")
+        self.assertIn("html.en-open .sh-gear{display:none}", css)
+        self.assertIn("html.en-open .dock-ask{bottom:20px}", css)
+
+    def test_a_key_counts_after_a_window_closed_but_not_in_the_panel_and_not_enter_on_a_button(self) -> None:
+        code = (taskhtml.WEB / "enter.js").read_text(encoding="utf-8")
+        self.assertIn('document.querySelector(".dock-panel:not([hidden])")', code)
+        self.assertIn('target.closest(".dock-btn") && (event.key === "Enter" || event.key === " ")', code)
+        self.assertNotIn("[data-identities],.dock-btn,.dock-panel", code, "a dock button no longer keeps every key from the screen")
+
+
 class CornerTests(unittest.TestCase):
     def test_the_greeting_has_the_corner_and_the_search_pill_stands_to_its_left(self) -> None:
         css, script = (taskhtml.WEB / "enter.css").read_text(encoding="utf-8"), (taskhtml.WEB / "enter.js").read_text(encoding="utf-8")

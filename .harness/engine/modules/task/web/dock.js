@@ -75,8 +75,8 @@ const DOCK = (function () {
         words.value = memory.typed[item.label] || "";
         words.addEventListener("input", () => { memory.typed[item.label] = words.value; });
       }
-      const go = item.href ? h("a", {class: "act", href: item.href, target: "_blank", rel: "noopener noreferrer"}, t("dock.open")) : item.opens === "reply" ? h("span", {class: "tag"}, t("dock.intask")) : h("button", {type: "button", class: "act"}, t("dock.start"));
-      if (go.tagName === "BUTTON") go.addEventListener("click", () => start(item, words ? words.value : ""));
+      const go = item.href ? h("a", {class: "act", href: item.href, target: "_blank", rel: "noopener noreferrer"}, t("dock.open")) : item.opens === "reply" ? h("span", {class: "tag"}, t("dock.intask")) : !item.opens ? null : h("button", {type: "button", class: "act"}, t("dock.start"));  // no `board-opens`: a tool pack's skill that is only listed (1.7.34)
+      if (go && go.tagName === "BUTTON") go.addEventListener("click", () => start(item, words ? words.value : ""));
       return h("div", {class: "dock-skill"}, h("div", {class: "dock-about"}, h("b", {title: item.name}, item.label), item.costly ? h("span", {class: "tag hot", title: t("dock.costly.hint")}, t("dock.costly")) : null, item.gone ? h("span", {class: "tag", title: t("dock.gone.hint")}, t("dock.gone")) : null, h("p", {class: "sub"}, item.about), item.opens === "reply" ? h("p", {class: "sub"}, t("dock.intask.hint")) : null, words), go);
     };
     function paint() {
@@ -86,9 +86,11 @@ const DOCK = (function () {
       const groups = [["company", (item) => item.own && item.naming !== "pack"], ["pack", (item) => item.own && item.naming === "pack"], ...["harness", "kb", "task"].map((key) => [key, (item) => !item.own && item.group === key])];  // by the naming rule (core/skillgroups.py)
       list.replaceChildren(...groups.flatMap(([key, test]) => {
         const items = shown.filter(test);
+        if (key === "pack") items.sort((one, two) => one.pack.localeCompare(two.pack));  // a small heading for each pack
         const out = items.length && !only ? [h("h3", null, t("dock.group." + key))] : [];  // a window of one part has its name as its title
         items.forEach((item, index) => {
           if (!["company", "pack"].includes(key) && item.step && (!index || items[index - 1].step !== item.step)) out.push(h("h4", null, t("dock.step." + item.step)));
+          if (key === "pack" && item.pack && (!index || items[index - 1].pack !== item.pack)) out.push(h("h4", {class: "dock-pack"}, item.pack));
           out.push(row(item));
         });
         return out;

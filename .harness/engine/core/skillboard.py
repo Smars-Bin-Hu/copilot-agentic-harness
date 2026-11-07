@@ -71,12 +71,14 @@ def skills(root: Path) -> List[Dict[str, Any]]:
         except (OSError, ValueError):
             continue
         opens = fields.get("board-opens", "")
-        if opens not in OPENS:
+        naming, pack = skillgroups.group(path.parent.name, prefix, packs)
+        if opens not in OPENS and naming != "pack":  # a tool pack's skill is listed under its pack even with no click-to-start (1.7.34): name and description only
             continue
+        opens = opens if opens in OPENS else ""
         out.append({"name": path.parent.name, "label": fields.get("board-label") or path.parent.name, "about": first_sentence(fields.get("description", "")), "opens": opens,
-                    "place": [place.strip() for place in fields.get("board-place", "all").split(",") if place.strip()], "kind": fields.get("board-kind", "") if fields.get("board-kind") in tasks.KINDS else "", "costly": fields.get("board-cost") == "high",
+                    "place": [place.strip() for place in fields.get("board-place", "all" if opens else "").split(",") if place.strip()], "kind": fields.get("board-kind", "") if fields.get("board-kind") in tasks.KINDS else "", "costly": fields.get("board-cost") == "high",
                     "hint": fields.get("argument-hint", ""), "own": path.parent.name.split("-")[0] not in ("harness", "generic"),
                     "group": fields.get("board-group") if fields.get("board-group") in GROUPS else "task", "order": int(fields["board-order"]) if fields.get("board-order", "").isdigit() else LAST, "step": fields.get("board-step") if fields.get("board-step") in STEPS else "",
-                    "naming": skillgroups.group(path.parent.name, prefix, packs)[0], "pack": skillgroups.group(path.parent.name, prefix, packs)[1],
+                    "naming": naming, "pack": pack,
                     "gone": bool(company and prefix and path.parent.name.startswith(prefix + "-") and not (company / "skills" / path.parent.name).is_dir())})
     return sorted(out, key=lambda item: (item["order"], item["name"]))

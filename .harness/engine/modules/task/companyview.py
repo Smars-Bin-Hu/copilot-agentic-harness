@@ -12,7 +12,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import config, connections, launchenv, messages, reach, skillboard, skillcheck, skillgroups, targets
+from core import config, connections, launchenv, messages, reach, skillboard, skillcheck, skillgroups, standards, targets, toolpacks
 
 FIRST_LINE = 160
 NO_WORD = re.compile(r"\\.")
@@ -107,6 +107,16 @@ def reason(line: Dict[str, Any]) -> str:
     return messages.text("desk.reach.why.exit", why=line.get("why") or "")
 
 
+def _reads(manifest: Dict[str, Any], kinds: List[Dict[str, Any]]) -> int:
+    """How many commands the agent may run without asking. A pack that lists its `commands`: those that no write, exec or destroy verb names (ado: 37 - 6 - 4 = 27).
+    One that does not: the command words of its read verbs."""
+    commands = [str(one) for one in manifest.get("commands") or [] if isinstance(one, str)]
+    if commands:
+        held = {word for kind in kinds for entry in kind.get("verbs") or [] if isinstance(entry, dict) and entry.get("verb") in ("write", "exec", "destroy") for word in _words(str(entry.get("pattern") or ""))}
+        return len([one for one in commands if one not in held])
+    return sum(max(1, len(_words(str(entry.get("pattern") or "")))) for kind in kinds for entry in kind.get("verbs") or [] if isinstance(entry, dict) and entry.get("verb") == "read")
+
+
 def tools(root: Path, lang: str) -> List[Dict[str, Any]]:
     packs = skillgroups.active_packs(root)
     if not packs:
@@ -137,7 +147,7 @@ def tools(root: Path, lang: str) -> List[Dict[str, Any]]:
         if links and all(link["state"] == reach.UNKNOWN for link in links):
             missing.append("untested")
         missing += [f"program:{program['name']}" for program in programs if not program["found"]]
-        reads = sum(max(1, len(_words(str(entry.get("pattern") or "")))) for kind in kinds for entry in kind.get("verbs") or [] if isinstance(entry, dict) and entry.get("verb") == "read")  # command words, not patterns
+        reads = _reads(manifest, kinds)
         out.append({"name": name, "version": str(manifest.get("version") or ""), "about": str(manifest.get("description") or ""), "programs": programs, "reads": reads,
                     "writes": _lines(kinds, "write", lang), "execs": _lines(kinds, "exec", lang), "destroys": _lines(kinds, "destroy", lang),
                     "types": [{"type": key, "label": str(kind.get("label") or key), "via": str(kind.get("via") or "cli")} for key, kind in types.items()], "connections": links, "missing": missing})
@@ -180,19 +190,34 @@ def files(folder: Path, suffix: str = ".md") -> List[Dict[str, str]]:
     return [{"file": path.name, "first": first_line(path)} for path in found]
 
 
+def instruction_state(root: Path, path_name: str, source: Path) -> str:
+    """`copied` / `not-copied` for the one instruction file the engine copies (`company sync`); `never` for every other file: it is listed but nothing copies it."""
+    from core import company as company_core
+
+    if path_name not in company_core.INSTRUCTION_FILES:
+        return "never"
+    return "copied" if company_core.same(source, root / company_core.INSTRUCTIONS_DIR / path_name) else "not-copied"
+
+
+def standard_state(path_name: str) -> str:
+    """`inplace` for the file the code-standards skill reads where it lies; `other` for the rest: not copied and not read by the harness itself."""
+    return "inplace" if "standards/" + path_name == standards.COMPANY_FILE else "other"
+
+
 def company(root: Path, lang: str = "") -> Dict[str, Any]:
     lang = lang or messages.language()
     folder = targets.company_folder(root)
     packs = skillgroups.active_packs(root)
     prefix = skillcheck.company_prefix(root)
     out: Dict[str, Any] = {"found": folder is not None, "prefix": prefix, "name": "", "version": "", "made": "", "stale": 0, "domains": [], "standards": [], "instructions": [], "tools": tools(root, lang),
-                           "skills": skills(root, folder, prefix, packs)}
+                           "unknown_use": toolpacks.unknown_use(root), "skills": skills(root, folder, prefix, packs)}
     if folder is None:
         return out
     config_file = _json(folder / "company.json")
     kb = folder.parent
     out.update(name=str(config_file.get("name") or kb.name), version=str(_json(folder / "manifest.json").get("version") or ""), made=str(_json(folder / "manifest.json").get("made") or ""),
-               standards=files(folder / "standards"), instructions=files(folder / "instructions"))
+               standards=[dict(row, state=standard_state(row["file"])) for row in files(folder / "standards")],
+               instructions=[dict(row, state=instruction_state(root, row["file"], folder / "instructions" / row["file"])) for row in files(folder / "instructions")])
     try:
         out["domains"] = sorted(item.name for item in (kb / "domains").iterdir() if item.is_dir() and not item.name.startswith("."))
     except OSError:

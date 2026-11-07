@@ -52,6 +52,19 @@ class BoardTests(unittest.TestCase):
             item = skillboard.skills(Path(folder))[0]
         self.assertEqual((item["group"], item["step"], item["kind"]), ("task", "", ""))
 
+    def test_a_tool_pack_skill_with_no_board_opens_is_listed_under_its_pack(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name, lines in (("acme-ado-triage", ""), ("acme-ado-start", "board-opens: chat\n"), ("acme-month-end", "")):
+                path = root / ".github" / "skills" / name
+                path.mkdir(parents=True)
+                (path / "SKILL.md").write_text(f"---\nname: {name}\ndescription: 'About {name}.'\n{lines}---\n", encoding="utf-8")
+            with mock.patch.object(skillboard.skillcheck, "company_prefix", return_value="acme"), mock.patch.object(skillboard.skillgroups, "active_packs", return_value={"ado": {}}):
+                found = {item["name"]: item for item in skillboard.skills(root)}
+        self.assertEqual(sorted(found), ["acme-ado-start", "acme-ado-triage"], "a company skill with no board-opens stays off the board")
+        self.assertEqual((found["acme-ado-triage"]["opens"], found["acme-ado-triage"]["pack"], found["acme-ado-triage"]["place"]), ("", "ado", []))
+        self.assertEqual(found["acme-ado-start"]["opens"], "chat")
+
     def test_a_long_description_is_cut_at_a_word_and_says_so(self) -> None:
         about = skillboard.first_sentence("word " * 100)
         self.assertLessEqual(len(about), skillboard.ABOUT + 3)

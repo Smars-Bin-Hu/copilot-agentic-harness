@@ -441,7 +441,7 @@ def guide(root: Path) -> Dict[str, Any]:
         text = ""
     parts = re.split(r"^## ", text, flags=re.M)
     found = {part.split("\n", 1)[0].strip(): part.split("\n", 1)[1] if "\n" in part else "" for part in parts[1:]}
-    return {"sections": [{"key": key, "title": title, "blocks": mdtree.parse(found.get(title, ""))["blocks"], "can_declare": key in CAN_DECLARE} for key, title in SECTIONS], "missing": missing(root), "declared": no_such(root)}
+    return {"sections": [{"key": key, "title": title, "blocks": mdtree.parse(found.get(title, ""))["blocks"], "can_declare": key in CAN_DECLARE} for key, title in SECTIONS], "missing": missing(root), "declared": no_such(root), "company": targets.company_folder(root) is not None}
 
 
 def sample(root: Path) -> Dict[str, str]:

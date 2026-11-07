@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -64,9 +65,26 @@ class Sections(ViewCase):
         found = companyview.company(self.root, "en")
         self.assertEqual((found["found"], found["prefix"], found["version"], found["made"], found["domains"]), (True, "acme", "3", "2026-11-01 10:00", ["orders"]))
         self.assertEqual(found["name"], "knowledge-base")
-        self.assertIn({"file": "naming.md", "first": "Names"}, found["standards"])
+        self.assertIn({"file": "naming.md", "first": "Names", "state": "other"}, found["standards"])
         self.assertEqual([row["file"] for row in found["instructions"]], ["knowledgebase.instructions.md"])
         self.assertGreater(found["stale"], 0, "nothing was copied yet")
+
+    def test_a_standard_or_instruction_says_whether_it_reaches_copilot(self) -> None:
+        put(self.kb, {**FILES, "company/standards/code-standards.md": "# Code\n\nNo select star", "company/standards/naming.md": "# Names", "company/instructions/pipelines.instructions.md": "# Pipelines"})
+        set_prefix(self.root)
+        states = lambda: {row["file"]: row["state"] for row in (lambda found: found["standards"] + found["instructions"])(companyview.company(self.root, "en"))}  # noqa: E731
+        self.assertEqual(states(), {"code-standards.md": "inplace", "naming.md": "other", "knowledgebase.instructions.md": "not-copied", "pipelines.instructions.md": "never"})
+        from core import company
+
+        company.sync(self.root)
+        self.assertEqual(states()["knowledgebase.instructions.md"], "copied")
+        self.assertEqual(states()["pipelines.instructions.md"], "never", "only knowledgebase.instructions.md is ever copied")
+        self.assertFalse((self.root / ".github/instructions/pipelines.instructions.md").exists())
+
+    def test_a_use_name_no_factory_pack_has_is_listed(self) -> None:
+        shutil.copytree(support.REPO / ".harness/toolpacks/ado", self.root / ".harness/toolpacks/ado")
+        put(self.kb, {**FILES, "company/tools/packs.json": '{"use": ["ado", "nope"]}'})
+        self.assertEqual(companyview.company(self.root, "en")["unknown_use"], ["nope"])
 
     def test_skills_are_grouped_by_name_and_one_in_the_knowledge_base_but_not_copied_is_marked(self) -> None:
         put(self.kb, {**FILES, "company/skills/acme-tracker-sop/SKILL.md": SKILL.format(name="acme-tracker-sop")})
@@ -98,6 +116,22 @@ class Tools(ViewCase):
             self.assertEqual([row["text"] for row in pack["writes"]], [comment, "Close ticket …", "Set the state of ticket …"])
             self.assertEqual(pack["execs"], [{"text": "", "pattern": r"\bmerge\b"}], "no words for it: the pattern")
             self.assertEqual(pack["destroys"][0]["pattern"], r"\bdelete\b")
+
+    def test_reads_are_the_commands_of_the_pack_less_its_writes_and_runs(self) -> None:
+        self.install()
+        found = next(iter(toolpacks.active(self.root).values()))
+        manifest_file = found["folder"] / "toolpack.json"
+        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+        manifest["commands"] = ["get", "list", "whoami", "comment", "close", "set-state", "merge", "delete", "version"]
+        manifest_file.write_text(json.dumps(manifest), encoding="utf-8")
+        pack = companyview.company(self.root, "en")["tools"][0]
+        self.assertEqual(pack["reads"], 4, "9 commands, less 3 writes, 1 run and 1 destroy")
+
+    def test_the_shipped_ado_pack_has_27_reads_6_writes_4_runs(self) -> None:
+        shutil.copytree(support.REPO / ".harness/toolpacks/ado", self.root / ".harness/toolpacks/ado")
+        put(self.kb, {**FILES, "company/tools/packs.json": '{"use": ["ado"]}'})
+        pack = next(item for item in companyview.company(self.root, "en")["tools"] if item["name"] == "ado")
+        self.assertEqual((pack["reads"], len(pack["writes"]), len(pack["execs"])), (27, 6, 4))
 
     def test_what_is_missing_is_named(self) -> None:
         self.install()

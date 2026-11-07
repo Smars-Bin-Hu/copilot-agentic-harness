@@ -592,6 +592,14 @@ def command_problems(root: Path) -> List[Dict[str, str]]:
     return out
 
 
+def _updated(entry: Dict[str, Any]) -> Dict[str, str]:
+    """`{from, to}` when the ledger says the pack's version changed in the last days (the board marks the row), else `{}`."""
+    was = entry.get("updated") if isinstance(entry.get("updated"), dict) else None
+    if was and _days_ago(str(was.get("at") or "")) <= UPDATED_SHOWN_DAYS:
+        return {"from": str(was.get("from") or "?"), "to": str(was.get("to") or entry.get("version") or "?")}
+    return {}
+
+
 def recent_updates(root: Path) -> List[str]:
     """The lines "ado 0.4.5 -> 0.5.0 updated" of the last days, from the ledger: doctor shows them."""
     out = []
@@ -792,7 +800,7 @@ def check(root: Path, only: str = "") -> Dict[str, Any]:
                "errors": errors, "programs": programs, "trust": bool(needs.get("trust")), "bundle": bool(bundle), "description": str(found.get("description") or ""), "types": types_here,
                "skills": len(_skills(folder)), "links": sorted((found.get("links") or {}).keys()) if isinstance(found.get("links"), dict) else [],
                "mcp_rules": len((found.get("mcp") or {}).get("tools") or []) if isinstance(found.get("mcp"), dict) else 0, "commands": [str(one) for one in found.get("commands") or []],
-               "put": list((book.get(name) or {}).get("skills") or []), "newer": False}
+               "put": list((book.get(name) or {}).get("skills") or []), "newer": False, "updated": _updated(book.get(name) or {})}
         row["ok"] = not errors and (all(programs.values()) or not item["active"])
         rows.append(row)
     if only and not rows:

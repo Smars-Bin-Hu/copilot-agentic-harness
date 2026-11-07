@@ -587,7 +587,9 @@
     if (document.body.classList.contains("has-dialog")) return;  // a window opened from the dock over this screen owns the keys (1.7.32)
     if (["Shift", "Control", "Alt", "Meta", "Tab", "Escape", "CapsLock", "Dead", "Process"].includes(event.key) || /^F\d+$/.test(event.key)) return;
     const target = event.target;
-    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[data-open],[data-launch],[data-identities],.dock-btn,.dock-panel")) return;
+    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[data-open],[data-launch],[data-identities]")) return;
+    if (document.querySelector(".dock-panel:not([hidden])")) return;  // the ? panel is open: its words are read, its text is typed in (1.7.34)
+    if (target && target.closest && target.closest(".dock-btn") && (event.key === "Enter" || event.key === " ")) return;  // a dock button keeps its own Enter and Space; after its window closed, any other key goes in
     if (tryEnter()) event.preventDefault();  // any key goes in, but only when everything is ready
   });
 

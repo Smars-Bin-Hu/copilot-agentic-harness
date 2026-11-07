@@ -473,6 +473,16 @@ class GuideTests(unittest.TestCase):
         for part in found["sections"]:
             self.assertTrue(part["blocks"], part["title"])
 
+    def test_the_guide_says_whether_the_company_folder_is_there(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            self.assertFalse(setup.guide(root)["company"])
+            (root / "knowledge-base" / "company").mkdir(parents=True)
+            found = setup.guide(root)
+            self.assertTrue(found["company"])
+            self.assertIn("instructions", found["missing"], "the one file is still missing: the page says so, not 'not found'")
+
     def test_a_team_may_declare_it_has_no_skills_but_not_no_repositories(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

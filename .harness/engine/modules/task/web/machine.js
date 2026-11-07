@@ -77,7 +77,7 @@ const MACHINE = (function () {
       ask("bundle", {host: host.value.trim(), proxy: proxy.value.trim()}).then((state) => { paint(state); caSaid.replaceChildren(made(state.made)); },
         (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { make.disabled = false; });
     });
-    drop.addEventListener("click", () => { drop.disabled = true; ask("drop").then((state) => { paint(state); caSaid.replaceChildren(); }, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { drop.disabled = false; }); });
+    drop.addEventListener("click", () => { drop.disabled = true; ask("drop").then((state) => { host.value = ""; proxy.value = ""; paint(state); caSaid.replaceChildren(); if (ctx.changed) ctx.changed(); }, (error) => { caSaid.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { drop.disabled = false; }); });
     return {body, foot: []};
   }
 
@@ -93,27 +93,30 @@ const MACHINE = (function () {
       list.replaceChildren(...(found.toolpacks.length ? found.toolpacks.flatMap((row) => {
         const missing = Object.entries(row.programs).filter(([, ok]) => !ok).map(([name]) => name);
         const unsigned = row.connections.filter((item) => !item.saved).map((item) => item.alias);
-        const tip = [row.description, ...Object.entries(row.programs).map(([name, ok]) => (ok ? "✓ " : "✗ ") + t("machine.conn.program", {name})),
-          row.trust ? (row.bundle ? "✓ " : "· ") + t(row.bundle ? "machine.conn.bundle" : "machine.conn.bundle.none") : null,
-          ...row.connections.map((item) => (item.saved ? "✓ " : "✗ ") + t("machine.conn.server", {alias: item.alias})),
-          ...row.errors.map((line) => "✗ " + line), row.from ? t("machine.conn.from", {from: row.from === "company" ? t("machine.conn.company") : row.from}) : null].filter(Boolean).join("\n");
+        const src = row.from === "company" ? "company" : row.from === "harness" ? "factory" : "folder";  // where the pack lies (1.7.34): factory (.harness/toolpacks/), the company's own, or a folder added on this computer
+        const srcTip = src === "folder" ? t("machine.conn.src.folder.tip", {path: row.from}) : t("machine.conn.src." + src + ".tip");
+        const tip = [t(row.active ? "machine.conn.on" : "machine.conn.off") + (row.active ? "" : " - " + t("machine.conn.off.how")), row.description,
+          ...(row.active ? Object.entries(row.programs).map(([name, ok]) => (ok ? "✓ " : "✗ ") + t("machine.conn.program", {name})) : []),
+          row.active && row.trust ? (row.bundle ? "✓ " : "· ") + t(row.bundle ? "machine.conn.bundle" : "machine.conn.bundle.none") : null,
+          ...(row.active ? row.connections.map((item) => (item.saved ? "✓ " : "✗ ") + t("machine.conn.server", {alias: item.alias})) : []),
+          ...row.errors.map((line) => "✗ " + line), srcTip, row.updated && row.updated.to ? t("machine.conn.updated.tip", row.updated) : null].filter(Boolean).join("\n");
         const ready = row.ok && !unsigned.length;
         const acts = [];
-        if (missing.length || (row.trust && !row.bundle)) acts.push(button(t("machine.title"), () => ctx.go("computer")));
-        if (unsigned.length) acts.push(button(t("connections.title"), () => ctx.go("connections")));
-        if (row.removable) {  // only a folder added here is forgotten here; a factory or company pack is turned off in the knowledge base (1.7.30)  // the company's follow the pack (company sync); one installed here is updated or removed here
+        if (row.active && (missing.length || (row.trust && !row.bundle))) acts.push(button(t("machine.title"), () => ctx.go("computer")));
+        if (row.active && unsigned.length) acts.push(button(t("connections.title"), () => ctx.go("connections")));
+        if (row.removable) {  // only a folder added here is forgotten here; a factory or company pack is turned on and off in the knowledge base (1.7.30)
           if (row.newer) acts.push(button(t("machine.conn.update"), () => change("toolpack-update", row.name)));
           const drop = button(t("machine.ca.drop"), () => { if (window.confirm(t("machine.conn.remove.ask", {name: row.name}))) change("toolpack-remove", row.name); });
           drop.classList.add("danger");
           acts.push(drop);
-        } else {
+        } else if (row.from === "company") {
           acts.push(h("span", {class: "sub"}, t("machine.conn.follows")));
         }
         const brings = [...row.types.map((item) => pill(t("machine.conn.type", {label: item.label}), item.via === "mcp" ? t("machine.conn.type.mcp") : "")),
           row.skills ? pill(t("machine.conn.skills", {n: row.skills})) : null, ...row.links.map((name) => pill(t("machine.conn.link", {name}))),
           row.mcp_rules ? pill(t("machine.conn.mcp", {n: row.mcp_rules}), t("machine.conn.mcp.tip")) : null].filter(Boolean);
-        return [h("div", {class: "sv-line mc-conn", title: tip}, h("span", {class: "mc-dot " + (row.errors.length ? "bad" : ready ? "ok" : "warn")}), h("b", {class: "sv-alias"}, row.name),
-          h("span", {class: "sv-kind"}, row.version), pill(t(row.from === "company" ? "machine.conn.company" : "connections.own")), h("span", {class: "mc-acts"}, ...acts)),
+        return [h("div", {class: "sv-line mc-conn" + (row.active ? "" : " off"), title: tip}, h("span", {class: "mc-dot" + (!row.active ? "" : row.errors.length ? " bad" : ready ? " ok" : " warn")}), h("b", {class: "sv-alias"}, row.name),
+          h("span", {class: "sv-kind"}, row.version), row.updated && row.updated.to ? pill(t("machine.conn.updated", row.updated), t("machine.conn.updated.tip", row.updated)) : null, pill(t("machine.conn.src." + src), srcTip), h("span", {class: "mc-acts"}, ...acts)),
           brings.length ? h("div", {class: "mc-brings"}, ...brings) : null].filter(Boolean);
       }) : [h("p", {class: "sub"}, t("machine.conn.none"))]));
       if (ctx.changed) ctx.changed();
@@ -155,7 +158,8 @@ const MACHINE = (function () {
   }
 
   function toolpacksSummary() {
-    return ask("toolpacks").then((found) => ({n: found.toolpacks.length, ready: found.toolpacks.filter((row) => row.ok && row.connections.every((item) => item.saved)).length}));
+    const on = (found) => found.toolpacks.filter((row) => row.active);  // a pack that is off is not counted (1.7.34)
+    return ask("toolpacks").then((found) => ({n: on(found).length, ready: on(found).filter((row) => row.ok && row.connections.every((item) => item.saved)).length}));
   }
 
   // One line for Get ready: how many tool folders, whether there is a bundle.

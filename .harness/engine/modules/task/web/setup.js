@@ -192,7 +192,7 @@ const SETUP = (function () {
       const state = (node, need, text) => node.replaceChildren(h("span", {class: "su-dot " + (need ? "need" : "ok")}), text);
       const has = (key) => st.parts.some((item) => item.key === key && item.ok);  // a folder chosen just now speaks for itself, before it is copied
       const missing = (key) => (st.parts ? !has(key) : needs(key));
-      state(companyState, missing("instructions"), t(missing("instructions") ? "setup.company.need" : "setup.company.ok"));
+      state(companyState, missing("instructions"), t(missing("instructions") ? (!st.parts && st.guide.company ? "setup.company.partial" : "setup.company.need") : "setup.company.ok"));  // the folder is there but lacks the one file: say that, not "not found" (1.7.34)
       state(standardsState, missing("standards"), t(missing("standards") ? "setup.standards.need" : st.parts || !st.guide.declared.includes("standards") ? "setup.standards.ok" : "setup.standards.none"));
     }
     function loadGuide() {

@@ -1062,6 +1062,8 @@ class FactoryPacks(ToolpackCase):
         self.assertIn("New.", (self.root / ".github/skills/tracker-ticket/SKILL.md").read_text(encoding="utf-8"))
         self.assertFalse((self.root / ".github/skills/tracker-note").exists(), "a skill the new version dropped goes")
         self.assertEqual(toolpacks.recent_updates(self.root), done["lines"])
+        row = toolpacks.check(self.root)["toolpacks"][0]
+        self.assertEqual((row["active"], row["updated"]), (True, {"from": "1.0.0", "to": "1.1.0"}), "the Tools window marks the row")
 
     def test_company_sync_does_not_call_a_pack_skill_the_companys_own_and_a_clash_is_refused(self) -> None:
         self.prefix("acme")

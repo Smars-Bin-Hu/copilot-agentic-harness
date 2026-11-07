@@ -75,8 +75,14 @@ const COMPANYTAB = (function () {
       item.connections.length ? h("div", {class: "co-line co-conns"}, h("span", {class: "sub"}, t("dock.co.conns")), links) : null);
   }
 
+  function unknownPack(name) {  // a name in the company's `use` that no factory pack has (1.7.34)
+    return h("div", {class: "co-pack"}, h("div", {class: "co-line"}, hover(h("b", {class: "co-name"}, name), () => [h("b", null, name), h("span", null, t("dock.co.unknown.tip", {name}))]),
+      h("span", {class: "co-miss", title: t("dock.co.unknown.tip", {name})}, t("dock.co.unknown"))));
+  }
+
   function toolsSection(found) {
-    return h("section", {class: "co-sec"}, head("tools", found.tools.length), found.tools.length ? found.tools.map((item) => pack(item, found.tools.length <= 3)) : h("p", {class: "sub"}, t("dock.co.tools.none")));
+    const unknown = found.unknown_use || [];
+    return h("section", {class: "co-sec"}, head("tools", found.tools.length), found.tools.map((item) => pack(item, found.tools.length <= 3)), unknown.map(unknownPack), found.tools.length || unknown.length ? null : h("p", {class: "sub"}, t("dock.co.tools.none")));
   }
 
   function skill(item) {
@@ -93,7 +99,9 @@ const COMPANYTAB = (function () {
 
   function filesSection(found) {
     const rows = [...found.standards.map((row) => ({...row, kind: "standards"})), ...found.instructions.map((row) => ({...row, kind: "instructions"}))];
-    return h("section", {class: "co-sec"}, head("standards", rows.length), rows.length ? rows.map((row) => hover(h("div", {class: "co-file"}, h("code", null, row.file), h("span", {class: "co-about"}, row.first)), () => [h("b", null, row.file), h("span", null, row.first), h("span", {class: "sub"}, t("dock.co." + row.kind + ".one"))])) : h("p", {class: "sub"}, t("dock.co.standards.none")));
+    const good = (state) => state === "copied" || state === "inplace";
+    return h("section", {class: "co-sec"}, head("standards", rows.length), rows.length ? rows.map((row) => hover(h("div", {class: "co-file"}, h("code", null, row.file), row.state ? h("span", {class: good(row.state) ? "co-chip" : "co-miss"}, t("dock.co.file." + row.state)) : null, h("span", {class: "co-about"}, row.first)),
+      () => [h("b", null, row.file), h("span", null, row.first), h("span", {class: "sub"}, t("dock.co." + row.kind + ".one")), row.state ? h("span", {class: "sub"}, t("dock.co.file." + row.state + ".tip")) : null])) : h("p", {class: "sub"}, t("dock.co.standards.none")));
   }
 
   function domainsSection(found, goMap) {

@@ -1,5 +1,0 @@
-{
-  "schema_version": 1,
-  "description": "The servers an agent may reach, by kind (1.7.10). Empty here: the harness ships none. The company lists its own in the knowledge base, company/tools/servers.json, copied to servers.company.json by `harness company sync`: {\"servers\": {alias: {\"kind\": <a kind of .harness/kinds/>, \"env\": dev|ist|qat|prod, \"auth\": <a way in the kind names>, <the kind's fields: host, port, ...>, \"label\": <words for people>, \"rules\": <optional, as in tools.json>}}}. An alias is lower case letters, digits and -. The person's identities, and servers of their own, are kept in .harness/.env by Get ready, never here. Each server becomes a system of tools.json for the gate.",
-  "servers": {}
-}

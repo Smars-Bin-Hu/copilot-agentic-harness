@@ -63,7 +63,7 @@ class ReachTests(unittest.TestCase):
         self.assertFalse(reach.fresh(self.root, SYSTEMS, now=reach.time.time() + reach.FRESH_MINUTES * 60 + 5))  # later: probe again
 
     def test_the_launch_script_is_offered_on_windows_only_and_started_in_a_window_of_its_own(self) -> None:
-        folder = self.root / ".harness" / "launch"
+        folder = self.root / ".harness" / "toolpacks" / "sqlpack" / "launch"  # a tool pack's launch/ (1.7.17)
         folder.mkdir(parents=True)
         (folder / "start-vscode.cmd").write_text("@echo off\r\n", encoding="utf-8")
         self.assertIsNone(reach.launch_script(self.root, platform="darwin"))

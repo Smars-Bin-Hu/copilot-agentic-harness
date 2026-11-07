@@ -70,6 +70,14 @@ class WhatGoesOver(ReinstallCase):
         self.assertEqual(result["copied"]["tasks"], ["job1"])
         self.assertTrue((self.old / "knowledge-base/toolkit/audit.md").exists(), "the old copy is not changed")
 
+    def test_the_ca_bundle_goes_with_the_env_that_names_it(self) -> None:
+        from core import launchenv
+
+        put(self.old, ".harness/.env", f"{launchenv.BUNDLE_KEY}={launchenv.BUNDLE.as_posix()}\n")
+        put(self.old, launchenv.BUNDLE.as_posix(), "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n")
+        self.apply()
+        self.assertEqual(launchenv.bundle_path(self.root), self.root / launchenv.BUNDLE, "named inside the new copy")
+
     def test_debug_capture_and_the_old_server_port_stay_behind(self) -> None:
         self.apply()
         self.assertFalse(self.exists(".harness/runtime/capture"))

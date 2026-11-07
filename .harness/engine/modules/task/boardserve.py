@@ -56,7 +56,8 @@ from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from core import ahp, company, config, messages, outbox, reach, registry, state, targets, tasks, user
-from core import servers as servers_core
+from core import launchenv
+from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
 
 from core import company, reinstall, setup as core_setup, shortcmd, skillboard
@@ -219,21 +220,24 @@ def relaunch(code: str) -> None:
 def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
     """What the Servers window shows (1.7.10): each server with its kind, environment, fields and whether an identity is saved (the account, never the password),
     what VS Code reached last, the kinds a person may add a server of, and whether VS Code is open now."""
-    known = servers_core.kinds(root)
-    env = servers_core.read_env(root)
+    known = conn_core.types(root)
+    env = conn_core.read_env(root)
     seen = reach.read(root)
     rows = []
-    for alias, server in servers_core.listed(root).items():
-        kind = known.get(str(server.get("kind"))) or {}
+    for alias, server in conn_core.listed(root).items():
+        kind = known.get(str(server.get("type"))) or {}
         auth = (kind.get("auth") or {}).get(server.get("auth") or next(iter(kind.get("auth") or {}), ""), {}) or {}
-        saved = servers_core.identity_of(env, alias, kind)
-        rows.append({"alias": alias, "label": server.get("label", ""), "kind": server.get("kind", ""), "kind_label": kind.get("label", server.get("kind", "")), "known": bool(kind),
+        saved = conn_core.identity_of(env, alias, kind)
+        rows.append({"alias": alias, "label": server.get("label", ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "toolpack": kind.get("toolpack", ""), "known": bool(kind), "login": auth.get("login", ""),
                      "env": server.get("env", ""), "auth": server.get("auth", ""), "auth_label": auth.get("label", ""), "identity": auth.get("identity", ""), "own": bool(server.get("own")),
                      "fields": {field: server.get(field, spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
                      "account": saved.get("account", ""), "saved": bool(saved), "reach": (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")})
-    kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", "")} for mode, spec in (kind.get("auth") or {}).items()}}
-                 for name, kind in known.items() if not servers_core.kind_problems(kind)}
-    return {"servers": rows, "kinds": kinds_out, "state": servers_core.state(root), "vscode_open": bool(vscode_open), "windows": os.name == "nt"}
+    kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
+                 for name, kind in known.items() if not conn_core.type_problems(kind)}
+    return {"connections": rows, "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "windows": os.name == "nt"}
+
+
+EMBEDDED = re.compile(r"\bElectron/\d")  # the user agent of VS Code's own browser (an Electron app); Chrome, Edge and Firefox never send it
 
 class Board:
     """What one server holds: the settings, the pairing code and the sessions of paired browsers. Memory only."""
@@ -693,43 +697,84 @@ class Board:
         given = {key: str(data.get(key) or "") for key in ("account", "password", "keyfile")}
         own = data.get("own") if isinstance(data.get("own"), dict) else None
         if own is not None:
-            own = {key: str(value) for key, value in own.items() if key in ("kind", "env", "auth", "label") or key in ((servers_core.kinds(self.root).get(str(own.get("kind"))) or {}).get("fields") or {})}
-            if not servers_core.ALIAS.match(alias) or alias in servers_core.company_servers(config.policy_or_empty(self.root, servers_core.SERVERS_POLICY)):
-                raise ValueError(say("servers.alias.bad", alias=alias))
-            if own.get("env") not in ("dev", "ist", "qat"):
-                raise ValueError(say("servers.own.env.none"))
+            own = {key: str(value) for key, value in own.items() if key in ("type", "env", "auth", "label") or key in ((conn_core.types(self.root).get(str(own.get("type"))) or {}).get("fields") or {})}
+            if not conn_core.ALIAS.match(alias) or alias in conn_core.company_connections(config.policy_or_empty(self.root, conn_core.POLICY)):
+                raise ValueError(say("connections.alias.bad", alias=alias))
+            if own.get("env") not in ("dev", "ist", "qat", "none"):
+                raise ValueError(say("connections.own.env.none"))
         stamp = hashlib.sha256(json.dumps([alias, given, own], sort_keys=True).encode("utf-8")).hexdigest()
         if step == "list":
             return servers_view(self.root, self.link.status().get("ready", False))
         if step == "test":
-            found = servers_core.test(self.root, alias, given, server=dict(own, own=True) if own else None)
-            if found["state"] == "ok":
-                self.tested[alias] = (stamp, time.time())
+            found = conn_core.test(self.root, alias, given, server=dict(own, own=True) if own else None)
+            if found["state"] in ("ok", "mcp"):  # an MCP connection has nothing to test here: what is kept is the connection itself
+                self.tested[alias] = (stamp, time.time(), found.get("who", ""))
             return found
         if step == "save":
             passed = self.tested.get(alias)
             if not passed or passed[0] != stamp or time.time() - passed[1] > 900:
-                raise ValueError(say("servers.save.untested"))
-            servers_core.save(self.root, alias, given, own)
+                raise ValueError(say("connections.save.untested"))
+            conn_core.save(self.root, alias, given, own, who=passed[2] if len(passed) > 2 else "")
             self.tested.pop(alias, None)
             return {"saved": alias}
         if step == "forget":
-            servers_core.forget(self.root, alias)
+            conn_core.forget(self.root, alias)
             return {"forgot": alias}
+        if step == "export":  # one's own connections in the form of connections.json (Tools, Connections, Export): no identity
+            return conn_core.export(self.root)
         if step == "share":  # into the company pack: the server only, never the identity (knowledge base, Pack for colleagues)
-            return servers_core.share(self.root, [str(item) for item in (data.get("aliases") or []) if isinstance(item, str)])
+            return conn_core.share(self.root, [str(item) for item in (data.get("aliases") or []) if isinstance(item, str)])
         chosen = [str(item) for item in (data.get("chosen") or []) if isinstance(item, str)]
         primary = str(data.get("primary") or "")
         if step == "plan":
-            return servers_core.plan(self.root, chosen, primary)
+            return conn_core.plan(self.root, chosen, primary)
         if step == "open":
             if self.link.status().get("ready"):
-                raise ValueError(say("servers.open.running"))
+                raise ValueError(say("connections.open.running"))
             code = ahp.find_code()
             if not code:
                 raise ValueError(say("serve.open.no-cli"))
-            return servers_core.launch(self.root, chosen, primary, [code, str(self.root)])
+            return conn_core.launch(self.root, chosen, primary, [code, str(self.root)])
         raise ValueError(say("serve.refused.request"))
+
+    def machine(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Get ready, This computer (1.7.11): the tool folders and the CA bundle VS Code is started with (`core.launchenv`). `step`: state, paths, bundle, drop."""
+        step = str(data.get("step", ""))
+        if step == "paths":
+            launchenv.save_paths(self.root, [str(item) for item in (data.get("paths") or []) if isinstance(item, str)])
+        elif step == "bundle":
+            made = launchenv.make(self.root, str(data.get("host") or ""), str(data.get("proxy") or ""))
+            return dict(launchenv.state(self.root), made=made, vscode_open=bool(self.link.status().get("ready", False)))
+        elif step == "drop":
+            launchenv.drop_bundle(self.root)
+        elif step == "mcp":  # the person says whether MCP may be used here (1.7.17); the tool packs' MCP servers follow
+            done = launchenv.set_mcp(self.root, bool(data.get("allowed")))
+            return dict(launchenv.state(self.root), mcp_done=done, vscode_open=bool(self.link.status().get("ready", False)))
+        elif step in ("toolpack-update", "toolpack-remove"):  # the paired browser is the person's: what `harness toolpack add --replace` / `remove` do at a terminal
+            from core import toolpacks
+
+            name = str(data.get("name") or "")
+            kept = toolpacks.ledger(self.root).get(name) or {}
+            if kept.get("from") == toolpacks.COMPANY:
+                raise ValueError(say("toolpack.company.managed", name=name))
+            if step == "toolpack-remove":
+                toolpacks.remove(self.root, name)
+            else:
+                toolpacks.add(self.root, str(kept.get("from") or ""), origin=str(kept.get("from") or ""), replace=True)
+            step = "toolpacks"
+        if step == "toolpacks":  # Get ready, Tool packs (1.7.13): what each has and lacks, with the servers of its kinds and whether each is signed in
+            from core import toolpacks
+
+            found = toolpacks.check(self.root)
+            found.pop("exit_code", None)
+            known, env = conn_core.types(self.root), conn_core.read_env(self.root)
+            for row in found["toolpacks"]:
+                row["connections"] = [{"alias": alias, "saved": bool(conn_core.identity_of(env, alias, known.get(str(server.get("type"))) or {}))}
+                                  for alias, server in conn_core.listed(self.root).items() if (known.get(str(server.get("type"))) or {}).get("toolpack") == row["name"]]
+            return found
+        if step not in ("state", "paths", "drop"):
+            raise ValueError(say("serve.refused.request"))
+        return dict(launchenv.state(self.root), vscode_open=bool(self.link.status().get("ready", False)))
 
     def setup(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Get ready (`core/setup.py`). `step`: state, probe or act. When the short command appears while VS Code is open, the agent's terminals do not have it yet:
@@ -1214,7 +1259,14 @@ def handler_for(board: Board) -> type:
         def host_ok(self) -> bool:
             return self.headers.get("Host", "") in allowed_hosts
 
+        def embedded(self) -> bool:
+            """A browser inside an editor (VS Code's own, which the agent can drive with its browser tools, 1.7.14): it is never paired, so the agent
+            cannot press a person's button there. Told by the user agent an Electron app sends."""
+            return bool(EMBEDDED.search(self.headers.get("User-Agent", "")))
+
         def token(self) -> str:
+            if self.embedded():
+                return ""
             for part in self.headers.get("Cookie", "").split(";"):
                 name, _, value = part.strip().partition("=")
                 if name == board.cookie:
@@ -1311,6 +1363,8 @@ def handler_for(board: Board) -> type:
                 return self.answer(400, {"error": say("serve.refused.body")})
             path = urlparse(self.path).path
             if path == "/api/pair":
+                if self.embedded():  # checked first: the code is not used up
+                    return self.answer(403, {"error": say("serve.pair.embedded")})
                 token = board.pair(str(data.get("code", "")))
                 if token is None:
                     return self.answer(403, {"error": say("serve.pair.wrong")})
@@ -1392,13 +1446,23 @@ def handler_for(board: Board) -> type:
                     return self.answer(200, {"result": found}) if found else self.answer(404, {"error": say("serve.refused.request")})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})
-            if path == "/api/servers":  # Get ready, Servers (1.7.10): the paired browser only; it writes the person's identities to .harness/.env
+            if path == "/api/connections":  # Get ready, Servers (1.7.10): the paired browser only; it writes the person's identities to .harness/.env
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 try:
                     result = board.servers(data)
                     if str(data.get("step", "")) in ("save", "forget", "open"):
                         print(say("serve.did", action="servers " + str(data.get("step")), task=str(data.get("alias") or "-")), flush=True)  # never a value
+                    return self.answer(200, {"result": result})
+                except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
+                    return self.answer(409, {"error": str(error)})
+            if path == "/api/machine":  # Get ready, This computer (1.7.11): the paired browser only; it writes .harness/.env and .harness/certs/
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                try:
+                    result = board.machine(data)
+                    if str(data.get("step", "")) not in ("state", "toolpacks"):  # a read leaves no line; an update or a removal does
+                        print(say("serve.did", action="machine " + str(data.get("step")), task="-"), flush=True)
                     return self.answer(200, {"result": result})
                 except Exception as error:  # noqa: BLE001 - a refusal is shown on the page
                     return self.answer(409, {"error": str(error)})

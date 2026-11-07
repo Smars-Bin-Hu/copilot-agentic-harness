@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""The sample tool pack's MCP server (stdio): the same made-up ticket board as the `demotracker` program, whose commands it runs. Used only where MCP
+is allowed (Get ready, This computer); elsewhere the agent uses the program in the terminal."""
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+PROGRAM = Path(__file__).resolve().parent / "demotracker"
+TICKET = {"project": {"type": "string"}, "id": {"type": "string"}}
+TOOLS = [
+    {"name": "get_ticket", "description": "Read one ticket of the demo tracker", "inputSchema": {"type": "object", "properties": TICKET, "required": ["project", "id"]}},
+    {"name": "list_tickets", "description": "List the tickets of a project", "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}, "required": ["project"]}},
+    {"name": "comment_ticket", "description": "Add a comment to a ticket (a write: the person approves it)", "inputSchema": {"type": "object", "properties": dict(TICKET, text={"type": "string"}), "required": ["project", "id", "text"]}},
+    {"name": "set_ticket_state", "description": "Change a ticket's state (a write: the person approves it)", "inputSchema": {"type": "object", "properties": dict(TICKET, state={"type": "string"}), "required": ["project", "id", "state"]}},
+]
+ACTIONS = {"get_ticket": ("get", "id"), "list_tickets": ("list", None), "comment_ticket": ("comment", "id", "text"), "set_ticket_state": ("set-state", "id", "state")}
+
+
+def reply(number, result):
+    sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": number, "result": result}) + "\n")
+    sys.stdout.flush()
+
+
+def call(name, args):
+    action, *keys = ACTIONS[name]
+    words = [sys.executable, str(PROGRAM), "--project", str(args.get("project", "")), action] + [str(args.get(key, "")) for key in keys if key]
+    done = subprocess.run(words, capture_output=True, text=True)
+    return {"content": [{"type": "text", "text": (done.stdout + done.stderr).strip() or "done"}], "isError": done.returncode != 0}
+
+
+for line in sys.stdin:
+    try:
+        message = json.loads(line)
+    except ValueError:
+        continue
+    method, number = message.get("method"), message.get("id")
+    if method == "initialize":
+        reply(number, {"protocolVersion": message["params"].get("protocolVersion", "2024-11-05"), "capabilities": {"tools": {}}, "serverInfo": {"name": "demotracker", "version": "1"}})
+    elif method == "tools/list":
+        reply(number, {"tools": TOOLS})
+    elif method == "tools/call":
+        reply(number, call(message["params"]["name"], message["params"].get("arguments") or {}))
+    elif number is not None:
+        reply(number, {})

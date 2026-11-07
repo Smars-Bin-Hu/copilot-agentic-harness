@@ -55,7 +55,7 @@
 .rv-pop[hidden]{display:none}.rv-pop p{margin:6px 0 10px}.rv-pop .chips{display:flex;flex-wrap:wrap;gap:6px}.rv-pop .chip{min-width:34px;padding:0 10px}
 .tk-rounds .subtabs{margin:0;border:0}
 .tk-pill .vs-pill{margin:0}
-.tk-forks{padding:2px 0 0;overflow-wrap:anywhere}
+.tk-forks{padding:2px 0 0;overflow-wrap:anywhere}.tk-link{display:inline-block;max-width:100%;margin:0 6px 2px 0;font:12px var(--mono);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;cursor:pointer}
 
 /* ---------- the surface ---------- */
 .tk-surface{margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:var(--r)}

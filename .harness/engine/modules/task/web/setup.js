@@ -443,19 +443,14 @@ const SETUP = (function () {
       show(st.guide.sections.find((part) => part.key === key) || st.guide.sections[0]);
     }
     loadGuide();
-    // Servers (1.7.10): a line here, the work in a window of its own (servers.js), so this form stays short.
-    const serversWords = h("span", {class: "su-note"});
-    const serversButton = h("button", {type: "button", class: "act"}, t("setup.servers.button"));
-    const serversState = h("div", {class: "su-line"}, serversWords, serversButton);
-    const showServers = () => { if (typeof SERVERS === "undefined") return; SERVERS.summary().then((found) => { serversWords.textContent = found.n ? t("setup.servers.state", found) : t("setup.servers.none"); }, () => { serversWords.textContent = ""; }); };
-    serversButton.addEventListener("click", () => SERVERS.open(showServers));
-    showServers();
+    // Tools (1.7.17): one group, a line each for Tool packs, Connections and This computer; the work in one window with a tab each (tools.js).
+    const toolsGroup = typeof TOOLS === "undefined" ? null : TOOLS.group();
     const more = h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row([t("setup.install"), question("python")], install, h("p", {class: "su-note"}, t("setup.install.example"))), row([t("setup.refused"), question("repos")], h("div", {class: "su-line"}, refusedBox, refusedAdd), refusedNote, refusedList, h("p", {class: "su-note"}, t("setup.refused.hint"))));
     app.classList.add("su-loading");  // an empty form that jumps when its data comes is worse than a moment of nothing
     app.replaceChildren(h("div", {class: "su"}, h("h1", null, t(first ? "setup.title" : "setup.guide")), h("p", {class: "su-lead"}, t(finished ? "setup.lead.again" : "setup.lead"), " ", olderLink), shortBox,
       h("section", {class: "su-card"}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "2"), h("h2", null, t("setup.form.title"))),
         changed, broken, row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "chips su-modes"}, chips), langNote), row([t("setup.repos"), question("repos")], h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))),
-        row([t("setup.kb"), kbStar, question("kb")], h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote, kbParts, kbReplace), row([t("setup.company"), question("instructions")], companyState), row([t("setup.servers")], serversState), row([t("setup.prefix"), question("skills")], prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))), row([t("setup.standards"), question("standards")], standardsState),
+        row([t("setup.kb"), kbStar, question("kb")], h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote, kbParts, kbReplace), row([t("setup.company"), question("instructions")], companyState), toolsGroup, row([t("setup.prefix"), question("skills")], prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))), row([t("setup.standards"), question("standards")], standardsState),
         more, h("div", {class: "su-end"}, go, goNote), said)));
     gate();
     load();

@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 import json
 import re
 
-from core import calls, reach, repo_paths, servers, targets, tasks, unseen
+from core import calls, reach, repo_paths, connections, targets, tasks, unseen
 from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
@@ -154,12 +154,39 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
             passes, how = True, "runner"
         elif data and tasks.plan_approved(ctx.root, data["task"], data):
             passes, how = True, "plan"
-    if decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes:
+    if decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes and _openable(systems.get(action.system) or {}):
         data = _open_task(ctx)
         opened = bool(data and _env_opened(data, action.env))  # the person opened this environment for this task (`task allow`, 1.7.4): no further approval
         passes = opened
         how = "opened" if opened else ""
     return {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": opened, "how": how, "code": ""}
+
+
+def check_mcp(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """An MCP tool an installed tool pack names (1.7.14): a read goes through, a write or an exec waits for the person's yes in Copilot (`ask`), a destroy
+    is refused, and a subagent may only read. Logged as a call to the tool pack. A tool no tool pack names is left as it was."""
+    try:
+        from core import toolpacks
+
+        found = toolpacks.mcp_verb(ctx.root, event.tool_name)
+    except Exception:  # noqa: BLE001 - a broken tool pack must not stop a tool call
+        return None
+    if not found:
+        return None
+    facts = {"external": {"system": found["toolpack"], "env": "none", "verb": found["verb"], "target": event.tool_name, "mcp": True}}
+    if found["verb"] == "read":
+        return Decision(facts=facts)
+    if found["verb"] == "destroy" or event.agent_type.strip():
+        return Decision(permission="deny", reason=rules.say("gate.mcp.deny", tool=event.tool_name, toolpack=found["toolpack"], verb=found["verb"]), facts=facts)
+    return Decision(permission="ask", reason=rules.say("gate.mcp.ask", tool=event.tool_name, toolpack=found["toolpack"], verb=found["verb"]), facts=facts)
+
+
+def _openable(system: Dict[str, Any]) -> bool:
+    """May Open to the agent let this system's held calls through (1.7.13)? A system says so with `openable`; a tool pack's system (a ticket board, a
+    pipeline) is closed unless it says yes: its writes reach people, so the person approves each one."""
+    if isinstance(system.get("openable"), bool):
+        return system["openable"]
+    return not system.get("toolpack")
 
 
 def _env_opened(data: Dict[str, Any], env: str) -> bool:
@@ -235,12 +262,12 @@ def named_servers(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if not text:
         return None
     try:
-        found = [one for one in servers.calls(ctx.root) if re.search(rf"(?<![A-Za-z0-9_-]){re.escape(one['alias'])}(?![A-Za-z0-9_-])", text, re.IGNORECASE)]
+        found = [one for one in connections.calls(ctx.root) if re.search(rf"(?<![A-Za-z0-9_-]){re.escape(one['alias'])}(?![A-Za-z0-9_-])", text, re.IGNORECASE)]
     except Exception:  # noqa: BLE001 - a reminder must not get in the way
         return None
     if not found:
         return None
-    return Decision(context=rules.say("servers.named.context", lines="\n".join(f"- {one['alias']} ({one['env'].upper()}): `{one['call']}`" for one in found)))
+    return Decision(context=rules.say("connections.named.context", lines="\n".join(f"- {one['alias']} ({one['env'].upper()}): `{one['call']}`" for one in found)))
 
 
 def asks_board(ctx: Context, text: str) -> int:
@@ -282,8 +309,8 @@ DUMP_ALL = re.compile(r"(?:^|[;&|(]\s*)(?:env|printenv|set|export\s+-p|Get-Child
 
 def secret_names(ctx: Context) -> list:
     """The variables that carry an identity (the kinds' `auth.env`, and the harness's own keys): no kind is known by name here."""
-    names = {servers.PREFIX}
-    for kind in servers.kinds(ctx.root).values():
+    names = {connections.PREFIX}
+    for kind in connections.types(ctx.root).values():
         for auth in (kind.get("auth") or {}).values():
             names.update(str(name) for name in ((auth or {}).get("env") or {}))
     return sorted(names)
@@ -292,19 +319,19 @@ def secret_names(ctx: Context) -> list:
 def check_secrets(event: HookEvent, ctx: Context) -> Optional[Decision]:
     """The person's identities stay out of the agent's hands (1.7.10): no read of `.harness/.env`, no print of a variable that carries one, no dump of
     the whole environment. A net, not a wall: the person's account is the real limit (docs/03-configure.md)."""
-    secret = (ctx.root / servers.ENV_FILE).resolve()
+    secret = (ctx.root / connections.ENV_FILE).resolve()
     for path in event.paths or []:
         try:
             target = (ctx.root / path).resolve() if not path.startswith(("/", "\\")) and ":" not in path[:3] else type(ctx.root)(path).resolve()
         except (OSError, ValueError):
             continue
         if target == secret:
-            return Decision(permission="deny", reason=rules.say("gate.servers.secret"), facts={"kind": "secret"})
+            return Decision(permission="deny", reason=rules.say("gate.connections.secret"), facts={"kind": "secret"})
     if event.tool_kind == "terminal" and event.command:
         text = event.command
         named = {name for name in secret_names(ctx) if re.search(r"(?<![\w])" + re.escape(name), text)}
         if SECRET_FILE.search(text) or DUMP_ALL.search(text) or (named and not named <= owned_names(event, ctx)):
-            return Decision(permission="deny", reason=rules.say("gate.servers.secret"), facts={"kind": "secret"})
+            return Decision(permission="deny", reason=rules.say("gate.connections.secret"), facts={"kind": "secret"})
     return None
 
 
@@ -314,14 +341,14 @@ def owned_names(event: HookEvent, ctx: Context) -> set:
     try:
         listed = ctx.policy("tools").get("systems") or {}
         found = external.classify(event.command, listed)
-        known, servers_of = servers.kinds(ctx.root), servers.listed(ctx.root)
+        known, servers_of = connections.types(ctx.root), connections.listed(ctx.root)
         if not found or any(action.system not in servers_of for action, _decision in found):
             return set()
         if len(gitcmd.split_segments(event.command)) != len(found):  # another command beside the calls (an `echo`, a pipe to elsewhere): nothing named
             return set()
         names: set = set()
         for action, _decision in found:
-            kind = known.get(str(servers_of[action.system].get("kind"))) or {}
+            kind = known.get(str(servers_of[action.system].get("type"))) or {}
             for auth in (kind.get("auth") or {}).values():
                 names.update(str(name) for name in ((auth or {}).get("env") or {}))
         return names
@@ -334,12 +361,12 @@ def check_wrapped(event: HookEvent, ctx: Context, judged: Optional[Dict[str, Any
     if not judged:
         return None
     alias = judged["action"].system
-    wrapped = set(servers.state(ctx.root).get("wrap") or [])
+    wrapped = set(connections.state(ctx.root).get("wrap") or [])
     given = next((found for found in (external.as_run(tokens) for tokens in gitcmd.split_segments(event.command)) if found), None)
     if given and given[0] != alias:
-        return Decision(permission="deny", reason=rules.say("gate.servers.wrap.other", given=given[0], alias=alias), facts={"kind": "wrap"})
+        return Decision(permission="deny", reason=rules.say("gate.connections.wrap.other", given=given[0], alias=alias), facts={"kind": "wrap"})
     if alias in wrapped and not given:
-        return Decision(permission="deny", reason=rules.say("gate.servers.wrap", alias=alias, call=f"harness as {alias} -- {gitcmd.collapse(event.command)}"), facts={"kind": "wrap"})
+        return Decision(permission="deny", reason=rules.say("gate.connections.wrap", alias=alias, call=f"harness as {alias} -- {gitcmd.collapse(event.command)}"), facts={"kind": "wrap"})
     return None
 
 
@@ -347,13 +374,13 @@ def wrapped_context(ctx: Context) -> Optional[Decision]:
     """At the start of a chat: one line with the servers (alias and environment) and where their commands are, and which go through `harness as`.
     The command of each is given only at a prompt that names it (`named_servers`): a chat that never touches a server pays for one line."""
     try:
-        found = servers.calls(ctx.root)
+        found = connections.calls(ctx.root)
     except Exception:  # noqa: BLE001 - a server list that cannot be read must not stop the chat
         found = []
-    wrapped = servers.state(ctx.root).get("wrap") or []
-    parts = [rules.say("servers.calls.context", servers=", ".join(f"{one['alias']} ({one['env'].upper()})" for one in found))] if found else []
+    wrapped = connections.state(ctx.root).get("wrap") or []
+    parts = [rules.say("connections.calls.context", servers=", ".join(f"{one['alias']} ({one['env'].upper()})" for one in found))] if found else []
     if wrapped:
-        parts.append(rules.say("servers.wrap.context", aliases=", ".join(wrapped), first=wrapped[0]))
+        parts.append(rules.say("connections.wrap.context", aliases=", ".join(wrapped), first=wrapped[0]))
     return Decision(context="\n".join(parts)) if parts else None
 
 
@@ -369,6 +396,10 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
         port = asks_board(ctx, json.dumps(event.raw, ensure_ascii=False, default=str))
         if port:
             return Decision(permission="deny", reason=rules.board_request(port))
+        if event.tool_kind == "other":  # an MCP or browser tool: no file and no command line
+            judged = check_mcp(event, ctx)
+            if judged:
+                return judged
     if event.event == "PreToolUse":
         unseen.note_call(ctx.root, event)
         refused = check_secrets(event, ctx)

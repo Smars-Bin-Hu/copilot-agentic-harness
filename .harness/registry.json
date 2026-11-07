@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "version": "1.7.10",
+  "version": "1.7.17",
   "released": "2026-11-06",
   "copyright": "Smars Hu",
   "contributors": [
@@ -13,6 +13,7 @@
       ".harness/engine/doctor.py",
       ".harness/engine/core/",
       ".harness/contracts/kb/",
+      ".harness/contracts/toolpack/",
       ".github/hooks/harness.json",
       ".harness/policies/cli.json",
       ".harness/policies/user.json",
@@ -78,7 +79,7 @@
       ".harness/tests/test_kbextract.py",
       ".harness/tests/test_reinstall.py",
       ".harness/.env.example",
-      ".harness/policies/servers.json"
+      ".harness/policies/connections.json"
     ]
   },
   "modules": {
@@ -226,7 +227,9 @@
         ".github/instructions/workspace.instructions.md",
         ".workspace/README.md",
         ".harness/tests/test_reach.py",
-        ".harness/tests/test_servers.py"
+        ".harness/tests/test_connections.py",
+        ".harness/tests/test_launchenv.py",
+        ".harness/tests/test_toolpacks.py"
       ],
       "retire_when": "Copilot itself supports limiting writes by path and can refuse dangerous terminal commands. The guardrails and the write scope of a task do not retire"
     },

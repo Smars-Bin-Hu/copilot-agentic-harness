@@ -23,7 +23,7 @@ A fact from an environment is worth something only as a saved run with a number.
 ## Prerequisites
 
 - The system is listed by the company. Do not check the way in before you run: run the command. Only when it fails to log in or to connect, run `harness tools reach` (it reads what the start of the chat found; it probes nothing and answers at once): not reached means stop and give the user its `launch` sentence (how to start VS Code so that the identity is there). `harness tools check` probes every system again; run it only when the user asks. A VS Code that was already running when the user started another with the identity does not have it: a tool that then asks for a password in the terminal fails (`liner: function not supported in this terminal` from sqlcmd); that is the same stop. Not listed: hand the run over (`harness task handoff run`), as before.
-- The command is the one the system's skill or the guide gives (the exact program, server and options). For a server set up in Get ready, a prompt that names it by its alias comes with a command that reaches it; otherwise `harness servers` gives it (`call`): keep its program, server and options, change only what it asks. Do not invent a server name, an account or a password; none is ever in a command.
+- The command is the one the system's skill or the guide gives (the exact program, server and options). For a connection set up in Get ready, a prompt that names it comes with a command that reaches it; otherwise `harness connections` gives it (`call`): keep its program, server and options, change only what it asks. Do not invent a server name, an account or a password; none is ever in a command.
 
 ## Step-by-Step Workflows
 

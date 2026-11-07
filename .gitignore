@@ -17,6 +17,9 @@
 .harness/.env
 .harness/.env.tmp
 
+# The CA bundle Get ready makes for the tools of this computer (1.7.11)
+.harness/certs/
+
 # Python cache
 __pycache__/
 *.pyc

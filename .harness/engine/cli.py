@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from core import company, domainskills, messages, output, pinpython, reinstall, render, skillcheck, user  # noqa: E402
+from core import approval, company, toolpacks, domainskills, messages, output, pinpython, reinstall, render, skillcheck, user  # noqa: E402
 from core.paths import repo_root  # noqa: E402
 from core.registry import harness_version, version_banner  # noqa: E402
 import doctor  # noqa: E402
@@ -92,6 +92,16 @@ def check_after_reinstall(names):
     return found
 
 
+def _toolpack_add(source: str, replace: bool) -> dict:
+    approval.require_person("toolpack add", typed=False)
+    return toolpacks.add(repo_root(), source, replace=replace)
+
+
+def _toolpack_remove(name: str) -> dict:
+    approval.require_person("toolpack remove", typed=False)
+    return toolpacks.remove(repo_root(), name)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="harness", description="Harness CLI")
     parser.add_argument("--version", action=ShowVersion)
@@ -126,6 +136,24 @@ def build_parser() -> argparse.ArgumentParser:
     update.add_argument("--from", dest="source", required=True, help="the zip: an absolute path")
     update.add_argument("--apply", action="store_true", help="do it. A person at a terminal only. Files changed here are copied to .harness/runtime/company-backup/ first; then `company sync` runs")
     update.set_defaults(handler=lambda a: company.update(repo_root(), a.source, a.apply))
+    link = commands.add_parser("toolpack", help="toolpacks: what lets the agent work with one outside tool (its kinds, systems, skills), as one folder. Installed by a person, or by `company sync` from <knowledge base>/company/toolpacks/")
+    link_commands = link.add_subparsers(dest="toolpack_command", required=True)
+    link_add = link_commands.add_parser("add", help="install a tool pack from a folder or a zip (a person at a terminal only: its rules are the gate's rules)")
+    link_add.add_argument("source", help="the folder that holds toolpack.json, or a zip of it: an absolute path")
+    link_add.add_argument("--replace", action="store_true", help="replace the one installed under the same name (a newer version)")
+    link_add.set_defaults(handler=lambda a: _toolpack_add(a.source, a.replace), person_only=True)
+    link_list = link_commands.add_parser("list", help="the toolpacks installed here, and whether each has what it needs: its files, its programs, a CA bundle")
+    link_list.set_defaults(handler=lambda _a: toolpacks.check(repo_root()))
+    link_check = link_commands.add_parser("check", help="check a tool pack: an installed one by its name (all when none is given), or a folder before you install it. Exit code 1 when one is not ready")
+    link_check.add_argument("name", nargs="?", default="", help="a name, or the path of a folder")
+    link_check.set_defaults(handler=lambda a: toolpacks.check_folder(repo_root(), Path(a.name).expanduser()) if a.name and Path(a.name).expanduser().is_dir() else toolpacks.check(repo_root(), a.name))
+    link_new = link_commands.add_parser("new", help="the skeleton of a tool pack to fill in (.harness/contracts/toolpack/README.md): in the company pack's tools/packs/ when there is one")
+    link_new.add_argument("name", help="one word of small letters and digits")
+    link_new.add_argument("--out", default="", help="the folder to make it in, instead")
+    link_new.set_defaults(handler=lambda a: toolpacks.new(repo_root(), a.name, a.out))
+    link_remove = link_commands.add_parser("remove", help="take a tool pack away, with the skills it copied; both go to .harness/runtime/toolpack-backup/ (a person at a terminal only)")
+    link_remove.add_argument("name")
+    link_remove.set_defaults(handler=lambda a: _toolpack_remove(a.name), person_only=True)
     task_commands.register(commands)
     gate_commands.register(commands)
     observe_commands.register(commands)

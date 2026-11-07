@@ -10,6 +10,66 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.17 (2026-11-06)
+
+### Added
+
+- **Tools, in one place.** Get ready has one group, **Tools**, with a line each for **Tool packs** (what is installed), **Connections** (where the agent goes, with your sign-in) and **This computer** (programs, the CA bundle, MCP); **Open** shows one Tools window with a tab each. Connections are grouped by type and say which tool pack each comes from; a tool pack shows what it brings.
+- **A written protocol**: `.harness/contracts/toolpack/` (the tool pack: every file and field; the connection list). `harness toolpack new <name>` makes a skeleton that checks clean; `harness toolpack check <folder>` names the file and the field of each problem before you install it.
+- **Export your connections**: once your own connections work, **Export** (Tools, Connections) gives them in the form of `connections.json`, with no account or password: copy it, save it as a file, or put it in the company pack. `harness connections export`.
+- **MCP is optional.** This computer says whether tool packs may add their MCP servers to VS Code here: **blocked** unless you allow it (`harness tools mcp --allow`), and the window says when VS Code here has MCP turned off. Where it is allowed, a tool pack's `mcp.json` goes into `.vscode/mcp.json` (now a guardrail), and comes out again when MCP is blocked or the pack is removed. A connection type may be reached through MCP (`via: mcp`). Every tool pack still works through its program where MCP is blocked; the `demotracker` sample has both.
+
+### Changed
+
+- **Servers are now connections, and their kinds are connection types that tool packs bring.** In the knowledge base, `company/tools/` holds `packs/<name>/` (each with `toolpack.json`, `types/`, `rules.json`, `skills/`, `launch/`, `mcp.json`) and `connections.json` (`{"connections": {name: {"type", "env", ...}}}`). `servers.json`, `kinds/`, `systems.json` and `launch/` directly under `company/tools/` are no longer read: move them into a tool pack and `connections.json`. The command `servers` is now `harness connections`; the identities in `.harness/.env` are `HARNESS_CONNECTION_*`. The samples are `.harness/examples/toolpacks/` (`sqlserver`, `demotracker`) and `.harness/examples/connections.json`.
+
+## 1.7.16 (2026-11-06)
+
+### Added
+
+- **A sample tool pack**, `.harness/examples/toolpacks/demotracker/`: a made-up ticket board with its own little program, a connection type with its own sign-in, gate rules, a skill, a link type and MCP tool rules. Its README walks the whole path in four steps.
+- The guide to how the harness works (`harness-rookie-wondering`, tools) has a part on tool packs.
+
+## 1.7.15 (2026-11-06)
+
+### Added
+
+- **A task can name a ticket or work item** (`harness task link add ado:12345`, or the agent links the id you give it). The task page shows a chip; a tool pack that knows the type (`links` in `toolpack.json`) makes it open the item. When the task closes, the agent asks you whether to update the item and what to write, and never updates it on its own; a write you agree to is drafted with the tool pack's skill and waits for your approval (`harness-my-task`).
+
+## 1.7.14 (2026-11-06)
+
+### Added
+
+- **The gate judges the MCP tools a tool pack names** (`"mcp": {"tools": [{"pattern", "verb"}]}` in `toolpack.json`): a read goes through, a write or an exec makes Copilot ask you, a destroy is refused, and a subagent only reads. Logged as a call to the tool pack.
+
+### Changed
+
+- **The board is never paired in the browser inside VS Code**: the agent can drive that browser with its browser tools, so it could press your buttons there. Pairing is refused with a line to open the link in Chrome, Edge or Firefox, and a cookie carried into it counts for nothing.
+
+## 1.7.13 (2026-11-06)
+
+### Added
+
+- **A program that keeps its own sign-in** (identity `tool` in a connection type, such as `az login`): nothing is typed or kept but the name its test answered with. **Sign in** in the Servers window (now Tools, Connections) runs the type's `login` in the board's Terminal window (`harness connections login <alias>`; a server of your own not saved yet signs in first with `--kind` and `--set field=value`), then **Test** and **Save**. A connection may have no environment (`env: none`): a ticket board, a pipeline service.
+- **Tool packs in Get ready**: once one is installed, a row with a dot each; the hover says what it has and lacks (its programs, the CA bundle, a sign-in), and a button opens where each is set.
+
+### Changed
+
+- **Open to the agent leaves a tool pack's systems closed**: each write to a ticket board or a pipeline waits for you, even in an environment you opened (a tool pack may say `openable: true`).
+- Get ready's **Test** and the board's Terminal window use the tool folders and CA bundle VS Code gets, so a tool found by the agent is found there too.
+
+## 1.7.12 (2026-11-06)
+
+### Added
+
+- **Tool packs**: what lets the agent work with one outside tool (a ticket board, a pipeline service), as one folder: `toolpack.json`, connection types, rules for the gate, skills named after it. `harness toolpack add <folder or zip>` installs one (you, in your own terminal), or put it in the knowledge base under `company/tools/packs/` and `company sync` installs it. Its systems sit after the company pack's and before your `tools.override.json`; `harness toolpack check` says whether its programs are found; `harness toolpack remove` takes it back with its skills. `.harness/toolpacks/` is a guardrail. The harness ships no tool pack.
+
+## 1.7.11 (2026-11-06)
+
+### Added
+
+- **This computer, in Get ready: tool folders and a CA bundle for VS Code.** The agent's commands run with the environment VS Code started with, so a tool unpacked in your own folder, or a proxy that inspects TLS, used to mean starting VS Code from a prepared shell. Now: **Tool folders** are put before PATH, and **Make** builds a CA bundle (the tool's public roots and the chain this computer trusts for an outside address, through the proxy) and keeps it only when a check with it passes. The board gives both to VS Code each time it opens it, as PATH and `REQUESTS_CA_BUNDLE`. `harness tools launch-env`, `harness tools ca-bundle`. `harness reinstall` carries them.
+
 ## 1.7.10 (2026-11-06)
 
 ### Added
@@ -18,12 +78,12 @@ To see which version you have: `harness --version`.
 - **Open VS Code with identities.** In the Servers window, and on the Enter screen when a server is not reached: tick the identities this window holds, then open (VS Code must be closed first). A Windows account is held as `runas /netonly` holds it, without a prompt (Windows); an account carried by variables is put in VS Code's environment. Two identities that cannot share one window (two Windows accounts, or two values of one variable) are marked: the window holds one, the other is reached through **`harness as <alias> -- <command>`**, each such command with that server's identity. The agent is told at the start of each chat, and the gate refuses a call without the prefix with the line to run.
 - **The gate keeps identities from the agent**: a read of `.harness/.env`, a print of a variable that carries an identity (`echo $SQLCMDPASSWORD`, `$env:…`, `%…%`), and a dump of the environment (`env`, `printenv`, `set`) are refused. A server's own call may name its kind's variable (curl with `$TOKEN`); the same variable sent anywhere else is refused.
 - **Servers in the Knowledge base window, and into the company pack.** The window lists the servers set up on this computer (a filled dot: the company's; a ring: your own; the hover says where, and whether your identity is saved). **⇪** on one of your own shows what will be written, then adds it to `company/tools/servers.json` (with its kind file when the pack has none) and syncs: the server only, never the account or the password, which stay in your `.env` and still serve it. Commit the knowledge base and Pack for colleagues as usual.
-- `harness servers`, `harness servers test <alias>`, `harness as`.
+- `harness connections`, `harness connections test <name>` (called `servers` until 1.7.17), `harness as`.
 
 ### Changed
 
 - **A look at a server is a Q&A task, opened without questions and closed when answered.** When you ask to run a read and see what it returns, the agent opens a `qa` task at once (no "which task, which kind", no requirement to confirm, no log), runs the command, answers, writes each command and what it returned into `TASK.md`, and closes the task. It records no evidence unless you ask. The board keeps the row; open it again, or turn it into other work with `task upgrade --kind` (`AGENTS.md`, `harness-my-task`, `generic-evidence-run`, the output of `task new`). And it no longer checks the way in before each run (`harness tools check` probed every server, 18 seconds here): it runs the command, and only when that fails reads `harness tools reach`, which answers at once from what the start of the chat found.
-- **The agent is told how to reach a server you name.** The start of a chat names the servers in one line (alias and environment). A prompt that names a server by its alias comes with a command that reaches it (the test command, no password in it, `harness as <alias> --` before it where the window needs it); `harness servers` shows it as `call` for the others. Before, the agent knew only the aliases and searched for the host and port. A chat that never touches a server pays for one line.
+- **The agent is told how to reach a server you name.** The start of a chat names the servers in one line (alias and environment). A prompt that names a server by its alias comes with a command that reaches it (the test command, no password in it, `harness as <alias> --` before it where the window needs it); `harness connections` (then called `servers`) shows it as `call` for the others. Before, the agent knew only the aliases and searched for the host and port. A chat that never touches a server pays for one line.
 - **Several reads on one server go in one command** (`generic-evidence-run`): one process, one gate check and one turn of the model instead of one each, with a marker printed between the statements. The record still has one step per statement, each with its own command and output. A write goes alone; the gate judges the whole command, so a write inside it is held as before.
 - **Prod takes only a rule written for prod**: a `*` rule of a system no longer loosens prod.
 - **The sample SQL Server pack is a kind and a server list** (`kinds/sqlserver.json`, `servers.json`), ready to copy to the knowledge base; its hand-written `systems.json` is gone (a team's own `systems.json` still works).

@@ -23,7 +23,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 
-from core import config, messages, paths
+from core import config, launchenv, messages, paths
 from core.paths import utc_now
 
 from . import taskrun
@@ -124,9 +124,11 @@ class Terminal:
             if sum(1 for job in self.jobs.values() if not job.ended) >= MAX_RUNNING:
                 raise CommandError(say("term.refused.many", limit=MAX_RUNNING))
         extra: Dict[str, Any] = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW} if sys.platform == "win32" else {"start_new_session": True}
+        base = {**os.environ, **launchenv.extra(self.root)}  # the tool folders and CA bundle VS Code gets (1.7.11): a tool found there is found here
+        path_key = next((key for key in base if key.upper() == "PATH"), "PATH")
         try:
             process = subprocess.Popen(command, cwd=str(cwd), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                       env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "HARNESS_PROGRESS": "1", "PATH": str(engine / "bin") + os.pathsep + os.environ.get("PATH", "")}, **extra)
+                                       env={**base, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8", "HARNESS_PROGRESS": "1", path_key: str(engine / "bin") + os.pathsep + base.get(path_key, "")}, **extra)
         except OSError as error:
             raise CommandError(say("term.refused.start", error=error)) from None
         job = Job(text, process, str(cwd))

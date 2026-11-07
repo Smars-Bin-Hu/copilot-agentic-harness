@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from core import config, messages, shortcmd, targets, tasks
-from core import reach, servers as servers_core, systems as outside
+from core import connections as conn_core, reach, systems as outside
 
 LINES = 6  # errors of doctor shown at the end of the setup
 DOCTOR_TIMEOUT = 300.0  # seconds the child `doctor` may take; `board.doctor_seconds` in the policy `task` (1.6.104: 90 was too short for a work computer that took 80 s)
@@ -173,7 +173,7 @@ class Ready:
         try:
             systems = config.policy_or_empty(self.root, "tools").get("systems") or {}
             raw = reach.view(self.root, systems) if systems and not outside.validate(systems) else []  # what VS Code reached (1.7.9), per server and environment
-            saved = len([alias for alias in servers_core.listed(self.root) if any(key.startswith(servers_core.env_key(alias, "")) and key.endswith(("_ACCOUNT", "_PASSWORD", "_KEYFILE")) for key in servers_core.read_env(self.root))])  # identities kept by Servers (1.7.10)
+            saved = len([alias for alias in conn_core.listed(self.root) if any(key.startswith(conn_core.env_key(alias, "")) and key.endswith(("_ACCOUNT", "_PASSWORD", "_KEYFILE")) for key in conn_core.read_env(self.root))])  # identities kept by Servers (1.7.10)
             marks = {reach.OK: "\u2713", reach.DENIED: "\u2717", reach.FAILED: "\u2717", reach.UNKNOWN: "?"}
             servers = list(dict.fromkeys(line["system"] for line in raw))
             worst = lambda states: reach.DENIED if reach.DENIED in states else reach.FAILED if reach.FAILED in states else reach.UNKNOWN if reach.UNKNOWN in states else reach.OK  # noqa: E731

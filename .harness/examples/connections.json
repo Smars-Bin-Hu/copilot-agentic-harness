@@ -1,7 +1,7 @@
 {
-  "servers": {
+  "connections": {
     "orders-dev": {
-      "kind": "sqlserver",
+      "type": "sqlserver",
       "env": "dev",
       "auth": "windows",
       "host": "sql-dev.example.local",
@@ -10,7 +10,7 @@
       "label": "Orders, DEV"
     },
     "orders-ist": {
-      "kind": "sqlserver",
+      "type": "sqlserver",
       "env": "ist",
       "auth": "windows",
       "host": "sql-ist.example.local",
@@ -19,13 +19,20 @@
       "label": "Orders, IST"
     },
     "orders-qat": {
-      "kind": "sqlserver",
+      "type": "sqlserver",
       "env": "qat",
       "auth": "windows",
       "host": "sql-qat.example.local",
       "port": "1433",
       "database": "orders",
       "label": "Orders, QAT"
+    },
+    "demo": {
+      "type": "demotracker",
+      "env": "none",
+      "auth": "signin",
+      "project": "DEMO",
+      "label": "Demo tracker"
     }
   }
 }

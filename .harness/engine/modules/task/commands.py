@@ -334,6 +334,13 @@ def register_task(subparsers: Any) -> None:
     hand_clear = hand_commands.add_parser("clear", help="the results are back: take the mark away, then work on them")
     hand_clear.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
     hand_clear.set_defaults(handler=lambda a: tasklife.handoff_clear(repo_root(), a.task))
+    linking = commands.add_parser("link", help="name an item of an outside tool in the task (ado:12345, jira:ABC-1): the board shows it; when the work is done the agent may ask whether to update it, never updates it unasked")
+    link_commands = linking.add_subparsers(dest="link_command", required=True)
+    for word, on in (("add", True), ("remove", False)):
+        one = link_commands.add_parser(word, help=("add" if on else "take away") + " a link: <type>:<id>")
+        one.add_argument("ref", help="<type>:<id>, the type a tool pack names (ado, jira, ...)")
+        one.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
+        one.set_defaults(handler=lambda a, on=on: tasklife.link(repo_root(), a.task, a.ref, on))
     allow = commands.add_parser("allow", help="the person opens an environment for one task: the agent's writes and procedures on the listed outside systems of that environment run without a further approval (terminal only; a destroy is still refused, prod cannot be opened)")
     allow.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
     allow.add_argument("--env", required=True, help="dev, ist or qat")

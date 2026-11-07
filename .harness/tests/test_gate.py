@@ -115,7 +115,7 @@ class GuardrailPolicyTests(unittest.TestCase):
             ".harness/registry.json": True,
             ".harness/runtime/state/vscode/s.json": True,
             ".vscode/settings.json": True,
-            ".vscode/mcp.json": False,
+            ".vscode/mcp.json": True,  # 1.7.17: an MCP server is a tool pack's, added only where the person allows MCP
             ".harness/tests/test_gate.py": False,
             ".harness/eval/fixtures/x.json": False,
             ".github/skills/l2/SKILL.md": False,

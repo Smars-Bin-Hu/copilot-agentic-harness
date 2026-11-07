@@ -630,11 +630,19 @@
     ui.review.set(JSON.stringify([full.settings && [full.settings.n, full.settings.max_n], full.status, desk.past && full.round]), () => reviewButton());
     ui.envs.set(JSON.stringify([desk.allow, full.status]), () => envButton());
     ui.pill.set(live ? JSON.stringify([desk.vscode, chat && chat.bound]) : "", () => (live ? [SHELL.vsPill(desk.vscode, chat), SERVE.pairMark(true)] : null));
-    ui.forks.set(JSON.stringify([desk.forked_from, desk.forked_to]), () => (desk.forked_from || desk.forked_to.length ? [
+    const links = desk.links || [];  // outside items the task names (1.7.15): a chip each, the address opens in a new tab
+    ui.forks.set(JSON.stringify([desk.forked_from, desk.forked_to, links]), () => (desk.forked_from || desk.forked_to.length || links.length ? [
+      links.map((item) => linkChip(item)),
       desk.forked_from ? [t("desk.forked.from") + " ", taskLink(desk.forked_from)] : null, desk.forked_from && desk.forked_to.length ? " · " : null,
       desk.forked_to.length ? [t("desk.forked.to") + " ", desk.forked_to.map((name, index) => [index ? ", " : "", taskLink(name)])] : null] : null));
     document.documentElement.style.setProperty("--tkh", ui.head.offsetHeight + "px");  // the tab bar sticks under the header
     Status.refresh();
+  }
+
+  function linkChip(item) {
+    const tip = [item.label ? item.label + " " + item.id : item.ref, item.url || t("desk.link.nourl")].join("\n");
+    return item.url ? h("a", {class: "chip tk-link", href: item.url, target: "_blank", rel: "noopener noreferrer", title: tip}, "\u2197 " + item.ref)
+      : h("span", {class: "chip tk-link", title: tip}, item.ref);
   }
 
   const defectSync = () => { const go = h("button", {type: "button", class: "act kb-mini"}, t("desk.test.defects.sync")); go.addEventListener("click", () => TERM.run("harness task defects sync --task " + desk.name)); return go; };

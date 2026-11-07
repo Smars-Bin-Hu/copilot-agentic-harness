@@ -147,7 +147,7 @@ def tools_check(root: Path) -> Dict[str, Any]:
     try:
         systems = config.load_policy(root, "tools").get("systems")
     except Exception as error:  # noqa: BLE001 - a broken file is what this command is for
-        return {"systems": [], "errors": [f"tools.json, tools.company.json or tools.override.json cannot be read: {error}"], "warnings": [], "ok": False, "exit_code": 1}
+        return {"systems": [], "errors": [f"tools.json, a tool pack's rules.json or tools.override.json cannot be read: {error}"], "warnings": [], "ok": False, "exit_code": 1}
     return external.report(systems, run=lambda command: external.run_probe(command, root))
 
 
@@ -165,42 +165,59 @@ def tools_reach(root: Path, probe: bool) -> Dict[str, Any]:
 
 def run_as(root: Path, alias: str, rest: List[str]) -> Dict[str, Any]:
     """`harness as <alias> -- <command>` (1.7.10): one command of that server with its saved identity; the output as it comes, its exit code."""
-    from core import servers
+    from core import connections
 
     words = rest[1:] if rest and rest[0] == "--" else rest
     if not words:
-        return {"_text": messages.text("servers.as.other", alias=alias), "exit_code": 2}
+        return {"_text": messages.text("connections.as.other", alias=alias), "exit_code": 2}
     listed = config.policy_or_empty(root, "tools").get("systems") or {}
-    code, output = servers.run_as(root, alias, words, lambda line: external.classify(line, listed))
+    code, output = connections.run_as(root, alias, words, lambda line: external.classify(line, listed))
     return {"_text": output, "exit_code": code}
 
 
 def servers_list(root: Path) -> Dict[str, Any]:
     """`harness servers`: every server with its kind, environment and whether an identity is saved; never a password."""
-    from core import servers
+    from core import connections
 
-    env, known = servers.read_env(root), servers.kinds(root)
+    env, known = connections.read_env(root), connections.types(root)
     out = []
-    for alias, server in servers.listed(root).items():
-        kind = known.get(str(server.get("kind"))) or {}
-        saved = servers.identity_of(env, alias, kind)
-        out.append({"alias": alias, "kind": server.get("kind"), "env": server.get("env"), "auth": server.get("auth", ""), "own": bool(server.get("own")),
+    for alias, server in connections.listed(root).items():
+        kind = known.get(str(server.get("type"))) or {}
+        saved = connections.identity_of(env, alias, kind)
+        out.append({"alias": alias, "type": server.get("type"), "env": server.get("env"), "auth": server.get("auth", ""), "own": bool(server.get("own")),
                     "account": saved.get("account", ""), "saved": bool(saved), "known_kind": bool(kind)})
-    calls = {one["alias"]: one["call"] for one in servers.calls(root)}
+    calls = {one["alias"]: one["call"] for one in connections.calls(root)}
     for one in out:
         if one["alias"] in calls:
             one["call"] = calls[one["alias"]]
-    return {"servers": out, "state": servers.state(root)}
+    return {"connections": out, "state": connections.state(root)}
 
 
 def servers_test(root: Path, alias: str) -> Dict[str, Any]:
     """`harness servers test <alias>`: test the way in with the saved identity, from this terminal."""
-    from core import servers
+    from core import connections
 
-    server = servers.listed(root).get(alias) or {}
-    kind = servers.kinds(root).get(str(server.get("kind"))) or {}
-    found = servers.test(root, alias, servers.identity_of(servers.read_env(root), alias, kind))
+    server = connections.listed(root).get(alias) or {}
+    kind = connections.types(root).get(str(server.get("type"))) or {}
+    found = connections.test(root, alias, connections.identity_of(connections.read_env(root), alias, kind))
     return {**found, "alias": alias, "exit_code": 0 if found["state"] == "ok" else 1}
+
+
+def servers_login(root: Path, alias: str, kind: str = "", given: Optional[List[str]] = None) -> Dict[str, Any]:
+    """`harness servers login <alias>`: the sign-in of a program that keeps its own (1.7.13). `--kind` and `--set field=value`: a server not saved yet."""
+    from core import connections
+
+    own = None
+    if kind:
+        own = {"type": kind}
+        for item in given or []:
+            field, _, value = str(item).partition("=")
+            if field.strip():
+                own[field.strip()] = value.strip()
+    code, said = connections.login(root, alias, own)
+    if code == 2 and said:
+        raise CommandError(said)
+    return {"alias": alias, "exit_code": code, "next": say("connections.login.after", alias=alias) if code == 0 else ""}
 
 
 def _wait(root: Path, args: Any) -> Dict[str, Any]:
@@ -209,8 +226,43 @@ def _wait(root: Path, args: Any) -> Dict[str, Any]:
     return wait.run_wait(root, args.run, args.until, args.every, args.timeout, args.out, args.task)
 
 
+def _launch_state(root: Path) -> Dict[str, Any]:
+    from core import launchenv
+
+    return dict(launchenv.state(root), extra=sorted(launchenv.extra(root)))
+
+
+def _export(root: Path, out: str) -> Dict[str, Any]:
+    from core import connections
+
+    found = connections.export(root)
+    if not out:
+        return found
+    Path(out).expanduser().write_text(json.dumps(found, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"written": str(Path(out).expanduser()), "connections": sorted(found["connections"])}
+
+
+def _mcp(root: Path, allow: bool, block: bool) -> Dict[str, Any]:
+    from core import launchenv
+
+    if allow or block:
+        approval.require_person("tools mcp", typed=False)
+        return launchenv.set_mcp(root, allow)
+    return {"mcp": "allowed" if launchenv.mcp_allowed(root) else "blocked", "detected": launchenv.detect_mcp() or "-"}
+
+
+def _ca_bundle(root: Path, host: str, proxy: Any) -> Dict[str, Any]:
+    from core import launchenv
+
+    try:
+        made = launchenv.make(root, host, proxy)
+    except ValueError as error:
+        raise CommandError(str(error)) from None
+    return dict(made, exit_code=0 if made["ok"] else 1)
+
+
 def register(subparsers: Any) -> None:
-    tools = subparsers.add_parser("tools", help="the outside systems a company listed (tools.company.json from the company pack, or tools.override.json)")
+    tools = subparsers.add_parser("tools", help="the outside systems the gate knows (the connections, the tool packs' rules.json from the company pack, or tools.override.json)")
     tools_commands = tools.add_subparsers(dest="tools_command", required=True)
     check = tools_commands.add_parser("check", help="is the list well formed, what does the gate decide for each system and environment, and is each system that has a probe reachable from here? Exit code 1 when there is an error")
     check.set_defaults(handler=lambda args: tools_check(repo_root()))
@@ -218,15 +270,36 @@ def register(subparsers: Any) -> None:
     seen.add_argument("--probe", action="store_true", help="run the probes now and keep the answers (the hook does this at the start of a chat, in VS Code's identity)")
     seen.set_defaults(handler=lambda args: tools_reach(repo_root(), args.probe))
 
+    machine = tools_commands.add_parser("launch-env", help="what the board gives VS Code when it starts it: the tool folders put before PATH and the CA bundle (Get ready, This computer)")
+    machine.set_defaults(handler=lambda args: _launch_state(repo_root()))
+    bundle = tools_commands.add_parser("ca-bundle", help="make the CA bundle for the tools of this computer: the public roots and the chain this computer trusts for an outside address, through the proxy; kept only when a check with it passes")
+    bundle.add_argument("--host", default="", help="the outside address to reach (default example.com); any address the proxy inspects will do")
+    bundle.add_argument("--proxy", default=None, help="host:port of the proxy; left out, the one this computer names (HTTPS_PROXY or the system setting); \"\" for none")
+    bundle.set_defaults(handler=lambda args: _ca_bundle(repo_root(), args.host, args.proxy))
+
+    mcp = tools_commands.add_parser("mcp", help="may tool packs add their MCP servers to VS Code here? Shows the setting; --allow or --block changes it (a person at a terminal only; blocked unless you allow it)")
+    mcp_side = mcp.add_mutually_exclusive_group()
+    mcp_side.add_argument("--allow", action="store_true")
+    mcp_side.add_argument("--block", action="store_true")
+    mcp.set_defaults(handler=lambda a: _mcp(repo_root(), a.allow, a.block))
+
     acting = subparsers.add_parser("as", help="run one command of a server with that server's saved identity (when this window does not hold it): harness as <alias> -- <command>")
     acting.add_argument("alias", help="the server, as Get ready lists it")
     acting.add_argument("rest", nargs=argparse.REMAINDER, help="-- then the command, whole")
     acting.set_defaults(handler=lambda a: run_as(repo_root(), a.alias, a.rest))
-    listing = subparsers.add_parser("servers", help="the servers of this copy (the company pack's and your own) and whether an identity is saved for each; `test <alias>` tests the way in")
-    listing_commands = listing.add_subparsers(dest="servers_command")
+    listing = subparsers.add_parser("connections", help="the servers of this copy (the company pack's and your own) and whether an identity is saved for each; `test <alias>` tests the way in")
+    listing_commands = listing.add_subparsers(dest="connections_command")
     probe = listing_commands.add_parser("test", help="test the way in to a server with its saved identity")
     probe.add_argument("alias")
     probe.set_defaults(handler=lambda a: servers_test(repo_root(), a.alias))
+    out = listing_commands.add_parser("export", help="your own connections in the form of connections.json (no account, no password), to give the company pack or a colleague")
+    out.add_argument("--out", default="", help="a file to write it to; left out, it is printed")
+    out.set_defaults(handler=lambda a: _export(repo_root(), a.out))
+    sign = listing_commands.add_parser("login", help="sign in to a server whose program keeps its own sign-in (an `auth` of identity `tool`, such as az login), with the tool folders and CA bundle VS Code gets")
+    sign.add_argument("alias")
+    sign.add_argument("--type", default="", help="a connection of your own not saved yet: its type")
+    sign.add_argument("--set", action="append", default=[], metavar="FIELD=VALUE", help="a server of your own not saved yet: one of its fields (more than once)")
+    sign.set_defaults(handler=lambda a: servers_login(repo_root(), a.alias, a.type, a.set))
     listing.set_defaults(handler=lambda a: servers_list(repo_root()))
 
     waiting = subparsers.add_parser("wait", help="wait for an outside system to reach a state in one call: run a read of a listed system every N seconds until its output matches a pattern, or a timeout; the last output goes to a file of the task")

@@ -528,6 +528,36 @@ def set_allow(root: Path, raw_task: str, env: str, on: bool, interactive: Option
     return {"task": task, "env": env, "on": on, "changed": before != on, "open": sorted(held), "next": say("task.allow.on" if on else "task.allow.off", env=env.upper())}
 
 
+def link(root: Path, raw_task: str, ref: str, on: bool) -> Dict[str, Any]:
+    """A task names an item of an outside tool (`ado:12345`, 1.7.15): the board shows it, and once the work is done the agent may ask the person whether
+    to update it. The harness keeps only the type and the id; the tool pack of the type knows its address."""
+    from core import toolpacks
+
+    ref = str(ref or "").strip()
+    if not toolpacks.LINK.match(ref):
+        raise CommandError(say("task.link.form", ref=ref or "-"))
+    task = task_ops.resolve(root, raw_task)
+    with task_ops.locked(root, task) as data:
+        held = [item for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]
+        there = any(item["ref"] == ref for item in held)
+        if on and not there:
+            held.append({"ref": ref, "at": utc_now()})
+        elif not on:
+            held = [item for item in held if item["ref"] != ref]
+        data["links"] = held
+        if there != on:
+            task_ops.note(data, "link", f"{ref}: {'on' if on else 'off'}")
+    known = toolpacks.link_view(root, ref)
+    return {"task": task, "links": [item["ref"] for item in held], "changed": there != on,
+            **({"warning": say("task.link.unknown", type=known["type"])} if on and not known["toolpack"] else {})}
+
+
+def links_hint(root: Path, data: Dict[str, Any]) -> str:
+    """One line for the agent when a task that names outside items is done: it may offer to update them, never update them unasked."""
+    refs = [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]
+    return say("task.link.suggest", links=", ".join(refs), name=str(data.get("name") or "")) if refs and data.get("kind") != "qa" else ""  # a look only reads: nothing to offer
+
+
 def handoff_clear(root: Path, raw_task: str) -> Dict[str, Any]:
     """The person came back with the result: the agent takes the mark away before it works on it."""
     task = task_ops.resolve(root, raw_task)

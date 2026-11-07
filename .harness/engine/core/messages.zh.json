@@ -3123,5 +3123,6 @@
   "serve.open.running_env": "VS Code 已经在运行，运行中的 VS Code 拿不到这台电脑的设置（工具目录、CA bundle）。请先完全退出 VS Code，再点 Open VS Code。",
   "toolpack.not_a_pack": "{folder} 不是工具包：里面没有 toolpack.json。",
   "toolpack.zip.bad": "{source} 不是能读的 zip 文件。",
-  "toolpack.path.long": "这个路径对这台电脑来说太长。把文件夹或 zip 移到更短的路径再试。"
+  "toolpack.path.long": "这个路径对这台电脑来说太长。把文件夹或 zip 移到更短的路径再试。",
+  "reach.denied.saved": "{alias}：为它保存的账号或 token 没被接受。到 Tools、Connections 里改好，再点 Test。重新启动 VS Code 没有用。"
 }

@@ -58,6 +58,14 @@ def _write(root: Path, found: Dict[str, Dict[str, Any]]) -> None:
 probes = outside.probes
 
 
+def first_line(output: str, limit: int = 160) -> str:
+    """The first line of a program's answer that says something."""
+    for line in (output or "").splitlines():
+        if line.strip():
+            return line.strip()[:limit]
+    return ""
+
+
 def _judge(needs: Dict[str, Any], code: Optional[int], output: str) -> Tuple[str, str, str]:
     """(state, why, who) of one probe's answer."""
     if needs.get("denied") and re.search(needs["denied"], output or "", re.IGNORECASE):
@@ -65,7 +73,7 @@ def _judge(needs: Dict[str, Any], code: Optional[int], output: str) -> Tuple[str
     if code is None or (needs.get("down") and re.search(needs["down"], output or "", re.IGNORECASE)):
         return FAILED, "no-answer", ""
     if code != 0:
-        return FAILED, f"exit-{code}", ""
+        return FAILED, first_line(output) or f"exit-{code}", ""  # what the program said first, not just its exit code (1.7.21)
     if needs.get("expect"):
         found = re.search(needs["expect"], output or "")
         if not found:
@@ -156,6 +164,13 @@ def view(root: Path, listed: Dict[str, Any]) -> List[Dict[str, Any]]:
     found = read(root)
     from . import launchenv, messages  # they read the connections, which read this module
 
+    from . import connections as conn_core
+
+    try:
+        saved = conn_core.read_env(root)
+        kept = {alias for alias in conn_core.listed(root) if any(saved.get(conn_core.env_key(alias, field)) for field in conn_core.IDENTITY_FIELDS)}
+    except Exception:  # noqa: BLE001 - a view must not fail for a broken list
+        kept = set()
     lacks = launchenv.seen(root)
     started_wrong = bool(lacks) and lacks.get("ok") is False  # a hook found VS Code started without the settings of this computer: what the board's own check found does not count (1.7.21)
     out: List[Dict[str, Any]] = []
@@ -163,6 +178,8 @@ def view(root: Path, listed: Dict[str, Any]) -> List[Dict[str, Any]]:
         launch = (system.get("needs") or {}).get("launch") or ""
         for env in probes(system):
             line = found.get(f"{name}:{env}") or {"state": UNKNOWN, "at": "", "why": "", "who": "", "source": ""}
+            if line.get("state") == DENIED and line.get("why") in ("identity", "other-identity") and name in kept:
+                launch = messages.text("reach.denied.saved", alias=name)  # an identity is kept here and was not accepted: starting VS Code again would change nothing
             if started_wrong:
                 line = {**line, "state": DENIED, "why": "vscode-env", "who": ""}
                 launch = messages.text("reach.vscode_env")

@@ -3123,5 +3123,6 @@
   "serve.open.running_env": "VS Code is already running, and a VS Code that is running cannot get the settings of this computer (tool folders, CA bundle). Quit VS Code completely first, then press Open VS Code again.",
   "toolpack.not_a_pack": "{folder} is not a tool pack: there is no toolpack.json in it.",
   "toolpack.zip.bad": "{source} is not a zip file that can be read.",
-  "toolpack.path.long": "That path is too long for this computer. Move the folder or the zip to a shorter path and try again."
+  "toolpack.path.long": "That path is too long for this computer. Move the folder or the zip to a shorter path and try again.",
+  "reach.denied.saved": "{alias}: the account or token kept for it was not accepted. Fix it in Tools, Connections, then press Test. Starting VS Code again would not help."
 }

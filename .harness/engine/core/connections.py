@@ -347,7 +347,9 @@ def judge(kind: Dict[str, Any], code: Optional[int], output: str) -> Dict[str, s
     if code is None or (kind.get("down") and re.search(kind["down"], output or "", re.IGNORECASE)):
         return {"state": "down", "why": "no-answer" if code is not None or "no answer" in (output or "") else (output or "")[:160], "who": ""}
     if code != 0:
-        return {"state": "failed", "why": f"exit-{code}", "who": ""}
+        from .reach import first_line
+
+        return {"state": "failed", "why": first_line(output) or f"exit-{code}", "who": ""}  # what the program said first (1.7.21)
     if kind.get("expect"):
         found = re.search(kind["expect"], output or "", re.MULTILINE)
         if not found:

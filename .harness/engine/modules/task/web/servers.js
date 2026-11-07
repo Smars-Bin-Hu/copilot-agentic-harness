@@ -13,7 +13,7 @@ const SERVERS = (function () {
   function where(row) { const f = row.fields || {}; return [f.host, f.port].filter(Boolean).join(":") || Object.values(f).filter(Boolean).join(" · "); }
   function result(found) {  // a test's answer: a mark and a short word, the reason on hover
     const word = found.timeout ? t("connections.state.timeout", {seconds: found.timeout}) : t("connections.state." + found.state);
-    const tip = found.timeout ? t("connections.tip.timeout", {seconds: found.timeout}) : found.state === "ok" ? t("connections.tip.ok", {who: found.who || "-", seconds: found.seconds}) : found.state === "missing" || found.state === "mcp" ? found.why : t("connections.tip." + found.state);
+    const tip = found.timeout ? t("connections.tip.timeout", {seconds: found.timeout}) : found.state === "ok" ? t("connections.tip.ok", {who: found.who || "-", seconds: found.seconds}) : found.state === "missing" || found.state === "mcp" ? found.why : found.state === "failed" && found.why && !/^exit-\d+$/.test(found.why) ? t("connections.tip.failed") + "\n" + found.why : t("connections.tip." + found.state);
     return h("span", {class: "sv-result " + (found.state === "ok" || found.state === "mcp" ? "ok" : "bad"), title: tip}, h("b", null, MARK[found.state] || "?"), " ", word);
   }
 

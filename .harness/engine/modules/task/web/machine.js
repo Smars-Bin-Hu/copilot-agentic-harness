@@ -109,8 +109,38 @@ const MACHINE = (function () {
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
     const change = (step, name) => ask(step, {name}).then(() => paint(), (error) => { list.prepend(h("p", {class: "bad"}, error.message)); });
     const button = (text, go) => { const b = h("button", {type: "button", class: "act kb-mini"}, text); b.addEventListener("click", go); return b; };
+    // Install from a folder or zip (1.7.19): a path field and Install. An installed name asks for a second click that says what it replaces.
+    const path = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: t("machine.conn.install.ph"), "aria-label": t("machine.conn.install.ph")});
+    const install = h("button", {type: "button", class: "act hot"}, t("machine.conn.install"));
+    const said = h("div", {class: "mc-said", "aria-live": "polite"});
+    let sure = null;  // {path, name} while the second click is waited for
+    const reset = () => { sure = null; install.textContent = t("machine.conn.install"); install.classList.remove("danger"); };
+    const clean = () => path.value.trim().replace(/^["']+|["']+$/g, "").trim();
+    path.addEventListener("input", () => { if (sure && sure.path !== clean()) { reset(); said.replaceChildren(); } });
+    install.addEventListener("click", () => {
+      const value = clean();
+      if (!value) { said.replaceChildren(h("span", {class: "bad"}, t("machine.conn.install.empty"))); return; }
+      install.disabled = true;
+      ask("toolpack-add", {path: value, replace: !!sure && sure.path === value}).then((got) => {
+        if (got.confirm) {
+          sure = {path: value, name: got.confirm.name};
+          install.textContent = t("machine.conn.replace", {from: got.confirm.installed, to: got.confirm.version});
+          install.classList.add("danger");
+          said.replaceChildren(h("span", {class: "sub"}, t("machine.conn.replace.ask", {name: got.confirm.name, from: got.confirm.installed, to: got.confirm.version})));
+          return;
+        }
+        reset();
+        const done = got.added;
+        said.replaceChildren(h("span", {class: "ok"}, "\u2713 " + t("machine.conn.installed", {name: done.installed, version: done.version, n: done.skills.length})
+          + (got.missing.length ? " " + t("machine.conn.installed.missing", {programs: got.missing.join(", ")}) : "")));
+        path.value = "";
+        paint();
+      }, (error) => { reset(); said.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { install.disabled = false; });
+    });
+    path.addEventListener("keydown", (event) => { if (event.key === "Enter") install.click(); });
     paint();
-    return {body: [h("p", {class: "sub"}, t("machine.conn.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.conn.lead.tip")}, "\u24d8")), list, h("p", {class: "sub"}, t("machine.conn.add"))], foot: []};
+    return {body: [h("p", {class: "sub"}, t("machine.conn.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.conn.lead.tip")}, "\u24d8")), list,
+      h("h3", {class: "mc-h"}, t("machine.conn.install.title")), h("div", {class: "su-line mc-install"}, path, install), said, h("p", {class: "sub"}, t("machine.conn.add"))], foot: []};
   }
 
   function toolpacksSummary() {

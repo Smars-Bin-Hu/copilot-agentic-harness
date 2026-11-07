@@ -55,7 +55,9 @@
   const bot = h("div", {class: "en-bot", "aria-hidden": "true"});
   const say = h("div", {class: "en-say", "aria-hidden": "true"});
   const headText = h("span", null, t("board.enter.checking"));
-  const head = h("div", {class: "en-chk-h h-check"}, h("i"), headText);
+  const getReady = h("button", {type: "button", class: "en-open en-getready", hidden: "hidden", title: t("board.enter.getready.tip")}, t("board.enter.getready"));  // beside "Not ready": the way to /setup (1.7.19)
+  getReady.addEventListener("click", () => location.assign("/setup"));
+  const head = h("div", {class: "en-chk-h h-check"}, h("i"), headText, getReady);
   const list = h("ul", {class: "en-chk-l"});
   const errLine = h("p", {class: "en-err", role: "status", hidden: "hidden"});
   const legal = h("p", {class: "en-legal"}, t("board.enter.legal", {copyright: t("board.copyright"), version: DATA.serve.version || ""}));
@@ -343,10 +345,80 @@
       button = id === "vscode" && Boolean(c.open) ? "open" : false;
     }
     if (state === "note" && (c.why === "error" || c.why === "problem")) message = c.why === "error" ? t("board.enter.m.error", vals) : t("board.enter.m.repos.problem", vals);
-    if (id === "systems" && (c.why === "unreached" || c.why === "unknown") && c.identities && typeof SERVERS !== "undefined") { message = t("board.enter.m.systems.launch"); button = "identities"; }  // the identities kept by Servers (1.7.10)
-    else if (id === "systems" && c.launch && (c.why === "unreached" || c.why === "unknown")) { message = t("board.enter.m.systems.launch"); button = "launch"; }  // Windows: the company's launch script (1.7.9)
-    const tip = c.tip ? t("board.enter.tip." + id + "." + c.why, vals) : id === "systems" && c.why === "unknown" ? t("board.enter.tip.systems.unknown") : "";  // the long words of a short line: on hover (1.7.9)
+    if (id === "systems" && c.why === "unreached" && c.identities && typeof SERVERS !== "undefined") { message = t("board.enter.m.systems.launch"); button = "identities"; }  // the identities kept by Servers (1.7.10)
+    else if (id === "systems" && c.launch && c.why === "unreached") { message = t("board.enter.m.systems.launch"); button = "launch"; }  // Windows: the company's launch script (1.7.9)
+    else if (id === "systems" && c.why === "unknown") { message = t(c.checking ? "board.enter.m.systems.checking" : c.check ? "board.enter.m.systems.notchecked" : "board.enter.m.systems.chat"); button = c.checking || !c.check ? false : "check"; }  // never checked: the board checks it itself (1.7.19)
+    const tip = id === "systems" && c.names && c.names.length ? "" : c.tip ? t("board.enter.tip." + id + "." + c.why, vals) : id === "systems" && c.why === "unknown" ? t("board.enter.tip.systems.unknown") : "";  // the long words of a short line: on hover (1.7.9)
     return {state, tag, message, button, tip};
+  }
+  // Outside systems (1.7.19): one line of names, a dot before each (ok, down, not checked, partly), "+N" for those that do not fit; the table of environments, states,
+  // reasons and times is a window on hover. A name is never cut: the first one wraps when it alone is wider than the line.
+  const pop = h("div", {class: "en-pop", hidden: "hidden", role: "tooltip"});
+  let popTimer = 0, popFor = null;
+  const ago = (stamp) => {
+    const date = new Date(stamp || "");
+    if (!stamp || isNaN(date.getTime())) return t("board.enter.sys.never");
+    const seconds = Math.max(0, (Date.now() - date.getTime()) / 1000);
+    return seconds < 60 ? t("board.enter.sys.now") : seconds < 3600 ? t("board.enter.sys.min", {n: Math.floor(seconds / 60)}) : seconds < 86400 ? t("board.enter.sys.hour", {n: Math.floor(seconds / 3600)}) : t("board.enter.sys.day", {n: Math.floor(seconds / 86400)});
+  };
+  function popTable(c) {
+    const head = ["system", "env", "status", "reason", "checked", "pack"].map((key) => h("th", null, t("board.enter.sys.col." + key)));
+    const body = [];
+    let last = null;
+    for (const row of c.rows || []) {
+      const first = row.system !== last;
+      last = row.system;
+      body.push(h("tr", {class: first ? "first" : ""}, h("td", {class: "sy-n"}, first ? row.system : ""), h("td", {class: "sy-e"}, row.env ? row.env.toUpperCase() : ""),
+        h("td", {class: "sy-s " + row.state}, h("i", {class: "sy-d " + row.state}), t("board.enter.sys.state." + row.state)), h("td", {class: "sy-r"}, row.reason || ""),
+        h("td", {class: "sy-t"}, row.state === "unknown" ? t("board.enter.sys.never") : ago(row.at)), h("td", {class: "sy-p"}, first ? row.pack || "" : "")));
+    }
+    return h("div", {class: "en-pop-in"}, h("table", null, h("thead", null, h("tr", null, ...head)), h("tbody", null, ...body)));
+  }
+  function popShow(li) {
+    const c = chk0.last && chk0.last.checks.find((x) => x.id === "systems");
+    if (!c || !c.rows || !c.rows.length) return;
+    clearTimeout(popTimer); popFor = li;
+    pop.replaceChildren(popTable(c));
+    pop.hidden = false;
+    const r = li.getBoundingClientRect(), w = pop.offsetWidth, ph = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
+    pop.style.top = (r.top - ph - 6 > 8 ? r.top - ph - 6 : Math.min(innerHeight - ph - 8, r.bottom + 6)) + "px";
+  }
+  const popHide = (later) => { clearTimeout(popTimer); popTimer = setTimeout(() => { pop.hidden = true; popFor = null; }, later ? 250 : 0); };
+  document.body.append(pop);
+  pop.addEventListener("mouseenter", () => clearTimeout(popTimer));
+  pop.addEventListener("mouseleave", () => popHide(true));
+  function sysNames(li, c) {
+    let sy = li.querySelector(".sy");
+    if (!sy) {
+      sy = h("div", {class: "sy", tabindex: "0", "aria-label": t("board.enter.t.systems")});
+      li.append(sy);
+      li.addEventListener("mouseenter", () => popShow(li)); li.addEventListener("mouseleave", () => popHide(true));
+      sy.addEventListener("focus", () => popShow(li)); sy.addEventListener("blur", () => popHide(false));
+    }
+    const key = JSON.stringify([c.names, root.lang]);
+    if (sy.dataset.k !== key) {
+      sy.dataset.k = key;
+      sy.replaceChildren(...c.names.map((item) => h("span", {class: "sy-i", "data-state": item.state}, h("i", {class: "sy-d " + item.state}), item.name)), h("span", {class: "sy-more", hidden: ""}));
+    }
+    fitNames(sy);
+    if (popFor === li && !pop.hidden) pop.replaceChildren(popTable(c));  // an open window follows the new answer
+  }
+  function fitNames(sy) {  // show the names that fit on one line, "+N" for the rest
+    const items = [...sy.querySelectorAll(".sy-i")], more = sy.querySelector(".sy-more");
+    items.forEach((item) => { item.hidden = false; });
+    more.hidden = true;
+    if (!sy.clientWidth) return;
+    const room = sy.clientWidth;
+    let used = 0, shown = 0;
+    for (const item of items) {
+      const size = item.offsetWidth + 10;
+      if (shown && used + size > room - 34) break;  // keep room for "+N"; the first name always stays, whole
+      used += size; shown += 1;
+    }
+    if (shown === items.length && used - 10 <= room) return;
+    items.forEach((item, index) => { item.hidden = index >= shown; });
+    more.textContent = "+" + (items.length - shown); more.hidden = false;
   }
   function render() {  // in place: the lines are made once and only their class and text change, so nothing blinks
     if (!list.children.length) build();
@@ -361,7 +433,8 @@
       const cls = "s-" + view.state + (c && !c.blocking ? " warns" : " blocks");
       setClass(li, cls); setText(li.querySelector(".t"), t("board.enter.t." + id));
       const em = li.querySelector("em"); em.title = view.tip || (view.tag.length > 24 ? view.tag : ""); em.classList.toggle("has-tip", Boolean(view.tip));
-      if (id === "systems" && /[\u2713\u2717?]/.test(view.tag)) {  // the marks of each environment in colour (1.7.9): ✓ green, ✗ orange, ? grey
+      if (id === "systems" && c && c.names && c.names.length) { setText(em, ""); em.dataset.k = ""; sysNames(li, c); }  // names with a dot each; the table is on hover (1.7.19)
+      else if (id === "systems" && /[\u2713\u2717?]/.test(view.tag)) {  // the marks of each environment in colour (1.7.9): ✓ green, ✗ orange, ? grey
         if (em.dataset.k !== view.tag) { em.dataset.k = view.tag; em.replaceChildren(...view.tag.split(/([\u2713\u2717?])/).map((part) => part === "\u2713" ? h("b", {class: "mk ok"}, part) : part === "\u2717" ? h("b", {class: "mk bad"}, part) : part === "?" ? h("b", {class: "mk unknown"}, part) : document.createTextNode(part))); }
       } else { em.dataset.k = ""; setText(em, view.tag); }
       li.classList.toggle("attn", id === "systems" && c && c.why === "unreached");
@@ -370,7 +443,7 @@
         if (p.dataset.k !== key) {
           p.replaceChildren(document.createTextNode(view.message));
           if (view.button) {
-            const b = view.button === "identities" ? h("button", {type: "button", class: "en-open", "data-identities": "1"}, t("board.enter.identities")) : view.button === "launch" ? h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")) : h("button", {type: "button", class: "en-open", "data-open": "1"}, t("board.enter.open"));
+            const b = view.button === "check" ? h("button", {type: "button", class: "en-open", "data-check": "1"}, t("board.enter.check")) : view.button === "identities" ? h("button", {type: "button", class: "en-open", "data-identities": "1"}, t("board.enter.identities")) : view.button === "launch" ? h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")) : h("button", {type: "button", class: "en-open", "data-open": "1"}, t("board.enter.open"));
             p.append(h("br"), b);
             if (chk0.openError) p.append(h("br"), h("span", null, chk0.openError));
           }
@@ -395,6 +468,8 @@
     setClass(head, "en-chk-h " + (pending && !bad ? "h-check" : ready ? "h-ok" : "h-wait"));
     setText(headText, pending && !bad ? t("board.enter.checking") : ready ? t("board.enter.ready") : t("board.enter.notready"));
     if (go.disabled === ready) go.disabled = !ready;
+    const offer = !ready && !(pending && !bad) && !chk0.setup;  // not ready for a reason: Get ready is one click away (a new copy already has its own button)
+    if (getReady.hidden === offer) getReady.hidden = !offer;
     const tip = ready ? "" : (first || (down ? errLine.textContent : t("board.enter.checking")));
     if (go.title !== tip) go.title = tip.length > 400 ? tip.slice(0, 399) + "…" : tip;
     const setup = checks.find((x) => x.id === "setup");
@@ -455,7 +530,7 @@
   }
   function finish(quick) {  // the screen goes; the page under it was never held back
     if (!open) return;
-    open = false; remember();
+    open = false; remember(); pop.remove();
     clearInterval(chk0.timer); clearInterval(chk0.tick); clearTimeout(chk0.soon); cancelAnimationFrame(wm.raf); wm.raf = 0; FX.down = false; FX.rel = null; fxClear(); tremble(0, 0);
     app.inert = false; root.classList.remove("en-open");
     if (typeof SPACE !== "undefined") { SPACE.hosted = null; SPACE.onTilt = null; SPACE.set(SPACE.tx / 2, SPACE.ty / 2); }
@@ -471,7 +546,13 @@
 
   // Open VS Code: the person-only call that brings the window of this folder forward (the board's own `/api/open`). The line then says it is waiting.
   list.addEventListener("click", (event) => {  // the identities kept by Servers: pick them, then VS Code opens with them (1.7.10)
-    if (event.target.closest("[data-identities]")) SERVERS.choose();
+    if (event.target.closest("[data-identities]")) SERVERS.choose(() => { chk0.opened = Date.now(); setTimeout(poll, 1500); });  // VS Code opened with them: it is waited for, not blamed (1.7.19)
+  });
+  list.addEventListener("click", (event) => {  // Check: the board looks at the connections now (1.7.19)
+    const button = event.target.closest("[data-check]");
+    if (!button || button.disabled) return;
+    button.disabled = true;
+    ask("/api/reach", {}).then(() => { setTimeout(poll, 800); setTimeout(poll, 2500); }, () => {}).then(() => { setTimeout(() => { button.disabled = false; }, 2500); });
   });
   list.addEventListener("click", (event) => {  // Windows: the company's launch script asks for the identity in a window of its own and starts VS Code with it (1.7.9)
     const button = event.target.closest("[data-launch]");
@@ -498,7 +579,7 @@
 
   // ---------- start ----------
   buildWord(); buildBot(); bindPlay(); wm.spot.setAttribute("cx", (VBW * .62).toFixed(1));
-  window.addEventListener("resize", () => { placeBot(); fxSize(); fitList(); roomForHi(); });
+  window.addEventListener("resize", () => { placeBot(); fxSize(); fitList(); roomForHi(); list.querySelectorAll(".sy").forEach(fitNames); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) return; poll(); loop(); });
   chk0.t0 = Date.now();
   if (shown) present(true); else render();

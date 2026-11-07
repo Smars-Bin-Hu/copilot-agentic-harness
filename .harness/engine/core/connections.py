@@ -40,6 +40,7 @@ IDENTITIES = ("env", "netonly", "keyfile", "tool")  # tool (1.7.13): the program
 SECRET_FIELDS = ("password",)
 OWN_FIELDS = ("type", "env", "auth", "label")  # what a server of the person's own has besides the kind's fields
 TEST_SECONDS = 15
+TOOL_TEST_SECONDS = 60  # a program that keeps its own sign-in (`az`) is slow to start; a type may set `test.timeout` itself (1.7.19)
 VIAS = ("cli", "mcp")  # how a connection of the type is reached: a program in the terminal, or an MCP server VS Code runs (1.7.17)
 ENVS = ("dev", "ist", "qat", "prod", "none")  # none (1.7.13): a ticket board or a pipeline service, which has no environments
 
@@ -86,9 +87,13 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
     for mode, auth in (kind.get("auth") or {}).items():
         if not isinstance(auth, dict) or auth.get("identity") not in IDENTITIES:
             out.append(f"types.{name}.auth.{mode}: `identity` is one of {', '.join(IDENTITIES)}")
-    if not kind.get("test"):
-        out.append(f"types.{name}: `test` is the command that tests the way in")
-    texts = [kind.get("test") or "", kind.get("match") or ""] + [str((auth or {}).get("args") or "") for auth in (kind.get("auth") or {}).values()]
+    if not test_command(kind):
+        out.append(f"types.{name}: `test` is the command that tests the way in (or {{\"command\": ..., \"timeout\": seconds}})")
+    if isinstance(kind.get("test"), dict):
+        wait = kind["test"].get("timeout", 1)
+        if isinstance(wait, bool) or not isinstance(wait, (int, float)) or not 1 <= wait <= 600:
+            out.append(f"types.{name}.test.timeout: seconds, from 1 to 600")
+    texts = [test_command(kind), kind.get("match") or ""] + [str((auth or {}).get("args") or "") for auth in (kind.get("auth") or {}).values()]
     if any("{password}" in text for text in texts):
         out.append(f"types.{name}: a password never goes on a command line; give it through `env` of the auth")
     for key in ("say", "body"):  # 1.7.20: what a held call's card says and shows
@@ -112,6 +117,20 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
 
 
 # --- the .env file ----------------------------------------------------------------------------------------------------------------------------------------
+
+def test_command(kind: Dict[str, Any]) -> str:
+    """The test command of a type: `test` is the text, or {"command", "timeout"}."""
+    given = kind.get("test")
+    return str(given.get("command") or "") if isinstance(given, dict) else str(given or "")
+
+
+def test_seconds(kind: Dict[str, Any], server: Optional[Dict[str, Any]] = None) -> float:
+    """How long a test may take: `test.timeout` of the type; else 60 s for a program that keeps its own sign-in (a `tool` identity), else 15 s."""
+    given = kind.get("test")
+    if isinstance(given, dict) and isinstance(given.get("timeout"), (int, float)) and not isinstance(given.get("timeout"), bool):
+        return float(given["timeout"])
+    return float(TOOL_TEST_SECONDS if delivery(kind, server or {})["identity"] == "tool" else TEST_SECONDS)
+
 
 def env_key(alias: str, field: str) -> str:
     return PREFIX + alias.upper().replace("-", "_") + "_" + field.upper()
@@ -225,7 +244,7 @@ def command(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, st
               "account": identity.get("account", ""), "keyfile": identity.get("keyfile", "")}
     quoted = {key: _quote(str(value)) for key, value in values.items()}
     quoted["auth"] = _fill(str(auth.get("args") or ""), quoted)
-    return " ".join(_fill(kind["test"], quoted).split())
+    return " ".join(_fill(test_command(kind), quoted).split())
 
 
 def delivery(kind: Dict[str, Any], server: Dict[str, Any]) -> Dict[str, Any]:
@@ -365,8 +384,54 @@ def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[st
     if missing_program(line, next((value for key, value in launch.items() if key.upper() == "PATH"), None)):
         return {"state": "missing", "why": say("connections.test.missing", program=shlex.split(line, posix=os.name != "nt")[0]), "who": "", "seconds": 0}
     started = time.time()
-    code, output = run_with(kind, server, identity, line, root, launch=launch)
-    return {**judge(kind, code, output), "seconds": round(time.time() - started, 1)}
+    wait = test_seconds(kind, server)
+    code, output = run_with(kind, server, identity, line, root, timeout=wait, launch=launch)
+    timed = code is None and (output or "").startswith("no answer in ")  # the program was still running: told as a timeout with its limit, not as a failure
+    return {**judge(kind, code, output), "seconds": round(time.time() - started, 1), **({"timeout": int(wait)} if timed else {})}
+
+
+def probe_keys(root: Path) -> List[str]:
+    """The `reach` keys of the connections the board can check by itself: those with a command-line type whose sign-in the board can supply (a `tool` identity, or one kept here)."""
+    known, env = types(root), read_env(root)
+    out = []
+    for alias, server in listed(root).items():
+        kind = known.get(str(server.get("type")))
+        if not kind or kind.get("via") == "mcp" or not kind.get("cli") or type_problems(kind) or server.get("env") not in ENVS:
+            continue
+        if delivery(kind, server)["identity"] != "tool" and not identity_of(env, alias, kind):
+            continue  # VS Code may hold this identity (a launch script, a window opened with it): the board cannot see it, the first chat's hook does
+        out.append(f"{alias}:{server['env']}")
+    return out
+
+
+def probe_all(root: Path, workers: int = 4) -> Dict[str, str]:
+    """The board's own check of each connection (1.7.19), in the environment VS Code is started with (tool folders, CA bundle) and the identity kept here,
+    so the Enter screen need not wait for the first chat's hook. The answer goes where the hook's probe puts it (`core.reach`): `{<alias>:<env>: state}`."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from . import launchenv, reach  # they read this module
+
+    known, env, launch = types(root), read_env(root), launchenv.extra(root)
+    wanted = set(probe_keys(root))
+    jobs = [(alias, server, known[str(server["type"])]) for alias, server in listed(root).items() if f"{alias}:{server.get('env')}" in wanted]
+
+    def one(job: Tuple[str, Dict[str, Any], Dict[str, Any]]) -> Tuple[str, Dict[str, Any]]:
+        alias, server, kind = job
+        identity = identity_of(env, alias, kind)
+        line = command(kind, server, identity)
+        needs = {key: kind[key] for key in ("expect", "denied", "down") if kind.get(key)}
+        if missing_program(line, next((value for key, value in launch.items() if key.upper() == "PATH"), None)):
+            state, why, who = reach.FAILED, "exit-127", ""
+        else:
+            state, why, who = reach._judge(needs, *run_with(kind, server, identity, line, root, timeout=test_seconds(kind, server), launch=launch))  # noqa: SLF001
+        return f"{alias}:{server['env']}", {"state": state, "at": utc_now(), "why": why[:200], "who": who, "source": "probe"}
+
+    with ThreadPoolExecutor(max_workers=max(1, min(workers, len(jobs) or 1))) as pool:
+        answers = list(pool.map(one, jobs))
+    found = reach.read(root)  # read again: a hook may have written meanwhile
+    found.update(dict(answers))
+    reach._write(root, found)  # noqa: SLF001
+    return {key: line["state"] for key, line in answers}
 
 
 def login(root: Path, alias: str, own: Optional[Dict[str, Any]] = None) -> Tuple[int, str]:

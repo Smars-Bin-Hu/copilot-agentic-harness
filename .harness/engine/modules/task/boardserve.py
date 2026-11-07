@@ -73,6 +73,7 @@ from . import tasksize
 from . import wallpaper
 from . import autorun, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
+from . import reachcheck
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -268,7 +269,8 @@ class Board:
         self.wall_window = threading.Lock()  # one folder window at a time
         self.language_stamp: List[int] = []
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
-        self.ready = readiness.Ready(root, self.link)  # the Enter screen (`/api/ready`)
+        self.checker = reachcheck.Checker(root)  # the board looks at the outside connections itself, in the background (1.7.19)
+        self.ready = readiness.Ready(root, self.link, checker=self.checker)  # the Enter screen (`/api/ready`)
         self.space = tasksize.Watch(root)  # how much room the task folders take, measured once an hour (1.6.109)
         self.who: Tuple[Any, str] = (None, "")  # (the stamp of the user files, the name) for `user_name`
 
@@ -738,7 +740,11 @@ class Board:
             code = ahp.find_code()
             if not code:
                 raise ValueError(say("serve.open.no-cli"))
-            return conn_core.launch(self.root, chosen, primary, [code, str(self.root)])
+            made = conn_core.launch(self.root, chosen, primary, [code, str(self.root)])
+            if made.get("started"):  # VS Code is on its way: look for its host often, and check the connections now, not at the first chat
+                self.link.hurry()
+                self.checker.start()
+            return made
         raise ValueError(say("serve.refused.request"))
 
     def machine(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -754,6 +760,20 @@ class Board:
         elif step == "mcp":  # the person says whether MCP may be used here (1.7.17); the tool packs' MCP servers follow
             done = launchenv.set_mcp(self.root, bool(data.get("allowed")))
             return dict(launchenv.state(self.root), mcp_done=done, vscode_open=bool(self.link.status().get("ready", False)))
+        elif step == "toolpack-add":  # a folder or zip the person names (1.7.19): what `harness toolpack add <path>` does; an installed name is replaced only after a second, confirming call
+            from core import toolpacks
+
+            try:
+                found = toolpacks.installed_against(self.root, str(data.get("path") or ""))
+                if found["installed"] and (toolpacks.ledger(self.root).get(found["name"]) or {}).get("from") == toolpacks.COMPANY:
+                    raise ValueError(say("toolpack.company.managed", name=found["name"]))
+                if found["installed"] and not data.get("replace"):
+                    return {"confirm": found}
+                done = toolpacks.add(self.root, str(data.get("path") or ""), replace=bool(data.get("replace")))
+                row = next((item for item in toolpacks.check(self.root, done["installed"])["toolpacks"] if item["name"] == done["installed"]), {})
+            except toolpacks.ToolpackError as error:
+                raise ValueError(str(error)) from None
+            return {"added": done, "missing": [name for name, ok in (row.get("programs") or {}).items() if not ok]}
         elif step in ("toolpack-update", "toolpack-remove"):  # the paired browser is the person's: what `harness toolpack add --replace` / `remove` do at a terminal
             from core import toolpacks
 
@@ -1391,7 +1411,12 @@ def handler_for(board: Board) -> type:
                 asked = board.link.open_window()
                 if asked != "queued":
                     return self.answer(409, {"error": say("serve.open.off") if asked == "off" else say("serve.open.no-cli")})
+                board.checker.start()  # the connections are checked at once, in VS Code's environment, so the Enter screen has a word within seconds (1.7.19)
                 return self.answer(200, {"result": {"queued": True}})
+            if path == "/api/reach":  # the Check button of the outside systems line: the board checks the connections now (the paired browser only)
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                return self.answer(200, {"result": {"started": board.checker.start()}})
             if path == "/api/launch":  # Windows: start the company's launch script (it asks for the identity itself, then starts VS Code); the paired browser only (1.7.9)
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})

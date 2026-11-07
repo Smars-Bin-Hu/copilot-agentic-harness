@@ -106,6 +106,19 @@ def fresh(root: Path, listed: Dict[str, Any], now: Optional[float] = None) -> bo
     return True
 
 
+def recent(root: Path, keys: List[str], seconds: float = 300.0, now: Optional[float] = None) -> bool:
+    """Every key has an answer, whatever it said, no older than `seconds`: the board need not check again (1.7.19)."""
+    found = read(root)
+    now = time.time() if now is None else now
+    for key in keys:
+        try:
+            if now - datetime.fromisoformat(str((found.get(key) or {}).get("at", ""))).timestamp() > seconds:
+                return False
+        except ValueError:
+            return False
+    return True
+
+
 def start(root: Path, listed: Dict[str, Any]) -> bool:
     """At the start of a chat: start the probes in a process of their own and return at once. False when nothing was started (no probe, or fresh)."""
     if not any(probes(system) for system in (listed or {}).values()) or fresh(root, listed):

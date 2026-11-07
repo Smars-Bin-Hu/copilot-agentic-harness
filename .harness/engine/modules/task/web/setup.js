@@ -2,7 +2,7 @@
 // Needs common.js (h, t, copyCommand), serve.js (SERVE), dock.js (DOCK: the knowledge base tip opens its window).
 const SETUP = (function () {
   // Draws the page in `app`. `finished`: what to do when the setup is done; none on the page of its own, which goes to the board. A box taken off the page stops the asking.
-  function mount(app, finished) {
+  function mount(app, finished, onbusy) {  // `onbusy(true|false)`: the window around the form hides its Close while the work runs
     const POLL = 2000, SLOW = 8000;  // slow once the short command is found: only a change from a terminal is left to see
     const leave = finished || (() => location.assign("/"));
     const st = {form: null, timer: 0, probe: 0, refused: [], rules: [], busy: false, saved: false, ready: false, mode: "none", root: "", rootFound: null, singles: [], broken: [], full: false, replace: false, kb: {here: false, domains: 0, prefix: ""}, stamp: "", opened: "", latest: null};
@@ -171,6 +171,7 @@ const SETUP = (function () {
       const lacking = !name.value.trim() ? t("setup.name.need", {limit: 100}) : st.mode !== "none" && !kbPath.value.trim() ? t("setup.kb.path") : st.full && !st.replace ? t("setup.kb.replace.need") : !st.ready ? t("setup.finish.first") : "";
       go.disabled = st.busy || st.saved || Boolean(lacking);
       goNote.textContent = st.busy ? t("setup.finish.working") : st.saved ? "" : lacking || t("setup.finish.note");
+      if (onbusy) onbusy(st.busy);
     }
     const values = () => ({name: name.value, language: st.lang, repos_root: st.root, singles: st.singles, kb_mode: st.mode, kb_path: kbPath.value, kb_replace: st.replace, skill_prefix: prefix.value, install_command: install.value, refused: st.refused, rules: st.rules});
     const chips = ["en", "zh"].map((lang) => {
@@ -291,17 +292,26 @@ const SETUP = (function () {
       return ask("state").then(paint, (error) => { app.classList.remove("su-loading"); said.replaceChildren(...SERVE.reasons(error.message || error)); }).then(() => { if (!document.hidden) st.timer = setTimeout(load, st.ready ? SLOW : POLL); else st.timer = 0; });
     }
 
-    const paintLines = (found) => said.replaceChildren(...found.lines.map((line) => h("p", {class: line.ok ? "su-note good" : "su-note bad"}, (line.ok ? "\u2713 " : "\u2717 ") + t("setup.line." + line.key) + ": " + line.detail)));
+    // While the work runs: a spinner, a line that says do not close, and the steps done. At the end: the result, or the reason it stopped (1.7.19).
+    function paintLines(found) {
+      const lines = found.lines.map((line) => h("p", {class: line.ok ? "su-note good" : "su-note bad"}, (line.ok ? "\u2713 " : "\u2717 ") + t("setup.line." + line.key) + ": " + line.detail));
+      const failed = found.lines.find((line) => !line.ok);
+      const head = found.running ? [h("p", {class: "su-busy su-run-head", role: "status"}, t("setup.run.working")), h("p", {class: "su-note"}, t("setup.run.steps", {done: found.lines.length, total: found.total || found.lines.length}))]
+        : failed ? [h("p", {class: "bad su-run-head", role: "status"}, t("setup.run.failed", {step: t("setup.line." + failed.key)})), h("p", {class: "su-note"}, t("setup.run.retry"))]
+        : found.done ? [h("p", {class: "su-note good su-run-head", role: "status"}, "\u2713 " + t("setup.run.done"))] : [];
+      said.replaceChildren(h("div", {class: "su-run"}, ...head, ...lines));
+      if (found.running || failed) said.scrollIntoView({block: "nearest", behavior: "smooth"});  // the form is long: the progress stays in sight
+    }
     function follow() {
       ask("job").then((found) => {
         paintLines(found);
         if (found.running) { setTimeout(follow, 700); return; }
         st.busy = false;
+        go.textContent = t(found.done ? (finished ? "setup.save" : "setup.finish") : "setup.run.again");  // after a stop, the same button runs it again
         st.stamp = found.stamp;  // what was written here is not a change from elsewhere
         st.saved = found.done;
         gate();
         if (!found.done) return;
-        said.append(h("p", {class: "su-note good"}, t("setup.saved")));
         leave();
       }, (error) => { st.busy = false; gate(); said.replaceChildren(...SERVE.reasons(error.message || error)); });
     }

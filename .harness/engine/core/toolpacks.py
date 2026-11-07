@@ -274,8 +274,27 @@ def _unpack(source: Path, into: Path) -> Path:
     raise ToolpackError(say("toolpack.manifest.none", source=source.name))
 
 
+def clean_path(raw: Any) -> str:
+    """A path pasted by a person: Windows "Copy as path" brings the quotes along."""
+    return str(raw or "").strip().strip("\"'").strip()
+
+
+def installed_against(root: Path, raw: str) -> Dict[str, Any]:
+    """The pack in this folder or zip against the one installed under its name: {name, version, installed}; `installed` is empty when none is."""
+    source = Path(clean_path(raw)).expanduser()
+    if not source.exists():
+        raise ToolpackError(say("toolpack.source.none", source=raw))
+    with tempfile.TemporaryDirectory() as holder:
+        folder = _unpack(source, Path(holder)) if source.is_file() else source
+        found = manifest(folder)
+        name = str(found.get("name") or "")
+        have = ledger(root).get(name) if NAME.match(name) and (root / FOLDER / name).exists() else None
+        return {"name": name, "version": str(found.get("version") or "?"), "installed": str((have or {}).get("version") or "?") if have is not None else ""}
+
+
 def add(root: Path, raw: str, origin: str = "", replace: bool = False) -> Dict[str, Any]:
     """Install a tool pack from a folder or a zip. One installed under the same name is replaced only with `replace` (a newer version, or the company's)."""
+    raw = clean_path(raw)
     source = Path(raw).expanduser()
     if not source.exists():
         raise ToolpackError(say("toolpack.source.none", source=raw))

@@ -377,7 +377,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("DATA.rows", code)  # status only, no task data
         self.assertNotIn("localStorage", code)  # nothing that lets a person skip it: the only memory is the tab's own session
         for call in re.findall(r'ask\("(/api/[a-z]+)"', code):
-            self.assertIn(call, ("/api/ready", "/api/open", "/api/launch"))  # the one read and the person-only actions (1.7.9: the company's launch script, Windows)
+            self.assertIn(call, ("/api/ready", "/api/open", "/api/launch", "/api/reach"))  # the one read and the person-only actions (1.7.9: the company's launch script, Windows)
 
     def test_every_text_of_the_screen_is_in_both_languages(self) -> None:
         code = (WEB / "enter.js").read_text(encoding="utf-8")

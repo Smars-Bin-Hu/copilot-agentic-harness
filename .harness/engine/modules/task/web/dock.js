@@ -469,7 +469,10 @@ const DOCK = (function () {
     const view = SERVE.dialog([h("div", {class: "su-winbar"}, note, close), box]);
     view.box.classList.add("su-window");
     let saved = false, warned = false;
-    const form = SETUP.mount(box, () => { saved = true; note.textContent = ""; close.classList.add("hot"); });
+    const form = SETUP.mount(box, () => { saved = true; note.textContent = ""; close.classList.add("hot"); }, (busy) => {  // no Close while the work runs (1.7.19)
+      close.hidden = busy;
+      note.textContent = busy ? t("setup.run.working") : note.textContent === t("setup.run.working") ? "" : note.textContent;
+    });
     view.holds = () => saved || form.busy() || form.dirty();
     close.addEventListener("click", () => {
       if (saved) location.reload();

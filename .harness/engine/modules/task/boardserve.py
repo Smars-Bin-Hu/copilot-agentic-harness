@@ -608,6 +608,8 @@ class Board:
             noted(self.root, result.get("task") or task, action)
             return result
         if action == "task link":  # one click, no code: the person names an item of an outside tool in the task, or takes it away (1.7.20); the same function as `task link add|remove`
+            if str(who or "") == "on":
+                tasklife.check_link_type(self.root, str(env_name or ""))  # a type no installed tool pack gives is refused here, with the types there are (1.7.22)
             result = tasklife.link(self.root, task, str(env_name or ""), str(who or "") == "on")
             noted(self.root, result.get("task") or task, action)
             return result

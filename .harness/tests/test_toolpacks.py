@@ -330,6 +330,22 @@ class TaskLinks(TaskCase):
 
         return tasklife.link(self.root, NAME, ref, on)
 
+    def test_the_board_refuses_a_type_no_installed_tool_pack_gives_and_says_the_types_there_are(self) -> None:
+        from modules.task import chatnew, tasklife
+        from modules.task.common import CommandError
+
+        tasklife.check_link_type(self.root, "trk:1")  # an installed type goes through
+        with self.assertRaises(CommandError) as caught:
+            tasklife.check_link_type(self.root, "jira:99")
+        self.assertIn("jira", str(caught.exception))
+        self.assertIn("trk", str(caught.exception))
+        with self.assertRaises(CommandError):
+            chatnew.links_of({"links": "trk:1 jira:99"}, self.root)  # the New task form says the same
+        self.assertEqual(chatnew.links_of({"links": "trk:1 trk:2"}, self.root), ["trk:1", "trk:2"])
+        with self.assertRaises(CommandError) as caught:
+            chatnew.links_of({"links": "trk:" + "9" * 100}, self.root)
+        self.assertIn("64", str(caught.exception))  # a long id is told as too long, not as "not a link"
+
     def test_a_link_is_kept_once_drawn_with_its_address_and_taken_away(self) -> None:
         from modules.task import taskdesk
 

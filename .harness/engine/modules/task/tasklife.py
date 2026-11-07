@@ -552,6 +552,16 @@ def _set_allow_links(root: Path, raw_task: str, on: bool) -> Dict[str, Any]:
     return {"task": task, "env": LINKS, "on": on, "changed": before != on, "links": refs, "next": say("task.allow.links.on" if on else "task.allow.links.off", links=", ".join(refs) or "-")}
 
 
+def check_link_type(root: Path, ref: str) -> None:
+    """The board takes a ticket of a type an installed tool pack gives, and says which types there are when it is another (1.7.22). With no type installed, any `<type>:<id>` is kept as text."""
+    from core import toolpacks
+
+    types = [item["type"] for item in toolpacks.link_types(root)]
+    kind = str(ref or "").split(":", 1)[0]
+    if types and kind not in types:
+        raise CommandError(say("task.link.type", type=kind, types=", ".join(types)))
+
+
 def link(root: Path, raw_task: str, ref: str, on: bool) -> Dict[str, Any]:
     """A task names an item of an outside tool (`ado:12345`, 1.7.15): the board shows it, and once the work is done the agent may ask the person whether
     to update it. The harness keeps only the type and the id; the tool pack of the type knows its address."""

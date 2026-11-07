@@ -672,7 +672,12 @@
     const input = h("input", {type: "text", class: "tk-link-in", maxlength: 80, autocomplete: "off", spellcheck: "false", placeholder: types.length ? types[0].type + ":300100" : t("desk.links.ph"), "aria-label": t("desk.links.add")});
     const go = h("button", {type: "button", class: "act"}, t("desk.links.go"));
     const say = h("span", {class: "bad tk-link-bad"}, linking.error);
-    const submit = () => { const ref = input.value.trim(); if (!LINK_FORM.test(ref)) { say.textContent = t("desk.links.bad"); return; } go.disabled = true; linkCall(ref, true); };
+    const submit = () => {
+      const ref = input.value.trim(), kind = ref.split(":")[0];
+      if (!LINK_FORM.test(ref)) { say.textContent = /^[a-z][a-z0-9]{0,15}:[A-Za-z0-9._#/-]+$/.test(ref) ? t("desk.links.long") : t("desk.links.bad"); return; }
+      if (types.length && !types.some((one) => one.type === kind)) { say.textContent = t("desk.links.type", {type: kind, types: types.map((one) => one.type).join(", ")}); return; }  // the server says the same (1.7.22)
+      go.disabled = true; linkCall(ref, true);
+    };
     go.addEventListener("click", submit);
     input.addEventListener("keydown", (event) => { if (event.key === "Enter") submit(); if (event.key === "Escape") { linking.open = false; draw(false); } });
     const kinds = types.map((one) => { const chip = h("button", {type: "button", class: "chip", title: (one.label || one.type) + " \u00b7 " + one.toolpack}, one.type + ":"); chip.addEventListener("click", () => { input.value = one.type + ":"; input.focus(); }); return chip; });

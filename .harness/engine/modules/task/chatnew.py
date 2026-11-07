@@ -10,6 +10,7 @@ thinking level, the reply language, the knowledge base domains (folders a knowle
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Iterable, List, Optional
 
 from core import ahp, domainskills, messages, tasks, toolpacks
@@ -73,11 +74,11 @@ def validate(root: Any, data: Dict[str, Any], models: List[Dict[str, Any]], wait
         raise refusal("permission")
     model = model_of(data, models)
     return {"name": name, "kind": kind, "source": source, "text": text, "lang": lang, "permission": permission, "approve": PERMISSIONS[permission], "model": model,
-            "links": links_of(data), "domains": domains_of(root, data), "domain_choice": bool(intake.kb_domains(root)),
+            "links": links_of(data, root), "domains": domains_of(root, data), "domain_choice": bool(intake.kb_domains(root)),
             "new_domains": [item for item in domains_of(root, data) if not domainskills.find(domainskills.domains(root), item)]}
 
 
-def links_of(data: Dict[str, Any]) -> List[str]:
+def links_of(data: Dict[str, Any], root: Any = None) -> List[str]:
     """The tickets the person typed (`ado:300100`, several), without repeats. Each must be `<type>:<id>` as `task link` takes it; the harness does not look for the type here (a link of a type no tool pack knows still shows as text)."""
     raw = data.get("links")
     if raw is None or raw == "":
@@ -91,7 +92,12 @@ def links_of(data: Dict[str, Any]) -> List[str]:
         raise refusal("links.many", limit=MAX_LINKS)
     for item in found:
         if not toolpacks.LINK.match(item):
-            raise refusal("links.form", ref=item[:80])
+            raise refusal("links.long" if re.match(r"^[a-z][a-z0-9]{0,15}:[A-Za-z0-9._#/-]+$", item) else "links.form", ref=item[:40], limit=64)
+        if root is not None:
+            try:
+                tasklife.check_link_type(root, item)
+            except CommandError as error:
+                raise refusal("links.type", why=str(error)) from None
     return found
 
 

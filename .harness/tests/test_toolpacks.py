@@ -589,7 +589,7 @@ class LinkedItems(TaskCase):
         holder = tempfile.TemporaryDirectory()
         self.addCleanup(holder.cleanup)
         source = make(Path(holder.name) / "tracker", links={"trk": {"label": "Ticket", "type": "tracker", "url": "https://tracker.example.org/{org}/item/{id}"}})
-        kind = dict(KIND, item="\\btracker(?:\\s+--org\\s+\\S+)?\\s+(?:comment|update)\\s+(\\d+)", link="trk", verbs=[{"pattern": "^(?:--org\\s+\\S+\\s+)?(?:[a-z]+\\s+)?(?:--help|-h)\\s*$", "verb": "read"}] + KIND["verbs"] + [{"pattern": "\\b(?:create|update)\\b", "verb": "write"}])
+        kind = dict(KIND, item=["\\btracker(?:\\s+--org\\s+\\S+)?\\s+(?:comment|update|link)\\s+(\\d+)", "\\s--to\\s+(\\d+)"], link="trk", verbs=[{"pattern": "^(?:--org\\s+\\S+\\s+)?(?:[a-z]+\\s+)?(?:--help|-h)\\s*$", "verb": "read"}] + KIND["verbs"] + [{"pattern": "\\b(?:create|update)\\b", "verb": "write"}])
         (source / "types" / "tracker.json").write_text(json.dumps(kind), encoding="utf-8")
         (source / "rules.json").unlink()
         toolpacks.add(self.root, str(source))
@@ -765,6 +765,112 @@ class LinkedItems(TaskCase):
         tasklife.link(self.root, NAME, "trk:42", True)
         chip = [item for item in taskdesk.allow_view(self.root, self.data())["envs"] if item["env"] == "links"]
         self.assertEqual((len(chip), chip[0]["open"], chip[0]["systems"]), (1, False, ["board"]))
+
+    # 1.7.25 (C8 R4): one rule instead of a patch for each way round the net
+
+    def scripts(self) -> None:
+        (self.root / "tools").mkdir(exist_ok=True)
+        (self.root / "tools" / "bad.sh").write_text("#!/bin/sh\ntracker --org demo comment 7 hi\n", encoding="utf-8")
+        (self.root / "tools" / "bad.ps1").write_text("tracker --org demo comment 7 hi\n", encoding="utf-8")
+        (self.root / "tools" / "ok.sh").write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
+        (self.root / "tools" / "ok.py").write_text("import sys\nprint(sys.stdin.read())\n", encoding="utf-8")
+        (self.root / "tools" / "big.sh").write_text("echo hi\n" * 40000, encoding="utf-8")
+
+    def test_every_word_that_is_a_program_is_accounted_for_or_the_line_is_held(self) -> None:
+        """K1: a function, a command in backticks, a program that wraps another, PowerShell's `&`, `%`, `.`, an alias: each held, with the program named."""
+        self.open_links()
+        W = "--org demo comment 7 --text b"
+        for line in (f"`echo tracker` {W}", f"function f {{ tracker $@; }}; f {W}", f"function f {{ tracker $@; }}\nf {W}", f"setsid tracker {W}", f"stdbuf -o0 tracker {W}",
+                     f"find . -maxdepth 0 -exec tracker {W} \\;", f"caffeinate tracker {W}", f"arch -arm64 tracker {W}", f"script -q /dev/null tracker {W}", f"ionice tracker {W}",
+                     f"su -c 'tracker {W}'", f"tmux new 'tracker {W}'", f"screen -dm tracker {W}", f"at now <<< 'tracker {W}'", f"git -c alias.x='!tracker {W}' x",
+                     f"& (Get-Command tracker) {W}", f"& (gcm tracker) {W}", f"&(gcm tracker) {W}", f"pwsh -c \"& (Get-Command tracker) {W}\"", f"1 | % {{ tracker {W} }}",
+                     f"1 | ForEach-Object {{ tracker {W} }}", f". tracker {W}", f"alias x=tracker; x {W}", f"cp /x/tracker x; ./x {W}", f"docker run x tracker {W}",
+                     f"echo tracker | xargs -I{{}} {{}} {W}", f"$(echo tracker) {W}"):
+            self.held(line)
+        reason = self.term("setsid tracker --org demo comment 7 --text b")["permissionDecisionReason"]
+        self.assertIn("`tracker`", reason)
+        self.assertNotIn("write ?", reason)
+
+    def test_a_program_name_that_is_only_an_argument_of_a_reader_is_not_held(self) -> None:
+        """K1, the other side: no new false holds for everyday work."""
+        self.open_links()
+        self.scripts()
+        for line in ("grep -rn tracker .harness | head", "cat .harness/toolpacks/tracker/README.md", "echo \"use tracker item 1\"", "head -5 .harness/toolpacks/tracker/bin/tracker",
+                     "sed -n 1,20p .harness/toolpacks/tracker/bin/tracker", "find .harness -name tracker", "which tracker", "type tracker", "git diff -- .harness/toolpacks/tracker/bin/tracker",
+                     "git grep -n tracker", "rg tracker", "echo tracker | wc -c", "git log --grep='tracker: fix comment'", "echo tracker comment | cat", "harness task link add trk:300114",
+                     "python3 .harness/engine/cli.py task link add trk:7", "cd tools && ./ok.sh", "./tools/ok.sh", "bash tools/ok.sh", "python3 tools/ok.py", "cd .harness/toolpacks/tracker && ls",
+                     "cat > notes.md <<'EOF'\nuse tracker comment 7 to talk\nEOF", "python3 - <<'EOF'\nprint(1)\nEOF",
+                     "/usr/bin/git status", "echo tracker > notes.txt", "Get-Content .harness/toolpacks/tracker/README.md", "Select-String tracker README.md"):
+            self.assertEqual(self.term(line), {}, line)
+
+    def test_a_backslash_and_a_new_line_join_the_lines_before_the_line_is_read(self) -> None:
+        """K2."""
+        self.open_links()
+        self.held("tracker --org demo comment 7 \\\n--text b")
+        self.held("tr\\\nacker --org demo comment 7 hi")
+        self.held("tracker\\\n --org demo comment 7 hi")
+        self.assertIn("task link add trk:7", self.term("tracker --org demo \\\ncomment 7 hi")["permissionDecisionReason"])
+        self.assertEqual(self.term("tracker --org demo comment 42 \\\n--text b"), {}, "a linked and opened item is the same call")
+
+    def test_a_file_that_is_run_is_read_wherever_it_is(self) -> None:
+        """K3: `./x.sh`, `source`, `.`, `<`, `cat | bash`, `bash -x`, `pwsh -File`, a script outside the repository, a file that is not there, a file that is too big."""
+        self.open_links()
+        self.scripts()
+        outside = self.root.parent / "outside-bad.sh"
+        outside.write_text("tracker --org demo comment 7 hi\n", encoding="utf-8")
+        self.addCleanup(outside.unlink)
+        for line in ("./tools/bad.sh", "source tools/bad.sh", ". ./tools/bad.sh", "bash < tools/bad.sh", "cat tools/bad.sh | bash", "cat tools/bad.sh | sh", "bash -x tools/bad.sh",
+                     "pwsh -File tools/bad.ps1", f"bash {outside}", f"{outside}", "bash tools/nothere.sh", "./tools/nothere.sh", "pwsh -File nothere.ps1", "bash tools/big.sh",
+                     "printf 'tracker comment 7' > x.sh; ./x.sh", "printf 'tracker comment 7' > x.sh; bash x.sh", "cp /usr/local/bin/tracker x; ./x comment 7"):
+            self.held(line)
+        self.assertIn("tools/nothere.sh", self.term("bash tools/nothere.sh")["permissionDecisionReason"], "it says which file it could not read")
+        for line in ("cat tools/ok.sh | bash", "bash -x tools/ok.sh", "bash < tools/ok.sh", "source tools/ok.sh", "cd tools && ./ok.sh"):
+            self.assertEqual(self.term(line), {}, line)
+
+    def test_a_here_document_or_string_that_goes_to_an_interpreter_is_code(self) -> None:
+        """K4: the text of `python3 - <<X` and `cat <<X | python3` is code; in a here-document of an unquoted tag the shell runs `$( )`."""
+        self.open_links()
+        for line in ("python3 - <<'X'\nimport os;os.system('tracker --org demo comment 7')\nX", "cat <<'X' | python3\nimport os;os.system('tracker --org demo comment 7')\nX",
+                     "bash <<EOF\ntracker comment 7\nEOF", "cat <<EOF\n$(tracker --org demo comment 7)\nEOF", "python3 - <<< \"import os;os.system('tracker --org demo comment 7')\"", "echo 'tracker comment 7' | python3 -"):
+            self.held(line)
+        self.assertEqual(self.term("cat <<'EOF'\n$(tracker --org demo comment 7)\nEOF"), {}, "a quoted tag: the shell puts nothing in; text for cat")
+
+    def test_only_the_part_that_cannot_be_read_is_held(self) -> None:
+        """K5: what the program prints, handed to python as data, is not code."""
+        self.open_links()
+        self.scripts()
+        for line in ("tracker --org demo get 7 --json | python3 -m json.tool", "tracker --org demo get 7 --json | python3 -m json.tool | head",
+                     "tracker --org demo get 7 | python3 -c 'print(1)'", "tracker --org demo get 7 --json | python3 tools/ok.py", "tracker --org demo get 7 --json | python3 -",
+                     "tracker --org demo get 7 --json > out.json; python3 -c 'import json; json.load(open(\"out.json\"))'", "tracker --org demo get 7 --json | node -e 'console.log(1)'",
+                     "tracker --org demo get 7 | jq .id"):
+            self.assertEqual(self.term(line).get("permissionDecision"), None, line)
+        self.held("tracker --org demo get 7 | python3 -c \"import os;os.system('tracker --org demo comment 7')\"")
+
+    def test_a_command_may_name_several_items_and_each_must_be_in_range(self) -> None:
+        """K6: `tracker link 42 --to 7`: the second number is an item the command writes too."""
+        from modules.task import tasklife
+
+        self.open_links()
+        refused = self.term("tracker --org demo link 42 --to 7")
+        self.assertEqual(refused["permissionDecision"], "deny")
+        self.assertIn("task link add trk:7", refused["permissionDecisionReason"])
+        self.assertEqual(self.term("tracker --org demo link 42 --to 42"), {})
+        refused = self.term("tracker --org demo link 7 --to 42")
+        self.assertIn("task link add trk:7", refused["permissionDecisionReason"])
+        tasklife.link(self.root, NAME, "trk:7", True)  # the agent's link: named, not opened
+        held = self.term("tracker --org demo link 42 --to 7")
+        self.assertEqual(held["permissionDecision"], "deny")
+        self.assertNotIn("task link add", held["permissionDecisionReason"], "held for approval, not refused as unlinked")
+        self.assertEqual(self.term("tracker --org demo comment 42 hi"), {})
+
+    def test_an_encoded_powershell_command_is_held(self) -> None:
+        """K7: any start of the word, `.exe` too."""
+        self.open_links()
+        for line in ("pwsh -EncodedCommand dHJhY2tlcg==", "pwsh -enc dHJhY2tlcg==", "pwsh -e dHJhY2tlcg==", "pwsh -ec dHJhY2tlcg==", "powershell -EncodedCommand dHJhY2tlcg==",
+                     "powershell.exe -enc dHJhY2tlcg==", "cmd /c pwsh -enc dHJhY2tlcg=="):
+            self.held(line)
+        self.assertIn("-EncodedCommand", self.term("pwsh -e dHJhY2tlcg==")["permissionDecisionReason"])
+        self.assertEqual(self.term("pwsh -NoProfile -Command Get-Date"), {})
 
 
 class InstallFromZip(HarnessTestCase):

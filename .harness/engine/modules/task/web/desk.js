@@ -1103,6 +1103,7 @@
     for (const [code, found] of approvedCalls) if (now - found.at > TELL_MINUTES * 60000 || (left && !left.has(code) && now - found.at > 6000)) { approvedCalls.delete(code); toldCodes.delete(code); }  // run (the approval is used up) or run out
     const codes = [...new Set([...(left ? [...left] : []), ...approvedCalls.keys()])];
     if (!codes.length || desk.past) return null;
+    const titles = new Map((Array.isArray(desk.approved) ? desk.approved : []).map((item) => [item.code, item.title]));
     const all = codes.every((code) => toldCodes.has(code));
     const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);  // the agent waits for an answer in its chat: a message from here would answer the wrong thing (1.7.20)
     const can = served() && canAct() && !asking;
@@ -1115,6 +1116,7 @@
     });
     return h("section", {class: "tk-need strong tk-call done"},
       h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good"), codes.map((code) => [" ", h("code", {class: "code-chip still"}, code)])),
+      codes.map((code) => { const title = titles.get(code) || (approvedCalls.get(code) || {}).title || ""; return title ? h("div", {class: "tk-call-say"}, title) : null; }),  // which call was approved (1.7.25)
       h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : all ? "desk.outbox.told" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
       h("div", {class: "tk-need-go tk-call-go"}, tell, said));
   }
@@ -1157,7 +1159,7 @@
   function bodyBlock(item) {
     const body = item.body;
     if (!body) return null;
-    if (body.missing) return h("div", {class: "tk-call-body missing"}, h("p", {class: "bad"}, t("desk.outbox.body.missing", {path: body.path})));
+    if (body.missing) return h("div", {class: "tk-call-body missing"}, h("p", {class: "bad"}, t("desk.outbox.body.missing", {path: body.path, dismiss: t("desk.outbox.dismiss")})));
     return h("div", {class: "tk-call-body"},
       h("div", {class: "tk-body-h"}, h("b", null, t("desk.outbox.body")), " ", h("span", {class: "sub"}, [body.path ? t("desk.outbox.body.file", {path: body.path}) : "", body.lines > 1 ? t("desk.outbox.body.lines", {n: body.lines}) : ""].filter(Boolean).join(" \u00b7 "))),
       h("pre", {class: "tk-body-text", tabindex: "0"}, body.text), body.cut ? h("p", {class: "sub"}, t("desk.outbox.body.cut")) : null);
@@ -1212,7 +1214,7 @@
     const send = () => {
       if (!ready_()) return;
       yes.disabled = true; yes.textContent = t("board.serve.working");
-      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then(() => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now()}); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
+      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then(() => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), title: item.say || String(item.command || "").replace(/\s+/g, " ").slice(0, 80)}); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
     };
     yes.addEventListener("click", send);
     input.addEventListener("keydown", (event) => { if (isEnter(event) && !yes.disabled) send(); });

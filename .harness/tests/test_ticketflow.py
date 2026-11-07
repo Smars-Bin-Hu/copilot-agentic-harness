@@ -100,6 +100,11 @@ class HeldCallCard(TaskCase):
         self.assertEqual(card["say"], "Add a comment to ticket 7")
         self.assertEqual((card["body"]["from"], card["body"]["lines"], card["body"]["text"]), ("file", 2, "Checked the load.\nAll good.\n"))
 
+    def test_the_facts_a_type_shows_are_on_the_card(self) -> None:
+        """1.7.25 (K11): `show` of the type (the sample's `state`) reaches the card of a held call; the page draws every fact it is given."""
+        card = self.held("demotracker --project DEMO set-state 7 Done")
+        self.assertEqual((card["facts"]["ticket"], card["facts"]["state"]), ("7", "Done"))
+
     def test_a_bare_file_name_is_found_from_the_repository_root_as_the_program_finds_it(self) -> None:
         """1.7.23 (R2 #2): `--file notes.md` showed the task's notes.md as the text, and the program, run from the repository root, found no such file."""
         card = self.held("demotracker --project DEMO comment 7 --file notes.md")
@@ -118,6 +123,16 @@ class HeldCallCard(TaskCase):
         self.assertEqual((card["body"].get("missing"), card["body"]["lines"]), (None, 2))
         card = self.held('demotracker --project DEMO comment 7 --text "one\\ntwo \\"q\\""')
         self.assertEqual(card["body"]["text"], 'one\ntwo "q"')
+
+    def test_the_text_is_read_as_the_shell_passes_it_on_and_then_as_the_program_reads_it(self) -> None:
+        """1.7.25 (R4 K8): `"a\\\\nb"` was shown as one line `a\\nb`; the shell hands `a\\nb` on and the program writes two lines."""
+        from modules.task import cmdview
+
+        rules = [{"pattern": r'--text\s+"((?:[^"\\]|\\.)*)"', "from": "text"}, {"pattern": r"--text\s+'([^']*)'", "from": "text"}]
+        for written, text in (('"a\\nb"', "a\nb"), ('"a\\\\nb"', "a\nb"), ("'a\\nb'", "a\nb"), ('"say \\"hi\\""', 'say "hi"'), ('"cost \\$5"', "cost $5"), ('"x\\ty"', "x\ty"), ("'a\\\\nb'", "a\\\nb")):
+            body = cmdview.body_of(f"comment 7 --text {written}", rules, None)
+            self.assertEqual(body["text"], text, written)
+            self.assertEqual(body["lines"], text.count("\n") + 1, written)
 
     def test_a_file_that_is_not_in_the_task_is_marked_not_read(self) -> None:
         card = self.held("demotracker --project DEMO comment 7 --file ../../outside.md")

@@ -23,6 +23,25 @@ To see which version you have: `harness --version`.
 - **Withdraw** shows only when the newest message has no answer yet (the agent is at work, stopped, asked or failed, or the chat is idle with the message still the last line).
 - **New task**: when tickets are named, the Kind is Dev and the text is short, a quiet note says Kind Q&A is lighter. Kind is not changed for you.
 
+## 1.7.25 (2026-11-07)
+
+### Changed
+
+- **One rule for the gate instead of one patch for each way round it.** Every word of a command line that is the name of a tool's program (`ado`, `ado.cmd`, `/x/bin/ado`) must be accounted for: it is the program of a call the gate judged, or an argument of a program that only reads (`grep`, `cat`, `head`, `sed`, `find` without `-exec`, `git` without `-c`, `harness ...`: one list in the gate's code, written down in the tool pack protocol). Anything else is held, and the reason names the program: behind `setsid`, `stdbuf`, `find -exec`, `su -c`, `tmux`, `screen`, `at`, `git -c alias...`; in a shell function or an alias; in PowerShell's `& (Get-Command ado)`, `% { ado ... }`, `. ado`; in a command in backquotes. What it holds is the line that names the program in a place it cannot follow; `grep ado`, `cat .../ado`, `git commit -m 'ado: fix'` and `harness task link add ado:1` run as before.
+- **A file that is run is read, wherever it is.** `./x.sh`, `source x.sh`, `. x.sh`, `bash x.sh`, `bash -x x.sh`, `pwsh -File x.ps1`, `bash < x.sh` and `cat x.sh | bash`: if the file (up to 200 KB) names a tool's program, the line is held; a file that is missing, too big or not readable is held with a reason that says so. So a script written and run in the same line is held: write it first, run it next. The code of a here-document or a here-string that goes to an interpreter is read the same way.
+- **What a program prints is data, not code.** `ado item 1 --json | python3 -m json.tool`, `... | python3 script.py`, `... | python3 -c "..."` are no longer held as a whole line; only the part the gate cannot read is looked at (the `-c` text, the script file, a here-document).
+- **A command may name several items.** A tool type's `item` can be a list of patterns; every item a command writes must be in range (`ado link 300105 --to 300114`: both numbers; an item that is not linked refuses the call, one the agent linked itself is held).
+- **PowerShell given an encoded command** (`-EncodedCommand`, `-enc`, `-e`) is always held: the gate cannot read it.
+- **A backslash at the end of a line joins the lines** before the gate reads them (`ado\` + new line + `comment ...` is `ado comment ...`).
+
+### Fixed
+
+- The text a held call writes is shown as the shell passes it on, then as the program reads `\n` and `\t`: `"a\\nb"` in double quotes is two lines on the card, as it is in the ticket.
+- The red text on a card whose file was not found names the button as the button reads (Dismiss / 作废) and reads well.
+- The green card of an approved call says which call it is (the sentence of its type, else the start of the command).
+- The facts a type shows on a card (`show`) list every value of an option given twice (`--tag a --tag b`); the sample tracker shows the new state.
+- What the gate cannot read is written in the tool pack protocol, with the advice for stronger isolation: an operating-system sandbox.
+
 ## 1.7.24 (2026-11-07)
 
 ### Fixed

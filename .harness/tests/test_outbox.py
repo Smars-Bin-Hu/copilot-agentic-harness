@@ -206,6 +206,8 @@ class OutboxOnThePageTests(OutboxCase):
         self.approve(code)
         (view,) = taskdesk.approved_view(self.root, TASK)
         self.assertEqual((view["code"], view["command"]), (code, COMMENT))
+        self.assertTrue(view["title"], "1.7.25: the card says which call it is (the type's sentence, else the start of the command)")
+        self.assertTrue(COMMENT.startswith(view["title"]) or view["title"], view["title"])
         self.assertEqual(taskdesk.outbox_view(self.root, TASK), [], "no longer held")
         self.assertEqual(self.term(COMMENT), {}, "the agent runs it: the approval is used up")
         self.assertEqual(taskdesk.approved_view(self.root, TASK), [])

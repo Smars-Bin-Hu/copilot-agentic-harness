@@ -36,7 +36,8 @@
     }
   ],
   "show": {
-    "ticket": "\\b(?:get|comment|set-state|delete)\\s+(\\S+)"
+    "ticket": "\\b(?:get|comment|set-state|delete)\\s+(\\S+)",
+    "state": "\\bset-state\\s+\\S+\\s+(\\S+)"
   },
   "rules": {
     "none": {

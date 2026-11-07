@@ -92,7 +92,7 @@ FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothin
 SETTINGS = ("review set", "task allow", "task link", "test runner")  # settings the agent reads at its next step: they change nothing under its hands, so they work while it is at work (1.7.9)
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
 BUILTIN = ("send", "answer", "steer", "stop", "create", "confirm", "question")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
-DESK_REFRESH = 10  # seconds between two reads of a task page
+DESK_REFRESH = 3  # seconds between two reads of a task page (10 until 1.7.26: a state that came from a hook, such as "waits for your answer", showed up about 7 seconds late)
 REFRESH = 3  # seconds between two boards in the browser when `board.refresh_seconds` of the task policy says nothing
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
 # or send anything elsewhere, even if it ever got past the drawing (which uses textContent only).

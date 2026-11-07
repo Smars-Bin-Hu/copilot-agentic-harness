@@ -97,7 +97,7 @@ class HeldCallCard(TaskCase):
     def test_a_comment_from_a_file_shows_the_sentence_and_the_file(self) -> None:
         relative = self.task.relative_to(self.root).as_posix() + "/notes.md"
         card = self.held(f"demotracker --project DEMO comment 7 --file {relative}")
-        self.assertEqual(card["say"], "Add a comment to ticket 7")
+        self.assertEqual(card["say"], "给工单 7 加评论")  # the tests run in zh (support.py): the sample pack's say text has both languages (1.7.30)
         self.assertEqual((card["body"]["from"], card["body"]["lines"], card["body"]["text"]), ("file", 2, "Checked the load.\nAll good.\n"))
 
     def test_the_facts_a_type_shows_are_on_the_card(self) -> None:
@@ -145,7 +145,7 @@ class HeldCallCard(TaskCase):
         (self.task / "big.md").write_text("line\n" * 5000, encoding="utf-8")
         big = self.held("demotracker --project DEMO comment 7 --file " + self.task.relative_to(self.root).as_posix() + "/big.md")["body"]
         self.assertEqual((len(big["text"]), big["lines"], big["cut"]), (cmdview.BODY_CHARS, 5000, True))
-        self.assertEqual(self.held("demotracker --project DEMO set-state 9 Done")["say"], "Set ticket 9 to Done")
+        self.assertEqual(self.held("demotracker --project DEMO set-state 9 Done")["say"], "把工单 9 改成 Done")
 
     def test_the_rules_are_checked_when_the_type_is_read(self) -> None:
         from core import connections

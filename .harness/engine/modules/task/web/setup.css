@@ -41,8 +41,8 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .sv-win{width:min(820px,calc(100vw - 32px))}.sv-list{display:flex;flex-direction:column;gap:4px}
 .sv-line{display:flex;align-items:center;gap:10px;width:100%;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .sv-line:hover,.sv-line[aria-expanded=true]{border-color:var(--line2);background:var(--hover)}
-.sv-alias{font-family:var(--mono);font-size:13px;white-space:nowrap;flex:0 1 auto;min-width:6ch;overflow:hidden;text-overflow:ellipsis}.sv-kind{color:var(--soft);font-size:12.5px;white-space:nowrap}
-.sv-where{color:var(--soft);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 20 auto}
+.sv-alias{font-family:var(--mono);font-size:13px;white-space:nowrap;flex:0 0 auto;max-width:min(44ch,55%);overflow:hidden;text-overflow:ellipsis}  /* the name keeps its width (1.7.24): only a very long one is cut; the address gives way first */.sv-kind{color:var(--soft);font-size:12.5px;white-space:nowrap}
+.sv-where{color:var(--soft);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 0}
 .sv-state{margin-left:auto;flex:none;font-size:12.5px;white-space:nowrap}.sv-state.ok{color:var(--good)}.sv-state.none{color:var(--soft)}
 .sv-own{flex:none;font-size:11px;padding:0 6px;border:1px solid var(--line2);border-radius:999px;color:var(--soft)}
 .sv-env{flex:none;font:600 10.5px/18px var(--mono);padding:0 6px;border-radius:5px;background:var(--track);color:var(--soft)}

@@ -2316,7 +2316,6 @@
   "setup.run.retry": "Fix the reason below, then press the button to try again.",
   "setup.run.done": "Setup finished.",
   "setup.run.again": "Retry setup",
-  "setup.saved": "Saved.",
   "setup.save": "Save",
   "setup.lead.again": "Change what you need, then press Save. No agent runs and no premium request is spent.",
   "setup.language.forced": "HARNESS_LANGUAGE on this computer sets the language.",

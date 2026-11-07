@@ -2316,7 +2316,6 @@
   "setup.run.retry": "处理下面的原因，再按按钮重试。",
   "setup.run.done": "配置完成。",
   "setup.run.again": "重试配置",
-  "setup.saved": "已保存。",
   "setup.save": "保存",
   "setup.lead.again": "改你要改的，然后按保存。不运行 agent，不花 premium request。",
   "setup.language.forced": "语言由这台电脑上的 HARNESS_LANGUAGE 决定。",

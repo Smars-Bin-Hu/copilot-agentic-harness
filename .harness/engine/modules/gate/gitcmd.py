@@ -72,10 +72,51 @@ def collapse(command: str) -> str:
     return " ".join(command.split())
 
 
+def join_lines(text: str) -> str:
+    """The text as the shell reads it before it splits it (1.7.25): a backslash and a new line join the two lines (not inside single quotes), and a pair of
+    backticks is a `$( )`, so `ado\\` + new line + `comment` is `ado comment`, and a command inside backticks is looked at like one inside `$( )`."""
+    if "\\\n" not in text and "\\\r\n" not in text and "`" not in text:
+        return text
+    out: List[str] = []
+    quote = ""
+    ticks: List[int] = []  # where an open backtick pair began, in `out`
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == "\\" and quote != "'":
+            rest = text[index + 1:index + 3]
+            if rest.startswith("\n") or rest == "\r\n":
+                index += 3 if rest == "\r\n" else 2
+                continue
+            out.append(char)
+            if index + 1 < len(text):
+                out.append(text[index + 1])
+            index += 2
+            continue
+        if quote:
+            if char == quote:
+                quote = ""
+        elif char in "\"'":
+            quote = char
+        if char == "`" and quote != "'":
+            if ticks:
+                out[ticks.pop()] = "$("
+                out.append(")")
+            else:
+                ticks.append(len(out))
+                out.append("`")
+            index += 1
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
 def split_segments(text: str) -> List[List[str]]:
     """The commands of a command line, each as tokens with their quotes removed. Quote-aware: `;` inside quotes splits nothing.
     A quote escaped with a backslash (`\"`, inside double quotes or outside any) is a quote character of the token, not an end of the quoting: the
     command a tool is given in quotes (`sqlcmd -Q \"SELECT ...\"` inside `harness wait --run "..."`) keeps its own quotes (1.7.5)."""
+    text = join_lines(text)
     segments: List[List[str]] = [[]]
     token: Optional[str] = None
     quote = ""

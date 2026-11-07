@@ -15,7 +15,7 @@ read is allowed (AGENTS.md). A tool or a shape never seen is kept for `doctor` (
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import json
 import re
@@ -208,21 +208,30 @@ def _item_scope(call: str, system: Dict[str, Any], verb: str, data: Optional[Dic
     such a write (a read, a new item, no `item` pattern)."""
     if verb != external.WRITE or not system.get("item") or not system.get("link"):
         return None
+    patterns = system["item"] if isinstance(system["item"], list) else [system["item"]]
+    ids: List[str] = []
     try:
-        found = re.match(str(system["item"]), call, re.IGNORECASE)
+        for index, pattern in enumerate(patterns):
+            # the first pattern must match from the program's first word; the others (1.7.25: `--to <id>`) are looked for anywhere in the command, every place they match
+            matches = [re.match(str(pattern), call, re.IGNORECASE)] if index == 0 else list(re.finditer(str(pattern), call, re.IGNORECASE))
+            for found in matches:
+                if found and found.groups():
+                    ids.extend(group for group in found.groups() if group)
     except re.error:
         return None
-    if not found or not found.groups() or not found.group(1):
+    if not ids:
         return None
     from core import toolpacks
 
-    ref = toolpacks.normal_ref(f"{system['link']}:{found.group(1)}")
+    refs_named = list(dict.fromkeys(toolpacks.normal_ref(f"{system['link']}:{item}") for item in ids))  # every item this command writes
     names = {toolpacks.normal_ref(str(item.get("ref"))) for item in ((data or {}).get("links") or []) if isinstance(item, dict)}
-    if ref not in names:
-        return "unlinked", ref
+    for ref in refs_named:
+        if ref not in names:
+            return "unlinked", ref
     opened = (data or {}).get("allow_links")
     refs = {toolpacks.normal_ref(str(item)) for item in ((opened or {}).get("refs") or [])} if isinstance(opened, dict) else set()
-    return ("opened" if ref in refs else "linked"), ref
+    shut = [ref for ref in refs_named if ref not in refs]
+    return ("linked", shut[0]) if shut else ("opened", refs_named[0])
 
 
 def _openable(system: Dict[str, Any]) -> bool:
@@ -287,7 +296,8 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
         return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft), facts=dict(facts, kind="external-outbox"))
     if judged.get("unseen"):
         named = action.target if action.unseen else ""
-        return Decision(permission="deny", reason=rules.say("gate.external.unreadable" if named else "gate.external.unseen", call=command, program=named), facts=dict(facts, kind="external-unseen"))
+        key = {"file": "gate.external.unreadable_file", "encoded": "gate.external.encoded"}.get(action.why) or ("gate.external.unreadable" if named else "gate.external.unseen")
+        return Decision(permission="deny", reason=rules.say(key, call=command, program=named, path=named), facts=dict(facts, kind="external-unseen"))
     if judged.get("unlinked"):
         return Decision(permission="deny", reason=rules.say("gate.external.unlinked", system=action.system, ref=judged["unlinked"], call=command, step=_link_step(ctx, judged["unlinked"], data)), facts=dict(facts, kind="external-unlinked"))
     reason = {external.DENY: rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, command)

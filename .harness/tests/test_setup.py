@@ -433,6 +433,34 @@ class KnowledgeBaseTests(unittest.TestCase):
         self.assertFalse(setupjob.probe_folder(self.root, self.source / "none")["ok"])
 
 
+class JobTests(unittest.TestCase):
+    def run_job(self, steps):
+        import time
+
+        job = setupjob.Job()
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        with mock.patch.object(setup, "check"), mock.patch.object(setupjob, "ahead"), mock.patch.object(setup, "steps", return_value=steps[:1]), \
+                mock.patch.object(setupjob, "steps", return_value=steps[1:]), mock.patch.object(setup, "write"):
+            first = job.start(root, {})
+            for _ in range(100):
+                if not job.view()["running"]:
+                    break
+                time.sleep(0.02)
+        return first, job.view()
+
+    def test_the_job_says_how_many_steps_there_are_and_where_it_stopped(self) -> None:
+        def boom():
+            raise RuntimeError("no network")
+
+        first, last = self.run_job([("user", lambda: "a"), ("kb", lambda: "b"), ("sync", lambda: "c")])
+        self.assertEqual((first["total"], last["total"], last["done"], len(last["lines"])), (3, 3, True, 3))
+        first, last = self.run_job([("user", lambda: "a"), ("kb", boom), ("sync", lambda: "c")])
+        self.assertEqual((last["total"], last["done"], last["running"]), (3, False, False))
+        self.assertEqual([line["ok"] for line in last["lines"]], [True, False])  # it stops at the failed step and says why
+        self.assertIn("no network", last["lines"][1]["detail"])
+
+
 class GuideTests(unittest.TestCase):
     def test_the_sample_comes_from_the_table_of_the_lesson(self) -> None:
         found = setup.sample(support.REPO)

@@ -55,7 +55,9 @@
   const bot = h("div", {class: "en-bot", "aria-hidden": "true"});
   const say = h("div", {class: "en-say", "aria-hidden": "true"});
   const headText = h("span", null, t("board.enter.checking"));
-  const head = h("div", {class: "en-chk-h h-check"}, h("i"), headText);
+  const getReady = h("button", {type: "button", class: "en-open en-getready", hidden: "hidden", title: t("board.enter.getready.tip")}, t("board.enter.getready"));  // beside "Not ready": the way to /setup (1.7.19)
+  getReady.addEventListener("click", () => location.assign("/setup"));
+  const head = h("div", {class: "en-chk-h h-check"}, h("i"), headText, getReady);
   const list = h("ul", {class: "en-chk-l"});
   const errLine = h("p", {class: "en-err", role: "status", hidden: "hidden"});
   const legal = h("p", {class: "en-legal"}, t("board.enter.legal", {copyright: t("board.copyright"), version: DATA.serve.version || ""}));
@@ -395,6 +397,8 @@
     setClass(head, "en-chk-h " + (pending && !bad ? "h-check" : ready ? "h-ok" : "h-wait"));
     setText(headText, pending && !bad ? t("board.enter.checking") : ready ? t("board.enter.ready") : t("board.enter.notready"));
     if (go.disabled === ready) go.disabled = !ready;
+    const offer = !ready && !(pending && !bad) && !chk0.setup;  // not ready for a reason: Get ready is one click away (a new copy already has its own button)
+    if (getReady.hidden === offer) getReady.hidden = !offer;
     const tip = ready ? "" : (first || (down ? errLine.textContent : t("board.enter.checking")));
     if (go.title !== tip) go.title = tip.length > 400 ? tip.slice(0, 399) + "…" : tip;
     const setup = checks.find((x) => x.id === "setup");

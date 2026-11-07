@@ -127,3 +127,4 @@ html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
 html.lite #enter,html.lite #enter *,html.lite #enter *::before,html.lite #enter *::after{animation:none!important;transition:none!important}
 html.lite #en-fx{display:none}
 @media (prefers-reduced-motion:reduce){#enter,#enter *,#enter *::before,#enter *::after{animation:none!important;transition:none!important}#en-fx{display:none}}
+.en-chk-h .en-getready{margin:0 0 0 auto;height:22px;padding:0 10px;font:600 11px var(--sans);letter-spacing:0;text-transform:none;display:inline-flex;align-items:center;border-radius:999px;border:0;background:var(--en-btn);color:var(--en-btn-ink);cursor:pointer}.en-chk-h .en-getready[hidden]{display:none}

@@ -129,11 +129,12 @@ class Job:
         self.lines: List[Dict[str, Any]] = []
         self.running = False
         self.done = False
+        self.total = 0
         self.lock = threading.Lock()
 
     def view(self) -> Dict[str, Any]:
         with self.lock:
-            return {"lines": list(self.lines), "running": self.running, "done": self.done}
+            return self.view_locked()
 
     def start(self, root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
         """Checks all the fields first: a ValueError here means nothing was written."""
@@ -143,11 +144,12 @@ class Job:
             if self.running:
                 return self.view_locked()
             self.lines, self.running, self.done = [], True, False
+            self.total = len(setup.steps(root, data)) + len(steps(root, data))
         threading.Thread(target=self.work, args=(root, data), daemon=True).start()
         return self.view()
 
     def view_locked(self) -> Dict[str, Any]:
-        return {"lines": list(self.lines), "running": self.running, "done": self.done}
+        return {"lines": list(self.lines), "running": self.running, "done": self.done, "total": self.total}
 
     def work(self, root: Path, data: Dict[str, Any]) -> None:
         good = True

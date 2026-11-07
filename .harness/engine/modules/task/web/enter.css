@@ -67,8 +67,8 @@ html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; 
 .en-say.on{opacity:1}
 
 /* the bottom: the readiness list, the Enter pill, the hint */
-.en-foot{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:end;column-gap:20px;padding:0 32px 28px;z-index:3}
-.en-chk{justify-self:start;width:min(420px,100%);max-height:var(--chk-max,60vh);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:6px;font:12px/1.45 var(--mono);color:var(--en-cap);scrollbar-width:thin}
+.en-foot{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:end;column-gap:20px;padding:0 32px 44px;z-index:3}  /* clear of the copyright line at the foot */
+.en-chk{justify-self:start;width:min(clamp(420px,36vw,520px),100%);max-height:var(--chk-max,60vh);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:6px;font:12px/1.45 var(--mono);color:var(--en-cap);scrollbar-width:thin}
 .en-chk-h{display:flex;align-items:center;gap:9px;margin-bottom:9px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;font-size:11px;color:var(--en-cap)}
 html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5px}
 .en-chk-h i{flex:none;width:7px;height:7px;border-radius:50%;background:var(--soft)}
@@ -108,7 +108,7 @@ html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
 .en-hint{justify-self:end;text-align:right;padding-right:56px}
 
 /* a short window: the wordmark rises and the list takes the room under it (enter.js sets --chk-max from where the wordmark ends) */
-@media (max-height:760px){.en-stage{padding-bottom:26vh}.en-chk{font-size:11.5px}.en-chk-h{margin-bottom:6px}.en-chk-l{gap:1px}.en-chk-l .m{padding:5px 9px;font-size:11.5px;line-height:1.4;margin-bottom:4px}.en-foot{padding-bottom:20px}}
+@media (max-height:760px){.en-stage{padding-bottom:26vh}.en-chk{font-size:11.5px}.en-chk-h{margin-bottom:6px}.en-chk-l{gap:1px}.en-chk-l .m{padding:5px 9px;font-size:11.5px;line-height:1.4;margin-bottom:4px}.en-foot{padding-bottom:38px}}
 @media (max-height:600px){.en-stage{padding-bottom:27vh}}
 @media (max-width:760px){.en-foot{grid-template-columns:minmax(0,1fr);row-gap:14px;justify-items:center}.en-chk{justify-self:stretch;width:auto}.en-hint{justify-self:center;text-align:center;padding-right:0}.en-go{order:-1}}
 
@@ -142,4 +142,4 @@ html.lite #en-fx{display:none}
 .en-pop table{border-collapse:collapse;width:100%}.en-pop th{position:sticky;top:0;background:var(--card);text-align:left;font-weight:600;color:var(--soft);padding:5px 10px 4px 0;white-space:nowrap}
 .en-pop td{padding:4px 10px 4px 0;vertical-align:top}.en-pop tr.first td{border-top:1px solid var(--line)}.en-pop tbody tr.first:first-child td{border-top:0}
 .en-pop .sy-n{font-weight:600;overflow-wrap:anywhere;max-width:200px}.en-pop .sy-e{white-space:nowrap}.en-pop .sy-s{white-space:nowrap}.en-pop .sy-s .sy-d{margin-right:6px}.en-pop .sy-r{overflow-wrap:anywhere;min-width:120px;max-width:260px}.en-pop .sy-t,.en-pop .sy-p{white-space:nowrap;color:var(--soft)}
-@media (max-width:760px){.en-pop{font-size:11.5px}}
+@media (max-width:760px){.en-pop{font-size:11.5px}.en-pop .sy-n,.en-pop .sy-r{overflow-wrap:break-word;word-break:normal}.en-pop .sy-n{min-width:8ch}}

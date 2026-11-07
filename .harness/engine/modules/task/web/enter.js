@@ -409,15 +409,18 @@
     items.forEach((item) => { item.hidden = false; });
     more.hidden = true;
     if (!sy.clientWidth) return;
-    const room = sy.clientWidth;
-    let used = 0, shown = 0;
-    for (const item of items) {
-      const size = item.offsetWidth + 10;
-      if (shown && used + size > room - 34) break;  // keep room for "+N"; the first name always stays, whole
-      used += size; shown += 1;
-    }
-    if (shown === items.length && used - 10 <= room) return;
-    items.forEach((item, index) => { item.hidden = index >= shown; });
+    const room = sy.clientWidth, size = (item) => Math.min(item.offsetWidth, room) + 10;
+    const place = (limit) => {  // one by one, in order: a name that does not fit is skipped and the next, shorter one may still go in; the first stays, whole
+      const keep = new Set();
+      let used = 0;
+      items.forEach((item, index) => { if (!index || used + size(item) <= limit) { keep.add(index); used += size(item); } });
+      return keep;
+    };
+    let keep = place(room + 10);
+    if (keep.size < items.length) keep = place(room - 34);  // room kept for "+N"
+    if (keep.size === items.length) return;
+    items.forEach((item, index) => { item.hidden = !keep.has(index); });
+    const shown = keep.size;
     more.textContent = "+" + (items.length - shown); more.hidden = false;
   }
   function render() {  // in place: the lines are made once and only their class and text change, so nothing blinks
@@ -484,7 +487,7 @@
   function fitList() {  // a short window: the list scrolls inside the room under the wordmark instead of running into it
     const wr = svg.getBoundingClientRect();
     if (!wr.height) return;
-    const room = Math.max(150, innerHeight - (wr.bottom + 16) - 28);
+    const room = Math.max(150, innerHeight - (wr.bottom + 16) - 44);
     const value = Math.round(room) + "px";
     if (chk.style.getPropertyValue("--chk-max") !== value) chk.style.setProperty("--chk-max", value);
   }

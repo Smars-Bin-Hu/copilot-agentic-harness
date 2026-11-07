@@ -20,7 +20,7 @@ const SERVERS = (function () {
   // One server: a line (environment, name, kind, where, what is saved), and when opened, its identity, Test and Save.
   function serverRow(row, redraw) {
     const line = h("button", {type: "button", class: "sv-line" + (row.saved ? " saved" : ""), "aria-expanded": "false",
-      title: [row.label, row.type_label + (row.auth_label ? " · " + row.auth_label : ""), where(row)].filter(Boolean).join("\n")},
+      title: [row.alias, row.label, row.type_label + (row.auth_label ? " · " + row.auth_label : ""), where(row)].filter(Boolean).join("\n")},
       envChip(row.env), h("b", {class: "sv-alias"}, row.alias), h("code", {class: "sv-where"}, where(row)),
       row.own ? h("span", {class: "sv-own", title: t("connections.own.tip")}, t("connections.own")) : null,
       row.toolpack ? h("span", {class: "sv-own sv-from", title: t("connections.from.tip", {pack: row.toolpack})}, row.toolpack) : null,

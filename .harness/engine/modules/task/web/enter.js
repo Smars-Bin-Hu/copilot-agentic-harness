@@ -493,7 +493,13 @@
     const room = Math.max(150, innerHeight - (wr.bottom + 16) - 44 - (stacked ? go.offsetHeight + 14 : 0));
     const value = Math.round(room) + "px";
     if (chk.style.getPropertyValue("--chk-max") !== value) chk.style.setProperty("--chk-max", value);
+    markMore();
   }
+  function markMore() {  // lines below the box edge: a fade at the foot says "scroll" (the buttons and the systems row can be down there)
+    const more = body.scrollHeight - body.scrollTop - body.clientHeight > 6;
+    if (chk.classList.contains("more") !== more) chk.classList.toggle("more", more);
+  }
+  body.addEventListener("scroll", markMore, {passive: true});
 
   const ask = (path, body) => SERVE.call(path, body, 8);  // a POST with a deadline (serve.js): the same headers and cookie as every other call
   function poll() {

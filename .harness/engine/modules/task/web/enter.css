@@ -71,6 +71,8 @@ html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; 
 .en-chk{justify-self:start;width:min(clamp(420px,40vw,560px),100%);max-height:var(--chk-max,60vh);display:flex;flex-direction:column;font:12px/1.45 var(--mono);color:var(--en-cap)}  /* one width rule for every screen: a wider window never shows less (1.7.24) */
 .en-chk-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:6px;scrollbar-width:thin}
 .en-chk .en-legal{flex:none}
+.en-chk{position:relative}.en-chk.more .en-chk-body{-webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,1) calc(100% - 24px),transparent);mask-image:linear-gradient(to bottom,rgba(0,0,0,1) calc(100% - 24px),transparent)}  /* more lines below: they fade out at the foot, so the box reads as scrollable (1.7.26) */
+.en-chk.more::after{content:"\2193";position:absolute;left:50%;bottom:40px;font:600 13px/1 var(--sans);color:var(--en-ink);opacity:.7;pointer-events:none;animation:enbeat 1.8s ease-in-out infinite}
 .en-chk-h{display:flex;align-items:center;gap:9px;margin-bottom:9px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;font-size:11px;color:var(--en-cap)}
 html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5px}
 .en-chk-h i{flex:none;width:7px;height:7px;border-radius:50%;background:var(--soft)}

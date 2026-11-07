@@ -2,7 +2,7 @@
   "type": "azure-devops",
   "label": "Azure DevOps",
   "cli": [
-    "az"
+    "ado"
   ],
   "fields": {
     "org": {
@@ -13,7 +13,7 @@
       "label": "Project"
     }
   },
-  "match": "(?:dev|vsrm\\.dev)\\.azure\\.com/{org}/",
+  "match": "\\b(?:me|item|items|comments|types|states|fields|areas|iterations|pipelines|runs|run|why|log|releases|release|comment|update|create)\\b",
   "auth": {
     "signin": {
       "identity": "tool",
@@ -27,20 +27,17 @@
   "down": "Max retries exceeded|Failed to establish|timed out|CERTIFICATE_VERIFY_FAILED",
   "verbs": [
     {
-      "pattern": "(?:--method|-m)\\s+['\"]?delete\\b",
-      "verb": "destroy"
-    },
-    {
-      "pattern": "(?:--method|-m)\\s+['\"]?(?:post|put|patch)\\b",
+      "pattern": "^(?:--json\\s+|--conn\\s+\\S+\\s+)*(?:comment|update|create)\\b",
       "verb": "write"
     },
     {
-      "pattern": "\\brest\\b",
+      "pattern": "^(?:--json\\s+|--conn\\s+\\S+\\s+)*(?:me|item|items|comments|types|states|fields|areas|iterations|pipelines|runs|run|why|log|releases|release)\\b",
       "verb": "read"
     }
   ],
   "show": {
-    "api": "_apis/([\\w/.-]+)"
+    "item": "\\b(?:item|comment|update|comments)\\s+(\\d+)",
+    "run": "\\b(?:run|why|log)\\s+(\\d+)"
   },
   "rules": {
     "none": {
@@ -49,5 +46,7 @@
       "exec": "human",
       "destroy": "deny"
     }
-  }
+  },
+  "item": "\\bado(?:\\.cmd)?[\"']?\\s+(?:--json\\s+|--conn\\s+\\S+\\s+)*(?:comment|update)\\s+(\\d+)",
+  "link": "ado"
 }

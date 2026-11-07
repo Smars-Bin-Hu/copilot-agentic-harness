@@ -44,7 +44,7 @@
     return Object.assign({}, task, {
       past: found, round: number, status: "closed", state: "", waiting: "", waiting_why: "", waited_s: null, paused_since: "", handoff: null, held: false, autorun: false, active: false,
       branch: found.branch, docs: found.docs, files: found.files, changes: found.changes, review: found.review, history: found.history, stages,
-      commit: null, test: null, intake: null, actions: [], todo: {done: 0, total: 0}, todo_left: 0, req_placeholders: 0, req_unconfirmed: false, req_changed: false, report: "",
+      commit: null, test: null, intake: null, actions: [], todo: {done: 0, total: 0}, todo_left: 0, req_placeholders: 0, req_sections: [], req_unconfirmed: false, req_changed: false, report: "",
     });
   }
   const hashOf = (tab) => "#" + (desk.past ? "r" + desk.past.round + "/" : "") + tab;
@@ -429,6 +429,7 @@
       result_missing: FILES[desk.kind] && ["design", "rca"].includes(desk.kind) && !doc(FILES[desk.kind]) ? FILES[desk.kind] : ""};  // a design or an RCA task without its result file: the close dialog warns
   }
   const OPTIONAL = ["pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
+  const isOptional = (item) => OPTIONAL.includes(item.action) || (item.action === "confirm-req" && desk.tier !== "full");  // a light or medium task needs no confirmed requirement (1.7.20): the button is there, nothing waits on it
   const offersChat = (item) => ["send", "answer"].includes(item.action) && chatNew(actionRow());
   const talkButtons = (row, item) => [actionButton(row, item, "big"), offersChat(item) ? goOnButton(row.name, "big") : null];
   const hintOf = (item) => (offersChat(item) ? t("desk.hint.newchat") : item.action === "approve-promote" && desk.promote_direct ? t("desk.hint.approve-promote.kb") : t("desk.hint." + item.action.replace(" ", "-")));
@@ -494,7 +495,7 @@
     if (chat && chat.bound && chat.title) items.push(copyTitleButton(chat));
     if (canAct()) {
       const row = actionRow();
-      for (const item of desk.actions.filter((entry) => OPTIONAL.includes(entry.action))) items.push(h("div", {class: "tk-mi-act"}, actionButton(row, item), h("span", {class: "hint"}, hintOf(item))));
+      for (const item of desk.actions.filter(isOptional)) items.push(h("div", {class: "tk-mi-act"}, actionButton(row, item), h("span", {class: "hint"}, hintOf(item))));
     }
     return items;
   }
@@ -949,13 +950,13 @@
   // A wait that asks for a decision gets one strong card (approve the plan, confirm the requirement, approve the promote): the wait, what to do, the action, and a link to the tab where the
   // thing is read. Any other wait that has an action (confirm a command, answer a question, send, recover, the checks...) is listed in one quieter card. The card is above the tabs, so it is
   // there on every tab. A task that only runs, or is quiet, has no card: its words are on the Live tab.
-  const needItems = () => desk.actions.filter((item) => !OPTIONAL.includes(item.action) && !TALK.includes(item.action));  // steer and stop are not a wait: they are on the Live tab
+  const needItems = () => desk.actions.filter((item) => !isOptional(item) && !TALK.includes(item.action));  // steer and stop are not a wait: they are on the Live tab
   const needsCard = () => canAct() && Boolean(needItems().length || desk.waiting || desk.paused_since || desk.state === "unheld");
 
   function waitNotes() {
     return [
       desk.req_changed ? h("p", {class: "hint bad"}, t("desk.req.changed")) : null,
-      desk.req_unconfirmed && desk.req_placeholders ? h("p", {class: "hint bad"}, t("desk.req.placeholders", {n: desk.req_placeholders})) : null,
+      desk.req_unconfirmed && desk.req_sections.length ? h("p", {class: "hint bad"}, t("desk.req.unfinished", {sections: desk.req_sections.join(", ")})) : null,
       desk.test && desk.test.reopen ? h("p", {class: "hint bad"}, t("desk.test.reopen", {dev: desk.test.reopen, envs: desk.test.failed.join(", ")})) : null,
       desk.state === "working" && served() ? h("p", {class: "hint"}, t(desk.chat && desk.chat.bound ? "desk.busy.note" : "desk.busy.note.nochat")) : null,
       desk.state === "waiting" && !desk.held && !chatNew(actionRow()) ? h("p", {class: "hint"}, t("desk.unheld.note")) : null,
@@ -1232,7 +1233,7 @@
   function tabInfo(tab) {
     const name = t("desk.tab." + tab);
     const mine = canAct();
-    if (tab === "req") return {name, bang: desk.req_unconfirmed};  // waits for the person's confirmation
+    if (tab === "req") return {name, bang: desk.req_unconfirmed || desk.req_sections.length > 0, bangTip: desk.req_sections.length ? t("desk.tab.bang.unfinished", {sections: desk.req_sections.join(", ")}) : ""};  // waits for the person's confirmation, or is not written to the end
     if (tab === "plan") return {name, bang: mine && desk.waiting_why === "plan"};
     if (tab === "todo") return {name, count: desk.todo.total ? desk.todo.done + "/" + desk.todo.total : ""};
     if (tab === "changes") return {name, count: desk.changes.files.length ? String(desk.changes.files.length) : "", bang: Boolean(desk.commit && !desk.commit.written) || (mine && desk.waiting_why === "promote")};
@@ -1260,12 +1261,12 @@
     const top = h("div", {class: "tk-top", role: "tablist", "aria-label": t("desk.tabs.label")}, groups.map((group) => {
       const single = group.tabs.length === 1;
       const infos = group.tabs.map(tabInfo);
-      const info = single ? infos[0] : {name: groupName(group.id), bang: infos.some((item) => item.bang)};
+      const info = single ? infos[0] : {name: groupName(group.id), bang: infos.some((item) => item.bang), bangTip: (infos.find((item) => item.bang) || {}).bangTip};
       const on = group.id === open.id;
       const target = single ? group.tabs[0] : (group.tabs.includes(lastTab[group.id]) ? lastTab[group.id] : group.tabs[0]);
       const summary = single ? tabText(infos[0]) : t("desk.tab.group", {group: info.name, tabs: infos.map(tabText).join(", ")});
       const button = h("button", {type: "button", role: "tab", class: "tk-tab" + (on ? " on" : "") + (single ? "" : " has-sub"), "aria-selected": on ? "true" : "false", tabindex: on ? "0" : "-1", "data-key": "g:" + group.id, title: summary, "aria-label": summary},
-        info.name, info.count ? h("span", {class: "tk-n"}, info.count) : null, info.bang ? h("i", {class: "tk-bang", title: t("desk.tab.bang")}) : null);
+        info.name, info.count ? h("span", {class: "tk-n"}, info.count) : null, info.bang ? h("i", {class: "tk-bang", title: info.bangTip || t("desk.tab.bang")}) : null);
       button.addEventListener("click", () => goTab(on && !single ? current : target));
       return button;
     }));
@@ -1276,7 +1277,7 @@
         const info = tabInfo(tab);
         const on = tab === current;
         const button = h("button", {type: "button", role: "tab", class: "tk-tab" + (on ? " on" : ""), "aria-selected": on ? "true" : "false", tabindex: on ? "0" : "-1", "data-key": "t:" + tab, "aria-label": tabText(info)},
-          info.name, info.count ? h("span", {class: "tk-n"}, info.count) : null, info.bang ? h("i", {class: "tk-bang", title: t("desk.tab.bang")}) : null);
+          info.name, info.count ? h("span", {class: "tk-n"}, info.count) : null, info.bang ? h("i", {class: "tk-bang", title: info.bangTip || t("desk.tab.bang")}) : null);
         button.addEventListener("click", () => goTab(tab));
         return button;
       })));
@@ -2252,7 +2253,7 @@
     if (current === "overview") {
       return [h("p", {class: "hint top"}, t("desk.overview.hint") + (doc("REQ.md") ? " " + t("desk.overview.req") : "")), markdown("TASK.md", t("desk.missing.task"))];
     }
-    if (current === "req") return [h("p", {class: "hint top"}, t("desk.req.hint")), markdown("REQ.md", t("desk.missing.req"))];
+    if (current === "req") return [desk.req_sections.length ? h("p", {class: "hint bad"}, t("desk.req.unfinished", {sections: desk.req_sections.join(", ")})) : null, h("p", {class: "hint top"}, t("desk.req.hint")), markdown("REQ.md", t("desk.missing.req"))];
     if (current === "design") return [h("p", {class: "hint top"}, t("desk.design.hint")), markdown(FILES.design, t("desk.missing.design"))];
     if (current === "rca") return [h("p", {class: "hint top"}, t("desk.rca.hint")), markdown(FILES.rca, t("desk.missing.rca"))];
     if (current === "plan") return [h("p", {class: "hint top"}, t("desk.plan.hint")), planApproval(), markdown("PLAN.md", t("desk.missing.plan"))];

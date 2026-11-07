@@ -98,15 +98,33 @@ class TestTab(StageCase):
 class PerKind(StageCase):
     """M40 (1.5.40): what a page and a task ask for depends on the kind."""
 
-    def test_only_a_full_task_asks_the_person_to_confirm_the_requirement(self) -> None:
+    def test_only_a_full_task_waits_for_the_person_to_confirm_the_requirement(self) -> None:
         for name, kind in (("one-off", "rca"), ("job", "dev")):
             self.new(name, kind)
             req = self.folder(name) / "REQ.md"
             req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Why the load fails.").replace("<一两段。用户的原意，不加你自己的设想>", "为什么加载失败。"), encoding="utf-8")
         desk = taskdesk.desk(self.root, "one-off", ("confirm-req", "pause"))
-        self.assertFalse(desk["req_unconfirmed"])
-        self.assertNotIn("confirm-req", [item["action"] for item in desk["actions"]])
+        self.assertFalse(desk["req_unconfirmed"], "nothing waits on it")
+        self.assertIn("confirm-req", [item["action"] for item in desk["actions"]], "1.7.20: the button is there in any tier once REQ.md is written")
         self.assertIn("confirm-req", [item["action"] for item in taskdesk.desk(self.root, "job", ("confirm-req", "pause"))["actions"]])
+
+    def test_the_page_names_the_sections_that_still_hold_template_text(self) -> None:
+        self.new("job", "dev")
+        task = f"{BASE}/job"
+        self.assertGreater(len(task_ops.req_unfilled(self.root, task)), 4, "the template as it is: every section")
+        req = self.folder("job") / "REQ.md"
+        req.write_text("# REQ: job\n\n- **User confirmed**: <not yet / confirmed yyyy-mm-dd>\n\n## What to do\n\nStop the load failing.\n\n## What not to do\n\n<What is ruled out>\n\n## Done when\n\n### Shown by the task files\n\n- [T1] <checked>\n", encoding="utf-8")
+        self.assertEqual(task_ops.req_unfilled(self.root, task), ["What not to do", "Shown by the task files"])
+        self.assertEqual(taskdesk.desk(self.root, "job")["req_sections"], ["What not to do", "Shown by the task files"])
+        status = task_ops.next_step(self.root, task, tasks.read(self.root, task))
+        self.assertTrue(status.startswith(task_ops.say("req.unfilled.agent", req=f"{task}/REQ.md", sections="What not to do, Shown by the task files")))
+        req.write_text(req.read_text(encoding="utf-8").replace("<What is ruled out>", "none").replace("<checked>", "a line changed"), encoding="utf-8")
+        self.assertEqual(task_ops.req_unfilled(self.root, task), [])
+        self.assertNotIn("template text", task_ops.next_step(self.root, task, tasks.read(self.root, task)))
+
+    def test_a_light_task_without_requirement_file_says_nothing(self) -> None:
+        self.new("look", "qa")
+        self.assertEqual(taskdesk.desk(self.root, "look")["req_sections"], [])
 
     def test_the_page_counts_the_template_lines_the_agent_left_in_the_requirement(self) -> None:
         self.new("job", "dev")

@@ -377,7 +377,6 @@
   "gate.target.terminal": "This terminal command would directly change files in the working tree of a target repository ({why}). Only promote writes to a target repository. Do not retry with another command. Fetch the file into the task's DEV/, change it there, then write it back with promote.",
   "gate.task.plan_req": "`{relative}` is under the task's `DEV/`. The requirement of the task changed after the user approved the plan, so `DEV/` is closed again. Check that {task}/PLAN.md still fits the requirement (change it if not), then stop and tell the user to read the requirement and the plan again, confirm the requirement and run `{command} task approve-plan` (or press the buttons on the task's page). Go on when the user says it is approved. Meanwhile write only notes, RCA, design and read-only queries, at the root of {task}/: code waits, code run by hand too.",
   "desk.req.changed": "The requirement changed after you confirmed it or after you approved the plan. Read it again: confirm it, and approve the plan again.",
-  "desk.req.placeholders": "REQ.md still has {n} line(s) that are the template's `<...>`. Ask the agent to write the answer there, or \"none\", before you confirm.",
   "gate.task.plan_first": "`{relative}` is under the task's `DEV/`. `DEV/` can be written only after the user approves the plan (it is not approved now, or it changed after the approval). Write [PLAN.md]({task}/PLAN.md), then stop and ask the user to run `{command} task approve-plan` in their own terminal. Go on when the user says it is approved. Code the user runs by hand (on a server, in a database) waits for the plan too: it goes in `DEV/_manual/<path>`. Only notes, RCA, design and read-only queries go at the root of `{task}/` without approval.",
   "gate.task.outside": "Task {task} is open: you may write only inside the task folder `{task}/`, and you tried to write `{relative}`. Notes, RCA, design and read-only queries go at the root of the task folder; code goes under `{task}/DEV/` once the plan is approved: `DEV/<repository>/<path>` to promote, `DEV/_manual/<path>` when the user runs it by hand.",
   "gate.task.person_files": "`{relative}` is in `REQ/`, `REF/` or `INBOX/` of task {task}. Those hold what the user gave and are read only. Write notes and results at the root of the task folder `{task}/`.",
@@ -3049,5 +3048,9 @@
   "stage.byhand.to": "Apply to {envs}",
   "desk.changes.byhand": "Files under DEV/_manual/ are run by hand where they belong (a server, a database): promote does not write them back.",
   "desk.changes.byhand.tag": "by hand",
-  "desk.changes.byhand.tip": "You run this file by hand; promote does not write it back"
+  "desk.changes.byhand.tip": "You run this file by hand; promote does not write it back",
+  "req.unfilled.agent": "{req} still has template text in: {sections}. Finish it (write the answer, or \"none\") before you ask the person to confirm it. ",
+  "desk.req.unfinished": "Requirement not finished: REQ.md still has template text in {sections}. Ask the agent to finish it before you confirm.",
+  "desk.tab.bang.unfinished": "Requirement not finished: template text is left in {sections}",
+  "task.close.held": "{count} call(s) to an outside system of this task are still held for the person's approval. They show on the task page only while the task is open. Tell the person in your answer; if they want to approve now, open the task again (`harness task open {name} --session-id <session id>`) and close it after. "
 }

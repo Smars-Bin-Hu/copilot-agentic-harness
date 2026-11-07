@@ -377,7 +377,6 @@
   "gate.target.terminal": "这条终端命令会直接改目标仓库工作区里的文件（{why}）。目标仓库只能由 promote 写。不要换个命令重试。把文件取到任务的 DEV/ 里改，再 promote。",
   "gate.task.plan_req": "`{relative}` 在任务的 `DEV/` 下。用户批准计划之后，任务的需求变了，所以 `DEV/` 又锁上了。先核对 {task}/PLAN.md 还合不合需求（不合就改），然后停下，请用户重新读需求和计划，确认需求，并运行 `{command} task approve-plan`（或在任务页上点按钮）。用户说批准了再继续。这期间只写笔记、RCA、设计和只读查询，放在 {task}/ 根目录：代码要等，手动运行的代码也一样。",
   "desk.req.changed": "需求在你确认之后，或者在你批准计划之后改过了。重新读一遍：确认需求，再批准计划。",
-  "desk.req.placeholders": "REQ.md 里还有 {n} 行是模板的 `<...>`。确认之前，请让 agent 把答案写上，没有就写 \"none\"。",
   "gate.task.plan_first": "`{relative}` 在任务的 `DEV/` 下。`DEV/` 要等计划经用户批准后才能写（现在没批准，或批准之后改过）。写好 [PLAN.md]({task}/PLAN.md) 就停下，请用户在自己的终端运行 `{command} task approve-plan`，用户说批准了再继续。用户手动运行的代码（在服务器上、数据库里）也要等计划：它放在 `DEV/_manual/<路径>`。只有笔记、RCA、设计和只读查询可以不等批准，写在 `{task}/` 根下。",
   "gate.task.outside": "任务 {task} 进行中，只能在任务目录 `{task}/` 里写，你要写的是 `{relative}`。笔记、RCA、设计和只读查询写在任务目录根下；代码在计划批准后写在 `{task}/DEV/` 下：要 promote 的放 `DEV/<仓库名>/<路径>`，用户手动运行的放 `DEV/_manual/<路径>`。",
   "gate.task.person_files": "`{relative}` 在任务 {task} 的 `REQ/`、`REF/` 或 `INBOX/` 里。那是用户给的材料，只读。要记笔记或写成果，写在任务目录 `{task}/` 根下。",
@@ -3049,5 +3048,9 @@
   "stage.byhand.to": "应用到 {envs}",
   "desk.changes.byhand": "DEV/_manual/ 下的文件由你在它该在的地方（服务器、数据库）手动运行：promote 不会动它们。",
   "desk.changes.byhand.tag": "手动",
-  "desk.changes.byhand.tip": "这个文件由你手动运行；promote 不会动它"
+  "desk.changes.byhand.tip": "这个文件由你手动运行；promote 不会动它",
+  "req.unfilled.agent": "{req} 里还有模板原文：{sections}。先把它写完（写答案，或写“none”），再请用户确认。",
+  "desk.req.unfinished": "需求还没写完：REQ.md 里 {sections} 还是模板原文。请让 agent 写完再确认。",
+  "desk.tab.bang.unfinished": "需求还没写完：{sections} 还是模板原文",
+  "task.close.held": "这个任务还有 {count} 个对外部系统的调用在等人批准。它们只在任务打开时显示在任务页上。在回答里告诉用户；如果用户现在就要批准，先重新打开任务（`harness task open {name} --session-id <session id>`），批完再关闭。"
 }

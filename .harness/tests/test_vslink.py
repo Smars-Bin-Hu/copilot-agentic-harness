@@ -347,6 +347,27 @@ class NotReadyTests(LinkCase):
         state["fail"] = False
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
 
+    def test_opening_vs_code_from_the_board_makes_the_link_look_every_second_not_after_the_grown_wait(self) -> None:
+        """1.7.19: while no window was open the wait between two looks had grown (3, 6 ... 60 s): after Open VS Code the Enter screen stayed red up to a minute."""
+        state = {"fail": True, "calls": 0}
+        real = self.open_host
+
+        def opener() -> ahp.Connection:
+            state["calls"] += 1
+            if state["fail"]:
+                raise ahp.NotReady("none")
+            return real()
+
+        slow = ahp.Backoff(30.0, 60.0)
+        self.link = vslink.VsLink(self.root, opener=opener, turn=0.05, backoff=slow)
+        self.addCleanup(self.link.stop)
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["why"] == "none"))
+        self.assertEqual(state["calls"], 1)  # then it waits 30 s
+        state["fail"] = False
+        self.link.hurry()
+        self.assertTrue(until(lambda: self.link.status()["ready"], 5), self.link.status())  # at once, not after the wait
+
     def test_a_host_that_hangs_up_is_ready_again_after_the_wait(self) -> None:
         self.link.start()
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1))

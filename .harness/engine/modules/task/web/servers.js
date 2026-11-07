@@ -180,7 +180,7 @@ const SERVERS = (function () {
   }
 
   // "Open VS Code with identities": tick the identities this window holds; those that cannot share it are reached through `harness as`, marked so.
-  function choose() {
+  function choose(opened) {  // `opened`: what the page does once VS Code was started with the identities (the Enter screen waits for it, 1.7.19)
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
     const said = h("p", {class: "sub sv-plan"});
     const running = h("p", {class: "bad sv-plan", hidden: ""}, t("connections.open.running"));  // its own line: the plan does not write over it
@@ -229,7 +229,7 @@ const SERVERS = (function () {
       go.disabled = true;
       ask("open", {chosen: picked, primary}).then((done) => {
         said.replaceChildren(done.started ? t("connections.open.started", {n: done.direct.length + done.wrap.length}) : h("span", {class: "bad"}, done.why || ""));
-        if (done.started) setTimeout(view.close, 2500);
+        if (done.started) { if (opened) opened(); setTimeout(view.close, 2500); }
       }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); go.disabled = false; });
     });
     close.addEventListener("click", view.close);

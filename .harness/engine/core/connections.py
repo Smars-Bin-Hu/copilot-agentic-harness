@@ -363,6 +363,50 @@ def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[st
     return {**judge(kind, code, output), "seconds": round(time.time() - started, 1), **({"timeout": int(wait)} if timed else {})}
 
 
+def probe_keys(root: Path) -> List[str]:
+    """The `reach` keys of the connections the board can check by itself: those with a command-line type whose sign-in the board can supply (a `tool` identity, or one kept here)."""
+    known, env = types(root), read_env(root)
+    out = []
+    for alias, server in listed(root).items():
+        kind = known.get(str(server.get("type")))
+        if not kind or kind.get("via") == "mcp" or not kind.get("cli") or type_problems(kind) or server.get("env") not in ENVS:
+            continue
+        if delivery(kind, server)["identity"] != "tool" and not identity_of(env, alias, kind):
+            continue  # VS Code may hold this identity (a launch script, a window opened with it): the board cannot see it, the first chat's hook does
+        out.append(f"{alias}:{server['env']}")
+    return out
+
+
+def probe_all(root: Path, workers: int = 4) -> Dict[str, str]:
+    """The board's own check of each connection (1.7.19), in the environment VS Code is started with (tool folders, CA bundle) and the identity kept here,
+    so the Enter screen need not wait for the first chat's hook. The answer goes where the hook's probe puts it (`core.reach`): `{<alias>:<env>: state}`."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from . import launchenv, reach  # they read this module
+
+    known, env, launch = types(root), read_env(root), launchenv.extra(root)
+    wanted = set(probe_keys(root))
+    jobs = [(alias, server, known[str(server["type"])]) for alias, server in listed(root).items() if f"{alias}:{server.get('env')}" in wanted]
+
+    def one(job: Tuple[str, Dict[str, Any], Dict[str, Any]]) -> Tuple[str, Dict[str, Any]]:
+        alias, server, kind = job
+        identity = identity_of(env, alias, kind)
+        line = command(kind, server, identity)
+        needs = {key: kind[key] for key in ("expect", "denied", "down") if kind.get(key)}
+        if missing_program(line, next((value for key, value in launch.items() if key.upper() == "PATH"), None)):
+            state, why, who = reach.FAILED, "exit-127", ""
+        else:
+            state, why, who = reach._judge(needs, *run_with(kind, server, identity, line, root, timeout=test_seconds(kind, server), launch=launch))  # noqa: SLF001
+        return f"{alias}:{server['env']}", {"state": state, "at": utc_now(), "why": why[:200], "who": who, "source": "probe"}
+
+    with ThreadPoolExecutor(max_workers=max(1, min(workers, len(jobs) or 1))) as pool:
+        answers = list(pool.map(one, jobs))
+    found = reach.read(root)  # read again: a hook may have written meanwhile
+    found.update(dict(answers))
+    reach._write(root, found)  # noqa: SLF001
+    return {key: line["state"] for key, line in answers}
+
+
 def login(root: Path, alias: str, own: Optional[Dict[str, Any]] = None) -> Tuple[int, str]:
     """Run the sign-in command of a server whose program keeps its own (`auth.login` of a `tool` identity: `az login`), here, with the tool folders and
     the CA bundle VS Code gets (1.7.13). Its output streams to this terminal; the sign-in itself happens in the program's own browser window."""

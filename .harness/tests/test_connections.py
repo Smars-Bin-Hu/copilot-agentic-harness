@@ -273,3 +273,91 @@ class CarryTests(ConnectionsCase):
         (new / ".harness").mkdir()
         plan, _left = reinstall.make_plan(new, self.root)
         self.assertIn(".env", [step["name"] for step in plan.steps if step["group"] == "identities"])
+
+
+class BoardChecksItself(ConnectionsCase):
+    """1.7.19: the board checks the connections itself, in the environment VS Code gets, and the Enter screen shows names with a state and a table; a connection added shows at once."""
+
+    def ready(self, checker=None):
+        from modules.task import ready, reachcheck
+
+        class Link:
+            def status(self): return {"ready": True, "bound": 0, "unbound": 0, "why": "ok"}
+            def copilot(self): return {"models": 1, "problem": ""}
+            def drops(self): return 0
+
+        return ready.Ready(self.root, Link(), lambda _root: {"errors": 0, "first": "", "failed": ""}, checker=checker or reachcheck.Checker(self.root, probe=lambda _root: None))
+
+    def line(self, check) -> dict:
+        return next(item for item in check.answer(True)["checks"] if item["id"] == "systems")
+
+    def test_probe_all_writes_what_the_hook_would_and_leaves_a_connection_without_an_identity_to_the_hook(self) -> None:
+        from core import reach
+
+        self.assertEqual(connections.probe_keys(self.root), [])  # no identity kept here: VS Code may hold it
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        self.assertEqual(connections.probe_keys(self.root), ["db-dev:dev"])
+        self.assertEqual(connections.probe_all(self.root), {"db-dev:dev": "ok"})
+        found = reach.read(self.root)["db-dev:dev"]
+        self.assertEqual((found["state"], found["who"], found["source"]), ("ok", "alice", "probe"))
+        self.assertTrue(reach.recent(self.root, ["db-dev:dev"]))
+        self.assertFalse(reach.recent(self.root, ["db-dev:dev", "db-ist:ist"]))
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "wrong"})
+        self.assertEqual(connections.probe_all(self.root), {"db-dev:dev": "denied"})
+
+    def test_the_checker_asks_when_an_answer_is_missing_or_old_not_on_every_poll(self) -> None:
+        from core import reach
+        from modules.task import reachcheck
+
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        seen, now = [], [100.0]
+        checker = reachcheck.Checker(self.root, probe=lambda root: (seen.append(1), connections.probe_all(root)), clock=lambda: now[0])
+        self.assertTrue(checker.maybe())
+        checker.last.join(10)
+        self.assertEqual(len(seen), 1)
+        now[0] += 60
+        self.assertFalse(checker.maybe())  # an answer younger than 5 minutes
+        data = reach.read(self.root)
+        data["db-dev:dev"]["at"] = "2020-01-01T00:00:00+00:00"
+        reach._write(self.root, data)
+        self.assertTrue(checker.maybe())  # old: asked again
+        checker.last.join(10)
+        self.assertTrue(checker.start())  # Check and Open VS Code ask whatever the age
+        checker.last.join(10)
+
+    def test_the_line_has_names_with_a_state_a_table_and_no_word_about_an_account_when_never_checked(self) -> None:
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        found = self.line(self.ready())
+        self.assertEqual((found["why"], found["check"]), ("unknown", True))
+        self.assertFalse(found.get("launch") or found.get("identities"))  # "VS Code needs your account" is for a refused identity only
+        self.assertEqual(found["names"], [{"name": "db-dev", "state": "unknown"}, {"name": "db-ist", "state": "unknown"}])
+        connections.probe_all(self.root)  # db-ist has no identity kept here: left to the hook
+        found = self.line(self.ready())
+        self.assertEqual(found["names"], [{"name": "db-dev", "state": "ok"}, {"name": "db-ist", "state": "unknown"}])
+        row = found["rows"][0]
+        self.assertEqual((row["system"], row["env"], row["state"], row["reason"]), ("db-dev", "dev", "ok", "alice"))
+
+    def test_a_connection_without_an_environment_has_an_empty_env_cell_and_a_system_with_two_states_is_partly(self) -> None:
+        from core import reach
+
+        check = self.ready()
+        table = check.table({"s": {"toolpack": "pack-a"}}, [
+            {"system": "s", "env": "dev", "state": reach.OK, "who": "me", "why": "", "at": "2026-01-01T00:00:00+00:00"},
+            {"system": "s", "env": "ist", "state": reach.FAILED, "who": "", "why": "no-answer", "at": ""},
+            {"system": "t", "env": "none", "state": reach.DENIED, "who": "", "why": "identity", "at": "", "launch": ""},
+            {"system": "u", "env": "any", "state": reach.UNKNOWN, "who": "", "why": "", "at": ""}])
+        self.assertEqual([(item["name"], item["state"]) for item in table["names"]], [("s", "partly"), ("t", "down"), ("u", "unknown")])
+        self.assertEqual([(row["system"], row["env"], row["state"], row["pack"]) for row in table["rows"]],
+                         [("s", "dev", "ok", "pack-a"), ("s", "ist", "down", "pack-a"), ("t", "", "down", ""), ("u", "", "unknown", "")])
+
+    def test_regression_a_connection_added_while_the_screen_is_open_shows_at_once_not_after_the_cache(self) -> None:
+        """The first answer said "none" and the folder cache (10 s) kept it: a connection added a second later was not on the screen until the cache ran out."""
+        for name in ("connections.company.json",):
+            (self.root / ".harness" / "policies" / name).unlink()
+        check = self.ready()
+        self.assertEqual(self.line(check)["why"], "none")
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"}})
+        self.assertEqual(self.line(check)["why"], "unknown")  # the same Ready object, no time passed
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        connections.probe_all(self.root)
+        self.assertEqual(self.line(check)["state"], "ok")

@@ -24,6 +24,8 @@ from typing import Any, Callable, Dict, List, Optional
 from core import config, messages, shortcmd, targets, tasks
 from core import connections as conn_core, reach, systems as outside
 
+from . import reachcheck
+
 LINES = 6  # errors of doctor shown at the end of the setup
 DOCTOR_TIMEOUT = 300.0  # seconds the child `doctor` may take; `board.doctor_seconds` in the policy `task` (1.6.104: 90 was too short for a work computer that took 80 s)
 DOCTOR_LIMITS = (30.0, 1800.0)
@@ -82,7 +84,7 @@ def run_doctor(root: Path, timeout: Optional[float] = None) -> Dict[str, Any]:
 
 
 class Ready:
-    def __init__(self, root: Path, link: Any, doctor: Optional[Callable[[Path], Dict[str, Any]]] = None, clock: Callable[[], float] = time.monotonic) -> None:
+    def __init__(self, root: Path, link: Any, doctor: Optional[Callable[[Path], Dict[str, Any]]] = None, clock: Callable[[], float] = time.monotonic, checker: Any = None) -> None:
         self.reopen = False  # the short command is new: VS Code must be closed and opened again before its terminals have it
         self.root = root
         self.link = link
@@ -94,6 +96,8 @@ class Ready:
         self.at = 0.0
         self.running = False
         self.folders: Dict[str, Any] = {"at": -1e9}
+        self.systems_kept: Any = None  # (what the line read, when, the line)
+        self.checker = checker or reachcheck.Checker(root)  # the board's own look at the connections (1.7.19)
 
     # --- doctor: once, off the request thread ----------------------------------------------------------------------
 
@@ -170,6 +174,15 @@ class Ready:
                 lines["repos"] = {"state": "note", "why": "none"}
         except Exception as error:  # noqa: BLE001 - a broken policy is doctor's to report; here it is a grey line
             lines["repos"] = {"state": "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
+        with self.lock:
+            self.folders = {"at": now, "lines": lines}
+        return lines
+
+    def systems_line(self) -> Dict[str, Any]:
+        """The outside systems line: what the connections reached (1.7.9), and since 1.7.19 the names with a state each and a table for the hover."""
+        out: Dict[str, Any] = {}
+        systems: Dict[str, Any] = {}
+        raw: List[Dict[str, Any]] = []
         try:
             systems = config.policy_or_empty(self.root, "tools").get("systems") or {}
             raw = reach.view(self.root, systems) if systems and not outside.validate(systems) else []  # what VS Code reached (1.7.9), per server and environment
@@ -190,27 +203,68 @@ class Ready:
             bad = [line for line in raw if line["state"] in (reach.DENIED, reach.FAILED)]
             name = lambda line: f"{line['system']} {line['env'].upper()}" if len(servers) > 1 else line["env"].upper()  # noqa: E731
             if not systems:
-                lines["systems"] = {"state": "note", "why": "none", "tip": "none"}  # not set up yet: the hover says how
+                out = {"state": "note", "why": "none", "tip": "none"}  # not set up yet: the hover says how
             elif not raw:
-                lines["systems"] = {"state": "ok", "why": "listed", "n": len(systems)}  # listed, with no probe: nothing to look at
+                out = {"state": "ok", "why": "listed", "n": len(systems)}  # listed, with no probe: nothing to look at
             elif bad:
                 grouped: Dict[str, List[str]] = {}  # one reason, the places it holds for: "finance IST, hr DEV: <sentence>"
                 for line in bad:
                     grouped.setdefault(reason(line), []).append(name(line))
                 overview = "\n".join(f"{label}: {env_marks(lines_)}" for label, _state, lines_ in units) if len(servers) > 1 else ""
-                lines["systems"] = {"state": "note", "why": "unreached", "detail": detail, "tip": "\n".join(([overview] if overview else []) + [short(f"{', '.join(names)}: {text}") for text, names in grouped.items()]),
+                out = {"state": "note", "why": "unreached", "detail": detail, "tip": "\n".join(([overview] if overview else []) + [short(f"{', '.join(names)}: {text}") for text, names in grouped.items()]),
                                     "launch": any(line["state"] == reach.DENIED for line in bad) and reach.launch_script(self.root) is not None, "identities": saved}  # only a refused identity is helped by starting VS Code again
             elif any(line["state"] == reach.UNKNOWN for line in raw):
-                lines["systems"] = {"state": "note", "why": "unknown", "detail": detail, "launch": reach.launch_script(self.root) is not None, "identities": saved}
+                out = {"state": "note", "why": "unknown", "detail": detail, "check": bool(conn_core.probe_keys(self.root))}  # never checked: a Check button when the board can check it itself; no word on an account (1.7.19)
             else:
                 last = max((line.get("at", "") for line in raw), default="")
                 accounts = " \u00b7 ".join(f"{name(line)} {line['who']}" for line in raw if line["who"])
-                lines["systems"] = {"state": "ok", "why": "ok", "detail": detail, "tip": short(messages.text("desk.reach.ok.tip", accounts=accounts or "-", at=last[11:16]))}
+                out = {"state": "ok", "why": "ok", "detail": detail, "tip": short(messages.text("desk.reach.ok.tip", accounts=accounts or "-", at=last[11:16]))}
         except Exception as error:  # noqa: BLE001
-            lines["systems"] = {"state": "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
+            out = {"state": "note", "why": "error", "detail": short(f"{type(error).__name__}: {error}")}
+        if out.get("why") != "error" and raw:
+            out.update(self.table(systems, raw))
+        return out
+
+    def table(self, systems: Dict[str, Any], raw: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """For the Enter screen (1.7.19): `names`, a state for each system (ok, down, unknown, partly), and `rows` for the hover table, one per system and environment.
+        The environment of a system that has none (`none`, `any`) is empty."""
+        kind = lambda state: "ok" if state == reach.OK else "unknown" if state == reach.UNKNOWN else "down"  # noqa: E731
+        names, rows = [], []
+        for system in dict.fromkeys(item["system"] for item in raw):
+            mine = [item for item in raw if item["system"] == system]
+            states = {kind(item["state"]) for item in mine}
+            names.append({"name": system, "state": "partly" if len(states) > 1 else next(iter(states))})
+            for item in mine:
+                why = ""
+                if item["state"] == reach.DENIED:
+                    why = item.get("launch") or messages.text("desk.reach.why.identity")
+                elif item["state"] == reach.FAILED:
+                    why = messages.text("desk.reach.why.no-answer") if item.get("why") == "no-answer" else messages.text("desk.reach.why.exit", why=item.get("why", ""))
+                elif item["state"] == reach.OK:
+                    why = item.get("who", "")
+                rows.append({"system": system, "env": "" if item["env"] in ("none", "any") else item["env"], "state": kind(item["state"]), "reason": short(why), "at": item.get("at", ""),
+                             "pack": str((systems.get(system) or {}).get("toolpack") or "")})
+        return {"names": names, "rows": rows, "checking": self.checker.busy()}
+
+    def systems_cached(self) -> Dict[str, Any]:
+        """The line again only when what it reads changed (a connection added, a pack installed, an answer written) or after FOLDERS_FOR: adding a connection shows at once."""
+        mark = []
+        for path in [*sorted((self.root / ".harness" / "policies").glob("*.json")), self.root / ".harness" / ".env", reach.path(self.root), self.root / ".harness" / "toolpacks" / "installed.json"]:
+            try:
+                mark.append((path.name, path.stat().st_mtime_ns))
+            except OSError:
+                mark.append((path.name, 0))
+        mark.append(("busy", self.checker.busy()))
+        now = self.clock()
         with self.lock:
-            self.folders = {"at": now, "lines": lines}
-        return lines
+            kept = self.systems_kept
+            if kept and kept[0] == mark and now - kept[1] < FOLDERS_FOR:
+                return kept[2]
+        line = self.systems_line()
+        with self.lock:
+            self.systems_kept = (mark, now, line)
+        return line
+
 
     def wait_reopen(self) -> None:
         self.drops_then = self.link.drops()
@@ -243,7 +297,12 @@ class Ready:
         try:
             more = self.folder_lines()
         except Exception as error:  # noqa: BLE001
-            more = {name: {"state": "note", "why": "error", "detail": short(error)} for name in ("kb", "repos", "systems")}
-        for name in ("kb", "repos", "systems"):
+            more = {name: {"state": "note", "why": "error", "detail": short(error)} for name in ("kb", "repos")}
+        for name in ("kb", "repos"):
             checks.append(dict(more[name], id=name, blocking=False))
+        try:
+            self.checker.maybe()  # the board asks the connections itself: the screen need not wait for a chat
+            checks.append(dict(self.systems_cached(), id="systems", blocking=False))
+        except Exception as error:  # noqa: BLE001
+            checks.append({"state": "note", "why": "error", "detail": short(error), "id": "systems", "blocking": False})
         return {"ready": all(line["state"] == "ok" for line in checks if line["blocking"]), "checks": checks}

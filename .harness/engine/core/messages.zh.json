@@ -1962,7 +1962,7 @@
   "board.new.kb.none": "不选",
   "board.new.kb.hint": "勾选任务涉及的 domain，或选“不选”。选择会写进第一条消息；agent 会记到任务上，并阅读这些 domain 的页面。",
   "board.new.kb.empty": "还没有设置知识库 domain。任务会不带 domain 开始；以后可以再指定。",
-  "board.new.first.hint": "这是将要发送的消息，由看板生成。这里不能输入：请改上面的字段。",
+  "board.new.first.hint": "这是将要发送的消息，由看板生成，固定用英文（agent 读英文），你写的内容原样放在最后。这里不能输入：请改上面的字段。",
   "board.new.go": "创建并发送",
   "board.new.working": "创建中…",
   "board.new.done": "chat 已创建，第一条消息已发送。agent 创建任务后，任务会出现在这里。",

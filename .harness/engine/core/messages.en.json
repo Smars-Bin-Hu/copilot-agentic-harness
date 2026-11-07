@@ -1962,7 +1962,7 @@
   "board.new.kb.none": "None",
   "board.new.kb.hint": "Tick the domains this task is about, or None. They go into the first message; the agent sets them on the task and reads their pages.",
   "board.new.kb.empty": "No knowledge base domain is set up yet. The task starts without one; a domain can be named later.",
-  "board.new.first.hint": "The message as it will be sent, made by the board. You cannot type here: change the fields above.",
+  "board.new.first.hint": "The message as it will be sent, made by the board. It is always in English, as the agent reads it; what you write goes in last, as typed. You cannot type here: change the fields above.",
   "board.new.go": "Create and send",
   "board.new.working": "Creating...",
   "board.new.done": "The chat is made and the first message is sent. The task appears here when the agent has opened it.",

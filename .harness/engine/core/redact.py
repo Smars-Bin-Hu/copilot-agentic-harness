@@ -12,7 +12,7 @@ from typing import Any, Callable, List, Match, Pattern, Tuple, Union
 MASK = "***"
 
 _NAMES = r"(?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|access[_-]?key|auth(?:orization)?|credential|private[_-]?key|sas|signature|sig|pat(?![a-z]))"  # pat: a personal access token (AZURE_DEVOPS_EXT_PAT=...), not path, patch or pattern
-_PATH_PART = re.compile(r"[A-Za-z]?[a-z0-9_-]*|[A-Z0-9_-]+")
+_PATH_PART = re.compile(r"[A-Za-z]?[a-z0-9_-]*|[A-Z0-9_-]+|[A-Z0-9]{1,12}(?:[-_][A-Za-z0-9]{1,16})+")  # the last: a code with a name after it (`435E00-ado`, the draft of a held call; 1.7.21)
 _WORD = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])")
 
 

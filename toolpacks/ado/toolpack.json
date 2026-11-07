@@ -1,13 +1,11 @@
 {
   "schema_version": 1,
   "name": "ado",
-  "version": "0.3.0",
-  "harness": "1.7.18",
-  "description": "Azure DevOps through its own program `ado`: work items (read, comment, update, create, the allowed values), pipeline runs (the stage, job and task tree, why a run failed, its logs) and classic releases. Reads run; a write waits for the person, or goes through for the items the task is linked to when the person opened them.",
+  "version": "0.4.0",
+  "harness": "1.7.20",
+  "description": "Azure DevOps through its own program `ado`: work items (read, history, links, attachments, saved queries; comment, update, tags, create, link, attach), pipeline runs (the stage, job and task tree, why a run failed, logs, test results, changes; queue, cancel, retry) and classic releases (deploy). Reads run; a write or a run waits for the person, or goes through for the items the task is linked to when the person opened them.",
   "needs": {
-    "programs": [
-      "az"
-    ],
+    "programs": [],
     "trust": [
       "REQUESTS_CA_BUNDLE"
     ]

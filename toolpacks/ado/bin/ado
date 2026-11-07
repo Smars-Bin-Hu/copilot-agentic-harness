@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-"""ado: Azure DevOps for the agent, one plain command per thing to do (tool pack `ado`, 0.3).
+"""ado: Azure DevOps for the agent, one plain command per thing to do (tool pack `ado`, 0.4).
 
 The agent never builds an `az rest` call: this program knows the addresses, the API versions, the JSON patch forms and the HTML of a comment. The
-organization and the project come from the harness connection of type `azure-devops`; the sign-in is the Azure CLI's (one `az account
-get-access-token` per run, kept in memory only); the requests go out with the proxy and the CA bundle VS Code was started with.
+organization, the project and the server address come from the harness connection of type `azure-devops`; the sign-in is the Azure CLI's (`signin`: one
+`az account get-access-token` per run, kept in memory only) or a personal access token (`token`); the requests go out with the proxy and the CA bundle
+VS Code was started with.
 
-Reads: me, item, items, comments, types, states, fields, areas, iterations, pipelines, runs, run, why, log, releases, release.
-Writes: comment, update, create (the gate holds them; a write to an item the task is not linked to is refused). There is no delete.
-`--json` prints what Azure DevOps answered, whole. Tests: ADO_BASE_URL (a fake server) and ADO_TOKEN (no az).
+Reads    me, item, items, comments, history, links, attachments, queries, query, tags, types, states, fields, areas, iterations,
+         pipelines, pipeline, runs, run, why, log, artifacts, tests, changes, releases, release
+Writes   comment, update, create, link, unlink, attach     (the gate holds them; a write to an item the task is not linked to is refused)
+Exec     queue, cancel, retry, deploy                       (the gate holds them for a person)
+There is no delete. `--json` prints what Azure DevOps answered, whole. Tests: ADO_URL (a server address), ADO_TOKEN (a bearer token, no az), ADO_PAT.
 """
 
 import argparse
+import base64
 import html
 import json
 import os
@@ -26,11 +30,17 @@ from datetime import date, datetime
 from pathlib import Path
 
 RESOURCE = "499b84ac-1321-427f-aa17-267ca6975798"  # Azure DevOps itself
-WIT = "7.1"
+CLOUD = "https://dev.azure.com"
+API = "7.1"
 COMMENTS = "7.1-preview.4"
+STAGES = "7.1-preview.1"
 FIELDS = {"title": "System.Title", "state": "System.State", "assigned": "System.AssignedTo", "area": "System.AreaPath", "iteration": "System.IterationPath",
           "priority": "Microsoft.VSTS.Common.Priority", "description": "System.Description", "tags": "System.Tags", "reason": "System.Reason"}
 LIST_FIELDS = "System.Id,System.WorkItemType,System.Title,System.State,System.AssignedTo,System.ChangedDate"
+RELATIONS = {"parent": "System.LinkTypes.Hierarchy-Reverse", "child": "System.LinkTypes.Hierarchy-Forward", "related": "System.LinkTypes.Related"}
+RELATION_NAMES = {value: key for key, value in RELATIONS.items()}
+QUIET = {"System.Rev", "System.ChangedDate", "System.Watermark", "System.AuthorizedDate", "System.RevisedDate", "System.AuthorizedAs", "System.PersonId", "System.ChangedBy",
+         "System.CommentCount", "System.AuthorizedAs", "System.Id"}
 
 
 class Stop(Exception):
@@ -52,9 +62,10 @@ def harness_root() -> Path:
     raise Stop("no harness copy found around this program")
 
 
-def connection(name: str) -> dict:
+def connection(name: str, org: str = "", project: str = "") -> dict:
+    """The connection to use: `url` (default https://dev.azure.com), `org`, `project`, and how to sign in (`auth`: signin or token)."""
     if os.environ.get("ADO_ORG") and os.environ.get("ADO_PROJECT"):
-        return {"org": os.environ["ADO_ORG"], "project": os.environ["ADO_PROJECT"], "name": "env"}
+        return {"org": os.environ["ADO_ORG"], "project": os.environ["ADO_PROJECT"], "name": "env", "url": os.environ.get("ADO_URL") or CLOUD, "auth": "token" if os.environ.get("ADO_PAT") else "signin"}
     root = harness_root()
     sys.path.insert(0, str(root / ".harness" / "engine"))
     from core import connections  # noqa: PLC0415 - the harness's own reading of the connections
@@ -64,6 +75,8 @@ def connection(name: str) -> dict:
         if name not in found:
             raise Stop(f"no azure-devops connection named {name}; there are: {', '.join(found) or 'none'} (Get ready, Tools, Connections)")
         found = {name: found[name]}
+    if org or project:
+        found = {alias: entry for alias, entry in found.items() if (not org or entry.get("org") == org) and (not project or entry.get("project") == project)}
     if not found:
         raise Stop("no azure-devops connection here: add one in Get ready, Tools, Connections (type Azure DevOps, its organization and project)")
     if len(found) > 1:
@@ -71,60 +84,109 @@ def connection(name: str) -> dict:
     alias, entry = next(iter(found.items()))
     if not entry.get("org") or not entry.get("project"):
         raise Stop(f"the connection {alias} has no org or project: fix it in Get ready, Tools, Connections")
-    return {"org": entry["org"], "project": entry["project"], "name": alias}
+    return {"org": entry["org"], "project": entry["project"], "name": alias, "url": str(os.environ.get("ADO_URL") or entry.get("url") or CLOUD).rstrip("/"),
+            "auth": entry.get("auth") or "signin", "root": root}
+
+
+def pat_of(conn: dict) -> str:
+    """A personal access token: ADO_PAT (VS Code was started with it), else the one Get ready saved in .harness/.env for this connection."""
+    if os.environ.get("ADO_PAT"):
+        return os.environ["ADO_PAT"]
+    root = conn.get("root")
+    if root:
+        sys.path.insert(0, str(root / ".harness" / "engine"))
+        from core import connections  # noqa: PLC0415
+
+        env = connections.read_env(root)
+        for field in ("token", "password"):
+            if env.get(connections.env_key(conn["name"], field)):
+                return env[connections.env_key(conn["name"], field)]
+    return ""
 
 
 class Ado:
     def __init__(self, conn: dict) -> None:
         self.conn = conn
-        base = os.environ.get("ADO_BASE_URL", "").rstrip("/")
+        base = conn["url"].rstrip("/")
         org, project = urllib.parse.quote(conn["org"]), urllib.parse.quote(conn["project"])
-        self.org_url = f"{base}/{org}" if base else f"https://dev.azure.com/{org}"
+        self.org_url = f"{base}/{org}"
         self.api = f"{self.org_url}/{project}/_apis/"
-        self.rm = f"{base}/vsrm/{org}/{project}/_apis/" if base else f"https://vsrm.dev.azure.com/{org}/{project}/_apis/"
-        self.web = f"https://dev.azure.com/{org}/{project}"
-        self._token = ""
+        # the cloud keeps releases on another host; a server has them beside the rest
+        self.rm = f"https://vsrm.dev.azure.com/{org}/{project}/_apis/" if base == CLOUD else self.api
+        self.web = f"{base}/{org}/{project}"
+        self._header = ""
 
-    def token(self) -> str:
-        if self._token:
-            return self._token
+    def header(self) -> str:
+        if self._header:
+            return self._header
+        if self.conn.get("auth") == "token":
+            pat = pat_of(self.conn)
+            if not pat:
+                raise Stop("this connection signs in with a token and none is saved: ask the user to set the token for the connection in Get ready, Tools, Connections")
+            self._header = "Basic " + base64.b64encode((":" + pat).encode("utf-8")).decode("ascii")
+            return self._header
         if os.environ.get("ADO_TOKEN"):
-            self._token = os.environ["ADO_TOKEN"]
-            return self._token
-        az = shutil.which("az")
+            self._header = "Bearer " + os.environ["ADO_TOKEN"]
+            return self._header
+        az = shutil.which("az")  # on Windows this is az.cmd; the arguments are plain words, no shell is used
         if not az:
             raise Stop("az is not found: add its folder in Get ready, Tools, This computer, then open VS Code from the board")
-        done = subprocess.run([az, "account", "get-access-token", "--resource", RESOURCE, "--query", "accessToken", "-o", "tsv"], capture_output=True, text=True)
-        if done.returncode != 0 or not done.stdout.strip():
+        done = subprocess.run([az, "account", "get-access-token", "--resource", RESOURCE, "--output", "json"], capture_output=True, text=True)
+        token = ""
+        try:
+            token = str(json.loads(done.stdout).get("accessToken") or "")
+        except ValueError:
+            pass
+        if done.returncode != 0 or not token:
             said = (done.stderr or done.stdout).strip().splitlines()
             raise Stop("not signed in to Azure DevOps (" + (said[-1][:200] if said else "no answer") + "): ask the user to press Sign in for the connection in Get ready, Tools, Connections")
-        self._token = done.stdout.strip()
-        return self._token
+        self._header = "Bearer " + token
+        return self._header
 
-    def call(self, method: str, url: str, params: dict = None, body=None, kind: str = "application/json", text: bool = False):
-        query = urllib.parse.urlencode({key: value for key, value in (params or {}).items() if value not in (None, "")}, safe="$,:@")
+    def unauthorized(self, code: int, said: str) -> Stop:
+        if self.conn.get("auth") == "token":
+            how = "the token is wrong, expired, or lacks the scope for this: ask the user to set a new token for the connection in Get ready, Tools, Connections"
+        else:
+            how = "not signed in, or the account has no access: ask the user to press Sign in for the connection in Get ready, Tools, Connections (do not run az login yourself)"
+        return Stop(f"Azure DevOps said {code}: {said[:200]}. {how}")
+
+    def call(self, method: str, url: str, params: dict = None, body=None, kind: str = "application/json", text: bool = False, raw: bytes = None, binary: bool = False):
+        query = urllib.parse.urlencode({key: value for key, value in (params or {}).items() if value not in (None, "")}, safe="$,:@/")
         full = url + ("&" if "?" in url else "?") + query if query else url
-        data = json.dumps(body).encode("utf-8") if body is not None else None
-        request = urllib.request.Request(full, data=data, method=method, headers={"Authorization": "Bearer " + self.token(), "Accept": "application/json" if not text else "text/plain", **({"Content-Type": kind} if data is not None else {})})
+        data = raw if raw is not None else json.dumps(body).encode("utf-8") if body is not None else None
+        headers = {"Authorization": self.header(), "Accept": "application/json" if not (text or binary) else "*/*", **({"Content-Type": kind} if data is not None else {})}
+        request = urllib.request.Request(full, data=data, method=method, headers=headers)
         bundle = os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
         context = ssl.create_default_context(cafile=bundle) if bundle and Path(bundle).is_file() else None
         try:
             with urllib.request.urlopen(request, timeout=60, context=context) as answer:
-                raw = answer.read().decode("utf-8", errors="replace")
+                content = answer.read()
         except urllib.error.HTTPError as error:
             said = error.read().decode("utf-8", errors="replace")
             try:
                 said = json.loads(said).get("message") or said
-            except ValueError:
+            except (ValueError, AttributeError):
                 pass
+            if error.code in (401, 403):
+                raise self.unauthorized(error.code, said) from None
             raise Stop(f"Azure DevOps said {error.code}: {said[:400]}") from None
         except urllib.error.URLError as error:
             reason = str(error.reason)
             hint = " (the CA bundle: Get ready, Tools, This computer; then open VS Code from the board)" if "CERTIFICATE" in reason.upper() else ""
-            raise Stop(f"cannot reach Azure DevOps: {reason[:300]}{hint}") from None
+            raise Stop(f"cannot reach {self.conn['url']}: {reason[:300]}{hint}") from None
+        if binary:
+            return content
+        raw_text = content.decode("utf-8", errors="replace")
         if text:
-            return raw
-        return json.loads(raw) if raw.strip() else {}
+            return raw_text
+        if not raw_text.strip():
+            return {}
+        try:
+            return json.loads(raw_text)
+        except ValueError:
+            if "<html" in raw_text.lower():  # a bad token is answered with the sign-in page
+                raise self.unauthorized(203, "the answer is a sign-in page") from None
+            raise Stop("Azure DevOps answered something that is not JSON: " + raw_text[:200]) from None
 
 
 # --- output ------------------------------------------------------------------------------------------------------------------------------------------------
@@ -165,15 +227,50 @@ def seconds(start: str, finish: str) -> str:
         return ""
 
 
-# --- work items --------------------------------------------------------------------------------------------------------------------------------------------
+def last_id(url: str) -> str:
+    return str(url).rstrip("/").rsplit("/", 1)[-1]
+
+
+def pairs(items, label: str) -> dict:
+    out = {}
+    for pair in items or []:
+        if "=" not in pair or not pair.split("=", 1)[0].strip():
+            raise Stop(f"{label} takes NAME=VALUE (got {pair})")
+        name, value = pair.split("=", 1)
+        out[name.strip()] = value
+    return out
+
+
+# --- work items: reads -------------------------------------------------------------------------------------------------------------------------------------
+
+def titles(ado: Ado, ids) -> dict:
+    """{id: {type, title, state}} for some work items, one request."""
+    ids = [str(one) for one in dict.fromkeys(ids)][:100]
+    if not ids:
+        return {}
+    rows = ado.call("GET", ado.api + "wit/workitems", {"ids": ",".join(ids), "fields": "System.WorkItemType,System.Title,System.State", "api-version": API}).get("value") or []
+    return {str(row["id"]): {"type": row["fields"].get("System.WorkItemType", ""), "title": row["fields"].get("System.Title", ""), "state": row["fields"].get("System.State", "")} for row in rows}
+
+
+def relation_rows(ado: Ado, found: dict) -> list:
+    """The relations of a work item: [{kind, id, url, name, size, index}]; kind is parent, child, related, file, link or the raw name."""
+    out = []
+    for index, rel in enumerate(found.get("relations") or []):
+        name = rel.get("rel", "")
+        kind = RELATION_NAMES.get(name) or ("file" if name == "AttachedFile" else "link" if name in ("Hyperlink", "ArtifactLink") else name)
+        out.append({"kind": kind, "id": last_id(rel.get("url", "")) if kind in RELATIONS else "", "url": rel.get("url", ""), "attrs": rel.get("attributes") or {}, "index": index})
+    return out
+
 
 def item(ado: Ado, args) -> str:
-    found = ado.call("GET", ado.api + f"wit/workitems/{args.id}", {"$expand": "relations", "api-version": WIT})
+    found = ado.call("GET", ado.api + f"wit/workitems/{args.id}", {"$expand": "relations", "api-version": API})
     if args.json:
         return json.dumps(found, indent=2)
     fields = found.get("fields") or {}
-    parents = [rel["url"].rsplit("/", 1)[-1] for rel in found.get("relations") or [] if rel.get("rel") == "System.LinkTypes.Hierarchy-Reverse"]
-    children = [rel["url"].rsplit("/", 1)[-1] for rel in found.get("relations") or [] if rel.get("rel") == "System.LinkTypes.Hierarchy-Forward"]
+    rows = relation_rows(ado, found)
+    near = titles(ado, [row["id"] for row in rows if row["id"]])
+    def show(kind):  # noqa: E306
+        return [f"#{row['id']} {near.get(row['id'], {}).get('type', '')} \"{near.get(row['id'], {}).get('title', '')}\" [{near.get(row['id'], {}).get('state', '')}]" for row in rows if row["kind"] == kind]
     lines = [f"#{found.get('id')}  {fields.get('System.WorkItemType', '')}  {fields.get('System.Title', '')}",
              f"state      {fields.get('System.State', '')}" + (f" ({fields['System.Reason']})" if fields.get("System.Reason") else ""),
              f"assigned   {who(fields.get('System.AssignedTo')) or '-'}",
@@ -182,38 +279,51 @@ def item(ado: Ado, args) -> str:
              f"priority   {fields.get('Microsoft.VSTS.Common.Priority', '-')}",
              f"tags       {fields.get('System.Tags', '') or '-'}",
              f"changed    {when(fields.get('System.ChangedDate'))} by {who(fields.get('System.ChangedBy')) or '-'}",
-             f"comments   {fields.get('System.CommentCount', 0)}",
-             f"parent     {', '.join(parents) or '-'}" + (f"   children {', '.join(children)}" if children else ""),
-             f"link       {ado.web}/_workitems/edit/{found.get('id')}"]
+             f"comments   {fields.get('System.CommentCount', 0)}"]
+    for kind in ("parent", "child", "related"):
+        shown = show(kind)
+        lines.append(f"{kind + ('ren' if kind == 'child' else ''):<10} " + ("; ".join(shown) if shown else "-"))
+    files = [row for row in rows if row["kind"] == "file"]
+    if files:
+        lines.append(f"attached   {', '.join(row['attrs'].get('name', '?') for row in files)}")
+    lines.append(f"link       {ado.web}/_workitems/edit/{found.get('id')}")
     for key, label in (("System.Description", "description"), ("Microsoft.VSTS.Common.AcceptanceCriteria", "acceptance criteria"), ("Microsoft.VSTS.TCM.ReproSteps", "repro steps")):
         if fields.get(key):
             lines += ["", label + ":", plain(fields[key], 3000)]
     return "\n".join(lines)
 
 
-def items(ado: Ado, args) -> str:
-    if args.query:
-        wiql = args.query
-    else:
-        where = ["[System.TeamProject] = @project"]
-        if args.mine:
-            where.append("[System.AssignedTo] = @Me")
-        if args.iteration:
-            where.append(f"[System.IterationPath] UNDER '{args.iteration}'")
-        if args.state:
-            where.append(f"[System.State] = '{args.state}'")
-        elif not args.all:
-            where.append("[System.State] NOT IN ('Closed', 'Done', 'Removed')")
-        wiql = "SELECT [System.Id] FROM WorkItems WHERE " + " AND ".join(where) + " ORDER BY [System.ChangedDate] DESC"
-    found = ado.call("POST", ado.api + "wit/wiql", {"api-version": WIT, "$top": args.top}, {"query": wiql})
-    ids = [str(entry["id"]) for entry in found.get("workItems") or []][: args.top]
+def item_table(ado: Ado, ids, args) -> str:
+    ids = [str(one) for one in ids][: args.top] if hasattr(args, "top") else [str(one) for one in ids]
     if not ids:
         return "no work item matches"
-    rows = ado.call("GET", ado.api + "wit/workitems", {"ids": ",".join(ids), "fields": LIST_FIELDS, "api-version": WIT}).get("value") or []
+    rows = ado.call("GET", ado.api + "wit/workitems", {"ids": ",".join(ids), "fields": LIST_FIELDS, "api-version": API}).get("value") or []
     if args.json:
         return json.dumps(rows, indent=2)
     return table([[row["id"], row["fields"].get("System.WorkItemType", ""), row["fields"].get("System.State", ""), who(row["fields"].get("System.AssignedTo")), row["fields"].get("System.Title", "")] for row in rows],
                  ["id", "type", "state", "assigned", "title"])
+
+
+def wiql_text(args) -> str:
+    where = ["[System.TeamProject] = @project"]
+    if args.mine:
+        where.append("[System.AssignedTo] = @Me")
+    if args.type:
+        where.append(f"[System.WorkItemType] = '{args.type}'")
+    if args.iteration:
+        where.append(f"[System.IterationPath] UNDER '{args.iteration}'")
+    if args.tag:
+        where.append(f"[System.Tags] CONTAINS '{args.tag}'")
+    if args.state:
+        where.append(f"[System.State] = '{args.state}'")
+    elif not args.all:
+        where.append("[System.State] NOT IN ('Closed', 'Done', 'Removed')")
+    return "SELECT [System.Id] FROM WorkItems WHERE " + " AND ".join(where) + " ORDER BY [System.ChangedDate] DESC"
+
+
+def items(ado: Ado, args) -> str:
+    found = ado.call("POST", ado.api + "wit/wiql", {"api-version": API, "$top": args.top}, {"query": args.query or wiql_text(args)})
+    return item_table(ado, [entry["id"] for entry in found.get("workItems") or []], args)
 
 
 def comments(ado: Ado, args) -> str:
@@ -226,86 +336,116 @@ def comments(ado: Ado, args) -> str:
     return "\n\n".join(f"[{when(row.get('createdDate'))}] {who(row.get('createdBy'))}\n{plain(row.get('text'), 2000)}" for row in rows)
 
 
-def comment(ado: Ado, args) -> str:
-    text = Path(args.file).read_text(encoding="utf-8") if args.file else (args.text or "")
-    if not text.strip():
-        raise Stop("nothing to write: give --text \"…\" or --file <path>")
-    found = ado.call("POST", ado.api + f"wit/workItems/{args.id}/comments", {"api-version": COMMENTS}, {"text": comment_html(text)})
-    return json.dumps(found, indent=2) if args.json else f"comment {found.get('id', '')} added to #{args.id}: {ado.web}/_workitems/edit/{args.id}"
-
-
-def item_type(ado: Ado, number: str) -> str:
-    return (ado.call("GET", ado.api + f"wit/workitems/{number}", {"fields": "System.WorkItemType", "api-version": WIT}).get("fields") or {}).get("System.WorkItemType", "")
-
-
-def allowed_states(ado: Ado, kind: str) -> list:
-    return [entry.get("name") for entry in ado.call("GET", ado.api + f"wit/workitemtypes/{urllib.parse.quote(kind)}/states", {"api-version": WIT}).get("value") or []]
-
-
-def patch_ops(args) -> list:
-    ops = []
-    for key, value in (("state", args.state), ("title", args.title), ("assigned", args.assign), ("area", args.area), ("iteration", args.iteration), ("description", args.description)):
-        if value:
-            ops.append({"op": "add", "path": f"/fields/{FIELDS[key]}", "value": comment_html(value) if key == "description" else value})
-    for pair in args.field or []:
-        if "=" not in pair:
-            raise Stop(f"--field takes NAME=VALUE (got {pair})")
-        name, value = pair.split("=", 1)
-        ops.append({"op": "add", "path": "/fields/" + FIELDS.get(name.strip().lower(), name.strip()), "value": value})
-    return ops
-
-
-def check_state(ado: Ado, kind: str, state: str) -> None:
-    if state:
-        states = allowed_states(ado, kind)
-        if states and state not in states:
-            raise Stop(f"{kind} has no state {state}; its states: {', '.join(states)}")
-
-
-def update(ado: Ado, args) -> str:
-    ops = patch_ops(args)
-    if not ops:
-        raise Stop("nothing to change: give --state, --title, --assign, --area, --iteration, --description or --field NAME=VALUE")
-    check_state(ado, item_type(ado, args.id), args.state)
-    found = ado.call("PATCH", ado.api + f"wit/workitems/{args.id}", {"api-version": WIT}, ops, kind="application/json-patch+json")
+def history(ado: Ado, args) -> str:
+    rows = ado.call("GET", ado.api + f"wit/workItems/{args.id}/updates", {"$top": 200, "api-version": API}).get("value") or []
     if args.json:
-        return json.dumps(found, indent=2)
-    return f"#{args.id} updated ({', '.join(op['path'].rsplit('/', 1)[-1] for op in ops)}): {ado.web}/_workitems/edit/{args.id}"
+        return json.dumps(rows, indent=2)
+    lines = []
+    for row in rows:
+        changes = []
+        for name, change in (row.get("fields") or {}).items():
+            if name in QUIET:
+                continue
+            old, new = plain(str(change.get("oldValue", "")), 120), plain(str(change.get("newValue", "")), 120)
+            changes.append(f"  {name.rsplit('.', 1)[-1]}: " + (f"{old or '(empty)'} → {new or '(empty)'}" if "oldValue" in change else f"{new}"))
+        rel = row.get("relations") or {}
+        for kind, sign in (("added", "+"), ("removed", "-")):
+            for entry in rel.get(kind) or []:
+                changes.append(f"  link {sign} {RELATION_NAMES.get(entry.get('rel'), entry.get('rel', ''))} {last_id(entry.get('url', ''))}" + (f" {entry['attributes']['name']}" if (entry.get("attributes") or {}).get("name") else ""))
+        if changes:
+            lines.append(f"rev {row.get('rev')}  {when(row.get('revisedDate'))}  {who(row.get('revisedBy'))}")
+            lines += changes
+    return "\n".join(lines) or f"#{args.id} has no change recorded"
 
 
-def create(ado: Ado, args) -> str:
-    kinds = [entry.get("name") for entry in ado.call("GET", ado.api + "wit/workitemtypes", {"api-version": WIT}).get("value") or []]
-    if kinds and args.type not in kinds:
-        raise Stop(f"no work item type {args.type}; the types: {', '.join(kinds)}")
-    check_state(ado, args.type, args.state)
-    ops = patch_ops(args)
-    if not any(op["path"].endswith("System.Title") for op in ops):
-        raise Stop("a new work item needs --title")
-    if args.parent:
-        ops.append({"op": "add", "path": "/relations/-", "value": {"rel": "System.LinkTypes.Hierarchy-Reverse", "url": f"{ado.org_url}/_apis/wit/workItems/{args.parent}"}})
-    found = ado.call("POST", ado.api + "wit/workitems/$" + urllib.parse.quote(args.type), {"api-version": WIT}, ops, kind="application/json-patch+json")
-    return json.dumps(found, indent=2) if args.json else f"#{found.get('id')} created: {ado.web}/_workitems/edit/{found.get('id')}"
+def links(ado: Ado, args) -> str:
+    found = ado.call("GET", ado.api + f"wit/workitems/{args.id}", {"$expand": "relations", "api-version": API})
+    rows = relation_rows(ado, found)
+    if args.json:
+        return json.dumps(found.get("relations") or [], indent=2)
+    near = titles(ado, [row["id"] for row in rows if row["id"]])
+    shown = [[row["kind"], "#" + row["id"], near.get(row["id"], {}).get("type", ""), near.get(row["id"], {}).get("state", ""), near.get(row["id"], {}).get("title", "")] if row["id"]
+             else [row["kind"], "", "", "", row["attrs"].get("name") or row["url"]] for row in rows]
+    return table(shown, ["link", "id", "type", "state", "title"]) if shown else f"#{args.id} has no link"
+
+
+def attachments(ado: Ado, args) -> str:
+    found = ado.call("GET", ado.api + f"wit/workitems/{args.id}", {"$expand": "relations", "api-version": API})
+    files = [row for row in relation_rows(ado, found) if row["kind"] == "file"]
+    if args.json:
+        return json.dumps([row for row in found.get("relations") or [] if row.get("rel") == "AttachedFile"], indent=2)
+    if not files:
+        return f"#{args.id} has no attachment"
+    lines = []
+    for row in files:
+        name = row["attrs"].get("name", "file")
+        line = [last_id(row["url"])[:8], name, str(row["attrs"].get("resourceSize", "")), when(row["attrs"].get("resourceCreatedDate")), row["attrs"].get("comment", "")]
+        if args.out:
+            target = Path(args.out) / re.sub(r"[^\w.\- ]", "_", name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(ado.call("GET", row["url"], {"fileName": name, "download": "true", "api-version": API}, binary=True))
+            line.append("saved " + str(target))
+        lines.append(line)
+    return table(lines, ["id", "name", "bytes", "added", "comment"] + (["saved"] if args.out else []))
+
+
+def queries(ado: Ado, args) -> str:
+    tree = ado.call("GET", ado.api + "wit/queries", {"$depth": 2, "$expand": "none", "api-version": API}).get("value") or []
+    if args.json:
+        return json.dumps(tree, indent=2)
+    out = []
+
+    def walk(node, path):
+        here = f"{path}/{node.get('name')}" if path else str(node.get("name"))
+        if node.get("isFolder"):
+            for child in node.get("children") or []:
+                walk(child, here)
+        else:
+            out.append([node.get("id"), here])
+    for node in tree:
+        walk(node, "")
+    return table(out, ["id", "query"]) if out else "no saved query"
+
+
+def query(ado: Ado, args) -> str:
+    ref = args.id
+    if not re.fullmatch(r"[0-9a-fA-F-]{36}", ref):  # a path such as "Shared Queries/Active bugs"
+        ref = ado.call("GET", ado.api + "wit/queries/" + urllib.parse.quote(ref, safe="/"), {"$depth": 0, "api-version": API}).get("id", "")
+        if not ref:
+            raise Stop(f"no saved query {args.id}; `ado queries` lists them")
+    found = ado.call("GET", ado.api + f"wit/wiql/{ref}", {"api-version": API, "$top": args.top})
+    ids = [entry["id"] for entry in found.get("workItems") or []] or [entry["target"]["id"] for entry in found.get("workItemRelations") or [] if entry.get("target")]
+    return item_table(ado, ids, args)
+
+
+def tags(ado: Ado, args) -> str:
+    rows = ado.call("GET", ado.api + "wit/tags", {"api-version": API}).get("value") or []
+    return json.dumps(rows, indent=2) if args.json else ("\n".join(sorted(str(row.get("name")) for row in rows)) or "no tag used yet")
 
 
 def types(ado: Ado, args) -> str:
-    rows = ado.call("GET", ado.api + "wit/workitemtypes", {"api-version": WIT}).get("value") or []
+    rows = ado.call("GET", ado.api + "wit/workitemtypes", {"api-version": API}).get("value") or []
     return json.dumps(rows, indent=2) if args.json else "\n".join(sorted(row.get("name", "") for row in rows))
 
 
 def states(ado: Ado, args) -> str:
-    rows = ado.call("GET", ado.api + f"wit/workitemtypes/{urllib.parse.quote(args.type)}/states", {"api-version": WIT}).get("value") or []
+    rows = ado.call("GET", ado.api + f"wit/workitemtypes/{urllib.parse.quote(args.type)}/states", {"api-version": API}).get("value") or []
     return json.dumps(rows, indent=2) if args.json else table([[row.get("name"), row.get("category", "")] for row in rows], ["state", "category"])
 
 
+def type_fields(ado: Ado, kind: str) -> list:
+    return ado.call("GET", ado.api + f"wit/workitemtypes/{urllib.parse.quote(kind)}/fields", {"$expand": "all", "api-version": API}).get("value") or []
+
+
 def fields(ado: Ado, args) -> str:
-    rows = ado.call("GET", ado.api + f"wit/workitemtypes/{urllib.parse.quote(args.type)}/fields", {"$expand": "all", "api-version": WIT}).get("value") or []
+    rows = type_fields(ado, args.type)
     if args.json:
         return json.dumps(rows, indent=2)
     return table([[row.get("referenceName"), row.get("name"), "required" if row.get("alwaysRequired") else ""] for row in rows], ["field", "name", ""])
 
 
 def nodes(ado: Ado, group: str, current: bool) -> list:
-    tree = ado.call("GET", ado.api + f"wit/classificationnodes/{group}", {"$depth": 10, "api-version": WIT})
+    tree = ado.call("GET", ado.api + f"wit/classificationnodes/{group}", {"$depth": 10, "api-version": API})
     out = []
 
     def walk(node, path):
@@ -333,28 +473,222 @@ def iterations(ado: Ado, args) -> str:
 def me(ado: Ado, args) -> str:
     found = ado.call("GET", ado.org_url + "/_apis/connectionData", {})
     user = found.get("authenticatedUser") or {}
-    return f"{user.get('providerDisplayName', '')}  ({ado.conn['org']} / {ado.conn['project']}, connection {ado.conn['name']})"
+    account = (user.get("properties") or {}).get("Account", {}).get("$value") or user.get("providerDisplayName", "")
+    if args.short:  # the test of the connection: one word
+        return re.sub(r"\s+", "_", str(account)) or "unknown"
+    return f"{user.get('providerDisplayName', '')}  {account}  ({ado.conn['org']} / {ado.conn['project']}, connection {ado.conn['name']}, {ado.conn['url']}, sign-in {ado.conn.get('auth')})"
 
 
-# --- pipelines and releases ----------------------------------------------------------------------------------------------------------------------------------
+# --- work items: writes ------------------------------------------------------------------------------------------------------------------------------------
+
+def read_text(args) -> str:
+    return Path(args.file).read_text(encoding="utf-8") if args.file else (args.text or "")
+
+
+def comment(ado: Ado, args) -> str:
+    text = read_text(args)
+    if not text.strip():
+        raise Stop("nothing to write: give --text \"…\" or --file <path>")
+    found = ado.call("POST", ado.api + f"wit/workItems/{args.id}/comments", {"api-version": COMMENTS}, {"text": comment_html(text)})
+    return json.dumps(found, indent=2) if args.json else f"comment {found.get('id', '')} added to #{args.id}: {ado.web}/_workitems/edit/{args.id}"
+
+
+def item_basics(ado: Ado, number: str) -> dict:
+    return ado.call("GET", ado.api + f"wit/workitems/{number}", {"fields": "System.WorkItemType,System.Tags,System.State,System.Title", "api-version": API}).get("fields") or {}
+
+
+def allowed_states(ado: Ado, kind: str) -> list:
+    return [entry.get("name") for entry in ado.call("GET", ado.api + f"wit/workitemtypes/{urllib.parse.quote(kind)}/states", {"api-version": API}).get("value") or []]
+
+
+def field_ref(ado: Ado, kind: str, name: str, cache: dict) -> str:
+    """A field's reference name from what the agent wrote: an alias (priority), a display name (Story Points) or the reference name itself. Else the allowed ones are listed."""
+    if name.lower() in FIELDS:
+        return FIELDS[name.lower()]
+    if "list" not in cache:
+        cache["list"] = type_fields(ado, kind)
+    known = cache["list"]
+    for row in known:
+        if name.lower() in (str(row.get("referenceName", "")).lower(), str(row.get("name", "")).lower()):
+            return row["referenceName"]
+    if known:
+        raise Stop(f"{kind} has no field {name}; its fields: " + ", ".join(f"{row.get('name')} ({row.get('referenceName')})" for row in known))
+    return name
+
+
+def tag_list(text: str) -> list:
+    return [part.strip() for part in str(text or "").split(";") if part.strip()]
+
+
+def patch_ops(ado: Ado, args, kind: str, current_tags: str = "") -> list:
+    ops, cache = [], {}
+    for key, value in (("state", args.state), ("title", args.title), ("assigned", args.assign), ("area", args.area), ("iteration", args.iteration), ("description", args.description)):
+        if value:
+            ops.append({"op": "add", "path": f"/fields/{FIELDS[key]}", "value": comment_html(value) if key == "description" else value})
+    for name, value in pairs(args.field, "--field").items():
+        ops.append({"op": "add", "path": "/fields/" + field_ref(ado, kind, name, cache), "value": value})
+    if args.tag or args.untag:
+        wanted = tag_list(current_tags)
+        for one in args.tag or []:
+            if one.lower() not in [t.lower() for t in wanted]:
+                wanted.append(one.strip())
+        gone = [one.lower() for one in args.untag or []]
+        wanted = [one for one in wanted if one.lower() not in gone]
+        ops.append({"op": "add", "path": "/fields/System.Tags", "value": "; ".join(wanted)})
+    return ops
+
+
+def check_state(ado: Ado, kind: str, state: str) -> None:
+    if state:
+        states = allowed_states(ado, kind)
+        if states and state not in states:
+            raise Stop(f"{kind} has no state {state}; its states: {', '.join(states)}")
+
+
+def update(ado: Ado, args) -> str:
+    basics = item_basics(ado, args.id)
+    kind = basics.get("System.WorkItemType", "")
+    check_state(ado, kind, args.state)
+    ops = patch_ops(ado, args, kind, basics.get("System.Tags", ""))
+    if not ops:
+        raise Stop("nothing to change: give --state, --title, --assign, --area, --iteration, --description, --tag, --untag or --field NAME=VALUE")
+    found = ado.call("PATCH", ado.api + f"wit/workitems/{args.id}", {"api-version": API}, ops, kind="application/json-patch+json")
+    if args.json:
+        return json.dumps(found, indent=2)
+    return f"#{args.id} updated ({', '.join(op['path'].rsplit('/', 1)[-1] for op in ops)}): {ado.web}/_workitems/edit/{args.id}"
+
+
+def create(ado: Ado, args) -> str:
+    kinds = [entry.get("name") for entry in ado.call("GET", ado.api + "wit/workitemtypes", {"api-version": API}).get("value") or []]
+    if kinds and args.type not in kinds:
+        raise Stop(f"no work item type {args.type}; the types: {', '.join(kinds)}")
+    check_state(ado, args.type, args.state)
+    ops = patch_ops(ado, args, args.type)
+    if not any(op["path"].endswith("System.Title") for op in ops):
+        raise Stop("a new work item needs --title")
+    if args.parent:
+        ops.append({"op": "add", "path": "/relations/-", "value": {"rel": RELATIONS["parent"], "url": f"{ado.org_url}/_apis/wit/workItems/{args.parent}"}})
+    found = ado.call("POST", ado.api + "wit/workitems/$" + urllib.parse.quote(args.type), {"api-version": API}, ops, kind="application/json-patch+json")
+    return json.dumps(found, indent=2) if args.json else f"#{found.get('id')} created: {ado.web}/_workitems/edit/{found.get('id')}"
+
+
+def link(ado: Ado, args) -> str:
+    if str(args.id) == str(args.to):
+        raise Stop("an item cannot link to itself")
+    ado.call("GET", ado.api + f"wit/workitems/{args.to}", {"fields": "System.Id", "api-version": API})  # a clear error when the target is not there
+    mine = ado.call("GET", ado.api + f"wit/workitems/{args.id}", {"$expand": "relations", "api-version": API})
+    if any(row["kind"] == args.type and row["id"] == str(args.to) for row in relation_rows(ado, mine)):
+        return f"#{args.id} already has {args.to} as {args.type}; nothing changed"
+    ops = [{"op": "add", "path": "/relations/-", "value": {"rel": RELATIONS[args.type], "url": f"{ado.org_url}/_apis/wit/workItems/{args.to}", "attributes": {"comment": args.comment or ""}}}]
+    found = ado.call("PATCH", ado.api + f"wit/workitems/{args.id}", {"api-version": API}, ops, kind="application/json-patch+json")
+    meaning = {"parent": f"{args.to} is the parent of {args.id}", "child": f"{args.to} is a child of {args.id}", "related": f"{args.id} and {args.to} are related"}[args.type]
+    return json.dumps(found, indent=2) if args.json else f"linked: {meaning}: {ado.web}/_workitems/edit/{args.id}"
+
+
+def unlink(ado: Ado, args) -> str:
+    mine = ado.call("GET", ado.api + f"wit/workitems/{args.id}", {"$expand": "relations", "api-version": API})
+    hits = [row for row in relation_rows(ado, mine) if row["id"] == str(args.to) and (not args.type or row["kind"] == args.type)]
+    if not hits:
+        have = ", ".join(f"{row['kind']} {row['id']}" for row in relation_rows(ado, mine) if row["id"]) or "none"
+        raise Stop(f"#{args.id} has no link to {args.to}" + (f" of type {args.type}" if args.type else "") + f"; its links: {have}")
+    ops = [{"op": "test", "path": "/rev", "value": mine.get("rev")}] + [{"op": "remove", "path": f"/relations/{row['index']}"} for row in sorted(hits, key=lambda one: -one["index"])]
+    found = ado.call("PATCH", ado.api + f"wit/workitems/{args.id}", {"api-version": API}, ops, kind="application/json-patch+json")
+    return json.dumps(found, indent=2) if args.json else f"unlinked {args.to} from #{args.id} ({len(hits)} link{'s' if len(hits) > 1 else ''})"
+
+
+def attach(ado: Ado, args) -> str:
+    path = Path(args.file)
+    if not path.is_file():
+        raise Stop(f"no such file: {args.file}")
+    name = args.name or path.name
+    sent = ado.call("POST", ado.api + "wit/attachments", {"fileName": name, "api-version": API}, raw=path.read_bytes(), kind="application/octet-stream")
+    if not sent.get("url"):
+        raise Stop("the upload gave no address back")
+    ops = [{"op": "add", "path": "/relations/-", "value": {"rel": "AttachedFile", "url": sent["url"], "attributes": {"comment": args.comment or "", "name": name}}}]
+    ado.call("PATCH", ado.api + f"wit/workitems/{args.id}", {"api-version": API}, ops, kind="application/json-patch+json")
+    return f"{name} ({path.stat().st_size} bytes) attached to #{args.id}: {ado.web}/_workitems/edit/{args.id}"
+
+
+# --- pipelines ---------------------------------------------------------------------------------------------------------------------------------------------
 
 def definition(ado: Ado, name: str) -> str:
     if str(name).isdigit():
         return str(name)
-    rows = ado.call("GET", ado.api + "build/definitions", {"name": name, "api-version": WIT}).get("value") or []
+    rows = ado.call("GET", ado.api + "build/definitions", {"name": name, "api-version": API}).get("value") or []
     if not rows:
-        near = [row.get("name") for row in ado.call("GET", ado.api + "build/definitions", {"api-version": WIT}).get("value") or [] if name.lower() in str(row.get("name", "")).lower()]
+        near = [row.get("name") for row in ado.call("GET", ado.api + "build/definitions", {"api-version": API}).get("value") or [] if name.lower() in str(row.get("name", "")).lower()]
         raise Stop(f"no pipeline named {name}" + (f"; close names: {', '.join(near[:10])}" if near else "; `ado pipelines` lists them"))
     return str(rows[0]["id"])
 
 
+def branch_ref(name: str) -> str:
+    return name if not name or name.startswith("refs/") else "refs/heads/" + name
+
+
 def pipelines(ado: Ado, args) -> str:
-    rows = ado.call("GET", ado.api + "build/definitions", {"name": f"*{args.name}*" if args.name else "", "api-version": WIT}).get("value") or []
+    rows = ado.call("GET", ado.api + "build/definitions", {"name": f"*{args.name}*" if args.name else "", "api-version": API}).get("value") or []
     return json.dumps(rows, indent=2) if args.json else table([[row.get("id"), row.get("name"), row.get("path", "")] for row in rows], ["id", "pipeline", "folder"])
 
 
+def yaml_parameters(text: str) -> list:
+    """The runtime parameters a pipeline's YAML declares: [{name, type, default, values}]. A small reader of the top `parameters:` list, enough to show and to check a name."""
+    found, inside, current = [], False, None
+    for line in text.splitlines():
+        if re.match(r"^parameters\s*:", line):
+            inside = True
+            continue
+        if inside and re.match(r"^\S", line) and not line.startswith("-"):
+            break
+        if not inside:
+            continue
+        start = re.match(r"^\s*-\s*name\s*:\s*(\S+)", line)
+        if start:
+            current = {"name": start.group(1).strip("'\""), "type": "string", "default": "", "values": []}
+            found.append(current)
+        elif current is not None:
+            kv = re.match(r"^\s+(type|default)\s*:\s*(.*)$", line)
+            if kv:
+                current[kv.group(1)] = kv.group(2).strip().strip("'\"")
+            val = re.match(r"^\s+-\s*(.+)$", line)
+            if val and not re.match(r"^\s*-\s*name\s*:", line):
+                current["values"].append(val.group(1).strip().strip("'\""))
+    return found
+
+
+def pipeline_parameters(ado: Ado, found: dict, branch: str = "") -> tuple:
+    """(parameters, why not). Reads the YAML file of the definition from its repository."""
+    process, repo = found.get("process") or {}, found.get("repository") or {}
+    if process.get("type") not in (2, None) or not process.get("yamlFilename") or not repo.get("id"):
+        return [], "not a YAML pipeline"
+    try:
+        answer = ado.call("GET", ado.api + f"git/repositories/{repo['id']}/items", {"path": process["yamlFilename"], "includeContent": "true", "versionDescriptor.version": (branch or repo.get("defaultBranch") or "main").replace("refs/heads/", ""),
+                                                                                   "versionDescriptor.versionType": "branch", "api-version": API})
+        return yaml_parameters(answer.get("content", "")), ""
+    except Stop as error:
+        return [], str(error)[:150]
+
+
+def pipeline(ado: Ado, args) -> str:
+    found = ado.call("GET", ado.api + f"build/definitions/{definition(ado, args.id)}", {"api-version": API})
+    if args.json:
+        return json.dumps(found, indent=2)
+    repo, process = found.get("repository") or {}, found.get("process") or {}
+    params, why = pipeline_parameters(ado, found)
+    folder = found.get("path") or "\\"
+    lines = [f"pipeline {found.get('id')}  {found.get('name')}  folder {folder}",
+             f"repository {repo.get('name', '')}  default branch {str(repo.get('defaultBranch', '')).replace('refs/heads/', '')}",
+             f"yaml       {process.get('yamlFilename', '-')}",
+             f"queue      {found.get('queueStatus', '')}"]
+    lines.append("parameters " + ("; ".join(f"{one['name']} ({one['type']}, default {one['default'] or '-'}" + (f", one of {'|'.join(one['values'])}" if one["values"] else "") + ")" for one in params) if params else "-" + (f" ({why})" if why else "")))
+    variables = found.get("variables") or {}
+    lines.append("variables  " + ("; ".join(f"{key}={'(secret)' if value.get('isSecret') else value.get('value', '')}{'' if value.get('allowOverride') else ' (fixed)'}" for key, value in variables.items()) if variables else "-"))
+    recent = ado.call("GET", ado.api + "build/builds", {"definitions": found.get("id"), "$top": 3, "queryOrder": "queueTimeDescending", "api-version": API}).get("value") or []
+    lines.append("latest     " + ("; ".join(f"{row.get('id')} {row.get('result') or row.get('status')}" for row in recent) if recent else "-"))
+    return "\n".join(lines)
+
+
 def runs(ado: Ado, args) -> str:
-    rows = ado.call("GET", ado.api + "build/builds", {"definitions": definition(ado, args.pipeline), "$top": args.top, "queryOrder": "queueTimeDescending", "branchName": args.branch, "api-version": WIT}).get("value") or []
+    rows = ado.call("GET", ado.api + "build/builds", {"definitions": definition(ado, args.pipeline), "$top": args.top, "queryOrder": "queueTimeDescending", "branchName": branch_ref(args.branch), "resultFilter": args.result, "api-version": API}).get("value") or []
     if args.json:
         return json.dumps(rows, indent=2)
     return table([[row.get("id"), row.get("buildNumber"), row.get("status"), row.get("result", ""), str(row.get("sourceBranch", "")).replace("refs/heads/", ""), str(row.get("sourceVersion", ""))[:8], who(row.get("requestedFor")), when(row.get("finishTime") or row.get("startTime"))] for row in rows],
@@ -362,18 +696,18 @@ def runs(ado: Ado, args) -> str:
 
 
 def timeline(ado: Ado, run: str) -> list:
-    return ado.call("GET", ado.api + f"build/builds/{run}/timeline", {"api-version": WIT}).get("records") or []
+    return ado.call("GET", ado.api + f"build/builds/{run}/timeline", {"api-version": API}).get("records") or []
 
 
 def run(ado: Ado, args) -> str:
-    head = ado.call("GET", ado.api + f"build/builds/{args.id}", {"api-version": WIT})
+    head = ado.call("GET", ado.api + f"build/builds/{args.id}", {"api-version": API})
     records = timeline(ado, args.id)
     if args.json:
         return json.dumps({"run": head, "records": records}, indent=2)
     children = {}
     for record in records:
         children.setdefault(record.get("parentId"), []).append(record)
-    lines = [f"run {head.get('id')}  {head.get('definition', {}).get('name', '')}  {head.get('buildNumber', '')}  {head.get('status', '')} {head.get('result', '')}",
+    lines = [f"run {head.get('id')}  {head.get('definition', {}).get('name', '')}  {head.get('buildNumber', '')}  {head.get('status', '')} {head.get('result') or ''}".rstrip(),
              f"branch {str(head.get('sourceBranch', '')).replace('refs/heads/', '')}  commit {str(head.get('sourceVersion', ''))[:8]}  by {who(head.get('requestedFor'))}", ""]
 
     def walk(parent, depth):
@@ -388,7 +722,7 @@ def run(ado: Ado, args) -> str:
 
 
 def log(ado: Ado, args) -> str:
-    text = ado.call("GET", ado.api + f"build/builds/{args.run}/logs/{args.log}", {"api-version": WIT}, text=True)
+    text = ado.call("GET", ado.api + f"build/builds/{args.run}/logs/{args.log}", {"api-version": API}, text=True)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(text, encoding="utf-8")
@@ -400,7 +734,7 @@ def log(ado: Ado, args) -> str:
 
 
 def why(ado: Ado, args) -> str:
-    head = ado.call("GET", ado.api + f"build/builds/{args.id}", {"api-version": WIT})
+    head = ado.call("GET", ado.api + f"build/builds/{args.id}", {"api-version": API})
     records = timeline(ado, args.id)
     failed = [record for record in records if record.get("result") == "failed" and record.get("type") == "Task"]
     lines = [f"run {head.get('id')}  {head.get('definition', {}).get('name', '')}  {head.get('result', '')}  commit {str(head.get('sourceVersion', ''))[:8]}  by {who(head.get('requestedFor'))}"]
@@ -416,7 +750,7 @@ def why(ado: Ado, args) -> str:
         lines += ["", f"✗ {' > '.join(path + [record.get('name', '')])}"]
         lines += [f"  error: {entry.get('message', '')[:500]}" for entry in record.get("issues") or [] if entry.get("type") == "error"]
         if record.get("log"):
-            text = ado.call("GET", ado.api + f"build/builds/{args.id}/logs/{record['log']['id']}", {"api-version": WIT}, text=True)
+            text = ado.call("GET", ado.api + f"build/builds/{args.id}/logs/{record['log']['id']}", {"api-version": API}, text=True)
             if args.out:
                 target = Path(args.out) / f"run-{args.id}-log-{record['log']['id']}.txt"
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -428,17 +762,105 @@ def why(ado: Ado, args) -> str:
     return "\n".join(lines)
 
 
+def artifacts(ado: Ado, args) -> str:
+    rows = ado.call("GET", ado.api + f"build/builds/{args.run}/artifacts", {"api-version": API}).get("value") or []
+    if args.json:
+        return json.dumps(rows, indent=2)
+    if not rows:
+        return f"run {args.run} published no artifact"
+    return table([[row.get("name"), (row.get("resource") or {}).get("type", ""), (row.get("resource") or {}).get("downloadUrl", "")] for row in rows], ["artifact", "type", "download"])
+
+
+def tests(ado: Ado, args) -> str:
+    runs_found = ado.call("GET", ado.api + "test/runs", {"buildUri": f"vstfs:///Build/Build/{args.run}", "api-version": API}).get("value") or []
+    if args.json:
+        return json.dumps(runs_found, indent=2)
+    if not runs_found:
+        return f"run {args.run} has no test result"
+    lines = []
+    for one in runs_found:
+        total, passed = one.get("totalTests", 0), one.get("passedTests", 0)
+        lines.append(f"test run {one.get('id')}  {one.get('name')}: {total} tests, {passed} passed, {total - passed - one.get('notApplicableTests', 0)} failed")
+        bad = ado.call("GET", ado.api + f"test/runs/{one['id']}/results", {"outcomes": "Failed", "$top": args.top, "api-version": API}).get("value") or []
+        for result in bad:
+            lines.append(f"  ✗ {result.get('testCaseTitle') or result.get('automatedTestName')}  ({result.get('automatedTestName', '')})")
+            if result.get("errorMessage"):
+                lines.append("      " + plain(result["errorMessage"], 400).replace("\n", "\n      "))
+            if args.stack and result.get("stackTrace"):
+                lines.append("      " + plain(result["stackTrace"], 1200).replace("\n", "\n      "))
+    return "\n".join(lines)
+
+
+def changes(ado: Ado, args) -> str:
+    rows = ado.call("GET", ado.api + f"build/builds/{args.run}/changes", {"api-version": API}).get("value") or []
+    if args.json:
+        return json.dumps(rows, indent=2)
+    lines = [f"{str(row.get('id', ''))[:8]}  {when(row.get('timestamp'))}  {who(row.get('author'))}\n    {str(row.get('message', '')).splitlines()[0][:200] if row.get('message') else ''}" for row in rows]
+    work = ado.call("GET", ado.api + f"build/builds/{args.run}/workitems", {"api-version": API}).get("value") or []
+    if work:
+        lines.append("work items: " + ", ".join("#" + str(one.get("id")) for one in work))
+    return "\n".join(lines) or f"run {args.run} has no change"
+
+
+def queue(ado: Ado, args) -> str:
+    number = definition(ado, args.pipeline)
+    found = ado.call("GET", ado.api + f"build/definitions/{number}", {"api-version": API})
+    params = pairs(args.param, "--param")
+    if params:
+        declared, why_not = pipeline_parameters(ado, found, args.branch)
+        names = [one["name"] for one in declared]
+        for name in params:
+            if names and name not in names:
+                raise Stop(f"pipeline {found.get('name')} has no parameter {name}; its parameters: {', '.join(names)}")
+        for one in declared:
+            if one["name"] in params and one["values"] and params[one["name"]] not in one["values"]:
+                raise Stop(f"parameter {one['name']} takes one of: {', '.join(one['values'])}")
+    body = {"resources": {"repositories": {"self": {"refName": branch_ref(args.branch) or (found.get("repository") or {}).get("defaultBranch", "refs/heads/main")}}}}
+    if params:
+        body["templateParameters"] = params
+    if args.var:
+        body["variables"] = {key: {"value": value} for key, value in pairs(args.var, "--var").items()}
+    made = ado.call("POST", ado.api + f"pipelines/{number}/runs", {"api-version": API}, body)
+    return json.dumps(made, indent=2) if args.json else f"queued run {made.get('id')} of {found.get('name')} on {body['resources']['repositories']['self']['refName'].replace('refs/heads/', '')}: `ado run {made.get('id')}` shows it"
+
+
+def cancel(ado: Ado, args) -> str:
+    head = ado.call("GET", ado.api + f"build/builds/{args.run}", {"api-version": API})
+    if head.get("status") == "completed":
+        raise Stop(f"run {args.run} is already completed ({head.get('result')}); only a running or queued run can be canceled")
+    ado.call("PATCH", ado.api + f"build/builds/{args.run}", {"api-version": API}, {"status": "cancelling"})
+    return f"run {args.run} is being canceled"
+
+
+def retry(ado: Ado, args) -> str:
+    head = ado.call("GET", ado.api + f"build/builds/{args.run}", {"api-version": API})
+    if head.get("status") != "completed":
+        raise Stop(f"run {args.run} is {head.get('status')}; only a completed run can be retried")
+    if args.stage:
+        stages = [record for record in timeline(ado, args.run) if record.get("type") == "Stage"]
+        match = next((one for one in stages if args.stage.lower() in (str(one.get("name", "")).lower(), str(one.get("identifier", "")).lower())), None)
+        if not match:
+            raise Stop(f"run {args.run} has no stage {args.stage}; its stages: {', '.join(str(one.get('name')) for one in stages) or 'none'}")
+        ado.call("PATCH", ado.api + f"build/builds/{args.run}/stages/{urllib.parse.quote(str(match.get('identifier') or match.get('name')))}", {"api-version": STAGES}, {"state": "retry", "forceRetryAllJobs": False})
+        return f"stage {match.get('name')} of run {args.run} is retried (same run; `ado run {args.run}` shows it)"
+    body = {"resources": {"repositories": {"self": {"refName": head.get("sourceBranch", ""), "version": head.get("sourceVersion", "")}}}}
+    made = ado.call("POST", ado.api + f"pipelines/{(head.get('definition') or {}).get('id')}/runs", {"api-version": API}, body)
+    return f"queued run {made.get('id')} again from run {args.run} (same branch and commit): `ado run {made.get('id')}` shows it"
+
+
+# --- releases ----------------------------------------------------------------------------------------------------------------------------------------------
+
 def release_definition(ado: Ado, name: str) -> str:
     if str(name).isdigit():
         return str(name)
-    rows = ado.call("GET", ado.rm + "release/definitions", {"searchText": name, "api-version": WIT}).get("value") or []
+    rows = ado.call("GET", ado.rm + "release/definitions", {"searchText": name, "api-version": API}).get("value") or []
     if not rows:
         raise Stop(f"no release definition named {name}")
     return str(rows[0]["id"])
 
 
 def releases(ado: Ado, args) -> str:
-    rows = ado.call("GET", ado.rm + "release/releases", {"definitionId": release_definition(ado, args.definition), "$top": args.top, "$expand": "environments", "api-version": WIT}).get("value") or []
+    rows = ado.call("GET", ado.rm + "release/releases", {"definitionId": release_definition(ado, args.definition), "$top": args.top, "$expand": "environments", "api-version": API}).get("value") or []
     if args.json:
         return json.dumps(rows, indent=2)
     return table([[row.get("id"), row.get("name"), when(row.get("createdOn")), "  ".join(f"{env.get('name')}:{env.get('status')}" for env in row.get("environments") or [])] for row in rows],
@@ -446,7 +868,7 @@ def releases(ado: Ado, args) -> str:
 
 
 def release(ado: Ado, args) -> str:
-    found = ado.call("GET", ado.rm + f"release/releases/{args.id}", {"api-version": WIT})
+    found = ado.call("GET", ado.rm + f"release/releases/{args.id}", {"api-version": API})
     if args.json:
         return json.dumps(found, indent=2)
     lines = [f"release {found.get('id')}  {found.get('name')}  {found.get('releaseDefinition', {}).get('name', '')}  created {when(found.get('createdOn'))}"]
@@ -462,34 +884,61 @@ def release(ado: Ado, args) -> str:
     return "\n".join(lines)
 
 
+def deploy(ado: Ado, args) -> str:
+    found = ado.call("GET", ado.rm + f"release/releases/{args.release}", {"api-version": API})
+    envs = found.get("environments") or []
+    match = next((env for env in envs if str(env.get("name", "")).lower() == args.env.lower()), None)
+    if not match:
+        raise Stop(f"release {args.release} has no environment {args.env}; its environments: {', '.join(str(env.get('name')) for env in envs) or 'none'}")
+    if match.get("status") in ("inProgress", "queued"):
+        raise Stop(f"{match.get('name')} of release {args.release} is already {match.get('status')}")
+    ado.call("PATCH", ado.rm + f"release/releases/{args.release}/environments/{match.get('id')}", {"api-version": API}, {"status": "inProgress", "scheduledDeploymentTime": None, "comment": args.comment or ""})
+    return f"deployment of release {args.release} to {match.get('name')} started (it was {match.get('status')}): `ado release {args.release}` shows it"
+
+
 # --- the command line ----------------------------------------------------------------------------------------------------------------------------------------
 
 def parser() -> argparse.ArgumentParser:
-    top = argparse.ArgumentParser(prog="ado", description="Azure DevOps for the agent. Reads run; comment, update and create wait for the person's approval.")
+    top = argparse.ArgumentParser(prog="ado", description="Azure DevOps for the agent. Reads run; comment, update, create, link, unlink, attach wait for the person's approval; queue, cancel, retry, deploy wait for the person.")
     top.add_argument("--conn", default="", help="the azure-devops connection, when there are several")
+    top.add_argument("--org", default="", help="pick the connection by its organization")
+    top.add_argument("--project", default="", help="pick the connection by its project")
     top.add_argument("--json", action="store_true", help="what Azure DevOps answered, whole")
     sub = top.add_subparsers(dest="command", required=True)
-    sub.add_parser("me", help="who is signed in, and the org and project in use")
-    one = sub.add_parser("item", help="one work item: type, title, state, assigned, area, iteration, parent, description")
-    one.add_argument("id")
-    many = sub.add_parser("items", help="work items: --mine, --iteration <path>, --state <s>, or --query <WIQL>")
-    many.add_argument("--mine", action="store_true")
-    many.add_argument("--iteration", default="")
-    many.add_argument("--state", default="")
-    many.add_argument("--all", action="store_true", help="also closed ones")
-    many.add_argument("--query", default="")
-    many.add_argument("--top", type=int, default=30)
-    said = sub.add_parser("comments", help="the comments of a work item")
-    said.add_argument("id")
-    write = sub.add_parser("comment", help="add a comment (a write: the person approves it)")
-    write.add_argument("id")
-    write.add_argument("--text", default="", help="the words; each line stays a line")
-    write.add_argument("--file", default="", help="or a file that holds them")
+
+    def add(name, text, *positional):
+        one = sub.add_parser(name, help=text)
+        for arg in positional:
+            one.add_argument(arg)
+        return one
+
+    one = add("me", "who is signed in, and the connection in use")
+    one.add_argument("--short", action="store_true", help="one word (the connection test)")
+    add("item", "one work item: fields, tags, parent, children, related, attached files, description", "id")
+    one = add("items", "work items: --mine, --type, --iteration, --state, --tag, or --query <WIQL>")
+    one.add_argument("--mine", action="store_true")
+    one.add_argument("--type", default="")
+    one.add_argument("--iteration", default="")
+    one.add_argument("--state", default="")
+    one.add_argument("--tag", default="")
+    one.add_argument("--all", action="store_true", help="also closed ones")
+    one.add_argument("--query", default="")
+    one.add_argument("--top", type=int, default=30)
+    add("comments", "the comments of a work item", "id")
+    add("history", "who changed what and when (every revision)", "id")
+    add("links", "parent, children, related items and other links", "id")
+    one = add("attachments", "the files attached to a work item (--out <folder> downloads them)", "id")
+    one.add_argument("--out", default="")
+    add("queries", "the saved queries")
+    one = add("query", "run a saved query (id or path from `ado queries`)", "id")
+    one.add_argument("--top", type=int, default=50)
+    add("tags", "the tags in use")
+    one = add("comment", "add a comment (a write: the person approves it)", "id")
+    one.add_argument("--text", default="", help="the words; each line stays a line")
+    one.add_argument("--file", default="", help="or a file that holds them")
     for name, helptext in (("update", "change fields of a work item (a write)"), ("create", "a new work item (a write)")):
-        change = sub.add_parser(name, help=helptext)
-        if name == "update":
-            change.add_argument("id")
-        else:
+        change = add(name, helptext, *(["id"] if name == "update" else []))
+        if name == "create":
             change.add_argument("--type", required=True, help="User Story, Bug, Task ... (ado types)")
             change.add_argument("--parent", default="", help="the id of its parent")
         change.add_argument("--state", default="")
@@ -498,43 +947,67 @@ def parser() -> argparse.ArgumentParser:
         change.add_argument("--area", default="", help="an area path (ado areas)")
         change.add_argument("--iteration", default="", help="an iteration path (ado iterations --current)")
         change.add_argument("--description", default="")
-        change.add_argument("--field", action="append", help="NAME=VALUE, more than once (priority=2, Microsoft.VSTS.Scheduling.StoryPoints=3)")
-    sub.add_parser("types", help="the work item types")
-    kind = sub.add_parser("states", help="the states a type allows")
+        change.add_argument("--field", action="append", help="NAME=VALUE, more than once (priority=2, \"Story Points=3\")")
+        change.add_argument("--tag", action="append", help="add a tag, more than once")
+        change.add_argument("--untag", action="append", help="take a tag away, more than once")
+    one = add("link", "link a work item to another (a write)", "id")
+    one.add_argument("--to", required=True, help="the other item's id")
+    one.add_argument("--type", required=True, choices=sorted(RELATIONS), help="what --to is to this item: parent, child or related")
+    one.add_argument("--comment", default="")
+    one = add("unlink", "take a link away (a write)", "id")
+    one.add_argument("--to", required=True)
+    one.add_argument("--type", default="", choices=["", *sorted(RELATIONS)])
+    one = add("attach", "attach a file (a write)", "id")
+    one.add_argument("--file", required=True)
+    one.add_argument("--name", default="", help="the name it shows (the file's own by default)")
+    one.add_argument("--comment", default="")
+    add("types", "the work item types")
+    kind = add("states", "the states a type allows")
     kind.add_argument("--type", required=True)
-    kind = sub.add_parser("fields", help="the fields of a type, and which are required")
+    kind = add("fields", "the fields of a type, and which are required")
     kind.add_argument("--type", required=True)
-    sub.add_parser("areas", help="the area paths")
-    period = sub.add_parser("iterations", help="the iteration paths")
+    add("areas", "the area paths")
+    period = add("iterations", "the iteration paths")
     period.add_argument("--current", action="store_true", help="only the one(s) of today")
-    found = sub.add_parser("pipelines", help="the pipelines (build definitions)")
-    found.add_argument("--name", default="")
-    found = sub.add_parser("runs", help="the latest runs of a pipeline")
-    found.add_argument("pipeline", help="its name or id")
-    found.add_argument("--top", type=int, default=5)
-    found.add_argument("--branch", default="", help="refs/heads/<branch>")
-    found = sub.add_parser("run", help="one run as a tree: stage, job, task, each with its result, time and error")
-    found.add_argument("id")
-    found = sub.add_parser("why", help="why a run failed: each failed task, its errors, the lines of its log that name an error, the end of the log")
-    found.add_argument("id")
-    found.add_argument("--out", default="", help="a folder to keep each failed task's whole log in (the task's RUNS/ADO, to record as evidence)")
-    found.add_argument("--tail", type=int, default=30)
-    found = sub.add_parser("log", help="one log of a run")
-    found.add_argument("run")
-    found.add_argument("log")
-    found.add_argument("--grep", default="")
-    found.add_argument("--tail", type=int, default=200)
-    found.add_argument("--out", default="", help="a file to keep the whole log in")
-    found = sub.add_parser("releases", help="the latest releases of a classic release definition, with each stage's state")
-    found.add_argument("definition", help="its name or id")
-    found.add_argument("--top", type=int, default=5)
-    found = sub.add_parser("release", help="one release: each stage, who it waits for, the failed tasks and their errors")
-    found.add_argument("id")
+    one = add("pipelines", "the pipelines (build definitions)")
+    one.add_argument("--name", default="")
+    add("pipeline", "one pipeline: repository, branch, YAML file, parameters, variables, latest runs", "id")
+    one = add("runs", "the latest runs of a pipeline", "pipeline")
+    one.add_argument("--top", type=int, default=5)
+    one.add_argument("--branch", default="")
+    one.add_argument("--result", default="", choices=["", "succeeded", "failed", "canceled", "partiallySucceeded"])
+    add("run", "one run as a tree: stage, job, task, each with its result, time and error", "id")
+    one = add("why", "why a run failed: each failed task, its errors, the lines of its log that name an error, the end of the log", "id")
+    one.add_argument("--out", default="", help="a folder to keep each failed task's whole log in (the task's RUNS/ADO, to record as evidence)")
+    one.add_argument("--tail", type=int, default=30)
+    one = add("log", "one log of a run", "run", "log")
+    one.add_argument("--grep", default="")
+    one.add_argument("--tail", type=int, default=200)
+    one.add_argument("--out", default="", help="a file to keep the whole log in")
+    add("artifacts", "what a run published", "run")
+    one = add("tests", "the test results of a run: counts and the failed cases with their messages", "run")
+    one.add_argument("--top", type=int, default=50)
+    one.add_argument("--stack", action="store_true", help="also the stack traces")
+    add("changes", "the commits (and work items) a run built", "run")
+    one = add("queue", "start a run of a pipeline (needs the person)", "pipeline")
+    one.add_argument("--branch", default="", help="main or refs/heads/main (the pipeline's default when left out)")
+    one.add_argument("--param", action="append", help="a runtime parameter NAME=VALUE, more than once")
+    one.add_argument("--var", action="append", help="a variable NAME=VALUE, more than once")
+    add("cancel", "cancel a running run (needs the person)", "run")
+    one = add("retry", "run a completed run again, or only a failed stage with --stage (needs the person)", "run")
+    one.add_argument("--stage", default="")
+    one = add("releases", "the latest releases of a classic release definition, with each stage's state", "definition")
+    one.add_argument("--top", type=int, default=5)
+    add("release", "one release: each stage, who it waits for, the failed tasks and their errors", "id")
+    one = add("deploy", "deploy a release to one environment (needs the person)", "release")
+    one.add_argument("--env", required=True, help="the environment's name (ado release <id> lists them)")
+    one.add_argument("--comment", default="")
     return top
 
 
-COMMANDS = {"me": me, "item": item, "items": items, "comments": comments, "comment": comment, "update": update, "create": create, "types": types, "states": states,
-            "fields": fields, "areas": areas, "iterations": iterations, "pipelines": pipelines, "runs": runs, "run": run, "log": log, "why": why, "releases": releases, "release": release}
+COMMANDS = {name: globals()[name] for name in ("me", "item", "items", "comments", "history", "links", "attachments", "queries", "query", "tags", "comment", "update", "create", "link", "unlink", "attach",
+                                                "types", "states", "fields", "areas", "iterations", "pipelines", "pipeline", "runs", "run", "why", "log", "artifacts", "tests", "changes",
+                                                "queue", "cancel", "retry", "releases", "release", "deploy")}
 
 
 def main(argv=None) -> int:
@@ -545,9 +1018,12 @@ def main(argv=None) -> int:
                 stream.reconfigure(encoding="utf-8", errors="replace")
             except (AttributeError, ValueError):
                 pass
-        print(COMMANDS[args.command](Ado(connection(args.conn)), args))
+        print(COMMANDS[args.command](Ado(connection(args.conn, args.org, args.project)), args))
         return 0
     except Stop as error:
+        print(f"ado: {error}", file=sys.stderr)
+        return 1
+    except OSError as error:
         print(f"ado: {error}", file=sys.stderr)
         return 1
 

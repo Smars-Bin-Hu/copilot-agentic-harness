@@ -11,33 +11,52 @@
     },
     "project": {
       "label": "Project"
+    },
+    "url": {
+      "label": "Server address",
+      "placeholder": "https://dev.azure.com",
+      "default": "https://dev.azure.com",
+      "optional": true
     }
   },
-  "match": "\\b(?:me|item|items|comments|types|states|fields|areas|iterations|pipelines|runs|run|why|log|releases|release|comment|update|create)\\b",
+  "match": "^",
   "auth": {
     "signin": {
       "identity": "tool",
       "label": "az login",
       "login": "az login --allow-no-subscriptions"
+    },
+    "token": {
+      "identity": "env",
+      "label": "Personal access token",
+      "env": {
+        "ADO_PAT": "password"
+      }
     }
   },
-  "test": "az account show --query user.name -o tsv",
+  "test": "ado --org {org} --project {project} me --short",
   "expect": "^(\\S+)\\s*$",
-  "denied": "az login|AADSTS|expired",
-  "down": "Max retries exceeded|Failed to establish|timed out|CERTIFICATE_VERIFY_FAILED",
+  "denied": "az login|AADSTS|expired|Sign in|token",
+  "down": "Max retries exceeded|Failed to establish|timed out|CERTIFICATE_VERIFY_FAILED|cannot reach",
   "verbs": [
     {
-      "pattern": "^(?:--json\\s+|--conn\\s+\\S+\\s+)*(?:comment|update|create)\\b",
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:comment|update|create|link|unlink|attach)\\b",
       "verb": "write"
     },
     {
-      "pattern": "^(?:--json\\s+|--conn\\s+\\S+\\s+)*(?:me|item|items|comments|types|states|fields|areas|iterations|pipelines|runs|run|why|log|releases|release)\\b",
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:queue|cancel|retry|deploy)\\b",
+      "verb": "exec"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:me|item|items|comments|history|links|attachments|queries|query|tags|types|states|fields|areas|iterations|pipelines|pipeline|runs|run|why|log|artifacts|tests|changes|releases|release)\\b",
       "verb": "read"
     }
   ],
   "show": {
-    "item": "\\b(?:item|comment|update|comments)\\s+(\\d+)",
-    "run": "\\b(?:run|why|log)\\s+(\\d+)"
+    "item": "\\b(?:item|comment|update|comments|history|links|attachments|link|unlink|attach)\\s+(\\d+)",
+    "run": "\\b(?:run|why|log|artifacts|tests|changes|cancel|retry)\\s+(\\d+)",
+    "pipeline": "\\b(?:pipeline|queue)\\s+(\\S+)",
+    "release": "\\b(?:release|deploy)\\s+(\\d+)"
   },
   "rules": {
     "none": {
@@ -47,6 +66,58 @@
       "destroy": "deny"
     }
   },
-  "item": "\\bado(?:\\.cmd)?[\"']?\\s+(?:--json\\s+|--conn\\s+\\S+\\s+)*(?:comment|update)\\s+(\\d+)",
-  "link": "ado"
+  "item": "\\bado(?:\\.cmd)?[\\\"']?\\s+(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:comment|update|link|unlink|attach)\\s+(\\d+)",
+  "link": "ado",
+  "say": [
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*comment\\s+(\\d+)",
+      "text": "Add a comment to work item {1}"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*update\\s+(\\d+)",
+      "text": "Update work item {1}"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*create\\b",
+      "text": "Create a new work item"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*link\\s+(\\d+).*--to\\s+[\\\"']?(\\d+)",
+      "text": "Link work item {1} to work item {2}"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*unlink\\s+(\\d+).*--to\\s+[\\\"']?(\\d+)",
+      "text": "Remove the link between work items {1} and {2}"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*attach\\s+(\\d+)",
+      "text": "Attach a file to work item {1}"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*queue\\s+[\\\"']?([^\\s\\\"']+)",
+      "text": "Start a run of pipeline {1}"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*cancel\\s+(\\d+)",
+      "text": "Cancel run {1}"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*retry\\s+(\\d+)",
+      "text": "Run {1} again"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*deploy\\s+(\\d+).*--env\\s+[\\\"']?([^\\s\\\"']+)",
+      "text": "Deploy release {1} to {2}"
+    }
+  ],
+  "body": [
+    {
+      "pattern": "--file\\s+(\\S+)",
+      "from": "file"
+    },
+    {
+      "pattern": "--text\\s+\\\"((?:[^\\\"\\\\]|\\\\.)*)\\\"",
+      "from": "text"
+    }
+  ]
 }

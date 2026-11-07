@@ -10,6 +10,29 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.30 (2026-11-07)
+
+### Added
+
+- **Factory tool packs**: `.harness/toolpacks/` holds the packs that ship with the harness: `ado` (Azure DevOps, 0.4.5, with its own program), `sqlserver` and `demotracker`. A pack is **on** when the knowledge base names it in `company/tools/packs.json` (`{"use": ["ado"]}`), when the company wrote it in `company/tools/packs/<name>/`, or when you added its folder for a trial (`harness toolpack add <folder>`). The pack's types, rules, `bin/` on the PATH and MCP servers are read where they lie.
+- **Skill names by tool**: with a `skill_prefix`, a pack's skills are put into `.github/skills/` as `<prefix>-<pack>-<skill>` (`acme-ado-workitem`), and the references between a pack's skills follow. `<pack>` is the name of the pack's program, so the agent finds the skills of a tool by the program it needs. A skill with no tool is `<prefix>-<skill>`. The rule is in `skills.instructions.md`.
+- **`company sync` copies skills only**, when the board starts and after Get ready and `company update`. It puts the skills of the packs that are on, takes back those of a pack that is no longer on, and puts them again when a pack's version changed. Finish setup and `harness doctor` show the line `ado 0.4.5 → 0.5.0 updated`.
+- **`commands` in `toolpack.json`**: the subcommands of the pack's program. `harness doctor` warns about a company skill that writes `<program> <word>` in code where `<word>` is not listed.
+- **`harness doctor`** also says: `.harness/examples/toolpacks/` is left over from an older copy (delete it); a company connection leaves a field its type needs unset (which); a name in `use` that no factory pack has.
+- **[Tool packs and MCP servers](13-tool-packs-and-mcp.md)**: a page on why the harness has tool packs and not only MCP servers (whether the company can use it, who holds "a write waits for the person", the skills, the cost).
+
+### Changed
+
+- **No installed copies.** To update the harness, unzip the new one over the old. Nothing else is to do. `harness toolpack add <folder>` now records the path only (a zip is refused: unzip it first); `toolpack remove` forgets a folder added here; a factory pack is turned off by taking it out of `use`. `toolpack list` shows where each pack lies and whether it is on.
+- `.harness/runtime/toolpacks.json` (`{"packs": {...}, "paths": [...]}`) replaces `.harness/toolpacks/installed.json`. It holds what `sync` put, for clean removal.
+- `.harness/toolpacks/` is now the factory folder (a guardrail, read only for the agent). `harness reinstall` does not carry it as this computer's state.
+- `connections share` puts a factory pack into `use` instead of copying it.
+
+### Retired
+
+- The installed copies of tool packs in `.harness/toolpacks/<name>/` and `installed.json`.
+- `.harness/examples/toolpacks/` (moved to `.harness/toolpacks/`); the Update button of the Tool packs tab (a pack is read where it lies).
+
 ## 1.7.29 (2026-11-07)
 
 ### Added

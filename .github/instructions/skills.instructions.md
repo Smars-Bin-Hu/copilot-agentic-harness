@@ -25,6 +25,9 @@ The folder name of a skill and its `name` field must be the same, and use one of
 
 
 - `<skill_prefix>-<skill-name>`: a skill the company writes for every domain (a system it works with, such as the ticket tracker or a server). Maintained by the team. The word is `skill_prefix` in `user.override.json` (lowercase letters and digits); when it is empty, there are no such skills. It lives here, in `.github/skills/`, so that the prefix tells it from the ones upstream ships. `skill check` and `doctor` accept it, `reinstall` carries these skills over, and `generic-build-new-skill` uses it for a new company skill.
+  A company skill has one of two forms (1.7.30). The agent reads the name to know what the skill is for:
+  - `<skill_prefix>-<name>`: a company SOP that needs no tool.
+  - `<skill_prefix>-<pack>-<name>`: the SOP of one tool pack. `<pack>` is the name of the pack's program (`acme-ado-workitem` for the program `ado`), so the agent finds the skills of a tool by the program it needs. `harness company sync` makes this name from the pack's `<pack>-<name>`; do not write it by hand in `.github/skills/`.
   A business domain skill stays `domain-<domain name>-<skill-name>` in the knowledge base, with no company prefix: where it lives already says whose it is.
 
 

@@ -12,7 +12,7 @@ There is no delete. A write to a work item the task is not linked to is refused;
 
 ## Set up
 
-1. Put this folder in the knowledge base as `company/tools/packs/ado/` (or `harness toolpack add <folder>` in your own terminal). It asks for harness 1.7.25.
+1. Turn it on: name it in the knowledge base, `company/tools/packs.json` = `{"use": ["ado"]}`, then `harness company sync` (or restart the board). To try it first, `harness toolpack add <this folder>` in your own terminal. It asks for harness 1.7.25.
 2. In `company/tools/connections.json`:
    ```json
    {"connections": {"ado": {"type": "azure-devops", "env": "none", "auth": "signin", "org": "<org>", "project": "<project>", "label": "Azure DevOps"}}}

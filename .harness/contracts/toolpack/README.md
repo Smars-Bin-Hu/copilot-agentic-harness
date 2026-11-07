@@ -1,12 +1,12 @@
 # Tool pack protocol, v1
 
-A **tool pack** teaches the agent one outside tool (a database, a ticket board, a pipeline service). It is one folder; the harness reads each file the way it reads the rest of its policies. The harness ships no tool pack: two samples are in `.harness/examples/toolpacks/`. `harness toolpack new <name>` makes the skeleton below; `harness toolpack check <folder>` says what is wrong, file by file, before you install it. The code is `.harness/engine/core/toolpacks.py`.
+A **tool pack** teaches the agent one outside tool (a database, a ticket board, a pipeline service). It is one folder; the harness reads each file the way it reads the rest of its policies. The factory packs ship in `.harness/toolpacks/` (`ado`, `sqlserver`, `demotracker`) and are read where they lie: there is no installed copy (1.7.30). The knowledge base turns one on (`company/tools/packs.json`, `{"use": ["ado"]}`); a pack the company wrote is in `company/tools/packs/<name>/`; `harness toolpack add <folder>` records a folder to try. `harness toolpack new <name>` makes the skeleton below; `harness toolpack check <folder>` says what is wrong, file by file, before you use it. Why a pack and not only an MCP server: [docs/13](../../../docs/13-tool-packs-and-mcp.md). The code is `.harness/engine/core/toolpacks.py`.
 
 Three words, used the same way on the board, in commands and in files:
 
 | Word | What it is | Where |
 |---|---|---|
-| tool pack | what you install once: how the agent reaches one tool, the gate's rules for it, its skills | `company/tools/packs/<name>/`, installed in `.harness/toolpacks/<name>/` |
+| tool pack | how the agent reaches one tool: its program, the gate's rules for it, its skills | `.harness/toolpacks/<name>/` (factory, on when `use` names it), `company/tools/packs/<name>/` (the company's), a folder added with `toolpack add` |
 | connection type | a kind of place the tool reaches (SQL Server, Azure DevOps project): its fields, its sign-in, its test | `types/<type>.json` of a tool pack |
 | connection | one place, with the person's sign-in (orders-dev, the Sales project) | `company/tools/connections.json` ([connections.md](connections.md)), or the person's own in Get ready |
 
@@ -21,7 +21,7 @@ Three words, used the same way on the board, in commands and in files:
   launch/*.cmd           optional: a script that starts VS Code with an identity (Windows), for a team that does not save identities
   mcp.json               optional: MCP servers for VS Code; used only where MCP is allowed (below)
   bin/                   optional: a small program of the pack's own (the sample has one); it is on the PATH VS Code gets, with nothing to set
-  README.md              for people: four steps (install, set up, sign in, try)
+  README.md              for people: four steps (turn on, set up, sign in, try)
 ```
 
 `<name>`: one word of small letters and digits (`ado`, `sqlserver`), not `harness`, `generic`, `domain` or the company's skill prefix. It starts the name of every skill of the pack (`ado-workitem`), so two packs never clash; a company that names its skills with its prefix may write `<prefix>-<name>-…` (`acme-ado-workitem`).
@@ -34,9 +34,10 @@ Three words, used the same way on the board, in commands and in files:
 |---|---|---|
 | `schema_version` | yes | `1` |
 | `name` | yes | the folder's name |
-| `version` | yes | the pack's own version, `1.0.0`; Get ready offers **Update** when the folder changed |
-| `harness` | no | the lowest harness version it works with; an older harness refuses to install it |
+| `version` | yes | the pack's own version, `1.0.0`; when it changes, `company sync` puts the pack's skills again and says `<name> <old> → <new> updated` |
+| `harness` | no | the lowest harness version it works with; an older harness refuses to use it |
 | `description` | yes | one sentence for people |
+| `commands` | no | `["item", "comment", ...]`: the subcommands of the pack's program (`bin/<name>`). `harness doctor` warns about a company skill that writes `<program> <word>` in code where `<word>` is not listed. A pack that lists none is not checked |
 | `needs.programs` | no | programs it calls (`["az"]`): `toolpack check` and Get ready look for them on the PATH VS Code gets (tool folders first) |
 | `needs.trust` | no | variables that must name the CA bundle for those programs (`REQUESTS_CA_BUNDLE` for Python tools, `NODE_EXTRA_CA_CERTS` for Node) |
 | `links` | no | `{<link type>: {"label", "type": <connection type>, "url": "https://.../{field}/{id}"}}`: `harness task link add <link type>:<id>` gives a task a chip that opens the item; `{id}` and the fields of the first connection of that type fill the address. The address may start with `{url}` (1.7.21): the connection's `url` field, or the type's default when it is left empty |
@@ -73,12 +74,13 @@ When the harness runs a connection's `test` or probe (the board's Test, Enter, `
 A company may block MCP (VS Code's organization policy). Every tool pack must work there:
 
 - Give the command-line way (`via: cli`, a program) for everything the agent must do. `mcp.json` and `via: mcp` types are extras.
-- Where MCP is allowed (Get ready, This computer; `harness tools mcp --allow`), installing the pack adds its `mcp.json` servers to `.vscode/mcp.json`; blocking MCP or removing the pack takes them out again. A server of the same name that is not the pack's own is left alone.
+- Where MCP is allowed (Get ready, This computer; `harness tools mcp --allow`), turning the pack on adds its `mcp.json` servers to `.vscode/mcp.json`; blocking MCP or turning the pack off takes them out again. A server of the same name that is not the pack's own is left alone.
 - A skill says: use the MCP tools when they are there, else the program. The gate judges both.
 
 ## What the harness guarantees
 
-- Only a person installs or removes a tool pack (in their own terminal, or the board's buttons): its rules are the gate's rules. `.harness/toolpacks/` and `.vscode/mcp.json` are guardrails.
+- Only a person adds or removes a folder to try (in their own terminal, or the board's buttons), and only the knowledge base turns a factory pack on: a pack's rules are the gate's rules. `.harness/toolpacks/`, `.harness/runtime/` and `.vscode/mcp.json` are guardrails.
+- **Skill names.** A pack's skills are `<name>-<skill>` in the pack. In `.github/skills/` they are `<prefix>-<name>-<skill>` when the company has a `skill_prefix` (folder, `name:` and the references between the pack's own skills are renamed by `company sync`). `<name>` is the name of the pack's program, so the agent finds the skills of a tool by the program it needs. A skill with no tool is `<prefix>-<skill>`.
 - Its rules sit after the company's and before the person's `tools.override.json`: the person's own file wins.
 - A write of a tool pack's connection waits for the person even in an environment opened to the agent, unless its type says `openable`.
 - No account or password is ever in a tool pack, a connection list, a log or a page.

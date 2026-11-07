@@ -332,6 +332,11 @@ const SETUP = (function () {
       paintShort(found);
       if (!st.form) fill(found);
       app.classList.remove("su-loading");
+      if (!st.scrolled) {  // the Enter screen sent the person to the section that is missing (1.7.36): ?sec=you|company|computer
+        st.scrolled = true;
+        const want = new URLSearchParams(location.search).get("sec"), target = want && app.querySelector('[data-sec="' + want.replace(/[^a-z]/g, "") + '"]');
+        if (target) setTimeout(() => target.scrollIntoView({block: "start"}), 0);
+      }
       st.latest = found;
       paintFacts();
       changed.hidden = !found.stamp || found.stamp === st.stamp || st.busy || st.saved;

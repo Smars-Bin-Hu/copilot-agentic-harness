@@ -3130,7 +3130,7 @@
   "desk.outbox.body": "将要写入的正文",
   "desk.outbox.body.file": "来自 {path}",
   "desk.outbox.body.lines": "{n} 行",
-  "desk.outbox.body.missing": "按仓库根（命令运行的地方）在任务文件夹里找不到文件 {path}，所以看不到正文，命令也会失败。可以先 Dismiss 这个调用，让 agent 先写好文件、用从仓库根起的路径来写，或者看原始命令。",
+  "desk.outbox.body.missing": "这条命令会失败：按仓库根（命令运行的地方）找不到文件 {path}，所以看不到正文。可以点「{dismiss}」，让 agent 先把文件写进任务文件夹、用从仓库根起的路径来写，或者看原始命令。",
   "desk.outbox.body.cut": "这里只显示前一部分；文件更长。",
   "task.waiting.asking": "等你回答",
   "desk.wait.asking": "agent 问了你一个问题，正在它在 VS Code 里的 chat 等你回答。请在那里回答。这期间可以批准或取消扣下的调用，不会打扰 agent。",

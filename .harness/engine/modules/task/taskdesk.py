@@ -142,10 +142,20 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
 
 
 def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
-    """The calls of this task approved on the board or in a terminal and not run yet (1.7.24): the page keeps its green card, and tells the agent, until the command has run."""
+    """The calls of this task approved on the board or in a terminal and not run yet (1.7.24): the page keeps its green card, and tells the agent, until the command has run.
+    1.7.25: each has a `title` (the sentence of its type's `say`, else the start of the command), so the card says which call was approved."""
     try:
-        return [{"code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "command": item["command"], "approved_at": item.get("approved_at", "")}
-                for item in outbox.approved_for(root, task)]
+        systems = config.policy_or_empty(root, "tools").get("systems") or {}
+        out = []
+        for item in outbox.approved_for(root, task):
+            said = ""
+            try:
+                said = cmdview.say_of(cmdview.args_of(item["command"], outside.clis(systems.get(item.get("system", "")) or {})), (systems.get(item.get("system", "")) or {}).get("say"))
+            except Exception:  # noqa: BLE001 - a title is a help; the card has the command anyway
+                said = ""
+            out.append({"code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "command": item["command"],
+                        "approved_at": item.get("approved_at", ""), "title": said or " ".join(str(item["command"]).split())[:80]})
+        return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
         return []
 

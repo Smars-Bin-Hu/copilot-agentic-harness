@@ -11,6 +11,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core import messages
+
 LONG = 40  # a quoted value this long, or with a line break, is a block of its own
 SCRIPT_CHARS = 60_000  # how much of a file the command reads is shown
 SCRIPT_SUFFIXES = (".sql", ".ps1", ".sh", ".py", ".txt", ".csv", ".json", ".yaml", ".yml", ".cmd", ".bat")
@@ -127,6 +129,13 @@ def args_of(command: str, programs: Optional[List[str]] = None) -> str:
     return command.strip()
 
 
+def _in_language(text: Any) -> str:
+    """A `say` text as the language of the session reads it (1.7.23): a plain string as it is; `{"en": ..., "zh": ...}` the language asked for, else `en`."""
+    if isinstance(text, dict):
+        return str(text.get(messages.language()) or text.get("en") or "")
+    return str(text or "")
+
+
 def say_of(args: str, rules: Optional[List[Dict[str, Any]]]) -> str:
     """The one-line title of the card: the `text` of the first rule whose `pattern` matches, with `{1}`, `{2}`, ... filled from its groups. A group that did not match is empty; a pattern that
     does not compile is skipped."""
@@ -137,7 +146,7 @@ def say_of(args: str, rules: Optional[List[Dict[str, Any]]]) -> str:
             continue
         if found:
             groups = found.groups()
-            return re.sub(r"\{(\d+)\}", lambda part: (groups[int(part.group(1)) - 1] or "") if 0 < int(part.group(1)) <= len(groups) else "", str(rule.get("text") or ""))[:SAY_CHARS].strip()
+            return re.sub(r"\{(\d+)\}", lambda part: (groups[int(part.group(1)) - 1] or "") if 0 < int(part.group(1)) <= len(groups) else "", _in_language(rule.get("text")))[:SAY_CHARS].strip()
     return ""
 
 
@@ -165,13 +174,14 @@ def body_of(args: str, rules: Optional[List[Dict[str, Any]]], folder: Optional[P
 
 
 def _from_file(folder: Optional[Path], value: str, root: Optional[Path] = None) -> Dict[str, Any]:
-    """The file a call names: a path as written is looked for beside the task folder and, when it is relative, from the repository root too (an agent's terminal starts there; 1.7.21).
-    Only a file inside the task folder is shown."""
+    """The file a call names, found as the command finds it: a relative path from the repository root (an agent's terminal starts there; 1.7.23: the task folder is no longer tried
+    first, a bare `result.md` in the task folder is not found by the program), a full path as it is. With no root given the task folder is the base. Only a file inside the task folder
+    is shown."""
     gone = {"text": "", "from": "file", "path": value[:200], "missing": True, "lines": 0, "cut": False}
     if folder is None or not value:
         return gone
     named = Path(value).expanduser()
-    for base in ([folder] + ([root] if root is not None and not named.is_absolute() else [])):
+    for base in ([root] if root is not None and not named.is_absolute() else [folder]):
         try:
             path = (base / named).resolve()
             if folder.resolve() in path.parents and path.is_file():

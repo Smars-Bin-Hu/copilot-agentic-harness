@@ -22,6 +22,22 @@ To see which version you have: `harness --version`.
 - **Get ready, not ready**: the list scrolls in its own box and the copyright and version line stays in view.
 - Checked in a browser: after **Finish** in setup the board's orange banner counts the items still missing and "Company content" reads the copied files.
 
+## 1.7.23 (2026-11-07)
+
+### Fixed
+
+- **The gate no longer lets a tool's program through behind another word.** Found by testing: `python3 <pack>/bin/ado comment ...` (and `python`, `py`, `node`, `bash`, `sh`, `pwsh -File` with the program as the script) was let through whole. The script's name is now read as the program and judged like a plain call. Shell groups and keywords (`{ ...; }`, `if ... then ... fi`, `for ... do ... done`, `while`, `case`, `!`), an escaped name (`a\do`) and `builtin eval` no longer hide a command (git commands in them are seen too).
+- **A line the gate cannot read is held when it names a tool's program.** A string piped into a shell (`echo '...' | bash`), a here-string, `source <(...)`, `python -c`, `node -e`, PowerShell `iex` / `Invoke-Expression` / `Start-Process`, `xargs` with a placeholder, and a script file of the repository that names the program: the call is held, and the reason says which program it names. A line that names no tool's program (`git status`, `ls | head`, `python3 -m unittest ...`) is not held. What the gate still cannot see is written in the tool pack protocol (what the gate reads).
+- **`ado --help 2>&1`** and the like are no longer read as a write or exec: redirections (`2>&1`, `> file`, `2>/dev/null`, `>> file`, `< file`) are left out of the arguments before the gate decides.
+- **A held call's card found the wrong file.** `--file result.md` showed the task's `result.md` as the text, but the program, run from the repository root, finds no such file. The card now looks from the repository root and says the file was not found there, and that the command will fail.
+- **The Open to the agent text** no longer speaks of `DROP`; it says that linked tickets already linked run without asking, and newly linked and new tickets still wait for you.
+- **Approve on the task page.** The agent and the card no longer tell you to run `harness approve-action` in a terminal; they say to approve on the task page (the command is still there, and `harness approve-action --help` documents it). The View window no longer says "UTC": the time is your local time.
+
+### Changed
+
+- **`say` texts of a tool pack may be written in two languages**: `"text": {"en": "...", "zh": "..."}`. The language of the session picks the text; a missing language reads `en`. A plain string works as before.
+- The gate gives a different reason for a line it holds because it cannot read it (`gate.external.unreadable`), apart from a program in an unknown variable (`gate.external.unseen`).
+
 ## 1.7.22 (2026-11-07)
 
 ### Fixed

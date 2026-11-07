@@ -47,7 +47,7 @@ def _named(what: str, name: str) -> str:
 # Subcommands where a lone `-f` means force. (`git tag -F`, `git config -f <file>` mean something else.)
 FORCE_SHORT = frozenset("add checkout switch branch tag mv rm fetch pull worktree submodule clean push".split())
 # Words that may stand before `git` without hiding it.
-WRAPPERS = frozenset("sudo env nohup time command exec nice timeout xargs call start watch".split())
+WRAPPERS = frozenset("sudo env nohup time command exec nice timeout xargs call start watch builtin".split())
 SHELLS = frozenset("bash sh zsh dash fish pwsh powershell cmd".split())
 SHELL_FLAGS = frozenset(["-c", "-command", "/c", "-lc", "-ic", "-encodedcommand"])
 SCRIPT_RUNNERS = frozenset("python python3 py node perl ruby".split())
@@ -56,6 +56,8 @@ OPTIONS_WITH_VALUE = frozenset(["-c", "-C", "--git-dir", "--work-tree", "--names
 CONFIG_OPTIONS = ("-c", "--config-env", "--exec-path")
 CONFIG_WRITES = frozenset(["--add", "--replace-all", "--unset", "--unset-all", "--rename-section", "--remove-section", "--edit", "-e"])
 SEPARATORS = ";&|()`\n"
+# Shell words that open or close a group and stand before the real command of a segment: `{ git push; }`, `if x; then git push; fi`, `for i in 1; do git push; done` (1.7.23).
+LEADING_KEYWORDS = frozenset(["{", "}", "!", "if", "then", "else", "elif", "fi", "do", "done", "while", "until", "builtin"])
 
 
 @dataclass
@@ -109,7 +111,13 @@ def split_segments(text: str) -> List[List[str]]:
             token = (token or "") + char
         index += 1
     end_token()
-    return [item for item in segments if item]
+    cleaned = []
+    for item in segments:
+        while item and item[0] in LEADING_KEYWORDS:
+            item = item[1:]
+        if item:
+            cleaned.append(item)
+    return cleaned
 
 
 def _name(token: str) -> str:

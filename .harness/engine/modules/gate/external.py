@@ -25,6 +25,7 @@ starts the program itself is not seen.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -117,6 +118,168 @@ def _owner(systems: Dict[str, Any], names: List[str], args: str) -> Optional[str
     return best or fallback
 
 
+INTERPRETERS = frozenset("python python3 py node bash sh zsh dash pwsh powershell ruby perl".split())
+_SCRIPT_EXTENSIONS = (".py", ".js", ".mjs", ".ps1", ".sh", ".rb", ".pl", ".cmd", ".bat")
+_VALUE_OPTIONS = {"-m": 1, "-w": 1, "-x": 1, "-file": 1, "-f": 1, "-r": 1, "-p": 1}
+MAX_SCRIPT_BYTES = 200 * 1024
+_REDIRECT = re.compile(r"^\d*(?:>>?|<)$")  # a redirection operator alone: its file is the next word
+_REDIRECT_WITH_FILE = re.compile(r"^\d*(?:>>?|<)\S")  # `>f`, `2>/dev/null`, `<f`
+_UNREADABLE = (
+    re.compile(r"\b(?:ba|z|da)?sh\b[^|;&\n]*<<", re.IGNORECASE),  # a shell given a here-string or a here-document
+    re.compile(r"\b(?:pwsh|powershell)\b[^|;&\n]*<<", re.IGNORECASE),
+    re.compile(r"(?:^|[\s;&|(])(?:source|\.)\s+<\(", re.IGNORECASE),  # source <( ... )
+    re.compile(r"\|\s*(?:sudo\s+|env\s+)?(?:ba|z|da)?sh\b(?!\s+\S*[^\s|;&])", re.IGNORECASE),  # ... | bash
+    re.compile(r"\|\s*(?:pwsh|powershell)\b(?!\s+\S)", re.IGNORECASE),
+    re.compile(r"\|\s*(?:ba|z|da)?sh\s+(?:-s\b|-)", re.IGNORECASE),
+    re.compile(r"\b(?:iex|invoke-expression|start-process|invoke-command|icm)\b", re.IGNORECASE),
+    re.compile(r"\b(?:python[\d.]*|py|node|ruby|perl)\b(?:\s+-\S+)*?\s+-(?:c|e)\b", re.IGNORECASE),  # python -c, node -e
+    re.compile(r"\|\s*(?:python[\d.]*|py|node|ruby|perl)\b(?!\s+[^-\s|;&])", re.IGNORECASE),  # ... | python
+)
+
+
+def _plain_name(token: str) -> str:
+    name = _name(token)
+    for suffix in _SCRIPT_EXTENSIONS:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+def _is_interpreter(token: str) -> bool:
+    name = _name(token)
+    return name in INTERPRETERS or bool(re.fullmatch(r"python\d(?:\.\d+)?", name))
+
+
+def _script_index(tokens: List[str], at: int) -> Optional[int]:
+    """Index of the script (or module) an interpreter at `tokens[at]` is given, or None (no script: `-c`, a pipe, a prompt)."""
+    index = at + 1
+    while index < len(tokens):
+        word = tokens[index]
+        low = word.lower()
+        if low in ("-c", "-e", "-command", "/c", "-encodedcommand"):
+            return None
+        if low in _VALUE_OPTIONS:
+            index += 2 if low != "-m" else 1
+            if low == "-m":
+                return index if index < len(tokens) else None
+            continue
+        if word.startswith("-") and word != "-":
+            index += 1
+            continue
+        return index if word != "-" else None
+    return None
+
+
+def _through_interpreter(tokens: List[str], programs: Dict[str, List[str]]) -> List[str]:
+    """`python3 <pack>/bin/ado comment ...`, `bash tools/ado ...`, `node ado.js ...`: the script is the call when its file name is the program of a listed system (1.7.23)."""
+    for at, token in enumerate(tokens):
+        if _is_interpreter(token):
+            index = _script_index(tokens, at)
+            if index is not None and _plain_name(tokens[index]) in programs:
+                return tokens[:0] + [_plain_name(tokens[index])] + tokens[index + 1:]
+            return tokens
+        if not (_name(token) in WRAPPERS or _is_environment(token) or token.startswith("-") or token.isdigit()):
+            return tokens
+    return tokens
+
+
+def _without_redirects(tokens: List[str]) -> List[str]:
+    """The arguments of a command without its redirections (`2>&1`, `> f`, `2>/dev/null`, `>> f`, `< f`): they are not words of the call (1.7.23)."""
+    out: List[str] = []
+    skip = False
+    for token in tokens:
+        if skip:
+            skip = False
+            continue
+        if _REDIRECT.match(token):
+            skip = True
+            continue
+        if _REDIRECT_WITH_FILE.match(token):
+            continue
+        out.append(token)
+    return out
+
+
+def _unescaped(tokens: List[str]) -> List[str]:
+    """The words with a lone backslash in them read as the shell does: `a\\do` is `ado`. A Windows path (a drive, `.\\`, two backslashes) is left."""
+    out = []
+    for token in tokens:
+        if "\\" in token and not (re.match(r"^(?:[A-Za-z]:|\.{1,2}\\|\\\\)", token) or token.count("\\") > 1):
+            token = re.sub(r"\\(.)", r"\1", token)
+        out.append(token)
+    return out
+
+
+def _word_in(programs: List[str], text: str) -> str:
+    """The first program (a word, not a part of one) that the text names, or an empty string."""
+    for program in programs:
+        if re.search(r"(?<![\w-])" + re.escape(program) + r"(?![\w-])", text, re.IGNORECASE):
+            return program
+    return ""
+
+
+def _script_text(command: str, root: Optional[Any], cwd: str) -> str:
+    """The text of every script file an interpreter in the line runs (in the repository, up to 200 KB); not the harness's own engine and tests."""
+    if root is None:
+        return ""
+    found: List[str] = []
+    for tokens in split_segments(command):
+        for at, token in enumerate(tokens):
+            if not _is_interpreter(token):
+                if _name(token) in WRAPPERS or _is_environment(token) or token.startswith("-") or token.isdigit():
+                    continue
+                break
+            index = _script_index(tokens, at)
+            if index is None or tokens[index - 1].lower() == "-m":
+                break
+            for base in [cwd, str(root)]:
+                if not base:
+                    continue
+                path = os.path.normpath(os.path.join(base, os.path.expanduser(tokens[index])))
+                try:
+                    inside = os.path.commonpath([os.path.realpath(path), os.path.realpath(str(root))]) == os.path.realpath(str(root))
+                except ValueError:
+                    inside = False
+                relative = os.path.relpath(os.path.realpath(path), os.path.realpath(str(root))).replace("\\", "/") if inside else ""
+                if not inside or relative.startswith((".harness/engine/", ".harness/tests/")):
+                    continue
+                try:
+                    if os.path.isfile(path) and os.path.getsize(path) <= MAX_SCRIPT_BYTES:
+                        with open(path, encoding="utf-8", errors="replace") as handle:
+                            found.append(handle.read())
+                        break
+                except OSError:
+                    continue
+            break
+    return "\n".join(found)
+
+
+def unreadable(command: str, programs: Dict[str, List[str]], root: Optional[Any] = None, cwd: str = "") -> str:
+    """The program of an outside system that this line names as a word when the gate cannot read what the line will run (1.7.23): a string piped into a shell, a here-string,
+    `source <(...)`, `python -c`, `node -e`, `iex`, `Start-Process`, `xargs` with a placeholder, a script file. An empty string when the line is readable or names no program."""
+    if not programs:
+        return ""
+    names = list(programs)
+    hidden = any(pattern.search(command) for pattern in _UNREADABLE)
+    scripted = False
+    for tokens in split_segments(command):
+        if any(_name(item) == "xargs" for item in tokens[:3]) and _start(tokens, programs) is None:
+            hidden = True
+        for at, token in enumerate(tokens):
+            if _is_interpreter(token):
+                index = _script_index(tokens, at)
+                if index is not None and tokens[index - 1].lower() != "-m" and _plain_name(tokens[index]) not in programs:
+                    scripted = True
+                break
+            if not (_name(token) in WRAPPERS or _is_environment(token) or token.startswith("-") or token.isdigit()):
+                break
+    if scripted:
+        found = _word_in(names, command) or _word_in(names, _script_text(command, root, cwd))
+        if found:
+            return found
+    return _word_in(names, command) if hidden else ""
+
+
 _VARIABLE = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
 _DECLARE = frozenset(["export", "declare", "typeset", "local", "readonly"])
 
@@ -159,6 +322,10 @@ def _substitutions(token: str) -> List[str]:
     return found
 
 
+def shlex_quote(token: str) -> str:
+    return "'" + token.replace("'", "'\"'\"'") + "'" if re.search(r"[\s;&|()$`<>\"'\\]", token) or not token else token
+
+
 def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], depth: int, found: List[Action], variables: Optional[Dict[str, str]] = None) -> None:
     variables = {} if variables is None else variables
     for tokens in split_segments(text):
@@ -169,7 +336,13 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                 key, _, value = item.partition("=")
                 variables[key] = value
             continue
-        tokens = _expand(tokens, variables)
+        tokens = _without_redirects(_expand(tokens, variables))
+        if not tokens:
+            continue
+        plain = _unescaped(tokens)
+        if plain != tokens:
+            _scan(" ".join(shlex_quote(item) for item in plain), systems, programs, depth + 1, found, variables) if depth < MAX_DEPTH else None
+        tokens = _through_interpreter(tokens, programs)
         if depth < MAX_DEPTH:
             for token in tokens:
                 for inner in (_substitutions(token) if ("$(" in token or "`" in token) else []):
@@ -237,7 +410,7 @@ def _wait_run(tokens: List[str]) -> Optional[str]:
     return None
 
 
-def classify(command: str, systems: Dict[str, Any], unseen: bool = False) -> List[Tuple[Action, str]]:
+def classify(command: str, systems: Dict[str, Any], unseen: bool = False, root: Optional[Any] = None, cwd: str = "") -> List[Tuple[Action, str]]:
     """Each call to a listed system in a command line, with what the policy decides for it. Empty when there is none.
     With `unseen` (the gate), a segment whose program the gate cannot read comes too, as a held call of no system (1.7.21)."""
     if not systems or not command.strip():
@@ -248,6 +421,10 @@ def classify(command: str, systems: Dict[str, Any], unseen: bool = False) -> Lis
             programs.setdefault(program, []).append(name)
     found: List[Action] = []
     _scan(command, systems, programs, 0, found)
+    if unseen:
+        hidden = unreadable(command, programs, root, cwd)
+        if hidden:  # the gate cannot read what runs, and the line names an outside program: held (1.7.23)
+            found.append(Action("", "none", WRITE, hidden, command, named=False, call=command, unseen=True))
     return [(action, HUMAN if action.unseen else decide(systems[action.system], action.env, action.verb)) for action in found if unseen or not action.unseen]
 
 

@@ -95,9 +95,16 @@ class HeldCallCard(TaskCase):
         return taskdesk.outbox_view(self.root, f"{tasks_dir()}/job1")[-1]  # the newest
 
     def test_a_comment_from_a_file_shows_the_sentence_and_the_file(self) -> None:
-        card = self.held("demotracker --project DEMO comment 7 --file notes.md")
+        relative = self.task.relative_to(self.root).as_posix() + "/notes.md"
+        card = self.held(f"demotracker --project DEMO comment 7 --file {relative}")
         self.assertEqual(card["say"], "Add a comment to ticket 7")
-        self.assertEqual((card["body"]["from"], card["body"]["path"], card["body"]["lines"], card["body"]["text"]), ("file", "notes.md", 2, "Checked the load.\nAll good.\n"))
+        self.assertEqual((card["body"]["from"], card["body"]["lines"], card["body"]["text"]), ("file", 2, "Checked the load.\nAll good.\n"))
+
+    def test_a_bare_file_name_is_found_from_the_repository_root_as_the_program_finds_it(self) -> None:
+        """1.7.23 (R2 #2): `--file notes.md` showed the task's notes.md as the text, and the program, run from the repository root, found no such file."""
+        card = self.held("demotracker --project DEMO comment 7 --file notes.md")
+        self.assertTrue(card["body"]["missing"])
+        self.assertEqual(card["body"]["text"], "")
 
     def test_a_comment_as_text_and_a_comment_after_the_id(self) -> None:
         card = self.held('demotracker --project DEMO comment 7 --text "PR \\"12\\" merged"')
@@ -121,7 +128,7 @@ class HeldCallCard(TaskCase):
         from modules.task import cmdview
 
         (self.task / "big.md").write_text("line\n" * 5000, encoding="utf-8")
-        big = self.held("demotracker --project DEMO comment 7 --file big.md")["body"]
+        big = self.held("demotracker --project DEMO comment 7 --file " + self.task.relative_to(self.root).as_posix() + "/big.md")["body"]
         self.assertEqual((len(big["text"]), big["lines"], big["cut"]), (cmdview.BODY_CHARS, 5000, True))
         self.assertEqual(self.held("demotracker --project DEMO set-state 9 Done")["say"], "Set ticket 9 to Done")
 
@@ -135,6 +142,27 @@ class HeldCallCard(TaskCase):
         self.assertTrue(any("from" in item for item in connections.type_problems(dict(kind, body=[{"pattern": "a(b)", "from": "net"}]))))
         self.assertTrue(systems.validate({"x": {"reach": {"cli": "x"}, "body": [{"pattern": "(a)", "from": "net"}]}}))
         self.assertEqual(systems.validate({"x": {"reach": {"cli": "x"}, "say": [{"pattern": "(a)", "text": "t {1}"}], "body": [{"pattern": "(a)", "from": "file"}]}}), [])
+
+    def test_a_say_text_may_be_given_in_two_languages(self) -> None:
+        """1.7.23 (H8): `text` is a string or {"en": ..., "zh": ...}; a language that is missing reads en; a bad shape is a problem."""
+        import os
+
+        from core import connections, messages, systems
+        from modules.task import cmdview
+
+        both = [{"pattern": "comment (\\d+)", "text": {"en": "Add a comment to {1}", "zh": "给 {1} 加评论"}}, {"pattern": "get", "text": {"en": "Read it"}}, {"pattern": "plain", "text": "Plain"}]
+        old = os.environ.get(messages.ENVIRONMENT)
+        self.addCleanup(lambda: (os.environ.__setitem__(messages.ENVIRONMENT, old) if old is not None else os.environ.pop(messages.ENVIRONMENT, None), messages.reset()))
+        for language, first, second in (("en", "Add a comment to 7", "Read it"), ("zh", "给 7 加评论", "Read it")):
+            os.environ[messages.ENVIRONMENT] = language
+            messages.reset()
+            self.assertEqual((cmdview.say_of("comment 7", both), cmdview.say_of("get x", both), cmdview.say_of("plain", both)), (first, second, "Plain"), language)
+        kind = dict(connections.types(self.root)["demotracker"])
+        self.assertEqual(connections.type_problems(dict(kind, say=both)), [])
+        for bad in ({"zh": "x"}, {"en": ""}, {"en": "x", "zh": 3}, 5):
+            self.assertTrue(connections.type_problems(dict(kind, say=[{"pattern": "a", "text": bad}])), bad)
+        self.assertEqual(systems.validate({"x": {"reach": {"cli": "x"}, "say": both}}), [])
+        self.assertTrue(systems.validate({"x": {"reach": {"cli": "x"}, "say": [{"pattern": "a", "text": {"zh": "x"}}]}}))
 
 
 def tasks_dir() -> str:

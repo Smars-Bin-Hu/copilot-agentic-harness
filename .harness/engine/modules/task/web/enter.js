@@ -496,7 +496,7 @@
     markMore();
   }
   function markMore() {  // lines below the box edge: a fade at the foot says "scroll" (the buttons and the systems row can be down there)
-    const more = body.scrollHeight - body.scrollTop - body.clientHeight > 6;
+    const more = body.scrollHeight - body.scrollTop - body.clientHeight > 2;
     if (chk.classList.contains("more") !== more) chk.classList.toggle("more", more);
   }
   body.addEventListener("scroll", markMore, {passive: true});

@@ -8,6 +8,7 @@
 #enter.out{opacity:0;transform:scale(1.025);visibility:hidden;pointer-events:none}
 html.en-open{overflow:hidden}
 html.en-open main{visibility:hidden}
+html.en-open body{height:100vh;overflow:hidden}  /* the page under the screen is not a page to scroll: no scroll height of its own (1.7.28) */
 /* over a picture the screen is dark in both themes: light letters, warm light */
 html.has-wall #enter{--en-ink:var(--enw-ink);--en-cap:rgba(245,246,247,.78);--en-m0:rgba(255,255,255,.97);--en-m1:rgba(255,255,255,.55);--en-rim:rgba(255,255,255,.35);--en-spot:rgba(255,255,255,.96);--en-sheen:rgba(255,255,255,.03);--en-floor:rgba(0,0,0,.35);
  --en-fx:255,214,150;--en-hot:255,170,70;--en-flash:255,255,255;--soft:var(--enw-soft);--good:var(--enw-good);--good-dot:var(--enw-good-dot);--hot:var(--enw-hot);--hot-dot:var(--enw-hot-dot);--bad:var(--enw-bad);--ink:var(--enw-ink);--line:rgba(255,255,255,.14);--line2:rgba(255,255,255,.24);
@@ -71,8 +72,8 @@ html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; 
 .en-chk{justify-self:start;width:min(clamp(420px,40vw,560px),100%);max-height:var(--chk-max,60vh);display:flex;flex-direction:column;font:12px/1.45 var(--mono);color:var(--en-cap)}  /* one width rule for every screen: a wider window never shows less (1.7.24) */
 .en-chk-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:6px;scrollbar-width:thin}
 .en-chk .en-legal{flex:none}
-.en-chk{position:relative}.en-chk.more .en-chk-body{-webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,1) calc(100% - 24px),transparent);mask-image:linear-gradient(to bottom,rgba(0,0,0,1) calc(100% - 24px),transparent)}  /* more lines below: they fade out at the foot, so the box reads as scrollable (1.7.26) */
-.en-chk.more::after{content:"\2193";position:absolute;left:50%;bottom:40px;font:600 13px/1 var(--sans);color:var(--en-ink);opacity:.7;pointer-events:none;animation:enbeat 1.8s ease-in-out infinite}
+.en-chk{position:relative}.en-chk.more .en-chk-body{-webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,1) calc(100% - 14px),transparent);mask-image:linear-gradient(to bottom,rgba(0,0,0,1) calc(100% - 14px),transparent)}  /* more lines below: they fade out at the foot, so the box reads as scrollable (1.7.26) */
+.en-chk.more::after{content:"\2193";position:absolute;right:8px;bottom:0;font:600 13px/1 var(--sans);color:var(--en-ink);opacity:.7;pointer-events:none;animation:enbeat 1.8s ease-in-out infinite}
 .en-chk-h{display:flex;align-items:center;gap:9px;margin-bottom:9px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;font-size:11px;color:var(--en-cap)}
 html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5px}
 .en-chk-h i{flex:none;width:7px;height:7px;border-radius:50%;background:var(--soft)}
@@ -114,7 +115,7 @@ html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
 /* a short window: the wordmark rises and the list takes the room under it (enter.js sets --chk-max from where the wordmark ends) */
 @media (max-height:760px){.en-stage{padding-bottom:26vh}.en-chk{font-size:11.5px}.en-chk-h{margin-bottom:6px}.en-chk-l{gap:1px}.en-chk-l .m{padding:5px 9px;font-size:11.5px;line-height:1.4;margin-bottom:4px}.en-foot{padding-bottom:38px}}
 @media (max-height:600px){.en-stage{padding-bottom:27vh}}
-@media (max-width:1100px){.en-foot{grid-template-columns:minmax(0,1fr);row-gap:14px;justify-items:center}.en-chk{justify-self:start}.en-hint{justify-self:center;text-align:center;padding-right:0}.en-go{order:-1}}  /* too narrow for the list, the pill and the hint in a row (1.7.24) */
+@media (max-width:1100px){.en-ref{visibility:hidden}.en-foot{grid-template-columns:minmax(0,1fr);row-gap:14px;justify-items:center}.en-chk{justify-self:start}.en-hint{justify-self:center;text-align:center;padding-right:0}.en-go{order:-1}}  /* too narrow for the list, the pill and the hint in a row (1.7.24) */
 
 /* the intro, under 1.5 s: the letters rise one by one, the light comes in, the list lights up */
 #enter.intro .en-word .lg{animation:enrise .75s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i)*70ms + 60ms)}

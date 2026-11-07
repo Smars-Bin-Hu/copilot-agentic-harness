@@ -14,7 +14,8 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core import config, messages, shortcmd, standards, state as files, targets
+from core import config, messages, shortcmd, skillcheck, standards, state as files, targets
+from core import connections as conn_core, launchenv, toolpacks
 
 MAX_NAME = 100
 MAX_PATH = 1024
@@ -244,6 +245,26 @@ def kb_state(root: Path) -> Dict[str, Any]:
     return {"here": False, "domains": 0, "prefix": ""}
 
 
+def company_facts(root: Path) -> Dict[str, Any]:
+    """The read-only checklist of the section From the company (1.7.36): what the knowledge base brought, one fact each. Quick: file looks only; never raises.
+    `prefix`: `kb` is what the knowledge base's `company.json` says, `effective` what the checks use; the page shows an input only when `kb` is empty."""
+    out: Dict[str, Any] = {"folder": False, "instructions": False, "standards": False, "declared": no_such(root), "prefix": {"kb": "", "effective": "", "conflict": ""},
+                           "packs": [], "connections": [], "recipe": {"present": False, "host": "", "proxy": "", "tool_folders": 0, "error": ""}}
+    try:
+        folder = targets.company_folder(root)
+        out["folder"] = folder is not None
+        out["instructions"] = bool(folder and (folder / "instructions" / "knowledgebase.instructions.md").is_file())
+        out["standards"] = bool(folder and (folder / standards.COMPANY_FILE).is_file())
+        out["prefix"] = {"kb": skillcheck.knowledge_base_prefix(root), "effective": skillcheck.effective_prefix(root), "conflict": skillcheck.prefix_conflict(root)}
+        out["packs"] = toolpacks.use_list(root)
+        out["connections"] = list(conn_core.company_connections(config.policy_or_empty(root, conn_core.POLICY)))
+        found = launchenv.recipe(root)
+        out["recipe"] = {"present": (root / launchenv.RECIPE).is_file(), "host": found["host"], "proxy": found["proxy"], "tool_folders": len(found["tool_folders"]), "error": found["error"]}
+    except Exception:  # noqa: BLE001 - doctor reports a broken file; the checklist only shows less
+        pass
+    return out
+
+
 def status(root: Path, short: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """What the page needs. Reading a broken override file is told, not raised: the page must open to say so."""
     problem = ""
@@ -257,7 +278,7 @@ def status(root: Path, short: Optional[Dict[str, Any]] = None) -> Dict[str, Any]
     singles = [str(entry["path"]) for entry in (target.get("repos") or {}).values() if is_single(entry)]
     forced = forced_language()
     return {"problem": problem, "name": str(user.get("name") or "") or git_name(), "language": forced or str(user.get("language") or messages.language()), "language_forced": bool(forced), "repos_root": str(target.get("repos_root") or ""), "root": repositories(target.get("repos_root")), "singles": singles, "broken": [path for path in singles if not has_git(Path(path))], "skill_prefix": str(user.get("skill_prefix") or ""),
-            "install_command": str((tools.get("python") or {}).get("install_command") or ""), "rules": rules_of(target), "kb": kb_state(root), "stamp": stamp(root),
+            "install_command": str((tools.get("python") or {}).get("install_command") or ""), "rules": rules_of(target), "kb": kb_state(root), "company": company_facts(root), "stamp": stamp(root),
             "short": short_state(root) if short is None else short, "example": r"C:\Users\me\repos\orders\deploy" if os.name == "nt" else "/Users/me/repos/orders/deploy"}
 
 

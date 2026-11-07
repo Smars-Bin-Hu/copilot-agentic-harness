@@ -164,12 +164,13 @@ const MACHINE = (function () {
 
   function toolpacksSummary() {
     const on = (found) => found.toolpacks.filter((row) => row.active);  // a pack that is off is not counted (1.7.34)
-    return ask("toolpacks").then((found) => ({n: on(found).length, ready: on(found).filter((row) => row.ok && row.connections.every((item) => item.saved)).length}));
+    const good = (row) => row.ok && row.connections.every((item) => item.saved);
+    return ask("toolpacks").then((found) => ({n: on(found).length, ready: on(found).filter(good).length, names: on(found).map((row) => ({name: row.name, ok: good(row)}))}));
   }
 
   // One line for Get ready: how many tool folders, whether there is a bundle.
   function summary() {
-    return ask("state").then((found) => ({paths: found.paths.length, certs: found.bundle.path ? found.bundle.n : 0, mcp: found.mcp.allowed}));
+    return ask("state").then((found) => ({paths: found.paths.length, found: found.paths.filter((item) => item.found).length, certs: found.bundle.path ? found.bundle.n : 0, host: found.bundle.path ? found.bundle.host || "" : "", mcp: found.mcp.allowed}));
   }
 
   return {open, panel, packsPanel, summary, toolpacksSummary};

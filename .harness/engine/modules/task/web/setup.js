@@ -5,7 +5,7 @@ const SETUP = (function () {
   function mount(app, finished, onbusy) {  // `onbusy(true|false)`: the window around the form hides its Close while the work runs
     const POLL = 2000, SLOW = 8000;  // slow once the short command is found: only a change from a terminal is left to see
     const leave = finished || (() => location.assign("/"));
-    const st = {form: null, timer: 0, probe: 0, refused: [], rules: [], busy: false, saved: false, ready: false, mode: "none", root: "", rootFound: null, singles: [], broken: [], full: false, replace: false, kb: {here: false, domains: 0, prefix: ""}, stamp: "", opened: "", latest: null};
+    const st = {form: null, timer: 0, probe: 0, refused: [], rules: [], busy: false, saved: false, ready: false, mode: "none", root: "", rootFound: null, singles: [], broken: [], full: false, replace: false, kb: {here: false, domains: 0, prefix: ""}, stamp: "", opened: "", latest: null, tools: null, probePrefix: ""};
     const ask = (step, body) => SERVE.post("/api/setup", {step, ...(body || {})}).then((data) => data.result);
 
     const shortBox = h("section", {class: "su-card"});
@@ -135,6 +135,7 @@ const SETUP = (function () {
       kbPick.dataset.kind = mode === "package" ? "file" : "folder";
       kbPath.placeholder = mode === "package" ? t("setup.kb.package.ph") : t("setup.kb.folder.ph");
       kbNote.className = "su-note";
+      st.probePrefix = "";
       paintParts(null);
       kbNote.replaceChildren(...(mode !== "none" ? [] : st.kb.here ? [t("setup.kb.have", {n: st.kb.domains})] : [t("setup.kb.none.hint"), " ", kbLearn]));
       st.full = false;
@@ -162,6 +163,7 @@ const SETUP = (function () {
         paintParts(st.mode === "folder" && kbPath.value.trim() ? found.parts || [] : null);
         paintReplace();
         if (found.prefix && !prefix.value) prefix.value = found.prefix;
+        st.probePrefix = found.prefix || "";
         gate();
       }, () => { paintParts(null); });
     }
@@ -184,17 +186,69 @@ const SETUP = (function () {
     const star = () => h("b", {class: "su-star", "aria-hidden": "true"}, " *");
     const kbStar = star();
     kbStar.hidden = true;
-    const companyState = h("p", {class: "su-state"});
-    const standardsState = h("p", {class: "su-state"});
     const needs = (key) => st.guide.missing.includes(key) || (key === "kb" && st.guide.missing.includes("domains"));
-    function paintStates() {
-      if (!st.guide) return;
-      const state = (node, need, text) => node.replaceChildren(h("span", {class: "su-dot " + (need ? "need" : "ok")}), text);
-      const has = (key) => st.parts.some((item) => item.key === key && item.ok);  // a folder chosen just now speaks for itself, before it is copied
+    // The facts (1.7.36): one row each, a dot, a name, one short fact; the details are on hover. A row that sends the person on has Open.
+    const NAMES = 6;  // names shown on a row; the rest is "+N", all of them on hover
+    const dotOf = (kind) => h("span", {class: "su-dot " + kind});
+    const fact = (label, kind, text, tip, help, open) => {
+      const node = h("div", {class: "su-fact", title: tip || ""}, dotOf(kind), h("b", {class: "su-fk"}, label), help ? question(help) : null, h("span", {class: "su-fv" + (typeof text === "string" ? "" : " su-names")}, text), open || null);
+      return node;
+    };
+    const names = (items) => {  // [{name, kind, tip}] -> a name with a dot each; long lists are cut with "+N"
+      const shown = items.slice(0, NAMES).map((item) => h("span", {class: "su-nm", title: item.tip || ""}, dotOf(item.kind), item.name));
+      return items.length > NAMES ? [...shown, h("span", {class: "su-more-n"}, "+" + (items.length - NAMES))] : shown;
+    };
+    const openTab = (tab) => {
+      const button = h("button", {type: "button", class: "act su-open"}, t("tools.open"));
+      button.addEventListener("click", () => TOOLS.open(tab, loadTools));
+      return button;
+    };
+    const factsBox = h("div", {class: "su-facts"});
+    const computerBox = h("div", {class: "su-facts"});
+    function paintFacts() {
+      if (!st.guide || !st.latest) return;
+      const c = st.latest.company || {};
+      const has = (key) => st.parts && st.parts.some((item) => item.key === key && item.ok);  // a folder chosen just now speaks for itself, before it is copied
       const missing = (key) => (st.parts ? !has(key) : needs(key));
-      state(companyState, missing("instructions"), t(missing("instructions") ? (!st.parts && st.guide.company ? "setup.company.partial" : "setup.company.need") : "setup.company.ok"));  // the folder is there but lacks the one file: say that, not "not found" (1.7.34)
-      state(standardsState, missing("standards"), t(missing("standards") ? "setup.standards.need" : st.parts || !st.guide.declared.includes("standards") ? "setup.standards.ok" : "setup.standards.none"));
+      const rows = [];
+      const lacking = missing("instructions");
+      const partial = lacking && !st.parts && st.guide.company;  // the folder is there but lacks the one file: say that, not "not found" (1.7.34)
+      rows.push(fact(t("setup.fact.company"), lacking ? "need" : "ok", t(lacking ? (partial ? "setup.fact.noinstr" : "setup.fact.notfound") : "setup.fact.found"), t(lacking ? (partial ? "setup.company.partial" : "setup.company.need") : "setup.company.ok"), "instructions"));
+      const own = st.probePrefix || (c.prefix && c.prefix.kb) || "";  // the knowledge base names it: a fact, no box. It names none: the box (the override keeps working)
+      const conflict = !st.probePrefix && c.prefix && c.prefix.conflict;
+      prefixRow.hidden = Boolean(own);
+      if (own) rows.push(fact(t("setup.prefix"), conflict ? "need" : "ok", own, conflict || t("setup.fact.prefix.tip"), "skills"));
+      else rows.push(prefixRow);
+      const standard = missing("standards");
+      const said = !st.parts && st.guide.declared.includes("standards");
+      rows.push(fact(t("setup.standards"), standard ? "need" : said ? "none" : "ok", t(standard ? "setup.fact.notfound" : said ? "setup.fact.nonesaid" : "setup.fact.found"), t(standard ? "setup.standards.need" : said ? "setup.standards.none" : "setup.standards.ok"), "standards"));
+      const tools = st.tools || {};
+      const packs = c.packs || [];
+      const ready = new Map(((tools.packs || {}).names || []).map((item) => [item.name, item.ok]));
+      rows.push(fact(t("setup.toolpacks"), "none", packs.length ? names(packs.map((name) => ({name, kind: !ready.has(name) ? "none" : ready.get(name) ? "ok" : "need", tip: ready.has(name) ? t(ready.get(name) ? "setup.fact.pack.ready" : "setup.fact.pack.not") : ""}))) : t("setup.fact.packs.none"), packs.join(", ") || t("setup.fact.packs.tip"), "", openTab("packs")));
+      const conns = c.connections || [];
+      rows.push(fact(t("connections.title"), "none", conns.length ? names(conns.map((name) => ({name, kind: "ok"}))) : t("setup.fact.conns.none"), conns.join(", ") || t("setup.fact.conns.tip"), "", openTab("connections")));
+      const rec = c.recipe || {};
+      if (rec.present) rows.push(fact(t("setup.fact.recipe"), rec.error ? "need" : "ok", rec.error ? t("setup.fact.recipe.bad") : [rec.host ? t("setup.fact.recipe.host", {host: rec.host}) : "", t("setup.fact.recipe.hints", {n: rec.tool_folders})].filter(Boolean).join(" \u00b7 "), rec.error || t("setup.fact.recipe.tip", {host: rec.host || "-", proxy: rec.proxy || "-", n: rec.tool_folders}), "", openTab("computer")));
+      // the dots of the name rows carry the state themselves: the row's own dot is hidden for them
+      factsBox.replaceChildren(...rows);
+      factsBox.querySelectorAll(".su-fact").forEach((node) => { if (node.querySelector(".su-names")) node.firstChild.classList.add("none"); });
+      // This computer
+      const pc = tools.pc, sv = tools.conns;
+      const mine = [];
+      if (pc) {
+        mine.push(fact(t("machine.paths"), pc.paths ? (pc.found === pc.paths ? "ok" : "need") : "none", pc.paths ? t("setup.fact.folders", {n: pc.paths}) : t("setup.fact.folders.none"), pc.paths ? t("setup.fact.folders.tip", {found: pc.found, n: pc.paths}) : t("setup.machine.none")));
+        mine.push(fact(t("setup.fact.ca"), pc.certs ? "ok" : "none", pc.certs ? [t("setup.fact.ca.n", {n: pc.certs}), pc.host].filter(Boolean).join(" \u00b7 ") : t("setup.fact.ca.none"), pc.certs ? t("setup.fact.ca.tip", {host: pc.host || "-"}) : t("machine.ca.none.tip")));
+        mine.push(fact("MCP", pc.mcp ? "ok" : "none", t(pc.mcp ? "tools.mcp.on" : "tools.mcp.off"), t("machine.mcp.tip")));
+      }
+      const head = h("div", {class: "su-fact su-fact-open"}, h("span", {class: "su-note"}, t("setup.fact.computer.lead")), openTab("computer"));
+      const signs = sv && sv.rows.length ? fact(t("setup.fact.signins"), "none", names(sv.rows.map((row) => ({name: row.alias, kind: row.saved ? "ok" : "none", tip: row.saved ? t("setup.fact.signin.saved", {account: row.account || "-"}) : t("setup.fact.signin.not")}))),
+        sv.rows.map((row) => (row.saved ? "\u2713 " : "\u00b7 ") + row.alias).join("\n"), "", openTab("connections")) : fact(t("setup.fact.signins"), "none", sv ? t("setup.fact.signins.none") : "", t("setup.fact.signins.tip"));
+      computerBox.replaceChildren(head, ...mine, signs);
+      computerBox.querySelectorAll(".su-fact").forEach((node) => { if (node.querySelector(".su-names")) node.firstChild.classList.add("none"); });
     }
+    const paintStates = paintFacts;
+    function loadTools() { if (typeof TOOLS === "undefined") return Promise.resolve(); return TOOLS.facts().then((found) => { st.tools = found; paintFacts(); }); }
     function loadGuide() {
       return ask("guide").then((found) => { st.guide = found; paintStates(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message || error)); });
     }
@@ -279,6 +333,7 @@ const SETUP = (function () {
       if (!st.form) fill(found);
       app.classList.remove("su-loading");
       st.latest = found;
+      paintFacts();
       changed.hidden = !found.stamp || found.stamp === st.stamp || st.busy || st.saved;
       broken.textContent = found.problem;  // a poll tells it too: the file can break while the form is open
       broken.hidden = !found.problem;
@@ -455,14 +510,17 @@ const SETUP = (function () {
       show(st.guide.sections.find((part) => part.key === key) || st.guide.sections[0]);
     }
     loadGuide();
-    // Tools (1.7.17): one group, a line each for Tool packs, Connections and This computer; the work in one window with a tab each (tools.js).
-    const toolsGroup = typeof TOOLS === "undefined" ? null : TOOLS.group();
+    loadTools();
+    const prefixRow = row([t("setup.prefix"), question("skills")], prefix, h("p", {class: "su-note"}, t("setup.prefix.hint")));  // only when the knowledge base names none (1.7.36)
+    const section = (key, ...nodes) => h("div", {class: "su-sec", "data-sec": key}, h("h3", {class: "su-sec-h"}, t("setup.sec." + key), " ", h("span", {class: "sv-info", tabindex: "0", title: t("setup.sec." + key + ".tip")}, "\u24d8")), ...nodes);
     const more = h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row([t("setup.install"), question("python")], install, h("p", {class: "su-note"}, t("setup.install.example"))), row([t("setup.refused"), question("repos")], h("div", {class: "su-line"}, refusedBox, refusedAdd), refusedNote, refusedList, h("p", {class: "su-note"}, t("setup.refused.hint"))));
     app.classList.add("su-loading");  // an empty form that jumps when its data comes is worse than a moment of nothing
     app.replaceChildren(h("div", {class: "su"}, h("h1", null, t(first ? "setup.title" : "setup.guide")), h("p", {class: "su-lead"}, t(finished ? "setup.lead.again" : "setup.lead"), " ", olderLink), shortBox,
       h("section", {class: "su-card"}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, "2"), h("h2", null, t("setup.form.title"))),
-        changed, broken, row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "chips su-modes"}, chips), langNote), row([t("setup.repos"), question("repos")], h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))),
-        row([t("setup.kb"), kbStar, question("kb")], h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote, kbParts, kbReplace), row([t("setup.company"), question("instructions")], companyState), toolsGroup, row([t("setup.prefix"), question("skills")], prefix, h("p", {class: "su-note"}, t("setup.prefix.hint"))), row([t("setup.standards"), question("standards")], standardsState),
+        changed, broken,
+        section("you", row([t("setup.name"), star()], name), row([t("setup.language"), star()], h("span", {class: "chips su-modes"}, chips), langNote), row([t("setup.repos"), question("repos")], h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint")))),
+        section("company", row([t("setup.kb"), kbStar, question("kb")], h("div", {class: "chips su-modes"}, modes), h("div", {class: "su-line"}, kbPath, kbPick), kbNote, kbParts, kbReplace), factsBox),
+        section("computer", computerBox),
         more, h("div", {class: "su-end"}, go, goNote), said)));
     gate();
     load();

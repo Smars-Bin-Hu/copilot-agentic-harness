@@ -186,7 +186,7 @@ const SERVERS = (function () {
 
   // One line for Get ready and the Enter screen: how many servers, how many with the person's identity.
   function summary() {
-    return ask("list").then((found) => ({n: found.connections.length, saved: found.connections.filter((row) => row.saved).length}));
+    return ask("list").then((found) => ({n: found.connections.length, saved: found.connections.filter((row) => row.saved).length, rows: found.connections.map((row) => ({alias: row.alias, saved: Boolean(row.saved), account: row.account || "", env: row.env || "", own: Boolean(row.own)}))}));
   }
 
   // "Open VS Code with identities": tick the identities this window holds; those that cannot share it are reached through `harness as`, marked so.

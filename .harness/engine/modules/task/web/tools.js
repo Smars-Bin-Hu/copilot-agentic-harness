@@ -1,6 +1,6 @@
 // Tools (1.7.17): one window, three tabs: Tool packs (what is installed), Connections (where the agent goes, with your sign-in), This computer (programs,
 // the CA bundle, MCP). Each tab is a panel of servers.js or machine.js: `panel(ctx)` gives {body, foot}; ctx.go(tab) switches, ctx.changed() repaints the dots.
-// Get ready shows one group "Tools" with a line per tab (`line(tab)`). Needs common.js (h, t), serve.js (SERVE), servers.js (SERVERS), machine.js (MACHINE).
+// Get ready draws their facts in its sections (`facts()`) and opens a tab with Open. Needs common.js (h, t), serve.js (SERVE), servers.js (SERVERS), machine.js (MACHINE).
 const TOOLS = (function () {
   const TABS = ["packs", "connections", "computer"];
   const LABEL = {packs: "setup.toolpacks", connections: "connections.title", computer: "machine.title"};
@@ -46,22 +46,10 @@ const TOOLS = (function () {
     if (done) { const watch = setInterval(() => { if (!view.box.isConnected) { clearInterval(watch); done(); } }, 400); }
   }
 
-  // Get ready: one group, a line per tab: its dot, a few words, and Open on that tab.
-  function group(refresh) {
-    const lines = {};
-    const rows = TABS.map((name) => {
-      lines[name] = {dot: h("span", {class: "mc-dot"}), words: h("span", {class: "su-note"})};
-      const go = h("button", {type: "button", class: "act"}, t("tools.open"));
-      go.addEventListener("click", () => open(name, paint));
-      return h("div", {class: "su-row tl-row"}, h("span", {class: "su-k"}, t(LABEL[name])), h("div", {class: "su-v"}, h("div", {class: "su-line"}, lines[name].dot, lines[name].words, go)));
-    });
-    function paint() {
-      states().then((found) => TABS.forEach((name) => { lines[name].dot.className = "mc-dot " + found[name].dot; lines[name].words.textContent = found[name].words; }));
-      if (refresh) refresh();
-    }
-    paint();
-    return h("div", {class: "tl-group"}, h("div", {class: "tl-head"}, h("b", null, t("tools.title")), " ", h("span", {class: "su-note"}, t("tools.lead")), " ", h("span", {class: "sv-info", tabindex: "0", title: t("tools.model.tip")}, "ⓘ")), ...rows);
+  // Get ready (1.7.36): the three summaries in one go, each null when it cannot be read. setup.js draws them as facts of its sections.
+  function facts() {
+    return Promise.all([MACHINE.toolpacksSummary(), SERVERS.summary(), MACHINE.summary()].map((promise) => promise.catch(() => null))).then(([packs, conns, pc]) => ({packs, conns, pc}));
   }
 
-  return {open, group};
+  return {open, facts};
 })();

@@ -154,11 +154,18 @@ def note_call(root: Path, system_name: str, system: Dict[str, Any], env: str, an
 def view(root: Path, listed: Dict[str, Any]) -> List[Dict[str, Any]]:
     """For the board: one line per system and environment that has a probe, `{system, env, state, at, why, who, source, launch}`; unknown when never seen."""
     found = read(root)
+    from . import launchenv, messages  # they read the connections, which read this module
+
+    lacks = launchenv.seen(root)
+    started_wrong = bool(lacks) and lacks.get("ok") is False  # a hook found VS Code started without the settings of this computer: what the board's own check found does not count (1.7.21)
     out: List[Dict[str, Any]] = []
     for name, system in (listed or {}).items():
         launch = (system.get("needs") or {}).get("launch") or ""
         for env in probes(system):
             line = found.get(f"{name}:{env}") or {"state": UNKNOWN, "at": "", "why": "", "who": "", "source": ""}
+            if started_wrong:
+                line = {**line, "state": DENIED, "why": "vscode-env", "who": ""}
+                launch = messages.text("reach.vscode_env")
             out.append({"system": name, "env": env, **line, "launch": launch})
     return out
 

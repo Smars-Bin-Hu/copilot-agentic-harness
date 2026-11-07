@@ -376,3 +376,16 @@ class BoardChecksItself(ConnectionsCase):
         connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
         connections.probe_all(self.root)
         self.assertEqual(self.line(check)["state"], "ok")
+
+
+class RulesOfTheType(ConnectionsCase):
+    """1.7.21: `rules` written on a connection type reach the gate; the connection's own rules win over them."""
+
+    def test_the_type_rules_are_used_and_the_connections_own_win(self) -> None:
+        put_type(self.root, dict(KIND, verbs=KIND["verbs"] + [{"pattern": "\\bsnap\\b", "verb": "exec"}], rules={"*": {"exec": "outbox"}}))
+        systems = connections.derived(self.root, {})
+        self.assertEqual(systems["db-dev"]["rules"], {"*": {"exec": "outbox"}})
+        decided = external.classify("fakedb --host db1:5000 snap", systems)
+        self.assertEqual([(a.verb, d) for a, d in decided], [("exec", "outbox")])
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000", "rules": {"*": {"exec": "deny"}}}})
+        self.assertEqual(connections.derived(self.root, {})["db-dev"]["rules"], {"*": {"exec": "deny"}})

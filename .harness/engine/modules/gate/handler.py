@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional, Tuple
 import json
 import re
 
-from core import calls, reach, repo_paths, connections, targets, tasks, unseen
+from core import calls, launchenv, reach, repo_paths, connections, targets, tasks, unseen
 from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
@@ -361,6 +361,8 @@ def watch_reach(event: HookEvent, ctx: Context) -> None:
     """Can the agent reach each environment from VS Code (core.reach, 1.7.9)? The hook runs in VS Code's identity: at the start of a chat it starts the
     pack's probes in a process of their own (the chat does not wait); after a call of a listed system it reads what the terminal printed. Never stops anything."""
     try:
+        if event.event == "SessionStart":
+            launchenv.note_seen(ctx.root)  # the hook has the environment VS Code was started with (1.7.21)
         listed = ctx.policy("tools").get("systems") or {}
         if not listed or external.validate(listed):
             return
@@ -452,6 +454,12 @@ def wrapped_context(ctx: Context) -> Optional[Decision]:
     parts = [rules.say("connections.calls.context", servers=", ".join(f"{one['alias']} ({one['env'].upper()})" for one in found))] if found else []
     if wrapped:
         parts.append(rules.say("connections.wrap.context", aliases=", ".join(wrapped), first=wrapped[0]))
+    try:
+        lacks = launchenv.seen(ctx.root)
+        if lacks.get("ok") is False and lacks.get("missing"):
+            parts.append(rules.say("reach.vscode_env.context", missing=", ".join(str(item) for item in lacks["missing"][:6])))
+    except Exception:  # noqa: BLE001
+        pass
     return Decision(context="\n".join(parts)) if parts else None
 
 

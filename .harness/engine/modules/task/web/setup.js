@@ -191,7 +191,7 @@ const SETUP = (function () {
     const NAMES = 6;  // names shown on a row; the rest is "+N", all of them on hover
     const dotOf = (kind) => h("span", {class: "su-dot " + kind});
     const fact = (label, kind, text, tip, help, open) => {
-      const node = h("div", {class: "su-fact", title: tip || ""}, dotOf(kind), h("b", {class: "su-fk"}, label), help ? question(help) : null, h("span", {class: "su-fv" + (typeof text === "string" ? "" : " su-names")}, text), open || null);
+      const node = h("div", {class: "su-fact", title: tip || ""}, dotOf(kind), h("b", {class: "su-fk"}, label, help ? " " : null, help ? question(help) : null), h("span", {class: "su-fv" + (typeof text === "string" ? "" : " su-names")}, text), open || null);
       return node;
     };
     const names = (items) => {  // [{name, kind, tip}] -> a name with a dot each; long lists are cut with "+N"
@@ -227,7 +227,7 @@ const SETUP = (function () {
       const ready = new Map(((tools.packs || {}).names || []).map((item) => [item.name, item.ok]));
       rows.push(fact(t("setup.toolpacks"), "none", packs.length ? names(packs.map((name) => ({name, kind: !ready.has(name) ? "none" : ready.get(name) ? "ok" : "need", tip: ready.has(name) ? t(ready.get(name) ? "setup.fact.pack.ready" : "setup.fact.pack.not") : ""}))) : t("setup.fact.packs.none"), packs.join(", ") || t("setup.fact.packs.tip"), "", openTab("packs")));
       const conns = c.connections || [];
-      rows.push(fact(t("connections.title"), "none", conns.length ? names(conns.map((name) => ({name, kind: "ok"}))) : t("setup.fact.conns.none"), conns.join(", ") || t("setup.fact.conns.tip"), "", openTab("connections")));
+      rows.push(fact(t("connections.title"), "none", conns.length ? names(conns.map((name) => ({name, kind: "none"}))) : t("setup.fact.conns.none"), conns.join(", ") || t("setup.fact.conns.tip"), "", openTab("connections")));
       const rec = c.recipe || {};
       if (rec.present) rows.push(fact(t("setup.fact.recipe"), rec.error ? "need" : "ok", rec.error ? t("setup.fact.recipe.bad") : [rec.host ? t("setup.fact.recipe.host", {host: rec.host}) : "", t("setup.fact.recipe.hints", {n: rec.tool_folders})].filter(Boolean).join(" \u00b7 "), rec.error || t("setup.fact.recipe.tip", {host: rec.host || "-", proxy: rec.proxy || "-", n: rec.tool_folders}), "", openTab("computer")));
       // the dots of the name rows carry the state themselves: the row's own dot is hidden for them

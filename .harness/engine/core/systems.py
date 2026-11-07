@@ -199,3 +199,8 @@ def reach(systems: Dict[str, Any], run: Callable[[str], Tuple[Optional[int], str
         bad = [line for line in lines if not line["reachable"]]
         found[name] = {"reachable": not bad, "why": bad[0]["why"] if bad else "", "launch": needs.get("launch") or ""}
     return found
+
+
+def place(system: str, env: str) -> str:
+    """Where a call goes, for a sentence: `finance (IST)`; a system with no environment is just its name (1.7.21)."""
+    return system if not env or env == "none" else f"{system} ({env})"

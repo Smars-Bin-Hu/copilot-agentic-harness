@@ -142,10 +142,11 @@ def say_of(args: str, rules: Optional[List[Dict[str, Any]]]) -> str:
 
 
 def _unescape(text: str) -> str:
-    return re.sub(r"\\(.)", r"\1", text)
+    """The text inside double quotes as the shell passes it on to a program that reads `\\n` itself, as a person reads it: `\\n` a line break, `\\t` a tab, `\\"` a quote, `\\\\` a backslash (1.7.21)."""
+    return re.sub(r"\\(.)", lambda found: {"n": "\n", "t": "\t"}.get(found.group(1), found.group(1)), text)
 
 
-def body_of(args: str, rules: Optional[List[Dict[str, Any]]], folder: Optional[Path]) -> Optional[Dict[str, Any]]:
+def body_of(args: str, rules: Optional[List[Dict[str, Any]]], folder: Optional[Path], root: Optional[Path] = None) -> Optional[Dict[str, Any]]:
     """The text the call writes: `{text, from, path?, lines, cut}` or None. For each rule in order: `file` reads the file the first group names, inside the task folder; `text` is the first group as
     written (a `\\"` in it is a quote). A value that starts with `@` is a file too (`--body @notes.md`). A file that is not there gives `{from: "file", path, missing: true}`."""
     for rule in rules or []:
@@ -159,22 +160,26 @@ def body_of(args: str, rules: Optional[List[Dict[str, Any]]], folder: Optional[P
         if rule.get("from") == "text" and not value.startswith("@"):
             return _shown({"text": _unescape(value), "from": "text"})
         path = value[1:] if value.startswith("@") else value
-        return _from_file(folder, path.strip("\"'"))
+        return _from_file(folder, path.strip("\"'"), root)
     return None
 
 
-def _from_file(folder: Optional[Path], value: str) -> Dict[str, Any]:
+def _from_file(folder: Optional[Path], value: str, root: Optional[Path] = None) -> Dict[str, Any]:
+    """The file a call names: a path as written is looked for beside the task folder and, when it is relative, from the repository root too (an agent's terminal starts there; 1.7.21).
+    Only a file inside the task folder is shown."""
     gone = {"text": "", "from": "file", "path": value[:200], "missing": True, "lines": 0, "cut": False}
     if folder is None or not value:
         return gone
-    try:
-        path = (folder / value).resolve()
-        if folder.resolve() not in path.parents or not path.is_file():
-            return gone
-        text = path.read_text(encoding="utf-8-sig", errors="replace")
-    except (OSError, ValueError):
-        return gone
-    return _shown({"text": text, "from": "file", "path": value})
+    named = Path(value).expanduser()
+    for base in ([folder] + ([root] if root is not None and not named.is_absolute() else [])):
+        try:
+            path = (base / named).resolve()
+            if folder.resolve() in path.parents and path.is_file():
+                text = path.read_text(encoding="utf-8-sig", errors="replace")
+                return _shown({"text": text, "from": "file", "path": path.relative_to(folder.resolve()).as_posix() if base is root else value})
+        except (OSError, ValueError):
+            continue
+    return gone
 
 
 def _shown(found: Dict[str, Any]) -> Dict[str, Any]:

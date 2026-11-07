@@ -327,7 +327,7 @@ def register_task(subparsers: Any) -> None:
     hand_tests.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
     hand_tests.set_defaults(handler=lambda a: tasklife.handoff(repo_root(), a.task, "tests", a.env))
     hand_run = hand_commands.add_parser("run", help="before the write-back, the person is to run something in an environment (a job, a query) and bring the output back; no check can start until then")
-    hand_run.add_argument("--env", required=True, help="the environment, for example DEV")
+    hand_run.add_argument("--env", default="none", help="the environment, for example DEV; left out for a system that has none (a ticket board)")
     hand_run.add_argument("--what", required=True, help="one line: what the person is to run and send back")
     hand_run.add_argument("--task", default="", help="the task folder (or just its name); left out, the one open task")
     hand_run.set_defaults(handler=lambda a: tasklife.handoff(repo_root(), a.task, "run", a.env, a.what))

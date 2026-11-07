@@ -44,6 +44,8 @@ class Action:
     target: str
     text: str  # the command it came from, one command of the line
     named: bool = True  # False: no verbs rule matched, the verb is the write floor (a query in a shell variable or a file the gate cannot read)
+    call: str = ""  # this one command from the program on (the program as its plain name): what a system's `item` pattern is matched against (1.7.21)
+    unseen: bool = False  # a segment the gate cannot read (a program in a variable it cannot expand): held, never guessed (1.7.21)
 
     def facts(self) -> Dict[str, Any]:
         facts: Dict[str, Any] = {"system": self.system, "env": self.env, "verb": self.verb, "target": self.target}
@@ -115,8 +117,63 @@ def _owner(systems: Dict[str, Any], names: List[str], args: str) -> Optional[str
     return best or fallback
 
 
-def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], depth: int, found: List[Action]) -> None:
+_VARIABLE = re.compile(r"\$(?:\{(\w+)\}|(\w+))")
+_DECLARE = frozenset(["export", "declare", "typeset", "local", "readonly"])
+
+
+def _expand(tokens: List[str], variables: Dict[str, str]) -> List[str]:
+    """The simple shell variables of this command line that were set in it (`A=ado; $A item 1`, `export X=...`), put in. What is not known stays as it is."""
+    out: List[str] = []
+    for token in tokens:
+        whole = _VARIABLE.fullmatch(token)
+        value = _VARIABLE.sub(lambda m: variables.get(m.group(1) or m.group(2), m.group(0)), token)
+        if whole and value != token:
+            out.extend(value.split())  # a variable that stands for a whole word may stand for a command and its words
+        else:
+            out.append(value)
+    return out
+
+
+def _head(tokens: List[str]) -> Optional[str]:
+    """The word that names the program of a segment: the first one that is not a wrapper, an environment setting, an option or a number."""
+    for token in tokens:
+        if not (_name(token) in WRAPPERS or _is_environment(token) or token.startswith("-") or token.isdigit()):
+            return token
+    return None
+
+
+def _substitutions(token: str) -> List[str]:
+    """The commands inside `$( ... )` and `` ` ... ` `` of one word: a double quote does not hide them from the shell (1.7.21)."""
+    found: List[str] = []
+    index = token.find("$(")
+    while index != -1:
+        depth, end = 1, index + 2
+        while end < len(token) and depth:
+            depth += {"(": 1, ")": -1}.get(token[end], 0)
+            end += 1
+        found.append(token[index + 2: end - 1 if depth == 0 else end])
+        index = token.find("$(", end)
+    if "`" in token:
+        parts = token.split("`")
+        found.extend(parts[1::2])
+    return found
+
+
+def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], depth: int, found: List[Action], variables: Optional[Dict[str, str]] = None) -> None:
+    variables = {} if variables is None else variables
     for tokens in split_segments(text):
+        if tokens and tokens[0] in _DECLARE:
+            tokens = tokens[1:]
+        if tokens and all(_is_environment(item) for item in tokens):  # `A=ado`, `export A=ado`: remembered, not a call
+            for item in tokens:
+                key, _, value = item.partition("=")
+                variables[key] = value
+            continue
+        tokens = _expand(tokens, variables)
+        if depth < MAX_DEPTH:
+            for token in tokens:
+                for inner in (_substitutions(token) if ("$(" in token or "`" in token) else []):
+                    _scan(inner, systems, programs, depth + 1, found, variables)
         start = _start(tokens, programs)
         name = _owner(systems, programs[_program(tokens[start])], " ".join(tokens[start + 1:])) if start is not None else None
         if name is not None:
@@ -127,7 +184,14 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                 match = re.search(system["target"], line, re.IGNORECASE)
                 target = (match.group(1) if match and match.groups() else match.group(0) if match else "")[:120]
             verb = verb_named(system, " ".join(tokens[start + 1:]))
-            found.append(Action(name, environment(system, line), verb or WRITE, target, " ".join(tokens), named=verb is not None))
+            found.append(Action(name, environment(system, line), verb or WRITE, target, " ".join(tokens), named=verb is not None, call=" ".join([_program(tokens[start])] + tokens[start + 1:])))
+            continue
+        if _evaluated(tokens) is not None and depth < MAX_DEPTH:  # `eval "<command>"`: the string is the call
+            _scan(_evaluated(tokens) or "", systems, programs, depth + 1, found, variables)
+            continue
+        head = _head(tokens)
+        if head is not None and (head.startswith("$") or "`" in head):  # a program the gate cannot read the name of: it may be a listed one
+            found.append(Action("", "none", WRITE, "", " ".join(tokens), named=False, call=" ".join(tokens), unseen=True))
             continue
         waited = _wait_run(tokens)
         if waited is not None and depth < MAX_DEPTH:  # `harness wait --run "<command>"` (1.7.5): the command inside is the call
@@ -143,6 +207,13 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                 if tokens[i].lower() in SHELL_FLAGS and i + 1 < len(tokens):
                     _scan(" ".join(tokens[i + 1:]) if len(tokens) > i + 2 else tokens[i + 1], systems, programs, depth + 1, found)
                     break
+
+
+def _evaluated(tokens: List[str]) -> Optional[str]:
+    head = _head(tokens)
+    if head is None or _name(head) != "eval":
+        return None
+    return " ".join(tokens[tokens.index(head) + 1:])
 
 
 def as_run(tokens: List[str]) -> Optional[Tuple[str, str]]:
@@ -166,8 +237,9 @@ def _wait_run(tokens: List[str]) -> Optional[str]:
     return None
 
 
-def classify(command: str, systems: Dict[str, Any]) -> List[Tuple[Action, str]]:
-    """Each call to a listed system in a command line, with what the policy decides for it. Empty when there is none."""
+def classify(command: str, systems: Dict[str, Any], unseen: bool = False) -> List[Tuple[Action, str]]:
+    """Each call to a listed system in a command line, with what the policy decides for it. Empty when there is none.
+    With `unseen` (the gate), a segment whose program the gate cannot read comes too, as a held call of no system (1.7.21)."""
     if not systems or not command.strip():
         return []
     programs: Dict[str, List[str]] = {}
@@ -176,7 +248,7 @@ def classify(command: str, systems: Dict[str, Any]) -> List[Tuple[Action, str]]:
             programs.setdefault(program, []).append(name)
     found: List[Action] = []
     _scan(command, systems, programs, 0, found)
-    return [(action, decide(systems[action.system], action.env, action.verb)) for action in found]
+    return [(action, HUMAN if action.unseen else decide(systems[action.system], action.env, action.verb)) for action in found if unseen or not action.unseen]
 
 
 def strictest(judged: List[Tuple[Action, str]]) -> Optional[Tuple[Action, str]]:

@@ -98,3 +98,14 @@ class ReachTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WhyItFailed(unittest.TestCase):
+    """1.7.21: a probe that fails says what the program said first; a refused identity that is kept here is not told to start VS Code again."""
+
+    def test_the_first_line_is_the_reason_and_an_empty_answer_keeps_the_exit_code(self) -> None:
+        needs = {"expect": r"^(\S+)$", "denied": "Login failed", "down": "refused"}
+        self.assertEqual(reach._judge(needs, 1, "\n  Error: unknown project demo\nmore\n"), (reach.FAILED, "Error: unknown project demo", ""))  # noqa: SLF001
+        self.assertEqual(reach._judge(needs, 3, ""), (reach.FAILED, "exit-3", ""))  # noqa: SLF001
+        self.assertEqual(reach._judge(needs, 1, "Login failed for user")[:2], (reach.DENIED, "identity"))  # noqa: SLF001
+        self.assertEqual(reach._judge(needs, 1, "connection refused")[:2], (reach.FAILED, "no-answer"))  # noqa: SLF001

@@ -376,3 +376,68 @@ class BoardChecksItself(ConnectionsCase):
         connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
         connections.probe_all(self.root)
         self.assertEqual(self.line(check)["state"], "ok")
+
+
+class RulesOfTheType(ConnectionsCase):
+    """1.7.21: `rules` written on a connection type reach the gate; the connection's own rules win over them."""
+
+    def test_the_type_rules_are_used_and_the_connections_own_win(self) -> None:
+        put_type(self.root, dict(KIND, verbs=KIND["verbs"] + [{"pattern": "\\bsnap\\b", "verb": "exec"}], rules={"*": {"exec": "outbox"}}))
+        systems = connections.derived(self.root, {})
+        self.assertEqual(systems["db-dev"]["rules"], {"*": {"exec": "outbox"}})
+        decided = external.classify("fakedb --host db1:5000 snap", systems)
+        self.assertEqual([(a.verb, d) for a, d in decided], [("exec", "outbox")])
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000", "rules": {"*": {"exec": "deny"}}}})
+        self.assertEqual(connections.derived(self.root, {})["db-dev"]["rules"], {"*": {"exec": "deny"}})
+
+
+ECHO_ENV = """#!{python}
+import os, sys
+names = sorted(k for k in os.environ if k.startswith("HARNESS_CONNECTION_"))
+print(" ".join(f"{{k}}={{os.environ[k]}}" for k in names))
+"""
+
+
+class UnsavedConnectionTest(ConnectionsCase):
+    """1.7.21: a connection that is not saved yet is tested with its own fields and identity in the environment; `{conn}` is its name; a token identity has one secret."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        program = self.root / "bin" / "envdump"
+        program.write_text(ECHO_ENV.format(python=sys.executable), encoding="utf-8")
+        program.chmod(program.stat().st_mode | stat.S_IEXEC)
+        self.kind = {
+            "type": "tracker", "label": "Tracker", "cli": ["envdump"],
+            "fields": {"org": {"label": "Org"}, "project": {"label": "Project"}, "url": {"label": "Url", "default": "https://t.example.org", "optional": True}},
+            "match": "^", "auth": {"signin": {"identity": "tool", "label": "Sign in", "login": "true"}, "token": {"identity": "token", "label": "Personal access token", "env": {"TRK_PAT": "password"}}},
+            "test": "envdump --conn {conn}", "expect": ".*",
+        }
+        put_type(self.root, self.kind)
+
+    def mine(self, alias: str, auth: str = "token", **fields: str) -> Dict[str, Any]:
+        return {"type": "tracker", "env": "none", "auth": auth, "org": "acme", "project": "demo", **fields, "own": True}
+
+    def test_the_fields_the_name_and_the_token_reach_the_program_before_anything_is_saved(self) -> None:
+        found = connections.test(self.root, "my-trk", {"password": "s3cret"}, server=self.mine("my-trk"))
+        self.assertEqual(found["state"], "ok", found)
+        self.assertEqual(connections.command(self.kind, self.mine("my-trk"), {"token": "x"}, "my-trk"), "envdump --conn my-trk")
+        out = connections.run_with(self.kind, self.mine("my-trk"), {"token": "s3cret"}, "envdump", self.root, alias="my-trk")[1]
+        for part in ("HARNESS_CONNECTION_MY_TRK_ORG=acme", "HARNESS_CONNECTION_MY_TRK_PROJECT=demo", "HARNESS_CONNECTION_MY_TRK_URL=https://t.example.org", "HARNESS_CONNECTION_MY_TRK_TOKEN=s3cret"):
+            self.assertIn(part, out)
+        self.assertNotIn("_PASSWORD", out)
+        self.assertEqual(connections.derived(self.root, {}) .get("my-trk"), None, "not saved: no system yet")
+
+    def test_two_connections_with_the_same_org_and_project_are_told_apart_by_name(self) -> None:
+        self.assertEqual(connections.command(self.kind, self.mine("a-one"), {}, "a-one"), "envdump --conn a-one")
+        self.assertEqual(connections.command(self.kind, self.mine("b-two"), {}, "b-two"), "envdump --conn b-two")
+
+    def test_a_token_is_kept_as_a_token_and_forgotten_with_the_connection(self) -> None:
+        env = lambda: connections.read_env(self.root)  # noqa: E731
+        connections.save(self.root, "my-trk", {"password": "s3cret"}, own=self.mine("my-trk"))
+        self.assertEqual(env()["HARNESS_CONNECTION_MY_TRK_TOKEN"], "s3cret")
+        self.assertNotIn("HARNESS_CONNECTION_MY_TRK_PASSWORD", env())
+        self.assertEqual(connections.identity_of(env(), "my-trk", self.kind), {"token": "s3cret"})
+        self.assertNotIn("s3cret", json.dumps(connections.export(self.root)))
+        self.assertEqual(connections.variables(self.kind, self.mine("my-trk"), {"token": "s3cret"}), {"TRK_PAT": "s3cret"})
+        connections.forget(self.root, "my-trk")
+        self.assertNotIn("HARNESS_CONNECTION_MY_TRK_TOKEN", env())

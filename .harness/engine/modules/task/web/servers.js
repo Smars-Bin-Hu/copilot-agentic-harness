@@ -13,7 +13,7 @@ const SERVERS = (function () {
   function where(row) { const f = row.fields || {}; return [f.host, f.port].filter(Boolean).join(":") || Object.values(f).filter(Boolean).join(" · "); }
   function result(found) {  // a test's answer: a mark and a short word, the reason on hover
     const word = found.timeout ? t("connections.state.timeout", {seconds: found.timeout}) : t("connections.state." + found.state);
-    const tip = found.timeout ? t("connections.tip.timeout", {seconds: found.timeout}) : found.state === "ok" ? t("connections.tip.ok", {who: found.who || "-", seconds: found.seconds}) : found.state === "missing" || found.state === "mcp" ? found.why : t("connections.tip." + found.state);
+    const tip = found.timeout ? t("connections.tip.timeout", {seconds: found.timeout}) : found.state === "ok" ? t("connections.tip.ok", {who: found.who || "-", seconds: found.seconds}) : found.state === "missing" || found.state === "mcp" ? found.why : found.state === "failed" && found.why && !/^exit-\d+$/.test(found.why) ? t("connections.tip.failed") + "\n" + found.why : t("connections.tip." + found.state);
     return h("span", {class: "sv-result " + (found.state === "ok" || found.state === "mcp" ? "ok" : "bad"), title: tip}, h("b", null, MARK[found.state] || "?"), " ", word);
   }
 
@@ -49,8 +49,9 @@ const SERVERS = (function () {
   function identityForm(row, own, redraw) {
     if (row.identity === "tool") return toolForm(row, own, redraw);
     const needsKey = row.identity === "keyfile";
+    const token = row.identity === "token";  // one secret under the label of the auth entry (1.7.21): no account box
     const account = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: row.identity === "netonly" ? "DOMAIN\\id" : t("connections.account"), value: row.account || ""});
-    const password = h("input", {class: "su-in su-mono", type: "password", autocomplete: "new-password", placeholder: row.saved ? t("connections.password.kept") : t("connections.password")});
+    const password = h("input", {class: "su-in su-mono", type: "password", autocomplete: "new-password", placeholder: row.saved ? t("connections.password.kept") : (token ? row.auth_label || t("connections.password") : t("connections.password"))});
     const keyfile = needsKey ? h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: t("connections.keyfile")}) : null;
     const said = h("span", {class: "sv-said"});
     const test = h("button", {type: "button", class: "act"}, t("connections.test"));
@@ -70,7 +71,7 @@ const SERVERS = (function () {
     });
     if (forget) forget.addEventListener("click", () => sure(forget, row, () => { forget.disabled = true; ask("forget", {alias: row.alias}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); }));
     password.addEventListener("keydown", (event) => { if (event.key === "Enter" && !test.disabled) test.click(); });
-    return [h("div", {class: "sv-fields"}, field(t("connections.account"), account), field(t("connections.password"), password), keyfile ? field(t("connections.keyfile"), keyfile) : null), h("div", {class: "sv-acts"}, test, save, forget, said)];
+    return [h("div", {class: "sv-fields"}, token ? null : field(t("connections.account"), account), field(token ? row.auth_label || t("connections.password") : t("connections.password"), password), keyfile ? field(t("connections.keyfile"), keyfile) : null), h("div", {class: "sv-acts"}, test, save, forget, said)];
   }
 
   // A server whose program keeps its own sign-in (1.7.13): nothing to type. Test runs the kind's check; Save keeps only the name it answered with.
@@ -120,7 +121,7 @@ const SERVERS = (function () {
     };
     const drawIdentity = () => {
       const spec = kinds[kind.value];
-      const row = {alias: "", identity: (spec.auth[auth.value] || {}).identity, login: (spec.auth[auth.value] || {}).login || "", saved: false, account: ""};
+      const row = {alias: "", identity: (spec.auth[auth.value] || {}).identity, login: (spec.auth[auth.value] || {}).login || "", auth_label: (spec.auth[auth.value] || {}).label || "", saved: false, account: ""};
       rest.replaceChildren(...identityForm(row, {alias: () => alias.value.trim(), fields: () => ({type: kind.value, env: env.value, auth: auth.value, ...Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value.trim()]))})}, redraw));
     };
     kind.addEventListener("change", draw);

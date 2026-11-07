@@ -27,6 +27,18 @@ To see which version you have: `harness --version`.
 - **Live** shows a call held in the outbox as held (waits for you), not as "Run Shell Command failed".
 - **The board list** no longer shows a turning mark on a task that waits for you.
 
+## 1.7.21 (2026-11-07)
+
+### Fixed
+
+- **A command line of several commands is judged one command at a time.** Before, only the first command of `a; b`, `a && b`, `a || b`, `a | b`, a new line or `$(...)` was looked at: with the linked items open, a write to another ticket, or a new one, went through behind a linked one. Now every command is judged, the strictest answer wins, and a write must name an item of its own command (a title that spells another command names nothing). Simple variables set in the line (`A=ado; $A comment 1 ...`, `export X=...`) are put in; a command whose program the gate cannot read (`$A ...` with no value) is held, with the reason "the gate cannot read what this one runs".
+- **An item the agent links itself is not opened.** `task allow --links` opens the items named when it was switched on (and those you add on the board while it is on). The refusal for an unlinked item now says what to do: open a Q&A task first when none is open, link with `harness task link add --task <task> ado:<id>`, and the write then waits for you. `ado:0300114` and `ado:300114` are the same item.
+- **VS Code started without this computer's settings.** The hook at the start of a chat checks that the tool folders and the CA bundle are in the environment VS Code gave it. When they are not, the connections on the Enter screen go red with "Quit VS Code completely, then open it again with Open VS Code on the board", the agent is told to say so, and the board's own check can no longer paint them green. **Open VS Code** on a VS Code that is already running says to quit it first.
+- **Testing a connection that is not saved yet.** The program of a connection's test or probe finds its fields and identity as `HARNESS_CONNECTION_<NAME>_<FIELD>` (and `_USER`, `_PASSWORD`, `_TOKEN`) in its environment, saved or not; `{conn}` in the test command is the connection's name, so two connections with the same organization and project are told apart. A connection type may declare a `token` identity: one secret, asked under the label of its auth entry, kept as `..._TOKEN`.
+- **Held-call cards.** A body file is found from the repository root and by its full path; `\n` in `--text` shows as a line break and `\"` as a quote; the sentences of the gate and the cards show no `(none)` for a system without environments, and the hand-off of its exec asks for no environment.
+- **`rules` on a connection type** reach the gate (the connection's own `rules` win). A pack can now set an `exec` to `outbox`: held like a write, approved on its card.
+- **Smaller.** A link address may start with `{url}`; a zip install gives `bin/` programs the execute bit; an install error is one sentence (not a tool pack, not a zip, path too long); a failed probe or test says what the program said first; a refused identity that is kept here says to fix it in Tools (not "open VS Code with your identity"); a chat question shows "waits for your answer" on the row (the question is in `waiting_tip`); the path of a held call's draft is no longer masked as a key.
+
 ## 1.7.20 (2026-11-07)
 
 ### Added

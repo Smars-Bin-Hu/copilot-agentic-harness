@@ -186,9 +186,9 @@ class OutboxOnThePageTests(OutboxCase):
         systems = {**SYSTEMS, "tickets": {**SYSTEMS["tickets"], "verbs": SYSTEMS["tickets"]["verbs"] + [{"pattern": r"^comment\b", "verb": "write"}]}}
         (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
         named = self.term(COMMENT)["permissionDecisionReason"]  # `comment` is now a rule of the tickets system: a write it names
-        unnamed = self.term('Q="comment T-7"; tk "$Q"')["permissionDecisionReason"]  # the verb is in a shell variable: nothing names it
+        unnamed = self.term('tk "$Q"')["permissionDecisionReason"]  # the verb is in a shell variable the line does not set: nothing names it
         view = {item["command"]: item for item in taskdesk.outbox_view(self.root, TASK)}
-        self.assertEqual((view[COMMENT]["named"], view['Q="comment T-7"; tk "$Q"']["named"]), (True, False))
+        self.assertEqual((view[COMMENT]["named"], view['tk "$Q"']["named"]), (True, False))
         drafts = {path.name: path.read_text(encoding="utf-8") for path in self.drafts()}
         kind_line = lambda text: next(line for line in text.splitlines() if ": write" in line)  # noqa: E731 - the draft is in the user's language
         self.assertIn("(", kind_line(drafts[f"{code_of(unnamed)}-tickets.md"]))
@@ -273,3 +273,35 @@ class OutboxOnThePageTests(OutboxCase):
             self.assertIn(key, en, key)
             self.assertIn(key, zh, key)
 
+
+
+class ExecAsOutboxTests(OutboxCase):
+    """1.7.21: an exec a system's rules set to `outbox` is held like a write, with a card the person approves; a system with no environment shows no `(none)` and asks for no `<ENV>`."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        systems = {"tickets": {**SYSTEMS["tickets"], "verbs": SYSTEMS["tickets"]["verbs"] + [{"pattern": r"^queue\b", "verb": "exec"}], "rules": {"none": {"exec": "outbox"}}}}
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
+
+    def test_the_exec_waits_for_an_approval_and_runs_once(self) -> None:
+        self.new()
+        held = self.term("tk queue 12")
+        self.assertEqual(held["permissionDecision"], "deny")
+        reason = held["permissionDecisionReason"]
+        self.assertIn("approve-action", reason)
+        self.assertNotIn("(none)", reason)
+        self.approve(code_of(reason))
+        self.assertEqual(self.term("tk queue 12"), {})
+        self.assertEqual(self.term("tk queue 12")["permissionDecision"], "deny")
+
+    def test_a_human_exec_of_a_system_with_no_environment_hands_off_without_one(self) -> None:
+        systems = {"tickets": {**SYSTEMS["tickets"], "verbs": [{"pattern": r"^queue\b", "verb": "exec"}], "rules": {"none": {"exec": "human"}}}}
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
+        self.new()
+        reason = self.term("tk queue 12")["permissionDecisionReason"]
+        self.assertNotIn("<ENV>", reason)
+        self.assertNotIn("(none)", reason)
+        self.assertIn("task handoff run --what", reason)
+        from core.systems import place
+
+        self.assertEqual((place("cloud", "dev"), place("tickets", "none")), ("cloud (dev)", "tickets"))

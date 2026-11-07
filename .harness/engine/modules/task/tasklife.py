@@ -340,7 +340,7 @@ def ask_text(ask: Dict[str, Any]) -> str:
         return messages.text("task.waiting.confirm", what=" ".join(str(ask.get("command") or ask.get("tool") or "").split())[:WAIT_WHAT])
     if not ask.get("supported"):
         return messages.text("task.waiting.question-vs")
-    return messages.text("task.waiting.question", what=" ".join(str(ask.get("message") or "").split())[:WAIT_WHAT])
+    return messages.text("task.waiting.asking")  # the same words as a question the agent put with its ask tool; the question itself is in `waiting_tip` (1.7.21)
 
 
 def apply_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], data: Optional[Dict[str, Any]] = None) -> bool:
@@ -349,7 +349,7 @@ def apply_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], data: Optional
     if not ask or row.get("status") != "open" or row.get("paused_since"):
         return False
     waited = waited_since(data or {}, str(ask.get("since") or ""))
-    row.update({"waiting": ask_text(ask), "waiting_why": "confirm" if ask.get("kind") == "confirm" else "question", "waiting_since": ask.get("since", ""), "waiting_from": wait_clock(data or {}, str(ask.get("since") or "")),
+    row.update({"waiting": ask_text(ask), "waiting_why": "confirm" if ask.get("kind") == "confirm" else "question", "waiting_tip": " ".join(str(ask.get("message") or ask.get("command") or "").split())[:600], "waiting_since": ask.get("since", ""), "waiting_from": wait_clock(data or {}, str(ask.get("since") or "")),
                 "waited_s": round(waited) if waited is not None else None, "state": "waiting", "active": False})
     return True
 
@@ -543,7 +543,9 @@ def _set_allow_links(root: Path, raw_task: str, on: bool) -> Dict[str, Any]:
         task_ops.require_open(data)
         before = bool(data.get(LINKS_KEY))
         if on:
-            data[LINKS_KEY] = {"at": utc_now()}
+            # the items named now are the ones opened (1.7.21): an item the agent links later is not, and its writes wait for the person as before
+            data[LINKS_KEY] = {"at": utc_now(),
+                               "refs": [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]}
         else:
             data.pop(LINKS_KEY, None)
         if before != on:
@@ -562,7 +564,7 @@ def check_link_type(root: Path, ref: str) -> None:
         raise CommandError(say("task.link.type", type=kind, types=", ".join(types)))
 
 
-def link(root: Path, raw_task: str, ref: str, on: bool) -> Dict[str, Any]:
+def link(root: Path, raw_task: str, ref: str, on: bool, by_person: bool = False) -> Dict[str, Any]:
     """A task names an item of an outside tool (`ado:12345`, 1.7.15): the board shows it, and once the work is done the agent may ask the person whether
     to update it. The harness keeps only the type and the id; the tool pack of the type knows its address."""
     from core import toolpacks
@@ -570,14 +572,21 @@ def link(root: Path, raw_task: str, ref: str, on: bool) -> Dict[str, Any]:
     ref = str(ref or "").strip()
     if not toolpacks.LINK.match(ref):
         raise CommandError(say("task.link.form", ref=ref or "-"))
+    ref = toolpacks.normal_ref(ref)
     task = task_ops.resolve(root, raw_task)
     with task_ops.locked(root, task) as data:
         held = [item for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]
-        there = any(item["ref"] == ref for item in held)
+        there = any(toolpacks.normal_ref(item["ref"]) == ref for item in held)
         if on and not there:
             held.append({"ref": ref, "at": utc_now()})
+            opened = data.get(LINKS_KEY)
+            if by_person and isinstance(opened, dict):  # the person added it on the board while the linked items are open: it is opened too; an agent's `task link add` is not (1.7.21)
+                opened["refs"] = sorted(set(opened.get("refs") or []) | {ref})
         elif not on:
-            held = [item for item in held if item["ref"] != ref]
+            held = [item for item in held if toolpacks.normal_ref(item["ref"]) != ref]
+            opened = data.get(LINKS_KEY)
+            if isinstance(opened, dict):
+                opened["refs"] = [item for item in opened.get("refs") or [] if item != ref]
         data["links"] = held
         if there != on:
             task_ops.note(data, "link", f"{ref}: {'on' if on else 'off'}")

@@ -152,3 +152,60 @@ class Bundle(LaunchEnvCase):
             stdout, stderr = "PROXY HTTP/1.1 403 Forbidden\r\n", ""
         with self.assertRaises(ValueError):
             launchenv.chain_windows("h.example.org", "127.0.0.1:9000", run=lambda *a, **k: Refused())
+
+
+class WhatVsCodeGot(LaunchEnvCase):
+    """1.7.21 (T3#1): a VS Code that was already running is not given the settings; the hook sees what it really got, and the board does not say green."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        launchenv.save_paths(self.root, [str(self.tools)])
+        bundle = self.root / launchenv.BUNDLE
+        bundle.parent.mkdir(parents=True, exist_ok=True)
+        bundle.write_text(cert(1), encoding="ascii")
+        connections.write_env(self.root, {launchenv.BUNDLE_KEY: launchenv.BUNDLE.as_posix()})
+
+    def test_lacking_names_a_tool_folder_and_a_trust_variable_that_are_not_there(self) -> None:
+        bundle = str(self.root / launchenv.BUNDLE)
+        right = {"PATH": os.pathsep.join([str(self.tools), "/usr/bin"]), "REQUESTS_CA_BUNDLE": bundle}
+        self.assertEqual(launchenv.lacking(self.root, right), [])
+        self.assertEqual(launchenv.lacking(self.root, {"PATH": "/usr/bin", "REQUESTS_CA_BUNDLE": bundle}), [f"PATH {self.tools}"])
+        self.assertEqual(launchenv.lacking(self.root, {**right, "REQUESTS_CA_BUNDLE": "/other.pem"}), ["REQUESTS_CA_BUNDLE"])
+        self.assertEqual(launchenv.lacking(self.root, {"PATH": "/usr/bin"}), [f"PATH {self.tools}", "REQUESTS_CA_BUNDLE"])
+
+    def test_nothing_to_give_nothing_lacking(self) -> None:
+        other = self.root / "elsewhere"
+        other.mkdir()
+        from core import launchenv as again
+
+        connections.write_env(self.root, {launchenv.BUNDLE_KEY: None, launchenv.PATH_KEY: None})
+        self.assertEqual(again.lacking(other, {"PATH": "/usr/bin"}), [])
+
+    def test_the_hook_keeps_what_it_found_and_the_view_goes_red_with_the_sentence(self) -> None:
+        from core import reach
+
+        systems = {"tk": {"reach": {"cli": "tk"}, "env": "none", "needs": {"probes": {"none": "tk me"}}}}
+        reach._write(self.root, {"tk:none": {"state": "ok", "at": "2026-01-01T00:00:00+00:00", "why": "", "who": "me", "source": "probe"}})  # noqa: SLF001
+        self.assertEqual(reach.view(self.root, systems)[0]["state"], "ok")
+        found = launchenv.note_seen(self.root, {"PATH": "/usr/bin"})
+        self.assertEqual((found["ok"], len(found["missing"])), (False, 2))
+        line = reach.view(self.root, systems)[0]
+        self.assertEqual((line["state"], line["why"]), ("denied", "vscode-env"))
+        self.assertIn("完全退出 VS Code", line["launch"])
+        launchenv.note_seen(self.root, {"PATH": str(self.tools), "REQUESTS_CA_BUNDLE": str(self.root / launchenv.BUNDLE)})
+        self.assertEqual(reach.view(self.root, systems)[0]["state"], "ok", "a VS Code started right: the board's own word stands")
+        launchenv.note_seen(self.root, {"PATH": "/usr/bin"})
+        launchenv.mark_started(self.root)  # the board started VS Code with the settings
+        self.assertEqual(reach.view(self.root, systems)[0]["state"], "ok")
+
+    def test_running_is_asked_of_the_system(self) -> None:
+        class Done:
+            def __init__(self, code: int, out: str = "") -> None:
+                self.returncode, self.stdout = code, out
+        self.assertTrue(launchenv.vscode_running(run=lambda *a, **k: Done(0), platform="darwin"))
+        self.assertFalse(launchenv.vscode_running(run=lambda *a, **k: Done(1), platform="darwin"))
+        self.assertTrue(launchenv.vscode_running(run=lambda *a, **k: Done(0, "Code.exe  1234 Console"), platform="win32"))
+        self.assertFalse(launchenv.vscode_running(run=lambda *a, **k: Done(0, "INFO: No tasks are running"), platform="win32"))
+        def broken(*a, **k):
+            raise OSError("no pgrep")
+        self.assertFalse(launchenv.vscode_running(run=broken, platform="darwin"))

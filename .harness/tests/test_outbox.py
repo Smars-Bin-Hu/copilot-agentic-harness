@@ -45,6 +45,22 @@ class OutboxCase(TaskCase):
 
 
 class OutboxTests(OutboxCase):
+    def test_the_agent_is_told_to_have_the_call_approved_on_the_task_page(self) -> None:
+        """1.7.23 (H7): the person approves on the task page; the agent no longer tells them to run `harness approve-action` in a terminal."""
+        self.new()
+        reason = self.term(COMMENT)["permissionDecisionReason"]
+        self.assertIn("任务页", reason)
+        self.assertNotIn("在自己的终端运行", reason)
+        draft = self.drafts()[0].read_text(encoding="utf-8")
+        self.assertIn("任务页", draft)
+        import json
+
+        for lang in ("en", "zh"):
+            found = json.loads((Path(__file__).resolve().parents[1] / "engine" / "core" / f"messages.{lang}.json").read_text(encoding="utf-8"))
+            self.assertNotIn("UTC", found["desk.outbox.asked"], lang)
+            self.assertNotIn("DROP", found["desk.set.open.tip"], lang)
+            self.assertNotIn("approve-action", found["desk.outbox.same_as"], lang)
+
     def test_a_write_waits_with_a_draft_then_runs_once_after_approval(self) -> None:
         self.new()
         refused = self.term(COMMENT)

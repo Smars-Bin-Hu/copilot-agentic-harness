@@ -113,7 +113,7 @@ To see which version you have: `harness --version`.
 - **Chinese pages**: the held card's "what" and fact words, the first line the board prints (button names), and the MCP choices (**Allow MCP** / **Do not allow MCP**) are in the page's language.
 - **Finish setup** reads the states below it again, so "Company content: Not found yet" no longer stays after the copy. The orange banner of the board says the copy can already work and lacks your team's content, so it does not clash with the Ready of the Enter screen.
 - **Forget** of a connection of your own asks once more (it removes the connection and its identity for good).
-- **Opening View on a held call** fills the code in the card and keeps it when the card is drawn again; Approve is then one click.
+- **A held call's code** stays in the card when the card is drawn again (it was lost when View opened). Opening View does not fill it in: type it, or click it in View.
 - **Live** shows a call held in the outbox as held (waits for you), not as "Run Shell Command failed".
 - **The board list** no longer shows a turning mark on a task that waits for you.
 

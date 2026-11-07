@@ -1093,6 +1093,7 @@
   // and the file it reads, whole, scrolling. The code is typed on the card, as the design says a person reads the command first: Approve wakes once the window was opened.
   // Approve is `harness approve-action` with that code (the board's act, no preview); Dismiss takes the call away without running anything.
   const viewedCalls = new Set();
+  const enteredCodes = new Map();  // what the person typed or clicked into a card's code box, kept when the card is drawn again
   const approvedCalls = new Map();  // code -> {at}: approved on this page and not yet told to the agent; the agent runs an approved call only when it is prompted, so the card offers to tell it
   const TELL_MINUTES = 10;  // the approval's life (git.approval_minutes by default): past it, telling is no use
   // After an approval: a green card with the codes and one button that tells the chat to run them (a send to the chat, as an answer), in place of typing it.
@@ -1209,7 +1210,8 @@
     const no = h("button", {type: "button", class: "act", disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
     const view = h("button", {type: "button", class: "act big tk-view"}, t("desk.outbox.view"));
     const said = h("div", {class: "bad"});
-    view.addEventListener("click", () => { callWindow(item, (code) => { input.value = code; arm(); yes.focus(); }); input.value = item.code; arm(); });  // a person who opened the view has read the command: the code is filled in (1.7.22), and stays when the card is drawn again
+    view.addEventListener("click", () => { callWindow(item, (code) => { input.value = code; enteredCodes.set(item.code, code); arm(); yes.focus(); }); arm(); });  // the code is not filled in by opening View: the person types it, or clicks it in View (1.7.29)
+    input.addEventListener("input", () => enteredCodes.set(item.code, input.value));
     input.addEventListener("focus", arm);
     const send = () => {
       if (!ready_()) return;
@@ -1222,7 +1224,7 @@
       no.disabled = true;
       SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); no.disabled = false; });
     });
-    if (viewedCalls.has(item.code)) input.value = item.code;  // the card was drawn again after the view was opened
+    input.value = enteredCodes.get(item.code) || "";  // the card was drawn again: what the person put in stays
     arm();
     const peek = item.command.length > 110 ? item.command.slice(0, 110) + "…" : item.command;
     const words = Boolean(item.say || item.body);  // the type says it in words: the card shows that and folds the command

@@ -1621,7 +1621,7 @@
   "desk.test.waits": "waits for your results",
   "desk.test.waiting": "Run the tests of {env} in TEST-GUIDE.md and bring the results back to the agent in VS Code.",
   "desk.outbox.view_first": "Open View first: the command is what you approve.",
-  "desk.outbox.type_code": "Type the code the agent gave you (it is in the draft's name).",
+  "desk.outbox.type_code": "Type the code the agent gave you, or click it in View.",
   "desk.outbox.code": "code",
   "desk.outbox.code_tip": "Click: the code is copied and put in the card's box; then press Approve.",
   "desk.outbox.same_as": "the approval is for this exact command only",

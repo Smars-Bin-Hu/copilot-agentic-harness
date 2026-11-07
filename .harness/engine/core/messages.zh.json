@@ -1621,7 +1621,7 @@
   "desk.test.waits": "等你的结果",
   "desk.test.waiting": "按 TEST-GUIDE.md 运行 {env} 的测试，把结果带回 VS Code 里的 agent。",
   "desk.outbox.view_first": "先点查看：你批准的是这条命令。",
-  "desk.outbox.type_code": "输入 agent 给你的 code（草稿文件名里就是它）。",
+  "desk.outbox.type_code": "输入 agent 给你的 code，或在查看窗口里点一下它。",
   "desk.outbox.code": "批准码",
   "desk.outbox.code_tip": "点一下：code 复制并填进卡片的输入框，然后按批准。",
   "desk.outbox.same_as": "批准只对这一条命令有效",

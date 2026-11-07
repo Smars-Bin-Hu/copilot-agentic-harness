@@ -63,7 +63,9 @@ SYSTEMS_SCHEMA = {
             "rules": {"type": "object", "additionalProperties": _RULE_SET},
             "show": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
             "toolpack": {"type": "string", "minLength": 1},  # 1.7.12: written by the harness for a system an installed tool pack brings
-            "openable": {"type": "boolean"},  # 1.7.13: may Open to the agent let its writes through? Default: yes, but not for a tool pack's system  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
+            "openable": {"type": "boolean"},
+            "item": {"type": "string", "minLength": 1},  # 1.7.18: a pattern whose first group is the id of the item a write names (a work item)
+            "link": {"type": "string", "minLength": 1},  # 1.7.18: the link type of `harness task link` that names such an item (ado)  # 1.7.13: may Open to the agent let its writes through? Default: yes, but not for a tool pack's system  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
             "needs": {  # 1.7.9: `probes` names one probe per environment (another server, another account); `denied` is what a call prints when the identity is not let in
                 "type": "object",
                 "properties": {"probe": {"type": "string", "minLength": 1}, "probes": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},

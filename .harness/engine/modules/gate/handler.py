@@ -154,6 +154,11 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
             passes, how = True, "runner"
         elif data and tasks.plan_approved(ctx.root, data["task"], data):
             passes, how = True, "plan"
+    scoped = _item_scope(event.command, systems.get(action.system) or {}, action.verb, _open_task(ctx)) if decision in (external.TASK, external.OUTBOX, external.HUMAN) else None
+    if scoped == "unlinked":  # a write to an item the task does not name: refused, with the line that links it (1.7.18)
+        return {"action": action, "decision": external.DENY, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "unlinked": True}
+    if scoped == "opened":  # a write to an item the task names, and the person opened the linked items for this task
+        return {"action": action, "decision": decision, "passes": True, "approved": False, "opened": True, "how": "opened", "code": ""}
     if decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes and _openable(systems.get(action.system) or {}):
         data = _open_task(ctx)
         opened = bool(data and _env_opened(data, action.env))  # the person opened this environment for this task (`task allow`, 1.7.4): no further approval
@@ -179,6 +184,25 @@ def check_mcp(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if found["verb"] == "destroy" or event.agent_type.strip():
         return Decision(permission="deny", reason=rules.say("gate.mcp.deny", tool=event.tool_name, toolpack=found["toolpack"], verb=found["verb"]), facts=facts)
     return Decision(permission="ask", reason=rules.say("gate.mcp.ask", tool=event.tool_name, toolpack=found["toolpack"], verb=found["verb"]), facts=facts)
+
+
+def _item_scope(command: str, system: Dict[str, Any], verb: str, data: Optional[Dict[str, Any]]) -> Optional[str]:
+    """A write that names one item of a tool (a work item, a ticket), when the system says how to find it (`item`, its first group) and which link type
+    names it (`link`) (1.7.18). "unlinked": the task does not name that item; "opened": it does and the person opened the linked items (`task allow
+    --links`); "linked": it does, not opened (held as before); None: not such a write (a read, a new item, no `item` pattern)."""
+    if verb != external.WRITE or not system.get("item") or not system.get("link"):
+        return None
+    try:
+        found = re.search(str(system["item"]), command, re.IGNORECASE)
+    except re.error:
+        return None
+    if not found or not found.groups() or not found.group(1):
+        return None
+    ref = f"{system['link']}:{found.group(1)}"
+    names = {str(item.get("ref")) for item in ((data or {}).get("links") or []) if isinstance(item, dict)}
+    if ref not in names:
+        return "unlinked"
+    return "opened" if (data or {}).get("allow_links") else "linked"
 
 
 def _openable(system: Dict[str, Any]) -> bool:
@@ -241,6 +265,11 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
         code = approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task))
         draft = outbox.write_draft(ctx.root, task, code, action, command, event.session_id, minutes) if task else ""
         return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft), facts=dict(facts, kind="external-outbox"))
+    if judged.get("unlinked"):
+        system = (ctx.policy("tools").get("systems") or {}).get(action.system) or {}
+        found = re.search(str(system.get("item")), event.command, re.IGNORECASE)
+        ref = f"{system.get('link', '')}:{found.group(1) if found and found.groups() else '?'}"
+        return Decision(permission="deny", reason=rules.say("gate.external.unlinked", system=action.system, ref=ref, call=command), facts=dict(facts, kind="external-unlinked"))
     reason = {external.DENY: rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, command)
     return Decision(permission="deny", reason=reason, facts=facts)
 

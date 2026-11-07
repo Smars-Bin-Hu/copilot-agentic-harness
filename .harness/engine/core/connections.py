@@ -253,7 +253,7 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
         for key in ("verbs", "target", "show", "rules"):
             if server.get(key) if key == "rules" else kind.get(key):
                 system[key] = server[key] if key == "rules" and server.get(key) else kind[key]
-        for key in ("toolpack", "openable"):
+        for key in ("toolpack", "openable", "item", "link"):
             if kind.get(key) is not None:
                 system[key] = kind[key]
         out[alias] = system

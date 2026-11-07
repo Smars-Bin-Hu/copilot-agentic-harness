@@ -497,6 +497,8 @@ def handoff(root: Path, raw_task: str, what: str, env: str, detail: str = "") ->
 
 ALLOW_KEY = "allow_env"
 ALLOW_ENVS = ("dev", "ist", "qat")  # the environments a person may open for a task; prod never, and a system with no environment (`none`) has nothing to open
+LINKS = "links"  # 1.7.18: not an environment: the items the task is linked to (a work item); the agent's writes to them go through, to no other item
+LINKS_KEY = "allow_links"
 
 
 def allowed_env(data: Dict[str, Any], env: str) -> bool:
@@ -511,6 +513,8 @@ def set_allow(root: Path, raw_task: str, env: str, on: bool, interactive: Option
     every call still leaves its line in the log."""
     task_ops.person("task allow", interactive, typed=False)
     env = " ".join(str(env or "").split()).lower()
+    if env == LINKS:
+        return _set_allow_links(root, raw_task, on)
     if env not in ALLOW_ENVS:
         raise CommandError(say("task.allow.env", env=env or "-", allowed=", ".join(ALLOW_ENVS)))
     task = task_ops.resolve(root, raw_task)
@@ -526,6 +530,23 @@ def set_allow(root: Path, raw_task: str, env: str, on: bool, interactive: Option
         if before != on:
             task_ops.note(data, "allow-env", f"{env}: {'on' if on else 'off'}")
     return {"task": task, "env": env, "on": on, "changed": before != on, "open": sorted(held), "next": say("task.allow.on" if on else "task.allow.off", env=env.upper())}
+
+
+def _set_allow_links(root: Path, raw_task: str, on: bool) -> Dict[str, Any]:
+    """The person lets the agent write the items this task is linked to (`ado:<id>`), with no approval each time (1.7.18). A write to an item the task is not
+    linked to is refused, a new item is still held, a destroy is refused. It ends with the task."""
+    task = task_ops.resolve(root, raw_task)
+    with task_ops.locked(root, task) as data:
+        task_ops.require_open(data)
+        before = bool(data.get(LINKS_KEY))
+        if on:
+            data[LINKS_KEY] = {"at": utc_now()}
+        else:
+            data.pop(LINKS_KEY, None)
+        if before != on:
+            task_ops.note(data, "allow-env", f"{LINKS}: {'on' if on else 'off'}")
+        refs = [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict)]
+    return {"task": task, "env": LINKS, "on": on, "changed": before != on, "links": refs, "next": say("task.allow.links.on" if on else "task.allow.links.off", links=", ".join(refs) or "-")}
 
 
 def link(root: Path, raw_task: str, ref: str, on: bool) -> Dict[str, Any]:

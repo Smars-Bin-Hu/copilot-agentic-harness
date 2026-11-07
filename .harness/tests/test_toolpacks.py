@@ -511,3 +511,58 @@ class WriteYourOwn(ToolpackCase):
         written = self.root / "out.json"
         self.assertEqual(self.cli("connections", "export", "--out", str(written)).returncode, 0)
         self.assertNotIn("secret", written.read_text(encoding="utf-8"))
+
+
+from taskcase import SESSION  # noqa: E402
+
+
+class LinkedItems(TaskCase):
+    """1.7.18: a write that names an item (a work item) must name one the task is linked to; with the linked items opened (`task allow --links`) it goes
+    through with no approval; a new item is still held; another item is refused with the line that links it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        holder = tempfile.TemporaryDirectory()
+        self.addCleanup(holder.cleanup)
+        source = make(Path(holder.name) / "tracker", links={"trk": {"label": "Ticket", "type": "tracker", "url": "https://tracker.example.org/{org}/item/{id}"}})
+        kind = dict(KIND, item="\\b(?:comment|update)\\s+(\\d+)", link="trk", verbs=KIND["verbs"] + [{"pattern": "\\b(?:create|update)\\b", "verb": "write"}])
+        (source / "types" / "tracker.json").write_text(json.dumps(kind), encoding="utf-8")
+        (source / "rules.json").unlink()
+        toolpacks.add(self.root, str(source))
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"board": {"type": "tracker", "env": "none", "org": "demo"}}}), encoding="utf-8")
+        self.new()
+
+    def term(self, command: str) -> dict:
+        event = pre_tool(SESSION, "run_in_terminal", {"command": command, "explanation": "t", "isBackground": False})
+        event["cwd"] = str(self.root)
+        return self.hook(event)
+
+    def test_linked_held_then_opened_another_refused_a_new_one_held(self) -> None:
+        from modules.task import tasklife
+
+        refused = self.term("tracker --org demo comment 42 hi")
+        self.assertEqual(refused["permissionDecision"], "deny")
+        self.assertIn("harness task link add trk:42", refused["permissionDecisionReason"])
+        tasklife.link(self.root, NAME, "trk:42", True)
+        held = self.term("tracker --org demo comment 42 hi")
+        self.assertEqual(held["permissionDecision"], "deny")
+        self.assertNotIn("task link add", held["permissionDecisionReason"], "linked, not opened: held for approval as before")
+        with self.assertRaises(Exception):
+            tasklife.set_allow(self.root, NAME, "links", True, interactive=False)  # the agent's terminal
+        done = tasklife.set_allow(self.root, NAME, "links", True, interactive=True)
+        self.assertEqual((done["on"], done["links"]), (True, ["trk:42"]))
+        self.assertEqual(self.term("tracker --org demo comment 42 hi"), {})
+        self.assertEqual(self.term("tracker --org demo update 42 --state Done"), {})
+        self.assertIn("task link add trk:7", self.term("tracker --org demo comment 7 hi")["permissionDecisionReason"])
+        self.assertEqual(self.term("tracker --org demo create --title x")["permissionDecision"], "deny", "a new item: held")
+        self.assertNotEqual(self.term("tracker --org demo get 7").get("permissionDecision"), "deny", "a read of any item: free")
+        tasklife.set_allow(self.root, NAME, "links", False, interactive=True)
+        self.assertEqual(self.term("tracker --org demo comment 42 hi")["permissionDecision"], "deny")
+
+    def test_the_task_page_offers_the_linked_items_chip_only_when_a_pack_can_scope_them(self) -> None:
+        from modules.task import taskdesk, tasklife
+
+        self.assertNotIn("links", [item["env"] for item in taskdesk.allow_view(self.root, self.data())["envs"]])
+        tasklife.link(self.root, NAME, "trk:42", True)
+        chip = [item for item in taskdesk.allow_view(self.root, self.data())["envs"] if item["env"] == "links"]
+        self.assertEqual((len(chip), chip[0]["open"], chip[0]["systems"]), (1, False, ["board"]))

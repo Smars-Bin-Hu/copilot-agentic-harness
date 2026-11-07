@@ -729,7 +729,7 @@
       const part = (one) => one.state === "ok" ? t("desk.reach.ok", {env: one.system, who: one.who || "-"}) : one.state === "unknown" ? t("desk.reach.unknown", {env: one.system}) : t("desk.reach.bad", {env: one.system, launch: why(one)});
       const seenTip = seen ? (seen.parts || []).map(part).join("\n") : "";  // one line per server of this environment
       const chip = h("button", {type: "button", class: "chip env" + (item.open ? " on" : ""), "aria-pressed": item.open ? "true" : "false", title: tip + (seenTip ? "\n" + seenTip : ""), disabled: listed && can ? null : "disabled"},
-        seen ? h("i", {class: "reach-dot " + (seen.state === "ok" ? "ok" : seen.state === "unknown" ? "unknown" : "bad")}) : null, item.env + (item.open ? " ✓" : ""));
+        seen ? h("i", {class: "reach-dot " + (seen.state === "ok" ? "ok" : seen.state === "unknown" ? "unknown" : "bad")}) : null, (item.label || item.env) + (item.open ? " ✓" : ""));
       chip.addEventListener("click", () => {
         chips.forEach((node) => { node.disabled = true; });
         SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: item.open ? "off" : "on", step: "act"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
@@ -742,7 +742,7 @@
       can ? null : h("p", {class: "set-warn"}, t("desk.set.open.cannot")));
     const unreached = found.envs.filter((item) => item.reach && (item.reach.state === "denied" || item.reach.state === "failed")).map((item) => item.env.toUpperCase());  // VS Code cannot reach these (1.7.9)
     const button = h("button", {type: "button", class: "rv-btn" + (open.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip") + (unreached.length ? "\n" + t("desk.reach.pill", {envs: unreached.join(", ")}) : "")},
-      icon(DOOR, 14), h("span", {class: "rv-name"}, t("desk.set.open")), h("b", null, open.length ? open.map((item) => item.env).join(", ") : t("desk.set.open.off")), unreached.length ? h("i", {class: "reach-dot bad pill"}) : null);
+      icon(DOOR, 14), h("span", {class: "rv-name"}, t("desk.set.open")), h("b", null, open.length ? open.map((item) => item.label || item.env).join(", ") : t("desk.set.open.off")), unreached.length ? h("i", {class: "reach-dot bad pill"}) : null);
     const show = (on) => { if (on && closeReview) closeReview(); pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeEnvs = on ? () => show(false) : null; if (on) inView(pop); };
     button.addEventListener("click", () => show(pop.hidden));
     return [button, pop];

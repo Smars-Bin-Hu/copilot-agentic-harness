@@ -146,6 +146,11 @@ def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     opened = data.get("allow_env") if isinstance(data.get("allow_env"), dict) and data.get("status") == "open" else {}  # the switch ends with the task (hand test B90-a: a closed task said dev was open)
     envs = [{"env": env, "systems": reaches.get(env, []), "open": env in opened, "since": str((opened.get(env) or {}).get("at") or ""),
              "reach": {"state": seen[env]["state"], "parts": seen[env]["parts"]} if env in seen else None} for env in tasklife.ALLOW_ENVS] if reaches else []
+    refs = {str(item.get("ref", "")).split(":", 1)[0] for item in (data.get("links") or []) if isinstance(item, dict)}
+    scoped = sorted(name for name, system in (systems or {}).items() if isinstance(system, dict) and system.get("item") and system.get("link") in refs) if refs else []
+    if scoped:  # 1.7.18: the items the task is linked to, a chip of their own: the agent's writes to them only
+        on = bool(data.get(tasklife.LINKS_KEY)) and data.get("status") == "open"
+        envs = envs + [{"env": tasklife.LINKS, "label": messages.text("desk.set.open.links"), "systems": scoped, "open": on, "since": str((data.get(tasklife.LINKS_KEY) or {}).get("at") or "") if on else "", "reach": None}]
     return {"envs": envs, "never": [outside.PROD]}
 
 

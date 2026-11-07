@@ -3194,7 +3194,7 @@
   "dock.co.version": "Knowledge base {version}",
   "dock.co.version.tip": "The version of the last package put in place.",
   "dock.co.made": "Made",
-  "dock.co.stale": "{n} copies behind",
+  "dock.co.stale": "Not copied: {n}",
   "dock.co.stale.tip": "Some company files are not copied to where Copilot reads them yet. The Overview tab has the Sync button.",
   "dock.co.tools.none": "No tool pack is active. The agent works with files only.",
   "dock.co.reads": "{n} reads",

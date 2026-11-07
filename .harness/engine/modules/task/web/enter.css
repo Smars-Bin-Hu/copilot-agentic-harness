@@ -157,6 +157,6 @@ html.lite #en-fx{display:none}
  .en-pop-in{overflow-x:hidden}.en-pop .sy-n,.en-pop .sy-r{overflow-wrap:break-word;word-break:normal}.en-pop .sy-n{min-width:8ch}}
 
 /* The row of small buttons at the bottom right (1.7.32), left of the gear of shell.css. A narrow window puts it in the middle, above the foot. */
-.en-tools{position:absolute;right:76px;bottom:28px;z-index:4;display:flex;gap:8px;max-width:calc(100% - 100px);flex-wrap:wrap;justify-content:flex-end}
+.en-tools{position:absolute;right:76px;bottom:12px;z-index:4;display:flex;gap:8px;max-width:calc(100% - 100px);flex-wrap:wrap;justify-content:flex-end}
 .en-tool{height:30px;padding:0 13px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--soft);font:600 12px var(--sans);cursor:pointer;white-space:nowrap}
 .en-tool:hover,.en-tool:focus-visible{color:var(--ink);border-color:var(--ink)}

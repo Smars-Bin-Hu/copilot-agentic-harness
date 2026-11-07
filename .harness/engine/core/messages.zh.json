@@ -3194,7 +3194,7 @@
   "dock.co.version": "知识库 {version}",
   "dock.co.version.tip": "最近一次放进来的包的版本。",
   "dock.co.made": "制作于",
-  "dock.co.stale": "{n} 个副本落后",
+  "dock.co.stale": "未复制：{n}",
   "dock.co.stale.tip": "有些公司文件还没复制到 Copilot 读的位置。概览标签页有 Sync 按钮。",
   "dock.co.tools.none": "没有启用的工具包。agent 只能处理文件。",
   "dock.co.reads": "{n} 条读",

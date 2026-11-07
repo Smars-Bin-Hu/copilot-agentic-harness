@@ -16,8 +16,8 @@ from modules.task import companyview, kbview
 from test_company import FILES, SKILL, put, set_prefix
 from test_toolpacks import KIND, make
 
-SAY = [{"pattern": r"\bcomment\s+(\S+)", "text": {"en": "Add a comment to ticket {1}", "zh": "给工单 {1} 加评论"}}, {"pattern": r"\bclose\s+(\S+)", "text": "Close ticket {1}"}]
-VERBS = [{"pattern": r"\b(?:get|list)\b", "verb": "read"}, {"pattern": r"\bwhoami\b", "verb": "read"}, {"pattern": r"\b(?:comment|close)\b", "verb": "write"}, {"pattern": r"\bmerge\b", "verb": "exec"}, {"pattern": r"\bdelete\b", "verb": "destroy"}]
+SAY = [{"pattern": r"\bcomment\s+(\S+)", "text": {"en": "Add a comment to ticket {1}", "zh": "给工单 {1} 加评论"}}, {"pattern": r"\bclose\s+(\S+)", "text": "Close ticket {1}"}, {"pattern": r"\bset-state\s+(\S+)", "text": "Set the state of ticket {1}"}]
+VERBS = [{"pattern": r"\b(?:get|list)\b", "verb": "read"}, {"pattern": r"\bwhoami\b", "verb": "read"}, {"pattern": r"^(?:--json\s+)*(?:comment|close|set-state)\b", "verb": "write"}, {"pattern": r"\bmerge\b", "verb": "exec"}, {"pattern": r"\bdelete\b", "verb": "destroy"}]
 
 
 class ViewCase(HarnessTestCase):
@@ -95,7 +95,7 @@ class Tools(ViewCase):
         for lang, comment in (("en", "Add a comment to ticket …"), ("zh", "给工单 … 加评论")):
             pack = companyview.company(self.root, lang)["tools"][0]
             self.assertEqual((pack["name"], pack["version"], pack["reads"]), ("tracker", "1.0.0", 3))
-            self.assertEqual([row["text"] for row in pack["writes"]], [comment, "Close ticket …"])
+            self.assertEqual([row["text"] for row in pack["writes"]], [comment, "Close ticket …", "Set the state of ticket …"])
             self.assertEqual(pack["execs"], [{"text": "", "pattern": r"\bmerge\b"}], "no words for it: the pattern")
             self.assertEqual(pack["destroys"][0]["pattern"], r"\bdelete\b")
 

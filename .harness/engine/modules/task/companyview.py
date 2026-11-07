@@ -16,6 +16,7 @@ from core import config, connections, launchenv, messages, reach, skillboard, sk
 
 FIRST_LINE = 160
 NO_WORD = re.compile(r"\\.")
+OPTION = re.compile(r"(?<![\w-])--?[A-Za-z][\w-]*")  # `--json`, `-h`: an option is no command
 WORD = re.compile(r"[A-Za-z][\w-]*")
 SKILL_DIR = skillcheck.SKILLS_DIR
 
@@ -62,7 +63,7 @@ def _text(value: Any, lang: str) -> str:
 
 def _words(pattern: str) -> List[str]:
     """The command words a verb pattern names (`\\b(?:comment|set-state)\\b` gives comment, set-state)."""
-    return list(dict.fromkeys(word for word in WORD.findall(NO_WORD.sub(" ", pattern)) if len(word) > 1))
+    return list(dict.fromkeys(word for word in WORD.findall(OPTION.sub(" ", NO_WORD.sub(" ", pattern))) if len(word) > 1))
 
 
 def _lines(kinds: List[Dict[str, Any]], verb: str, lang: str) -> List[Dict[str, str]]:

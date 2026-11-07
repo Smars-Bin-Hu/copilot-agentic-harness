@@ -61,7 +61,7 @@ const COMPANYTAB = (function () {
     const programs = item.programs.map((program) => hover(h("span", {class: "co-prog"}, dot(program.found ? "ok" : "denied"), program.name), () => h("span", null, t(program.found ? "dock.co.program.found" : "dock.co.program.missing", {name: program.name}))));
     const kinds = (rows, key) => rows.length ? h("details", {class: "co-verb", open: open ? "" : null}, h("summary", null, t("dock.co." + key), h("span", {class: "co-n"}, rows.length)), lines(rows)) : null;
     const links = item.connections.map((link) => hover(h("span", {class: "co-conn"}, link.state === "none" ? null : dot(link.state), link.name), () => [
-      h("b", null, link.name), fact(t("board.enter.sys.col.env"), link.env ? link.env.toUpperCase() : ""), fact(t("board.enter.sys.col.status"), link.state === "none" ? t("dock.co.conn.mcp") : t("board.enter.sys.state." + (STATE[link.state] || "unknown"))),
+      h("b", null, link.name), fact(t("board.enter.sys.col.env"), link.env && link.env !== "none" ? link.env.toUpperCase() : ""), fact(t("board.enter.sys.col.status"), link.state === "none" ? t("dock.co.conn.mcp") : t("board.enter.sys.state." + (STATE[link.state] || "unknown"))),
       fact(t("dock.co.conn.who"), link.who), fact(t("board.enter.sys.col.reason"), link.why), fact(t("board.enter.sys.col.checked"), link.state === "unknown" || !link.at ? t("board.enter.sys.never") : ago(link.at)),
       fact(t("dock.co.conn.type"), link.type), link.own ? h("span", {class: "sub"}, t("dock.co.conn.own")) : null]));
     const missing = item.missing.map((code) => {
@@ -99,7 +99,7 @@ const COMPANYTAB = (function () {
   function domainsSection(found, goMap) {
     const shown = found.domains.slice(0, 8);
     const more = found.domains.length - shown.length;
-    const map = h("button", {type: "button", class: "first-link"}, t("dock.co.domains.map"));
+    const map = h("button", {type: "button", class: "act"}, t("dock.co.domains.map"));
     map.addEventListener("click", goMap);
     return h("section", {class: "co-sec"}, head("domains", found.domains.length), found.domains.length ? h("div", {class: "co-line"}, shown.map((name) => h("span", {class: "co-chip", title: name}, name)), more > 0 ? h("span", {class: "sub"}, t("dock.co.domains.more", {n: more})) : null, map) : h("p", {class: "sub"}, t("dock.co.domains.none")));
   }

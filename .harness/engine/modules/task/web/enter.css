@@ -21,7 +21,10 @@ html.has-wall #enter{--en-ink:var(--enw-ink);--en-cap:rgba(245,246,247,.78);--en
 /* the list sits on a dark backing over a picture: the amber and grey lines hold their contrast on any picture */
 html.has-wall .en-chk{padding:12px 14px;border-radius:14px;background:rgba(8,9,10,.58)}
 html.has-wall .en-chk-l .m{background:rgba(8,9,10,.5)}
-html[data-theme="light"]:not(.has-wall) .en-chk-l .m{background:linear-gradient(var(--hot-bg),var(--hot-bg)),rgba(255,255,255,.9)}
+html[data-theme="light"]:not(.has-wall) .en-chk-l .m:not(.soft){background:linear-gradient(var(--hot-bg),var(--hot-bg)),rgba(255,255,255,.9)}
+html[data-theme="light"]:not(.has-wall) .en-chk-l .m.soft{background:rgba(255,255,255,.6)}  /* a note is calm: not the amber of a line that needs you (1.7.29) */
+.en-chk-l .m.inline{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px}.en-chk-l .m.inline .en-open{margin-top:0}  /* "not checked yet" and its Check button on one line */
+.en-ref{transition:opacity .4s ease}html.en-notready .en-ref{opacity:0 !important}  /* the intro animation holds its last value, so it must be forced */  /* the list grows up into the reflection when something needs you: no reflection then (1.7.29) */
 
 /* top right: only the greeting (the search is the fixed one of shell.css, which keeps the room at the right) */
 .en-top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:flex-end;padding:21px 24px;z-index:3;pointer-events:none}

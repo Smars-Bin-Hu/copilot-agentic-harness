@@ -449,7 +449,7 @@
           p.replaceChildren(document.createTextNode(view.message));
           if (view.button) {
             const b = view.button === "check" ? h("button", {type: "button", class: "en-open", "data-check": "1"}, t("board.enter.check")) : view.button === "identities" ? h("button", {type: "button", class: "en-open", "data-identities": "1"}, t("board.enter.identities")) : view.button === "launch" ? h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")) : h("button", {type: "button", class: "en-open", "data-open": "1"}, t("board.enter.open"));
-            p.append(h("br"), b);
+            if (view.button === "check" && view.state === "note") p.append(" ", b); else p.append(h("br"), b);
             if (chk0.openError) p.append(h("br"), h("span", null, chk0.openError));
           }
           if (id === "doctor" && view.state === "fail") {  // this line stops the way in, so it holds the way on
@@ -461,7 +461,7 @@
           }
           p.title = view.message.length > 120 ? view.message : ""; p.dataset.k = key;
         }
-        setClass(p, "m" + (view.state === "note" ? " soft" : "")); if (p.hidden) p.hidden = false;
+        setClass(p, "m" + (view.state === "note" ? " soft" : "") + (view.state === "note" && view.button === "check" ? " inline" : "")); if (p.hidden) p.hidden = false;
         if (!first && c && c.blocking && view.state !== "ok") first = view.message;
       } else if (!p.hidden) { p.hidden = true; p.dataset.k = ""; }
     });
@@ -470,6 +470,7 @@
     errLine.hidden = !down; setText(errLine, down ? t("board.enter.noanswer", {error: chk0.error}) : "");
     const ready = all && !pending && !down && slot(ORDER.length - 1);
     chk0.ready = ready;
+    root.classList.toggle("en-notready", !ready && !(pending && !bad));  // the reflection of the wordmark goes when the list is long and has something to say (1.7.29)
     setClass(head, "en-chk-h " + (pending && !bad ? "h-check" : ready ? "h-ok" : "h-wait"));
     setText(headText, pending && !bad ? t("board.enter.checking") : ready ? t("board.enter.ready") : t("board.enter.notready"));
     if (go.disabled === ready) go.disabled = !ready;

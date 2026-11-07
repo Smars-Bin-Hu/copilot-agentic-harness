@@ -643,6 +643,29 @@ def share(root: Path, company: Path, name: str) -> bool:
     return True
 
 
+def set_use(root: Path, name: str, on: bool) -> Dict[str, Any]:
+    """Turn a factory pack on or off (the Tools window, 1.7.34): its name goes into, or out of, the `use` list of `<knowledge base>/company/tools/packs.json` (made when missing,
+    the other keys and names kept), then the skills are put or taken back at once. The list is the only record of the choice. Raises ToolpackError without a company folder,
+    or for a pack that is not a factory pack."""
+    here = listed(root).get(name)
+    if not here or here["source"] != HARNESS:
+        raise ToolpackError(say("toolpack.use.factory", name=name))
+    folder = targets.company_folder(root)
+    if folder is None:
+        raise ToolpackError(say("toolpack.use.nocompany"))
+    file = folder / USE_FILE
+    found = _json(file) if file.is_file() else {}
+    found = found if isinstance(found, dict) else {}
+    use = [str(item) for item in found.get("use") or [] if isinstance(item, str)]
+    new = [item for item in use if item != name] + ([name] if on else [])
+    if new != use or not file.is_file():
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text(json.dumps(dict(found, use=new), indent=2) + "\n", encoding="utf-8")
+    done = sync_skills(root)
+    apply_mcp(root)
+    return {"name": name, "on": bool(on), "use": new, "put": done["put"], "removed": done["removed"]}
+
+
 def _read_mcp(root: Path) -> Dict[str, Any]:
     try:
         found = json.loads((root / VSCODE_MCP).read_text(encoding="utf-8-sig"))
@@ -800,7 +823,7 @@ def check(root: Path, only: str = "") -> Dict[str, Any]:
                "errors": errors, "programs": programs, "trust": bool(needs.get("trust")), "bundle": bool(bundle), "description": str(found.get("description") or ""), "types": types_here,
                "skills": len(_skills(folder)), "links": sorted((found.get("links") or {}).keys()) if isinstance(found.get("links"), dict) else [],
                "mcp_rules": len((found.get("mcp") or {}).get("tools") or []) if isinstance(found.get("mcp"), dict) else 0, "commands": [str(one) for one in found.get("commands") or []],
-               "put": list((book.get(name) or {}).get("skills") or []), "newer": False, "updated": _updated(book.get(name) or {})}
+               "put": list((book.get(name) or {}).get("skills") or []), "newer": False, "updated": _updated(book.get(name) or {}), "toggle": "" if item["source"] != HARNESS else "on" if targets.company_folder(root) else "nocompany"}
         row["ok"] = not errors and (all(programs.values()) or not item["active"])
         rows.append(row)
     if only and not rows:

@@ -3239,7 +3239,7 @@
   "dock.group.pack": "工具包的 SOP",
   "machine.conn.on": "已开",
   "machine.conn.off": "未开",
-  "machine.conn.off.how": "要开启，把它的名字加进知识库 company/tools/ 里 packs.json 的 use 列表。",
+  "machine.conn.off.how": "用按钮开启，或把它的名字加进公司 packs.json 的 use 列表。",
   "machine.conn.src.factory": "出厂",
   "machine.conn.src.factory.tip": "随 harness 发（.harness/toolpacks/）。只有公司的 packs.json 列出它，它才开着。",
   "machine.conn.src.company": "公司",
@@ -3260,5 +3260,12 @@
   "dock.co.file.inplace.tip": "code-standards skill 在原处读这个文件，不复制。",
   "dock.co.file.other": "自己不生效",
   "dock.co.file.other.tip": "harness 里没有东西自动读这个文件。只有知识库规则或 skill 指到它时，agent 才会看到。",
-  "setup.company.partial": "公司文件夹在，但里面没有 instructions/knowledgebase.instructions.md。"
+  "setup.company.partial": "公司文件夹在，但里面没有 instructions/knowledgebase.instructions.md。",
+  "toolpack.use.factory": "`{name}` 不是出厂包，不能在这里开关。",
+  "toolpack.use.nocompany": "知识库里还没有 company 文件夹。包的选择记在那里（company/tools/packs.json）。",
+  "machine.conn.toggle.on": "开启",
+  "machine.conn.toggle.off": "关闭",
+  "machine.conn.toggle.on.tip": "把名字写进公司 packs.json 的 use 列表，并马上放好它的 skill。",
+  "machine.conn.toggle.off.tip": "把名字从公司 packs.json 的 use 列表去掉，并收回它的 skill。",
+  "machine.conn.toggle.nocompany": "需要有 company 文件夹：选择记在知识库里（company/tools/packs.json）。"
 }

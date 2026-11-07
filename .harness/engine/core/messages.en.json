@@ -3239,7 +3239,7 @@
   "dock.group.pack": "Tool pack SOPs",
   "machine.conn.on": "On",
   "machine.conn.off": "Off",
-  "machine.conn.off.how": "to turn it on, add its name to the use list in the company's packs.json (knowledge base, company/tools/).",
+  "machine.conn.off.how": "turn it on with the button, or add its name to the use list in the company's packs.json.",
   "machine.conn.src.factory": "factory",
   "machine.conn.src.factory.tip": "Comes with the harness (.harness/toolpacks/). It is on only when the company's packs.json lists it.",
   "machine.conn.src.company": "company",
@@ -3260,5 +3260,12 @@
   "dock.co.file.inplace.tip": "The code-standards skill reads this file where it lies. It is not copied.",
   "dock.co.file.other": "not used by itself",
   "dock.co.file.other.tip": "Nothing in the harness reads this file by itself. The agent sees it only when a knowledge base rule or a skill points to it.",
-  "setup.company.partial": "The company folder is there, but it has no instructions/knowledgebase.instructions.md."
+  "setup.company.partial": "The company folder is there, but it has no instructions/knowledgebase.instructions.md.",
+  "toolpack.use.factory": "`{name}` is not a factory pack: it cannot be turned on or off here.",
+  "toolpack.use.nocompany": "There is no company folder in the knowledge base yet. The choice of packs is kept there (company/tools/packs.json).",
+  "machine.conn.toggle.on": "Turn on",
+  "machine.conn.toggle.off": "Turn off",
+  "machine.conn.toggle.on.tip": "Writes the name into the use list of the company's packs.json and puts its skills now.",
+  "machine.conn.toggle.off.tip": "Takes the name out of the use list of the company's packs.json and takes its skills back.",
+  "machine.conn.toggle.nocompany": "The company folder is needed: the choice is kept in the knowledge base (company/tools/packs.json)."
 }

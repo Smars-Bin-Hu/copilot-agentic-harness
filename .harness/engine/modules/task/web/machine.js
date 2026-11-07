@@ -109,6 +109,11 @@ const MACHINE = (function () {
           const drop = button(t("machine.ca.drop"), () => { if (window.confirm(t("machine.conn.remove.ask", {name: row.name}))) change("toolpack-remove", row.name); });
           drop.classList.add("danger");
           acts.push(drop);
+        } else if (row.toggle) {  // a factory pack: on or off is the knowledge base's `use` list (1.7.34)
+          const flip = button(t(row.active ? "machine.conn.toggle.off" : "machine.conn.toggle.on"), () => change("toolpack-use", row.name, {on: !row.active}));
+          flip.title = row.toggle === "nocompany" ? t("machine.conn.toggle.nocompany") : t(row.active ? "machine.conn.toggle.off.tip" : "machine.conn.toggle.on.tip");
+          if (row.toggle === "nocompany") flip.disabled = true;
+          acts.push(flip);
         } else if (row.from === "company") {
           acts.push(h("span", {class: "sub"}, t("machine.conn.follows")));
         }
@@ -121,7 +126,7 @@ const MACHINE = (function () {
       }) : [h("p", {class: "sub"}, t("machine.conn.none"))]));
       if (ctx.changed) ctx.changed();
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
-    const change = (step, name) => ask(step, {name}).then(() => paint(), (error) => { list.prepend(h("p", {class: "bad"}, error.message)); });
+    const change = (step, name, more) => ask(step, {name, ...(more || {})}).then(() => paint(), (error) => { list.prepend(h("p", {class: "bad"}, error.message)); });
     const button = (text, go) => { const b = h("button", {type: "button", class: "act kb-mini"}, text); b.addEventListener("click", go); return b; };
     // Install from a folder or zip (1.7.19): a path field and Install. An installed name asks for a second click that says what it replaces.
     const path = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: t("machine.conn.install.ph"), "aria-label": t("machine.conn.install.ph")});

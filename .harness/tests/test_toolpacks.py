@@ -971,6 +971,43 @@ class FactoryPacks(ToolpackCase):
     def prefix(self, word: str) -> None:
         (self.root / ".harness/policies/user.override.json").write_text(json.dumps({"skill_prefix": word}), encoding="utf-8")
 
+    def test_the_toggle_writes_use_and_puts_or_takes_back_the_skills(self) -> None:
+        self.prefix("acme")
+        (self.kb / "tools" / "packs.json").write_text(json.dumps({"use": ["other"], "note": "kept"}), encoding="utf-8")
+        row = toolpacks.check(self.root)["toolpacks"][0]
+        self.assertEqual((row["active"], row["toggle"]), (False, "on"))
+        done = toolpacks.set_use(self.root, "tracker", True)
+        self.assertEqual(done["use"], ["other", "tracker"])
+        self.assertEqual(json.loads((self.kb / "tools" / "packs.json").read_text(encoding="utf-8")), {"use": ["other", "tracker"], "note": "kept"})
+        self.assertTrue((self.root / ".github/skills/acme-tracker-ticket").is_dir())
+        self.assertNotIn("tracker", json.dumps(toolpacks.ledger(self.root)["paths"]), "the ledger holds no choice")
+        done = toolpacks.set_use(self.root, "tracker", False)
+        self.assertEqual(done["use"], ["other"])
+        self.assertFalse((self.root / ".github/skills/acme-tracker-ticket").exists())
+        self.assertIn("acme-tracker-ticket", done["removed"])
+        with self.assertRaises(toolpacks.ToolpackError):
+            toolpacks.set_use(self.root, "nosuch", True)
+
+    def test_the_board_step_flips_a_factory_pack_and_answers_with_the_new_rows(self) -> None:
+        from modules.task import boardserve
+
+        board = boardserve.Board(self.root, False, 8798, [])
+        self.addCleanup(lambda: board.link.stop() if hasattr(board.link, "stop") else None)
+        rows = board.machine({"step": "toolpack-use", "name": "tracker", "on": True})["toolpacks"]
+        self.assertTrue(rows[0]["active"])
+        rows = board.machine({"step": "toolpack-use", "name": "tracker", "on": False})["toolpacks"]
+        self.assertFalse(rows[0]["active"])
+        with self.assertRaises(ValueError):
+            board.machine({"step": "toolpack-use", "name": "nosuch", "on": True})
+
+    def test_the_toggle_makes_packs_json_when_missing_and_is_refused_without_a_company_folder(self) -> None:
+        toolpacks.set_use(self.root, "tracker", True)
+        self.assertEqual(json.loads((self.kb / "tools" / "packs.json").read_text(encoding="utf-8")), {"use": ["tracker"]})
+        shutil.rmtree(self.root / "knowledge-base")
+        self.assertEqual(toolpacks.check(self.root)["toolpacks"][0]["toggle"], "nocompany")
+        with self.assertRaises(toolpacks.ToolpackError):
+            toolpacks.set_use(self.root, "tracker", True)
+
     def test_a_factory_pack_is_off_until_use_names_it_and_off_again_when_dropped(self) -> None:
         row = toolpacks.listed(self.root)["tracker"]
         self.assertEqual((row["source"], row["active"]), ("harness", False))

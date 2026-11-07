@@ -777,6 +777,14 @@ class Board:
             except toolpacks.ToolpackError as error:
                 raise ValueError(str(error)) from None
             return {"added": done, "missing": [name for name, ok in (row.get("programs") or {}).items() if not ok]}
+        elif step == "toolpack-use":  # a factory pack on or off: its name in `use` of the knowledge base's packs.json, and the skills follow at once (1.7.34)
+            from core import toolpacks
+
+            try:
+                toolpacks.set_use(self.root, str(data.get("name") or ""), bool(data.get("on")))
+            except toolpacks.ToolpackError as error:
+                raise ValueError(str(error)) from None
+            step = "toolpacks"
         elif step in ("toolpack-update", "toolpack-remove"):  # the paired browser is the person's: what `harness toolpack add --replace` / `remove` do at a terminal
             from core import toolpacks
 

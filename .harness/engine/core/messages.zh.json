@@ -3135,6 +3135,7 @@
   "gate.external.unlinked.none": "现在没有打开的任务。先用 skill `harness-my-task` 开一个 Q&A 任务，关联这一条（`harness task link add --task <任务> {ref}`），再重跑命令：之后这次写会等用户批准。",
   "gate.external.unlinked.one": "先关联它（`harness task link add {ref}`），再重跑命令：之后这次写会等用户批准。",
   "gate.external.unlinked.some": "先关联它（`harness task link add --task {task} {ref}`），再重跑命令：之后这次写会等用户批准。",
+  "gate.external.unreadable": "gate 读不出这一行会跑什么，而它提到了 `{program}`（外部系统的程序），所以扣下。请把命令直接写出来，程序名放最前面，一条一条跑，不要经 pipe 进 shell、字符串或脚本。命令：{call}",
   "gate.external.unseen": "这一行命令里有一段 gate 看不出跑的是什么程序（变量认不出，或字符串里的命令），所以扣下：它可能连到外部系统。把每条命令写清楚，程序名放在前面，一条一条运行。命令：{call}",
   "reach.vscode_env": "这个 VS Code 启动时没带这台电脑的设置（工具目录、CA bundle）。请完全退出 VS Code，再从看板点 Open VS Code。",
   "reach.vscode_env.context": "这个 VS Code 启动时没带这台电脑的设置（{missing}）。工具命令在这里可能失败：'command not found' 或证书错误。遇到时告诉用户：完全退出 VS Code，再从任务看板点 Open VS Code。不要自己绕过去。",

@@ -139,7 +139,7 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
         systems = ctx.policy("tools").get("systems") or {}
         if not systems or external.validate(systems):
             return None
-        every = external.classify(event.command, systems, unseen=True)
+        every = external.classify(event.command, systems, unseen=True, root=ctx.root, cwd=event.cwd or "")
         results = [_judge_one(event, ctx, systems, action, decision) for action, decision in every]
     except Exception:  # noqa: BLE001 - see above
         return None
@@ -286,7 +286,8 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
         draft = outbox.write_draft(ctx.root, task, code, action, command, event.session_id, minutes) if task else ""
         return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft), facts=dict(facts, kind="external-outbox"))
     if judged.get("unseen"):
-        return Decision(permission="deny", reason=rules.say("gate.external.unseen", call=command), facts=dict(facts, kind="external-unseen"))
+        named = action.target if action.unseen else ""
+        return Decision(permission="deny", reason=rules.say("gate.external.unreadable" if named else "gate.external.unseen", call=command, program=named), facts=dict(facts, kind="external-unseen"))
     if judged.get("unlinked"):
         return Decision(permission="deny", reason=rules.say("gate.external.unlinked", system=action.system, ref=judged["unlinked"], call=command, step=_link_step(ctx, judged["unlinked"], data)), facts=dict(facts, kind="external-unlinked"))
     reason = {external.DENY: rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, command)

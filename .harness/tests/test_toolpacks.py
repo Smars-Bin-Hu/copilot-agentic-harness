@@ -589,7 +589,7 @@ class LinkedItems(TaskCase):
         holder = tempfile.TemporaryDirectory()
         self.addCleanup(holder.cleanup)
         source = make(Path(holder.name) / "tracker", links={"trk": {"label": "Ticket", "type": "tracker", "url": "https://tracker.example.org/{org}/item/{id}"}})
-        kind = dict(KIND, item="\\btracker(?:\\s+--org\\s+\\S+)?\\s+(?:comment|update)\\s+(\\d+)", link="trk", verbs=KIND["verbs"] + [{"pattern": "\\b(?:create|update)\\b", "verb": "write"}])
+        kind = dict(KIND, item="\\btracker(?:\\s+--org\\s+\\S+)?\\s+(?:comment|update)\\s+(\\d+)", link="trk", verbs=[{"pattern": "^(?:--org\\s+\\S+\\s+)?(?:[a-z]+\\s+)?(?:--help|-h)\\s*$", "verb": "read"}] + KIND["verbs"] + [{"pattern": "\\b(?:create|update)\\b", "verb": "write"}])
         (source / "types" / "tracker.json").write_text(json.dumps(kind), encoding="utf-8")
         (source / "rules.json").unlink()
         toolpacks.add(self.root, str(source))
@@ -697,6 +697,66 @@ class LinkedItems(TaskCase):
         self.open_links()
         self.assertEqual(self.term("tracker --org demo comment 0042 hi"), {})
         self.assertEqual(tasklife.link(self.root, NAME, "trk:0042", True)["changed"], False)
+
+    # 1.7.23 (C8 R2: B1-B9): every way round the net that was found, each held or refused, never let through
+
+    def held(self, command: str) -> None:
+        self.assertEqual(self.term(command).get("permissionDecision"), "deny", command)
+
+    def test_an_interpreter_running_the_program_is_the_program(self) -> None:
+        """H1: `python3 <pack>/bin/ado ...` was let through whole."""
+        self.open_links()
+        for write in ("comment 7 hi", "update 7 --state x", "create --title x"):
+            for prefix in ("python3 .harness/toolpacks/tracker/bin/tracker", "python /x/y/bin/tracker", "py -3 tracker.py", "node tools/tracker.js", "bash ./tracker", "sh -x tracker", "pwsh -File tracker.ps1"):
+                self.held(f"{prefix} --org demo {write}")
+        reason = self.term("python3 .harness/toolpacks/tracker/bin/tracker --org demo comment 7 hi")["permissionDecisionReason"]
+        self.assertIn("task link add trk:7", reason, "judged as the program itself: an item the task does not name")
+        self.assertEqual(self.term("python3 .harness/toolpacks/tracker/bin/tracker --org demo comment 42 hi"), {}, "a linked and opened item goes through, as the plain call does")
+        self.assertEqual(self.term("python3 -m tracker --org demo comment 42 hi"), {})
+
+    def test_shell_structure_does_not_hide_a_command(self) -> None:
+        """H2: groups, `if`, `for`, `while`, `case`, a subshell, an escaped name, `builtin eval`."""
+        self.open_links()
+        for line in ("{ tracker --org demo comment 7 hi; }", "if true; then tracker --org demo comment 7 hi; fi", "for i in 7; do tracker --org demo comment $i hi; done",
+                     "while true; do tracker --org demo comment 7 hi; done", "case x in x) tracker --org demo comment 7 hi;; esac", "( tracker --org demo comment 7 hi )",
+                     "t\\racker --org demo comment 7 hi", "\\tracker --org demo comment 7 hi", "builtin eval tracker --org demo comment 7 hi", "! tracker --org demo comment 7 hi",
+                     "true && { tracker --org demo create --title x; }"):
+            self.held(line)
+        self.assertEqual(self.term("{ tracker --org demo comment 42 hi; }"), {}, "a linked and opened item inside a group is the same call")
+
+    def test_a_line_the_gate_cannot_read_that_names_a_program_is_held(self) -> None:
+        """H3: xargs, a string into a shell, here-strings, source <(...), -c / -e, PowerShell, a script file."""
+        self.open_links()
+        for line in ("echo tracker | xargs -I{} {} comment 7 hi", "echo 'tracker --org demo comment 7 hi' | bash", "echo 'tracker comment 7' | sh -s", "bash <<< 'tracker --org demo comment 7 hi'",
+                     "source <(echo 'tracker --org demo comment 7 hi')", ". <(echo tracker)", "python3 -c \"import subprocess; subprocess.run(['tracker','comment','7'])\"",
+                     "node -e \"require('child_process').execSync('tracker comment 7')\"", "Invoke-Expression 'tracker comment 7'", "iex 'tracker comment 7'",
+                     "Start-Process tracker -ArgumentList 'comment 7'", "printf 'tracker comment 7' > x.sh; bash x.sh", "bash <<EOF\ntracker comment 7\nEOF"):
+            self.held(line)
+        reason = self.term("echo 'tracker comment 7' | bash")["permissionDecisionReason"]
+        self.assertIn("`tracker`", reason)
+        (self.root / "tools").mkdir()
+        (self.root / "tools" / "run.sh").write_text("#!/bin/sh\ntracker --org demo comment 7 hi\n", encoding="utf-8")
+        (self.root / "tools" / "calc.py").write_text("print(1 + 1)\n", encoding="utf-8")
+        self.held("bash tools/run.sh")
+        self.held("sh ./tools/run.sh")
+        self.assertEqual(self.term("python3 tools/calc.py"), {}, "a script that names no outside program: as before")
+
+    def test_normal_work_is_not_held(self) -> None:
+        """No false holds: the same constructs with no outside program in them."""
+        self.open_links()
+        for line in ("git status", "ls | head", "echo hello", "python3 -m unittest test_gate", "cd .harness/tests && python3 -m unittest test_gate", "echo hi | xargs -n1 echo",
+                     "python3 -c \"print(1)\"", "node -e \"console.log(1)\"", "echo ls | bash", "bash <<< 'echo hi'", "for i in 1 2; do echo $i; done", "{ echo a; echo b; }",
+                     "if true; then echo a; fi", "cat x | grep tracker-note", "echo tracker-notes > notes.txt", "python3 .harness/engine/cli.py task list", "harness task list 2>&1 | head"):
+            self.assertEqual(self.term(line), {}, line)
+
+    def test_a_redirection_is_not_part_of_the_call(self) -> None:
+        """H4: `--help 2>&1` was read as a write."""
+        self.open_links()
+        for line in ("tracker --org demo --help", "tracker --org demo --help 2>&1", "tracker --org demo comment --help 2>&1 | head", "tracker --org demo -h >/dev/null 2>&1", "tracker --org demo get 7 2>&1", "tracker --org demo get 7 2>&1 | head", "tracker --org demo get 7 > out.txt", "tracker --org demo get 7 2>/dev/null",
+                     "tracker --org demo get 7 >> out.txt 2>&1", "tracker --org demo get 7 < in.txt"):
+            self.assertEqual(self.term(line).get("permissionDecision"), None, line)
+        self.held("tracker --org demo comment 7 hi 2>&1")
+        self.assertIn("task link add trk:7", self.term("tracker --org demo comment 7 hi 2>&1")["permissionDecisionReason"])
 
     def test_the_task_page_offers_the_linked_items_chip_only_when_a_pack_can_scope_them(self) -> None:
         from modules.task import taskdesk, tasklife

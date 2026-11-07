@@ -469,7 +469,7 @@
   "approval.person_only": "{name} can only be run by the user, by hand, in their own terminal. An agent cannot run it; a pipe or a script cannot either.",
   "approval.person_only.typed": "{name} can only be run by the user, by hand, in their own terminal, with a typed code. An agent cannot run it; a pipe or a script cannot either.",
   "approval.ask": "{question}, type {code} (anything else cancels): ",
-  "breaker.stop": "Refused: {reason}\nThis same refusal has now come up {count} times. Stop retrying, and do not look for a way around it. Tell the user what stopped you, and wait for the user to decide.",
+  "breaker.stop": "Refused: {reason}\nThe same refusal has come up {count} times. Stop retrying, and do not look for a way around it. Tell the user what stopped you, and wait for the user to decide.",
   "cli.version.unreadable": "harness: cannot read the version: {error}",
   "target.unknown": "There is no target repository called `{name}`. Known repositories: {known}.",
   "target.none": "(no target repository is set up)",

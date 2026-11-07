@@ -125,7 +125,7 @@ def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optiona
             if cmdview.say_of(part, system.get("say")):
                 args, said = part, cmdview.say_of(part, system.get("say"))
                 break
-    writes = sum(1 for part in cmdview.all_args(command, programs) if cmdview.say_of(part, system.get("say")))  # a held line of several writes: the card says how many (1.7.29)
+    writes = sum(1 for part in re.split(r"\n|;|&&|\|\||\|", command) if re.search(r"\S", part) and cmdview.say_of(cmdview.args_of(part, programs), system.get("say")))  # a held line of several writes: the card says how many (1.7.29); by command, not by the word `ado` (a `--conn ado` is no second write)
     return {"say": said, "writes": writes, "body": cmdview.body_of(args, system.get("body"), folder, root)}
 
 

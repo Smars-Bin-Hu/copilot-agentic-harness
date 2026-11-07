@@ -282,7 +282,7 @@ const CHAT = (function () {
     const problem = h("div", {class: "sub"});  // what is not right yet: shown quietly while the person types
     const blocked = h("div", {class: "bad"});
     const kbBox = h("div", {class: "new-kb"});  // the knowledge base domains a task may be about: ticks, and "None" (a choice of its own). Drawn when the options come.
-    const go = h("button", {type: "button", class: "act hot", disabled: "disabled"}, t("board.new.go"));
+    const go = h("button", {type: "button", class: "act hot primary", disabled: "disabled"}, t("board.new.go"));
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const langChips = ["en", "zh"].map((lang) => {
       const chip = h("button", {type: "button", class: "chip" + (lang === "en" ? " on" : ""), "aria-pressed": lang === "en" ? "true" : "false"}, t("desk.send.lang." + lang));

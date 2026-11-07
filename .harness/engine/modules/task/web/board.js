@@ -189,7 +189,8 @@
       });
       nodes.push(more);
     }
-    return h("div", {class: "act-strip"}, nodes);
+    const strip = h("div", {class: "act-strip"}, nodes);
+    return strip.querySelector("button, a") ? strip : null;  // nothing to press (only the room kept for steer and stop): the cell says "-" like any row with no action (1.7.28)
   }
   function actionCell(row) {
     const strip = actionStrip(row);

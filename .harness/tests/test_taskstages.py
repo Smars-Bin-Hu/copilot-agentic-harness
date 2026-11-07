@@ -102,7 +102,7 @@ class PerKind(StageCase):
         for name, kind in (("one-off", "rca"), ("job", "dev")):
             self.new(name, kind)
             req = self.folder(name) / "REQ.md"
-            req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Why the load fails.").replace("<一两段。用户的原意，不加你自己的设想>", "为什么加载失败。"), encoding="utf-8")
+            req.write_text("\n".join(("Why the load fails." if task_ops._PLACEHOLDER.match(line.strip()) else line) for line in req.read_text(encoding="utf-8").splitlines()) + "\n", encoding="utf-8")  # every template line written: a line still `<...>` keeps the button away (1.7.22)
         desk = taskdesk.desk(self.root, "one-off", ("confirm-req", "pause"))
         self.assertFalse(desk["req_unconfirmed"], "nothing waits on it")
         self.assertIn("confirm-req", [item["action"] for item in desk["actions"]], "1.7.20: the button is there in any tier once REQ.md is written")

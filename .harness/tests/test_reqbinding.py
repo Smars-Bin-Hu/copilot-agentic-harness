@@ -14,8 +14,9 @@ from modules.task import taskdesk, taskreview
 
 
 def written(text: str) -> str:
-    """The English template with the first section filled in."""
-    return text.replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Keep the latest row per id.").replace("<一两段。用户的原意，不加你自己的设想>", "Keep the latest row per id.")
+    """The English template written: the first section says what to do, every other template line is filled too (a line still `<...>` keeps the confirm button away, 1.7.22)."""
+    text = text.replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Keep the latest row per id.").replace("<一两段。用户的原意，不加你自己的设想>", "Keep the latest row per id.")
+    return "\n".join(("Nothing more." if task_ops._PLACEHOLDER.match(line.strip()) else line) for line in text.splitlines()) + "\n"
 
 
 class DigestTests(TaskCase):

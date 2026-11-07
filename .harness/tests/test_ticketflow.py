@@ -100,6 +100,11 @@ class HeldCallCard(TaskCase):
         self.assertEqual(card["say"], "Add a comment to ticket 7")
         self.assertEqual((card["body"]["from"], card["body"]["lines"], card["body"]["text"]), ("file", 2, "Checked the load.\nAll good.\n"))
 
+    def test_the_facts_a_type_shows_are_on_the_card(self) -> None:
+        """1.7.25 (K11): `show` of the type (the sample's `state`) reaches the card of a held call; the page draws every fact it is given."""
+        card = self.held("demotracker --project DEMO set-state 7 Done")
+        self.assertEqual((card["facts"]["ticket"], card["facts"]["state"]), ("7", "Done"))
+
     def test_a_bare_file_name_is_found_from_the_repository_root_as_the_program_finds_it(self) -> None:
         """1.7.23 (R2 #2): `--file notes.md` showed the task's notes.md as the text, and the program, run from the repository root, found no such file."""
         card = self.held("demotracker --project DEMO comment 7 --file notes.md")

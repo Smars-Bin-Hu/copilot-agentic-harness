@@ -101,15 +101,17 @@ def script_of(folder: Path, value: str) -> Optional[Dict[str, Any]]:
 
 
 def facts(command: str, show: Optional[Dict[str, Any]]) -> Dict[str, str]:
-    """The facts the pack says to show beside a command: `{name: first group of the pattern}` for each pattern that matches. A pattern that does not compile is skipped."""
+    """The facts the pack says to show beside a command: `{name: first group of the pattern}` for each pattern that matches. A pattern that does not compile is skipped. A pattern that
+    matches several times (an option given twice: `--tag a --tag b`) gives all of them, in order, joined with a comma (1.7.25)."""
     out: Dict[str, str] = {}
     for name, pattern in (show or {}).items():
         try:
-            match = re.search(str(pattern), command, re.IGNORECASE)
+            found = list(re.finditer(str(pattern), command, re.IGNORECASE))
         except re.error:
             continue
-        if match:
-            out[str(name)] = (match.group(1) if match.groups() else match.group(0))[:120]
+        values = list(dict.fromkeys((item.group(1) if item.groups() else item.group(0)) for item in found if (item.group(1) if item.groups() else item.group(0))))
+        if values:
+            out[str(name)] = ", ".join(values)[:120]
     return out
 
 

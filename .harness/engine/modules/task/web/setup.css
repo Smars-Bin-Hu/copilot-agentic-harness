@@ -77,3 +77,11 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .su-fact .su-open{margin-left:auto;flex:none}.su-fact-open{justify-content:space-between}.su-fact .su-row{width:100%}.su-facts>.su-row{margin:6px 0}
 .su-dot.none{background:var(--line2)}
 @media(max-width:600px){.su-fk{width:auto;flex:1 1 0;min-width:0}.su-fv{flex:1 1 100%;padding-left:16px;order:3}.su-fact .su-open{order:2}}
+/* 1.7.37: Programs rows (a name, who needs it, found or not, and "I installed it here" under a missing one) */
+.mc-prog{margin:0 0 8px}.mc-prow{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:13px}.mc-pname{font-family:var(--mono)}.mc-pwho{color:var(--soft);flex:1;min-width:0;overflow-wrap:anywhere}
+.mc-pstate{white-space:nowrap}.mc-pstate.ok{color:var(--good)}.mc-pstate.bad{color:var(--hot)}
+.mc-phere{display:grid;grid-template-columns:1fr auto;gap:4px 6px;align-items:center;margin:4px 0 0 0}.mc-phere .sv-cap{grid-column:1/-1}.mc-phere input{min-width:0}
+.mc-added{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin:6px 0 8px;font-size:12px}.mc-added .mc-dir{overflow:visible;white-space:normal;overflow-wrap:anywhere}
+.mc-x{border:0;background:transparent;color:var(--soft);cursor:pointer;font-size:15px;line-height:1;padding:0 4px}.mc-x:hover{color:var(--hot)}
+.mc-signins .sv-line.orphan{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sv-shared{color:var(--soft);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 0}

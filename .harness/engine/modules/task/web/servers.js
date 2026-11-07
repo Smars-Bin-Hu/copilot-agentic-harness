@@ -137,7 +137,7 @@ const SERVERS = (function () {
     const signed = Boolean(tool.account);
     const shared = tool.shared_by.length ? t("machine.signins.shared", {names: tool.shared_by.join(", ")}) : t("machine.signins.shared.none");
     const line = h("button", {type: "button", class: "sv-line" + (signed ? " saved" : ""), "aria-expanded": "false", title: [tool.program, tool.types.join(", "), shared, tool.login].filter(Boolean).join("\n")},
-      h("b", {class: "sv-alias"}, tool.program), h("span", {class: "sv-where"}, shared),
+      h("b", {class: "sv-alias"}, tool.program), h("span", {class: "sv-shared"}, shared),
       h("span", {class: "sv-state " + (signed ? "ok" : "none"), title: signed ? t("machine.signins.tool.saved.tip", {program: tool.program, account: tool.account}) : t("connections.none.tip")}, signed ? "\u2713 " + tool.account : t("connections.none")));
     const box = h("div", {class: "sv-form", hidden: ""});
     const said = h("span", {class: "sv-said"});
@@ -165,7 +165,7 @@ const SERVERS = (function () {
     const forget = h("button", {type: "button", class: "act danger"}, t("connections.forget"));
     const said = h("span", {class: "sv-said"});
     forget.addEventListener("click", () => { forget.disabled = true; ask("forget", {alias: item.name}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
-    return h("div", {class: "sv-row"}, h("div", {class: "sv-line orphan", title: t("machine.signins.orphan.tip", {name: item.name})}, h("b", {class: "sv-alias"}, item.name), h("span", {class: "sv-where"}, t("machine.signins.orphan")),
+    return h("div", {class: "sv-row"}, h("div", {class: "sv-line orphan", title: t("machine.signins.orphan.tip", {name: item.name})}, h("b", {class: "sv-alias"}, item.name), h("span", {class: "sv-shared"}, t("machine.signins.orphan")),
       h("span", {class: "sv-state none"}, item.account || "\u2014"), forget, said));
   }
 
@@ -240,7 +240,7 @@ const SERVERS = (function () {
 
   // One line for Get ready and the Enter screen: how many servers, how many with the person's identity.
   function summary() {
-    return ask("list").then((found) => ({tools: found.signins.tools.map((tool) => ({program: tool.program, account: tool.account, shared_by: tool.shared_by})), orphans: found.signins.orphans.map((item) => item.name), n: found.connections.length, saved: found.connections.filter((row) => row.saved).length, rows: found.connections.map((row) => ({alias: row.alias, saved: Boolean(row.saved), account: row.account || "", env: row.env || "", own: Boolean(row.own)}))}));
+    return ask("list").then((found) => ({tools: found.signins.tools.map((tool) => ({program: tool.program, account: tool.account, shared_by: tool.shared_by})), orphans: found.signins.orphans.map((item) => item.name), n: found.connections.length, saved: found.connections.filter((row) => row.saved).length, rows: found.connections.filter((row) => found.signins.connections.some((one) => one.alias === row.alias)).map((row) => ({alias: row.alias, saved: Boolean(row.saved), account: row.account || "", env: row.env || "", own: Boolean(row.own)}))}));
   }
 
   // "Open VS Code with identities": tick the identities this window holds; those that cannot share it are reached through `harness as`, marked so.

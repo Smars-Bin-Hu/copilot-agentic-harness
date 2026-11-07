@@ -228,8 +228,6 @@ const SETUP = (function () {
       rows.push(fact(t("setup.toolpacks"), "none", packs.length ? names(packs.map((name) => ({name, kind: !ready.has(name) ? "none" : ready.get(name) ? "ok" : "need", tip: ready.has(name) ? t(ready.get(name) ? "setup.fact.pack.ready" : "setup.fact.pack.not") : ""}))) : t("setup.fact.packs.none"), packs.join(", ") || t("setup.fact.packs.tip"), "", openTab("packs")));
       const conns = c.connections || [];
       rows.push(fact(t("connections.title"), "none", conns.length ? names(conns.map((name) => ({name, kind: "none"}))) : t("setup.fact.conns.none"), conns.join(", ") || t("setup.fact.conns.tip"), "", openTab("connections")));
-      const rec = c.recipe || {};
-      if (rec.present) rows.push(fact(t("setup.fact.recipe"), rec.error ? "need" : "ok", rec.error ? t("setup.fact.recipe.bad") : [rec.host ? t("setup.fact.recipe.host", {host: rec.host}) : "", t("setup.fact.recipe.hints", {n: rec.tool_folders})].filter(Boolean).join(" \u00b7 "), rec.error || t("setup.fact.recipe.tip", {host: rec.host || "-", proxy: rec.proxy || "-", n: rec.tool_folders}), "", openTab("computer")));
       // the dots of the name rows carry the state themselves: the row's own dot is hidden for them
       factsBox.replaceChildren(...rows);
       factsBox.querySelectorAll(".su-fact").forEach((node) => { if (node.querySelector(".su-names")) node.firstChild.classList.add("none"); });

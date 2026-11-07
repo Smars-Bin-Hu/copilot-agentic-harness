@@ -172,8 +172,12 @@ const SERVERS = (function () {
   function signinsBlock(ctx) {
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
     const addBox = h("details", {class: "sv-add"}, h("summary", null, t("connections.own.add")));
+    const launch = h("button", {type: "button", class: "act hot"}, t("connections.open"));  // the same button as on the Connections tab
+    launch.addEventListener("click", () => { if (ctx && ctx.close) ctx.close(); choose(); });
     const redraw = () => ask("list").then((found) => {
       const s = found.signins;
+      launch.disabled = !found.connections.some((row) => row.saved);
+      launch.title = launch.disabled ? t("connections.open.nothing") : "";
       const mine = found.connections.filter((row) => s.connections.some((one) => one.alias === row.alias)).sort((a, b) => a.type_label.localeCompare(b.type_label) || ENV_ORDER.indexOf(a.env) - ENV_ORDER.indexOf(b.env) || a.alias.localeCompare(b.alias));
       const parts = [...s.tools.map((tool) => toolRow(tool, redraw)), ...mine.map((row) => serverRow(row, redraw)), ...s.orphans.map((item) => orphanRow(item, redraw))];
       list.replaceChildren(...(parts.length ? parts : [h("p", {class: "sub"}, t("machine.signins.empty"))]));
@@ -181,7 +185,7 @@ const SERVERS = (function () {
       if (ctx && ctx.changed) ctx.changed();
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
     redraw();
-    return [list, addBox];
+    return [list, addBox, h("div", {class: "sv-acts"}, launch)];
   }
 
   // The Servers window.

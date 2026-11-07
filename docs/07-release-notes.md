@@ -25,6 +25,9 @@ To see which version you have: `harness --version`.
 - **The recipe's `tool_folders` entries may carry `"program": "az"`** beside `label` and `hint`; old entries keep working as hints.
 - A connection's row says "no sign-in" where it said "not set".
 
+- **Get ready no longer lists "This computer's recipe"** under From the company: the recipe (`company/tools/computer.json`) is setup hints for this computer, not something the agent gets. It shows only where it acts: the proxy and the CA host in Network, and a missing program's folder in Programs, each prefilled and marked "company" (hover: where it comes from). `harness doctor` still checks the file.
+- **Open VS Code with identities** has a place in the Sign-ins block too (it stays on the Connections tab).
+
 ### Retired
 
 - **Tool folders as a concept.** The textarea of folders is gone. A missing program has its own input; the folders you added are one small line with × for each. `HARNESS_TOOL_PATH` is the same underneath.

@@ -10,6 +10,15 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.27 (2026-11-07)
+
+### Fixed
+
+- **Fewer false holds by the gate** (retest R7). A program name that is only data is not a call: `perl -ne/-pe/-lane` and `ruby -ne` (the one-liner is code, not a file named `print`); `find ... -exec grep -l ado {} \;` and `grep -rl ado . | xargs -I{} cp {} /tmp`; file managers (`mkdir`, `touch`, `cp`, `mv`, `chmod`, `ln`, `tar`, `zip`, `unzip`, `code`, `python3 -m py_compile`, `flake8`, `ruff`, `black`) with a program name or path in their arguments; `python3 -i < /dev/null`; `git clean -n`. Nothing that was held for a real reason is let through: `-exec sh -c`, `xargs sh`, `tar --to-command`, `zip -TT`, a copied script that is then run are still held (tests for each).
+- **A line of several commands that holds a write** (`ado states; echo ---; ado update 1 ...`) now gets its card's title from the write. When the agent then sends the write alone, the waiting card takes over the short command and keeps its code, so there is one card, not an orphan beside a new one.
+- **Words**: the note on a waiting question says "approve or dismiss" (the button is Dismiss), and the facts of a held call (state, title, tag, branch, param, ...) have names in Chinese.
+- **Protocol README**: the limits section lists the classes the gate cannot see (build and test tools, `python3 -m`, `find | xargs bash`, ...).
+
 ## 1.7.26 (2026-11-07)
 
 ### Fixed

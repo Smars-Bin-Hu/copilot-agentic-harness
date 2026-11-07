@@ -147,7 +147,7 @@
           "en": "it rewrites or drops git history, branches or changes that are not committed",
           "zh": "会改写或丢弃 git 历史、分支或未提交的改动"
         },
-        "pattern": "\\bgit\\s+(?:push|reset\\s+--hard|clean|checkout\\s+(?:-f|--force)|branch\\s+-D|stash\\s+(?:drop|clear)|restore(?!\\s+--staged)|filter-branch|reflog\\s+expire)\\b"
+        "pattern": "\\bgit\\s+(?:push|reset\\s+--hard|clean(?!\\s+(?:-[a-zA-Z]*n[a-zA-Z]*|--dry-run)(?![\\w-]))|checkout\\s+(?:-f|--force)|branch\\s+-D|stash\\s+(?:drop|clear)|restore(?!\\s+--staged)|filter-branch|reflog\\s+expire)\\b"
       },
       {
         "why": {

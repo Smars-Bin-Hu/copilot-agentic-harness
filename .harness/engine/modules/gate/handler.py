@@ -291,7 +291,7 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
             outbox.mark(ctx.root, outbox.draft_of(used), "sent")
             return None  # the person read this command and approved it: it runs once
         task = data["task"] if data else None
-        code = approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task))
+        code = outbox.merge_into_waiting(ctx.root, task or "", event.session_id, event.command, action, minutes) or approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task))
         draft = outbox.write_draft(ctx.root, task, code, action, command, event.session_id, minutes) if task else ""
         return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft), facts=dict(facts, kind="external-outbox"))
     if judged.get("unseen"):

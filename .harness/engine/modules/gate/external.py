@@ -492,7 +492,7 @@ def _head(tokens: List[str]) -> Optional[str]:
 
 
 def _substitutions(token: str) -> List[str]:
-    """The commands inside `$( ... )` and `` ` ... ` `` of one word: a double quote does not hide them from the shell (1.7.21)."""
+    """The commands inside `$( ... )` of one word (backticks became `$( )` in `join_lines`): a double quote does not hide them from the shell (1.7.21)."""
     found: List[str] = []
     index = token.find("$(")
     while index != -1:
@@ -502,9 +502,6 @@ def _substitutions(token: str) -> List[str]:
             end += 1
         found.append(token[index + 2: end - 1 if depth == 0 else end])
         index = token.find("$(", end)
-    if "`" in token:
-        parts = token.split("`")
-        found.extend(parts[1::2])
     return found
 
 
@@ -544,7 +541,7 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
         tokens = _through_interpreter(tokens, programs)
         if depth < MAX_DEPTH:
             for token in tokens:
-                for inner in (_substitutions(token) if ("$(" in token or "`" in token) else []):
+                for inner in (_substitutions(token) if "$(" in token else []):
                     _scan(inner, systems, programs, depth + 1, found, variables, ctx)
         start = _start(tokens, programs)
         name = _owner(systems, programs[_program(tokens[start])], " ".join(tokens[start + 1:])) if start is not None else None
@@ -564,7 +561,7 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
             _scan(_evaluated(tokens) or "", systems, programs, depth + 1, found, variables, ctx)
             continue
         head = _head(tokens)
-        if head is not None and (head.startswith("$") or "`" in head):  # a program the gate cannot read the name of: it may be a listed one
+        if head is not None and head.startswith("$"):  # a program the gate cannot read the name of: it may be a listed one
             found.append(Action("", "none", WRITE, "", " ".join(tokens), named=False, call=" ".join(tokens), unseen=True))
             continue
         waited = _wait_run(tokens)

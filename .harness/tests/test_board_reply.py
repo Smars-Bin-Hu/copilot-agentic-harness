@@ -434,7 +434,8 @@ class ServeTests(SendCase):
         self.assertTrue(boardserve.trust_chat(fixed))
         self.assertEqual((fixed["state"], fixed["active"]), ("waiting", False))
         self.assertEqual(boardserve.trust_chat(row({"bound": True, "state": "error"})), True)
-        for chat in ({"bound": True, "state": "busy"}, {"bound": True, "state": "input"}, {"bound": False, "why": "no-chat"}, {}):
+        self.assertEqual(boardserve.trust_chat(row({"bound": True, "state": "input"})), True)  # waiting for the person's answer is not at work (1.7.20)
+        for chat in ({"bound": True, "state": "busy"}, {"bound": False, "why": "no-chat"}, {}):
             same = row(chat)
             self.assertFalse(boardserve.trust_chat(same), chat)
             self.assertEqual(same["state"], "working")

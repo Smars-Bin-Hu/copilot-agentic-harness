@@ -368,7 +368,7 @@ const Status = (function () {
     const make = {
       model: (data, key, focus) => modelMark(data.chat, key, focus),
       context: (data, key, focus) => contextMark(data.chat, key, focus),
-      run: (data, key, focus) => runMark(data.chat, key, focus),
+      run: (data, key, focus) => (stateOf(data, live) === "waiting" ? null : runMark(data.chat, key, focus)),  // a task that waits for the person does not turn (1.7.22): VS Code may still call the chat busy
       stage: (data, key) => stageMark(data, live, key),
       todo: (data, key, focus) => todoMark(data.todo, key, focus),
       open: (data, key, focus) => openMark(data.open_envs, key, focus),
@@ -376,7 +376,7 @@ const Status = (function () {
     const sigs = {
       model: (data) => data.chat && data.chat.model || "",
       context: (data) => JSON.stringify(data.chat && data.chat.context || null),
-      run: (data) => data.chat && data.chat.state === "busy" ? data.chat.started_at || "" : "",
+      run: (data) => (stateOf(data, live) === "waiting" ? "" : data.chat && data.chat.state === "busy" ? data.chat.started_at || "" : ""),
       stage: (data) => JSON.stringify([data.stages, data.status, stateOf(data, live), data.waiting_why, live]),
       todo: (data) => JSON.stringify(data.todo || null),
       open: (data) => JSON.stringify(data.open_envs || null),

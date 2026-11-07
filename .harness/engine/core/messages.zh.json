@@ -2661,6 +2661,7 @@
   "desk.live.stale": "看板现在没有应答，下面是它给出的最后内容。",
   "desk.live.cut": "到此截断，其余在 VS Code 里。",
   "desk.live.wait": "等你",
+  "desk.live.held": "被扣下等你批准：命令在待批列表里",
   "desk.live.thought": "想了",
   "desk.live.thinking": "思考中",
   "desk.live.working": "工作中",

@@ -13,7 +13,7 @@ const LIVE = (function () {
   const SLOW = 3000;  // after a failed one
   const LINK_DOWN = ["starting", "none", "no-cli", "cli-failed", "many", "error", "lost", "off"];  // why the link to VS Code itself is not there (the other reasons are about this task's chat)
 
-  const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, listeners: [], needs: [], started: ""};
+  const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, held: [], listeners: [], needs: [], started: ""};
 
   const svg = (paths, size, cls) => {
     const node = document.createElementNS(NS, "svg");
@@ -165,8 +165,16 @@ const LIVE = (function () {
     rec.subList.replaceChildren(...[...sub.items.map(subLine), sub.more ? h("li", {class: "sub-think"}, t("desk.live.subagent.more")) : null, !sub.items.length ? h("li", {class: "sub-think"}, t("desk.live.subagent.none")) : null].filter(Boolean));
   }
 
+  // A call the gate held for the person fails in the chat ("Run Shell Command failed"): when its command is one waiting in the outbox, it is shown as held, not as failed (1.7.22).
+  const flat = (text) => String(text || "").replace(/\s+/g, " ").trim();
+  function isHeld(item) {
+    if (item.k !== "tool" || item.st !== "fail" || !item.target || !st.held.length) return false;
+    const target = flat(item.target).slice(0, 60);
+    return target.length > 3 && st.held.some((command) => command.includes(target) || target.includes(command.slice(0, 60)));
+  }
   function paint(rec, item) {
-    const sig = JSON.stringify(item);
+    const held = isHeld(item);
+    const sig = JSON.stringify(item) + (held ? "|held" : "");
     if (sig === rec.sig) return;
     rec.sig = sig;
     rec.item = item;
@@ -181,20 +189,20 @@ const LIVE = (function () {
     } else if (item.k === "tool") {
       const kind = kindOf(item.tool || "", item.name || "");
       if (rec.kind2 !== kind) { rec.kind2 = kind; rec.ico.replaceChildren(svg(ICONS[kind], 15)); }
-      const label = item.say || item.name || item.tool || "";
+      const label = held ? t("desk.live.held") : item.say || item.name || item.tool || "";
       setText(rec.say, label);
       rec.say.title = label;
       setText(rec.tg, item.target || "");
       rec.tg.hidden = !item.target;
       rec.tg.title = (item.target || "") + (item.cut ? " …" : "");
-      for (const name of ["run", "wait", "fail", "done"]) rec.el.classList.toggle("is-" + name, (item.st === "stop" ? "done" : item.st || "done") === name);  // classList: the `enter` class is not lost
+      for (const name of ["run", "wait", "fail", "done"]) rec.el.classList.toggle("is-" + name, (held ? "wait" : item.st === "stop" ? "done" : item.st || "done") === name);  // classList: the `enter` class is not lost
       paintSub(rec, item.sub);
       const time = rec.el2;
       if (item.st === "run" && item.t0) { running(time, item.t0); }
       else {
         stopped(time);
         const label2 = time.querySelector(".st-time");
-        setText(label2, item.st === "wait" ? t("desk.live.wait") : item.st === "run" ? "" : item.st === "stop" ? t("desk.trace.stopped") : (item.st === "fail" ? "✗" : "✓") + (item.t0 && item.t1 ? " " + seconds(item.t1 - item.t0) : ""));
+        setText(label2, held || item.st === "wait" ? t("desk.live.wait") : item.st === "run" ? "" : item.st === "stop" ? t("desk.trace.stopped") : (item.st === "fail" ? "✗" : "✓") + (item.t0 && item.t1 ? " " + seconds(item.t1 - item.t0) : ""));
       }
     } else {
       const done = !item.run;
@@ -336,6 +344,8 @@ const LIVE = (function () {
       }
       if (typeof ROUNDS !== "undefined") { if (!info.off) roundsHere(ROUNDS.node); ROUNDS.follow(info.task); }
       st.chat = info.chat || null;
+      const heldNow = (info.held || []).map(flat);
+      if (heldNow.join("\n") !== st.held.join("\n")) { st.held = heldNow; for (const rec of st.nodes.values()) if (rec.item) paint(rec, rec.item); }  // a card that arrives later changes how its call reads
       st.off = info.off || "";
       const nothing = st.chat && !st.chat.bound ? st.chat.why || "" : "";
       link.title = nothing === "no-cli" || nothing === "off" ? t("board.vs.why." + nothing) : t("board.vs.open");

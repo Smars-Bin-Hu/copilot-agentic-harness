@@ -1256,7 +1256,7 @@
     const chat = served() && !desk.past ? desk.chat : null;
     const onLive = current === "live" && hasStream();
     if (typeof LIVE !== "undefined" && served()) {
-      LIVE.config({task: desk.task, chat, off: desk.status === "open" && !desk.past ? "" : desk.status || "closed"});
+      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed"});
       LIVE.want("tab", onLive);
       LIVE.visible(onLive);
     }

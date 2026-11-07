@@ -2661,6 +2661,7 @@
   "desk.live.stale": "The board does not answer now. What is shown is the last it gave.",
   "desk.live.cut": "Cut here. The rest is in VS Code.",
   "desk.live.wait": "waits for you",
+  "desk.live.held": "Held for your approval: the command waits in the outbox",
   "desk.live.thought": "Thought",
   "desk.live.thinking": "Thinking",
   "desk.live.working": "Working",

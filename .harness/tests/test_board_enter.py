@@ -425,10 +425,10 @@ class PageTests(unittest.TestCase):
 class DockOnEnterTests(unittest.TestCase):
     """1.7.34: the Enter screen has no gear; the dock comes down; a key counts after a window closed and not while the ? panel is open."""
 
-    def test_the_gear_is_gone_from_the_screen_and_the_dock_takes_its_place(self) -> None:
+    def test_the_gear_stays_on_the_screen_under_the_dock_column(self) -> None:
+        """The gear is the board's own panel (theme, wallpaper, language): the Enter screen keeps it, as every page does (1.7.35; 1.7.34 had hidden it by mistake)."""
         css = (taskhtml.WEB / "dock.css").read_text(encoding="utf-8")
-        self.assertIn("html.en-open .sh-gear{display:none}", css)
-        self.assertIn("html.en-open .dock-ask{bottom:20px}", css)
+        self.assertNotIn(".sh-gear{display:none}", css)
 
     def test_a_key_counts_after_a_window_closed_but_not_in_the_panel_and_not_enter_on_a_button(self) -> None:
         code = (taskhtml.WEB / "enter.js").read_text(encoding="utf-8")

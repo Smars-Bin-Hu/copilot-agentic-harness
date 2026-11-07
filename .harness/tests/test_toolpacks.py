@@ -1214,3 +1214,157 @@ class ShippedFactoryPacks(ToolpackCase):
         out = subprocess.run([sys.executable, str(REPO / ".harness" / "toolpacks" / "ado" / "bin" / "ado"), "--help"], capture_output=True, text=True, check=False).stdout
         for word in listed:
             self.assertIn(word, out, word)
+
+
+TWO_WAYS = dict(KIND, auth={"signin": {"identity": "tool", "login": "trk-login --org {org}", "label": "Its own sign-in", "needs": ["trk-login"]},
+                            "token": {"identity": "token", "label": "Token", "env": {"TRACKER_TOKEN": "token"}}},
+                test="tracker --org {org} whoami", expect="^(\\S+@\\S+)$", denied="run login first")
+
+
+class ProgramNeeds(ToolpackCase):
+    """1.7.37: what a pack needs is declared by the pack, per sign-in way, and checked as soon as it is on: the same answer everywhere."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.source / "types" / "tracker.json").write_text(json.dumps(TWO_WAYS), encoding="utf-8")
+        (self.source / "rules.json").unlink()
+        toolpacks.add(self.root, str(self.source))
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+            "board": {"type": "tracker", "env": "none", "org": "demo"},
+            "board-b": {"type": "tracker", "env": "none", "org": "demo2"},
+            "board-t": {"type": "tracker", "env": "none", "org": "demo3", "auth": "token"}}}), encoding="utf-8")
+        self.bin = self.root / "somewhere" / "bin"
+        self.bin.mkdir(parents=True)
+        for name in ("trk-login", "tracker"):
+            program = self.bin / name
+            program.write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
+            program.chmod(program.stat().st_mode | stat.S_IEXEC)
+
+    def rows(self):
+        return toolpacks.needs_report(self.root)["tracker"]
+
+    def test_a_program_of_the_pack_and_one_of_each_signin_way_in_use_are_looked_for(self) -> None:
+        got = [(row["program"], row["why"], row["found"]) for row in self.rows()]
+        self.assertEqual(got, [("tracker", "pack", False), ("trk-login", "signin:board", False), ("trk-login", "signin:board-b", False)], "the token way needs nothing")
+        launchenv.add_folder(self.root, "tracker", str(self.bin))
+        found = self.rows()
+        self.assertTrue(all(row["found"] for row in found))
+        self.assertTrue(all(row["path"].startswith(str(self.bin)) for row in found))
+
+    def test_a_missing_program_makes_the_pack_not_usable_in_the_listing_and_in_doctor(self) -> None:
+        row = next(item for item in toolpacks.check(self.root)["toolpacks"] if item["name"] == "tracker")
+        self.assertFalse(row["ok"])
+        self.assertEqual({name for name, ok in row["programs"].items() if not ok}, {"tracker", "trk-login"})
+        self.assertTrue(any("tracker" in str(line) and "trk-login" in str(line) and "Get ready" in str(line) for line in DoctorToolpacks.lines_of(self.root)))
+        launchenv.add_folder(self.root, "tracker", str(self.bin))
+        self.assertTrue(next(item for item in toolpacks.check(self.root)["toolpacks"] if item["name"] == "tracker")["ok"])
+        self.assertFalse(any("trk-login" in str(line) for line in DoctorToolpacks.lines_of(self.root)))
+
+    def test_a_pack_that_is_off_is_not_asked(self) -> None:
+        self.assertEqual(toolpacks.needs_report(self.root, include_off=False).keys(), {"tracker"})
+        self.assertEqual(toolpacks.missing_for(self.root, "board-t"), ["tracker"], "only the pack's own program for a token connection")
+        self.assertEqual(toolpacks.missing_for(self.root, "board"), ["tracker", "trk-login"])
+
+    def test_the_agent_is_told_when_a_program_is_missing(self) -> None:
+        from modules.gate import handler
+
+        line = handler.named_line(type("C", (), {"root": self.root})(), {"alias": "board", "env": "none", "call": "tracker --org demo whoami"})
+        self.assertIn("trk-login", line)
+        self.assertIn("tracker", line.split("trk-login")[0].split("。")[-1] + line)
+        launchenv.add_folder(self.root, "tracker", str(self.bin))
+        self.assertNotIn("trk-login", handler.named_line(type("C", (), {"root": self.root})(), {"alias": "board", "env": "none", "call": "tracker --org demo whoami"}))
+
+    def test_the_company_tab_counts_each_missing_program_once(self) -> None:
+        from modules.task import companyview
+
+        rows = companyview.tools(self.root, "en")
+        item = next(one for one in rows if one["name"] == "tracker")
+        self.assertEqual([m for m in item["missing"] if m.startswith("program:")], ["program:tracker", "program:trk-login"])
+        self.assertEqual({p["why"] for p in item["programs"]}, {"pack", "signin:board", "signin:board-b"})
+
+    def test_a_type_that_asks_for_a_bad_needs_list_is_refused(self) -> None:
+        bad = dict(TWO_WAYS, auth={"signin": dict(TWO_WAYS["auth"]["signin"], needs="az")})
+        self.assertTrue(any("needs" in line for line in connections.type_problems(bad)))
+
+
+class ToolLevelSignin(ToolIdentity):
+    """1.7.37: the sign-in of a program is one for the program, shared by every connection of the type, and can be made before a connection exists."""
+
+    def test_one_key_for_the_tool_and_the_old_per_connection_key_is_read_still(self) -> None:
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+            "board": {"type": "tracker", "env": "none", "org": "demo"}, "board2": {"type": "tracker", "env": "none", "org": "demo2"}}}), encoding="utf-8")
+        before = connections.signins(self.root)
+        self.assertEqual([(row["program"], row["account"], row["shared_by"]) for row in before["tools"]], [("tracker", "", ["board", "board2"])])
+        connections.save(self.root, "board", {}, who="me@example.org")
+        env = connections.read_env(self.root)
+        self.assertEqual(env["HARNESS_TOOL_TRACKER_USER"], "me@example.org")
+        self.assertNotIn(connections.env_key("board", "account"), env)
+        kind = connections.types(self.root)["tracker"]
+        for alias in ("board", "board2"):
+            self.assertEqual(connections.identity_of(env, alias, kind, connections.listed(self.root)[alias]), {"account": "me@example.org"}, "shared")
+        connections.write_env(self.root, {"HARNESS_TOOL_TRACKER_USER": None, connections.env_key("board", "account"): "old@example.org"})
+        shown = connections.signins(self.root)["tools"][0]
+        self.assertEqual(shown["account"], "old@example.org")
+        connections.forget_tool(self.root, "tracker")
+        self.assertNotIn(connections.env_key("board", "account"), connections.read_env(self.root))
+
+    def test_the_tool_can_be_signed_in_before_any_connection_exists(self) -> None:
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {}}), encoding="utf-8")
+        launchenv.save_paths(self.root, [str(self.tools)])
+        shown = connections.signins(self.root)
+        self.assertEqual([(row["program"], row["shared_by"]) for row in shown["tools"]], [("tracker", [])])
+        self.assertEqual(connections.login(self.root, "tracker")[0], 0, "the sign-in is run by the program's name")
+
+    def test_a_token_connection_is_a_row_of_its_own_and_an_orphan_is_named_until_forgotten(self) -> None:
+        token_kind = dict(KIND, type="tok", cli=["tracker"], auth={"token": {"identity": "token", "label": "Token", "env": {"TRACKER_TOKEN": "token"}}})
+        (self.source / "types" / "tok.json").write_text(json.dumps(token_kind), encoding="utf-8")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"t-one": {"type": "tok", "env": "none", "org": "x"}}}), encoding="utf-8")
+        connections.write_env(self.root, {connections.env_key("t-one", "token"): "s3", connections.env_key("gone-db", "account"): "me", connections.env_key("gone-db", "password"): "p"})
+        shown = connections.signins(self.root)
+        self.assertEqual([(row["alias"], row["state"]) for row in shown["connections"]], [("t-one", "saved")])
+        self.assertEqual(shown["orphans"], [{"name": "gone-db", "account": "me"}])
+        connections.forget(self.root, "gone-db")
+        self.assertEqual(connections.signins(self.root)["orphans"], [])
+        self.assertIn(connections.env_key("t-one", "token"), connections.read_env(self.root), "a listed connection's identity is not touched")
+
+
+class SigninsOnTheBoard(ProgramNeeds):
+    """1.7.37: the board hands the This computer tab its four blocks; the page strings carry the pieces."""
+
+    def board(self):
+        from modules.task import boardserve
+
+        board = boardserve.Board(self.root, False, 8798, [])
+        self.addCleanup(lambda: board.link.stop() if hasattr(board.link, "stop") else None)
+        return board
+
+    def test_i_installed_it_here_adds_the_folder_and_the_row_turns_found(self) -> None:
+        board = self.board()
+        rows = {row["program"]: row for row in board.machine({"step": "state"})["programs"]}
+        self.assertEqual((rows["tracker"]["found"], rows["trk-login"]["found"]), (False, False))
+        self.assertEqual(sorted(item["conn"] for item in rows["trk-login"]["needed_by"]), ["board", "board-b"])
+        with self.assertRaises(ValueError):
+            board.machine({"step": "folder-add", "program": "tracker", "path": str(self.root)})
+        after = board.machine({"step": "folder-add", "program": "tracker", "path": str(self.bin)})
+        self.assertTrue(all(row["found"] for row in after["programs"]))
+        self.assertEqual([item["path"] for item in after["paths"]], [str(self.bin)])
+        after = board.machine({"step": "paths", "paths": []})
+        self.assertEqual(after["paths"], [], "a folder you added can be taken out again")
+
+    def test_the_servers_list_carries_the_signins(self) -> None:
+        found = self.board().servers({"step": "list"})["signins"]
+        self.assertEqual([row["alias"] for row in found["connections"]], ["board-t"])
+        self.assertEqual(found["tools"][0]["program"], "trk-login")
+        self.assertEqual(found["tools"][0]["shared_by"], ["board", "board-b"])
+
+    def test_the_page_strings_for_the_four_blocks(self) -> None:
+        web = Path(toolpacks.__file__).resolve().parents[1] / "modules" / "task" / "web"
+        machine, servers, setup, enter = [(web / name).read_text(encoding="utf-8") for name in ("machine.js", "servers.js", "setup.js", "enter.js")]
+        for word in ('"folder-add"', 'machine.prog.title', 'machine.net.title', 'machine.signins.title', '"MCP "', 'SERVERS.signinsBlock', 'machine.paths.added', 'machine.paths.remove'):
+            self.assertIn(word, machine, word)
+        self.assertNotIn("machine.paths.placeholder", machine, "no Tool folders text box any more")
+        for word in ("toolRow", "orphanRow", '"forget-tool"', "signins.shared", "signins.orphan", "connections.own.add"):
+            self.assertIn(word, servers, word)
+        for word in ("machine.prog.title", "machine.net.title", "setup.fact.signins"):
+            self.assertIn(word, setup, word)
+        self.assertIn("machine.conn.notusable", enter)

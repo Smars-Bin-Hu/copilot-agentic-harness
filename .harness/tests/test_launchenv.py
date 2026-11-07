@@ -63,6 +63,42 @@ class ToolFolders(LaunchEnvCase):
         self.assertEqual(connections.read_env(self.root)["HARNESS_SERVER_DB_ACCOUNT"], "me")
 
 
+class Programs(LaunchEnvCase):
+    """1.7.37: no more tool folders as a concept: a program that is not found gets "I installed it here"."""
+
+    def test_the_folder_must_hold_the_program_that_asked_for_it(self) -> None:
+        for bad, program in ((str(self.root / "nowhere"), "az"), (str(self.root / "tools"), "az"), (str(self.tools), "other"), ("relative", "az")):
+            with self.assertRaises(ValueError, msg=bad):
+                launchenv.add_folder(self.root, program, bad)
+        self.assertEqual(launchenv.settings(self.root)["paths"], [])
+        launchenv.add_folder(self.root, "az", ' "' + str(self.tools) + '" ')
+        launchenv.add_folder(self.root, "az", str(self.tools))
+        self.assertEqual(launchenv.settings(self.root)["paths"], [str(self.tools)], "once")
+
+    def test_the_rows_say_who_needs_each_program_and_carry_the_companys_hint_for_a_missing_one(self) -> None:
+        import json
+        import tempfile
+        from test_toolpacks import make
+
+        recipe = {"tool_folders": [{"label": "Azure CLI", "hint": "C:\\tools\\az\\bin", "program": "tracker-nowhere"}, {"label": "Old", "hint": "an old entry without a program"}]}
+        (self.root / launchenv.RECIPE).write_text(json.dumps(recipe), encoding="utf-8")
+        with tempfile.TemporaryDirectory() as outside:
+            from core import toolpacks
+
+            toolpacks.add(self.root, str(make(Path(outside) / "tracker", needs={"programs": ["tracker-nowhere"], "trust": []})))
+            shown = launchenv.state(self.root)
+        rows = {row["program"]: row for row in shown["programs"]}
+        self.assertEqual(list(rows)[0], "python")
+        self.assertTrue(rows["python"]["found"])
+        self.assertEqual((rows["tracker-nowhere"]["found"], rows["tracker-nowhere"]["hint"], rows["tracker-nowhere"]["needed_by"][0]["pack"]), (False, "C:\\tools\\az\\bin", "tracker"))
+        self.assertEqual([item["label"] for item in shown["recipe"]["tool_folders"]], ["Azure CLI", "Old"], "an entry without a program still works")
+        self.assertEqual(shown["recipe"]["tool_folders"][1].get("program"), None)
+
+    def test_a_program_on_the_path_shows_no_hint_and_a_bad_program_name_in_the_recipe_is_named(self) -> None:
+        self.assertTrue(any("program" in line for line in launchenv.recipe_errors({"tool_folders": [{"label": "x", "program": "a b!"}]})))
+        self.assertEqual(launchenv.recipe_errors({"tool_folders": [{"label": "x", "program": "az"}]}), [])
+
+
 class Bundle(LaunchEnvCase):
     def test_the_bundle_is_the_tools_roots_and_the_chain_but_the_site_once_each(self) -> None:
         launchenv.save_paths(self.root, [str(self.tools)])

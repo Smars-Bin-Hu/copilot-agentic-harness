@@ -579,7 +579,7 @@ def recipe(root: Path) -> Dict[str, Any]:
         return out
     out["host"] = str((data.get("ca_bundle") or {}).get("host") or "")
     out["proxy"] = str((data.get("ca_bundle") or {}).get("proxy") or "")
-    out["tool_folders"] = [{"label": str(item["label"]), "hint": str(item.get("hint") or ""), "program": str(item.get("program") or "")} for item in data.get("tool_folders") or []]
+    out["tool_folders"] = [{"label": str(item["label"]), "hint": str(item.get("hint") or ""), **({"program": str(item["program"])} if item.get("program") else {})} for item in data.get("tool_folders") or []]
     return out
 
 

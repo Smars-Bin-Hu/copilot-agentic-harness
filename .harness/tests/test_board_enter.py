@@ -207,6 +207,19 @@ class ReadinessTests(TaskCase):
         found = settled(ready.Ready(self.root, StubLink(up), clean))
         self.assertEqual((line(found, "folder")["level"], line(found, "kb")["version"]), ("ok", "7"))
 
+    def test_a_pack_whose_program_is_not_found_makes_the_line_yellow_and_names_it(self) -> None:
+        import tempfile
+        from test_toolpacks import make
+        from core import toolpacks
+
+        up = {"ready": True, "bound": 0, "unbound": 0, "why": "ok"}
+        with tempfile.TemporaryDirectory() as outside:
+            toolpacks.add(self.root, str(make(Path(outside) / "tracker", needs={"programs": ["tracker-nowhere"], "trust": []})))
+            found = settled(ready.Ready(self.root, StubLink(up), clean))
+        packs = line(found, "packs")
+        self.assertEqual((packs["level"], packs["why"], packs["names"][0]["missing"]), ("yellow", "need", ["tracker-nowhere"]))
+        self.assertTrue(found["ready"], "a missing program is a dot, not a door")
+
     def test_an_unpaired_browser_blocks_and_the_grey_lines_never_do(self) -> None:
         up = {"ready": True, "bound": 0, "unbound": 0, "why": "ok"}
         found = settled(ready.Ready(self.root, StubLink(up), clean), paired=False)

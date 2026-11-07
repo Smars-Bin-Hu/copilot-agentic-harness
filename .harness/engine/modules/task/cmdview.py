@@ -150,9 +150,19 @@ def say_of(args: str, rules: Optional[List[Dict[str, Any]]]) -> str:
     return ""
 
 
+def _shell_value(text: str, quote: str) -> str:
+    """What the shell passes on for a value written between these quotes (1.7.25): in double quotes `\\` is a backslash, `\"` a quote, `\$` a dollar, a backtick after a backslash a backtick, any other
+    backslash stays as it is; in single quotes everything stays; with no quote a backslash is dropped and the character after it stays."""
+    if quote == "'":
+        return text
+    if quote == '"':
+        return re.sub(r'\\([\\"$`])', lambda found: found.group(1), text)
+    return re.sub(r"\\(.)", lambda found: found.group(1), text)
+
+
 def _unescape(text: str) -> str:
-    """The text inside double quotes as the shell passes it on to a program that reads `\\n` itself, as a person reads it: `\\n` a line break, `\\t` a tab, `\\"` a quote, `\\\\` a backslash (1.7.21)."""
-    return re.sub(r"\\(.)", lambda found: {"n": "\n", "t": "\t"}.get(found.group(1), found.group(1)), text)
+    """The text the program reads `\\n` and `\\t` in as a person reads it: a line break and a tab. Run on what the shell passed on (`_shell_value`), as the program gets it."""
+    return re.sub(r"\\([nt])", lambda found: {"n": "\n", "t": "\t"}[found.group(1)], text)
 
 
 def body_of(args: str, rules: Optional[List[Dict[str, Any]]], folder: Optional[Path], root: Optional[Path] = None) -> Optional[Dict[str, Any]]:
@@ -167,7 +177,8 @@ def body_of(args: str, rules: Optional[List[Dict[str, Any]]], folder: Optional[P
             continue
         value = found.group(1)
         if rule.get("from") == "text" and not value.startswith("@"):
-            return _shown({"text": _unescape(value), "from": "text"})
+            quote = args[found.start(1) - 1] if found.start(1) > 0 and args[found.start(1) - 1] in "\"'" else ""
+            return _shown({"text": _unescape(_shell_value(value, quote)), "from": "text"})
         path = value[1:] if value.startswith("@") else value
         return _from_file(folder, path.strip("\"'"), root)
     return None

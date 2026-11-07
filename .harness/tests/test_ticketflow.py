@@ -119,6 +119,16 @@ class HeldCallCard(TaskCase):
         card = self.held('demotracker --project DEMO comment 7 --text "one\\ntwo \\"q\\""')
         self.assertEqual(card["body"]["text"], 'one\ntwo "q"')
 
+    def test_the_text_is_read_as_the_shell_passes_it_on_and_then_as_the_program_reads_it(self) -> None:
+        """1.7.25 (R4 K8): `"a\\\\nb"` was shown as one line `a\\nb`; the shell hands `a\\nb` on and the program writes two lines."""
+        from modules.task import cmdview
+
+        rules = [{"pattern": r'--text\s+"((?:[^"\\]|\\.)*)"', "from": "text"}, {"pattern": r"--text\s+'([^']*)'", "from": "text"}]
+        for written, text in (('"a\\nb"', "a\nb"), ('"a\\\\nb"', "a\nb"), ("'a\\nb'", "a\nb"), ('"say \\"hi\\""', 'say "hi"'), ('"cost \\$5"', "cost $5"), ('"x\\ty"', "x\ty"), ("'a\\\\nb'", "a\\\nb")):
+            body = cmdview.body_of(f"comment 7 --text {written}", rules, None)
+            self.assertEqual(body["text"], text, written)
+            self.assertEqual(body["lines"], text.count("\n") + 1, written)
+
     def test_a_file_that_is_not_in_the_task_is_marked_not_read(self) -> None:
         card = self.held("demotracker --project DEMO comment 7 --file ../../outside.md")
         self.assertTrue(card["body"]["missing"])

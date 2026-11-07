@@ -131,6 +131,16 @@ def args_of(command: str, programs: Optional[List[str]] = None) -> str:
     return command.strip()
 
 
+def all_args(command: str, programs: Optional[List[str]] = None) -> List[str]:
+    """What stands after the program, once for each place the program is a whole word and a command of its own (1.7.27): in a line of several commands (`ado states; echo ---; ado update 1`)
+    each part has its own words, up to the next `;`, `&&`, `||`, `|` or new line. `args_of` is the first."""
+    out: List[str] = []
+    for program in programs or []:
+        for found in re.finditer(rf"(?:^|[\s/\\=;&|(])({re.escape(program)})(?:\.cmd|\.bat|\.exe)?(?=\s|$)", command, re.IGNORECASE):
+            out.append(re.split(r"\n|;|&&|\|\||\|", command[found.end():].strip(), maxsplit=1)[0].strip())
+    return out
+
+
 def _in_language(text: Any) -> str:
     """A `say` text as the language of the session reads it (1.7.23): a plain string as it is; `{"en": ..., "zh": ...}` the language asked for, else `en`."""
     if isinstance(text, dict):

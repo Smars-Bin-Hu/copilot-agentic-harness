@@ -62,6 +62,33 @@ def write_draft(root: Path, task: str, code: str, action: Any, command: str, ses
     return relative
 
 
+_SEPARATORS = re.compile(r"\n|;|&&|\|\||\|")
+
+
+def merge_into_waiting(root: Path, task: str, session_id: str, command: str, action: Any, minutes: int) -> str:
+    """The code of a waiting card this command takes over, or "" (1.7.27). The agent sent a line of several commands (a read, then a write); it was held whole. It then sends the write alone:
+    the same write, the same task, not yet approved. That is the same card, not a second one: the waiting entry gets the short command, keeps its code, and its draft is written again."""
+    text = approvals.collapse(command)
+    if not task or not text or _SEPARATORS.search(text):
+        return ""
+    waiting = pending_for(root, task)
+    if any(approvals.collapse(str(item.get("command", ""))) == text for item in waiting):
+        return ""  # the short command already has its card
+    for item in waiting:
+        old = str(item.get("command", ""))
+        parts = [approvals.collapse(part) for part in _SEPARATORS.split(old)]
+        if old == text or len(parts) < 2 or text not in parts or item.get("system", "") != action.system:
+            continue
+        if approvals.rewrite(root, str(item["code"]), session_id, text, minutes, extra=entry_extra(action, task), file=approvals.ACTIONS):
+            try:
+                (root / draft_path(task, item["code"], action.system)).unlink()
+            except OSError:
+                pass
+            write_draft(root, task, item["code"], action, text, session_id, minutes)
+            return str(item["code"])
+    return ""
+
+
 def mark(root: Path, relative: Optional[str], state: str) -> None:
     """Set the state line of a draft: `approved` or `sent`, with the time. A draft that is gone is left alone."""
     if not relative:

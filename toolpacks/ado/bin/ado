@@ -990,12 +990,16 @@ def deploy(ado: Ado, args) -> str:
 
 # --- the command line ----------------------------------------------------------------------------------------------------------------------------------------
 
+PACK_VERSION = "0.4.4"  # the same as toolpack.json
+
+
 def parser() -> argparse.ArgumentParser:
     top = argparse.ArgumentParser(prog="ado", description="Azure DevOps for the agent. Reads run; comment, update, create, link, unlink, attach, and queue, cancel, retry, deploy wait for the person's approval on the task page.")
     top.add_argument("--conn", default="", help="the azure-devops connection, when there are several")
     top.add_argument("--org", default="", help="pick the connection by its organization")
     top.add_argument("--project", default="", help="pick the connection by its project")
     top.add_argument("--json", action="store_true", help="what Azure DevOps answered, whole")
+    top.add_argument("--version", action="version", version=f"ado {PACK_VERSION}")
     sub = top.add_subparsers(dest="command", required=True)
 
     def number(text):
@@ -1015,6 +1019,7 @@ def parser() -> argparse.ArgumentParser:
                 one.add_argument(arg)
         return one
 
+    add("version", "the version of this pack (no connection needed)")
     one = add("me", "who is signed in, and the connection in use")
     one.add_argument("--short", action="store_true", help="one word (the connection test)")
     add("item", "one work item: fields, tags, parent, children, related, attached files, description", "id")
@@ -1121,6 +1126,9 @@ def main(argv=None) -> int:
                 stream.reconfigure(encoding="utf-8", errors="replace")
             except (AttributeError, ValueError):
                 pass
+        if args.command == "version":
+            print(f"ado {PACK_VERSION}")
+            return 0
         print(COMMANDS[args.command](Ado(connection(args.conn, args.org, args.project)), args))
         return 0
     except Stop as error:

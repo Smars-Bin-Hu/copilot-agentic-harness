@@ -40,7 +40,7 @@
   "down": "Max retries exceeded|Failed to establish|timed out|CERTIFICATE_VERIFY_FAILED|cannot reach",
   "verbs": [
     {
-      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:[a-z]+\\s+)?(?:--help|-h)\\s*$",
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:[a-z]+\\s+)?(?:--help|-h|--version)\\s*$",
       "verb": "read"
     },
     {
@@ -56,7 +56,7 @@
       "verb": "exec"
     },
     {
-      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:me|item|items|comments|history|links|attachments|queries|query|tags|types|states|fields|areas|iterations|pipelines|pipeline|runs|run|why|log|artifacts|tests|changes|releases|release)\\b",
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:version|me|item|items|comments|history|links|attachments|queries|query|tags|types|states|fields|areas|iterations|pipelines|pipeline|runs|run|why|log|artifacts|tests|changes|releases|release)\\b",
       "verb": "read"
     }
   ],

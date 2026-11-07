@@ -228,6 +228,7 @@ class LinkTests(LinkCase):
         chatlink.keep(self.root, TASK, {"session": "ahp-session:/gone", "chat": "ahp-chat:/gone", "title": "t", "how": "board", "bound_at": "x"})
         self.link.start()
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertTrue(until(lambda: self.data()["chat"]["session"] == self.resource), self.data()["chat"])  # the task's record is written just after the link counts it bound: a loaded machine read in between
         self.assertEqual((self.row()["chat"]["how"], self.data()["chat"]["session"]), ("sdk", self.resource))
 
     def test_the_steps_of_a_subagent_show_under_the_tool_call_that_started_it(self) -> None:

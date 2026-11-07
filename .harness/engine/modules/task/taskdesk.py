@@ -117,8 +117,15 @@ def evidence_pictures(folder: Path, env: str) -> List[str]:
 
 def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optional[Path] = None) -> Dict[str, Any]:
     """What a connection type says of its held calls (1.7.20): `say`, the title in words, and `body`, the text the call writes (inline, or read from a file in the task). Nothing when the type says none."""
-    args = cmdview.args_of(command, outside.clis(system))
-    return {"say": cmdview.say_of(args, system.get("say")), "body": cmdview.body_of(args, system.get("body"), folder, root)}
+    programs = outside.clis(system)
+    args = cmdview.args_of(command, programs)
+    said = cmdview.say_of(args, system.get("say"))
+    if not said:  # a line of several commands (a read, then the write): the title is that of the part that says something (1.7.27)
+        for part in cmdview.all_args(command, programs):
+            if cmdview.say_of(part, system.get("say")):
+                args, said = part, cmdview.say_of(part, system.get("say"))
+                break
+    return {"say": said, "body": cmdview.body_of(args, system.get("body"), folder, root)}
 
 
 def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
@@ -150,7 +157,7 @@ def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
         for item in outbox.approved_for(root, task):
             said = ""
             try:
-                said = cmdview.say_of(cmdview.args_of(item["command"], outside.clis(systems.get(item.get("system", "")) or {})), (systems.get(item.get("system", "")) or {}).get("say"))
+                said = call_words(item["command"], systems.get(item.get("system", "")) or {}, tasks.task_dir(root, task), root)["say"]
             except Exception:  # noqa: BLE001 - a title is a help; the card has the command anyway
                 said = ""
             out.append({"code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "command": item["command"],

@@ -133,6 +133,13 @@ READ_ONLY_PROGRAMS = frozenset(
     "realpath readlink jq column fold rev md5sum sha1sum sha256sum shasum od xxd strings date man apropos whatis sed find git gh harness "
     "get-content gc select-string sls get-childitem gci write-output write-host get-item test-path set-location sl resolve-path measure-object".split()
 )
+# Programs that manage files (1.7.27): they do not run their arguments, so a program name among them is only a name (`cp .../ado /tmp`, `chmod +x .../ado`, `mkdir out/ado`). The program that was
+# copied is read when it is run later. `_data_only` takes away the options that make `tar` and `zip` run a command. `FILE_PLAIN` has no such option: it may stand after `xargs` too.
+FILE_PLAIN = frozenset("mkdir touch cp mv rm rmdir chmod ln".split())
+FILE_PROGRAMS = FILE_PLAIN | frozenset("tar zip unzip code".split())
+FILE_MODULES = frozenset("py_compile compileall pyflakes flake8 black ruff isort".split())  # `python3 -m <one of these> file`
+FILE_TOOLS = frozenset("flake8 ruff black pyflakes isort".split())
+_FILE_RUNS = ("--use-compress-program", "--to-command", "--checkpoint-action", "--rsh-command", "--info-script", "--new-volume-script", "-I", "-F", "-TT", "-T", "--unzip-command")
 _READERS = frozenset("cat tac head tail type get-content gc nl sort uniq less more".split())  # print files: into an interpreter they are its code
 _SED_RUNS = re.compile(r"(?:^|[;{}\n])\s*(?:\d+(?:,\d+)?|\$)?\s*e\b|/[gpiImM0-9]*e[gpiImM0-9]*\s*$")  # sed's `e` command and `s///e`: runs a command
 _CODE_INTERPRETERS = frozenset("python python3 py node bash sh zsh dash fish pwsh powershell ruby perl".split())
@@ -205,7 +212,7 @@ def _interp(tokens: List[str], at: int) -> Tuple[str, Optional[int]]:
                 index += 1
                 continue
         elif family == "ruby":
-            if low == "-e":
+            if low == "-e" or re.fullmatch(r"-[0-9A-DF-HJ-Za-hj-z]*[eE]", word):  # `-ne`, `-pe`, `-lane` (not `-i`: it takes the rest of the word as a suffix)
                 return "code", index
             if word.startswith("-"):
                 index += 1
@@ -322,11 +329,20 @@ def _data_only(tokens: List[str], at: int) -> bool:
     name = _program(tokens[at])
     if _is_harness(tokens, at):
         return True
+    if _is_interpreter(tokens[at]):
+        kind, index = _interp(tokens, at)
+        return kind == "module" and index is not None and _name(tokens[index]) in FILE_MODULES  # `python3 -m py_compile file`
+    plain = "/" not in tokens[at] and "\\" not in tokens[at]
+    if name in FILE_PROGRAMS | FILE_TOOLS and plain:
+        args = tokens[at + 1:]
+        if name in ("tar", "zip", "unzip", "code"):
+            return not any(item.startswith(_FILE_RUNS) or (item.startswith("-") and not item.startswith("--") and re.search(r"[IFTj]", item[1:]) and name in ("tar", "zip")) for item in args)
+        return True
     if name not in READ_ONLY_PROGRAMS:
         return False
     args = tokens[at + 1:]
     if name == "find":
-        return not any(item in ("-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls") for item in args)
+        return _find_data(args)
     if name == "git":
         words = []
         for index, item in enumerate(args):
@@ -347,6 +363,24 @@ def _data_only(tokens: List[str], at: int) -> bool:
     return True
 
 
+def _find_data(args: List[str]) -> bool:
+    """`find` with no action that writes, and whose `-exec` programs only read (`-exec grep -l ado {} \\;`): the words after `-exec` are that program's data (1.7.27)."""
+    if any(item in ("-delete", "-fprint", "-fprintf", "-fls", "-fprint0") for item in args):
+        return False
+    index = 0
+    while index < len(args):
+        if args[index] in ("-exec", "-execdir", "-ok", "-okdir"):
+            end = next((i for i in range(index + 1, len(args)) if args[i] in (";", "\\;", "\\", "+")), None)
+            if end is None or end == index + 1:
+                return False
+            inner = args[index + 1: end]
+            if inner[0] in ("{}", "{") or inner[0].startswith("$") or not _data_only(inner, 0):
+                return False
+            index = end
+        index += 1
+    return True
+
+
 def _xargs_runs_code(tokens: List[str]) -> bool:
     """`xargs` that runs what it is given (a placeholder, a variable, a program that is not a plain reader): its input is code. `xargs -n1 echo` is not."""
     at = next((i for i, item in enumerate(tokens[:3]) if _name(item) == "xargs"), None)
@@ -361,7 +395,7 @@ def _xargs_runs_code(tokens: List[str]) -> bool:
         if word.startswith("-") and word != "--":
             index += 1
             continue
-        return not (_program(word) in READ_ONLY_PROGRAMS and word.isalpha() and not word.startswith("$"))
+        return not ((_program(word) in READ_ONLY_PROGRAMS or word in FILE_PLAIN) and word.isalpha() and not word.startswith("$"))
     return False
 
 
@@ -437,6 +471,8 @@ def _file_state(path: str, names: List[str], ctx: _Ctx) -> Tuple[str, str]:
     tests. `("missing", "")`: there is no such file. `("unreadable", "")`: too big (over 200 KB) or not readable."""
     if not path or path.startswith(("-", "$")) or "$(" in path:
         return "missing", ""
+    if path in ("/dev/null", "NUL"):
+        return "ok", ""  # nothing to run
     if re.search(r"(?:^|[\\/])\.harness[\\/](?:engine|tests)[\\/]", path):
         return "ok", ""  # the harness's own program and tests: the gate guards them in other ways
     root = os.path.realpath(str(ctx.root)) if ctx.root is not None else ""

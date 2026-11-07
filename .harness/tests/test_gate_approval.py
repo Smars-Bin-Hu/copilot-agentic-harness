@@ -50,7 +50,7 @@ class ClassifyTests(unittest.TestCase):
     def test_never_approved(self) -> None:
         self.check(
             NEVER, "git push", "git push origin main", "git -C repo push", "git push --force", "git push -f", "git push --force-with-lease",
-            "git clean -fd", "git clean -n", "git reset --hard", "git reset --hard HEAD~1", "git branch -D x", "git branch -d x --force",
+            "git clean -fd", "git clean -f -n", "git reset --hard", "git reset --hard HEAD~1", "git branch -D x", "git branch -d x --force",
             "git checkout -f main", "git checkout --force main", "git switch -f main", "git switch --discard-changes main", "git add -f a",
             "git rm -f a", "git fetch --force", "git worktree remove -f x", "git reflog expire --all", "git reflog delete HEAD@{1}",
             "git filter-branch --all", "git update-ref -d refs/heads/x", "git gc --prune=now", "git prune", "gh pr create", "gh pr merge 3",

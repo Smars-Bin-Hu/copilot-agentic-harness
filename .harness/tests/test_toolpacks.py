@@ -646,6 +646,48 @@ class LinkedItems(TaskCase):
             self.assertEqual(self.term(nested)["permissionDecision"], "deny", nested)
         self.assertEqual(self.term(f"{ok}; cd ."), {}, "a command of no listed system beside it changes nothing")
 
+    def test_commands_that_only_read_or_manage_files_are_not_held_for_a_program_name(self) -> None:
+        """1.7.27 (R7 false holds): a program name that is data to a command is not a call, and not a bypass."""
+        open_ = ("perl -ne 'print' README.md", "perl -pe 's/a/b/' README.md", "perl -lane 'print $F[0]' README.md", "ruby -ne 'print' README.md", "echo x | perl -ne 'print'",
+                 "find . -name '*.md' -exec grep -l tracker {} \\;", "find . -name '*.md' -exec grep -l tracker {} +",
+                 "grep -rl tracker . | xargs -I{} cp {} /tmp", "mkdir -p out/tracker", "touch out/tracker", "cp tools/tracker /tmp/tracker.bak", "mv out/tracker out/old", "chmod +x tools/tracker",
+                 "tar czf /tmp/t.tgz tools/tracker", "zip -r /tmp/x.zip tools/tracker", "code tools/tracker", "ln -s tracker out/t2", "python3 -m py_compile tools/tracker",
+                 "python3 -m pyflakes tools/tracker", "black --check tools/tracker", "flake8 tools/tracker", "python3 -i < /dev/null", "git clean -n", "git clean -nd")
+        for command in open_:
+            self.assertEqual(self.term(command), {}, command)
+        w = "tracker --org demo comment 7 hi"
+        held = ("perl -pie 'x' f", "perl -ne 'system(\"" + w + "\")' README.md", "ruby -ne 'system(\"" + w + "\")' README.md",
+                "find . -exec sh -c '" + w + "' \\;", "find . -exec env " + w + " {} \\;", "find . -exec {} \\;", "find . -exec grep x {} \\; -exec " + w + " \\;",
+                "echo tracker | xargs sh -c", "tar xf a.tar --to-command='" + w + "'", "tar -I tracker -cf a.tar x", "zip x.zip y -T -TT '" + w + "'",
+                "./cp tracker x", "cp x.sh y.sh && bash y.sh", "python3 -m flake8 --foo $(" + w + ")", "git clean -fd", "git clean -f -n")
+        for command in held:
+            if command in ("echo tracker | xargs sh -c", "find . -exec {} \\;"):
+                continue  # F7's known limits: no program name in the line
+            self.assertNotEqual(self.term(command), {}, command)
+
+    def test_a_write_held_in_a_line_of_several_commands_is_one_card_with_a_title(self) -> None:
+        """1.7.27 (R9): `read; echo ---; write` is held whole; the agent then sends the write alone: the same card takes over, and the card has the title of the write."""
+        from modules.task import taskdesk, cmdview
+        from core import outbox, config
+
+        write = "tracker --org demo create --title x"
+        first = self.term(f"tracker --org demo get 1; echo ---; {write}")
+        self.assertEqual(first["permissionDecision"], "deny")
+        waiting = outbox.pending_for(self.root, TASK)
+        self.assertEqual(len(waiting), 1)
+        code = waiting[0]["code"]
+        self.term(write)
+        waiting = outbox.pending_for(self.root, TASK)
+        self.assertEqual([(item["code"], item["command"]) for item in waiting], [(code, write)], "the same card, now the short command")
+        self.assertTrue((self.root / outbox.draft_path(TASK, code, waiting[0]["system"])).exists())
+        self.assertIn("create --title x", (self.root / outbox.draft_path(TASK, code, waiting[0]["system"])).read_text(encoding="utf-8").split("```")[1])
+        self.term("echo a; tracker --org demo create --title y")  # another line: its own card
+        self.assertEqual(len(outbox.pending_for(self.root, TASK)), 2)
+        rules = [{"pattern": "^(?:--org\\s+\\S+\\s+)?create\\b", "text": "Create a new item"}]
+        words = taskdesk.call_words("tracker --org demo get 1; echo ---; " + write, {"reach": {"cli": ["tracker"]}, "say": rules}, self.root / TASK, self.root)
+        self.assertEqual(words["say"], "Create a new item")
+        self.assertEqual(cmdview.all_args("a x; echo ---; a y | b", ["a"]), ["x", "y"])
+
     def test_an_item_named_in_the_words_of_a_command_is_not_the_item_it_writes(self) -> None:
         self.open_links()
         decoy = self.term('tracker --org demo update 7 --description "tracker comment 42 x"')

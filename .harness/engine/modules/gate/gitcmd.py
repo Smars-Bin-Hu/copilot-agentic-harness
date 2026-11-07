@@ -246,6 +246,8 @@ def _git(tokens: List[str], start: int) -> Tuple[str, str]:
     subcommand, arguments = rest[index].lower(), rest[index + 1:]
     if re.search(r"[$%]|^\W", subcommand):
         return APPROVE, _why("unclear")
+    if subcommand == "clean" and any(item == "--dry-run" or re.fullmatch(r"-[a-zA-Z]*n[a-zA-Z]*", item) for item in arguments[:1]):
+        return NONE, ""  # a dry run only lists what it would remove (1.7.27)
     if subcommand in NEVER_SUBCOMMANDS:
         return NEVER, _named(f"git {subcommand}", NEVER_SUBCOMMANDS[subcommand])
     if subcommand == "reset" and any(item == "--hard" for item in arguments):

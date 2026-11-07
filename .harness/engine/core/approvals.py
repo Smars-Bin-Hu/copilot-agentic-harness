@@ -89,6 +89,20 @@ def request(
     return code
 
 
+def rewrite(root: Path, code: str, session_id: str, command: str, limit_minutes: int, extra: Optional[Dict[str, Any]] = None, now: Optional[float] = None, file: str = FILE) -> bool:
+    """A waiting entry takes a new command (and session, and `extra`) and keeps its code (1.7.27). Only a pending entry that is alive."""
+    now = time.time() if now is None else now
+    limit = limit_minutes * 60.0
+    with state_lock(path(root, file)):
+        entries = [item for item in _read(root, file) if _alive(item, limit, now)]
+        for item in entries:
+            if item.get("code") == code and item.get("state") == "pending":
+                item.update({**(extra or {}), "session_id": session_id, "command": collapse(command)})
+                _write(root, entries, file)
+                return True
+    return False
+
+
 def consume(root: Path, session_id: str, command: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> Optional[Dict[str, Any]]:
     """The approval for exactly this command in this session, used up; None when there is none. (An entry is truthy.)"""
     now = time.time() if now is None else now

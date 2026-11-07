@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.28 (2026-11-07)
+
+### Fixed
+
+- **The board list** fits any width. Its columns give way in steps by the width of the list's own box: the time bar, checks, Credits and prompts go first, then waited and time, and under about 600 px each task is one block (name, state, buttons). What a hidden column held is written under the task name, so nothing is cut without a trace. A list that still scrolls sideways fades at its right edge. The task name gives way first, with the whole name on hover. A row with nothing to press shows a dash in the Do column.
+- **The round buttons at the bottom right** lie in a row along the bottom edge in a window under 900 px, and the page keeps room for them, so they no longer cover rows.
+- **The Enter screen**: the scroll arrow sits on the copyright line, not over the last list line; the fade at the foot is shorter; the grey Not ready pill no longer lies over the reflection of the wordmark (the reflection is off where the pill is stacked above the list); the page under the screen has no scroll height of its own (no extra 33 px); the scroll hint shows from 2 px. The VS Code lines no longer show a setting name or an environment variable.
+- **Tools**: the window body scrolls inside the window and the buttons stay in view, with one height for the three tabs (14 connections used to push Close off the screen); the env chips of the connections have one width, so the names line up.
+- **An approved call's card** is green all through (it was orange with a green edge), and **Create and send** in New task is the main (filled) button.
+
 ## 1.7.26 (2026-11-07)
 
 ### Fixed

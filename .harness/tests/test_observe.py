@@ -340,6 +340,14 @@ if __name__ == "__main__":
 class RedactTests(unittest.TestCase):
     """M43-3: the log keeps the command of a refused call; the values of passwords and tokens in it become ***."""
 
+    def test_the_path_of_a_draft_with_its_code_is_not_a_key(self) -> None:
+        """1.7.21: `OUTBOX/435E00-ado.md` under a long task path was shown as `.***.md` in the agent's reply."""
+        from core import redact
+
+        line = "draft: .workspace/sandbox/tasks/t3-read/OUTBOX/435E00-ado.md"
+        self.assertEqual(redact.text(line), line)
+        self.assertIn("***", redact.text("key AbCdEfGhIjKlMnOpQrStUvWxYz0123456789AbCdEf/aB3dE5gH7jK9mN1pQ3sT5uW7yZ9aB1cD3eF5gH7iJ9kL1mN3oP5qR7sT9uV"))
+
     def test_common_spellings_of_a_secret_are_masked(self) -> None:
         from core import redact
 

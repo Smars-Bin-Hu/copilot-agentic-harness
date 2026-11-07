@@ -115,6 +115,20 @@ def evidence_pictures(folder: Path, env: str) -> List[str]:
         return []
 
 
+def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optional[Path] = None) -> Dict[str, Any]:
+    """What a connection type says of its held calls (1.7.20): `say`, the title in words, and `body`, the text the call writes (inline, or read from a file in the task). Nothing when the type says none."""
+    programs = outside.clis(system)
+    args = cmdview.args_of(command, programs)
+    said = cmdview.say_of(args, system.get("say"))
+    if not said:  # a line of several commands (a read, then the write): the title is that of the part that says something (1.7.27)
+        for part in cmdview.all_args(command, programs):
+            if cmdview.say_of(part, system.get("say")):
+                args, said = part, cmdview.say_of(part, system.get("say"))
+                break
+    writes = sum(1 for part in re.split(r"\n|;|&&|\|\||\|", command) if re.search(r"\S", part) and cmdview.say_of(cmdview.args_of(part, programs), system.get("say")))  # a held line of several writes: the card says how many (1.7.29); by command, not by the word `ado` (a `--conn ado` is no second write)
+    return {"say": said, "writes": writes, "body": cmdview.body_of(args, system.get("body"), folder, root)}
+
+
 def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
     """The calls of this task that wait for the person (1.7.7), oldest first, each with its facts (the pack's `show` patterns), the layout of its command and the file it reads, if any.
     The page draws a card for each; the code is in the draft's name too."""
@@ -128,7 +142,27 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
                 "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True),
                 "command": item["command"], "created_at": item.get("created_at", ""), "session_id": item.get("session_id", ""), "draft": outbox.draft_of(item).split("/", 4)[-1] if outbox.draft_of(item) else "",
                 "facts": cmdview.facts(item["command"], system.get("show")), "layout": cmdview.layout(item["command"], folder),
+                **call_words(item["command"], system, folder, root),
             })
+        return out
+    except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
+        return []
+
+
+def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The calls of this task approved on the board or in a terminal and not run yet (1.7.24): the page keeps its green card, and tells the agent, until the command has run.
+    1.7.25: each has a `title` (the sentence of its type's `say`, else the start of the command), so the card says which call was approved."""
+    try:
+        systems = config.policy_or_empty(root, "tools").get("systems") or {}
+        out = []
+        for item in outbox.approved_for(root, task):
+            said = ""
+            try:
+                said = call_words(item["command"], systems.get(item.get("system", "")) or {}, tasks.task_dir(root, task), root)["say"]
+            except Exception:  # noqa: BLE001 - a title is a help; the card has the command anyway
+                said = ""
+            out.append({"code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "command": item["command"],
+                        "approved_at": item.get("approved_at", ""), "title": said or " ".join(str(item["command"]).split())[:80]})
         return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
         return []
@@ -146,6 +180,11 @@ def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     opened = data.get("allow_env") if isinstance(data.get("allow_env"), dict) and data.get("status") == "open" else {}  # the switch ends with the task (hand test B90-a: a closed task said dev was open)
     envs = [{"env": env, "systems": reaches.get(env, []), "open": env in opened, "since": str((opened.get(env) or {}).get("at") or ""),
              "reach": {"state": seen[env]["state"], "parts": seen[env]["parts"]} if env in seen else None} for env in tasklife.ALLOW_ENVS] if reaches else []
+    refs = {str(item.get("ref", "")).split(":", 1)[0] for item in (data.get("links") or []) if isinstance(item, dict)}
+    scoped = sorted(name for name, system in (systems or {}).items() if isinstance(system, dict) and system.get("item") and system.get("link") in refs) if refs else []
+    if scoped:  # 1.7.18: the items the task is linked to, a chip of their own: the agent's writes to them only
+        on = bool(data.get(tasklife.LINKS_KEY)) and data.get("status") == "open"
+        envs = envs + [{"env": tasklife.LINKS, "label": messages.text("desk.set.open.links"), "systems": scoped, "open": on, "since": str((data.get(tasklife.LINKS_KEY) or {}).get("at") or "") if on else "", "reach": None}]
     return {"envs": envs, "never": [outside.PROD]}
 
 
@@ -156,6 +195,16 @@ def links_view(root: Path, data: Dict[str, Any]) -> List[Dict[str, str]]:
 
         return [toolpacks.link_view(root, str(item.get("ref"))) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]
     except Exception:  # noqa: BLE001 - a broken tool pack: the links are not drawn
+        return []
+
+
+def link_types(root: Path) -> List[Dict[str, str]]:
+    """The kinds of ticket a person may add to the task (1.7.20): from the installed tool packs."""
+    try:
+        from core import toolpacks
+
+        return toolpacks.link_types(root)
+    except Exception:  # noqa: BLE001 - a broken tool pack: the page offers a free field
         return []
 
 
@@ -371,10 +420,13 @@ def needs_req(data: Dict[str, Any]) -> bool:
 def offered(root: Path, row: Dict[str, Any], task: str, served: Tuple[str, ...], data: Dict[str, Any]) -> List[Dict[str, str]]:
     """What the person can do about the task: the board's actions, and on its page also: confirm the requirement once the agent wrote it."""
     found = taskboard.actions(row, served)
-    if needs_req(data) and row.get("status") == "open" and "confirm-req" in served and task_ops.req_state(root, task) in ("open", "changed") and not any(item["action"] == "confirm-req" for item in found):
+    unfilled = row.get("status") == "open" and task_ops.req_placeholders(root, task) > 0  # REQ.md still holds the template's text (1.7.22): no Confirm, in any tier
+    if row.get("status") == "open" and "confirm-req" in served and not unfilled and task_ops.req_state(root, task) in ("open", "changed") and not any(item["action"] == "confirm-req" for item in found):
         found.insert(0, {"action": "confirm-req", "command": f"{cli_command()} task confirm-req --task {row['name']}"})
     if not task_ops.todo_left(root, task) or not tasks.plan_approved(root, task, data):  # `autorun on` is refused then (autorun.need.todo, need.approval): not offered
         found = [item for item in found if item["action"] != "autorun on"]
+    if unfilled:
+        found = [item for item in found if item["action"] != "confirm-req"]
     return found
 
 
@@ -394,15 +446,15 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "name": name, "task": task, "as_of": utc_now(),
         "kind": data.get("kind", ""), "tier": data.get("tier", ""), "status": row.get("status", ""), "state": row.get("state", ""), "round": data.get("round", 1), "branch": str((data.get("promote") or {}).get("branch") or data.get("branch") or ""),
         "promote_direct": bool((data.get("promote") or {}).get("direct")), "domains": list(data.get("domains") or []), "autorun": bool(row.get("autorun")), "paused_since": row.get("paused_since") or "",
-        "waiting": row.get("waiting") or "", "waiting_why": row.get("waiting_why") or "", "waited_s": row.get("waited_s"), "waiting_from": row.get("waiting_from") or "",
+        "waiting": row.get("waiting") or "", "waiting_why": row.get("waiting_why") or "", "waiting_tip": row.get("waiting_tip") or "", "waited_s": row.get("waited_s"), "waiting_from": row.get("waiting_from") or "",
         "handoff": {key: str((data.get("handoff") or {}).get(key) or "") for key in ("what", "env", "detail")} if isinstance(data.get("handoff"), dict) else None,
         "created_at": data.get("created_at", ""), "updated_at": data.get("updated_at", ""),
         "forked_from": task_ops.name_of(str(data.get("forked_from"))) if data.get("forked_from") else "",
-        "links": links_view(root, data),
+        "links": links_view(root, data), "link_types": link_types(root),
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
-        "plan_approval": plan_approval(root, task, data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if needs_req(data) and row.get("status") == "open" else 0, "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),
+        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "approved": approved_view(root, task) if row.get("status") == "open" else [], "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
+        "plan_approval": plan_approval(root, task, data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if row.get("status") == "open" else 0, "req_sections": task_ops.req_unfilled(root, task) if row.get("status") == "open" else [], "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),
         "req_changed": needs_req(data) and row.get("status") == "open" and (taskreview.req_changed(root, task) or tasks.plan_req_changed(root, task, data)),

@@ -15,12 +15,12 @@ read is allowed (AGENTS.md). A tool or a shape never seen is kept for `doctor` (
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import json
 import re
 
-from core import calls, reach, repo_paths, connections, targets, tasks, unseen
+from core import calls, launchenv, reach, repo_paths, connections, targets, tasks, unseen
 from core.paths import board_serve_port
 from core.context import Context
 from core.events import Decision, HookEvent, merge
@@ -132,19 +132,33 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
     finds the person's approval: then `approved` is set). No list, or a list that does not validate, means no rule here:
     doctor and `tools check` report the break, and the gate does not guess what a broken policy meant (a hook that fails
     itself must not hurt normal work).
+
+    A command line of several commands is judged one command at a time (1.7.21): it goes through only when every command does; the answer is the one that stops it, the strictest first.
     """
     try:
         systems = ctx.policy("tools").get("systems") or {}
         if not systems or external.validate(systems):
             return None
-        picked = external.strictest(external.classify(event.command, systems))
+        every = external.classify(event.command, systems, unseen=True, root=ctx.root, cwd=event.cwd or "")
+        results = [_judge_one(event, ctx, systems, action, decision) for action, decision in every]
     except Exception:  # noqa: BLE001 - see above
         return None
-    if picked is None:
+    if not results:
         return None
-    action, decision = picked
+    stopped = [item for item in results if not item["passes"]]
+    pool = stopped or results
+    best = pool[0]
+    for item in pool:
+        if external.DECISIONS.index(item["decision"]) > external.DECISIONS.index(best["decision"]):
+            best = item
+    return best
+
+
+def _judge_one(event: HookEvent, ctx: Context, systems: Dict[str, Any], action: external.Action, decision: str) -> Dict[str, Any]:
     passes = decision == external.ALLOW
     how = "allow" if passes else ""  # what let it through (core.calls): the evidence says it (1.7.9)
+    if action.unseen:  # a command whose program the gate cannot read: it may be a listed one, so it is held, whatever the task allows
+        return {"action": action, "decision": decision, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "unseen": True}
     if event.agent_type.strip():  # a subagent (the reviewer, the mapper) reads only: the person's leave (a plan, a grant, an open environment, an approval) is the main agent's, never its own (1.7.9)
         return {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": False, "how": how, "code": "", "subagent": not passes}
     opened = False
@@ -154,6 +168,11 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
             passes, how = True, "runner"
         elif data and tasks.plan_approved(ctx.root, data["task"], data):
             passes, how = True, "plan"
+    scoped = _item_scope(action.call or action.text, systems.get(action.system) or {}, action.verb, _open_task(ctx)) if decision in (external.TASK, external.OUTBOX, external.HUMAN) else None
+    if scoped and scoped[0] == "unlinked":  # a write to an item the task does not name: refused, with the line that links it (1.7.18)
+        return {"action": action, "decision": external.DENY, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "unlinked": scoped[1]}
+    if scoped and scoped[0] == "opened":  # a write to an item the task names, and the person opened it (`task allow --links`, with the items named then)
+        return {"action": action, "decision": decision, "passes": True, "approved": False, "opened": True, "how": "opened", "code": ""}
     if decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes and _openable(systems.get(action.system) or {}):
         data = _open_task(ctx)
         opened = bool(data and _env_opened(data, action.env))  # the person opened this environment for this task (`task allow`, 1.7.4): no further approval
@@ -179,6 +198,40 @@ def check_mcp(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if found["verb"] == "destroy" or event.agent_type.strip():
         return Decision(permission="deny", reason=rules.say("gate.mcp.deny", tool=event.tool_name, toolpack=found["toolpack"], verb=found["verb"]), facts=facts)
     return Decision(permission="ask", reason=rules.say("gate.mcp.ask", tool=event.tool_name, toolpack=found["toolpack"], verb=found["verb"]), facts=facts)
+
+
+def _item_scope(call: str, system: Dict[str, Any], verb: str, data: Optional[Dict[str, Any]]) -> Optional[Tuple[str, str]]:
+    """A write that names one item of a tool (a work item, a ticket), when the system says how to find it (`item`, its first group) and which link type
+    names it (`link`) (1.7.18). `call` is one command from its program on, and the pattern must match from its first word: the words after it are not read for an
+    item (a title that spells another command names nothing; 1.7.21). Answers `(state, ref)`. "unlinked": the task does not name that item; "opened": it
+    does and the person opened it (`task allow --links` lists the items named at that time; 1.7.21); "linked": it does, not opened (held as before); None: not
+    such a write (a read, a new item, no `item` pattern)."""
+    if verb != external.WRITE or not system.get("item") or not system.get("link"):
+        return None
+    patterns = system["item"] if isinstance(system["item"], list) else [system["item"]]
+    ids: List[str] = []
+    try:
+        for index, pattern in enumerate(patterns):
+            # the first pattern must match from the program's first word; the others (1.7.25: `--to <id>`) are looked for anywhere in the command, every place they match
+            matches = [re.match(str(pattern), call, re.IGNORECASE)] if index == 0 else list(re.finditer(str(pattern), call, re.IGNORECASE))
+            for found in matches:
+                if found and found.groups():
+                    ids.extend(group for group in found.groups() if group)
+    except re.error:
+        return None
+    if not ids:
+        return None
+    from core import toolpacks
+
+    refs_named = list(dict.fromkeys(toolpacks.normal_ref(f"{system['link']}:{item}") for item in ids))  # every item this command writes
+    names = {toolpacks.normal_ref(str(item.get("ref"))) for item in ((data or {}).get("links") or []) if isinstance(item, dict)}
+    for ref in refs_named:
+        if ref not in names:
+            return "unlinked", ref
+    opened = (data or {}).get("allow_links")
+    refs = {toolpacks.normal_ref(str(item)) for item in ((opened or {}).get("refs") or [])} if isinstance(opened, dict) else set()
+    shut = [ref for ref in refs_named if ref not in refs]
+    return ("linked", shut[0]) if shut else ("opened", refs_named[0])
 
 
 def _openable(system: Dict[str, Any]) -> bool:
@@ -238,11 +291,25 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
             outbox.mark(ctx.root, outbox.draft_of(used), "sent")
             return None  # the person read this command and approved it: it runs once
         task = data["task"] if data else None
-        code = approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task))
+        code = outbox.merge_into_waiting(ctx.root, task or "", event.session_id, event.command, action, minutes) or approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task))
         draft = outbox.write_draft(ctx.root, task, code, action, command, event.session_id, minutes) if task else ""
         return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft), facts=dict(facts, kind="external-outbox"))
+    if judged.get("unseen"):
+        named = action.target if action.unseen else ""
+        key = {"file": "gate.external.unreadable_file", "encoded": "gate.external.encoded"}.get(action.why) or ("gate.external.unreadable" if named else "gate.external.unseen")
+        return Decision(permission="deny", reason=rules.say(key, call=command, program=named, path=named), facts=dict(facts, kind="external-unseen"))
+    if judged.get("unlinked"):
+        return Decision(permission="deny", reason=rules.say("gate.external.unlinked", system=action.system, ref=judged["unlinked"], call=command, step=_link_step(ctx, judged["unlinked"], data)), facts=dict(facts, kind="external-unlinked"))
     reason = {external.DENY: rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, command)
     return Decision(permission="deny", reason=reason, facts=facts)
+
+
+def _link_step(ctx: Context, ref: str, data: Optional[Dict[str, Any]]) -> str:
+    """What to do to write an item the task does not name (1.7.21): no task open yet: open a Q&A one first; several open: name the task."""
+    if not data:
+        return rules.say("gate.external.unlinked.none", ref=ref)
+    many = len(tasks.folders(ctx.root)) > 1 and sum(1 for name in tasks.folders(ctx.root) if (tasks.read(ctx.root, name) or {}).get("status") == "open") > 1
+    return rules.say("gate.external.unlinked.some", ref=ref, task=str(data["task"]).replace("\\", "/").rsplit("/", 1)[-1]) if many else rules.say("gate.external.unlinked.one", ref=ref)
 
 
 def approved_context(event: HookEvent, ctx: Context) -> Optional[Decision]:
@@ -256,6 +323,21 @@ def approved_context(event: HookEvent, ctx: Context) -> Optional[Decision]:
     return Decision(context=rules.external_approved([item["command"] for item in waiting]))
 
 
+def named_line(ctx: Context, one: Dict[str, str]) -> str:
+    """One connection a prompt names (1.7.20): its fields and the tool pack's skills and program. With no tool pack to point at, the test command is all there is, and it is given as that."""
+    try:
+        info = connections.brief(ctx.root, one["alias"], one["call"])
+    except Exception:  # noqa: BLE001 - a line must not be lost for one broken type
+        info = {"alias": one["alias"], "env": one["env"], "fields": {}, "skills": [], "program": "", "toolpack": "", "label": "", "call": one["call"]}
+    env = "" if info["env"] in ("", "none") else f" ({info['env'].upper()})"
+    fields = ", ".join(f"{key}={value}" for key, value in info["fields"].items())
+    head = f"- {info['alias']}{env}" + (f": {info['label']}" if info["label"] else "") + (f" [{fields}]" if fields else "")
+    wrap = rules.say("connections.named.wrap", alias=info["alias"]) if one["call"].startswith(f"harness as {info['alias']} --") else ""
+    if info["skills"]:
+        return head + rules.say("connections.named.pack", toolpack=info["toolpack"], skills=", ".join(info["skills"]), program=info["program"] or "-") + wrap
+    return head + rules.say("connections.named.test", call=info["call"])
+
+
 def named_servers(event: HookEvent, ctx: Context) -> Optional[Decision]:
     """At a prompt that names a server by its alias: a command that reaches it, so the agent does not search for its host and port. Only those named."""
     text = event.words or event.prompt
@@ -267,7 +349,7 @@ def named_servers(event: HookEvent, ctx: Context) -> Optional[Decision]:
         return None
     if not found:
         return None
-    return Decision(context=rules.say("connections.named.context", lines="\n".join(f"- {one['alias']} ({one['env'].upper()}): `{one['call']}`" for one in found)))
+    return Decision(context=rules.say("connections.named.context", lines="\n".join(named_line(ctx, one) for one in found)))
 
 
 def asks_board(ctx: Context, text: str) -> int:
@@ -290,6 +372,8 @@ def watch_reach(event: HookEvent, ctx: Context) -> None:
     """Can the agent reach each environment from VS Code (core.reach, 1.7.9)? The hook runs in VS Code's identity: at the start of a chat it starts the
     pack's probes in a process of their own (the chat does not wait); after a call of a listed system it reads what the terminal printed. Never stops anything."""
     try:
+        if event.event == "SessionStart":
+            launchenv.note_seen(ctx.root)  # the hook has the environment VS Code was started with (1.7.21)
         listed = ctx.policy("tools").get("systems") or {}
         if not listed or external.validate(listed):
             return
@@ -381,6 +465,12 @@ def wrapped_context(ctx: Context) -> Optional[Decision]:
     parts = [rules.say("connections.calls.context", servers=", ".join(f"{one['alias']} ({one['env'].upper()})" for one in found))] if found else []
     if wrapped:
         parts.append(rules.say("connections.wrap.context", aliases=", ".join(wrapped), first=wrapped[0]))
+    try:
+        lacks = launchenv.seen(ctx.root)
+        if lacks.get("ok") is False and lacks.get("missing"):
+            parts.append(rules.say("reach.vscode_env.context", missing=", ".join(str(item) for item in lacks["missing"][:6])))
+    except Exception:  # noqa: BLE001
+        pass
     return Decision(context="\n".join(parts)) if parts else None
 
 

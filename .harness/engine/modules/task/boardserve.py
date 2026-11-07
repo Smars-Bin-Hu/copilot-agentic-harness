@@ -55,7 +55,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
-from core import ahp, company, config, messages, outbox, reach, registry, state, targets, tasks, user
+from core import ahp, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
 from core import launchenv
 from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
@@ -73,6 +73,7 @@ from . import tasksize
 from . import wallpaper
 from . import autorun, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
+from . import reachcheck
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -88,10 +89,10 @@ MAX_ARCHIVE = 200  # tasks in one request
 EARLY_ENTER = 2.0  # seconds after the start in which a line from the terminal is not taken for the person pressing Enter
 REOPEN_EVERY = 3.0  # seconds
 FREE = ("pause", "resume", "offwork", "onwork")  # no pairing: they guard nothing
-SETTINGS = ("review set", "task allow", "test runner")  # settings the agent reads at its next step: they change nothing under its hands, so they work while it is at work (1.7.9)
+SETTINGS = ("review set", "task allow", "task link", "test runner")  # settings the agent reads at its next step: they change nothing under its hands, so they work while it is at work (1.7.9)
 ALL_AT_ONCE = ("offwork", "onwork")  # every task at once (`task offwork`, `task onwork`); allowed where `pause` is
 BUILTIN = ("send", "answer", "steer", "stop", "create", "confirm", "question")  # the buttons that talk to the chat (1.6) and the "new task" button (B73): always offered by a served board, not a setting; each is a POST of a paired browser
-DESK_REFRESH = 10  # seconds between two reads of a task page
+DESK_REFRESH = 3  # seconds between two reads of a task page (10 until 1.7.26: a state that came from a hook, such as "waits for your answer", showed up about 7 seconds late)
 REFRESH = 3  # seconds between two boards in the browser when `board.refresh_seconds` of the task policy says nothing
 # The pages may run their own inline script and talk to this server only: an agent's text drawn on a page cannot load
 # or send anything elsewhere, even if it ever got past the drawing (which uses textContent only).
@@ -112,7 +113,7 @@ def refresh_seconds(value: Any) -> int:
 def settings(root: Path) -> Dict[str, Any]:
     found = config.policy_or_empty(root, "task").get("board") or {}
     actions = found.get("actions")
-    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close"]}
+    return {"port": config.whole(found.get("port"), 8765), "refresh": refresh_seconds(found.get("refresh_seconds")), "actions": list(actions) if isinstance(actions, list) else ["pause", "resume", "confirm-req", "approve-plan", "approve-promote", "review extend", "review waive", "review dismiss", "review set", "test runner", "task allow", "task link", "approve-action", "dismiss action", "autorun on", "recover", "archive", "close"]}
 
 
 class Fallback(CommandError):
@@ -185,7 +186,7 @@ RESTART_AFTER = 0.3  # seconds for the answer to reach the page
 RESTART_CODE = "HARNESS_BOARD_RESTART"  # the pairing code of the next process: in its environment, never on disk
 
 
-CHAT_STILL = ("idle", "error")  # VS Code says the chat runs no turn: it waits for the person, or its last turn failed
+CHAT_STILL = ("idle", "error", "input")  # VS Code says the chat runs no turn: it waits for the person (`input`: a question or a command to allow, 1.7.20), or its last turn failed
 
 
 def trust_chat(row: Dict[str, Any]) -> bool:
@@ -234,7 +235,7 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
                      "account": saved.get("account", ""), "saved": bool(saved), "reach": (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")})
     kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
                  for name, kind in known.items() if not conn_core.type_problems(kind)}
-    return {"connections": rows, "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "windows": os.name == "nt"}
+    return {"connections": rows, "types": kinds_out, "state": conn_core.state(root), "vscode_open": bool(vscode_open), "env_wrong": launchenv.seen(root).get("ok") is False, "windows": os.name == "nt"}
 
 
 EMBEDDED = re.compile(r"\bElectron/\d")  # the user agent of VS Code's own browser (an Electron app); Chrome, Edge and Firefox never send it
@@ -268,7 +269,8 @@ class Board:
         self.wall_window = threading.Lock()  # one folder window at a time
         self.language_stamp: List[int] = []
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
-        self.ready = readiness.Ready(root, self.link)  # the Enter screen (`/api/ready`)
+        self.checker = reachcheck.Checker(root)  # the board looks at the outside connections itself, in the background (1.7.19)
+        self.ready = readiness.Ready(root, self.link, checker=self.checker)  # the Enter screen (`/api/ready`)
         self.space = tasksize.Watch(root)  # how much room the task folders take, measured once an hour (1.6.109)
         self.who: Tuple[Any, str] = (None, "")  # (the stamp of the user files, the name) for `user_name`
 
@@ -605,6 +607,12 @@ class Board:
             result = tasklife.set_allow(self.root, task, str(env_name or ""), str(who or "") == "on", interactive=True)
             noted(self.root, result.get("task") or task, action)
             return result
+        if action == "task link":  # one click, no code: the person names an item of an outside tool in the task, or takes it away (1.7.20); the same function as `task link add|remove`
+            if str(who or "") == "on":
+                tasklife.check_link_type(self.root, str(env_name or ""))  # a type no installed tool pack gives is refused here, with the types there are (1.7.22)
+            result = tasklife.link(self.root, task, str(env_name or ""), str(who or "") == "on", by_person=True)
+            noted(self.root, result.get("task") or task, action)
+            return result
         if action == "test runner":  # one click, no code: the person lets the agent run an environment of the test guide, or takes it back (1.7.2)
             result = testrecord.set_runner(self.root, task, str(env_name or ""), str(who or "") == testrecord.AGENT, interactive=True)
             noted(self.root, result.get("task") or task, action)
@@ -694,7 +702,7 @@ class Board:
 
         step = str(data.get("step", ""))
         alias = str(data.get("alias") or "")
-        given = {key: str(data.get(key) or "") for key in ("account", "password", "keyfile")}
+        given = {key: str(data.get(key) or "") for key in ("account", "password", "keyfile", "token")}
         own = data.get("own") if isinstance(data.get("own"), dict) else None
         if own is not None:
             own = {key: str(value) for key, value in own.items() if key in ("type", "env", "auth", "label") or key in ((conn_core.types(self.root).get(str(own.get("type"))) or {}).get("fields") or {})}
@@ -734,7 +742,12 @@ class Board:
             code = ahp.find_code()
             if not code:
                 raise ValueError(say("serve.open.no-cli"))
-            return conn_core.launch(self.root, chosen, primary, [code, str(self.root)])
+            made = conn_core.launch(self.root, chosen, primary, [code, str(self.root)])
+            if made.get("started"):
+                launchenv.mark_started(self.root)  # VS Code is on its way: look for its host often, and check the connections now, not at the first chat
+                self.link.hurry()
+                self.checker.start()
+            return made
         raise ValueError(say("serve.refused.request"))
 
     def machine(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -750,6 +763,20 @@ class Board:
         elif step == "mcp":  # the person says whether MCP may be used here (1.7.17); the tool packs' MCP servers follow
             done = launchenv.set_mcp(self.root, bool(data.get("allowed")))
             return dict(launchenv.state(self.root), mcp_done=done, vscode_open=bool(self.link.status().get("ready", False)))
+        elif step == "toolpack-add":  # a folder or zip the person names (1.7.19): what `harness toolpack add <path>` does; an installed name is replaced only after a second, confirming call
+            from core import toolpacks
+
+            try:
+                found = toolpacks.installed_against(self.root, str(data.get("path") or ""))
+                if found["installed"] and (toolpacks.ledger(self.root).get(found["name"]) or {}).get("from") == toolpacks.COMPANY:
+                    raise ValueError(say("toolpack.company.managed", name=found["name"]))
+                if found["installed"] and not data.get("replace"):
+                    return {"confirm": found}
+                done = toolpacks.add(self.root, str(data.get("path") or ""), replace=bool(data.get("replace")))
+                row = next((item for item in toolpacks.check(self.root, done["installed"])["toolpacks"] if item["name"] == done["installed"]), {})
+            except toolpacks.ToolpackError as error:
+                raise ValueError(str(error)) from None
+            return {"added": done, "missing": [name for name, ok in (row.get("programs") or {}).items() if not ok]}
         elif step in ("toolpack-update", "toolpack-remove"):  # the paired browser is the person's: what `harness toolpack add --replace` / `remove` do at a terminal
             from core import toolpacks
 
@@ -1069,7 +1096,7 @@ class Board:
             found = tasks.read(self.root, folder) or {}
             sources.append({"name": task_ops.name_of(folder), "kind": str(found.get("kind") or ""), "status": str(found.get("status") or "")})
         return {"ready": bool(status["ready"]), "why": status["why"], "models": self.link.model_list(), "kinds": list(tasks.KINDS), "sources": sources,
-                "limit": chatnew.MAX_TEXT,
+                "limit": chatnew.MAX_TEXT, "link_types": toolpacks.link_types(self.root),
                 "domains": intake.kb_domains(self.root)}  # the knowledge base domains a task may be about (none is a choice); empty: no knowledge base has one
 
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1384,10 +1411,19 @@ def handler_for(board: Board) -> type:
             if path == "/api/open":  # bring the VS Code window of this folder forward: the thread of the link runs `code <folder>`; this answers at once
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                if not data.get("anyway") and launchenv.extra(board.root) and launchenv.vscode_running() and launchenv.seen(board.root).get("ok") is not True:  # it is running and no chat found it started with the settings: starting it again gives it nothing (1.7.21); the person may still open it (`anyway`, 1.7.29)
+                    return self.answer(409, {"error": say("serve.open.running_env"), "running": True})
+                if not board.link.status().get("ready") and not launchenv.vscode_running():
+                    launchenv.mark_started(board.root)  # this start has the settings: what an earlier one lacked no longer holds
                 asked = board.link.open_window()
                 if asked != "queued":
                     return self.answer(409, {"error": say("serve.open.off") if asked == "off" else say("serve.open.no-cli")})
+                board.checker.start()  # the connections are checked at once, in VS Code's environment, so the Enter screen has a word within seconds (1.7.19)
                 return self.answer(200, {"result": {"queued": True}})
+            if path == "/api/reach":  # the Check button of the outside systems line: the board checks the connections now (the paired browser only)
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                return self.answer(200, {"result": {"started": board.checker.start()}})
             if path == "/api/launch":  # Windows: start the company's launch script (it asks for the identity itself, then starts VS Code); the paired browser only (1.7.9)
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
@@ -1696,7 +1732,12 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         opened = board.restarted or bool(opener(f"{address}#pair={board.code}"))  # after a restart the page is there, and asks for itself
     except Exception:  # noqa: BLE001 - the person can pair by hand
         opened = False
-    print(say("serve.started", address=address, actions=", ".join(board.actions)), file=out, flush=True)
+    def button(action: str) -> str:  # the first line names the buttons as the board shows them (1.7.22), not as the command words
+        key = "board.action." + action.replace(" ", "-")
+        word = say(key)
+        return action if word == key else word
+
+    print(say("serve.started", address=address, actions=", ".join(button(action) for action in board.actions)), file=out, flush=True)
     print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
     if ready is not None:
         ready(server)

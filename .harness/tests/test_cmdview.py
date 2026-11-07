@@ -50,6 +50,11 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(found, {"server": "sql-dev.example.local", "port": "1433"})
         self.assertEqual(cmdview.facts("sqlcmd -S h -Q x", None), {})
 
+    def test_an_option_given_twice_shows_every_value_once(self) -> None:
+        """1.7.25 (K11): `--tag a --tag b` is two tags on the card, not the first."""
+        show = {"tag": r"--tag\s+(\S+)", "state": r"--state\s+(\S+)"}
+        self.assertEqual(cmdview.facts("tk update 7 --state Done --tag a --tag b --tag a", show), {"tag": "a, b", "state": "Done"})
+
 
 if __name__ == "__main__":
     unittest.main()

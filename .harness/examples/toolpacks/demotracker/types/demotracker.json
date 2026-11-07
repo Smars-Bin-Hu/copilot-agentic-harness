@@ -36,7 +36,8 @@
     }
   ],
   "show": {
-    "ticket": "\\b(?:get|comment|set-state|delete)\\s+(\\S+)"
+    "ticket": "\\b(?:get|comment|set-state|delete)\\s+(\\S+)",
+    "state": "\\bset-state\\s+\\S+\\s+(\\S+)"
   },
   "rules": {
     "none": {
@@ -45,5 +46,35 @@
       "exec": "human",
       "destroy": "deny"
     }
-  }
+  },
+  "say": [
+    {
+      "pattern": "\\bcomment\\s+(\\S+)",
+      "text": "Add a comment to ticket {1}"
+    },
+    {
+      "pattern": "\\bset-state\\s+(\\S+)\\s+(\\S.*)$",
+      "text": "Set ticket {1} to {2}"
+    },
+    {
+      "pattern": "\\bdelete\\s+(\\S+)",
+      "text": "Delete ticket {1}"
+    }
+  ],
+  "body": [
+    {
+      "pattern": "--file\\s+(\\S+)",
+      "from": "file"
+    },
+    {
+      "pattern": "--text\\s+\"((?:[^\"\\\\]|\\\\.)*)\"",
+      "from": "text"
+    },
+    {
+      "pattern": "\\bcomment\\s+\\S+\\s+(?!--)(\\S.*)$",
+      "from": "text"
+    }
+  ],
+  "item": "\\bdemotracker(?:\\.cmd)?\\s+--project\\s+\\S+\\s+(?:comment|set-state)\\s+(\\S+)",
+  "link": "demo"
 }

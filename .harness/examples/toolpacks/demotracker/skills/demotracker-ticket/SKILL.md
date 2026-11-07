@@ -19,8 +19,8 @@ A sample skill of the sample tool pack `demotracker` (a made-up ticket board). A
 ## Step-by-Step Workflows
 
 1. **Link the ticket the user names**: `harness task link add demo:<id> --task <name>`. Only an id the user gave.
-2. **Read it** (a read goes through): `demotracker --project <project> get <id>`. `<project>` is the `project` field of the server, not the server's name: `harness servers` shows the server's command in `call`; take the project from there.
-3. **Update it only when the user said yes**, with the words the user agreed to. Show the text first; then run `demotracker --project <project> comment <id> <text>`, or `set-state <id> <state>`. The gate holds the write; the user approves it on the task page.
+2. **Read it** (a read goes through): `demotracker --project <project> get <id>`. `<project>` is the `project` field of the server, not the server's name: `harness connections` shows the connection's fields; take the project from there.
+3. **Update it only when the user said yes**, with the words the user agreed to. Show the text first. A long comment goes in a file of the task folder (`notes.md`): run `demotracker --project <project> comment <id> --file notes.md`; a short one: `comment <id> --text "<text>"`. A state change: `set-state <id> <state>`. The gate holds the write; the user approves it on the task page.
 
 ## Gotchas
 

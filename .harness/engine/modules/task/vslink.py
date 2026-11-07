@@ -50,6 +50,8 @@ REREAD_AFTER_ANSWER = 10.0  # seconds after a person answered in which a session
 PROBLEM_FOR = 120.0  # seconds a "Copilot is not usable" answer of the host is still told after it was heard
 INITIATOR_WAIT = 10.0  # seconds after the first message in which the host is asked who made the chat
 UNDO_WAIT = 12.0  # seconds a Withdraw waits for the turn it stopped to end
+HURRY_FOR = 60.0  # seconds after the board opens VS Code in which the link looks for the host every HURRY_EVERY seconds, not after the grown wait (1.7.19)
+HURRY_EVERY = 1.0
 SUB_FOLLOW = 3  # chats of subagents followed for each bound chat, the newest (1.6.105)
 
 
@@ -148,6 +150,7 @@ class VsLink:
         self.jobs: "queue.Queue[Any]" = queue.Queue()  # "open", or a Job
         self.thread: Optional[threading.Thread] = None
         self.ready = False
+        self.hurry_until = 0.0  # monotonic time until which a missing host is looked for often
         self.losses = 0  # how many times a working link went away: VS Code was closed, however soon it came back
         self.why = "off" if not enabled else "starting"
         self.sessions: Dict[str, Dict[str, Any]] = {}  # the chats of this folder, by resource
@@ -356,7 +359,7 @@ class VsLink:
             if not self.enabled or self.why in ("off", "no-cli"):
                 return "off" if not self.enabled else self.why
         self.jobs.put("open")
-        self.wake.set()
+        self.hurry()
         return "queued"
 
     def ask_of(self, task: str) -> Optional[Dict[str, Any]]:
@@ -405,7 +408,16 @@ class VsLink:
             self.losses += 1 if self.ready and not ready else 0
             self.ready, self.why = ready, why
 
+    def hurry(self) -> None:
+        """The board just opened VS Code: look for its host every second for a while. The wait had grown to a minute while no window was open, and the Enter screen stayed
+        red (and the Open VS Code button shown) until it ran out."""
+        self.hurry_until = time.monotonic() + HURRY_FOR
+        self.backoff.reset()
+        self.wake.set()
+
     def _wait(self, seconds: float) -> None:
+        if time.monotonic() < self.hurry_until:
+            seconds = min(seconds, HURRY_EVERY)
         self.wake.wait(seconds)
         self.wake.clear()
 

@@ -16,6 +16,7 @@
 /* The fixed controls live in a right gutter. Where the page would run under them the content moves left (the header, the numbers, the list, the tabs all stay clear). */
 @media (max-width:1480px){main,main.wide{margin-left:20px;margin-right:152px;max-width:none}}
 @media (max-width:900px){main,main.wide{margin-right:20px}.sh-pill span{display:none}}
+@media (max-width:900px){.lb-top{padding-right:106px}}  /* the fixed search pill is over the top right corner: the buttons stop before it (1.7.29) */
 
 /* An overlay (the palette, the settings, the reply panel) is nearly solid and does not blur: a page has at most three blurred layers (wall.css), whatever is open. */
 
@@ -78,3 +79,4 @@ html.lite .pal,html.lite .setp{background:var(--card)}
 .space-bar{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px 14px;margin:10px 0 0;padding:10px 14px;border:1px solid var(--line2);border-radius:12px;background:var(--card);color:var(--ink);font-size:13px}.space-bar[hidden]{display:none}
 .space-bar>i{flex:none;width:7px;height:7px;margin-top:6px;border-radius:50%;background:var(--hot-dot)}.space-words{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:3px;overflow-wrap:anywhere}
 .space-list{color:var(--soft);font-size:12.5px}.space-task{margin-right:10px}.space-task code{font-size:12px;overflow-wrap:anywhere}.space-mb{white-space:nowrap}.space-acts{display:flex;gap:8px;flex-wrap:wrap;align-self:center}
+@media (max-width:900px){main,main.wide{padding-bottom:92px}}

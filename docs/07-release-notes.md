@@ -10,6 +10,182 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.29 (2026-11-07)
+
+### Added
+
+- **[Guardrails and the gate](12-guardrails-and-gate.md)**: a page on why the gate is a guardrail and not a sandbox, what passes and what waits for you, why code answers and not the model, the two checkpoints, and the next steps (record each real write first, then let the tool pack's program check before it writes).
+- **A held call** now also tells the agent not to reach the same result another way (another program, a script, the service's web address).
+
+### Fixed
+
+- **A held call with several writes** (`comment ...; update ...` in one line) says "2 writes" beside its title. In the green box of approved calls each code now stands in front of its own title. When the agent resends one write of it and the card is rewritten, "asked at" shows the new time.
+- **The Enter screen**: the reflection of the wordmark is gone while the list needs you (it lay under the list header and Get ready at 1280 x 800). "Outside systems: not checked yet" is a calm grey line with the Check button beside it, not an amber warning; checking is not an error.
+- **The board header** at 900 px no longer runs under the search pill (the New task button was partly hidden in Chinese).
+- **New task**: the hint over the first message says the message is always in English (the agent reads English) and your text goes in last as typed.
+- **A repeated refusal** now says first what was refused and why, then how many times it came up. The hold for a file the line only names (`diff <(...) missing-file`) no longer says the line "runs" it.
+- **Protocol README**: the limits section names more classes the gate cannot read: start-up files set by environment variables (`BASH_ENV`, `PYTHONSTARTUP`), `env --split-string`, aliases kept by other tools, tools that read commands from stdin or a file (`make -f -`, `at`), other shells, PowerShell `iex`, and calling the REST address from code.
+
+### Changed
+
+- **Open VS Code while VS Code is already running** (and no chat found it started with this computer's settings): a window says why it is better to quit VS Code first, with **I will quit it first** and **Open anyway**. Before, the board only refused.
+
+## 1.7.28 (2026-11-07)
+
+### Fixed
+
+- **The board list** fits any width. Its columns give way in steps by the width of the list's own box: the time bar, checks, Credits and prompts go first, then waited and time, and under about 600 px each task is one block (name, state, buttons). What a hidden column held is written under the task name, so nothing is cut without a trace. A list that still scrolls sideways fades at its right edge. The task name gives way first, with the whole name on hover. A row with nothing to press shows a dash in the Do column.
+- **The round buttons at the bottom right** lie in a row along the bottom edge in a window under 900 px, and the page keeps room for them, so they no longer cover rows.
+- **The Enter screen**: the scroll arrow sits on the copyright line, not over the last list line; the fade at the foot is shorter; the grey Not ready pill no longer lies over the reflection of the wordmark (the reflection is off where the pill is stacked above the list); the page under the screen has no scroll height of its own (no extra 33 px); the scroll hint shows from 2 px. The VS Code lines no longer show a setting name or an environment variable.
+- **Tools**: the window body scrolls inside the window and the buttons stay in view, with one height for the three tabs (14 connections used to push Close off the screen); the env chips of the connections have one width, so the names line up.
+- **An approved call's card** is green all through (it was orange with a green edge), and **Create and send** in New task is the main (filled) button.
+
+## 1.7.27 (2026-11-07)
+
+### Fixed
+
+- **Fewer false holds by the gate** (retest R7). A program name that is only data is not a call: `perl -ne/-pe/-lane` and `ruby -ne` (the one-liner is code, not a file named `print`); `find ... -exec grep -l ado {} \;` and `grep -rl ado . | xargs -I{} cp {} /tmp`; file managers (`mkdir`, `touch`, `cp`, `mv`, `chmod`, `ln`, `tar`, `zip`, `unzip`, `code`, `python3 -m py_compile`, `flake8`, `ruff`, `black`) with a program name or path in their arguments; `python3 -i < /dev/null`; `git clean -n`. Nothing that was held for a real reason is let through: `-exec sh -c`, `xargs sh`, `tar --to-command`, `zip -TT`, a copied script that is then run are still held (tests for each).
+- **A line of several commands that holds a write** (`ado states; echo ---; ado update 1 ...`) now gets its card's title from the write. When the agent then sends the write alone, the waiting card takes over the short command and keeps its code, so there is one card, not an orphan beside a new one.
+- **Words**: the note on a waiting question says "approve or dismiss" (the button is Dismiss), and the facts of a held call (state, title, tag, branch, param, ...) have names in Chinese.
+- **Protocol README**: the limits section lists the classes the gate cannot see (build and test tools, `python3 -m`, `find | xargs bash`, ...).
+
+## 1.7.26 (2026-11-07)
+
+### Fixed
+
+- **The Enter screen's list** shows a fade and a small arrow at the foot of its box when lines are below the edge (the Outside systems row and its Check and Open VS Code buttons can be there on a short or narrow window), so it is clear that the box scrolls.
+- **The state pill in the task head** has room for the whole text, and the task name gives way first; a long wait text is one line in a list row (the whole text on hover). The text for a held outside call is shorter: "an outside call waits for your approval".
+- **The task page is read every 3 seconds** (it was 10), so a state set by a hook, such as "waits for your answer", shows within a few seconds.
+- **Words**: a Chinese typo in the note about a question the agent waits on; "Company Context" has a Chinese word; "1 certificate(s)" in Tools, This computer.
+- **A held call's card** no longer shows the draft file's name; it is on the pointer of "asked at ...".
+- **Tools**: the three tabs start at one height, so the window does not jump when you change tab.
+- **Withdraw** shows only when the newest message has no answer yet (the agent is at work, stopped, asked or failed, or the chat is idle with the message still the last line).
+- **New task**: when tickets are named, the Kind is Dev and the text is short, a quiet note says Kind Q&A is lighter. Kind is not changed for you.
+
+## 1.7.25 (2026-11-07)
+
+### Changed
+
+- **One rule for the gate instead of one patch for each way round it.** Every word of a command line that is the name of a tool's program (`ado`, `ado.cmd`, `/x/bin/ado`) must be accounted for: it is the program of a call the gate judged, or an argument of a program that only reads (`grep`, `cat`, `head`, `sed`, `find` without `-exec`, `git` without `-c`, `harness ...`: one list in the gate's code, written down in the tool pack protocol). Anything else is held, and the reason names the program: behind `setsid`, `stdbuf`, `find -exec`, `su -c`, `tmux`, `screen`, `at`, `git -c alias...`; in a shell function or an alias; in PowerShell's `& (Get-Command ado)`, `% { ado ... }`, `. ado`; in a command in backquotes. What it holds is the line that names the program in a place it cannot follow; `grep ado`, `cat .../ado`, `git commit -m 'ado: fix'` and `harness task link add ado:1` run as before.
+- **A file that is run is read, wherever it is.** `./x.sh`, `source x.sh`, `. x.sh`, `bash x.sh`, `bash -x x.sh`, `pwsh -File x.ps1`, `bash < x.sh` and `cat x.sh | bash`: if the file (up to 200 KB) names a tool's program, the line is held; a file that is missing, too big or not readable is held with a reason that says so. So a script written and run in the same line is held: write it first, run it next. The code of a here-document or a here-string that goes to an interpreter is read the same way.
+- **What a program prints is data, not code.** `ado item 1 --json | python3 -m json.tool`, `... | python3 script.py`, `... | python3 -c "..."` are no longer held as a whole line; only the part the gate cannot read is looked at (the `-c` text, the script file, a here-document).
+- **A command may name several items.** A tool type's `item` can be a list of patterns; every item a command writes must be in range (`ado link 300105 --to 300114`: both numbers; an item that is not linked refuses the call, one the agent linked itself is held).
+- **PowerShell given an encoded command** (`-EncodedCommand`, `-enc`, `-e`) is always held: the gate cannot read it.
+- **A backslash at the end of a line joins the lines** before the gate reads them (`ado\` + new line + `comment ...` is `ado comment ...`).
+
+### Fixed
+
+- The text a held call writes is shown as the shell passes it on, then as the program reads `\n` and `\t`: `"a\\nb"` in double quotes is two lines on the card, as it is in the ticket.
+- The red text on a card whose file was not found names the button as the button reads (Dismiss / 作废) and reads well.
+- The green card of an approved call says which call it is (the sentence of its type, else the start of the command).
+- The facts a type shows on a card (`show`) list every value of an option given twice (`--tag a --tag b`); the sample tracker shows the new state.
+- What the gate cannot read is written in the tool pack protocol, with the advice for stronger isolation: an operating-system sandbox.
+
+## 1.7.24 (2026-11-07)
+
+### Fixed
+
+- **A question the agent waits on** has its full text on the pointer of the state pill (task head, board list), and every held call's card says that the agent waits for an answer, not only the first.
+- **An approved call keeps its green card** (and **Tell the agent to run it**) until the command has run, also after the agent answered a question or the page was loaded again; the server keeps that list now. On the Live tab such a call reads *Approved: ... waits for the agent*, and a held one *waits for you*, not "failed".
+- **VS Code started without this computer's settings**: the Enter screen's outside systems line says it in words (quit VS Code completely, then press **Open VS Code** here) instead of asking for accounts; the identities window no longer marks a connection "in the window" then.
+- **Connection names** in Tools, Connections keep their width; only a very long name is cut, and the address gives way first (the full text on hover).
+- **The Enter screen's list** has one width rule on every screen, so a wider window never shows fewer names than a narrower one; under 1100 px the pill goes above the list. The hover table on a narrow screen is a block per system, nothing cut at the right.
+- **Get ready, not ready**: the list scrolls in its own box and the copyright and version line stays in view.
+- Checked in a browser: after **Finish** in setup the board's orange banner counts the items still missing and "Company content" reads the copied files.
+
+## 1.7.23 (2026-11-07)
+
+### Fixed
+
+- **The gate no longer lets a tool's program through behind another word.** Found by testing: `python3 <pack>/bin/ado comment ...` (and `python`, `py`, `node`, `bash`, `sh`, `pwsh -File` with the program as the script) was let through whole. The script's name is now read as the program and judged like a plain call. Shell groups and keywords (`{ ...; }`, `if ... then ... fi`, `for ... do ... done`, `while`, `case`, `!`), an escaped name (`a\do`) and `builtin eval` no longer hide a command (git commands in them are seen too).
+- **A line the gate cannot read is held when it names a tool's program.** A string piped into a shell (`echo '...' | bash`), a here-string, `source <(...)`, `python -c`, `node -e`, PowerShell `iex` / `Invoke-Expression` / `Start-Process`, `xargs` with a placeholder, and a script file of the repository that names the program: the call is held, and the reason says which program it names. A line that names no tool's program (`git status`, `ls | head`, `python3 -m unittest ...`) is not held. What the gate still cannot see is written in the tool pack protocol (what the gate reads).
+- **`ado --help 2>&1`** and the like are no longer read as a write or exec: redirections (`2>&1`, `> file`, `2>/dev/null`, `>> file`, `< file`) are left out of the arguments before the gate decides.
+- **A held call's card found the wrong file.** `--file result.md` showed the task's `result.md` as the text, but the program, run from the repository root, finds no such file. The card now looks from the repository root and says the file was not found there, and that the command will fail.
+- **The Open to the agent text** no longer speaks of `DROP`; it says that linked tickets already linked run without asking, and newly linked and new tickets still wait for you.
+- **Approve on the task page.** The agent and the card no longer tell you to run `harness approve-action` in a terminal; they say to approve on the task page (the command is still there, and `harness approve-action --help` documents it). The View window no longer says "UTC": the time is your local time.
+
+### Changed
+
+- **`say` texts of a tool pack may be written in two languages**: `"text": {"en": "...", "zh": "..."}`. The language of the session picks the text; a missing language reads `en`. A plain string works as before.
+- The gate gives a different reason for a line it holds because it cannot read it (`gate.external.unreadable`), apart from a program in an unknown variable (`gate.external.unseen`).
+
+## 1.7.22 (2026-11-07)
+
+### Fixed
+
+- **Open to the agent, linked items** can be closed again with a second click: the pop stays open after a click, and the click reads the chip as it is now.
+- **A held call's time** ("asked at") is in your local time, like the rest of the page.
+- **Long connection names** shrink with an ellipsis in Tools, Connections (the full name on hover) and no longer push the tag and the state out of the window. On a narrow window the Search pill no longer covers the task head's buttons.
+- **The Enter screen's outside systems line** places the names one by one: a name that does not fit is skipped and a shorter one after it can still go in; wide windows give the line more room. The names and addresses in its hover table are not split in the middle on a narrow window. A long list no longer covers the copyright line.
+- **No Confirm button while `REQ.md` still has template text**, in any tier, and the Requirement tab no longer says "the button above".
+- **A ticket of a type no installed tool pack gives** (`jira:99`) is refused on the task page and in New task, with the types there are; a too long id is told as too long.
+- **Chinese pages**: the held card's "what" and fact words, the first line the board prints (button names), and the MCP choices (**Allow MCP** / **Do not allow MCP**) are in the page's language.
+- **Finish setup** reads the states below it again, so "Company content: Not found yet" no longer stays after the copy. The orange banner of the board says the copy can already work and lacks your team's content, so it does not clash with the Ready of the Enter screen.
+- **Forget** of a connection of your own asks once more (it removes the connection and its identity for good).
+- **A held call's code** stays in the card when the card is drawn again (it was lost when View opened). Opening View does not fill it in: type it, or click it in View.
+- **Live** shows a call held in the outbox as held (waits for you), not as "Run Shell Command failed".
+- **The board list** no longer shows a turning mark on a task that waits for you.
+
+## 1.7.21 (2026-11-07)
+
+### Fixed
+
+- **A command line of several commands is judged one command at a time.** Before, only the first command of `a; b`, `a && b`, `a || b`, `a | b`, a new line or `$(...)` was looked at: with the linked items open, a write to another ticket, or a new one, went through behind a linked one. Now every command is judged, the strictest answer wins, and a write must name an item of its own command (a title that spells another command names nothing). Simple variables set in the line (`A=ado; $A comment 1 ...`, `export X=...`) are put in; a command whose program the gate cannot read (`$A ...` with no value) is held, with the reason "the gate cannot read what this one runs".
+- **An item the agent links itself is not opened.** `task allow --links` opens the items named when it was switched on (and those you add on the board while it is on). The refusal for an unlinked item now says what to do: open a Q&A task first when none is open, link with `harness task link add --task <task> ado:<id>`, and the write then waits for you. `ado:0300114` and `ado:300114` are the same item.
+- **VS Code started without this computer's settings.** The hook at the start of a chat checks that the tool folders and the CA bundle are in the environment VS Code gave it. When they are not, the connections on the Enter screen go red with "Quit VS Code completely, then open it again with Open VS Code on the board", the agent is told to say so, and the board's own check can no longer paint them green. **Open VS Code** on a VS Code that is already running says to quit it first.
+- **Testing a connection that is not saved yet.** The program of a connection's test or probe finds its fields and identity as `HARNESS_CONNECTION_<NAME>_<FIELD>` (and `_USER`, `_PASSWORD`, `_TOKEN`) in its environment, saved or not; `{conn}` in the test command is the connection's name, so two connections with the same organization and project are told apart. A connection type may declare a `token` identity: one secret, asked under the label of its auth entry, kept as `..._TOKEN`.
+- **Held-call cards.** A body file is found from the repository root and by its full path; `\n` in `--text` shows as a line break and `\"` as a quote; the sentences of the gate and the cards show no `(none)` for a system without environments, and the hand-off of its exec asks for no environment.
+- **`rules` on a connection type** reach the gate (the connection's own `rules` win). A pack can now set an `exec` to `outbox`: held like a write, approved on its card.
+- **Smaller.** A link address may start with `{url}`; a zip install gives `bin/` programs the execute bit; an install error is one sentence (not a tool pack, not a zip, path too long); a failed probe or test says what the program said first; a refused identity that is kept here says to fix it in Tools (not "open VS Code with your identity"); a chat question shows "waits for your answer" on the row (the question is in `waiting_tip`); the path of a held call's draft is no longer masked as a key.
+
+## 1.7.20 (2026-11-07)
+
+### Added
+
+- **Tickets from the board.** The **New task** window has an optional **Link tickets** field (`ado:300100`, several allowed; a click on a type puts it in). On a task page, each linked ticket is a chip with an `×` to remove it, and **+ Link a ticket** adds one (it runs `harness task link add|remove`). The types offered come from the installed tool packs.
+- **A held call says what it does.** A connection type may give `say` (a sentence for the card: "Add a comment to ticket 7") and `body` (the text the call writes: a file of the task, or the text as written, also `--body @file`). The card shows the sentence, the text in a block of its own (up to 20000 characters, scrolling) and the raw command folded under **Raw command**. The `demotracker` sample has both (`comment <id> --file`, `--text`). Written in the [protocol](../.harness/contracts/toolpack/README.md).
+- **Requirement not finished.** While `REQ.md` still holds the template's `<...>` text, the task page marks it (the tab, and a line on the Requirement tab that names the sections), and the agent's next-step text says "finish it before you ask the person to confirm".
+- **Confirm requirement in every tier.** Once `REQ.md` is written and not confirmed, the page offers the button in any tier. Only a `full` task waits for it; the rule says a light or medium task needs no confirmation.
+- **Small ticket chores are Q&A tasks** (link, read, comment, change a field): no `REQ.md`, no plan; writes still go through the gate. `task close` says when a write is still held.
+- **A prompt that names a connection** now gets its fields (org, project, ...) and its tool pack's skills and program, not the type's test command.
+
+### Changed
+
+- **`harness servers`** is the old name of `harness connections`: it says so, then does the same.
+- **The held-call card** shows no environment label when the environment is `none`, and the copy button says **Copy the command**.
+- **An agent that waits for the answer to its question** (the ask tool) is not "at work" any more: the board says **waits for your answer**, and **Approve** and **Dismiss** of held calls work meanwhile. The page does not offer to "tell the agent" while it waits, and a chat that waits for input counts as not at work.
+
+## 1.7.19 (2026-11-07)
+
+### Added
+
+- **Install a tool pack from the board.** Tools, Tool packs has **Install from a folder**: a path field (or a zip) and **Install**; quotes from "Copy as path" are removed; a pack that is installed already needs a second click that says what it replaces (`Replace 1.0.0 → 1.1.0`); the result or the reason it was refused shows under the field.
+- **Finish setup shows its work.** After the click: a spinner, "Still setting up. Do not close this window.", the steps done (`3 of 5`); the window has no Close until it ends. Then the result, or the step it stopped at with its reason, and **Retry setup**.
+- **A Get ready button on the Enter screen**, beside "Not ready". (The dock's settings button, bottom right of the board, already opened the same form in a window.)
+- **A connection test limit.** A connection type may set `test.timeout` (seconds; `test` may be `{"command", "timeout"}`); a program that keeps its own sign-in (`az`) gets 60 s, the others stay at 15 s. A test that runs out of time says **timed out (60 s)**. When **Sign in** has run to its end, the row says **Signed in? Click Test.** and highlights Test.
+- **The board checks the outside connections itself.** After **Open VS Code**, and when the Enter screen opens with no answer under 5 minutes old, the board runs each connection's test in the environment VS Code is started with and writes the answer where the hooks write theirs; the Enter screen no longer waits for the first chat. A connection never checked says "Not checked yet" with a **Check** button (it no longer says VS Code needs your account; that stays for an identity that was refused). `/api/reach` is the button's call.
+- **The outside systems line shows names.** Only the connection names, a status dot before each (green reached, red not reached, grey not checked, yellow partly), `+N` when they do not fit, never cut. The hover is a table by connection: system, environment (empty for `none`), status, reason, last checked, tool pack; it scrolls when there are many.
+
+### Changed
+
+- After **Open VS Code** the link to VS Code looks for the host every second for a minute. Before, the wait between two looks had grown to a minute while no window was open, so the Enter screen could stay red, with the Open VS Code button, long after VS Code was up. Opening it with identities does the same, and the Enter screen waits for it as it does for the plain button.
+
+### Fixed
+
+- A connection added while the Enter screen was open did not show: the outside systems line was kept with the folder lines for 10 seconds and read "not set up yet". It now reads again as soon as a connection, a pack, the policies or an answer changes.
+
+## 1.7.18 (2026-11-07)
+
+### Added
+
+- **Open to the agent for linked items.** A tool pack's connection type may say how a write names an item (`item`, `link`), as the Azure DevOps pack does for a work item. A write to an item the task is not linked to is then refused, with the line that links it. On the task page, **Open to the agent** has a chip **linked items** (`harness task allow --links --on`): the agent's writes to the items this task is linked to run without asking you each time; a new item still waits; it ends with the task.
+- A tool pack's skills may lead with the company's skill prefix (`<prefix>-<pack>-…`).
+- The protocol says it: give the agent a program, not a recipe (`.harness/contracts/toolpack/`). The `demotracker` sample scopes its writes to linked tickets.
+
+### Fixed
+
+- **Make** of the CA bundle on Windows read no chain (the address and the proxy did not reach the PowerShell script, and an empty answer read as trusted). It now passes them, and says why when no chain is read.
+
 ## 1.7.17 (2026-11-06)
 
 ### Added

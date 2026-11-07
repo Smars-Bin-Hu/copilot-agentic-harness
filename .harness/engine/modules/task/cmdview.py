@@ -11,6 +11,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core import messages
+
 LONG = 40  # a quoted value this long, or with a line break, is a block of its own
 SCRIPT_CHARS = 60_000  # how much of a file the command reads is shown
 SCRIPT_SUFFIXES = (".sql", ".ps1", ".sh", ".py", ".txt", ".csv", ".json", ".yaml", ".yml", ".cmd", ".bat")
@@ -99,13 +101,120 @@ def script_of(folder: Path, value: str) -> Optional[Dict[str, Any]]:
 
 
 def facts(command: str, show: Optional[Dict[str, Any]]) -> Dict[str, str]:
-    """The facts the pack says to show beside a command: `{name: first group of the pattern}` for each pattern that matches. A pattern that does not compile is skipped."""
+    """The facts the pack says to show beside a command: `{name: first group of the pattern}` for each pattern that matches. A pattern that does not compile is skipped. A pattern that
+    matches several times (an option given twice: `--tag a --tag b`) gives all of them, in order, joined with a comma (1.7.25)."""
     out: Dict[str, str] = {}
     for name, pattern in (show or {}).items():
         try:
-            match = re.search(str(pattern), command, re.IGNORECASE)
+            found = list(re.finditer(str(pattern), command, re.IGNORECASE))
         except re.error:
             continue
-        if match:
-            out[str(name)] = (match.group(1) if match.groups() else match.group(0))[:120]
+        values = list(dict.fromkeys((item.group(1) if item.groups() else item.group(0)) for item in found if (item.group(1) if item.groups() else item.group(0))))
+        if values:
+            out[str(name)] = ", ".join(values)[:120]
     return out
+
+
+# --- what a held call says in words, and the text it writes (1.7.20) ---------------------------------------------------------------------------------------
+
+BODY_CHARS = 20_000  # how much of the text a call writes is shown
+SAY_CHARS = 200
+
+
+def args_of(command: str, programs: Optional[List[str]] = None) -> str:
+    """What stands after the program of the command: the text the `say` and `body` patterns of a connection type read. The program is the first of `programs` (a name, a path or a Windows
+    `.cmd`) found as a whole word; with none found, the whole command."""
+    for program in programs or []:
+        found = re.search(rf"(?:^|[\s/\\=])({re.escape(program)})(?:\.cmd|\.bat|\.exe)?(?=\s|$)", command, re.IGNORECASE)
+        if found:
+            return command[found.end():].strip()
+    return command.strip()
+
+
+def all_args(command: str, programs: Optional[List[str]] = None) -> List[str]:
+    """What stands after the program, once for each place the program is a whole word and a command of its own (1.7.27): in a line of several commands (`ado states; echo ---; ado update 1`)
+    each part has its own words, up to the next `;`, `&&`, `||`, `|` or new line. `args_of` is the first."""
+    out: List[str] = []
+    for program in programs or []:
+        for found in re.finditer(rf"(?:^|[\s/\\=;&|(])({re.escape(program)})(?:\.cmd|\.bat|\.exe)?(?=\s|$)", command, re.IGNORECASE):
+            out.append(re.split(r"\n|;|&&|\|\||\|", command[found.end():].strip(), maxsplit=1)[0].strip())
+    return out
+
+
+def _in_language(text: Any) -> str:
+    """A `say` text as the language of the session reads it (1.7.23): a plain string as it is; `{"en": ..., "zh": ...}` the language asked for, else `en`."""
+    if isinstance(text, dict):
+        return str(text.get(messages.language()) or text.get("en") or "")
+    return str(text or "")
+
+
+def say_of(args: str, rules: Optional[List[Dict[str, Any]]]) -> str:
+    """The one-line title of the card: the `text` of the first rule whose `pattern` matches, with `{1}`, `{2}`, ... filled from its groups. A group that did not match is empty; a pattern that
+    does not compile is skipped."""
+    for rule in rules or []:
+        try:
+            found = re.search(str(rule.get("pattern")), args, re.IGNORECASE)
+        except (re.error, AttributeError):
+            continue
+        if found:
+            groups = found.groups()
+            return re.sub(r"\{(\d+)\}", lambda part: (groups[int(part.group(1)) - 1] or "") if 0 < int(part.group(1)) <= len(groups) else "", _in_language(rule.get("text")))[:SAY_CHARS].strip()
+    return ""
+
+
+def _shell_value(text: str, quote: str) -> str:
+    """What the shell passes on for a value written between these quotes (1.7.25): in double quotes `\\` is a backslash, `\"` a quote, `\$` a dollar, a backtick after a backslash a backtick, any other
+    backslash stays as it is; in single quotes everything stays; with no quote a backslash is dropped and the character after it stays."""
+    if quote == "'":
+        return text
+    if quote == '"':
+        return re.sub(r'\\([\\"$`])', lambda found: found.group(1), text)
+    return re.sub(r"\\(.)", lambda found: found.group(1), text)
+
+
+def _unescape(text: str) -> str:
+    """The text the program reads `\\n` and `\\t` in as a person reads it: a line break and a tab. Run on what the shell passed on (`_shell_value`), as the program gets it."""
+    return re.sub(r"\\([nt])", lambda found: {"n": "\n", "t": "\t"}[found.group(1)], text)
+
+
+def body_of(args: str, rules: Optional[List[Dict[str, Any]]], folder: Optional[Path], root: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    """The text the call writes: `{text, from, path?, lines, cut}` or None. For each rule in order: `file` reads the file the first group names, inside the task folder; `text` is the first group as
+    written (a `\\"` in it is a quote). A value that starts with `@` is a file too (`--body @notes.md`). A file that is not there gives `{from: "file", path, missing: true}`."""
+    for rule in rules or []:
+        try:
+            found = re.search(str(rule.get("pattern")), args, re.IGNORECASE)
+        except (re.error, AttributeError):
+            continue
+        if not found or not found.groups() or found.group(1) is None:
+            continue
+        value = found.group(1)
+        if rule.get("from") == "text" and not value.startswith("@"):
+            quote = args[found.start(1) - 1] if found.start(1) > 0 and args[found.start(1) - 1] in "\"'" else ""
+            return _shown({"text": _unescape(_shell_value(value, quote)), "from": "text"})
+        path = value[1:] if value.startswith("@") else value
+        return _from_file(folder, path.strip("\"'"), root)
+    return None
+
+
+def _from_file(folder: Optional[Path], value: str, root: Optional[Path] = None) -> Dict[str, Any]:
+    """The file a call names, found as the command finds it: a relative path from the repository root (an agent's terminal starts there; 1.7.23: the task folder is no longer tried
+    first, a bare `result.md` in the task folder is not found by the program), a full path as it is. With no root given the task folder is the base. Only a file inside the task folder
+    is shown."""
+    gone = {"text": "", "from": "file", "path": value[:200], "missing": True, "lines": 0, "cut": False}
+    if folder is None or not value:
+        return gone
+    named = Path(value).expanduser()
+    for base in ([root] if root is not None and not named.is_absolute() else [folder]):
+        try:
+            path = (base / named).resolve()
+            if folder.resolve() in path.parents and path.is_file():
+                text = path.read_text(encoding="utf-8-sig", errors="replace")
+                return _shown({"text": text, "from": "file", "path": path.relative_to(folder.resolve()).as_posix() if base is root else value})
+        except (OSError, ValueError):
+            continue
+    return gone
+
+
+def _shown(found: Dict[str, Any]) -> Dict[str, Any]:
+    text = found["text"]
+    return dict(found, text=text[:BODY_CHARS], lines=text.count("\n") + (1 if text and not text.endswith("\n") else 0), cut=len(text) > BODY_CHARS)

@@ -191,7 +191,7 @@ class PageFileTests(unittest.TestCase):
         for gone in ("function chatBars()", "function lane(", "function ribbon()", "function contextMeter("):
             self.assertNotIn(gone, desk)
         for kept in ("function settingsRow()", "function draftsBox()", "function resultForm()", "function roundSwitch()", "copyTitleButton(", "askCompact", "SERVE.vsButton(", "SHELL.vsPill(", "/snapshot/", "desk.report",
-                     "TALK.includes(item.action)", "OPTIONAL.includes(entry.action)", "SERVE.banner(true)"):
+                     "TALK.includes(item.action)", "desk.actions.filter(isOptional)", "SERVE.banner(true)"):
             self.assertIn(kept, desk)
 
     def test_the_strong_cards_name_a_tab_each_and_the_confirm_card_has_no_word_about_a_code(self) -> None:

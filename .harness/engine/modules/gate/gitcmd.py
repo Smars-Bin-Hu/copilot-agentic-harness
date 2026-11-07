@@ -47,7 +47,7 @@ def _named(what: str, name: str) -> str:
 # Subcommands where a lone `-f` means force. (`git tag -F`, `git config -f <file>` mean something else.)
 FORCE_SHORT = frozenset("add checkout switch branch tag mv rm fetch pull worktree submodule clean push".split())
 # Words that may stand before `git` without hiding it.
-WRAPPERS = frozenset("sudo env nohup time command exec nice timeout xargs call start watch".split())
+WRAPPERS = frozenset("sudo env nohup time command exec nice timeout xargs call start watch builtin".split())
 SHELLS = frozenset("bash sh zsh dash fish pwsh powershell cmd".split())
 SHELL_FLAGS = frozenset(["-c", "-command", "/c", "-lc", "-ic", "-encodedcommand"])
 SCRIPT_RUNNERS = frozenset("python python3 py node perl ruby".split())
@@ -56,6 +56,8 @@ OPTIONS_WITH_VALUE = frozenset(["-c", "-C", "--git-dir", "--work-tree", "--names
 CONFIG_OPTIONS = ("-c", "--config-env", "--exec-path")
 CONFIG_WRITES = frozenset(["--add", "--replace-all", "--unset", "--unset-all", "--rename-section", "--remove-section", "--edit", "-e"])
 SEPARATORS = ";&|()`\n"
+# Shell words that open or close a group and stand before the real command of a segment: `{ git push; }`, `if x; then git push; fi`, `for i in 1; do git push; done` (1.7.23).
+LEADING_KEYWORDS = frozenset(["{", "}", "!", "if", "then", "else", "elif", "fi", "do", "done", "while", "until", "builtin"])
 
 
 @dataclass
@@ -70,10 +72,51 @@ def collapse(command: str) -> str:
     return " ".join(command.split())
 
 
+def join_lines(text: str) -> str:
+    """The text as the shell reads it before it splits it (1.7.25): a backslash and a new line join the two lines (not inside single quotes), and a pair of
+    backticks is a `$( )`, so `ado\\` + new line + `comment` is `ado comment`, and a command inside backticks is looked at like one inside `$( )`."""
+    if "\\\n" not in text and "\\\r\n" not in text and "`" not in text:
+        return text
+    out: List[str] = []
+    quote = ""
+    ticks: List[int] = []  # where an open backtick pair began, in `out`
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == "\\" and quote != "'":
+            rest = text[index + 1:index + 3]
+            if rest.startswith("\n") or rest == "\r\n":
+                index += 3 if rest == "\r\n" else 2
+                continue
+            out.append(char)
+            if index + 1 < len(text):
+                out.append(text[index + 1])
+            index += 2
+            continue
+        if quote:
+            if char == quote:
+                quote = ""
+        elif char in "\"'":
+            quote = char
+        if char == "`" and quote != "'":
+            if ticks:
+                out[ticks.pop()] = "$("
+                out.append(")")
+            else:
+                ticks.append(len(out))
+                out.append("`")
+            index += 1
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
 def split_segments(text: str) -> List[List[str]]:
     """The commands of a command line, each as tokens with their quotes removed. Quote-aware: `;` inside quotes splits nothing.
     A quote escaped with a backslash (`\"`, inside double quotes or outside any) is a quote character of the token, not an end of the quoting: the
     command a tool is given in quotes (`sqlcmd -Q \"SELECT ...\"` inside `harness wait --run "..."`) keeps its own quotes (1.7.5)."""
+    text = join_lines(text)
     segments: List[List[str]] = [[]]
     token: Optional[str] = None
     quote = ""
@@ -109,7 +152,13 @@ def split_segments(text: str) -> List[List[str]]:
             token = (token or "") + char
         index += 1
     end_token()
-    return [item for item in segments if item]
+    cleaned = []
+    for item in segments:
+        while item and item[0] in LEADING_KEYWORDS:
+            item = item[1:]
+        if item:
+            cleaned.append(item)
+    return cleaned
 
 
 def _name(token: str) -> str:
@@ -197,6 +246,8 @@ def _git(tokens: List[str], start: int) -> Tuple[str, str]:
     subcommand, arguments = rest[index].lower(), rest[index + 1:]
     if re.search(r"[$%]|^\W", subcommand):
         return APPROVE, _why("unclear")
+    if subcommand == "clean" and any(item == "--dry-run" or re.fullmatch(r"-[a-zA-Z]*n[a-zA-Z]*", item) for item in arguments[:1]):
+        return NONE, ""  # a dry run only lists what it would remove (1.7.27)
     if subcommand in NEVER_SUBCOMMANDS:
         return NEVER, _named(f"git {subcommand}", NEVER_SUBCOMMANDS[subcommand])
     if subcommand == "reset" and any(item == "--hard" for item in arguments):

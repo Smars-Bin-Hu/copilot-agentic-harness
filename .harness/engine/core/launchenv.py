@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import importlib.util
+import json
 import os
 import re
 import shutil
@@ -163,6 +164,12 @@ def trusted_by(root: Path) -> List[str]:
     return list(dict.fromkeys(list(TRUST_VARS) + toolpacks.trust_vars(root)))
 
 
+def tool_folders(root: Path) -> List[str]:
+    from . import toolpacks  # it reads this module
+
+    return list(dict.fromkeys([item for item in settings(root)["paths"] if Path(item).is_dir()] + toolpacks.bin_folders(root)))  # a tool pack's own programs come with it (1.7.17)
+
+
 def extra(root: Path, environ: Optional[Dict[str, str]] = None, trust_vars: Optional[Tuple[str, ...]] = None) -> Dict[str, str]:
     """The variables the board adds when it starts VS Code: PATH with the tool folders first, and each trust variable naming the bundle (when it is there)."""
     base = dict(os.environ if environ is None else environ)
@@ -170,7 +177,7 @@ def extra(root: Path, environ: Optional[Dict[str, str]] = None, trust_vars: Opti
     out: Dict[str, str] = {}
     from . import toolpacks  # it reads this module
 
-    folders = list(dict.fromkeys([item for item in kept["paths"] if Path(item).is_dir()] + toolpacks.bin_folders(root)))  # a tool pack's own programs come with it (1.7.17)
+    folders = tool_folders(root)
     if folders:
         key = next((name for name in base if name.upper() == "PATH"), "PATH")  # Windows writes `Path`
         rest = [item for item in base.get(key, "").split(os.pathsep) if item and item not in folders]
@@ -180,6 +187,72 @@ def extra(root: Path, environ: Optional[Dict[str, str]] = None, trust_vars: Opti
         for name in (trust_vars if trust_vars is not None else trusted_by(root)):
             out[name] = str(bundle)
     return out
+
+
+# --- what VS Code really got (1.7.21) ----------------------------------------------------------------------------------------------------------------------------
+
+SEEN = Path(".harness") / "runtime" / "state" / "vscode-env.json"
+
+
+def _same(one: str, other: str) -> bool:
+    return os.path.normcase(os.path.normpath(one)) == os.path.normcase(os.path.normpath(other))
+
+
+def lacking(root: Path, environ: Optional[Dict[str, str]] = None) -> List[str]:
+    """What `extra` would give that this environment does not have: `PATH <folder>` for a tool folder not on the PATH, the name of a trust variable that does not name the bundle.
+    Run by a hook, the environment is the one VS Code was started with: when it is not there, VS Code was started without the settings of this computer."""
+    env = dict(os.environ if environ is None else environ)
+    out: List[str] = []
+    key = next((name for name in env if name.upper() == "PATH"), "PATH")
+    on_path = [item for item in env.get(key, "").split(os.pathsep) if item]
+    out.extend(f"PATH {folder}" for folder in tool_folders(root) if not any(_same(folder, item) for item in on_path))
+    bundle = bundle_path(root)
+    if bundle:
+        out.extend(name for name in trusted_by(root) if not env.get(name) or not _same(env[name], str(bundle)))
+    return out
+
+
+def note_seen(root: Path, environ: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    """Called by the hook at the start of a chat: keep what this environment lacks. `{ok, missing, at}`."""
+    found = {"ok": False, "missing": lacking(root, environ), "at": utc_now()}
+    found["ok"] = not found["missing"]
+    target = root / SEEN
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_suffix(".tmp")
+    temp.write_text(json.dumps(found, ensure_ascii=False), encoding="utf-8")
+    os.replace(temp, target)
+    return found
+
+
+def seen(root: Path) -> Dict[str, Any]:
+    """What the hook of the latest chat found: `{ok, missing, at}`; empty when no chat has told yet."""
+    try:
+        found = json.loads((root / SEEN).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def mark_started(root: Path) -> None:
+    """The board starts VS Code itself, with the settings: what an older VS Code lacked no longer holds. The next chat's hook says what is true."""
+    target = root / SEEN
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps({"ok": True, "missing": [], "at": utc_now(), "by": "board"}), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def vscode_running(run: Callable[..., Any] = subprocess.run, platform: str = sys.platform) -> bool:
+    """Is a VS Code running on this computer? macOS and Linux: `pgrep`; Windows: one `tasklist`. A start that finds one running gives it no environment."""
+    try:
+        if platform.startswith("win"):
+            done = run(["tasklist", "/FI", "IMAGENAME eq Code.exe", "/NH"], capture_output=True, text=True, timeout=10)
+            return "Code.exe" in (done.stdout or "")
+        pattern = "Visual Studio Code.app" if platform == "darwin" else "/code"
+        return run(["pgrep", "-f", pattern], capture_output=True, text=True, timeout=5).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 # --- the CA bundle ----------------------------------------------------------------------------------------------------------------------------------------------
@@ -289,7 +362,7 @@ def _find(top: Path, name: str, depth: int, budget: int = 20000):
 
 
 WINDOWS_CHAIN = r"""
-$h = $args[0]; $p = $args[1]
+$h = '__HOST__'; $p = '__PROXY__'
 $global:zchain = @(); $global:zerr = ''
 $cb = [Net.Security.RemoteCertificateValidationCallback]{ param($s, $c, $ch, $e) $global:zerr = "$e"; $global:zchain = @($ch.ChainElements | ForEach-Object { $_.Certificate }); $true }
 if ($p) { $hp = $p.Split(':'); $tcp = [Net.Sockets.TcpClient]::new($hp[0], [int]$hp[1]); $ns = $tcp.GetStream()
@@ -307,16 +380,19 @@ $zchain | ForEach-Object { "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64
 def chain_windows(host: str, proxy: str, run: Callable[..., Any] = subprocess.run) -> Tuple[List[str], str]:
     """The chain Windows builds for `host`, through `proxy` when given (the root from the system's store included). `(blocks, trust)`: trust is
     "None" when Windows trusts it, else the reason (RemoteCertificateChainErrors, ...)."""
-    done = run(["powershell", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_CHAIN, host, proxy], capture_output=True, text=True, timeout=SECONDS,
+    # The values go into the script's text: `-Command <script> <args>` hands the script no $args. Both were checked to hold no quote (make, proxy_address).
+    script = WINDOWS_CHAIN.replace("__HOST__", host).replace("__PROXY__", proxy)
+    done = run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, timeout=SECONDS,
                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     out = done.stdout or ""
     found = re.search(r"^PROXY (.*)$", out, re.MULTILINE)
     if found:
         raise ValueError(say("launch.ca.proxy.refused", said=found.group(1).strip()))
     trust = re.search(r"^TRUST (.*)$", out, re.MULTILINE)
-    if not trust:
+    blocks = pem_blocks(out)
+    if not trust or not blocks:  # no chain read: say why, never "None" (the system trusted nothing it was shown)
         raise ValueError(say("launch.ca.chain.failed", said=((done.stderr or out).strip().splitlines() or ["-"])[-1][:300]))
-    return pem_blocks(out), trust.group(1).strip() or "None"
+    return blocks, trust.group(1).strip() or "None"
 
 
 def chain_openssl(host: str, proxy: str, run: Callable[..., Any] = subprocess.run) -> Tuple[List[str], str]:

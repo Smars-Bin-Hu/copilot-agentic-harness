@@ -31,6 +31,7 @@
         "tool_search_tool": "meta",
         "task_complete": "meta",
         "AskUserQuestion": "meta",
+        "ask_user": "meta",
         "multi_replace_string_in_file": "edit",
         "insert_edit_into_file": "edit",
         "apply_patch": "edit",

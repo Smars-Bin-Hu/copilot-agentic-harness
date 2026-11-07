@@ -10,9 +10,10 @@ thinking level, the reply language, the knowledge base domains (folders a knowle
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Iterable, List, Optional
 
-from core import ahp, domainskills, messages, tasks
+from core import ahp, domainskills, messages, tasks, toolpacks
 from core.paths import utc_now
 
 from . import chatsend, intake, task as task_ops, tasklife
@@ -20,6 +21,7 @@ from .common import CommandError
 
 MAX_TEXT = 5000  # characters of what the person asks for
 MAX_DOMAINS = 20  # domains a request may name (a knowledge base has few)
+MAX_LINKS = 10  # tickets a new task may be linked to at once
 PERMISSIONS = {"allow-all": "autoApprove"}  # the page's word -> `config.autoApprove` of the host. One only (1.6.38): with another, the agent's first command waits in VS Code before there is a task to show on the board
 DEFAULT_PERMISSION = "allow-all"
 KEEP_PENDING = 3600.0  # seconds a made chat waits for its task to appear before the board lets go of it
@@ -72,8 +74,38 @@ def validate(root: Any, data: Dict[str, Any], models: List[Dict[str, Any]], wait
         raise refusal("permission")
     model = model_of(data, models)
     return {"name": name, "kind": kind, "source": source, "text": text, "lang": lang, "permission": permission, "approve": PERMISSIONS[permission], "model": model,
-            "domains": domains_of(root, data), "domain_choice": bool(intake.kb_domains(root)),
+            "links": links_of(data, root), "domains": domains_of(root, data), "domain_choice": bool(intake.kb_domains(root)),
             "new_domains": [item for item in domains_of(root, data) if not domainskills.find(domainskills.domains(root), item)]}
+
+
+def links_of(data: Dict[str, Any], root: Any = None) -> List[str]:
+    """The tickets the person typed (`ado:300100`, several), without repeats. Each must be `<type>:<id>` as `task link` takes it; the harness does not look for the type here (a link of a type no tool pack knows still shows as text)."""
+    raw = data.get("links")
+    if raw is None or raw == "":
+        return []
+    if isinstance(raw, str):
+        raw = raw.replace(",", " ").split()
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise refusal("field", field="links")
+    found = list(dict.fromkeys(item.strip() for item in raw if item.strip()))
+    if len(found) > MAX_LINKS:
+        raise refusal("links.many", limit=MAX_LINKS)
+    for item in found:
+        if not toolpacks.LINK.match(item):
+            raise refusal("links.long" if re.match(r"^[a-z][a-z0-9]{0,15}:[A-Za-z0-9._#/-]+$", item) else "links.form", ref=item[:40], limit=64)
+        if root is not None:
+            try:
+                tasklife.check_link_type(root, item)
+            except CommandError as error:
+                raise refusal("links.type", why=str(error)) from None
+    return found
+
+
+def links_text(raw: Any) -> List[str]:
+    """The tickets in a field that may still be wrong: only the words, for the preview."""
+    if isinstance(raw, str):
+        raw = raw.replace(",", " ").split()
+    return list(dict.fromkeys(item.strip() for item in raw if isinstance(item, str) and item.strip())) if isinstance(raw, list) else []
 
 
 def domains_of(root: Any, data: Dict[str, Any]) -> List[str]:
@@ -104,7 +136,7 @@ def preview(root: Any, data: Dict[str, Any], models: List[Dict[str, Any]], waiti
     known = domainskills.domains(root)
     wanted = data.get("domains") if isinstance(data.get("domains"), list) else []
     plan = {"name": word("name")[:80] or "<task name>", "kind": word("kind") if word("kind") in tasks.KINDS else "<kind>", "source": word("source") if word("source") in known_names(root) else "",
-            "text": word("text")[:MAX_TEXT] or "<what to do>", "lang": word("lang") if word("lang") in chatsend.LANGS else "en",
+            "text": word("text")[:MAX_TEXT] or "<what to do>", "links": [item for item in (links_text(data.get("links"))) if toolpacks.LINK.match(item)][:MAX_LINKS], "lang": word("lang") if word("lang") in chatsend.LANGS else "en",
             "domains": list(dict.fromkeys(found for found in (domainskills.find(known, item.strip()) or (item.strip() if word("kind") == "kb" and domainskills.NAME.match(item.strip()) else None) for item in wanted if isinstance(item, str)) if found))[:MAX_DOMAINS],
             "domain_choice": bool(known), "new_domains": [item for item in wanted if isinstance(item, str) and not domainskills.find(known, item.strip())]}
     return {"text": first_message(plan), "problem": problem, "model": {}, "permission": DEFAULT_PERMISSION}
@@ -148,6 +180,8 @@ def first_message(plan: Dict[str, Any]) -> str:
                 "The name and the kind are given: do not ask for them.\n"
                 f"- Task name: {plan['name']}\n- Kind: {plan['kind']}")
     head += domain_line(plan)
+    if plan.get("links"):
+        head += f"\n- Tickets to link: {', '.join(plan['links'])} (run harness task link add <ref> --task <name> for each once the task is open; do not ask)"
     return chatsend.compose(head + "\n\nWhat to do:\n" + plan["text"], plan["lang"], [])
 
 

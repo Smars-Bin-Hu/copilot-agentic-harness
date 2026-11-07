@@ -178,7 +178,7 @@ class WaitTextTests(unittest.TestCase):
         self.assertIn("python3 -c", row["waiting"])
         self.assertGreater(row["waited_s"], 0)
         asked = dict(chatask.shown(question_item()), since="2026-10-01T10:00:00+00:00", count=1)
-        self.assertIn("Pick a colour", tasklife.ask_text(asked))
+        self.assertEqual(tasklife.ask_text(asked), messages.text("task.waiting.asking"), "1.7.21: the same words as the asking mark; the question is in the hover (waiting_tip)")
         vs = dict(chatask.shown(question_item(questions=[{"id": "d", "kind": "date"}])), since="x", count=1)
         self.assertEqual(tasklife.ask_text(vs), messages.text("task.waiting.question-vs"))
         rows = [{"state": "quiet", "waited_s": None}, {"state": "waiting", "waited_s": 5}, {"state": "waiting", "waited_s": 50}]

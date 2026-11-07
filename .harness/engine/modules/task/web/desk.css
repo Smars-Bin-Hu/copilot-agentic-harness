@@ -8,7 +8,7 @@
 .tk-icon:hover,.tk-icon[aria-expanded="true"]{background:var(--hover);border-color:var(--line2);text-decoration:none}
 .tk-icon svg{width:16px;height:16px;display:block}
 .tk-name{flex:0 1 auto;min-width:6ch;max-width:44ch;margin:0;font-size:18px;font-weight:600;letter-spacing:-.015em;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tk-state{flex:0 0 auto;min-width:0;max-width:30ch;display:inline-flex}
+.tk-state{flex:0 0 auto;min-width:0;max-width:min(46ch,100%);display:inline-flex}
 .tk-state .tag,.tk-state .tag.long{display:block;max-width:100%;height:22px;padding:0 9px 0 8px;line-height:20px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tk-state .tag::before{display:inline-block;vertical-align:1px;margin-right:6px}
 .tk-stage{flex:none;display:flex;align-items:center;width:clamp(100px,13vw,172px);height:30px;padding:0 6px;border-radius:999px;cursor:default}
@@ -55,7 +55,7 @@
 .rv-pop[hidden]{display:none}.rv-pop p{margin:6px 0 10px}.rv-pop .chips{display:flex;flex-wrap:wrap;gap:6px}.rv-pop .chip{min-width:34px;padding:0 10px}
 .tk-rounds .subtabs{margin:0;border:0}
 .tk-pill .vs-pill{margin:0}
-.tk-forks{padding:2px 0 0;overflow-wrap:anywhere}.tk-link{display:inline-block;max-width:100%;margin:0 6px 2px 0;font:12px var(--mono);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;cursor:pointer}
+.tk-forks{padding:2px 0 0;overflow-wrap:anywhere}.tk-link{display:inline-flex;align-items:center;gap:4px;max-width:100%;margin:0 6px 2px 0;font:12px var(--mono);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;cursor:pointer}
 
 /* ---------- the surface ---------- */
 .tk-surface{margin-top:10px;background:var(--card);border:1px solid var(--line);border-radius:var(--r)}
@@ -214,3 +214,17 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 .dialog.wide{overflow:hidden}.dialog.wide .win-body{flex:0 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;margin:0 -4px;padding:0 4px}
 .dialog.wide .win-foot{flex:none;margin-top:12px}
 .cmd-scroll.flat{max-height:none;overflow-x:auto;overflow-y:hidden}
+
+.tk-link-a{color:inherit;text-decoration:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}a.tk-link-a{cursor:pointer}
+.tk-link-x{border:0;background:none;color:inherit;font:inherit;line-height:1;padding:0 2px;opacity:.6;cursor:pointer}.tk-link-x:hover,.tk-link-x:focus-visible{opacity:1}
+.tk-link-add{display:inline-block;margin:0 6px 2px 0;font:12px var(--mono);cursor:pointer;opacity:.8}.tk-link-add:hover{opacity:1}
+.tk-link-form{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0 6px 2px 0;max-width:100%}.tk-link-in{font:12px var(--mono);width:16em;max-width:100%}.tk-link-bad{flex-basis:100%}
+
+.tk-call-say{font-weight:650;font-size:15px;line-height:1.35;margin:4px 0 2px;overflow-wrap:anywhere}
+.tk-call-body{margin:0 0 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);min-width:0}.tk-body-h{padding:6px 10px 0;font-size:12.5px}
+.tk-body-text{margin:0;padding:6px 10px 10px;max-height:14em;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.tk-call-body.missing{padding:6px 10px}.tk-call-body.missing p{margin:0}
+.tk-raw{margin:0 0 8px;font-size:12.5px;min-width:0}.tk-raw summary{cursor:pointer;color:var(--soft)}.tk-raw pre{margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;min-width:0;max-height:8em;overflow:auto}
+.tk-need.strong.tk-call.done{background:var(--good-bg);border-color:var(--good-line);border-left-color:var(--good-dot)}  /* an approved call: the whole card is green, not orange with a green edge (1.7.28) */
+.tk-call-row{display:flex;align-items:baseline;gap:10px;margin:4px 0 2px}.tk-call-row .tk-call-say{margin:0;min-width:0}.tk-call-row .code-chip{flex:none}.tk-writes{margin-left:8px;font-size:12px;font-weight:600;color:var(--hot);white-space:nowrap}
+.tk-call.done .code-chip.still{background:var(--good-bg);color:var(--good)}

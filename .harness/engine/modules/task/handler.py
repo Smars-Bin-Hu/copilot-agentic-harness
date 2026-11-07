@@ -405,6 +405,33 @@ def mark_waiting(ctx: Context, data: Dict[str, Any], stopped: bool) -> None:
         pass
 
 
+ASK_TOOLS = ("ask_user", "askuserquestion")  # the tool that asks the person a question (1.7.20): `ask_user` in a Copilot SDK session (recorded in events.jsonl), `AskUserQuestion` in older recordings
+
+
+def note_asking(event: HookEvent, ctx: Context) -> None:
+    """While the agent waits in the ask-the-person tool it makes no hook call and has not stopped: the board would say "working" for minutes and refuse a held call's Approve (1.7.20).
+    The call before the tool leaves the mark `asking` (the person is next); the call after it, or any other tool call, takes it away. Never in the way of the hook."""
+    try:
+        if is_subagent_session(ctx) or ctx.admin or event.event not in ("PreToolUse", "PostToolUse"):
+            return
+        data = open_task(ctx)
+        if data is None:
+            return
+        mark = data.get("waiting") if isinstance(data.get("waiting"), dict) else {}
+        asking = event.tool_name.strip().lower() in ASK_TOOLS
+        from core.paths import utc_now
+
+        from . import tasklife
+
+        if asking and event.event == "PreToolUse":
+            if mark.get("why") != "asking":
+                tasklife.set_waiting(ctx.root, data["task"], {"since": utc_now(), "why": "asking"})
+        elif mark.get("why") == "asking":
+            tasklife.set_waiting(ctx.root, data["task"], None)  # answered (or the agent went on): it is at work again
+    except Exception:  # noqa: BLE001 - the mark is for the board; losing it must not turn a tool call into an error
+        pass
+
+
 def autorun_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
     """A task in autorun (M13-1): the facts say whether the agent is pushed on to the next step or may stop."""
     if not (isinstance(data.get("autorun"), dict) and data["autorun"].get("state") == "on"):
@@ -442,6 +469,7 @@ def on_stop(event: HookEvent, ctx: Context) -> Optional[Decision]:
 
 
 def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    note_asking(event, ctx)
     if event.event == "SessionStart":
         return Decision(context=prompt_text(ctx))
     if event.event == "UserPromptSubmit":

@@ -241,6 +241,19 @@ class ReadinessTests(TaskCase):
         got = board()
         self.assertEqual((got["state"], got["why"], got["detail"]), ("note", "unreached", "DEV \u2713 \u00b7 IST \u2717"))
         self.assertIn("start-vscode.cmd", got["tip"])
+        self.assertFalse(got["env_wrong"])
+        from core import launchenv
+
+        seen = self.root / launchenv.SEEN  # a hook found VS Code started without the settings of this computer (1.7.24): the line says so, apart from accounts
+        seen.parent.mkdir(parents=True, exist_ok=True)
+        seen.write_text(json.dumps({"ok": False, "missing": ["PATH"]}), encoding="utf-8")
+        got = board()
+        self.assertEqual((got["why"], got["env_wrong"]), ("unreached", True))
+        from modules.task import boardserve
+
+        self.assertTrue(boardserve.servers_view(self.root, True)["env_wrong"])
+        seen.write_text(json.dumps({"ok": True, "missing": []}), encoding="utf-8")
+        self.assertFalse(boardserve.servers_view(self.root, True)["env_wrong"])
 
 
 class StalledCommandTests(TaskCase):
@@ -377,7 +390,7 @@ class PageTests(unittest.TestCase):
         self.assertNotIn("DATA.rows", code)  # status only, no task data
         self.assertNotIn("localStorage", code)  # nothing that lets a person skip it: the only memory is the tab's own session
         for call in re.findall(r'ask\("(/api/[a-z]+)"', code):
-            self.assertIn(call, ("/api/ready", "/api/open", "/api/launch"))  # the one read and the person-only actions (1.7.9: the company's launch script, Windows)
+            self.assertIn(call, ("/api/ready", "/api/open", "/api/launch", "/api/reach"))  # the one read and the person-only actions (1.7.9: the company's launch script, Windows)
 
     def test_every_text_of_the_screen_is_in_both_languages(self) -> None:
         code = (WEB / "enter.js").read_text(encoding="utf-8")

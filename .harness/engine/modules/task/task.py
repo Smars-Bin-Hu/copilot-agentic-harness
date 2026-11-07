@@ -256,6 +256,13 @@ def page_url(root: Path, task: str) -> str:
 
 
 def next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
+    """What the agent does next. While REQ.md still holds the template's text, that comes first (1.7.20): finish it before anyone is asked to confirm."""
+    sections = req_unfilled(root, task)
+    note = say("req.unfilled.agent", req=f"{task}/{tasks.REQ_FILE}", sections=", ".join(sections)) if sections else ""
+    return note + _next_step(root, task, data)
+
+
+def _next_step(root: Path, task: str, data: Dict[str, Any]) -> str:
     plan, dev = f"{task}/{tasks.PLAN_NAME}", f"{task}/{tasks.DEV_NAME}"
     page = say("task.step.page", url=page_url(root, task)) if page_url(root, task) else ""  # where the user reads the plan
     handed = data.get("handoff") if isinstance(data.get("handoff"), dict) else {}
@@ -348,6 +355,11 @@ def close(root: Path, raw_task: str = "", reason: str = "", todo_open: str = "",
     from . import tasklife  # it imports this module
 
     hint = tasklife.links_hint(root, tasks.read(root, task) or {})
+    from core import outbox  # a held write shows on the page only while the task is open (1.7.20: a Q&A chore on a ticket may leave one)
+
+    held = len(outbox.pending_for(root, task))
+    if held:
+        hint = say("task.close.held", count=held, name=name_of(task)) + hint
     if hint:
         result["next"] = hint
     if left:
@@ -454,13 +466,37 @@ _REQ_UNWRITTEN = ("<One or two paragraphs", "<一两段")  # the template's own 
 _PLACEHOLDER = re.compile(r"^(?:[-*]\s+)?(?:\[[TRA]\d+\]\s+)?<[^<>\n]+>(?::\s*<[^<>\n]+>)?\s*$")
 
 
-def req_placeholders(root: Path, task: str) -> int:
-    """How many lines of REQ.md are still the template's `<...>` (the agent left them instead of writing the answer, or "none"). 0 when there is no REQ.md."""
+def _req_unfilled(root: Path, task: str) -> List[Tuple[str, int]]:
+    """[(section heading, lines still the template's)] of REQ.md, in file order; only the sections that have some. Lines before the first heading count under the title."""
     try:
         text = (tasks.task_dir(root, task) / tasks.REQ_FILE).read_text(encoding="utf-8-sig", errors="replace")
     except OSError:
-        return 0
-    return sum(1 for line in text.splitlines() if _PLACEHOLDER.match(line.strip()))
+        return []
+    found: List[Tuple[str, int]] = []
+    heading, count, fence = "", 0, False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            fence = not fence
+        if not fence and re.match(r"^#{1,6}\s+\S", stripped):
+            if count:
+                found.append((heading, count))
+            heading, count = stripped.lstrip("#").strip(), 0
+        elif not fence and _PLACEHOLDER.match(stripped):
+            count += 1
+    if count:
+        found.append((heading, count))
+    return found
+
+
+def req_placeholders(root: Path, task: str) -> int:
+    """How many lines of REQ.md are still the template's `<...>` (the agent left them instead of writing the answer, or "none"). 0 when there is no REQ.md."""
+    return sum(count for _heading, count in _req_unfilled(root, task))
+
+
+def req_unfilled(root: Path, task: str) -> List[str]:
+    """The sections of REQ.md that still hold the template's text (1.7.20), by their headings. Empty when there is no REQ.md or all is written."""
+    return [heading for heading, _count in _req_unfilled(root, task) if heading]
 
 
 def req_state(root: Path, task: str) -> str:

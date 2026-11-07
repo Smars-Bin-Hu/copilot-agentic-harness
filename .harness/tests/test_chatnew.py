@@ -59,7 +59,7 @@ class ValidationTests(TaskCase):
 
     def test_the_mode_and_the_folder_cannot_be_asked_for(self) -> None:
         found = self.plan(mode="autopilot", isolation="worktree", provider="claude", workingDirectories=["file:///etc"])
-        self.assertEqual(sorted(found), ["approve", "domain_choice", "domains", "kind", "lang", "model", "name", "new_domains", "permission", "source", "text"])  # nothing of them is carried
+        self.assertEqual(sorted(found), ["approve", "domain_choice", "domains", "kind", "lang", "links", "model", "name", "new_domains", "permission", "source", "text"])  # nothing of them is carried
 
     def test_the_name_follows_the_rules_of_task_new_and_is_not_taken(self) -> None:
         for name in ("", "  ", "a/b", "a\\b", ".hidden", "a b", "x" * 81, "..", "a;b", "$(x)", "-x"):

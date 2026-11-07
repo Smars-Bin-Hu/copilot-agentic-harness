@@ -18,6 +18,7 @@ from typing import Callable, List
 
 from . import approvals, config, messages
 from .paths import utc_now
+from .systems import place
 
 FOLDER = "OUTBOX"
 STATE_MARK = "<!-- state -->"
@@ -40,7 +41,7 @@ def write_draft(root: Path, task: str, code: str, action: Any, command: str, ses
         return relative
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
-        say("outbox.draft.title", code=code, system=action.system, env=action.env),
+        say("outbox.draft.title", code=code, place=place(action.system, action.env)),
         "",
         f"- {say('outbox.draft.state')}: {say('outbox.state.waiting')} {STATE_MARK}",
         f"- {say('outbox.draft.verb')}: {action.verb}" + ("" if getattr(action, "named", True) else f" ({say('outbox.draft.unnamed')})"),
@@ -59,6 +60,33 @@ def write_draft(root: Path, task: str, code: str, action: Any, command: str, ses
     ]
     path.write_text("\n".join(lines), encoding="utf-8")
     return relative
+
+
+_SEPARATORS = re.compile(r"\n|;|&&|\|\||\|")
+
+
+def merge_into_waiting(root: Path, task: str, session_id: str, command: str, action: Any, minutes: int) -> str:
+    """The code of a waiting card this command takes over, or "" (1.7.27). The agent sent a line of several commands (a read, then a write); it was held whole. It then sends the write alone:
+    the same write, the same task, not yet approved. That is the same card, not a second one: the waiting entry gets the short command, keeps its code, and its draft is written again."""
+    text = approvals.collapse(command)
+    if not task or not text or _SEPARATORS.search(text):
+        return ""
+    waiting = pending_for(root, task)
+    if any(approvals.collapse(str(item.get("command", ""))) == text for item in waiting):
+        return ""  # the short command already has its card
+    for item in waiting:
+        old = str(item.get("command", ""))
+        parts = [approvals.collapse(part) for part in _SEPARATORS.split(old)]
+        if old == text or len(parts) < 2 or text not in parts or item.get("system", "") != action.system:
+            continue
+        if approvals.rewrite(root, str(item["code"]), session_id, text, minutes, extra=entry_extra(action, task), file=approvals.ACTIONS):
+            try:
+                (root / draft_path(task, item["code"], action.system)).unlink()
+            except OSError:
+                pass
+            write_draft(root, task, item["code"], action, text, session_id, minutes)
+            return str(item["code"])
+    return ""
 
 
 def mark(root: Path, relative: Optional[str], state: str) -> None:
@@ -97,6 +125,13 @@ def pending_for(root: Path, task: str) -> List[Dict[str, Any]]:
     return sorted(found, key=lambda item: str(item.get("created_at", "")))
 
 
+def approved_for(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The calls of this task that the person approved and the agent has not run yet (the approval is used up when the command runs), oldest approval first."""
+    minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+    found = [item for item in approvals.approved_all(root, minutes, file=approvals.ACTIONS) if item.get("task") == task]
+    return sorted(found, key=lambda item: str(item.get("approved_at", "")))
+
+
 def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None) -> Dict[str, Any]:
     """Show the outside calls waiting in the outbox, then approve the one whose code is typed. Terminal only, like `approve-command`; the board calls it with `interactive=True` and the code
     typed on the page (1.7.7). The draft of the entry is marked approved."""
@@ -113,7 +148,7 @@ def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, int
     for number, item in enumerate(waiting, 1):
         draft = draft_of(item)
         print(say(
-            "gate.action.item", number=number, system=item.get("system", "?"), env=item.get("env", "?"), verb=item.get("verb", "?"),
+            "gate.action.item", number=number, place=place(item.get("system", "?"), item.get("env", "?")), verb=item.get("verb", "?"),
             target=f" {item['target']}" if item.get("target") else "", session_id=item["session_id"], created_at=item["created_at"],
             draft=f"; {draft}" if draft else "",
         ), file=out)

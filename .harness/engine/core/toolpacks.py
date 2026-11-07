@@ -26,6 +26,7 @@ import re
 import shutil
 import tempfile
 import time
+import os
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
@@ -69,6 +70,8 @@ def _numbers(version: str) -> tuple:
 def manifest(folder: Path) -> Dict[str, Any]:
     try:
         found = json.loads((folder / MANIFEST).read_text(encoding="utf-8-sig"))
+    except FileNotFoundError:
+        raise ToolpackError(say("toolpack.not_a_pack", folder=folder.name or str(folder))) from None
     except (OSError, ValueError) as error:
         raise ToolpackError(say("toolpack.manifest.bad", folder=folder.name, error=error)) from None
     if not isinstance(found, dict):
@@ -107,7 +110,7 @@ def problems(root: Path, folder: Path) -> List[str]:
         except (OSError, ValueError, AttributeError) as error:
             out.append(f"{MCP_FILE}: {error}")
     links = found.get("links") or {}
-    if not isinstance(links, dict) or any(not re.match(r"^[a-z][a-z0-9]{0,15}$", str(key)) or not isinstance(spec, dict) or not str(spec.get("url") or "").startswith("https://") for key, spec in links.items()):
+    if not isinstance(links, dict) or any(not re.match(r"^[a-z][a-z0-9]{0,15}$", str(key)) or not isinstance(spec, dict) or not str(spec.get("url") or "").startswith(("https://", "{url}")) for key, spec in links.items()):
         out.append(say("toolpack.links.bad"))
     for index, rule in enumerate((mcp.get("tools") or []) if isinstance(mcp, dict) else []):
         try:
@@ -130,10 +133,12 @@ def problems(root: Path, folder: Path) -> List[str]:
         except (OSError, ValueError, AttributeError) as error:
             out.append(f"rules.json: {error}")
     for skill in _skills(folder):
-        if not skill.name.startswith(name + "-"):
-            out.append(say("toolpack.skill.prefix", skill=skill.name, name=name))
+        company = skillcheck.company_prefix(root)
+        owner = name if skill.name.startswith(name + "-") else company if company and skill.name.startswith(f"{company}-{name}-") else ""  # the company's prefix may lead (1.7.18)
+        if not owner:
+            out.append(say("toolpack.skill.prefix", skill=skill.name, name=name, company=company or "<prefix>"))
             continue
-        out.extend(f"skills/{skill.name}: {problem}" for problem in skillcheck.check(skill, name)["errors"])
+        out.extend(f"skills/{skill.name}: {problem}" for problem in skillcheck.check(skill, owner)["errors"])
     return out
 
 
@@ -196,6 +201,32 @@ def rules_layer(root: Path) -> Dict[str, Any]:
 LINK = re.compile(r"^([a-z][a-z0-9]{0,15}):([A-Za-z0-9._#/-]{1,64})$")
 
 
+def normal_ref(ref: str) -> str:
+    """One spelling of a link: an id of digits only has no leading zeros (`ado:0300114` is `ado:300114`, 1.7.21)."""
+    kind, _, ident = str(ref or "").strip().partition(":")
+    return f"{kind}:{ident.lstrip('0') or '0'}" if ident.isdigit() else str(ref or "").strip()
+
+
+def link_types(root: Path) -> List[Dict[str, str]]:
+    """The kinds of item a task may be linked to, from the installed tool packs (1.7.20): `{type, label, toolpack}`, one per link type, in the order of the packs. A link type is named by a pack's `links`
+    and by the connection types that declare `link`; a type that only a connection declares has no label of its own, and takes the type's."""
+    found: Dict[str, Dict[str, str]] = {}
+    for name, item in installed(root).items():
+        links = item["manifest"].get("links") if isinstance(item["manifest"].get("links"), dict) else {}
+        for key, spec in links.items():
+            if LINK.match(f"{key}:0") and isinstance(spec, dict):
+                found.setdefault(key, {"type": key, "label": str(spec.get("label") or ""), "toolpack": name})
+        for path in sorted((item["folder"] / "types").glob("*.json")) if isinstance(item.get("folder"), Path) and (item["folder"] / "types").is_dir() else []:
+            try:
+                kind = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            key = kind.get("link") if isinstance(kind, dict) else None
+            if isinstance(key, str) and LINK.match(f"{key}:0"):
+                found.setdefault(key, {"type": key, "label": str(kind.get("label") or ""), "toolpack": name})
+    return list(found.values())
+
+
 def link_view(root: Path, ref: str) -> Dict[str, str]:
     """A task's link as the board draws it: `{ref, type, id, label, url, tool pack}`; a type no tool pack knows keeps only its text."""
     from . import connections  # it reads this module's kinds
@@ -210,7 +241,8 @@ def link_view(root: Path, ref: str) -> Dict[str, str]:
             continue
         out.update(label=str(spec.get("label") or ""), toolpack=name)
         server = next((one for one in connections.listed(root).values() if one.get("type") == spec.get("type")), {})
-        values = {**{key: str(value) for key, value in server.items() if isinstance(value, (str, int))}, "id": out["id"]}
+        defaults = {field: str(item.get("default")) for field, item in ((connections.types(root).get(str(spec.get("type"))) or {}).get("fields") or {}).items() if isinstance(item, dict) and item.get("default")}  # a field left empty has the type's default: `{url}` is the server address (1.7.21)
+        values = {**defaults, **{key: str(value) for key, value in server.items() if isinstance(value, (str, int)) and value != ""}, "id": out["id"]}
         url = re.sub(r"\{(\w+)\}", lambda part: values.get(part.group(1), "\0"), str(spec.get("url") or ""))
         if url.startswith("https://") and "\0" not in url:  # every field was there: a link that would go to a wrong place is not drawn
             out["url"] = url
@@ -252,13 +284,58 @@ def _unpack(source: Path, into: Path) -> Path:
     raise ToolpackError(say("toolpack.manifest.none", source=source.name))
 
 
-def add(root: Path, raw: str, origin: str = "", replace: bool = False) -> Dict[str, Any]:
-    """Install a tool pack from a folder or a zip. One installed under the same name is replaced only with `replace` (a newer version, or the company's)."""
-    source = Path(raw).expanduser()
-    if not source.exists():
+def clean_path(raw: Any) -> str:
+    """A path pasted by a person: Windows "Copy as path" brings the quotes along."""
+    return str(raw or "").strip().strip("\"'").strip()
+
+
+def _exists(source: Path, raw: str) -> bool:
+    """Does the path exist? A path too long for the system is one sentence (`toolpack.path.long`), not an exception (1.7.21)."""
+    try:
+        return source.exists()
+    except OSError as error:
+        if getattr(error, "errno", None) in (36, 63) or getattr(error, "winerror", None) == 206:
+            raise ToolpackError(say("toolpack.path.long")) from None
+        raise ToolpackError(say("toolpack.source.none", source=raw)) from None
+
+
+def _unpack_zip(source: Path, into: Path) -> Path:
+    try:
+        return _unpack(source, into)
+    except zipfile.BadZipFile:
+        raise ToolpackError(say("toolpack.zip.bad", source=source.name)) from None
+
+
+def _executable(folder: Path) -> None:
+    """A zip does not keep the execute bit: the programs in a tool pack's `bin/` get it back (1.7.21)."""
+    if os.name == "nt" or not (folder / "bin").is_dir():
+        return
+    for item in (folder / "bin").rglob("*"):
+        if item.is_file() and not item.is_symlink():
+            item.chmod(item.stat().st_mode | 0o111)
+
+
+def installed_against(root: Path, raw: str) -> Dict[str, Any]:
+    """The pack in this folder or zip against the one installed under its name: {name, version, installed}; `installed` is empty when none is."""
+    source = Path(clean_path(raw)).expanduser()
+    if not _exists(source, raw):
         raise ToolpackError(say("toolpack.source.none", source=raw))
     with tempfile.TemporaryDirectory() as holder:
-        folder = _unpack(source, Path(holder)) if source.is_file() else source
+        folder = _unpack_zip(source, Path(holder)) if source.is_file() else source
+        found = manifest(folder)
+        name = str(found.get("name") or "")
+        have = ledger(root).get(name) if NAME.match(name) and (root / FOLDER / name).exists() else None
+        return {"name": name, "version": str(found.get("version") or "?"), "installed": str((have or {}).get("version") or "?") if have is not None else ""}
+
+
+def add(root: Path, raw: str, origin: str = "", replace: bool = False) -> Dict[str, Any]:
+    """Install a tool pack from a folder or a zip. One installed under the same name is replaced only with `replace` (a newer version, or the company's)."""
+    raw = clean_path(raw)
+    source = Path(raw).expanduser()
+    if not _exists(source, raw):
+        raise ToolpackError(say("toolpack.source.none", source=raw))
+    with tempfile.TemporaryDirectory() as holder:
+        folder = _unpack_zip(source, Path(holder)) if source.is_file() else source
         found = problems(root, folder)
         if found:
             raise ToolpackError(say("toolpack.refused", problems="; ".join(found)))
@@ -277,6 +354,8 @@ def add(root: Path, raw: str, origin: str = "", replace: bool = False) -> Dict[s
         if target.exists():
             shutil.rmtree(target)
         shutil.copytree(folder, target, ignore=shutil.ignore_patterns(".git", "__pycache__", ".DS_Store"))
+        if source.is_file():
+            _executable(target)
         for skill in skills:
             place = root / SKILLS_DIR / skill.name
             if place.exists():

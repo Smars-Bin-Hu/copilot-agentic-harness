@@ -88,7 +88,7 @@
     const column = COLUMNS[key];
     const on = view.key === key;
     const mark = on ? (view.dir === 1 ? " \u25b2" : " \u25bc") : "";
-    const cell = h("th", {class: "sortable" + (numeric ? " num" : "") + (on ? " on" : ""), title: t("board.sort.hint"), "aria-sort": on ? (view.dir === 1 ? "ascending" : "descending") : "none"}, column.label() + mark);
+    const cell = h("th", {class: "sortable col-" + key + (numeric ? " num" : "") + (on ? " on" : ""), title: t("board.sort.hint"), "aria-sort": on ? (view.dir === 1 ? "ascending" : "descending") : "none"}, column.label() + mark);
     cell.addEventListener("click", () => sortBy(key));
     return cell;
   }
@@ -189,7 +189,8 @@
       });
       nodes.push(more);
     }
-    return h("div", {class: "act-strip"}, nodes);
+    const strip = h("div", {class: "act-strip"}, nodes);
+    return strip.querySelector("button, a") ? strip : null;  // nothing to press (only the room kept for steer and stop): the cell says "-" like any row with no action (1.7.28)
   }
   function actionCell(row) {
     const strip = actionStrip(row);
@@ -228,6 +229,15 @@
     return h("span", {class: "tag warn", title: row.warn.map((item) => t("board.warn." + item.rule, {n: item.n})).join("\n"), "aria-label": t("board.warn.label")}, "\u26a0");
   }
 
+  const cell = (key, text) => h("td", {class: "num col-" + key}, text);
+  // What a narrow list takes out of its columns is written under the name instead, so nothing is cut without a trace (board.css shows each part where its column is hidden).
+  function meta(row) {
+    const brief = figures(row);
+    const parts = [["waited", row.waiting && row.waited_s !== null ? clock(row.waited_s) : ""], ["reviews", row.checks && row.checks.n ? row.checks.n : ""],
+      ["time", brief ? clock(brief.active_s) : ""], ["aiu", brief ? amount(brief.aiu) : ""], ["prompts", brief ? brief.prompts : ""]].filter(([, value]) => value !== "");
+    return h("div", {class: "row-meta"}, parts.map(([key, value]) => h("span", {class: "m-" + key}, t("board.col." + (key === "aiu" ? "credits" : key)) + " ", h("b", null, String(value)))));
+  }
+
   function line(row, longest) {
     const brief = figures(row);
     return h("tr", {class: [row.status === "closed" ? "closed" : "", touched.has(row.name) ? "touched" : ""].join(" ").trim() || null, "data-name": row.name},
@@ -237,17 +247,17 @@
           DATA.serve ? h("a", {href: "/task/" + encodeURIComponent(row.name), title: row.name}, row.name)
             : row.report ? h("a", {href: row.report.split("/").map(encodeURIComponent).join("/"), title: row.name}, row.name) : h("span", {title: row.name}, row.name),
           DATA.serve && row.status === "open" ? SERVE.vsButton(row.chat) : null),
-        statusLine(row)),
+        statusLine(row), meta(row)),
       h("td", {class: "state"}, state(row), warnTag(row) ? [" ", warnTag(row)] : null),
-      h("td", {class: "checks"}, row.status === "new" ? "-" : checkDots(row)),
-      num(row.waiting && row.waited_s !== null ? clock(row.waited_s) : "-"),
+      h("td", {class: "checks col-reviews"}, row.status === "new" ? "-" : checkDots(row)),
+      cell("waited", row.waiting && row.waited_s !== null ? clock(row.waited_s) : "-"),
       actionCell(row),
       brief
-        ? [h("td", {style: "width:6%"}, bar([
+        ? [h("td", {class: "col-bar", style: "width:6%"}, bar([
             ["work", brief.active_s, t("report.active") + " " + clock(brief.active_s)],
             ["wait", brief.waiting_s, t("report.waiting") + " " + clock(brief.waiting_s)]], longest, true)),
-          num(clock(brief.active_s)), num(amount(brief.aiu)), num(brief.prompts)]
-        : [h("td"), num("-"), num("-"), num("-")]);
+          cell("time", clock(brief.active_s)), cell("aiu", amount(brief.aiu)), cell("prompts", brief.prompts)]
+        : [h("td", {class: "col-bar"}), cell("time", "-"), cell("aiu", "-"), cell("prompts", "-")]);
   }
 
   // --- the page: drawn once, then its parts are drawn again when the rows change ----------------------------------
@@ -321,11 +331,22 @@
     const longest = Math.max(0, ...briefs.map((brief) => brief.active_s + brief.waiting_s)) || 1;
     if (!shownRows.length) { tableBox.replaceChildren(h("div", {class: "empty"}, t("board.filter.none"))); return; }
     tableBox.replaceChildren(
-      table([canArchive ? headerTick(shownRows) : null, header("task"), header("waiting"), header("reviews"), header("waited", true), th(t("board.col.actions")), header("time"), th("", true), header("aiu", true), header("prompts", true)],
+      table([canArchive ? headerTick(shownRows) : null, header("task"), header("waiting"), header("reviews"), header("waited", true), h("th", {class: "col-acts"}, t("board.col.actions")), header("time"), h("th", {class: "num col-bar"}),  header("aiu", true), header("prompts", true)],
         shownRows.map((row) => line(row, longest))),
       legend([["work", t("report.active"), ""], ["wait", t("report.waiting"), ""]]));
     slide(before);
+    hintOverflow();
   }
+
+  // A list wider than its box still scrolls sideways (the tiers in board.css keep that rare); the right edge fades while there is more to see.
+  function hintOverflow() {
+    const box = tableBox.querySelector(".scroll");
+    if (!box) return;
+    const update = () => { box.classList.toggle("over", box.scrollWidth > box.clientWidth + 1); box.classList.toggle("end", box.scrollLeft + box.clientWidth >= box.scrollWidth - 2); };
+    box.addEventListener("scroll", update, {passive: true});
+    update();
+  }
+  window.addEventListener("resize", () => hintOverflow());
 
   // A task whose file was just written lights up once, and a row that moves slides to its new place instead of jumping.
   // `seen`: the updated_at of each task at the last draw (the first draw lights nothing).

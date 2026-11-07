@@ -41,11 +41,11 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .sv-win{width:min(820px,calc(100vw - 32px))}.sv-list{display:flex;flex-direction:column;gap:4px}
 .sv-line{display:flex;align-items:center;gap:10px;width:100%;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 .sv-line:hover,.sv-line[aria-expanded=true]{border-color:var(--line2);background:var(--hover)}
-.sv-alias{font-family:var(--mono);font-size:13px;white-space:nowrap}.sv-kind{color:var(--soft);font-size:12.5px;white-space:nowrap}
-.sv-where{color:var(--soft);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto}
-.sv-state{margin-left:auto;font-size:12.5px;white-space:nowrap}.sv-state.ok{color:var(--good)}.sv-state.none{color:var(--soft)}
-.sv-own{font-size:11px;padding:0 6px;border:1px solid var(--line2);border-radius:999px;color:var(--soft)}
-.sv-env{flex:none;font:600 10.5px/18px var(--mono);padding:0 6px;border-radius:5px;background:var(--track);color:var(--soft)}
+.sv-alias{font-family:var(--mono);font-size:13px;white-space:nowrap;flex:0 0 auto;max-width:min(44ch,55%);overflow:hidden;text-overflow:ellipsis}  /* the name keeps its width (1.7.24): only a very long one is cut; the address gives way first */.sv-kind{color:var(--soft);font-size:12.5px;white-space:nowrap}
+.sv-where{color:var(--soft);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 0}
+.sv-state{margin-left:auto;flex:none;font-size:12.5px;white-space:nowrap}.sv-state.ok{color:var(--good)}.sv-state.none{color:var(--soft)}
+.sv-own{flex:none;font-size:11px;padding:0 6px;border:1px solid var(--line2);border-radius:999px;color:var(--soft)}
+.sv-env{flex:none;box-sizing:border-box;min-width:42px;text-align:center;font:600 10.5px/18px var(--mono);padding:0 6px;border-radius:5px;background:var(--track);color:var(--soft)}
 .sv-env-dev{background:var(--good-bg);color:var(--good)}.sv-env-ist{background:var(--hot-bg);color:var(--hot)}.sv-env-qat{background:var(--track);color:var(--ink)}
 .sv-form{padding:8px 10px 10px 54px}.sv-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:0 0 8px}
 .sv-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.sv-said{font-size:12.5px}
@@ -56,7 +56,7 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .sv-plan{margin-top:8px}.sv-win .win-foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 .tl-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:4px 0 12px;overflow-x:auto}
 .tl-tab{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:13px;padding:7px 12px;border:0;border-bottom:2px solid transparent;background:none;color:var(--soft);cursor:pointer;white-space:nowrap}
-.tl-tab.on{color:var(--ink);border-bottom-color:var(--ink)}.tl-body{min-height:220px}
+.tl-tab.on{color:var(--ink);border-bottom-color:var(--ink)}.tl-body{min-height:220px}.dialog.tl-win .win-body.tl-body{min-height:min(600px,calc(100vh - 232px))}  /* the three tabs start at one height, so the centred window does not jump when the tab changes (1.7.26) */
 .tl-group{border:1px solid var(--line);border-radius:12px;padding:6px 14px 6px;margin:6px 0}.tl-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0 2px}
 .tl-row .su-line .act{margin-left:auto}
 .sv-grp{font-size:12px;color:var(--soft);margin:10px 0 2px}.sv-grp:first-child{margin-top:0}.sv-from{border-style:dashed}
@@ -67,3 +67,7 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .mc-h{font-size:13.5px;margin:14px 0 6px}.mc-h:first-child{margin-top:0}.mc-paths{width:100%;box-sizing:border-box;resize:vertical}
 .mc-found{display:flex;flex-direction:column;gap:2px;margin:4px 0 8px;font:12px var(--mono)}.mc-dir{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:help}.mc-dir.ok{color:var(--good)}.mc-dir.bad{color:var(--hot)}
 @media (max-width:600px){.mc-brings{margin-left:0}.sv-where{display:none}.sv-form{padding-left:10px}}
+.mc-install{align-items:center}.mc-install input{flex:1;min-width:0}.mc-said{margin:6px 0;font-size:13px;overflow-wrap:anywhere}.mc-said .ok{color:var(--good)}.mc-said .bad{color:var(--hot)}
+.sv-retest{color:var(--hot);font-weight:600}
+/* The board page has no desk.css: the Tools window keeps its own rule for the long tab. The body scrolls inside the window and the buttons stay in view, so the three tabs have one height (1.7.28). */
+.dialog.tl-win{overflow:hidden}.dialog.tl-win .win-body.tl-body{flex:0 1 auto;height:min(600px,calc(100vh - 232px));overflow:auto;overscroll-behavior:contain;margin:0 -4px;padding:0 4px}.dialog.tl-win .win-foot{flex:none;margin-top:12px}

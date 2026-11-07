@@ -228,6 +228,7 @@ class LinkTests(LinkCase):
         chatlink.keep(self.root, TASK, {"session": "ahp-session:/gone", "chat": "ahp-chat:/gone", "title": "t", "how": "board", "bound_at": "x"})
         self.link.start()
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
+        self.assertTrue(until(lambda: self.data()["chat"]["session"] == self.resource), self.data()["chat"])  # the task's record is written just after the link counts it bound: a loaded machine read in between
         self.assertEqual((self.row()["chat"]["how"], self.data()["chat"]["session"]), ("sdk", self.resource))
 
     def test_the_steps_of_a_subagent_show_under_the_tool_call_that_started_it(self) -> None:
@@ -347,6 +348,27 @@ class NotReadyTests(LinkCase):
         state["fail"] = False
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1), self.link.status())
 
+    def test_opening_vs_code_from_the_board_makes_the_link_look_every_second_not_after_the_grown_wait(self) -> None:
+        """1.7.19: while no window was open the wait between two looks had grown (3, 6 ... 60 s): after Open VS Code the Enter screen stayed red up to a minute."""
+        state = {"fail": True, "calls": 0}
+        real = self.open_host
+
+        def opener() -> ahp.Connection:
+            state["calls"] += 1
+            if state["fail"]:
+                raise ahp.NotReady("none")
+            return real()
+
+        slow = ahp.Backoff(30.0, 60.0)
+        self.link = vslink.VsLink(self.root, opener=opener, turn=0.05, backoff=slow)
+        self.addCleanup(self.link.stop)
+        self.link.start()
+        self.assertTrue(until(lambda: self.link.status()["why"] == "none"))
+        self.assertEqual(state["calls"], 1)  # then it waits 30 s
+        state["fail"] = False
+        self.link.hurry()
+        self.assertTrue(until(lambda: self.link.status()["ready"], 5), self.link.status())  # at once, not after the wait
+
     def test_a_host_that_hangs_up_is_ready_again_after_the_wait(self) -> None:
         self.link.start()
         self.assertTrue(until(lambda: self.link.status()["bound"] == 1))
@@ -442,6 +464,24 @@ class BoardLinkTests(BoardCase):
         status, data, _ = self.request("POST", "/api/open", {}, cookie=cookie)
         self.assertEqual((status, data["result"]), (200, {"queued": True}))
         self.assertEqual(calls, ["open"])
+
+    def test_a_running_vscode_without_the_settings_is_refused_unless_the_person_opens_it_anyway(self) -> None:
+        from unittest import mock
+
+        cookie = self.pair()
+        calls = []
+        self.vs.jobs.put = lambda job: calls.append(job)
+        self.vs.why = "ok"
+        env = boardserve.launchenv
+        with mock.patch.object(env, "extra", return_value={"HARNESS_TOOL_PATH": "x"}), mock.patch.object(env, "vscode_running", return_value=True), mock.patch.object(env, "seen", return_value={}):
+            status, data, _ = self.request("POST", "/api/open", {}, cookie=cookie)
+            self.assertEqual((status, data.get("running")), (409, True))  # the page offers "I will quit it first" and "Open anyway" (1.7.29)
+            self.assertEqual(calls, [])
+            status, data, _ = self.request("POST", "/api/open", {"anyway": True}, cookie=cookie)
+            self.assertEqual((status, data["result"]), (200, {"queued": True}))
+            self.assertEqual(calls, ["open"])
+        with mock.patch.object(env, "extra", return_value={"HARNESS_TOOL_PATH": "x"}), mock.patch.object(env, "vscode_running", return_value=True), mock.patch.object(env, "seen", return_value={"ok": True}):
+            self.assertEqual(self.request("POST", "/api/open", {}, cookie=cookie)[0], 200)  # a chat found it started with the settings: nothing to ask
 
 
 class NoVsCodeTests(ServeCase):

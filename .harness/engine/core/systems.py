@@ -62,8 +62,18 @@ SYSTEMS_SCHEMA = {
             "target": {"type": "string"},
             "rules": {"type": "object", "additionalProperties": _RULE_SET},
             "show": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+            "say": {  # 1.7.20: `[{"pattern": <on the arguments after the program>, "text": "Add a comment to work item {1}"}]`: the first match is the one line a held call's card opens with
+                "type": "array",
+                "items": {"type": "object", "required": ["pattern", "text"], "properties": {"pattern": {"type": "string", "minLength": 1}, "text": {"type": ["string", "object"], "minLength": 1, "required": ["en"], "additionalProperties": {"type": "string", "minLength": 1}}}},  # 1.7.23: `text` is a string, or {"en": "...", "zh": "..."} (a language that is missing reads en)
+            },
+            "body": {  # 1.7.20: `[{"pattern": <first group is the value>, "from": "file"|"text"}]`: the text a held call writes, shown on its card (a file of the task, or the text as written)
+                "type": "array",
+                "items": {"type": "object", "required": ["pattern", "from"], "properties": {"pattern": {"type": "string", "minLength": 1}, "from": {"type": "string", "enum": ["file", "text"]}}},
+            },
             "toolpack": {"type": "string", "minLength": 1},  # 1.7.12: written by the harness for a system an installed tool pack brings
-            "openable": {"type": "boolean"},  # 1.7.13: may Open to the agent let its writes through? Default: yes, but not for a tool pack's system  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
+            "openable": {"type": "boolean"},
+            "item": {"type": ["string", "array"], "minLength": 1, "items": {"type": "string", "minLength": 1}},  # 1.7.18: a pattern whose first group is the id of the item a write names (a work item); 1.7.25: a pattern, or a list of them; every group of every match names an item
+            "link": {"type": "string", "minLength": 1},  # 1.7.18: the link type of `harness task link` that names such an item (ado)  # 1.7.13: may Open to the agent let its writes through? Default: yes, but not for a tool pack's system  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
             "needs": {  # 1.7.9: `probes` names one probe per environment (another server, another account); `denied` is what a call prints when the identity is not let in
                 "type": "object",
                 "properties": {"probe": {"type": "string", "minLength": 1}, "probes": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
@@ -100,7 +110,7 @@ def validate(systems: Any) -> List[str]:
             if program in owner:
                 errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}; give one of them a `when`")
             owner[program] = name
-        patterns = [("target", system.get("target") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or ""), ("needs.denied", (system.get("needs") or {}).get("denied") or ""), ("needs.down", (system.get("needs") or {}).get("down") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs") for index, item in enumerate(system.get(key) or [])]
+        patterns = [("target", system.get("target") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or ""), ("needs.denied", (system.get("needs") or {}).get("denied") or ""), ("needs.down", (system.get("needs") or {}).get("down") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"item[{index}]", value) for index, value in enumerate([system["item"]] if isinstance(system.get("item"), str) else (system.get("item") or [])) if isinstance(value, str)] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs", "say", "body") for index, item in enumerate(system.get(key) or [])]
         for where, pattern in (item for item in patterns if item[1]):
             try:
                 re.compile(pattern)
@@ -189,3 +199,8 @@ def reach(systems: Dict[str, Any], run: Callable[[str], Tuple[Optional[int], str
         bad = [line for line in lines if not line["reachable"]]
         found[name] = {"reachable": not bad, "why": bad[0]["why"] if bad else "", "launch": needs.get("launch") or ""}
     return found
+
+
+def place(system: str, env: str) -> str:
+    """Where a call goes, for a sentence: `finance (IST)`; a system with no environment is just its name (1.7.21)."""
+    return system if not env or env == "none" else f"{system} ({env})"

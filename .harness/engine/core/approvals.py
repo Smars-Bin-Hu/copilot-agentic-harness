@@ -89,6 +89,20 @@ def request(
     return code
 
 
+def rewrite(root: Path, code: str, session_id: str, command: str, limit_minutes: int, extra: Optional[Dict[str, Any]] = None, now: Optional[float] = None, file: str = FILE) -> bool:
+    """A waiting entry takes a new command (and session, and `extra`) and keeps its code (1.7.27). Only a pending entry that is alive."""
+    now = time.time() if now is None else now
+    limit = limit_minutes * 60.0
+    with state_lock(path(root, file)):
+        entries = [item for item in _read(root, file) if _alive(item, limit, now)]
+        for item in entries:
+            if item.get("code") == code and item.get("state") == "pending":
+                item.update({**(extra or {}), "session_id": session_id, "command": collapse(command), "created_at": utc_now()})  # "asked at" shows the new time, as the draft does; "at" (the time limit) stays
+                _write(root, entries, file)
+                return True
+    return False
+
+
 def consume(root: Path, session_id: str, command: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> Optional[Dict[str, Any]]:
     """The approval for exactly this command in this session, used up; None when there is none. (An entry is truthy.)"""
     now = time.time() if now is None else now
@@ -115,6 +129,12 @@ def approved(root: Path, session_id: str, limit_minutes: int, now: Optional[floa
     """The approvals of this session that are not used yet and not run out."""
     now = time.time() if now is None else now
     return [item for item in _read(root, file) if item["state"] == "approved" and item["session_id"] == session_id and _alive(item, limit_minutes * 60.0, now)]
+
+
+def approved_all(root: Path, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> List[Dict[str, Any]]:
+    """Every approval that is not used yet and not run out, whatever session it is for (the board shows them until the command has run, 1.7.24)."""
+    now = time.time() if now is None else now
+    return [item for item in _read(root, file) if item["state"] == "approved" and _alive(item, limit_minutes * 60.0, now)]
 
 
 def approve(root: Path, code: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> Optional[Dict[str, Any]]:

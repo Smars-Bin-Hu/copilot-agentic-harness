@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from pathlib import Path
 import json
 import re
 import unittest
@@ -45,6 +46,22 @@ class OutboxCase(TaskCase):
 
 
 class OutboxTests(OutboxCase):
+    def test_the_agent_is_told_to_have_the_call_approved_on_the_task_page(self) -> None:
+        """1.7.23 (H7): the person approves on the task page; the agent no longer tells them to run `harness approve-action` in a terminal."""
+        self.new()
+        reason = self.term(COMMENT)["permissionDecisionReason"]
+        self.assertIn("任务页", reason)
+        self.assertNotIn("在自己的终端运行", reason)
+        draft = self.drafts()[0].read_text(encoding="utf-8")
+        self.assertIn("任务页", draft)
+        import json
+
+        for lang in ("en", "zh"):
+            found = json.loads((Path(__file__).resolve().parents[1] / "engine" / "core" / f"messages.{lang}.json").read_text(encoding="utf-8"))
+            self.assertNotIn("UTC", found["desk.outbox.asked"], lang)
+            self.assertNotIn("DROP", found["desk.set.open.tip"], lang)
+            self.assertNotIn("approve-action", found["desk.outbox.same_as"], lang)
+
     def test_a_write_waits_with_a_draft_then_runs_once_after_approval(self) -> None:
         self.new()
         refused = self.term(COMMENT)
@@ -179,6 +196,22 @@ class OutboxOnThePageTests(OutboxCase):
         self.assertTrue(view[0]["draft"].startswith("OUTBOX/"))
         self.assertEqual(view[0]["facts"], {})
 
+    def test_an_approved_call_stays_on_the_page_until_the_command_has_run(self) -> None:
+        """1.7.24: the green card is the server's, not the page's memory: it is there after the agent answered or the page was loaded again, and goes when the command ran (the approval is used up)."""
+        from modules.task import taskdesk
+
+        self.new()
+        code = code_of(self.term(COMMENT)["permissionDecisionReason"])
+        self.assertEqual(taskdesk.approved_view(self.root, TASK), [])
+        self.approve(code)
+        (view,) = taskdesk.approved_view(self.root, TASK)
+        self.assertEqual((view["code"], view["command"]), (code, COMMENT))
+        self.assertTrue(view["title"], "1.7.25: the card says which call it is (the type's sentence, else the start of the command)")
+        self.assertTrue(COMMENT.startswith(view["title"]) or view["title"], view["title"])
+        self.assertEqual(taskdesk.outbox_view(self.root, TASK), [], "no longer held")
+        self.assertEqual(self.term(COMMENT), {}, "the agent runs it: the approval is used up")
+        self.assertEqual(taskdesk.approved_view(self.root, TASK), [])
+
     def test_a_call_whose_verb_no_rule_names_says_so_on_the_card_and_in_the_draft(self) -> None:
         from modules.task import taskdesk
 
@@ -186,9 +219,9 @@ class OutboxOnThePageTests(OutboxCase):
         systems = {**SYSTEMS, "tickets": {**SYSTEMS["tickets"], "verbs": SYSTEMS["tickets"]["verbs"] + [{"pattern": r"^comment\b", "verb": "write"}]}}
         (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
         named = self.term(COMMENT)["permissionDecisionReason"]  # `comment` is now a rule of the tickets system: a write it names
-        unnamed = self.term('Q="comment T-7"; tk "$Q"')["permissionDecisionReason"]  # the verb is in a shell variable: nothing names it
+        unnamed = self.term('tk "$Q"')["permissionDecisionReason"]  # the verb is in a shell variable the line does not set: nothing names it
         view = {item["command"]: item for item in taskdesk.outbox_view(self.root, TASK)}
-        self.assertEqual((view[COMMENT]["named"], view['Q="comment T-7"; tk "$Q"']["named"]), (True, False))
+        self.assertEqual((view[COMMENT]["named"], view['tk "$Q"']["named"]), (True, False))
         drafts = {path.name: path.read_text(encoding="utf-8") for path in self.drafts()}
         kind_line = lambda text: next(line for line in text.splitlines() if ": write" in line)  # noqa: E731 - the draft is in the user's language
         self.assertIn("(", kind_line(drafts[f"{code_of(unnamed)}-tickets.md"]))
@@ -267,9 +300,41 @@ class OutboxOnThePageTests(OutboxCase):
         self.assertIn("shade.addEventListener(\"click\"", (taskhtml.WEB / "serve.js").read_text(encoding="utf-8"))  # a click beside the window closes it
         self.assertIn('view.box.classList.add("wide")', desk)
         self.assertIn(".cmd-scroll{max-height:min(50vh,520px);overflow:auto", (taskhtml.WEB / "desk.css").read_text(encoding="utf-8"))  # the window scrolls both ways
-        self.assertIn('"outbox"]', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
+        self.assertIn('"outbox", "asking"]', (taskhtml.WEB / "common.js").read_text(encoding="utf-8"))
         en, zh = messages.table("en"), messages.table("zh")
         for key in ("task.waiting.outbox", "outbox.state.dismissed", "gate.action.dismissed", "desk.outbox.view", "desk.outbox.approve", "desk.outbox.dismiss", "desk.outbox.window", "desk.outbox.view_first"):
             self.assertIn(key, en, key)
             self.assertIn(key, zh, key)
 
+
+
+class ExecAsOutboxTests(OutboxCase):
+    """1.7.21: an exec a system's rules set to `outbox` is held like a write, with a card the person approves; a system with no environment shows no `(none)` and asks for no `<ENV>`."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        systems = {"tickets": {**SYSTEMS["tickets"], "verbs": SYSTEMS["tickets"]["verbs"] + [{"pattern": r"^queue\b", "verb": "exec"}], "rules": {"none": {"exec": "outbox"}}}}
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
+
+    def test_the_exec_waits_for_an_approval_and_runs_once(self) -> None:
+        self.new()
+        held = self.term("tk queue 12")
+        self.assertEqual(held["permissionDecision"], "deny")
+        reason = held["permissionDecisionReason"]
+        self.assertIn("approve-action", reason)
+        self.assertNotIn("(none)", reason)
+        self.approve(code_of(reason))
+        self.assertEqual(self.term("tk queue 12"), {})
+        self.assertEqual(self.term("tk queue 12")["permissionDecision"], "deny")
+
+    def test_a_human_exec_of_a_system_with_no_environment_hands_off_without_one(self) -> None:
+        systems = {"tickets": {**SYSTEMS["tickets"], "verbs": [{"pattern": r"^queue\b", "verb": "exec"}], "rules": {"none": {"exec": "human"}}}}
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": systems}), encoding="utf-8")
+        self.new()
+        reason = self.term("tk queue 12")["permissionDecisionReason"]
+        self.assertNotIn("<ENV>", reason)
+        self.assertNotIn("(none)", reason)
+        self.assertIn("task handoff run --what", reason)
+        from core.systems import place
+
+        self.assertEqual((place("cloud", "dev"), place("tickets", "none")), ("cloud (dev)", "tickets"))

@@ -12,15 +12,15 @@ const SERVERS = (function () {
   function envChip(env) { return env === "none" ? h("span", {class: "sv-env", title: t("connections.env.none.tip")}, "\u2014") : h("span", {class: "sv-env sv-env-" + env}, env.toUpperCase()); }
   function where(row) { const f = row.fields || {}; return [f.host, f.port].filter(Boolean).join(":") || Object.values(f).filter(Boolean).join(" · "); }
   function result(found) {  // a test's answer: a mark and a short word, the reason on hover
-    const word = t("connections.state." + found.state);
-    const tip = found.state === "ok" ? t("connections.tip.ok", {who: found.who || "-", seconds: found.seconds}) : found.state === "missing" || found.state === "mcp" ? found.why : t("connections.tip." + found.state);
+    const word = found.timeout ? t("connections.state.timeout", {seconds: found.timeout}) : t("connections.state." + found.state);
+    const tip = found.timeout ? t("connections.tip.timeout", {seconds: found.timeout}) : found.state === "ok" ? t("connections.tip.ok", {who: found.who || "-", seconds: found.seconds}) : found.state === "missing" || found.state === "mcp" ? found.why : found.state === "failed" && found.why && !/^exit-\d+$/.test(found.why) ? t("connections.tip.failed") + "\n" + found.why : t("connections.tip." + found.state);
     return h("span", {class: "sv-result " + (found.state === "ok" || found.state === "mcp" ? "ok" : "bad"), title: tip}, h("b", null, MARK[found.state] || "?"), " ", word);
   }
 
   // One server: a line (environment, name, kind, where, what is saved), and when opened, its identity, Test and Save.
   function serverRow(row, redraw) {
     const line = h("button", {type: "button", class: "sv-line" + (row.saved ? " saved" : ""), "aria-expanded": "false",
-      title: [row.label, row.type_label + (row.auth_label ? " · " + row.auth_label : ""), where(row)].filter(Boolean).join("\n")},
+      title: [...new Set([row.alias, row.label])].concat([row.type_label + (row.auth_label ? " · " + row.auth_label : ""), where(row)]).filter(Boolean).join("\n")},
       envChip(row.env), h("b", {class: "sv-alias"}, row.alias), h("code", {class: "sv-where"}, where(row)),
       row.own ? h("span", {class: "sv-own", title: t("connections.own.tip")}, t("connections.own")) : null,
       row.toolpack ? h("span", {class: "sv-own sv-from", title: t("connections.from.tip", {pack: row.toolpack})}, row.toolpack) : null,
@@ -36,12 +36,22 @@ const SERVERS = (function () {
     return h("div", {class: "sv-row"}, line, box);
   }
 
+  // Forgetting a connection of the person's own takes the connection and its identity away, and nothing brings it back: one more click, within a few seconds (1.7.22). A connection of a tool pack or the company
+  // only loses the identity: it is still listed, and one click is enough.
+  function sure(button, row, run) {
+    if (!row.own || button.dataset.sure) { run(); return; }
+    const label = button.textContent;
+    button.dataset.sure = "1"; button.textContent = t("connections.forget.sure"); button.title = t("connections.forget.sure.tip", {name: row.alias});
+    setTimeout(() => { if (!button.isConnected) return; delete button.dataset.sure; button.textContent = label; button.removeAttribute("title"); }, 5000);
+  }
+
   // The identity of a server, tested before it is kept. `own`: the fields of a server of the person's own (kind, env, auth, host, ...), or null.
   function identityForm(row, own, redraw) {
     if (row.identity === "tool") return toolForm(row, own, redraw);
     const needsKey = row.identity === "keyfile";
+    const token = row.identity === "token";  // one secret under the label of the auth entry (1.7.21): no account box
     const account = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: row.identity === "netonly" ? "DOMAIN\\id" : t("connections.account"), value: row.account || ""});
-    const password = h("input", {class: "su-in su-mono", type: "password", autocomplete: "new-password", placeholder: row.saved ? t("connections.password.kept") : t("connections.password")});
+    const password = h("input", {class: "su-in su-mono", type: "password", autocomplete: "new-password", placeholder: row.saved ? t("connections.password.kept") : (token ? row.auth_label || t("connections.password") : t("connections.password"))});
     const keyfile = needsKey ? h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: t("connections.keyfile")}) : null;
     const said = h("span", {class: "sv-said"});
     const test = h("button", {type: "button", class: "act"}, t("connections.test"));
@@ -59,9 +69,9 @@ const SERVERS = (function () {
       save.disabled = true;
       ask("save", values()).then(() => { password.value = ""; redraw(); }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); });
     });
-    if (forget) forget.addEventListener("click", () => { forget.disabled = true; ask("forget", {alias: row.alias}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
+    if (forget) forget.addEventListener("click", () => sure(forget, row, () => { forget.disabled = true; ask("forget", {alias: row.alias}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); }));
     password.addEventListener("keydown", (event) => { if (event.key === "Enter" && !test.disabled) test.click(); });
-    return [h("div", {class: "sv-fields"}, field(t("connections.account"), account), field(t("connections.password"), password), keyfile ? field(t("connections.keyfile"), keyfile) : null), h("div", {class: "sv-acts"}, test, save, forget, said)];
+    return [h("div", {class: "sv-fields"}, token ? null : field(t("connections.account"), account), field(token ? row.auth_label || t("connections.password") : t("connections.password"), password), keyfile ? field(t("connections.keyfile"), keyfile) : null), h("div", {class: "sv-acts"}, test, save, forget, said)];
   }
 
   // A server whose program keeps its own sign-in (1.7.13): nothing to type. Test runs the kind's check; Save keeps only the name it answered with.
@@ -72,19 +82,21 @@ const SERVERS = (function () {
     const forget = row.saved ? h("button", {type: "button", class: "act danger"}, t("connections.forget")) : null;
     const values = () => ({alias: own ? own.alias() : row.alias, account: "", password: "", keyfile: "", own: own ? own.fields() : undefined});
     test.addEventListener("click", () => {
+      test.classList.remove("hot", "live");
       test.disabled = true; save.disabled = true; said.replaceChildren(h("span", {class: "sub"}, t("connections.testing")));
       ask("test", values()).then((found) => { said.replaceChildren(result(found)); save.disabled = found.state !== "ok"; }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); })
         .then(() => { test.disabled = false; });
     });
     save.addEventListener("click", () => { save.disabled = true; ask("save", values()).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
-    if (forget) forget.addEventListener("click", () => { forget.disabled = true; ask("forget", {alias: row.alias}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
+    if (forget) forget.addEventListener("click", () => sure(forget, row, () => { forget.disabled = true; ask("forget", {alias: row.alias}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); }));
     const signIn = row.login && typeof TERM !== "undefined" ? h("button", {type: "button", class: "act", title: row.login}, t("connections.tool.login")) : null;  // the kind's own sign-in, in the Terminal window
     const word = (text) => (/^[\w.:@\/-]+$/.test(text) ? text : '"' + String(text).replace(/"/g, "") + '"');
+    const signedIn = () => { test.classList.add("hot", "live"); said.replaceChildren(h("span", {class: "sv-retest"}, t("connections.tool.retest"))); };  // the sign-in ran to its end: the person tests again (1.7.19)
     if (signIn) signIn.addEventListener("click", () => {
-      if (!own) { TERM.run("harness connections login " + row.alias); return; }
+      if (!own) { TERM.run("harness connections login " + row.alias, signedIn); return; }
       const fields = own.fields();  // not saved yet: the kind and the fields typed so far
       const name = own.alias() || "new";
-      TERM.run(["harness connections login", word(name), "--type", word(fields.type), ...Object.entries(fields).filter(([key, value]) => !["type", "env"].includes(key) && value).map(([key, value]) => "--set " + word(key + "=" + value))].join(" "));
+      TERM.run(["harness connections login", word(name), "--type", word(fields.type), ...Object.entries(fields).filter(([key, value]) => !["type", "env"].includes(key) && value).map(([key, value]) => "--set " + word(key + "=" + value))].join(" "), signedIn);
     });
     return [h("p", {class: "sub sv-tool"}, t(row.saved ? "connections.tool.saved" : "connections.tool.hint", {account: row.account || ""})), h("div", {class: "sv-acts"}, signIn, test, save, forget, said)];
   }
@@ -109,7 +121,7 @@ const SERVERS = (function () {
     };
     const drawIdentity = () => {
       const spec = kinds[kind.value];
-      const row = {alias: "", identity: (spec.auth[auth.value] || {}).identity, login: (spec.auth[auth.value] || {}).login || "", saved: false, account: ""};
+      const row = {alias: "", identity: (spec.auth[auth.value] || {}).identity, login: (spec.auth[auth.value] || {}).login || "", auth_label: (spec.auth[auth.value] || {}).label || "", saved: false, account: ""};
       rest.replaceChildren(...identityForm(row, {alias: () => alias.value.trim(), fields: () => ({type: kind.value, env: env.value, auth: auth.value, ...Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value.trim()]))})}, redraw));
     };
     kind.addEventListener("change", draw);
@@ -178,7 +190,7 @@ const SERVERS = (function () {
   }
 
   // "Open VS Code with identities": tick the identities this window holds; those that cannot share it are reached through `harness as`, marked so.
-  function choose() {
+  function choose(opened) {  // `opened`: what the page does once VS Code was started with the identities (the Enter screen waits for it, 1.7.19)
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
     const said = h("p", {class: "sub sv-plan"});
     const running = h("p", {class: "bad sv-plan", hidden: ""}, t("connections.open.running"));  // its own line: the plan does not write over it
@@ -197,7 +209,7 @@ const SERVERS = (function () {
       ask("plan", {chosen, primary}).then((plan) => {
         for (const row of rows) {
           const node = marks[row.alias];
-          if (!picked.includes(row.alias)) { node.replaceChildren(); continue; }
+          if (!picked.includes(row.alias) || found0.env_wrong) { node.replaceChildren(); continue; }  // a VS Code started without this computer's settings holds none of them: "in the window" would be false (1.7.24)
           const wrapped = plan.wrap.includes(row.alias);
           node.replaceChildren(h("span", {class: "sv-how " + (wrapped ? "wrap" : "direct"), title: wrapped ? t("connections.how.wrap.tip", {alias: row.alias}) : t("connections.how.direct.tip")}, wrapped ? t("connections.how.wrap") : t("connections.how.direct")));
         }
@@ -227,7 +239,7 @@ const SERVERS = (function () {
       go.disabled = true;
       ask("open", {chosen: picked, primary}).then((done) => {
         said.replaceChildren(done.started ? t("connections.open.started", {n: done.direct.length + done.wrap.length}) : h("span", {class: "bad"}, done.why || ""));
-        if (done.started) setTimeout(view.close, 2500);
+        if (done.started) { if (opened) opened(); setTimeout(view.close, 2500); }
       }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); go.disabled = false; });
     });
     close.addEventListener("click", view.close);

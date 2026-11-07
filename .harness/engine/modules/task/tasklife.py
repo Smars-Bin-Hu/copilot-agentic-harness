@@ -279,6 +279,9 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     """
     state = (data.get("promote") or {}).get("state", "none")
     updated = data.get("updated_at", "")
+    asking = data.get("waiting")
+    if isinstance(asking, dict) and asking.get("why") == "asking" and asking.get("since") and not (cancelled_at(data) > str(asking["since"])):
+        return {"why": "asking", "since": str(asking["since"])}  # the agent waits in the tool that asks the person (1.7.20): this comes first; held calls can still be approved meanwhile
     if state == "partial":
         return {"why": "recover", "since": last_event(data, "promote-partial") or updated}
     if data.get("kind") != "test" and tasks.plan_digest(root, task) and not tasks.plan_approved(root, task, data):  # a test task writes nothing back: a plan it has is not asked for (B65)
@@ -337,7 +340,7 @@ def ask_text(ask: Dict[str, Any]) -> str:
         return messages.text("task.waiting.confirm", what=" ".join(str(ask.get("command") or ask.get("tool") or "").split())[:WAIT_WHAT])
     if not ask.get("supported"):
         return messages.text("task.waiting.question-vs")
-    return messages.text("task.waiting.question", what=" ".join(str(ask.get("message") or "").split())[:WAIT_WHAT])
+    return messages.text("task.waiting.asking")  # the same words as a question the agent put with its ask tool; the question itself is in `waiting_tip` (1.7.21)
 
 
 def apply_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], data: Optional[Dict[str, Any]] = None) -> bool:
@@ -346,7 +349,7 @@ def apply_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], data: Optional
     if not ask or row.get("status") != "open" or row.get("paused_since"):
         return False
     waited = waited_since(data or {}, str(ask.get("since") or ""))
-    row.update({"waiting": ask_text(ask), "waiting_why": "confirm" if ask.get("kind") == "confirm" else "question", "waiting_since": ask.get("since", ""), "waiting_from": wait_clock(data or {}, str(ask.get("since") or "")),
+    row.update({"waiting": ask_text(ask), "waiting_why": "confirm" if ask.get("kind") == "confirm" else "question", "waiting_tip": " ".join(str(ask.get("message") or ask.get("command") or "").split())[:600], "waiting_since": ask.get("since", ""), "waiting_from": wait_clock(data or {}, str(ask.get("since") or "")),
                 "waited_s": round(waited) if waited is not None else None, "state": "waiting", "active": False})
     return True
 
@@ -497,6 +500,8 @@ def handoff(root: Path, raw_task: str, what: str, env: str, detail: str = "") ->
 
 ALLOW_KEY = "allow_env"
 ALLOW_ENVS = ("dev", "ist", "qat")  # the environments a person may open for a task; prod never, and a system with no environment (`none`) has nothing to open
+LINKS = "links"  # 1.7.18: not an environment: the items the task is linked to (a work item); the agent's writes to them go through, to no other item
+LINKS_KEY = "allow_links"
 
 
 def allowed_env(data: Dict[str, Any], env: str) -> bool:
@@ -511,6 +516,8 @@ def set_allow(root: Path, raw_task: str, env: str, on: bool, interactive: Option
     every call still leaves its line in the log."""
     task_ops.person("task allow", interactive, typed=False)
     env = " ".join(str(env or "").split()).lower()
+    if env == LINKS:
+        return _set_allow_links(root, raw_task, on)
     if env not in ALLOW_ENVS:
         raise CommandError(say("task.allow.env", env=env or "-", allowed=", ".join(ALLOW_ENVS)))
     task = task_ops.resolve(root, raw_task)
@@ -528,7 +535,36 @@ def set_allow(root: Path, raw_task: str, env: str, on: bool, interactive: Option
     return {"task": task, "env": env, "on": on, "changed": before != on, "open": sorted(held), "next": say("task.allow.on" if on else "task.allow.off", env=env.upper())}
 
 
-def link(root: Path, raw_task: str, ref: str, on: bool) -> Dict[str, Any]:
+def _set_allow_links(root: Path, raw_task: str, on: bool) -> Dict[str, Any]:
+    """The person lets the agent write the items this task is linked to (`ado:<id>`), with no approval each time (1.7.18). A write to an item the task is not
+    linked to is refused, a new item is still held, a destroy is refused. It ends with the task."""
+    task = task_ops.resolve(root, raw_task)
+    with task_ops.locked(root, task) as data:
+        task_ops.require_open(data)
+        before = bool(data.get(LINKS_KEY))
+        if on:
+            # the items named now are the ones opened (1.7.21): an item the agent links later is not, and its writes wait for the person as before
+            data[LINKS_KEY] = {"at": utc_now(),
+                               "refs": [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]}
+        else:
+            data.pop(LINKS_KEY, None)
+        if before != on:
+            task_ops.note(data, "allow-env", f"{LINKS}: {'on' if on else 'off'}")
+        refs = [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict)]
+    return {"task": task, "env": LINKS, "on": on, "changed": before != on, "links": refs, "next": say("task.allow.links.on" if on else "task.allow.links.off", links=", ".join(refs) or "-")}
+
+
+def check_link_type(root: Path, ref: str) -> None:
+    """The board takes a ticket of a type an installed tool pack gives, and says which types there are when it is another (1.7.22). With no type installed, any `<type>:<id>` is kept as text."""
+    from core import toolpacks
+
+    types = [item["type"] for item in toolpacks.link_types(root)]
+    kind = str(ref or "").split(":", 1)[0]
+    if types and kind not in types:
+        raise CommandError(say("task.link.type", type=kind, types=", ".join(types)))
+
+
+def link(root: Path, raw_task: str, ref: str, on: bool, by_person: bool = False) -> Dict[str, Any]:
     """A task names an item of an outside tool (`ado:12345`, 1.7.15): the board shows it, and once the work is done the agent may ask the person whether
     to update it. The harness keeps only the type and the id; the tool pack of the type knows its address."""
     from core import toolpacks
@@ -536,14 +572,21 @@ def link(root: Path, raw_task: str, ref: str, on: bool) -> Dict[str, Any]:
     ref = str(ref or "").strip()
     if not toolpacks.LINK.match(ref):
         raise CommandError(say("task.link.form", ref=ref or "-"))
+    ref = toolpacks.normal_ref(ref)
     task = task_ops.resolve(root, raw_task)
     with task_ops.locked(root, task) as data:
         held = [item for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]
-        there = any(item["ref"] == ref for item in held)
+        there = any(toolpacks.normal_ref(item["ref"]) == ref for item in held)
         if on and not there:
             held.append({"ref": ref, "at": utc_now()})
+            opened = data.get(LINKS_KEY)
+            if by_person and isinstance(opened, dict):  # the person added it on the board while the linked items are open: it is opened too; an agent's `task link add` is not (1.7.21)
+                opened["refs"] = sorted(set(opened.get("refs") or []) | {ref})
         elif not on:
-            held = [item for item in held if item["ref"] != ref]
+            held = [item for item in held if toolpacks.normal_ref(item["ref"]) != ref]
+            opened = data.get(LINKS_KEY)
+            if isinstance(opened, dict):
+                opened["refs"] = [item for item in opened.get("refs") or [] if item != ref]
         data["links"] = held
         if there != on:
             task_ops.note(data, "link", f"{ref}: {'on' if on else 'off'}")

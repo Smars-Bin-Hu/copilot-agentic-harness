@@ -189,13 +189,13 @@ class RefreshSettingTests(HarnessTestCase):
             self.assertEqual(boardserve.refresh_seconds(value), 3, value)
         self.assertEqual(boardserve.refresh_seconds(7), 7)
 
-    def test_the_board_page_carries_the_setting_and_the_task_page_keeps_10(self) -> None:
+    def test_the_board_page_carries_the_setting_and_the_task_page_keeps_3(self) -> None:
         board = boardserve.Board(self.root, False, 0, ["pause"], refresh=5)
         text = board.page()
         start = text.index('<script type="application/json" id="data">') + len('<script type="application/json" id="data">')
         self.assertEqual(json.loads(text[start:text.index("</script>", start)])["serve"]["refresh"], 5)
         self.assertEqual(boardserve.Board(self.root, False, 0, ["pause"]).refresh, 3)  # nothing said: 3
-        self.assertEqual(boardserve.DESK_REFRESH, 10)
+        self.assertEqual(boardserve.DESK_REFRESH, 3)  # 10 until 1.7.26
 
     def test_the_user_name_is_asked_once_while_the_user_files_do_not_change(self) -> None:
         """1.6.109: every page has the name, and git takes seconds to start on a slow computer. Before, a page waited on git once a minute."""
@@ -560,7 +560,7 @@ class WalkThroughTests(unittest.TestCase):
     def test_the_task_settings_bar_opens_an_environment_with_one_click_and_the_row_marks_it(self) -> None:
         """1.7.6: the chips post `task allow` with no code; the line under the name has the open mark; both languages have the words."""
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
-        self.assertIn('SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: item.open ? "off" : "on", step: "act"})', desk)
+        self.assertIn('SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: chip.getAttribute("aria-pressed") === "true" ? "off" : "on", step: "act"})', desk)
         self.assertIn('disabled: listed && can ? null : "disabled"', desk)  # no system reaches it, or the board cannot act: not clickable
         self.assertIn('class: "chip env never"', desk)  # prod
         self.assertIn('ui.envs = slot("span", "tk-rv tk-env");', desk)  # a pill of the head, beside Independent review, not a field of the message bar

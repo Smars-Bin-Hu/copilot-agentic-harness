@@ -259,11 +259,15 @@ const CHAT = (function () {
   }
 
   function create(preset) {  // preset: `true` for the sample of the lesson, or {name, kind, domains, text, note, back} for a skill; `back` opens the place the person came from
-    const state = {lang: "en", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set()};
+    const state = {lang: "en", busy: false, ready: false, timer: null, models: [], options: null, domainList: null, domains: new Set(), linkTypes: []};
     const field = (label, control, extra) => h("label", {class: "new-field" + (extra ? " " + extra : "")}, h("span", {class: "sub label"}, label), control);
     const name = h("input", {type: "text", class: "send-body", maxlength: 80, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.name.ph")});
     const kind = h("select", {class: "send-body"});
     const source = h("select", {class: "send-body"});
+    const links = h("input", {type: "text", class: "send-body new-links", maxlength: 400, autocomplete: "off", spellcheck: "false", placeholder: t("board.new.links.ph")});  // tickets to link (1.7.20): `ado:300100`, several split by space or comma
+    const linkKinds = h("div", {class: "chips new-link-types"});
+    const smallNote = h("p", {class: "sub new-small", hidden: "", role: "note"}, t("board.new.small"));  // tickets named, a short text, Kind Dev: a small errand is lighter as Q&A (1.7.26). Kind is not changed for the person.
+    const small = () => { const on = kind.value === "dev" && links.value.trim().length > 0 && text.value.trim().length < 140; if (smallNote.hidden === on) smallNote.hidden = !on; };
     const text = h("textarea", {rows: 5, class: "send-body", placeholder: t("board.new.text.ph"), maxlength: 5000});
     const said = h("div", {class: "bad"});
     const files = fileTray(text, said, () => sync());
@@ -278,7 +282,7 @@ const CHAT = (function () {
     const problem = h("div", {class: "sub"});  // what is not right yet: shown quietly while the person types
     const blocked = h("div", {class: "bad"});
     const kbBox = h("div", {class: "new-kb"});  // the knowledge base domains a task may be about: ticks, and "None" (a choice of its own). Drawn when the options come.
-    const go = h("button", {type: "button", class: "act hot", disabled: "disabled"}, t("board.new.go"));
+    const go = h("button", {type: "button", class: "act hot primary", disabled: "disabled"}, t("board.new.go"));
     const no = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
     const langChips = ["en", "zh"].map((lang) => {
       const chip = h("button", {type: "button", class: "chip" + (lang === "en" ? " on" : ""), "aria-pressed": lang === "en" ? "true" : "false"}, t("desk.send.lang." + lang));
@@ -291,6 +295,7 @@ const CHAT = (function () {
           h("div", {class: "new-grid"}, field(t("board.new.name"), name), field(t("board.new.kind"), kind)),
           field(t("board.new.source"), source), h("p", {class: "sub"}, t("board.new.source.hint")),
           h("div", {class: "new-field"}, h("span", {class: "sub label"}, t("board.new.kb")), kbBox),
+          h("div", {class: "new-field"}, h("span", {class: "sub label"}, t("board.new.links")), links, linkKinds, h("p", {class: "sub"}, t("board.new.links.hint")), smallNote),
           field(t("board.new.text"), text), h("div", {class: "new-files"}, files.attach, files.picker, files.tray),
           h("div", {class: "new-grid models"}, field(t("board.new.model"), model, "new-model"), field(t("board.new.thinking"), thinking), roomField, field(t("board.new.lang"), h("div", {class: "chips"}, langChips), "new-lang")),
           h("label", {class: "new-grill"}, grill, h("span", null, t("board.new.grill"))), h("p", {class: "sub"}, t("board.new.fixed"))),
@@ -298,7 +303,7 @@ const CHAT = (function () {
       h("div", {class: "new-actions"}, problem, said, h("div", {class: "row send-actions"}, go, no))]);  // the bar stays in view: the reason the button is dim is read there, not below the long message
     view.box.classList.add("new-wide");
     files.zone(view.box);
-    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: grill.checked ? text.value.trimEnd() + "\n\nFirst use the skill generic-grill-me: ask me what is unclear." : text.value, model: model.value, thinking: thinking.value, context: sizes.chosen(), lang: state.lang, domains: Array.from(state.domains)});
+    const body = (step) => ({step, name: name.value.trim(), kind: kind.value, source: source.value, text: grill.checked ? text.value.trimEnd() + "\n\nFirst use the skill generic-grill-me: ask me what is unclear." : text.value, model: model.value, thinking: thinking.value, context: sizes.chosen(), lang: state.lang, domains: Array.from(state.domains), links: links.value});
     // The knowledge base: the domains this repository's knowledge bases have. None ticked is a valid choice. When there are no domains the box says so and the dialog goes on.
     function drawKb() {
       const list = state.domainList;
@@ -322,6 +327,7 @@ const CHAT = (function () {
     }
     const keepPick = () => remember({id: model.value, thinking: thinking.value, context: sizes.chosen()});
     function refresh() {
+      small();
       clearTimeout(state.timer);
       state.timer = setTimeout(() => {
         ask("/api/create", body("preview")).then((found) => {
@@ -345,7 +351,7 @@ const CHAT = (function () {
       back.addEventListener("click", () => { close(); preset.back(); });
       no.before(back);
     }
-    for (const control of [name, text]) control.addEventListener("input", refresh);
+    for (const control of [name, text, links]) control.addEventListener("input", refresh);
     for (const control of [kind, source, thinking]) control.addEventListener("change", refresh);
     model.addEventListener("change", () => { levels(); sizes.fill(state.models.find((item) => item.id === model.value), ""); keepPick(); refresh(); });
     thinking.addEventListener("change", keepPick);
@@ -373,6 +379,12 @@ const CHAT = (function () {
       const last = remembered();  // a task's chat starts on the model last picked for a task, not on Copilot Fusion (1.6.101)
       if (last && state.models.some((item) => item.id === last.id)) model.value = last.id;
       state.domainList = Array.isArray(found.domains) ? found.domains : [];
+      state.linkTypes = Array.isArray(found.link_types) ? found.link_types : [];
+      for (const one of state.linkTypes) {  // a click puts the type in, ready for the number
+        const chip = h("button", {type: "button", class: "chip", title: (one.label || one.type) + " \u00b7 " + one.toolpack}, one.type + ":");
+        chip.addEventListener("click", () => { links.value = (links.value.trim() ? links.value.trim() + " " : "") + one.type + ":"; links.focus(); refresh(); });
+        linkKinds.append(chip);
+      }
       drawKb();
       levels();
       if (last && model.value === last.id && [...thinking.options].some((option) => option.value === last.thinking)) thinking.value = last.thinking;

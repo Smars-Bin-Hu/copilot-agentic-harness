@@ -18,6 +18,7 @@ html[data-theme="light"].has-wall .lb-top,html[data-theme="light"].has-wall .kpi
 /* the header floats on the picture instead of running edge to edge */
 html.has-wall .lb-top,html.has-wall .tk-head{top:0;margin:12px 0 0;padding:12px 18px;border-radius:18px}  /* 12 px down at rest, stuck at the top edge when scrolled */
 html.has-wall .tk-head{padding:10px 16px}
+@media (max-width:900px){html.has-wall .tk-head{padding-right:96px}}  /* the search pill floats over the right end: the head keeps clear of it (the rule above has more weight than desk.css) */
 html.has-wall main{padding-top:0}
 html.has-wall .kpis{margin-top:14px}
 @media (min-width:901px){html.has-wall .kpi:nth-child(5n+1){padding-left:22px}}

@@ -8,6 +8,7 @@
 #enter.out{opacity:0;transform:scale(1.025);visibility:hidden;pointer-events:none}
 html.en-open{overflow:hidden}
 html.en-open main{visibility:hidden}
+html.en-open body{height:100vh;overflow:hidden}  /* the page under the screen is not a page to scroll: no scroll height of its own (1.7.28) */
 /* over a picture the screen is dark in both themes: light letters, warm light */
 html.has-wall #enter{--en-ink:var(--enw-ink);--en-cap:rgba(245,246,247,.78);--en-m0:rgba(255,255,255,.97);--en-m1:rgba(255,255,255,.55);--en-rim:rgba(255,255,255,.35);--en-spot:rgba(255,255,255,.96);--en-sheen:rgba(255,255,255,.03);--en-floor:rgba(0,0,0,.35);
  --en-fx:255,214,150;--en-hot:255,170,70;--en-flash:255,255,255;--soft:var(--enw-soft);--good:var(--enw-good);--good-dot:var(--enw-good-dot);--hot:var(--enw-hot);--hot-dot:var(--enw-hot-dot);--bad:var(--enw-bad);--ink:var(--enw-ink);--line:rgba(255,255,255,.14);--line2:rgba(255,255,255,.24);
@@ -20,7 +21,10 @@ html.has-wall #enter{--en-ink:var(--enw-ink);--en-cap:rgba(245,246,247,.78);--en
 /* the list sits on a dark backing over a picture: the amber and grey lines hold their contrast on any picture */
 html.has-wall .en-chk{padding:12px 14px;border-radius:14px;background:rgba(8,9,10,.58)}
 html.has-wall .en-chk-l .m{background:rgba(8,9,10,.5)}
-html[data-theme="light"]:not(.has-wall) .en-chk-l .m{background:linear-gradient(var(--hot-bg),var(--hot-bg)),rgba(255,255,255,.9)}
+html[data-theme="light"]:not(.has-wall) .en-chk-l .m:not(.soft){background:linear-gradient(var(--hot-bg),var(--hot-bg)),rgba(255,255,255,.9)}
+html[data-theme="light"]:not(.has-wall) .en-chk-l .m.soft{background:rgba(255,255,255,.6)}  /* a note is calm: not the amber of a line that needs you (1.7.29) */
+.en-chk-l .m.inline{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px}.en-chk-l .m.inline .en-open{margin-top:0}  /* "not checked yet" and its Check button on one line */
+.en-ref{transition:opacity .4s ease}html.en-notready .en-ref{opacity:0 !important}  /* the intro animation holds its last value, so it must be forced */  /* the list grows up into the reflection when something needs you: no reflection then (1.7.29) */
 
 /* top right: only the greeting (the search is the fixed one of shell.css, which keeps the room at the right) */
 .en-top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:flex-end;padding:21px 24px;z-index:3;pointer-events:none}
@@ -67,8 +71,12 @@ html.en-open .sh-pill{right:var(--en-hi,16px)}  /* the greeting has the corner; 
 .en-say.on{opacity:1}
 
 /* the bottom: the readiness list, the Enter pill, the hint */
-.en-foot{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:end;column-gap:20px;padding:0 32px 28px;z-index:3}
-.en-chk{justify-self:start;width:min(420px,100%);max-height:var(--chk-max,60vh);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:6px;font:12px/1.45 var(--mono);color:var(--en-cap);scrollbar-width:thin}
+.en-foot{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:end;column-gap:20px;padding:0 32px 44px;z-index:3}  /* clear of the copyright line at the foot */
+.en-chk{justify-self:start;width:min(clamp(420px,40vw,560px),100%);max-height:var(--chk-max,60vh);display:flex;flex-direction:column;font:12px/1.45 var(--mono);color:var(--en-cap)}  /* one width rule for every screen: a wider window never shows less (1.7.24) */
+.en-chk-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:6px;scrollbar-width:thin}
+.en-chk .en-legal{flex:none}
+.en-chk{position:relative}.en-chk.more .en-chk-body{-webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,1) calc(100% - 14px),transparent);mask-image:linear-gradient(to bottom,rgba(0,0,0,1) calc(100% - 14px),transparent)}  /* more lines below: they fade out at the foot, so the box reads as scrollable (1.7.26) */
+.en-chk.more::after{content:"\2193";position:absolute;right:8px;bottom:0;font:600 13px/1 var(--sans);color:var(--en-ink);opacity:.7;pointer-events:none;animation:enbeat 1.8s ease-in-out infinite}
 .en-chk-h{display:flex;align-items:center;gap:9px;margin-bottom:9px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;font-size:11px;color:var(--en-cap)}
 html[lang="zh"] .en-chk-h{letter-spacing:.1em;text-transform:none;font-size:12.5px}
 .en-chk-h i{flex:none;width:7px;height:7px;border-radius:50%;background:var(--soft)}
@@ -108,9 +116,9 @@ html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
 .en-hint{justify-self:end;text-align:right;padding-right:56px}
 
 /* a short window: the wordmark rises and the list takes the room under it (enter.js sets --chk-max from where the wordmark ends) */
-@media (max-height:760px){.en-stage{padding-bottom:26vh}.en-chk{font-size:11.5px}.en-chk-h{margin-bottom:6px}.en-chk-l{gap:1px}.en-chk-l .m{padding:5px 9px;font-size:11.5px;line-height:1.4;margin-bottom:4px}.en-foot{padding-bottom:20px}}
+@media (max-height:760px){.en-stage{padding-bottom:26vh}.en-chk{font-size:11.5px}.en-chk-h{margin-bottom:6px}.en-chk-l{gap:1px}.en-chk-l .m{padding:5px 9px;font-size:11.5px;line-height:1.4;margin-bottom:4px}.en-foot{padding-bottom:38px}}
 @media (max-height:600px){.en-stage{padding-bottom:27vh}}
-@media (max-width:760px){.en-foot{grid-template-columns:minmax(0,1fr);row-gap:14px;justify-items:center}.en-chk{justify-self:stretch;width:auto}.en-hint{justify-self:center;text-align:center;padding-right:0}.en-go{order:-1}}
+@media (max-width:1100px){.en-ref{visibility:hidden}.en-foot{grid-template-columns:minmax(0,1fr);row-gap:14px;justify-items:center}.en-chk{justify-self:start}.en-hint{justify-self:center;text-align:center;padding-right:0}.en-go{order:-1}}  /* too narrow for the list, the pill and the hint in a row (1.7.24) */
 
 /* the intro, under 1.5 s: the letters rise one by one, the light comes in, the list lights up */
 #enter.intro .en-word .lg{animation:enrise .75s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i)*70ms + 60ms)}
@@ -127,3 +135,23 @@ html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
 html.lite #enter,html.lite #enter *,html.lite #enter *::before,html.lite #enter *::after{animation:none!important;transition:none!important}
 html.lite #en-fx{display:none}
 @media (prefers-reduced-motion:reduce){#enter,#enter *,#enter *::before,#enter *::after{animation:none!important;transition:none!important}#en-fx{display:none}}
+.en-chk-h .en-getready{margin:0 0 0 auto;height:22px;padding:0 10px;font:600 11px var(--sans);letter-spacing:0;text-transform:none;display:inline-flex;align-items:center;border-radius:999px;border:0;background:var(--en-btn);color:var(--en-btn-ink);cursor:pointer}.en-chk-h .en-getready[hidden]{display:none}
+
+/* Outside systems (1.7.19): names with a dot, +N, a table on hover */
+.en-chk-l .sy{grid-column:2/4;display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;max-height:1.5em;overflow:hidden;font:12px/1.5 var(--mono);color:var(--en-ink);cursor:default;outline:0}
+.en-chk-l .sy:focus-visible{outline:2px solid var(--en-ink);outline-offset:2px;border-radius:4px}
+.en-chk-l .sy-i{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}.en-chk-l .sy-i:first-child{white-space:normal;overflow-wrap:anywhere}.en-chk-l .sy-i[hidden]{display:none}
+.en-chk-l .sy-more{font-weight:600;color:var(--en-cap)}.en-chk-l .sy-more[hidden]{display:none}
+.sy-d{flex:none;display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--soft)}.sy-d.ok{background:var(--good-dot)}.sy-d.down{background:var(--bad)}.sy-d.partly{background:var(--hot-dot)}.sy-d.unknown{background:var(--soft);opacity:.7}
+.en-chk-l .m[hidden]+.sy{margin-top:0}
+.en-pop{position:fixed;z-index:400;max-width:min(720px,calc(100vw - 16px));border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--ink);box-shadow:0 14px 40px rgba(0,0,0,.28);font:12px/1.45 var(--sans)}
+.en-pop[hidden]{display:none}
+.en-pop-in{max-height:min(46vh,360px);overflow:auto;padding:6px 10px 8px;overscroll-behavior:contain}
+.en-pop table{border-collapse:collapse;width:100%}.en-pop th{position:sticky;top:0;background:var(--card);text-align:left;font-weight:600;color:var(--soft);padding:5px 10px 4px 0;white-space:nowrap}
+.en-pop td{padding:4px 10px 4px 0;vertical-align:top}.en-pop tr.first td{border-top:1px solid var(--line)}.en-pop tbody tr.first:first-child td{border-top:0}
+.en-pop .sy-n{font-weight:600;overflow-wrap:anywhere;max-width:200px}.en-pop .sy-e{white-space:nowrap}.en-pop .sy-s{white-space:nowrap}.en-pop .sy-s .sy-d{margin-right:6px}.en-pop .sy-r{overflow-wrap:anywhere;min-width:120px;max-width:260px}.en-pop .sy-t,.en-pop .sy-p{white-space:nowrap;color:var(--soft)}
+@media (max-width:760px){.en-pop{font-size:11.5px;width:calc(100vw - 16px)}
+ .en-pop table,.en-pop tbody{display:block}.en-pop thead{display:none}  /* a block for each system: nothing is cut at the right, nothing to scroll sideways (1.7.24) */
+ .en-pop tr{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 12px;padding:5px 0;border-top:1px solid var(--line)}.en-pop tr.first{border-top:1px solid var(--line)}.en-pop tbody tr.first:first-child{border-top:0}
+ .en-pop td,.en-pop tr.first td{display:block;padding:0;border:0}.en-pop .sy-n{order:1;max-width:100%}.en-pop .sy-e{order:2}.en-pop .sy-s{order:3}.en-pop .sy-r{order:5;flex:1 0 100%;min-width:0;max-width:none}.en-pop .sy-t{order:6}.en-pop .sy-p{order:7}.en-pop td:empty{display:none}
+ .en-pop-in{overflow-x:hidden}.en-pop .sy-n,.en-pop .sy-r{overflow-wrap:break-word;word-break:normal}.en-pop .sy-n{min-width:8ch}}

@@ -22,11 +22,11 @@ specificTo: generic
 3. **Read why.** `ado why <run> --out .workspace/sandbox/tasks/<task>/RUNS/ADO`: each failed task, its errors, the log lines that name an error, the end of the log; the whole logs are kept in that folder. Record it as evidence (skill `generic-evidence-run`) and cite it. A test failure: `ado tests <run>` (failed cases with their messages; `--stack` adds traces).
 4. **Go to the cause.** `ado changes <run>` lists the commits and work items the run built; the run names its commit (`commit` in `ado run`). Compare with the last green run (`ado runs <pipeline> --result succeeded`). Find the file and line the error names in the target repository and the knowledge base; say what changed and why it breaks.
 5. **Say it plainly**: the failed step or test, the error line, the cause in the code, and what would fix it. When a fix in the code is needed and the user agrees, the task becomes a development task (`harness task upgrade --kind dev`).
-6. **Only when the user asks to run something**: `ado queue <pipeline> --branch B --param K=V --var K=V`, `ado cancel <run>`, `ado retry <run> [--stage S]`. These are held for the person: run the command, tell the user it waits for them, say what it will do. `ado queue` checks parameter names and allowed values against the pipeline's YAML.
+6. **Only when the user asks to run something**: `ado queue <pipeline> --branch B --param K=V --var K=V`, `ado cancel <run>`, `ado retry <run> [--stage S]`. Each is held like a write: run the command, tell the user it waits for approval on the task page and what it will do, then run the same command again once they approve. `ado queue` checks parameter names and allowed values against the pipeline's YAML.
 
 ## Gotchas
 
 - One failed task is often the effect of an earlier one: read the first ✗ in the tree, not the last.
-- `ado log <run> <log> --grep <word> --tail 200` reads more of one log; never print a whole long log into the chat.
+- `ado log <run> <log> --grep <word> --tail 200` reads more of one log (default: the last 200 lines); never print a whole long log into the chat. `ado why <run> --json` gives the same facts as JSON.
 - `ado artifacts <run>` lists what a run published; it does not download.
 - A retry of a stage re-runs the same run; a retry of a run starts a new run on the same commit.

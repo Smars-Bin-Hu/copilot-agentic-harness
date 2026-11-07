@@ -7,7 +7,7 @@ specificTo: generic
 
 # Azure DevOps work items with `ado`
 
-**Do not use `az rest`, `az boards` or `az devops`, and do not install any extension.** Every step is one `ado` command: it knows the addresses, the versions and the sign-in, and reads the server, org and project from the harness connection.
+**Do not use `az rest`, `az boards` or `az devops`, and do not install any extension.** Every step is one `ado` command; it knows the addresses, versions, sign-in and the connection.
 
 ## When to Use This Skill
 
@@ -31,11 +31,11 @@ ado tags                  the tags in use
 
 **Write** (only with the user's yes, with the words the user agreed to):
 
-1. Link the item to the task first if it is not: `harness task link add ado:<id>`. A write to an item the task is not linked to is refused.
+1. Have a task, and link the item to it: no task yet (a small ticket job) → open a Q&A task first (skill `harness-my-task`); then `harness task link add --task <task> ado:<id>` (`--task` when several tasks are open). A write to an item the task is not linked to is refused.
 2. Run one of:
    ```
    ado comment 12345 --text "line one
-   line two"                       (or --file <path> for a long text written in the task folder)
+   line two"                       (or --file .workspace/sandbox/tasks/<task>/comment.md: write the text there first, the path from the repository root)
    ado update 12345 --state Resolved --tag urgent --untag old --field priority=2
    ado link 12345 --to 12300 --type parent      --to is the parent of 12345; child | related too
    ado unlink 12345 --to 12300
@@ -44,10 +44,12 @@ ado tags                  the tags in use
    ```
 3. The gate holds the write: tell the user it waits on the task page, and run the same command again once they approve. When the user opened the linked items for the task, a write to them runs at once; a new item always waits. There is no delete.
 
+**Test result as a comment**: write the result (what was run, what came back, the evidence ids E1, E2 of `generic-evidence-run`) into `comment.md` in the task folder, then `ado comment <id> --file .workspace/sandbox/tasks/<task>/comment.md`. `ado attach <id> --file <path>` adds a file (a log, a screenshot) when the text is too long. Before `update --state`, read `ado item <id>` and `ado states --type <type>`; a workflow may allow only some moves.
+
 ## Gotchas
 
-- `ado` checks a state, a type and a field name before it writes and lists the allowed ones: take one of those, never invent another.
-- Several lines of a comment stay several lines (`ado` turns them into HTML).
-- An item is for people: write only what the user asked for, never the task's working notes.
+- Read this skill instead of trying `ado --help` or other commands. `--json` works before or after the command.
+- `ado` checks a state, a type, an area, an iteration and a field name before it writes and lists the allowed ones: take one of those, never invent another.
+- An item is for people: write only what the user asked for, not the task's working notes.
 - `ado: … 401 …`: ask the user to press **Sign in** (or set the token) for the connection in Get ready, Tools, Connections. Do not run `az login` yourself.
 - `ado: cannot reach … CERTIFICATE`: VS Code was not opened from the board with the CA bundle; tell the user.

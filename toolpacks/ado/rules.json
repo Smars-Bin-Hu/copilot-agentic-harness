@@ -29,7 +29,58 @@
         "none": {
           "read": "allow",
           "write": "outbox",
-          "exec": "human",
+          "exec": "outbox",
+          "destroy": "deny"
+        }
+      },
+      "say": [
+        {
+          "pattern": "(?:--method|-m)\\s+['\\\"]?(?:post|put|patch)\\b",
+          "text": "Change Azure DevOps with az rest"
+        }
+      ]
+    },
+    "ado-az": {
+      "reach": {
+        "cli": [
+          "az"
+        ],
+        "when": "^\\s*(?:devops|boards|pipelines)\\b"
+      },
+      "env": "none",
+      "verbs": [
+        {
+          "pattern": "(?:--http-method|-m)\\s+['\\\"]?delete\\b|^\\s*(?:devops|boards|pipelines)(?:\\s+[a-z][a-z-]*){0,3}\\s+delete(?=\\s|$)",
+          "verb": "destroy"
+        },
+        {
+          "pattern": "^\\s*devops\\s+invoke\\b.*--http-method\\s+['\\\"]?(?:post|put|patch)\\b",
+          "verb": "write"
+        },
+        {
+          "pattern": "^\\s*devops\\s+invoke\\b",
+          "verb": "read"
+        },
+        {
+          "pattern": "^\\s*(?:devops|boards|pipelines)(?:\\s+[a-z][a-z-]*){0,3}\\s+(?:show|list|query|list-[a-z-]+)(?=\\s|$)",
+          "verb": "read"
+        },
+        {
+          "pattern": "^\\s*(?:devops|boards|pipelines)(?:\\s+[a-z][a-z-]*){0,3}\\s+(?:--help|-h)\\s*$",
+          "verb": "read"
+        }
+      ],
+      "say": [
+        {
+          "pattern": "^\\s*(?:devops|boards|pipelines)\\b",
+          "text": "Change Azure DevOps with az (use the ado program instead)"
+        }
+      ],
+      "rules": {
+        "none": {
+          "read": "allow",
+          "write": "outbox",
+          "exec": "outbox",
           "destroy": "deny"
         }
       }

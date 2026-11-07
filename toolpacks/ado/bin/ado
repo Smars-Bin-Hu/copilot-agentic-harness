@@ -9,8 +9,8 @@ VS Code was started with.
 Reads    me, item, items, comments, history, links, attachments, queries, query, tags, types, states, fields, areas, iterations,
          pipelines, pipeline, runs, run, why, log, artifacts, tests, changes, releases, release
 Writes   comment, update, create, link, unlink, attach     (the gate holds them; a write to an item the task is not linked to is refused)
-Exec     queue, cancel, retry, deploy                       (the gate holds them for a person)
-There is no delete. `--json` prints what Azure DevOps answered, whole. Tests: ADO_URL (a server address), ADO_TOKEN (a bearer token, no az), ADO_PAT.
+Exec     queue, cancel, retry, deploy                       (the gate holds them like a write: the person approves each on the task page)
+There is no delete. `--json` (before or after the command) prints what Azure DevOps answered, whole (why and log: the same facts as JSON). `--conn NAME` picks a connection: the saved one, or, while the harness tests a connection not saved yet, the one in HARNESS_CONNECTION_<NAME>_* variables. Tests: ADO_URL (a server address), ADO_TOKEN (a bearer token, no az), ADO_PAT.
 """
 
 import argparse
@@ -62,10 +62,28 @@ def harness_root() -> Path:
     raise Stop("no harness copy found around this program")
 
 
+def env_name(name: str) -> str:
+    """The upper-case, underscore form of a connection name, as the harness writes it in HARNESS_CONNECTION_<NAME>_<FIELD>."""
+    return re.sub(r"[^A-Za-z0-9]", "_", name).upper()
+
+
+def from_env(name: str) -> dict:
+    """The connection the harness passes in variables while it tests or probes one (it may not be saved yet): HARNESS_CONNECTION_<NAME>_ORG, _PROJECT, _URL, _AUTH."""
+    prefix = "HARNESS_CONNECTION_" + env_name(name) + "_"
+    org, project = os.environ.get(prefix + "ORG", ""), os.environ.get(prefix + "PROJECT", "")
+    if not (org and project):
+        return {}
+    given = bool(os.environ.get(prefix + "TOKEN") or os.environ.get(prefix + "PASSWORD") or os.environ.get("ADO_PAT"))
+    return {"org": org, "project": project, "name": name, "url": str(os.environ.get("ADO_URL") or os.environ.get(prefix + "URL") or CLOUD).rstrip("/"),
+            "auth": os.environ.get(prefix + "AUTH") or ("token" if given else "signin")}
+
+
 def connection(name: str, org: str = "", project: str = "") -> dict:
     """The connection to use: `url` (default https://dev.azure.com), `org`, `project`, and how to sign in (`auth`: signin or token)."""
     if os.environ.get("ADO_ORG") and os.environ.get("ADO_PROJECT"):
         return {"org": os.environ["ADO_ORG"], "project": os.environ["ADO_PROJECT"], "name": "env", "url": os.environ.get("ADO_URL") or CLOUD, "auth": "token" if os.environ.get("ADO_PAT") else "signin"}
+    if name and from_env(name):  # a test or a probe of the harness: the connection as it is on the screen, saved or not
+        return from_env(name)
     root = harness_root()
     sys.path.insert(0, str(root / ".harness" / "engine"))
     from core import connections  # noqa: PLC0415 - the harness's own reading of the connections
@@ -89,10 +107,16 @@ def connection(name: str, org: str = "", project: str = "") -> dict:
 
 
 def pat_of(conn: dict) -> str:
-    """A personal access token: ADO_PAT (VS Code was started with it), else the one Get ready saved in .harness/.env for this connection."""
+    """A personal access token: ADO_PAT, else HARNESS_CONNECTION_<NAME>_TOKEN/_PASSWORD (a test), else the one Get ready saved in .harness/.env for this connection."""
     if os.environ.get("ADO_PAT"):
         return os.environ["ADO_PAT"]
-    root = conn.get("root")
+    for field in ("TOKEN", "PASSWORD"):  # given by the harness while it tests a connection
+        if os.environ.get(f"HARNESS_CONNECTION_{env_name(conn['name'])}_{field}"):
+            return os.environ[f"HARNESS_CONNECTION_{env_name(conn['name'])}_{field}"]
+    try:
+        root = conn.get("root") or harness_root()
+    except Stop:
+        return ""
     if root:
         sys.path.insert(0, str(root / ".harness" / "engine"))
         from core import connections  # noqa: PLC0415
@@ -148,7 +172,7 @@ class Ado:
             how = "the token is wrong, expired, or lacks the scope for this: ask the user to set a new token for the connection in Get ready, Tools, Connections"
         else:
             how = "not signed in, or the account has no access: ask the user to press Sign in for the connection in Get ready, Tools, Connections (do not run az login yourself)"
-        return Stop(f"Azure DevOps said {code}: {said[:200]}. {how}")
+        return Stop(f"Azure DevOps said {code}: {said[:200].rstrip(chr(46) + chr(32))}. {how}")
 
     def call(self, method: str, url: str, params: dict = None, body=None, kind: str = "application/json", text: bool = False, raw: bytes = None, binary: bool = False):
         query = urllib.parse.urlencode({key: value for key, value in (params or {}).items() if value not in (None, "")}, safe="$,:@/")
@@ -201,6 +225,13 @@ def plain(value: str, limit: int = 0) -> str:
 
 def who(value) -> str:
     return (value or {}).get("displayName", "") if isinstance(value, dict) else str(value or "")
+
+
+def value_text(value) -> str:
+    """A field value as words: a person is their name, a missing value is empty."""
+    if isinstance(value, dict):
+        return str(value.get("displayName") or value.get("uniqueName") or value.get("name") or "")
+    return "" if value is None else str(value)
 
 
 def table(rows, heads) -> str:
@@ -323,7 +354,10 @@ def wiql_text(args) -> str:
 
 def items(ado: Ado, args) -> str:
     found = ado.call("POST", ado.api + "wit/wiql", {"api-version": API, "$top": args.top}, {"query": args.query or wiql_text(args)})
-    return item_table(ado, [entry["id"] for entry in found.get("workItems") or []], args)
+    shown = item_table(ado, [entry["id"] for entry in found.get("workItems") or []], args)
+    if not (args.json or args.all or args.state or args.query):
+        shown += "\n\n(Closed, Done and Removed items are not listed; add --all to list them too)"
+    return shown
 
 
 def comments(ado: Ado, args) -> str:
@@ -333,7 +367,10 @@ def comments(ado: Ado, args) -> str:
     rows = found.get("comments") or []
     if not rows:
         return f"#{args.id} has no comment"
-    return "\n\n".join(f"[{when(row.get('createdDate'))}] {who(row.get('createdBy'))}\n{plain(row.get('text'), 2000)}" for row in rows)
+    out = "\n\n".join(f"[{when(row.get('createdDate'))}] {who(row.get('createdBy'))}\n{plain(row.get('text'), 2000)}" for row in rows)
+    if any(len(plain(row.get("text"))) > 2000 for row in rows):
+        out += f"\n\n(a comment is cut at 2000 characters; `ado --json comments {args.id}` has the whole text)"
+    return out
 
 
 def history(ado: Ado, args) -> str:
@@ -346,7 +383,7 @@ def history(ado: Ado, args) -> str:
         for name, change in (row.get("fields") or {}).items():
             if name in QUIET:
                 continue
-            old, new = plain(str(change.get("oldValue", "")), 120), plain(str(change.get("newValue", "")), 120)
+            old, new = (" / ".join(plain(value_text(change.get(key)), 120).split("\n")) for key in ("oldValue", "newValue"))
             changes.append(f"  {name.rsplit('.', 1)[-1]}: " + (f"{old or '(empty)'} → {new or '(empty)'}" if "oldValue" in change else f"{new}"))
         rel = row.get("relations") or {}
         for kind, sign in (("added", "+"), ("removed", "-")):
@@ -476,13 +513,25 @@ def me(ado: Ado, args) -> str:
     account = (user.get("properties") or {}).get("Account", {}).get("$value") or user.get("providerDisplayName", "")
     if args.short:  # the test of the connection: one word
         return re.sub(r"\s+", "_", str(account)) or "unknown"
-    return f"{user.get('providerDisplayName', '')}  {account}  ({ado.conn['org']} / {ado.conn['project']}, connection {ado.conn['name']}, {ado.conn['url']}, sign-in {ado.conn.get('auth')})"
+    return f"{user.get('providerDisplayName', '')}  {account}  ({ado.conn['org']} / {ado.conn['project']}, connection {ado.conn['name']}, {ado.conn['url']}, signed in with " + ("a personal access token" if ado.conn.get("auth") == "token" else "az login") + ")"
 
 
 # --- work items: writes ------------------------------------------------------------------------------------------------------------------------------------
 
 def read_text(args) -> str:
-    return Path(args.file).read_text(encoding="utf-8") if args.file else (args.text or "")
+    if args.file and args.text:
+        raise Stop("give --text or --file, not both")
+    if not args.file:
+        return args.text or ""
+    path = Path(args.file)
+    if path.is_dir():
+        raise Stop(f"{args.file} is a folder, not a file")
+    if not path.is_file():
+        raise Stop(f"no such file: {args.file} (the agent works in the repository root: write the path from there, e.g. .workspace/sandbox/tasks/<task>/result.md)")
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise Stop(f"{args.file} is not a UTF-8 text file") from None
 
 
 def comment(ado: Ado, args) -> str:
@@ -545,10 +594,24 @@ def check_state(ado: Ado, kind: str, state: str) -> None:
             raise Stop(f"{kind} has no state {state}; its states: {', '.join(states)}")
 
 
+def check_paths(ado: Ado, args) -> None:
+    """--area and --iteration must be paths the project has; the allowed ones are listed. A project whose tree cannot be read is not checked."""
+    for group, wanted, command in (("areas", args.area, "ado areas"), ("iterations", args.iteration, "ado iterations")):
+        if not wanted:
+            continue
+        try:
+            known = [node["path"] for node in nodes(ado, group, False)]
+        except Stop:
+            continue
+        if known and wanted.strip("\\").lower() not in [one.lower() for one in known]:
+            raise Stop(f"no {group[:-1]} path {wanted}; `{command}` lists them: " + ", ".join(known[:15]) + (" ..." if len(known) > 15 else ""))
+
+
 def update(ado: Ado, args) -> str:
     basics = item_basics(ado, args.id)
     kind = basics.get("System.WorkItemType", "")
     check_state(ado, kind, args.state)
+    check_paths(ado, args)
     ops = patch_ops(ado, args, kind, basics.get("System.Tags", ""))
     if not ops:
         raise Stop("nothing to change: give --state, --title, --assign, --area, --iteration, --description, --tag, --untag or --field NAME=VALUE")
@@ -563,6 +626,7 @@ def create(ado: Ado, args) -> str:
     if kinds and args.type not in kinds:
         raise Stop(f"no work item type {args.type}; the types: {', '.join(kinds)}")
     check_state(ado, args.type, args.state)
+    check_paths(ado, args)
     ops = patch_ops(ado, args, args.type)
     if not any(op["path"].endswith("System.Title") for op in ops):
         raise Stop("a new work item needs --title")
@@ -598,6 +662,8 @@ def unlink(ado: Ado, args) -> str:
 
 def attach(ado: Ado, args) -> str:
     path = Path(args.file)
+    if path.is_dir():
+        raise Stop(f"{args.file} is a folder, not a file; attach one file (zip a folder first)")
     if not path.is_file():
         raise Stop(f"no such file: {args.file}")
     name = args.name or path.name
@@ -727,39 +793,59 @@ def log(ado: Ado, args) -> str:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(text, encoding="utf-8")
     lines = text.splitlines()
+    if not lines:
+        raise Stop(f"log {args.log} of run {args.run} is empty or does not exist; `ado run {args.run}` shows the log id of each task")
+    total = len(lines)
     if args.grep:
         lines = [line for line in lines if re.search(args.grep, line, re.IGNORECASE)]
     shown = lines[-args.tail:] if args.tail else lines
-    return "\n".join(shown) + (f"\n\n(whole log: {args.out})" if args.out else "")
+    if args.json:
+        return json.dumps({"run": args.run, "log": args.log, "lines_in_log": total, "lines_matching": len(lines), "lines": shown}, indent=2, ensure_ascii=False)
+    note = ""
+    if not lines:
+        note = f"no line of the log matches {args.grep!r} ({total} lines in it)"
+    elif len(shown) < len(lines):
+        note = f"(the last {len(shown)} of {len(lines)} lines{' that match' if args.grep else ''}; --tail 0 shows all, --grep <word> filters, --out <file> keeps the whole log)"
+    return "\n".join(part for part in ("\n".join(shown), note, f"(whole log: {args.out})" if args.out else "") if part)
 
 
 def why(ado: Ado, args) -> str:
     head = ado.call("GET", ado.api + f"build/builds/{args.id}", {"api-version": API})
     records = timeline(ado, args.id)
     failed = [record for record in records if record.get("result") == "failed" and record.get("type") == "Task"]
-    lines = [f"run {head.get('id')}  {head.get('definition', {}).get('name', '')}  {head.get('result', '')}  commit {str(head.get('sourceVersion', ''))[:8]}  by {who(head.get('requestedFor'))}"]
+    top = f"run {head.get('id')}  {head.get('definition', {}).get('name', '')}  {head.get('result', '')}  commit {str(head.get('sourceVersion', ''))[:8]}  by {who(head.get('requestedFor'))}"
+    lines, found = [top], []
     if not failed:
         lines.append("no failed task" + ("" if head.get("result") == "failed" else f" (the run is {head.get('result') or head.get('status')})"))
-        return "\n".join(lines)
+        return json.dumps({"run": head.get("id"), "result": head.get("result"), "failed": []}, indent=2) if args.json else "\n".join(lines)
     by_id = {record.get("id"): record for record in records}
     for record in failed:
         path, parent = [], by_id.get(record.get("parentId"))
         while parent:
             path.insert(0, parent.get("name", ""))
             parent = by_id.get(parent.get("parentId"))
-        lines += ["", f"✗ {' > '.join(path + [record.get('name', '')])}"]
-        lines += [f"  error: {entry.get('message', '')[:500]}" for entry in record.get("issues") or [] if entry.get("type") == "error"]
+        errors = [entry.get("message", "") for entry in record.get("issues") or [] if entry.get("type") == "error"]
+        one = {"path": " > ".join(path + [record.get("name", "")]), "errors": errors, "log": (record.get("log") or {}).get("id"), "error_lines": [], "end_of_log": [], "whole_log": ""}
+        lines += ["", f"✗ {one['path']}"]
+        lines += [f"  error: {message[:500]}" for message in errors]
         if record.get("log"):
             text = ado.call("GET", ado.api + f"build/builds/{args.id}/logs/{record['log']['id']}", {"api-version": API}, text=True)
             if args.out:
                 target = Path(args.out) / f"run-{args.id}-log-{record['log']['id']}.txt"
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(text, encoding="utf-8")
+                one["whole_log"] = str(target)
                 lines.append(f"  whole log: {target}")
-            hits = [line for line in text.splitlines() if re.search(r"error|fail|exception|fatal", line, re.IGNORECASE)][-15:]
+            every = text.splitlines()
+            hits = [line for line in every if re.search(r"error|fail|exception|fatal", line, re.IGNORECASE)][-15:]
+            end = [line for line in every[-args.tail:] if line not in hits]  # a line is shown once
+            one["error_lines"], one["end_of_log"] = [line[:300] for line in hits], [line[:300] for line in end]
             lines += ["  lines that name an error:", *("    " + line[:300] for line in hits)] if hits else []
-            lines += ["  end of the log:", *("    " + line[:300] for line in text.splitlines()[-args.tail:])]
-    return "\n".join(lines)
+            lines += ["  rest of the end of the log:", *("    " + line[:300] for line in end)] if end else []
+            if not args.out:
+                lines.append(f"  (the whole log: `ado log {args.id} {record['log']['id']} --tail 0`, or add --out <folder> to keep it)")
+        found.append(one)
+    return json.dumps({"run": head.get("id"), "result": head.get("result"), "failed": found}, indent=2, ensure_ascii=False) if args.json else "\n".join(lines)
 
 
 def artifacts(ado: Ado, args) -> str:
@@ -899,17 +985,28 @@ def deploy(ado: Ado, args) -> str:
 # --- the command line ----------------------------------------------------------------------------------------------------------------------------------------
 
 def parser() -> argparse.ArgumentParser:
-    top = argparse.ArgumentParser(prog="ado", description="Azure DevOps for the agent. Reads run; comment, update, create, link, unlink, attach wait for the person's approval; queue, cancel, retry, deploy wait for the person.")
+    top = argparse.ArgumentParser(prog="ado", description="Azure DevOps for the agent. Reads run; comment, update, create, link, unlink, attach, and queue, cancel, retry, deploy wait for the person's approval on the task page.")
     top.add_argument("--conn", default="", help="the azure-devops connection, when there are several")
     top.add_argument("--org", default="", help="pick the connection by its organization")
     top.add_argument("--project", default="", help="pick the connection by its project")
     top.add_argument("--json", action="store_true", help="what Azure DevOps answered, whole")
     sub = top.add_subparsers(dest="command", required=True)
 
+    def number(text):
+        if not re.fullmatch(r"\d+", text):
+            raise argparse.ArgumentTypeError(f"{text!r} is not a number")
+        return str(int(text))
+
     def add(name, text, *positional):
         one = sub.add_parser(name, help=text)
+        one.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="what Azure DevOps answered, whole (same as before the command)")
+        for option in ("conn", "org", "project"):
+            one.add_argument("--" + option, default=argparse.SUPPRESS, help="as before the command")
         for arg in positional:
-            one.add_argument(arg)
+            if arg in ("id", "run") and name not in ("pipeline", "release", "releases", "queue", "query"):
+                one.add_argument(arg, type=number)
+            else:
+                one.add_argument(arg)
         return one
 
     one = add("me", "who is signed in, and the connection in use")
@@ -989,17 +1086,17 @@ def parser() -> argparse.ArgumentParser:
     one.add_argument("--top", type=int, default=50)
     one.add_argument("--stack", action="store_true", help="also the stack traces")
     add("changes", "the commits (and work items) a run built", "run")
-    one = add("queue", "start a run of a pipeline (needs the person)", "pipeline")
+    one = add("queue", "start a run of a pipeline (held for the person's approval)", "pipeline")
     one.add_argument("--branch", default="", help="main or refs/heads/main (the pipeline's default when left out)")
     one.add_argument("--param", action="append", help="a runtime parameter NAME=VALUE, more than once")
     one.add_argument("--var", action="append", help="a variable NAME=VALUE, more than once")
-    add("cancel", "cancel a running run (needs the person)", "run")
-    one = add("retry", "run a completed run again, or only a failed stage with --stage (needs the person)", "run")
+    add("cancel", "cancel a running run (held for the person's approval)", "run")
+    one = add("retry", "run a completed run again, or only a failed stage with --stage (held for the person's approval)", "run")
     one.add_argument("--stage", default="")
     one = add("releases", "the latest releases of a classic release definition, with each stage's state", "definition")
     one.add_argument("--top", type=int, default=5)
     add("release", "one release: each stage, who it waits for, the failed tasks and their errors", "id")
-    one = add("deploy", "deploy a release to one environment (needs the person)", "release")
+    one = add("deploy", "deploy a release to one environment (held for the person's approval)", "release")
     one.add_argument("--env", required=True, help="the environment's name (ado release <id> lists them)")
     one.add_argument("--comment", default="")
     return top

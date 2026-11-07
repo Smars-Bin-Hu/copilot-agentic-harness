@@ -34,11 +34,19 @@
       }
     }
   },
-  "test": "ado --org {org} --project {project} me --short",
+  "test": "ado --conn {conn} me --short",
   "expect": "^(\\S+)\\s*$",
   "denied": "az login|AADSTS|expired|Sign in|token",
   "down": "Max retries exceeded|Failed to establish|timed out|CERTIFICATE_VERIFY_FAILED|cannot reach",
   "verbs": [
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:[a-z]+\\s+)?(?:--help|-h)\\s*$",
+      "verb": "read"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*$",
+      "verb": "read"
+    },
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:comment|update|create|link|unlink|attach)\\b",
       "verb": "write"
@@ -62,7 +70,7 @@
     "none": {
       "read": "allow",
       "write": "outbox",
-      "exec": "human",
+      "exec": "outbox",
       "destroy": "deny"
     }
   },
@@ -108,15 +116,51 @@
     {
       "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*deploy\\s+(\\d+).*--env\\s+[\\\"']?([^\\s\\\"']+)",
       "text": "Deploy release {1} to {2}"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*deploy\\b(?:\\s+--\\w+\\s+\\S+)*\\s+(\\d+)",
+      "text": "Deploy release {1}"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*link\\s+(\\d+)",
+      "text": "Link work item {1} to another work item"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*unlink\\s+(\\d+)",
+      "text": "Remove a link from work item {1}"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*queue\\b",
+      "text": "Start a pipeline run"
     }
   ],
   "body": [
     {
-      "pattern": "--file\\s+(\\S+)",
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*comment\\b.*?--file(?:=|\\s+)[\\\"']?([^\\s\\\"']+)",
       "from": "file"
     },
     {
-      "pattern": "--text\\s+\\\"((?:[^\\\"\\\\]|\\\\.)*)\\\"",
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*comment\\b.*?--text(?:=|\\s+)\"((?:[^\"\\\\]|\\\\.)*)\"",
+      "from": "text"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*comment\\b.*?--text(?:=|\\s+)'([^']*)'",
+      "from": "text"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*comment\\b.*?--text(?:=|\\s+)([^\\s\\\"'][^\\s]*)",
+      "from": "text"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:create|update)\\b.*?--description(?:=|\\s+)\"((?:[^\"\\\\]|\\\\.)*)\"",
+      "from": "text"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:create|update)\\b.*?--description(?:=|\\s+)'([^']*)'",
+      "from": "text"
+    },
+    {
+      "pattern": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:create|update)\\b.*?--description(?:=|\\s+)([^\\s\\\"'][^\\s]*)",
       "from": "text"
     }
   ]

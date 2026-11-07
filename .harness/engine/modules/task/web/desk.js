@@ -748,6 +748,8 @@
   // procedures on that environment's listed systems then run without the outbox. Not drawn when no system is listed.
   const DOOR = ["M3 14V3.5A1.5 1.5 0 0 1 4.5 2h5A1.5 1.5 0 0 1 11 3.5V14", "M11 6h2.5v8H11", "M3 14h10.5", "M8 8.5h.01"];
   let closeEnvs = null;
+  const keepEnvs = (on) => { try { if (on) sessionStorage.setItem("tk-envs-open", "1"); else sessionStorage.removeItem("tk-envs-open"); } catch (error) { /* no storage: the pop closes, as before */ } };  // a click on a chip reloads the page: the pop stays open, so the next click is one more click
+  const keptEnvs = () => { try { return sessionStorage.getItem("tk-envs-open") === "1"; } catch (error) { return false; } };
   document.addEventListener("click", (event) => { if (closeEnvs && !event.target.closest(".tk-env")) closeEnvs(); });
   document.addEventListener("keydown", (event) => { if (closeEnvs && event.key === "Escape") closeEnvs(); });
   function envButton() {
@@ -767,7 +769,7 @@
         seen ? h("i", {class: "reach-dot " + (seen.state === "ok" ? "ok" : seen.state === "unknown" ? "unknown" : "bad")}) : null, (item.label || item.env) + (item.open ? " ✓" : ""));
       chip.addEventListener("click", () => {
         chips.forEach((node) => { node.disabled = true; });
-        SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: item.open ? "off" : "on", step: "act"}).then(() => SERVE.done(), (error) => { SERVE.failed(error); SERVE.done(); });
+        SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: chip.getAttribute("aria-pressed") === "true" ? "off" : "on", step: "act"}).then(() => { keepEnvs(true); SERVE.done(); }, (error) => { chips.forEach((node) => { node.disabled = false; }); SERVE.failed(error); });
       });
       return chip;
     });
@@ -779,7 +781,8 @@
     const button = h("button", {type: "button", class: "rv-btn" + (open.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip") + (unreached.length ? "\n" + t("desk.reach.pill", {envs: unreached.join(", ")}) : "")},
       icon(DOOR, 14), h("span", {class: "rv-name"}, t("desk.set.open")), h("b", null, open.length ? open.map((item) => item.label || item.env).join(", ") : t("desk.set.open.off")), unreached.length ? h("i", {class: "reach-dot bad pill"}) : null);
     const show = (on) => { if (on && closeReview) closeReview(); pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeEnvs = on ? () => show(false) : null; if (on) inView(pop); };
-    button.addEventListener("click", () => show(pop.hidden));
+    button.addEventListener("click", () => { keepEnvs(false); show(pop.hidden); });
+    if (keptEnvs()) { keepEnvs(false); setTimeout(() => show(true), 0); }
     return [button, pop];
   }
 

@@ -10,6 +10,17 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.29 (2026-11-07)
+
+### Fixed
+
+- **A held call with several writes** (`comment ...; update ...` in one line) says "2 writes" beside its title. In the green box of approved calls each code now stands in front of its own title. When the agent resends one write of it and the card is rewritten, "asked at" shows the new time.
+- **The Enter screen**: the reflection of the wordmark is gone while the list needs you (it lay under the list header and Get ready at 1280 x 800). "Outside systems: not checked yet" is a calm grey line with the Check button beside it, not an amber warning; checking is not an error.
+- **The board header** at 900 px no longer runs under the search pill (the New task button was partly hidden in Chinese).
+- **New task**: the hint over the first message says the message is always in English (the agent reads English) and your text goes in last as typed.
+- **A repeated refusal** now says first what was refused and why, then how many times it came up. The hold for a file the line only names (`diff <(...) missing-file`) no longer says the line "runs" it.
+- **Protocol README**: the limits section names more classes the gate cannot read: start-up files set by environment variables (`BASH_ENV`, `PYTHONSTARTUP`), `env --split-string`, aliases kept by other tools, tools that read commands from stdin or a file (`make -f -`, `at`), other shells, PowerShell `iex`, and calling the REST address from code.
+
 ## 1.7.28 (2026-11-07)
 
 ### Fixed

@@ -194,6 +194,7 @@ knowledge-base/
     instructions/knowledgebase.instructions.md      copied to .github/instructions/
     tools/packs/<name>/                             a tool pack each (below); installed into .harness/toolpacks/<name>/
     tools/connections.json                          the connections (below); copied to .harness/policies/connections.company.json
+    tools/computer.json                             the recipe for This computer (below); copied to .harness/policies/computer.company.json
 ```
 
 These paths are fixed: `company sync`, `company pack` and `company update` count on them. Copilot finds skills and instructions in `.github/` only, and the gate reads policies in `.harness/policies/` only. So `harness company sync` copies them there. It touches no other file and is safe to run again. A company skill that is no longer in `company/` moves to `.harness/runtime/company-backup/`. Change the files in `company/`, never the copies: the next sync replaces them.
@@ -250,6 +251,8 @@ The agent's commands run with the environment VS Code had when it started: a set
 - **Tool folders**: folders put before PATH, one per line. Use it for a tool unpacked in your own folder (the `bin` folder of the Azure CLI zip) when PATH cannot be changed without an administrator. A folder must hold a program.
 - **CA bundle**: a proxy that inspects TLS signs with your company's own CA. The system trusts it, but a tool with its own list of roots (az, pip and other Python tools) fails with `CERTIFICATE_VERIFY_FAILED`. **Make** reads the chain this computer trusts for an outside address, through the proxy (the one this computer names, or type `host:port`), adds it to the tool's public roots, and keeps `.harness/certs/ca-bundle.pem` only when a check with it passes. VS Code gets it as `REQUESTS_CA_BUNDLE`, and as the variables a tool pack asks for. Certificate checks stay on.
 - **MCP**: whether tool packs may add their MCP servers to VS Code here. **Blocked** unless you allow it; the window says so when VS Code here has MCP turned off. Where it is blocked, every tool pack still works through its program in the terminal.
+
+A company can give every colleague a recipe for this window: `company/tools/computer.json`, with no secret in it: `{"ca_bundle": {"host": "dev.example.com", "proxy": "127.0.0.1:9000"}, "tool_folders": [{"label": "Azure CLI", "hint": "the bin folder of the Azure CLI you unpacked"}]}`. `company sync` copies it to `.harness/policies/computer.company.json`. The window then fills the address and the proxy of **Make** when you have set none (marked "company"; you can change them), and lists the hints beside the tool folders. A hint fills nothing in: the folder is on your own computer. `doctor` and the knowledge base window name what is wrong in the file.
 
 All of it is kept in `.harness/.env` and `.harness/certs/`, which `harness reinstall` carries. From a terminal: `harness tools launch-env` shows what VS Code gets, `harness tools ca-bundle [--host <address>] [--proxy host:port]` makes the bundle, `harness tools mcp [--allow | --block]` shows or sets MCP.
 

@@ -41,6 +41,13 @@ PROXY_KEY = "HARNESS_CA_PROXY"
 MADE_KEY = "HARNESS_CA_MADE"
 MCP_KEY = "HARNESS_MCP"  # allowed | blocked (1.7.17): may tool packs add MCP servers to VS Code here? Blocked unless the person says otherwise
 BUNDLE = Path(".harness") / "certs" / "ca-bundle.pem"
+RECIPE = ".harness/policies/computer.company.json"  # 1.7.31: from `company/tools/computer.json`; what every colleague's computer needs and holds no secret
+RECIPE_SCHEMA = {"type": "object", "properties": {
+    "ca_bundle": {"type": "object", "properties": {
+        "host": {"type": "string", "pattern": r"^[A-Za-z0-9.\-]+$", "maxLength": 253},
+        "proxy": {"type": "string", "pattern": r"^[A-Za-z0-9.\-\[\]:]+:\d{1,5}$", "maxLength": 260}}},
+    "tool_folders": {"type": "array", "maxItems": 20, "items": {"type": "object", "required": ["label"], "properties": {
+        "label": {"type": "string", "minLength": 1, "maxLength": 80}, "hint": {"type": "string", "maxLength": 400}}}}}}
 TRUST_VARS = ("REQUESTS_CA_BUNDLE",)  # Python tools (az, pip's requests); NODE_EXTRA_CA_CERTS and others when a tool pack asks for them
 DEFAULT_HOST = "example.com"
 SECONDS = 20
@@ -481,6 +488,42 @@ def make(root: Path, host: str = "", proxy: Optional[str] = None, get_chain: Cal
 
 # --- what Get ready shows ---------------------------------------------------------------------------------------------------------------------------------
 
+def recipe_errors(data: Any) -> List[str]:
+    """What is wrong in a `computer.json`, in words that name the key; [] when it is right."""
+    from . import schema
+
+    if not isinstance(data, dict):
+        return ["the file is not a JSON object"]
+    errors = [item.replace("$.", "").replace("$", "the file") for item in schema.validate(data, RECIPE_SCHEMA)]
+    for key in data:
+        if key not in RECIPE_SCHEMA["properties"]:
+            errors.append(f"unknown key `{key}` (it holds `ca_bundle` and `tool_folders`)")
+    if isinstance(data.get("ca_bundle"), dict):
+        errors += [f"ca_bundle: unknown key `{key}`" for key in data["ca_bundle"] if key not in ("host", "proxy")]
+    return errors
+
+
+def recipe(root: Path) -> Dict[str, Any]:
+    """The company's recipe for this computer: `{"host", "proxy", "tool_folders": [{label, hint}], "error"}`. Empty with no file; a file with faults gives the first fault and no values."""
+    out: Dict[str, Any] = {"host": "", "proxy": "", "tool_folders": [], "error": ""}
+    path = root / RECIPE
+    if not path.is_file():
+        return out
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as error:
+        out["error"] = str(error)
+        return out
+    errors = recipe_errors(data)
+    if errors:
+        out["error"] = errors[0]
+        return out
+    out["host"] = str((data.get("ca_bundle") or {}).get("host") or "")
+    out["proxy"] = str((data.get("ca_bundle") or {}).get("proxy") or "")
+    out["tool_folders"] = [{"label": str(item["label"]), "hint": str(item.get("hint") or "")} for item in data.get("tool_folders") or []]
+    return out
+
+
 def state(root: Path) -> Dict[str, Any]:
     kept = settings(root)
     bundle = bundle_path(root)
@@ -488,5 +531,5 @@ def state(root: Path) -> Dict[str, Any]:
     return {"paths": [{"path": item, "found": Path(item).is_dir(), "programs": programs_in(Path(item))[:8]} for item in kept["paths"]],
             "bundle": {"path": str(bundle) if bundle else "", "n": n, "host": kept["host"], "proxy": kept["proxy"], "made": kept["made"],
                        "vars": trusted_by(root)},
-            "proxy": detect_proxy(), "default_host": DEFAULT_HOST, "mcp": {"allowed": mcp_allowed(root), "detected": detect_mcp(),
+            "proxy": detect_proxy(), "recipe": recipe(root), "default_host": DEFAULT_HOST, "mcp": {"allowed": mcp_allowed(root), "detected": detect_mcp(),
             "set": bool(conn_core.read_env(root).get(MCP_KEY))}}

@@ -7,6 +7,7 @@
   company/tools/            packs/<name>/: a tool pack each (core.toolpacks), installed into `.harness/toolpacks/` by `sync`; connections.json
                             (`{"connections": {...}}`), copied to `.harness/policies/connections.company.json` (1.7.17). These paths are fixed:
                             pack, update and sync count on them
+                            computer.json (`{"ca_bundle": {host, proxy}, "tool_folders": [{label, hint}]}`), copied to `.harness/policies/computer.company.json` (1.7.31)
   company/manifest.json     what a package holds; made by `pack`, written last by `update`
 
 `sync` makes the copies, and never touches any other file. `pack` makes a zip of what git has in the knowledge base;
@@ -38,6 +39,8 @@ INSTRUCTION_FILES = ("knowledgebase.instructions.md",)  # one name only: a copy 
 TOOLS_DIR = "tools"
 CONNECTIONS_FILE = "connections.json"
 CONNECTIONS_COPY = ".harness/policies/connections.company.json"
+COMPUTER_FILE = "computer.json"  # 1.7.31: the recipe for "This computer" (core.launchenv.recipe): CA bundle host and proxy, hints for the tool folders. No secret
+COMPUTER_COPY = ".harness/policies/computer.company.json"
 NOT_CONTENT = {".git", ".DS_Store", "Thumbs.db"}
 PLACEHOLDER = {"README.md", ".gitkeep"}  # what an empty knowledge base ships with
 BACKUP_DIR = "company-backup"
@@ -131,6 +134,8 @@ def copies(root: Path, folder: Path) -> Dict[str, Any]:
             pairs.append((f"{INSTRUCTIONS_DIR}/{name}", folder / "instructions" / name, root / INSTRUCTIONS_DIR / name))
     if (folder / TOOLS_DIR / CONNECTIONS_FILE).is_file():
         pairs.append((CONNECTIONS_COPY, folder / TOOLS_DIR / CONNECTIONS_FILE, root / CONNECTIONS_COPY))
+    if (folder / TOOLS_DIR / COMPUTER_FILE).is_file():
+        pairs.append((COMPUTER_COPY, folder / TOOLS_DIR / COMPUTER_FILE, root / COMPUTER_COPY))
     named = {item.name for item in skills}
     here = root / SKILLS_DIR
     only_here = sorted(item.name for item in here.glob(f"{have}-*") if item.is_dir() and item.name not in named) if have else []
@@ -286,9 +291,18 @@ def tools_part(company: Path) -> List[Dict[str, Any]]:
     base = company / toolpacks.COMPANY_PACKS
     packs = sorted(item for item in base.iterdir() if item.is_dir()) if base.is_dir() else []
     path = company / TOOLS_DIR / CONNECTIONS_FILE
-    if not packs and not path.is_file():
+    recipe = company / TOOLS_DIR / COMPUTER_FILE
+    if not packs and not path.is_file() and not recipe.is_file():
         return []
     errors: List[str] = []
+    if recipe.is_file():
+        from . import launchenv
+
+        try:
+            for fault in launchenv.recipe_errors(json.loads(recipe.read_text(encoding="utf-8-sig"))):
+                errors.append(f"{COMPUTER_FILE}: {fault}")
+        except ValueError as error:
+            errors.append(f"{COMPUTER_FILE}: {error}")
     for folder in packs:
         try:
             toolpacks.manifest(folder)

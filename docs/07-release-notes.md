@@ -10,6 +10,12 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.31 (2026-11-07)
+
+### Added
+
+- **A recipe for this computer**: a company may put `company/tools/computer.json` in the knowledge base (`{"ca_bundle": {"host", "proxy"}, "tool_folders": [{"label", "hint"}]}`, no secret). `harness company sync` copies it to `.harness/policies/computer.company.json`. In Get ready, This computer, **Make** is one click: the outside address and the proxy are filled from the recipe when you have set none (marked "company", hover says where from, you can change them), and the tool-folder hints stand beside the tool folders field. A hint fills nothing in. The file is checked: the knowledge base window and `doctor` name what is wrong.
+
 ## 1.7.29 (2026-11-07)
 
 ### Added

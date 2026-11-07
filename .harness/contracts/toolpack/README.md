@@ -9,6 +9,7 @@ Three words, used the same way on the board, in commands and in files:
 | tool pack | what you install once: how the agent reaches one tool, the gate's rules for it, its skills | `company/tools/packs/<name>/`, installed in `.harness/toolpacks/<name>/` |
 | connection type | a kind of place the tool reaches (SQL Server, Azure DevOps project): its fields, its sign-in, its test | `types/<type>.json` of a tool pack |
 | connection | one place, with the person's sign-in (orders-dev, the Sales project) | `company/tools/connections.json` ([connections.md](connections.md)), or the person's own in Get ready |
+| computer recipe | what every colleague's computer needs and holds no secret: the CA bundle address and proxy, hints for the tool folders | `company/tools/computer.json`, copied to `.harness/policies/computer.company.json`; shown in Get ready, This computer |
 
 ## Layout
 

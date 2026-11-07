@@ -2314,7 +2314,7 @@
   "setup.run.working": "还在配置，请不要关闭这个窗口。",
   "setup.run.steps": "已完成 {done}/{total} 步。",
   "setup.run.failed": "配置停在：{step}。",
-  "setup.run.retry": "处理上面的原因，再按按钮重试。",
+  "setup.run.retry": "处理下面的原因，再按按钮重试。",
   "setup.run.done": "配置完成。",
   "setup.run.again": "重试配置",
   "setup.saved": "已保存。",

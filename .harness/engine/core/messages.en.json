@@ -2314,7 +2314,7 @@
   "setup.run.working": "Still setting up. Do not close this window.",
   "setup.run.steps": "{done} of {total} steps done.",
   "setup.run.failed": "Setup stopped at: {step}.",
-  "setup.run.retry": "Fix the reason above, then press the button to try again.",
+  "setup.run.retry": "Fix the reason below, then press the button to try again.",
   "setup.run.done": "Setup finished.",
   "setup.run.again": "Retry setup",
   "setup.saved": "Saved.",

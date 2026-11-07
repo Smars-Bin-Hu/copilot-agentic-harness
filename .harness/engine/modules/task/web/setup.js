@@ -300,6 +300,7 @@ const SETUP = (function () {
         : failed ? [h("p", {class: "bad su-run-head", role: "status"}, t("setup.run.failed", {step: t("setup.line." + failed.key)})), h("p", {class: "su-note"}, t("setup.run.retry"))]
         : found.done ? [h("p", {class: "su-note good su-run-head", role: "status"}, "\u2713 " + t("setup.run.done"))] : [];
       said.replaceChildren(h("div", {class: "su-run"}, ...head, ...lines));
+      if (found.running || failed) said.scrollIntoView({block: "nearest", behavior: "smooth"});  // the form is long: the progress stays in sight
     }
     function follow() {
       ask("job").then((found) => {

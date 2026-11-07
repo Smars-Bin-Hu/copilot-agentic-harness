@@ -312,6 +312,8 @@ const SETUP = (function () {
         st.saved = found.done;
         gate();
         if (!found.done) return;
+        st.parts = null;  // what the folder had is now copied: the states below follow the copy itself, read again (1.7.22; "Not found yet" stayed after the copy)
+        loadGuide();
         leave();
       }, (error) => { st.busy = false; gate(); said.replaceChildren(...SERVE.reasons(error.message || error)); });
     }

@@ -1202,7 +1202,7 @@
     const no = h("button", {type: "button", class: "act", disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
     const view = h("button", {type: "button", class: "act big tk-view"}, t("desk.outbox.view"));
     const said = h("div", {class: "bad"});
-    view.addEventListener("click", () => { callWindow(item, (code) => { input.value = code; arm(); yes.focus(); }); arm(); });
+    view.addEventListener("click", () => { callWindow(item, (code) => { input.value = code; arm(); yes.focus(); }); input.value = item.code; arm(); });  // a person who opened the view has read the command: the code is filled in (1.7.22), and stays when the card is drawn again
     input.addEventListener("focus", arm);
     const send = () => {
       if (!ready_()) return;
@@ -1215,6 +1215,7 @@
       no.disabled = true;
       SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); no.disabled = false; });
     });
+    if (viewedCalls.has(item.code)) input.value = item.code;  // the card was drawn again after the view was opened
     arm();
     const peek = item.command.length > 110 ? item.command.slice(0, 110) + "…" : item.command;
     const words = Boolean(item.say || item.body);  // the type says it in words: the card shows that and folds the command

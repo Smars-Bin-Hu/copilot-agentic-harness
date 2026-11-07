@@ -51,7 +51,7 @@ Three words, used the same way on the board, in commands and in files:
 | `via` | no | `cli` (default: a program in the terminal) or `mcp` (an MCP server VS Code runs: no test, no `auth`; offered only where MCP is allowed) |
 | `fields` | yes for `cli` | `{field: {"label", "placeholder", "default", "optional"}}`: what one connection of this type is (`host`, `port`; `org`, `project`) |
 | `auth` | yes for `cli` | `{way in: {"identity", "label", ...}}`; `identity` is `env` (variables, `"env": {VAR: field}`), `netonly` (a Windows account held by the VS Code window), `keyfile`, or `tool` (the program keeps its own sign-in; `"login"`: the command that signs in) |
-| `test` | yes for `cli` | the command that tests the way in, with `{field}` and `{auth}` (the way in's `args`); never `{password}` |
+| `test` | yes for `cli` | the command that tests the way in, with `{field}` and `{auth}` (the way in's `args`); never `{password}`. Or `{"command": ..., "timeout": <seconds>}`: the test stops after `timeout` s (default 15; 60 for a type whose sign-in is a `tool` identity) |
 | `expect`, `denied`, `down` | no | patterns on the test's output: who it is (first group), not let in, no answer |
 | `cli` | for the gate | the programs (`["sqlcmd"]`); a Windows `.cmd` path is recognised |
 | `match` | for the gate | how a command names one connection, with `{field}` (`-S\\s+{host}`) |

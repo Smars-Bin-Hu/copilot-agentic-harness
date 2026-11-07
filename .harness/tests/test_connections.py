@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest import mock
 import os
 import stat
 import sys
@@ -116,6 +117,23 @@ class TestOfTheWayInTests(ConnectionsCase):
         put_type(self.root, other)
         self.company({"x-dev": {"type": "nothere", "env": "dev", "auth": "own", "host": "h"}})
         self.assertEqual(connections.test(self.root, "x-dev", {"account": "a", "password": "b"})["state"], "missing")
+
+    def test_a_test_has_a_limit_a_type_may_set_a_tool_identity_gets_sixty_seconds_and_a_timeout_is_told_with_it(self) -> None:
+        kind = connections.types(self.root)["fakedb"]
+        server = connections.listed(self.root)["db-dev"]
+        self.assertEqual(connections.test_seconds(kind, server), 15)
+        self.assertEqual(connections.test_seconds(dict(kind, test={"command": "fakedb --who", "timeout": 25}), server), 25)
+        tool = dict(kind, auth={"own": {"identity": "tool", "login": "fakedb login"}})
+        self.assertEqual(connections.test_seconds(tool, server), 60)
+        self.assertEqual(connections.test_seconds(dict(tool, test={"command": "x", "timeout": 90}), server), 90)
+        self.assertEqual(connections.test_command(dict(kind, test={"command": "x --y"})), "x --y")
+        self.assertEqual(connections.type_problems(dict(kind, test={"command": "fakedb --who", "timeout": 25})), [])
+        self.assertTrue(connections.type_problems(dict(kind, test={"command": "fakedb --who", "timeout": 0})))
+        self.assertTrue(connections.type_problems(dict(kind, test={"timeout": 5})))
+        seen = []
+        with mock.patch.object(connections, "run_with", side_effect=lambda *a, **k: (seen.append(k["timeout"]) or (None, "no answer in 15 s"))):
+            found = connections.test(self.root, "db-dev", {"account": "alice", "password": "right"})
+        self.assertEqual((seen, found["timeout"], found["state"]), ([15.0], 15, "down"))
 
     def test_harness_servers_lists_without_a_password(self) -> None:
         connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})

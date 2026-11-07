@@ -10,6 +10,25 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.19 (2026-11-07)
+
+### Added
+
+- **Install a tool pack from the board.** Tools, Tool packs has **Install from a folder**: a path field (or a zip) and **Install**; quotes from "Copy as path" are removed; a pack that is installed already needs a second click that says what it replaces (`Replace 1.0.0 → 1.1.0`); the result or the reason it was refused shows under the field.
+- **Finish setup shows its work.** After the click: a spinner, "Still setting up. Do not close this window.", the steps done (`3 of 5`); the window has no Close until it ends. Then the result, or the step it stopped at with its reason, and **Retry setup**.
+- **A Get ready button on the Enter screen**, beside "Not ready". (The dock's settings button, bottom right of the board, already opened the same form in a window.)
+- **A connection test limit.** A connection type may set `test.timeout` (seconds; `test` may be `{"command", "timeout"}`); a program that keeps its own sign-in (`az`) gets 60 s, the others stay at 15 s. A test that runs out of time says **timed out (60 s)**. When **Sign in** has run to its end, the row says **Signed in? Click Test.** and highlights Test.
+- **The board checks the outside connections itself.** After **Open VS Code**, and when the Enter screen opens with no answer under 5 minutes old, the board runs each connection's test in the environment VS Code is started with and writes the answer where the hooks write theirs; the Enter screen no longer waits for the first chat. A connection never checked says "Not checked yet" with a **Check** button (it no longer says VS Code needs your account; that stays for an identity that was refused). `/api/reach` is the button's call.
+- **The outside systems line shows names.** Only the connection names, a status dot before each (green reached, red not reached, grey not checked, yellow partly), `+N` when they do not fit, never cut. The hover is a table by connection: system, environment (empty for `none`), status, reason, last checked, tool pack; it scrolls when there are many.
+
+### Changed
+
+- After **Open VS Code** the link to VS Code looks for the host every second for a minute. Before, the wait between two looks had grown to a minute while no window was open, so the Enter screen could stay red, with the Open VS Code button, long after VS Code was up. Opening it with identities does the same, and the Enter screen waits for it as it does for the plain button.
+
+### Fixed
+
+- A connection added while the Enter screen was open did not show: the outside systems line was kept with the folder lines for 10 seconds and read "not set up yet". It now reads again as soon as a connection, a pack, the policies or an answer changes.
+
 ## 1.7.18 (2026-11-07)
 
 ### Added

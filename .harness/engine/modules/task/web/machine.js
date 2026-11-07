@@ -101,7 +101,7 @@ const MACHINE = (function () {
         const acts = [];
         if (missing.length || (row.trust && !row.bundle)) acts.push(button(t("machine.title"), () => ctx.go("computer")));
         if (unsigned.length) acts.push(button(t("connections.title"), () => ctx.go("connections")));
-        if (row.from !== "company") {  // the company's follow the pack (company sync); one installed here is updated or removed here
+        if (row.removable) {  // only a folder added here is forgotten here; a factory or company pack is turned off in the knowledge base (1.7.30)  // the company's follow the pack (company sync); one installed here is updated or removed here
           if (row.newer) acts.push(button(t("machine.conn.update"), () => change("toolpack-update", row.name)));
           const drop = button(t("machine.ca.drop"), () => { if (window.confirm(t("machine.conn.remove.ask", {name: row.name}))) change("toolpack-remove", row.name); });
           drop.classList.add("danger");

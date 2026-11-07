@@ -111,7 +111,8 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
         if found.get("error"):
             raise ValueError(found["error"])
         left = [item["skill"] for item in found.get("refused") or []]
-        return say("setup.kb.synced.some", names=", ".join(left)) if left else say("setup.kb.synced")
+        lines = list((found.get("toolpacks") or {}).get("lines") or [])  # "ado 0.4.5 -> 0.5.0 updated" (1.7.30)
+        return " ".join([say("setup.kb.synced.some", names=", ".join(left)) if left else say("setup.kb.synced"), *lines])
 
     def doctor() -> str:
         found = ready.run_doctor(root)

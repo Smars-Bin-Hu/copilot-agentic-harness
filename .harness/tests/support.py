@@ -215,11 +215,32 @@ def confirm_requirement(root: Path, task: str, text: str = "给 a.sql 加一列�
 
 
 def put_type(root: Path, kind: Dict[str, Any], pack: str = "testpack") -> Path:
-    """A connection type, brought by a tool pack installed by hand (1.7.17: types come only from tool packs)."""
+    """A connection type, brought by a tool pack this computer added by its folder (1.7.30: a pack is read where it lies; types come only from packs)."""
     folder = root / ".harness" / "toolpacks" / pack
     (folder / "types").mkdir(parents=True, exist_ok=True)
     if not (folder / "toolpack.json").is_file():
         (folder / "toolpack.json").write_text(json.dumps({"schema_version": 1, "name": pack, "version": "1.0.0", "description": "test"}), encoding="utf-8")
     path = folder / "types" / (str(kind.get("type") or "x") + ".json")
     path.write_text(json.dumps(kind), encoding="utf-8")
+    add_path(root, folder)
     return path
+
+
+def add_path(root: Path, folder: Path) -> None:
+    """What `harness toolpack add <folder>` records (1.7.30): the path, in the ledger of this computer."""
+    ledger = root / ".harness" / "runtime" / "toolpacks.json"
+    book = json.loads(ledger.read_text(encoding="utf-8")) if ledger.is_file() else {"packs": {}, "paths": []}
+    if str(folder) not in book["paths"]:
+        book["paths"].append(str(folder))
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    ledger.write_text(json.dumps(book), encoding="utf-8")
+
+
+def use_packs(root: Path, *names: str) -> None:
+    """Turn factory packs on the way a company does (1.7.30): copy them from the repository into this root and name them in `company/tools/packs.json` of the knowledge base."""
+    company = root / "knowledge-base" / "company"
+    (company / "tools").mkdir(parents=True, exist_ok=True)
+    (root / "knowledge-base" / "README.md").touch()
+    for name in names:
+        shutil.copytree(REPO / ".harness" / "toolpacks" / name, root / ".harness" / "toolpacks" / name, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+    (company / "tools" / "packs.json").write_text(json.dumps({"use": list(names)}), encoding="utf-8")

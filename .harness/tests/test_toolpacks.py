@@ -12,7 +12,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from support import HarnessTestCase, pre_tool
+from support import HarnessTestCase, pre_tool, use_packs
 
 from core import company, config, toolpacks, launchenv, connections, skillcheck
 from core.toolpacks import ToolpackError
@@ -98,7 +98,7 @@ class Install(ToolpackCase):
         for why, folder in cases.items():
             with self.assertRaises(ToolpackError, msg=why):
                 toolpacks.add(self.root, str(folder))
-        self.assertFalse((self.root / toolpacks.FOLDER).exists() and any((self.root / toolpacks.FOLDER).iterdir()))
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [], "nothing is recorded")
 
     def test_a_skill_may_lead_with_the_companys_prefix(self) -> None:
         (self.root / ".harness/policies/user.override.json").write_text(json.dumps({"skill_prefix": "acme"}), encoding="utf-8")
@@ -107,16 +107,21 @@ class Install(ToolpackCase):
         with self.assertRaises(ToolpackError):
             toolpacks.add(self.root, str(make(self.outside / "other", name="other", skills=("acme-tracker-x",))))  # the company's prefix, but another pack's name
 
-    def test_again_needs_replace_and_a_skill_the_new_version_dropped_goes(self) -> None:
+    def test_the_same_folder_again_is_the_same_entry_another_folder_of_the_name_needs_replace_and_a_dropped_skill_goes(self) -> None:
         make(self.source, skills=("tracker-ticket", "tracker-old"))
         toolpacks.add(self.root, str(self.source))
+        toolpacks.add(self.root, str(self.source))
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [str(self.source.resolve())], "one entry")
+        other = make(self.outside / "tracker2", skills=("tracker-ticket",))
+        shutil.copytree(self.source / "types", other / "types", dirs_exist_ok=True)
         with self.assertRaises(ToolpackError):
-            toolpacks.add(self.root, str(self.source))
-        shutil.rmtree(self.source / "skills" / "tracker-old")
-        make(self.source, version="1.1.0", skills=("tracker-ticket",))
-        done = toolpacks.add(self.root, str(self.source), replace=True)
+            toolpacks.add(self.root, str(other))
+        make(other, version="1.1.0", skills=("tracker-ticket",))
+        done = toolpacks.add(self.root, str(other), replace=True)
         self.assertEqual(done["version"], "1.1.0")
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [str(other.resolve())])
         self.assertFalse((self.root / ".github/skills/tracker-old").exists())
+        self.assertTrue((self.root / ".github/skills/tracker-ticket/SKILL.md").is_file())
 
     def test_a_skill_that_is_not_its_own_is_never_written_over(self) -> None:
         mine = self.root / ".github/skills/tracker-ticket"
@@ -126,25 +131,21 @@ class Install(ToolpackCase):
             toolpacks.add(self.root, str(self.source))
         self.assertEqual((mine / "SKILL.md").read_text(encoding="utf-8"), "mine\n")
 
-    def test_a_zip_with_one_folder_installs_and_one_that_climbs_out_is_refused(self) -> None:
-        good = self.outside / "tracker.zip"
-        with zipfile.ZipFile(good, "w") as archive:
-            for path in self.source.rglob("*"):
-                archive.write(path, "tracker/" + path.relative_to(self.source).as_posix())
-        self.assertEqual(toolpacks.add(self.root, str(good))["installed"], "tracker")
-        bad = self.outside / "bad.zip"
-        with zipfile.ZipFile(bad, "w") as archive:
-            archive.writestr("toolpack.json", "{}")
-            archive.writestr("../escape.txt", "x")
-        with self.assertRaises(ToolpackError):
-            toolpacks.add(self.root, str(bad), replace=True)
-        self.assertFalse((self.outside / "escape.txt").exists())
+    def test_a_zip_is_refused_in_one_sentence_nothing_is_unpacked(self) -> None:
+        archive = self.outside / "tracker.zip"
+        with zipfile.ZipFile(archive, "w") as out:
+            out.writestr("tracker/toolpack.json", "{}")
+        with self.assertRaises(ToolpackError) as caught:
+            toolpacks.add(self.root, str(archive))
+        self.assertIn("tracker.zip", str(caught.exception))
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [])
 
     def test_remove_takes_back_its_folder_and_skills_into_the_backup(self) -> None:
         toolpacks.add(self.root, str(self.source))
         done = toolpacks.remove(self.root, "tracker")
         self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
-        self.assertFalse((self.root / toolpacks.FOLDER / "tracker").exists())
+        self.assertTrue(self.source.is_dir(), "the folder itself is the person's: it stays")
+        self.assertEqual(toolpacks.ledger(self.root), {"packs": {}, "paths": []})
         self.assertTrue((Path(done["backup"]) / "skills" / "tracker-ticket" / "SKILL.md").is_file())
         self.assertNotIn("tracker-board", config.load_policy(self.root, "tools").get("systems") or {})
         with self.assertRaises(ToolpackError):
@@ -177,7 +178,7 @@ class Install(ToolpackCase):
         for words in (["toolpack", "add", str(self.source)], ["toolpack", "remove", "tracker"]):
             done = self.cli(*words)
             self.assertEqual(done.returncode, 1, words)
-        self.assertFalse((self.root / toolpacks.FOLDER / "tracker").exists())
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [])
 
     def test_the_agent_cannot_write_into_an_installed_tool_pack(self) -> None:
         toolpacks.add(self.root, str(self.source))
@@ -196,24 +197,31 @@ class FromCompany(ToolpackCase):
         (self.kb / "company.json").write_text('{"skill_prefix": "acme"}\n', encoding="utf-8")
         make(self.kb / "tools" / "packs" / "tracker")
 
-    def test_sync_installs_it_once_replaces_it_when_it_changed_and_lists_one_that_left(self) -> None:
+    def test_the_companys_own_pack_is_on_its_skills_are_put_once_and_again_when_the_version_changes_and_taken_back(self) -> None:
         first = company.sync(self.root)
-        self.assertIn(".harness/toolpacks/tracker", first["copied"])
-        self.assertEqual(toolpacks.ledger(self.root)["tracker"]["from"], "company")
-        self.assertNotIn(".harness/toolpacks/tracker", company.sync(self.root)["copied"], "again: nothing to do")
+        self.assertIn(".github/skills/tracker-ticket", first["copied"])
+        row = toolpacks.listed(self.root)["tracker"]
+        self.assertEqual((row["source"], row["active"]), ("company", True))
+        self.assertEqual(toolpacks.ledger(self.root)["packs"]["tracker"]["source"], "company")
+        self.assertNotIn(".github/skills/tracker-ticket", company.sync(self.root)["copied"], "again: nothing to do")
         make(self.kb / "tools" / "packs" / "tracker", version="2.0.0")
-        company.sync(self.root)
-        self.assertEqual(toolpacks.ledger(self.root)["tracker"]["version"], "2.0.0")
+        again = company.sync(self.root)
+        self.assertEqual(toolpacks.ledger(self.root)["packs"]["tracker"]["version"], "2.0.0")
+        self.assertEqual(len(again["toolpacks"]["lines"]), 1)
+        self.assertTrue(again["toolpacks"]["lines"][0].startswith("tracker 1.0.0 → 2.0.0"))
+        self.assertEqual(toolpacks.recent_updates(self.root), again["toolpacks"]["lines"], "doctor shows the same line")
         shutil.rmtree(self.kb / "tools" / "packs" / "tracker")
-        self.assertEqual(company.sync(self.root)["toolpacks_gone"], ["tracker"])
-        self.assertTrue((self.root / toolpacks.FOLDER / "tracker").is_dir(), "listed, not removed")
+        gone = company.sync(self.root)
+        self.assertNotIn("tracker", toolpacks.listed(self.root))
+        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists(), "its skills are taken back")
+        self.assertEqual(toolpacks.ledger(self.root)["packs"], {})
+        self.assertIn(".github/skills/tracker-ticket", gone["copied"])
 
-    def test_one_installed_by_hand_is_not_replaced_by_the_companys(self) -> None:
-        toolpacks.add(self.root, str(self.source))
-        make(self.kb / "tools" / "packs" / "tracker", version="3.0.0")
-        found = company.sync(self.root)
-        self.assertEqual(found["exit_code"], 1)
-        self.assertEqual(toolpacks.ledger(self.root)["tracker"]["version"], "1.0.0")
+    def test_a_folder_added_here_cannot_take_the_name_of_the_companys_pack(self) -> None:
+        with self.assertRaises(ToolpackError):
+            toolpacks.add(self.root, str(self.source))
+        self.assertEqual(toolpacks.listed(self.root)["tracker"]["source"], "company", "the company's first")
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [])
 
 
 TRACKER = """#!{python}
@@ -412,14 +420,17 @@ class TaskLinks(TaskCase):
 
 
 class ShippedSample(ToolpackCase):
-    """1.7.16: the sample in examples/toolpacks installs as it is and does what its README says, with its own made-up program."""
+    """1.7.16: the sample in .harness/toolpacks is turned on by `use` as it is and does what its README says, with its own made-up program."""
 
     def test_install_sign_in_test_read_and_a_held_write(self) -> None:
         from support import REPO
 
-        sample = REPO / ".harness" / "examples" / "toolpacks" / "demotracker"
+        sample = REPO / ".harness" / "toolpacks" / "demotracker"
         self.assertEqual(toolpacks.problems(self.root, sample), [])
-        toolpacks.add(self.root, str(sample))
+        shutil.copytree(sample, self.root / ".harness" / "toolpacks" / "demotracker")
+        self.assertFalse(toolpacks.listed(self.root)["demotracker"]["active"], "a factory pack is off until the knowledge base turns it on")
+        use_packs(self.root, "demotracker")
+        toolpacks.sync_skills(self.root)
         self.assertEqual(skillcheck.check_all(self.root, ["demotracker-ticket"])[0]["errors"], [])
         home = self.root / "home"
         home.mkdir()
@@ -455,9 +466,9 @@ class BoardActions(ToolpackCase):
         board = self.board()
         row = board.machine({"step": "toolpacks"})["toolpacks"][0]
         self.assertFalse(row["newer"])
-        make(self.source, version="1.2.0")
-        self.assertTrue(board.machine({"step": "toolpacks"})["toolpacks"][0]["newer"])
+        make(self.source, version="1.2.0")  # read where it lies: the new version is seen at once
         self.assertEqual(board.machine({"step": "toolpack-update", "name": "tracker"})["toolpacks"][0]["version"], "1.2.0")
+        self.assertEqual(toolpacks.ledger(self.root)["packs"]["tracker"]["version"], "1.2.0")
         self.assertEqual(board.machine({"step": "toolpack-remove", "name": "tracker"})["toolpacks"], [])
         for step in ("state", "paths", "drop"):
             board.machine({"step": step, "paths": []})
@@ -471,9 +482,10 @@ class BoardActions(ToolpackCase):
         self.assertEqual(done["added"]["installed"], "tracker")
         self.assertEqual(done["added"]["version"], "1.0.0")
         self.assertIn("tracker", done["missing"])  # the made-up program is not on this computer
-        make(self.source, version="1.1.0")
+        other = make(self.outside / "tracker-new", version="1.1.0")  # another folder with the same pack name
+        quoted = '"%s"' % other
         asked = board.machine({"step": "toolpack-add", "path": quoted})
-        self.assertEqual(asked, {"confirm": {"name": "tracker", "version": "1.1.0", "installed": "1.0.0"}})
+        self.assertEqual(asked, {"confirm": {"name": "tracker", "version": "1.1.0", "installed": "1.0.0", "source": str(self.source.resolve())}})
         self.assertEqual(board.machine({"step": "toolpacks"})["toolpacks"][0]["version"], "1.0.0")  # nothing changed yet
         board.machine({"step": "toolpack-add", "path": quoted, "replace": True})
         self.assertEqual(board.machine({"step": "toolpacks"})["toolpacks"][0]["version"], "1.1.0")
@@ -495,10 +507,15 @@ class BoardActions(ToolpackCase):
         row = board.machine({"step": "toolpacks"})["toolpacks"][0]
         self.assertEqual((row["types"], row["skills"], row["mcp_rules"]), ([{"type": "tracker", "label": "Tracker", "via": "cli"}], 1, 0))
 
-    def test_one_from_the_company_pack_is_not_changed_here(self) -> None:
-        toolpacks.add(self.root, str(self.source), origin=toolpacks.COMPANY)
-        with self.assertRaises(ValueError):
+    def test_a_company_or_factory_pack_is_not_removed_here_it_says_where_to_turn_it_off(self) -> None:
+        make(self.root / "knowledge-base" / "company" / "tools" / "packs" / "tracker")
+        with self.assertRaises(ValueError) as caught:
             self.board().machine({"step": "toolpack-remove", "name": "tracker"})
+        self.assertIn("company/tools/packs/tracker", str(caught.exception))
+        use_packs(self.root, "demotracker")
+        with self.assertRaises(ValueError) as caught:
+            self.board().machine({"step": "toolpack-remove", "name": "demotracker"})
+        self.assertIn("packs.json", str(caught.exception))
 
 
 class McpOptional(ToolpackCase):
@@ -921,28 +938,181 @@ class LinkedItems(TaskCase):
 
 
 class InstallFromZip(HarnessTestCase):
-    """1.7.21: a zip keeps no execute bit (the pack's programs get it back); a source that is not a pack, a bad zip and a path too long are one sentence each."""
+    """1.7.21 / 1.7.30: a source that is not a pack, a zip, and a path too long are one sentence each; a pack's programs are read where they lie."""
 
-    def test_programs_in_bin_are_executable_after_a_zip_install_and_errors_are_sentences(self) -> None:
+    def test_errors_are_sentences(self) -> None:
         with tempfile.TemporaryDirectory() as holder:
-            folder = make(Path(holder) / "tracker")
-            (folder / "bin").mkdir()
-            (folder / "bin" / "tracker").write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
-            archive = Path(holder) / "tracker.zip"
-            with zipfile.ZipFile(archive, "w") as out:
-                for item in folder.rglob("*"):
-                    if item.is_file():
-                        out.write(item, item.relative_to(folder).as_posix())  # no mode kept
-            toolpacks.add(self.root, str(archive))
-            program = self.root / toolpacks.FOLDER / "tracker" / "bin" / "tracker"
-            if os.name != "nt":
-                self.assertTrue(os.access(program, os.X_OK))
             empty = Path(holder) / "empty"
             empty.mkdir()
             junk = Path(holder) / "junk.zip"
             junk.write_text("not a zip", encoding="utf-8")
-            for source, word in ((empty, "not a tool pack"), (junk, "not a zip"), (Path(holder) / ("x" * 400), "too long")):
+            for source, word in ((empty, "not a tool pack"), (junk, "a file"), (Path(holder) / ("x" * 400), "too long")):
                 with self.assertRaises(ToolpackError) as caught:
                     toolpacks.add(self.root, str(source))
                 self.assertNotIn("Errno", str(caught.exception))
                 self.assertNotIn("Traceback", str(caught.exception))
+
+
+class FactoryPacks(ToolpackCase):
+    """1.7.30: a factory pack is read where it lies; it is on when the knowledge base names it; only its skills are copied, renamed with the company's prefix."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.factory = make(self.root / ".harness" / "toolpacks" / "tracker", skills=("tracker-ticket", "tracker-note"))
+        for name in ("tracker-ticket", "tracker-note"):  # the skills refer to each other and to themselves by name
+            (self.factory / "skills" / name / "SKILL.md").write_text(SKILL.format(name=name) + "See `tracker-note` and tracker-ticket, not tracker-ticketing or tracker-notes.\n", encoding="utf-8")
+        self.kb = self.root / "knowledge-base" / "company"
+        (self.kb / "tools").mkdir(parents=True)
+        (self.root / "knowledge-base" / "README.md").write_text("# kb\n", encoding="utf-8")
+
+    def use(self, *names: str) -> None:
+        (self.kb / "tools" / "packs.json").write_text(json.dumps({"use": list(names)}), encoding="utf-8")
+
+    def prefix(self, word: str) -> None:
+        (self.root / ".harness/policies/user.override.json").write_text(json.dumps({"skill_prefix": word}), encoding="utf-8")
+
+    def test_a_factory_pack_is_off_until_use_names_it_and_off_again_when_dropped(self) -> None:
+        row = toolpacks.listed(self.root)["tracker"]
+        self.assertEqual((row["source"], row["active"]), ("harness", False))
+        self.assertNotIn("tracker-board", config.load_policy(self.root, "tools").get("systems") or {}, "its rules are not read")
+        self.assertEqual(launchenv.tool_folders(self.root), [])
+        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
+        self.use("tracker")
+        done = toolpacks.sync_skills(self.root)
+        self.assertEqual(sorted(done["put"]), ["tracker-note", "tracker-ticket"])
+        self.assertTrue(toolpacks.listed(self.root)["tracker"]["active"])
+        self.assertIn("tracker-board", config.load_policy(self.root, "tools")["systems"])
+        self.assertEqual(connections.types(self.root)["tracker"]["toolpack"], "tracker")
+        self.assertEqual(toolpacks.ledger(self.root)["packs"]["tracker"], {"source": "harness", "version": "1.0.0", "skills": ["tracker-note", "tracker-ticket"], "mcp": []})
+        self.use()
+        gone = toolpacks.sync_skills(self.root)
+        self.assertEqual(sorted(gone["removed"]), ["tracker-note", "tracker-ticket"])
+        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
+        self.assertEqual(toolpacks.ledger(self.root)["packs"], {})
+        self.assertNotIn("tracker-board", config.load_policy(self.root, "tools").get("systems") or {})
+
+    def test_a_name_in_use_that_no_pack_has_is_listed(self) -> None:
+        self.use("tracker", "nosuch")
+        self.assertEqual(toolpacks.unknown_use(self.root), ["nosuch"])
+        self.assertEqual(toolpacks.check(self.root)["unknown_use"], ["nosuch"])
+
+    def test_with_a_prefix_the_folder_the_name_and_the_references_between_a_packs_skills_are_renamed(self) -> None:
+        self.prefix("acme")
+        self.use("tracker")
+        toolpacks.sync_skills(self.root)
+        text = (self.root / ".github/skills/acme-tracker-ticket/SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("name: acme-tracker-ticket\n", text)
+        self.assertIn("See `acme-tracker-note` and acme-tracker-ticket, not tracker-ticketing or tracker-notes.", text, "whole words only")
+        self.assertEqual(skillcheck.check_all(self.root, ["acme-tracker-ticket"])[0]["errors"], [])
+        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
+        self.assertEqual(toolpacks.ledger(self.root)["packs"]["tracker"]["skills"], ["acme-tracker-note", "acme-tracker-ticket"])
+        self.assertEqual(connections.brief(self.root, "none").get("skills"), [])
+        self.assertEqual(skillcheck.check_all(self.root, ["acme-tracker-note"])[0]["errors"], [])
+
+    def test_the_company_prefix_set_later_moves_the_skills(self) -> None:
+        self.use("tracker")
+        toolpacks.sync_skills(self.root)
+        self.assertTrue((self.root / ".github/skills/tracker-ticket").is_dir())
+        self.prefix("acme")
+        toolpacks.sync_skills(self.root)
+        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
+        self.assertTrue((self.root / ".github/skills/acme-tracker-ticket").is_dir())
+
+    def test_a_new_version_puts_the_skills_again_and_says_so(self) -> None:
+        self.use("tracker")
+        toolpacks.sync_skills(self.root)
+        self.assertEqual(toolpacks.sync_skills(self.root), {"put": [], "removed": [], "updated": [], "refused": [], "lines": []}, "again: nothing")
+        make(self.factory, version="1.1.0", skills=("tracker-ticket",))
+        (self.factory / "skills" / "tracker-ticket" / "SKILL.md").write_text(SKILL.format(name="tracker-ticket") + "New.\n", encoding="utf-8")
+        shutil.rmtree(self.factory / "skills" / "tracker-note")
+        done = toolpacks.sync_skills(self.root)
+        self.assertEqual(done["updated"], [{"toolpack": "tracker", "from": "1.0.0", "to": "1.1.0"}])
+        self.assertTrue(done["lines"][0].startswith("tracker 1.0.0 → 1.1.0"))
+        self.assertIn("New.", (self.root / ".github/skills/tracker-ticket/SKILL.md").read_text(encoding="utf-8"))
+        self.assertFalse((self.root / ".github/skills/tracker-note").exists(), "a skill the new version dropped goes")
+        self.assertEqual(toolpacks.recent_updates(self.root), done["lines"])
+
+    def test_company_sync_does_not_call_a_pack_skill_the_companys_own_and_a_clash_is_refused(self) -> None:
+        self.prefix("acme")
+        (self.kb / "company.json").write_text('{"skill_prefix": "acme"}\n', encoding="utf-8")
+        self.use("tracker")
+        mine = self.root / ".github/skills/acme-tracker-note"
+        mine.mkdir(parents=True)
+        (mine / "SKILL.md").write_text("somebody's own\n", encoding="utf-8")
+        found = company.sync(self.root)
+        self.assertEqual([item["skill"] for item in found["refused"]], ["acme-tracker-note"])
+        self.assertEqual((mine / "SKILL.md").read_text(encoding="utf-8"), "somebody's own\n")
+        self.assertTrue((self.root / ".github/skills/acme-tracker-ticket").is_dir())
+        again = company.sync(self.root, remove=True)
+        self.assertNotIn("acme-tracker-ticket", again["only_here"], "a pack's skill is not 'only here'")
+        self.assertTrue((self.root / ".github/skills/acme-tracker-ticket").is_dir(), "remove=True leaves it")
+
+    def test_the_diff_offers_a_sync_when_the_packs_skills_differ(self) -> None:
+        self.use("tracker")
+        self.assertFalse(company.diff(self.root)["in_sync"])
+        company.sync(self.root)
+        self.assertTrue(company.diff(self.root)["in_sync"])
+
+    def test_the_gate_guards_the_factory_folder_and_the_ledger(self) -> None:
+        for relative in (".harness/toolpacks/tracker/rules.json", ".harness/runtime/toolpacks.json"):
+            event = pre_tool("s-guard", "create_file", {"filePath": str(self.root.resolve() / relative), "content": "{}"})
+            event["cwd"] = str(self.root.resolve())
+            self.assertEqual(self.hook(event)["permissionDecision"], "deny", relative)
+
+    def test_connections_share_names_a_factory_pack_in_use_and_copies_a_folder_added_here(self) -> None:
+        self.assertTrue(toolpacks.share(self.root, self.kb, "tracker"))
+        self.assertEqual(json.loads((self.kb / "tools" / "packs.json").read_text(encoding="utf-8")), {"use": ["tracker"]})
+        self.assertFalse(toolpacks.share(self.root, self.kb, "tracker"), "once")
+        toolpacks.add(self.root, str(make(self.outside / "other", name="other", skills=())))
+        self.assertTrue(toolpacks.share(self.root, self.kb, "other"))
+        self.assertTrue((self.kb / "tools" / "packs" / "other" / "toolpack.json").is_file())
+
+
+class DoctorToolpacks(ToolpackCase):
+    """1.7.30: what `harness doctor` says about tool packs."""
+
+    def lines(self) -> list:
+        import doctor
+
+        report = doctor.Report()
+        doctor.check_toolpacks(report, self.root)
+        return report.lines
+
+    def test_a_leftover_examples_folder_is_to_be_deleted(self) -> None:
+        self.assertEqual(self.lines(), [])
+        (self.root / ".harness" / "examples" / "toolpacks").mkdir(parents=True)
+        self.assertTrue(any(".harness/examples/toolpacks/" in line and "Delete" in line or "删掉" in line for line in self.lines()))
+
+    def test_a_required_field_of_a_company_connection_that_is_unset_is_named(self) -> None:
+        kind = dict(KIND, fields={"org": {"label": "Org"}, "region": {"label": "Region", "default": "eu"}, "note": {"label": "Note", "optional": True}})
+        (self.source / "types" / "tracker.json").write_text(json.dumps(kind), encoding="utf-8")
+        toolpacks.add(self.root, str(self.source))
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"t1": {"type": "tracker", "env": "none"}, "t2": {"type": "tracker", "env": "none", "org": "acme"}}}), encoding="utf-8")
+        self.assertEqual(connections.unset_fields(self.root), [{"alias": "t1", "type": "tracker", "fields": ["org"]}])
+        self.assertTrue(any("`t1`" in line and "org" in line for line in self.lines()))
+
+    def test_a_company_skill_that_writes_a_command_the_pack_does_not_list_is_named(self) -> None:
+        (self.root / ".harness/policies/user.override.json").write_text(json.dumps({"skill_prefix": "acme"}), encoding="utf-8")
+        make(self.source, commands=["get", "comment"])
+        toolpacks.add(self.root, str(self.source))
+        skill = self.root / ".github/skills/acme-tracker-howto"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(SKILL.format(name="acme-tracker-howto") + "\nRun `tracker get 5` then:\n\n```\ntracker fetchall 5\n```\n\nThe tracker is slow today.\n", encoding="utf-8")
+        found = toolpacks.command_problems(self.root)
+        self.assertEqual(found, [{"skill": "acme-tracker-howto", "program": "tracker", "word": "fetchall", "pack": "tracker"}], "prose is not code")
+        self.assertTrue(any("fetchall" in line and "acme-tracker-howto" in line for line in self.lines()))
+        make(self.source, commands=[])  # a pack that lists none is not checked
+        self.assertEqual(toolpacks.command_problems(self.root), [])
+
+
+class ShippedFactoryPacks(ToolpackCase):
+    def test_every_factory_pack_checks_clean_and_ados_commands_are_those_of_its_program(self) -> None:
+        from support import REPO
+
+        for folder in sorted((REPO / ".harness" / "toolpacks").iterdir()):
+            if folder.is_dir():
+                self.assertEqual(toolpacks.problems(self.root, folder), [], folder.name)
+        listed = json.loads((REPO / ".harness" / "toolpacks" / "ado" / "toolpack.json").read_text(encoding="utf-8"))["commands"]
+        out = subprocess.run([sys.executable, str(REPO / ".harness" / "toolpacks" / "ado" / "bin" / "ado"), "--help"], capture_output=True, text=True, check=False).stdout
+        for word in listed:
+            self.assertIn(word, out, word)

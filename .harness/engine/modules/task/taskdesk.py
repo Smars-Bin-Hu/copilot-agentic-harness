@@ -141,6 +141,15 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
         return []
 
 
+def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The calls of this task approved on the board or in a terminal and not run yet (1.7.24): the page keeps its green card, and tells the agent, until the command has run."""
+    try:
+        return [{"code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "command": item["command"], "approved_at": item.get("approved_at", "")}
+                for item in outbox.approved_for(root, task)]
+    except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
+        return []
+
+
 def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     """The Task settings field "Open to the agent" (1.7.6): each environment the protocol knows, with the systems of the company pack that reach it (none: the chip
     cannot be clicked) and whether the person opened it for this task (`task allow`). Prod is listed as never. Empty `envs` when no system is listed: the field is not drawn."""
@@ -419,14 +428,14 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "name": name, "task": task, "as_of": utc_now(),
         "kind": data.get("kind", ""), "tier": data.get("tier", ""), "status": row.get("status", ""), "state": row.get("state", ""), "round": data.get("round", 1), "branch": str((data.get("promote") or {}).get("branch") or data.get("branch") or ""),
         "promote_direct": bool((data.get("promote") or {}).get("direct")), "domains": list(data.get("domains") or []), "autorun": bool(row.get("autorun")), "paused_since": row.get("paused_since") or "",
-        "waiting": row.get("waiting") or "", "waiting_why": row.get("waiting_why") or "", "waited_s": row.get("waited_s"), "waiting_from": row.get("waiting_from") or "",
+        "waiting": row.get("waiting") or "", "waiting_why": row.get("waiting_why") or "", "waiting_tip": row.get("waiting_tip") or "", "waited_s": row.get("waited_s"), "waiting_from": row.get("waiting_from") or "",
         "handoff": {key: str((data.get("handoff") or {}).get(key) or "") for key in ("what", "env", "detail")} if isinstance(data.get("handoff"), dict) else None,
         "created_at": data.get("created_at", ""), "updated_at": data.get("updated_at", ""),
         "forked_from": task_ops.name_of(str(data.get("forked_from"))) if data.get("forked_from") else "",
         "links": links_view(root, data), "link_types": link_types(root),
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
+        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "approved": approved_view(root, task) if row.get("status") == "open" else [], "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
         "plan_approval": plan_approval(root, task, data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if row.get("status") == "open" else 0, "req_sections": task_ops.req_unfilled(root, task) if row.get("status") == "open" else [], "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),

@@ -98,6 +98,13 @@ def pending_for(root: Path, task: str) -> List[Dict[str, Any]]:
     return sorted(found, key=lambda item: str(item.get("created_at", "")))
 
 
+def approved_for(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The calls of this task that the person approved and the agent has not run yet (the approval is used up when the command runs), oldest approval first."""
+    minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+    found = [item for item in approvals.approved_all(root, minutes, file=approvals.ACTIONS) if item.get("task") == task]
+    return sorted(found, key=lambda item: str(item.get("approved_at", "")))
+
+
 def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None) -> Dict[str, Any]:
     """Show the outside calls waiting in the outbox, then approve the one whose code is typed. Terminal only, like `approve-command`; the board calls it with `interactive=True` and the code
     typed on the page (1.7.7). The draft of the entry is marked approved."""

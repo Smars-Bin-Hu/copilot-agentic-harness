@@ -598,8 +598,8 @@
     view.chat = chat;
     if (ui.name.textContent !== desk.name) { ui.name.textContent = desk.name; ui.name.title = desk.name; }
     const state = stateTag(desk, live);
-    state.title = state.textContent;
-    ui.state.set(state.className + "|" + state.textContent, () => state);
+    if (!state.title) state.title = state.textContent;
+    ui.state.set(state.className + "|" + state.textContent + "|" + state.title, () => state);
 
     const found = desk.stages && desk.status !== "new" ? Status.stages(desk, live) : null;
     if (saved && found) found.steps.forEach((step) => { if (!isNaN(step.since)) { step.s = Math.max(0, (Date.parse(desk.as_of) - step.since) / 1000); step.since = NaN; } });  // a saved copy does not count on: the time is as of the day it was saved
@@ -995,9 +995,11 @@
   const needItems = () => desk.actions.filter((item) => !isOptional(item) && !TALK.includes(item.action));  // steer and stop are not a wait: they are on the Live tab
   const needsCard = () => canAct() && Boolean(needItems().length || desk.waiting || desk.paused_since || desk.state === "unheld");
 
+  const askNote = () => (desk.waiting_why === "asking" && (desk.outbox || []).length ? h("p", {class: "hint"}, t("desk.wait.asking")) : null);  // a held call's card is up; the question is the other thing the person owes. Every held card says it (1.7.24)
+
   function waitNotes() {
     return [
-      desk.waiting_why === "asking" && (desk.outbox || []).length ? h("p", {class: "hint"}, t("desk.wait.asking")) : null,  // a held call's card is up; the question is the other thing the person owes
+      askNote(),
       desk.req_changed ? h("p", {class: "hint bad"}, t("desk.req.changed")) : null,
       desk.req_unconfirmed && desk.req_sections.length ? h("p", {class: "hint bad"}, t("desk.req.unfinished", {sections: desk.req_sections.join(", ")})) : null,
       desk.test && desk.test.reopen ? h("p", {class: "hint bad"}, t("desk.test.reopen", {dev: desk.test.reopen, envs: desk.test.failed.join(", ")})) : null,
@@ -1080,7 +1082,7 @@
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
     const cards = told ? [told] : [];  // the approved calls first: the one step left is to tell the agent
-    cards.push(...(desk.outbox || []).map((item, index) => outboxCard(item, index || told ? [] : notes)));
+    cards.push(...(desk.outbox || []).map((item, index) => outboxCard(item, index || told ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
     cards.push(...strong.map((item, index) => strongCard(item, index || cards.length ? [] : notes)));
     if (other.length || (!strong.length && !cards.length)) cards.push(otherCard(other, strong.length || cards.length ? [] : notes));  // the held calls stand for themselves
     return cards;
@@ -1094,23 +1096,26 @@
   const approvedCalls = new Map();  // code -> {at}: approved on this page and not yet told to the agent; the agent runs an approved call only when it is prompted, so the card offers to tell it
   const TELL_MINUTES = 10;  // the approval's life (git.approval_minutes by default): past it, telling is no use
   // After an approval: a green card with the codes and one button that tells the chat to run them (a send to the chat, as an answer), in place of typing it.
+  const toldCodes = new Set();  // told the agent from this page: the card stays all the same until the command has run (the server says which approvals are left, 1.7.24)
   function approvedCard() {
     const now = Date.now();
-    for (const [code, found] of approvedCalls) if (now - found.at > TELL_MINUTES * 60000) approvedCalls.delete(code);
-    if (!approvedCalls.size || desk.past) return null;
-    const codes = [...approvedCalls.keys()];
+    const left = Array.isArray(desk.approved) ? new Set(desk.approved.map((item) => item.code)) : null;  // null: a page without the list (a saved copy)
+    for (const [code, found] of approvedCalls) if (now - found.at > TELL_MINUTES * 60000 || (left && !left.has(code) && now - found.at > 6000)) { approvedCalls.delete(code); toldCodes.delete(code); }  // run (the approval is used up) or run out
+    const codes = [...new Set([...(left ? [...left] : []), ...approvedCalls.keys()])];
+    if (!codes.length || desk.past) return null;
+    const all = codes.every((code) => toldCodes.has(code));
     const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);  // the agent waits for an answer in its chat: a message from here would answer the wrong thing (1.7.20)
     const can = served() && canAct() && !asking;
-    const tell = h("button", {type: "button", class: "act hot big", disabled: can ? null : "disabled"}, t("desk.outbox.tell"));
+    const tell = h("button", {type: "button", class: "act hot big", disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.tell"));
     const said = h("div", {class: "bad"});
     tell.addEventListener("click", () => {
       tell.disabled = true; tell.textContent = t("board.serve.working");
       SERVE.post("/api/send", {task: desk.name, kind: "answer", lang: "", note: "", body: t("desk.outbox.tell.body", {codes: codes.join(", ")}), step: "act"})
-        .then(() => { codes.forEach((code) => approvedCalls.delete(code)); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); tell.disabled = false; tell.textContent = t("desk.outbox.tell"); });
+        .then(() => { codes.forEach((code) => toldCodes.add(code)); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); tell.disabled = false; tell.textContent = t(all ? "desk.outbox.tell.again" : "desk.outbox.tell"); });
     });
     return h("section", {class: "tk-need strong tk-call done"},
       h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good"), codes.map((code) => [" ", h("code", {class: "code-chip still"}, code)])),
-      h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
+      h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : all ? "desk.outbox.told" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
       h("div", {class: "tk-need-go tk-call-go"}, tell, said));
   }
   const SQL_WORDS = /\b(select|from|where|insert|into|update|set|delete|merge|exec|execute|create|alter|drop|truncate|table|values|join|on|group by|order by|having|union|with|begin|commit|rollback|tran|declare|if|else|while|top|as|and|or|not|null|is|in|exists|case|when|then|end|nocount)\b/gi;
@@ -1256,7 +1261,7 @@
     const chat = served() && !desk.past ? desk.chat : null;
     const onLive = current === "live" && hasStream();
     if (typeof LIVE !== "undefined" && served()) {
-      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed"});
+      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).map((item) => item.command), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed"});
       LIVE.want("tab", onLive);
       LIVE.visible(onLive);
     }

@@ -13,7 +13,7 @@ const LIVE = (function () {
   const SLOW = 3000;  // after a failed one
   const LINK_DOWN = ["starting", "none", "no-cli", "cli-failed", "many", "error", "lost", "off"];  // why the link to VS Code itself is not there (the other reasons are about this task's chat)
 
-  const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, held: [], listeners: [], needs: [], started: ""};
+  const st = {task: "", rev: "", nodes: new Map(), wants: new Set(), timer: 0, busy: false, fails: 0, skew: 0, data: null, off: "", chat: null, held: [], approved: [], listeners: [], needs: [], started: ""};
 
   const svg = (paths, size, cls) => {
     const node = document.createElementNS(NS, "svg");
@@ -167,14 +167,16 @@ const LIVE = (function () {
 
   // A call the gate held for the person fails in the chat ("Run Shell Command failed"): when its command is one waiting in the outbox, it is shown as held, not as failed (1.7.22).
   const flat = (text) => String(text || "").replace(/\s+/g, " ").trim();
-  function isHeld(item) {
-    if (item.k !== "tool" || item.st !== "fail" || !item.target || !st.held.length) return false;
+  function isHeld(item) {  // "held" (waits for the person), "approved" (waits for the agent to run it again), or "" (a call like any other)
+    if (item.k !== "tool" || item.st !== "fail" || !item.target) return "";
     const target = flat(item.target).slice(0, 60);
-    return target.length > 3 && st.held.some((command) => command.includes(target) || target.includes(command.slice(0, 60)));
+    if (target.length <= 3) return "";
+    const same = (command) => command.includes(target) || target.includes(command.slice(0, 60));
+    return st.held.some(same) ? "held" : st.approved.some(same) ? "approved" : "";  // an approved call that has not run is not a failure (1.7.24)
   }
   function paint(rec, item) {
     const held = isHeld(item);
-    const sig = JSON.stringify(item) + (held ? "|held" : "");
+    const sig = JSON.stringify(item) + (held ? "|" + held : "");
     if (sig === rec.sig) return;
     rec.sig = sig;
     rec.item = item;
@@ -189,7 +191,7 @@ const LIVE = (function () {
     } else if (item.k === "tool") {
       const kind = kindOf(item.tool || "", item.name || "");
       if (rec.kind2 !== kind) { rec.kind2 = kind; rec.ico.replaceChildren(svg(ICONS[kind], 15)); }
-      const label = held ? t("desk.live.held") : item.say || item.name || item.tool || "";
+      const label = held === "approved" ? t("desk.live.approved") : held ? t("desk.live.held") : item.say || item.name || item.tool || "";
       setText(rec.say, label);
       rec.say.title = label;
       setText(rec.tg, item.target || "");
@@ -202,7 +204,7 @@ const LIVE = (function () {
       else {
         stopped(time);
         const label2 = time.querySelector(".st-time");
-        setText(label2, held || item.st === "wait" ? t("desk.live.wait") : item.st === "run" ? "" : item.st === "stop" ? t("desk.trace.stopped") : (item.st === "fail" ? "✗" : "✓") + (item.t0 && item.t1 ? " " + seconds(item.t1 - item.t0) : ""));
+        setText(label2, held === "approved" ? t("desk.live.wait.agent") : held || item.st === "wait" ? t("desk.live.wait") : item.st === "run" ? "" : item.st === "stop" ? t("desk.trace.stopped") : (item.st === "fail" ? "✗" : "✓") + (item.t0 && item.t1 ? " " + seconds(item.t1 - item.t0) : ""));
       }
     } else {
       const done = !item.run;
@@ -345,7 +347,8 @@ const LIVE = (function () {
       if (typeof ROUNDS !== "undefined") { if (!info.off) roundsHere(ROUNDS.node); ROUNDS.follow(info.task); }
       st.chat = info.chat || null;
       const heldNow = (info.held || []).map(flat);
-      if (heldNow.join("\n") !== st.held.join("\n")) { st.held = heldNow; for (const rec of st.nodes.values()) if (rec.item) paint(rec, rec.item); }  // a card that arrives later changes how its call reads
+      const approvedNow = (info.approved || []).map(flat);
+      if (heldNow.join("\n") !== st.held.join("\n") || approvedNow.join("\n") !== st.approved.join("\n")) { st.held = heldNow; st.approved = approvedNow; for (const rec of st.nodes.values()) if (rec.item) paint(rec, rec.item); }  // a card that arrives later changes how its call reads
       st.off = info.off || "";
       const nothing = st.chat && !st.chat.bound ? st.chat.why || "" : "";
       link.title = nothing === "no-cli" || nothing === "off" ? t("board.vs.why." + nothing) : t("board.vs.open");

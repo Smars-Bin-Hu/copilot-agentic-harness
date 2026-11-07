@@ -179,6 +179,20 @@ class OutboxOnThePageTests(OutboxCase):
         self.assertTrue(view[0]["draft"].startswith("OUTBOX/"))
         self.assertEqual(view[0]["facts"], {})
 
+    def test_an_approved_call_stays_on_the_page_until_the_command_has_run(self) -> None:
+        """1.7.24: the green card is the server's, not the page's memory: it is there after the agent answered or the page was loaded again, and goes when the command ran (the approval is used up)."""
+        from modules.task import taskdesk
+
+        self.new()
+        code = code_of(self.term(COMMENT)["permissionDecisionReason"])
+        self.assertEqual(taskdesk.approved_view(self.root, TASK), [])
+        self.approve(code)
+        (view,) = taskdesk.approved_view(self.root, TASK)
+        self.assertEqual((view["code"], view["command"]), (code, COMMENT))
+        self.assertEqual(taskdesk.outbox_view(self.root, TASK), [], "no longer held")
+        self.assertEqual(self.term(COMMENT), {}, "the agent runs it: the approval is used up")
+        self.assertEqual(taskdesk.approved_view(self.root, TASK), [])
+
     def test_a_call_whose_verb_no_rule_names_says_so_on_the_card_and_in_the_draft(self) -> None:
         from modules.task import taskdesk
 

@@ -111,9 +111,16 @@ const PLAIN_WAITS = ["plan", "promote", "recover", "review", "req", "commit", "s
 function waitText(row) {
   return PLAIN_WAITS.includes(row.waiting_why) && Object.prototype.hasOwnProperty.call(TEXT, "task.waiting." + row.waiting_why) ? t("task.waiting." + row.waiting_why) : row.waiting;
 }
+// The whole question or command a waiting task is held on, for the pointer (1.7.24): the chat's own words when the host told them, else what the wait means.
+function waitTip(row) {
+  const ask = row.ask && typeof row.ask === "object" ? row.ask : null;
+  const own = String(row.waiting_tip || (ask && (ask.message || ask.command)) || "").trim();
+  if (own) return own;
+  return row.waiting_why === "asking" && Object.prototype.hasOwnProperty.call(TEXT, "desk.wait.asking") ? t("desk.wait.asking") : "";
+}
 function stateTag(row, live) {
   const state = stateOf(row, live);
-  if (state === "waiting") return tag(waitText(row), "hot long");
+  if (state === "waiting") { const node = tag(waitText(row), "hot long"); const tip = waitTip(row); if (tip) node.title = tip; return node; }
   if (state === "working") return tag(t("board.state.working"), "good run");
   if (state === "quiet") return tag(t("board.state.quiet"), "idle");
   if (state === "unheld") return tag(t("board.state.unheld") + (row.unheld_s === null || row.unheld_s === undefined ? "" : " \u00b7 " + clock(row.unheld_s)), "lost");

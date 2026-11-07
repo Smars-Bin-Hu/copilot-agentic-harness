@@ -608,6 +608,11 @@ class DeskTests(ServeCase):
         self.assertNotIn("to_shelf", rows)
         self.assertEqual(self.request("POST", "/api/board", {})[1]["archive_to"], str(shelf.resolve()))
 
+    def fill_req(self, req) -> None:
+        """REQ.md with every line of the template written (a line that is still `<...>` keeps the confirm button away, 1.7.22)."""
+        lines = [("Stop the nightly load from failing." if task_ops._PLACEHOLDER.match(line.strip()) else line) for line in req.read_text(encoding="utf-8").splitlines()]
+        req.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
     def test_the_person_confirms_the_requirement_on_the_page_and_the_harness_fills_the_line(self) -> None:
         import hashlib
 
@@ -617,7 +622,7 @@ class DeskTests(ServeCase):
         req = self.task / "REQ.md"
         self.assertEqual(task_ops.req_state(self.root, TASK), "unwritten")
         self.assertNotIn("confirm-req", names())  # the template is still empty: nothing to confirm
-        req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Stop the nightly load from failing.").replace("<一两段。用户的原意，不加你自己的设想>", "别让夜间加载失败。"), encoding="utf-8")
+        self.fill_req(req)
         self.assertEqual(task_ops.req_state(self.root, TASK), "open")
         self.assertEqual(names()[0], "confirm-req")
         body = {"action": "confirm-req", "task": TASK}
@@ -635,6 +640,18 @@ class DeskTests(ServeCase):
         self.assertNotIn("confirm-req", names())
         self.assertIn("confirm-req", [event["what"] for event in self.data()["events"]])
 
+    def test_a_requirement_with_template_text_left_offers_no_confirm_in_any_tier(self) -> None:
+        names = lambda: [item["action"] for item in taskdesk.desk(self.root, "job1", ("confirm-req", "pause"))["actions"]]
+        req = self.task / "REQ.md"
+        self.fill_req(req)
+        text = req.read_text(encoding="utf-8")
+        self.assertEqual(task_ops.req_state(self.root, TASK), "open")
+        self.assertEqual(names()[0], "confirm-req")  # all written: offered
+        req.write_text(text + "\n## Extra\n\n- [R9] <ENV>: <what is wanted>\n", encoding="utf-8")
+        self.assertGreater(task_ops.req_placeholders(self.root, TASK), 0)
+        self.assertNotIn("confirm-req", names())  # one line is still the template's: nothing to confirm yet
+        self.assertEqual(taskdesk.desk(self.root, "job1", ("confirm-req", "pause"))["req_sections"], ["Extra"])
+
     def test_a_written_requirement_is_offered_once_and_waits_since_it_was_written(self) -> None:
         import os
         from datetime import datetime, timezone
@@ -642,7 +659,7 @@ class DeskTests(ServeCase):
         from modules.task import tasklife
 
         req = self.task / "REQ.md"
-        req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Stop the nightly load from failing.").replace("<一两段。用户的原意，不加你自己的设想>", "别让夜间加载失败。"), encoding="utf-8")
+        self.fill_req(req)
         (self.task / "PLAN.md").unlink(missing_ok=True)  # no plan yet: the requirement is what it waits for
         with task_ops.locked(self.root, TASK) as data:
             data["tier"], data["updated_at"] = "full", "2026-01-01T00:00:00+00:00"  # the task was opened long before the agent wrote the requirement
@@ -659,7 +676,7 @@ class DeskTests(ServeCase):
 
         (self.task / "PLAN.md").unlink(missing_ok=True)
         req = self.task / "REQ.md"
-        req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "Stop the nightly load from failing.").replace("<一两段。用户的原意，不加你自己的设想>", "别让夜间加载失败。"), encoding="utf-8")
+        self.fill_req(req)
         code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
         task_ops.confirm_req(self.root, TASK, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
         desk = taskdesk.desk(self.root, "job1", ("confirm-req", "pause"))
@@ -676,7 +693,7 @@ class DeskTests(ServeCase):
 
     def test_a_requirement_changed_while_the_person_confirms_is_not_confirmed(self) -> None:
         req = self.task / "REQ.md"
-        req.write_text(req.read_text(encoding="utf-8").replace("<One or two paragraphs. What the user meant, with nothing of your own added>", "A.").replace("<一两段。用户的原意，不加你自己的设想>", "甲。"), encoding="utf-8")
+        self.fill_req(req)
 
         def reader(_asked: str) -> str:  # the person types the right code of the version they read; then the agent edits the file
             import hashlib

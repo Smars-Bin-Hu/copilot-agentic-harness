@@ -1408,7 +1408,7 @@
   "desk.files.saved": "存档副本中没有这个文件（只包含小文件）。请从看板打开任务页查看。",
   "desk.files.other": "这个文件（{size}）无法在此显示，请在编辑器中打开。",
   "desk.overview.hint": "任务进行到哪（TASK.md）。",
-  "desk.req.hint": "任务要做什么（REQ.md）。只有你能用上面的按钮确认；确认之后它再变，要重新确认。",
+  "desk.req.hint": "任务要做什么（REQ.md）。只有你能确认；确认之后它再变，要重新确认。",
   "desk.overview.req": "要做什么（REQ.md）在“需求”标签页。",
   "desk.template.note": "关于这个文件",
   "desk.plan.approval.none": "还没批准。",

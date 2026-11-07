@@ -393,10 +393,13 @@ def needs_req(data: Dict[str, Any]) -> bool:
 def offered(root: Path, row: Dict[str, Any], task: str, served: Tuple[str, ...], data: Dict[str, Any]) -> List[Dict[str, str]]:
     """What the person can do about the task: the board's actions, and on its page also: confirm the requirement once the agent wrote it."""
     found = taskboard.actions(row, served)
-    if row.get("status") == "open" and "confirm-req" in served and task_ops.req_state(root, task) in ("open", "changed") and not any(item["action"] == "confirm-req" for item in found):
+    unfilled = row.get("status") == "open" and task_ops.req_placeholders(root, task) > 0  # REQ.md still holds the template's text (1.7.22): no Confirm, in any tier
+    if row.get("status") == "open" and "confirm-req" in served and not unfilled and task_ops.req_state(root, task) in ("open", "changed") and not any(item["action"] == "confirm-req" for item in found):
         found.insert(0, {"action": "confirm-req", "command": f"{cli_command()} task confirm-req --task {row['name']}"})
     if not task_ops.todo_left(root, task) or not tasks.plan_approved(root, task, data):  # `autorun on` is refused then (autorun.need.todo, need.approval): not offered
         found = [item for item in found if item["action"] != "autorun on"]
+    if unfilled:
+        found = [item for item in found if item["action"] != "confirm-req"]
     return found
 
 

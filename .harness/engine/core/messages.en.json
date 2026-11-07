@@ -1408,7 +1408,7 @@
   "desk.files.saved": "This file is not in the saved copy (only the small ones are). Open the task page from the board to read it.",
   "desk.files.other": "This file ({size}) cannot be shown here. Open it in the editor.",
   "desk.overview.hint": "Where the task stands (TASK.md).",
-  "desk.req.hint": "What the task asks for (REQ.md). Only you confirm it, with the button above. If it changes after that, you confirm again.",
+  "desk.req.hint": "What the task asks for (REQ.md). Only you confirm it. If it changes after that, you confirm again.",
   "desk.overview.req": " What is asked (REQ.md) has its own tab.",
   "desk.template.note": "About this file",
   "desk.plan.approval.none": "Not approved yet.",

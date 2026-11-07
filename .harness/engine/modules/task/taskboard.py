@@ -227,6 +227,8 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
         row["todo_left"] = (row["todo"]["total"] - row["todo"]["done"]) if row["todo"] and row["status"] == "open" else 0
         if not row["todo_left"] or not tasks.plan_approved(root, row["task"]):  # `autorun on` is refused then (autorun.need.todo, need.approval): not offered
             row["actions"] = [item for item in row["actions"] if item["action"] != "autorun on"]
+        if task_ops.req_placeholders(root, row["task"]):  # REQ.md still holds the template's text (1.7.22): nothing to confirm yet, in any tier
+            row["actions"] = [item for item in row["actions"] if item["action"] != "confirm-req"]
         row["req_unconfirmed"] = row["status"] == "open" and task_ops.req_state(root, row["task"]) in ("open", "changed")
         held = (tasks.read(root, row["task"]) or {}).get("allow_env")
         row["open_envs"] = sorted(env for env in held if env in reaches) if isinstance(held, dict) and row["status"] == "open" else []  # the environments the person opened for the task (1.7.6): a mark under the name; none without a listed system

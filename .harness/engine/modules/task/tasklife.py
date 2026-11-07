@@ -279,6 +279,9 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
     """
     state = (data.get("promote") or {}).get("state", "none")
     updated = data.get("updated_at", "")
+    asking = data.get("waiting")
+    if isinstance(asking, dict) and asking.get("why") == "asking" and asking.get("since") and not (cancelled_at(data) > str(asking["since"])):
+        return {"why": "asking", "since": str(asking["since"])}  # the agent waits in the tool that asks the person (1.7.20): this comes first; held calls can still be approved meanwhile
     if state == "partial":
         return {"why": "recover", "since": last_event(data, "promote-partial") or updated}
     if data.get("kind") != "test" and tasks.plan_digest(root, task) and not tasks.plan_approved(root, task, data):  # a test task writes nothing back: a plan it has is not asked for (B65)

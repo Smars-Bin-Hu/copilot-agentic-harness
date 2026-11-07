@@ -107,7 +107,7 @@ const tag = (text, kind) => h("span", {class: "tag" + (kind ? " " + kind : "")},
 function stateOf(row, live) { return row.state === "working" && !live ? "quiet" : row.state || "quiet"; }
 // What a task waits for, in the language of the page. The server words it too (`row.waiting`), but a board that runs while the language is changed may still send the
 // old language for a while; the page's own table is always the one it shows. Waits with a detail in them (a command, a question, an environment) keep the server's words.
-const PLAIN_WAITS = ["plan", "promote", "recover", "review", "req", "commit", "stopped", "cancelled", "go-req", "go-plan", "go-promote", "go-recover", "go-review", "outbox"];
+const PLAIN_WAITS = ["plan", "promote", "recover", "review", "req", "commit", "stopped", "cancelled", "go-req", "go-plan", "go-promote", "go-recover", "go-review", "outbox", "asking"];
 function waitText(row) {
   return PLAIN_WAITS.includes(row.waiting_why) && Object.prototype.hasOwnProperty.call(TEXT, "task.waiting." + row.waiting_why) ? t("task.waiting." + row.waiting_why) : row.waiting;
 }

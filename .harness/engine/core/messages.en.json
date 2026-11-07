@@ -3062,7 +3062,6 @@
   "desk.links.add.tip": "Name a ticket of an outside tool in this task. The agent may then write to it, if you open the linked items.",
   "desk.links.ph": "ado:300100",
   "desk.links.go": "Link",
-  "desk.links.types": "Types: {types}",
   "desk.links.none": "No tool pack is installed that gives ticket links. Any <type>:<id> is kept as text.",
   "desk.links.remove": "Remove this link",
   "desk.links.bad": "Not a link. Write it as <type>:<id>, like ado:300100.",
@@ -3075,5 +3074,8 @@
   "desk.outbox.body.file": "from {path}",
   "desk.outbox.body.lines": "{n} lines",
   "desk.outbox.body.missing": "The file {path} is not in the task folder, so the text cannot be shown. Dismiss this call and ask the agent to write the file first, or read the raw command.",
-  "desk.outbox.body.cut": "Only the first part is shown here; the file is longer."
+  "desk.outbox.body.cut": "Only the first part is shown here; the file is longer.",
+  "task.waiting.asking": "waits for your answer",
+  "desk.wait.asking": "The agent asked you a question and waits for your answer in its chat in VS Code. Answer it there. A held call can be approved or dismissed meanwhile; that does not disturb the agent.",
+  "desk.outbox.tell.asking": "The agent is waiting for your answer to its question. Answer it in the chat first; after that it can run the approved command (the approval lasts {minutes} minutes)."
 }

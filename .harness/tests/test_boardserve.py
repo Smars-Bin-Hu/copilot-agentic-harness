@@ -165,6 +165,31 @@ class ServeTests(ServeCase):
         self.agent_stopped()  # the agent stopped: the same buttons work
         self.assertEqual(self.request("POST", "/api/act", {"action": "pause", "task": TASK})[0], 200)
 
+    def test_an_agent_that_waits_for_the_answer_to_its_question_is_not_at_work(self) -> None:
+        """1.7.20: the agent sits in the ask-the-person tool, makes no call and has not stopped. The page said "working" and refused a held call's Approve and Dismiss."""
+        from support import payload
+
+        self.agent_at_work()
+        ask = payload("PreToolUse", "sess-main", tool_name="ask_user", tool_input={"question": "Which one?", "choices": ["a", "b"]})
+        ask["cwd"] = str(self.root)
+        self.hook(ask)
+        self.assertEqual(self.data()["waiting"]["why"], "asking")
+        row = next(row for row in self.request("POST", "/api/board", {})[1]["rows"] if row["name"] == "job1")
+        self.assertEqual((row["state"], row["waiting_why"]), ("waiting", "asking"))  # one state
+        self.assertEqual(row["waiting"], messages.text("task.waiting.asking"))
+        cookie = self.pair()
+        refused = self.request("POST", "/api/act", {"action": "dismiss action", "task": TASK, "code": "ZZZZZZ"}, cookie=cookie)[1]
+        self.assertNotIn(messages.text("serve.busy"), json.dumps(refused, ensure_ascii=False))  # no longer "busy": it gets as far as the code, which is unknown
+        done = payload("PostToolUse", "sess-main", tool_name="ask_user", tool_input={}, tool_response="a")
+        done["cwd"] = str(self.root)
+        self.hook(done)
+        self.assertFalse(self.data().get("waiting"), "answered: at work again")
+        busy = self.request("POST", "/api/act", {"action": "dismiss action", "task": TASK, "code": "ZZZZZZ"}, cookie=cookie)[1]
+        self.assertIn(messages.text("serve.busy"), json.dumps(busy, ensure_ascii=False))
+
+    def test_a_chat_that_waits_for_input_is_not_at_work_by_the_word_of_vs_code(self) -> None:
+        self.assertIn("input", boardserve.CHAT_STILL)
+
     def test_the_reason_typed_in_the_close_dialog_is_the_reason_of_the_close(self) -> None:
         cookie = self.pair()
         self.assertEqual(self.request("POST", "/api/close", {"task": "job1", "reason": "  merged upstream  "}, cookie=cookie)[0], 200)

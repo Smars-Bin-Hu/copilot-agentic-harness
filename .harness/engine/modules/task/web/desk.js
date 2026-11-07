@@ -884,7 +884,7 @@
   function quiet() {
     if (desk.paused_since) return {title: t("desk.actions.paused"), hint: t("desk.actions.paused.hint")};
     const why = desk.waiting_why;
-    if (desk.waiting && (["stopped", "cancelled", "autorun", "tests", "run", "commit"].includes(why) || why.startsWith("go-"))) {
+    if (desk.waiting && (["stopped", "cancelled", "autorun", "tests", "run", "commit", "asking"].includes(why) || why.startsWith("go-"))) {
       const handed = desk.handoff || {};
       const form = served() && (why === "tests" || why === "run");  // the page has the form for the results: no message to teach (the form says it)
       return {title: desk.waiting.charAt(0).toUpperCase() + desk.waiting.slice(1), hint: t("desk.wait." + why + (form ? ".form" : ""), {env: handed.env || "", what: handed.detail || "", branch: desk.branch || ""}),
@@ -984,6 +984,7 @@
 
   function waitNotes() {
     return [
+      desk.waiting_why === "asking" && (desk.outbox || []).length ? h("p", {class: "hint"}, t("desk.wait.asking")) : null,  // a held call's card is up; the question is the other thing the person owes
       desk.req_changed ? h("p", {class: "hint bad"}, t("desk.req.changed")) : null,
       desk.req_unconfirmed && desk.req_sections.length ? h("p", {class: "hint bad"}, t("desk.req.unfinished", {sections: desk.req_sections.join(", ")})) : null,
       desk.test && desk.test.reopen ? h("p", {class: "hint bad"}, t("desk.test.reopen", {dev: desk.test.reopen, envs: desk.test.failed.join(", ")})) : null,
@@ -1085,7 +1086,8 @@
     for (const [code, found] of approvedCalls) if (now - found.at > TELL_MINUTES * 60000) approvedCalls.delete(code);
     if (!approvedCalls.size || desk.past) return null;
     const codes = [...approvedCalls.keys()];
-    const can = served() && canAct();
+    const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);  // the agent waits for an answer in its chat: a message from here would answer the wrong thing (1.7.20)
+    const can = served() && canAct() && !asking;
     const tell = h("button", {type: "button", class: "act hot big", disabled: can ? null : "disabled"}, t("desk.outbox.tell"));
     const said = h("div", {class: "bad"});
     tell.addEventListener("click", () => {
@@ -1095,7 +1097,7 @@
     });
     return h("section", {class: "tk-need strong tk-call done"},
       h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good"), codes.map((code) => [" ", h("code", {class: "code-chip still"}, code)])),
-      h("p", {class: "sub"}, t("desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
+      h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
       h("div", {class: "tk-need-go tk-call-go"}, tell, said));
   }
   const SQL_WORDS = /\b(select|from|where|insert|into|update|set|delete|merge|exec|execute|create|alter|drop|truncate|table|values|join|on|group by|order by|having|union|with|begin|commit|rollback|tran|declare|if|else|while|top|as|and|or|not|null|is|in|exists|case|when|then|end|nocount)\b/gi;

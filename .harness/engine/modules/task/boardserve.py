@@ -185,7 +185,7 @@ RESTART_AFTER = 0.3  # seconds for the answer to reach the page
 RESTART_CODE = "HARNESS_BOARD_RESTART"  # the pairing code of the next process: in its environment, never on disk
 
 
-CHAT_STILL = ("idle", "error")  # VS Code says the chat runs no turn: it waits for the person, or its last turn failed
+CHAT_STILL = ("idle", "error", "input")  # VS Code says the chat runs no turn: it waits for the person (`input`: a question or a command to allow, 1.7.20), or its last turn failed
 
 
 def trust_chat(row: Dict[str, Any]) -> bool:

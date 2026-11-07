@@ -689,3 +689,31 @@ class LinkedItems(TaskCase):
         tasklife.link(self.root, NAME, "trk:42", True)
         chip = [item for item in taskdesk.allow_view(self.root, self.data())["envs"] if item["env"] == "links"]
         self.assertEqual((len(chip), chip[0]["open"], chip[0]["systems"]), (1, False, ["board"]))
+
+
+class InstallFromZip(HarnessTestCase):
+    """1.7.21: a zip keeps no execute bit (the pack's programs get it back); a source that is not a pack, a bad zip and a path too long are one sentence each."""
+
+    def test_programs_in_bin_are_executable_after_a_zip_install_and_errors_are_sentences(self) -> None:
+        with tempfile.TemporaryDirectory() as holder:
+            folder = make(Path(holder) / "tracker")
+            (folder / "bin").mkdir()
+            (folder / "bin" / "tracker").write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
+            archive = Path(holder) / "tracker.zip"
+            with zipfile.ZipFile(archive, "w") as out:
+                for item in folder.rglob("*"):
+                    if item.is_file():
+                        out.write(item, item.relative_to(folder).as_posix())  # no mode kept
+            toolpacks.add(self.root, str(archive))
+            program = self.root / toolpacks.FOLDER / "tracker" / "bin" / "tracker"
+            if os.name != "nt":
+                self.assertTrue(os.access(program, os.X_OK))
+            empty = Path(holder) / "empty"
+            empty.mkdir()
+            junk = Path(holder) / "junk.zip"
+            junk.write_text("not a zip", encoding="utf-8")
+            for source, word in ((empty, "not a tool pack"), (junk, "not a zip"), (Path(holder) / ("x" * 400), "too long")):
+                with self.assertRaises(ToolpackError) as caught:
+                    toolpacks.add(self.root, str(source))
+                self.assertNotIn("Errno", str(caught.exception))
+                self.assertNotIn("Traceback", str(caught.exception))

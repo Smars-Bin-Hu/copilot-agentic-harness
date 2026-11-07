@@ -26,6 +26,7 @@ import re
 import shutil
 import tempfile
 import time
+import os
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
@@ -69,6 +70,8 @@ def _numbers(version: str) -> tuple:
 def manifest(folder: Path) -> Dict[str, Any]:
     try:
         found = json.loads((folder / MANIFEST).read_text(encoding="utf-8-sig"))
+    except FileNotFoundError:
+        raise ToolpackError(say("toolpack.not_a_pack", folder=folder.name or str(folder))) from None
     except (OSError, ValueError) as error:
         raise ToolpackError(say("toolpack.manifest.bad", folder=folder.name, error=error)) from None
     if not isinstance(found, dict):
@@ -286,13 +289,39 @@ def clean_path(raw: Any) -> str:
     return str(raw or "").strip().strip("\"'").strip()
 
 
+def _exists(source: Path, raw: str) -> bool:
+    """Does the path exist? A path too long for the system is one sentence (`toolpack.path.long`), not an exception (1.7.21)."""
+    try:
+        return source.exists()
+    except OSError as error:
+        if getattr(error, "errno", None) in (36, 63) or getattr(error, "winerror", None) == 206:
+            raise ToolpackError(say("toolpack.path.long")) from None
+        raise ToolpackError(say("toolpack.source.none", source=raw)) from None
+
+
+def _unpack_zip(source: Path, into: Path) -> Path:
+    try:
+        return _unpack(source, into)
+    except zipfile.BadZipFile:
+        raise ToolpackError(say("toolpack.zip.bad", source=source.name)) from None
+
+
+def _executable(folder: Path) -> None:
+    """A zip does not keep the execute bit: the programs in a tool pack's `bin/` get it back (1.7.21)."""
+    if os.name == "nt" or not (folder / "bin").is_dir():
+        return
+    for item in (folder / "bin").rglob("*"):
+        if item.is_file() and not item.is_symlink():
+            item.chmod(item.stat().st_mode | 0o111)
+
+
 def installed_against(root: Path, raw: str) -> Dict[str, Any]:
     """The pack in this folder or zip against the one installed under its name: {name, version, installed}; `installed` is empty when none is."""
     source = Path(clean_path(raw)).expanduser()
-    if not source.exists():
+    if not _exists(source, raw):
         raise ToolpackError(say("toolpack.source.none", source=raw))
     with tempfile.TemporaryDirectory() as holder:
-        folder = _unpack(source, Path(holder)) if source.is_file() else source
+        folder = _unpack_zip(source, Path(holder)) if source.is_file() else source
         found = manifest(folder)
         name = str(found.get("name") or "")
         have = ledger(root).get(name) if NAME.match(name) and (root / FOLDER / name).exists() else None
@@ -303,10 +332,10 @@ def add(root: Path, raw: str, origin: str = "", replace: bool = False) -> Dict[s
     """Install a tool pack from a folder or a zip. One installed under the same name is replaced only with `replace` (a newer version, or the company's)."""
     raw = clean_path(raw)
     source = Path(raw).expanduser()
-    if not source.exists():
+    if not _exists(source, raw):
         raise ToolpackError(say("toolpack.source.none", source=raw))
     with tempfile.TemporaryDirectory() as holder:
-        folder = _unpack(source, Path(holder)) if source.is_file() else source
+        folder = _unpack_zip(source, Path(holder)) if source.is_file() else source
         found = problems(root, folder)
         if found:
             raise ToolpackError(say("toolpack.refused", problems="; ".join(found)))
@@ -325,6 +354,8 @@ def add(root: Path, raw: str, origin: str = "", replace: bool = False) -> Dict[s
         if target.exists():
             shutil.rmtree(target)
         shutil.copytree(folder, target, ignore=shutil.ignore_patterns(".git", "__pycache__", ".DS_Store"))
+        if source.is_file():
+            _executable(target)
         for skill in skills:
             place = root / SKILLS_DIR / skill.name
             if place.exists():

@@ -3120,5 +3120,8 @@
   "gate.external.unseen": "This command line runs a program the gate cannot read the name of (a variable it cannot expand, or a command inside a string), so it is held: it may reach an outside system. Write each command out in plain words, with the program name in front, one at a time. Command: {call}",
   "reach.vscode_env": "VS Code was started without this computer's settings (tool folders, CA bundle). Quit VS Code completely, then open it again with Open VS Code on the board.",
   "reach.vscode_env.context": "This VS Code was started without the settings of this computer ({missing}). Commands of the tools may fail here: 'command not found', or a certificate error. When one does, tell the user: quit VS Code completely, then open it again with Open VS Code on the task board. Do not try to work around it.",
-  "serve.open.running_env": "VS Code is already running, and a VS Code that is running cannot get the settings of this computer (tool folders, CA bundle). Quit VS Code completely first, then press Open VS Code again."
+  "serve.open.running_env": "VS Code is already running, and a VS Code that is running cannot get the settings of this computer (tool folders, CA bundle). Quit VS Code completely first, then press Open VS Code again.",
+  "toolpack.not_a_pack": "{folder} is not a tool pack: there is no toolpack.json in it.",
+  "toolpack.zip.bad": "{source} is not a zip file that can be read.",
+  "toolpack.path.long": "That path is too long for this computer. Move the folder or the zip to a shorter path and try again."
 }

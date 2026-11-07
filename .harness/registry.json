@@ -79,7 +79,8 @@
       ".harness/tests/test_kbextract.py",
       ".harness/tests/test_reinstall.py",
       ".harness/.env.example",
-      ".harness/policies/connections.json"
+      ".harness/policies/connections.json",
+      ".harness/policies/computer.json"
     ]
   },
   "modules": {
@@ -228,6 +229,7 @@
         ".workspace/README.md",
         ".harness/tests/test_reach.py",
         ".harness/tests/test_connections.py",
+        ".harness/tests/test_computer_recipe.py",
         ".harness/tests/test_launchenv.py",
         ".harness/tests/test_ticketflow.py",
         ".harness/tests/test_toolpacks.py"

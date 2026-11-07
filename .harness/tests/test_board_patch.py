@@ -560,7 +560,7 @@ class WalkThroughTests(unittest.TestCase):
     def test_the_task_settings_bar_opens_an_environment_with_one_click_and_the_row_marks_it(self) -> None:
         """1.7.6: the chips post `task allow` with no code; the line under the name has the open mark; both languages have the words."""
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
-        self.assertIn('SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: item.open ? "off" : "on", step: "act"})', desk)
+        self.assertIn('SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: chip.getAttribute("aria-pressed") === "true" ? "off" : "on", step: "act"})', desk)
         self.assertIn('disabled: listed && can ? null : "disabled"', desk)  # no system reaches it, or the board cannot act: not clickable
         self.assertIn('class: "chip env never"', desk)  # prod
         self.assertIn('ui.envs = slot("span", "tk-rv tk-env");', desk)  # a pill of the head, beside Independent review, not a field of the message bar

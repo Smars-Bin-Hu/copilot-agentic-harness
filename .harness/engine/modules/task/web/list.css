@@ -1,0 +1,36 @@
+/* The board's list: the columns give way as the box narrows, and what they held is written under the task name (board.js `meta`), so nothing is cut without a trace.
+   The tiers follow the width of the list's own box (not the window): all columns; then no bar / checks / credits / prompts; then no waited / time; then one block per task. */
+.board-list>.scroll{container-type:inline-size;overflow-x:auto}
+.board-list>.scroll.over:not(.end){-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 36px),transparent)}
+.board-list table{width:100%}
+.board-list td.name{width:100%;max-width:0;overflow:hidden}
+.board-list td.name .name-line{min-width:0}
+.board-list td.name .name-line>a,.board-list td.name .name-line>span:not([class]){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-meta{display:none;margin-top:3px;font-size:12px;color:var(--soft);white-space:normal}.row-meta span{display:none;margin-right:14px}.row-meta b{font-weight:550;color:var(--ink);font-variant-numeric:tabular-nums}
+@container (max-width:980px){
+  .col-bar,.col-reviews,.col-aiu,.col-prompts{display:none}
+  .row-meta{display:block}.row-meta .m-reviews,.row-meta .m-aiu,.row-meta .m-prompts{display:inline}
+}
+@container (max-width:740px){
+  .col-waited,.col-time{display:none}
+  .row-meta .m-waited,.row-meta .m-time{display:inline}
+}
+@container (max-width:600px){
+  .board-list table,.board-list tbody{display:block}
+  .board-list tr{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"tick name name" "tick state acts";align-items:center;column-gap:8px;padding:8px 6px;border-bottom:1px solid var(--line)}
+  .board-list tr:last-child{border-bottom:0}
+  .board-list .st-slot:empty{display:none}.board-list td.name .st-row{height:auto;min-height:0;margin-top:0}
+  .board-list td,.board-list th{display:block;border:0;padding:2px 0}
+  .board-list td.tick,.board-list th.tick{grid-area:tick}.board-list td.tick:empty,.board-list th.tick:empty{display:none}
+  .board-list td.name{grid-area:name;width:auto;max-width:none;padding-left:0}
+  .board-list td.state{grid-area:state;min-width:0}
+  .board-list td.acts{grid-area:acts;justify-self:end}
+  .board-list td.checks,.board-list td.col-bar,.board-list td.col-reviews,.board-list td.col-aiu,.board-list td.col-prompts,.board-list td.col-waited,.board-list td.col-time{display:none}
+  .board-list tr:not(:first-child):hover td{background:none}
+  .board-list tr:not(:first-child):hover{background:var(--hover)}
+  .board-list tr:has(.tag.hot){background:var(--hot-row);box-shadow:inset 2px 0 0 var(--hot-dot)}.board-list tr:has(.tag.hot) td{background:none;box-shadow:none}
+  .board-list tr:has(.tag.hot):hover{background:var(--hot-row-h)}
+  /* the head becomes a row of the sort labels, one line or two */
+  .board-list tr:first-child{display:flex;flex-wrap:wrap;gap:0 14px;padding:8px 6px 6px}
+  .board-list tr:first-child th{padding:2px 0;flex:none}.board-list tr:first-child th.col-acts,.board-list tr:first-child th.col-bar{display:none}.board-list tr:first-child th.num{text-align:left}
+}

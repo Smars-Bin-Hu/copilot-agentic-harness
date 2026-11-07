@@ -95,7 +95,7 @@ def build(skeleton: str, scripts: List[str], title: str, data: Dict[str, Any], r
         "<!--TITLE-->": escape(title),
         "<!--NOSCRIPT-->": escape(say("report.noscript")),
         "/*THEME*/": read("theme.js"),
-        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *(["dock.css", "kbatlas.css"] if "dock.js" in scripts else []), *(["setup.css"] if "setup.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else [])]),
+        "/*CSS*/": "\n".join(read(name) for name in [LOOK[0], *(styles or LOOK[1:]), *FINISH, *([STATUS_CSS] if "status.js" in scripts else []), *([SHELL_CSS] if "shell.js" in scripts else []), *([ENTER_CSS] if "enter.js" in scripts else []), *([DESK_CSS] if "desk.js" in scripts else []), *([LIVE_CSS] if "live.js" in scripts else []), *([RUN_CSS] if "run.js" in scripts else []), *(["dock.css", "kbatlas.css"] if "dock.js" in scripts else []), *(["setup.css"] if "setup.js" in scripts else []), *([ROUNDS_CSS] if "rounds.js" in scripts else []), *([SPACE_CSS] if "space.js" in scripts else []), *([WALL_CSS] if "wall.js" in scripts else []), *(["list.css"] if "board.js" in scripts else [])]),
         "<!--DATA-->": as_json(data),
         "/*JS*/": "\n".join(read(name) for name in scripts),
     }

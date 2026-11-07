@@ -165,13 +165,14 @@ def body_of(args: str, rules: Optional[List[Dict[str, Any]]], folder: Optional[P
 
 
 def _from_file(folder: Optional[Path], value: str, root: Optional[Path] = None) -> Dict[str, Any]:
-    """The file a call names: a path as written is looked for beside the task folder and, when it is relative, from the repository root too (an agent's terminal starts there; 1.7.21).
-    Only a file inside the task folder is shown."""
+    """The file a call names, found as the command finds it: a relative path from the repository root (an agent's terminal starts there; 1.7.23: the task folder is no longer tried
+    first, a bare `result.md` in the task folder is not found by the program), a full path as it is. With no root given the task folder is the base. Only a file inside the task folder
+    is shown."""
     gone = {"text": "", "from": "file", "path": value[:200], "missing": True, "lines": 0, "cut": False}
     if folder is None or not value:
         return gone
     named = Path(value).expanduser()
-    for base in ([folder] + ([root] if root is not None and not named.is_absolute() else [])):
+    for base in ([root] if root is not None and not named.is_absolute() else [folder]):
         try:
             path = (base / named).resolve()
             if folder.resolve() in path.parents and path.is_file():

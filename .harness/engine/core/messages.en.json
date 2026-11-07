@@ -3127,7 +3127,7 @@
   "desk.outbox.body": "The text that will be written",
   "desk.outbox.body.file": "from {path}",
   "desk.outbox.body.lines": "{n} lines",
-  "desk.outbox.body.missing": "The file {path} is not in the task folder, so the text cannot be shown. Dismiss this call and ask the agent to write the file first, or read the raw command.",
+  "desk.outbox.body.missing": "The file {path} was not found from the repository root (where the command runs) inside the task folder, so the text cannot be shown, and the command will fail. Dismiss this call and ask the agent to write the file first and name it with its path from the repository root, or read the raw command.",
   "desk.outbox.body.cut": "Only the first part is shown here; the file is longer.",
   "task.waiting.asking": "waits for your answer",
   "desk.wait.asking": "The agent asked you a question and waits for your answer in its chat in VS Code. Answer it there. A held call can be approved or dismissed meanwhile; that does not disturb the agent.",

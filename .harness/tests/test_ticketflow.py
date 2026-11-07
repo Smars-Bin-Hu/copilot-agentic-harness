@@ -95,9 +95,16 @@ class HeldCallCard(TaskCase):
         return taskdesk.outbox_view(self.root, f"{tasks_dir()}/job1")[-1]  # the newest
 
     def test_a_comment_from_a_file_shows_the_sentence_and_the_file(self) -> None:
-        card = self.held("demotracker --project DEMO comment 7 --file notes.md")
+        relative = self.task.relative_to(self.root).as_posix() + "/notes.md"
+        card = self.held(f"demotracker --project DEMO comment 7 --file {relative}")
         self.assertEqual(card["say"], "Add a comment to ticket 7")
-        self.assertEqual((card["body"]["from"], card["body"]["path"], card["body"]["lines"], card["body"]["text"]), ("file", "notes.md", 2, "Checked the load.\nAll good.\n"))
+        self.assertEqual((card["body"]["from"], card["body"]["lines"], card["body"]["text"]), ("file", 2, "Checked the load.\nAll good.\n"))
+
+    def test_a_bare_file_name_is_found_from_the_repository_root_as_the_program_finds_it(self) -> None:
+        """1.7.23 (R2 #2): `--file notes.md` showed the task's notes.md as the text, and the program, run from the repository root, found no such file."""
+        card = self.held("demotracker --project DEMO comment 7 --file notes.md")
+        self.assertTrue(card["body"]["missing"])
+        self.assertEqual(card["body"]["text"], "")
 
     def test_a_comment_as_text_and_a_comment_after_the_id(self) -> None:
         card = self.held('demotracker --project DEMO comment 7 --text "PR \\"12\\" merged"')
@@ -121,7 +128,7 @@ class HeldCallCard(TaskCase):
         from modules.task import cmdview
 
         (self.task / "big.md").write_text("line\n" * 5000, encoding="utf-8")
-        big = self.held("demotracker --project DEMO comment 7 --file big.md")["body"]
+        big = self.held("demotracker --project DEMO comment 7 --file " + self.task.relative_to(self.root).as_posix() + "/big.md")["body"]
         self.assertEqual((len(big["text"]), big["lines"], big["cut"]), (cmdview.BODY_CHARS, 5000, True))
         self.assertEqual(self.held("demotracker --project DEMO set-state 9 Done")["say"], "Set ticket 9 to Done")
 

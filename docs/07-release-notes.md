@@ -10,6 +10,23 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.22 (2026-11-07)
+
+### Fixed
+
+- **Open to the agent, linked items** can be closed again with a second click: the pop stays open after a click, and the click reads the chip as it is now.
+- **A held call's time** ("asked at") is in your local time, like the rest of the page.
+- **Long connection names** shrink with an ellipsis in Tools, Connections (the full name on hover) and no longer push the tag and the state out of the window. On a narrow window the Search pill no longer covers the task head's buttons.
+- **The Enter screen's outside systems line** places the names one by one: a name that does not fit is skipped and a shorter one after it can still go in; wide windows give the line more room. The names and addresses in its hover table are not split in the middle on a narrow window. A long list no longer covers the copyright line.
+- **No Confirm button while `REQ.md` still has template text**, in any tier, and the Requirement tab no longer says "the button above".
+- **A ticket of a type no installed tool pack gives** (`jira:99`) is refused on the task page and in New task, with the types there are; a too long id is told as too long.
+- **Chinese pages**: the held card's "what" and fact words, the first line the board prints (button names), and the MCP choices (**Allow MCP** / **Do not allow MCP**) are in the page's language.
+- **Finish setup** reads the states below it again, so "Company content: Not found yet" no longer stays after the copy. The orange banner of the board says the copy can already work and lacks your team's content, so it does not clash with the Ready of the Enter screen.
+- **Forget** of a connection of your own asks once more (it removes the connection and its identity for good).
+- **Opening View on a held call** fills the code in the card and keeps it when the card is drawn again; Approve is then one click.
+- **Live** shows a call held in the outbox as held (waits for you), not as "Run Shell Command failed".
+- **The board list** no longer shows a turning mark on a task that waits for you.
+
 ## 1.7.20 (2026-11-07)
 
 ### Added

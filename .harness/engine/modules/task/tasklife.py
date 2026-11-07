@@ -340,7 +340,7 @@ def ask_text(ask: Dict[str, Any]) -> str:
         return messages.text("task.waiting.confirm", what=" ".join(str(ask.get("command") or ask.get("tool") or "").split())[:WAIT_WHAT])
     if not ask.get("supported"):
         return messages.text("task.waiting.question-vs")
-    return messages.text("task.waiting.question", what=" ".join(str(ask.get("message") or "").split())[:WAIT_WHAT])
+    return messages.text("task.waiting.asking")  # the same words as a question the agent put with its ask tool; the question itself is in `waiting_tip` (1.7.21)
 
 
 def apply_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], data: Optional[Dict[str, Any]] = None) -> bool:
@@ -349,7 +349,7 @@ def apply_ask(row: Dict[str, Any], ask: Optional[Dict[str, Any]], data: Optional
     if not ask or row.get("status") != "open" or row.get("paused_since"):
         return False
     waited = waited_since(data or {}, str(ask.get("since") or ""))
-    row.update({"waiting": ask_text(ask), "waiting_why": "confirm" if ask.get("kind") == "confirm" else "question", "waiting_since": ask.get("since", ""), "waiting_from": wait_clock(data or {}, str(ask.get("since") or "")),
+    row.update({"waiting": ask_text(ask), "waiting_why": "confirm" if ask.get("kind") == "confirm" else "question", "waiting_tip": " ".join(str(ask.get("message") or ask.get("command") or "").split())[:600], "waiting_since": ask.get("since", ""), "waiting_from": wait_clock(data or {}, str(ask.get("since") or "")),
                 "waited_s": round(waited) if waited is not None else None, "state": "waiting", "active": False})
     return True
 

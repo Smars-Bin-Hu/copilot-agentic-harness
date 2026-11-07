@@ -2586,6 +2586,7 @@
   "board.enter.tip.systems.unknown": "还没检查：在 VS Code 里开一个 chat，它的第一步就会用 VS Code 的身份检查每个环境。",
   "board.enter.launch": "用我的身份启动 VS Code",
   "board.enter.launched": "已启动：在它的窗口里输入账户和密码，然后关掉现在这个 VS Code",
+  "board.enter.m.systems.vscodeenv": "VS Code 启动时没带这台电脑的设置（工具目录、CA bundle）。先完全退出 VS Code，再点这里的“打开 VS Code”。",
   "board.enter.m.systems.launch": "VS Code 需要你的账户才能连这些服务器。",
   "serve.launch.none": ".harness/launch/ 里没有启动脚本（它随公司包一起来：harness company sync）。",
   "board.enter.tip.systems.none": "还没有列出 agent 可以访问的服务器。公司包里列出它们（知识库里的 company/tools/systems.json，然后 harness company sync）；见 docs/03-configure.md 的 Outside systems。",

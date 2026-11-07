@@ -209,7 +209,7 @@ const SERVERS = (function () {
       ask("plan", {chosen, primary}).then((plan) => {
         for (const row of rows) {
           const node = marks[row.alias];
-          if (!picked.includes(row.alias)) { node.replaceChildren(); continue; }
+          if (!picked.includes(row.alias) || found0.env_wrong) { node.replaceChildren(); continue; }  // a VS Code started without this computer's settings holds none of them: "in the window" would be false (1.7.24)
           const wrapped = plan.wrap.includes(row.alias);
           node.replaceChildren(h("span", {class: "sv-how " + (wrapped ? "wrap" : "direct"), title: wrapped ? t("connections.how.wrap.tip", {alias: row.alias}) : t("connections.how.direct.tip")}, wrapped ? t("connections.how.wrap") : t("connections.how.direct")));
         }

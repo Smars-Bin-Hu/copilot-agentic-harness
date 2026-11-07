@@ -212,7 +212,8 @@ class Ready:
                     grouped.setdefault(reason(line), []).append(name(line))
                 overview = "\n".join(f"{label}: {env_marks(lines_)}" for label, _state, lines_ in units) if len(servers) > 1 else ""
                 out = {"state": "note", "why": "unreached", "detail": detail, "tip": "\n".join(([overview] if overview else []) + [short(f"{', '.join(names)}: {text}") for text, names in grouped.items()]),
-                                    "launch": any(line["state"] == reach.DENIED for line in bad) and reach.launch_script(self.root) is not None, "identities": saved}  # only a refused identity is helped by starting VS Code again
+                                    "launch": any(line["state"] == reach.DENIED for line in bad) and reach.launch_script(self.root) is not None, "identities": saved,
+                                    "env_wrong": any(line.get("why") == "vscode-env" for line in bad)}  # VS Code was started without the settings of this computer (1.7.24): the line says so in words, not a button for accounts  # only a refused identity is helped by starting VS Code again
             elif any(line["state"] == reach.UNKNOWN for line in raw):
                 out = {"state": "note", "why": "unknown", "detail": detail, "check": bool(conn_core.probe_keys(self.root))}  # never checked: a Check button when the board can check it itself; no word on an account (1.7.19)
             else:

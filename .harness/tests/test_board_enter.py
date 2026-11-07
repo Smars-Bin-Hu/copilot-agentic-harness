@@ -241,6 +241,19 @@ class ReadinessTests(TaskCase):
         got = board()
         self.assertEqual((got["state"], got["why"], got["detail"]), ("note", "unreached", "DEV \u2713 \u00b7 IST \u2717"))
         self.assertIn("start-vscode.cmd", got["tip"])
+        self.assertFalse(got["env_wrong"])
+        from core import launchenv
+
+        seen = self.root / launchenv.SEEN  # a hook found VS Code started without the settings of this computer (1.7.24): the line says so, apart from accounts
+        seen.parent.mkdir(parents=True, exist_ok=True)
+        seen.write_text(json.dumps({"ok": False, "missing": ["PATH"]}), encoding="utf-8")
+        got = board()
+        self.assertEqual((got["why"], got["env_wrong"]), ("unreached", True))
+        from modules.task import boardserve
+
+        self.assertTrue(boardserve.servers_view(self.root, True)["env_wrong"])
+        seen.write_text(json.dumps({"ok": True, "missing": []}), encoding="utf-8")
+        self.assertFalse(boardserve.servers_view(self.root, True)["env_wrong"])
 
 
 class StalledCommandTests(TaskCase):

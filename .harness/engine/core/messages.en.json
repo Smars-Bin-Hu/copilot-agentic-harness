@@ -2586,6 +2586,7 @@
   "board.enter.tip.systems.unknown": "Not checked yet: the first step of a chat in VS Code checks each environment, in VS Code's identity.",
   "board.enter.launch": "Start VS Code with my identity",
   "board.enter.launched": "Started: type your account and password in its window, then close this VS Code",
+  "board.enter.m.systems.vscodeenv": "VS Code was started without this computer's settings (tool folders, CA bundle). Quit VS Code completely, then press Open VS Code here.",
   "board.enter.m.systems.launch": "VS Code needs your account to reach these servers.",
   "serve.launch.none": "There is no launch script in .harness/launch/ (it comes with the company pack: harness company sync).",
   "board.enter.tip.systems.none": "No server is listed for the agent. Your company's pack lists them (company/tools/systems.json in the knowledge base, then harness company sync); see Outside systems in docs/03-configure.md.",

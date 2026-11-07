@@ -346,7 +346,8 @@
       button = id === "vscode" && Boolean(c.open) ? "open" : false;
     }
     if (state === "note" && (c.why === "error" || c.why === "problem")) message = c.why === "error" ? t("board.enter.m.error", vals) : t("board.enter.m.repos.problem", vals);
-    if (id === "systems" && c.why === "unreached" && c.identities && typeof SERVERS !== "undefined") { message = t("board.enter.m.systems.launch"); button = "identities"; }  // the identities kept by Servers (1.7.10)
+    if (id === "systems" && c.why === "unreached" && c.env_wrong) { message = t("board.enter.m.systems.vscodeenv"); button = "open"; }  // the real cause, in words (1.7.24): quit VS Code, open it from here; accounts are not the matter
+    else if (id === "systems" && c.why === "unreached" && c.identities && typeof SERVERS !== "undefined") { message = t("board.enter.m.systems.launch"); button = "identities"; }  // the identities kept by Servers (1.7.10)
     else if (id === "systems" && c.launch && c.why === "unreached") { message = t("board.enter.m.systems.launch"); button = "launch"; }  // Windows: the company's launch script (1.7.9)
     else if (id === "systems" && c.why === "unknown") { message = t(c.checking ? "board.enter.m.systems.checking" : c.check ? "board.enter.m.systems.notchecked" : "board.enter.m.systems.chat"); button = c.checking || !c.check ? false : "check"; }  // never checked: the board checks it itself (1.7.19)
     const tip = id === "systems" && c.names && c.names.length ? "" : c.tip ? t("board.enter.tip." + id + "." + c.why, vals) : id === "systems" && c.why === "unknown" ? t("board.enter.tip.systems.unknown") : "";  // the long words of a short line: on hover (1.7.9)

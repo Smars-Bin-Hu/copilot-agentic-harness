@@ -65,18 +65,8 @@
   const chk = h("div", {class: "en-chk", "aria-live": "polite"}, body, legal);
   const go = h("button", {type: "button", class: "en-go", disabled: "disabled"}, h("span", null, t("board.enter.checking")), h("kbd", null, "↵"));
   const hint = h("div", {class: "en-cap en-hint"}, t("board.enter.hint"));
-  // The row of round buttons at the bottom right (1.7.32), left of the gear of shell.js (which is the first of the row: the settings): the book opens the knowledge base window, the list opens its Company tab (what the agent can do).
-  // Same look as the dock's buttons; the name is on hover only. dock.js loads after this file, so DOCK is looked up when a button is pressed.
-  function tools() {
-    const NS = "http://www.w3.org/2000/svg";
-    const icon = (path) => { const svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true"); for (const d of path) { const p = document.createElementNS(NS, "path"); p.setAttribute("d", d); svg.append(p); } return svg; };
-    const one = (key, path, run) => { const b = h("button", {type: "button", class: "en-tool", title: t("board.enter.tool." + key), "aria-label": t("board.enter.tool." + key)}, icon(path)); b.addEventListener("click", run); return b; };
-    return h("div", {class: "en-tools"},
-      one("can", ["M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"], () => DOCK.kbWindow("company")),
-      one("kb", ["M12 6.5C10.2 5 7.5 4.5 3.5 4.5v14c4 0 6.7.5 8.5 2 1.8-1.5 4.5-2 8.5-2v-14c-4 0-6.7.5-8.5 2z", "M12 6.5v14"], () => DOCK.kbWindow()));
-  }
   const enter = h("div", {id: "enter", class: isTask ? "pending" : "", role: "dialog", tabindex: "-1", "aria-label": t("board.enter.label")},
-    h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, chk, go, hint), tools());
+    h("div", {class: "en-ground"}), h("div", {class: "en-top"}, name ? hi : null), h("div", {class: "en-stage"}, svg, ref), canvas, bot, say, h("div", {class: "en-foot"}, chk, go, hint));
   document.body.append(enter);
   const stage = enter.querySelector(".en-stage");
   let open = true;
@@ -594,10 +584,10 @@
   document.addEventListener("keydown", (event) => {
     if (!open || !shown || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.isComposing) return;
     if (typeof SHELL !== "undefined" && SHELL.isOpen()) return;  // the palette or the settings own the keys
-    if (document.body.classList.contains("has-dialog")) return;  // a window opened from the row of buttons owns the keys (1.7.32)
+    if (document.body.classList.contains("has-dialog")) return;  // a window opened from the dock over this screen owns the keys (1.7.32)
     if (["Shift", "Control", "Alt", "Meta", "Tab", "Escape", "CapsLock", "Dead", "Process"].includes(event.key) || /^F\d+$/.test(event.key)) return;
     const target = event.target;
-    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[data-open],[data-launch],[data-identities],.en-tool")) return;
+    if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[data-open],[data-launch],[data-identities],.dock-btn,.dock-panel")) return;
     if (tryEnter()) event.preventDefault();  // any key goes in, but only when everything is ready
   });
 

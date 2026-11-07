@@ -15,7 +15,7 @@ To see which version you have: `harness --version`.
 ### Added
 
 - **The Company tab** in the knowledge base window, after Map: what this company's agent can do, read from the files in place, with nothing new to set up. Company (name, skill prefix, knowledge base version, and how many company files are not copied yet); Tools (one block for each active tool pack: its program and version, how many reads, each write and each run in words, the connections of its types with a status dot and the environment, who and the reason on hover, and what is missing: no connection, never tested, program not found); Skills in three groups by name (those that come with the harness, the company's SOPs, the SOPs of a tool pack), each with one line, and a mark on a skill that is in the knowledge base or the pack but not copied to `.github/skills/`; Standards and instructions; Domains with a link to Map.
-- **The Enter screen** has a row of small labelled buttons at the bottom right: Settings, Knowledge base, and What it can do (the Company tab).
+- **The Enter screen** now shows the board's dock (the question mark, Knowledge base, Settings) at the bottom right, as on a task page, without the Home button. The knowledge base window opens from there, and the Company tab is in it.
 - **The skill list** behind the question mark groups your company's skills in two: the company's SOPs and the SOPs of a tool pack (by the name rule `<prefix>-<name>` and `<prefix>-<pack>-<name>`).
 
 ## 1.7.29 (2026-11-07)

@@ -1,6 +1,6 @@
 /* The buttons at the bottom right (dock.js). The gear is at 20px; one step up from it each. Not on the Enter screen. */
 .dock-btn{position:fixed;right:20px;bottom:72px;z-index:150;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;padding:0;border:1px solid var(--line2);background:var(--card);color:var(--soft);font:600 17px var(--sans);cursor:pointer}.dock-btn:hover{color:var(--ink)}
-html.en-open .dock-btn,html.en-open .dock-panel{display:none}
+html.en-open .dock-home{display:none}  /* the Enter screen is where the house goes (1.7.32) */
 .dock-panel{position:fixed;right:76px;bottom:20px;z-index:161;box-sizing:border-box;width:min(380px,calc(100vw - 92px));padding:14px;border:1px solid var(--line2);border-radius:14px;background:var(--card);box-shadow:var(--shadow)}.dock-panel[hidden]{display:none}.dock-panel h3{margin:0 0 10px;font-size:14px}
 .dock-line{display:flex;gap:8px;margin-top:8px;min-width:0}.dock-panel .su-in{flex:1;box-sizing:border-box;min-width:0;padding:6px 9px;border:1px solid var(--line2);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
 @media (max-width:480px){.dock-panel{right:8px;left:8px;width:auto;bottom:min(280px,calc(100vh - 240px))}}

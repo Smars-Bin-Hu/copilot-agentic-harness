@@ -156,10 +156,4 @@ html.lite #en-fx{display:none}
  .en-pop td,.en-pop tr.first td{display:block;padding:0;border:0}.en-pop .sy-n{order:1;max-width:100%}.en-pop .sy-e{order:2}.en-pop .sy-s{order:3}.en-pop .sy-r{order:5;flex:1 0 100%;min-width:0;max-width:none}.en-pop .sy-t{order:6}.en-pop .sy-p{order:7}.en-pop td:empty{display:none}
  .en-pop-in{overflow-x:hidden}.en-pop .sy-n,.en-pop .sy-r{overflow-wrap:break-word;word-break:normal}.en-pop .sy-n{min-width:8ch}}
 
-/* The row of round buttons at the bottom right (1.7.32): the look of the dock's buttons, left of the gear of shell.css (the first of the row). The hint above is lifted clear of it. */
-.en-tools{position:absolute;right:76px;bottom:20px;z-index:4;display:flex;gap:12px}
-.en-tool{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;padding:0;border:1px solid var(--line2);background:var(--card);color:var(--soft);cursor:pointer;box-shadow:var(--shadow)}
-.en-tool svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
-.en-tool:hover,.en-tool:focus-visible{color:var(--ink);border-color:var(--ink)}
-@media (min-width:1101px){.en-hint{margin-bottom:58px}}
-@media (max-width:600px){.en-hint{letter-spacing:.1em;font-size:10.5px}}
+@media (max-width:900px){.en-hint{justify-self:start;text-align:left}}  /* the dock lies in a row along the bottom edge: the hint keeps the left (1.7.32) */

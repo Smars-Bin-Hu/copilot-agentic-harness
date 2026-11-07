@@ -69,7 +69,7 @@ The skills behind the steps: `generic-kb-toolkit-design`, `/generic-kb-toolkit-b
 
 ## See how the domains hang together
 
-Open the knowledge base window (the book at the bottom right of the board, or the Knowledge base button on the Enter screen) and press **Map**. The **Company** tab beside it lists what the company part of the knowledge base gives the agent (tools, skills, standards). It shows which domain uses which. What others build on stands left, and what comes last stands right. An arrow means "uses".
+Open the knowledge base window (the book at the bottom right of the board, or the same button on the Enter screen) and press **Map**. The **Company** tab beside it lists what the company part of the knowledge base gives the agent (tools, skills, standards). It shows which domain uses which. What others build on stands left, and what comes last stands right. An arrow means "uses".
 
 - **Who uses what**: click a domain to see what it uses and what uses it. Click a row to see the objects behind it.
 - **If this changes**: click a domain to see which domains a change can reach, step by step.

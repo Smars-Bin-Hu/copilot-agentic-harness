@@ -97,7 +97,7 @@ def rewrite(root: Path, code: str, session_id: str, command: str, limit_minutes:
         entries = [item for item in _read(root, file) if _alive(item, limit, now)]
         for item in entries:
             if item.get("code") == code and item.get("state") == "pending":
-                item.update({**(extra or {}), "session_id": session_id, "command": collapse(command)})
+                item.update({**(extra or {}), "session_id": session_id, "command": collapse(command), "created_at": utc_now()})  # "asked at" shows the new time, as the draft does; "at" (the time limit) stays
                 _write(root, entries, file)
                 return True
     return False

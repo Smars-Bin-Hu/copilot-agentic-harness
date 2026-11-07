@@ -125,7 +125,8 @@ def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optiona
             if cmdview.say_of(part, system.get("say")):
                 args, said = part, cmdview.say_of(part, system.get("say"))
                 break
-    return {"say": said, "body": cmdview.body_of(args, system.get("body"), folder, root)}
+    writes = sum(1 for part in cmdview.all_args(command, programs) if cmdview.say_of(part, system.get("say")))  # a held line of several writes: the card says how many (1.7.29)
+    return {"say": said, "writes": writes, "body": cmdview.body_of(args, system.get("body"), folder, root)}
 
 
 def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:

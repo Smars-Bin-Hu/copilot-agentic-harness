@@ -226,4 +226,5 @@ html.lite .tk-call .pulse{animation:none}@media (prefers-reduced-motion:reduce){
 .tk-call-body.missing{padding:6px 10px}.tk-call-body.missing p{margin:0}
 .tk-raw{margin:0 0 8px;font-size:12.5px;min-width:0}.tk-raw summary{cursor:pointer;color:var(--soft)}.tk-raw pre{margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;min-width:0;max-height:8em;overflow:auto}
 .tk-need.strong.tk-call.done{background:var(--good-bg);border-color:var(--good-line);border-left-color:var(--good-dot)}  /* an approved call: the whole card is green, not orange with a green edge (1.7.28) */
+.tk-call-row{display:flex;align-items:baseline;gap:10px;margin:4px 0 2px}.tk-call-row .tk-call-say{margin:0;min-width:0}.tk-call-row .code-chip{flex:none}.tk-writes{margin-left:8px;font-size:12px;font-weight:600;color:var(--hot);white-space:nowrap}
 .tk-call.done .code-chip.still{background:var(--good-bg);color:var(--good)}

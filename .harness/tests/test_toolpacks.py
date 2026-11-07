@@ -676,9 +676,11 @@ class LinkedItems(TaskCase):
         waiting = outbox.pending_for(self.root, TASK)
         self.assertEqual(len(waiting), 1)
         code = waiting[0]["code"]
+        before = waiting[0]["created_at"]
         self.term(write)
         waiting = outbox.pending_for(self.root, TASK)
         self.assertEqual([(item["code"], item["command"]) for item in waiting], [(code, write)], "the same card, now the short command")
+        self.assertGreater(waiting[0]["created_at"], before, "asked at shows the new time (1.7.29)")
         self.assertTrue((self.root / outbox.draft_path(TASK, code, waiting[0]["system"])).exists())
         self.assertIn("create --title x", (self.root / outbox.draft_path(TASK, code, waiting[0]["system"])).read_text(encoding="utf-8").split("```")[1])
         self.term("echo a; tracker --org demo create --title y")  # another line: its own card
@@ -686,6 +688,9 @@ class LinkedItems(TaskCase):
         rules = [{"pattern": "^(?:--org\\s+\\S+\\s+)?create\\b", "text": "Create a new item"}]
         words = taskdesk.call_words("tracker --org demo get 1; echo ---; " + write, {"reach": {"cli": ["tracker"]}, "say": rules}, self.root / TASK, self.root)
         self.assertEqual(words["say"], "Create a new item")
+        self.assertEqual(words["writes"], 1)
+        two = taskdesk.call_words("tracker --org demo create --title a; tracker --org demo create --title b", {"reach": {"cli": ["tracker"]}, "say": rules}, self.root / TASK, self.root)
+        self.assertEqual(two["writes"], 2, "the card says how many writes (1.7.29)")
         self.assertEqual(cmdview.all_args("a x; echo ---; a y | b", ["a"]), ["x", "y"])
 
     def test_an_item_named_in_the_words_of_a_command_is_not_the_item_it_writes(self) -> None:

@@ -1627,6 +1627,7 @@
   "desk.outbox.same_as": "the approval is for this exact command only",
   "desk.outbox.as_written": "As written by the agent, one line:",
   "desk.outbox.script.note": "the file the command reads, {n} lines, as it is in the task now",
+  "desk.outbox.writes": "{n} writes",
   "desk.outbox.since": "asked at {at}",
   "desk.outbox.draft.tip": "The call is saved as a draft file in the task folder: {file}",
   "desk.outbox.asked": "Asked at {at}. It runs once after you approve it, in the same chat, within the time limit; a changed command needs a new approval. The code:",

@@ -1115,8 +1115,8 @@
         .then(() => { codes.forEach((code) => toldCodes.add(code)); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); tell.disabled = false; tell.textContent = t(all ? "desk.outbox.tell.again" : "desk.outbox.tell"); });
     });
     return h("section", {class: "tk-need strong tk-call done"},
-      h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good"), codes.map((code) => [" ", h("code", {class: "code-chip still"}, code)])),
-      codes.map((code) => { const title = titles.get(code) || (approvedCalls.get(code) || {}).title || ""; return title ? h("div", {class: "tk-call-say"}, title) : null; }),  // which call was approved (1.7.25)
+      h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good")),
+      codes.map((code) => { const title = titles.get(code) || (approvedCalls.get(code) || {}).title || ""; return h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, code), title ? h("span", {class: "tk-call-say"}, title) : null); }),  // each code stands in front of its own title (1.7.29)  // which call was approved (1.7.25)
       h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : all ? "desk.outbox.told" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
       h("div", {class: "tk-need-go tk-call-go"}, tell, said));
   }
@@ -1155,7 +1155,7 @@
   }
   // The card of a call whose type says what it does in words (1.7.20): the title is that sentence, and the text it writes stands in a block of its own (a file of the task, or the text as written).
   // The raw command is folded: ids, headers and long addresses are not on the face of the card.
-  const sayLine = (item) => (item.say ? h("div", {class: "tk-call-say"}, item.say) : null);
+  const sayLine = (item) => (item.say ? h("div", {class: "tk-call-say"}, item.say, item.writes > 1 ? h("span", {class: "tk-writes"}, t("desk.outbox.writes", {n: item.writes})) : null) : null);
   function bodyBlock(item) {
     const body = item.body;
     if (!body) return null;

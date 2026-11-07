@@ -1627,6 +1627,7 @@
   "desk.outbox.same_as": "批准只对这一条命令有效",
   "desk.outbox.as_written": "agent 写的原样，一行：",
   "desk.outbox.script.note": "命令要读的文件，{n} 行，任务里现在的内容",
+  "desk.outbox.writes": "{n} 个写",
   "desk.outbox.since": "{at} 提出",
   "desk.outbox.draft.tip": "这条调用存成了任务文件夹里的草稿文件：{file}",
   "desk.outbox.asked": "{at} 提出。批准后在同一个 chat 里、限时内只跑一次；命令改了要重新批准。code：",

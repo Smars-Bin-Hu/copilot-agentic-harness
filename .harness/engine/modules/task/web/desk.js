@@ -656,6 +656,11 @@
     off.addEventListener("click", () => { off.disabled = true; linkCall(item.ref, false); });
     return h("span", {class: "chip tk-link"}, body, off);
   }
+  // A light or medium task has no wait card for the requirement, so the button is here, on the tab where it is read (1.7.20).
+  function reqOffer() {
+    const item = desk.tier === "full" ? null : desk.actions.find((one) => one.action === "confirm-req");
+    return item && canAct() ? h("div", {class: "tk-act"}, actionButton(actionRow(), item), h("p", {class: "hint"}, hintOf(item))) : null;
+  }
   // "+ ticket": a small form under the chips. The types are those the installed tool packs give; any `<type>:<id>` is accepted (the CLI keeps an unknown type as text).
   function linkAdd() {
     const types = desk.link_types || [];
@@ -2301,7 +2306,7 @@
     if (current === "overview") {
       return [h("p", {class: "hint top"}, t("desk.overview.hint") + (doc("REQ.md") ? " " + t("desk.overview.req") : "")), markdown("TASK.md", t("desk.missing.task"))];
     }
-    if (current === "req") return [desk.req_sections.length ? h("p", {class: "hint bad"}, t("desk.req.unfinished", {sections: desk.req_sections.join(", ")})) : null, h("p", {class: "hint top"}, t("desk.req.hint")), markdown("REQ.md", t("desk.missing.req"))];
+    if (current === "req") return [reqOffer(), desk.req_sections.length ? h("p", {class: "hint bad"}, t("desk.req.unfinished", {sections: desk.req_sections.join(", ")})) : null, h("p", {class: "hint top"}, t("desk.req.hint")), markdown("REQ.md", t("desk.missing.req"))];
     if (current === "design") return [h("p", {class: "hint top"}, t("desk.design.hint")), markdown(FILES.design, t("desk.missing.design"))];
     if (current === "rca") return [h("p", {class: "hint top"}, t("desk.rca.hint")), markdown(FILES.rca, t("desk.missing.rca"))];
     if (current === "plan") return [h("p", {class: "hint top"}, t("desk.plan.hint")), planApproval(), markdown("PLAN.md", t("desk.missing.plan"))];

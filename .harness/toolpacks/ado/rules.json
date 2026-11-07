@@ -1,0 +1,95 @@
+{
+  "systems": {
+    "ado-any": {
+      "reach": {
+        "cli": [
+          "az"
+        ],
+        "when": "(?:dev|vsrm\\.dev)\\.azure\\.com/|\\.visualstudio\\.com/"
+      },
+      "env": "none",
+      "verbs": [
+        {
+          "pattern": "(?:--method|-m)\\s+['\"]?delete\\b",
+          "verb": "destroy"
+        },
+        {
+          "pattern": "(?:--method|-m)\\s+['\"]?(?:post|put|patch)\\b",
+          "verb": "write"
+        },
+        {
+          "pattern": "\\brest\\b",
+          "verb": "read"
+        }
+      ],
+      "show": {
+        "api": "_apis/([\\w/.-]+)"
+      },
+      "rules": {
+        "none": {
+          "read": "allow",
+          "write": "outbox",
+          "exec": "outbox",
+          "destroy": "deny"
+        }
+      },
+      "say": [
+        {
+          "pattern": "(?:--method|-m)\\s+['\\\"]?(?:post|put|patch)\\b",
+          "text": {
+            "en": "Change Azure DevOps with az rest",
+            "zh": "用 az rest 修改 Azure DevOps"
+          }
+        }
+      ]
+    },
+    "ado-az": {
+      "reach": {
+        "cli": [
+          "az"
+        ],
+        "when": "^\\s*(?:devops|boards|pipelines)\\b"
+      },
+      "env": "none",
+      "verbs": [
+        {
+          "pattern": "(?:--http-method|-m)\\s+['\\\"]?delete\\b|^\\s*(?:devops|boards|pipelines)(?:\\s+[a-z][a-z-]*){0,3}\\s+delete(?=\\s|$)",
+          "verb": "destroy"
+        },
+        {
+          "pattern": "^\\s*devops\\s+invoke\\b.*--http-method\\s+['\\\"]?(?:post|put|patch)\\b",
+          "verb": "write"
+        },
+        {
+          "pattern": "^\\s*devops\\s+invoke\\b",
+          "verb": "read"
+        },
+        {
+          "pattern": "^\\s*(?:devops|boards|pipelines)(?:\\s+[a-z][a-z-]*){0,3}\\s+(?:show|list|query|list-[a-z-]+)(?=\\s|$)",
+          "verb": "read"
+        },
+        {
+          "pattern": "^\\s*(?:devops|boards|pipelines)(?:\\s+[a-z][a-z-]*){0,3}\\s+(?:--help|-h)\\s*$",
+          "verb": "read"
+        }
+      ],
+      "say": [
+        {
+          "pattern": "^\\s*(?:devops|boards|pipelines)\\b",
+          "text": {
+            "en": "Change Azure DevOps with az (use the ado program instead)",
+            "zh": "用 az 修改 Azure DevOps（请改用 ado 程序）"
+          }
+        }
+      ],
+      "rules": {
+        "none": {
+          "read": "allow",
+          "write": "outbox",
+          "exec": "outbox",
+          "destroy": "deny"
+        }
+      }
+    }
+  }
+}

@@ -1411,8 +1411,8 @@ def handler_for(board: Board) -> type:
             if path == "/api/open":  # bring the VS Code window of this folder forward: the thread of the link runs `code <folder>`; this answers at once
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
-                if launchenv.extra(board.root) and launchenv.vscode_running() and launchenv.seen(board.root).get("ok") is not True:  # it is running and no chat found it started with the settings: starting it again gives it nothing (1.7.21)
-                    return self.answer(409, {"error": say("serve.open.running_env")})
+                if not data.get("anyway") and launchenv.extra(board.root) and launchenv.vscode_running() and launchenv.seen(board.root).get("ok") is not True:  # it is running and no chat found it started with the settings: starting it again gives it nothing (1.7.21); the person may still open it (`anyway`, 1.7.29)
+                    return self.answer(409, {"error": say("serve.open.running_env"), "running": True})
                 if not board.link.status().get("ready") and not launchenv.vscode_running():
                     launchenv.mark_started(board.root)  # this start has the settings: what an earlier one lacked no longer holds
                 asked = board.link.open_window()

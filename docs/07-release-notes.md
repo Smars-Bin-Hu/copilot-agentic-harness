@@ -21,6 +21,10 @@ To see which version you have: `harness --version`.
 - **A repeated refusal** now says first what was refused and why, then how many times it came up. The hold for a file the line only names (`diff <(...) missing-file`) no longer says the line "runs" it.
 - **Protocol README**: the limits section names more classes the gate cannot read: start-up files set by environment variables (`BASH_ENV`, `PYTHONSTARTUP`), `env --split-string`, aliases kept by other tools, tools that read commands from stdin or a file (`make -f -`, `at`), other shells, PowerShell `iex`, and calling the REST address from code.
 
+### Changed
+
+- **Open VS Code while VS Code is already running** (and no chat found it started with this computer's settings): a window says why it is better to quit VS Code first, with **I will quit it first** and **Open anyway**. Before, the board only refused.
+
 ## 1.7.28 (2026-11-07)
 
 ### Fixed

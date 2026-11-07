@@ -50,7 +50,7 @@ const SERVE = (function () {
     return fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json", "X-Harness-Board": "1"}, body: JSON.stringify(body || {}), signal: control ? control.signal : undefined})
       .then((response) => response.json().catch(() => ({})).then((data) => {
         clearTimeout(timer);
-        if (!response.ok) throw Object.assign(new Error(data.error || "HTTP " + response.status), {status: response.status});
+        if (!response.ok) throw Object.assign(new Error(data.error || "HTTP " + response.status), {status: response.status, data});
         return data;
       }), failed);
   }
@@ -275,13 +275,32 @@ const SERVE = (function () {
     svg.append(path);
     return svg;
   }
+  // Open VS Code. A VS Code that is already running cannot get this computer's settings (1.7.21): the server says so (409, `running`) and the person
+  // may still open it (1.7.29). A window that is closed another way (Esc, a click beside it) is the safe answer: not opened. `sender`: post, or a call with a deadline.
+  function openVS(sender) {
+    const go = sender || post;
+    return go("/api/open", {}).catch((error) => {
+      if (!(error && error.data && error.data.running)) throw error;
+      return new Promise((resolve, reject) => {
+        const quit = h("button", {type: "button", class: "act hot"}, t("board.vs.quit_first"));
+        const anyway = h("button", {type: "button", class: "act", title: t("board.vs.anyway.tip")}, t("board.vs.anyway"));
+        const view = dialog([h("h2", null, t("board.vs.running")), h("p", null, error.message), h("div", {class: "row win-foot"}, quit, anyway)]);
+        let done = false;
+        const end = (then) => { if (done) return; done = true; clearInterval(watch); view.close(); then(); };
+        const watch = setInterval(() => { if (!view.box.isConnected) end(() => reject(error)); }, 300);
+        quit.addEventListener("click", () => end(() => reject(error)));
+        anyway.addEventListener("click", () => end(() => go("/api/open", {anyway: true}).then(resolve, reject)));
+      });
+    });
+  }
+
   function vsButton(chat) {
     const why = chat && !chat.bound ? chat.why || "" : "";
     const nothing = why === "no-cli" || why === "off", alone = ["no-chat", "no-session", "ambiguous"].includes(why);  // VS Code is there and this task has no chat: the window is all it can bring
     const button = h("button", {type: "button", class: "vs-btn" + (alone ? " no-chat" : ""), disabled: nothing ? "disabled" : null, title: nothing ? t("board.vs.why." + why) : alone ? t("board.vs.nochat") : t("board.vs.open"), "aria-label": t("board.vs.open")}, vsLogo());
     button.addEventListener("click", () => {
       button.disabled = true;
-      post("/api/open", {}).then(() => { setTimeout(() => { button.disabled = false; }, 1500); }, (error) => { button.disabled = false; failed(error, chat && chat.title); });
+      openVS().then(() => { setTimeout(() => { button.disabled = false; }, 1500); }, (error) => { button.disabled = false; failed(error, chat && chat.title); });
     });
     return button;
   }
@@ -341,5 +360,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner(true));
   }
 
-  return {call, file, pairMark, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
+  return {call, file, pairMark, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, openVS, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
 })();

@@ -464,6 +464,24 @@ class BoardLinkTests(BoardCase):
         self.assertEqual((status, data["result"]), (200, {"queued": True}))
         self.assertEqual(calls, ["open"])
 
+    def test_a_running_vscode_without_the_settings_is_refused_unless_the_person_opens_it_anyway(self) -> None:
+        from unittest import mock
+
+        cookie = self.pair()
+        calls = []
+        self.vs.jobs.put = lambda job: calls.append(job)
+        self.vs.why = "ok"
+        env = boardserve.launchenv
+        with mock.patch.object(env, "extra", return_value={"HARNESS_TOOL_PATH": "x"}), mock.patch.object(env, "vscode_running", return_value=True), mock.patch.object(env, "seen", return_value={}):
+            status, data, _ = self.request("POST", "/api/open", {}, cookie=cookie)
+            self.assertEqual((status, data.get("running")), (409, True))  # the page offers "I will quit it first" and "Open anyway" (1.7.29)
+            self.assertEqual(calls, [])
+            status, data, _ = self.request("POST", "/api/open", {"anyway": True}, cookie=cookie)
+            self.assertEqual((status, data["result"]), (200, {"queued": True}))
+            self.assertEqual(calls, ["open"])
+        with mock.patch.object(env, "extra", return_value={"HARNESS_TOOL_PATH": "x"}), mock.patch.object(env, "vscode_running", return_value=True), mock.patch.object(env, "seen", return_value={"ok": True}):
+            self.assertEqual(self.request("POST", "/api/open", {}, cookie=cookie)[0], 200)  # a chat found it started with the settings: nothing to ask
+
 
 class NoVsCodeTests(ServeCase):
     """The default link in the tests has no `code`: the board is what it was."""

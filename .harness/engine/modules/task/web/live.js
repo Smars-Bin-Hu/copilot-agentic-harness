@@ -63,7 +63,7 @@ const LIVE = (function () {
 
   link.addEventListener("click", () => {
     link.disabled = true;
-    SERVE.post("/api/open", {}).then(() => { setTimeout(() => { link.disabled = false; }, 1500); }, (error) => { link.disabled = false; SERVE.failed(error, st.chat && st.chat.title); });
+    SERVE.openVS().then(() => { setTimeout(() => { link.disabled = false; }, 1500); }, (error) => { link.disabled = false; SERVE.failed(error, st.chat && st.chat.title); });
   });
 
   // --- time -------------------------------------------------------------------------------------------------------------
@@ -298,7 +298,7 @@ const LIVE = (function () {
     calm.dataset.sig = sig;
     const open = button ? h("button", {type: "button", class: "act hot live big"}, t(fresh ? "board.go.new" : "desk.live.open")) : null;
     if (open && fresh) open.addEventListener("click", () => chatGoOn(st.task.split("/").pop()));
-    else if (open) open.addEventListener("click", () => { open.disabled = true; SERVE.post("/api/open", {}).then(() => { setTimeout(() => { open.disabled = false; }, 1500); }, (error) => { open.disabled = false; SERVE.failed(error, st.chat && st.chat.title); }); });
+    else if (open) open.addEventListener("click", () => { open.disabled = true; SERVE.openVS().then(() => { setTimeout(() => { open.disabled = false; }, 1500); }, (error) => { open.disabled = false; SERVE.failed(error, st.chat && st.chat.title); }); });
     calm.replaceChildren(...[robot(), h("h3", null, title), why ? h("p", null, why) : null, open].filter(Boolean));
   }
 

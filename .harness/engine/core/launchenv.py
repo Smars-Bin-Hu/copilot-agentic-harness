@@ -289,7 +289,7 @@ def _find(top: Path, name: str, depth: int, budget: int = 20000):
 
 
 WINDOWS_CHAIN = r"""
-$h = $args[0]; $p = $args[1]
+$h = '__HOST__'; $p = '__PROXY__'
 $global:zchain = @(); $global:zerr = ''
 $cb = [Net.Security.RemoteCertificateValidationCallback]{ param($s, $c, $ch, $e) $global:zerr = "$e"; $global:zchain = @($ch.ChainElements | ForEach-Object { $_.Certificate }); $true }
 if ($p) { $hp = $p.Split(':'); $tcp = [Net.Sockets.TcpClient]::new($hp[0], [int]$hp[1]); $ns = $tcp.GetStream()
@@ -307,16 +307,19 @@ $zchain | ForEach-Object { "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64
 def chain_windows(host: str, proxy: str, run: Callable[..., Any] = subprocess.run) -> Tuple[List[str], str]:
     """The chain Windows builds for `host`, through `proxy` when given (the root from the system's store included). `(blocks, trust)`: trust is
     "None" when Windows trusts it, else the reason (RemoteCertificateChainErrors, ...)."""
-    done = run(["powershell", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_CHAIN, host, proxy], capture_output=True, text=True, timeout=SECONDS,
+    # The values go into the script's text: `-Command <script> <args>` hands the script no $args. Both were checked to hold no quote (make, proxy_address).
+    script = WINDOWS_CHAIN.replace("__HOST__", host).replace("__PROXY__", proxy)
+    done = run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, timeout=SECONDS,
                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     out = done.stdout or ""
     found = re.search(r"^PROXY (.*)$", out, re.MULTILINE)
     if found:
         raise ValueError(say("launch.ca.proxy.refused", said=found.group(1).strip()))
     trust = re.search(r"^TRUST (.*)$", out, re.MULTILINE)
-    if not trust:
+    blocks = pem_blocks(out)
+    if not trust or not blocks:  # no chain read: say why, never "None" (the system trusted nothing it was shown)
         raise ValueError(say("launch.ca.chain.failed", said=((done.stderr or out).strip().splitlines() or ["-"])[-1][:300]))
-    return pem_blocks(out), trust.group(1).strip() or "None"
+    return blocks, trust.group(1).strip() or "None"
 
 
 def chain_openssl(host: str, proxy: str, run: Callable[..., Any] = subprocess.run) -> Tuple[List[str], str]:

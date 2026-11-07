@@ -136,8 +136,17 @@ class Bundle(LaunchEnvCase):
 
         class Done:
             stdout, stderr = out, ""
-        blocks, trust = launchenv.chain_windows("h.example.org", "127.0.0.1:9000", run=lambda *a, **k: Done())
+        seen = []
+        blocks, trust = launchenv.chain_windows("h.example.org", "127.0.0.1:9000", run=lambda argv, **k: seen.append(argv) or Done())
         self.assertEqual((blocks, trust), ([cert(4)], "None"))
+        script = seen[0][-1]
+        self.assertIn("$h = 'h.example.org'; $p = '127.0.0.1:9000'", script, "the values are in the script itself: -Command passes it no $args")
+        self.assertEqual(seen[0][-2], "-Command")
+
+        class Empty:
+            stdout, stderr = "TRUST \r\n", "Exception calling AuthenticateAsClient"
+        with self.assertRaises(ValueError):  # no chain is a failure with its reason, not "the system trusts it"
+            launchenv.chain_windows("h.example.org", "", run=lambda *a, **k: Empty())
 
         class Refused:
             stdout, stderr = "PROXY HTTP/1.1 403 Forbidden\r\n", ""

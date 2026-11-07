@@ -1727,7 +1727,12 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         opened = board.restarted or bool(opener(f"{address}#pair={board.code}"))  # after a restart the page is there, and asks for itself
     except Exception:  # noqa: BLE001 - the person can pair by hand
         opened = False
-    print(say("serve.started", address=address, actions=", ".join(board.actions)), file=out, flush=True)
+    def button(action: str) -> str:  # the first line names the buttons as the board shows them (1.7.22), not as the command words
+        key = "board.action." + action.replace(" ", "-")
+        word = say(key)
+        return action if word == key else word
+
+    print(say("serve.started", address=address, actions=", ".join(button(action) for action in board.actions)), file=out, flush=True)
     print(say("serve.opened" if opened else "serve.not_opened"), file=out, flush=True)
     if ready is not None:
         ready(server)

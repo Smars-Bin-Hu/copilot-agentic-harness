@@ -10,6 +10,25 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.37 (2026-11-07)
+
+### Added
+
+- **A tool pack declares the programs it needs, per way in.** `needs.programs` stays (`sqlserver` needs `sqlcmd`); a way in of a connection type may add `"needs": ["az"]` (`ado`: `signin` needs `az`, `token` needs nothing). The protocol README documents it; the `ado` (0.4.6) and `sqlserver` packs declare it.
+- **Checked as soon as a pack is on.** Every needed program is looked for on the PATH VS Code will get. Found: a tick, the place on hover. Not found: the pack is "not usable yet: X not found" at once in the Tools window (yellow), on the Enter screen (a yellow dot with the reason), in the Company tab, in `harness doctor`, and in the text the agent gets when a prompt names that connection ("sqlcmd is not found on this computer: tell the person"). Save in Get ready is not blocked.
+- **Programs block in This computer.** One row for each needed program and who needs it (`sqlcmd ← sqlserver`, `az ← ado (sign-in)`, `python`). A missing one has **I installed it here** with the folder and **Use** (the folder must hold the program); the company recipe can prefill it per program.
+- **Sign-ins block in This computer.** A connection does not depend on a sign-in (no sign-in is a grey mark; the agent is told to ask you). A program that keeps its own sign-in (`az login`) has one row for the tool, "shared by ado, ado-test", with Sign in and Test, also before any connection exists; kept once as `HARNESS_TOOL_<PROGRAM>_USER` in `.harness/.env` (the old per-connection key is read still). A connection with a token or a password has its own row. An identity whose connection the company removed gets a row with **Forget**. `harness connections login az` signs in by the tool's name.
+
+### Changed
+
+- **This computer has four blocks**: Programs, Network (proxy, CA bundle), Sign-ins, MCP. The Get ready facts follow them.
+- **The recipe's `tool_folders` entries may carry `"program": "az"`** beside `label` and `hint`; old entries keep working as hints.
+- A connection's row says "no sign-in" where it said "not set".
+
+### Retired
+
+- **Tool folders as a concept.** The textarea of folders is gone. A missing program has its own input; the folders you added are one small line with × for each. `HARNESS_TOOL_PATH` is the same underneath.
+
 ## 1.7.36 (2026-11-07)
 
 ### Changed

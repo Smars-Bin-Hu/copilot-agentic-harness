@@ -150,7 +150,7 @@ Two files of each domain hold what only people or environments know:
 | Which factory tool packs are on | `tools/packs.json`: `{"use": ["ado", "sqlserver"]}` |
 | Tool packs the company wrote (not named like a factory pack) | `tools/packs/<name>/` |
 | Connections, without secrets | `tools/connections.json` |
-| The recipe for each colleague's computer (CA bundle host and proxy, hints for tool folders; no secret) | `tools/computer.json` |
+| The recipe for each colleague's computer (CA bundle host and proxy, where a program is installed, as `{label, hint, program}`; no secret) | `tools/computer.json` |
 | SOP skills (no tool: `<prefix>-<name>`) | `skills/` |
 | Code standards | `standards/code-standards.md` |
 

@@ -50,15 +50,15 @@
   "say": [
     {
       "pattern": "\\bcomment\\s+(\\S+)",
-      "text": "Add a comment to ticket {1}"
+      "text": {"en": "Add a comment to ticket {1}", "zh": "给工单 {1} 加评论"}
     },
     {
       "pattern": "\\bset-state\\s+(\\S+)\\s+(\\S.*)$",
-      "text": "Set ticket {1} to {2}"
+      "text": {"en": "Set ticket {1} to {2}", "zh": "把工单 {1} 改成 {2}"}
     },
     {
       "pattern": "\\bdelete\\s+(\\S+)",
-      "text": "Delete ticket {1}"
+      "text": {"en": "Delete ticket {1}", "zh": "删除工单 {1}"}
     }
   ],
   "body": [

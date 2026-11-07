@@ -10,6 +10,16 @@ Every version has three parts:
 
 To see which version you have: `harness --version`.
 
+## 1.7.34 (2026-11-07)
+
+### Fixed
+
+- **Tool packs tab**: every pack shows its source (`factory`, `company`, `folder here`) and whether it is on; an off pack has a grey dot, a dimmed row and a hover that says how to turn it on (the `use` list of the company's `packs.json`). Factory packs are no longer called "yours", and no longer say "follows the company pack". The Setup line counts only the packs that are on (`2 on · 2 ready`). The install box says a folder (a zip is refused). Remove names the real backup folder and says the folder itself is kept. A pack whose version changed shows `updated 0.4.5 → 0.4.6` for 7 days. After Remove on This computer the fields come back to the company's values.
+- **Company tab**: the reads of a pack are its `commands` less the writes and runs (`ado`: 27 read commands, not 37); a name in `use` with no factory pack is a marked row; each standard and instruction says whether it reaches Copilot (only `knowledgebase.instructions.md` is copied). Get ready no longer says the company content is not found when the folder is there: it says which file is missing.
+- **Enter screen**: the gear is gone (the dock's buttons come down into its place; the settings stay in the search palette). A key counts as "Enter" after a window or the `?` panel closed; keys typed in the `?` panel do not reach the board.
+- **The `?` list**: the tool pack SOPs have the pack name as a small heading, and a pack's skill without `board-opens` is listed (name and description). A pack's skill is no longer marked "not in the knowledge base".
+- Small: the Chinese state word "通" is "正常"; the demo tracker's write texts have Chinese; "Installed" says the pack is read where its folder lies.
+
 ## 1.7.33 (2026-11-07)
 
 ### Changed

@@ -2878,7 +2878,7 @@
   "machine.conn.install.empty": "Type or paste the path of a tool pack folder.",
   "machine.conn.replace": "Replace {from} → {to}",
   "machine.conn.replace.ask": "{name} {from} is installed. Click again to replace it with {to}.",
-  "machine.conn.installed": "Installed {name} {version} ({n} skills).",
+  "machine.conn.installed": "Added {name} {version}: it is read where its folder lies ({n} skills put).",
   "machine.conn.installed.missing": "Missing programs: {programs}. See This computer.",
   "machine.conn.add": "A factory pack is turned on by its name in the use list of the company's packs.json (knowledge base, company/tools/). A pack the company wrote goes in company/tools/packs/. Or ask whoever looks after the harness here.",
   "connections.export": "Export",

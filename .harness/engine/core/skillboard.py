@@ -80,5 +80,5 @@ def skills(root: Path) -> List[Dict[str, Any]]:
                     "hint": fields.get("argument-hint", ""), "own": path.parent.name.split("-")[0] not in ("harness", "generic"),
                     "group": fields.get("board-group") if fields.get("board-group") in GROUPS else "task", "order": int(fields["board-order"]) if fields.get("board-order", "").isdigit() else LAST, "step": fields.get("board-step") if fields.get("board-step") in STEPS else "",
                     "naming": naming, "pack": pack,
-                    "gone": bool(company and prefix and path.parent.name.startswith(prefix + "-") and not (company / "skills" / path.parent.name).is_dir())})
+                    "gone": bool(naming != "pack" and company and prefix and path.parent.name.startswith(prefix + "-") and not (company / "skills" / path.parent.name).is_dir())})
     return sorted(out, key=lambda item: (item["order"], item["name"]))

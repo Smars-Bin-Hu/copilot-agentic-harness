@@ -36,8 +36,9 @@ ENV_FILE = Path(".harness") / ".env"
 STATE_FILE = Path(".harness") / "runtime" / "state" / "identities.json"
 PREFIX = "HARNESS_CONNECTION_"
 ALIAS = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
-IDENTITIES = ("env", "netonly", "keyfile", "tool")  # tool (1.7.13): the program keeps its own sign-in (`az login`); the harness keeps no account, only who the test answered
-SECRET_FIELDS = ("password",)
+IDENTITIES = ("env", "netonly", "keyfile", "tool", "token")  # tool (1.7.13): the program keeps its own sign-in (`az login`); the harness keeps no account, only who the test answered
+SECRET_FIELDS = ("password", "token")
+IDENTITY_FIELDS = ("account", "password", "keyfile", "token")
 OWN_FIELDS = ("type", "env", "auth", "label")  # what a server of the person's own has besides the kind's fields
 TEST_SECONDS = 15
 TOOL_TEST_SECONDS = 60  # a program that keeps its own sign-in (`az`) is slow to start; a type may set `test.timeout` itself (1.7.19)
@@ -203,7 +204,7 @@ def own_connections(env: Dict[str, str], known: Dict[str, Dict[str, Any]]) -> Di
     for key, value in env.items():
         if key.startswith(PREFIX) and key.endswith("_ALIAS") and ALIAS.match(value):
             stem = key[: -len("ALIAS")]
-            out[value] = {field[len(stem):].lower(): item for field, item in env.items() if field.startswith(stem) and field != key and not field.endswith(("_ACCOUNT", "_PASSWORD", "_KEYFILE"))}
+            out[value] = {field[len(stem):].lower(): item for field, item in env.items() if field.startswith(stem) and field != key and not field.endswith(("_ACCOUNT", "_PASSWORD", "_KEYFILE", "_TOKEN"))}
             out[value]["own"] = True
     return {alias: item for alias, item in out.items() if alias not in known}
 
@@ -220,7 +221,7 @@ def listed(root: Path, policy: Optional[Dict[str, Any]] = None) -> Dict[str, Dic
 
 def identity_of(env: Dict[str, str], alias: str, kind: Dict[str, Any]) -> Dict[str, str]:
     """What the person saved for this server: account, password, keyfile (what is there)."""
-    return {field: env[env_key(alias, field)] for field in ("account", "password", "keyfile") if env.get(env_key(alias, field))}
+    return {field: env[env_key(alias, field)] for field in IDENTITY_FIELDS if env.get(env_key(alias, field))}
 
 
 def _fill(template: str, values: Dict[str, Any], escape: bool = False) -> str:
@@ -237,11 +238,11 @@ def _quote(value: str) -> str:
     return subprocess.list2cmdline([value]) if os.name == "nt" else shlex.quote(value)
 
 
-def command(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, str]) -> str:
-    """The test command of a server with this identity, ready to run (the password never in it)."""
+def command(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, str], alias: str = "") -> str:
+    """The test command of a server with this identity, ready to run (the password never in it). `{conn}` is the name of the connection (1.7.21)."""
     auth = (kind.get("auth") or {}).get(server.get("auth") or next(iter(kind.get("auth") or {"": {}})), {}) or {}
     values = {**{field: (server.get(field) if server.get(field) not in (None, "") else spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
-              "account": identity.get("account", ""), "keyfile": identity.get("keyfile", "")}
+              "account": identity.get("account", ""), "keyfile": identity.get("keyfile", ""), "conn": alias}
     quoted = {key: _quote(str(value)) for key, value in values.items()}
     quoted["auth"] = _fill(str(auth.get("args") or ""), quoted)
     return " ".join(_fill(test_command(kind), quoted).split())
@@ -256,7 +257,22 @@ def delivery(kind: Dict[str, Any], server: Dict[str, Any]) -> Dict[str, Any]:
 
 def variables(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, str]) -> Dict[str, str]:
     """The environment variables that carry this identity (`env` and `keyfile` delivery)."""
-    return {var: identity.get(field, "") for var, field in delivery(kind, server)["env"].items() if identity.get(field)}
+    how = delivery(kind, server)
+    token = identity.get("token", "") if how["identity"] == "token" else ""
+    return {var: (identity.get(field, "") or token) for var, field in how["env"].items() if identity.get(field) or token}
+
+
+def connection_env(alias: str, kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, str]) -> Dict[str, str]:
+    """What a program of a connection can read when the harness runs its test or probe, saved or not (1.7.21): `HARNESS_CONNECTION_<NAME>_<FIELD>` for each non-secret
+    field (a field left empty gives its default), and the identity as `_USER`, `_PASSWORD`, `_TOKEN` (and `_KEYFILE`). NAME is the alias in capitals, `-` as `_`."""
+    stem = env_key(alias, "")
+    out = {stem + field.upper(): str(server.get(field) if server.get(field) not in (None, "") else spec.get("default", ""))
+           for field, spec in (kind.get("fields") or {}).items() if field not in SECRET_FIELDS and isinstance(spec, dict)}
+    out = {key: value for key, value in out.items() if value}
+    for field, name in (("account", "USER"), ("password", "PASSWORD"), ("token", "TOKEN"), ("keyfile", "KEYFILE")):
+        if identity.get(field):
+            out[stem + name] = identity[field]
+    return out
 
 
 # --- the gate's view: a system per server -----------------------------------------------------------------------------------------------------------------
@@ -270,7 +286,7 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
         if not kind or not kind.get("cli") or not kind.get("match") or type_problems(kind) or server.get("env") not in ENVS:
             continue
         values = {field: (server.get(field) if server.get(field) not in (None, "") else spec.get("default", "")) for field, spec in kind["fields"].items()}
-        probe = command(kind, server, identity_of(env, alias, kind))
+        probe = command(kind, server, identity_of(env, alias, kind), alias)
         if alias in wrapped:
             probe = f"{_quote(sys.executable)} {_quote(str(root / '.harness' / 'engine' / 'cli.py'))} as {alias} -- {probe}"
         system: Dict[str, Any] = {
@@ -302,7 +318,7 @@ def calls(root: Path) -> List[Dict[str, str]]:
         kind = known.get(str(server.get("type")))
         if not kind or kind.get("via") == "mcp" or type_problems(kind) or server.get("env") not in ENVS or (held and alias not in held):
             continue
-        call = command(kind, server, identity_of(env, alias, kind))
+        call = command(kind, server, identity_of(env, alias, kind), alias)
         out.append({"alias": alias, "env": server["env"], "call": f"harness as {alias} -- {call}" if alias in wrapped else call})
     return out
 
@@ -341,11 +357,11 @@ def judge(kind: Dict[str, Any], code: Optional[int], output: str) -> Dict[str, s
 
 
 def run_with(kind: Dict[str, Any], server: Dict[str, Any], identity: Dict[str, str], line: str, cwd: Path, timeout: float = TEST_SECONDS,
-             launch: Optional[Dict[str, str]] = None) -> Tuple[Optional[int], str]:
+             launch: Optional[Dict[str, str]] = None, alias: str = "") -> Tuple[Optional[int], str]:
     """Run a command line with this identity: in the environment (env, keyfile) or with Windows network credentials (netonly). `launch`: what VS Code is
     started with (tool folders, CA bundle, 1.7.11), so a test finds what the agent will."""
     how = delivery(kind, server)
-    extra = {**(launch or {}), **variables(kind, server, identity)}
+    extra = {**(launch or {}), **(connection_env(alias, kind, server, identity) if alias else {}), **variables(kind, server, identity)}
     if how["identity"] == "netonly":
         if not identity.get("account") or not identity.get("password"):
             return None, say("connections.test.no_identity")
@@ -367,6 +383,15 @@ def missing_program(line: str, path: Optional[str] = None) -> bool:
     return bool(first) and shutil.which(first, path=path) is None
 
 
+def given_identity(kind: Dict[str, Any], server: Dict[str, Any], given: Dict[str, str]) -> Dict[str, str]:
+    """What the person typed, as an identity. A token identity has one secret: the form's password box (or `token`) is the token (1.7.21)."""
+    out = {key: value for key, value in given.items() if key in IDENTITY_FIELDS and value}
+    if delivery(kind, server)["identity"] == "token":
+        token = out.pop("token", "") or out.pop("password", "")
+        out = {"token": token} if token else {}
+    return out
+
+
 def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Test the way in to a server with what the person typed (not saved yet). `{state, why, who, seconds}`; state ok, denied, down, failed, missing."""
     server = server or listed(root).get(alias)
@@ -379,14 +404,14 @@ def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[st
 
     if kind.get("via") == "mcp":  # VS Code runs the MCP server and holds its sign-in: nothing to test from here
         return {"state": "mcp", "why": say("connections.mcp.vscode"), "who": "", "seconds": 0}
-    identity = {key: value for key, value in given.items() if key in ("account", "password", "keyfile") and value}
-    line = command(kind, server, identity)
+    identity = given_identity(kind, server, given)
+    line = command(kind, server, identity, alias)
     launch = launchenv.extra(root)
     if missing_program(line, next((value for key, value in launch.items() if key.upper() == "PATH"), None)):
         return {"state": "missing", "why": say("connections.test.missing", program=shlex.split(line, posix=os.name != "nt")[0]), "who": "", "seconds": 0}
     started = time.time()
     wait = test_seconds(kind, server)
-    code, output = run_with(kind, server, identity, line, root, timeout=wait, launch=launch)
+    code, output = run_with(kind, server, identity, line, root, timeout=wait, launch=launch, alias=alias)
     timed = code is None and (output or "").startswith("no answer in ")  # the program was still running: told as a timeout with its limit, not as a failure
     return {**judge(kind, code, output), "seconds": round(time.time() - started, 1), **({"timeout": int(wait)} if timed else {})}
 
@@ -419,12 +444,12 @@ def probe_all(root: Path, workers: int = 4) -> Dict[str, str]:
     def one(job: Tuple[str, Dict[str, Any], Dict[str, Any]]) -> Tuple[str, Dict[str, Any]]:
         alias, server, kind = job
         identity = identity_of(env, alias, kind)
-        line = command(kind, server, identity)
+        line = command(kind, server, identity, alias)
         needs = {key: kind[key] for key in ("expect", "denied", "down") if kind.get(key)}
         if missing_program(line, next((value for key, value in launch.items() if key.upper() == "PATH"), None)):
             state, why, who = reach.FAILED, "exit-127", ""
         else:
-            state, why, who = reach._judge(needs, *run_with(kind, server, identity, line, root, timeout=test_seconds(kind, server), launch=launch))  # noqa: SLF001
+            state, why, who = reach._judge(needs, *run_with(kind, server, identity, line, root, timeout=test_seconds(kind, server), launch=launch, alias=alias))  # noqa: SLF001
         return f"{alias}:{server['env']}", {"state": state, "at": utc_now(), "why": why[:200], "who": who, "source": "probe"}
 
     with ThreadPoolExecutor(max_workers=max(1, min(workers, len(jobs) or 1))) as pool:
@@ -455,11 +480,12 @@ def login(root: Path, alias: str, own: Optional[Dict[str, Any]] = None) -> Tuple
 def save(root: Path, alias: str, given: Dict[str, str], own: Optional[Dict[str, Any]] = None, who: str = "") -> None:
     """Keep what passed the test in the `.env`. `own`: a server of the person's own (its kind, env, auth and fields) is kept with it. `who`: the name the test
     answered; for a `tool` identity it is all that is kept, to show (the program holds the sign-in)."""
-    changes: Dict[str, Optional[str]] = {env_key(alias, key): (given.get(key) or None) for key in ("account", "password", "keyfile")}
     server = own or listed(root).get(alias) or {}
     kind = types(root).get(str(server.get("type"))) or {}
+    given = given_identity(kind, server, given)
+    changes: Dict[str, Optional[str]] = {env_key(alias, key): (given.get(key) or None) for key in IDENTITY_FIELDS}
     if kind and delivery(kind, server)["identity"] == "tool":
-        changes = {env_key(alias, "account"): (who or say("connections.tool.signed")), env_key(alias, "password"): None, env_key(alias, "keyfile"): None}
+        changes = {env_key(alias, "account"): (who or say("connections.tool.signed")), env_key(alias, "password"): None, env_key(alias, "keyfile"): None, env_key(alias, "token"): None}
     if own:
         changes[env_key(alias, "alias")] = alias
         changes.update({env_key(alias, key): str(value) for key, value in own.items() if key not in ("own",) and value not in (None, "")})
@@ -492,7 +518,7 @@ def share(root: Path, aliases: List[str]) -> Dict[str, Any]:
             raise ValueError(say("connections.share.notown", alias=alias))
         if alias in listed_now:
             raise ValueError(say("connections.share.taken", alias=alias))
-        listed_now[alias] = {key: value for key, value in entry.items() if key != "own" and key not in ("account", "password", "keyfile")}
+        listed_now[alias] = {key: value for key, value in entry.items() if key != "own" and key not in IDENTITY_FIELDS}
         added.append(alias)
         pack = str((known.get(str(entry.get("type"))) or {}).get("toolpack") or "")
         target = folder / toolpacks.COMPANY_PACKS / pack
@@ -508,7 +534,7 @@ def share(root: Path, aliases: List[str]) -> Dict[str, Any]:
 def export(root: Path, names: Optional[List[str]] = None) -> Dict[str, Any]:
     """The person's own connections in the form of `connections.json` (contracts/toolpack/connections.md), to put in the company pack or a file. Never an
     account, a password or a key file."""
-    picked = {alias: {key: value for key, value in entry.items() if key not in ("own", "account", "password", "keyfile", "alias")}
+    picked = {alias: {key: value for key, value in entry.items() if key not in ("own", "alias") + IDENTITY_FIELDS}
               for alias, entry in listed(root).items() if entry.get("own") and (not names or alias in names)}
     return {"connections": picked}
 

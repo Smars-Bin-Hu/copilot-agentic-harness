@@ -700,7 +700,7 @@ class Board:
 
         step = str(data.get("step", ""))
         alias = str(data.get("alias") or "")
-        given = {key: str(data.get(key) or "") for key in ("account", "password", "keyfile")}
+        given = {key: str(data.get(key) or "") for key in ("account", "password", "keyfile", "token")}
         own = data.get("own") if isinstance(data.get("own"), dict) else None
         if own is not None:
             own = {key: str(value) for key, value in own.items() if key in ("type", "env", "auth", "label") or key in ((conn_core.types(self.root).get(str(own.get("type"))) or {}).get("fields") or {})}

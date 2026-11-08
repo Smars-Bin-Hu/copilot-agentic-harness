@@ -106,4 +106,4 @@ The introduction for people is in `README.md` and `docs/`; agents need not read 
 | `.workspace/sandbox/tasks/` | Task folders, one folder per task, not in git |
 | `.workspace/reports/` | Task reports and the board, not in git |
 | `.workspace/goals/` | The files of `/generic-goal-driven` (GOAL, NOW, TODO, LOG), not in git |
-| `knowledge-base/` | Where a team's knowledge base is plugged in; empty when shipped. The skills of one business domain live in it, at `domains/<domain>/skills/` (not in `.github/skills/`): `harness skill list --domain <d>` lists them, and a task that named its domains (`task set-domain`) is told them on every prompt |
+| `knowledge-base/` | Where a team's knowledge base is plugged in; not shipped (the harness makes the folder when one is imported, and everything that reads it takes a missing folder as an empty one). The skills of one business domain live in it, at `domains/<domain>/skills/` (not in `.github/skills/`): `harness skill list --domain <d>` lists them, and a task that named its domains (`task set-domain`) is told them on every prompt |

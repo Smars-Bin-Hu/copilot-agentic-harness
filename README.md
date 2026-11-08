@@ -203,7 +203,7 @@ This repository (the harness)
 │   ├── sandbox/tasks/<task>/      task directory: TASK.md, REQ.md, PLAN.md, results,
 │   │                              DEV/, REVIEW/, SNAPSHOT/ (not in git)
 │   └── reports/                   task reports (not in git)
-└── knowledge-base/                where the company knowledge base goes (ships empty)
+└── knowledge-base/                where the company knowledge base goes (made when you import one; not shipped)
 
 Outside the harness: target repositories (the company's code)
 <repos_root>/                      the folder set in target.override.json

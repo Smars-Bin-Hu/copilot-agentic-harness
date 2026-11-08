@@ -19,7 +19,7 @@ from core import company, messages, paths, setup, targets
 
 from . import kbsetup, ready
 
-PLACEHOLDER = (".gitkeep", "README.md")  # what `knowledge-base/` ships with: an empty `.gitkeep` (1.7.38: it was a `README.md`, which an unzip over a copy replaced with the placeholder); a copy made before has the README
+PLACEHOLDER = (".gitkeep", "README.md")  # what `knowledge-base/` of a copy made before 1.7.38 holds: a placeholder README, then an empty `.gitkeep`; the harness ships no such folder now
 MAX_LISTED = 2000  # entries of one folder in the picker
 LINE = 1200  # what a line on the page holds; doctor may have several errors
 

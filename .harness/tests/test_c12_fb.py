@@ -594,13 +594,15 @@ class TheHooksProbeDoesNotOverwriteTheBoardsAnswerTests(ConnectionsCase):
 class ShippedKnowledgeBaseTests(HarnessTestCase):
     """C12 TB-17: an unzip over a copy replaced the imported knowledge base's `README.md` with the shipped placeholder."""
 
-    def test_the_repository_ships_nothing_in_knowledge_base_a_knowledge_base_could_have(self) -> None:
-        from core import reinstall
+    def test_the_repository_ships_no_knowledge_base_folder_at_all(self) -> None:
+        """C12 N1 (FC): an empty `.gitkeep` made an imported git knowledge base dirty (Pack for colleagues refused, doctor said uncommitted). Nothing is shipped there now: the folder is made when one is imported."""
+        import subprocess
 
-        folder = ENGINE.parents[1] / "knowledge-base"
-        self.assertEqual(sorted(item.name for item in folder.iterdir()), [".gitkeep"])
-        self.assertEqual((folder / ".gitkeep").stat().st_size, 0)
-        self.assertTrue(reinstall.is_placeholder(folder), "an empty knowledge base for `reinstall` and `company sync`")
+        top = ENGINE.parents[1]
+        listed = subprocess.run(["git", "-C", str(top), "ls-files", "--", "knowledge-base"], capture_output=True, text=True, check=False)
+        if listed.returncode != 0:
+            self.skipTest("not a git checkout")
+        self.assertEqual(listed.stdout.strip(), "", "a file of the repository in knowledge-base/")
 
     def test_a_copy_made_before_still_counts_as_empty_and_a_gitkeep_is_no_content(self) -> None:
         from core import company, reinstall

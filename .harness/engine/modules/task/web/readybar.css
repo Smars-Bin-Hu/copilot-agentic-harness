@@ -18,4 +18,4 @@ html[lang="zh"] .rd-grp{letter-spacing:.06em;text-transform:none;font-size:12px}
 .rd-dot.yellow{background:var(--hot-dot)}.rd-dot.red{background:var(--bad)}
 .rd-fix{flex:none;margin:0}
 html.rd-red .vs-banner{display:none}  /* the red block says it already */
-@media (max-width:640px){.rd-bar{padding:12px 14px}.rd-li{flex-wrap:wrap;gap:6px 12px}.rd-t{flex-basis:100%}}
+@media (max-width:640px){.rd-bar{padding:12px 14px}.rd-li{display:grid;grid-template-columns:8px minmax(0,1fr);align-items:start;gap:6px 12px}.rd-li .rd-dot{margin-top:7px}.rd-fix{grid-column:2;justify-self:start}}

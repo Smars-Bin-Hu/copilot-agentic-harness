@@ -563,7 +563,7 @@ class BlockPageTests(unittest.TestCase):
         for name in ("served", "desk served"):
             self.assertLess(pages[name].index("const READY = (function"), pages[name].index("/api/ready"), name)  # readyui.js before enter.js: the screen uses it
         self.assertIn("const READYBAR = (function", pages["served"])
-        self.assertLess(pages["served"].index("const READYBAR = (function"), pages["served"].index("typeof READYBAR !== \"undefined\" ? READYBAR.node()"))
+        self.assertLess(pages["served"].index("const READYBAR = (function"), pages["served"].index("[READYBAR.node()]"))  # the board puts it under its header
         self.assertIn(".rd-wrap{", pages["served"])
         for name in ("board", "desk", "desk served"):
             self.assertNotIn("const READYBAR", pages[name], name)

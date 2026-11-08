@@ -41,12 +41,14 @@ def ask_to_quit(run: Callable[..., Any] = subprocess.run, platform: str = sys.pl
 
 class Restart:
     def __init__(self, running: Callable[[], bool], opener: Callable[[], Any], ask: Optional[Callable[[], bool]] = None, clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], Any] = time.sleep, wait: float = QUIT_WAIT, settle: float = SETTLE, gone: Optional[Callable[[], Any]] = None) -> None:
+                 sleep: Callable[[float], Any] = time.sleep, wait: Optional[float] = None, settle: Optional[float] = None, gone: Optional[Callable[[], Any]] = None) -> None:
         self.running = running  # is any VS Code running on this computer
         self.opener = opener  # opens this folder the way the board does (`/api/open`)
         self.gone = gone or (lambda: None)  # VS Code has quit: the link looks for it again at once
         self.ask = ask or ask_to_quit
-        self.clock, self.sleep, self.wait, self.settle = clock, sleep, wait, settle
+        self.clock, self.sleep = clock, sleep
+        self.wait = QUIT_WAIT if wait is None else wait
+        self.settle = SETTLE if settle is None else settle
         self.lock = threading.Lock()
         self.state, self.why, self.since = "idle", "", 0.0
         self.thread: Optional[threading.Thread] = None  # for a test to join

@@ -77,7 +77,7 @@ You can put any task aside (pause), take it up again (resume), or let the agent 
 
 ## 4. Follow and steer it in the browser
 
-Run `harness task board` in your own terminal. Your browser first shows an Enter screen (once for each tab) that checks that VS Code, Copilot, `harness doctor` and the pairing are ready, and lets you in only when they are. Then it opens on the board of every task. It opens as a **lobby**: each open task is a small agent on the floor, in the zone of what it is doing (at work, waiting for you, resting). Point at one: a card shows the task, its model, context, run time, stage and TODO, its time and Credits, and the same buttons as the list.
+Run `harness task board` in your own terminal. Your browser first shows an Enter screen (once for each tab) that checks that this copy is set up, the browser is paired, `harness doctor` has no error, VS Code is open and Copilot is connected, and lets you in only when they are. What the company's side still lacks (knowledge base, sign-ins, a program a tool pack needs) is told too, and never stops you. Then it opens on the board of every task. It opens as a **lobby**: each open task is a small agent on the floor, in the zone of what it is doing (at work, waiting for you, resting). Point at one: a card shows the task, its model, context, run time, stage and TODO, its time and Credits, and the same buttons as the list.
 
 ![The lobby: every open task as a small agent; the card of one shows its stage, how long it waited and its buttons](images/board.png)
 

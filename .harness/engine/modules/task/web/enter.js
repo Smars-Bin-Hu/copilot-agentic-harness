@@ -458,7 +458,7 @@
   const noNames = (li) => { const sy = li.querySelector(".sy"); if (sy) sy.remove(); };
 
   // The words of a restart that is going on: the VS Code line says so, and the button waits.
-  function showRestart(view) { chk0.restart = view; if (view.state === "done") chk0.opened = Date.now(); render(); }
+  function showRestart(view, willOpen) { chk0.restart = view; if (view.state === "done" && willOpen !== false) chk0.opened = Date.now(); render(); }
   const optionalCount = () => (chk0.last && chk0.last.optional ? chk0.last.optional.count : 0);
   function render() {  // in place: the lines are made once and only their class and text change, so nothing blinks
     if (!list.children.length) build();
@@ -482,7 +482,8 @@
       let note = view.note, soft = view.soft;
       if (id === "vscode") {
         const live = chk0.restart && (chk0.restart.state === "quitting" || chk0.restart.state === "opening");
-        const failed = (chk0.restart && chk0.restart.state === "failed" || chk0.fail) && view.state !== "ok";  // a failure is told while VS Code is still not ok
+        const lost = chk0.restart && chk0.restart.state === "failed" && (view.state !== "ok" || (chk0.restart.since || 0) < 120);  // a VS Code that did not quit is still open: the failure is told for two minutes, and for as long as VS Code is not ok
+        const failed = Boolean(chk0.fail) || lost;
         const said = failed ? (chk0.fail || READY.restartNote(chk0.restart)) : live ? READY.restartNote(chk0.restart) : "";
         if (said) { note = said; soft = !failed; }
       }

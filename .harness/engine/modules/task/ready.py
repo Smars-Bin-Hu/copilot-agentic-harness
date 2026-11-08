@@ -286,7 +286,7 @@ class Ready:
         if notes["n"]:
             for entry in listed:
                 if entry["key"] == "kb":
-                    problem = {"key": "doctor", "text": messages.text("ready.p.doctor.one" if notes["n"] == 1 else "ready.p.doctor", n=notes["n"]), "why": notes["first"], "short": messages.text("ready.p.doctor.short.one" if notes["n"] == 1 else "ready.p.doctor.short", n=notes["n"]),
+                    problem = {"key": "doctor", "text": messages.text("ready.p.doctor.one" if notes["n"] == 1 else "ready.p.doctor", n=notes["n"]), "why": plain(notes["first"])[:180], "short": messages.text("ready.p.doctor.short.one" if notes["n"] == 1 else "ready.p.doctor.short", n=notes["n"]),
                                "fix": {"to": "term", "run": "harness doctor", "label": messages.text("ready.fix.doctor")}}
                     entry["problems"] = [*entry["problems"], problem]
                     entry["state"] = "yellow"

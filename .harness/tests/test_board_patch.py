@@ -61,22 +61,30 @@ assert.strictEqual(stages(row, true).steps[0].since, Date.parse("2026-11-01T09:5
 @unittest.skipUnless(NODE, "node is not installed")
 class ButtonsAreNotCoveredTests(unittest.TestCase):
     def test_the_number_on_the_book_says_what_it_counts_on_hover_of_the_number_and_of_the_button(self) -> None:
-        """Retest N12: the badge showed a bare 4 and the hover of the button said only Knowledge base."""
-        source = between((WEB / "dock.js").read_text(encoding="utf-8"), "  function badge(n) {", "  function watchStale()")
+        """Retest N12: the badge showed a bare 4 and the hover of the button said only Knowledge base. The company's words (copies that differ) stay on the button, the count comes below them."""
+        dock = (WEB / "dock.js").read_text(encoding="utf-8")
+        source = between(dock, "  let staleCount = 0;", "  function watchStale()") + between(dock, "  function paintBook() {", "  function watchCompany()")
         script = r"""
 const assert = require("assert");
-const TEXT = {"dock.kb": "Knowledge base", "dock.kb.badge.one": "1 stale card", "dock.kb.badge.n": "{n} stale cards"};
+const TEXT = {"dock.kb": "Knowledge base", "dock.kb.badge.one": "1 stale card", "dock.kb.badge.n": "{n} stale cards", "dock.company.tip.one": "1 company item differs"};
 const t = (key, values) => TEXT[key].replace(/\{(\w+)\}/g, (whole, name) => values[name]);
+const plainWords = (text) => text, COMPANY_LINES = 6, changeWord = (row) => row, stuckWord = (item) => item;
+let drift = null;
 const mark = {hidden: true, textContent: "", title: ""}, book = {title: "Knowledge base"};
 global.document = {querySelector: (selector) => (selector === ".dock-count" ? mark : selector === ".dock-book" ? book : null)};
 """ + source + r"""
 badge(4);
-assert.deepStrictEqual([mark.hidden, mark.textContent, mark.title, book.title], [false, "4", "4 stale cards", "Knowledge base \u00b7 4 stale cards"]);
+assert.deepStrictEqual([mark.hidden, mark.textContent, mark.title, book.title], [false, "4", "4 stale cards", "Knowledge base\n4 stale cards"]);
 badge(1);
 assert.strictEqual(mark.title, "1 stale card");
+drift = {total: 1, changes: ["x"], refused: [], problem: ""};
+paintBook();  // the company's words come first and the count stays
+assert.strictEqual(book.title, "1 company item differs\nx\n1 stale card");
 badge(120);
 assert.strictEqual(mark.textContent, "99+");
 badge(0);
+drift = null;
+paintBook();
 assert.deepStrictEqual([mark.hidden, mark.title, book.title], [true, "", "Knowledge base"]);
 """
         done = run_node(script)

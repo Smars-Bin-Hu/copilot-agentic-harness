@@ -108,15 +108,17 @@ const DOCK = (function () {
   // A view asked for the first time in a window is worked out again, so what changed since shows; the kept one stays on the page until the new one is there.
   const STALE_EVERY = 600000;  // ms; the view is kept as long (kbview.py)
   const UNPAIRED_EVERY = 30000;  // a page opened before its browser is paired asks again soon
+  let staleCount = 0;
   function badge(n) {
-    const mark = document.querySelector(".dock-count"), book = document.querySelector(".dock-book");
+    const mark = document.querySelector(".dock-count");
     if (!mark) return;
+    staleCount = n || 0;
     mark.hidden = !n;
     mark.textContent = n > 99 ? "99+" : String(n);
-    const words = n ? t(n === 1 ? "dock.kb.badge.one" : "dock.kb.badge.n", {n}) : "";  // what the number counts, on hover of the number and of the button (retest N12)
-    mark.title = words;
-    if (book) book.title = words ? t("dock.kb") + " \u00b7 " + words : t("dock.kb");
+    mark.title = staleWords();  // what the number counts, on hover of the number and, below the other words, of the button (retest N12)
+    paintBook();
   }
+  const staleWords = () => (staleCount ? t(staleCount === 1 ? "dock.kb.badge.one" : "dock.kb.badge.n", {n: staleCount}) : "");
   function watchStale() {
     SERVE.post("/api/kb", {op: "detail", fresh: false}).then((data) => {
       if (data.result.result) badge(data.result.result.stale);
@@ -174,7 +176,14 @@ const DOCK = (function () {
     const book = document.querySelector(".dock-book");
     if (!book) return;
     book.classList.toggle("dock-warn", Boolean(drift));
-    book.title = !drift ? t("dock.kb") : [drift.total ? t(drift.total === 1 ? "dock.company.tip.one" : "dock.company.tip", {count: drift.total}) : t("dock.company.title.stuck"), ...drift.changes.slice(0, COMPANY_LINES).map(changeWord), ...drift.refused.slice(0, COMPANY_LINES).map(stuckWord), plainWords(drift.problem || "")].filter(Boolean).join("\n");
+    paintBook();
+  }
+  // The hover of the book: the company's copies that differ (when they do), then what the number on it counts.
+  function paintBook() {
+    const book = document.querySelector(".dock-book");
+    if (!book) return;
+    const base = !drift ? t("dock.kb") : [drift.total ? t(drift.total === 1 ? "dock.company.tip.one" : "dock.company.tip", {count: drift.total}) : t("dock.company.title.stuck"), ...drift.changes.slice(0, COMPANY_LINES).map(changeWord), ...drift.refused.slice(0, COMPANY_LINES).map(stuckWord), plainWords(drift.problem || "")].filter(Boolean).join("\n");
+    book.title = [base, staleWords()].filter(Boolean).join("\n");
   }
   function watchCompany() {
     SERVE.post("/api/company", {}).then((data) => { showDrift(data.result); setTimeout(watchCompany, COMPANY_EVERY); }, () => setTimeout(watchCompany, UNPAIRED_EVERY));

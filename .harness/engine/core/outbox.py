@@ -302,9 +302,19 @@ def dismiss_action(root: Path, code: str, interactive: Optional[bool] = None, re
             "agent": agent_place(before or done), "next": say("gate.action.dismissed")}
 
 
+def reason_words(reason: str) -> str:
+    """The kind of reason in words (no sentence stop: the text that holds it adds its own)."""
+    return say(f"outbox.reason.{reason}") if reason in REASONS else say("outbox.reason.none")
+
+
+def note_text(note: str) -> str:
+    """The person's own line, for the text to the agent: on a line of its own, in quotes, whatever it ends with (it used to end the sentence and a second full stop followed: `two.'.`). Empty without a line."""
+    return say("outbox.note", note=note) if note else ""
+
+
 def reason_text(reason: str, note: str = "") -> str:
-    """The reason in words, for the agent and the draft: the kind, then the person's line."""
-    words = say(f"outbox.reason.{reason}") if reason in REASONS else say("outbox.reason.none")
+    """The reason in words, for the draft and the history line: the kind, then the person's line."""
+    words = reason_words(reason)
     return f"{words}: {note}" if note else words
 
 
@@ -318,15 +328,16 @@ def decided(entry: Dict[str, Any], minutes: int = approvals.DEFAULT_MINUTES) -> 
         return {"approved": False, "state": "opened", "opened": True, "names": names, "next": say("wait.approval.opened", names=names)}
     reason, note = str(entry.get("reason") or ""), str(entry.get("note") or "")
     why = reason_text(reason, note)
-    return {"approved": False, "state": "dismissed", "dismissed": True, "reason": reason or "none", "note": note, "why": why, "next": say("wait.approval.not_approved", why=why, follow=follow_text(reason)), "exit_code": 1}
+    return {"approved": False, "state": "dismissed", "dismissed": True, "reason": reason or "none", "note": note, "why": why, "next": say("wait.approval.not_approved", why=reason_words(reason), note=note_text(note), follow=follow_text(reason)), "exit_code": 1}
 
 
 def follow_text(reason: str) -> str:
     """What the agent is to do after a call was not approved, by the reason (the rules for the agent: one source, here)."""
-    return say(f"wait.approval.follow.{reason}") if reason in REASONS else say("wait.approval.follow.none")
+    text = say(f"wait.approval.follow.{reason}") if reason in REASONS else say("wait.approval.follow.none")
+    return text + " " + say("connections.ask") if reason == "connection" else text  # 1.7.38, C12 TB-08: the agent asked "which connection?" with PROD or the one just turned down as the default
 
 
 def wake_dismissed(entry: Dict[str, Any]) -> str:
     """The message the board sends to an agent whose turn ended on a call the person did not approve, and gave a reason for (1.7.38)."""
     reason, note = str(entry.get("reason") or ""), str(entry.get("note") or "")
-    return say("wake.dismissed", code=str(entry.get("code") or ""), why=reason_text(reason, note), follow=follow_text(reason))
+    return say("wake.dismissed", code=str(entry.get("code") or ""), why=reason_words(reason), note=note_text(note), follow=follow_text(reason))

@@ -11,6 +11,7 @@ The mark: `deliver` saves the summary in `task.json`; the Stop hook turns it int
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -76,6 +77,28 @@ def view(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return {"summary": str(found.get("summary") or ""), "skipped": [str(line) for line in found.get("skipped") or []], "at": str(found.get("at") or ""), "todo_open": str(found.get("todo_open") or "")}
 
 
+_STATUS_LINE = re.compile(r"^(\s*- \*\*(?:Status|状态)\*\*\s*[:：]\s*).*$", re.MULTILINE)
+_UPDATED_LINE = re.compile(r"^(\s*- \*\*(?:Updated|更新)\*\*\s*[:：]\s*).*$", re.MULTILINE)
+
+
+def mark_done(root: Path, task: str, key: str) -> bool:
+    """The board closed the task (the person accepted, or the promote did): the Status line of `TASK.md` says so (1.7.38, C12 TB-12). The agent wrote it before it stopped and it said "waiting for the user
+    to check and promote"; nobody was left to change it, and the closed task's Overview showed the old state. Only the Status and the Updated line, and only when they are there as the template makes them.
+    `key`: `accept.status.accepted` or `accept.status.promoted`. True when the file changed. Never raises: the task is closed whatever happens here."""
+    try:
+        path = tasks.task_dir(root, task) / tasks.TASK_FILE
+        text = path.read_text(encoding="utf-8")
+        today = utc_now()[:10]
+        done = _STATUS_LINE.sub(lambda found: found.group(1) + messages.text(key, date=today), text, count=1)
+        if done == text:
+            return False
+        done = _UPDATED_LINE.sub(lambda found: found.group(1) + today, done, count=1)
+        path.write_text(done, encoding="utf-8")
+        return True
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
 def accept(root: Path, raw_task: str) -> Dict[str, Any]:
     """The person accepts the delivered work on the board: the task closes (the report is written, the session lets go). Nothing is sent to the chat. Refused unless the task waits for acceptance."""
     task = task_ops.resolve(root, raw_task)
@@ -83,7 +106,9 @@ def accept(root: Path, raw_task: str) -> Dict[str, Any]:
     if tasklife.waiting(root, task, data)["why"] != "accept":
         raise CommandError(say("accept.not_waiting", name=task_ops.name_of(task)))
     left = (data.get("deliver") or {}).get("todo_open") or ""
-    return task_ops.close(root, task, say("accept.reason"), check_todo=False, todo_note=left or say("accept.reason"))
+    result = task_ops.close(root, task, say("accept.reason"), check_todo=False, todo_note=left or say("accept.reason"))
+    mark_done(root, task, "accept.status.accepted")
+    return result
 
 
 # --- a development task: the promote is the acceptance ---------------------------------------------------------------
@@ -116,6 +141,7 @@ def sweep(root: Path) -> List[str]:
         try:
             if promoted_and_quiet(root, task, data):
                 task_ops.close(root, task, say("accept.promote.reason"), check_todo=False, todo_note=say("accept.promote.reason"))
+                mark_done(root, task, "accept.status.promoted")
                 done.append(task_ops.name_of(task))
         except Exception:  # noqa: BLE001 - see above
             continue

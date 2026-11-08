@@ -512,15 +512,25 @@ def _tokens(*texts: Any) -> List[str]:
 FIND_LIMIT = 5
 
 
-def find(root: Path, text: str, limit: int = FIND_LIMIT) -> Dict[str, Any]:
+def window_aliases(root: Path) -> List[str]:
+    """The connections this chat can use: the ones `calls` gives. Layer 0 (the kinds and counts at the start of a chat) and layer 1 (`find`) both read this list, so they agree (1.7.38, C12 TB-07):
+    a connection signed in after VS Code was opened from the board is in neither."""
+    return [one["alias"] for one in calls(root)]
+
+
+def find(root: Path, text: str, limit: int = FIND_LIMIT, aliases: Optional[List[str]] = None) -> Dict[str, Any]:
     """Layer 1 (1.7.38): the connections that fit some words (`sales warehouse dev`). A word fits when it is, or starts, a word of the name, the type, the sentence `about`, the label, the `repos` or
     the `domains` of a connection; an environment must be the word itself (`dev` is not `devops`). The connection that fits the most words comes first, then the name counts, then the order of the
-    list. `{matches: [describe...], total, all}`: `total` fitted, `all` connections there are."""
+    list. `{matches: [describe...], total, all, envs}`: `total` fitted, `all` connections there are. An environment word (`dev`, `ist`, `qat`, `prod`) filters (1.7.38, C12 TB-06): a connection of another
+    environment is left out, even when it fits the other words; one with no environment (a ticket board) is kept when it fits another word. `envs`: the environments asked for. `aliases`: only these connections."""
     words = list(dict.fromkeys(_WORD.findall(str(text or "").lower())))
+    asked = [word for word in words if word in ENVS and word != "none"]
     servers, kinds = listed(root), types(root)
-    rows = [describe(root, alias, servers, kinds) for alias in servers]
+    rows = [describe(root, alias, servers, kinds) for alias in servers if aliases is None or alias in aliases]
     scored = []
     for position, row in enumerate(rows):
+        if asked and row["env"] not in ("", "none") and row["env"] not in asked:
+            continue
         name, kind, env = _tokens(row["alias"]), _tokens(row["type"], row["type_label"]), _tokens(row["env"])
         other = _tokens(row["about"], row["label"], " ".join(row["repos"]), " ".join(row["domains"]))
         hit, weight = 0, 0
@@ -535,7 +545,7 @@ def find(root: Path, text: str, limit: int = FIND_LIMIT) -> Dict[str, Any]:
         if hit:
             scored.append((-hit, -weight, position, row))
     scored.sort(key=lambda item: item[:3])
-    return {"matches": [item[3] for item in scored[:limit]], "total": len(scored), "all": len(rows)}
+    return {"matches": [item[3] for item in scored[:limit]], "total": len(scored), "all": len(rows), "envs": asked}
 
 
 # --- a test of the way in ----------------------------------------------------------------------------------------------------------------------------------

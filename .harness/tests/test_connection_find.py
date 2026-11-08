@@ -72,9 +72,10 @@ class FindTests(FindCase):
         self.assertEqual(self.names("devops"), ["ado"])
 
     def test_the_connection_that_fits_the_most_words_comes_first(self) -> None:
-        self.assertEqual(self.names("sales orders ist"), ["orders-ist", "orders-dev"])
-        self.assertEqual(self.names("sales warehouse dev"), ["orders-dev", "hr-dev", "orders-ist"], "an unknown word counts for nothing; a name beats a sentence")
-        self.assertEqual(self.names("Orders, DEV!"), ["orders-dev", "orders-ist", "hr-dev"], "case and punctuation do not matter")
+        self.assertEqual(self.names("sales orders"), ["orders-dev", "orders-ist"])
+        self.assertEqual(self.names("sales orders ist"), ["orders-ist"], "an environment word filters: the DEV copy fits `sales orders` and is left out")
+        self.assertEqual(self.names("sales warehouse dev"), ["orders-dev", "hr-dev"], "an unknown word counts for nothing; a name beats a sentence; the IST copy is another environment")
+        self.assertEqual(self.names("Orders, DEV!"), ["orders-dev", "hr-dev"], "case and punctuation do not matter")
 
     def test_nothing_fits_or_no_words(self) -> None:
         found = connections.find(self.root, "payroll")
@@ -87,12 +88,16 @@ class FindTests(FindCase):
         self.assertEqual((len(found["matches"]), found["total"]), (connections.FIND_LIMIT, 8))
 
     def test_the_command_answers_in_a_few_lines_and_asks_when_two_could_be_the_one(self) -> None:
-        done = self.cli("connections", "find", "sales", "orders", "ist")
+        done = self.cli("connections", "find", "sales", "orders")  # no environment named: the DEV and the IST copy both fit
         self.assertEqual(done.returncode, 0, done.stderr)
         lines = done.stdout.strip().splitlines()
-        self.assertTrue(lines[0].startswith("orders-ist  (SQL Server, IST)  Sales orders and invoices, integration tests"), lines[0])
+        self.assertTrue(lines[0].startswith("orders-dev  (SQL Server, DEV)  Sales orders and invoices, development"), lines[0])
         self.assertIn(messages.text("connections.find.many", n=2), lines[-1])
         self.assertLessEqual(len(lines), connections.FIND_LIMIT + 2)
+        one = self.cli("connections", "find", "sales", "orders", "ist").stdout  # an environment named: only that one (C12 TB-06)
+        self.assertTrue(one.splitlines()[0].startswith("orders-ist  (SQL Server, IST)"), one)
+        self.assertIn(messages.text("connections.find.one.env", env="IST"), one)
+        self.assertNotIn("orders-dev", one)
 
     def test_one_match_none_and_no_connection_at_all(self) -> None:
         one = self.cli("connections", "find", "people").stdout

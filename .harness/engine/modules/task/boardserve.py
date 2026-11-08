@@ -281,6 +281,7 @@ class Board:
         self.ready.restart = self.restarter
         self.space = tasksize.Watch(root)  # how much room the task folders take, measured once an hour (1.6.109)
         self.who: Tuple[Any, str] = (None, "")  # (the stamp of the user files, the name) for `user_name`
+        self.sweeping = threading.Event()  # set when the server stops: the thread that closes promoted tasks ends
 
     def user_name(self) -> str:
         """The name for `Hi, <name>` on the Enter screen: what `harness user` reads (user.override.json, else `git config user.name`).
@@ -386,6 +387,19 @@ class Board:
                 "space": self.space.view(result["tasks"])}
 
     SWEEP_EVERY = 5.0  # seconds between two looks for a promoted task that waits for nothing
+
+    def sweep_loop(self, wait: Optional[Callable[[float], bool]] = None) -> None:
+        """Close the promoted tasks that wait for nothing, on the server's own clock (1.7.38, C12 TB-12): it used to happen only when a page asked for the rows, so a promote made with no board page
+        open left the task open. `wait` gives the time between two looks (it returns True when the server stops); the tests pass their own."""
+        wait = wait or self.sweeping.wait
+        while not wait(self.SWEEP_EVERY):
+            try:
+                self.close_promoted()
+            except Exception:  # noqa: BLE001 - a look at the tasks must not end the thread
+                continue
+
+    def start_sweeper(self) -> None:
+        threading.Thread(target=self.sweep_loop, daemon=True, name="board-sweep").start()
 
     def close_promoted(self) -> List[str]:
         """The promote is the acceptance of a development task: when it is done, the agent has stopped and nothing else waits, the board closes the task (1.7.38, C12 Q14). At most once in a few seconds."""
@@ -1931,6 +1945,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
         pass
     link.start()  # the thread only; the board does not wait for VS Code
     board.space.start()
+    board.start_sweeper()  # a promoted task closes by itself, with no page open (1.7.38)
     path = board_serve_file(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"port": board.port, "pid": os.getpid(), "started": utc_now()}), encoding="utf-8")
@@ -1958,6 +1973,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     except KeyboardInterrupt:
         pass
     finally:
+        board.sweeping.set()
         board.runner.stop_all()
         board.terminal.stop_all()
         link.stop()

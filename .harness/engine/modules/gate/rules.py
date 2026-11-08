@@ -131,7 +131,7 @@ def external_outbox(action: Any, command: str, code: str, minutes: int, draft: s
     if offers:  # 1.7.38: the card can also open the connection for the task; the agent says so, and runs the same command again if the user does
         names = ", ".join(str(item["system"]) for item in offers)
         text += " " + say("gate.external.outbox.opens", names=names)
-    return text
+    return text + " " + say("gate.external.outbox.code", code=code)  # 1.7.38, C12 TB-10: the agent wrote the code in the chat: the person may then approve without reading the card first
 
 
 def external_autorun(action: Any, command: str) -> str:

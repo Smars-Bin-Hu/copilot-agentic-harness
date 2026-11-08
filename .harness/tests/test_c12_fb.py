@@ -13,11 +13,13 @@ from typing import Any, Dict
 
 import support  # noqa: F401 - the engine on sys.path
 from support import HarnessTestCase, pre_tool, use_packs
-from taskcase import SESSION, TASK, TaskCase
+from taskcase import NAME, SESSION, TASK, TaskCase
+from test_accept import SUMMARY, AcceptCase
+from test_connection_find import LISTED, FindCase
 
-from core import approvals, config, outbox, pinfiles, toolpacks
+from core import approvals, config, connections, messages, outbox, pinfiles, toolpacks
 from modules.gate import external
-from modules.task import cmdview, taskdesk
+from modules.task import accept, cmdview, taskdesk
 
 ENGINE = Path(__file__).resolve().parents[1] / "engine"
 WEB = ENGINE / "modules" / "task" / "web"
@@ -29,6 +31,10 @@ def run_node(script: str) -> subprocess.CompletedProcess:
         file = Path(folder) / "check.js"
         file.write_text(script, encoding="utf-8")
         return subprocess.run([NODE, str(file)], capture_output=True, text=True, check=False)
+
+
+def messages_language() -> str:
+    return messages.language()
 
 
 def real_pack(name: str) -> Dict[str, Any]:
@@ -310,6 +316,195 @@ class PinnedFilesTests(TaskCase):
         self.assertEqual(pinfiles.changed(None, {"a": "1"}), [], "an approval of before 1.7.38 kept no files")
         self.assertEqual(pinfiles.changed({}, {"a": "1"}), ["a"])
         self.assertEqual(pinfiles.changed({"a": "1", "b": "2"}, {"a": "1", "b": "3", "c": "4"}), ["b", "c"])
+
+
+class WordsToTheAgentTests(HarnessTestCase):
+    """C12 TB-09 (no doubled stops where the person's line meets the template) and TB-10 (the code is for the wait, never for the chat)."""
+
+    NOTES = ("Use this text instead: 'C12 dismiss test two.'", "Do not write, just SELECT with a SELECT.", "do not write", "换成 'two'。", "ends with a quote'")
+
+    def entry(self, reason: str, note: str) -> Dict[str, Any]:
+        return {"code": "AB12CD", "reason": reason, "note": note, "state": "dismissed"}
+
+    def test_the_persons_line_is_quoted_on_a_line_of_its_own_and_no_stop_is_doubled(self) -> None:
+        import re
+
+        for note in self.NOTES:
+            for text in (outbox.decided(self.entry("command", note))["next"], outbox.wake_dismissed(self.entry("command", note))):
+                self.assertIn(note, text)
+                rest = text.replace(note, "")
+                self.assertNotRegex(rest, r"[.。]\s*[.。]", (note, text))
+                self.assertNotRegex(rest, r"[.。]['\"”]\s*[.。]", (note, text))
+                self.assertIn(f'"{note}"' if messages_language() == "en" else f"“{note}”", text)
+        for text in (outbox.decided(self.entry("later", ""))["next"], outbox.wake_dismissed(self.entry("", ""))):
+            self.assertNotIn("..", text)
+            self.assertNotIn("。。", text)
+            self.assertNotIn("The user wrote", text)
+            self.assertNotIn("用户写的是", text)
+
+    def test_the_history_and_draft_line_keeps_the_kind_and_the_line_as_before(self) -> None:
+        self.assertTrue(outbox.reason_text("command", "two").endswith(": two"))
+        self.assertEqual(outbox.reason_text("later"), outbox.reason_words("later"))
+
+    def test_the_held_call_tells_the_agent_to_keep_the_code_for_its_wait(self) -> None:
+        action = external.Action("tickets", "none", "write", "", "tk comment T-1 x")
+        from modules.gate import rules
+
+        text = rules.external_outbox(action, "tk comment T-1 x", "AB12CD", 10, "")
+        self.assertIn("wait --approval AB12CD", text)
+        tail = text[text.index("AB12CD", text.index("wait --approval") + 20):]
+        self.assertTrue("Do not write it in the chat" in tail or "不要把它写进聊天" in tail, tail)
+        self.assertNotIn("AB12CD", messages.text("wait.approval.timeout", seconds=540, code="AB12CD"), "the end-your-turn text no longer asks for the code")
+        self.assertIn("never write its code", messages.text("wait.approval.timeout", seconds=540, code="X")) if messages_language() == "en" else None
+
+
+class WaitingForAPersonIsNotToolTimeTests(unittest.TestCase):
+    """C12 TB-04: `harness wait --approval` and a question to the person were counted as tools running; the report of a task that waited nine minutes said the tools ran nine minutes."""
+
+    def parse(self, rows: list) -> dict:
+        from core import copilot_events
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "events.jsonl"
+            path.write_text("\n".join(json.dumps(item) for item in rows) + "\n", encoding="utf-8")
+            return copilot_events.read(path)
+
+    def rows(self, tool: str, arguments: dict, seconds: float = 539.0) -> list:
+        from datetime import datetime, timezone
+
+        from test_taskboard import row
+
+        start = datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+        return [
+            row("user.message", start, 0, content="go", delivery="idle"),
+            row("assistant.turn_start", start, 0),
+            row("assistant.message", start, 5, model="m1"),
+            row("tool.execution_start", start, 5, toolCallId="t1", toolName=tool, arguments=arguments),
+            row("tool.execution_complete", start, 5 + seconds, toolCallId="t1", success=True),
+            row("assistant.turn_end", start, 5 + seconds),
+        ]
+
+    def test_a_wait_for_the_approval_is_the_persons_time(self) -> None:
+        from modules.task import taskinsight
+
+        for command in ("harness wait --approval E773B7", "python3 .harness/engine/cli.py wait --approval E773B7 --timeout 540", "cd x && harness.cmd wait --approval AB12CD"):
+            prompt = self.parse(self.rows("bash", {"command": command}))["prompts"][0]
+            self.assertEqual(round(prompt["approval_s"]), 539, command)
+            self.assertEqual(prompt["tools"][0]["seconds"], 0.0)
+            split = taskinsight.split(dict(prompt, next_at=None))
+            self.assertEqual((round(split["approval_s"]), round(split["tool_s"])), (539, 0), command)
+
+    def test_a_question_to_the_person_is_too(self) -> None:
+        prompt = self.parse(self.rows("ask_user", {"question": "Which?", "choices": ["a"]}, 132.0))["prompts"][0]
+        self.assertEqual(round(prompt["approval_s"]), 132)
+
+    def test_a_command_that_only_mentions_the_words_and_other_waits_are_tools(self) -> None:
+        for command in ("harness wait --run 'sqlcmd -Q x' --until DONE", "grep -n 'wait --approval' notes.md", "harness approve-action"):
+            prompt = self.parse(self.rows("bash", {"command": command}, 40.0))["prompts"][0]
+            self.assertEqual(prompt["approval_s"], 0.0, command)
+            self.assertEqual(round(prompt["tools"][0]["seconds"]), 40, command)
+
+
+class FindByEnvironmentTests(FindCase):
+    """C12 TB-06 (an environment word filters) and TB-07 (the line at the start of a chat and `find` count the same connections) and TB-08 (do not preselect PROD)."""
+
+    def names(self, words: str, **extra: Any) -> list:
+        return [one["alias"] for one in connections.find(self.root, words, **extra)["matches"]]
+
+    def test_an_environment_word_leaves_out_the_other_environments_but_keeps_what_has_none(self) -> None:
+        self.assertEqual(self.names("sales warehouse dev"), ["orders-dev", "hr-dev"])
+        self.assertEqual(self.names("work items dev")[0], "ado", "a ticket board has no environment: it stays when it fits another word, and comes first (it fits the most)")
+        self.assertNotIn("orders-ist", self.names("work items dev"))
+        self.assertEqual(self.names("sales prod"), [], "no connection in that environment: nothing, so the agent says so and asks")
+        self.assertEqual(sorted(self.names("dev ist")), ["hr-dev", "orders-dev", "orders-ist"], "two environments asked: both")
+        found = connections.find(self.root, "sales dev")
+        self.assertEqual(found["envs"], ["dev"])
+        self.assertEqual(connections.find(self.root, "sales")["envs"], [])
+
+    def test_a_word_that_is_not_an_environment_of_the_harness_filters_nothing(self) -> None:
+        self.assertEqual(self.names("sales uat"), ["orders-dev", "orders-ist"])
+
+    def test_the_line_at_the_start_of_a_chat_and_find_see_the_same_connections(self) -> None:
+        """A connection that is not in the window (signed in after VS Code was opened from the board) is in neither layer: the line said 3 SQL Server, and `find` found 4."""
+        self.company(dict(LISTED, **{"orders-prod": {"type": "sqlserver", "env": "prod", "host": "localhost", "port": "14333", "auth": "sql", "about": "Sales orders, production"}}))
+        path = self.root / connections.STATE_FILE
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"direct": ["orders-dev", "orders-ist", "hr-dev", "ado"], "wrap": []}), encoding="utf-8")
+        self.assertEqual(sorted(connections.window_aliases(self.root)), ["ado", "hr-dev", "orders-dev", "orders-ist"])
+        self.assertIn("3 SQL Server", self.start())
+        done = self.cli("connections", "find", "sales", "prod")
+        self.assertIn(messages.text("connections.find.none", words="sales prod", n=4), done.stdout)
+        self.assertNotIn("orders-prod", self.cli("connections", "find", "sales").stdout)
+        path.unlink()  # a window that was not opened from the board carries every connection: the line counts them all, and so does find
+        self.assertIn("4 SQL Server", self.start())
+        self.assertIn("orders-prod", self.cli("connections", "find", "sales", "prod").stdout)
+
+    def test_when_more_than_one_fits_the_agent_is_told_not_to_preselect_prod(self) -> None:
+        text = self.cli("connections", "find", "sales", "orders").stdout
+        self.assertIn(messages.text("connections.ask"), text)
+        one = self.cli("connections", "find", "people").stdout
+        self.assertNotIn(messages.text("connections.ask"), one)
+        for reason in ("connection",):
+            self.assertIn(messages.text("connections.ask"), outbox.follow_text(reason))
+        for reason in ("command", "later", "other_way", ""):
+            self.assertNotIn(messages.text("connections.ask"), outbox.follow_text(reason))
+
+
+class BoardClosesByItselfTests(AcceptCase):
+    """C12 TB-12: a promoted task closed only while a page of the board was open, and its TASK.md still said "waiting for the user to check and promote"."""
+
+    def status(self) -> str:
+        text = (self.task / "TASK.md").read_text(encoding="utf-8")
+        return next(line for line in text.splitlines() if line.startswith(("- **Status", "- **状态")))
+
+    def test_the_server_closes_a_promoted_task_on_its_own_clock_with_no_page(self) -> None:
+        self.promoted()
+        self.stop()
+        board = self.board()
+        calls = iter([False, False, True])  # two looks, then the server stops
+        board.sweep_loop(wait=lambda _seconds: next(calls))
+        self.assertEqual(self.data()["status"], "closed")
+        self.assertIn("promote", [event for event in self.data()["events"] if event["what"] == "close"][-1]["detail"])
+
+    def test_the_loop_ends_with_the_server_and_a_look_that_fails_does_not_end_it(self) -> None:
+        board = self.board()
+        board.close_promoted = lambda: (_ for _ in ()).throw(RuntimeError("boom"))  # type: ignore[assignment]
+        calls = iter([False, False, False, True])
+        board.sweep_loop(wait=lambda _seconds: next(calls))
+        board.sweeping.set()
+        board.sweep_loop(wait=board.sweeping.wait)  # already set: returns at once
+
+    def today(self) -> str:
+        from datetime import datetime, timezone
+
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    def test_the_status_of_task_md_says_it_was_promoted_and_closed_by_the_board(self) -> None:
+        self.promoted()
+        self.stop()
+        self.assertEqual(accept.sweep(self.root), [NAME])
+        self.assertIn(messages.text("accept.status.promoted", date=self.today()), self.status())
+        updated = next(line for line in (self.task / "TASK.md").read_text(encoding="utf-8").splitlines() if line.startswith(("- **Updated", "- **更新")))
+        self.assertIn(self.today(), updated)
+
+    def test_accept_and_close_writes_the_status_too_and_other_lines_are_left_alone(self) -> None:
+        self.new(kind="rca")
+        before = (self.task / "TASK.md").read_text(encoding="utf-8")
+        self.deliver("--summary", SUMMARY)
+        self.stop()
+        self.board().act("accept", NAME, "act")
+        after = (self.task / "TASK.md").read_text(encoding="utf-8")
+        self.assertIn(messages.text("accept.status.accepted", date=self.today()), self.status())
+        mine = lambda text: [line for line in text.splitlines() if not line.startswith(("- **Status", "- **状态", "- **Updated", "- **更新"))]  # noqa: E731
+        self.assertEqual(mine(before), mine(after))
+
+    def test_a_task_md_with_no_status_line_is_left_as_it_is(self) -> None:
+        self.new(kind="rca")
+        (self.task / "TASK.md").write_text("# my own notes\n\nnothing like the template\n", encoding="utf-8")
+        self.assertFalse(accept.mark_done(self.root, TASK, "accept.status.accepted"))
+        self.assertEqual((self.task / "TASK.md").read_text(encoding="utf-8"), "# my own notes\n\nnothing like the template\n")
+        (self.task / "TASK.md").unlink()
+        self.assertFalse(accept.mark_done(self.root, TASK, "accept.status.accepted"))
 
 
 if __name__ == "__main__":

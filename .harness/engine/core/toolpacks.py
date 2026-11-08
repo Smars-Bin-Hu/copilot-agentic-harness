@@ -20,7 +20,8 @@ There is no installed copy (1.7.30). A pack is read where it lies:
   <knowledge base>/company/tools/packs/<name>/ a pack the company wrote (always on)
   .harness/runtime/toolpacks.json `paths`    folders this computer added to try a pack (`harness toolpack add <folder>`)
 
-Its types, rules, `bin/` and MCP servers are read in place. The only thing copied is the skills: `sync_skills` (run by `company sync`) puts the
+Its types, rules, `bin/` and MCP servers are read in place. A pack that is off still guards its connections (1.7.38): while a connection uses a type
+of an off pack, the gate reads that pack's types, rules and MCP rules (`guarded`); turning a pack off takes back only its skills and its `bin/` on the PATH. The only thing copied is the skills: `sync_skills` (run by `company sync`) puts the
 skills of the active packs into `.github/skills/`, renamed `<prefix>-<pack>-<skill>` when the company has a `skill_prefix`, takes away the skills of
 a pack no longer active, and puts them again when the pack's version changed (`ado 0.4.5 -> 0.5.0 updated`). `.harness/runtime/toolpacks.json`
 `packs` keeps what was put there, so a removal takes back that and nothing else. To update the harness is to unzip it over the old one.
@@ -244,6 +245,42 @@ def active(root: Path) -> Dict[str, Dict[str, Any]]:
 installed = active  # the name the other modules know (before 1.7.30 a pack was copied in)
 
 
+def type_names(folder: Path) -> List[str]:
+    """The connection types a pack's `types/` brings: the `type` of each file (the file's name when it names none)."""
+    out: List[str] = []
+    for path in sorted((folder / TYPES).glob("*.json")) if (folder / TYPES).is_dir() else []:
+        found = _json(path)
+        if isinstance(found, dict):
+            out.append(str(found.get("type") or path.stem))
+    return out
+
+
+def guarded(root: Path) -> Dict[str, Dict[str, Any]]:
+    """The packs the gate reads (1.7.38): the packs that are on, and the packs that are off but whose connection type a connection uses. A connection is a place that
+    may be written to; whether a pack's skills and `bin/` are on must not decide whether its calls are judged. Same shape and order as `listed`. A type an active pack
+    already brings is not looked for again in an off pack (the first pack that brings a type keeps it)."""
+    every = listed(root)
+    names = {str(server.get("type")) for server in connections_listed(root).values()}
+    names -= {one for item in every.values() if item["active"] for one in type_names(item["folder"])}
+    out = {name: item for name, item in every.items() if item["active"]}
+    if names:
+        for name, item in every.items():
+            if item["active"]:
+                continue
+            brought = set(type_names(item["folder"]))
+            if brought & names:
+                out[name] = item
+                names -= brought
+    return {name: out[name] for name in every if name in out}
+
+
+def guard_only(root: Path) -> Dict[str, List[str]]:
+    """`{pack: [connections]}` of the packs that are off but guard a connection (`guarded` minus `active`): for doctor."""
+    held = {name: item for name, item in guarded(root).items() if not item["active"]}
+    servers = connections_listed(root)
+    return {name: sorted(alias for alias, server in servers.items() if str(server.get("type")) in set(type_names(item["folder"]))) for name, item in held.items()}
+
+
 def unknown_use(root: Path) -> List[str]:
     """Names in `use` that no factory pack has."""
     have = listed(root)
@@ -331,9 +368,9 @@ def missing_for(root: Path, alias: str) -> List[str]:
     return [str(one) for one in dict.fromkeys(wanted) if not locate(one, path)]
 
 
-def type_entries(root: Path) -> List[tuple]:
-    """`(pack name, type file)` of each connection type the active packs bring, in the order of the packs."""
-    return [(name, path) for name, item in active(root).items() for path in sorted((item["folder"] / TYPES).glob("*.json"))]
+def type_entries(root: Path, guard: bool = False) -> List[tuple]:
+    """`(pack name, type file)` of each connection type the active packs bring, in the order of the packs. With `guard` also those of the off packs a connection uses (`guarded`, 1.7.38)."""
+    return [(name, path) for name, item in (guarded(root) if guard else active(root)).items() for path in sorted((item["folder"] / TYPES).glob("*.json"))]
 
 
 def type_files(root: Path) -> List[Path]:
@@ -341,9 +378,9 @@ def type_files(root: Path) -> List[Path]:
 
 
 def rules_layer(root: Path) -> Dict[str, Any]:
-    """The systems the installed tool packs write by hand, each marked with its tool pack (`tool pack`), in the form of tools.json."""
+    """The systems the tool packs write by hand, each marked with its tool pack (`toolpack`), in the form of tools.json: the packs that are on, and the off packs a connection uses (1.7.38)."""
     out: Dict[str, Any] = {}
-    for name, item in installed(root).items():
+    for name, item in guarded(root).items():
         try:
             listed = json.loads((item["folder"] / RULES).read_text(encoding="utf-8-sig")).get("systems") or {}
         except (OSError, ValueError, AttributeError):
@@ -407,8 +444,8 @@ def link_view(root: Path, ref: str) -> Dict[str, str]:
 
 
 def mcp_verb(root: Path, tool: str) -> Optional[Dict[str, str]]:
-    """What an MCP tool does, by the first rule of an installed tool pack whose pattern matches its name: `{tool pack, verb}`; None when none names it."""
-    for name, item in installed(root).items():
+    """What an MCP tool does, by the first rule of a tool pack whose pattern matches its name (the packs that are on, and the off packs a connection uses): `{tool pack, verb}`; None when none names it."""
+    for name, item in guarded(root).items():
         for rule in ((item["manifest"].get("mcp") or {}).get("tools") or []):
             try:
                 if isinstance(rule, dict) and rule.get("verb") in MCP_VERBS and re.search(str(rule.get("pattern") or ""), tool, re.IGNORECASE):

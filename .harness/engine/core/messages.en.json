@@ -2821,7 +2821,7 @@
   "machine.conn.update": "Update",
   "machine.conn.remove.ask": "Remove {name}? The board forgets this folder and moves the pack's skills to .harness/runtime/toolpack-backup/. The folder itself stays as it is.",
   "toolpack.company.managed": "`{name}` is the company's: it follows the knowledge base (company sync), not a button here",
-  "toolpack.clash": "The company wrote a pack `{name}` in company/tools/packs/, but the harness has a factory pack with that name. The factory pack is used; the company pack is not. Rename the company pack.",
+  "toolpack.clash": "The company wrote a pack `{name}` in company/tools/packs/, but the harness has a factory pack with that name. Rename the company's pack: until then `company sync` stops and changes nothing.",
   "connections.mcp.vscode": "Reached through an MCP connection that VS Code runs: sign in there (VS Code asks the first time a tool of it is used).",
   "toolpack.new.exists": "{path} is there already",
   "toolpack.new.done": "Made {path}. Fill in toolpack.json, the type and the skill (.harness/contracts/toolpack/README.md), then harness toolpack check {path}.",
@@ -3365,5 +3365,7 @@
   "tools.conn.sign.yes": "signed in",
   "tools.conn.sign.no": "not signed in yet",
   "tools.conn.sign.failed": "sign-in failed",
-  "tools.conn.sign.tip": "Opens the sign-in on This computer."
+  "tools.conn.sign.tip": "Opens the sign-in on This computer.",
+  "doctor.toolpacks.guard": "Tool pack {name} is off, but the connections {aliases} use its type. The gate still judges their calls by its rules; its skills and its program on the PATH are off.",
+  "company.sync.clash": "Sync stopped and changed nothing. The company's pack {names} in company/tools/packs/ has the name of a factory pack. Rename the company's pack, then run `harness company sync` again."
 }

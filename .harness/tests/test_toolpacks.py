@@ -1028,6 +1028,78 @@ class FactoryPacks(ToolpackCase):
         self.assertEqual(toolpacks.ledger(self.root)["packs"], {})
         self.assertNotIn("tracker-board", config.load_policy(self.root, "tools").get("systems") or {})
 
+    def connect(self, **fields) -> None:
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"board": dict({"type": "tracker", "env": "none", "org": "demo"}, **fields)}}), encoding="utf-8")
+
+    def term(self, command: str) -> dict:
+        event = pre_tool("s-off", "run_in_terminal", {"command": command, "explanation": "t", "isBackground": False})
+        event["cwd"] = str(self.root)
+        return self.hook(event)
+
+    def test_a_pack_that_is_off_still_guards_the_connections_that_use_its_type(self) -> None:
+        """1.7.38: turning a pack off takes back its skills and its bin/ only; a connection of its type is still judged."""
+        self.use()
+        self.assertEqual(self.term("tracker --org demo comment 7 hi"), {}, "no connection: the gate knows no tracker")
+        self.connect()
+        systems = config.load_policy(self.root, "tools")["systems"]
+        self.assertEqual((systems["board"]["toolpack"], systems["board"]["env"]), ("tracker", "none"))
+        self.assertNotIn("needs", systems["board"], "nothing probes a connection of an off pack: no state on the board")
+        self.assertIn("tracker-board", systems, "its rules.json counts too")
+        held = self.term("tracker --org demo comment 7 hi")
+        self.assertEqual(held.get("permissionDecision"), "deny", held)
+        self.assertIn("board", json.dumps(held, ensure_ascii=False))
+        self.assertNotEqual(self.term("tracker --org demo get 7").get("permissionDecision"), "deny", "a read runs")
+        self.assertEqual(toolpacks.guard_only(self.root), {"tracker": ["board"]})
+        # what turning off still takes back
+        self.assertNotIn("tracker", toolpacks.active(self.root))
+        self.assertEqual(toolpacks.bin_folders(self.root), [])
+        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
+        self.assertNotIn("tracker", connections.types(self.root), "the board and the tests see the types of the packs that are on")
+        self.assertIn("tracker", connections.types(self.root, guard=True))
+        self.assertEqual(toolpacks.needs_report(self.root), {})
+
+    def test_an_off_pack_judges_prod_as_read_only_and_a_connection_of_another_type_guards_nothing(self) -> None:
+        self.connect(env="prod")
+        denied = self.term("tracker --org demo comment 7 hi")
+        self.assertEqual(denied.get("permissionDecision"), "deny")
+        self.assertIn("(prod)", denied["permissionDecisionReason"])
+        self.assertNotIn("Approve", denied["permissionDecisionReason"], "prod is refused, not held for the person's approval")
+        self.assertNotEqual(self.term("tracker --org demo get 7").get("permissionDecision"), "deny", "prod read runs")
+        self.connect(type="elsewhere")
+        self.assertEqual(toolpacks.guard_only(self.root), {})
+        self.assertEqual(self.term("tracker --org demo comment 7 hi"), {})
+        self.assertNotIn("tracker-board", config.load_policy(self.root, "tools").get("systems") or {})
+
+    def test_an_own_connection_in_the_env_file_guards_an_off_pack_too(self) -> None:
+        connections.write_env(self.root, {"HARNESS_CONNECTION_MINE_ALIAS": "mine", "HARNESS_CONNECTION_MINE_TYPE": "tracker", "HARNESS_CONNECTION_MINE_ENV": "none", "HARNESS_CONNECTION_MINE_ORG": "demo"})
+        self.assertEqual(self.term("tracker --org demo comment 7 hi").get("permissionDecision"), "deny")
+        self.assertEqual(toolpacks.guard_only(self.root), {"tracker": ["mine"]})
+
+    def test_a_pack_that_is_on_keeps_its_type_and_an_off_pack_with_the_same_type_is_not_read(self) -> None:
+        other = make(self.root / ".harness" / "toolpacks" / "tracker2", name="tracker2", skills=("tracker2-ticket",))
+        (other / "types" / "tracker.json").write_text(json.dumps(dict(KIND, label="Second")), encoding="utf-8")
+        self.use("tracker2")
+        self.connect()
+        self.assertEqual(sorted(toolpacks.guarded(self.root)), ["tracker2"], "tracker brings the same type but tracker2 is on and keeps it")
+        self.assertEqual(connections.types(self.root, guard=True)["tracker"]["label"], "Second")
+        self.assertEqual(toolpacks.guard_only(self.root), {})
+
+    def test_an_off_packs_mcp_rules_count_while_a_connection_uses_it(self) -> None:
+        manifest = json.loads((self.factory / "toolpack.json").read_text(encoding="utf-8"))
+        manifest["mcp"] = {"tools": [{"pattern": "^mcp_tracker_(get|list)", "verb": "read"}, {"pattern": "^mcp_tracker_", "verb": "write"}]}
+        (self.factory / "toolpack.json").write_text(json.dumps(manifest), encoding="utf-8")
+        self.assertIsNone(toolpacks.mcp_verb(self.root, "mcp_tracker_update"), "off, no connection: not judged")
+        self.connect()
+        self.assertEqual(toolpacks.mcp_verb(self.root, "mcp_tracker_update"), {"toolpack": "tracker", "verb": "write"})
+        self.assertEqual(toolpacks.mcp_verb(self.root, "mcp_tracker_get_x")["verb"], "read")
+
+    def test_doctor_says_an_off_pack_still_guards_its_connections(self) -> None:
+        self.connect()
+        lines = DoctorToolpacks.lines_of(self.root)
+        self.assertTrue(any("tracker" in line and "board" in line and "[OK]" in line for line in lines), lines)
+        self.use("tracker")
+        self.assertFalse(any("still judges" in line for line in DoctorToolpacks.lines_of(self.root)))
+
     def test_a_name_in_use_that_no_pack_has_is_listed(self) -> None:
         self.use("tracker", "nosuch")
         self.assertEqual(toolpacks.unknown_use(self.root), ["nosuch"])

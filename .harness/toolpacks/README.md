@@ -20,7 +20,7 @@ A pack is off until the knowledge base names it. In the knowledge base, `company
 {"use": ["ado", "sqlserver"]}
 ```
 
-Then `harness company sync` (the board also runs it when it starts). A pack that is on has its types, gate rules, `bin/` on the PATH and MCP servers read from here, and its skills put into `.github/skills/` as `<prefix>-<pack>-<skill>` (`acme-ado-workitem`), where `<prefix>` is the company's `skill_prefix`. Without one the name stays `<pack>-<skill>`. Take a name out of `use` and its skills are taken back.
+Then `harness company sync` (the board also runs it when it starts). A pack that is on has its types, gate rules, `bin/` on the PATH and MCP servers read from here, and its skills put into `.github/skills/` as `<prefix>-<pack>-<skill>` (`acme-ado-workitem`), where `<prefix>` is the company's `skill_prefix`. Without one the name stays `<pack>-<skill>`. Take a name out of `use` and its skills are taken back and its `bin/` leaves the PATH. The pack's gate rules stay in force for the connections that use one of its types: a pack that is off still guards its connections. A company pack with the name of a factory pack makes `harness company sync` stop and change nothing until the company's pack is renamed.
 
 ## Write your own
 

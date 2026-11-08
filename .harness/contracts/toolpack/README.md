@@ -2,6 +2,10 @@
 
 A **tool pack** teaches the agent one outside tool (a database, a ticket board, a pipeline service). It is one folder; the harness reads each file the way it reads the rest of its policies. The factory packs ship in `.harness/toolpacks/` (`ado`, `sqlserver`, `demotracker`) and are read where they lie: there is no installed copy (1.7.30). The knowledge base turns one on (`company/tools/packs.json`, `{"use": ["ado"]}`); a pack the company wrote is in `company/tools/packs/<name>/`; `harness toolpack add <folder>` records a folder to try. `harness toolpack new <name>` makes the skeleton below; `harness toolpack check <folder>` says what is wrong, file by file, before you use it. Why a pack and not only an MCP server: [docs/13](../../../docs/13-tool-packs-and-mcp.md). The code is `.harness/engine/core/toolpacks.py`.
 
+**On and off (1.7.38).** Turning a pack off takes back only its skills (`.github/skills/`) and its `bin/` on the PATH. It does not take back the guard: while a connection (the company's, or one of the person's own) has a type the pack brings, the gate still judges the calls of the pack's program by the pack's types, `rules.json` and MCP rules (`toolpacks.guarded`). An off pack that no connection uses is unknown to the gate. A system made for a connection of an off pack has no `needs`, so nothing probes it and the board shows no state for it.
+
+**One name, one pack.** A company pack in `company/tools/packs/<name>/` must not have the name of a factory pack. `harness company sync` then stops as a whole before it changes anything and says to rename the company's pack; `harness doctor` reports an error.
+
 Three words, used the same way on the board, in commands and in files:
 
 | Word | What it is | Where |
@@ -81,7 +85,7 @@ A company may block MCP (VS Code's organization policy). Every tool pack must wo
 
 ## What the harness guarantees
 
-- Only a person adds or removes a folder to try (in their own terminal, or the board's buttons), and only the knowledge base turns a factory pack on: a pack's rules are the gate's rules. `.harness/toolpacks/`, `.harness/runtime/` and `.vscode/mcp.json` are guardrails.
+- Only a person adds or removes a folder to try (in their own terminal, or the board's buttons), and only the knowledge base turns a factory pack on: a pack's rules are the gate's rules, and they stay in force for a connection of the pack's type when the pack is off. `.harness/toolpacks/`, `.harness/runtime/` and `.vscode/mcp.json` are guardrails.
 - **Skill names.** A pack's skills are `<name>-<skill>` in the pack. In `.github/skills/` they are `<prefix>-<name>-<skill>` when the company has a `skill_prefix` (folder, `name:` and the references between the pack's own skills are renamed by `company sync`). `<name>` is the name of the pack's program, so the agent finds the skills of a tool by the program it needs. A skill with no tool is `<prefix>-<skill>`.
 - Its rules sit after the company's and before the person's `tools.override.json`: the person's own file wins.
 - A write of a tool pack's connection waits for the person even in an environment opened to the agent, unless its type says `openable`.

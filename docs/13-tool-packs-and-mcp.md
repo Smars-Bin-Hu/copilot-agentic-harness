@@ -20,6 +20,8 @@ A tool pack's connection type says:
 
 This is where the harness's own abilities (tasks, gate, approvals, linked items) meet the tool. MCP tool calls go through the gate too, and a write asks. But the server gives none of this information. The pack's type does.
 
+The guard does not depend on the pack being on. Turning a pack off takes back its skills and its program on the PATH. While a connection still has one of its types, the gate keeps judging that tool's calls the same way.
+
 ## 3. Skills are needed either way
 
 A server says what can be called. It does not say when, in which order, or how the company does it. The SOP skills of a pack (`<prefix>-<pack>-<name>`) are the half MCP never had.

@@ -3405,5 +3405,7 @@
   "setup.look.n": "{n} to look at for company tasks · none stops Enter",
   "setup.skills": "Company skills",
   "setup.fact.ca.n.one": "certificate bundle · 1 certificate",
-  "machine.ca.state.long.one": "certificate bundle · 1 certificate · made {made}"
+  "machine.ca.state.long.one": "certificate bundle · 1 certificate · made {made}",
+  "setup.fact.signin.failed": "Your identity is kept ({account}), but the last check did not pass.",
+  "setup.fact.conns.failed": "{n} failed"
 }

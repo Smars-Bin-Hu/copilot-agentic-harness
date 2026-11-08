@@ -269,9 +269,10 @@ const SETUP = (function () {
       add(rows, fact(t("setup.toolpacks"), packKind, packs.length ? [...names(packs.map((item, index) => ({name: item.name, kind: packKinds[index], tip: ready.has(item.name) ? t(ready.get(item.name) ? "setup.fact.pack.ready" : "setup.fact.pack.not") : ""}))), packs.some((item) => item.from === "harness") ? part(t("setup.fact.packs.harness"), "soft") : null].filter(Boolean)
         : h("span", null, part(t("setup.fact.packs.none"), "off"), part(" \u00b7 " + t("setup.fact.packs.picks"), "soft")), packs.map((item) => item.name).join(", ") || t("setup.fact.packs.tip"), "", ["packs", ""], ["packs", ""]), packKind);
       const conns = tools.conns ? tools.conns.rows : (c.connections || []).map((name) => ({alias: name, saved: false, account: ""}));
-      const todo = conns.filter((row) => !row.saved).length;
-      const connKind = !conns.length || todo ? "need" : "ok";
-      add(rows, fact(t("connections.title"), connKind, conns.length ? [...names(conns.map((row) => ({name: row.alias, kind: row.saved ? "ok" : "ring", tip: row.saved ? t("setup.fact.signin.saved", {account: row.account || "-"}) : t("setup.fact.signin.not")}))), part(t(todo ? "setup.fact.conns.todo" : "setup.fact.conns.all", {n: todo}), todo ? "off" : "soft")]
+      const todo = conns.filter((row) => !row.saved).length, failed = conns.filter((row) => row.failed).length;  // failed: kept, and the last check or Test did not pass
+      const connKind = !conns.length || todo || failed ? "need" : "ok";
+      add(rows, fact(t("connections.title"), connKind, conns.length ? [...names(conns.map((row) => ({name: row.alias, kind: row.failed ? "need" : row.saved ? "ok" : "ring", tip: row.failed ? t("setup.fact.signin.failed", {account: row.account || "-"}) : row.saved ? t("setup.fact.signin.saved", {account: row.account || "-"}) : t("setup.fact.signin.not")}))),
+        part([todo ? t("setup.fact.conns.todo", {n: todo}) : failed ? "" : t("setup.fact.conns.all"), failed ? t("setup.fact.conns.failed", {n: failed}) : ""].filter(Boolean).join(" \u00b7 "), todo || failed ? "off" : "soft")]
         : part(t("setup.fact.conns.none"), "off"), conns.map((row) => row.alias).join(", ") || t("setup.fact.conns.tip"), "", ["connections", ""], ["connections", ""]), connKind);
       factsBox.replaceChildren(...rows);
       // Local

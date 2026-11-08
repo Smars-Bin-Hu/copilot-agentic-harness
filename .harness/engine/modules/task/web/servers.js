@@ -312,7 +312,7 @@ const SERVERS = (function () {
   // One line for Get ready and the Enter screen: how many servers, how many with the person's identity.
   function summary() {
     return ask("list").then((found) => ({orphans: found.signins.orphans.map((item) => item.name), n: found.connections.length, saved: found.connections.filter((row) => row.saved).length,
-      rows: found.connections.filter((row) => row.via !== "mcp").map((row) => ({alias: row.alias, saved: Boolean(row.saved), account: row.account || "", env: row.env || "", own: Boolean(row.own), tool: row.tool || ""}))}));
+      rows: found.connections.filter((row) => row.via !== "mcp").map((row) => ({alias: row.alias, saved: Boolean(row.saved), account: row.account || "", env: row.env || "", own: Boolean(row.own), tool: row.tool || "", failed: Boolean(row.saved) && (row.reach === "denied" || row.reach === "failed")}))}));
   }
 
   // "Open VS Code with identities": tick the identities this window holds; those that cannot share it are reached through `harness as`, marked so.

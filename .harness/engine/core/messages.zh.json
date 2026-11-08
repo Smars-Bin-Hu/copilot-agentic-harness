@@ -3405,5 +3405,7 @@
   "setup.look.n": "做公司任务前有 {n} 项要看看 · 都不会挡住 Enter",
   "setup.skills": "公司 skill",
   "setup.fact.ca.n.one": "证书 bundle · 1 张证书",
-  "machine.ca.state.long.one": "证书 bundle · 1 张证书 · {made} 生成"
+  "machine.ca.state.long.one": "证书 bundle · 1 张证书 · {made} 生成",
+  "setup.fact.signin.failed": "你的身份已保存（{account}），但最近一次检查没通过。",
+  "setup.fact.conns.failed": "{n} 个没通过"
 }

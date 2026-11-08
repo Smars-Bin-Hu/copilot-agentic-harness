@@ -257,6 +257,7 @@ const SETUP = (function () {
       prefixRow.hidden = !showBox;
       if (own) add(rows, fact(t("setup.prefix"), conflict ? "need" : "ok", own, conflict || t("setup.fact.prefix.tip"), "skills"), conflict ? "need" : "ok");
       else if (showBox) rows.push(prefixRow);
+      else if (c.prefix && c.prefix.effective) add(rows, fact(t("setup.prefix"), "ok", c.prefix.effective, t("setup.fact.prefix.tip"), "skills"), "ok");  // no knowledge base, but this copy names one (user.override.json): say it, as the Enter screen does
       else add(rows, fact(t("setup.prefix"), "need", t("setup.fact.notfound"), t("setup.fact.prefix.none.tip"), "skills"), "need");
       const standard = missing("standards");
       const said = !st.parts && st.guide.declared.includes("standards");

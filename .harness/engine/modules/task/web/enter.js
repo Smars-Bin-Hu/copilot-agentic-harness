@@ -372,7 +372,7 @@
     else if (id === "paired") note = t("board.enter.m.paired.unpaired");
     else if (id === "doctor") note = word("board.enter.m.doctor." + c.why + (c.why === "errors" && c.n === 1 ? ".one" : ""), vals, plainWords(c.detail || ""));
     else if (id === "vscode") note = c.why === "none" && recentlyOpened() ? t("board.enter.m.vscode.opened") : c.why === "none" ? t("board.enter.m.vscode.none", {button: buttonWords()})
-      : c.why === "env" || c.why === "unseen" ? t("board.enter.m.vscode." + c.why, {button: buttonWords()}) + (c.detail ? " " + t("board.enter.m.vscode.missing", {detail: plainWords(c.detail)}) : "")  // connected, but not started with this copy's settings (Q2)
+      : c.why === "env" || c.why === "unseen" ? t("board.enter.m.vscode." + c.why, {button: buttonWords()}) + (c.detail ? (root.lang === "zh" ? "" : " ") + t("board.enter.m.vscode.missing", {detail: plainWords(c.detail)}) : "")  // connected, but not started with this copy's settings (Q2)
       : word("board.enter.m.vscode." + c.why, vals);
     else if (id === "copilot" && c.why !== "vscode") note = word("board.enter.m.copilot." + c.why, vals);
     return {state, level, tag, note, soft: state === "wait", tip};

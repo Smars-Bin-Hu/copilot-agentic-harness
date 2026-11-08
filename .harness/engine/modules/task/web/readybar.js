@@ -25,7 +25,7 @@ const READYBAR = (function () {
   function line(problem, level, extra) {
     const hooks = {done: () => poll(true), onState: (view) => { restart = view; paint(); }, opened: () => { restart = null; setTimeout(() => poll(true), 1500); }, fail: (error) => { failed = error.message || String(error); paint(); }};
     const said = extra || "";
-    return h("div", {class: "rd-li"}, dot(level), h("span", {class: "rd-t"}, h("span", {class: "rd-what"}, problem.text), " ", h("span", {class: "rd-why"}, said || problem.why || "")),
+    return h("div", {class: "rd-li"}, dot(level), h("span", {class: "rd-t"}, h("span", {class: "rd-what"}, problem.text), document.documentElement.lang === "zh" ? "" : " ", h("span", {class: "rd-why"}, said || problem.why || "")),
       problem.fix && problem.fix.to ? READY.button(problem.fix, hooks, "act rd-fix" + (level === "red" && problem.fix.to === "vscode" ? " hot live" : "")) : null);
   }
 

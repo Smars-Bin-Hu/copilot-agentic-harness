@@ -552,6 +552,68 @@ class PageTests(unittest.TestCase):
         self.assertIn("prefers-reduced-motion: reduce", code)
 
 
+class BlockPageTests(unittest.TestCase):
+    """1.7.38, block B: the blocks at the top of the board after Enter, and the VS Code button."""
+
+    def pages(self) -> Dict[str, str]:
+        return PageTests().pages()
+
+    def test_the_served_pages_carry_the_shared_part_before_the_screen_and_only_the_board_the_blocks(self) -> None:
+        pages = self.pages()
+        for name in ("served", "desk served"):
+            self.assertLess(pages[name].index("const READY = (function"), pages[name].index("/api/ready"), name)  # readyui.js before enter.js: the screen uses it
+        self.assertIn("const READYBAR = (function", pages["served"])
+        self.assertLess(pages["served"].index("const READYBAR = (function"), pages["served"].index("typeof READYBAR !== \"undefined\" ? READYBAR.node()"))
+        self.assertIn(".rd-wrap{", pages["served"])
+        for name in ("board", "desk", "desk served"):
+            self.assertNotIn("const READYBAR", pages[name], name)
+        for name in ("board", "desk"):
+            self.assertNotIn("const READY =", pages[name], name)  # a page on disk calls nothing out
+
+    def test_the_block_hides_by_the_set_of_problems_in_a_try_and_the_red_one_has_no_hide(self) -> None:
+        code = (WEB / "readybar.js").read_text(encoding="utf-8")
+        self.assertIn("harness.ready.hidden", code)
+        self.assertRegex(code, r"try \{ return localStorage\.getItem\(KEY\)")
+        self.assertRegex(code, r"try \{ localStorage\.setItem\(KEY, value\); \} catch")
+        self.assertIn("fingerprint(optional)", code)  # hidden until the set of problems changes
+        red = code[code.index("function red("):code.index("function yellow(")]
+        self.assertNotIn("board.ready.hide", red)  # the red block cannot be hidden
+        self.assertIn('role: "alert"', red)
+        self.assertIn("html.rd-red .vs-banner{display:none}", (WEB / "readybar.css").read_text(encoding="utf-8"))
+
+    def test_the_board_asks_the_same_answer_as_the_screen_and_not_while_the_screen_is_up(self) -> None:
+        code = (WEB / "readybar.js").read_text(encoding="utf-8")
+        self.assertIn('SERVE.call("/api/ready"', code)
+        self.assertIn('root.classList.contains("en-open")', code)
+        self.assertNotRegex(code, r"SERVE\.post\(")
+
+    def test_every_fix_the_server_gives_leads_somewhere_the_page_knows(self) -> None:
+        import tempfile
+        from core import readyitems
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            listed = readyitems.items(root)
+        fixes = [problem["fix"] for entry in listed for problem in entry["problems"]] + [entry["fix"] for entry in listed]
+        ui = (WEB / "readyui.js").read_text(encoding="utf-8")
+        for fix in [item for item in fixes if item]:
+            self.assertIn(f'fix.to === "{fix["to"]}"', ui, fix)
+            self.assertIn(fix["tab"] if fix["to"] in ("tools", "kb") else fix["sec"], ("packs", "connections", "local", "company"), fix)
+        self.assertIn('fix.to === "vscode"', ui)
+        self.assertIn("TOOLS.open(fix.tab, given.done, fix.part || undefined)", ui)
+
+    def test_the_vscode_button_goes_through_the_restart_and_never_through_the_old_open_dialog(self) -> None:
+        screen, ui, serve = [(WEB / name).read_text(encoding="utf-8") for name in ("enter.js", "readyui.js", "serve.js")]
+        self.assertIn("READY.vsAct(buttonKind()", screen)
+        self.assertNotIn("SERVE.openVS", screen)
+        self.assertIn("SERVE.restartVS({open: !withIdentities", ui)
+        self.assertIn('"/api/restart"', serve)
+        self.assertIn("board.vs.restart.busy.one", serve)  # the question before it stops an agent at work
+        self.assertIn("board.vs.restart.anyway", serve)
+        self.assertIn("openVS, restartVS", serve)  # /api/open and openVS stay for the task page
+
+
 class DockOnEnterTests(unittest.TestCase):
     """1.7.34: the Enter screen has no gear; the dock comes down; a key counts after a window closed and not while the ? panel is open."""
 

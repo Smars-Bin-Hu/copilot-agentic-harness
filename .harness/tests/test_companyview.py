@@ -163,6 +163,46 @@ class Tools(ViewCase):
         self.assertEqual(len(found["tools"]), 12)
 
 
+class PageRules(unittest.TestCase):
+    """1.7.38 (the C11 test of a whole setup): what the pages do, as far as a test of the files can say. The real look was checked in a browser."""
+
+    WEB = Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web"
+
+    def source(self, name: str) -> str:
+        return (self.WEB / name).read_text(encoding="utf-8")
+
+    def test_the_company_tab_keeps_the_actions_folded_and_a_rule_in_no_words_is_a_count(self) -> None:
+        tab = self.source("companytab.js")
+        self.assertIn('h("details", {class: "co-verb"}', tab)  # no `open`: only the number shows
+        self.assertNotIn("open: open", tab)
+        self.assertIn('t(bare.length === 1 ? "dock.co.rules.one" : "dock.co.rules"', tab)
+        self.assertIn('h("code", {class: "co-pat"}, row.pattern)', tab)  # the pattern is in the small window
+
+    def test_pack_for_colleagues_checks_before_it_asks_for_a_folder(self) -> None:
+        dock = self.source("dock.js")
+        start = dock.split("function packStart()")[1].split("function paintPackError")[0]
+        self.assertLess(start.index('op: "packcheck"'), start.index('chooseOnPage("folder"'))
+        self.assertIn('op: "commit"', dock)  # the button commits; no command to read
+        self.assertNotIn("git -C", dock)
+
+    def test_every_tab_of_the_window_says_when_there_is_no_knowledge_base_and_refresh_forgets_every_view(self) -> None:
+        dock = self.source("dock.js")
+        self.assertIn("if (found.has_kb === false) { emptyState(); return; }", dock)
+        self.assertIn('post({op: "forget"})', dock)
+        self.assertIn("recheck();", dock)  # the copies are looked at again with Refresh and when the window opens
+
+    def test_a_connection_of_ones_own_is_removed_only_after_the_browser_asked(self) -> None:
+        servers = self.source("servers.js")
+        self.assertIn('window.confirm(t("connections.forget.ask"', servers)
+        self.assertNotIn("connections.forget.sure", servers)
+        self.assertIn('"connections.state.notsaved"', servers)  # a failed test of what is not kept says so
+        self.assertIn("env.redraw()", servers.split("shareWindow(row, (said, bad) =>")[1].split("));")[0])  # a share draws the list again
+
+    def test_a_row_name_of_an_unfolded_list_opens_its_window(self) -> None:
+        enter = self.source("enter.js")
+        self.assertNotIn('if (!name || list.classList.contains("folded")) return;', enter)
+
+
 class Wiring(ViewCase):
     def test_the_window_knows_when_no_knowledge_base_is_in_place_and_forgets_its_views_on_request(self) -> None:
         """1.7.38: every tab shows the empty state with no knowledge base; Refresh and a rebuilt map make every kept view old."""

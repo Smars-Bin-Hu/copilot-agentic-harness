@@ -312,7 +312,7 @@ const DOCK = (function () {
       return known && known.stale ? [t("dock.kb.refresh.cards"), refresh] : null;
     }
     const staleOf = (item) => { if (!extra) return undefined; const known = extra.domains[item.domain]; return known ? known.stale : 0; };  // a domain only listed has no folder yet, so no card
-    const percent = (item) => { const left = item.to_learn || 0, cards = item.cards || 0; return item.done ? 100 : cards + left ? Math.round(100 * cards / (cards + left)) : 0; };
+    const percent = (item) => { const left = item.to_learn || 0, cards = item.cards || 0; return item.done ? 100 : item.problem ? 0 : cards + left ? Math.round(100 * cards / (cards + left)) : 0; };  // a domain whose objects are not known (no map) has no bar, not a full one
     function readText(item) {
       if (!extra) return "\u2026";
       const known = extra.domains[item.domain];

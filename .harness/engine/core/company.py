@@ -14,7 +14,7 @@
 
 `sync` makes the copies, and never touches any other file. `pack` makes a zip of what git has in the knowledge base;
 `update` puts one in place, for a team with no git server to pull from. It keeps a copy of the files changed here first.
-`update --apply` is for a person at a terminal.
+`update --apply` is for a person at a terminal. `folder_update` (1.7.38) is the same for a folder of git: a pull, listed first, never replacing a commit of this copy.
 """
 
 from __future__ import annotations
@@ -687,6 +687,89 @@ def apply_package(root: Path, kb: Path, path: Path, manifest: Dict[str, Any], ch
         (kb / MANIFEST_PATH).parent.mkdir(parents=True, exist_ok=True)
         (kb / MANIFEST_PATH).write_bytes(package.read(MANIFEST_PATH))  # last: a run that stopped halfway can simply be run again
     return backup
+
+
+# --- update from a folder: a git pull, listed first (Q5, 1.7.38) -------------------------------------------------------------------------------------------
+
+
+UPDATE_SHOWN = 12  # files listed in the preview; `total` has them all
+UPDATE_SUBJECTS = 3  # commit subjects told when the copy is ahead
+
+
+def _git_say(result: subprocess.CompletedProcess) -> str:
+    """The first line git said on a failure, for a person."""
+    text = (result.stderr or b"").decode("utf-8", "replace").strip() or (result.stdout or b"").decode("utf-8", "replace").strip()
+    return next((line.strip() for line in text.splitlines() if line.strip()), "")[:240]
+
+
+def _commit_subjects(kb: Path, span: str) -> List[str]:
+    done = git(kb, "log", "--format=%s", "-n", str(UPDATE_SUBJECTS), span)
+    return [line.strip() for line in done.stdout.decode("utf-8", "replace").splitlines() if line.strip()] if done.returncode == 0 else []
+
+
+def folder_update(root: Path, raw: str, apply: bool = False) -> Dict[str, Any]:
+    """Update the knowledge base here from a folder that holds it, by git (Q5): what the folder has that this copy has not is listed first, and only a person who says yes gets it.
+    Nothing here replaces or drops a commit of this copy. `state`:
+
+      behind     the folder has commits this copy has not (`behind`), and the copy has none the folder lacks: `changes` (first UPDATE_SHOWN of `total`), `counts`, `commits`; with `apply` they are merged (fast-forward only)
+      same       the copy has everything the folder has
+      ahead      the copy has commits the folder lacks (`ahead`, `subjects`): stop; they are never replaced. `behind` says whether the folder has new ones too
+      unrelated  the two share no history: stop
+      dirty      files changed here and not committed would be changed by the update (`files`): stop
+      plain      the folder or this copy is no git repository: nothing to pull; the caller falls back to the old way (copy the folder, the old one to a backup)
+      error      git could not read the folder (`why`)
+
+    `why` is the sentence for the person (empty when all is well); `text` the preview. A fetch writes objects into this copy's `.git`, never a branch, never a file."""
+    kb = root / targets.KB_DIR
+    source = Path(raw)
+    out: Dict[str, Any] = {"state": "plain", "why": "", "text": "", "behind": 0, "ahead": 0, "changes": [], "total": 0, "counts": {"add": 0, "change": 0, "remove": 0}, "commits": [], "subjects": [], "files": [], "uncommitted_there": 0, "branch": ""}
+    if not (kb / ".git").exists() or not (source / ".git").exists():
+        return out
+    branch = git(source, "rev-parse", "--abbrev-ref", "HEAD")
+    if branch.returncode != 0:
+        return dict(out, state="error", why=say("company.folder.error", error=_git_say(branch)))
+    name = branch.stdout.decode("utf-8", "replace").strip() or "HEAD"
+    out["branch"] = name
+    fetched = git(kb, "fetch", "--no-tags", "--quiet", str(source), name)
+    if fetched.returncode != 0:
+        return dict(out, state="error", why=say("company.folder.error", error=_git_say(fetched)))
+    if git(kb, "merge-base", "HEAD", "FETCH_HEAD").returncode != 0:
+        return dict(out, state="unrelated", why=say("company.folder.unrelated"))
+    counts = git(kb, "rev-list", "--left-right", "--count", "HEAD...FETCH_HEAD").stdout.decode("utf-8", "replace").split()
+    ahead, behind = (int(counts[0]), int(counts[1])) if len(counts) == 2 and all(item.isdigit() for item in counts) else (0, 0)
+    out.update(ahead=ahead, behind=behind)
+    there = git(source, "status", "--porcelain")
+    out["uncommitted_there"] = len(changed_lines(there.stdout)) if there.returncode == 0 else 0
+    if ahead:  # a commit of this copy the folder lacks: never replaced, never dropped
+        out["subjects"] = _commit_subjects(kb, "FETCH_HEAD..HEAD")
+        return dict(out, state="ahead", why=say("company.folder.ahead" if ahead > 1 else "company.folder.ahead.one", n=ahead, subjects="; ".join(out["subjects"]) or "-", folder=str(source), kb=str(kb), branch=name))
+    if not behind:
+        return dict(out, state="same", text=say("company.folder.same"))
+    listed = git(kb, "diff", "--name-status", "--no-renames", "-z", "HEAD", "FETCH_HEAD")
+    if listed.returncode != 0:
+        return dict(out, state="error", why=say("company.folder.error", error=_git_say(listed)))
+    parts = listed.stdout.decode("utf-8", "replace").split("\0")
+    rows = [(parts[index], parts[index + 1]) for index in range(0, len(parts) - 1, 2) if parts[index]]
+    kinds = {"A": "add", "D": "remove"}
+    changes = [{"path": path, "change": kinds.get(code[:1], "change")} for code, path in rows]
+    for row in changes:
+        out["counts"][row["change"]] += 1
+    out.update(changes=changes[:UPDATE_SHOWN], total=len(changes), commits=_commit_subjects(kb, "HEAD..FETCH_HEAD"))
+    mine = git(kb, "status", "--porcelain", "-z")
+    held = {chunk[3:] for chunk in mine.stdout.decode("utf-8", "replace").split("\0") if len(chunk) > 3 and chunk[:2] != "??"} if mine.returncode == 0 else set()
+    clash = sorted(held & {row["path"] for row in changes})
+    if clash:  # git would refuse to overwrite them: said before, with the names
+        return dict(out, state="dirty", files=clash[:UPDATE_SHOWN], why=say("company.folder.dirty", files=", ".join(clash[:UPDATE_SHOWN]) + (" ..." if len(clash) > UPDATE_SHOWN else "")))
+    counts_out = out["counts"]
+    out["text"] = say("company.folder.behind" if behind > 1 else "company.folder.behind.one", n=behind, new=counts_out["add"], changed=counts_out["change"], removed=counts_out["remove"]) \
+        + (" " + say("company.folder.uncommitted.one" if out["uncommitted_there"] == 1 else "company.folder.uncommitted", n=out["uncommitted_there"]) if out["uncommitted_there"] else "")
+    out["state"] = "behind"
+    if not apply:
+        return out
+    merged = git(kb, "merge", "--ff-only", "--quiet", "FETCH_HEAD")
+    if merged.returncode != 0:
+        raise CompanyError(say("company.folder.error", error=_git_say(merged)))
+    return dict(out, state="updated", text=say("company.folder.done", n=behind, total=len(changes)))
 
 
 def update(root: Path, raw: str, apply: bool = False, interactive: Optional[bool] = None) -> Dict[str, Any]:

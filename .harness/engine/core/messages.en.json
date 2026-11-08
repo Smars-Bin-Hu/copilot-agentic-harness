@@ -3546,5 +3546,20 @@
   "connections.kept": "The sign-in is saved. The test did not reach the system, so it does not say the sign-in is wrong. Fix the cause above, then press Test.",
   "company.why.instruction.same": "its copy would be {name}, the same as the copy of {other}",
   "setup.layout.instructions.many": "{n} instruction files.",
-  "dock.co.file.copy": "Copy: .github/instructions/{name}"
+  "dock.co.file.copy": "Copy: .github/instructions/{name}",
+  "company.folder.error": "Git could not read the folder: {error}",
+  "company.folder.unrelated": "The knowledge base here and this folder do not share a history, so they cannot be joined. Nothing was changed.",
+  "company.folder.ahead": "The knowledge base here has {n} commits that this folder does not have: {subjects}. They stay, and nothing was changed. Bring them into the folder first (for example `git -C \"{folder}\" pull \"{kb}\" {branch}`), then update again.",
+  "company.folder.ahead.one": "The knowledge base here has 1 commit that this folder does not have: {subjects}. It stays, and nothing was changed. Bring it into the folder first (for example `git -C \"{folder}\" pull \"{kb}\" {branch}`), then update again.",
+  "company.folder.dirty": "These files are changed here and not committed, and the update would change them too: {files}. Commit or undo them in the knowledge base first. Nothing was changed.",
+  "company.folder.same": "The knowledge base here has everything this folder has. Nothing to update.",
+  "company.folder.behind": "The folder has {n} commits this copy does not. The update brings in {new} new, {changed} changed and {removed} removed files.",
+  "company.folder.behind.one": "The folder has 1 commit this copy does not. The update brings in {new} new, {changed} changed and {removed} removed files.",
+  "company.folder.uncommitted": "{n} files in the folder are not committed, so they are not taken.",
+  "company.folder.done": "The knowledge base is updated: {n} commits, {total} files.",
+  "setup.kb.update.tick": "Update the knowledge base here from this folder. Only new commits come in; nothing here is replaced.",
+  "setup.kb.update.need": "Tick the box to update the knowledge base.",
+  "setup.kb.update.more": "and {n} more",
+  "company.folder.uncommitted.one": "1 file in the folder is not committed, so it is not taken.",
+  "setup.kb.update.stop": "The update is stopped: read the note above."
 }

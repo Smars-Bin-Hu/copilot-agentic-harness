@@ -3546,5 +3546,20 @@
   "connections.kept": "登录已保存。测试没连到系统，所以不能说明登录有错。解决上面的原因后，点 Test。",
   "company.why.instruction.same": "它的副本会叫 {name}，和 {other} 的副本同名",
   "setup.layout.instructions.many": "{n} 个 instruction 文件。",
-  "dock.co.file.copy": "副本：.github/instructions/{name}"
+  "dock.co.file.copy": "副本：.github/instructions/{name}",
+  "company.folder.error": "Git 读不了这个文件夹：{error}",
+  "company.folder.unrelated": "这里的知识库和这个文件夹没有共同的历史，没法合并。什么都没改。",
+  "company.folder.ahead": "这里的知识库有 {n} 个文件夹里没有的提交：{subjects}。它们保留，什么都没改。请先把它们合并进文件夹（例如 `git -C \"{folder}\" pull \"{kb}\" {branch}`），再更新。",
+  "company.folder.ahead.one": "这里的知识库有 1 个文件夹里没有的提交：{subjects}。它保留，什么都没改。请先把它合并进文件夹（例如 `git -C \"{folder}\" pull \"{kb}\" {branch}`），再更新。",
+  "company.folder.dirty": "这些文件在这里改了还没提交，更新也会改它们：{files}。请先在知识库里提交或撤销。什么都没改。",
+  "company.folder.same": "这里的知识库已经有这个文件夹的全部内容。没有要更新的。",
+  "company.folder.behind": "文件夹里有 {n} 个这份副本没有的提交。更新会带来 {new} 个新文件、{changed} 个改动、{removed} 个删除。",
+  "company.folder.behind.one": "文件夹里有 1 个这份副本没有的提交。更新会带来 {new} 个新文件、{changed} 个改动、{removed} 个删除。",
+  "company.folder.uncommitted": "文件夹里有 {n} 个文件没提交，所以不会拿。",
+  "company.folder.done": "知识库已更新：{n} 个提交，{total} 个文件。",
+  "setup.kb.update.tick": "用这个文件夹更新这里的知识库。只带来新提交；这里的东西不会被替换。",
+  "setup.kb.update.need": "勾选方框来更新知识库。",
+  "setup.kb.update.more": "还有 {n} 个",
+  "company.folder.uncommitted.one": "文件夹里有 1 个文件没提交，所以不会拿。",
+  "setup.kb.update.stop": "更新已停下：请看上面的说明。"
 }

@@ -94,6 +94,16 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
             found = company.update(root, path, apply=True, interactive=True)
             return say("setup.kb.package.done", version=found.get("version", ""))
         if mode == "folder":
+            if held_in(root):  # a knowledge base is in place: a git pull when both are repositories, listed first and asked (Q5); the old copy-and-backup way only when git cannot be used
+                found = company.folder_update(root, path)
+                if found["state"] == "same":
+                    return found["text"]
+                if found["state"] == "behind":
+                    if not data.get("kb_replace"):
+                        raise ValueError(found["text"])  # the person has not said yes to the list
+                    return company.folder_update(root, path, apply=True)["text"]
+                if found["state"] != "plain":
+                    raise ValueError(found["why"])
             return copy_folder(root, Path(path), bool(data.get("kb_replace")))
         return say("setup.kb.kept") if any(targets.knowledge_base_content(place) for _name, place in targets.knowledge_bases(root)) else say("setup.line.later")  # Keep it: the one in place stays (1.7.38)
 
@@ -254,7 +264,15 @@ def probe_folder(root: Path, raw: Any) -> Dict[str, Any]:
     if not targets.knowledge_base_content(path):
         return {"ok": False, "why": say("setup.kb.nothing")}
     if held_in(root):
-        return {"ok": False, "full": True, "why": say("setup.kb.full.here"), "parts": company.layout(path)}
+        update = company.folder_update(root, str(path))
+        if update["state"] == "plain":  # no git on one side: the old way, a replace the person ticks (the old one moves to a backup)
+            return {"ok": False, "full": True, "why": say("setup.kb.full.here"), "parts": company.layout(path)}
+        view = {key: update[key] for key in ("state", "behind", "ahead", "changes", "total", "counts", "commits", "subjects", "uncommitted_there", "branch")}
+        if update["state"] == "same":
+            return {"ok": True, "why": update["text"], "update": view, "parts": company.layout(path)}
+        if update["state"] == "behind":  # listed, and the person ticks to say yes: `full` asks for the tick
+            return {"ok": False, "full": True, "why": update["text"], "update": view, "parts": company.layout(path)}
+        return {"ok": False, "why": update["why"], "update": view, "parts": company.layout(path)}  # ahead, unrelated, dirty, error: told, nothing to tick
     found: Dict[str, Any] = {}
     try:
         found = company.read_json(path / targets.COMPANY_DIR / company.CONFIG_FILE)

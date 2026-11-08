@@ -22,13 +22,15 @@ const SETUP = (function () {
     const kbInfo = h("div", {class: "su-kbinfo"});  // path, domains, domain skills, version of the knowledge base that is in place
     const repoDot = h("span", {class: "su-dot need"});
     const kbParts = h("div", {class: "su-parts", hidden: ""});
+    const kbChanges = h("div", {class: "su-changes", hidden: ""});  // what an update from the folder would change, listed before the person ticks (Q5)
     const kbLearn = h("button", {type: "button", class: "su-link"}, t("setup.kb.learn"));
     kbLearn.addEventListener("click", () => DOCK.allSkills("kb"));
     const kbPick = h("button", {type: "button", class: "act"}, t("setup.browse"));
     kbPick.hidden = true;
     kbPick.addEventListener("click", () => DOCK.chooseOnPage(kbPick.dataset.kind, kbPath.value.trim(), (path) => { kbPath.value = path; checkKb(); gate(); }));
     const kbReplaceBox = h("input", {type: "checkbox"});
-    const kbReplace = h("label", {class: "su-tick", hidden: ""}, kbReplaceBox, h("span", null, t("setup.kb.replace")));
+    const kbReplaceText = h("span", null, t("setup.kb.replace"));
+    const kbReplace = h("label", {class: "su-tick", hidden: ""}, kbReplaceBox, kbReplaceText);
     kbReplaceBox.addEventListener("change", () => { st.replace = kbReplaceBox.checked; gate(); });
     const prefix = h("input", {type: "text", class: "su-in su-short", maxlength: 31, autocomplete: "off", spellcheck: "false"});
     const install = h("input", {type: "text", class: "su-in su-mono", maxlength: 500, autocomplete: "off", spellcheck: "false", placeholder: t("setup.install.ph")});
@@ -157,14 +159,26 @@ const SETUP = (function () {
       kbNote.replaceChildren(...(mode !== "none" || st.kb.here ? [] : [t("setup.kb.none.line"), " ", kbLearn]));
       paintKbInfo();
       st.full = false;
+      st.update = null;
       paintReplace();
+      paintChanges();
       if (mode !== "none" && kbPath.value.trim()) checkKb();
       kbDotPaint();
       gate();
     };
     function paintReplace() {
       kbReplace.hidden = !st.full;
+      kbReplaceText.textContent = t(st.update && st.update.state === "behind" ? "setup.kb.update.tick" : "setup.kb.replace");  // a git update, or the old replace
       if (!st.full) { st.replace = false; kbReplaceBox.checked = false; }
+    }
+    // The list of an update from a folder (Q5): the files it would add, change or remove, the first ones by name; for a copy that is ahead, the commits that stay.
+    const MARK = {add: "+", change: "~", remove: "\u2212"};
+    function paintChanges() {
+      const u = st.update, rows = u && u.state === "behind" ? u.changes || [] : [];
+      const subjects = u && u.state === "ahead" ? u.subjects || [] : [];
+      kbChanges.hidden = !rows.length && !subjects.length;
+      kbChanges.replaceChildren(...(rows.length ? [h("ul", {class: "su-chg"}, rows.map((row) => h("li", {class: row.change}, h("b", null, MARK[row.change] || "~"), " ", h("code", null, row.path))), u.total > rows.length ? h("li", {class: "su-soft"}, t("setup.kb.update.more", {n: u.total - rows.length})) : null)] : []),
+        ...(subjects.length ? [h("ul", {class: "su-chg"}, subjects.map((line) => h("li", null, line)))] : []));
     }
     // The check of a chosen folder (`company.layout`): green for what is right, a warning with the place for the rest. It stops nothing, and it says what the states below will say.
     function paintParts(parts) {
@@ -177,11 +191,13 @@ const SETUP = (function () {
     function checkKb() {
       ask("probe", {kind: st.mode, path: kbPath.value}).then((found) => {
         kbNote.className = "su-note" + (found.full ? "" : !found.ok ? " bad" : found.why ? "" : " good");  // a knowledge base in place is a choice to make, not a fault
-        kbNote.textContent = !found.ok ? found.why : st.mode === "package" ? t("setup.kb.package.ok", {version: found.version, new: found.new, changed: found.changed, removed: found.removed}) + (found.local ? " " + t("setup.kb.package.local", {n: found.local}) : "") : found.why || t("setup.kb.folder.ok");
+        kbNote.textContent = !found.ok ? plainWords(found.why) : st.mode === "package" ? t("setup.kb.package.ok", {version: found.version, new: found.new, changed: found.changed, removed: found.removed}) + (found.local ? " " + t("setup.kb.package.local", {n: found.local}) : "") : plainWords(found.why || t("setup.kb.folder.ok"));
         st.full = Boolean(found.full);
+        st.update = st.mode === "folder" ? found.update || null : null;
         st.kbOk = Boolean(found.ok);
         paintParts(st.mode === "folder" && kbPath.value.trim() ? found.parts || [] : null);
         paintReplace();
+        paintChanges();
         if (found.prefix && !prefix.value) prefix.value = found.prefix;
         st.probePrefix = found.prefix || "";
         gate();
@@ -190,7 +206,7 @@ const SETUP = (function () {
     const go = h("button", {type: "button", class: "act hot big"}, t(finished ? "setup.save" : "setup.finish"));
     const goNote = h("span", {class: "su-note"});
     function gate() {  // what the server would refuse for being empty, said before the button is pressed
-      const lacking = !name.value.trim() ? t("setup.name.need", {limit: 100}) : st.mode !== "none" && !kbPath.value.trim() ? t("setup.kb.path") : st.full && !st.replace ? t("setup.kb.replace.need") : !st.ready ? t("setup.finish.first") : "";
+      const lacking = !name.value.trim() ? t("setup.name.need", {limit: 100}) : st.mode !== "none" && !kbPath.value.trim() ? t("setup.kb.path") : st.update && ["ahead", "unrelated", "dirty", "error"].includes(st.update.state) ? t("setup.kb.update.stop") : st.full && !st.replace ? t(st.update && st.update.state === "behind" ? "setup.kb.update.need" : "setup.kb.replace.need") : !st.ready ? t("setup.finish.first") : "";
       go.disabled = st.busy || st.saved || Boolean(lacking);
       goNote.textContent = st.busy ? t("setup.finish.working") : st.saved ? "" : lacking;
       if (onbusy) onbusy(st.busy);
@@ -521,7 +537,7 @@ const SETUP = (function () {
       });
     }
     name.addEventListener("input", gate);
-    kbPath.addEventListener("input", () => { st.full = false; paintReplace(); gate(); clearTimeout(st.probe); st.probe = setTimeout(checkKb, 400); });
+    kbPath.addEventListener("input", () => { st.full = false; st.update = null; paintReplace(); paintChanges(); gate(); clearTimeout(st.probe); st.probe = setTimeout(checkKb, 400); });
     document.addEventListener("visibilitychange", () => { if (!document.hidden && !st.timer && app.isConnected) load(); });
 
     const olderLink = h("button", {type: "button", class: "su-link"}, t("setup.older.title"));
@@ -576,7 +592,7 @@ const SETUP = (function () {
     loadTools();
     const prefixRow = row([t("setup.prefix"), question("skills")], prefix, h("p", {class: "su-note"}, t("setup.prefix.hint")));  // only when the knowledge base names none (1.7.36)
     // The knowledge base is the first fact of card 3 and shaped like the others: a dot, its name, and what it says (1.7.38); the chips choose where a new one comes from.
-    const kbRow = h("div", {class: "su-fact su-kbrow"}, kbDot, h("b", {class: "su-fk"}, t("setup.kb"), kbStar, " ", question("kb")), h("div", {class: "su-fv su-kbv"}, modeBox, h("div", {class: "su-line"}, kbPath, kbPick), kbInfo, kbNote, kbParts, kbReplace));
+    const kbRow = h("div", {class: "su-fact su-kbrow"}, kbDot, h("b", {class: "su-fk"}, t("setup.kb"), kbStar, " ", question("kb")), h("div", {class: "su-fv su-kbv"}, modeBox, h("div", {class: "su-line"}, kbPath, kbPick), kbInfo, kbNote, kbChanges, kbParts, kbReplace));
     const repoRow = h("div", {class: "su-fact su-repos"}, repoDot, h("b", {class: "su-fk"}, t("setup.repos"), " ", question("repos")), h("div", {class: "su-fv su-repov"}, h("div", {class: "su-line"}, repos, repoAdd, browse(repos, "folder", () => { repoAdd.disabled = false; addRepo(); })), repoNote, repoPick, repoList, h("p", {class: "su-note"}, t("setup.repos.hint"))));
     const card = (key, num, head, ...nodes) => h("section", {class: "su-card", "data-sec": key}, h("div", {class: "su-head"}, h("span", {class: "su-mark"}, num), h("h2", null, t("setup.sec." + key), " ", h("span", {class: "sv-info", tabindex: "0", title: t("setup.sec." + key + ".tip")}, "\u24d8")), head), ...nodes);  // four cards of one rank (1.7.38)
     const more = h("details", {class: "su-more"}, h("summary", {class: "su-note"}, t("setup.more")), row([t("setup.install"), question("python")], install, h("p", {class: "su-note"}, t("setup.install.example"))), row([t("setup.refused"), question("repos")], h("div", {class: "su-line"}, refusedBox, refusedAdd), refusedNote, refusedList, h("p", {class: "su-note"}, t("setup.refused.hint"))));

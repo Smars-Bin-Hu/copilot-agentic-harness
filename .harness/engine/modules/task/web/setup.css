@@ -126,3 +126,5 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 @media(max-width:600px){.su-fact.su-kbrow,.su-fact.su-repos{flex-wrap:wrap}.su-kbv,.su-repov{flex:1 1 100%;padding-left:16px}.su-fact-open{margin-left:16px}}
 .dialog.tl-win{max-width:820px}  /* the three windows are as wide as the prototype: one connection or one pack fits on a line */
 @media (min-width:700px){.tl-l1,.tl-c1,.tl-id{flex-wrap:nowrap}.tl-id{flex:1 1 0}.tl-id .sv-alias{flex:0 1 auto;min-width:3ch}.tl-id .sv-kind{flex:0 10 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tl-id .sv-where{flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tl-id .sv-own{flex:none}}
+
+.su-changes{margin:4px 0 2px}.su-chg{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;font-size:12.5px}.su-chg li{display:flex;gap:6px;min-width:0;overflow-wrap:anywhere}.su-chg li b{flex:none;width:1em;text-align:center}.su-chg li.add b{color:var(--good)}.su-chg li.remove b{color:var(--bad)}.su-chg code{font:12px/1.5 var(--mono);min-width:0}

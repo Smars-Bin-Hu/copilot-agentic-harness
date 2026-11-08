@@ -711,7 +711,7 @@ def folder_update(root: Path, raw: str, apply: bool = False) -> Dict[str, Any]:
     """Update the knowledge base here from a folder that holds it, by git (Q5): what the folder has that this copy has not is listed first, and only a person who says yes gets it.
     Nothing here replaces or drops a commit of this copy. `state`:
 
-      behind     the folder has commits this copy has not (`behind`), and the copy has none the folder lacks: `changes` (first UPDATE_SHOWN of `total`), `counts`, `commits`; with `apply` they are merged (fast-forward only)
+      behind     the folder has commits this copy has not (`behind`), and the copy has none the folder lacks: `changes` (first UPDATE_SHOWN of `total`), `counts`; with `apply` they are merged (fast-forward only)
       same       the copy has everything the folder has
       ahead      the copy has commits the folder lacks (`ahead`, `subjects`): stop; they are never replaced. `behind` says whether the folder has new ones too
       unrelated  the two share no history: stop
@@ -722,7 +722,7 @@ def folder_update(root: Path, raw: str, apply: bool = False) -> Dict[str, Any]:
     `why` is the sentence for the person (empty when all is well); `text` the preview. A fetch writes objects into this copy's `.git`, never a branch, never a file."""
     kb = root / targets.KB_DIR
     source = Path(raw)
-    out: Dict[str, Any] = {"state": "plain", "why": "", "text": "", "behind": 0, "ahead": 0, "changes": [], "total": 0, "counts": {"add": 0, "change": 0, "remove": 0}, "commits": [], "subjects": [], "files": [], "uncommitted_there": 0, "branch": ""}
+    out: Dict[str, Any] = {"state": "plain", "why": "", "text": "", "behind": 0, "ahead": 0, "changes": [], "total": 0, "counts": {"add": 0, "change": 0, "remove": 0}, "subjects": [], "files": [], "uncommitted_there": 0, "branch": ""}
     if not (kb / ".git").exists() or not (source / ".git").exists():
         return out
     branch = git(source, "rev-parse", "--abbrev-ref", "HEAD")
@@ -733,11 +733,11 @@ def folder_update(root: Path, raw: str, apply: bool = False) -> Dict[str, Any]:
     fetched = git(kb, "fetch", "--no-tags", "--quiet", str(source), name)
     if fetched.returncode != 0:
         return dict(out, state="error", why=say("company.folder.error", error=_git_say(fetched)))
-    if git(kb, "merge-base", "HEAD", "FETCH_HEAD").returncode != 0:
-        return dict(out, state="unrelated", why=say("company.folder.unrelated"))
     counts = git(kb, "rev-list", "--left-right", "--count", "HEAD...FETCH_HEAD").stdout.decode("utf-8", "replace").split()
     ahead, behind = (int(counts[0]), int(counts[1])) if len(counts) == 2 and all(item.isdigit() for item in counts) else (0, 0)
     out.update(ahead=ahead, behind=behind)
+    if ahead and git(kb, "merge-base", "HEAD", "FETCH_HEAD").returncode != 0:  # nothing of this copy is in the folder: if it had no commit of its own, the folder would contain it (a process costs a second on a work computer: asked only here)
+        return dict(out, state="unrelated", why=say("company.folder.unrelated"))
     there = git(source, "status", "--porcelain")
     out["uncommitted_there"] = len(changed_lines(there.stdout)) if there.returncode == 0 else 0
     if ahead:  # a commit of this copy the folder lacks: never replaced, never dropped
@@ -754,7 +754,7 @@ def folder_update(root: Path, raw: str, apply: bool = False) -> Dict[str, Any]:
     changes = [{"path": path, "change": kinds.get(code[:1], "change")} for code, path in rows]
     for row in changes:
         out["counts"][row["change"]] += 1
-    out.update(changes=changes[:UPDATE_SHOWN], total=len(changes), commits=_commit_subjects(kb, "HEAD..FETCH_HEAD"))
+    out.update(changes=changes[:UPDATE_SHOWN], total=len(changes))
     mine = git(kb, "status", "--porcelain", "-z")
     held = {chunk[3:] for chunk in mine.stdout.decode("utf-8", "replace").split("\0") if len(chunk) > 3 and chunk[:2] != "??"} if mine.returncode == 0 else set()
     clash = sorted(held & {row["path"] for row in changes})

@@ -49,7 +49,6 @@ class FolderUpdateTests(unittest.TestCase):
         self.assertEqual((found["state"], found["behind"], found["ahead"], found["total"]), ("behind", 2, 0, 3))
         self.assertEqual(found["counts"], {"add": 1, "change": 1, "remove": 1})
         self.assertEqual({row["path"]: row["change"] for row in found["changes"]}, {"domains/sales/new.md": "add", "domains/sales/domain.yaml": "change", "domains/sales/old.md": "remove"})
-        self.assertEqual(found["commits"], ["drop the old card", "add a card"])
         self.assertEqual(found["text"], messages.text("company.folder.behind", n=2, new=1, changed=1, removed=1))
         self.assertEqual(self.head(self.kb), before)  # a look only
         self.assertTrue((self.kb / "domains/sales/old.md").is_file())

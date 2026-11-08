@@ -439,7 +439,7 @@ class Ready:
                 if state == "wait":
                     text, reason = say("ready.r.vscode.wait"), say(f"board.enter.m.vscode.{why}")
                 elif why in ("env", "unseen"):  # connected, but not started with this copy's settings (Q2): the VS Code button restarts it
-                    text, reason, fix = say(f"ready.r.vscode.{why}"), say("ready.r.vscode.env.why"), open_fix
+                    text, reason, fix = say("ready.r.vscode.env" if why == "env" else "ready.r.vscode.unseen"), say("ready.r.vscode.env.why"), open_fix
                 elif why == "none":
                     text, reason, fix = say("ready.r.vscode.none"), say("ready.r.vscode.none.why"), open_fix
                 else:

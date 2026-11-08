@@ -370,7 +370,10 @@ def process_started(pid: Any, platform: str = sys.platform, run: Callable[..., A
             from ctypes import wintypes
 
             kernel = ctypes.windll.kernel32  # type: ignore[attr-defined]
-            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.OpenProcess.restype = wintypes.HANDLE  # a handle is as wide as a pointer: say it, or ctypes cuts it to an int
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
             handle = kernel.OpenProcess(0x1000, False, number)  # PROCESS_QUERY_LIMITED_INFORMATION
             if not handle:
                 return None

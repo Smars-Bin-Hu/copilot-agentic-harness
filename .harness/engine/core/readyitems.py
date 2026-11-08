@@ -272,10 +272,10 @@ def connections_item(root: Path) -> Dict[str, Any]:
         return item("connections", "yellow" if problems else "grey", say("ready.none"), problems[0]["fix"] if problems else {}, problems=problems)
     ok = len([one for one in found if one["state"] == "ok"])
     parts = [say("ready.conn.signed", n=ok)] if ok else []
-    for state, key in (("none", "ready.conn.unsigned"), ("down", "ready.conn.down"), ("untested", "ready.conn.untested")):
+    for state, key, single in (("none", "ready.conn.unsigned", "ready.conn.unsigned"), ("down", "ready.conn.down", "ready.conn.down.one"), ("untested", "ready.conn.untested", "ready.conn.untested")):
         n = len([one for one in found if one["state"] == state])
         if n:
-            parts.append(say(key + ".one" if n == 1 and state == "down" else key, n=n))
+            parts.append(say(single if n == 1 else key, n=n))
     detail = " \u00b7 ".join(parts)
     return item("connections", "yellow" if problems else "ok" if ok == len(found) else "grey", detail, problems[0]["fix"] if problems else {}, [{"name": one["name"], "state": one["state"], "saved": one["saved"]} for one in found], problems)
 

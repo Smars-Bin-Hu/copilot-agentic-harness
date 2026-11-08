@@ -276,3 +276,84 @@ class WhatVsCodeGot(LaunchEnvCase):
         def broken(*a, **k):
             raise OSError("no pgrep")
         self.assertFalse(launchenv.vscode_running(run=broken, platform="darwin"))
+
+
+PS_LINE = ("/Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper.app/Contents/MacOS/Code Helper --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US "
+           "TERM_PROGRAM=vscode PATH=/Users/me/tools/az/bin:/usr/bin:/Applications/Visual Studio Code.app/Contents/Resources/app/bin REQUESTS_CA_BUNDLE=/Users/me/Dev Folder/copy/.harness/certs/ca-bundle.pem HOME=/Users/me")
+
+
+class SettingsCarriedByVSCode(LaunchEnvCase):
+    """1.7.38, Q2: the board tells before any chat whether the VS Code that runs was started with this copy's settings."""
+
+    def settings_on(self) -> None:
+        launchenv.save_paths(self.root, [str(self.tools)])
+
+    def test_the_environment_in_a_ps_line_is_read_with_spaces_in_a_value_and_no_argument_taken_for_a_name(self) -> None:
+        found = launchenv.parse_ps_environ(PS_LINE)
+        self.assertEqual(found["PATH"], "/Users/me/tools/az/bin:/usr/bin:/Applications/Visual Studio Code.app/Contents/Resources/app/bin")
+        self.assertEqual(found["REQUESTS_CA_BUNDLE"], "/Users/me/Dev Folder/copy/.harness/certs/ca-bundle.pem")
+        self.assertEqual(found["TERM_PROGRAM"], "vscode")
+        self.assertNotIn("--type", found)
+        self.assertNotIn("type", found)
+        self.assertEqual(launchenv.parse_ps_environ(""), {})
+
+    def test_an_environment_is_read_by_ps_on_macos_by_proc_on_linux_and_never_on_windows(self) -> None:
+        done = mock.Mock(returncode=0, stdout=PS_LINE)
+        run = mock.Mock(return_value=done)
+        self.assertEqual(launchenv.host_environ(4711, "darwin", run)["TERM_PROGRAM"], "vscode")
+        self.assertEqual(run.call_args[0][0], ["ps", "eww", "-o", "command=", "-p", "4711"])
+        self.assertEqual(launchenv.host_environ(4711, "linux", read=lambda path: b"A=1\0PATH=/a:/b\0")["PATH"], "/a:/b")
+        self.assertIsNone(launchenv.host_environ(4711, "win32", run), "another process's memory is not read")
+        self.assertIsNone(launchenv.host_environ("x", "darwin", run))
+        self.assertIsNone(launchenv.host_environ(4711, "darwin", mock.Mock(return_value=mock.Mock(returncode=1, stdout=""))))
+        self.assertIsNone(launchenv.host_environ(4711, "linux", read=mock.Mock(side_effect=PermissionError)))
+
+    def test_how_long_a_process_ran_is_read_from_ps_elapsed_time(self) -> None:
+        self.assertEqual(launchenv._elapsed_seconds("08:47"), 527.0)  # noqa: SLF001
+        self.assertEqual(launchenv._elapsed_seconds("1:02:03"), 3723.0)  # noqa: SLF001
+        self.assertEqual(launchenv._elapsed_seconds("2-00:00:10"), 172810.0)  # noqa: SLF001
+        self.assertIsNone(launchenv._elapsed_seconds("nonsense"))  # noqa: SLF001
+        run = mock.Mock(return_value=mock.Mock(returncode=0, stdout="  01:40\n"))
+        self.assertEqual(launchenv.process_started(4711, "darwin", run, now=lambda: 1000.0), 900.0)
+
+    def test_a_copy_with_no_settings_accepts_any_vscode(self) -> None:
+        self.assertEqual(launchenv.needs(self.root), {"folders": [], "bundle": ""})
+        found = launchenv.carried(self.root, 4711, environ=lambda _pid: {"PATH": "/usr/bin"})
+        self.assertEqual((found["state"], found["missing"]), (launchenv.FREE, []))
+
+    def test_the_environment_of_the_agent_host_is_judged_by_the_words_of_the_hook(self) -> None:
+        self.settings_on()
+        lost = launchenv.carried(self.root, 4711, environ=lambda _pid: {"PATH": "/usr/bin"})
+        self.assertEqual((lost["state"], lost["by"], lost["missing"]), (launchenv.MISSING, "env", [f"PATH {self.tools}"]))
+        good = launchenv.carried(self.root, 4711, environ=lambda _pid: {"PATH": os.pathsep.join([str(self.tools), "/usr/bin"])})
+        self.assertEqual((good["state"], good["by"]), (launchenv.CARRIED, "env"))
+        self.assertEqual(launchenv.carried(self.root, None)["state"], launchenv.UNSEEN)  # no VS Code known: nothing is judged
+
+    def test_where_the_environment_cannot_be_read_the_start_of_the_board_and_the_birth_of_the_process_decide(self) -> None:
+        """Windows: a VS Code created after the board started it has the settings; one created before it does not; a VS Code the board did not start proves nothing."""
+        self.settings_on()
+        none = lambda _pid: None  # noqa: E731
+        born = lambda at: (lambda _pid: at)  # noqa: E731
+        self.assertEqual(launchenv.carried(self.root, 4711, none, born(1000.0))["state"], launchenv.UNSEEN, "never started by the board, no chat yet")
+        launchenv.mark_started(self.root)
+        mark = launchenv._stamp(launchenv.seen(self.root)["at"])  # noqa: SLF001
+        after = launchenv.carried(self.root, 4711, none, born(mark + 5))
+        self.assertEqual((after["state"], after["by"]), (launchenv.CARRIED, "board"))
+        within = launchenv.carried(self.root, 4711, none, born(mark - 1))  # created a moment before the mark: the board marks just before it asks VS Code to open
+        self.assertEqual(within["state"], launchenv.CARRIED)
+        before = launchenv.carried(self.root, 4711, none, born(mark - 3600))  # an older VS Code: the board's start did not make it
+        self.assertEqual((before["state"], before["by"]), (launchenv.MISSING, "board"))
+        self.assertEqual(launchenv.carried(self.root, 4711, none, none)["state"], launchenv.UNSEEN, "when it cannot be known when the process was created")
+
+    def test_a_chat_of_this_vscode_is_believed_and_one_of_an_older_vscode_is_not(self) -> None:
+        self.settings_on()
+        none = lambda _pid: None  # noqa: E731
+        found = launchenv.note_seen(self.root, {"PATH": "/usr/bin"})  # a hook: the chat's environment lacks the tool folder
+        at = launchenv._stamp(found["at"])  # noqa: SLF001
+        said = launchenv.carried(self.root, 4711, none, lambda _pid: at - 60)  # this VS Code started a minute before the chat
+        self.assertEqual((said["state"], said["by"], said["missing"]), (launchenv.MISSING, "hook", [f"PATH {self.tools}"]))
+        stale = launchenv.carried(self.root, 4711, none, lambda _pid: at + 60)  # this VS Code is newer than that report
+        self.assertEqual(stale["state"], launchenv.UNSEEN)
+        launchenv.note_seen(self.root, {"PATH": str(self.tools)})
+        good = launchenv.carried(self.root, 4711, none, lambda _pid: at - 60)
+        self.assertEqual((good["state"], good["by"]), (launchenv.CARRIED, "hook"))

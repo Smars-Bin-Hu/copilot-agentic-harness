@@ -3561,5 +3561,14 @@
   "setup.kb.update.need": "勾选方框来更新知识库。",
   "setup.kb.update.more": "还有 {n} 个",
   "company.folder.uncommitted.one": "文件夹里有 1 个文件没提交，所以不会拿。",
-  "setup.kb.update.stop": "更新已停下：请看上面的说明。"
+  "setup.kb.update.stop": "更新已停下：请看上面的说明。",
+  "board.enter.m.vscode.env": "VS Code 开着，但启动时没带这份副本的设置（工具目录和 CA bundle）。agent 的命令会在没有它们的情况下运行。点 {button}：看板会带着它们重新打开。",
+  "board.enter.m.vscode.unseen": "VS Code 开着，但不是看板启动的，所以看板没法确定它有没有这份副本的设置（工具目录和 CA bundle）。点 {button}：看板会带着它们重新打开。",
+  "board.enter.m.vscode.missing": "缺：{detail}。",
+  "board.enter.d.vscode.unseen": "设置不明",
+  "ready.r.vscode.env": "VS Code 启动时没带这份副本的设置。",
+  "ready.r.vscode.unseen": "VS Code 不是看板启动的：它的设置不明。",
+  "ready.r.vscode.env.why": "agent 的命令在它里面运行，需要这台电脑的工具目录和 CA bundle。",
+  "ready.vs.lacks.folders": "工具目录",
+  "ready.vs.lacks.bundle": "CA bundle（证书包）"
 }

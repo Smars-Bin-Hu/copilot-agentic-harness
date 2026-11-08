@@ -26,7 +26,9 @@ import socket
 import ssl
 import subprocess
 import sys
+import time
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -268,7 +270,7 @@ def lacking(root: Path, environ: Optional[Dict[str, str]] = None) -> List[str]:
 
 def note_seen(root: Path, environ: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """Called by the hook at the start of a chat: keep what this environment lacks. `{ok, missing, at}`."""
-    found = {"ok": False, "missing": lacking(root, environ), "at": utc_now()}
+    found = {"ok": False, "missing": lacking(root, environ), "at": utc_now(), "by": "hook"}
     found["ok"] = not found["missing"]
     target = root / SEEN
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -295,6 +297,128 @@ def mark_started(root: Path) -> None:
         target.write_text(json.dumps({"ok": True, "missing": [], "at": utc_now(), "by": "board"}), encoding="utf-8")
     except OSError:
         pass
+
+
+# --- is the VS Code that runs the one with this copy's settings? Before any chat (1.7.38, Q2) ---------------------------------------------------------------------
+#
+# The hook tells it at the first chat (`note_seen`). The board can tell earlier, because the editor's agent host names itself in `code agent endpoints` (its `pid`): the agent's commands and the
+# hooks run in that process, so its environment is what the hook would see.
+#   macOS, Linux   its environment is read (`ps eww`, `/proc/<pid>/environ`): the same `lacking` the hook runs, on the same variables.
+#   Windows        another process's environment cannot be read without reading its memory, and that is what a security tool on a work computer watches for: it is not done. Instead the
+#                  board knows when it started VS Code (`mark_started`) and when that process was created (`process_started`, a query that needs no right on the process): a VS Code
+#                  created after the board's start got its settings; one created before did not. A VS Code the board did not start, with no chat yet, is "unseen": nothing proves it.
+# What a VS Code must carry for this copy is `needs`: the tool folders and the CA bundle (what `lacking` can check). Which identities a window holds is the person's choice (Open with
+# identities), and `harness as` reaches the others: they do not make a VS Code wrong.
+
+CARRIED, FREE, MISSING, UNSEEN = "carried", "free", "missing", "unseen"
+START_SLACK = 3.0  # seconds: the board marks its start just before it asks VS Code to open; a process created within this much before the mark is the board's
+
+
+def needs(root: Path) -> Dict[str, Any]:
+    """What a VS Code must be started with for this copy: `{folders, bundle}`; both empty: any VS Code will do."""
+    bundle = bundle_path(root)
+    return {"folders": tool_folders(root), "bundle": str(bundle) if bundle else ""}
+
+
+def parse_ps_environ(text: str) -> Dict[str, str]:
+    """The environment in the output of `ps eww`: the command and its arguments, then `NAME=value` words. A value may hold spaces (a folder named `Visual Studio Code.app`): it runs to the next ` NAME=`.
+    An argument is no name (`--type=utility` starts with a dash)."""
+    words = list(re.finditer(r"(?:(?<=\s)|^)([A-Za-z_][A-Za-z0-9_]*)=", text))
+    out: Dict[str, str] = {}
+    for index, found in enumerate(words):
+        end = words[index + 1].start() if index + 1 < len(words) else len(text)
+        out[found.group(1)] = text[found.end():end].rstrip()
+    return out
+
+
+def host_environ(pid: Any, platform: str = sys.platform, run: Callable[..., Any] = subprocess.run, read: Callable[[str], bytes] = lambda path: Path(path).read_bytes()) -> Optional[Dict[str, str]]:
+    """The environment of a process of this user, or None when it cannot be read (Windows, a process that is gone, a refusal). Never a guess."""
+    try:
+        number = int(pid)
+    except (TypeError, ValueError):
+        return None
+    try:
+        if platform.startswith("win"):
+            return None  # not without reading another process's memory
+        if platform == "darwin":
+            done = run(["ps", "eww", "-o", "command=", "-p", str(number)], capture_output=True, text=True, timeout=5)
+            return parse_ps_environ(done.stdout or "") if done.returncode == 0 and (done.stdout or "").strip() else None
+        raw = read(f"/proc/{number}/environ")
+        return {key: value for key, _, value in (item.decode("utf-8", "replace").partition("=") for item in raw.split(b"\0")) if key} or None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def _elapsed_seconds(text: str) -> Optional[float]:
+    """`ps -o etime=`: `[[dd-]hh:]mm:ss`."""
+    found = re.match(r"^\s*(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)\s*$", text or "")
+    if not found:
+        return None
+    days, hours, minutes, seconds = (int(item or 0) for item in found.groups())
+    return float(((days * 24 + hours) * 60 + minutes) * 60 + seconds)
+
+
+def process_started(pid: Any, platform: str = sys.platform, run: Callable[..., Any] = subprocess.run, now: Callable[[], float] = time.time) -> Optional[float]:
+    """When a process was created, in seconds since 1970; None when it is not known. Windows: `GetProcessTimes` on a handle that may only ask for limited information (no memory is read)."""
+    try:
+        number = int(pid)
+    except (TypeError, ValueError):
+        return None
+    try:
+        if platform.startswith("win"):
+            import ctypes
+            from ctypes import wintypes
+
+            kernel = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            handle = kernel.OpenProcess(0x1000, False, number)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return None
+            try:
+                created, other_a, other_b, other_c = (wintypes.FILETIME() for _ in range(4))
+                if not kernel.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(other_a), ctypes.byref(other_b), ctypes.byref(other_c)):
+                    return None
+                ticks = (created.dwHighDateTime << 32) | created.dwLowDateTime  # 100 ns since 1601
+                return ticks / 10_000_000 - 11644473600
+            finally:
+                kernel.CloseHandle(handle)
+        done = run(["ps", "-o", "etime=", "-p", str(number)], capture_output=True, text=True, timeout=5)
+        elapsed = _elapsed_seconds(done.stdout or "") if done.returncode == 0 else None
+        return None if elapsed is None else now() - elapsed
+    except (OSError, subprocess.SubprocessError, ValueError, AttributeError):
+        return None
+
+
+def _stamp(text: Any) -> Optional[float]:
+    try:
+        return datetime.fromisoformat(str(text).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def carried(root: Path, pid: Any, environ: Optional[Callable[[Any], Optional[Dict[str, str]]]] = None, started: Optional[Callable[[Any], Optional[float]]] = None) -> Dict[str, Any]:
+    """Was the VS Code whose agent host has this `pid` started with the settings of this copy? `{state, by, missing}`. state: `free` (this copy has no settings to carry), `carried`, `missing` (it is
+    known to lack them: `missing` lists what), `unseen` (nothing proves either way). `by`: env (its environment was read), hook (the hook of a chat in this VS Code said so), board (the board started it),
+    none. No VS Code known (`pid` empty) is `unseen` with `by` none: the caller does not judge then."""
+    want = needs(root)
+    if not want["folders"] and not want["bundle"]:
+        return {"state": FREE, "by": "none", "missing": []}
+    if not pid:
+        return {"state": UNSEEN, "by": "none", "missing": []}
+    read = (environ or host_environ)(pid)
+    if read is not None:  # the same words as the hook's: what `extra` would give and this environment lacks
+        lost = lacking(root, read)
+        return {"state": MISSING if lost else CARRIED, "by": "env", "missing": lost}
+    since = (started or process_started)(pid)
+    found = seen(root)
+    at = _stamp(found.get("at")) if found else None
+    if since is not None and at is not None:
+        if found.get("by") == "board":
+            return {"state": CARRIED, "by": "board", "missing": []} if since >= at - START_SLACK else {"state": MISSING, "by": "board", "missing": [str(item) for item in want["folders"][:3]] or ["CA bundle"]}  # created before the board's start: not the board's
+        if found.get("by") == "hook" and at >= since:  # a chat of this VS Code told: its word is the truth
+            lost = [str(item) for item in found.get("missing") or []]
+            return {"state": MISSING if lost or found.get("ok") is False else CARRIED, "by": "hook", "missing": lost}
+    return {"state": UNSEEN, "by": "none", "missing": []}
 
 
 def vscode_running(run: Callable[..., Any] = subprocess.run, platform: str = sys.platform) -> bool:

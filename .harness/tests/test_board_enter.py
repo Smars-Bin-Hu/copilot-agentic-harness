@@ -20,7 +20,7 @@ from test_ahp import FakeHost, TOKEN
 from test_boardserve import ServeCase
 from test_vslink import until
 
-from core import ahp, messages
+from core import ahp, launchenv, messages
 from modules.task import boardserve, ready, taskhtml, vslink
 
 WEB = taskhtml.WEB
@@ -79,6 +79,86 @@ UP = {"ready": True, "bound": 0, "unbound": 0, "why": "ok"}
 
 def item(found: Dict[str, Any], key: str) -> Dict[str, Any]:
     return next(entry for entry in found["optional"]["items"] if entry["key"] == key)
+
+
+class HostLink(StubLink):
+    """A link that knows the process of the editor's agent host (`code agent endpoints`, 1.7.38)."""
+
+    def __init__(self, status: Dict[str, Any], pid: Any = 4711) -> None:
+        super().__init__(status)
+        self.pid = pid
+
+    def host(self) -> Any:
+        return self.pid
+
+
+class SettingsOfThisCopyTests(TaskCase):
+    """Q2: the VS Code line is red, blocks Enter and offers the restart when the VS Code that is connected was not started with the settings of this copy; no settings, no check."""
+
+    def answer(self, verdict: Dict[str, Any], link: Any = None, clock: Any = None) -> Any:
+        check = ready.Ready(self.root, link or HostLink(UP), clean, clock=clock) if clock else ready.Ready(self.root, link or HostLink(UP), clean)
+        with mock.patch.object(ready.launchenv, "carried", return_value=verdict) as carried:
+            self.carried = carried
+            return settled(check)
+
+    def test_a_vscode_started_without_the_settings_is_red_blocks_enter_and_the_button_restarts_it(self) -> None:
+        found = self.answer({"state": "missing", "by": "env", "missing": ["PATH /x/bin", "REQUESTS_CA_BUNDLE"]})
+        vscode = line(found, "vscode")
+        self.assertEqual((vscode["state"], vscode["why"], vscode["level"], vscode["env"]), ("fail", "env", "red", "missing"))
+        self.assertEqual(vscode["detail"], f"{messages.text('ready.vs.lacks.folders')} x/bin; {messages.text('ready.vs.lacks.bundle')}")
+        self.assertFalse(found["ready"], "Enter stays off")
+        self.assertEqual(line(found, "copilot")["state"], "ok", "Copilot is judged by its connection, not by the settings")
+        problem = next(item for item in found["problems"]["required"] if item["key"] == "vscode")
+        self.assertEqual((problem["level"], problem["fix"]["to"], problem["fix"]["kind"]), ("red", "vscode", "restart"))
+        self.assertEqual(problem["text"], messages.text("ready.r.vscode.env"))
+        self.assertTrue(found["vscode_button"]["up"])  # it runs: the button is Restart, not Open
+
+    def test_a_vscode_the_board_cannot_vouch_for_says_so_in_its_own_words(self) -> None:
+        found = self.answer({"state": "unseen", "by": "none", "missing": []})
+        vscode = line(found, "vscode")
+        self.assertEqual((vscode["state"], vscode["why"], vscode["level"]), ("fail", "unseen", "red"))
+        self.assertFalse(found["ready"])
+        problem = next(item for item in found["problems"]["required"] if item["key"] == "vscode")
+        self.assertEqual(problem["text"], messages.text("ready.r.vscode.unseen"))
+
+    def test_a_vscode_with_the_settings_and_a_copy_with_none_are_green(self) -> None:
+        for verdict in ({"state": "carried", "by": "env", "missing": []}, {"state": "free", "by": "none", "missing": []}):
+            found = self.answer(verdict)
+            self.assertEqual((line(found, "vscode")["state"], line(found, "vscode")["level"]), ("ok", "ok"), verdict)
+            self.assertTrue(found["ready"], verdict)
+        self.assertNotIn("env", line(self.answer({"state": "free", "by": "none", "missing": []}), "vscode"))
+
+    def test_no_known_host_means_no_judgment_and_a_vscode_that_is_not_connected_is_told_as_before(self) -> None:
+        found = self.answer({"state": "missing", "by": "env", "missing": ["PATH x"]}, link=StubLink(UP))  # a link with no `host`
+        self.assertEqual((line(found, "vscode")["state"], found["ready"]), ("ok", True))
+        found = self.answer({"state": "missing", "by": "env", "missing": ["PATH x"]}, link=HostLink({"ready": False, "bound": 0, "unbound": 0, "why": "none"}, pid=None))
+        self.assertEqual((line(found, "vscode")["why"], found["ready"]), ("none", False))
+        self.carried.assert_not_called()
+
+    def test_the_answer_is_kept_a_few_seconds_and_a_new_host_is_asked_at_once(self) -> None:
+        now = [100.0]
+        link = HostLink(UP)
+        check = ready.Ready(self.root, link, clean, clock=lambda: now[0])
+        with mock.patch.object(ready.launchenv, "carried", return_value={"state": "carried", "by": "env", "missing": []}) as carried:
+            settled(check)
+            check.answer(True)
+            self.assertEqual(carried.call_count, 1)
+            now[0] += ready.ENV_KEEP + 1
+            check.answer(True)
+            self.assertEqual(carried.call_count, 2)
+            link.pid = 4712  # VS Code was started again
+            check.answer(True)
+            self.assertEqual(carried.call_count, 3)
+
+    def test_a_hooks_old_word_does_not_count_against_a_vscode_that_was_seen_to_carry_the_settings(self) -> None:
+        wrong = {"rows": [], "checking": False, "launch": False, "env_wrong": True}  # what the hook's old record makes of the connections row
+        with mock.patch.object(ready.Ready, "connection_facts", return_value=wrong):
+            found = self.answer({"state": "carried", "by": "env", "missing": []})
+            self.assertEqual((line(found, "vscode")["level"], "env_wrong" in line(found, "vscode")), ("ok", False))
+            with mock.patch.object(ready.launchenv, "carried") as carried:  # a link that does not know its host: the old yellow word stays
+                found = settled(ready.Ready(self.root, StubLink(UP), clean))
+            carried.assert_not_called()
+            self.assertEqual((line(found, "vscode")["level"], line(found, "vscode")["env_wrong"], found["ready"]), ("yellow", True, True))
 
 
 class ReadinessTests(TaskCase):

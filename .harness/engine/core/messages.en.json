@@ -3561,5 +3561,14 @@
   "setup.kb.update.need": "Tick the box to update the knowledge base.",
   "setup.kb.update.more": "and {n} more",
   "company.folder.uncommitted.one": "1 file in the folder is not committed, so it is not taken.",
-  "setup.kb.update.stop": "The update is stopped: read the note above."
+  "setup.kb.update.stop": "The update is stopped: read the note above.",
+  "board.enter.m.vscode.env": "VS Code is open, but it was started without this copy's settings (the tool folders and the CA bundle). The agent's commands would run without them. Press {button}: the board opens it again with them.",
+  "board.enter.m.vscode.unseen": "VS Code is open, but the board did not start it, so it cannot tell whether it has this copy's settings (the tool folders and the CA bundle). Press {button}: the board opens it again with them.",
+  "board.enter.m.vscode.missing": "It lacks: {detail}.",
+  "board.enter.d.vscode.unseen": "settings unknown",
+  "ready.r.vscode.env": "VS Code was started without this copy's settings.",
+  "ready.r.vscode.unseen": "VS Code was not started by the board: its settings are not known.",
+  "ready.r.vscode.env.why": "The agent's commands run in it and need the tool folders and the CA bundle of this computer.",
+  "ready.vs.lacks.folders": "tool folders",
+  "ready.vs.lacks.bundle": "CA bundle"
 }

@@ -96,7 +96,7 @@ def _out(steps: Dict[str, str], broken: str, key: str, values: Dict[str, Any], l
             if seen:
                 steps[step] = SKIP
             seen = seen or step == broken
-    return {"steps": steps, "broken": broken, "key": key, "text": say("connections.layer." + key, local=say("tools.local.title"), **values), "link": link}
+    return {"steps": steps, "broken": broken, "key": key, "text": say(f"connections.layer.{key}", local=say("tools.local.title"), **values), "link": link}
 
 
 def passed() -> Dict[str, Any]:

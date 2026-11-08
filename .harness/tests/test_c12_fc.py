@@ -11,7 +11,9 @@ from pathlib import Path
 import support  # noqa: F401 - the engine on sys.path
 from support import GIT, HarnessTestCase, make_repo, make_root
 
-from core import company, messages
+from test_connections import ConnectionsCase
+
+from core import company, connections, messages, reach
 from modules.task import kbsetup, setupjob
 
 ENGINE = Path(__file__).resolve().parents[1] / "engine"
@@ -79,6 +81,63 @@ class NoShippedKnowledgeBaseTests(HarnessTestCase):
             names = sorted(path.relative_to(folder).as_posix() for path in folder.rglob("*") if path.is_file() and ".git" not in path.parts)
             self.assertNotIn(".gitkeep", names)
             self.assertIn("company/company.json", names)
+
+
+class DoctorKeepsNoReachStateTests(ConnectionsCase):
+    """N2 / TB-13: the board runs `harness doctor` in a child with the PATH of a new terminal. Its probe found a server "not answering" there and wrote that over the board's own ok."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.addCleanup(setattr, reach, "RETRY_PAUSE", reach.RETRY_PAUSE)
+        reach.RETRY_PAUSE = 0.0
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        connections.save(self.root, "db-ist", {"account": "alice", "password": "right"})
+
+    def test_doctor_reports_a_failed_connection_and_writes_nothing_to_the_shared_state(self) -> None:
+        import doctor
+        from core import config
+
+        connections.probe_all(self.root)  # the board's own check: both ok
+        before = reach.path(self.root).read_bytes()
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "9999"},  # nothing answers there
+                      "db-ist": {"type": "fakedb", "env": "ist", "auth": "own", "host": "db2", "port": "5000"}})
+        systems = config.load_policy(self.root, "tools")["systems"]
+        found = doctor.system_reach(self.root, systems)
+        self.assertEqual((found["db-dev"]["reachable"], found["db-ist"]["reachable"]), (False, True))
+        self.assertIn("connection refused", found["db-dev"]["why"], "what the probe printed is in the report")
+        self.assertEqual(reach.path(self.root).read_bytes(), before, "doctor wrote the shared state")
+
+    def test_a_probe_that_got_no_answer_is_run_once_more_and_says_what_the_program_printed(self) -> None:
+        calls = []
+
+        def second_time_answers() -> tuple:
+            calls.append(1)
+            return (None, "no answer in 8 s") if len(calls) == 1 else (0, "alice\n")
+
+        needs = {"expect": r"^\s*(\S+)\s*$", "down": "connection refused"}
+        line = reach.judged(needs, second_time_answers)
+        self.assertEqual((line["state"], len(calls), line["who"]), (reach.OK, 2, "alice"))
+        calls.clear()
+        refused = reach.judged(needs, lambda: (calls.append(1), (1, "connection refused: CA cert does not include key usage\nmore"))[1])
+        self.assertEqual((refused["state"], refused["why"], len(calls)), (reach.FAILED, "no-answer", 2), "one more try, no more")
+        self.assertEqual(refused["said"], "connection refused: CA cert does not include key usage")
+        calls.clear()
+        denied = reach.judged({"denied": "Login failed"}, lambda: (calls.append(1), (1, "Login failed"))[1])
+        self.assertEqual((denied["state"], len(calls)), (reach.DENIED, 1), "a denial is not tried again")
+
+    def test_what_the_probe_printed_is_kept_by_the_board_check_and_shown_in_the_table_and_the_company_tab(self) -> None:
+        from modules.task import companyview
+
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "9999"},
+                      "db-ist": {"type": "fakedb", "env": "ist", "auth": "own", "host": "db2", "port": "5000"}})
+        self.assertEqual(connections.probe_all(self.root), {"db-dev:dev": "failed", "db-ist:ist": "ok"})
+        kept = reach.read(self.root)
+        self.assertEqual((kept["db-dev:dev"]["why"], kept["db-dev:dev"]["said"]), ("no-answer", "connection refused"))
+        self.assertNotIn("said", kept["db-ist:ist"])
+        words = reach.failed_words(kept["db-dev:dev"])
+        self.assertIn(messages.text("desk.reach.said", said="connection refused"), words)
+        self.assertEqual(companyview.reason(kept["db-dev:dev"]), words)
+        self.assertEqual(reach.failed_words({"why": "no-answer"}), messages.text("desk.reach.why.no-answer"))
 
 
 if __name__ == "__main__":

@@ -641,10 +641,10 @@ def check_toolpacks(report: Report, root: Path) -> None:
         report.warn(say("doctor.company.failed", error=error))
 
 
-def reach_words(code: str) -> str:
-    """The word a probe leaves (`no-answer`, `identity`, `exit-<n>`) as a person reads it; anything else is kept as it is."""
+def reach_words(code: str, said: str = "") -> str:
+    """The word a probe leaves (`no-answer`, `identity`, `exit-<n>`) as a person reads it; anything else is kept as it is. `said`: what the probe printed when nothing answered."""
     if code == "no-answer":
-        return say("doctor.systems.why.no_answer")
+        return say("doctor.systems.why.no_answer") + (say("doctor.systems.why.said", said=said) if said else "")
     if code in ("identity", "other-identity"):
         return say("doctor.systems.why.identity")
     if code.startswith("exit-"):
@@ -661,17 +661,17 @@ def system_reach(root: Path, systems: Dict[str, Any]) -> Dict[str, Dict[str, Any
 
     listed = set(connections.listed(root))
     try:
-        done = connections.probe_all(root) if listed else {}
+        done = connections.probe_lines(root) if listed else {}  # it reports and keeps nothing: the board runs doctor in a child with another PATH, and its answer must not replace the board's own (C12 N2)
     except Exception:  # noqa: BLE001 - a probe that cannot run leaves the terminal's way
         done = {}
-    kept = seen.read(root)
     by_connection: Dict[str, Dict[str, Any]] = {}
     for name, system in systems.items():
         keys = [f"{name}:{env}" for env in outside.probes(system)]
         if name in listed and keys and all(key in done for key in keys):
-            bad = [key for key in keys if done[key] != seen.OK]
-            code = str((kept.get(bad[0]) or {}).get("why") or done[bad[0]]) if bad else ""
-            by_connection[name] = {"reachable": not bad, "why": say("doctor.systems.why.connection", why=reach_words(code))[:200] if bad else "",
+            bad = [key for key in keys if done[key]["state"] != seen.OK]
+            code = str(done[bad[0]].get("why") or done[bad[0]]["state"]) if bad else ""
+            said = str(done[bad[0]].get("said") or "") if bad else ""
+            by_connection[name] = {"reachable": not bad, "why": say("doctor.systems.why.connection", why=reach_words(code, said))[:260] if bad else "",
                                    "launch": say("doctor.systems.launch.noanswer") if code == "no-answer" else (system.get("needs") or {}).get("launch") or ""}  # a new identity does not help when nothing answered
     rest = {name: system for name, system in systems.items() if name not in by_connection}
     answers = {**external.reach(rest, lambda command: external.run_probe(command, root)), **by_connection}

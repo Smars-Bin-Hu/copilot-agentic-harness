@@ -102,9 +102,7 @@ def reason(line: Dict[str, Any]) -> str:
     """Why a connection was not reached, in words (the same words as the Enter screen's table)."""
     if line["state"] == reach.DENIED:
         return str(line.get("launch") or messages.text("desk.reach.why.identity"))
-    if line.get("why") == "no-answer":
-        return messages.text("desk.reach.why.no-answer")
-    return messages.text("desk.reach.why.exit", why=line.get("why") or "")
+    return reach.failed_words(line)
 
 
 def _read_names(manifest: Dict[str, Any], kinds: List[Dict[str, Any]]) -> List[str]:

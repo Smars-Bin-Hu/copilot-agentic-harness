@@ -671,9 +671,9 @@ def unsigned(root: Path) -> List[str]:
     return out
 
 
-def probe_all(root: Path, workers: int = 4) -> Dict[str, str]:
-    """The board's own check of each connection (1.7.19), in the environment VS Code is started with (tool folders, CA bundle) and the identity kept here,
-    so the Enter screen need not wait for the first chat's hook. The answer goes where the hook's probe puts it (`core.reach`): `{<alias>:<env>: state}`."""
+def probe_lines(root: Path, workers: int = 4) -> Dict[str, Dict[str, Any]]:
+    """The board's own check of each connection (1.7.19), in the environment VS Code is started with (tool folders, CA bundle) and the identity kept here: `{<alias>:<env>: line}`, as `core.reach` keeps a line.
+    It writes nothing: a caller that reports (`harness doctor`) uses this; the one that keeps the answer is `probe_all`. A probe that got no answer is run once more first, and its first line is kept as `said` (1.7.38)."""
     from concurrent.futures import ThreadPoolExecutor
 
     from . import launchenv, reach  # they read this module
@@ -688,17 +688,24 @@ def probe_all(root: Path, workers: int = 4) -> Dict[str, str]:
         line = command(kind, server, identity, alias)
         needs = {key: kind[key] for key in ("expect", "denied", "down") if kind.get(key)}
         if missing_program(line, next((value for key, value in launch.items() if key.upper() == "PATH"), None)):
-            state, why, who = reach.FAILED, "exit-127", ""
+            answer = {"state": reach.FAILED, "why": "exit-127", "who": ""}
         else:
-            state, why, who = reach._judge(needs, *run_with(kind, server, identity, line, root, timeout=test_seconds(kind, server), launch=launch, alias=alias))  # noqa: SLF001
-        return f"{alias}:{server['env']}", {"state": state, "at": utc_now(), "why": why[:200], "who": who, "source": "probe"}
+            answer = reach.judged(needs, lambda: run_with(kind, server, identity, line, root, timeout=test_seconds(kind, server), launch=launch, alias=alias))
+        return f"{alias}:{server['env']}", {**answer, "at": utc_now(), "source": "probe"}
 
     with ThreadPoolExecutor(max_workers=max(1, min(workers, len(jobs) or 1))) as pool:
-        answers = list(pool.map(one, jobs))
+        return dict(pool.map(one, jobs))
+
+
+def probe_all(root: Path, workers: int = 4) -> Dict[str, str]:
+    """`probe_lines`, and the answer goes where the hook's probe puts it (`core.reach`): `{<alias>:<env>: state}`. Only the board's own check and the hook keep an answer; `harness doctor` does not."""
+    from . import reach
+
+    answers = probe_lines(root, workers)
     found = reach.read(root)  # read again: a hook may have written meanwhile
-    found.update(dict(answers))
+    found.update(answers)
     reach._write(root, found)  # noqa: SLF001
-    return {key: line["state"] for key, line in answers}
+    return {key: line["state"] for key, line in answers.items()}
 
 
 def login(root: Path, alias: str, own: Optional[Dict[str, Any]] = None) -> Tuple[int, str]:

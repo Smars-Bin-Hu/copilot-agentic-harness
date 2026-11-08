@@ -689,7 +689,7 @@ class SystemReachTests(unittest.TestCase):
             return 0, "ok"
 
         with tempfile.TemporaryDirectory() as folder, mock.patch("core.connections.listed", return_value={"board": {}, "down": {}}), \
-                mock.patch("core.connections.probe_all", return_value={"board:dev": "ok", "down:dev": "failed"}), mock.patch("modules.gate.external.run_probe", side_effect=run):
+                mock.patch("core.connections.probe_lines", return_value={"board:dev": {"state": "ok"}, "down:dev": {"state": "failed"}}), mock.patch("modules.gate.external.run_probe", side_effect=run):
             found = doctor.system_reach(Path(folder), systems)
         self.assertEqual(list(found), ["board", "down", "mine"])
         self.assertEqual((found["board"]["reachable"], found["down"]["reachable"], found["mine"]["reachable"]), (True, False, True))
@@ -718,7 +718,7 @@ class SystemReachTests(unittest.TestCase):
         self.addCleanup(messages.reset)
         with tempfile.TemporaryDirectory() as folder, mock.patch.dict(os.environ, {"HARNESS_LANGUAGE": "en"}), mock.patch("core.config.load_policy", return_value={"systems": systems}), mock.patch("modules.gate.external.validate", return_value=[]), \
                 mock.patch("modules.gate.external.warnings", return_value=[]), mock.patch("modules.gate.external.reach", return_value=answers), mock.patch("core.connections.listed", return_value={name: {} for name in systems}), \
-                mock.patch("core.connections.probe_all", return_value={}), mock.patch("core.connections.unsigned", return_value=["ado", "sql-dev", "sql-ist", "fine"]):
+                mock.patch("core.connections.probe_lines", return_value={}), mock.patch("core.connections.unsigned", return_value=["ado", "sql-dev", "sql-ist", "fine"]):
             report = Report()
             doctor.check_systems(report, Path(folder))
         warned = [text for kind, text in report.lines if kind == "warn"]

@@ -304,7 +304,7 @@ class Ready:
                 if item["state"] == reach.DENIED:
                     why = item.get("launch") or messages.text("desk.reach.why.identity")
                 elif item["state"] == reach.FAILED:
-                    why = messages.text("desk.reach.why.no-answer") if item.get("why") == "no-answer" else messages.text("desk.reach.why.exit", why=item.get("why", ""))
+                    why = reach.failed_words(item)
                 elif item["state"] == reach.OK:
                     why = item.get("who", "")
                 rows.append({"system": system, "env": "" if item["env"] in ("none", "any") else item["env"], "state": kind(item["state"]), "reason": short(why), "at": item.get("at", ""),

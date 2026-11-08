@@ -12,7 +12,10 @@ probe for it; the hooks can, because VS Code starts them and they inherit its id
 The state is `.harness/runtime/state/reach.json`: `{"<system>:<env>": {state, at, why, who, source}}`. `state`: ok, denied (the identity is not let in: the
 launch sentence helps), failed (the server did not answer: down, or this computer is off its network; a new identity would not help), unknown.
 `why` is a word the page turns into its own sentence: `identity`, `other-identity`, `no-answer`, `exit-<n>`. `who` is what the pack's `expect` pattern captured (its first group), or empty: the board shows only what the
-company asked it to show. Never a password, never the probe's whole output.
+company asked it to show. Never a password, never the probe's whole output. `said` (1.7.38): the first line the probe printed when nothing answered (`no-answer`), so a person can see why; a probe that got no answer is run once more first.
+
+Only a run that is meant to keep an answer writes this file: the board's own check, the hook and `tools reach --probe`. `harness doctor` reports and writes nothing here: the board runs it in a child with the PATH of a new terminal, and what it found
+there must not replace what the board found in VS Code's environment (C12 N2).
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from .paths import utc_now
 FILE = Path(".harness") / "runtime" / "state" / "reach.json"
 FRESH_MINUTES = 30
 OK, DENIED, FAILED, UNKNOWN = "ok", "denied", "failed", "unknown"
+RETRY_PAUSE = 1.0  # seconds before a probe that got no answer is run once more (1.7.38): one lost packet is not "the server does not answer"
 
 
 def path(root: Path) -> Path:
@@ -56,6 +60,16 @@ def _write(root: Path, found: Dict[str, Dict[str, Any]]) -> None:
 
 
 probes = outside.probes
+
+
+def failed_words(line: Dict[str, Any]) -> str:
+    """Why a probe failed, in the board's words (the Enter table and the Company tab read the same): no answer, with what the probe printed when it printed something (1.7.38), or its first line / exit code."""
+    from . import messages  # it reads the connections, which read this module
+
+    if line.get("why") == "no-answer":
+        said = str(line.get("said") or "")
+        return messages.text("desk.reach.why.no-answer") + (" " + messages.text("desk.reach.said", said=said) if said else "")
+    return messages.text("desk.reach.why.exit", why=line.get("why") or "")
 
 
 def first_line(output: str, limit: int = 160) -> str:
@@ -82,14 +96,27 @@ def _judge(needs: Dict[str, Any], code: Optional[int], output: str) -> Tuple[str
     return OK, "", ""
 
 
+def judged(needs: Dict[str, Any], run: Callable[[], Tuple[Optional[int], str]]) -> Dict[str, Any]:
+    """One probe, as a stored line without its time: `{state, why, who, said}`. No answer is tried once more after RETRY_PAUSE; `said` is what the last try printed first (only when nothing answered)."""
+    code, output = run()
+    state, why, who = _judge(needs, code, output)
+    if state == FAILED and why == "no-answer":
+        time.sleep(RETRY_PAUSE)
+        code, output = run()
+        state, why, who = _judge(needs, code, output)
+    line = {"state": state, "why": why[:200], "who": who}
+    if state == FAILED and why == "no-answer" and first_line(output):
+        line["said"] = first_line(output)
+    return line
+
+
 def probe_all(root: Path, listed: Dict[str, Any], run: Callable[[str], Tuple[Optional[int], str]]) -> Dict[str, Dict[str, Any]]:
     """Run every probe of every listed system and keep the answers. Run in VS Code's identity (the process the hook started)."""
     found = read(root)
     for name, system in (listed or {}).items():
         needs = system.get("needs") or {}
         for env, command in probes(system).items():
-            state, why, who = _judge(needs, *run(command))
-            found[f"{name}:{env}"] = {"state": state, "at": utc_now(), "why": why[:200], "who": who, "source": "probe"}
+            found[f"{name}:{env}"] = {**judged(needs, lambda command=command: run(command)), "at": utc_now(), "source": "probe"}
     _write(root, found)
     return found
 

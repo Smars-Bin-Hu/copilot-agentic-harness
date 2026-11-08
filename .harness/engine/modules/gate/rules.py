@@ -123,6 +123,11 @@ def external_denied(action: Any, command: str) -> str:
     return say("gate.external.denied", place=place(action.system, action.env), verb=word(action.verb), call=command)
 
 
+def external_denied_file(action: Any, command: str) -> str:
+    """1.7.38, C12 RC-G1: the call is refused because of what a file it reads holds (`sqlcmd -i drop.sql`): the line names the file."""
+    return say("gate.external.denied_file", place=place(action.system, action.env), verb=word(action.verb), file=action.file, call=command)
+
+
 def external_human(action: Any, command: str) -> str:
     """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
     return say("gate.external.human", place=place(action.system, action.env), verb=word(action.verb), call=command, handoff_env="" if action.env in ("", "none") else f" --env {action.env.upper()}")
@@ -135,7 +140,9 @@ def external_task(action: Any, command: str) -> str:
 
 def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str, offers: Any = None, changed: Any = None) -> str:
     where = say("gate.external.outbox_draft", draft=draft) if draft else say("gate.external.outbox_nodraft")
-    text = (say("gate.external.changed_file", files=", ".join(str(one) for one in changed)) + " " if changed else "") + say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)
+    key = {"unread": "gate.external.input_unread", "twice": "gate.external.input_twice"}.get(getattr(action, "file_why", ""))  # 1.7.38: a file the gate could not judge made this a write
+    note = say(key, file=action.file) + " " if key else ""
+    text = note + (say("gate.external.changed_file", files=", ".join(str(one) for one in changed)) + " " if changed else "") + say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)
     if offers:  # 1.7.38: the card can also open the connection for the task; the agent says so, and runs the same command again if the user does
         buttons = messages.joined(say("gate.external.outbox.button", text=say("desk.outbox.open.items" if item.get("scope") == "items" else "desk.outbox.open", name=str(item["system"]))) for item in offers)  # the buttons as the card names them (C12 N12): a connection that opens only the linked items has its own words
         text += " " + say("gate.external.outbox.opens", buttons=buttons)

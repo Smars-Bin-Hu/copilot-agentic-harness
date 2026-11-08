@@ -55,20 +55,28 @@ def bases(root: Path, folder: Path, cwd: str = "", command: str = "") -> List[Pa
     return out
 
 
-def find(value: str, root: Path, folder: Path, cwd: str = "", command: str = "") -> Optional[Path]:
-    """The file `value` names (a path as the command wrote it), when it is a file inside the task folder; else None. The first place it exists in (`bases`) is the one."""
+def locate(value: str, root: Path, folder: Path, cwd: str = "", command: str = "") -> Optional[Path]:
+    """The file `value` names (a path as the command wrote it), wherever it is; None when there is no such file. The first place it exists in (`bases`) is the one."""
     if not value or value.startswith("-") or "\x00" in value or len(value) > 400:
         return None
     try:
         named = Path(value).expanduser()
-        inside = folder.resolve()
         for base in ([None] if named.is_absolute() else bases(root, folder, cwd, command)):
             path = (named if base is None else base / named).resolve()
             if path.is_file():
-                return path if inside in path.parents else None  # the first file there is is the one the command reads; one outside the task is not ours to pin
+                return path  # the first file there is is the one the command reads
     except (OSError, ValueError, RuntimeError):
         return None
     return None
+
+
+def find(value: str, root: Path, folder: Path, cwd: str = "", command: str = "") -> Optional[Path]:
+    """The file `value` names, when it is a file inside the task folder; else None (a file outside the task is not ours to pin or to show)."""
+    try:
+        path = locate(value, root, folder, cwd, command)
+        return path if path is not None and folder.resolve() in path.parents else None
+    except (OSError, ValueError, RuntimeError):
+        return None
 
 
 def digest(path: Path) -> str:

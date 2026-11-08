@@ -34,6 +34,7 @@ from core.systems import (  # noqa: F401 - the names the handler, doctor and the
     ALLOW, DECISIONS, DEFAULT_RULES, DENY, DESTROY, ENVS, EXEC, HUMAN, OUTBOX, PROBE_SECONDS, PROD, PROD_RULES, READ, TASK, VERBS, WRITE, by_address, clis, reach, run_probe, validate, warnings,
 )
 
+from . import inputfiles
 from .gitcmd import MAX_DEPTH, SHELLS, SHELL_FLAGS, WRAPPERS, _is_environment, _name, join_lines, split_segments
 
 
@@ -48,11 +49,15 @@ class Action:
     call: str = ""  # this one command from the program on (the program as its plain name): what a system's `item` pattern is matched against (1.7.21)
     why: str = ""  # an unseen call that is not an unreadable program name: "file" (a script the gate cannot read), "encoded" (an encoded PowerShell command); "command" (1.7.38): a word the system's own program does not have, its `target`
     unseen: bool = False  # a segment the gate cannot read (a program in a variable it cannot expand): held, never guessed (1.7.21)
+    file: str = ""  # (1.7.38, C12 RC-G1) a file the call names as its input (`sqlcmd -i`): the one whose text made the call a destroy, or the first one the gate could not judge
+    file_why: str = ""  # "destroy" (the file holds one: refused), "unread" (missing, too big, not text: held as a write), "twice" (the line names the file again and may change it: held as a write)
 
     def facts(self) -> Dict[str, Any]:
         facts: Dict[str, Any] = {"system": self.system, "env": self.env, "verb": self.verb, "target": self.target}
         if not self.named:
             facts["named"] = False  # said only when it matters: the log and the draft stay as they were for a named verb
+        if self.file_why:
+            facts["file"], facts["file_why"] = self.file, self.file_why  # said only when it matters
         return facts
 
 
@@ -486,8 +491,9 @@ def _heredocs(text: str) -> Tuple[str, List[Tuple[str, bool]]]:
 class _Ctx:
     """What a scan of a command line needs besides the text (1.7.25). `hold`: the gate is asking, so the reading checks run (a script file is read, a word is accounted for)."""
 
-    def __init__(self, root: Optional[Any] = None, cwd: str = "", hold: bool = False) -> None:
+    def __init__(self, root: Optional[Any] = None, cwd: str = "", hold: bool = False, folder: Optional[Any] = None, line: str = "") -> None:
         self.root, self.cwd, self.hold = root, cwd, hold
+        self.folder, self.line = folder, line  # the task's folder (a place a relative path is looked for) and the whole line as written: for the files a call names as its input (1.7.38)
         self.dirs: List[str] = []  # directories this line changes to (`cd tools && ./run.sh`)
         self.quiet: set = set()  # programs a system lists `by_address`: not among the names that must be accounted for
 
@@ -623,7 +629,17 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                 found.append(Action(name, environment(system, line), WRITE, word[:120], " ".join(tokens), call=" ".join([_program(tokens[start])] + tokens[start + 1:]), why="command"))
                 continue
             verb = verb_named(system, " ".join(tokens[start + 1:]))
-            found.append(Action(name, environment(system, line), verb or WRITE, target, " ".join(tokens), named=verb is not None, call=" ".join([_program(tokens[start])] + tokens[start + 1:])))
+            file, file_why = "", ""
+            if ctx.root is not None and system.get("input"):  # 1.7.38, C12 RC-G1: the statements of `sqlcmd -i file` are in the file: judged as the same words in the line are
+                read = inputfiles.read(system, tokens[start + 1:], ctx.root, ctx.folder, ctx.cwd, ctx.line or " ".join(tokens))
+                if read is not None:
+                    verb = inputfiles.strictest([verb_named(system, read.rest), read.verb])
+                    if read.state == "destroy":
+                        verb, file, file_why = DESTROY, read.file, "destroy"
+                    elif read.state:  # a file the gate cannot judge: the call is at least a write
+                        verb = inputfiles.strictest([verb, WRITE])
+                        file, file_why = (read.file, read.state) if verb == WRITE else ("", "")
+            found.append(Action(name, environment(system, line), verb or WRITE, target, " ".join(tokens), named=verb is not None and file_why not in ("unread", "twice"), call=" ".join([_program(tokens[start])] + tokens[start + 1:]), file=file, file_why=file_why))
             continue
         if start is not None:
             continue  # the program of a listed system, none of whose systems owns this call: judged, and nothing to hold
@@ -756,9 +772,10 @@ def _wait_run(tokens: List[str]) -> Optional[str]:
     return None
 
 
-def classify(command: str, systems: Dict[str, Any], unseen: bool = False, root: Optional[Any] = None, cwd: str = "") -> List[Tuple[Action, str]]:
+def classify(command: str, systems: Dict[str, Any], unseen: bool = False, root: Optional[Any] = None, cwd: str = "", folder: Optional[Any] = None) -> List[Tuple[Action, str]]:
     """Each call to a listed system in a command line, with what the policy decides for it. Empty when there is none.
-    With `unseen` (the gate), a segment whose program the gate cannot read comes too, as a held call of no system (1.7.21)."""
+    With `unseen` (the gate), a segment whose program the gate cannot read comes too, as a held call of no system (1.7.21).
+    With `root` (the gate, 1.7.38), the files a call names as its input are read and judged too (`input` of the system); `folder` is the task's folder, a place a relative path is looked for."""
     if not systems or not command.strip():
         return []
     programs: Dict[str, List[str]] = {}
@@ -771,7 +788,7 @@ def classify(command: str, systems: Dict[str, Any], unseen: bool = False, root: 
             quiet.add(program)
     quiet -= {program for system in systems.values() for program in clis(system)}  # a program some system lists by name is a listed program for all
     found: List[Action] = []
-    context = _Ctx(root, cwd, hold=unseen)
+    context = _Ctx(root, cwd, hold=unseen, folder=folder, line=command)
     context.quiet = quiet
     _scan(command, systems, programs, 0, found, ctx=context)
     return [(action, HUMAN if action.unseen else DENY if action.why == "command" else decide(systems[action.system], action.env, action.verb)) for action in found if unseen or not action.unseen]

@@ -42,16 +42,16 @@
   "down": "TCP Provider|Named Pipes Provider|Login timeout expired|Cannot open server|network-related or instance-specific error|unable to open tcp connection|connection refused|i/o timeout",
   "verbs": [
     {
+      "pattern": "\\b(?:drop|truncate|kill|shutdown|restore)\\b",
+      "verb": "destroy"
+    },
+    {
       "pattern": "\\binto\\b|\\b(?:insert|update|delete|merge|create|alter|grant|revoke)\\b",
       "verb": "write"
     },
     {
       "pattern": "\\b(?:begin\\s+tran(?:saction)?|commit|rollback|save\\s+tran(?:saction)?|dbcc|backup|reconfigure|deny|disable\\s+trigger|enable\\s+trigger|openrowset|opendatasource|openquery|bulk|xp_\\w+)\\b",
       "verb": "write"
-    },
-    {
-      "pattern": "\\b(?:drop|truncate|kill|shutdown|restore)\\b",
-      "verb": "destroy"
     },
     {
       "pattern": "\\bexec(?:ute)?\\b|\\bsp_\\w+",
@@ -66,6 +66,12 @@
       "verb": "read"
     }
   ],
+  "input": {
+    "options": [
+      "-i"
+    ],
+    "include": "^\\s*:r\\s+(?:\"([^\"\\r\\n]+)\"|(\\S+))"
+  },
   "body": [
     {
       "pattern": "(?:^|\\s)-[Qq]\\s+\"((?:[^\"\\\\]|\\\\.)*)\"",

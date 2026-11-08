@@ -50,6 +50,8 @@ The gate is code that runs in the hooks, before a call. It does not ask a model.
 
 The agent cannot change these facts: the files that hold them are guardrail files, and an approval needs the code from the board.
 
+A script file counts like the same words in the command line: a type says which option names one (`sqlcmd -i file`), and the gate reads the file (at most 200 KB) and judges its statements with the same rules. A drop or a truncate in it is refused, even when the connection is opened; a file of reads only runs; any other waits for you, and so does a file it cannot read.
+
 A made-up subcommand of a tool pack's own program (`ado workitem`, when `ado` has no such command) is refused with one line and shows no card: there is nothing to approve.
 
 When a call is held or refused, the agent is told to tell you what the call is for and not to reach the same result another way. A held call also tells it to run `harness wait --approval <code>`: one terminal call that reads one file, calls no model, and returns at once when you approve, open the connection or dismiss (with your reason), or ends after 9 minutes so the agent can end its turn; the board wakes it when you decide later. The wait only reads the approval state, so the gate lets it through. That part is a rule the agent follows, not a lock. The next section is about the locks.

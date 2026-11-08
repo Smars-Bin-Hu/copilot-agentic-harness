@@ -131,11 +131,19 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
                 re.compile(str(rule["pattern"]))
             except re.error as error:
                 out.append(f"types.{name}.{key}[{index}]: bad pattern: {error}")
+    given = kind.get("input")  # 1.7.38 (C12 RC-G1): the options that name a file the call reads its statements from, and how such a file names more files
+    if given is not None and not (isinstance(given, dict) and set(given) <= {"options", "include"} and isinstance(given.get("options"), list) and given["options"] and all(isinstance(one, str) and one for one in given["options"]) and isinstance(given.get("include", ""), str)):
+        out.append(f"types.{name}.input: {{\"options\": [\"-i\"], \"include\": <a pattern whose group is a file>}}: `options` are the options that name a file; `include` is optional")
     for key in ("expect", "denied", "down", "match", "signin_lost", "command"):
         try:
             re.compile(_fill(kind.get(key) or "", {}, escape=True) if key == "match" else kind.get(key) or "")
         except re.error as error:
             out.append(f"types.{name}.{key}: bad pattern: {error}")
+    if isinstance(given, dict) and isinstance(given.get("include"), str) and given["include"]:
+        try:
+            re.compile(given["include"])
+        except re.error as error:
+            out.append(f"types.{name}.input.include: bad pattern: {error}")
     return out
 
 
@@ -378,7 +386,7 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
             chosen = (server.get(key) or kind.get(key)) if key == "rules" else kind.get(key)  # the connection's own rules win, else the type's (1.7.21)
             if chosen:
                 system[key] = chosen
-        for key in ("toolpack", "openable", "item", "link", "commands", "command"):
+        for key in ("toolpack", "openable", "item", "link", "commands", "command", "input"):
             if kind.get(key) is not None:
                 system[key] = kind[key]
         system["open"] = connection_scope(kind, server)

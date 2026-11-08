@@ -542,6 +542,19 @@ def probe_keys(root: Path) -> List[str]:
     return out
 
 
+def unsigned(root: Path) -> List[str]:
+    """The connections with no sign-in kept here (1.7.38): a sign-in that has to be typed and is not saved. A program that keeps its own (`az`) is not among them. `harness doctor` names them in one line."""
+    known, env = types(root), read_env(root)
+    out = []
+    for alias, server in listed(root).items():
+        kind = known.get(str(server.get("type")))
+        if not kind or kind.get("via") == "mcp" or not kind.get("cli") or type_problems(kind):
+            continue
+        if delivery(kind, server)["identity"] != "tool" and not identity_of(env, alias, kind, server):
+            out.append(alias)
+    return out
+
+
 def probe_all(root: Path, workers: int = 4) -> Dict[str, str]:
     """The board's own check of each connection (1.7.19), in the environment VS Code is started with (tool folders, CA bundle) and the identity kept here,
     so the Enter screen need not wait for the first chat's hook. The answer goes where the hook's probe puts it (`core.reach`): `{<alias>:<env>: state}`."""

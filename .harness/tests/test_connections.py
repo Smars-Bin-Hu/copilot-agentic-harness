@@ -329,6 +329,14 @@ class BoardChecksItself(ConnectionsCase):
         connections.save(self.root, "db-dev", {"account": "alice", "password": "wrong"})
         self.assertEqual(connections.probe_all(self.root), {"db-dev:dev": "denied"})
 
+    def test_unsigned_names_the_connections_with_no_sign_in_kept_here(self) -> None:
+        """Q16: the list `harness doctor` merges into one line."""
+        self.assertEqual(connections.unsigned(self.root), ["db-dev", "db-ist"])
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        self.assertEqual(connections.unsigned(self.root), ["db-ist"])
+        connections.forget(self.root, "db-dev")
+        self.assertEqual(connections.unsigned(self.root), ["db-dev", "db-ist"])
+
     def test_the_checker_asks_when_an_answer_is_missing_or_old_not_on_every_poll(self) -> None:
         from core import reach
         from modules.task import reachcheck

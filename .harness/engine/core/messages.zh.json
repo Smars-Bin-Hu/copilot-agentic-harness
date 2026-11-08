@@ -3534,5 +3534,7 @@
   "task.allow.on.asks": "{env} 已标为对这个任务开放，但那里的系统都来自工具包，每次写入或执行仍要等你批准。Open to the agent 改不了这一点。",
   "board.enter.vs.again": "再试一次",
   "connections.state.nopack.tip": "这个连接的 tool pack 没开，所以这里没有登录和测试。gate 仍按 tool pack 的规则判断它的调用：读直接过，写要等你批准，删除一律拒绝。",
-  "connections.own.env.prod": "这里没有 PROD：prod 连接只来自公司知识库，agent 在那里只能读。"
+  "connections.own.env.prod": "这里没有 PROD：prod 连接只来自公司知识库，agent 在那里只能读。",
+  "doctor.systems.unsigned.one": "连接 {names} 在这里没有保存登录，所以这个终端连不上。请在看板的 Connections & sign-ins 里登录，再运行 doctor。",
+  "doctor.systems.unsigned": "{n} 个连接在这里没有保存登录，所以这个终端连不上：{names}。请在看板的 Connections & sign-ins 里登录，再运行 doctor。"
 }

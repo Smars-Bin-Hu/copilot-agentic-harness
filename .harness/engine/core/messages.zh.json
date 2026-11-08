@@ -3511,5 +3511,7 @@
   "ready.p.sync.one": "有 1 处公司内容没有同步。",
   "ready.p.sync": "有 {n} 处公司内容没有同步。",
   "ready.p.sync.short.one": "有 1 处公司内容没有同步。",
-  "ready.p.sync.short": "有 {n} 处公司内容没有同步。"
+  "ready.p.sync.short": "有 {n} 处公司内容没有同步。",
+  "desk.outbox.moved": "agent 没等它",
+  "desk.outbox.moved.note": "agent 在这条之后又跑了别的命令，没有在等它。不要了就作废；还要的话，批准后告诉 agent。"
 }

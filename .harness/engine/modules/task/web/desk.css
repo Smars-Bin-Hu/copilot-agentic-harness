@@ -62,6 +62,7 @@
 .tk-wait{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
 .tk-wait>.card{margin:0}
 .tk-need{padding:12px 14px;border:1px solid var(--line);border-radius:12px}
+.tk-need.moved{border-style:dashed}  /* a held call the agent went on without (1.7.38): not a wait, so no orange edge */
 .tk-need.strong{border-color:var(--hot-line);border-left:3px solid var(--hot-dot);background:var(--hot-bg)}
 .tk-need-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 10px;margin-bottom:6px;min-width:0}
 .tk-need-h h2{margin:0;font-size:14.5px;min-width:0;overflow-wrap:anywhere}

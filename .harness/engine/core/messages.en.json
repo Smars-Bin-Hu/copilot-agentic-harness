@@ -3511,5 +3511,7 @@
   "ready.p.sync.one": "1 company item is not synced.",
   "ready.p.sync": "{n} company items are not synced.",
   "ready.p.sync.short.one": "1 company item is not synced.",
-  "ready.p.sync.short": "{n} company items are not synced."
+  "ready.p.sync.short": "{n} company items are not synced.",
+  "desk.outbox.moved": "The agent went on",
+  "desk.outbox.moved.note": "The agent ran other commands after this call, so it is not waiting for it. Dismiss it. If you still want it, approve it and tell the agent."
 }

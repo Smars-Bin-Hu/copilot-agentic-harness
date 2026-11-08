@@ -125,6 +125,46 @@ def pending_for(root: Path, task: str) -> List[Dict[str, Any]]:
     return sorted(found, key=lambda item: str(item.get("created_at", "")))
 
 
+MOVED_MARGIN_S = 1.5  # calls that run together start together: a call that began within this of the held one was in the same batch, not a next move
+LOG_TAIL = 256 * 1024
+_starts: Dict[str, Any] = {}  # log file -> (size, mtime), the start times of its allowed terminal calls
+
+
+def _terminal_starts(root: Path, surface: str, session_id: str) -> List[float]:
+    """When each terminal call that went through began in a session (from its hook log, the tail of it); empty when the log is missing."""
+    from . import copilot_events, logs
+
+    path = logs.session_log_path(root, surface or "vscode", session_id)
+    try:
+        stat = path.stat()
+    except OSError:
+        return []
+    key, stamp = str(path), (stat.st_size, stat.st_mtime_ns)
+    held = _starts.get(key)
+    if held is None or held[0] != stamp:
+        found = [copilot_events.seconds(row.get("at")) for row in logs.read_tail(path, LOG_TAIL)
+                 if row.get("event") == "PreToolUse" and row.get("tool_kind") == "terminal" and row.get("decision") not in ("deny", "ask")]
+        held = (stamp, [one for one in found if one is not None])
+        if len(_starts) > 200:
+            _starts.clear()
+        _starts[key] = held
+    return held[1]
+
+
+def moved_on(root: Path, entries: List[Dict[str, Any]]) -> set:
+    """The codes of held calls the agent did not wait for (1.7.38, C11 T2-04). The gate tells the agent to stop and ask the person; an agent that then runs another terminal command in the same
+    session has gone on without this call (it was a command it got wrong and replaced, a line it split). The facts are in the hook log of the session; nothing is guessed from the chat.
+    Such a call stays in the outbox, the person may still approve or dismiss it, but the task is not "waiting for you" because of it."""
+    from . import copilot_events
+
+    out = set()
+    for item in entries:
+        asked = copilot_events.seconds(item.get("created_at"))
+        if asked is not None and any(begun > asked + MOVED_MARGIN_S for begun in _terminal_starts(root, str(item.get("surface") or ""), str(item.get("session_id") or ""))):
+            out.add(str(item.get("code")))
+    return out
+
+
 def approved_for(root: Path, task: str) -> List[Dict[str, Any]]:
     """The calls of this task that the person approved and the agent has not run yet (the approval is used up when the command runs), oldest approval first."""
     minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))

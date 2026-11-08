@@ -1076,16 +1076,17 @@
   function waitBand() {
     if (desk.past) return pastNote();
     const told = approvedCard();
-    if (!needsCard()) return told;
+    const left = (desk.outbox || []).filter((item) => item.moved_on).map((item) => outboxCard(item, []));  // calls the agent went on without: not a wait, but still here to dismiss (or approve), whatever else the task waits for (1.7.38)
+    if (!needsCard()) return left.length ? [told, ...left].filter(Boolean) : told;
     const items = needItems().filter((item) => item.action !== "approve-action");  // the held calls have cards of their own
     const strong = items.filter((item) => JUMPS[item.action]);
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
     const cards = told ? [told] : [];  // the approved calls first: the one step left is to tell the agent
-    cards.push(...(desk.outbox || []).map((item, index) => outboxCard(item, index || told ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
+    cards.push(...(desk.outbox || []).filter((item) => !item.moved_on).map((item, index) => outboxCard(item, index || told ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
     cards.push(...strong.map((item, index) => strongCard(item, index || cards.length ? [] : notes)));
     if (other.length || (!strong.length && !cards.length)) cards.push(otherCard(other, strong.length || cards.length ? [] : notes));  // the held calls stand for themselves
-    return cards;
+    return [...cards, ...left];
   }
 
   // --- a call to an outside system held in the outbox (1.7.7) -------------------------------------------------------------------------------------------------
@@ -1200,14 +1201,15 @@
     const ready_ = () => can && viewedCalls.has(item.code) && input.value.trim().length > 0;  // the window was opened and a code was typed (the one the agent gave, in the draft's name)
     const yes = h("button", {type: "button", class: "act hot big", disabled: "disabled", title: t("desk.outbox.view_first")}, t("desk.outbox.approve"));
     // Why Approve is grey is shown by motion, not words: View pulses until it was opened, then the code box until a code is typed (hand test: the tip alone was not seen).
+    const gone = Boolean(item.moved_on);  // the agent ran other commands after this call: it does not wait for it, so nothing pulses and Dismiss is the main button
     const arm = () => {
       yes.disabled = !ready_();
       yes.title = ready_() || !can ? "" : viewedCalls.has(item.code) ? t("desk.outbox.type_code") : t("desk.outbox.view_first");
-      view.classList.toggle("pulse", can && !viewedCalls.has(item.code));
-      input.classList.toggle("pulse", can && viewedCalls.has(item.code) && !input.value.trim());
+      view.classList.toggle("pulse", can && !gone && !viewedCalls.has(item.code));
+      input.classList.toggle("pulse", can && !gone && viewedCalls.has(item.code) && !input.value.trim());
     };
     input.addEventListener("input", arm);
-    const no = h("button", {type: "button", class: "act", disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
+    const no = h("button", {type: "button", class: "act" + (gone ? " hot big" : ""), disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
     const view = h("button", {type: "button", class: "act big tk-view"}, t("desk.outbox.view"));
     const said = h("div", {class: "bad"});
     view.addEventListener("click", () => { callWindow(item, (code) => { input.value = code; enteredCodes.set(item.code, code); arm(); yes.focus(); }); arm(); });  // the code is not filled in by opening View: the person types it, or clicks it in View (1.7.29)
@@ -1228,12 +1230,13 @@
     arm();
     const peek = item.command.length > 110 ? item.command.slice(0, 110) + "…" : item.command;
     const words = Boolean(item.say || item.body);  // the type says it in words: the card shows that and folds the command
-    return h("section", {class: "tk-need strong tk-call", "data-action": "approve-action", "data-code": item.code},
-      h("div", {class: "tk-need-h"}, tag(t("task.waiting.outbox"), "hot"), h("span", {class: "sub", title: item.draft ? t("desk.outbox.draft.tip", {file: item.draft}) : null}, t("desk.outbox.since", {at: when(item.created_at, 11, 16)}))),  // the draft's file name is on hover, not on the card (1.7.26)
+    return h("section", {class: "tk-need tk-call" + (gone ? " moved" : " strong"), "data-action": "approve-action", "data-code": item.code},
+      h("div", {class: "tk-need-h"}, tag(t(gone ? "desk.outbox.moved" : "task.waiting.outbox"), gone ? "" : "hot"), h("span", {class: "sub", title: item.draft ? t("desk.outbox.draft.tip", {file: item.draft}) : null}, t("desk.outbox.since", {at: when(item.created_at, 11, 16)}))),  // the draft's file name is on hover, not on the card (1.7.26)
       sayLine(item),
       callFacts(item),
       bodyBlock(item),
       words ? rawFold(item) : h("div", {class: "tk-cmd-peek"}, h("code", null, peek)),
+      gone ? h("p", {class: "hint"}, t("desk.outbox.moved.note")) : null,
       notes,
       h("div", {class: "tk-need-go tk-call-go"}, view, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), no, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));  // View first in the row: the eye goes View, code, Approve
   }
@@ -1265,7 +1268,7 @@
     const chat = served() && !desk.past ? desk.chat : null;
     const onLive = current === "live" && hasStream();
     if (typeof LIVE !== "undefined" && served()) {
-      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).map((item) => item.command), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed"});
+      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).filter((item) => !item.moved_on).map((item) => item.command), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed"});
       LIVE.want("tab", onLive);
       LIVE.visible(onLive);
     }

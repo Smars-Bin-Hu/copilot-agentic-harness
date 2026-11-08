@@ -136,9 +136,11 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
         systems = config.policy_or_empty(root, "tools").get("systems") or {}
         folder = tasks.task_dir(root, task)
         out = []
-        for item in outbox.pending_for(root, task):
+        waiting = outbox.pending_for(root, task)
+        gone = outbox.moved_on(root, waiting)  # 1.7.38: the agent went on without these
+        for item in waiting:
             system = systems.get(item.get("system", "")) or {}
-            out.append({
+            out.append({"moved_on": str(item["code"]) in gone,
                 "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True),
                 "command": item["command"], "created_at": item.get("created_at", ""), "session_id": item.get("session_id", ""), "draft": outbox.draft_of(item).split("/", 4)[-1] if outbox.draft_of(item) else "",
                 "facts": cmdview.facts(item["command"], system.get("show")), "layout": cmdview.layout(item["command"], folder),

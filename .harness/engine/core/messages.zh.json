@@ -2801,7 +2801,6 @@
   "connections.tool.retest": "登录好了？再点 Test。",
   "connections.tool.login": "登录",
   "connections.env.none": "不分环境",
-  "connections.env.none.tip": "不分环境的工具（工单系统、pipeline 服务）",
   "connections.login.none": "`{alias}` 没有自己的登录命令可以运行",
   "connections.login.after": "登录好了。在 Get ready，工具，这台电脑，Sign-ins 里给 `{alias}` 点 Test，再 Save。",
   "setup.toolpacks": "工具包",

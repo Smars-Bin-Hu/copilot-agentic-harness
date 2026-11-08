@@ -2801,7 +2801,6 @@
   "connections.tool.retest": "Signed in? Click Test.",
   "connections.tool.login": "Sign in",
   "connections.env.none": "No environment",
-  "connections.env.none.tip": "A tool with no environments (a ticket board, a pipeline service)",
   "connections.login.none": "`{alias}` has no sign-in of its own to run",
   "connections.login.after": "Signed in. In Get ready, Tools, This computer, Sign-ins: Test, then Save for `{alias}`.",
   "setup.toolpacks": "Tool packs",

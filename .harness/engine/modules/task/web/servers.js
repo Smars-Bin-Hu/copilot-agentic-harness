@@ -9,7 +9,7 @@ const SERVERS = (function () {
   const kept = (key, fallback) => { try { const found = localStorage.getItem("harness.servers." + key); return found ? JSON.parse(found) : fallback; } catch (error) { return fallback; } };
 
   const field = (caption, input) => h("label", {class: "sv-field"}, h("span", {class: "sv-cap"}, caption), input);  // a field keeps its name once it is filled
-  function envChip(env) { return env === "none" ? h("span", {class: "sv-env", title: t("connections.env.none.tip")}, "\u2014") : h("span", {class: "sv-env sv-env-" + env}, env.toUpperCase()); }
+  function envChip(env) { return env === "none" ? null : h("span", {class: "sv-env sv-env-" + env}, env.toUpperCase()); }  // env none: no chip at all (the rule since 1.7.19)
   function where(row) { const f = row.fields || {}; return [f.host, f.port].filter(Boolean).join(":") || Object.values(f).filter(Boolean).join(" · "); }
   function result(found) {  // a test's answer: a mark and a short word, the reason on hover
     const word = found.timeout ? t("connections.state.timeout", {seconds: found.timeout}) : t("connections.state." + found.state);

@@ -17,7 +17,7 @@ from test_boardserve import ServeCase
 
 from taskcase import TASK
 
-from core import messages, tasks
+from core import approval, messages, tasks
 from modules.task.common import CommandError
 from modules.task import mdtree, task as task_ops, taskboard, taskdesk
 
@@ -815,7 +815,7 @@ class DeskTests(ServeCase):
         digest = tasks.plan_digest(self.root, TASK)
         task_ops.approve_plan(self.root, TASK, reader=lambda _prompt: digest[:8], interactive=True, out=io.StringIO())
         found = taskdesk.desk(self.root, "job1", ())["plan_approval"]
-        self.assertEqual((found["approved"], found["code"], found["changed"]), (True, digest[:8], False))
+        self.assertEqual((found["approved"], found["code"], found["changed"]), (True, approval.code_of(digest), False))
         self.assertEqual(found["at"], self.data()["plan"]["approved_at"])
         (self.task / "PLAN.md").write_text((self.task / "PLAN.md").read_text(encoding="utf-8") + "\nOne more step.\n", encoding="utf-8")
         found = taskdesk.desk(self.root, "job1", ())["plan_approval"]

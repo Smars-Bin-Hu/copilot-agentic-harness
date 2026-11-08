@@ -14,6 +14,7 @@ from typing import Any, Callable, Optional
 
 from . import messages
 
+LEGACY_LENGTH = 8  # what the code was before 1.7.38
 CODE_LENGTH = 6  # as long as the code of a held outside call, and written the same way: capitals (C12 N13: the code of a requirement was 8 small letters and digits, the others 6 capitals)
 
 
@@ -42,7 +43,7 @@ def ask(question: str, digest: str, refusal: str, reader: Optional[Callable[[str
     """Ask the person to type the code of `digest`. Anything else raises Refused(refusal)."""
     code = code_of(digest)
     answer = (reader or input)(messages.text("approval.ask", question=question, code=code)).strip()
-    if answer.upper() != code:  # the letters of the code are capitals; a person may type them small
+    if answer.upper() != code and answer != digest[:LEGACY_LENGTH]:  # the letters of the code are capitals; a person may type them small. The old code (8 small characters, shown by a page loaded before 1.7.38) is taken too
         raise Refused(refusal)
 
 

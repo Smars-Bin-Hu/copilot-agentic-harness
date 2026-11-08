@@ -576,7 +576,7 @@
     setText(vsNote, said);
     vsNote.hidden = !said;
     vsNote.classList.toggle("bad", failed);
-    vsBtn.hidden = Boolean(up && vs && vs.state === "ok" && !going && !failed && !said);  // VS Code runs with this copy's settings and nothing is going on: nothing to press, and a button that need not be pressed made people stop and wonder (C12 N15)
+    vsBtn.hidden = false;  // always there (the person decided, 1.7.38): Open, Restart, or Restart with identities
     vsBtn.disabled = going;
     vsBtn.classList.toggle("hot", !ready && !chk0.setup && Boolean(vs) && vs.state !== "ok");
     vsBtn.title = going ? "" : t(up ? "board.enter.vs.restart.tip" : "board.enter.vs.open.tip");

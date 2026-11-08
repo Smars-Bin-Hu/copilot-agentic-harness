@@ -50,6 +50,17 @@ def short(text: Any) -> str:
     return one if len(one) <= REASON_MAX else one[: REASON_MAX - 1] + "…"
 
 
+def clip(text: str, size: int) -> str:
+    """At most `size` characters, cut at the end of a sentence or between words, never inside a word."""
+    if len(text) <= size:
+        return text
+    head = text[:size]
+    end = head.rfind(". ")
+    if end >= size // 2:
+        return head[:end + 1]
+    return head[:head.rfind(" ")].rstrip(" ,;:(") + "…" if " " in head else head[:size - 1] + "…"
+
+
 def plain(text: Any) -> str:
     """Words of the engine for a person at a page: the marks that are for a terminal are left out."""
     return str(text).replace("`", "")
@@ -286,7 +297,7 @@ class Ready:
         if notes["n"]:
             for entry in listed:
                 if entry["key"] == "kb":
-                    problem = {"key": "doctor", "text": messages.text("ready.p.doctor.one" if notes["n"] == 1 else "ready.p.doctor", n=notes["n"]), "why": plain(notes["first"])[:180], "short": messages.text("ready.p.doctor.short.one" if notes["n"] == 1 else "ready.p.doctor.short", n=notes["n"]),
+                    problem = {"key": "doctor", "text": messages.text("ready.p.doctor.one" if notes["n"] == 1 else "ready.p.doctor", n=notes["n"]), "why": clip(plain(notes["first"]), 180), "short": messages.text("ready.p.doctor.short.one" if notes["n"] == 1 else "ready.p.doctor.short", n=notes["n"]),
                                "fix": {"to": "term", "run": "harness doctor", "label": messages.text("ready.fix.doctor")}}
                     entry["problems"] = [*entry["problems"], problem]
                     entry["state"] = "yellow"

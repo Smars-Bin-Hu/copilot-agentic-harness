@@ -198,9 +198,9 @@ const SETUP = (function () {
       const shown = items.slice(0, NAMES).map((item) => h("span", {class: "su-nm", title: item.tip || ""}, dotOf(item.kind), item.name));
       return items.length > NAMES ? [...shown, h("span", {class: "su-more-n"}, "+" + (items.length - NAMES))] : shown;
     };
-    const openTab = (tab) => {
+    const openTab = (tab, part) => {
       const button = h("button", {type: "button", class: "act su-open"}, t("tools.open"));
-      button.addEventListener("click", () => TOOLS.open(tab, loadTools));
+      button.addEventListener("click", () => TOOLS.open(tab, loadTools, part));
       return button;
     };
     const factsBox = h("div", {class: "su-facts"});
@@ -225,9 +225,9 @@ const SETUP = (function () {
       const tools = st.tools || {};
       const packs = c.packs || [];
       const ready = new Map(((tools.packs || {}).names || []).map((item) => [item.name, item.ok]));
-      rows.push(fact(t("setup.toolpacks"), "none", packs.length ? names(packs.map((name) => ({name, kind: !ready.has(name) ? "none" : ready.get(name) ? "ok" : "need", tip: ready.has(name) ? t(ready.get(name) ? "setup.fact.pack.ready" : "setup.fact.pack.not") : ""}))) : t("setup.fact.packs.none"), packs.join(", ") || t("setup.fact.packs.tip"), "", openTab("packs")));
+      rows.push(fact(t("setup.toolpacks"), "none", packs.length ? names(packs.map((name) => ({name, kind: !ready.has(name) ? "none" : ready.get(name) ? "ok" : "need", tip: ready.has(name) ? t(ready.get(name) ? "setup.fact.pack.ready" : "setup.fact.pack.not") : ""}))) : t("setup.fact.packs.none"), packs.join(", ") || t("setup.fact.packs.tip"), "", openTab("company", "packs")));
       const conns = c.connections || [];
-      rows.push(fact(t("connections.title"), "none", conns.length ? names(conns.map((name) => ({name, kind: "none"}))) : t("setup.fact.conns.none"), conns.join(", ") || t("setup.fact.conns.tip"), "", openTab("connections")));
+      rows.push(fact(t("connections.title"), "none", conns.length ? names(conns.map((name) => ({name, kind: "none"}))) : t("setup.fact.conns.none"), conns.join(", ") || t("setup.fact.conns.tip"), "", openTab("company", "connections")));
       // the dots of the name rows carry the state themselves: the row's own dot is hidden for them
       factsBox.replaceChildren(...rows);
       factsBox.querySelectorAll(".su-fact").forEach((node) => { if (node.querySelector(".su-names")) node.firstChild.classList.add("none"); });
@@ -238,14 +238,14 @@ const SETUP = (function () {
       if (pc) {
         const lacking = pc.programs.filter((row) => !row.found).map((row) => row.program);
         mine.push(fact(t("machine.prog.title"), "none", names(pc.programs.map((row) => ({name: row.program, kind: row.found ? "ok" : "need", tip: row.found ? row.path : t("machine.prog.missing.tip", {program: row.program})}))),
-          lacking.length ? t("machine.prog.lacking", {programs: lacking.join(", ")}) : t("machine.prog.tip"), "", openTab("computer")));
+          lacking.length ? t("machine.prog.lacking", {programs: lacking.join(", ")}) : t("machine.prog.tip"), "", openTab("computer", "programs")));
         mine.push(fact(t("machine.net.title"), pc.certs ? "ok" : "none", [pc.proxy ? t("setup.fact.net.proxy", {proxy: pc.proxy}) : "", pc.certs ? t("setup.fact.ca.n", {n: pc.certs}) : t("setup.fact.ca.none")].filter(Boolean).join(" \u00b7 "),
-          pc.certs ? t("setup.fact.ca.tip", {host: pc.host || "-"}) : t("machine.ca.none.tip")));
+          pc.certs ? t("setup.fact.ca.tip", {host: pc.host || "-"}) : t("machine.ca.none.tip"), "", openTab("computer", "network")));
       }
       const head = h("div", {class: "su-fact su-fact-open"}, h("span", {class: "su-note"}, t("setup.fact.computer.lead")), openTab("computer"));
       const people = sv ? sv.tools.reduce(addTool, []).concat(sv.rows.map((row) => ({name: row.alias, kind: row.saved ? "ok" : "none", tip: row.saved ? t("setup.fact.signin.saved", {account: row.account || "-"}) : t("setup.fact.signin.not")})), sv.orphans.map((name) => ({name, kind: "need", tip: t("machine.signins.orphan.tip", {name})}))) : [];
-      mine.push(sv && people.length ? fact(t("setup.fact.signins"), "none", names(people), people.map((row) => (row.kind === "ok" ? "\u2713 " : "\u00b7 ") + row.name).join("\n"), "", openTab("computer")) : fact(t("setup.fact.signins"), "none", sv ? t("setup.fact.signins.none") : "", t("setup.fact.signins.tip")));
-      if (pc) mine.push(fact("MCP", pc.mcp ? "ok" : "none", t(pc.mcp ? "tools.mcp.on" : "tools.mcp.off"), t("machine.mcp.tip")));
+      mine.push(sv && people.length ? fact(t("setup.fact.signins"), "none", names(people), people.map((row) => (row.kind === "ok" ? "\u2713 " : "\u00b7 ") + row.name).join("\n"), "", openTab("computer", "signins")) : fact(t("setup.fact.signins"), "none", sv ? t("setup.fact.signins.none") : "", t("setup.fact.signins.tip")));
+      if (pc) mine.push(fact("MCP", pc.mcp ? "ok" : "none", t(pc.mcp ? "tools.mcp.on" : "tools.mcp.off"), t("machine.mcp.tip"), "", openTab("computer", "mcp")));
       computerBox.replaceChildren(head, ...mine);
       computerBox.querySelectorAll(".su-fact").forEach((node) => { if (node.querySelector(".su-names")) node.firstChild.classList.add("none"); });
     }

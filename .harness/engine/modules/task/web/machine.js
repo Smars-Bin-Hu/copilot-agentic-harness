@@ -24,7 +24,7 @@ const MACHINE = (function () {
     const rows = state.programs.map((row) => {
       const mark = h("span", {class: "mc-pstate " + (row.found ? "ok" : "bad"), title: row.found ? row.path : t("machine.prog.missing.tip", {program: row.program})}, row.found ? "\u2713 " : "\u2717 ", row.found ? t("machine.prog.found") : t("machine.prog.missing"));
       const head = h("div", {class: "mc-prow"}, h("b", {class: "mc-pname"}, row.program), h("span", {class: "mc-pwho", title: row.needed_by.map((item) => item.pack + (item.conn ? " \u2190 " + item.conn : "")).join("\n")}, "\u2190 ", who(row)), mark);
-      if (row.found) return h("div", {class: "mc-prog"}, head);
+      if (row.found) return h("div", {class: "mc-prog", "data-focus": "prog:" + row.program}, head);
       const input = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", "aria-label": t("machine.prog.here", {program: row.program}), placeholder: t("machine.prog.ph"), value: row.hint || ""});
       const use = h("button", {type: "button", class: "act"}, t("machine.prog.use"));
       const go = () => {
@@ -33,7 +33,7 @@ const MACHINE = (function () {
       };
       use.addEventListener("click", go);
       input.addEventListener("keydown", (event) => { if (event.key === "Enter") go(); });
-      return h("div", {class: "mc-prog"}, head, h("div", {class: "mc-phere"}, h("span", {class: "sv-cap"}, t("machine.prog.here", {program: row.program}), row.hint ? " " : null, row.hint ? h("span", {class: "sv-own", title: t("machine.recipe.from", {value: row.hint})}, t("machine.recipe.mark")) : null), input, use));
+      return h("div", {class: "mc-prog", "data-focus": "prog:" + row.program}, head, h("div", {class: "mc-phere"}, h("span", {class: "sv-cap"}, t("machine.prog.here", {program: row.program}), row.hint ? " " : null, row.hint ? h("span", {class: "sv-own", title: t("machine.recipe.from", {value: row.hint})}, t("machine.recipe.mark")) : null), input, use));
     });
     const general = rec.tool_folders.filter((item) => !item.program);  // an older recipe hint names no program: shown as a hint
     const added = state.paths.map((item) => {
@@ -63,14 +63,16 @@ const MACHINE = (function () {
     const proxyMark = h("span", {class: "sv-own", hidden: ""}, t("machine.recipe.mark"));
     const info = (key) => h("span", {class: "sv-info", tabindex: "0", title: t(key)}, "\u24d8");
     const signs = h("div", {class: "mc-signins"});
+    const part = (key, title, ...nodes) => h("section", {class: "tl-part", "data-part": key}, h("h3", {class: "mc-h"}, title), ...nodes);
     const body = [h("p", {class: "sub"}, t("machine.lead"), " ", info("machine.lead.tip")),
-      h("h3", {class: "mc-h"}, t("machine.prog.title"), " ", info("machine.prog.tip")), progs, said,
-      h("h3", {class: "mc-h"}, t("machine.net.title"), " ", caInfo, " ", caState),
-      h("div", {class: "sv-fields"}, field(t("machine.ca.host"), host, hostMark), field(t("machine.ca.proxy"), proxy, proxyMark)), h("div", {class: "sv-acts"}, make, drop, caSaid),
-      h("h3", {class: "mc-h"}, t("machine.signins.title"), " ", info("machine.signins.tip")), signs,
-      h("h3", {class: "mc-h"}, "MCP ", mcpInfo), mcp, open_];
+      part("programs", [t("machine.prog.title"), " ", info("machine.prog.tip")], progs, said),
+      part("network", [t("machine.net.title"), " ", caInfo, " ", caState], h("div", {class: "sv-fields"}, field(t("machine.ca.host"), host, hostMark), field(t("machine.ca.proxy"), proxy, proxyMark)), h("div", {class: "sv-acts"}, make, drop, caSaid)),
+      part("signins", [t("machine.signins.title"), " ", info("machine.signins.tip")], signs),
+      part("mcp", ["MCP ", mcpInfo], mcp, open_),
+      part("added", [t("machine.added.title"), " ", info("machine.added.tip")], ...addedBlock(ctx))];
     const paint = (state) => {
       progs.replaceChildren(...programsBlock(state, (next) => { paint(next); if (ctx.changed) ctx.changed(); }, said));
+      if (ctx.arrived) ctx.arrived();
       host.placeholder = state.default_host;
       const rec = state.recipe || {host: "", proxy: "", tool_folders: [], error: ""};  // the company's recipe fills only what the person has not set: a made bundle's own values come first
       if (!host.value) host.value = state.bundle.host || rec.host || "";
@@ -106,12 +108,14 @@ const MACHINE = (function () {
     if (typeof TOOLS !== "undefined") TOOLS.open("computer", done);
   }
 
-  // Tool packs (1.7.13): each with a dot, ready or not; the hover says what it has and lacks; a button for each thing that is missing opens where it is set.
-  function packsPanel(ctx) {
+  // Tool packs. The same row is drawn twice: in From the company (the packs of the factory and the company: on or off, what is missing, read only) and in Packs added on this computer (a folder added here: Update, Remove).
+  const link = (text, tip, go) => { const b = h("button", {type: "button", class: "act kb-mini tl-link", title: tip}, text); b.addEventListener("click", go); return b; };
+  function packList(ctx, added) {
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
     const pill = (text, tip) => h("span", {class: "sv-own", title: tip || ""}, text);
     const paint = () => ask("toolpacks").then((found) => {
-      list.replaceChildren(...(found.toolpacks.length ? found.toolpacks.flatMap((row) => {
+      const rows = found.toolpacks.filter((row) => Boolean(row.removable) === added);
+      list.replaceChildren(...(rows.length ? rows.flatMap((row) => {
         const missing = Object.entries(row.programs).filter(([, ok]) => !ok).map(([name]) => name);
         const unsigned = row.connections.filter((item) => !item.saved).map((item) => item.alias);
         const src = row.from === "company" ? "company" : row.from === "harness" ? "factory" : "folder";  // where the pack lies (1.7.34): factory (.harness/toolpacks/), the company's own, or a folder added on this computer
@@ -123,9 +127,12 @@ const MACHINE = (function () {
           ...(row.active ? row.connections.map((item) => (item.saved ? "✓ " : "✗ ") + t("machine.conn.server", {alias: item.alias})) : []),
           ...row.errors.map((line) => "✗ " + line), srcTip, row.updated && row.updated.to ? t("machine.conn.updated.tip", row.updated) : null].filter(Boolean).join("\n");
         const ready = row.ok && !unsigned.length;
-        const acts = [];
-        if (row.active && (missing.length || (row.trust && !row.bundle))) acts.push(button(t("machine.title"), () => ctx.go("computer")));
-        if (row.active && unsigned.length) acts.push(button(t("connections.title"), () => ctx.go("connections")));
+        const acts = [];  // a missing program or a missing sign-in is a small link: it opens that row of This computer (1.7.38)
+        if (row.active) {
+          missing.forEach((name) => acts.push(link(t("tools.link.prog", {program: name}), t("tools.link.tip"), () => ctx.go("computer", "programs", "prog:" + name))));
+          if (row.trust && !row.bundle) acts.push(link(t("tools.link.net"), t("tools.link.tip"), () => ctx.go("computer", "network")));
+          if (unsigned.length) acts.push(link(t("tools.link.sign", {n: unsigned.length}), t("tools.link.tip") + "\n" + unsigned.join(", "), () => ctx.go("computer", "signins", "sign:" + unsigned[0])));
+        }
         if (row.removable) {  // only a folder added here is forgotten here; a factory or company pack is turned on and off in the knowledge base (1.7.30)
           if (row.newer) acts.push(button(t("machine.conn.update"), () => change("toolpack-update", row.name)));
           const drop = button(t("machine.ca.drop"), () => { if (window.confirm(t("machine.conn.remove.ask", {name: row.name}))) change("toolpack-remove", row.name); });
@@ -145,11 +152,24 @@ const MACHINE = (function () {
         return [h("div", {class: "sv-line mc-conn" + (row.active ? "" : " off"), title: tip}, h("span", {class: "mc-dot" + (!row.active ? "" : row.errors.length ? " bad" : ready ? " ok" : " warn")}), h("b", {class: "sv-alias"}, row.name),
           h("span", {class: "sv-kind"}, row.version), row.updated && row.updated.to ? pill(t("machine.conn.updated", row.updated), t("machine.conn.updated.tip", row.updated)) : null, pill(t("machine.conn.src." + src), srcTip), h("span", {class: "mc-acts"}, ...acts)),
           brings.length ? h("div", {class: "mc-brings"}, ...brings) : null].filter(Boolean);
-      }) : [h("p", {class: "sub"}, t("machine.conn.none"))]));
+      }) : [h("p", {class: "sub"}, t(added ? "tools.added.none" : "machine.conn.none"))]));
       if (ctx.changed) ctx.changed();
+      if (ctx.arrived) ctx.arrived();
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
     const change = (step, name, more) => ask(step, {name, ...(more || {})}).then(() => paint(), (error) => { list.prepend(h("p", {class: "bad"}, error.message)); });
     const button = (text, go) => { const b = h("button", {type: "button", class: "act kb-mini"}, text); b.addEventListener("click", go); return b; };
+    paint();
+    return {list, paint};
+  }
+
+  function packsPanel(ctx) {  // the Tool packs part of From the company
+    const made = packList(ctx, false);
+    return {body: [h("p", {class: "sub"}, t("machine.conn.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.conn.lead.tip")}, "\u24d8")), made.list], foot: []};
+  }
+
+  // Packs added on this computer (1.7.38, moved from the Tool packs tab): a pack folder tried here, read where it lies. Install, Update, Remove.
+  function addedBlock(ctx) {
+    const made = packList(ctx, true);
     // Install from a folder or zip (1.7.19): a path field and Install. An installed name asks for a second click that says what it replaces.
     const path = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: t("machine.conn.install.ph"), "aria-label": t("machine.conn.install.ph")});
     const install = h("button", {type: "button", class: "act hot"}, t("machine.conn.install"));
@@ -175,13 +195,11 @@ const MACHINE = (function () {
         said.replaceChildren(h("span", {class: "ok"}, "\u2713 " + t("machine.conn.installed", {name: done.installed, version: done.version, n: done.skills.length})
           + (got.missing.length ? " " + t("machine.conn.installed.missing", {programs: got.missing.join(", ")}) : "")));
         path.value = "";
-        paint();
+        made.paint();
       }, (error) => { reset(); said.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { install.disabled = false; });
     });
     path.addEventListener("keydown", (event) => { if (event.key === "Enter") install.click(); });
-    paint();
-    return {body: [h("p", {class: "sub"}, t("machine.conn.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.conn.lead.tip")}, "\u24d8")), list,
-      h("h3", {class: "mc-h"}, t("machine.conn.install.title"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("machine.conn.add")}, "\u24d8")), h("div", {class: "su-line mc-install"}, path, install), said], foot: []};
+    return [h("div", {class: "su-line mc-install"}, path, install), said, made.list];
   }
 
   function toolpacksSummary() {
@@ -196,5 +214,5 @@ const MACHINE = (function () {
       programs: found.programs.map((row) => ({program: row.program, found: row.found, path: row.path})), mcp: found.mcp.allowed}));
   }
 
-  return {open, panel, packsPanel, summary, toolpacksSummary};
+  return {open, panel, packsPanel, addedBlock, summary, toolpacksSummary};
 })();

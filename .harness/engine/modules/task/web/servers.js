@@ -34,7 +34,7 @@ const SERVERS = (function () {
       if (open && !drawn) { drawn = true; box.append(...identityForm(row, null, redraw)); }
       if (open) { const first = box.querySelector("input"); if (first) first.focus(); }
     });
-    return h("div", {class: "sv-row"}, line, box);
+    return h("div", {class: "sv-row", "data-focus": "sign:" + row.alias}, line, box);
   }
 
   // Forgetting a connection of the person's own takes the connection and its identity away, and nothing brings it back: one more click, within a few seconds (1.7.22). A connection of a tool pack or the company
@@ -158,58 +158,66 @@ const SERVERS = (function () {
     if (forget) forget.addEventListener("click", () => { forget.disabled = true; ask("forget-tool", {program: tool.program}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
     box.append(h("p", {class: "sub sv-tool"}, t(signed ? "machine.signins.tool.hint.saved" : "machine.signins.tool.hint", {program: tool.program, account: tool.account || ""})), h("div", {class: "sv-acts"}, signIn, test, save, forget, said));
     line.addEventListener("click", () => { const open = box.hidden; box.hidden = !open; line.setAttribute("aria-expanded", String(open)); });
-    return h("div", {class: "sv-row"}, line, box);
+    return h("div", {class: "sv-row", "data-focus": "sign:" + tool.program}, line, box);
   }
 
   function orphanRow(item, redraw) {  // an identity kept for a connection the company no longer lists: only the person forgets it
     const forget = h("button", {type: "button", class: "act danger"}, t("connections.forget"));
     const said = h("span", {class: "sv-said"});
     forget.addEventListener("click", () => { forget.disabled = true; ask("forget", {alias: item.name}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
-    return h("div", {class: "sv-row"}, h("div", {class: "sv-line orphan", title: t("machine.signins.orphan.tip", {name: item.name})}, h("b", {class: "sv-alias"}, item.name), h("span", {class: "sv-shared"}, t("machine.signins.orphan")),
+    return h("div", {class: "sv-row", "data-focus": "sign:" + item.name}, h("div", {class: "sv-line orphan", title: t("machine.signins.orphan.tip", {name: item.name})}, h("b", {class: "sv-alias"}, item.name), h("span", {class: "sv-shared"}, t("machine.signins.orphan")),
       h("span", {class: "sv-state none"}, item.account || "\u2014"), forget, said));
   }
 
   function signinsBlock(ctx) {
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
     const addBox = h("details", {class: "sv-add"}, h("summary", null, t("connections.own.add")));
-    const launch = h("button", {type: "button", class: "act hot"}, t("connections.open"));  // the same button as on the Connections tab
+    const launch = h("button", {type: "button", class: "act hot"}, t("connections.open"));
+    const out = h("button", {type: "button", class: "act", title: t("connections.export.tip")}, t("connections.export"));  // one's own connections, to put in the company pack (moved here from the Connections tab, 1.7.38)
     launch.addEventListener("click", () => { if (ctx && ctx.close) ctx.close(); choose(); });
+    out.addEventListener("click", () => exportWindow());
     const redraw = () => ask("list").then((found) => {
       const s = found.signins;
       launch.disabled = !found.connections.some((row) => row.saved);
       launch.title = launch.disabled ? t("connections.open.nothing") : "";
+      out.disabled = !found.connections.some((row) => row.own);
       const mine = found.connections.filter((row) => s.connections.some((one) => one.alias === row.alias)).sort((a, b) => a.type_label.localeCompare(b.type_label) || ENV_ORDER.indexOf(a.env) - ENV_ORDER.indexOf(b.env) || a.alias.localeCompare(b.alias));
       const parts = [...s.tools.map((tool) => toolRow(tool, redraw)), ...mine.map((row) => serverRow(row, redraw)), ...s.orphans.map((item) => orphanRow(item, redraw))];
       list.replaceChildren(...(parts.length ? parts : [h("p", {class: "sub"}, t("machine.signins.empty"))]));
       addBox.replaceChildren(h("summary", null, t("connections.own.add")), ownForm(found.types, redraw));
       if (ctx && ctx.changed) ctx.changed();
+      if (ctx && ctx.arrived) ctx.arrived();
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
     redraw();
-    return [list, addBox, h("div", {class: "sv-acts"}, launch)];
+    return [list, addBox, h("div", {class: "sv-acts sv-below"}, launch, out)];
   }
 
-  // The Servers window.
-  // The Connections tab of the Tools window (tools.js): the connections grouped by type, each with the tool pack it comes from; one's own added below.
-  function panel(ctx) {
+  // From the company, the Connections part (1.7.38): one read-only row for each connection, the company's and the person's own (marked "yours"): name, type, environment, address, the tool pack it
+  // belongs to, and at the end a dot for the person's sign-in. The dot opens the Sign-ins row of This computer; signing in, testing and saving are there, not here.
+  function companyRow(row, found, ctx) {
+    const failed = row.saved && (row.reach === "denied" || row.reach === "failed");
+    const state = !row.saved ? "none" : failed ? "bad" : "ok";
+    const tool = row.identity === "tool" ? found.signins.tools.find((one) => one.shared_by.includes(row.alias)) : null;
+    const word = state === "ok" ? t("tools.conn.sign.yes") : state === "bad" ? t("tools.conn.sign.failed") : t("tools.conn.sign.no");
+    const dot = h("button", {type: "button", class: "sv-sdot " + state, "data-alias": row.alias, "aria-label": row.alias + ": " + word,
+      title: [word + (row.account ? " \u00b7 " + row.account : ""), t("tools.conn.sign.tip")].join("\n")}, h("i"));
+    dot.addEventListener("click", () => ctx.go("computer", "signins", "sign:" + (tool ? tool.program : row.alias)));
+    return h("div", {class: "sv-line sv-ro", title: [...new Set([row.alias, row.label])].concat([row.type_label + (row.auth_label ? " \u00b7 " + row.auth_label : ""), where(row)]).filter(Boolean).join("\n")},
+      h("b", {class: "sv-alias"}, row.alias), h("span", {class: "sv-kind"}, row.type_label), envChip(row.env), h("code", {class: "sv-where"}, where(row)),
+      row.toolpack ? h("span", {class: "sv-own sv-from", title: t("connections.from.tip", {pack: row.toolpack})}, row.toolpack) : null,
+      row.own ? h("span", {class: "sv-own", title: t("connections.own.tip")}, t("connections.own")) : null, dot);
+  }
+
+  function listPanel(ctx) {
     const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
-    const addBox = h("details", {class: "sv-add"}, h("summary", null, t("connections.own.add")));
-    const launch = h("button", {type: "button", class: "act hot"}, t("connections.open"));
-    const out = h("button", {type: "button", class: "act", title: t("connections.export.tip")}, t("connections.export"));
     const redraw = () => ask("list").then((found) => {
       const rows = found.connections.slice().sort((a, b) => a.type_label.localeCompare(b.type_label) || ENV_ORDER.indexOf(a.env) - ENV_ORDER.indexOf(b.env) || a.alias.localeCompare(b.alias));
-      const groups = [];
-      rows.forEach((row) => { if (!groups.length || groups[groups.length - 1].label !== row.type_label) groups.push({label: row.type_label, rows: []}); groups[groups.length - 1].rows.push(row); });
-      list.replaceChildren(...(rows.length ? groups.flatMap((group) => [h("div", {class: "sv-grp"}, group.label), ...group.rows.map((row) => serverRow(row, redraw))]) : [h("p", {class: "sub"}, t("connections.empty"))]));
-      addBox.replaceChildren(h("summary", null, t("connections.own.add")), ownForm(found.types, redraw));
-      launch.disabled = !rows.some((row) => row.saved);
-      launch.title = launch.disabled ? t("connections.open.nothing") : "";
-      out.disabled = !rows.some((row) => row.own);
+      list.replaceChildren(...(rows.length ? rows.map((row) => companyRow(row, found, ctx)) : [h("p", {class: "sub"}, t("connections.empty"))]));
       if (ctx.changed) ctx.changed();
+      if (ctx.arrived) ctx.arrived();
     }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
-    launch.addEventListener("click", () => { ctx.close(); choose(); });
-    out.addEventListener("click", () => exportWindow());
     redraw();
-    return {body: [h("p", {class: "sub"}, t("connections.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("connections.lead.tip")}, "\u24d8")), list, addBox], foot: [launch, out]};
+    return {body: [h("p", {class: "sub"}, t("connections.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("connections.lead.tip")}, "\u24d8")), list], foot: []};
   }
 
   // Export: one's own connections in the form of connections.json (no account, no password): copy it, save it as a file, or put it in the company pack.
@@ -239,7 +247,7 @@ const SERVERS = (function () {
   }
 
   function open(done) {
-    if (typeof TOOLS !== "undefined") TOOLS.open("connections", done);
+    if (typeof TOOLS !== "undefined") TOOLS.open("company", done, "connections");
   }
 
   // One line for Get ready and the Enter screen: how many servers, how many with the person's identity.
@@ -303,5 +311,5 @@ const SERVERS = (function () {
     close.addEventListener("click", view.close);
   }
 
-  return {open, panel, choose, summary, signinsBlock};
+  return {open, listPanel, choose, summary, signinsBlock};
 })();

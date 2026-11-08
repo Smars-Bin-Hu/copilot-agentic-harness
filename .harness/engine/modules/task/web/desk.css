@@ -172,7 +172,7 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 @media (max-width:640px){.tk-info{flex-wrap:wrap}.tk-info-l{flex-basis:100%;flex-wrap:wrap}.rv-pop{right:auto;left:0}}
 @media (max-width:640px){.tk-pane{padding:14px}.tk-top,.tk-sub{padding-left:8px;padding-right:8px}}
 /* "Open to the agent" (1.7.38): the pop of the head pill lists what is open in this task, one row each with a button that closes it */
-.rv-pop .open-list{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.rv-pop .open-list{display:flex;flex-direction:column;gap:6px;margin:8px 0;max-height:40vh;overflow-y:auto}
 .rv-pop .open-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:6px 8px;border:1px solid var(--good-line);background:var(--good-bg);border-radius:8px}
 .rv-pop .open-row b{overflow-wrap:anywhere;min-width:0}.rv-pop .open-row .sub{flex:1 1 12em;min-width:0}
 .tk-call-go .tk-open{max-width:100%;overflow-wrap:anywhere;white-space:normal;text-align:left}

@@ -1661,6 +1661,27 @@ class OpenRulesOfTheTypes(TaskCase):
         tasklife.set_allow(self.root, NAME, "acmedw-ist", True, interactive=True)
         self.assertEqual(self.term(both), {})
 
+    def test_prod_and_a_type_that_says_no_are_not_opened_even_when_the_task_file_says_open(self) -> None:
+        """The gate asks the type, not only the task: a name forced into `allow_conn` opens nothing in prod or in a connection the type keeps closed."""
+        self.new()
+        path = self.root / TASK / ".task" / "task.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["allow_conn"] = {name: {"at": "2026-11-08T00:00:00+00:00", "env": env} for name, env in (("acmedw-prod", "prod"), ("acmedw-qat", "qat"))}
+        path.write_text(json.dumps(data), encoding="utf-8")
+        for port in (14329, 14330):
+            self.assertEqual(self.term(self.SQL.format(port=port))["permissionDecision"], "deny", port)
+
+    def test_a_destroy_is_not_passed_by_an_open_connection_even_when_the_company_made_it_a_held_call(self) -> None:
+        from core import approvals
+        from modules.task import tasklife
+
+        self.write_connections({"acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql", "rules": {"dev": {"destroy": "outbox"}}}})
+        self.new()
+        tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=True)
+        self.assertEqual(self.term('sqlcmd -S localhost,14332 -C -Q "DROP TABLE t"')["permissionDecision"], "deny")
+        held = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
+        self.assertEqual((held["verb"], held.get("offers")), ("destroy", None), "held for the person, with no Open button: the opening does not cover a destroy")
+
     def test_a_subagent_gets_nothing_from_an_opened_connection(self) -> None:
         from modules.task import tasklife
 

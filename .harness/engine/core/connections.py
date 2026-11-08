@@ -480,10 +480,10 @@ def kind_counts(root: Path, aliases: Optional[List[str]] = None) -> str:
     return ", ".join(f"{n} {label}" for label, n in count.items())
 
 
-def describe(root: Path, alias: str) -> Dict[str, Any]:
+def describe(root: Path, alias: str, servers: Optional[Dict[str, Dict[str, Any]]] = None, kinds: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
     """What `find` knows of one connection: `{alias, type, type_label, env, label, about, repos, domains}` (the fields the company wrote for finding it; no secret, no sign-in)."""
-    server = listed(root).get(alias) or {}
-    kind = types(root).get(str(server.get("type"))) or {}
+    server = (listed(root) if servers is None else servers).get(alias) or {}
+    kind = (types(root) if kinds is None else kinds).get(str(server.get("type"))) or {}
     return {"alias": alias, "type": str(server.get("type") or ""), "type_label": str(kind.get("label") or server.get("type") or ""), "env": str(server.get("env") or ""),
             "label": str(server.get("label") or ""), "about": " ".join(str(server.get("about") or "").split()), "repos": _words(server.get("repos")), "domains": _words(server.get("domains"))}
 
@@ -511,7 +511,8 @@ def find(root: Path, text: str, limit: int = FIND_LIMIT) -> Dict[str, Any]:
     the `domains` of a connection; an environment must be the word itself (`dev` is not `devops`). The connection that fits the most words comes first, then the name counts, then the order of the
     list. `{matches: [describe...], total, all}`: `total` fitted, `all` connections there are."""
     words = list(dict.fromkeys(_WORD.findall(str(text or "").lower())))
-    rows = [describe(root, alias) for alias in listed(root)]
+    servers, kinds = listed(root), types(root)
+    rows = [describe(root, alias, servers, kinds) for alias in servers]
     scored = []
     for position, row in enumerate(rows):
         name, kind, env = _tokens(row["alias"]), _tokens(row["type"], row["type_label"]), _tokens(row["env"])

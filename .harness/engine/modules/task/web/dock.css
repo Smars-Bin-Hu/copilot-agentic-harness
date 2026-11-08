@@ -45,3 +45,4 @@ body.has-dialog .term-toggle{visibility:hidden}
 @media (max-width:1099px){body.has-dialog .term{z-index:165}}
 /* 1.7.38: narrow window: a domain name is never cut in the middle of a word, and the table scrolls sideways instead; the button of a row keeps its words on one line */
 .kb-table .kb-name{overflow-wrap:normal;word-break:normal;min-width:6.5em}.kb-table th{white-space:nowrap}.kb-table{width:max-content;min-width:100%}.kb-table .kb-do .act{white-space:nowrap}
+@media (max-width:600px){.kb-table th,.kb-table td{padding-right:6px}.kb-bar-line{width:44px}.kb-table .kb-name{min-width:5em}}  /* 560 px: the last column (Learn) fits and is not cut off (1.7.38) */

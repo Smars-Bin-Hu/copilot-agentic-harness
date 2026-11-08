@@ -20,7 +20,8 @@ There is no installed copy (1.7.30). A pack is read where it lies:
   <knowledge base>/company/tools/packs/<name>/ a pack the company wrote (always on)
   .harness/runtime/toolpacks.json `paths`    folders this computer added to try a pack (`harness toolpack add <folder>`)
 
-Its types, rules, `bin/` and MCP servers are read in place. The only thing copied is the skills: `sync_skills` (run by `company sync`) puts the
+Its types, rules, `bin/` and MCP servers are read in place. A pack that is off still guards its connections (1.7.38): while a connection uses a type
+of an off pack, the gate reads that pack's types, rules and MCP rules (`guarded`); turning a pack off takes back only its skills and its `bin/` on the PATH. The only thing copied is the skills: `sync_skills` (run by `company sync`) puts the
 skills of the active packs into `.github/skills/`, renamed `<prefix>-<pack>-<skill>` when the company has a `skill_prefix`, takes away the skills of
 a pack no longer active, and puts them again when the pack's version changed (`ado 0.4.5 -> 0.5.0 updated`). `.harness/runtime/toolpacks.json`
 `packs` keeps what was put there, so a removal takes back that and nothing else. To update the harness is to unzip it over the old one.
@@ -196,7 +197,8 @@ def paths(root: Path) -> List[str]:
 
 
 def clashes(root: Path) -> List[str]:
-    """Names of packs the company wrote in `company/tools/packs/` that a factory pack in `.harness/toolpacks/` already has. The factory pack stays; the company's is not used until it is renamed."""
+    """Names of packs the company wrote in `company/tools/packs/` that a factory pack in `.harness/toolpacks/` already has. While there is one, `company sync` stops before it changes anything
+    (1.7.38): `sync_skills` and `company.sync` check this first. Reading goes on as before: the factory pack stays, the company's is not read until it is renamed."""
     company = targets.company_folder(root)
     base = company / COMPANY_PACKS if company else None
     factory = root / FOLDER
@@ -208,6 +210,19 @@ def clashes(root: Path) -> List[str]:
 
 def clash_lines(root: Path) -> List[str]:
     return [say("toolpack.clash", name=name) for name in clashes(root)]
+
+
+def clash_stop(root: Path) -> str:
+    """The one line `company sync` answers with when a company pack has the name of a factory pack (1.7.38), naming every such pack; "" when there is none."""
+    names = clashes(root)
+    return say("company.sync.clash", names=", ".join(f"`{name}`" for name in names)) if names else ""
+
+
+def refuse_on_clash(root: Path) -> None:
+    """For `add`, `remove` and the on/off switch, which all end in a sync: while a company pack has the name of a factory pack none of them changes anything (1.7.38)."""
+    line = clash_stop(root)
+    if line:
+        raise ToolpackError(line)
 
 
 def listed(root: Path) -> Dict[str, Dict[str, Any]]:
@@ -242,6 +257,42 @@ def active(root: Path) -> Dict[str, Dict[str, Any]]:
 
 
 installed = active  # the name the other modules know (before 1.7.30 a pack was copied in)
+
+
+def type_names(folder: Path) -> List[str]:
+    """The connection types a pack's `types/` brings: the `type` of each file (the file's name when it names none)."""
+    out: List[str] = []
+    for path in sorted((folder / TYPES).glob("*.json")) if (folder / TYPES).is_dir() else []:
+        found = _json(path)
+        if isinstance(found, dict):
+            out.append(str(found.get("type") or path.stem))
+    return out
+
+
+def guarded(root: Path) -> Dict[str, Dict[str, Any]]:
+    """The packs the gate reads (1.7.38): the packs that are on, and the packs that are off but whose connection type a connection uses. A connection is a place that
+    may be written to; whether a pack's skills and `bin/` are on must not decide whether its calls are judged. Same shape and order as `listed`. A type an active pack
+    already brings is not looked for again in an off pack (the first pack that brings a type keeps it)."""
+    every = listed(root)
+    names = {str(server.get("type")) for server in connections_listed(root).values()}
+    names -= {one for item in every.values() if item["active"] for one in type_names(item["folder"])}
+    out = {name: item for name, item in every.items() if item["active"]}
+    if names:
+        for name, item in every.items():
+            if item["active"]:
+                continue
+            brought = set(type_names(item["folder"]))
+            if brought & names:
+                out[name] = item
+                names -= brought
+    return {name: out[name] for name in every if name in out}
+
+
+def guard_only(root: Path) -> Dict[str, List[str]]:
+    """`{pack: [connections]}` of the packs that are off but guard a connection (`guarded` minus `active`): for doctor."""
+    held = {name: item for name, item in guarded(root).items() if not item["active"]}
+    servers = connections_listed(root)
+    return {name: sorted(alias for alias, server in servers.items() if str(server.get("type")) in set(type_names(item["folder"]))) for name, item in held.items()}
 
 
 def unknown_use(root: Path) -> List[str]:
@@ -331,9 +382,9 @@ def missing_for(root: Path, alias: str) -> List[str]:
     return [str(one) for one in dict.fromkeys(wanted) if not locate(one, path)]
 
 
-def type_entries(root: Path) -> List[tuple]:
-    """`(pack name, type file)` of each connection type the active packs bring, in the order of the packs."""
-    return [(name, path) for name, item in active(root).items() for path in sorted((item["folder"] / TYPES).glob("*.json"))]
+def type_entries(root: Path, guard: bool = False) -> List[tuple]:
+    """`(pack name, type file)` of each connection type the active packs bring, in the order of the packs. With `guard` also those of the off packs a connection uses (`guarded`, 1.7.38)."""
+    return [(name, path) for name, item in (guarded(root) if guard else active(root)).items() for path in sorted((item["folder"] / TYPES).glob("*.json"))]
 
 
 def type_files(root: Path) -> List[Path]:
@@ -341,9 +392,9 @@ def type_files(root: Path) -> List[Path]:
 
 
 def rules_layer(root: Path) -> Dict[str, Any]:
-    """The systems the installed tool packs write by hand, each marked with its tool pack (`tool pack`), in the form of tools.json."""
+    """The systems the tool packs write by hand, each marked with its tool pack (`toolpack`), in the form of tools.json: the packs that are on, and the off packs a connection uses (1.7.38)."""
     out: Dict[str, Any] = {}
-    for name, item in installed(root).items():
+    for name, item in guarded(root).items():
         try:
             listed = json.loads((item["folder"] / RULES).read_text(encoding="utf-8-sig")).get("systems") or {}
         except (OSError, ValueError, AttributeError):
@@ -407,8 +458,8 @@ def link_view(root: Path, ref: str) -> Dict[str, str]:
 
 
 def mcp_verb(root: Path, tool: str) -> Optional[Dict[str, str]]:
-    """What an MCP tool does, by the first rule of an installed tool pack whose pattern matches its name: `{tool pack, verb}`; None when none names it."""
-    for name, item in installed(root).items():
+    """What an MCP tool does, by the first rule of a tool pack whose pattern matches its name (the packs that are on, and the off packs a connection uses): `{tool pack, verb}`; None when none names it."""
+    for name, item in guarded(root).items():
         for rule in ((item["manifest"].get("mcp") or {}).get("tools") or []):
             try:
                 if isinstance(rule, dict) and rule.get("verb") in MCP_VERBS and re.search(str(rule.get("pattern") or ""), tool, re.IGNORECASE):
@@ -463,6 +514,7 @@ def add(root: Path, raw: str, origin: str = "", replace: bool = False) -> Dict[s
     """`harness toolpack add <folder>`: this computer records the folder's path to try the pack (1.7.30). Nothing is copied but the skills (`sync_skills`).
     A folder with the name of one added before is taken in its place only with `replace`; a name the company's own packs have is refused."""
     path, folder, found = _folder_to_add(root, raw)
+    refuse_on_clash(root)
     problem = problems(root, folder)
     if problem:
         raise ToolpackError(say("toolpack.refused", problems="; ".join(problem)))
@@ -496,6 +548,7 @@ def _name_at(path: str) -> str:
 def remove(root: Path, name: str) -> Dict[str, Any]:
     """`harness toolpack remove <name or folder>`: forget a folder added here, and take back the skills it put. A factory pack is turned off by taking it out of `use`
     in the knowledge base (`company/tools/packs.json`); a pack the company wrote, by deleting its folder there. Neither is this command's to change."""
+    refuse_on_clash(root)
     book = ledger(root)
     name = clean_path(name)
     mine = [item for item in book["paths"] if item == name or _name_at(item) == name or Path(item).name == name]
@@ -614,7 +667,13 @@ def skill_plan(root: Path) -> Dict[str, Any]:
 
 def sync_skills(root: Path) -> Dict[str, Any]:
     """Put the skills of the active packs into `.github/skills/` and take back those of a pack no longer active (they go to the backup folder).
-    Returns `{put, removed, updated, refused, lines}` (and `renamed: [{toolpack, from, to}]` when a changed company prefix renamed skills); `lines` are the sentences the board and doctor show."""
+    Returns `{put, removed, updated, refused, lines}` (and `renamed: [{toolpack, from, to}]` when a changed company prefix renamed skills); `lines` are the sentences the board and doctor show.
+    1.7.38: when a company pack has the name of a factory pack it stops before it changes anything (no skill put, no skill taken back, no ledger written) and answers
+    `{failed: True, clashes: [names], error: <the line>, put: [], removed: [], ...}`; what the last good sync put stays as it was."""
+    stop = clash_stop(root)
+    if stop:
+        return {"put": [], "removed": [], "updated": [], "refused": [{"toolpack": name, "skill": name, "why": say("toolpack.clash", name=name)} for name in clashes(root)], "unknown_use": unknown_use(root),
+                "lines": clash_lines(root), "failed": True, "clashes": clashes(root), "error": stop}
     plan = skill_plan(root)
     book = ledger(root)
     put: List[str] = []
@@ -740,6 +799,7 @@ def set_use(root: Path, name: str, on: bool) -> Dict[str, Any]:
     here = listed(root).get(name)
     if not here or here["source"] != HARNESS:
         raise ToolpackError(say("toolpack.use.factory", name=name))
+    refuse_on_clash(root)
     folder = targets.company_folder(root)
     if folder is None:
         raise ToolpackError(say("toolpack.use.nocompany"))

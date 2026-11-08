@@ -603,8 +603,8 @@ def check_toolpacks(report: Report, root: Path) -> None:
         gone = toolpacks.unknown_use(root)
         if gone:
             report.warn(say("doctor.toolpacks.unknown", names=", ".join(gone)))
-        for line in toolpacks.clash_lines(root):
-            report.warn(line)
+        for line in toolpacks.clash_lines(root):  # `company sync` stops as a whole while this stands (1.7.38)
+            report.error(line)
         company = targets.company_folder(root)
         recipe_file = company / "tools" / "computer.json" if company else None
         if recipe_file is not None and recipe_file.is_file():
@@ -617,6 +617,8 @@ def check_toolpacks(report: Report, root: Path) -> None:
         names = sorted(toolpacks.active(root))
         if names:
             report.ok(say("doctor.toolpacks.on", names=", ".join(names)))
+        for name, aliases in toolpacks.guard_only(root).items():  # a pack that is off still guards the connections that use its types (1.7.38)
+            report.ok(say("doctor.toolpacks.guard", name=name, aliases=", ".join(aliases)))
         for line in toolpacks.recent_updates(root):
             report.ok(line)
         for name, rows in toolpacks.needs_report(root).items():  # a program a pack on needs is not found (1.7.37)

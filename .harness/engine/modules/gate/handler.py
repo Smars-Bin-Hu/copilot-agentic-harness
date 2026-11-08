@@ -398,7 +398,7 @@ DUMP_ALL = re.compile(r"(?:^|[;&|(]\s*)(?:env|printenv|set|export\s+-p|Get-Child
 def secret_names(ctx: Context) -> list:
     """The variables that carry an identity (the kinds' `auth.env`, and the harness's own keys): no kind is known by name here."""
     names = {connections.PREFIX}
-    for kind in connections.types(ctx.root).values():
+    for kind in connections.types(ctx.root, guard=True).values():  # also the kinds of an off pack a connection uses (1.7.38)
         for auth in (kind.get("auth") or {}).values():
             names.update(str(name) for name in ((auth or {}).get("env") or {}))
     return sorted(names)
@@ -429,7 +429,7 @@ def owned_names(event: HookEvent, ctx: Context) -> set:
     try:
         listed = ctx.policy("tools").get("systems") or {}
         found = external.classify(event.command, listed)
-        known, servers_of = connections.types(ctx.root), connections.listed(ctx.root)
+        known, servers_of = connections.types(ctx.root, guard=True), connections.listed(ctx.root)
         if not found or any(action.system not in servers_of for action, _decision in found):
             return set()
         if len(gitcmd.split_segments(event.command)) != len(found):  # another command beside the calls (an `echo`, a pipe to elsewhere): nothing named

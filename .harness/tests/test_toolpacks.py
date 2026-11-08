@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -1028,6 +1029,78 @@ class FactoryPacks(ToolpackCase):
         self.assertEqual(toolpacks.ledger(self.root)["packs"], {})
         self.assertNotIn("tracker-board", config.load_policy(self.root, "tools").get("systems") or {})
 
+    def connect(self, **fields) -> None:
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"board": dict({"type": "tracker", "env": "none", "org": "demo"}, **fields)}}), encoding="utf-8")
+
+    def term(self, command: str) -> dict:
+        event = pre_tool("s-off", "run_in_terminal", {"command": command, "explanation": "t", "isBackground": False})
+        event["cwd"] = str(self.root)
+        return self.hook(event)
+
+    def test_a_pack_that_is_off_still_guards_the_connections_that_use_its_type(self) -> None:
+        """1.7.38: turning a pack off takes back its skills and its bin/ only; a connection of its type is still judged."""
+        self.use()
+        self.assertEqual(self.term("tracker --org demo comment 7 hi"), {}, "no connection: the gate knows no tracker")
+        self.connect()
+        systems = config.load_policy(self.root, "tools")["systems"]
+        self.assertEqual((systems["board"]["toolpack"], systems["board"]["env"]), ("tracker", "none"))
+        self.assertNotIn("needs", systems["board"], "nothing probes a connection of an off pack: no state on the board")
+        self.assertIn("tracker-board", systems, "its rules.json counts too")
+        held = self.term("tracker --org demo comment 7 hi")
+        self.assertEqual(held.get("permissionDecision"), "deny", held)
+        self.assertIn("board", json.dumps(held, ensure_ascii=False))
+        self.assertNotEqual(self.term("tracker --org demo get 7").get("permissionDecision"), "deny", "a read runs")
+        self.assertEqual(toolpacks.guard_only(self.root), {"tracker": ["board"]})
+        # what turning off still takes back
+        self.assertNotIn("tracker", toolpacks.active(self.root))
+        self.assertEqual(toolpacks.bin_folders(self.root), [])
+        self.assertFalse((self.root / ".github/skills/tracker-ticket").exists())
+        self.assertNotIn("tracker", connections.types(self.root), "the board and the tests see the types of the packs that are on")
+        self.assertIn("tracker", connections.types(self.root, guard=True))
+        self.assertEqual(toolpacks.needs_report(self.root), {})
+
+    def test_an_off_pack_judges_prod_as_read_only_and_a_connection_of_another_type_guards_nothing(self) -> None:
+        self.connect(env="prod")
+        denied = self.term("tracker --org demo comment 7 hi")
+        self.assertEqual(denied.get("permissionDecision"), "deny")
+        self.assertIn("(prod)", denied["permissionDecisionReason"])
+        self.assertNotIn("Approve", denied["permissionDecisionReason"], "prod is refused, not held for the person's approval")
+        self.assertNotEqual(self.term("tracker --org demo get 7").get("permissionDecision"), "deny", "prod read runs")
+        self.connect(type="elsewhere")
+        self.assertEqual(toolpacks.guard_only(self.root), {})
+        self.assertEqual(self.term("tracker --org demo comment 7 hi"), {})
+        self.assertNotIn("tracker-board", config.load_policy(self.root, "tools").get("systems") or {})
+
+    def test_an_own_connection_in_the_env_file_guards_an_off_pack_too(self) -> None:
+        connections.write_env(self.root, {"HARNESS_CONNECTION_MINE_ALIAS": "mine", "HARNESS_CONNECTION_MINE_TYPE": "tracker", "HARNESS_CONNECTION_MINE_ENV": "none", "HARNESS_CONNECTION_MINE_ORG": "demo"})
+        self.assertEqual(self.term("tracker --org demo comment 7 hi").get("permissionDecision"), "deny")
+        self.assertEqual(toolpacks.guard_only(self.root), {"tracker": ["mine"]})
+
+    def test_a_pack_that_is_on_keeps_its_type_and_an_off_pack_with_the_same_type_is_not_read(self) -> None:
+        other = make(self.root / ".harness" / "toolpacks" / "tracker2", name="tracker2", skills=("tracker2-ticket",))
+        (other / "types" / "tracker.json").write_text(json.dumps(dict(KIND, label="Second")), encoding="utf-8")
+        self.use("tracker2")
+        self.connect()
+        self.assertEqual(sorted(toolpacks.guarded(self.root)), ["tracker2"], "tracker brings the same type but tracker2 is on and keeps it")
+        self.assertEqual(connections.types(self.root, guard=True)["tracker"]["label"], "Second")
+        self.assertEqual(toolpacks.guard_only(self.root), {})
+
+    def test_an_off_packs_mcp_rules_count_while_a_connection_uses_it(self) -> None:
+        manifest = json.loads((self.factory / "toolpack.json").read_text(encoding="utf-8"))
+        manifest["mcp"] = {"tools": [{"pattern": "^mcp_tracker_(get|list)", "verb": "read"}, {"pattern": "^mcp_tracker_", "verb": "write"}]}
+        (self.factory / "toolpack.json").write_text(json.dumps(manifest), encoding="utf-8")
+        self.assertIsNone(toolpacks.mcp_verb(self.root, "mcp_tracker_update"), "off, no connection: not judged")
+        self.connect()
+        self.assertEqual(toolpacks.mcp_verb(self.root, "mcp_tracker_update"), {"toolpack": "tracker", "verb": "write"})
+        self.assertEqual(toolpacks.mcp_verb(self.root, "mcp_tracker_get_x")["verb"], "read")
+
+    def test_doctor_says_an_off_pack_still_guards_its_connections(self) -> None:
+        self.connect()
+        lines = DoctorToolpacks.lines_of(self.root)
+        self.assertTrue(any("tracker" in line and "board" in line and "[OK]" in line for line in lines), lines)
+        self.use("tracker")
+        self.assertFalse(any("still judges" in line for line in DoctorToolpacks.lines_of(self.root)))
+
     def test_a_name_in_use_that_no_pack_has_is_listed(self) -> None:
         self.use("tracker", "nosuch")
         self.assertEqual(toolpacks.unknown_use(self.root), ["nosuch"])
@@ -1055,14 +1128,110 @@ class FactoryPacks(ToolpackCase):
         self.use("tracker")
         make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
         self.assertEqual(toolpacks.clashes(self.root), ["tracker"])
-        self.assertEqual(toolpacks.listed(self.root)["tracker"]["source"], "harness")
+        self.assertEqual(toolpacks.listed(self.root)["tracker"]["source"], "harness", "reading goes on: the factory pack stays")
         found = toolpacks.check(self.root)
         self.assertEqual((found["exit_code"], len(found["clashes"])), (1, 1))
         done = toolpacks.sync_skills(self.root)
         self.assertEqual([item["toolpack"] for item in done["refused"]], ["tracker"])
         self.assertFalse(any("updated" in line for line in done["lines"]))
         self.assertTrue(any("`tracker`" in line for line in done["lines"]))
-        self.assertTrue(any("factory" in line or "出厂" in line for line in DoctorToolpacks.lines_of(self.root)))
+        lines = DoctorToolpacks.lines_of(self.root)
+        self.assertTrue(any("factory" in line or "出厂" in line for line in lines))
+        self.assertTrue(any(line.startswith("[ERROR]") and "`tracker`" in line for line in lines), "doctor reports it as an error (1.7.38)")
+
+    def seed_company(self) -> None:
+        """A company with a skill of its own, a connection list and a factory pack that is on, synced once with no clash."""
+        self.prefix("acme")
+        (self.kb / "company.json").write_text('{"skill_prefix": "acme"}\n', encoding="utf-8")
+        (self.kb / "skills" / "acme-hello").mkdir(parents=True)
+        (self.kb / "skills" / "acme-hello" / "SKILL.md").write_text(SKILL.format(name="acme-hello"), encoding="utf-8")
+        (self.kb / "tools" / "connections.json").write_text(json.dumps({"connections": {"board": {"type": "tracker", "env": "none", "org": "demo"}}}), encoding="utf-8")
+        self.use("tracker")
+        good = company.sync(self.root, remove=True)
+        self.assertEqual((good["found"], good.get("failed"), good["exit_code"]), (True, None, 0), good)
+
+    def tree(self) -> dict:
+        """Every file under .github/skills, the ledger, and the copies the sync makes, with their bytes; and the backup folders."""
+        out = {}
+        for place in (self.root / ".github", self.root / ".harness" / "policies", self.root / ".harness" / "runtime"):
+            for path in sorted(place.rglob("*")) if place.is_dir() else []:
+                if path.is_file():
+                    out[path.relative_to(self.root).as_posix()] = path.read_bytes()
+        return out
+
+    def test_a_company_pack_with_the_name_of_a_factory_pack_stops_the_whole_sync_and_changes_nothing(self) -> None:
+        """1.7.38: the factory pack stayed and the company's was skipped with a line; the rest of the sync went on. Now the sync stops before it changes anything."""
+        self.seed_company()
+        before = self.tree()
+        self.assertIn(".github/skills/acme-tracker-ticket/SKILL.md", before)
+        # everything a sync would do now: a changed company skill, a new one, a pack turned off, a new version of a pack, a skill that left the company content
+        (self.kb / "skills" / "acme-hello" / "SKILL.md").write_text(SKILL.format(name="acme-hello") + "\nChanged.\n", encoding="utf-8")
+        (self.kb / "skills" / "acme-new").mkdir()
+        (self.kb / "skills" / "acme-new" / "SKILL.md").write_text(SKILL.format(name="acme-new"), encoding="utf-8")
+        make(self.factory, version="2.0.0", skills=("tracker-ticket", "tracker-note"))
+        self.use()
+        (self.kb / "tools" / "connections.json").write_text(json.dumps({"connections": {}}), encoding="utf-8")
+        make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
+        make(self.kb / "tools" / "packs" / "other", name="other", skills=())
+        before = self.tree()
+        done = company.sync(self.root, remove=True)
+        self.assertEqual((done["found"], done["failed"], done["exit_code"]), (True, True, 1))
+        self.assertEqual(done["clashes"], ["tracker"])
+        self.assertEqual(done["copied"], [])
+        self.assertIn("`tracker`", done["error"])
+        self.assertEqual(done["next"], done["error"], "one line")
+        self.assertEqual(len(done["error"].splitlines()), 1)
+        self.assertEqual(self.tree(), before, "no skill copied, none taken back, the ledger and the copies as they were")
+        self.assertFalse((self.root / ".harness" / "runtime" / "company-backup").exists())
+        self.assertFalse((self.root / ".harness" / "runtime" / "toolpack-backup").exists())
+        self.assertEqual(company.sync_after(self.root), {"error": done["error"], "clashes": ["tracker"]})
+        shown = company.diff(self.root)
+        self.assertEqual((shown["found"], shown["in_sync"], shown["problem"]), (True, False, done["error"]))
+        # the command line says it too: the line, and exit code 1
+        said = self.cli("company", "sync")
+        self.assertEqual(said.returncode, 1)
+        self.assertIn("`tracker`", said.stdout + said.stderr)
+        # once the company's pack is renamed away (the folder is gone here) the sync does all of it
+        shutil.rmtree(self.kb / "tools" / "packs" / "tracker")
+        again = company.sync(self.root, remove=True)
+        self.assertEqual((again.get("failed"), again["exit_code"]), (None, 0), again)
+        self.assertTrue((self.root / ".github/skills/acme-new/SKILL.md").is_file())
+        self.assertFalse((self.root / ".github/skills/acme-tracker-ticket").exists(), "the pack was turned off")
+
+    def test_the_stop_line_names_every_pack_and_says_to_rename_the_companys_pack_in_both_languages(self) -> None:
+        make(self.factory.parent / "second", name="second", skills=())
+        make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
+        make(self.kb / "tools" / "packs" / "second", name="second", skills=())
+        self.assertEqual(toolpacks.clashes(self.root), ["second", "tracker"])
+        line = toolpacks.clash_stop(self.root)
+        self.assertIn("`second`, `tracker`", line)
+        for language, words in (("en", "Rename the company's pack"), ("zh", "改名")):
+            texts = json.loads((Path(toolpacks.__file__).parent / f"messages.{language}.json").read_text(encoding="utf-8"))
+            self.assertIn(words, texts["company.sync.clash"], language)
+            self.assertIn("{names}", texts["company.sync.clash"], language)
+
+    def test_the_board_still_opens_with_a_clash_adding_a_folder_and_the_switch_say_why_and_change_nothing(self) -> None:
+        from modules.task import boardserve
+
+        self.use()
+        make(self.kb / "tools" / "packs" / "tracker", version="0.1.0")
+        done = toolpacks.sync_skills(self.root)  # what the board does when it opens: it must not raise
+        self.assertTrue(done["failed"])
+        use_before = (self.kb / "tools" / "packs.json").read_text(encoding="utf-8")
+        with self.assertRaises(toolpacks.ToolpackError) as caught:
+            toolpacks.set_use(self.root, "tracker", True)
+        self.assertIn("`tracker`", str(caught.exception))
+        self.assertEqual((self.kb / "tools" / "packs.json").read_text(encoding="utf-8"), use_before, "the choice is not written")
+        with self.assertRaises(toolpacks.ToolpackError):
+            toolpacks.add(self.root, str(self.source))
+        self.assertEqual(toolpacks.ledger(self.root)["paths"], [], "nothing recorded")
+        board = boardserve.Board(self.root, False, 8799, [])
+        self.addCleanup(lambda: board.link.stop() if hasattr(board.link, "stop") else None)
+        with self.assertRaises(ValueError) as refused:
+            board.machine({"step": "toolpack-use", "name": "tracker", "on": True})
+        self.assertIn("`tracker`", str(refused.exception))
+        rows = board.machine({"step": "toolpacks"})["toolpacks"]  # the window still lists what there is
+        self.assertTrue(rows)
 
     def test_with_a_prefix_the_folder_the_name_and_the_references_between_a_packs_skills_are_renamed(self) -> None:
         self.prefix("acme")
@@ -1214,6 +1383,133 @@ class ShippedFactoryPacks(ToolpackCase):
         out = subprocess.run([sys.executable, str(REPO / ".harness" / "toolpacks" / "ado" / "bin" / "ado"), "--help"], capture_output=True, text=True, check=False).stdout
         for word in listed:
             self.assertIn(word, out, word)
+
+    @staticmethod
+    def ado_program():
+        """The `ado` program of the repository loaded as a module (it has no .py name); nothing runs on loading."""
+        import importlib.machinery
+        import importlib.util
+
+        from support import REPO
+
+        path = str(REPO / ".harness" / "toolpacks" / "ado" / "bin" / "ado")
+        spec = importlib.util.spec_from_loader("ado_program", importlib.machinery.SourceFileLoader("ado_program", path))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_ado_turns_only_a_line_break_and_one_backslash_and_the_card_reads_the_text_the_same_way(self) -> None:
+        """1.7.38: `C:\\temp\\data` was broken (`\\t` a tab, the other backslashes dropped). Only `\\n` and `\\\\` are turned; the held card (cmdview) does the same."""
+        from modules.task import cmdview
+
+        ado = self.ado_program()
+        cases = {  # written -> what the program writes
+            r"line one\nline two": "line one\nline two",
+            r"a\\b": "a\\b",  # two backslashes are one
+            r"a\\nb": "a\\nb",  # a backslash and n, no line break
+            r"C:\temp\data": "C:\\temp\\data",  # a path: \t and \d stay
+            r"C:\temp\new": "C:\\temp\new",  # but \n is a line break: a path with it goes in a file
+            r"\d+\s*": "\\d+\\s*",
+            r"tab\there": "tab\\there",
+            r'say \"hi\"': 'say \\"hi\\"',
+            "plain": "plain", "": "", "end\\": "end\\",
+            r"\\\\": "\\\\",
+            r"\\\n": "\\\n",
+        }
+        for written, expected in cases.items():
+            self.assertEqual(ado.unescaped(written), expected, written)
+            self.assertEqual(cmdview._unescape(written), expected, written)  # noqa: SLF001 - the two must stay the same
+            self.assertEqual(ado.unescaped(written), cmdview._unescape(written), written)  # noqa: SLF001
+
+
+    def test_the_ado_program_has_no_back_door_in_the_environment_and_its_versions_agree(self) -> None:
+        """1.7.38: ADO_URL, ADO_ORG, ADO_PROJECT, ADO_PAT and ADO_TOKEN let a call go elsewhere than the connection the gate judged. The connection is the saved one, or the one the harness hands over while it tests."""
+        from support import REPO
+
+        folder = REPO / ".harness" / "toolpacks" / "ado"
+        for path in [folder / "bin" / "ado", folder / "bin" / "ado.cmd", *sorted((folder / "types").glob("*.json")), *sorted(folder.glob("*.md")), *sorted(folder.rglob("SKILL.md"))]:
+            text = path.read_text(encoding="utf-8")
+            for name in ("ADO_URL", "ADO_ORG", "ADO_PROJECT", "ADO_PAT", "ADO_TOKEN"):
+                self.assertNotIn(name, text, f"{path.name}: {name}")
+        version = json.loads((folder / "toolpack.json").read_text(encoding="utf-8"))["version"]
+        self.assertEqual(self.ado_program().PACK_VERSION, version)
+
+class AdoProgramConnection(HarnessTestCase):
+    """1.7.38: the `ado` program reaches the saved connection, or the one the harness hands over while it tests, and nothing else. A small web server on this computer stands in for Azure DevOps."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        import http.server
+        import threading
+
+        from support import ENGINE, REPO
+
+        seen: list = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 - the name the server calls
+                seen.append((self.path, self.headers.get("Authorization", "")))
+                body = json.dumps({"authenticatedUser": {"providerDisplayName": "Test Person", "properties": {"Account": {"$value": "test.person@acme.example"}}}}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args) -> None:  # noqa: D102 - no noise in the test output
+                return
+
+        self.seen = seen
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.url = f"http://127.0.0.1:{server.server_address[1]}"
+        # the program finds its harness copy from where it lies: a root with the engine's core and the program
+        (self.root / ".harness" / "engine").mkdir(parents=True)
+        (self.root / ".harness" / "engine" / "cli.py").write_text("", encoding="utf-8")
+        shutil.copytree(ENGINE / "core", self.root / ".harness" / "engine" / "core", ignore=shutil.ignore_patterns("__pycache__"))
+        self.program = self.root / ".harness" / "toolpacks" / "ado" / "bin" / "ado"
+        self.program.parent.mkdir(parents=True)
+        shutil.copy(REPO / ".harness" / "toolpacks" / "ado" / "bin" / "ado", self.program)
+        self.decoys = {"ADO_URL": "http://127.0.0.1:9", "ADO_ORG": "evil", "ADO_PROJECT": "evil", "ADO_PAT": "evil-pat", "ADO_TOKEN": "evil-bearer"}
+
+    def ado(self, *arguments: str, env: dict = None) -> subprocess.CompletedProcess:
+        empty = self.root / "no-az"
+        empty.mkdir(exist_ok=True)
+        base = {key: value for key, value in os.environ.items() if not key.startswith(("HARNESS_CONNECTION_", "ADO_"))}
+        return subprocess.run([sys.executable, str(self.program), *arguments], cwd=str(self.root), capture_output=True, text=True, check=False,
+                              env={**base, "PATH": str(empty), "HARNESS_ROOT": str(self.root), **(env or {})})
+
+    def test_a_connection_not_saved_yet_is_the_variables_of_the_test_and_the_old_back_doors_do_nothing(self) -> None:
+        mine = {"HARNESS_CONNECTION_T1_ORG": "acme", "HARNESS_CONNECTION_T1_PROJECT": "demo", "HARNESS_CONNECTION_T1_URL": self.url, "HARNESS_CONNECTION_T1_TOKEN": "typed-token", "HARNESS_CONNECTION_T1_AUTH": "token"}
+        done = self.ado("--conn", "t1", "me", "--short", env={**mine, **self.decoys})
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, "test.person@acme.example"), done.stderr)
+        self.assertEqual(self.seen, [("/acme/_apis/connectionData", "Basic " + base64.b64encode(b":typed-token").decode("ascii"))], "the connection's address and token, not ADO_URL or ADO_PAT")
+        del self.seen[:]
+        without_url = {key: value for key, value in mine.items() if not key.endswith("_URL")}
+        done = self.ado("--conn", "t1", "me", "--short", env={**without_url, **self.decoys})
+        self.assertNotEqual(done.returncode, 0, "no url: the cloud address, never ADO_URL")
+        self.assertEqual(self.seen, [])
+        self.assertNotIn("127.0.0.1:9", done.stderr)
+
+    def test_the_saved_connection_is_used_with_its_own_address_and_token_whatever_the_environment_says(self) -> None:
+        (self.root / ".harness" / "policies" / "connections.company.json").write_text(json.dumps({"connections": {"ado": {
+            "type": "azure-devops", "env": "none", "auth": "token", "org": "acme", "project": "demo", "url": self.url}}}), encoding="utf-8")
+        connections.write_env(self.root, {"HARNESS_CONNECTION_ADO_TOKEN": "saved-token"})
+        done = self.ado("me", "--short", env=self.decoys)
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, "test.person@acme.example"), done.stderr)
+        self.assertEqual(self.seen, [("/acme/_apis/connectionData", "Basic " + base64.b64encode(b":saved-token").decode("ascii"))])
+        self.assertNotEqual(self.ado("--conn", "nope", "me", "--short", env=self.decoys).returncode, 0, "a name that is not saved is not made up from the environment")
+
+    def test_a_bearer_token_in_the_environment_is_not_a_sign_in(self) -> None:
+        """ADO_TOKEN let a call skip `az`; now a connection that signs in with `az` needs `az`."""
+        (self.root / ".harness" / "policies" / "connections.company.json").write_text(json.dumps({"connections": {"ado": {
+            "type": "azure-devops", "env": "none", "auth": "signin", "org": "acme", "project": "demo", "url": self.url}}}), encoding="utf-8")
+        done = self.ado("me", "--short", env=self.decoys)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("az is not found", done.stderr)
+        self.assertEqual(self.seen, [])
 
 
 TWO_WAYS = dict(KIND, auth={"signin": {"identity": "tool", "login": "trk-login --org {org}", "label": "Its own sign-in", "needs": ["trk-login"]},

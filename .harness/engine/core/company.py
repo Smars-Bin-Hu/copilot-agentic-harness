@@ -153,13 +153,19 @@ def same(source: Path, target: Path) -> bool:
 
 
 def sync(root: Path, remove: bool = False) -> Dict[str, Any]:
-    """Copy the content to `.github/`. `remove`: a skill of the company's word that left the content goes too, into the backup folder (a person asked for this sync; a sync at the end of another command removes nothing)."""
+    """Copy the content to `.github/`. `remove`: a skill of the company's word that left the content goes too, into the backup folder (a person asked for this sync; a sync at the end of another command removes nothing).
+    1.7.38: a company pack in `company/tools/packs/` with the name of a factory pack stops the sync as a whole, before anything is copied, removed or written: `{found, failed: True, clashes, error, next, exit_code: 1}`.
+    What the last good sync put stays as it was. The failure is read from the files each time (`toolpacks.clashes`), so there is nothing to clear once the pack is renamed."""
     from . import toolpacks  # it reads the policies this module's copies feed
 
     folder = targets.company_folder(root)
     if folder is None:
         packs = toolpacks.sync_skills(root)  # a folder added here for a trial still has skills to put
         return {"found": False, "next": say("company.sync.none"), **({"toolpacks": packs} if packs["lines"] or packs["put"] or packs["removed"] else {})}
+    stop = toolpacks.clash_stop(root)
+    if stop:
+        return {"found": True, "failed": True, "company": str(folder), "copied": [], "clashes": toolpacks.clashes(root), "error": stop, "refused": [], "only_here": [], "already_same": 0, "next": stop, "exit_code": 1,
+                "toolpacks": {"put": [], "removed": [], "updated": [], "refused": [], "unknown_use": [], "lines": toolpacks.clash_lines(root), "failed": True}}
     plan = copies(root, folder)
     done: List[str] = []
     for name, source, target in plan["pairs"]:
@@ -195,6 +201,8 @@ def sync_after(root: Path) -> Optional[Dict[str, Any]]:
     except (CompanyError, OSError) as error:
         return {"error": str(error)}
     found.pop("exit_code", None)
+    if found.get("failed"):  # the same shape as any other problem of a sync at the end of a command (1.7.38)
+        return {"error": found["error"], "clashes": found.get("clashes") or []}
     return found if found["found"] or found.get("toolpacks") else None
 
 
@@ -246,6 +254,11 @@ def diff(root: Path) -> Dict[str, Any]:
     folder = targets.company_folder(root)
     if folder is None:
         return {"found": False, "in_sync": True, "changes": [], "total": 0, "refused": [], "problem": "", "next": say("company.sync.none")}
+    from . import toolpacks
+
+    stop = toolpacks.clash_stop(root)
+    if stop:  # a sync would stop at once (1.7.38): the window says why instead of offering it
+        return {"found": True, "in_sync": False, "changes": [], "total": 0, "refused": [], "problem": stop, "clashes": toolpacks.clashes(root), "next": stop}
     try:
         plan = copies(root, folder)
     except CompanyError as error:

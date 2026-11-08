@@ -52,15 +52,16 @@ def say(key: str, /, **values: Any) -> str:
 
 # --- kinds ------------------------------------------------------------------------------------------------------------------------------------------------
 
-def types(root: Path) -> Dict[str, Dict[str, Any]]:
-    """Every kind this copy knows, `{name: kind}`; a file that cannot be read is left out (`problems` says why)."""
+def types(root: Path, guard: bool = False) -> Dict[str, Dict[str, Any]]:
+    """Every kind this copy knows, `{name: kind}`; a file that cannot be read is left out (`problems` says why). The kinds of the packs that are on. With `guard` (the gate, 1.7.38)
+    also those of an off pack that a connection uses: a pack that is off still guards its connections."""
     from . import toolpacks  # it reads this module for its checks
 
     from . import launchenv  # it reads this module's .env
 
     mcp = launchenv.mcp_allowed(root)
     found: Dict[str, Dict[str, Any]] = {}
-    for pack_name, path in toolpacks.type_entries(root):  # the first tool pack that brings a type keeps it
+    for pack_name, path in toolpacks.type_entries(root, guard):  # the first tool pack that brings a type keeps it
         try:
             kind = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
@@ -336,8 +337,13 @@ def connection_env(alias: str, kind: Dict[str, Any], server: Dict[str, Any], ide
 # --- the gate's view: a system per server -----------------------------------------------------------------------------------------------------------------
 
 def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    """A system of the tools policy for every server whose kind tells the gate how to see it (`cli`, `match`). A system written by hand with the same name wins."""
-    known, env, wrapped = types(root), read_env(root), set(state(root).get("wrap") or [])
+    """A system of the tools policy for every server whose kind tells the gate how to see it (`cli`, `match`). A system written by hand with the same name wins.
+    1.7.38: the kinds of a pack that is off count too when a connection uses them (the gate still judges the calls); such a system has no `needs`, so nothing probes it
+    and the board shows no state for it: the pack is off, its program is not on the PATH."""
+    from . import toolpacks
+
+    known, env, wrapped = types(root, guard=True), read_env(root), set(state(root).get("wrap") or [])
+    on = toolpacks.active(root)
     out: Dict[str, Dict[str, Any]] = {}
     for alias, server in listed(root).items():
         kind = known.get(str(server.get("type")))
@@ -350,11 +356,12 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
         system: Dict[str, Any] = {
             "reach": {"cli": kind["cli"], "when": _fill(kind["match"], values, escape=True)},
             "env": server["env"],
-            "needs": {"probes": {server["env"]: probe}, "launch": say("connections.launch", alias=alias)},
         }
-        for key in ("expect", "denied", "down"):
-            if kind.get(key):
-                system["needs"][key] = kind[key]
+        if str(kind.get("toolpack") or "") in on:
+            system["needs"] = {"probes": {server["env"]: probe}, "launch": say("connections.launch", alias=alias)}
+            for key in ("expect", "denied", "down"):
+                if kind.get(key):
+                    system["needs"][key] = kind[key]
         for key in ("verbs", "target", "show", "rules", "say", "body"):
             chosen = (server.get(key) or kind.get(key)) if key == "rules" else kind.get(key)  # the connection's own rules win, else the type's (1.7.21)
             if chosen:

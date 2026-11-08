@@ -31,10 +31,7 @@
     },
     "token": {
       "identity": "token",
-      "label": "Personal access token",
-      "env": {
-        "ADO_PAT": "token"
-      }
+      "label": "Personal access token"
     }
   },
   "test": "ado --conn {conn} me --short",

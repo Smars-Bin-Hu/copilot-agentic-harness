@@ -125,11 +125,13 @@ class HeldCallCard(TaskCase):
         self.assertEqual(card["body"]["text"], 'one\ntwo "q"')
 
     def test_the_text_is_read_as_the_shell_passes_it_on_and_then_as_the_program_reads_it(self) -> None:
-        """1.7.25 (R4 K8): `"a\\\\nb"` was shown as one line `a\\nb`; the shell hands `a\\nb` on and the program writes two lines."""
+        """1.7.25 (R4 K8): `"a\\\\nb"` was shown as one line `a\\nb`; the shell hands `a\\nb` on and the program writes two lines.
+        1.7.38: only `\\n` is a line break and `\\\\` one backslash; a tab escape, a Windows path and a regular expression stay as written."""
         from modules.task import cmdview
 
         rules = [{"pattern": r'--text\s+"((?:[^"\\]|\\.)*)"', "from": "text"}, {"pattern": r"--text\s+'([^']*)'", "from": "text"}]
-        for written, text in (('"a\\nb"', "a\nb"), ('"a\\\\nb"', "a\nb"), ("'a\\nb'", "a\nb"), ('"say \\"hi\\""', 'say "hi"'), ('"cost \\$5"', "cost $5"), ('"x\\ty"', "x\ty"), ("'a\\\\nb'", "a\\\nb")):
+        for written, text in (('"a\\nb"', "a\nb"), ('"a\\\\nb"', "a\nb"), ("'a\\nb'", "a\nb"), ('"say \\"hi\\""', 'say "hi"'), ('"cost \\$5"', "cost $5"), ('"x\\ty"', "x\\ty"), ("'a\\\\nb'", "a\\nb"),
+                              ("'C:\\temp\\data'", "C:\\temp\\data"), ('"C:\\\\temp\\\\data"', "C:\\temp\\data"), ("'\\d+\\s'", "\\d+\\s"), ("'one\\\\two'", "one\\two")):
             body = cmdview.body_of(f"comment 7 --text {written}", rules, None)
             self.assertEqual(body["text"], text, written)
             self.assertEqual(body["lines"], text.count("\n") + 1, written)

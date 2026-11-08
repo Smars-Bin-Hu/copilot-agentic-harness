@@ -53,7 +53,31 @@ const READYBAR = (function () {
     return h("section", {class: "rd-bar rd-yellow"}, head, h("div", {class: "rd-grp"}, t("board.enter.g.optional") + " · " + t("board.enter.tag.optional")), ...problems.map((problem) => line(problem, "yellow")));
   }
 
+  // The dialog "New task" (1.7.38): a VS Code that was not started with this copy's settings does not stop it, but the person is told there too, in the words of the red block and with its button.
+  const notes = new Set();
+  function vsNote() {
+    const box = h("div", {class: "rd-note", role: "alert", hidden: ""});
+    let shown = "";
+    const draw = () => {
+      const problem = ((last && last.problems && last.problems.required) || []).find((item) => item.key === "vscode" && ["env", "unseen"].includes(item.code));
+      const going = restart && (restart.state === "quitting" || restart.state === "opening");
+      const key = JSON.stringify([problem && problem.text, problem && problem.fix, going && restart.state, failed, root.lang]);
+      if (key === shown) return;
+      shown = key;
+      box.hidden = !problem;
+      if (!problem) { box.replaceChildren(); return; }
+      const row = line(problem, "red", going ? READY.restartNote(restart) : failed || (restart && restart.state === "failed" ? READY.restartNote(restart) : ""));
+      const button = row.querySelector("button");
+      if (going && button) { button.disabled = true; button.textContent = t(restart.state === "opening" ? "board.enter.opening" : "board.enter.vs.quitting"); }
+      box.replaceChildren(row);
+    };
+    notes.add(() => { if (!box.isConnected) return false; draw(); return true; });
+    draw();
+    return box;
+  }
+
   function paint() {
+    for (const redraw of [...notes]) if (!redraw()) notes.delete(redraw);
     if (!last) { wrap.hidden = true; return; }
     const required = (last.problems && last.problems.required) || [], optional = (last.problems && last.problems.optional) || [], kb = Boolean(last.optional && last.optional.kb);
     const sig = JSON.stringify([required, optional, kb, restart && restart.state, failed, openYellow, memory === fingerprint(optional), root.lang]);
@@ -82,5 +106,5 @@ const READYBAR = (function () {
   }
   if (typeof SERVE !== "undefined" && DATA.serve) setInterval(() => poll(false), 1000);
 
-  return {node: () => wrap, poll};
+  return {node: () => wrap, poll, vsNote};
 })();

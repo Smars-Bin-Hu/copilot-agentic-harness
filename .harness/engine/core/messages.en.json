@@ -3344,7 +3344,7 @@
   "setup.fact.packs.harness": "from the harness",
   "setup.fact.packs.mixed": "{harness} from the harness · {own} the company's own",
   "setup.fact.packs.picks": "the knowledge base picks them",
-  "setup.fact.conns.todo": "{n} to sign in",
+  "setup.fact.conns.todo": "{n} not signed in",
   "setup.fact.conns.all": "all signed in",
   "setup.fact.programs.hint": "the packs the company uses add theirs here",
   "setup.fact.ca.need.company": "needed behind the company proxy",

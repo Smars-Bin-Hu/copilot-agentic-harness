@@ -294,7 +294,7 @@ class Ready:
         pack_of = lambda system: str((systems.get(system) or {}).get("toolpack") or "")  # noqa: E731
         first_env = lambda system: min(order.get(item["env"], -1) for item in raw if item["system"] == system)  # noqa: E731
         # The order of the Connections window: by kind (the pack), then environment, then name; the file's order told nothing (1.7.38)
-        raw = sorted(raw, key=lambda item: (pack_of(item["system"]), first_env(item["system"]), item["system"], order.get(item["env"], -1)))
+        raw = sorted(raw, key=lambda item: (not pack_of(item["system"]), pack_of(item["system"]), first_env(item["system"]), item["system"], order.get(item["env"], -1)))
         for system in dict.fromkeys(item["system"] for item in raw):
             mine = [item for item in raw if item["system"] == system]
             states = {kind(item["state"]) for item in mine}
@@ -453,7 +453,7 @@ class Ready:
                 if why == "vscode":
                     continue
                 text, reason = say("ready.r.copilot"), say(f"board.enter.m.copilot.{why}")
-            out.append({"key": key, "level": "red" if state == "fail" else "yellow", "text": plain(text), "why": plain(short(reason)), "fix": fix})
+            out.append({"key": key, "level": "red" if state == "fail" else "yellow", "code": why, "text": plain(text), "why": plain(short(reason)), "fix": fix})
         return out
 
     def answer(self, paired: bool) -> Dict[str, Any]:

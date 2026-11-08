@@ -321,6 +321,8 @@ class ToolIdentity(ToolpackCase):
         done = self.cli("connections", "login", "mine", "--type", "tracker", "--set", "org=demo", "--set", "auth=signin")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(connections.test(self.root, "mine", {}, server={"type": "tracker", "env": "none", "org": "demo", "own": True})["state"], "ok")
+        self.assertNotIn("{", done.stdout, "the board's Terminal window shows what a person reads, not JSON with alias and next")
+        self.assertIn("mine", done.stdout)
 
     def test_login_is_refused_for_a_server_without_a_sign_in_of_its_own(self) -> None:
         self.assertEqual(connections.login(self.root, "nowhere")[0], 2)

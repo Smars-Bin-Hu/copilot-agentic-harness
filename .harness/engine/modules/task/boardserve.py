@@ -1705,6 +1705,8 @@ def handler_for(board: Board) -> type:
                     if op == "forget":  # every kept view is old: a rebuilt map, or Refresh (1.7.38)
                         board.kb_view.forget()
                         return self.answer(200, {"result": {"ok": True}})
+                    if op == "has":  # is a knowledge base in place: a few file looks, no view is started (Look up asks before it shows its box)
+                        return self.answer(200, {"result": {"has_kb": board.kb_view.has_kb()}})
                     return self.answer(200, {"result": board.kb_view.near(data.get("query")) if op == "near" else board.kb_view.get(op, bool(data.get("fresh")))})
                 except (KeyError, ValueError) as error:
                     return self.answer(409, {"error": str(error)})

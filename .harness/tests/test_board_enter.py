@@ -111,6 +111,7 @@ class SettingsOfThisCopyTests(TaskCase):
         problem = next(item for item in found["problems"]["required"] if item["key"] == "vscode")
         self.assertEqual((problem["level"], problem["fix"]["to"], problem["fix"]["kind"]), ("red", "vscode", "restart"))
         self.assertEqual(problem["text"], messages.text("ready.r.vscode.env"))
+        self.assertEqual(problem["code"], "env", "the New task dialog shows this line by the code, with the button, and does not block")
         self.assertTrue(found["vscode_button"]["up"])  # it runs: the button is Restart, not Open
 
     def test_a_vscode_the_board_cannot_vouch_for_says_so_in_its_own_words(self) -> None:
@@ -119,7 +120,7 @@ class SettingsOfThisCopyTests(TaskCase):
         self.assertEqual((vscode["state"], vscode["why"], vscode["level"]), ("fail", "unseen", "red"))
         self.assertFalse(found["ready"])
         problem = next(item for item in found["problems"]["required"] if item["key"] == "vscode")
-        self.assertEqual(problem["text"], messages.text("ready.r.vscode.unseen"))
+        self.assertEqual((problem["text"], problem["code"]), (messages.text("ready.r.vscode.unseen"), "unseen"))
 
     def test_a_vscode_with_the_settings_and_a_copy_with_none_are_green(self) -> None:
         for verdict in ({"state": "carried", "by": "env", "missing": []}, {"state": "free", "by": "none", "missing": []}):

@@ -445,7 +445,7 @@ const DOCK = (function () {
       again.hidden = key === "lookup";
       rebuild.hidden = true;
       stage.replaceChildren(h("p", {class: "sub"}, t("dock.kb.working")));
-      if (key === "lookup") { lookup(); return; }
+      if (key === "lookup") { post({op: "has"}).then((found) => { if (current === "lookup") { if (found.has_kb === false) emptyState(); else lookup(); } }, () => { if (current === "lookup") lookup(); }); return; }  // with no knowledge base there is nothing to look up: the same words as the other tabs
       const op = ["health", "atlas", "company"].includes(key) ? key : "status";
       const paint = key === "health" ? health : key === "atlas" ? (found) => ATLAS.draw(stage, found) : key === "company" ? (found) => COMPANYTAB.draw(stage, found, {goMap: () => show("atlas"), goDomains: () => show("domains"), goTools: typeof TOOLS !== "undefined" ? () => TOOLS.open("packs", () => show("company")) : null}) : key === "overview" ? overview : domains;
       again.onclick = () => {  // every kept view is old, not only this one: a map rebuilt here changes Overview and Domains too

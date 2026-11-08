@@ -242,7 +242,7 @@ def servers_login(root: Path, alias: str, kind: str = "", given: Optional[List[s
     code, said = connections.login(root, alias, own)
     if code != 0 and said:  # the sign-in did not start: it says why (no connection, no sign-in way, a program that is not there or not allowed to run)
         raise CommandError(said)
-    return {"alias": alias, "exit_code": code, "next": say("connections.login.after", alias=alias) if code == 0 else ""}
+    return {"exit_code": code, "_text": say("connections.login.after", alias=alias) if code == 0 else ""}  # a person's command (the board's Sign in runs it in the Terminal window): words, not JSON
 
 
 def _wait(root: Path, args: Any) -> Dict[str, Any]:

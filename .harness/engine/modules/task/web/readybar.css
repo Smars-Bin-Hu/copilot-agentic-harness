@@ -17,5 +17,6 @@ html[lang="zh"] .rd-grp{letter-spacing:.06em;text-transform:none;font-size:12px}
 .rd-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--soft)}
 .rd-dot.yellow{background:var(--hot-dot)}.rd-dot.red{background:var(--bad)}
 .rd-fix{flex:none;margin:0}
+.rd-note{margin:0 0 12px;padding:2px 14px;border-radius:12px;border:1px solid var(--bad-line);background:var(--bad-bg);font-size:13px;line-height:1.5}.rd-note[hidden]{display:none}.rd-note .rd-li{border-top:0}
 html.rd-red .vs-banner{display:none}  /* the red block says it already */
 @media (max-width:640px){.rd-bar{padding:12px 14px}.rd-li{display:grid;grid-template-columns:8px minmax(0,1fr);align-items:start;gap:6px 12px}.rd-li .rd-dot{margin-top:7px}.rd-fix{grid-column:2;justify-self:start}}

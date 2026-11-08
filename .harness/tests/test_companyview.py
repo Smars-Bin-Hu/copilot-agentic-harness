@@ -209,6 +209,8 @@ class PageRules(unittest.TestCase):
         self.assertIn("if (found.has_kb === false) { emptyState(); return; }", dock)
         self.assertIn('post({op: "forget"})', dock)
         self.assertIn("recheck();", dock)  # the copies are looked at again with Refresh and when the window opens
+        self.assertIn('post({op: "has"})', dock.split('if (key === "lookup")')[1].split("const op =")[0], "Look up has no view to ask: it asks whether a knowledge base is in place, then shows the box or the same words")
+        self.assertIn('op == "has"', (self.ENGINE / "modules" / "task" / "boardserve.py").read_text(encoding="utf-8"))
 
     def test_a_connection_of_ones_own_is_removed_only_after_the_browser_asked(self) -> None:
         servers = self.source("servers.js")

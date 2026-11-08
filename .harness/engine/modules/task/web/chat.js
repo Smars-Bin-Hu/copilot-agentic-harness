@@ -289,7 +289,7 @@ const CHAT = (function () {
       chip.addEventListener("click", () => { state.lang = lang; langChips.forEach((item, at) => { const on = ["en", "zh"][at] === lang; item.classList.toggle("on", on); item.setAttribute("aria-pressed", on ? "true" : "false"); }); refresh(); });
       return chip;
     });
-    const view = SERVE.dialog([h("h2", null, t("board.new.title")), blocked,
+    const view = SERVE.dialog([h("h2", null, t("board.new.title")), blocked, typeof READYBAR !== "undefined" ? READYBAR.vsNote() : null,
       h("div", {class: "new-split"},
         h("div", {class: "new-form"},
           h("div", {class: "new-grid"}, field(t("board.new.name"), name), field(t("board.new.kind"), kind)),

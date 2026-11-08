@@ -182,16 +182,16 @@ def skills_item(root: Path, folder: Optional[Path]) -> Dict[str, Any]:
 
 
 def files_item(key: str, folder: Optional[Path], has_kb: bool) -> Dict[str, Any]:
-    """Instructions and code standards. Only one file of each counts (1.7.38): the one the engine copies for the agent (`company.INSTRUCTION_FILES`), the one the standards skill reads
+    """Instructions and code standards. Instructions: every file named `<name>.instructions.md` counts, the engine copies each for the agent (1.7.38). Code standards: only the one the standards skill reads
     (`standards.COMPANY_FILE`). The others are told in the hover and by a short mark, because nothing reads them."""
-    used_names = company.INSTRUCTION_FILES if key == "instructions" else (Path(standards.COMPANY_FILE).name,)
+    used_names = (Path(standards.COMPANY_FILE).name,)
     try:
         names = sorted(path.name for path in folder.iterdir() if path.is_file() and path.suffix == ".md" and path.name not in README) if folder is not None and folder.is_dir() else []
     except OSError:
         names = []
-    used = [name for name in names if name in used_names]
-    unused = [name for name in names if name not in used_names]
-    tip = say("ready.tip.instr" if key == "instructions" else "ready.tip.stds", names=names_text(unused), used=used_names[0]) if unused else ""
+    used = [name for name in names if name.endswith(company.INSTRUCTION_SUFFIX) and not name.startswith(".")] if key == "instructions" else [name for name in names if name in used_names]
+    unused = [name for name in names if name not in used]
+    tip = say("ready.tip.instr", names=names_text(unused)) if unused and key == "instructions" else say("ready.tip.stds", names=names_text(unused), used=used_names[0]) if unused else ""
     if names and not used and key == "instructions":
         fix = fix_kb("company", say("ready.fix.show"))
         return item(key, "yellow", say("ready.instr.main"), fix, problems=[{"key": key, "text": say("ready.p.instr"), "why": say("ready.p.instr.why"), "short": "", "fix": fix}], tip=tip)

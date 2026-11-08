@@ -198,12 +198,25 @@ def files(folder: Path, suffix: str = ".md") -> List[Dict[str, str]]:
 
 
 def instruction_state(root: Path, path_name: str, source: Path) -> str:
-    """`copied` / `not-copied` for the one instruction file the engine copies (`company sync`); `never` for every other file: it is listed but nothing copies it."""
+    """`copied` / `not-copied` for an instruction file the engine copies (`<name>.instructions.md`, to `.github/instructions/<word>-<name>.instructions.md`, 1.7.38); `never` for every other file: it is listed but nothing copies it."""
     from core import company as company_core
 
-    if path_name not in company_core.INSTRUCTION_FILES:
+    if not path_name.endswith(company_core.INSTRUCTION_SUFFIX):
         return "never"
-    return "copied" if company_core.same(source, root / company_core.INSTRUCTIONS_DIR / path_name) else "not-copied"
+    prefix = skillcheck.company_prefix(root)
+    if not prefix and path_name != company_core.MAIN_INSTRUCTION:
+        return "not-copied"  # a sync cannot name the copy before the company's word is set
+    return "copied" if company_core.same(source, root / company_core.INSTRUCTIONS_DIR / company_core.instruction_copy(path_name, prefix)) else "not-copied"
+
+
+def instruction_copy(root: Path, path_name: str) -> str:
+    """The name of the copy a sync makes, for the hover; empty for a file nothing copies."""
+    from core import company as company_core
+
+    if not path_name.endswith(company_core.INSTRUCTION_SUFFIX):
+        return ""
+    prefix = skillcheck.company_prefix(root)
+    return company_core.instruction_copy(path_name, prefix) if prefix or path_name == company_core.MAIN_INSTRUCTION else ""
 
 
 def standard_state(path_name: str) -> str:
@@ -224,7 +237,7 @@ def company(root: Path, lang: str = "") -> Dict[str, Any]:
     kb = folder.parent
     out.update(name=str(config_file.get("name") or ""), version=str(_json(folder / "manifest.json").get("version") or ""), made=str(_json(folder / "manifest.json").get("made") or ""),
                standards=[dict(row, state=standard_state(row["file"])) for row in files(folder / "standards")],
-               instructions=[dict(row, state=instruction_state(root, row["file"], folder / "instructions" / row["file"])) for row in files(folder / "instructions")])
+               instructions=[dict(row, state=instruction_state(root, row["file"], folder / "instructions" / row["file"]), copy=instruction_copy(root, row["file"])) for row in files(folder / "instructions")])
     try:
         out["domains"] = sorted(item.name for item in (kb / "domains").iterdir() if item.is_dir() and not item.name.startswith("."))
     except OSError:

@@ -3,7 +3,8 @@
   company/company.json      { "skill_prefix": "<word>" }
   company/standards/        code-standards.md, read where it is (`standards.py`)
   company/skills/           `<prefix>-<name>/`, copied to `.github/skills/`: Copilot finds a skill there only
-  company/instructions/     knowledgebase.instructions.md, copied to `.github/instructions/`, for the same reason
+  company/instructions/     `<name>.instructions.md`, any number, copied to `.github/instructions/` as `<skill_prefix>-<name>.instructions.md` (1.7.38), for the same reason;
+                            `knowledgebase.instructions.md` keeps its name: it replaces the one the harness ships. A file that left the content is taken back by a sync a person asked for
   company/tools/            packs.json (`{"use": ["ado", ...]}`: the factory packs of `.harness/toolpacks/` this company turns on), packs/<name>/: a tool pack
                             the company wrote (core.toolpacks); both are read where they lie, and `sync` copies only their skills to `.github/skills/` (1.7.30);
                             connections.json (`{"connections": {...}}`), copied to `.harness/policies/connections.company.json` (1.7.17). These paths are fixed:
@@ -36,7 +37,8 @@ MANIFEST_FILE = "manifest.json"
 MANIFEST_PATH = f"{targets.COMPANY_DIR}/{MANIFEST_FILE}"
 SKILLS_DIR = ".github/skills"
 INSTRUCTIONS_DIR = ".github/instructions"
-INSTRUCTION_FILES = ("knowledgebase.instructions.md",)  # one name only: a copy must never replace a file the harness ships for itself
+INSTRUCTION_SUFFIX = ".instructions.md"  # the only files Copilot reads from `.github/instructions/`
+MAIN_INSTRUCTION = "knowledgebase.instructions.md"  # keeps its name (it replaces the harness's own); every other file gets the company's word in front, so a copy never replaces a file the harness ships for itself
 TOOLS_DIR = "tools"
 CONNECTIONS_FILE = "connections.json"
 CONNECTIONS_COPY = ".harness/policies/connections.company.json"
@@ -163,7 +165,8 @@ def copies(root: Path, folder: Path) -> Dict[str, Any]:
     have = skillcheck.company_prefix(root)
     source = folder / "skills"
     skills = sorted(item for item in source.iterdir() if item.is_dir()) if source.is_dir() else []
-    if skills and not have:
+    notes = [item for item in instruction_sources(folder) if item.name != MAIN_INSTRUCTION]
+    if (skills or notes) and not have:
         raise CompanyError(say("company.no_prefix", word=wanted or "<word>"))
     if wanted and have and wanted.casefold() != have.casefold():  # `BNS` in the file and `bns` here are one word: the form of a word is the harness's, not the company's
         raise CompanyError(say("company.other_prefix", wanted=wanted, have=have))
@@ -177,9 +180,14 @@ def copies(root: Path, folder: Path) -> Dict[str, Any]:
             refused.append({"skill": item.name, "why": "; ".join(errors)})
         else:
             pairs.append((f"{SKILLS_DIR}/{item.name}", item, root / SKILLS_DIR / item.name))
-    for name in INSTRUCTION_FILES:
-        if (folder / "instructions" / name).is_file():
-            pairs.append((f"{INSTRUCTIONS_DIR}/{name}", folder / "instructions" / name, root / INSTRUCTIONS_DIR / name))
+    copied: Dict[str, str] = {}  # the name of a copy -> the file it came from: two files with one copy name would write one over the other
+    for item in instruction_sources(folder):
+        name = instruction_copy(item.name, have)
+        if name in copied:
+            refused.append({"skill": item.name, "why": say("company.why.instruction.same", other=copied[name], name=name)})
+            continue
+        copied[name] = item.name
+        pairs.append((f"{INSTRUCTIONS_DIR}/{name}", item, root / INSTRUCTIONS_DIR / name))
     if (folder / TOOLS_DIR / CONNECTIONS_FILE).is_file():
         pairs.append((CONNECTIONS_COPY, folder / TOOLS_DIR / CONNECTIONS_FILE, root / CONNECTIONS_COPY))
     if (folder / TOOLS_DIR / COMPUTER_FILE).is_file():
@@ -192,7 +200,9 @@ def copies(root: Path, folder: Path) -> Dict[str, Any]:
     only_here = sorted(item.name for item in here.glob(f"{have}-*") if item.is_dir() and item.name not in named and item.name not in put) if have else []
     # 1.7.38: a copy the last sync put under another word (the company changed `skill_prefix`) is taken back, with the same backup; a skill that is not in the ledger is none of our business
     left = sorted(name for name in ledger_names(root) if have and not name.startswith(have + "-") and name not in put and (here / name).is_dir())
-    return {"pairs": pairs, "refused": refused, "only_here": sorted(set(only_here) | set(left))}
+    here_files = root / INSTRUCTIONS_DIR  # 1.7.38: an instruction copy of the last sync whose file left the content, or whose name the company's word changed
+    files_gone = sorted(name for name in ledger_files(root) if name not in copied and name != MAIN_INSTRUCTION and (here_files / name).is_file())
+    return {"pairs": pairs, "refused": refused, "only_here": sorted(set(only_here) | set(left)), "files_gone": files_gone}
 
 
 def ledger_names(root: Path) -> List[str]:
@@ -204,14 +214,24 @@ def ledger_names(root: Path) -> List[str]:
         return []
 
 
-def write_ledger(root: Path, names: List[str]) -> None:
+def ledger_files(root: Path) -> List[str]:
+    """The instruction files the last sync put in `.github/instructions/` under the company's word (never `knowledgebase.instructions.md`: it is the harness's file, replaced)."""
+    try:
+        found = json.loads((runtime_dir(root) / COPIES_LEDGER).read_text(encoding="utf-8"))
+        return [str(name) for name in found.get("instructions") or [] if isinstance(name, str) and name and "/" not in name]
+    except (OSError, ValueError, AttributeError):
+        return []
+
+
+def write_ledger(root: Path, names: List[str], files: Optional[List[str]] = None) -> None:
     names = sorted(dict.fromkeys(names))
-    if names == sorted(ledger_names(root)):
+    files = sorted(dict.fromkeys(ledger_files(root) if files is None else files))
+    if names == sorted(ledger_names(root)) and files == sorted(ledger_files(root)):
         return
     try:
         target = runtime_dir(root) / COPIES_LEDGER
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps({"skills": names}, indent=2) + "\n", encoding="utf-8")
+        target.write_text(json.dumps({"skills": names, "instructions": files}, indent=2) + "\n", encoding="utf-8")
     except OSError:
         pass  # only the taking back of an old name needs it
 
@@ -220,6 +240,18 @@ def same(source: Path, target: Path) -> bool:
     if source.is_dir():
         return target.is_dir() and digests(source) == digests(target)
     return target.is_file() and source.read_bytes() == target.read_bytes()
+
+
+def instruction_sources(folder: Path) -> List[Path]:
+    """The instruction files of the company content: the `*.instructions.md` files right in `<company>/instructions/`, in the order of their names. A hidden file is none."""
+    return [item for item in listed_files(folder / "instructions") if item.name.endswith(INSTRUCTION_SUFFIX) and item.name != INSTRUCTION_SUFFIX and not item.name.startswith(".")]
+
+
+def instruction_copy(name: str, prefix: str) -> str:
+    """The name of the copy in `.github/instructions/`: `<prefix>-<name>`; `knowledgebase.instructions.md` keeps its name, and a name that has the word already is not given it twice."""
+    if name == MAIN_INSTRUCTION or not prefix or name.casefold().startswith(prefix.casefold() + "-"):
+        return name
+    return f"{prefix}-{name}"
 
 
 def sync(root: Path, remove: bool = False) -> Dict[str, Any]:
@@ -234,7 +266,7 @@ def sync(root: Path, remove: bool = False) -> Dict[str, Any]:
         return {"found": False, "next": say("company.sync.none"), **({"toolpacks": packs} if packs["lines"] or packs["put"] or packs["removed"] else {})}
     stop = toolpacks.clash_stop(root)
     if stop:
-        return {"found": True, "failed": True, "company": str(folder), "copied": [], "clashes": toolpacks.clashes(root), "error": stop, "refused": [], "only_here": [], "already_same": 0, "next": stop, "exit_code": 1,
+        return {"found": True, "failed": True, "company": str(folder), "copied": [], "clashes": toolpacks.clashes(root), "error": stop, "refused": [], "only_here": [], "files_gone": [], "already_same": 0, "next": stop, "exit_code": 1,
                 "toolpacks": {"put": [], "removed": [], "updated": [], "refused": [], "unknown_use": [], "lines": toolpacks.clash_lines(root), "failed": True}}
     plan = copies(root, folder)
     done: List[str] = []
@@ -249,21 +281,26 @@ def sync(root: Path, remove: bool = False) -> Dict[str, Any]:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
         done.append(name)
-    if remove and plan["only_here"]:
+    if remove and (plan["only_here"] or plan["files_gone"]):
         backup = runtime_dir(root) / BACKUP_DIR / time.strftime("%Y%m%d-%H%M%S")
         backup.mkdir(parents=True, exist_ok=True)
         for name in plan["only_here"]:
             shutil.move(str(root / SKILLS_DIR / name), str(backup / name))
             done.append(f"{SKILLS_DIR}/{name}")
-        plan["only_here"] = []
-    same_now = len(plan["pairs"]) - len(done)
+        for name in plan["files_gone"]:
+            shutil.move(str(root / INSTRUCTIONS_DIR / name), str(backup / name))
+            done.append(f"{INSTRUCTIONS_DIR}/{name}")
+        plan["only_here"], plan["files_gone"] = [], []
+    same_now = len(plan["pairs"]) - len([name for name in done if name in {pair[0] for pair in plan["pairs"]}])  # copies already as they should be (a copy taken back is not one of them)
     kept = [name for name in ledger_names(root) if (root / SKILLS_DIR / name).is_dir()]  # one that was taken back is gone from the folder now
-    write_ledger(root, [Path(name).name for name, _source, _target in plan["pairs"] if name.startswith(SKILLS_DIR + "/")] + kept)
+    kept_files = [name for name in ledger_files(root) if (root / INSTRUCTIONS_DIR / name).is_file()]
+    write_ledger(root, [Path(name).name for name, _source, _target in plan["pairs"] if name.startswith(SKILLS_DIR + "/")] + kept,
+                 [Path(name).name for name, _source, _target in plan["pairs"] if name.startswith(INSTRUCTIONS_DIR + "/") and Path(name).name != MAIN_INSTRUCTION] + kept_files)
     packs = toolpacks.sync_skills(root)  # the skills of the active tool packs: put, renamed with the company's word, taken back, put again when the version changed
     done += [f"{SKILLS_DIR}/{name}" for name in packs["put"] + packs["removed"]]
     plan["refused"] += [{"skill": item["skill"], "why": item["why"]} for item in packs["refused"]]
-    return {"found": True, "company": str(folder), "copied": done, "toolpacks": packs, "already_same": same_now, "refused": plan["refused"], "only_here": plan["only_here"],
-            "next": " ".join([say("company.sync.problems" if plan["refused"] else "company.sync.done"), *([say("company.sync.only_here", names=", ".join(plan["only_here"]))] if plan["only_here"] else [])]), "exit_code": 1 if plan["refused"] else 0}
+    return {"found": True, "company": str(folder), "copied": done, "toolpacks": packs, "already_same": same_now, "refused": plan["refused"], "only_here": plan["only_here"], "files_gone": plan["files_gone"],
+            "next": " ".join([say("company.sync.problems" if plan["refused"] else "company.sync.done"), *([say("company.sync.only_here", names=", ".join(plan["only_here"] + plan["files_gone"]))] if plan["only_here"] or plan["files_gone"] else [])]), "exit_code": 1 if plan["refused"] else 0}
 
 
 def sync_after(root: Path) -> Optional[Dict[str, Any]]:
@@ -287,7 +324,7 @@ def drift(root: Path) -> Optional[Dict[str, Any]]:
         plan = copies(root, folder)
     except CompanyError as error:
         return {"problem": str(error), "stale": [], "refused": []}
-    return {"problem": "", "stale": [name for name, source, target in plan["pairs"] if not same(source, target)] + [row["path"] for row in pack_changes(root)],
+    return {"problem": "", "stale": [name for name, source, target in plan["pairs"] if not same(source, target)] + [f"{INSTRUCTIONS_DIR}/{name}" for name in plan["files_gone"]] + [row["path"] for row in pack_changes(root)],
             "refused": [item["skill"] for item in plan["refused"]], "version": str(read_json(folder / MANIFEST_FILE).get("version") or "")}
 
 
@@ -322,7 +359,7 @@ def wanted_prefix(folder: Path) -> str:
 
 def diff(root: Path) -> Dict[str, Any]:
     """The company content against its copies, and what a sync would change. It reads files only, so the board can ask every 2 minutes.
-    An instructions file taken out of the content cannot be seen: the copy then looks like the file the harness ships."""
+    An instruction file taken out of the content is seen by the ledger of the last sync (`ledger_files`), except `knowledgebase.instructions.md`: its copy then looks like the file the harness ships."""
     folder = targets.company_folder(root)
     if folder is None:
         return {"found": False, "in_sync": True, "changes": [], "total": 0, "refused": [], "problem": "", "next": say("company.sync.none")}
@@ -338,6 +375,7 @@ def diff(root: Path) -> Dict[str, Any]:
         problem = (say("company.prefix.board", word=word, have=have) if have else say("company.prefix.board.none", word=word)) if word else str(error)  # 1.7.38: "another one" only when there is one
         return {"found": True, "in_sync": False, "changes": [], "total": 0, "refused": [], "problem": problem, "fix": word, "next": str(error)}
     changes = [row for name, source, target in plan["pairs"] for row in difference(name, source, target)] + [{"path": f"{SKILLS_DIR}/{name}", "change": "remove"} for name in plan["only_here"]]
+    changes += [{"path": f"{INSTRUCTIONS_DIR}/{name}", "change": "remove"} for name in plan["files_gone"]]  # a file taken out of the content (1.7.38)
     changes += pack_changes(root)
     same_now = not changes and not plan["refused"]
     return {"found": True, "in_sync": same_now, "changes": changes[:DIFF_SHOWN], "total": len(changes), "refused": plan["refused"], "problem": "", "next": say("company.diff.same" if same_now else "company.diff.differs.one" if len(changes) == 1 else "company.diff.differs", count=len(changes))}
@@ -372,10 +410,11 @@ def layout(kb: Path) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = [{"key": "domains", "ok": count > 0, "count": count, "text": say("setup.layout.domains", n=count) if count else say("setup.layout.domains.none")}]
     if not company.is_dir():
         out.append({"key": "company", "ok": False, "count": 0, "text": say("setup.layout.company.none")})
-    guide = f"{targets.COMPANY_DIR}/instructions/{INSTRUCTION_FILES[0]}"
+    guide = f"{targets.COMPANY_DIR}/instructions/{MAIN_INSTRUCTION}"
     near = misplaced(kb, "instructions", guide)
-    if (kb / guide).is_file():
-        out.append({"key": "instructions", "ok": True, "count": 1, "text": say("setup.layout.instructions")})
+    many = len(instruction_sources(company))
+    if many:
+        out.append({"key": "instructions", "ok": True, "count": many, "text": say("setup.layout.instructions" if many == 1 and (kb / guide).is_file() else "setup.layout.instructions.many", n=many)})
     elif near or company.is_dir():
         out.append({"key": "instructions", "ok": False, "count": 0, "text": say("setup.layout.moved", found=near[0], wanted=guide) if near else say("setup.layout.instructions.none", wanted=guide)})
     rules = f"{targets.COMPANY_DIR}/{standards.COMPANY_FILE}"

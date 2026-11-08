@@ -135,11 +135,84 @@ class SyncTests(CompanyCase):
         self.assertTrue((self.root / ".github" / "skills" / "acme-ticket").is_dir())
         self.assertFalse((self.root / ".github" / "skills" / "generic-review").exists())
 
-    def test_only_the_named_instruction_file_is_copied(self) -> None:
+    def test_each_instruction_file_is_copied_with_the_companys_word_in_front_and_the_main_one_keeps_its_name(self) -> None:
+        """Q7: `<name>.instructions.md` -> `.github/instructions/<prefix>-<name>.instructions.md`; a file that is not named so is left; the harness's own files are never replaced."""
         set_prefix(self.root)
-        put(self.kb, {"company/instructions/skills.instructions.md": "mine\n"})
+        shipped = self.root / ".github" / "instructions"
+        shipped.mkdir(parents=True, exist_ok=True)
+        (shipped / "skills.instructions.md").write_text("the harness's own\n", encoding="utf-8")
+        put(self.kb, {"company/instructions/skills.instructions.md": "the company's\n", "company/instructions/sql.instructions.md": "sql\n", "company/instructions/acme-etl.instructions.md": "etl\n",
+                      "company/instructions/notes.md": "not an instruction\n", "company/instructions/README.md": "# readme\n", "company/instructions/.hidden.instructions.md": "x\n"})
+        result = company.sync(self.root)
+        self.assertEqual(sorted(path.name for path in shipped.iterdir()), ["acme-etl.instructions.md", "acme-skills.instructions.md", "acme-sql.instructions.md", "knowledgebase.instructions.md", "skills.instructions.md"])
+        self.assertEqual((shipped / "skills.instructions.md").read_text(encoding="utf-8"), "the harness's own\n")  # not replaced
+        self.assertEqual((shipped / "acme-skills.instructions.md").read_text(encoding="utf-8"), "the company's\n")
+        self.assertIn(".github/instructions/acme-sql.instructions.md", result["copied"])
+        self.assertEqual(json.loads((self.root / ".harness" / "runtime" / "company-copies.json").read_text(encoding="utf-8"))["instructions"], ["acme-etl.instructions.md", "acme-skills.instructions.md", "acme-sql.instructions.md"])  # the main file is the harness's: never in the ledger
+        self.assertEqual(company.sync(self.root)["already_same"], 5)  # a skill, the main file and three more instruction files: nothing changed
+        self.assertTrue(company.diff(self.root)["in_sync"])
+
+    def test_two_instruction_files_with_one_copy_name_are_told_and_the_first_wins(self) -> None:
+        set_prefix(self.root)
+        put(self.kb, {"company/instructions/sql.instructions.md": "one\n", "company/instructions/acme-sql.instructions.md": "two\n"})
+        result = company.sync(self.root)
+        self.assertEqual([item["skill"] for item in result["refused"]], ["sql.instructions.md"])  # sorted order: `acme-sql` is the first
+        self.assertIn("acme-sql.instructions.md", result["refused"][0]["why"])
+        self.assertEqual((self.root / ".github" / "instructions" / "acme-sql.instructions.md").read_text(encoding="utf-8"), "two\n")
+
+    def test_a_file_that_left_the_content_is_seen_by_diff_and_doctor_and_taken_back_only_when_a_person_asks(self) -> None:
+        set_prefix(self.root)
+        put(self.kb, {"company/instructions/sql.instructions.md": "sql\n"})
         company.sync(self.root)
-        self.assertFalse((self.root / ".github" / "instructions" / "skills.instructions.md").exists())
+        copy = self.root / ".github" / "instructions" / "acme-sql.instructions.md"
+        put(self.root, {".github/instructions/acme-mine.instructions.md": "a person's own\n"})  # not in the ledger: none of our business
+        (self.kb / "company" / "instructions" / "sql.instructions.md").unlink()
+        self.assertIn({"path": ".github/instructions/acme-sql.instructions.md", "change": "remove"}, company.diff(self.root)["changes"])
+        self.assertIn(".github/instructions/acme-sql.instructions.md", company.drift(self.root)["stale"])
+        company.sync_after(self.root)
+        self.assertTrue(copy.is_file(), "a sync at the end of another command removes nothing")
+        result = company.sync(self.root, remove=True)
+        self.assertIn(".github/instructions/acme-sql.instructions.md", result["copied"])
+        self.assertFalse(copy.exists())
+        self.assertTrue((self.root / ".github" / "instructions" / "acme-mine.instructions.md").is_file())
+        self.assertEqual([path.name for path in (self.root / ".harness" / "runtime" / "company-backup").glob("*/*")], ["acme-sql.instructions.md"])
+        self.assertTrue(company.diff(self.root)["in_sync"])
+        self.assertEqual(json.loads((self.root / ".harness" / "runtime" / "company-copies.json").read_text(encoding="utf-8"))["instructions"], [])
+
+    def test_the_main_instruction_file_is_never_taken_back_and_a_new_word_takes_the_old_copies_back(self) -> None:
+        set_prefix(self.root)
+        put(self.kb, {"company/instructions/sql.instructions.md": "sql\n"})
+        company.sync(self.root)
+        (self.kb / "company" / "instructions" / "knowledgebase.instructions.md").unlink()
+        company.sync(self.root, remove=True)
+        self.assertTrue((self.root / ".github" / "instructions" / "knowledgebase.instructions.md").is_file(), "it is the harness's file: its copy stays")
+        shutil.move(str(self.kb / "company" / "skills" / "acme-ticket"), str(self.kb / "company" / "skills" / "bnk-ticket"))
+        (self.kb / "company" / "company.json").write_text('{ "skill_prefix": "bnk" }\n', encoding="utf-8")
+        (self.kb / "company" / "skills" / "bnk-ticket" / "SKILL.md").write_text(SKILL.format(name="bnk-ticket"), encoding="utf-8")
+        set_prefix(self.root, "bnk")
+        company.sync(self.root, remove=True)
+        names = sorted(path.name for path in (self.root / ".github" / "instructions").iterdir())
+        self.assertIn("bnk-sql.instructions.md", names)
+        self.assertNotIn("acme-sql.instructions.md", names)
+
+    def test_doctor_judges_only_the_guide_to_the_knowledge_base_not_the_other_company_instructions(self) -> None:
+        import doctor
+
+        set_prefix(self.root)
+        put(self.kb, {"company/instructions/sql.instructions.md": "---\napplyTo: '**/*.sql'\n---\n\nSee knowledge-base/domains for the tables.\n"})
+        company.sync(self.root)
+        names = [path.name for path in doctor.kb_instruction_files(self.root)]
+        self.assertIn("knowledgebase.instructions.md", names)
+        self.assertNotIn("acme-sql.instructions.md", names)
+
+    def test_an_instruction_file_needs_the_word_like_a_skill_does(self) -> None:
+        put(self.kb, {"company/instructions/sql.instructions.md": "sql\n"})
+        shutil.rmtree(self.kb / "company" / "skills")
+        with self.assertRaises(CompanyError):
+            company.sync(self.root)  # no `skill_prefix`: nothing can be named
+        shutil.rmtree(self.kb / "company" / "instructions")
+        put(self.kb, {"company/instructions/knowledgebase.instructions.md": "main\n"})
+        self.assertFalse(company.sync(self.root)["refused"])  # the main file alone needs no word
 
     def test_no_word_or_another_word_stops_before_anything_is_copied(self) -> None:
         with self.assertRaises(CompanyError) as caught:

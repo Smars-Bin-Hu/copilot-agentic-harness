@@ -420,7 +420,10 @@ def kb_instruction_files(root: Path) -> List[Path]:
     """Instruction files that have text and are about the knowledge base: named after it, or naming its folder."""
     directory = root / ".github" / "instructions"
     found = []
+    others = set(company.ledger_files(root))  # the company's other instruction files (1.7.38) are about other things; only the guide to the knowledge base is judged here
     for path in sorted(directory.glob("*.instructions.md")) if directory.is_dir() else []:
+        if path.name in others:
+            continue
         text = path.read_text(encoding="utf-8")
         if body_of(text) and ("knowledge" in path.name.lower() or KB_DIR in text.lower()):
             found.append(path)

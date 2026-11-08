@@ -536,7 +536,7 @@ class CompanyFactsTests(unittest.TestCase):
             kb = root / "knowledge-base"
             company = kb / "company"
             (company / "instructions").mkdir(parents=True)
-            for name in ("knowledgebase.instructions.md", "etl.instructions.md", "README.md"):  # a README is no instruction
+            for name in ("knowledgebase.instructions.md", "etl.instructions.md", "notes.md", "README.md"):  # a README is no instruction; notes.md is not named <name>.instructions.md
                 (company / "instructions" / name).write_text("x", encoding="utf-8")
             (company / "standards").mkdir()
             (company / "standards" / "code-standards.md").write_text("x", encoding="utf-8")
@@ -556,7 +556,7 @@ class CompanyFactsTests(unittest.TestCase):
             self.assertEqual((found["kb"]["here"], found["kb"]["domains"], found["kb"]["domain_skills"], found["kb"]["version"], found["kb"]["prefix"]), (True, 3, 3, "2026.11.05", "acme"))
             self.assertTrue(found["kb"]["path"].endswith("knowledge-base"))
             facts = found["company"]
-            self.assertEqual((facts["instructions_n"], facts["instructions_unused"], facts["standards_n"], facts["standards_unused"]), (1, ["etl.instructions.md"], 1, ["extra.md"]), "only the file the engine uses is counted; a README is no instruction")
+            self.assertEqual((facts["instructions_n"], facts["instructions_unused"], facts["standards_n"], facts["standards_unused"]), (2, ["notes.md"], 1, ["extra.md"]), "every <name>.instructions.md is counted (Q7); only the code-standards file is; a README is no instruction")
             self.assertEqual((facts["skills"]["n"], facts["skills"]["off"]), (3, ["acme-empty", "acme-good", "release-notes"]), "no SKILL.md, a name that is not the folder's, or not the company's word: the check of the Enter screen")
             self.assertEqual(facts["own_packs"], [])
             (company / "tools" / "packs" / "acmejobs").mkdir(parents=True)

@@ -135,22 +135,25 @@ class SyncAndPrefixTests(TaskCase):
 
 
 class InstructionsTests(TaskCase):
-    def test_instructions_are_in_place_only_with_the_file_that_is_copied_for_the_agent(self) -> None:
-        """1.7.38: only knowledgebase.instructions.md is copied (company.INSTRUCTION_FILES); the Enter screen says what the form says."""
+    def test_every_instruction_file_named_like_that_counts_and_the_others_are_told_as_not_used(self) -> None:
+        """Q7: each `<name>.instructions.md` is copied for the agent; a file with another name is not read by Copilot, and the hover says so."""
         folder = self.root / "kb-instructions"
         folder.mkdir()
+        (folder / "notes.md").write_text("x", encoding="utf-8")
+        found = readyitems.files_item("instructions", folder, True)
+        self.assertEqual((found["state"], len(found["problems"])), ("yellow", 1))  # files, but none a Copilot instruction
+        self.assertEqual(found["problems"][0]["text"], say("ready.p.instr"))
         (folder / "etl.instructions.md").write_text("x", encoding="utf-8")
         found = readyitems.files_item("instructions", folder, True)
-        self.assertEqual((found["state"], len(found["problems"])), ("yellow", 1))
+        self.assertEqual((found["state"], found["problems"]), ("ok", []))
+        self.assertEqual(found["detail"], say("ready.files.one") + " \u00b7 " + say("ready.files.skipped", n=1))
+        self.assertIn("notes.md", found["tip"])  # the one that is not copied is told on hover
         (folder / "knowledgebase.instructions.md").write_text("x", encoding="utf-8")
         found = readyitems.files_item("instructions", folder, True)
-        self.assertEqual((found["state"], found["problems"]), ("ok", []))
-        self.assertEqual(found["detail"], say("ready.files.one") + " \u00b7 " + say("ready.files.skipped", n=1))  # 1.7.38: only the file that is copied counts
-        self.assertIn("etl.instructions.md", found["tip"])  # the one that is not copied is told on hover
-        self.assertIn("knowledgebase.instructions.md", found["tip"])
-        (folder / "etl.instructions.md").unlink()
+        self.assertEqual(found["detail"], say("ready.files", n=2) + " \u00b7 " + say("ready.files.skipped", n=1))  # a second file counts: no mark for it
+        (folder / "notes.md").unlink()
         found = readyitems.files_item("instructions", folder, True)
-        self.assertEqual((found["detail"], found["tip"]), (say("ready.files.one"), ""))
+        self.assertEqual((found["detail"], found["tip"]), (say("ready.files", n=2), ""))
 
     def test_code_standards_count_the_one_file_that_is_read(self) -> None:
         folder = self.root / "kb-standards"

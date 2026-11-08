@@ -218,6 +218,7 @@ def mark_opened(root: Path, code: str, names: List[str], limit_minutes: int, now
         entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
         for item in entries:
             if item["state"] == "pending" and item["code"] == code.strip().upper():
+                item["opened_offers"] = [*(item.get("opened_offers") or []), *(one for one in item.get("offers") or [] if isinstance(one, dict) and one.get("system") in names)]  # what was offered, for the words of the green card (the linked items of ado)
                 item["offers"] = [one for one in item.get("offers") or [] if isinstance(one, dict) and one.get("system") not in names]
                 item["opened_for"] = sorted(set(item.get("opened_for") or []) | set(names))
                 if not item["offers"]:

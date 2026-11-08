@@ -2,7 +2,8 @@
 
 Code names a message; the text lives in `messages.<language>.json` next to this file, one file per language with the
 same names. The language is `user.json`'s `language` (`en` or `zh`); `HARNESS_LANGUAGE` in the environment wins over
-it. A name that is missing in one language is taken from the other; a name that is in neither, or a table that cannot
+it. A message that names a button, a tab or a window of the board writes `{@name}` for it: it is replaced, when the table is read, by the text of that message in the same language, so
+the words always match what is on the screen (1.7.38). A name that is missing in one language is taken from the other; a name that is in neither, or a table that cannot
 be read, gives the name itself back: a wrong text must not stop a command or a hook.
 """
 
@@ -10,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -25,12 +27,22 @@ def table_path(language: str = DEFAULT_LANGUAGE) -> Path:
     return Path(__file__).resolve().parent / f"messages.{language}.json"
 
 
+_LINK = re.compile(r"\{@([A-Za-z0-9_.-]+)\}")
+
+
+def _linked(words: Dict[str, str]) -> Dict[str, str]:
+    """`{@name}` in a message becomes the message `name` of the same table (one that is not there stays as written: a test finds it). Twice, so that a name may itself hold one."""
+    for _round in range(2):
+        words = {key: _LINK.sub(lambda found: words.get(found.group(1), found.group(0)), value) if "{@" in value else value for key, value in words.items()}
+    return words
+
+
 def table(language: str = DEFAULT_LANGUAGE) -> Dict[str, str]:
     if language not in _TABLES:
         try:
             with table_path(language).open(encoding="utf-8-sig") as handle:
                 data = json.load(handle)
-            _TABLES[language] = {key: value for key, value in data.items() if isinstance(value, str)} if isinstance(data, dict) else {}
+            _TABLES[language] = _linked({key: value for key, value in data.items() if isinstance(value, str)} if isinstance(data, dict) else {})
         except (OSError, ValueError):
             _TABLES[language] = {}
     return _TABLES[language]

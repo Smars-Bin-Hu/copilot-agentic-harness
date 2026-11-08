@@ -188,6 +188,28 @@ class Bundle(LaunchEnvCase):
         self.assertEqual(launchenv.recipe_errors({"ca_bundle": {"host": "localhost:18443", "proxy": "127.0.0.1:9000"}}), [])
         self.assertTrue(launchenv.recipe_errors({"ca_bundle": {"host": "localhost:abc"}}))
 
+    def test_no_chain_because_nothing_answered_names_the_proxy_not_an_errno(self) -> None:
+        class Down:
+            stdout, stderr = "", "connect:errno=61\n"
+
+        with mock.patch.object(launchenv.shutil, "which", return_value="/usr/bin/openssl"):
+            with self.assertRaises(ValueError) as proxy:
+                launchenv.chain_openssl("h.example.org", "127.0.0.1:9009", lambda *a, **k: Down())
+            with self.assertRaises(ValueError) as host:
+                launchenv.chain_openssl("h.example.org", "", lambda *a, **k: Down())
+        self.assertIn("127.0.0.1:9009", str(proxy.exception))
+        self.assertNotIn("errno", str(proxy.exception))
+        self.assertIn("h.example.org", str(host.exception))
+        self.assertNotIn("9009", str(host.exception))
+
+        class Odd:
+            stdout, stderr = "", "something else broke\n"
+
+        with mock.patch.object(launchenv.shutil, "which", return_value="/usr/bin/openssl"):
+            with self.assertRaises(ValueError) as other:
+                launchenv.chain_openssl("h.example.org", "", lambda *a, **k: Odd())
+        self.assertIn("something else broke", str(other.exception), "a failure that is not a missing answer keeps its words")
+
     def test_proxy_addresses_and_pem_reading(self) -> None:
         self.assertEqual(launchenv.proxy_address("http://user@127.0.0.1:9000/"), "127.0.0.1:9000")
         self.assertEqual(launchenv.proxy_address("nonsense"), "")

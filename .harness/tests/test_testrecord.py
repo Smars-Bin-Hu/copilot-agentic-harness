@@ -331,11 +331,11 @@ class OpenConnectionTests(RecordCase):
         from modules.task import taskboard, tasklife
 
         found = taskdesk.allow_view(self.root, self.data("job"))
-        self.assertEqual((found["open"], found["can"], found["links"], found["never"]), ([], ["sql"], None, ["prod"]))
+        self.assertEqual((found["open"], found["can"], found["any"], found["links"], found["never"]), ([], [], True, None, ["prod"]), "no call is held: nothing to name, but the field is there")
         tasklife.set_allow(self.root, "job", "sql", True, interactive=True)
         found = taskdesk.allow_view(self.root, self.data("job"))
         self.assertEqual([(item["name"], item["env"], bool(item["since"]), item["known"]) for item in found["open"]], [("sql", "dev", True, True)])
-        self.assertEqual(found["can"], [])
+        self.assertEqual((found["can"], found["any"]), ([], False))
         rows, _problems = taskboard.board_rows(self.root, False, 0, (), rewrite=False)
         self.assertEqual(next(row for row in rows["tasks"] if row["name"] == "job")["open_conns"], ["sql"])
         (self.root / ".harness" / "policies" / "tools.company.json").unlink()

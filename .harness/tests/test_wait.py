@@ -174,6 +174,14 @@ class ApprovalWaitTests(HarnessTestCase):
         self.assertIn("no further approval", found["next"])
         self.assertNotIn("exit_code", found)
 
+    def test_a_connection_that_opens_only_its_linked_items_says_so_to_the_agent(self) -> None:
+        approvals.rewrite(self.root, self.code, "s1", self.COMMAND, self.minutes, extra={"offers": [{"system": "ado", "scope": "items", "refs": ["ado:7"]}]}, file=approvals.ACTIONS)
+        self.after[2] = lambda: approvals.mark_opened(self.root, self.code, ["ado"], self.minutes, file=approvals.ACTIONS)
+        found = self.wait()
+        self.assertEqual(found["names"], "ado")
+        self.assertIn(messages.text("desk.outbox.opened.items", name="ado"), found["next"])
+        self.assertEqual(outbox.opened_words("tickets", [{"system": "tickets", "scope": "all"}]), "tickets")
+
     def test_one_connection_of_two_opened_is_not_the_end_of_the_wait(self) -> None:
         approvals.rewrite(self.root, self.code, "s1", self.COMMAND, self.minutes, extra={"offers": [{"system": "a", "scope": "all"}, {"system": "b", "scope": "all"}]}, file=approvals.ACTIONS)
         self.after[2] = lambda: approvals.mark_opened(self.root, self.code, ["a"], self.minutes, file=approvals.ACTIONS)
@@ -213,9 +221,18 @@ class ApprovalWaitTests(HarnessTestCase):
         self.assertNotIn("exit_code", found, "not an error: the agent is not to retry in a loop")
         self.assertIn("End your turn now", found["next"])
         self.assertIn(self.code, found["next"])
-        self.assertLessEqual(found["seconds"], 30)
+        self.assertEqual(found["seconds"], 30)
         self.assertEqual(self.entry()["wait"]["state"], "timeout")
         self.assertEqual(outbox.agent_place(self.entry()), "ended", "the board knows: its turn ended on this card")
+
+    def test_the_time_it_says_is_the_time_that_was_asked_not_a_second_less(self) -> None:
+        for asked in (5, 7, 540):
+            self.now[0] = 0.0
+            self.slept.clear()
+            found = self.wait(timeout=asked)
+            self.assertEqual(found["seconds"], asked)
+            self.assertIn(f"No answer in {asked} seconds", found["next"])
+            self.assertAlmostEqual(sum(self.slept), asked, msg="it waited as long as it said")
 
     def test_while_it_runs_it_beats_so_the_board_knows_the_agent_waits(self) -> None:
         seen: List[str] = []

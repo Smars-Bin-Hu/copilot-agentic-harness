@@ -760,7 +760,7 @@
   function envButton() {
     const found = desk.allow;
     closeEnvs = null;
-    if (!found || (!(found.open || []).length && !found.links && !(found.can || []).length)) return null;
+    if (!found || (!(found.open || []).length && !found.links && !(found.can || []).length && !found.any)) return null;
     const rows = found.open || [];
     const links = found.links;
     const can = served() && full.status === "open" && SERVE.runs("task allow");
@@ -784,7 +784,7 @@
       return h("div", {class: "open-row", "data-conn": "links"}, h("b", null, t("desk.set.open.links")), h("span", {class: "sub"}, links.open ? t("desk.set.open.links.row", {refs}) : t("desk.set.open.links.off.row", {refs})), toggle);
     };
     const shown = [...rows.map(rowFor), links ? linksRow() : null].filter(Boolean);
-    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip.conn")), h("p", {class: "set-warn"}, t("desk.set.open.warn")),
+    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip.conn")),
       h("div", {class: "open-list"}, shown.length ? [h("b", {class: "sub"}, t("desk.set.open.list")), ...shown] : h("p", {class: "sub"}, t("desk.set.open.empty"))),
       (found.can || []).length ? h("p", {class: "sub"}, t("desk.set.open.can", {names: found.can.join(", ")})) : null,
       h("p", {class: "sub"}, t("desk.set.open.never")),
@@ -1152,14 +1152,14 @@
       h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good")),
       codes.map((code) => { const title = titles.get(code) || (approvedCalls.get(code) || {}).title || ""; return h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, code), title ? h("span", {class: "tk-call-say"}, title) : null); }),  // each code stands in front of its own title (1.7.29)  // which call was approved (1.7.25)
       h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : viaWait ? "desk.outbox.told.wait" : all ? "desk.outbox.told" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
-      h("div", {class: "tk-need-go tk-call-go"}, tell, said));
+      viaWait ? null : h("div", {class: "tk-need-go tk-call-go"}, tell, said));  // the agent's wait returned and it goes on by itself: nothing to press
   }
   // After "Open <connection> for this task" on a card (1.7.38): the connection is open, the command is not approved. A green card asks the person to tell the agent to run it again; it goes when the agent has.
   const toldOpened = new Set();
   function openedCard() {
     const list = Array.isArray(desk.opened) ? desk.opened : [];
     if (!list.length || desk.past) return null;
-    const names = [...new Set(list.flatMap((item) => item.names))];
+    const names = [...new Set(list.flatMap((item) => item.shown || item.names))];  // the linked items of ado, not "ado": that is all that was opened
     const all = list.every((item) => toldOpened.has(item.code) || item.told);
     const viaWait = list.every((item) => item.told === "wait");
     const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);
@@ -1174,8 +1174,8 @@
     return h("section", {class: "tk-need strong tk-call done", "data-action": "opened"},
       h("div", {class: "tk-need-h"}, tag(t("desk.outbox.opened"), "good")),
       list.map((item) => h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, item.code), item.title ? h("span", {class: "tk-call-say"}, item.title) : null)),
-      h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : viaWait ? "desk.outbox.told.wait" : all ? "desk.outbox.told" : "desk.outbox.opened.hint", {names: names.join(", "), minutes: TELL_MINUTES})),
-      h("div", {class: "tk-need-go tk-call-go"}, tell, said));
+      h("p", {class: "sub"}, t(asking ? "desk.outbox.opened.asking" : viaWait ? "desk.outbox.opened.wait" : all ? "desk.outbox.opened.told" : "desk.outbox.opened.hint", {names: names.join(", ")})),
+      viaWait ? null : h("div", {class: "tk-need-go tk-call-go"}, tell, said));  // the agent's wait returned and it goes on by itself: nothing to press
   }
   const SQL_WORDS = /\b(select|from|where|insert|into|update|set|delete|merge|exec|execute|create|alter|drop|truncate|table|values|join|on|group by|order by|having|union|with|begin|commit|rollback|tran|declare|if|else|while|top|as|and|or|not|null|is|in|exists|case|when|then|end|nocount)\b/gi;
   function sqlNodes(text) {
@@ -1269,7 +1269,7 @@
     const gone = Boolean(item.moved_on);  // the agent ran other commands after this call: it does not wait for it, so nothing pulses and Dismiss is the main button
     const opens = gone ? [] : (item.offers || []).map((offer) => {  // 1.7.38: one button for each connection of the line that the card may open for the task; it needs the same code as Approve
       const tip = t(offer.scope === "items" ? "desk.outbox.open.tip.items" : "desk.outbox.open.tip.all", {name: offer.system, refs: (offer.refs || []).join(", ")});
-      const open = h("button", {type: "button", class: "act tk-open", "data-conn": offer.system, disabled: "disabled", title: tip}, t("desk.outbox.open", {name: offer.system}));
+      const open = h("button", {type: "button", class: "act tk-open", "data-conn": offer.system, disabled: "disabled", title: tip}, t(offer.scope === "items" ? "desk.outbox.open.items" : "desk.outbox.open", {name: offer.system}));  // ado opens only the items the task is linked to: the button says so
       open.dataset.tip = tip;
       return open;
     });

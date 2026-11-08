@@ -547,7 +547,7 @@ def set_allow(root: Path, raw_task: str, name: str, on: bool, interactive: Optio
     task = task_ops.resolve(root, raw_task)
     if on:
         if not isinstance(system, dict):
-            raise CommandError(say("task.allow.retired" if name in RETIRED_ENVS else "task.allow.unknown", name=name or "-"))
+            raise CommandError(say("task.allow.retired" if name in RETIRED_ENVS else "task.allow.unknown", name=name or "-", open=say("desk.outbox.open", name="...")))  # the label of the card's button, as the page draws it
         scope = conn_scope(system)
         if scope == outside.ITEMS:  # the connection opens as its linked items (ado)
             return dict(_set_allow_links(root, raw_task, True), conn=name)

@@ -676,7 +676,7 @@ class Board:
                 found = result.get("task") or task_ops.resolve(self.root, task)
                 stood = {str(item["code"]): outbox.agent_place(item) for item in outbox.pending_for(self.root, found) if any(isinstance(one, dict) and one.get("system") == name for one in item.get("offers") or [])}
                 outbox.mark_opened_everywhere(self.root, found, [name])
-                self.after_decision(found, [(each, place) for each, place in stood.items() if (self.entry(each) or {}).get("state") == "opened"], messages.text("desk.outbox.opened.body", names=name))
+                self.after_decision(found, [(each, place) for each, place in stood.items() if (self.entry(each) or {}).get("state") == "opened"], messages.text("desk.outbox.opened.body", names=outbox.opened_words(name, [offer] if offer else [])))
             noted(self.root, result.get("task") or task, action)
             return result
         if action == "task link":  # one click, no code: the person names an item of an outside tool in the task, or takes it away (1.7.20); the same function as `task link add|remove`

@@ -641,6 +641,17 @@ def check_toolpacks(report: Report, root: Path) -> None:
         report.warn(say("doctor.company.failed", error=error))
 
 
+def reach_words(code: str) -> str:
+    """The word a probe leaves (`no-answer`, `identity`, `exit-<n>`) as a person reads it; anything else is kept as it is."""
+    if code == "no-answer":
+        return say("doctor.systems.why.no_answer")
+    if code in ("identity", "other-identity"):
+        return say("doctor.systems.why.identity")
+    if code.startswith("exit-"):
+        return say("doctor.systems.why.exit", code=code[5:])
+    return code
+
+
 def system_reach(root: Path, systems: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """Is each outside system reachable from here? A connection is probed as the board and VS Code do it (1.7.38): with the tool folders and the CA bundle VS Code gets and the identity kept here, so a connection
     that passed its Test is not reported as not reachable (exit code 127 or 1) just because a terminal has neither. What has no kept identity, and a system written by hand, is probed in this terminal as before."""
@@ -659,8 +670,9 @@ def system_reach(root: Path, systems: Dict[str, Any]) -> Dict[str, Dict[str, Any
         keys = [f"{name}:{env}" for env in outside.probes(system)]
         if name in listed and keys and all(key in done for key in keys):
             bad = [key for key in keys if done[key] != seen.OK]
-            by_connection[name] = {"reachable": not bad, "why": say("doctor.systems.why.connection", why=str((kept.get(bad[0]) or {}).get("why") or done[bad[0]]))[:200] if bad else "",
-                                   "launch": (system.get("needs") or {}).get("launch") or ""}
+            code = str((kept.get(bad[0]) or {}).get("why") or done[bad[0]]) if bad else ""
+            by_connection[name] = {"reachable": not bad, "why": say("doctor.systems.why.connection", why=reach_words(code))[:200] if bad else "",
+                                   "launch": say("doctor.systems.launch.noanswer") if code == "no-answer" else (system.get("needs") or {}).get("launch") or ""}  # a new identity does not help when nothing answered
     rest = {name: system for name, system in systems.items() if name not in by_connection}
     answers = {**external.reach(rest, lambda command: external.run_probe(command, root)), **by_connection}
     try:

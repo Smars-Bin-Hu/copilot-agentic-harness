@@ -413,6 +413,8 @@
     clearTimeout(popTimer); popFor = li;
     pop.replaceChildren(popTable(c));
     pop.hidden = false;
+    const inner = pop.firstChild;  // more rows than the window holds: it says so, and how many there are
+    if (inner && inner.scrollHeight > inner.clientHeight + 2) { inner.append(h("p", {class: "sy-scroll"}, t("board.enter.sys.scroll", {n: new Set(c.rows.map((row) => row.system)).size}))); }
     const r = li.getBoundingClientRect(), w = pop.offsetWidth, ph = pop.offsetHeight;
     pop.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
     pop.style.top = (r.top - ph - 6 > 8 ? r.top - ph - 6 : Math.min(innerHeight - ph - 8, r.bottom + 6)) + "px";
@@ -477,7 +479,7 @@
       setClass(li, "row s-" + view.state + (view.level ? " l-" + view.level : "") + (req ? " blocks" : " warns") + (!req && c && ((c.home && c.home.to) || (c.fix && c.fix.to)) ? " has-fix" : "") + (!req && c && c.names && c.names.length ? " has-names" : ""));
       setText(li.querySelector(".t"), t("board.enter.t." + id));
       const em = li.querySelector("em");
-      li.title = view.tip || "";
+      li.title = id === "connections" && c && c.rows && c.rows.length ? "" : view.tip || "";  // the hover table has the same sentence at its foot: not a second bubble beside it
       li.dataset.fix = !req && c && ((c.home && c.home.to) || (c.fix && c.fix.to)) ? "1" : "";
       if (!req && c && c.names && c.names.length) { setText(em, ""); names(li, c, id === "connections"); } else { noNames(li); setText(em, view.tag || (view.state === "check" ? "" : "—")); }
       const p = li.querySelector(".m");

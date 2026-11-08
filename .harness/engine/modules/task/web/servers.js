@@ -170,7 +170,7 @@ const SERVERS = (function () {
         // Who it is signed in as (1.7.38): the account kept here; else the name the last test answered with; else, for a token, that a token is saved. A failed test of something not kept says it was not kept.
         const who = row.account || (last && last.state === "ok" && last.who) || ((row.saved || row.signed) && row.who) || (row.saved && row.identity === "token" ? t("connections.token.saved") : row.signed && !row.saved ? t("connections.tool.signed") : "");
         const failed = last && last.timeout ? t("connections.state.timeout", {seconds: last.timeout}) : t(row.saved ? "connections.state.testfailed" : "connections.state.notsaved");
-        const note = wait ? t("connections.state.untested") : bad ? failed : "";
+        const note = wait ? t(who ? "connections.state.untested" : "connections.state.untested.alone") : bad ? failed : "";  // "token saved · not tested yet": the name of the row already says saved
         words = h("span", {class: "tl-who" + (bad ? " bad" : "")}, who + (note ? (who ? " · " : "") + note : ""));
       }
       const tip = wait ? t("connections.untested.tip") : last ? (last.state === "ok" ? t("connections.tip.ok", {who: last.who || "-", seconds: last.seconds}) : last.layers && last.layers.text ? last.layers.text : "") : row.saved ? t("connections.saved.tip", {account: row.account || row.who || "-"}) : row.signed ? t("connections.signed.tip") : t("connections.none.tip");

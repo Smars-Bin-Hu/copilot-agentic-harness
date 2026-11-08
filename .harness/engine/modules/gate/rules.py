@@ -101,28 +101,36 @@ def git_needs_approval(why: str, command: str, code: str, minutes: int) -> str:
     return say("gate.git.needs_approval", why=why, git_command=command, code=code, minutes=minutes)
 
 
+def word(verb: str) -> str:
+    """The kind of a call as a person reads it: the protocol word in English (`write`); in Chinese the word of the board with the protocol word after it (`写（write）`: the rules and the log use it)."""
+    if messages.language() == "en":
+        return verb
+    found = messages.text(f"desk.outbox.verb.{verb}")
+    return verb if found == f"desk.outbox.verb.{verb}" else f"{found}（{verb}）"
+
+
 def _verb(verb: str) -> str:
-    """The verb with its article, for the English texts ("a write", "an exec"); the zh texts ignore the article."""
-    return ("an " if verb[:1] in "aeiou" else "a ") + verb
+    """The verb with its article, for the English texts ("a write", "an exec"); the zh texts have the word of the board and no article."""
+    return ("an " if verb[:1] in "aeiou" else "a ") + verb if messages.language() == "en" else word(verb)
 
 
 def external_subagent(action: Any, command: str, agent: str) -> str:
-    return say("gate.external.subagent", agent=agent, place=place(action.system, action.env), verb=action.verb, call=command)
+    return say("gate.external.subagent", agent=agent, place=place(action.system, action.env), verb=word(action.verb), call=command)
 
 
 def external_denied(action: Any, command: str) -> str:
     """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
-    return say("gate.external.denied", place=place(action.system, action.env), verb=action.verb, call=command)
+    return say("gate.external.denied", place=place(action.system, action.env), verb=word(action.verb), call=command)
 
 
 def external_human(action: Any, command: str) -> str:
     """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
-    return say("gate.external.human", place=place(action.system, action.env), verb=action.verb, call=command, handoff_env="" if action.env in ("", "none") else f" --env {action.env.upper()}")
+    return say("gate.external.human", place=place(action.system, action.env), verb=word(action.verb), call=command, handoff_env="" if action.env in ("", "none") else f" --env {action.env.upper()}")
 
 
 def external_task(action: Any, command: str) -> str:
     """`command` is the whole line as the agent wrote it: the person copies it, so its quotes must stay."""
-    return say("gate.external.task", place=place(action.system, action.env), verb=action.verb, call=command)
+    return say("gate.external.task", place=place(action.system, action.env), verb=word(action.verb), call=command)
 
 
 def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str, offers: Any = None) -> str:

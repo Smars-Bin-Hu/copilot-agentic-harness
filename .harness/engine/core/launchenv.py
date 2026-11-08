@@ -558,6 +558,16 @@ $zchain | ForEach-Object { "-----BEGIN CERTIFICATE-----`n" + [Convert]::ToBase64
 """
 
 
+_UNREACHED = re.compile(r"errno=\d+|refused|timed? ?out|unreachable|No connection could be made|getaddrinfo|Name or service not known|nodename nor servname|could not be resolved|No such host", re.IGNORECASE)
+
+
+def chain_failed(said: str, host: str, proxy: str) -> ValueError:
+    """Why no chain was read, for a person: nothing answered at the proxy (or at the address, with no proxy), or git-style raw words when it was something else (`errno=61` means nothing to a person)."""
+    if _UNREACHED.search(said):
+        return ValueError(say("launch.ca.unreached.proxy", where=proxy) if proxy else say("launch.ca.unreached.host", where=host))
+    return ValueError(say("launch.ca.chain.failed", said=said[:300]))
+
+
 def chain_windows(host: str, proxy: str, run: Callable[..., Any] = subprocess.run) -> Tuple[List[str], str]:
     """The chain Windows builds for `host`, through `proxy` when given (the root from the system's store included). `(blocks, trust)`: trust is
     "None" when Windows trusts it, else the reason (RemoteCertificateChainErrors, ...)."""
@@ -573,7 +583,7 @@ def chain_windows(host: str, proxy: str, run: Callable[..., Any] = subprocess.ru
     trust = re.search(r"^TRUST (.*)$", out, re.MULTILINE)
     blocks = pem_blocks(out)
     if not trust or not blocks:  # no chain read: say why, never "None" (the system trusted nothing it was shown)
-        raise ValueError(say("launch.ca.chain.failed", said=((done.stderr or out).strip().splitlines() or ["-"])[-1][:300]))
+        raise chain_failed(((done.stderr or out).strip().splitlines() or ["-"])[-1], host, proxy)
     return blocks, trust.group(1).strip() or "None"
 
 
@@ -588,7 +598,7 @@ def chain_openssl(host: str, proxy: str, run: Callable[..., Any] = subprocess.ru
     done = run(argv, input="", capture_output=True, text=True, timeout=SECONDS)
     blocks = pem_blocks(done.stdout or "")
     if not blocks:
-        raise ValueError(say("launch.ca.chain.failed", said=((done.stderr or "").strip().splitlines() or ["-"])[-1][:300]))
+        raise chain_failed(((done.stderr or "").strip().splitlines() or ["-"])[-1], host, proxy)
     verify = re.search(r"Verify return code: (\d+) \(([^)]*)\)", done.stdout or "")
     return blocks, ("None" if verify and verify.group(1) == "0" else (verify.group(2) if verify else "?"))
 

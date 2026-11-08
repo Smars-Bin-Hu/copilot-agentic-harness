@@ -290,6 +290,11 @@ class Ready:
         The environment of a system that has none (`none`, `any`) is empty."""
         kind = lambda state: "ok" if state == reach.OK else "unknown" if state == reach.UNKNOWN else "down"  # noqa: E731
         names, rows = [], []
+        order = {"dev": 0, "ist": 1, "qat": 2, "prod": 3}
+        pack_of = lambda system: str((systems.get(system) or {}).get("toolpack") or "")  # noqa: E731
+        first_env = lambda system: min(order.get(item["env"], -1) for item in raw if item["system"] == system)  # noqa: E731
+        # The order of the Connections window: by kind (the pack), then environment, then name; the file's order told nothing (1.7.38)
+        raw = sorted(raw, key=lambda item: (pack_of(item["system"]), first_env(item["system"]), item["system"], order.get(item["env"], -1)))
         for system in dict.fromkeys(item["system"] for item in raw):
             mine = [item for item in raw if item["system"] == system]
             states = {kind(item["state"]) for item in mine}

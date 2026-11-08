@@ -144,15 +144,15 @@ def run_approval_wait(root: Path, code: str, timeout: int = DEFAULT_TIMEOUT, clo
             if last_beat is None or now - last_beat >= beat:
                 approvals.wait_mark(root, code, "running", minutes, file=approvals.ACTIONS)
                 last_beat = now
-            if now - started + poll > timeout:
+            left = timeout - (now - started)
+            if left <= 0:
                 break
-            sleep(poll)
+            sleep(min(poll, left))  # the last sleep is what is left: the wait ends at the time that was asked, not a second before
         again = approvals.find(root, code, minutes, file=approvals.ACTIONS)  # the person may have decided in the last moment
         if again is not None and again.get("state") != "pending":
             return {"code": code, "seconds": int(clock() - started), **outbox.decided(again, minutes)}
         approvals.wait_mark(root, code, "timeout", minutes, file=approvals.ACTIONS)
-        seconds = int(clock() - started)
-        return {"code": code, "approved": False, "state": "pending", "waiting": True, "seconds": seconds, "next": say("wait.approval.timeout", seconds=seconds, code=code)}
+        return {"code": code, "approved": False, "state": "pending", "waiting": True, "seconds": timeout, "next": say("wait.approval.timeout", seconds=timeout, code=code)}
     except BaseException:
         approvals.wait_mark(root, code, "gone", minutes, file=approvals.ACTIONS)  # stopped (the terminal was closed, an error): the agent no longer waits for it
         raise

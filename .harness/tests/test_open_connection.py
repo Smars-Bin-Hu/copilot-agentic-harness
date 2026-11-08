@@ -87,6 +87,13 @@ class OpenFromTheCard(TaskCase):
         view = taskdesk.allow_view(self.root, self.data())
         self.assertEqual([item["name"] for item in view["open"]], ["acmedw-dev"])
 
+    def test_the_pop_names_only_the_connections_a_held_call_of_this_task_offers(self) -> None:
+        self.assertEqual(taskdesk.allow_view(self.root, self.data(), TASK)["can"], [], "nothing is held: no names")
+        self.assertTrue(taskdesk.allow_view(self.root, self.data(), TASK)["any"], "but a connection could be opened, so the field is drawn")
+        self.term(DEV)
+        found = taskdesk.allow_view(self.root, self.data(), TASK)
+        self.assertEqual(found["can"], ["acmedw-dev"], "not acmedw-ist, which no call of this task reached")
+
     def test_the_agent_runs_the_command_again_and_it_goes_through_and_the_green_card_goes(self) -> None:
         self.term(DEV)
         self.open("acmedw-dev", self.code("acmedw-dev"))
@@ -143,6 +150,21 @@ class OpenFromTheCard(TaskCase):
         self.assertTrue(self.data()["allow_links"])
         self.assertEqual(self.term("ado comment 123 --text hi"), {})
         self.assertEqual(self.term("ado comment 124 --text hi")["permissionDecision"], "deny", "an item the task does not name is refused")
+
+    def test_the_words_say_linked_items_where_only_they_are_opened(self) -> None:
+        from core import messages
+
+        tasklife.link(self.root, NAME, "ado:123", True)
+        self.term("ado comment 123 --text hi")
+        card = taskdesk.outbox_view(self.root, TASK)[-1]
+        self.assertEqual(card["offers"][0]["scope"], "items")  # the page labels this card's button "Open linked items of ado for this task"
+        self.open("ado", card["code"])
+        shown = taskdesk.opened_view(self.root, TASK)[0]
+        self.assertEqual((shown["names"], shown["shown"]), (["ado"], [messages.text("desk.outbox.opened.items", name="ado")]))
+        self.term(DEV)
+        self.open("acmedw-dev", self.code("acmedw-dev"))
+        names = {item["code"]: item for item in taskdesk.opened_view(self.root, TASK)}
+        self.assertIn(["acmedw-dev"], [item["shown"] for item in names.values()], "a connection that opens everything keeps its own name")
 
     def test_the_status_mark_names_what_is_open(self) -> None:
         from modules.task import taskboard

@@ -189,15 +189,17 @@ def opened_view(root: Path, task: str) -> List[Dict[str, Any]]:
                 said = " \u00b7 ".join(call_words(item["command"], systems.get(item.get("system", "")) or {}, tasks.task_dir(root, task), root)["says"])
             except Exception:  # noqa: BLE001 - a title is a help; the card has the code anyway
                 said = ""
-            out.append({"code": item["code"], "names": [str(name) for name in item.get("opened_for") or []], "title": said or " ".join(str(item["command"]).split())[:80], "told": str(item.get("told") or "")})
+            names = [str(name) for name in item.get("opened_for") or []]
+            out.append({"code": item["code"], "names": names, "shown": [outbox.opened_words(name, item.get("opened_offers")) for name in names], "title": said or " ".join(str(item["command"]).split())[:80], "told": str(item.get("told") or "")})
         return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
         return []
 
 
-def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
+def allow_view(root: Path, data: Dict[str, Any], task: str = "") -> Dict[str, Any]:
     """The Task settings field "Open to the agent" (1.7.38): the connections the person opened for this task (`open`, each can be closed), the linked items when a connection of the task's tickets
-    is opened by them (`links`), and the connections a held call's card could open (`can`, for the words of the pop). Nothing to draw when there is none of these. The switch ends with the task."""
+    is opened by them (`links`), and the connections a held call of THIS task offers to open (`can`, for the words of the pop: not every connection there is). `any`: some connection could be opened,
+    so the field is drawn even before a call is held. Nothing to draw when there is none of these. The switch ends with the task."""
     try:
         systems = config.policy_or_empty(root, "tools").get("systems") or {}
         systems = systems if systems and not outside.validate(systems) else {}
@@ -206,14 +208,19 @@ def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
     is_open = data.get("status") == "open"
     held = data.get(tasklife.ALLOW_KEY) if isinstance(data.get(tasklife.ALLOW_KEY), dict) and is_open else {}
     rows = [{"name": name, "env": str((item or {}).get("env") or (systems.get(name) or {}).get("env") or ""), "since": str((item or {}).get("at") or ""), "known": name in systems} for name, item in sorted(held.items())]
-    can = sorted(name for name, system in systems.items() if name not in held and isinstance(system, dict) and tasklife.conn_scope(system) == outside.ALL)
+    openable = sorted(name for name, system in systems.items() if name not in held and isinstance(system, dict) and tasklife.conn_scope(system) == outside.ALL)
+    try:  # the ones a held call of this task offers: those have to do with this task
+        offered = {str(one.get("system")) for item in (outbox.pending_for(root, task) if task and is_open else []) for one in item.get("offers") or [] if isinstance(one, dict)}
+    except Exception:  # noqa: BLE001 - the pop then says less
+        offered = set()
+    can = [name for name in openable if name in offered]
     refs = {str(item.get("ref", "")).split(":", 1)[0] for item in (data.get("links") or []) if isinstance(item, dict)}
     scoped = sorted(name for name, system in systems.items() if isinstance(system, dict) and system.get("item") and system.get("link") in refs and tasklife.conn_scope(system) in (outside.ITEMS, outside.ALL)) if refs else []
     links = None
     if scoped:  # 1.7.18: the items the task is linked to: the agent's writes to them only
         on = bool(data.get(tasklife.LINKS_KEY)) and is_open
         links = {"systems": scoped, "open": on, "since": str((data.get(tasklife.LINKS_KEY) or {}).get("at") or "") if on else "", "refs": [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]}
-    return {"open": rows, "links": links, "can": can, "never": [outside.PROD]}
+    return {"open": rows, "links": links, "can": can, "any": bool(openable), "never": [outside.PROD]}
 
 
 def links_view(root: Path, data: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -481,7 +488,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "links": links_view(root, data), "link_types": link_types(root),
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "approved": approved_view(root, task) if row.get("status") == "open" else [], "opened": opened_view(root, task) if row.get("status") == "open" else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
+        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data, task), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "approved": approved_view(root, task) if row.get("status") == "open" else [], "opened": opened_view(root, task) if row.get("status") == "open" else [], "accept": accept.view(data), "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
         "plan_approval": plan_approval(root, task, data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if row.get("status") == "open" else 0, "req_sections": task_ops.req_unfilled(root, task) if row.get("status") == "open" else [], "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),

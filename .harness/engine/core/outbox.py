@@ -125,6 +125,12 @@ def offer_for(root: Path, task: str, code: str, name: str) -> Optional[Dict[str,
     return next((dict(one) for one in entry.get("offers") or [] if isinstance(one, dict) and one.get("system") == name), None)
 
 
+def opened_words(name: str, offers: Any) -> str:
+    """A connection the person opened, as words: the name, or, when the call offered only its linked items (the connection's `open` word is `items`), the linked items of it (1.7.38)."""
+    scoped = next((one for one in offers or [] if isinstance(one, dict) and one.get("system") == name), None)
+    return say("desk.outbox.opened.items", name=name) if scoped and scoped.get("scope") == "items" else name
+
+
 def draft_of(entry: Dict[str, Any]) -> str:
     """The draft of an approval entry: only a call made in a session that held a task has one."""
     return draft_path(entry["task"], entry["code"], entry.get("system", "")) if entry.get("task") else ""
@@ -299,7 +305,8 @@ def decided(entry: Dict[str, Any], minutes: int = approvals.DEFAULT_MINUTES) -> 
         return {"approved": True, "state": "approved", "next": say("wait.approval.approved", minutes=minutes)}
     if state == "opened":
         names = ", ".join(str(name) for name in entry.get("opened_for") or [])
-        return {"approved": False, "state": "opened", "opened": True, "names": names, "next": say("wait.approval.opened", names=names)}
+        shown = ", ".join(opened_words(str(name), entry.get("opened_offers")) for name in entry.get("opened_for") or [])
+        return {"approved": False, "state": "opened", "opened": True, "names": names, "next": say("wait.approval.opened", names=shown)}
     reason, note = str(entry.get("reason") or ""), str(entry.get("note") or "")
     why = reason_text(reason, note)
     return {"approved": False, "state": "dismissed", "dismissed": True, "reason": reason or "none", "note": note, "why": why, "next": say("wait.approval.not_approved", why=why, follow=follow_text(reason)), "exit_code": 1}

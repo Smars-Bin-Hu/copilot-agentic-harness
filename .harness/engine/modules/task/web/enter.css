@@ -114,6 +114,7 @@ html[lang="zh"] .en-cap{letter-spacing:.12em;text-transform:none;font-size:12px}
 .en-hint{justify-self:end;text-align:right;padding-right:56px}
 
 /* a short window: the wordmark rises and the list takes the room under it (enter.js sets --chk-max from where the wordmark ends) */
+@media (max-height:940px){.en-chk-h{margin-bottom:6px}.en-chk-l{gap:1px}.en-chk-l .m{padding:5px 9px;line-height:1.4;margin-bottom:4px}}  /* a laptop screen: a note under a row (VS Code red, a yellow one) must not be pushed under the fold (1.7.38) */
 @media (max-height:760px){.en-stage{padding-bottom:26vh}.en-chk{font-size:11.5px}.en-chk-h{margin-bottom:6px}.en-chk-l{gap:1px}.en-chk-l .m{padding:5px 9px;font-size:11.5px;line-height:1.4;margin-bottom:4px}.en-foot{padding-bottom:38px}}
 @media (max-height:600px){.en-stage{padding-bottom:27vh}}
 @media (max-width:1100px){.en-ref{visibility:hidden}.en-foot{grid-template-columns:minmax(0,1fr);row-gap:14px;justify-items:center}.en-chk{justify-self:start}.en-hint{justify-self:center;text-align:center;padding-right:0}}  /* too narrow for the list, the pill and the hint in a row (1.7.24) */
@@ -144,7 +145,8 @@ html.lite #en-fx{display:none}
 .en-chk-l .m[hidden]+.sy{margin-top:0}
 .en-pop{position:fixed;z-index:400;max-width:min(720px,calc(100vw - 16px));border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--ink);box-shadow:0 14px 40px rgba(0,0,0,.28);font:12px/1.45 var(--sans)}
 .en-pop[hidden]{display:none}
-.en-pop-in{max-height:min(46vh,360px);overflow:auto;padding:6px 10px 8px;overscroll-behavior:contain}
+.en-pop-in{max-height:min(70vh,560px);overflow:auto;padding:6px 10px 8px;overscroll-behavior:contain}
+.en-pop .sy-scroll{position:sticky;bottom:-8px;margin:6px -10px -8px;padding:5px 10px 6px;background:var(--card);border-top:1px solid var(--line);color:var(--soft);font-size:11.5px}
 .en-pop table{border-collapse:collapse;width:100%}.en-pop th{position:sticky;top:0;background:var(--card);text-align:left;font-weight:600;color:var(--soft);padding:5px 10px 4px 0;white-space:nowrap}
 .en-pop td{padding:4px 10px 4px 0;vertical-align:top}.en-pop tr.first td{border-top:1px solid var(--line)}.en-pop tbody tr.first:first-child td{border-top:0}
 .en-pop .sy-off{margin:8px 0 0;padding-top:6px;border-top:1px solid var(--line);color:var(--soft);overflow-wrap:anywhere}

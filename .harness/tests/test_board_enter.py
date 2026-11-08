@@ -484,6 +484,15 @@ class ReadinessTests(TaskCase):
         running.get()
         self.assertTrue(until(lambda: running.value is None and not running.busy))  # a probe that breaks says nothing
 
+    def test_the_hover_table_goes_by_kind_then_environment_then_name_like_the_connections_window(self) -> None:
+        check = ready.Ready(self.root, StubLink(UP), clean)
+        systems = {"z-sql": {"toolpack": "sqlserver"}, "a-sql": {"toolpack": "sqlserver"}, "ado": {"toolpack": "ado"}, "b-sql": {"toolpack": "sqlserver"}}
+        raw = [{"system": "z-sql", "env": "dev", "state": "ok"}, {"system": "b-sql", "env": "ist", "state": "ok"}, {"system": "ado", "env": "none", "state": "ok"}, {"system": "a-sql", "env": "ist", "state": "ok"},
+               {"system": "b-sql", "env": "dev", "state": "ok"}]
+        got = check.table(systems, raw)
+        self.assertEqual([(row["system"], row["env"]) for row in got["rows"]], [("ado", ""), ("b-sql", "dev"), ("b-sql", "ist"), ("z-sql", "dev"), ("a-sql", "ist")])
+        self.assertEqual([item["name"] for item in got["names"]], ["ado", "b-sql", "z-sql", "a-sql"], "the names of the row go in the same order")
+
     def test_the_answer_carries_the_restart_that_is_going_on(self) -> None:
         check = ready.Ready(self.root, StubLink(UP), clean)
         self.assertNotIn("restart", settled(check))

@@ -106,7 +106,7 @@ def run_doctor(root: Path, timeout: Optional[float] = None) -> Dict[str, Any]:
     if not errors and done.returncode != 0 and '"errors"' not in text:  # it did not get as far as its summary line
         tail = done.stderr.decode("utf-8", errors="replace").strip().splitlines()
         return {"errors": 0, "first": "", "failed": short(tail[-1] if tail else f"exit code {done.returncode}")}
-    return {"errors": len(errors) if errors else (1 if done.returncode else 0), "first": short(errors[0]) if errors else "", "failed": "", "lines": [short(line) for line in errors[:LINES]], "warned": len(warnings) + len(company) + len(copies), "warning": short((warnings + company + copies)[0]) if warnings or company or copies else "", "company": [short(line) for line in company[:LINES]], "company_n": len(company)}
+    return {"errors": len(errors) if errors else (1 if done.returncode else 0), "first": short(errors[0]) if errors else "", "failed": "", "lines": [short(line) for line in errors[:LINES]], "warned": len(warnings) + len(company) + len(copies), "warning": clip(" ".join((warnings + company + copies)[0].split()), REASON_MAX) if warnings or company or copies else "", "company": [short(line) for line in company[:LINES]], "company_n": len(company)}
 
 
 class Running:

@@ -340,7 +340,7 @@ def diff(root: Path) -> Dict[str, Any]:
     changes = [row for name, source, target in plan["pairs"] for row in difference(name, source, target)] + [{"path": f"{SKILLS_DIR}/{name}", "change": "remove"} for name in plan["only_here"]]
     changes += pack_changes(root)
     same_now = not changes and not plan["refused"]
-    return {"found": True, "in_sync": same_now, "changes": changes[:DIFF_SHOWN], "total": len(changes), "refused": plan["refused"], "problem": "", "next": say("company.diff.same" if same_now else "company.diff.differs", count=len(changes))}
+    return {"found": True, "in_sync": same_now, "changes": changes[:DIFF_SHOWN], "total": len(changes), "refused": plan["refused"], "problem": "", "next": say("company.diff.same" if same_now else "company.diff.differs.one" if len(changes) == 1 else "company.diff.differs", count=len(changes))}
 
 
 # --- pack: the owner's zip ----------------------------------------------------------------------------------------------------------------------------------
@@ -468,7 +468,7 @@ def found_in_place(root: Path) -> List[str]:
 def skill_trouble(folder: Path, word: str) -> str:
     """Why a company skill would not reach a colleague, with its name; "" when it would."""
     why = say("company.why.prefix", word=word) if not folder.name.startswith(word + "-") else next(iter(skillcheck.check(folder, word)["errors"]), "")
-    return f"{folder.name}: {why.rstrip('. ')}" if why else ""  # the message that holds the list ends with its own full stop
+    return f"{folder.name}: {why.rstrip('. \u3002')}" if why else ""  # the message that holds the list ends with its own full stop
 
 
 def changed_lines(status: bytes) -> List[str]:

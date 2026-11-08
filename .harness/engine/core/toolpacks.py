@@ -408,13 +408,17 @@ def declared_needs(folder: Path, manifest: Dict[str, Any], path: Optional[str]) 
             for program in (auth.get("needs") or []) if isinstance(auth, dict) and isinstance(auth.get("needs"), list) else []:
                 if isinstance(program, str) and program:
                     rows.setdefault(program, {"program": program, "found": False, "path": "", "why": "signin"})
-    own = folder / "bin"  # a program the pack brings itself (`bin/`) is not something to find on this computer
-    brought = {item.stem if item.suffix.lower() in (".cmd", ".bat", ".exe") else item.name for item in own.iterdir()} if own.is_dir() else set()
+    own = folder / "bin"  # a program the pack brings itself (`bin/`) is not something to find on this computer: it shows only when it cannot run (no run bit, 1.7.38)
+    brought = {item.stem if item.suffix.lower() in (".cmd", ".bat", ".exe") else item.name: item for item in sorted(own.iterdir(), key=lambda one: one.suffix.lower() not in (".cmd", ".bat", ".exe")) if item.is_file()} if own.is_dir() else {}  # the program itself wins over its `.cmd`
     for row in rows.values():
         row["path"] = locate(row["program"], path)
         row["found"] = bool(row["path"])
         row["blocked"] = "" if row["found"] else blocked(row["program"], path)
-    return [row for row in rows.values() if row["program"] not in brought]
+    out = [row for row in rows.values() if row["program"] not in brought]
+    for name, file in sorted(brought.items()):
+        if os.name != "nt" and file.name == name and "." not in name and not os.access(file, os.X_OK):  # the program itself, not its `.cmd` beside it for Windows
+            out.append({"program": name, "found": False, "path": "", "why": "own", "blocked": str(file)})
+    return out
 
 
 def skill_label(names: List[str]) -> str:

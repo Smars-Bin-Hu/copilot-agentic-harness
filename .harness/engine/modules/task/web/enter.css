@@ -216,3 +216,7 @@ html.has-wall .en-vs:not(.hot){background:rgba(8,9,10,.58);color:var(--en-ink);b
 @media (min-width:1101px) and (min-height:761px) and (max-height:1000px){.en-stage{padding-bottom:22vh}.en-word{width:min(94vw,1700px,110vh)}.en-ref{width:min(94vw,1700px,110vh);height:calc(min(94vw,1700px,110vh)*.1)}}
 /* 1.7.38: narrow window: the dock lies in a row at the foot (dock.css), so the line with the version keeps to its left and the arrow of a long list sits beside it, not under the buttons */
 @media (max-width:900px){.en-chk .en-legal{max-width:calc(100vw - 350px)}.en-chk.more::after{right:auto;left:calc(100vw - 372px)}}
+/* 1.7.38: the VS Code button has one width whatever its words are (Open, Restart, Restart with identities; a long one takes two lines), so the list beside it does not get wider and narrower with it;
+   and the word at the right of a required line that needs the person is red, like its dot */
+@media (min-width:1101px){.en-vs{box-sizing:border-box;width:15em;justify-content:center;text-align:center;white-space:normal;line-height:1.15;padding:0 22px}}
+.en-chk-l li.row.s-fail.blocks.l-red em{color:var(--bad)}

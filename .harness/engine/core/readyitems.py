@@ -142,7 +142,7 @@ def skill_trouble(path: Path, prefix: str) -> str:
 def sentence(text: str) -> str:
     """A message of the checks for a person: no terminal marks, a capital, a full stop."""
     one = " ".join(str(text).replace("`", "").split())
-    return (one[:1].upper() + one[1:] + ("" if one.endswith((".", "!", "?")) else ".")) if one else ""
+    return (one[:1].upper() + one[1:] + ("" if one.endswith((".", "!", "?", "\u3002", "\uff01", "\uff1f")) else ".")) if one else ""  # a Chinese full stop is a stop too (no "。.")
 
 
 def skills_item(root: Path, folder: Optional[Path]) -> Dict[str, Any]:

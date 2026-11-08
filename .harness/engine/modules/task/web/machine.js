@@ -202,7 +202,8 @@ const MACHINE = (function () {
       }, (error) => { reset(); said.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { install.disabled = false; });
     });
     path.addEventListener("keydown", (event) => { if (isEnter(event)) install.click(); });
-    return {nodes: [h("div", {class: "su-line mc-install"}, path, install), said], paint: (rows) => { box.replaceChildren(...(rows.length ? rows.map((row) => packRow(row, ctx, change)) : [h("p", {class: "tl-empty"}, t("tools.added.none"))])); }};
+    const run = (step, name, more) => { if (step === "toolpack-remove") said.replaceChildren(); return change(step, name, more); };  // what was said of an add is old once a pack goes (1.7.38)
+    return {nodes: [h("div", {class: "su-line mc-install"}, path, install), said], paint: (rows) => { box.replaceChildren(...(rows.length ? rows.map((row) => packRow(row, ctx, run)) : [h("p", {class: "tl-empty"}, t("tools.added.none"))])); }};
   }
 
   // The setup form (card 3, Tool packs): how many packs are on, which are ready, which come from the harness.

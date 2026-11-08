@@ -394,7 +394,7 @@ const SERVERS = (function () {
       go.disabled = true; go.dataset.busy = "1";
       if (before) close.disabled = true;  // once VS Code is on its way out there is no way back
       const free = () => { delete go.dataset.busy; close.disabled = false; go.disabled = !picked.length; };
-      (before ? before() : Promise.resolve()).then(() => ask("open", {chosen: picked, primary})).then((done) => {
+      (before ? before((view) => { if (typeof READY !== "undefined") said.replaceChildren(READY.restartNote(view)); }) : Promise.resolve()).then(() => ask("open", {chosen: picked, primary})).then((done) => {
         said.replaceChildren(done.started ? t("connections.open.started", {n: done.direct.length + done.wrap.length}) : h("span", {class: "bad"}, done.why || ""));
         if (done.started) { if (opened) opened(); close.disabled = false; setTimeout(view.close, 2500); } else free();
       }, (error) => { said.replaceChildren(error && error.quiet ? "" : h("span", {class: "bad"}, (error && error.message) || String(error))); free(); });  // the person said no to the question about a working agent: VS Code was not touched

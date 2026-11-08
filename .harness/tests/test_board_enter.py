@@ -658,11 +658,12 @@ class BlockPageTests(unittest.TestCase):
         self.assertIn("SERVE.restartVS({open: true", ui)  # Open and Restart: quit, wait, open
         self.assertIn("SERVERS.choose(", ui)
         # with identities the person chooses first: VS Code is closed by the picker's own button, after the choice (1.7.38, T1-14b), never before the picker is up
-        self.assertIn("const quit = () => SERVE.restartVS({open: false", ui)
+        self.assertIn("const quit = (note) => SERVE.restartVS({open: false", ui)
         self.assertRegex(ui, r"SERVERS\.choose\(\(\) => \{[^}]*\}, quit\)")
         picker = (WEB / "servers.js").read_text(encoding="utf-8")
         self.assertIn("function choose(opened, before)", picker)
-        self.assertIn("(before ? before() : Promise.resolve()).then(() => ask(\"open\"", picker)  # quit, wait until it is gone, then open with the identities
+        self.assertIn("(before ? before(", picker)
+        self.assertIn(": Promise.resolve()).then(() => ask(\"open\"", picker)  # quit, wait until it is gone, then open with the identities
         self.assertIn("error && error.quiet", picker)  # no to the question about a working agent: nothing was touched
         self.assertIn('"/api/restart"', serve)
         self.assertIn("board.vs.restart.busy.one", serve)  # the question before it stops an agent at work

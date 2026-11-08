@@ -164,6 +164,20 @@ class Install(ToolpackCase):
         toolpacks.add(self.root, str(self.source))
         self.assertEqual(toolpacks.check(self.root)["toolpacks"][0]["programs"], {"tracker": True})
 
+    @unittest.skipIf(os.name == "nt", "a run bit is a macOS and Linux thing")
+    def test_a_program_the_pack_brings_shows_only_when_it_cannot_run(self) -> None:
+        """1.7.38: the company pack that brings its own program had an orange dot and no word why."""
+        (self.source / "bin").mkdir()
+        program = self.source / "bin" / "tracker"
+        program.write_text("#!/bin/sh\necho 1\n", encoding="utf-8")
+        (self.source / "bin" / "tracker.cmd").write_text("@echo 1\n", encoding="utf-8")
+        manifest = toolpacks.manifest(self.source)
+        program.chmod(0o755)
+        self.assertEqual(toolpacks.declared_needs(self.source, manifest, ""), [])
+        program.chmod(0o644)
+        rows = toolpacks.declared_needs(self.source, manifest, "")
+        self.assertEqual([(row["program"], row["found"], row["blocked"], row["why"]) for row in rows], [("tracker", False, str(program), "own")])
+
     def test_check_says_a_program_is_missing_and_finds_it_in_a_tool_folder(self) -> None:
         toolpacks.add(self.root, str(self.source))
         row = toolpacks.check(self.root)["toolpacks"][0]

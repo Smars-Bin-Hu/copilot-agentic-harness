@@ -171,7 +171,7 @@ const DOCK = (function () {
     const book = document.querySelector(".dock-book");
     if (!book) return;
     book.classList.toggle("dock-warn", Boolean(drift));
-    book.title = !drift ? t("dock.kb") : [drift.total ? t("dock.company.tip", {count: drift.total}) : t("dock.company.title.stuck"), ...drift.changes.slice(0, COMPANY_LINES).map(changeWord), ...drift.refused.slice(0, COMPANY_LINES).map(stuckWord), plainWords(drift.problem || "")].filter(Boolean).join("\n");
+    book.title = !drift ? t("dock.kb") : [drift.total ? t(drift.total === 1 ? "dock.company.tip.one" : "dock.company.tip", {count: drift.total}) : t("dock.company.title.stuck"), ...drift.changes.slice(0, COMPANY_LINES).map(changeWord), ...drift.refused.slice(0, COMPANY_LINES).map(stuckWord), plainWords(drift.problem || "")].filter(Boolean).join("\n");
   }
   function watchCompany() {
     SERVE.post("/api/company", {}).then((data) => { showDrift(data.result); setTimeout(watchCompany, COMPANY_EVERY); }, () => setTimeout(watchCompany, UNPAIRED_EVERY));

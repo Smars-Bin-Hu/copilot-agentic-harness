@@ -29,7 +29,7 @@ const READY = (function () {
   function vsAct(kind, hooks) {
     const given = hooks || {};
     if (kind === "identities" && typeof SERVERS !== "undefined") {
-      const quit = () => SERVE.restartVS({open: false, onState: (view) => { if (given.onState) given.onState(view, false); }}).then(() => waitGone());
+      const quit = (note) => SERVE.restartVS({open: false, onState: (view) => { if (given.onState) given.onState(view, false); if (note) note(view); }}).then(() => waitGone());
       return Promise.resolve(SERVERS.choose(() => { if (given.opened) given.opened(); }, quit));
     }
     return SERVE.restartVS({open: true, onState: (view) => { if (given.onState) given.onState(view, true); }}).then((view) => { if (given.opened) given.opened(); return view; });

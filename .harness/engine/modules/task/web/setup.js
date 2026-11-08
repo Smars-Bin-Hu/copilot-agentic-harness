@@ -345,6 +345,7 @@ const SETUP = (function () {
         parts.push(h("p", {class: "su-note"}, t("setup.short.do")), h("div", {class: "su-cmd"}, h("code", null, found.short.command), copy), h("div", {class: "su-end"}, run), out);
       } else {
         if (found.reopen) parts.push(h("p", {class: "su-warn"}, t("setup.short.reopen")));
+        parts.push(h("p", {class: "su-note"}, t("setup.short.where")));  // the path above may be another copy's: it runs the copy of the folder you are in (1.7.38)
         const test = h("button", {type: "button", class: "act"}, t("setup.short.test"));
         test.addEventListener("click", () => testShort(test));
         parts.push(h("div", {class: "su-end"}, test, h("code", {class: "su-note"}, "harness --version")), testOut);

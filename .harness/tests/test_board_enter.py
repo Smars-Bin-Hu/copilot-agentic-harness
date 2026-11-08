@@ -171,6 +171,9 @@ class ReadinessTests(TaskCase):
         (engine / "cli.py").write_text("import os\nprint('[WARN]  a note')\nprint('[WARN:company] ' + os.environ.get('HARNESS_DOCTOR_TOPICS', 'unset'))\nprint('{\"errors\": 0}')\n", encoding="utf-8")
         found = ready.run_doctor(self.root)
         self.assertEqual((found["errors"], found["company"], found["company_n"], found["warned"], found["warning"]), (0, ["1"], 1, 2, "a note"))
+        (engine / "cli.py").write_text("print('[WARN:copies] Copies differ')\nprint('{\"errors\": 0}')\n", encoding="utf-8")
+        found = ready.run_doctor(self.root)  # the copies are counted by the board itself, with a Sync button: not as a note of doctor (1.7.38)
+        self.assertEqual((found["company"], found["company_n"], found["warned"], found["warning"]), ([], 0, 1, "Copies differ"))
         from importlib import reload
         import doctor
 
@@ -186,6 +189,21 @@ class ReadinessTests(TaskCase):
             report.warn("other")
         self.assertEqual(report.lines, ["[WARN]  kb", "[WARN]  plain", "[WARN:company] tagged", "[WARN]  other"])
         del reload
+
+    def test_a_sync_makes_the_board_run_doctor_again_at_its_next_question(self) -> None:
+        runs: List[int] = []
+
+        def counting(_root: Path) -> Dict[str, Any]:
+            runs.append(1)
+            return {"errors": 0, "first": "", "failed": ""}
+
+        check = ready.Ready(self.root, StubLink(UP), counting)
+        settled(check)
+        check.answer(True)
+        self.assertEqual(len(runs), 1)  # a clean doctor is kept for ten minutes
+        check.drop_doctor()
+        settled(check)
+        self.assertEqual(len(runs), 2)
 
     def test_the_notes_of_the_doctor_about_the_company_join_the_knowledge_base_row(self) -> None:
         def noisy(_root: Path) -> Dict[str, Any]:

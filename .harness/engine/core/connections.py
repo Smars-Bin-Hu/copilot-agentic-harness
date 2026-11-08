@@ -488,7 +488,9 @@ def test(root: Path, alias: str, given: Dict[str, str], server: Optional[Dict[st
     else:
         lacking = next((one for one in toolpacks.signin_needs(kind, server) if not toolpacks.locate(one, path)), "")  # the program of the sign-in way (`az`) is needed too
     if lacking:
-        return {"state": "missing", "why": say("connections.test.missing", program=lacking), "who": "", "seconds": 0, "layers": connlayers.classify(kind, server, alias, "missing", "", how, identity, program=lacking)}
+        no_run = toolpacks.blocked(lacking, path)  # there, but with no run bit (a zip that lost it): told in its own words, not as "not found"
+        return {"state": "missing", "why": say("connections.test.blocked" if no_run else "connections.test.missing", program=lacking, path=no_run), "who": "", "seconds": 0,
+                "layers": connlayers.classify(kind, server, alias, "missing", "", how, identity, program=lacking, blocked=no_run)}
     if how == "netonly" and not (identity.get("account") and identity.get("password")):  # a Windows account is typed first: nothing to run without it
         return {"state": "denied", "why": "no-identity", "who": "", "seconds": 0, "layers": connlayers.classify(kind, server, alias, "denied", "", how, {})}
     started = time.time()
@@ -563,7 +565,16 @@ def login(root: Path, alias: str, own: Optional[Dict[str, Any]] = None) -> Tuple
     if auth.get("identity") != "tool" or not auth.get("login"):
         return 2, say("connections.login.none", alias=alias)
     values = {field: _quote(str(server.get(field) if server.get(field) not in (None, "") else spec.get("default", ""))) for field, spec in (kind.get("fields") or {}).items()}
-    return subprocess.run(_fill(str(auth["login"]), values), shell=True, cwd=str(root), env={**os.environ, **launchenv.extra(root)}).returncode, ""  # noqa: S602 - the kind's own sign-in, started by the person
+    line = _fill(str(auth["login"]), values)
+    launch = launchenv.extra(root)
+    path = next((value for key, value in launch.items() if key.upper() == "PATH"), None)
+    if missing_program(line, path):  # say it in words before the shell says `Permission denied` or `not found` with a code (1.7.38)
+        from . import toolpacks
+
+        program = shlex.split(line, posix=os.name != "nt")[0]
+        no_run = toolpacks.blocked(program, path)
+        return 126 if no_run else 127, say("connections.login.blocked" if no_run else "connections.login.missing", program=program, path=no_run)
+    return subprocess.run(line, shell=True, cwd=str(root), env={**os.environ, **launch}).returncode, ""  # noqa: S602 - the kind's own sign-in, started by the person
 
 
 def save(root: Path, alias: str, given: Dict[str, str], own: Optional[Dict[str, Any]] = None, who: str = "") -> None:

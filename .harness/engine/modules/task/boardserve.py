@@ -1621,6 +1621,7 @@ def handler_for(board: Board) -> type:
                         done = company.sync(board.root, remove=True)
                         if done.get("failed"):  # a company pack has the name of a factory pack: nothing was changed (1.7.38)
                             return self.answer(409, {"error": done["error"], "clashes": done.get("clashes") or []})
+                        board.ready.drop_doctor()  # the notes of doctor were about the copies as they were
                     return self.answer(200, {"result": company.diff(board.root)})
                 except company.DirtyError as error:
                     return self.answer(409, {"error": str(error), "dirty": error.path})

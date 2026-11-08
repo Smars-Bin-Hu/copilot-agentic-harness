@@ -53,17 +53,17 @@ def _layers(**marks: str) -> Dict[str, str]:
     return {step: marks.get(step, SKIP) for step in STEPS}
 
 
-def classify(kind: Dict[str, Any], server: Dict[str, Any], alias: str, state: str, output: str, how: str, identity: Dict[str, str], *, why: str = "", program: str = "", timeout: int = 0) -> Dict[str, Any]:
+def classify(kind: Dict[str, Any], server: Dict[str, Any], alias: str, state: str, output: str, how: str, identity: Dict[str, str], *, why: str = "", program: str = "", timeout: int = 0, blocked: str = "") -> Dict[str, Any]:
     """`{steps, broken, text, link}` of a test that did not pass. `state` is the word of `judge` (denied, down, failed) or `missing`; `how` the identity way
     (`tool`, `env`, `netonly`, `keyfile`, `token`); `identity` what the test ran with; `why` the word of `judge`; `program` the program that is not found; `timeout` the seconds a timed-out test was given.
-    `link` names the part of the Local window that helps (`{part, focus}`), or is empty."""
+    `blocked`: the place of the program when it is there but has no run bit. `link` names the part of the Local window that helps (`{part, focus}`), or is empty."""
     where, address = where_of(kind, server), address_of(kind, server)
     account = str(identity.get("account") or "")
     tool = str((kind.get("auth") or {}).get(server.get("auth") or next(iter(kind.get("auth") or {}), ""), {}).get("login") or "").split(" ")[0] or "the tool"
     have_credential = bool(identity) if how != "tool" else True
     lost = kind.get("signin_lost")
     if state == "missing" and program:
-        return _out(_layers(program=BAD), "program", "program", {"program": program}, {"part": "programs", "focus": "prog:" + program})
+        return _out(_layers(program=BAD), "program", "program.blocked" if blocked else "program", {"program": program, "path": blocked}, {"part": "programs", "focus": "prog:" + program})
     if timeout:
         return _out(_layers(program=OK, signin=UNKNOWN, access=UNKNOWN, address=UNKNOWN), "", "timeout", {"seconds": timeout}, None)
     if state == "denied" and why == "other-identity":  # the program ran and answered, but not with the account the type expects: no word on any step

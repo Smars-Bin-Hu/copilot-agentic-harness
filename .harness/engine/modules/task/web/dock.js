@@ -176,6 +176,10 @@ const DOCK = (function () {
   function watchCompany() {
     SERVE.post("/api/company", {}).then((data) => { showDrift(data.result); setTimeout(watchCompany, COMPANY_EVERY); }, () => setTimeout(watchCompany, UNPAIRED_EVERY));
   }
+  // The Sync button of the Enter screen and of the block at the top of the board (1.7.38): `sync`, or `prefix` (the company's word goes in the person's file first). The book follows the answer.
+  function syncCompany(op) {
+    return SERVE.post("/api/company", {op: op === "prefix" ? "prefix" : "sync"}).then((data) => { showDrift(data.result); return data.result; });
+  }
   function driftCard(node) {
     const said = h("p", {class: "bad"});
     const go = h("button", {type: "button", class: "act hot"}, t("dock.company.go"));
@@ -205,6 +209,9 @@ const DOCK = (function () {
     const alarm = h("p", {class: "bad kb-alarm", hidden: ""});  // outside the stage: a drawn view stays as it is
     const synced = h("section", {class: "kb-sync", hidden: ""});
     driftCard(synced);
+    // The copies are looked at again when the window opens and with Refresh (1.7.38): a person who just changed the knowledge base should not wait for the 2 minutes of the book
+    const recheck = () => SERVE.post("/api/company", {}).then((data) => { showDrift(data.result); driftCard(synced); }, () => {});
+    recheck();
     const packed = h("p", {class: "su-note kb-packed", hidden: ""});
     const pack = h("button", {type: "button", class: "act", title: t("dock.pack.hint"), hidden: hasCompany ? null : ""}, t("dock.pack"));
     function paintPackError(error) {  // changes git does not hold: they are the person's, so the way on shows them and commits them in the person's own Terminal window
@@ -406,7 +413,7 @@ const DOCK = (function () {
       if (key === "lookup") { lookup(); return; }
       const op = ["health", "atlas", "company"].includes(key) ? key : "status";
       const paint = key === "health" ? health : key === "atlas" ? (found) => ATLAS.draw(stage, found) : key === "company" ? (found) => COMPANYTAB.draw(stage, found, {goMap: () => show("atlas"), goDomains: () => show("domains"), goTools: typeof TOOLS !== "undefined" ? () => TOOLS.open("packs", () => show("company")) : null}) : key === "overview" ? overview : domains;
-      again.onclick = () => { clearTimeout(timer); load(op, paint, true); loadDetail(true); };
+      again.onclick = () => { clearTimeout(timer); load(op, paint, true); loadDetail(true); recheck(); };
       load(op, paint, !asked.has(op));
       asked.add(op);
       if (op === "status" && !asked.has("detail")) { asked.add("detail"); loadDetail(true); }
@@ -495,5 +502,5 @@ const DOCK = (function () {
   }
 
   if (typeof DATA !== "undefined" && DATA.serve) build();
-  return {start, allSkills, kbWindow, setupWindow, enterScreen, chooseOnPage};
+  return {start, allSkills, kbWindow, setupWindow, enterScreen, chooseOnPage, syncCompany};
 })();

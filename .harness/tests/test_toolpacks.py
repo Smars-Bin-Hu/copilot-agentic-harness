@@ -10,6 +10,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import unittest
 import zipfile
 from pathlib import Path
 
@@ -268,6 +269,31 @@ class ToolIdentity(ToolpackCase):
         env = connections.read_env(self.root)
         self.assertEqual(connections.identity_of(env, "board", TOOL_KIND), {"account": "me@example.org"})
         self.assertEqual(connections.plan(self.root, ["board"])["direct"], ["board"])
+
+    @unittest.skipIf(os.name == "nt", "a run bit is a macOS and Linux thing")
+    def test_a_program_with_no_run_bit_is_told_in_words_not_as_not_found_and_not_as_code_126(self) -> None:
+        """1.7.38: a zip that lost the run bit left `runbook` there but not allowed to run. Test, the sign-in, the pack's needs and the Local rows say so."""
+        program = self.tools / "tracker"
+        launchenv.save_paths(self.root, [str(self.tools)])
+        program.chmod(0o644)
+        found = connections.test(self.root, "board", {})
+        self.assertEqual(found["state"], "missing")
+        self.assertIn("chmod +x", found["why"])
+        self.assertIn(str(program), found["why"])
+        self.assertEqual((found["layers"]["broken"], found["layers"]["key"]), ("program", "program.blocked"))
+        code, said = connections.login(self.root, "board")
+        self.assertEqual(code, 126)
+        self.assertIn("chmod +x", said)
+        done = self.cli("connections", "login", "board")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("chmod +x", done.stdout + done.stderr)
+        self.assertNotIn("Permission denied", done.stdout + done.stderr)
+        row = next(item for item in toolpacks.needs_report(self.root)["tracker"] if item["program"] == "tracker")
+        self.assertEqual((row["found"], row["blocked"]), (False, str(program)))
+        self.assertEqual(next(item for item in launchenv._program_rows(self.root) if item["program"] == "tracker")["blocked"], str(program))  # noqa: SLF001
+        program.chmod(0o755)
+        self.assertTrue(next(item for item in toolpacks.needs_report(self.root)["tracker"] if item["program"] == "tracker")["found"])
+        self.assertEqual(toolpacks.blocked("nothing-like-it", str(self.tools)), "")
 
     def test_a_board_with_no_environment_is_a_system_of_the_toolpack_and_its_writes_are_held(self) -> None:
         system = config.load_policy(self.root, "tools")["systems"]["board"]

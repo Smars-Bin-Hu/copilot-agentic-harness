@@ -45,6 +45,7 @@ COMPUTER_COPY = ".harness/policies/computer.company.json"
 NOT_CONTENT = {".git", ".DS_Store", "Thumbs.db"}
 PLACEHOLDER = {"README.md", ".gitkeep"}  # what an empty knowledge base ships with
 BACKUP_DIR = "company-backup"
+COPIES_LEDGER = "company-copies.json"  # in `.harness/runtime/`: the skills the last sync put in `.github/skills/`; with it a sync takes back a copy whose name the company has left (a new `skill_prefix`)
 SHOWN = 20
 DIFF_SHOWN = 200  # lines of `diff`; `total` has them all
 GIT_SECONDS = 60
@@ -76,6 +77,51 @@ def say(key: str, /, **values: Any) -> str:
 
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def is_program(name: str) -> bool:
+    """A file in the `bin/` of a tool pack the company wrote: `company/tools/packs/<pack>/bin/<file>`. It must run, so its zip entry says so (1.7.38)."""
+    parts = PurePosixPath(name).parts
+    return len(parts) >= 6 and parts[:3] == (targets.COMPANY_DIR, TOOLS_DIR, "packs") and parts[4] == "bin"
+
+
+def zip_mode(kb: Path, name: str, data: bytes) -> int:
+    """The mode a file gets in the package: 755 when the file runs here, or is a program of a company pack that starts with `#!` (a package made on Windows has no run bit to read), else 644."""
+    try:
+        runs = bool((kb / name).stat().st_mode & 0o111)
+    except OSError:
+        runs = False
+    return 0o755 if runs or (is_program(name) and data[:2] == b"#!") else 0o644
+
+
+def zip_entry(name: str, mode: int) -> zipfile.ZipInfo:
+    info = zipfile.ZipInfo(name, date_time=time.localtime()[:6])
+    info.compress_type = zipfile.ZIP_DEFLATED
+    info.create_system = 3  # Unix: the mode in `external_attr` counts
+    info.external_attr = (mode & 0o777) << 16
+    return info
+
+
+def run_bit(path: Path) -> None:
+    """Give a file the run bit where it can be read. Windows ignores it; a file that cannot be changed stays as it is."""
+    try:
+        mode = path.stat().st_mode
+        path.chmod(mode | ((mode & 0o444) >> 2))
+    except OSError:
+        pass
+
+
+def restore_modes(kb: Path, package: zipfile.ZipFile, names: List[str]) -> None:
+    """After a package is put in place: a file the package marks as one that runs gets its run bit (also when its content did not change), and so does a program of a company pack that starts with
+    `#!` in a package that says nothing about modes (an older one). Without it the program cannot run on macOS or Linux (1.7.38)."""
+    for name in names:
+        path = kb / name
+        if not path.is_file():
+            continue
+        info = package.getinfo(name)
+        marked = info.create_system == 3 and bool((info.external_attr >> 16) & 0o111)
+        if (marked or (is_program(name) and path.read_bytes()[:2] == b"#!")) and not path.stat().st_mode & 0o111:
+            run_bit(path)
 
 
 def digests(folder: Path) -> Dict[str, str]:
@@ -143,7 +189,30 @@ def copies(root: Path, folder: Path) -> Dict[str, Any]:
 
     put = {skill for entry in toolpacks.ledger(root)["packs"].values() for skill in entry.get("skills") or []}
     only_here = sorted(item.name for item in here.glob(f"{have}-*") if item.is_dir() and item.name not in named and item.name not in put) if have else []
-    return {"pairs": pairs, "refused": refused, "only_here": only_here}
+    # 1.7.38: a copy the last sync put under another word (the company changed `skill_prefix`) is taken back, with the same backup; a skill that is not in the ledger is none of our business
+    left = sorted(name for name in ledger_names(root) if have and not name.startswith(have + "-") and name not in put and (here / name).is_dir())
+    return {"pairs": pairs, "refused": refused, "only_here": sorted(set(only_here) | set(left))}
+
+
+def ledger_names(root: Path) -> List[str]:
+    """The skills the last sync put in `.github/skills/` (the company's own)."""
+    try:
+        found = json.loads((runtime_dir(root) / COPIES_LEDGER).read_text(encoding="utf-8"))
+        return [str(name) for name in found.get("skills") or [] if isinstance(name, str) and name and "/" not in name]
+    except (OSError, ValueError, AttributeError):
+        return []
+
+
+def write_ledger(root: Path, names: List[str]) -> None:
+    names = sorted(dict.fromkeys(names))
+    if names == sorted(ledger_names(root)):
+        return
+    try:
+        target = runtime_dir(root) / COPIES_LEDGER
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps({"skills": names}, indent=2) + "\n", encoding="utf-8")
+    except OSError:
+        pass  # only the taking back of an old name needs it
 
 
 def same(source: Path, target: Path) -> bool:
@@ -187,6 +256,8 @@ def sync(root: Path, remove: bool = False) -> Dict[str, Any]:
             done.append(f"{SKILLS_DIR}/{name}")
         plan["only_here"] = []
     same_now = len(plan["pairs"]) - len(done)
+    kept = [name for name in ledger_names(root) if (root / SKILLS_DIR / name).is_dir()]  # one that was taken back is gone from the folder now
+    write_ledger(root, [Path(name).name for name, _source, _target in plan["pairs"] if name.startswith(SKILLS_DIR + "/")] + kept)
     packs = toolpacks.sync_skills(root)  # the skills of the active tool packs: put, renamed with the company's word, taken back, put again when the version changed
     done += [f"{SKILLS_DIR}/{name}" for name in packs["put"] + packs["removed"]]
     plan["refused"] += [{"skill": item["skill"], "why": item["why"]} for item in packs["refused"]]
@@ -262,8 +333,9 @@ def diff(root: Path) -> Dict[str, Any]:
     try:
         plan = copies(root, folder)
     except CompanyError as error:
-        word = skillcheck.usable(wanted_prefix(folder))
-        return {"found": True, "in_sync": False, "changes": [], "total": 0, "refused": [], "problem": say("company.prefix.board", word=word) if word else str(error), "fix": word, "next": str(error)}
+        word, have = skillcheck.usable(wanted_prefix(folder)), skillcheck.company_prefix(root)
+        problem = (say("company.prefix.board", word=word, have=have) if have else say("company.prefix.board.none", word=word)) if word else str(error)  # 1.7.38: "another one" only when there is one
+        return {"found": True, "in_sync": False, "changes": [], "total": 0, "refused": [], "problem": problem, "fix": word, "next": str(error)}
     changes = [row for name, source, target in plan["pairs"] for row in difference(name, source, target)] + [{"path": f"{SKILLS_DIR}/{name}", "change": "remove"} for name in plan["only_here"]]
     changes += pack_changes(root)
     same_now = not changes and not plan["refused"]
@@ -395,7 +467,7 @@ def found_in_place(root: Path) -> List[str]:
 def skill_trouble(folder: Path, word: str) -> str:
     """Why a company skill would not reach a colleague, with its name; "" when it would."""
     why = say("company.why.prefix", word=word) if not folder.name.startswith(word + "-") else next(iter(skillcheck.check(folder, word)["errors"]), "")
-    return f"{folder.name}: {why}" if why else ""
+    return f"{folder.name}: {why.rstrip('. ')}" if why else ""  # the message that holds the list ends with its own full stop
 
 
 def changed_lines(status: bytes) -> List[str]:
@@ -426,7 +498,8 @@ def check_for_pack(root: Path, kb: Path) -> str:
 
 
 def next_version(out: Path, word: str) -> str:
-    today = time.strftime("%Y.%m.%d")
+    """The date and the minute (1.7.38): two packages of one day do not overwrite each other. Made in the same minute, the second gets `.2`."""
+    today = time.strftime("%Y.%m.%d-%H%M")
     version, count = today, 1
     while (out / f"{word}-kb-{version}.zip").exists():
         count += 1
@@ -460,8 +533,8 @@ def pack(root: Path, raw_out: str) -> Dict[str, Any]:
             for name in names:
                 data = (kb / name).read_bytes()
                 manifest["files"][name] = digest(data)
-                package.writestr(name, data)
-            package.writestr(MANIFEST_PATH, json.dumps(manifest, indent=2, sort_keys=True))
+                package.writestr(zip_entry(name, zip_mode(kb, name, data)), data)
+            package.writestr(zip_entry(MANIFEST_PATH, 0o644), json.dumps(manifest, indent=2, sort_keys=True))
     except OSError:
         target.unlink(missing_ok=True)
         raise
@@ -536,6 +609,7 @@ def apply_package(root: Path, kb: Path, path: Path, manifest: Dict[str, Any], ch
         for name in change["new"] + change["changed"]:
             (kb / name).parent.mkdir(parents=True, exist_ok=True)
             (kb / name).write_bytes(package.read(name))
+        restore_modes(kb, package, sorted(manifest["files"]))  # before the commit below: the run bit is part of the version
         for name in change["removed"]:
             (kb / name).unlink()
         for folder in sorted((item for item in kb.rglob("*") if item.is_dir() and ".git" not in item.relative_to(kb).parts), key=lambda item: len(item.parts), reverse=True):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+import time
 import unittest
 import zipfile
 from pathlib import Path
@@ -17,6 +18,7 @@ from core import setup as core_setup
 from core.company import CompanyError
 from modules.task import setupjob
 
+REAL_STRFTIME = time.strftime
 SKILL = "---\nname: {name}\ndescription: 'Open a ticket in the tracker. Use when a task needs a ticket.'\ntype: workflow\nspecificTo: generic\n---\n\n# Ticket\n\nOpen one.\n"
 RULE = "### No select star\n\n- **Applies to**: `*.sql`\n- **Rule**: name the columns.\n"
 FILES = {
@@ -99,6 +101,26 @@ class SyncTests(CompanyCase):
         company.sync(self.root, remove=True)
         self.assertFalse((self.root / ".github" / "skills" / "acme-gone").exists())
         self.assertEqual([path.name for path in (self.root / ".harness" / "runtime" / "company-backup").glob("*/*")], ["acme-gone"])
+
+    def test_a_copy_put_under_an_old_word_is_taken_back_when_the_word_changes(self) -> None:
+        set_prefix(self.root)
+        company.sync(self.root)
+        self.assertEqual(json.loads((self.root / ".harness" / "runtime" / "company-copies.json").read_text(encoding="utf-8"))["skills"], ["acme-ticket"])
+        put(self.root, {".github/skills/mine-own/SKILL.md": "not the company's\n"})
+        shutil.move(str(self.kb / "company" / "skills" / "acme-ticket"), str(self.kb / "company" / "skills" / "bnk-ticket"))
+        (self.kb / "company" / "company.json").write_text('{ "skill_prefix": "bnk" }\n', encoding="utf-8")
+        (self.kb / "company" / "skills" / "bnk-ticket" / "SKILL.md").write_text(SKILL.format(name="bnk-ticket"), encoding="utf-8")
+        set_prefix(self.root, "bnk")
+        self.assertIn({"path": ".github/skills/acme-ticket", "change": "remove"}, company.diff(self.root)["changes"])
+        company.sync_after(self.root)
+        self.assertTrue((self.root / ".github" / "skills" / "acme-ticket").is_dir())  # only a person's sync takes it back
+        result = company.sync(self.root, remove=True)
+        self.assertIn(".github/skills/acme-ticket", result["copied"])
+        self.assertFalse((self.root / ".github" / "skills" / "acme-ticket").exists())
+        self.assertTrue((self.root / ".github" / "skills" / "bnk-ticket").is_dir())
+        self.assertTrue((self.root / ".github" / "skills" / "mine-own").is_dir())  # not in the ledger: none of our business
+        self.assertEqual([path.name for path in (self.root / ".harness" / "runtime" / "company-backup").glob("*/*")], ["acme-ticket"])
+        self.assertTrue(company.diff(self.root)["in_sync"])
 
     def test_no_company_content_is_no_difference(self) -> None:
         with mock.patch.object(company.targets, "company_folder", return_value=None):
@@ -201,6 +223,10 @@ class PackageCase(HarnessTestCase):
     def pack(self) -> dict:
         return company.pack(self.root, str(self.out))
 
+    def one_minute(self):
+        """The clock stands at 14:32 on 8 November: two packages of this minute meet."""
+        return mock.patch.object(company.time, "strftime", side_effect=lambda fmt: "2026.11.08-1432" if fmt == "%Y.%m.%d-%H%M" else REAL_STRFTIME(fmt))
+
     def owner_changes(self, files: dict, gone: tuple = ()) -> None:
         put(self.kb, files)
         for name in gone:
@@ -220,7 +246,53 @@ class PackageCase(HarnessTestCase):
             manifest = json.loads(package.read(company.MANIFEST_PATH))
         self.assertEqual(manifest["skill_prefix"], "acme")
         self.assertEqual(self.pack()["version"], f"{made['version']}.2")  # never over an earlier package
+        self.assertRegex(made["version"], r"^\d{4}\.\d{2}\.\d{2}-\d{4}$")  # the date and the minute
         self.assertTrue(Path(made["package"]).is_file())
+
+    def test_a_program_of_a_company_pack_keeps_its_run_bit_through_a_package_and_an_update(self) -> None:
+        program = "company/tools/packs/runbook/bin/runbook"
+        plain = "company/tools/packs/runbook/README.md"
+        put(self.kb, {program: "#!/usr/bin/env python3\nprint(1)\n", plain: "x\n", "company/tools/packs/runbook/bin/other": "#!/bin/sh\n"})
+        (self.kb / program).chmod(0o755)
+        (self.kb / "company/tools/packs/runbook/bin/other").chmod(0o644)  # written on a computer with no run bit: the first line says it is a program
+        run_git(self.kb, "add", "-A")
+        run_git(self.kb, "commit", "-qm", "pack")
+        made = self.pack()
+        with zipfile.ZipFile(made["package"]) as package:
+            modes = {item.filename: (item.external_attr >> 16) & 0o777 for item in package.infolist()}
+        self.assertEqual((modes[program], modes["company/tools/packs/runbook/bin/other"], modes[plain], modes["README.md"]), (0o755, 0o755, 0o644, 0o644))
+        set_prefix(self.mate)
+        self.update(made["package"])
+        kb = self.mate / "knowledge-base"
+        self.assertTrue((kb / program).stat().st_mode & 0o100)
+        self.assertTrue((kb / "company/tools/packs/runbook/bin/other").stat().st_mode & 0o100)
+        self.assertFalse((kb / plain).stat().st_mode & 0o111)
+        # the same content again, the program has lost its bit here: an update gives it back
+        (kb / program).chmod(0o644)
+        self.update(made["package"])
+        self.assertTrue((kb / program).stat().st_mode & 0o100)
+
+    def test_a_package_of_before_the_modes_still_gives_a_program_its_bit(self) -> None:
+        program = "company/tools/packs/runbook/bin/runbook"
+        put(self.kb, {program: "#!/usr/bin/env python3\n"})
+        run_git(self.kb, "add", "-A")
+        run_git(self.kb, "commit", "-qm", "pack")
+        made = self.pack()
+        old = self.place / "old.zip"
+        with zipfile.ZipFile(made["package"]) as package, zipfile.ZipFile(old, "w") as again:
+            for name in package.namelist():
+                again.writestr(name, package.read(name))  # what 1.7.37 did: mode 600 for all
+        set_prefix(self.mate)
+        self.update(str(old))
+        self.assertTrue((self.mate / "knowledge-base" / program).stat().st_mode & 0o100)
+
+    def test_two_packages_of_one_day_do_not_overwrite_each_other(self) -> None:
+        with self.one_minute():
+            first = self.pack()
+        with mock.patch.object(company.time, "strftime", side_effect=lambda fmt: "2026.11.08-1433" if fmt == "%Y.%m.%d-%H%M" else REAL_STRFTIME(fmt)):
+            second = self.pack()
+        self.assertEqual((first["version"], second["version"]), ("2026.11.08-1432", "2026.11.08-1433"))
+        self.assertTrue(Path(first["package"]).is_file() and Path(second["package"]).is_file())
 
     def test_the_owner_cannot_pack_what_a_colleague_could_not_use(self) -> None:
         with self.assertRaises(CompanyError):

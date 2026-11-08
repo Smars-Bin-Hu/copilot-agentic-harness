@@ -186,7 +186,7 @@ def _program_rows(root: Path) -> List[Dict[str, Any]]:
     for program, who in sorted(wanted.items()):
         where = toolpacks.locate(program, path)
         hint = hints.get(program) or {}
-        out.append({"program": program, "found": bool(where), "path": where, "needed_by": who, "hint": hint.get("hint", ""), "label": hint.get("label", "")})
+        out.append({"program": program, "found": bool(where), "path": where, "blocked": "" if where else toolpacks.blocked(program, path), "needed_by": who, "hint": hint.get("hint", ""), "label": hint.get("label", "")})
     return out
 
 

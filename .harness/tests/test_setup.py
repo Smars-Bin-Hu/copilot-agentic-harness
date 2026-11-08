@@ -354,6 +354,14 @@ class KnowledgeBaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             setupjob.copy_folder(self.root, self.source)
 
+    def test_keeping_a_knowledge_base_in_place_is_not_told_as_not_set(self) -> None:
+        """1.7.38: the result line of Keep it said "not set; you can set it later" while a knowledge base was there."""
+        def line(key: str) -> str:
+            return dict((name, step) for name, step in setupjob.steps(self.root, {"kb_mode": "none"}))[key]()
+        self.assertEqual(line("kb"), messages.text("setup.line.later"))  # the placeholder README only: nothing is in place
+        setupjob.copy_folder(self.root, self.source)
+        self.assertEqual(line("kb"), messages.text("setup.kb.kept"))
+
     def test_a_copy_that_fails_leaves_nothing_and_can_be_run_again(self) -> None:
         (self.source / "secret.md").write_text("x", encoding="utf-8")
         with mock.patch("shutil.copytree", side_effect=OSError("no way")):

@@ -378,7 +378,7 @@
   function optView(c) {
     const level = c.state === "ok" ? "ok" : c.state === "yellow" ? "yellow" : "grey";
     const notes = (c.problems || []).filter((problem) => problem.short).map((problem) => ({text: problem.short, fix: problem.fix}));
-    return {state: c.state === "ok" ? "ok" : "note", level, tag: c.detail || "", notes, tip: ""};
+    return {state: c.state === "ok" ? "ok" : "note", level, tag: c.detail || "", notes, tip: c.tip || ""};
   }
   // Names with a dot each (tool packs, connections): one line, "+N" for those that do not fit; the table of environments, states, reasons and times of the connections is a window on hover (1.7.19).
   // A name is never cut: the first one wraps when it alone is wider than the line.

@@ -40,7 +40,7 @@ SLOW_GATE_SHARE = 0.5  # of the PreToolUse timeout: the SDK engine lets a call t
 DEFAULT_HOOK_TIMEOUT = 30
 
 
-TOPICS = "HARNESS_DOCTOR_TOPICS"  # the board's own run (1.7.38): a warning about the company's content (knowledge base, its copies, standards, repositories) says so, `[WARN:company]`; a person's run prints `[WARN]` as always
+TOPICS = "HARNESS_DOCTOR_TOPICS"  # the board's own run (1.7.38): a warning about the company's content (knowledge base, standards, repositories) says so, `[WARN:company]`; one about its copies `[WARN:copies]`; a person's run prints `[WARN]` as always
 
 
 class Report:
@@ -849,7 +849,7 @@ def run(root: Path) -> int:
     check_knowledge_base(report, root)
     report.topic = ""
     check_skills(report, root)  # skills, packs and systems: the items of readyitems.py say more, so they are not counted twice
-    report.topic = "company"
+    report.topic = "copies"  # the board counts the copies itself (readyitems.sync_item), with a button; its count of doctor's notes leaves this line out
     check_company(report, root)
     report.topic = ""
     check_toolpacks(report, root)

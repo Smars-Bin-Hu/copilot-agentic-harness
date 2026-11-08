@@ -318,6 +318,20 @@ def locate(program: str, path: Optional[str]) -> str:
     return shutil.which(str(program), path=path) or ""
 
 
+def blocked(program: str, path: Optional[str]) -> str:
+    """Where `program` is on `path` when the file is there but has no run bit (macOS and Linux), else "". A pack handed over in a zip that lost the bit brings such a file (1.7.38)."""
+    if os.name == "nt" or not program or "/" in str(program):
+        return ""
+    for folder in (path if path is not None else os.environ.get("PATH", "")).split(os.pathsep):
+        try:
+            found = Path(folder) / str(program) if folder else None
+            if found is not None and found.is_file() and not os.access(found, os.X_OK):
+                return str(found)
+        except OSError:
+            continue
+    return ""
+
+
 def signin_needs(kind: Dict[str, Any], server: Dict[str, Any]) -> List[str]:
     """The programs the sign-in way a connection uses asks for (`auth.<way>.needs`, 1.7.37): az for `signin`, nothing for `token`."""
     modes = kind.get("auth") or {}
@@ -338,7 +352,7 @@ def needs_report(root: Path, only: str = "", include_off: bool = False) -> Dict[
         rows: List[Dict[str, Any]] = []
         for program in (item["manifest"].get("needs") or {}).get("programs") or []:
             where = locate(program, path)
-            rows.append({"program": str(program), "found": bool(where), "path": where, "why": "pack"})
+            rows.append({"program": str(program), "found": bool(where), "path": where, "why": "pack", "blocked": "" if where else blocked(str(program), path)})
         if item["active"]:
             for alias, server in servers.items():
                 kind = kinds.get(str(server.get("type"))) or {}
@@ -346,7 +360,7 @@ def needs_report(root: Path, only: str = "", include_off: bool = False) -> Dict[
                     continue
                 for program in signin_needs(kind, server):
                     where = locate(program, path)
-                    rows.append({"program": program, "found": bool(where), "path": where, "why": f"signin:{alias}"})
+                    rows.append({"program": program, "found": bool(where), "path": where, "why": f"signin:{alias}", "blocked": "" if where else blocked(program, path)})
         out[name] = rows
     return out
 
@@ -399,6 +413,7 @@ def declared_needs(folder: Path, manifest: Dict[str, Any], path: Optional[str]) 
     for row in rows.values():
         row["path"] = locate(row["program"], path)
         row["found"] = bool(row["path"])
+        row["blocked"] = "" if row["found"] else blocked(row["program"], path)
     return [row for row in rows.values() if row["program"] not in brought]
 
 

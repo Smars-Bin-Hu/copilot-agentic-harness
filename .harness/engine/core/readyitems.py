@@ -10,6 +10,7 @@
   fix       the place that mends the item, or {}: {to, label, ...}; `to` is setup (the Get ready form: `sec`), tools (a window: `tab`, `part`), kb (the knowledge base window: `tab`)
   names     packs and connections: [{name, state}] (ok, need, down, none, untested), for a dot each
   problems  [{key, text, why, short, fix}]: one for each thing the person should look at; `text` and `why` for the board block, `short` for a note under the Enter row
+  tip       a sentence for the hover of the row; "" when there is none
   found     kb only: whether a knowledge base with content is in place
 
 Nothing here blocks anything. A caller that counts "to look at" counts `problems`. MCP never appears: a connection that VS Code runs is not here.
@@ -20,7 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import config, domainskills, launchenv, messages, reach, skillcheck, skillgroups, targets, toolpacks
+from . import company, config, domainskills, launchenv, messages, reach, skillcheck, skillgroups, standards, targets, toolpacks
 from . import connections as conn_core
 
 SHOWN_NAMES = 4  # names in one sentence of the board block; the rest is "+N"
@@ -55,13 +56,6 @@ def fix_kb(tab: str, label: str) -> Dict[str, Any]:
     return {"to": "kb", "tab": tab, "label": label}
 
 
-def files_in(folder: Optional[Path]) -> int:
-    try:
-        return len([item for item in folder.iterdir() if item.is_file() and item.suffix == ".md" and item.name not in README]) if folder is not None and folder.is_dir() else 0
-    except OSError:
-        return 0
-
-
 def home_short(path: Path) -> str:
     """`~/repos` for a folder in the home folder, else the path as it is."""
     try:
@@ -70,8 +64,8 @@ def home_short(path: Path) -> str:
         return str(path)
 
 
-def item(key: str, state: str, detail: str, fix: Optional[Dict[str, Any]] = None, names: Optional[List[Dict[str, str]]] = None, problems: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
-    return {"key": key, "state": state, "detail": detail, "fix": fix or {}, "names": names or [], "problems": problems or []}
+def item(key: str, state: str, detail: str, fix: Optional[Dict[str, Any]] = None, names: Optional[List[Dict[str, str]]] = None, problems: Optional[List[Dict[str, Any]]] = None, tip: str = "") -> Dict[str, Any]:
+    return {"key": key, "state": state, "detail": detail, "fix": fix or {}, "names": names or [], "problems": problems or [], "tip": tip}
 
 
 # --- the knowledge base ------------------------------------------------------------------------------------------------------------------------------------------
@@ -82,6 +76,27 @@ def knowledge_base(root: Path) -> Tuple[Optional[str], Optional[Path]]:
         if targets.knowledge_base_content(path):
             return name, path
     return None, None
+
+
+def sync_item(root: Path) -> Optional[Dict[str, Any]]:
+    """The company content against its copies (`company.diff`, files only): a problem of the knowledge base row when a sync would change something (1.7.38), with the button that does it.
+    None when they are the same, when there is no company content, and when the only thing wrong is the skill prefix (the Company skills row says that, with its own button)."""
+    try:
+        found = company.diff(root)
+    except Exception:  # noqa: BLE001 - a broken copy is doctor's to report
+        return None
+    if not found.get("found") or found.get("in_sync") or found.get("fix"):
+        return None
+    if found.get("problem") and not found.get("changes"):  # a sync cannot go on (a company pack with the name of a factory pack, a file it cannot read): the window says why
+        fix = fix_kb("company", say("ready.fix.show"))
+        return {"key": "sync", "text": sentence(found["problem"]), "why": "", "short": "", "fix": fix}
+    items = list(dict.fromkeys("/".join(str(row["path"]).split("/")[:3]) for row in found.get("changes") or []))  # a skill is one item, not one for each of its files
+    if not items:
+        return None  # only skills a sync cannot fix: the Company skills row has them
+    n = len(items)
+    names = [Path(path).name for path in items]
+    return {"key": "sync", "text": say("ready.p.sync.one" if n == 1 else "ready.p.sync", n=n), "why": names_text(names), "short": say("ready.p.sync.short.one" if n == 1 else "ready.p.sync.short", n=n),
+            "fix": {"to": "sync", "op": "sync", "label": say("ready.fix.sync")}}
 
 
 def kb_item(root: Path, name: Optional[str], path: Optional[Path]) -> Dict[str, Any]:
@@ -96,7 +111,11 @@ def kb_item(root: Path, name: Optional[str], path: Optional[Path]) -> Dict[str, 
         skills = len(domainskills.skills(root))
     except OSError:
         skills = 0
-    return dict(item("kb", "ok", say("ready.kb.found", name=name, domains=count(domains, "ready.kb.domains"), skills=count(skills, "ready.kb.skills"))), found=True)
+    detail = say("ready.kb.found", name=name, domains=count(domains, "ready.kb.domains"), skills=count(skills, "ready.kb.skills"))
+    problem = sync_item(root)
+    if problem:
+        return dict(item("kb", "yellow", detail, problem["fix"], problems=[problem]), found=True)
+    return dict(item("kb", "ok", detail), found=True)
 
 
 # --- skills, instructions, standards -----------------------------------------------------------------------------------------------------------------------------
@@ -127,35 +146,57 @@ def sentence(text: str) -> str:
 
 
 def skills_item(root: Path, folder: Optional[Path]) -> Dict[str, Any]:
-    prefix = skillcheck.effective_prefix(root)
+    prefix = skillcheck.effective_prefix(root)  # the word the names are judged by: the person's, else the company's
+    used = skillcheck.company_prefix(root)  # the word a sync copies by: only the person's file counts (1.7.38: the row tells when the two words differ)
+    wanted = skillcheck.usable(company.wanted_prefix(folder)) if folder is not None else ""  # what the company content says its word is
     found = company_skills(root, folder, prefix, skillgroups.active_packs(root))
+    clash = "other" if wanted and used and wanted != used.casefold() else "none" if wanted and not used and found else ""
     bad = [(path.name, skill_trouble(path, prefix)) for _name, path in found]
     bad = [(name, why) for name, why in bad if why]
     parts = [str(len(found))]
-    if prefix:
+    if clash == "other":
+        parts.append(say("ready.skills.prefix.other", prefix=used, wanted=wanted))
+    elif clash == "none":
+        parts.append(say("ready.skills.prefix.none", wanted=wanted))
+    elif prefix:
         parts.append(say("ready.skills.prefix", prefix=prefix))
     elif found:
         parts.append(say("ready.skills.noprefix"))
-    if bad:
+    if bad and not clash:
         parts.append(say("ready.skills.bad", n=len(bad)))
     problems: List[Dict[str, Any]] = []
     fix = fix_kb("company", say("ready.fix.show"))
-    if bad:
+    use = {"to": "sync", "op": "prefix", "label": say("ready.fix.prefix", word=wanted)}
+    if clash:  # nothing is copied while the two words differ, so that comes first; one button sets the company's word and syncs
+        values = {"wanted": wanted, "prefix": used}
+        text, short = ("ready.p.prefix.other", "ready.p.prefix.short.other") if clash == "other" else ("ready.p.prefix.none", "ready.p.prefix.short.none")
+        problems.append({"key": "skills", "text": say(text, **values), "why": say("ready.p.prefix.why"), "short": say(short, **values), "fix": use})
+        fix = use
+    elif bad:
         problems.append({"key": "skills", "text": say("ready.p.skills.one" if len(bad) == 1 else "ready.p.skills", n=len(bad), names=names_text([name for name, _why in bad])), "why": bad[0][1], "short": "", "fix": fix})
     elif found and not prefix:
         problems.append({"key": "skills", "text": say("ready.p.noprefix"), "why": say("ready.p.noprefix.why"), "short": "", "fix": fix_setup("company", say("ready.fix.setup"))})
     state = "yellow" if problems else "ok" if found else "grey"
-    return item("skills", state, " · ".join(parts) if found or prefix else DASH, fix if problems else {}, problems=problems)
+    return item("skills", state, " \u00b7 ".join(parts) if found or prefix else DASH, fix if problems else {}, problems=problems)
 
 
 def files_item(key: str, folder: Optional[Path], has_kb: bool) -> Dict[str, Any]:
-    n = files_in(folder)
-    if key == "instructions" and n and folder is not None and not (folder / "knowledgebase.instructions.md").is_file():  # only that file is copied for the agent (company.INSTRUCTION_FILES): the form says the same
+    """Instructions and code standards. Only one file of each counts (1.7.38): the one the engine copies for the agent (`company.INSTRUCTION_FILES`), the one the standards skill reads
+    (`standards.COMPANY_FILE`). The others are told in the hover and by a short mark, because nothing reads them."""
+    used_names = company.INSTRUCTION_FILES if key == "instructions" else (Path(standards.COMPANY_FILE).name,)
+    try:
+        names = sorted(path.name for path in folder.iterdir() if path.is_file() and path.suffix == ".md" and path.name not in README) if folder is not None and folder.is_dir() else []
+    except OSError:
+        names = []
+    used = [name for name in names if name in used_names]
+    unused = [name for name in names if name not in used_names]
+    tip = say("ready.tip.instr" if key == "instructions" else "ready.tip.stds", names=names_text(unused), used=used_names[0]) if unused else ""
+    if names and not used and key == "instructions":
         fix = fix_kb("company", say("ready.fix.show"))
-        return item(key, "yellow", say("ready.instr.main"), fix, problems=[{"key": key, "text": say("ready.p.instr"), "why": say("ready.p.instr.why"), "short": "", "fix": fix}])
-    if n:
-        return item(key, "ok", count(n, "ready.files"))
-    return item(key, "grey", say("ready.none") if has_kb else DASH)
+        return item(key, "yellow", say("ready.instr.main"), fix, problems=[{"key": key, "text": say("ready.p.instr"), "why": say("ready.p.instr.why"), "short": "", "fix": fix}], tip=tip)
+    if used:
+        return item(key, "ok", count(len(used), "ready.files") + (" \u00b7 " + say("ready.files.skipped", n=len(unused)) if unused else ""), tip=tip)
+    return item(key, "grey", (say("ready.files.none.skipped", n=len(unused)) if unused else say("ready.none")) if has_kb else DASH, tip=tip)
 
 
 # --- tool packs and connections ----------------------------------------------------------------------------------------------------------------------------------
@@ -165,10 +206,16 @@ def packs_item(root: Path) -> Dict[str, Any]:
     names: List[Dict[str, str]] = []
     problems: List[Dict[str, Any]] = []
     for name in toolpacks.active(root):
-        lost = list(dict.fromkeys(row["program"] for row in needs.get(name, []) if not row["found"]))
+        rows = [row for row in needs.get(name, []) if not row["found"]]
+        lost = list(dict.fromkeys(row["program"] for row in rows))
         names.append({"name": name, "state": "need" if lost else "ok", "missing": ", ".join(lost)})
         if lost:
             many = len(lost) > 1
+            stuck = {row["program"] for row in rows if row.get("blocked")}  # there, but with no run bit: told in its own words (1.7.38)
+            if stuck and len(stuck) == len(lost):
+                problems.append({"key": "packs", "text": say("ready.p.program.blocked", programs=names_text(lost)), "why": say("ready.p.program.blocked.why", pack=name), "short": say("ready.p.program.blocked.short", pack=name, programs=", ".join(lost)),
+                                 "fix": fix_tools("local", say("ready.fix.local"), "programs")})
+                continue
             problems.append({"key": "packs", "text": say("ready.p.program", programs=names_text(lost)), "why": say("ready.p.program.why.many" if many else "ready.p.program.why", pack=name),
                              "short": say("ready.p.program.short", pack=name, programs=", ".join(lost)), "fix": fix_tools("local", say("ready.fix.local"), "programs")})
     if not names:

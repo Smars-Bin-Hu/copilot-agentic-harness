@@ -101,10 +101,11 @@ def run_doctor(root: Path, timeout: Optional[float] = None) -> Dict[str, Any]:
     errors = [line[len("[ERROR]"):].strip() for line in text.splitlines() if line.startswith("[ERROR]")]
     warnings = [line[len("[WARN]"):].strip() for line in text.splitlines() if line.startswith("[WARN]")]
     company = [line[len("[WARN:company]"):].strip() for line in text.splitlines() if line.startswith("[WARN:company]")]  # about the company's content: they go with the Optional block
+    copies = [line[len("[WARN:copies]"):].strip() for line in text.splitlines() if line.startswith("[WARN:copies]")]  # the copies differ: the board counts them itself, with a Sync button (readyitems.sync_item)
     if not errors and done.returncode != 0 and '"errors"' not in text:  # it did not get as far as its summary line
         tail = done.stderr.decode("utf-8", errors="replace").strip().splitlines()
         return {"errors": 0, "first": "", "failed": short(tail[-1] if tail else f"exit code {done.returncode}")}
-    return {"errors": len(errors) if errors else (1 if done.returncode else 0), "first": short(errors[0]) if errors else "", "failed": "", "lines": [short(line) for line in errors[:LINES]], "warned": len(warnings) + len(company), "warning": short((warnings + company)[0]) if warnings or company else "", "company": [short(line) for line in company[:LINES]], "company_n": len(company)}
+    return {"errors": len(errors) if errors else (1 if done.returncode else 0), "first": short(errors[0]) if errors else "", "failed": "", "lines": [short(line) for line in errors[:LINES]], "warned": len(warnings) + len(company) + len(copies), "warning": short((warnings + company + copies)[0]) if warnings or company or copies else "", "company": [short(line) for line in company[:LINES]], "company_n": len(company)}
 
 
 class Running:
@@ -214,6 +215,11 @@ class Ready:
         if found["errors"]:
             return {"state": "fail", "why": "errors", "n": found["errors"], "detail": found["first"]}
         return {"state": "ok", "why": "ok", "n": 0}
+
+    def drop_doctor(self) -> None:
+        """What doctor said is old (a sync was done): the next question runs it again."""
+        with self.lock:
+            self.at = -1e9
 
     def doctor_notes(self) -> Dict[str, Any]:
         """What `harness doctor` warned of about the company's content, from the kept result: `{n, first}`."""

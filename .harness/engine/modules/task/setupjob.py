@@ -93,7 +93,9 @@ def steps(root: Path, data: Dict[str, Any]) -> List[Tuple[str, Callable[[], str]
         if mode == "package":
             found = company.update(root, path, apply=True, interactive=True)
             return say("setup.kb.package.done", version=found.get("version", ""))
-        return copy_folder(root, Path(path), bool(data.get("kb_replace"))) if mode == "folder" else say("setup.line.later")
+        if mode == "folder":
+            return copy_folder(root, Path(path), bool(data.get("kb_replace")))
+        return say("setup.kb.kept") if any(targets.knowledge_base_content(place) for _name, place in targets.knowledge_bases(root)) else say("setup.line.later")  # Keep it: the one in place stays (1.7.38)
 
     def repository() -> str:
         if mode == "none" and not targets.knowledge_base_content(root / targets.KB_DIR):

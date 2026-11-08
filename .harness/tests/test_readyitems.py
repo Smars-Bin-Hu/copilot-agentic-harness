@@ -9,7 +9,7 @@ from unittest import mock
 
 from test_connections import ConnectionsCase
 
-from core import connections, launchenv, messages, readyitems
+from core import company, connections, launchenv, messages, readyitems, setup
 from taskcase import TaskCase
 
 SKILL = "---\nname: {name}\ndescription: 'Do the {name} routine of the company. Use when a task names it.'\ntype: workflow\nspecificTo: generic\n---\n\n# {name}\n\nSteps.\n\n## Gotchas\n\n- none\n"
@@ -37,7 +37,7 @@ class KnowledgeBaseTests(TaskCase):
         for key in ("instructions", "skills", "standards"):
             self.assertEqual((found[key]["state"], found[key]["detail"], found[key]["problems"]), ("grey", readyitems.DASH, []), key)  # nothing to say before a knowledge base is in
         for entry in found.values():
-            self.assertEqual(set(entry), {"key", "state", "detail", "fix", "home", "names", "problems"} | ({"found"} if entry["key"] == "kb" else set()))
+            self.assertEqual(set(entry), {"key", "state", "detail", "fix", "home", "names", "problems", "tip"} | ({"found"} if entry["key"] == "kb" else set()))
         problems = readyitems.problems(list(found.values()))
         self.assertEqual(problems[0]["row"], "kb")
         self.assertEqual({problem["row"] for problem in problems}, {entry["key"] for entry in found.values() if entry["problems"]})
@@ -53,10 +53,11 @@ class KnowledgeBaseTests(TaskCase):
             (kb / "company" / "instructions" / name).write_text("x", encoding="utf-8")
         (kb / "company" / "standards").mkdir()
         (kb / "company" / "standards" / "code-standards.md").write_text("x", encoding="utf-8")
+        company.sync(self.root)  # the copies are made: nothing is left to sync
         found = by_key(readyitems.items(self.root))
         self.assertEqual((found["kb"]["state"], found["kb"]["found"]), ("ok", True))
         self.assertEqual(found["kb"]["detail"], say("ready.kb.found", name="knowledge-base", domains=say("ready.kb.domains", n=3), skills=say("ready.kb.skills", n=2)))
-        self.assertEqual((found["instructions"]["detail"], found["standards"]["detail"]), (say("ready.files", n=2), say("ready.files.one")))  # the README is no content
+        self.assertEqual((found["instructions"]["detail"], found["standards"]["detail"]), (say("ready.files.one") + " \u00b7 " + say("ready.files.skipped", n=1), say("ready.files.one")))  # the README is no content; style.md is not copied, so it does not count
         self.assertEqual(found["kb"]["problems"], [])
 
     def test_a_count_of_one_is_said_in_the_singular(self) -> None:
@@ -68,6 +69,7 @@ class KnowledgeBaseTests(TaskCase):
         skills = self.root / ".github" / "skills"
         (self.kb() / "company").mkdir(parents=True)
         (self.kb() / "company" / "company.json").write_text('{"skill_prefix": "acme"}', encoding="utf-8")
+        setup.write(self.root, "user", {"skill_prefix": "acme"})  # the word a sync copies by is the person's own
         for name in ("acme-release", "acme-triage", "release-notes", "harness-keep", "acme-ado-flow"):
             (skills / name).mkdir(parents=True, exist_ok=True)
             (skills / name / "SKILL.md").write_text(SKILL.format(name=name), encoding="utf-8")
@@ -95,6 +97,43 @@ class KnowledgeBaseTests(TaskCase):
         self.assertEqual(list(found), list(readyitems.KEYS))
 
 
+class SyncAndPrefixTests(TaskCase):
+    """1.7.38: the Enter screen tells what the book of the dock tells: the copies differ, and the two words of the skill prefix."""
+
+    def kb(self) -> Path:
+        return self.root / "knowledge-base"
+
+    def company_files(self, word: str = "acme") -> None:
+        (self.kb() / "company" / "skills" / f"{word}-release").mkdir(parents=True, exist_ok=True)
+        (self.kb() / "company" / "skills" / f"{word}-release" / "SKILL.md").write_text(SKILL.format(name=f"{word}-release"), encoding="utf-8")
+        (self.kb() / "company" / "company.json").write_text(json.dumps({"skill_prefix": word}), encoding="utf-8")
+
+    def test_copies_that_differ_are_one_line_of_the_knowledge_base_row_with_a_sync_button(self) -> None:
+        self.company_files()
+        setup.write(self.root, "user", {"skill_prefix": "acme"})
+        found = by_key(readyitems.items(self.root))["kb"]
+        problem = found["problems"][0]
+        self.assertEqual((found["state"], problem["key"], problem["text"], problem["fix"]["to"], problem["fix"]["op"], problem["fix"]["label"]), ("yellow", "sync", say("ready.p.sync.one"), "sync", "sync", say("ready.fix.sync")))
+        self.assertEqual(problem["why"], "acme-release")  # the skill, not each of its files
+        self.assertEqual(problem["short"], say("ready.p.sync.short.one"))
+        company.sync(self.root)
+        self.assertEqual((by_key(readyitems.items(self.root))["kb"]["state"], by_key(readyitems.items(self.root))["kb"]["problems"]), ("ok", []))
+
+    def test_the_two_words_of_the_prefix_are_told_on_the_skills_row_with_one_button_and_not_twice(self) -> None:
+        self.company_files("acmeco")
+        setup.write(self.root, "user", {"skill_prefix": "acme"})
+        found = by_key(readyitems.items(self.root))
+        skills = found["skills"]
+        self.assertEqual(skills["state"], "yellow")
+        self.assertIn(say("ready.skills.prefix.other", prefix="acme", wanted="acmeco"), skills["detail"])
+        problem = skills["problems"][0]
+        self.assertEqual((problem["text"], problem["fix"]["op"], problem["fix"]["label"]), (say("ready.p.prefix.other", wanted="acmeco", prefix="acme"), "prefix", say("ready.fix.prefix", word="acmeco")))
+        self.assertEqual(found["kb"]["problems"], [])  # the knowledge base row does not say the same thing again
+        (self.root / ".harness" / "policies" / "user.override.json").write_text("{}", encoding="utf-8")
+        none = by_key(readyitems.items(self.root))["skills"]["problems"][0]
+        self.assertEqual((none["text"], none["fix"]["op"]), (say("ready.p.prefix.none", wanted="acmeco"), "prefix"))
+
+
 class InstructionsTests(TaskCase):
     def test_instructions_are_in_place_only_with_the_file_that_is_copied_for_the_agent(self) -> None:
         """1.7.38: only knowledgebase.instructions.md is copied (company.INSTRUCTION_FILES); the Enter screen says what the form says."""
@@ -106,7 +145,35 @@ class InstructionsTests(TaskCase):
         (folder / "knowledgebase.instructions.md").write_text("x", encoding="utf-8")
         found = readyitems.files_item("instructions", folder, True)
         self.assertEqual((found["state"], found["problems"]), ("ok", []))
-        self.assertIn("2", found["detail"])
+        self.assertEqual(found["detail"], say("ready.files.one") + " \u00b7 " + say("ready.files.skipped", n=1))  # 1.7.38: only the file that is copied counts
+        self.assertIn("etl.instructions.md", found["tip"])  # the one that is not copied is told on hover
+        self.assertIn("knowledgebase.instructions.md", found["tip"])
+        (folder / "etl.instructions.md").unlink()
+        found = readyitems.files_item("instructions", folder, True)
+        self.assertEqual((found["detail"], found["tip"]), (say("ready.files.one"), ""))
+
+    def test_code_standards_count_the_one_file_that_is_read(self) -> None:
+        folder = self.root / "kb-standards"
+        folder.mkdir()
+        (folder / "naming.md").write_text("x", encoding="utf-8")
+        found = readyitems.files_item("standards", folder, True)
+        self.assertEqual((found["state"], found["detail"]), ("grey", say("ready.files.none.skipped", n=1)))
+        self.assertIn("naming.md", found["tip"])
+        (folder / "code-standards.md").write_text("x", encoding="utf-8")
+        found = readyitems.files_item("standards", folder, True)
+        self.assertEqual((found["state"], found["detail"]), ("ok", say("ready.files.one") + " \u00b7 " + say("ready.files.skipped", n=1)))
+
+
+class PackProgramTests(TaskCase):
+    def test_a_program_that_is_there_without_the_right_to_run_is_not_called_not_found(self) -> None:
+        """1.7.38: a pack handed over in a zip that lost the run bit."""
+        rows = {"runbook": [{"program": "runbook", "found": False, "path": "", "why": "pack", "blocked": "/kb/bin/runbook"}], "ado": [{"program": "az", "found": False, "path": "", "why": "pack", "blocked": ""}]}
+        with mock.patch.object(readyitems.toolpacks, "needs_report", return_value=rows), mock.patch.object(readyitems.toolpacks, "active", return_value={"runbook": {}, "ado": {}}):
+            found = readyitems.packs_item(self.root)
+        by_name = {problem["short"]: problem for problem in found["problems"]}
+        self.assertIn(say("ready.p.program.blocked.short", pack="runbook", programs="runbook"), by_name)
+        self.assertIn(say("ready.p.program.short", pack="ado", programs="az"), by_name)
+        self.assertEqual(found["state"], "yellow")
 
 
 class HomeTests(TaskCase):

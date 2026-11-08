@@ -33,7 +33,7 @@ const MACHINE = (function () {
     const who = (row) => row.needed_by.map((item) => item.pack === "harness" ? t("machine.prog.harness") : item.why === "signin" ? t("machine.prog.signin", {pack: item.pack, program: row.program}) : item.pack).filter((x, i, all) => all.indexOf(x) === i).join(", ");
     const rows = state.programs.map((row) => {
       const parts = [dot(row.found ? "ok" : "need"), h("b", {class: "tl-pname"}, row.program), h("span", {class: "tl-pwho", title: row.needed_by.map((item) => item.pack + (item.conn ? " \u2190 " + item.conn : "")).join("\n")}, "\u2190 ", who(row)),
-        h("code", {class: "tl-ppath" + (row.found ? "" : " need"), title: row.found ? row.path : t("machine.prog.missing.tip", {program: row.program})}, row.found ? row.path : t("machine.prog.missing"))];
+        h("code", {class: "tl-ppath" + (row.found ? "" : " need"), title: row.found ? row.path : row.blocked ? t("machine.prog.blocked.tip", {program: row.program, path: row.blocked}) : t("machine.prog.missing.tip", {program: row.program})}, row.found ? row.path : t(row.blocked ? "machine.prog.blocked" : "machine.prog.missing"))];
       if (!row.found) {  // not found: the folder it is in, on the same line (it wraps on a narrow window)
         const input = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", "aria-label": t("machine.prog.here", {program: row.program}), placeholder: t("machine.prog.ph.of", {program: row.program}), value: row.hint || ""});
         const use = h("button", {type: "button", class: "act"}, t("machine.prog.use"));
@@ -130,7 +130,7 @@ const MACHINE = (function () {
     const needs = row.needs_all.map((item) => {
       const words = t(item.why === "signin" ? "machine.pack.needs.signin" : "machine.pack.needs", {program: item.program});
       if (!row.active) return chip(words, "", t("machine.pack.needs.off"));
-      const out = chip([dot(item.found ? "ok" : "need"), words + " · " + t(item.found ? "machine.prog.found" : "machine.prog.missing")], item.found ? "" : "warn", item.found ? item.path : t("machine.prog.missing.tip", {program: item.program}));
+      const out = chip([dot(item.found ? "ok" : "need"), words + " · " + t(item.found ? "machine.prog.found" : item.blocked ? "machine.prog.blocked" : "machine.prog.missing")], item.found ? "" : "warn", item.found ? item.path : item.blocked ? t("machine.prog.blocked.tip", {program: item.program, path: item.blocked}) : t("machine.prog.missing.tip", {program: item.program}));
       if (item.found) return out;
       out.append(" ", link(t("tools.local.title"), t("tools.link.tip"), () => ctx.go("local", "programs", "prog:" + item.program)));
       return out;

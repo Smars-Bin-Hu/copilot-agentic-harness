@@ -217,7 +217,7 @@ def servers_login(root: Path, alias: str, kind: str = "", given: Optional[List[s
             if field.strip():
                 own[field.strip()] = value.strip()
     code, said = connections.login(root, alias, own)
-    if code == 2 and said:
+    if code != 0 and said:  # the sign-in did not start: it says why (no connection, no sign-in way, a program that is not there or not allowed to run)
         raise CommandError(said)
     return {"alias": alias, "exit_code": code, "next": say("connections.login.after", alias=alias) if code == 0 else ""}
 

@@ -4,6 +4,7 @@
 //   tools   a window of Tools:                     TOOLS.open(tab, done, part), tab packs | connections | local (the three windows of block C; the old window knows packs and connections)
 //   kb      the knowledge base window:             DOCK.kbWindow(tab)
 //   term    a command the Terminal window runs:    TERM.run(line)
+//   sync    the company's copies: `company sync`, or with op prefix the company's word first (DOCK.syncCompany); the answer is a promise
 //   vscode  the VS Code button:                    open, restart, or restart with identities (vsAct)
 // Needs common.js (h, t), serve.js (SERVE). The other windows are used when the page has them.
 "use strict";
@@ -38,18 +39,29 @@ const READY = (function () {
     else if (fix.to === "tools" && typeof TOOLS !== "undefined") TOOLS.open(fix.tab, given.done, fix.part || undefined);  // block C rebuilds the window: the tab names are packs, connections and local
     else if (fix.to === "kb" && typeof DOCK !== "undefined") DOCK.kbWindow(fix.tab);
     else if (fix.to === "term" && typeof TERM !== "undefined") TERM.run(fix.run);
+    else if (fix.to === "sync" && typeof DOCK !== "undefined") return DOCK.syncCompany(fix.op).then(() => { if (given.done) given.done(); });  // an error goes to the caller: the button says it
     else if (fix.to === "vscode") vsAct(fix.kind, given).catch((error) => { if (given.fail && !error.quiet) given.fail(error); });
+    return undefined;
+  }
+
+  // What a button or a link does with the promise a fix may give: it waits while the work runs, and says the error where it stood.
+  function wait(node, fix, hooks) {
+    const answer = go(fix, hooks);
+    if (!answer || !answer.then) return;
+    const label = node.textContent;
+    node.disabled = true;
+    answer.then(() => { node.disabled = false; }, (error) => { node.disabled = false; node.textContent = (error && error.message ? error.message : String(error)).slice(0, 160); node.title = label; });
   }
 
   // A fix as a small button (the board's block) or as a link in a note (the Enter screen).
   function button(fix, hooks, cls) {
     const node = h("button", {type: "button", class: cls || "act"}, fix.label || "");
-    node.addEventListener("click", () => go(fix, hooks));
+    node.addEventListener("click", () => wait(node, fix, hooks));
     return node;
   }
   function link(fix, hooks, text) {
     const node = h("button", {type: "button", class: "en-link"}, text || fix.label || "");
-    node.addEventListener("click", () => go(fix, hooks));
+    node.addEventListener("click", () => wait(node, fix, hooks));
     return node;
   }
 

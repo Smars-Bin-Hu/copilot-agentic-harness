@@ -382,6 +382,34 @@ def missing_for(root: Path, alias: str) -> List[str]:
     return [str(one) for one in dict.fromkeys(wanted) if not locate(one, path)]
 
 
+def declared_needs(folder: Path, manifest: Dict[str, Any], path: Optional[str]) -> List[Dict[str, Any]]:
+    """Every program a pack names, whether it is on or not (1.7.41, the Tool packs window): its own `needs.programs` (`why: "pack"`) and the `needs` of any sign-in way
+    of its connection types (`why: "signin"`), looked for on `path`. `[{program, found, path, why}]`, each program once."""
+    rows: Dict[str, Dict[str, Any]] = {}
+    for program in (manifest.get("needs") or {}).get("programs") or []:
+        rows[str(program)] = {"program": str(program), "found": False, "path": "", "why": "pack"}
+    for one in sorted((folder / TYPES).glob("*.json")) if (folder / TYPES).is_dir() else []:
+        spec = _json(one)
+        for auth in (spec.get("auth") or {}).values() if isinstance(spec, dict) and isinstance(spec.get("auth"), dict) else []:
+            for program in (auth.get("needs") or []) if isinstance(auth, dict) and isinstance(auth.get("needs"), list) else []:
+                if isinstance(program, str) and program:
+                    rows.setdefault(program, {"program": program, "found": False, "path": "", "why": "signin"})
+    own = folder / "bin"  # a program the pack brings itself (`bin/`) is not something to find on this computer
+    brought = {item.stem if item.suffix.lower() in (".cmd", ".bat", ".exe") else item.name for item in own.iterdir()} if own.is_dir() else set()
+    for row in rows.values():
+        row["path"] = locate(row["program"], path)
+        row["found"] = bool(row["path"])
+    return [row for row in rows.values() if row["program"] not in brought]
+
+
+def skill_label(names: List[str]) -> str:
+    """How a pack's skills are shown in one chip: the name of the only one, or the stem they share and a star (`acme-ado-*`)."""
+    if len(names) < 2:
+        return names[0] if names else ""
+    stem = os.path.commonprefix(names)
+    return stem[:stem.rfind("-") + 1] + "*" if "-" in stem else ""
+
+
 def type_entries(root: Path, guard: bool = False) -> List[tuple]:
     """`(pack name, type file)` of each connection type the active packs bring, in the order of the packs. With `guard` also those of the off packs a connection uses (`guarded`, 1.7.38)."""
     return [(name, path) for name, item in (guarded(root) if guard else active(root)).items() for path in sorted((item["folder"] / TYPES).glob("*.json"))]
@@ -977,9 +1005,12 @@ def check(root: Path, only: str = "") -> Dict[str, Any]:
                "errors": errors, "programs": programs, "needs": report if item["active"] else [], "trust": bool(needs.get("trust")), "bundle": bool(bundle), "description": str(found.get("description") or ""), "types": types_here,
                "skills": len(_skills(folder)), "links": sorted((found.get("links") or {}).keys()) if isinstance(found.get("links"), dict) else [],
                "mcp_rules": len((found.get("mcp") or {}).get("tools") or []) if isinstance(found.get("mcp"), dict) else 0, "commands": [str(one) for one in found.get("commands") or []],
-               "put": list((book.get(name) or {}).get("skills") or []), "newer": False, "updated": _updated(book.get(name) or {}), "toggle": "" if item["source"] != HARNESS else "on" if targets.company_folder(root) else "nocompany"}
+               "put": list((book.get(name) or {}).get("skills") or []), "newer": False, "updated": _updated(book.get(name) or {}), "toggle": "" if item["source"] != HARNESS else "on" if targets.company_folder(root) else "nocompany",
+               "used": item["source"] != HARNESS or name in use_list(root), "needs_all": declared_needs(folder, found, path),  # 1.7.41: what the pack names, on or off; `used`: the company's packs.json lists it (a company or folder pack is always used)
+               "skill_names": _final_names(root, name, folder) if item["active"] else []}
+        row["skill_label"] = skill_label(row["skill_names"])
         row["ok"] = not errors and (all(programs.values()) or not item["active"])
         rows.append(row)
     if only and not rows:
         raise ToolpackError(say("toolpack.none", name=only))
-    return {"toolpacks": rows, "unknown_use": unknown_use(root), "clashes": clash_lines(root), "exit_code": 0 if all(row["ok"] for row in rows) and not clash_lines(root) else 1}
+    return {"toolpacks": rows, "company": targets.company_folder(root) is not None, "unknown_use": unknown_use(root), "clashes": clash_lines(root), "exit_code": 0 if all(row["ok"] for row in rows) and not clash_lines(root) else 1}

@@ -228,28 +228,73 @@ def rules_of(target: Dict[str, Any]) -> List[Dict[str, str]]:
     return [{"repo": name, "rule": rule} for name, entry in sorted((target.get("repos") or {}).items()) if isinstance(entry, dict) and isinstance(entry.get("refused_paths"), list) for rule in entry["refused_paths"] if rule != GIT_RULE]
 
 
+def _count(folder: Path, suffix: str = ".md") -> int:
+    """The files of a folder of the knowledge base that are content (not the README or a hidden file)."""
+    try:
+        return sum(1 for item in folder.iterdir() if item.is_file() and item.suffix == suffix and item.name != "README.md" and not item.name.startswith("."))
+    except OSError:
+        return 0
+
+
+def company_skills(root: Path, folder: Optional[Path]) -> Dict[str, Any]:
+    """The company's own skills (`company/skills/<name>/SKILL.md`): how many, and which are not by the rules: no SKILL.md, a name of the wrong form, or one that does not start
+    with the company's word (`<prefix>-`). Names only, quick: a full check is `harness skill check`."""
+    base = folder / "skills" if folder else None
+    try:
+        names = sorted(item.name for item in base.iterdir() if item.is_dir() and not item.name.startswith(".")) if base is not None and base.is_dir() else []
+    except OSError:
+        names = []
+    prefix = skillcheck.effective_prefix(root)
+    off = [name for name in names if not (base / name / "SKILL.md").is_file() or not skillcheck.NAME.match(name) or (prefix and not name.startswith(prefix + "-"))]
+    return {"n": len(names), "off": off}
+
+
+def shown_path(root: Path, path: Path) -> str:
+    """A folder as a person reads it: absolute, and `~` for the home folder."""
+    try:
+        full = (path if path.is_absolute() else root / path).resolve()
+        home = Path.home().resolve()
+        return "~/" + full.relative_to(home).as_posix() if full != home and home in full.parents else str(full)
+    except (OSError, ValueError, RuntimeError):
+        return str(path)
+
+
 def kb_state(root: Path) -> Dict[str, Any]:
-    """What is in place: the form says so, and does not ask for a knowledge base a person already has."""
+    """What is in place: the form says so, and does not ask for a knowledge base a person already has. `domain_skills`: `domains/<domain>/skills/<skill>/`."""
     for _name, path in targets.knowledge_bases(root):
         if targets.knowledge_base_content(path):
+            domains = 0
+            skills = 0
             try:
-                domains = sum(1 for item in (path / "domains").iterdir() if item.is_dir())
+                for item in (path / "domains").iterdir():
+                    if item.is_dir() and not item.name.startswith("."):
+                        domains += 1
+                        try:
+                            skills += sum(1 for one in (item / "skills").iterdir() if (one / "SKILL.md").is_file())
+                        except OSError:
+                            pass
             except OSError:
-                domains = 0
+                pass
             found: Dict[str, Any] = {}
             try:
                 found = json.loads((path / targets.COMPANY_DIR / "company.json").read_text(encoding="utf-8-sig"))
             except (OSError, ValueError):
                 pass
-            return {"here": True, "domains": domains, "prefix": str(found.get("skill_prefix") or "").strip().lower() if isinstance(found, dict) else ""}
-    return {"here": False, "domains": 0, "prefix": ""}
+            version = ""
+            try:
+                manifest = json.loads((path / targets.COMPANY_DIR / "manifest.json").read_text(encoding="utf-8-sig"))
+                version = str(manifest.get("version") or "") if isinstance(manifest, dict) else ""
+            except (OSError, ValueError):
+                pass
+            return {"here": True, "domains": domains, "domain_skills": skills, "version": version, "path": shown_path(root, path), "prefix": str(found.get("skill_prefix") or "").strip().lower() if isinstance(found, dict) else ""}
+    return {"here": False, "domains": 0, "domain_skills": 0, "version": "", "path": "", "prefix": ""}
 
 
 def company_facts(root: Path) -> Dict[str, Any]:
     """The read-only checklist of the section From the company (1.7.36): what the knowledge base brought, one fact each. Quick: file looks only; never raises.
     `prefix`: `kb` is what the knowledge base's `company.json` says, `effective` what the checks use; the page shows an input only when `kb` is empty."""
     out: Dict[str, Any] = {"folder": False, "instructions": False, "standards": False, "declared": no_such(root), "prefix": {"kb": "", "effective": "", "conflict": ""},
-                           "packs": [], "connections": [], "recipe": {"present": False, "host": "", "proxy": "", "tool_folders": 0, "error": ""}}
+                           "packs": [], "own_packs": [], "instructions_n": 0, "standards_n": 0, "skills": {"n": 0, "off": []}, "connections": [], "recipe": {"present": False, "host": "", "proxy": "", "tool_folders": 0, "error": ""}}
     try:
         folder = targets.company_folder(root)
         out["folder"] = folder is not None
@@ -257,6 +302,11 @@ def company_facts(root: Path) -> Dict[str, Any]:
         out["standards"] = bool(folder and (folder / standards.COMPANY_FILE).is_file())
         out["prefix"] = {"kb": skillcheck.knowledge_base_prefix(root), "effective": skillcheck.effective_prefix(root), "conflict": skillcheck.prefix_conflict(root)}
         out["packs"] = toolpacks.use_list(root)
+        own = folder / toolpacks.COMPANY_PACKS if folder else None
+        out["own_packs"] = sorted(item.name for item in own.iterdir() if item.is_dir() and not item.name.startswith(".")) if own is not None and own.is_dir() else []  # the company's own, besides the factory packs it turns on
+        out["instructions_n"] = _count(folder / "instructions") if folder else 0
+        out["standards_n"] = _count(folder / "standards") if folder else 0
+        out["skills"] = company_skills(root, folder)
         out["connections"] = list(conn_core.company_connections(config.policy_or_empty(root, conn_core.POLICY)))
         found = launchenv.recipe(root)
         out["recipe"] = {"present": (root / launchenv.RECIPE).is_file(), "host": found["host"], "proxy": found["proxy"], "tool_folders": len(found["tool_folders"]), "error": found["error"]}

@@ -518,20 +518,64 @@ class CompanyFactsTests(unittest.TestCase):
             self.assertEqual(setup.company_facts(root)["prefix"]["kb"], "acme")
             self.assertIn("company", setup.status(root))
 
+    def test_the_form_counts_what_the_knowledge_base_brings_and_names_the_company_skills_that_are_not_by_the_rules(self) -> None:
+        """1.7.41: card 3 says path, domains, domain skills, version, the files of instructions and standards, the company's skills and which break the naming rule."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            kb = root / "knowledge-base"
+            company = kb / "company"
+            (company / "instructions").mkdir(parents=True)
+            for name in ("knowledgebase.instructions.md", "etl.instructions.md", "README.md"):  # a README is no instruction
+                (company / "instructions" / name).write_text("x", encoding="utf-8")
+            (company / "standards").mkdir()
+            (company / "standards" / "code-standards.md").write_text("x", encoding="utf-8")
+            (company / "company.json").write_text(json.dumps({"skill_prefix": "acme"}), encoding="utf-8")
+            (company / "manifest.json").write_text(json.dumps({"version": "2026.11.05"}), encoding="utf-8")
+            for name, has_file in (("acme-good", True), ("release-notes", True), ("acme-empty", False)):
+                (company / "skills" / name).mkdir(parents=True)
+                if has_file:
+                    (company / "skills" / name / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+            for domain, count in (("sales", 2), ("hr", 1)):
+                for index in range(count):
+                    (kb / "domains" / domain / "skills" / f"domain-{domain}-{index}").mkdir(parents=True)
+                    (kb / "domains" / domain / "skills" / f"domain-{domain}-{index}" / "SKILL.md").write_text("x", encoding="utf-8")
+            (kb / "domains" / "empty").mkdir()
+            found = setup.status(root, {"found": True, "command": "", "windows": False})
+            self.assertEqual((found["kb"]["here"], found["kb"]["domains"], found["kb"]["domain_skills"], found["kb"]["version"], found["kb"]["prefix"]), (True, 3, 3, "2026.11.05", "acme"))
+            self.assertTrue(found["kb"]["path"].endswith("knowledge-base"))
+            facts = found["company"]
+            self.assertEqual((facts["instructions_n"], facts["standards_n"]), (2, 1))
+            self.assertEqual((facts["skills"]["n"], facts["skills"]["off"]), (3, ["acme-empty", "release-notes"]), "no SKILL.md, or not the company's word")
+            self.assertEqual(facts["own_packs"], [])
+            (company / "tools" / "packs" / "acmejobs").mkdir(parents=True)
+            self.assertEqual(setup.company_facts(root)["own_packs"], ["acmejobs"])
+        with tempfile.TemporaryDirectory() as folder:  # no knowledge base: every count is zero and nothing raises
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            found = setup.status(root, {"found": True, "command": "", "windows": False})
+            self.assertEqual((found["kb"], found["company"]["skills"], found["company"]["instructions_n"]), ({"here": False, "domains": 0, "domain_skills": 0, "version": "", "path": "", "prefix": ""}, {"n": 0, "off": []}, 0))
+
     def test_the_page_draws_four_cards_and_keeps_every_control(self) -> None:
         web = support.REPO / ".harness" / "engine" / "modules" / "task" / "web"
         source = (web / "setup.js").read_text(encoding="utf-8")
         messages = json.loads((support.REPO / ".harness" / "engine" / "core" / "messages.en.json").read_text(encoding="utf-8"))
-        for key, number, open_to in (("you", "2", '""'), ("company", "3", '"company"'), ("computer", "4", '"computer"')):
-            self.assertIn(f'card("{key}", "{number}", {open_to}', source)
+        for key, number, head in (("you", "2", "null"), ("company", "3", 'h("span", {class: "su-tag"}'), ("computer", "4", 'openTab("local")')):
+            self.assertIn(f'card("{key}", "{number}", {head}', source)
             self.assertIn(f"setup.sec.{key}", messages)
         self.assertNotIn("setup.form.title", source)
         for control in ("name", "chips", "repos", "modes", "kbPath", "prefix", "install", "refusedBox", "more", "go"):
             self.assertIn(control, source)
-        # Code repositories is the first row of card 4; the card of the company holds no Open of a row
-        self.assertLess(source.index('card("computer"'), source.index("t(\"setup.repos\")", source.index('card("computer"')))
-        self.assertNotIn("openTab(\"company\", ", source)
+        # 1.7.41: card 3 holds the knowledge base, the facts and the code repositories, in that order; card 4 is Local and holds the programs, the network and MCP, with one Open
+        card = source[source.index('card("company", "3"'):source.index('card("computer", "4"')]
+        self.assertLess(card.index("kbRow"), card.index("factsBox"))
+        self.assertLess(card.index("factsBox"), card.index("repoRow"))
+        self.assertIn("computerBox", source[source.index('card("computer", "4"'):])
+        self.assertIn('["packs", ""], ["packs", ""]', source)  # Tool packs and Connections have their own Open, which opens their own window
+        self.assertIn('["connections", ""], ["connections", ""]', source)
         self.assertIn("TOOLS.open(go[0], loadTools, go[1])", source)
+        self.assertIn("TOOLS.open(open[0], loadTools, open[1])", source)
+        self.assertIn("paintUnpaired", source, "a browser that is not paired is told so inside the first card")
         # the small print is a hover: HARNESS_LANGUAGE only when set, the override files beside Finish setup
         self.assertIn('title: t("setup.language.forced")', source)
         self.assertIn('title: t("setup.finish.note")', source)

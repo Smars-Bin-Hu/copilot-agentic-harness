@@ -1,6 +1,6 @@
-// Servers (1.7.10): the servers of the company pack and the person's own, each with the person's identity, tested before it is kept; and "Open VS Code
-// with identities", where the person picks which identities this window holds. A window of its own, opened from Get ready and from the Enter screen.
-// The server (`/api/servers`) never sends a password back: a saved one shows as a mark. Needs common.js (h, t), serve.js (SERVE).
+// Connections & sign-ins (1.7.10, one window since 1.7.41): the connections of the company and the person's own, in one list, each with its sign-in (the account kept here, or the one a program keeps itself)
+// and a Test that says which step broke. And "Open VS Code with identities", where the person picks which identities this window holds.
+// The server (`/api/connections`) never sends a password back: a saved one shows as a mark. Needs common.js (h, t), serve.js (SERVE).
 const SERVERS = (function () {
   const ask = (step, body) => SERVE.post("/api/connections", {step, ...(body || {})}).then((data) => data.result);
   const ENV_ORDER = ["dev", "ist", "qat", "prod"];
@@ -17,24 +17,28 @@ const SERVERS = (function () {
     return h("span", {class: "sv-result " + (found.state === "ok" || found.state === "mcp" ? "ok" : "bad"), title: tip}, h("b", null, MARK[found.state] || "?"), " ", word);
   }
 
-  // One server: a line (environment, name, kind, where, what is saved), and when opened, its identity, Test and Save.
-  function serverRow(row, redraw) {
-    const line = h("button", {type: "button", class: "sv-line" + (row.saved ? " saved" : ""), "aria-expanded": "false",
-      title: [...new Set([row.alias, row.label])].concat([row.type_label + (row.auth_label ? " · " + row.auth_label : ""), where(row)]).filter(Boolean).join("\n")},
-      envChip(row.env), h("b", {class: "sv-alias"}, row.alias), h("code", {class: "sv-where"}, where(row)),
-      row.own ? h("span", {class: "sv-own", title: t("connections.own.tip")}, t("connections.own")) : null,
-      row.toolpack ? h("span", {class: "sv-own sv-from", title: t("connections.from.tip", {pack: row.toolpack})}, row.toolpack) : null,
-      h("span", {class: "sv-state " + (row.saved ? (row.reach === "denied" || row.reach === "failed" ? "bad" : "ok") : "none"), title: row.saved ? t("connections.saved.tip", {account: row.account || "-"}) : t("connections.none.tip")},
-        row.saved ? (row.reach === "denied" || row.reach === "failed" ? "✗ " : "✓ ") + (row.account || t("connections.saved")) : t("connections.none")));
-    const box = h("div", {class: "sv-form", hidden: ""});
-    let drawn = false;
-    line.addEventListener("click", () => {
-      const open = box.hidden;
-      box.hidden = !open; line.setAttribute("aria-expanded", String(open));
-      if (open && !drawn) { drawn = true; box.append(...identityForm(row, null, redraw)); }
-      if (open) { const first = box.querySelector("input"); if (first) first.focus(); }
+  const STEPS = ["program", "signin", "access", "address"];
+  const STEP_MARK = {ok: "\u2713 ", bad: "\u2717 ", unknown: "? ", skip: ""};
+  // The four steps of a Test that did not pass (1.7.41): the first that broke is marked, the steps after it were not looked at; and one sentence with a link to the part of Local that helps.
+  // `go(tab, part, focus)` opens that window.
+  function layersBox(found, go) {
+    const layers = found && found.layers;
+    if (!layers || found.state === "ok" || found.state === "mcp") return null;
+    const parts = [];
+    STEPS.forEach((step, index) => {
+      if (index) parts.push(h("span", {class: "tl-arrow"}, "\u2192"));
+      const how = layers.steps[step] || "skip";
+      parts.push(h("span", {class: "tl-step " + how, title: t("connections.step." + how + ".tip")}, STEP_MARK[how] + t("connections.step." + step)));
     });
-    return h("div", {class: "sv-row", "data-focus": "sign:" + row.alias}, line, box);
+    const text = [layers.text];
+    if (layers.link && go) {
+      const label = t("tools.local.title"), at = layers.text.lastIndexOf(label);
+      const open = h("button", {type: "button", class: "tl-textlink"}, label);
+      open.addEventListener("click", () => go("local", layers.link.part, layers.link.focus));
+      if (at >= 0) text.splice(0, 1, layers.text.slice(0, at), open, layers.text.slice(at + label.length));
+      else text.push(" ", open);
+    }
+    return h("div", {class: "tl-why"}, h("div", {class: "tl-steps"}, parts), h("p", {class: "tl-say"}, text));
   }
 
   // Forgetting a connection of the person's own takes the connection and its identity away, and nothing brings it back: one more click, within a few seconds (1.7.22). A connection of a tool pack or the company
@@ -47,8 +51,8 @@ const SERVERS = (function () {
   }
 
   // The identity of a server, tested before it is kept. `own`: the fields of a server of the person's own (kind, env, auth, host, ...), or null.
-  function identityForm(row, own, redraw) {
-    if (row.identity === "tool") return toolForm(row, own, redraw);
+  function identityForm(row, own, redraw, go) {
+    if (row.identity === "tool") return toolForm(row, own, redraw, go);
     const needsKey = row.identity === "keyfile";
     const token = row.identity === "token";  // one secret under the label of the auth entry (1.7.21): no account box
     const account = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: row.identity === "netonly" ? "DOMAIN\\id" : t("connections.account"), value: row.account || ""});
@@ -63,7 +67,7 @@ const SERVERS = (function () {
     [account, password, keyfile].filter(Boolean).forEach((input) => input.addEventListener("input", changed));
     test.addEventListener("click", () => {
       test.disabled = true; save.disabled = true; said.replaceChildren(h("span", {class: "sub"}, t("connections.testing")));
-      ask("test", values()).then((found) => { said.replaceChildren(result(found)); save.disabled = !["ok", "mcp"].includes(found.state); }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); })
+      ask("test", values()).then((found) => { said.replaceChildren(...[result(found), layersBox(found, go)].filter(Boolean)); save.disabled = !["ok", "mcp"].includes(found.state); }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); })
         .then(() => { test.disabled = false; });
     });
     save.addEventListener("click", () => {
@@ -76,7 +80,7 @@ const SERVERS = (function () {
   }
 
   // A server whose program keeps its own sign-in (1.7.13): nothing to type. Test runs the kind's check; Save keeps only the name it answered with.
-  function toolForm(row, own, redraw) {
+  function toolForm(row, own, redraw, go) {
     const said = h("span", {class: "sv-said"});
     const test = h("button", {type: "button", class: "act"}, t("connections.test"));
     const save = h("button", {type: "button", class: "act hot", disabled: ""}, t("connections.save"));
@@ -85,7 +89,7 @@ const SERVERS = (function () {
     test.addEventListener("click", () => {
       test.classList.remove("hot", "live");
       test.disabled = true; save.disabled = true; said.replaceChildren(h("span", {class: "sub"}, t("connections.testing")));
-      ask("test", values()).then((found) => { said.replaceChildren(result(found)); save.disabled = found.state !== "ok"; }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); })
+      ask("test", values()).then((found) => { said.replaceChildren(...[result(found), layersBox(found, go)].filter(Boolean)); save.disabled = found.state !== "ok"; }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); })
         .then(() => { test.disabled = false; });
     });
     save.addEventListener("click", () => { save.disabled = true; ask("save", values()).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
@@ -103,7 +107,7 @@ const SERVERS = (function () {
   }
 
   // A server of the person's own: a kind of this copy, its fields, its environment and way in, a name; then the same identity, test and save.
-  function ownForm(kinds, redraw) {
+  function ownForm(kinds, redraw, go) {
     const names = Object.keys(kinds);
     if (!names.length) return h("p", {class: "sub"}, t("connections.own.nokind"));
     const kind = h("select", {class: "su-in"}, names.map((name) => h("option", {value: name}, kinds[name].label)));
@@ -123,7 +127,7 @@ const SERVERS = (function () {
     const drawIdentity = () => {
       const spec = kinds[kind.value];
       const row = {alias: "", identity: (spec.auth[auth.value] || {}).identity, login: (spec.auth[auth.value] || {}).login || "", auth_label: (spec.auth[auth.value] || {}).label || "", saved: false, account: ""};
-      rest.replaceChildren(...identityForm(row, {alias: () => alias.value.trim(), fields: () => ({type: kind.value, env: env.value, auth: auth.value, ...Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value.trim()]))})}, redraw));
+      rest.replaceChildren(...identityForm(row, {alias: () => alias.value.trim(), fields: () => ({type: kind.value, env: env.value, auth: auth.value, ...Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value.trim()]))})}, redraw, go));
     };
     kind.addEventListener("change", draw);
     auth.addEventListener("change", drawIdentity);
@@ -131,93 +135,148 @@ const SERVERS = (function () {
     return h("div", {class: "sv-own-form"}, h("div", {class: "sv-fields"}, field(t("connections.own.kind"), kind), field(t("connections.own.name"), alias), field(t("connections.own.env"), env), field(t("connections.own.auth"), auth)), fields, rest);
   }
 
-  // Sign-ins (1.7.37), a block of This computer. A connection does not depend on a sign-in; a sign-in hangs on a connection or on a tool, never alone. A tool's sign-in (`az login`) is one for the
-  // tool, shared by the connections of its type, and can be made before any connection exists.
-  function toolRow(tool, redraw) {
-    const signed = Boolean(tool.account);
-    const shared = tool.shared_by.length ? t("machine.signins.shared", {names: tool.shared_by.join(", ")}) : t("machine.signins.shared.none");
-    const line = h("button", {type: "button", class: "sv-line" + (signed ? " saved" : ""), "aria-expanded": "false", title: [tool.program, tool.types.join(", "), shared, tool.login].filter(Boolean).join("\n")},
-      h("b", {class: "sv-alias"}, tool.program), h("span", {class: "sv-shared"}, shared),
-      h("span", {class: "sv-state " + (signed ? "ok" : "none"), title: signed ? t("machine.signins.tool.saved.tip", {program: tool.program, account: tool.account}) : t("connections.none.tip")}, signed ? "\u2713 " + tool.account : t("connections.none")));
-    const box = h("div", {class: "sv-form", hidden: ""});
-    const said = h("span", {class: "sv-said"});
-    const test = h("button", {type: "button", class: "act"}, t("connections.test"));
-    const save = h("button", {type: "button", class: "act hot", disabled: ""}, t("connections.save"));
-    const forget = signed ? h("button", {type: "button", class: "act danger"}, t("connections.forget")) : null;
-    const first = tool.shared_by[0];
-    if (!first) { test.disabled = true; test.title = t("machine.signins.test.noconn"); }
-    const signIn = typeof TERM !== "undefined" && tool.login ? h("button", {type: "button", class: "act", title: tool.login}, t("connections.tool.login")) : null;
-    const blank = {alias: first, account: "", password: "", keyfile: ""};
-    const signedIn = () => { test.classList.add("hot", "live"); said.replaceChildren(h("span", {class: "sv-retest"}, t("connections.tool.retest"))); };
-    if (signIn) signIn.addEventListener("click", () => TERM.run("harness connections login " + tool.program, signedIn));
-    test.addEventListener("click", () => {
-      test.classList.remove("hot", "live"); test.disabled = true; save.disabled = true; said.replaceChildren(h("span", {class: "sub"}, t("connections.testing")));
-      ask("test", blank).then((found) => { said.replaceChildren(result(found)); save.disabled = found.state !== "ok"; }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { test.disabled = false; });
+  // One connection (1.7.41): name, type, where it points (the environment chip, or `org · project`), whether the company or the person added it, the sign-in (a dot and the account), Sign in and Test.
+  // Under it: the form of a sign-in that needs typing, and the four steps of a Test that did not pass. A sign-in that a program keeps itself (`az`) is one for the whole computer: every connection that uses
+  // it shows the same account, with a hover that says so.
+  function place(row) {
+    const f = row.fields || {};
+    const address = [f.host, f.port].filter(Boolean).join(":");
+    const rest = Object.entries(f).filter(([key, value]) => value && key !== "url").map(([, value]) => value);
+    return address || rest.join(" · ") || Object.values(f).filter(Boolean).join(" · ");
+  }
+  function connRow(row, found, env) {  // env: {results: Map, paints: Map, redraw, go}
+    const key = row.alias;
+    const names = found.connections.filter((one) => row.tool && one.tool === row.tool && one.alias !== key).map((one) => one.alias);
+    const stateBox = h("span", {class: "tl-state"});
+    const why = h("div", {class: "tl-whybox"});
+    const form = h("div", {class: "tl-form", hidden: ""});
+    const signBtn = h("button", {type: "button", class: "act"}, t("connections.signin"));
+    const testBtn = h("button", {type: "button", class: "act"}, t("connections.test"));
+    const via = row.type && !row.known ? "nopack" : row.via === "mcp" ? "mcp" : "";
+    const fail = () => {
+      const last = env.results.get(key);
+      return last ? !["ok", "mcp"].includes(last.state) : row.saved && (row.reach === "denied" || row.reach === "failed");
+    };
+    function paint() {
+      const last = env.results.get(key);
+      const bad = fail();
+      const dot = h("span", {class: "su-dot " + (via ? "none" : bad ? "bad" : row.saved ? "ok" : "ring")});
+      let words;
+      if (via === "mcp") words = h("span", {class: "tl-who none"}, t("connections.state.mcp"));
+      else if (via === "nopack") words = h("span", {class: "tl-who none"}, t("connections.state.nopack"));
+      else if (!row.saved && !last) words = h("span", {class: "tl-who none"}, t("connections.none"));
+      else words = h("span", {class: "tl-who" + (bad ? " bad" : "")}, (row.account || "") + (bad ? (row.account ? " · " : "") + (last && last.timeout ? t("connections.state.timeout", {seconds: last.timeout}) : t("connections.state.testfailed")) : ""));
+      const tip = last ? (last.state === "ok" ? t("connections.tip.ok", {who: last.who || "-", seconds: last.seconds}) : last.layers && last.layers.text ? last.layers.text : "") : row.saved ? t("connections.saved.tip", {account: row.account || "-"}) : t("connections.none.tip");
+      const share = row.tool ? h("span", {class: "sv-info", tabindex: "0", title: t(names.length ? "connections.shared.with" : "connections.shared.one", {program: row.tool, names: names.join(", ")})}, "ⓘ") : null;
+      const forget = row.saved && !via ? h("button", {type: "button", class: "mc-x", title: t(row.own ? "connections.forget.own.tip" : "connections.forget.tip"), "aria-label": t("connections.forget")}, "×") : null;
+      if (forget) forget.addEventListener("click", () => sure(forget, row, () => {
+        forget.disabled = true;
+        (row.tool ? ask("forget-tool", {program: row.tool}) : ask("forget", {alias: key})).then(() => { env.results.delete(key); env.redraw(); }, (error) => { why.replaceChildren(h("p", {class: "tl-say bad"}, error.message)); forget.disabled = false; });
+      }));
+      stateBox.replaceChildren(...[dot, words, share, forget].filter(Boolean));
+      stateBox.title = tip;
+      why.replaceChildren(...[last && layersBox(last, env.go)].filter(Boolean));
+      signBtn.className = "act" + (row.saved || via ? "" : " hot");
+      signBtn.hidden = Boolean(via);
+      testBtn.hidden = Boolean(via);
+      testBtn.disabled = !row.saved && row.identity !== "tool";
+      testBtn.title = testBtn.disabled ? t("connections.test.off") : "";
+    }
+    const again = () => (env.paints.get(key) || paint)();  // the list may have been drawn again while a test ran: the row that is on the page shows the answer
+    const busy = (on, say) => { signBtn.disabled = testBtn.disabled = on; if (!on) again(); else why.replaceChildren(h("p", {class: "tl-say sub"}, say || t("connections.testing"))); };
+    const keep = (found0) => { env.results.set(key, found0); };
+    // A sign-in that a program keeps: it is tested, and the name it answers with is kept when the test passes (nothing secret is typed or kept here).
+    const afterTool = () => {
+      busy(true);
+      ask("test", {alias: key}).then((answer) => {
+        keep(answer);
+        if (answer.state !== "ok") { busy(false); return; }
+        return ask("save", {alias: key}).then(() => { env.results.delete(key); env.redraw(); });
+      }, (error) => { busy(false); why.replaceChildren(h("p", {class: "tl-say bad"}, error.message)); });
+    };
+    testBtn.addEventListener("click", () => {
+      busy(true);
+      ask("test", {alias: key, saved: true}).then((answer) => {
+        keep(answer);
+        if (answer.state === "ok" && row.tool && (!row.saved || (answer.who && answer.who !== row.account))) return ask("save", {alias: key}).then(() => { env.results.delete(key); env.redraw(); });
+        busy(false);
+      }, (error) => { busy(false); why.replaceChildren(h("p", {class: "tl-say bad"}, error.message)); });
     });
-    save.addEventListener("click", () => { save.disabled = true; ask("save", blank).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }); });
-    if (forget) forget.addEventListener("click", () => { forget.disabled = true; ask("forget-tool", {program: tool.program}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
-    box.append(h("p", {class: "sub sv-tool"}, t(signed ? "machine.signins.tool.hint.saved" : "machine.signins.tool.hint", {program: tool.program, account: tool.account || ""})), h("div", {class: "sv-acts"}, signIn, test, save, forget, said));
-    line.addEventListener("click", () => { const open = box.hidden; box.hidden = !open; line.setAttribute("aria-expanded", String(open)); });
-    return h("div", {class: "sv-row", "data-focus": "sign:" + tool.program}, line, box);
+    let drawn = false;
+    signBtn.addEventListener("click", () => {
+      if (row.identity === "tool") {
+        if (typeof TERM === "undefined" || !row.login) { why.replaceChildren(h("p", {class: "tl-say bad"}, t("connections.signin.noterm"))); return; }
+        TERM.run("harness connections login " + key, afterTool);  // the kind's own sign-in, in the Terminal window; when it ends the row tests and keeps the account
+        return;
+      }
+      form.hidden = !form.hidden;
+      if (!form.hidden && !drawn) { drawn = true; form.append(...typedForm(row, env, keep, busy)); }
+      if (!form.hidden) { const first = form.querySelector("input"); if (first) first.focus(); }
+    });
+    const source = row.own ? h("span", {class: "sv-own sv-from", title: t("connections.own.tip")}, t("connections.own")) : h("span", {class: "sv-own sv-from", title: t("connections.company.tip")}, t("connections.company"));
+    const chip = envChip(row.env);
+    const title = [...new Set([row.alias, row.label])].concat([row.type_label + (row.auth_label ? " · " + row.auth_label : ""), place(row), (row.fields || {}).url]).filter(Boolean).join("\n");
+    paint();
+    env.paints.set(key, paint);
+    return h("div", {class: "tl-crow", "data-focus": "sign:" + key, "data-alias": key},
+      h("div", {class: "tl-c1"}, h("span", {class: "tl-id", title}, h("b", {class: "sv-alias"}, key), h("span", {class: "sv-kind"}, row.type_label), chip || h("code", {class: "sv-where"}, place(row)), source),
+        h("span", {class: "tl-act"}, stateBox, signBtn, testBtn)), why, form);
+  }
+
+  // The form of a sign-in that needs typing: an account and a password (or one token, or a key file). Sign in tests with what was typed and keeps it only when the test passes.
+  function typedForm(row, env, keep, busy) {
+    const token = row.identity === "token";
+    const account = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: row.identity === "netonly" ? "DOMAIN\\id" : t("connections.account"), value: row.account || ""});
+    const password = h("input", {class: "su-in su-mono", type: "password", autocomplete: "new-password", placeholder: row.saved ? t("connections.password.kept") : (token ? row.auth_label || t("connections.password") : t("connections.password"))});
+    const keyfile = row.identity === "keyfile" ? h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: t("connections.keyfile")}) : null;
+    const go = h("button", {type: "button", class: "act hot"}, t("connections.signin"));
+    const run = () => {
+      busy(true);
+      const values = {alias: row.alias, account: account.value.trim(), password: password.value, keyfile: keyfile ? keyfile.value.trim() : ""};
+      ask("test", values).then((answer) => {
+        keep(answer);
+        if (!["ok", "mcp"].includes(answer.state)) { busy(false); return; }
+        return ask("save", values).then(() => { password.value = ""; env.results.delete(row.alias); env.redraw(); });
+      }, (error) => { busy(false); env.results.set(row.alias, {state: "failed", why: error.message, layers: {steps: {}, broken: "", text: error.message, link: null}}); busy(false); });
+    };
+    go.addEventListener("click", run);
+    [account, password, keyfile].filter(Boolean).forEach((input) => input.addEventListener("keydown", (event) => { if (isEnter(event) && !go.disabled) run(); }));
+    return [h("div", {class: "sv-fields"}, token ? null : field(t("connections.account"), account), field(token ? row.auth_label || t("connections.password") : t("connections.password"), password), keyfile ? field(t("connections.keyfile"), keyfile) : null), h("div", {class: "sv-acts"}, go)];
   }
 
   function orphanRow(item, redraw) {  // an identity kept for a connection the company no longer lists: only the person forgets it
     const forget = h("button", {type: "button", class: "act danger"}, t("connections.forget"));
     const said = h("span", {class: "sv-said"});
     forget.addEventListener("click", () => { forget.disabled = true; ask("forget", {alias: item.name}).then(redraw, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); forget.disabled = false; }); });
-    return h("div", {class: "sv-row", "data-focus": "sign:" + item.name}, h("div", {class: "sv-line orphan", title: t("machine.signins.orphan.tip", {name: item.name})}, h("b", {class: "sv-alias"}, item.name), h("span", {class: "sv-shared"}, t("machine.signins.orphan")),
-      h("span", {class: "sv-state none"}, item.account || "\u2014"), forget, said));
+    return h("div", {class: "tl-crow", "data-focus": "sign:" + item.name}, h("div", {class: "tl-c1 orphan", title: t("machine.signins.orphan.tip", {name: item.name})}, h("span", {class: "tl-id"}, h("b", {class: "sv-alias"}, item.name), h("span", {class: "sv-kind"}, t("machine.signins.orphan"))),
+      h("span", {class: "tl-act"}, h("span", {class: "tl-state"}, h("span", {class: "su-dot none"}), h("span", {class: "tl-who none"}, item.account || "—")), forget)), said);
   }
 
-  function signinsBlock(ctx) {
-    const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
-    const addBox = h("details", {class: "sv-add"}, h("summary", null, t("connections.own.add")));
-    const launch = h("button", {type: "button", class: "act hot"}, t("connections.open"));
-    const out = h("button", {type: "button", class: "act", title: t("connections.export.tip")}, t("connections.export"));  // one's own connections, to put in the company pack (moved here from the Connections tab, 1.7.38)
-    launch.addEventListener("click", () => { if (ctx && ctx.close) ctx.close(); choose(); });
+  // The window (1.7.41): one list, a footer with "Add a connection of your own" and Export. `ctx.go(tab, part, focus)` opens another window at a part.
+  function connectionsPanel(ctx) {
+    const results = new Map();  // alias -> the answer of the last Test, kept while the window is open
+    const list = h("div", {class: "tl-clist"}, h("p", {class: "sub tl-pad"}, t("connections.loading")));
+    const addBox = h("div", {class: "tl-add", hidden: ""});
+    const add = h("button", {type: "button", class: "act", "aria-expanded": "false"}, t("connections.own.add"));
+    const out = h("button", {type: "button", class: "act", title: t("connections.export.tip")}, t("connections.export"));  // one's own connections, to put in the company pack
+    const env = {results, paints: new Map(), redraw: () => redraw(), go: (name, part, focus) => ctx.go(name, part, focus)};
+    add.addEventListener("click", () => {
+      const open = addBox.hidden;
+      addBox.hidden = !open; add.setAttribute("aria-expanded", String(open));
+      if (open) { const first = addBox.querySelector("input"); if (first) first.focus(); addBox.scrollIntoView({block: "nearest", behavior: "smooth"}); }
+    });
     out.addEventListener("click", () => exportWindow());
+    let kinds = null;
     const redraw = () => ask("list").then((found) => {
-      const s = found.signins;
-      launch.disabled = !found.connections.some((row) => row.saved);
-      launch.title = launch.disabled ? t("connections.open.nothing") : "";
       out.disabled = !found.connections.some((row) => row.own);
-      const mine = found.connections.filter((row) => s.connections.some((one) => one.alias === row.alias)).sort((a, b) => a.type_label.localeCompare(b.type_label) || ENV_ORDER.indexOf(a.env) - ENV_ORDER.indexOf(b.env) || a.alias.localeCompare(b.alias));
-      const parts = [...s.tools.map((tool) => toolRow(tool, redraw)), ...mine.map((row) => serverRow(row, redraw)), ...s.orphans.map((item) => orphanRow(item, redraw))];
-      list.replaceChildren(...(parts.length ? parts : [h("p", {class: "sub"}, t("machine.signins.empty"))]));
-      addBox.replaceChildren(h("summary", null, t("connections.own.add")), ownForm(found.types, redraw));
-      if (ctx && ctx.changed) ctx.changed();
-      if (ctx && ctx.arrived) ctx.arrived();
-    }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
-    redraw();
-    return [list, addBox, h("div", {class: "sv-acts sv-below"}, launch, out)];
-  }
-
-  // From the company, the Connections part (1.7.38): one read-only row for each connection, the company's and the person's own (marked "yours"): name, type, environment, address, the tool pack it
-  // belongs to, and at the end a dot for the person's sign-in. The dot opens the Sign-ins row of This computer; signing in, testing and saving are there, not here.
-  function companyRow(row, found, ctx) {
-    const failed = row.saved && (row.reach === "denied" || row.reach === "failed");
-    const state = !row.saved ? "none" : failed ? "bad" : "ok";
-    const tool = row.identity === "tool" ? found.signins.tools.find((one) => one.shared_by.includes(row.alias)) : null;
-    const word = state === "ok" ? t("tools.conn.sign.yes") : state === "bad" ? t("tools.conn.sign.failed") : t("tools.conn.sign.no");
-    const dot = h("button", {type: "button", class: "sv-sdot " + state, "data-alias": row.alias, "aria-label": row.alias + ": " + word,
-      title: [word + (row.account ? " \u00b7 " + row.account : ""), t("tools.conn.sign.tip")].join("\n")}, h("i"));
-    dot.addEventListener("click", () => ctx.go("computer", "signins", "sign:" + (tool ? tool.program : row.alias)));
-    return h("div", {class: "sv-line sv-ro", title: [...new Set([row.alias, row.label])].concat([row.type_label + (row.auth_label ? " \u00b7 " + row.auth_label : ""), where(row)]).filter(Boolean).join("\n")},
-      h("b", {class: "sv-alias"}, row.alias), h("span", {class: "sv-kind"}, row.type_label), row.env === "none" ? null : envChip(row.env), h("code", {class: "sv-where"}, where(row)),
-      row.toolpack ? h("span", {class: "sv-own sv-from", title: t("connections.from.tip", {pack: row.toolpack})}, row.toolpack) : null,
-      row.own ? h("span", {class: "sv-own", title: t("connections.own.tip")}, t("connections.own")) : null, dot);
-  }
-
-  function listPanel(ctx) {
-    const list = h("div", {class: "sv-list"}, h("p", {class: "sub"}, t("connections.loading")));
-    const redraw = () => ask("list").then((found) => {
+      out.title = out.disabled ? t("connections.export.none") : t("connections.export.tip");
       const rows = found.connections.slice().sort((a, b) => a.type_label.localeCompare(b.type_label) || ENV_ORDER.indexOf(a.env) - ENV_ORDER.indexOf(b.env) || a.alias.localeCompare(b.alias));
-      list.replaceChildren(...(rows.length ? rows.map((row) => companyRow(row, found, ctx)) : [h("p", {class: "sub"}, t("connections.empty"))]));
-      if (ctx.changed) ctx.changed();
+      list.replaceChildren(...(rows.length ? rows.map((row) => connRow(row, found, env)) : [h("p", {class: "sub tl-pad"}, t("connections.empty"))]), ...found.signins.orphans.map((item) => orphanRow(item, redraw)));
+      if (JSON.stringify(Object.keys(found.types)) !== JSON.stringify(kinds)) { kinds = Object.keys(found.types); addBox.replaceChildren(h("h4", {class: "mc-h"}, t("connections.own.add")), ownForm(found.types, redraw, env.go)); }
       if (ctx.arrived) ctx.arrived();
-    }, (error) => { list.replaceChildren(h("p", {class: "bad"}, error.message)); });
+    }, (error) => { list.replaceChildren(h("p", {class: "bad tl-pad"}, error.message)); });
     redraw();
-    return {body: [h("p", {class: "sub"}, t("connections.lead"), " ", h("span", {class: "sv-info", tabindex: "0", title: t("connections.lead.tip")}, "\u24d8")), list], foot: []};
+    return {title: t("tools.conn.title"), tip: t("tools.conn.tip"), sub: t("tools.conn.lead"), body: [list, addBox], foot: [add, out]};
   }
 
   // Export: one's own connections in the form of connections.json (no account, no password): copy it, save it as a file, or put it in the company pack.
@@ -247,12 +306,13 @@ const SERVERS = (function () {
   }
 
   function open(done) {
-    if (typeof TOOLS !== "undefined") TOOLS.open("company", done, "connections");
+    if (typeof TOOLS !== "undefined") TOOLS.open("connections", done);
   }
 
   // One line for Get ready and the Enter screen: how many servers, how many with the person's identity.
   function summary() {
-    return ask("list").then((found) => ({tools: found.signins.tools.map((tool) => ({program: tool.program, account: tool.account, shared_by: tool.shared_by})), orphans: found.signins.orphans.map((item) => item.name), n: found.connections.length, saved: found.connections.filter((row) => row.saved).length, rows: found.connections.filter((row) => found.signins.connections.some((one) => one.alias === row.alias)).map((row) => ({alias: row.alias, saved: Boolean(row.saved), account: row.account || "", env: row.env || "", own: Boolean(row.own)}))}));
+    return ask("list").then((found) => ({orphans: found.signins.orphans.map((item) => item.name), n: found.connections.length, saved: found.connections.filter((row) => row.saved).length,
+      rows: found.connections.filter((row) => row.via !== "mcp").map((row) => ({alias: row.alias, saved: Boolean(row.saved), account: row.account || "", env: row.env || "", own: Boolean(row.own), tool: row.tool || "", failed: Boolean(row.saved) && (row.reach === "denied" || row.reach === "failed")}))}));
   }
 
   // "Open VS Code with identities": tick the identities this window holds; those that cannot share it are reached through `harness as`, marked so.
@@ -311,5 +371,5 @@ const SERVERS = (function () {
     close.addEventListener("click", view.close);
   }
 
-  return {open, listPanel, choose, summary, signinsBlock};
+  return {open, connectionsPanel, choose, summary};
 })();

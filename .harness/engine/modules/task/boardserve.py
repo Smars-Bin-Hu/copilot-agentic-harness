@@ -229,9 +229,10 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
         kind = known.get(str(server.get("type"))) or {}
         auth = (kind.get("auth") or {}).get(server.get("auth") or next(iter(kind.get("auth") or {}), ""), {}) or {}
         saved = conn_core.identity_of(env, alias, kind, server)
-        rows.append({"alias": alias, "label": server.get("label", ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "toolpack": kind.get("toolpack", ""), "known": bool(kind), "login": auth.get("login", ""),
+        rows.append({"alias": alias, "label": server.get("label", ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "toolpack": kind.get("toolpack", ""), "known": bool(kind), "via": kind.get("via", "cli"), "login": auth.get("login", ""),
                      "env": server.get("env", ""), "auth": server.get("auth", ""), "auth_label": auth.get("label", ""), "identity": auth.get("identity", ""), "own": bool(server.get("own")),
                      "fields": {field: server.get(field, spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
+                     "tool": conn_core.tool_program(auth) if auth.get("identity") == "tool" else "",  # 1.7.41: the program whose own sign-in this connection uses; one sign-in per computer, shared
                      "account": saved.get("account", ""), "saved": bool(saved), "reach": (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")})
     kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
                  for name, kind in known.items() if not conn_core.type_problems(kind)}
@@ -714,9 +715,11 @@ class Board:
         if step == "list":
             return servers_view(self.root, self.link.status().get("ready", False))
         if step == "test":
-            found = conn_core.test(self.root, alias, given, server=dict(own, own=True) if own else None)
+            found = conn_core.test(self.root, alias, given, server=dict(own, own=True) if own else None, saved=bool(data.get("saved")))
             if found["state"] in ("ok", "mcp"):  # an MCP connection has nothing to test here: what is kept is the connection itself
                 self.tested[alias] = (stamp, time.time(), found.get("who", ""))
+            if data.get("saved") and not own and found["state"] != "mcp":  # a test of what is kept here says how that connection is now (1.7.41)
+                self.note_reach(alias, found)
             return found
         if step == "save":
             passed = self.tested.get(alias)
@@ -724,6 +727,7 @@ class Board:
                 raise ValueError(say("connections.save.untested"))
             conn_core.save(self.root, alias, given, own, who=passed[2] if len(passed) > 2 else "")
             self.tested.pop(alias, None)
+            self.note_reach(alias, {"state": "ok", "why": "", "who": passed[2] if len(passed) > 2 else ""}, own)  # it passed the test just before: the old failure is gone
             return {"saved": alias}
         if step == "forget":
             conn_core.forget(self.root, alias)
@@ -752,6 +756,18 @@ class Board:
                 self.checker.start()
             return made
         raise ValueError(say("serve.refused.request"))
+
+    def note_reach(self, alias: str, found: Dict[str, Any], own: Optional[Dict[str, Any]] = None) -> None:
+        """Keep what a test of a connection found out beside the probes' answers (`core.reach.record`). A connection with no environment of the list is not recorded."""
+        try:
+            server = own or conn_core.listed(self.root).get(alias) or {}
+            env = str(server.get("env") or "")
+            if env not in conn_core.ENVS:
+                return
+            state = {"ok": reach.OK, "denied": reach.DENIED}.get(str(found.get("state")), reach.FAILED)
+            reach.record(self.root, f"{alias}:{env}", state, str(found.get("why") or ""), str(found.get("who") or ""))
+        except Exception:  # noqa: BLE001 - a note on a state must never fail the test the person pressed
+            pass
 
     def machine(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Get ready, This computer (1.7.11): the tool folders and the CA bundle VS Code is started with (`core.launchenv`). `step`: state, paths, bundle, drop."""

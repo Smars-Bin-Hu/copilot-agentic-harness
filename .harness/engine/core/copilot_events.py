@@ -101,6 +101,19 @@ PATH_KEYS = ("path", "filePath", "file_path")
 PATCH_HEADER = re.compile(r"^\*\*\* (?:Add File|Update File):\s*(.+?)\s*$", re.MULTILINE)
 
 
+HUMAN_TOOLS = ("ask_user", "askuserquestion")  # tools that only wait for the person's answer (the same list as `modules/task/handler.py` ASK_TOOLS)
+_APPROVAL_WAIT = re.compile(r"(?:^|[\s/\\;&|])wait(?:\.cmd)?\s+(?:--approval\b|\S+\s+--approval\b)")
+
+
+def waits_for_person(name: str, arguments: Any) -> bool:
+    """Is this tool call only the agent waiting for a person (1.7.38, C12 TB-04)? A question to the person (`ask_user`), or `harness wait --approval <code>` in a terminal: no work runs in either, so the
+    time is the person's, not the tool's. It was counted as tool time, and the report of a task that waited nine minutes said the tools ran for nine minutes."""
+    if name.lower() in HUMAN_TOOLS:
+        return True
+    command = arguments.get("command") if isinstance(arguments, dict) else None
+    return isinstance(command, str) and bool(_APPROVAL_WAIT.search(command))
+
+
 def task_docs(name: str, arguments: Any) -> List[Dict[str, str]]:
     """The REQ.md and PLAN.md a write call names: `[{doc, task}]`, the task being the folder the file is in. A call that only reads names none."""
     if not isinstance(arguments, dict) or not any(word in name.lower() for word in WRITE_WORDS) or arguments.get("command") == "view":
@@ -294,14 +307,18 @@ def _read(path: Path, text_chars: int) -> Optional[Dict[str, Any]]:
                     current["turn_s"] += max(0.0, at - turn_started)
                 turn_started = message_at = None
             elif kind == "tool.execution_start":
-                tools[str(data.get("toolCallId"))] = {"name": str(data.get("toolName") or ""), "at": at, "asked": 0.0}
+                tools[str(data.get("toolCallId"))] = {"name": str(data.get("toolName") or ""), "at": at, "asked": 0.0, "person": waits_for_person(str(data.get("toolName") or ""), data.get("arguments"))}
                 current["docs"].extend(dict(found, at=at) for found in task_docs(str(data.get("toolName") or ""), data.get("arguments")))
             elif kind == "tool.execution_complete":
                 started = tools.pop(str(data.get("toolCallId")), None)
                 if started is not None:
                     metrics = ((data.get("toolTelemetry") or {}).get("metrics") or {}) if isinstance(data.get("toolTelemetry"), dict) else {}
+                    ran = max(0.0, at - started["at"] - started["asked"])
+                    if started.get("person"):  # the agent waited for a person in this call: that is waiting for the person, as a permission is (1.7.38, C12 TB-04)
+                        current["approval_s"] += ran
+                        ran = 0.0
                     current["tools"].append({
-                        "name": started["name"], "seconds": max(0.0, at - started["at"] - started["asked"]), "ok": data.get("success") is not False,
+                        "name": started["name"], "seconds": ran, "ok": data.get("success") is not False,
                         "result_tokens": number(metrics.get("result_token_count")) if isinstance(metrics, dict) else None,
                         "at": started["at"], "error": str((data.get("error") or {}).get("message") or "") if isinstance(data.get("error"), dict) else "",
                     })

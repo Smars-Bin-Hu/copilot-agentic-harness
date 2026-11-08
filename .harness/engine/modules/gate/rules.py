@@ -133,13 +133,13 @@ def external_task(action: Any, command: str) -> str:
     return say("gate.external.task", place=place(action.system, action.env), verb=word(action.verb), call=command)
 
 
-def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str, offers: Any = None) -> str:
+def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str, offers: Any = None, changed: Any = None) -> str:
     where = say("gate.external.outbox_draft", draft=draft) if draft else say("gate.external.outbox_nodraft")
-    text = say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)
+    text = (say("gate.external.changed_file", files=", ".join(str(one) for one in changed)) + " " if changed else "") + say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)
     if offers:  # 1.7.38: the card can also open the connection for the task; the agent says so, and runs the same command again if the user does
         names = ", ".join(str(item["system"]) for item in offers)
         text += " " + say("gate.external.outbox.opens", names=names)
-    return text
+    return text + " " + say("gate.external.outbox.code", code=code)  # 1.7.38, C12 TB-10: the agent wrote the code in the chat: the person may then approve without reading the card first
 
 
 def external_autorun(action: Any, command: str) -> str:

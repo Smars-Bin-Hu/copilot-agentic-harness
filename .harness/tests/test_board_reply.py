@@ -576,7 +576,7 @@ class PageTests(unittest.TestCase):
         self.assertEqual((chatsend.MAX_FILE, chatsend.MAX_FILES_TOTAL), (10 * 1024 * 1024, 20 * 1024 * 1024))
 
     def test_a_task_that_waits_is_not_called_idle(self) -> None:
-        self.assertIn('const waits = state === "input" || (state === "idle" && st.needs.length > 0);', source("live.js"))
+        self.assertIn('const waits = asked || state === "input" || (state === "idle" && st.needs.length > 0);', source("live.js"))
 
     def test_the_stream_is_drawn_by_the_drawing_of_the_documents(self) -> None:
         self.assertIn('LIVE.drawing(blocks)', source("desk.js"))

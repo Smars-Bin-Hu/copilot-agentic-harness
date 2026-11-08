@@ -62,7 +62,7 @@ def types(root: Path, guard: bool = False) -> Dict[str, Dict[str, Any]]:
 
     mcp = launchenv.mcp_allowed(root)
     found: Dict[str, Dict[str, Any]] = {}
-    for pack_name, path in toolpacks.type_entries(root, guard):  # the first tool pack that brings a type keeps it
+    for pack_name, path, item in toolpacks.typed_entries(root, guard):  # the first tool pack that brings a type keeps it
         try:
             kind = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
@@ -71,6 +71,9 @@ def types(root: Path, guard: bool = False) -> Dict[str, Dict[str, Any]]:
             continue
         if isinstance(kind, dict) and kind.get("type") and str(kind["type"]) not in found:
             found[str(kind["type"])] = dict(kind, toolpack=pack_name)  # its connections' systems are the tool pack's: Open to the agent leaves them closed
+            own = toolpacks.own_commands(item, kind)  # 1.7.38: a pack that lists the subcommands of its own program: the gate refuses any other word after it
+            if own and "commands" not in kind:
+                found[str(kind["type"])]["commands"] = own
     return found
 
 
@@ -128,7 +131,7 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
                 re.compile(str(rule["pattern"]))
             except re.error as error:
                 out.append(f"types.{name}.{key}[{index}]: bad pattern: {error}")
-    for key in ("expect", "denied", "down", "match", "signin_lost"):
+    for key in ("expect", "denied", "down", "match", "signin_lost", "command"):
         try:
             re.compile(_fill(kind.get(key) or "", {}, escape=True) if key == "match" else kind.get(key) or "")
         except re.error as error:
@@ -375,7 +378,7 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
             chosen = (server.get(key) or kind.get(key)) if key == "rules" else kind.get(key)  # the connection's own rules win, else the type's (1.7.21)
             if chosen:
                 system[key] = chosen
-        for key in ("toolpack", "openable", "item", "link"):
+        for key in ("toolpack", "openable", "item", "link", "commands", "command"):
             if kind.get(key) is not None:
                 system[key] = kind[key]
         system["open"] = connection_scope(kind, server)
@@ -509,15 +512,25 @@ def _tokens(*texts: Any) -> List[str]:
 FIND_LIMIT = 5
 
 
-def find(root: Path, text: str, limit: int = FIND_LIMIT) -> Dict[str, Any]:
+def window_aliases(root: Path) -> List[str]:
+    """The connections this chat can use: the ones `calls` gives. Layer 0 (the kinds and counts at the start of a chat) and layer 1 (`find`) both read this list, so they agree (1.7.38, C12 TB-07):
+    a connection signed in after VS Code was opened from the board is in neither."""
+    return [one["alias"] for one in calls(root)]
+
+
+def find(root: Path, text: str, limit: int = FIND_LIMIT, aliases: Optional[List[str]] = None) -> Dict[str, Any]:
     """Layer 1 (1.7.38): the connections that fit some words (`sales warehouse dev`). A word fits when it is, or starts, a word of the name, the type, the sentence `about`, the label, the `repos` or
     the `domains` of a connection; an environment must be the word itself (`dev` is not `devops`). The connection that fits the most words comes first, then the name counts, then the order of the
-    list. `{matches: [describe...], total, all}`: `total` fitted, `all` connections there are."""
+    list. `{matches: [describe...], total, all, envs}`: `total` fitted, `all` connections there are. An environment word (`dev`, `ist`, `qat`, `prod`) filters (1.7.38, C12 TB-06): a connection of another
+    environment is left out, even when it fits the other words; one with no environment (a ticket board) is kept when it fits another word. `envs`: the environments asked for. `aliases`: only these connections."""
     words = list(dict.fromkeys(_WORD.findall(str(text or "").lower())))
+    asked = [word for word in words if word in ENVS and word != "none"]
     servers, kinds = listed(root), types(root)
-    rows = [describe(root, alias, servers, kinds) for alias in servers]
+    rows = [describe(root, alias, servers, kinds) for alias in servers if aliases is None or alias in aliases]
     scored = []
     for position, row in enumerate(rows):
+        if asked and row["env"] not in ("", "none") and row["env"] not in asked:
+            continue
         name, kind, env = _tokens(row["alias"]), _tokens(row["type"], row["type_label"]), _tokens(row["env"])
         other = _tokens(row["about"], row["label"], " ".join(row["repos"]), " ".join(row["domains"]))
         hit, weight = 0, 0
@@ -532,7 +545,7 @@ def find(root: Path, text: str, limit: int = FIND_LIMIT) -> Dict[str, Any]:
         if hit:
             scored.append((-hit, -weight, position, row))
     scored.sort(key=lambda item: item[:3])
-    return {"matches": [item[3] for item in scored[:limit]], "total": len(scored), "all": len(rows)}
+    return {"matches": [item[3] for item in scored[:limit]], "total": len(scored), "all": len(rows), "envs": asked}
 
 
 # --- a test of the way in ----------------------------------------------------------------------------------------------------------------------------------

@@ -192,7 +192,8 @@ class ApprovalWaitTests(HarnessTestCase):
         self.after[2] = lambda: approvals.dismiss(self.root, self.code, self.minutes, file=approvals.ACTIONS, reason="command", note="use the dev ticket")
         found = self.wait()
         self.assertEqual((found["approved"], found["dismissed"], found["reason"], found["note"], found["exit_code"]), (False, True, "command", "use the dev ticket", 1))
-        self.assertIn("the command is wrong: use the dev ticket", found["next"])
+        self.assertIn("Reason: the command is wrong.", found["next"])
+        self.assertIn('The user wrote: "use the dev ticket"', found["next"])  # 1.7.38 (C12 TB-09): the person's line on a line of its own, in quotes: no doubled stop
         self.assertIn("Change the command", found["next"])
         self.assertIn("held again as usual", found["next"])
 
@@ -220,7 +221,7 @@ class ApprovalWaitTests(HarnessTestCase):
         self.assertEqual((found["approved"], found["waiting"], found["state"]), (False, True, "pending"))
         self.assertNotIn("exit_code", found, "not an error: the agent is not to retry in a loop")
         self.assertIn("End your turn now", found["next"])
-        self.assertIn(self.code, found["next"])
+        self.assertNotIn(self.code, found["next"], "the agent is not asked to say the code (1.7.38, C12 TB-10)")
         self.assertEqual(found["seconds"], 30)
         self.assertEqual(self.entry()["wait"]["state"], "timeout")
         self.assertEqual(outbox.agent_place(self.entry()), "ended", "the board knows: its turn ended on this card")

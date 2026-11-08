@@ -40,7 +40,7 @@ How the two records are matched: the hook log notes for every prompt which task 
 
 `task close` writes `.workspace/reports/tasks/<task name>/report.md` (one folder per task): the whole plan, the times of the two approvals, which files were fetched, the lines added and removed, the verdict of every independent check, the calls that were refused. Afterwards, "what changed, who approved, why was it redone" can be answered without relying on memory.
 
-The `report.html` next to it answers another question: where the time and the usage went. It splits every prompt into model thinking, tools running, subagents and waiting for your confirmation click, and works out the time spent waiting for you, the share of each stage, and how much the context grew. To have the agent explain it, type `/harness-task-report` (only the user can start it).
+The `report.html` next to it answers another question: where the time and the usage went. It splits every prompt into model thinking, tools running, subagents and waiting for you (your approval click, your answer to a question, and the agent's `harness wait --approval`), and works out the time spent waiting for you, the share of each stage, and how much the context grew. To have the agent explain it, type `/harness-task-report` (only the user can start it).
 
 ### 12.5 doctor: the self-check
 

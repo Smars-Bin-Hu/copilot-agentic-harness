@@ -20,6 +20,7 @@
     }
   },
   "match": "^",
+  "command": "^(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*([a-z][\\w-]*)",
   "auth": {
     "signin": {
       "identity": "tool",

@@ -75,7 +75,7 @@ def _judge(needs: Dict[str, Any], code: Optional[int], output: str) -> Tuple[str
     if code != 0:
         return FAILED, first_line(output) or f"exit-{code}", ""  # what the program said first, not just its exit code (1.7.21)
     if needs.get("expect"):
-        found = re.search(needs["expect"], output or "")
+        found = re.search(needs["expect"], output or "", re.MULTILINE)  # as `connections.judge` reads it: a warning line before the answer is not another identity
         if not found:
             return DENIED, "other-identity", ""
         return OK, "", (found.group(1).strip()[:80] if found.groups() and found.group(1) else "")

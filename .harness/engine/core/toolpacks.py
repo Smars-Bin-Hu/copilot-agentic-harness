@@ -429,9 +429,26 @@ def skill_label(names: List[str]) -> str:
     return stem[:stem.rfind("-") + 1] + "*" if "-" in stem else ""
 
 
+def typed_entries(root: Path, guard: bool = False) -> List[tuple]:
+    """`(pack name, type file, the pack)` of each connection type the active packs bring, in the order of the packs. With `guard` also those of the off packs a connection uses (`guarded`, 1.7.38)."""
+    return [(name, path, item) for name, item in (guarded(root) if guard else active(root)).items() for path in sorted((item["folder"] / TYPES).glob("*.json"))]
+
+
 def type_entries(root: Path, guard: bool = False) -> List[tuple]:
     """`(pack name, type file)` of each connection type the active packs bring, in the order of the packs. With `guard` also those of the off packs a connection uses (`guarded`, 1.7.38)."""
-    return [(name, path) for name, item in (guarded(root) if guard else active(root)).items() for path in sorted((item["folder"] / TYPES).glob("*.json"))]
+    return [(name, path) for name, path, _item in typed_entries(root, guard)]
+
+
+def own_commands(item: Dict[str, Any], kind: Dict[str, Any]) -> List[str]:
+    """The subcommands the pack lists (`commands` of its manifest), when the program of this type is the pack's own (a file of `bin/`, with or without `.cmd`): `[]` for a program the pack does not
+    bring (`sqlcmd`, `az`): nothing is known of its words (1.7.38, C12 TB-03)."""
+    commands = item["manifest"].get("commands")
+    cli = kind.get("cli")
+    program = str(cli[0]) if isinstance(cli, list) and cli else ""
+    if not program or not isinstance(commands, list) or not commands:
+        return []
+    folder = item["folder"] / "bin"
+    return [str(one) for one in commands] if any((folder / (program + suffix)).is_file() for suffix in ("", ".cmd")) else []
 
 
 def type_files(root: Path) -> List[Path]:

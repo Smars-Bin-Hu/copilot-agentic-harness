@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core import messages
+from core import messages, pinfiles
 
 LONG = 40  # a quoted value this long, or with a line break, is a block of its own
 SCRIPT_CHARS = 60_000  # how much of a file the command reads is shown
@@ -104,9 +104,10 @@ def commands(command: str) -> List[str]:
     return out
 
 
-def layout(command: str, folder: Optional[Path] = None) -> Dict[str, Any]:
+def layout(command: str, folder: Optional[Path] = None, root: Optional[Path] = None, cwd: str = "") -> Dict[str, Any]:
     """The lines of a command for the small window: `{program, lines: [{kind, text, value?}], script?}`. `kind`: program, option (with its value), flag (no value), block (a long quoted
-    value on its own), arg (a bare value). `script`: a file the command names that is in `folder` (the task), with its text (capped) and its line count."""
+    value on its own), arg (a bare value). `script`: a file the command names that is in `folder` (the task), with its text (capped) and its line count. 1.7.38: a relative path is looked for
+    where the agent's terminal was (`cwd`), then from the root of the repository (`root`, where its terminal starts), then in the task folder (`core.pinfiles.find`)."""
     found = tokens(command)
     if not found:
         return {"program": "", "lines": [], "script": None}
@@ -133,7 +134,7 @@ def layout(command: str, folder: Optional[Path] = None) -> Dict[str, Any]:
                 else:
                     lines.append({"kind": "option", "text": item["text"], "value": nxt["text"], **({"quoted": True} if nxt["quoted"] else {})})  # quoted: the body of the call when there is no block (a short query)
                     if script is None and folder is not None:
-                        script = script_of(folder, nxt["text"])
+                        script = script_of(folder, nxt["text"], root, cwd, command)
                 index += 2
                 continue
             lines.append({"kind": "flag", "text": item["text"]})
@@ -142,18 +143,19 @@ def layout(command: str, folder: Optional[Path] = None) -> Dict[str, Any]:
         else:
             lines.append({"kind": "arg", "text": item["text"], **({"quoted": True} if item["quoted"] else {})})
             if script is None and folder is not None:
-                script = script_of(folder, item["text"])
+                script = script_of(folder, item["text"], root, cwd, command)
         index += 1
     return {"program": found[0]["text"], "lines": lines, "script": script}
 
 
-def script_of(folder: Path, value: str) -> Optional[Dict[str, Any]]:
-    """A file the command names, when it is inside the task folder: its text, capped, and its line count. A path outside the task, or no file, is None."""
+def script_of(folder: Path, value: str, root: Optional[Path] = None, cwd: str = "", command: str = "") -> Optional[Dict[str, Any]]:
+    """A file the command names, when it is inside the task folder: its text, capped, and its line count. A path outside the task, or no file, is None. A relative path is found as the command finds it
+    (`core.pinfiles.find`): from the agent's terminal, from the repository root, then in the task folder; the card showed no script for `-i .workspace/sandbox/tasks/<task>/DEV/_manual/x.sql` before (1.7.38)."""
     if not value or value.startswith("-") or not value.lower().endswith(SCRIPT_SUFFIXES):
         return None
     try:
-        path = (folder / value).resolve()
-        if folder.resolve() not in path.parents or not path.is_file():
+        path = pinfiles.find(value, root or folder, folder, cwd, command)
+        if path is None:
             return None
         text = path.read_text(encoding="utf-8-sig", errors="replace")
     except (OSError, ValueError):

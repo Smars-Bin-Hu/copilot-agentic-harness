@@ -586,7 +586,7 @@ def confirm_req(
         if hashlib.sha256(now.encode("utf-8")).hexdigest() != digest:
             raise CommandError(say("req.changed"))
         fill_confirmation(root, task, path, now, again, digest)
-        if not tasks.plan_digest(root, task):
+        if not tasks.plan_digest(root, task) and not isinstance(again.get("deliver"), dict):  # a delivered task waits for its acceptance: confirming does not tell the agent to go on, nor take that away (1.7.38, C12 TB-01)
             again["waiting"] = {"since": utc_now(), "why": "go-req"}  # no plan yet, and nobody told the agent: the page gives the message to send (1.5.34)
     return {"confirmed": True, "task": task, "req": req, "next": say("req.next")}
 

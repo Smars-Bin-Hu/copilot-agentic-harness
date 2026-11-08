@@ -17,7 +17,7 @@ from typing import Any, Dict, Optional
 import sys
 from typing import Callable, List
 
-from . import approvals, config, messages
+from . import approvals, config, messages, pinfiles
 from .paths import utc_now
 from .systems import place
 
@@ -66,7 +66,7 @@ def write_draft(root: Path, task: str, code: str, action: Any, command: str, ses
 _SEPARATORS = re.compile(r"\n|;|&&|\|\||\|")
 
 
-def merge_into_waiting(root: Path, task: str, session_id: str, command: str, action: Any, minutes: int, offers: Optional[List[Dict[str, Any]]] = None) -> str:
+def merge_into_waiting(root: Path, task: str, session_id: str, command: str, action: Any, minutes: int, offers: Optional[List[Dict[str, Any]]] = None, cwd: str = "") -> str:
     """The code of a waiting card this command takes over, or "" (1.7.27). The agent sent a line of several commands (a read, then a write); it was held whole. It then sends the write alone:
     the same write, the same task, not yet approved. That is the same card, not a second one: the waiting entry gets the short command, keeps its code, and its draft is written again."""
     text = approvals.collapse(command)
@@ -80,7 +80,7 @@ def merge_into_waiting(root: Path, task: str, session_id: str, command: str, act
         parts = [approvals.collapse(part) for part in _SEPARATORS.split(old)]
         if old == text or len(parts) < 2 or text not in parts or item.get("system", "") != action.system:
             continue
-        if approvals.rewrite(root, str(item["code"]), session_id, text, minutes, extra=entry_extra(action, task, offers), file=approvals.ACTIONS):
+        if approvals.rewrite(root, str(item["code"]), session_id, text, minutes, extra=entry_extra(action, task, offers, cwd), file=approvals.ACTIONS):
             try:
                 (root / draft_path(task, item["code"], action.system)).unlink()
             except OSError:
@@ -105,10 +105,10 @@ def mark(root: Path, relative: Optional[str], state: str, reason: str = "") -> N
     path.write_text(_STATE_LINE.sub(lambda _match: line, text, count=1), encoding="utf-8")
 
 
-def entry_extra(action: Any, task: Optional[str], offers: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def entry_extra(action: Any, task: Optional[str], offers: Optional[List[Dict[str, Any]]] = None, cwd: str = "") -> Dict[str, Any]:
     """What the person sees in `approve-action` besides the command. The draft is `draft_of(entry)`. `offers` (1.7.38): the connections of the line that the card may open for the task
-    (`{system, env, scope: all|items, refs?}`); a request to open one is accepted only for a connection named here."""
-    extra = {"system": action.system, "env": action.env, "verb": action.verb, "target": action.target, "task": task or ""}
+    (`{system, env, scope: all|items, refs?}`); a request to open one is accepted only for a connection named here. `cwd` (1.7.38): where the agent's terminal was, to find the files the line names."""
+    extra = {"system": action.system, "env": action.env, "verb": action.verb, "target": action.target, "task": task or "", "cwd": cwd or ""}
     if not getattr(action, "named", True):
         extra["named"] = False  # no verbs rule matched: the card and the draft say so
     if offers:
@@ -162,7 +162,7 @@ def running_wait(item: Dict[str, Any], now: Optional[float] = None) -> bool:
 
 def agent_place(item: Dict[str, Any], now: Optional[float] = None) -> str:
     """Where the agent stands towards this held call (1.7.38, C11 Q21): `wait` (its `harness wait --approval` on the code is running), `ended` (its wait ran out and it was told to end its turn and say what waits
-    for this card; a call held a moment ago counts too, for the agent has had no time to start its wait), or `away` (it did neither: it went on)."""
+    for this card; a call held a moment ago counts too, for the agent has had no time to start its wait), or `away` (it did neither: it went on, or it delivered the work: `agent_left`)."""
     now = time.time() if now is None else now
     wait = item.get("wait") if isinstance(item.get("wait"), dict) else {}
     if running_wait(item, now):
@@ -173,6 +173,20 @@ def agent_place(item: Dict[str, Any], now: Optional[float] = None) -> str:
         return "ended" if not wait and now - float(item.get("at", 0)) <= START_GRACE_S else "away"
     except (TypeError, ValueError):
         return "away"
+
+
+def agent_left(root: Path, task: str) -> int:
+    """The agent delivered the work of this task and stops (1.7.38, C12 TB-03): a held call it never started a wait on is a call it went on without, at once, not after the grace of `START_GRACE_S`.
+    A call it waits on, or ended its turn on, is left as it is. How many calls were marked."""
+    count = 0
+    try:
+        minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+        for item in pending_for(root, task):
+            if not isinstance(item.get("wait"), dict) and approvals.wait_mark(root, str(item.get("code")), "left", minutes, file=approvals.ACTIONS):
+                count += 1
+    except Exception:  # noqa: BLE001 - a mark that cannot be written must not stop a delivery
+        pass
+    return count
 
 
 def agent_waits(item: Dict[str, Any], now: Optional[float] = None) -> bool:
@@ -259,7 +273,9 @@ def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, int
         ), file=out)
         print(f"      {item['command']}", file=out)
     answer = (reader or input)(say("gate.action.prompt")).strip()
-    done = approvals.approve(root, answer, minutes, file=approvals.ACTIONS) if answer else None
+    chosen = next((item for item in waiting if str(item.get("code")) == answer.upper()), None) if answer else None
+    kept = pinfiles.pins(str(chosen["command"]), Path(root), str(chosen.get("task") or ""), str(chosen.get("cwd") or "")) if chosen else {}  # the files the line names, as the person read them (1.7.38, C12 TB-05)
+    done = approvals.approve(root, answer, minutes, file=approvals.ACTIONS, files=kept) if answer else None
     if done is None:
         raise ValueError(say("gate.action.refused"))
     mark(Path(root), draft_of(done), "approved")
@@ -292,9 +308,19 @@ def dismiss_action(root: Path, code: str, interactive: Optional[bool] = None, re
             "agent": agent_place(before or done), "next": say("gate.action.dismissed")}
 
 
+def reason_words(reason: str) -> str:
+    """The kind of reason in words (no sentence stop: the text that holds it adds its own)."""
+    return say(f"outbox.reason.{reason}") if reason in REASONS else say("outbox.reason.none")
+
+
+def note_text(note: str) -> str:
+    """The person's own line, for the text to the agent: on a line of its own, in quotes, whatever it ends with (it used to end the sentence and a second full stop followed: `two.'.`). Empty without a line."""
+    return say("outbox.note", note=note) if note else ""
+
+
 def reason_text(reason: str, note: str = "") -> str:
-    """The reason in words, for the agent and the draft: the kind, then the person's line."""
-    words = say(f"outbox.reason.{reason}") if reason in REASONS else say("outbox.reason.none")
+    """The reason in words, for the draft and the history line: the kind, then the person's line."""
+    words = reason_words(reason)
     return f"{words}: {note}" if note else words
 
 
@@ -309,15 +335,16 @@ def decided(entry: Dict[str, Any], minutes: int = approvals.DEFAULT_MINUTES) -> 
         return {"approved": False, "state": "opened", "opened": True, "names": names, "next": say("wait.approval.opened", names=shown)}
     reason, note = str(entry.get("reason") or ""), str(entry.get("note") or "")
     why = reason_text(reason, note)
-    return {"approved": False, "state": "dismissed", "dismissed": True, "reason": reason or "none", "note": note, "why": why, "next": say("wait.approval.not_approved", why=why, follow=follow_text(reason)), "exit_code": 1}
+    return {"approved": False, "state": "dismissed", "dismissed": True, "reason": reason or "none", "note": note, "why": why, "next": say("wait.approval.not_approved", why=reason_words(reason), note=note_text(note), follow=follow_text(reason)), "exit_code": 1}
 
 
 def follow_text(reason: str) -> str:
     """What the agent is to do after a call was not approved, by the reason (the rules for the agent: one source, here)."""
-    return say(f"wait.approval.follow.{reason}") if reason in REASONS else say("wait.approval.follow.none")
+    text = say(f"wait.approval.follow.{reason}") if reason in REASONS else say("wait.approval.follow.none")
+    return text + " " + say("connections.ask") if reason == "connection" else text  # 1.7.38, C12 TB-08: the agent asked "which connection?" with PROD or the one just turned down as the default
 
 
 def wake_dismissed(entry: Dict[str, Any]) -> str:
     """The message the board sends to an agent whose turn ended on a call the person did not approve, and gave a reason for (1.7.38)."""
     reason, note = str(entry.get("reason") or ""), str(entry.get("note") or "")
-    return say("wake.dismissed", code=str(entry.get("code") or ""), why=reason_text(reason, note), follow=follow_text(reason))
+    return say("wake.dismissed", code=str(entry.get("code") or ""), why=reason_words(reason), note=note_text(note), follow=follow_text(reason))

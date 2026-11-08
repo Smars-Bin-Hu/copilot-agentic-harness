@@ -66,6 +66,8 @@ SYSTEMS_SCHEMA = {
                 "items": {"type": "object", "required": ["pattern", "verb"], "properties": {"pattern": {"type": "string", "minLength": 1}, "verb": {"type": "string", "enum": list(VERBS)}}},
             },
             "target": {"type": "string"},
+            "commands": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: the subcommands of the system's own program (a tool pack's `commands`): a call whose subcommand is none of them is refused, with a line, not held
+            "command": {"type": "string", "minLength": 1},  # 1.7.38: a pattern on the arguments after the program whose first group is the subcommand (default: the first word)
             "rules": {"type": "object", "additionalProperties": _RULE_SET},
             "show": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
             "say": {  # 1.7.20: `[{"pattern": <on the arguments after the program>, "text": "Add a comment to work item {1}"}]`: the first match is the one line a held call's card opens with
@@ -125,7 +127,7 @@ def validate(systems: Any) -> List[str]:
             if program in owner:
                 errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}; give one of them a `when`")
             owner[program] = name
-        patterns = [("target", system.get("target") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or ""), ("needs.denied", (system.get("needs") or {}).get("denied") or ""), ("needs.down", (system.get("needs") or {}).get("down") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"item[{index}]", value) for index, value in enumerate([system["item"]] if isinstance(system.get("item"), str) else (system.get("item") or [])) if isinstance(value, str)] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs", "say", "body") for index, item in enumerate(system.get(key) or [])]
+        patterns = [("target", system.get("target") or ""), ("command", system.get("command") or ""), ("reach.when", when or ""), ("needs.expect", (system.get("needs") or {}).get("expect") or ""), ("needs.denied", (system.get("needs") or {}).get("denied") or ""), ("needs.down", (system.get("needs") or {}).get("down") or "")] + [(f"show.{key}", value) for key, value in (system.get("show") or {}).items()] + [(f"item[{index}]", value) for index, value in enumerate([system["item"]] if isinstance(system.get("item"), str) else (system.get("item") or [])) if isinstance(value, str)] + [(f"{key}[{index}]", item["pattern"]) for key in ("env_from", "verbs", "say", "body") for index, item in enumerate(system.get(key) or [])]
         for where, pattern in (item for item in patterns if item[1]):
             try:
                 re.compile(pattern)

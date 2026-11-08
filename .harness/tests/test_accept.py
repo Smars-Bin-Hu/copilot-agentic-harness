@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
-from support import payload
+from support import confirm_requirement, payload
 from taskcase import NAME, SESSION, TASK, TaskCase
 
 from core import messages, tasks
@@ -159,6 +159,102 @@ class WaitTests(AcceptCase):
         row = next(item for item in rows["tasks"] if item["task"] == TASK)
         self.assertEqual([item["action"] for item in row["actions"]][0], "accept")
         self.assertEqual(row["actions"][0]["command"], "", "the board only: no command in a terminal")
+
+
+class DeliveredWithAnOpenRequirementTests(AcceptCase):
+    """C12 TB-01: a full test task delivered before its requirement was confirmed. The acceptance comes first; confirming the requirement tells the agent nothing and takes nothing away."""
+
+    def delivered(self) -> None:
+        self.new(kind="test")
+        self.assertEqual(task_ops.req_state(self.root, TASK), "unwritten")
+        req = self.task / "REQ.md"  # every line of the template written: a line left as `<...>` keeps the confirm button away
+        lines = [("Run DEV and IST." if task_ops._PLACEHOLDER.match(line.strip()) else line) for line in req.read_text(encoding="utf-8").splitlines()]
+        req.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self.assertEqual((self.data()["tier"], task_ops.req_state(self.root, TASK)), ("full", "open"))
+        self.deliver("--summary", SUMMARY, "--skipped", "UAT: skipped on the user's word")
+        self.stop()
+
+    def test_the_acceptance_comes_before_the_requirement_that_waits_for_a_confirmation(self) -> None:
+        self.delivered()
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "accept")
+        desk = taskdesk.desk(self.root, NAME, ("accept", "close", "confirm-req"))
+        self.assertEqual(desk["waiting_why"], "accept")
+        names = [item["action"] for item in desk["actions"]]
+        self.assertIn("accept", names)
+        self.assertIn("confirm-req", names, "the confirmation is still there, beside the acceptance")
+        self.assertTrue(desk["req_unconfirmed"])
+
+    def test_confirming_the_requirement_does_not_wake_the_agent_nor_take_the_acceptance_away(self) -> None:
+        self.delivered()
+        import hashlib
+        import io
+
+        req = self.task / "REQ.md"
+        code = hashlib.sha256(req.read_bytes()).hexdigest()[:8]
+        task_ops.confirm_req(self.root, TASK, reader=lambda _prompt: code, interactive=True, out=io.StringIO())
+        data = self.data()
+        self.assertEqual(data["waiting"]["why"], "accept")
+        self.assertIn("deliver", data)
+        self.assertEqual(tasklife.waiting(self.root, TASK, data)["why"], "accept")
+        self.assertNotIn("go-req", json.dumps(data["waiting"]))
+        self.assertEqual(self.board().act("accept", NAME, "act")["status"], "closed", "Accept and close is still there")
+
+    def test_without_a_delivery_the_confirmation_still_tells_the_agent_to_go_on(self) -> None:
+        self.new(kind="test")
+        confirm_requirement(self.root, TASK)
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "go-req")
+
+    def test_a_call_held_for_an_answer_that_the_agent_waits_on_is_not_covered(self) -> None:
+        self.delivered()
+        from core import approvals
+
+        approvals.request(self.root, "vscode", SESSION, "tk comment T-1 x", 10, file=approvals.ACTIONS, extra={"system": "tk", "env": "none", "verb": "write", "task": TASK})
+        approvals.wait_mark(self.root, next(item["code"] for item in approvals.pending(self.root, 10, file=approvals.ACTIONS)), "running", 10, file=approvals.ACTIONS)
+        self.assertNotEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "accept")
+
+
+class DeliveryLeavesHeldCallsBehindTests(AcceptCase):
+    """C12 TB-03: a call the agent held and never waited on is a call it went on without, as soon as it delivers: the task shows "to accept", not "waits for your approval" for two minutes."""
+
+    def held(self, wait: str = "") -> str:
+        from core import approvals
+
+        code = approvals.request(self.root, "vscode", SESSION, "tk comment T-1 x", 10, file=approvals.ACTIONS, extra={"system": "tk", "env": "none", "verb": "write", "task": TASK})
+        if wait:
+            approvals.wait_mark(self.root, code, wait, 10, file=approvals.ACTIONS)
+        return code
+
+    def test_a_call_with_no_wait_is_away_when_the_agent_delivers(self) -> None:
+        from core import approvals, outbox
+
+        self.new(kind="rca")
+        code = self.held()
+        self.assertEqual(outbox.agent_place(approvals.find(self.root, code, 10, file=approvals.ACTIONS)), "ended", "held a moment ago: the agent may still start its wait")
+        self.deliver("--summary", SUMMARY)
+        self.stop()
+        self.assertEqual(outbox.agent_place(approvals.find(self.root, code, 10, file=approvals.ACTIONS)), "away")
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "accept")
+        desk = taskdesk.desk(self.root, NAME, ("accept", "close", "approve-action"))
+        self.assertEqual(desk["waiting_why"], "accept")
+        self.assertTrue(desk["outbox"][0]["moved_on"], "the card stays, to dismiss or approve, as a call the agent went on without")
+        self.assertIn("accept", [item["action"] for item in desk["actions"]])
+        self.assertEqual(self.board().act("accept", NAME, "act")["status"], "closed")
+
+    def test_a_call_the_agent_ended_its_turn_on_stays_what_it_was(self) -> None:
+        from core import approvals, outbox
+
+        self.new(kind="rca")
+        code = self.held("timeout")
+        self.deliver("--summary", SUMMARY)
+        self.assertEqual(outbox.agent_place(approvals.find(self.root, code, 10, file=approvals.ACTIONS)), "ended")
+
+    def test_a_call_it_waits_on_is_not_touched(self) -> None:
+        from core import approvals, outbox
+
+        self.new(kind="rca")
+        code = self.held("running")
+        self.deliver("--summary", SUMMARY)
+        self.assertEqual(outbox.agent_place(approvals.find(self.root, code, 10, file=approvals.ACTIONS)), "wait")
 
 
 class AcceptOnTheBoardTests(AcceptCase):

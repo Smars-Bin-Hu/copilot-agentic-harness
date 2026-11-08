@@ -158,7 +158,16 @@ def tools_reach(root: Path, probe: bool) -> Dict[str, Any]:
     if external.validate(listed):
         return {"envs": [], "ok": False, "next": "the list of systems has errors: run `harness tools check`"}
     if probe:
-        reach.probe_all(root, listed, lambda command: external.run_probe(command, root))
+        from core import connections as conn_core
+
+        own = set(conn_core.probe_keys(root))  # 1.7.38, C12 TB-13: the connections the board can check itself (it keeps their identity) are checked the way the board checks them: with the identity, the tool folders and the CA bundle.
+        # This run is started at the first step of a chat, in VS Code's environment, which has none of the three for a connection signed in here: it answered "failed" or "denied" and put that over the board's own "ok",
+        # and the Enter screen and the lobby said a connection did not answer a few minutes after its test had passed.
+        if own:
+            conn_core.probe_all(root)
+        rest = {name: system for name, system in listed.items() if not all(f"{name}:{env}" in own for env in reach.probes(system))}
+        if rest:
+            reach.probe_all(root, rest, lambda command: external.run_probe(command, root))
     lines = reach.view(root, listed)
     return {"envs": lines, "ok": all(line["state"] == reach.OK for line in lines)}
 
@@ -194,26 +203,34 @@ def servers_list(root: Path) -> Dict[str, Any]:
     return {"connections": out, "state": connections.state(root)}
 
 
+def _find_lines(found: Dict[str, Any]) -> List[str]:
+    lines = []
+    for one in found["matches"]:
+        where = "" if one["env"] in ("", "none") else f", {one['env'].upper()}"
+        about = one["about"] or one["label"]
+        lines.append(f"{one['alias']}  ({one['type_label']}{where})" + (f"  {about}" if about else ""))
+    return lines
+
+
 def servers_find(root: Path, words: List[str]) -> Dict[str, Any]:
     """`harness connections find <words>` (1.7.38, layer 1): a few lines, the connections that fit; a read. `_text`, for the agent to read and for a person."""
     from core import connections
 
     text = " ".join(words).strip()
-    found = connections.find(root, text) if text else {"matches": [], "total": 0, "all": len(connections.listed(root))}
+    window = connections.window_aliases(root)  # the same connections as the line at the start of a chat (1.7.38, C12 TB-07)
+    found = connections.find(root, text, aliases=window) if text else {"matches": [], "total": 0, "all": len(window), "envs": []}
     if not found["all"]:
         return {"_text": say("connections.find.empty")}
     if not text:
         return {"_text": say("connections.find.words")}
     if not found["matches"]:
         return {"_text": say("connections.find.none", words=text, n=found["all"])}
-    lines = []
-    for one in found["matches"]:
-        where = "" if one["env"] in ("", "none") else f", {one['env'].upper()}"
-        about = one["about"] or one["label"]
-        lines.append(f"{one['alias']}  ({one['type_label']}{where})" + (f"  {about}" if about else ""))
+    if found.get("envs") and found["total"] == 1:
+        return {"_text": "\n".join(_find_lines(found)) + "\n" + say("connections.find.one.env", env=", ".join(env.upper() for env in found["envs"]))}
+    lines = _find_lines(found)
     if found["total"] > len(found["matches"]):
         lines.append(say("connections.find.more", n=found["total"] - len(found["matches"])))
-    lines.append(say("connections.find.many", n=found["total"]) if found["total"] > 1 else say("connections.find.one"))
+    lines.append(say("connections.find.many", n=found["total"]) + " " + say("connections.ask") if found["total"] > 1 else say("connections.find.one"))
     return {"_text": "\n".join(lines)}
 
 

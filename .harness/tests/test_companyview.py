@@ -166,7 +166,8 @@ class Tools(ViewCase):
 class PageRules(unittest.TestCase):
     """1.7.38 (the C11 test of a whole setup): what the pages do, as far as a test of the files can say. The real look was checked in a browser."""
 
-    WEB = Path(__file__).resolve().parents[1] / "engine" / "modules" / "task" / "web"
+    ENGINE = Path(__file__).resolve().parents[1] / "engine"
+    WEB = ENGINE / "modules" / "task" / "web"
 
     def source(self, name: str) -> str:
         return (self.WEB / name).read_text(encoding="utf-8")
@@ -184,6 +185,19 @@ class PageRules(unittest.TestCase):
         self.assertLess(start.index('op: "packcheck"'), start.index('chooseOnPage("folder"'))
         self.assertIn('op: "commit"', dock)  # the button commits; no command to read
         self.assertNotIn("git -C", dock)
+
+    def test_a_skill_not_by_the_rules_says_the_package_was_not_made_which_skill_and_that_the_rest_is_fine(self) -> None:
+        """Retest E3: the terminal said it; the window only listed the skills. Same words in both; a list line ends with a full stop."""
+        dock = self.source("dock.js")
+        error = dock.split("function paintPackError")[1].split("const folder = error.data")[0]
+        self.assertIn('t("dock.pack.skills")', error)
+        self.assertIn('t("dock.pack.skills.rest")', error)
+        self.assertIn(".test(item.trim()) ? item.trim() : item.trim() + \".\"", error)
+        for language in ("en", "zh"):
+            words = json.loads((self.ENGINE / "core" / f"messages.{language}.json").read_text(encoding="utf-8"))
+            self.assertIn(words["dock.pack.skills.rest"].rstrip("。."), words["company.pack.bad_skills"], language)  # the window's last sentence is the terminal's
+            self.assertTrue(words["dock.pack.skills"].startswith(words["company.pack.bad_skills"][:5]), language)  # and so is its first
+        self.assertIn("commit].filter(Boolean)", dock)  # replaceChildren writes a null as the word "null"
 
     def test_every_tab_of_the_window_says_when_there_is_no_knowledge_base_and_refresh_forgets_every_view(self) -> None:
         dock = self.source("dock.js")

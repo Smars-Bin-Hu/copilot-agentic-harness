@@ -232,10 +232,10 @@ const DOCK = (function () {
     function paintPackError(error) {  // changes git does not hold: they are listed here, and one button commits them (no command to read)
       const skills = error.data && error.data.skills;
       if (skills) {  // what a skill lacks is written in the skill: that is a change in the knowledge base, so an agent makes it
-        const items = skills.map(plainWords);
+        const items = skills.map(plainWords).map((item) => (/[.!?\u3002]$/.test(item.trim()) ? item.trim() : item.trim() + "."));  // the package was not made; which skill and why; the rest is fine (1.7.38, as `harness company pack` says it)
         const fix = h("button", {type: "button", class: "act kb-mini"}, chatGlyph(), t("dock.company.chat"));
         fix.addEventListener("click", () => start("harness-my-task", t("dock.company.chat.words", {items: items.join(" ")}).slice(0, CHAT_WORDS)));
-        packed.replaceChildren(t("dock.pack.skills"), h("ul", null, items.map((item) => h("li", null, item))), fix);
+        packed.replaceChildren(t("dock.pack.skills"), h("ul", null, items.map((item) => h("li", null, item))), h("p", {class: "su-note"}, t("dock.pack.skills.rest")), fix);
         return;
       }
       const folder = error.data && error.data.dirty;
@@ -246,7 +246,7 @@ const DOCK = (function () {
         commit.disabled = true;
         SERVE.post("/api/company", {op: "commit"}).then(() => packStart(), (problem) => { commit.disabled = false; packed.classList.add("bad"); packed.replaceChildren(plainWords(problem.message)); });
       });
-      packed.replaceChildren(t("dock.pack.dirty"), files.length ? h("ul", {class: "kb-dirty"}, files.map((name) => h("li", null, h("code", null, name))), error.data.more ? h("li", null, t("dock.pack.more", {n: error.data.more})) : null) : null, commit);
+      packed.replaceChildren(...[t("dock.pack.dirty"), files.length ? h("ul", {class: "kb-dirty"}, files.map((name) => h("li", null, h("code", null, name))), error.data.more ? h("li", null, t("dock.pack.more", {n: error.data.more})) : null) : null, commit].filter(Boolean));  // replaceChildren writes a null as the word "null"
     }
     pack.addEventListener("click", packStart);
     const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "kb-bar"}, h("div", {class: "chips dock-tabs"}, tabs), age, rebuild, again), alarm, synced, stage, packed, h("div", {class: "row"}, pack, no)]);

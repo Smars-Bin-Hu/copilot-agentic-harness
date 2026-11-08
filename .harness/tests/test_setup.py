@@ -540,6 +540,7 @@ class CompanyFactsTests(unittest.TestCase):
                 (company / "instructions" / name).write_text("x", encoding="utf-8")
             (company / "standards").mkdir()
             (company / "standards" / "code-standards.md").write_text("x", encoding="utf-8")
+            (company / "standards" / "extra.md").write_text("x", encoding="utf-8")
             (company / "company.json").write_text(json.dumps({"skill_prefix": "acme"}), encoding="utf-8")
             (company / "manifest.json").write_text(json.dumps({"version": "2026.11.05"}), encoding="utf-8")
             for name, has_file in (("acme-good", True), ("release-notes", True), ("acme-empty", False)):
@@ -555,7 +556,7 @@ class CompanyFactsTests(unittest.TestCase):
             self.assertEqual((found["kb"]["here"], found["kb"]["domains"], found["kb"]["domain_skills"], found["kb"]["version"], found["kb"]["prefix"]), (True, 3, 3, "2026.11.05", "acme"))
             self.assertTrue(found["kb"]["path"].endswith("knowledge-base"))
             facts = found["company"]
-            self.assertEqual((facts["instructions_n"], facts["standards_n"]), (2, 1))
+            self.assertEqual((facts["instructions_n"], facts["instructions_unused"], facts["standards_n"], facts["standards_unused"]), (1, ["etl.instructions.md"], 1, ["extra.md"]), "only the file the engine uses is counted; a README is no instruction")
             self.assertEqual((facts["skills"]["n"], facts["skills"]["off"]), (3, ["acme-empty", "acme-good", "release-notes"]), "no SKILL.md, a name that is not the folder's, or not the company's word: the check of the Enter screen")
             self.assertEqual(facts["own_packs"], [])
             (company / "tools" / "packs" / "acmejobs").mkdir(parents=True)

@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from core import config, messages, shortcmd, skillcheck, standards, state as files, targets
+from core import company, config, messages, shortcmd, skillcheck, standards, state as files, targets
 from core import connections as conn_core, launchenv, toolpacks
 
 MAX_NAME = 100
@@ -228,12 +228,13 @@ def rules_of(target: Dict[str, Any]) -> List[Dict[str, str]]:
     return [{"repo": name, "rule": rule} for name, entry in sorted((target.get("repos") or {}).items()) if isinstance(entry, dict) and isinstance(entry.get("refused_paths"), list) for rule in entry["refused_paths"] if rule != GIT_RULE]
 
 
-def _count(folder: Path, suffix: str = ".md") -> int:
-    """The files of a folder of the knowledge base that are content (not the README or a hidden file)."""
+def _files(folder: Path, used: Tuple[str, ...], suffix: str = ".md") -> Tuple[int, List[str]]:
+    """The content files of a folder of the knowledge base (not the README or a hidden file): how many the engine uses, and the names of the others, which nothing reads (1.7.38: the Enter screen counts the same way)."""
     try:
-        return sum(1 for item in folder.iterdir() if item.is_file() and item.suffix == suffix and item.name != "README.md" and not item.name.startswith("."))
+        names = sorted(item.name for item in folder.iterdir() if item.is_file() and item.suffix == suffix and item.name != "README.md" and not item.name.startswith("."))
     except OSError:
-        return 0
+        return 0, []
+    return sum(1 for name in names if name in used), [name for name in names if name not in used]
 
 
 def company_skills(root: Path, folder: Optional[Path]) -> Dict[str, Any]:
@@ -289,7 +290,7 @@ def company_facts(root: Path) -> Dict[str, Any]:
     """The read-only checklist of the section From the company (1.7.36): what the knowledge base brought, one fact each. Quick: file looks only; never raises.
     `prefix`: `kb` is what the knowledge base's `company.json` says, `effective` what the checks use; the page shows an input only when `kb` is empty."""
     out: Dict[str, Any] = {"folder": False, "instructions": False, "standards": False, "declared": no_such(root), "prefix": {"kb": "", "effective": "", "conflict": ""},
-                           "packs": [], "own_packs": [], "instructions_n": 0, "standards_n": 0, "skills": {"n": 0, "off": []}, "connections": [], "recipe": {"present": False, "host": "", "proxy": "", "tool_folders": 0, "error": ""}}
+                           "packs": [], "own_packs": [], "instructions_n": 0, "instructions_unused": [], "standards_n": 0, "standards_unused": [], "skills": {"n": 0, "off": []}, "connections": [], "recipe": {"present": False, "host": "", "proxy": "", "tool_folders": 0, "error": ""}}
     try:
         folder = targets.company_folder(root)
         out["folder"] = folder is not None
@@ -299,8 +300,9 @@ def company_facts(root: Path) -> Dict[str, Any]:
         out["packs"] = toolpacks.use_list(root)
         own = folder / toolpacks.COMPANY_PACKS if folder else None
         out["own_packs"] = sorted(item.name for item in own.iterdir() if item.is_dir() and not item.name.startswith(".")) if own is not None and own.is_dir() else []  # the company's own, besides the factory packs it turns on
-        out["instructions_n"] = _count(folder / "instructions") if folder else 0
-        out["standards_n"] = _count(folder / "standards") if folder else 0
+        if folder:
+            out["instructions_n"], out["instructions_unused"] = _files(folder / "instructions", company.INSTRUCTION_FILES)
+            out["standards_n"], out["standards_unused"] = _files(folder / "standards", (Path(standards.COMPANY_FILE).name,))
         out["skills"] = company_skills(root, folder)
         out["connections"] = list(conn_core.company_connections(config.policy_or_empty(root, conn_core.POLICY)))
         found = launchenv.recipe(root)

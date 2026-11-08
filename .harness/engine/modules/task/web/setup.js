@@ -244,7 +244,10 @@ const SETUP = (function () {
       const inCopy = st.guide.company && !st.parts;  // counts are of the company folder that is here, not of one just chosen
       const lacking = missing("instructions");
       const partial = lacking && !st.parts && st.guide.company;  // the folder is there but lacks the one file: say that, not "not found" (1.7.34)
-      add(rows, fact(t("setup.fact.company"), lacking ? "need" : "ok", lacking ? t(partial ? "setup.fact.noinstr" : "setup.fact.notfound") : inCopy && c.instructions_n ? files(c.instructions_n) : t("setup.fact.found"), t(lacking ? (partial ? "setup.company.partial" : "setup.company.need") : "setup.company.ok"), "instructions"), lacking ? "need" : "ok");
+      // Only the file the engine uses counts (1.7.38), as on the Enter screen: the others are told as "not used", their names on hover.
+      const counted = (n, unused) => (!inCopy || !n ? t("setup.fact.found") : h("span", null, files(n), (unused || []).length ? part(" \u00b7 " + t("setup.fact.skipped", {n: unused.length}), "soft") : null));
+      const unusedTip = (unused, key, used) => ((unused || []).length ? " " + t(key, {names: unused.join(", "), used}) : "");
+      add(rows, fact(t("setup.fact.company"), lacking ? "need" : "ok", lacking ? t(partial ? "setup.fact.noinstr" : "setup.fact.notfound") : counted(c.instructions_n, c.instructions_unused), t(lacking ? (partial ? "setup.company.partial" : "setup.company.need") : "setup.company.ok") + (lacking || !inCopy ? "" : unusedTip(c.instructions_unused, "setup.fact.skipped.instr", "knowledgebase.instructions.md")), "instructions"), lacking ? "need" : "ok");
       const skills = c.skills || {n: 0, off: []};
       const noSkills = st.parts ? !has("skills") : !inCopy || !skills.n;
       const off = inCopy ? skills.off || [] : [];
@@ -261,7 +264,7 @@ const SETUP = (function () {
       else add(rows, fact(t("setup.prefix"), "need", t("setup.fact.notfound"), t("setup.fact.prefix.none.tip"), "skills"), "need");
       const standard = missing("standards");
       const said = !st.parts && st.guide.declared.includes("standards");
-      add(rows, fact(t("setup.standards"), standard ? "need" : said ? "none" : "ok", standard ? t("setup.fact.notfound") : said ? t("setup.fact.nonesaid") : inCopy && c.standards_n ? files(c.standards_n) : t("setup.fact.found"), t(standard ? "setup.standards.need" : said ? "setup.standards.none" : "setup.standards.ok"), "standards"), standard ? "need" : "ok");
+      add(rows, fact(t("setup.standards"), standard ? "need" : said ? "none" : "ok", standard ? t("setup.fact.notfound") : said ? t("setup.fact.nonesaid") : counted(c.standards_n, c.standards_unused), t(standard ? "setup.standards.need" : said ? "setup.standards.none" : "setup.standards.ok") + (standard || said || !inCopy ? "" : unusedTip(c.standards_unused, "setup.fact.skipped.stds", "code-standards.md")), "standards"), standard ? "need" : "ok");
       const tools = st.tools || {};
       const packs = [...(c.packs || []).map((name) => ({name, from: "harness"})), ...(c.own_packs || []).map((name) => ({name, from: "company"}))];
       const ready = new Map(((tools.packs || {}).names || []).map((item) => [item.name, item.ok]));

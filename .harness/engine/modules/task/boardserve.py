@@ -231,7 +231,7 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
         saved = conn_core.identity_of(env, alias, kind, server)
         reached = (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")
         tool = conn_core.tool_program(auth) if auth.get("identity") == "tool" else ""
-        rows.append({"alias": alias, "label": server.get("label", ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "toolpack": kind.get("toolpack", ""), "known": bool(kind), "via": kind.get("via", "cli"), "login": auth.get("login", ""),
+        rows.append({"alias": alias, "label": server.get("label", ""), "about": str(server.get("about") or ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "toolpack": kind.get("toolpack", ""), "known": bool(kind), "via": kind.get("via", "cli"), "login": auth.get("login", ""),
                      "env": server.get("env", ""), "auth": server.get("auth", ""), "auth_label": auth.get("label", ""), "identity": auth.get("identity", ""), "own": bool(server.get("own")),
                      "fields": {field: server.get(field, spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
                      "tool": tool,  # 1.7.38: the program whose own sign-in this connection uses; one sign-in per computer, shared
@@ -642,8 +642,16 @@ class Board:
                 raise CommandError(str(error)) from None
             noted(self.root, task, action)
             return result
-        if action == "task allow":  # one click, no code: the person opens an environment for this task, or closes it (1.7.6); the same function as `task allow`
-            result = tasklife.set_allow(self.root, task, str(env_name or ""), str(who or "") == "on", interactive=True)
+        if action == "task allow":  # the person closes a connection for this task with one click (1.7.6); the same function as `task allow`. Opening one needs the code of a held call that offers it (1.7.38)
+            name = " ".join(str(env_name or "").split()).lower()
+            on, offer = str(who or "") == "on", None
+            if on and name != tasklife.LINKS:
+                offer = outbox.offer_for(self.root, task_ops.resolve(self.root, task), str(code or ""), name)
+                if not offer:
+                    raise CommandError(say("serve.allow.code", name=name or "-"))
+            result = tasklife.set_allow(self.root, task, name, on, interactive=True, env=str((offer or {}).get("env") or ""))
+            if offer:  # the held calls that offered it have done their part: the page then asks the person to tell the agent (1.7.38)
+                outbox.mark_opened_everywhere(self.root, result.get("task") or task, [name])
             noted(self.root, result.get("task") or task, action)
             return result
         if action == "task link":  # one click, no code: the person names an item of an outside tool in the task, or takes it away (1.7.20); the same function as `task link add|remove`
@@ -744,7 +752,7 @@ class Board:
         given = {key: str(data.get(key) or "") for key in ("account", "password", "keyfile", "token")}
         own = data.get("own") if isinstance(data.get("own"), dict) else None
         if own is not None:
-            own = {key: str(value) for key, value in own.items() if key in ("type", "env", "auth", "label") or key in ((conn_core.types(self.root).get(str(own.get("type"))) or {}).get("fields") or {})}
+            own = {key: str(value) for key, value in own.items() if key in conn_core.OWN_FIELDS or key in ((conn_core.types(self.root).get(str(own.get("type"))) or {}).get("fields") or {})}
             if not conn_core.ALIAS.match(alias) or alias in conn_core.company_connections(config.policy_or_empty(self.root, conn_core.POLICY)):
                 raise ValueError(say("connections.alias.bad", alias=alias))
             if own.get("env") not in ("dev", "ist", "qat", "none"):

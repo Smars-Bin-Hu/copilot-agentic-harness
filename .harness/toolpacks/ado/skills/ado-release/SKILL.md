@@ -7,6 +7,8 @@ specificTo: generic
 
 # Classic releases with `ado`
 
+Find the connection first: `harness connections find <words>` (system and environment). If two fit, ask the user which; never guess.
+
 **Do not use `az rest`, `az pipelines release` or `az devops`, and do not install any extension**: use `ado`.
 
 ## When to Use This Skill

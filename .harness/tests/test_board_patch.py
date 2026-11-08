@@ -626,19 +626,21 @@ class WalkThroughTests(unittest.TestCase):
             self.assertNotIn(key, messages.table("en"), key)
         self.assertIn(".tk-model-name{max-width:16em;overflow:hidden;text-overflow:ellipsis", (WEB / "desk.css").read_text(encoding="utf-8"))  # a long model name does not push the line
 
-    def test_the_task_settings_bar_opens_an_environment_with_one_click_and_the_row_marks_it(self) -> None:
-        """1.7.6: the chips post `task allow` with no code; the line under the name has the open mark; both languages have the words."""
+    def test_the_task_settings_bar_lists_what_is_open_and_the_card_opens_a_connection_with_the_code(self) -> None:
+        """1.7.38: the pop lists the connections opened in this task, each with a Close that posts `task allow` with no code; the card of a held call opens one with the code; the row marks it."""
         desk = (WEB / "desk.js").read_text(encoding="utf-8")
-        self.assertIn('SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: chip.getAttribute("aria-pressed") === "true" ? "off" : "on", step: "act"})', desk)
-        self.assertIn('disabled: listed && can ? null : "disabled"', desk)  # no system reaches it, or the board cannot act: not clickable
-        self.assertIn('class: "chip env never"', desk)  # prod
+        self.assertIn('SERVE.post("/api/act", {action: "task allow", task: desk.name, env: name, runner: on ? "on" : "off", step: "act"})', desk)  # close: one click, no code
+        self.assertIn('SERVE.post("/api/act", {action: "task allow", task: desk.name, step: "act", env: open.dataset.conn, runner: "on", code: input.value.trim()})', desk)  # open: the code of the call
+        self.assertIn("opens.forEach((open) => { open.disabled = !ready_();", desk)  # armed by the same View + code as Approve
+        self.assertNotIn('class: "chip env', desk)  # the environment chips are gone
         self.assertIn('ui.envs = slot("span", "tk-rv tk-env");', desk)  # a pill of the head, beside Independent review, not a field of the message bar
         self.assertIn('ui.envs.set(JSON.stringify([desk.allow, full.status]), () => envButton());', desk)
         status = (WEB / "status.js").read_text(encoding="utf-8")
-        self.assertIn('open: (data, key, focus) => openMark(data.open_envs, key, focus)', status)
+        self.assertIn('open: (data, key, focus) => openMark(data.open_conns, key, focus)', status)
         self.assertIn(".st-s-open{width:88px", (WEB / "status.css").read_text(encoding="utf-8"))
         en, zh = messages.table("en"), messages.table("zh")
-        for key in ("desk.set.open", "desk.set.open.none", "desk.set.open.never", "desk.set.open.note", "desk.set.open.off", "desk.set.open.cannot", "board.status.open", "board.status.open.word"):
+        for key in ("desk.set.open", "desk.set.open.tip.conn", "desk.set.open.list", "desk.set.open.empty", "desk.set.open.never", "desk.set.open.off", "desk.set.open.cannot", "board.status.open.conns", "board.status.open.word",
+                    "desk.outbox.open", "desk.outbox.open.tip.all", "desk.outbox.open.tip.items", "desk.outbox.opened", "desk.outbox.opened.hint", "desk.outbox.opened.tell", "desk.outbox.opened.body"):
             self.assertIn(key, en, key)
             self.assertIn(key, zh, key)
 

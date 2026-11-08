@@ -1,4 +1,4 @@
-# ado: an Azure DevOps tool pack (0.4.8)
+# ado: an Azure DevOps tool pack (0.4.9)
 
 The agent works with Azure DevOps through this pack's own program, `ado` (`bin/ado`, Python's standard library only; on Windows `bin/ado.cmd`): one plain command per thing to do, so it never builds an `az rest` call. `ado` reads the server, org and project from the harness connection, signs in with the Azure CLI (`az login`, once) or a personal access token, and sends its requests with the proxy and the CA bundle VS Code was started with.
 
@@ -8,7 +8,7 @@ The agent works with Azure DevOps through this pack's own program, `ado` (`bin/a
 | `pipelines`, `pipeline`, `runs`, `run` (stage, job, task), `why`, `log`, `artifacts`, `tests`, `changes` | | `deploy` (a release) |
 | `releases`, `release` | | |
 
-There is no delete. A write to a work item the task is not linked to is refused; when you open **linked items** for a task (Open to the agent), its writes to those items run without asking you each time. A new item, a pipeline run and a deployment always wait for you: approve each once on the task page. `ado --help` and `ado <command> --help` are reads.
+There is no delete. A write to a work item the task is not linked to is refused; when you open **linked items** for a task (the button **Open ado for this task** on the card of a held write to a linked item, or the pop **Open to the agent**; the type says `"open": "items"`), its writes to those items run without asking you each time. A new item, a pipeline run and a deployment always wait for you: approve each once on the task page. `ado --help` and `ado <command> --help` are reads.
 
 ## Set up
 
@@ -21,7 +21,7 @@ There is no delete. A write to a work item the task is not linked to is refused;
 3. Each person, once: Get ready, Tools, **This computer** (the az `bin` folder; the CA bundle behind a proxy that inspects TLS), then **Connections**, `ado`: **Sign in** (`signin`) or paste the token (`token`; kept in `.harness/.env`, never in a file that is shared), **Test**, **Save**. Open VS Code from the board.
 4. Try: "read ado:<id>", then "comment on it: checked" - the comment waits on the task page.
 
-`rules.json` holds `ado-any` (an `az rest` call to any Azure DevOps address: `dev.azure.com`, `*.visualstudio.com`, and the `url` of each connection of this type; a delete is refused, a post or put is held) and `ado-az` (`az devops`, `az boards`, `az pipelines`: `show`, `list`, `query` and a GET `invoke` run; anything else is held; a delete is refused), for the day the agent reaches for `az` anyway.
+`rules.json` holds `ado-curl` (0.4.9: a `curl` to the same addresses is judged like `az rest`: a read runs, a post, put, patch or a body is held, a delete is refused; a `curl` to any other address, or one that saves to a file with `-o`, asks as before), `ado-any` (an `az rest` call to any Azure DevOps address: `dev.azure.com`, `*.visualstudio.com`, and the `url` of each connection of this type; a delete is refused, a post or put is held) and `ado-az` (`az devops`, `az boards`, `az pipelines`: `show`, `list`, `query` and a GET `invoke` run; anything else is held; a delete is refused), for the day the agent reaches for `az` anyway.
 
 Skills: `ado-workitem`, `ado-pipeline-triage`, `ado-release`. To name them with your company's skill prefix, rename the folders and their `name:` to `<prefix>-ado-...`.
 

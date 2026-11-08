@@ -985,7 +985,7 @@ def deploy(ado: Ado, args) -> str:
 
 # --- the command line ----------------------------------------------------------------------------------------------------------------------------------------
 
-PACK_VERSION = "0.4.8"  # the same as toolpack.json
+PACK_VERSION = "0.4.9"  # the same as toolpack.json
 
 
 def parser() -> argparse.ArgumentParser:

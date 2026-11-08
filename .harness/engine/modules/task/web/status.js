@@ -130,11 +130,11 @@ const Status = (function () {
     return marked(h("span", {class: "st-chip"}, modelWords(chat, chat.model_name || shortModel(chat.model))), key, () => full, full, focusable);
   }
 
-  // The environments the person opened for the task (`task allow`, 1.7.6): "dev open"; the tip lists them.
-  function openMark(envs, key, focusable) {
-    if (!envs || !envs.length) return null;
-    const words = t("board.status.open", {envs: envs.join(", ")});
-    return marked(h("span", {class: "st-chip st-open"}, envs.length === 1 ? envs[0] + " " + t("board.status.open.word") : envs.length + " " + t("board.status.open.word")), key, () => words, words, focusable);
+  // What the person opened for the task (`task allow`, 1.7.6; since 1.7.38 the connections, and the linked items): "orders-dev open"; the tip lists them.
+  function openMark(names, key, focusable) {
+    if (!names || !names.length) return null;
+    const words = t("board.status.open.conns", {names: names.join(", ")});
+    return marked(h("span", {class: "st-chip st-open"}, names.length === 1 ? names[0] + " " + t("board.status.open.word") : names.length + " " + t("board.status.open.word")), key, () => words, words, focusable);
   }
 
   const finite = (value) => typeof value === "number" && isFinite(value);
@@ -371,7 +371,7 @@ const Status = (function () {
       run: (data, key, focus) => (stateOf(data, live) === "waiting" ? null : runMark(data.chat, key, focus)),  // a task that waits for the person does not turn (1.7.22): VS Code may still call the chat busy
       stage: (data, key) => stageMark(data, live, key),
       todo: (data, key, focus) => todoMark(data.todo, key, focus),
-      open: (data, key, focus) => openMark(data.open_envs, key, focus),
+      open: (data, key, focus) => openMark(data.open_conns, key, focus),
     };
     const sigs = {
       model: (data) => data.chat && data.chat.model || "",
@@ -379,7 +379,7 @@ const Status = (function () {
       run: (data) => (stateOf(data, live) === "waiting" ? "" : data.chat && data.chat.state === "busy" ? data.chat.started_at || "" : ""),
       stage: (data) => JSON.stringify([data.stages, data.status, stateOf(data, live), data.waiting_why, live]),
       todo: (data) => JSON.stringify(data.todo || null),
-      open: (data) => JSON.stringify(data.open_envs || null),
+      open: (data) => JSON.stringify(data.open_conns || null),
     };
     function update(data, nextLive) {
       if (nextLive !== undefined) live = Boolean(nextLive);

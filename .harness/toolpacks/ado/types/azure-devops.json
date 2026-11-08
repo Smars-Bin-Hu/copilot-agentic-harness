@@ -90,6 +90,7 @@
       "destroy": "deny"
     }
   },
+  "open": "items",
   "item": [
     "\\bado(?:\\.cmd)?[\\\"\\']?\\s+(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:comment|update|link|unlink|attach)\\s+(\\d+)",
     "\\bado(?:\\.cmd)?[\\\"\\']?\\s+(?:--json\\s+|--(?:conn|org|project)\\s+\\S+\\s+)*(?:link|unlink)\\b.*?--to[\\s=]+[\\\"\\']?(\\d+)"

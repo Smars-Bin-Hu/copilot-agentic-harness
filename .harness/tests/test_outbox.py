@@ -59,7 +59,7 @@ class OutboxTests(OutboxCase):
         for lang in ("en", "zh"):
             found = json.loads((Path(__file__).resolve().parents[1] / "engine" / "core" / f"messages.{lang}.json").read_text(encoding="utf-8"))
             self.assertNotIn("UTC", found["desk.outbox.asked"], lang)
-            self.assertNotIn("DROP", found["desk.set.open.tip"], lang)
+            self.assertNotIn("DROP", found["desk.set.open.tip.conn"], lang)
             self.assertNotIn("approve-action", found["desk.outbox.same_as"], lang)
 
     def test_a_write_waits_with_a_draft_then_runs_once_after_approval(self) -> None:
@@ -282,7 +282,7 @@ class OutboxOnThePageTests(OutboxCase):
         from modules.task import tasklife
 
         self.new()
-        tasklife.set_allow(self.root, TASK, "dev", True, interactive=True)
+        tasklife.set_allow(self.root, TASK, "cloud", True, interactive=True)
         def as_reviewer(command: str) -> Dict[str, Any]:
             data = pre_tool(SESSION, "run_in_terminal", {"command": command, "explanation": "t", "isBackground": False})
             data["cwd"], data["agent_type"] = str(self.root), "reviewer"
@@ -290,7 +290,7 @@ class OutboxOnThePageTests(OutboxCase):
         self.assertEqual(as_reviewer("tk show T-7"), {})  # a read (the tickets system names `show`)
         refused = as_reviewer("cloudctl run job-1")
         self.assertIn("reviewer", refused["permissionDecisionReason"])
-        self.assertEqual(self.term("cloudctl run job-1"), {})  # the main agent: the environment is open
+        self.assertEqual(self.term("cloudctl run job-1"), {})  # the main agent: the connection is open
 
     def test_the_packs_show_patterns_give_the_facts_of_the_card(self) -> None:
         from modules.task import taskdesk

@@ -98,7 +98,7 @@ const SERVERS = (function () {
       if (!own) { TERM.run("harness connections login " + row.alias, signedIn); return; }
       const fields = own.fields();  // not saved yet: the kind and the fields typed so far
       const name = own.alias() || "new";
-      TERM.run(["harness connections login", word(name), "--type", word(fields.type), ...Object.entries(fields).filter(([key, value]) => !["type", "env"].includes(key) && value).map(([key, value]) => "--set " + word(key + "=" + value))].join(" "), signedIn);
+      TERM.run(["harness connections login", word(name), "--type", word(fields.type), ...Object.entries(fields).filter(([key, value]) => !["type", "env", "about"].includes(key) && value).map(([key, value]) => "--set " + word(key + "=" + value))].join(" "), signedIn);
     });
     return [h("p", {class: "sub sv-tool"}, t(row.saved ? "connections.tool.saved" : "connections.tool.hint", {account: row.account || ""})), h("div", {class: "sv-acts"}, signIn, test, save, forget, said)];
   }
@@ -111,6 +111,7 @@ const SERVERS = (function () {
     const alias = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", placeholder: t("connections.own.alias")});
     const env = h("select", {class: "su-in", required: ""}, h("option", {value: ""}, t("connections.own.env.pick")), ["dev", "ist", "qat"].map((name) => h("option", {value: name}, name.toUpperCase())), h("option", {value: "none"}, t("connections.env.none")));  // no environment chosen for you: a wrong one is easy to miss
     const auth = h("select", {class: "su-in"});
+    const about = h("input", {class: "su-in", autocomplete: "off", spellcheck: "false", maxlength: "120", placeholder: t("connections.own.about.ph")});  // one line the agent finds this connection by (`harness connections find`)
     const fields = h("div", {class: "sv-fields"});
     const rest = h("div");
     let inputs = {};
@@ -124,12 +125,12 @@ const SERVERS = (function () {
     const drawIdentity = () => {
       const spec = kinds[kind.value];
       const row = {alias: "", identity: (spec.auth[auth.value] || {}).identity, login: (spec.auth[auth.value] || {}).login || "", auth_label: (spec.auth[auth.value] || {}).label || "", saved: false, account: ""};
-      rest.replaceChildren(...identityForm(row, {alias: () => alias.value.trim(), fields: () => ({type: kind.value, env: env.value, auth: auth.value, ...Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value.trim()]))})}, redraw, go));
+      rest.replaceChildren(...identityForm(row, {alias: () => alias.value.trim(), fields: () => ({type: kind.value, env: env.value, auth: auth.value, about: about.value.trim(), ...Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value.trim()]))})}, redraw, go));
     };
     kind.addEventListener("change", draw);
     auth.addEventListener("change", drawIdentity);
     draw();
-    return h("div", {class: "sv-own-form"}, h("div", {class: "sv-fields"}, field(t("connections.own.kind"), kind), field(t("connections.own.name"), alias), field(t("connections.own.env"), env), field(t("connections.own.auth"), auth)), h("p", {class: "sub"}, t("connections.own.env.prod")), fields, rest);  // why there is no PROD (1.7.38)
+    return h("div", {class: "sv-own-form"}, h("div", {class: "sv-fields"}, field(t("connections.own.kind"), kind), field(t("connections.own.name"), alias), field(t("connections.own.env"), env), field(t("connections.own.auth"), auth)), h("p", {class: "sub"}, t("connections.own.env.prod")), field(t("connections.own.about"), about), fields, rest);  // why there is no PROD (1.7.38)
   }
 
   // One connection (1.7.38): name, type, where it points (the environment chip, or `org · project`), whether the company or the person added it, the sign-in (a dot and the account), Sign in and Test.
@@ -221,7 +222,7 @@ const SERVERS = (function () {
     const up = row.own ? h("button", {type: "button", class: "mc-x tl-share", title: t("dock.connections.share.tip"), "aria-label": t("dock.connections.share.tip")}, "\u21ea") : null;
     if (up) up.addEventListener("click", () => shareWindow(row, (said, bad) => { env.notes.set(key, {said, bad}); env.redraw(); }));  // the list is read again: the row is the company's now, and says what was done
     const chip = envChip(row.env);
-    const title = [...new Set([row.alias, row.label])].concat([row.type_label + (row.auth_label ? " · " + row.auth_label : ""), place(row), (row.fields || {}).url]).filter(Boolean).join("\n");
+    const title = [...new Set([row.alias, row.label])].concat([row.about, row.type_label + (row.auth_label ? " · " + row.auth_label : ""), place(row), (row.fields || {}).url]).filter(Boolean).join("\n");
     paint();
     env.paints.set(key, paint);
     return h("div", {class: "tl-crow", "data-focus": "sign:" + key, "data-alias": key},

@@ -163,3 +163,42 @@ def dismiss(root: Path, code: str, limit_minutes: int, now: Optional[float] = No
                 return dict(item)
         _write(root, entries, file)
     return None
+
+
+def opened_all(root: Path, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> List[Dict[str, Any]]:
+    """Every entry whose connections were opened from its card and that the agent has not run again (1.7.38), whatever session it is for."""
+    now = time.time() if now is None else now
+    return [item for item in _read(root, file) if item["state"] == "opened" and _alive(item, limit_minutes * 60.0, now)]
+
+
+def mark_opened(root: Path, code: str, names: List[str], limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> Optional[Dict[str, Any]]:
+    """The person opened connections for the task from the card of this pending entry (1.7.38). The entry keeps no offer for them (`offers`), and remembers them (`opened_for`). With no offer left it is
+    `opened`: the person has done their part, and the agent is to run the same command again; it is not an approval of the command. None when no pending entry has the code."""
+    now = time.time() if now is None else now
+    with state_lock(path(root, file)):
+        entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
+        for item in entries:
+            if item["state"] == "pending" and item["code"] == code.strip().upper():
+                item["offers"] = [one for one in item.get("offers") or [] if isinstance(one, dict) and one.get("system") not in names]
+                item["opened_for"] = sorted(set(item.get("opened_for") or []) | set(names))
+                if not item["offers"]:
+                    item.update(state="opened", at=now, opened_at=utc_now())
+                _write(root, entries, file)
+                return dict(item)
+        _write(root, entries, file)
+    return None
+
+
+def settle(root: Path, task: str, command: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> int:
+    """The agent ran the command of an `opened` entry again (it went through, or it is held anew): the entry has done its work and goes (1.7.38). How many were taken away."""
+    now = time.time() if now is None else now
+    text = collapse(command)
+    if not path(root, file).exists():
+        return 0
+    with state_lock(path(root, file)):
+        entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
+        keep = [item for item in entries if not (item["state"] == "opened" and item.get("task") == task and item["command"] == text)]
+        if len(keep) != len(entries):
+            _write(root, keep, file)
+        return len(entries) - len(keep)
+

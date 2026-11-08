@@ -1,17 +1,17 @@
-# sqlserver: a sample tool pack
+# sqlserver: a sample tool pack (1.0.1)
 
 A ready tool pack for SQL Server reached with `sqlcmd`: copy it, list your connections, and colleagues only type their own account in Get ready. The harness knows no connection type; SQL Server is one this pack brings.
 
 ## What is in it
 
-- `toolpack.json`: its name, version, and the program it needs (`sqlcmd`).
+- `toolpack.json`: its name, version (1.0.1: `open` rules, needs harness 1.7.38), and the program it needs (`sqlcmd`).
 - `types/sqlserver.json`: the connection type. The fields of a connection (server name, port, database), two ways in (`windows`: a Windows account, held by the VS Code window the way `runas /netonly` holds it; `sql`: a SQL account, which sqlcmd reads from `SQLCMDUSER` and `SQLCMDPASSWORD`), the test of the way in (it asks the server who the session is), what sqlcmd prints when the identity is refused (`denied`) and when the server does not answer (`down`), and for the gate: the program (`cli`), how a command names one connection (`match`: the server and port after `-S`), the verbs and the rules.
 - `launch/start-vscode.cmd`: `runas /netonly` with the account the person types, then VS Code. Kept for a team that does not save identities; Get ready's **Open VS Code with identities** does the same without a prompt.
 - `skills/sqlserver-jobs/`: a sample skill (start a job, wait for it with `harness wait`, check it).
 
 The connections themselves are not in the pack: `../../examples/connections.json` lists three made-up ones (`orders-dev`, `orders-ist`, `orders-qat`).
 
-The gate, per environment: a `SELECT` runs; a write, a procedure, a script file (`-i`), a transaction (`BEGIN TRAN`, `COMMIT`, `ROLLBACK`), `BACKUP`, `DBCC`, `RECONFIGURE`, `DENY`, a trigger switch, `OPENROWSET` and `xp_` procedures wait in the outbox for the person (QAT procedures are the person's to run); `DROP`, `TRUNCATE`, `KILL`, `SHUTDOWN` and `RESTORE` are refused; prod is read only. The read pattern matches anywhere in the line, so a statement you fear must have a pattern of its own: keep that list when you change the type.
+The gate, per environment: a `SELECT` runs; a write, a procedure, a script file (`-i`), a transaction (`BEGIN TRAN`, `COMMIT`, `ROLLBACK`), `BACKUP`, `DBCC`, `RECONFIGURE`, `DENY`, a trigger switch, `OPENROWSET` and `xp_` procedures wait in the outbox for the person (QAT procedures are the person's to run); `DROP`, `TRUNCATE`, `KILL`, `SHUTDOWN` and `RESTORE` are refused; prod is read only. The type's `open` word says how far a person may open a connection for one task (the button **Open <connection> for this task** on the card of a held call): `all` in DEV and IST, `no` in QAT and PROD. The read pattern matches anywhere in the line, so a statement you fear must have a pattern of its own: keep that list when you change the type.
 
 ## To use it
 

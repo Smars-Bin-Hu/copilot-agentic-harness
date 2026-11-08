@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from core.systems import (  # noqa: F401 - the names the handler, doctor and the tests use from here
-    ALLOW, DECISIONS, DEFAULT_RULES, DENY, DESTROY, ENVS, EXEC, HUMAN, OUTBOX, PROBE_SECONDS, PROD, PROD_RULES, READ, TASK, VERBS, WRITE, clis, reach, run_probe, validate, warnings,
+    ALLOW, DECISIONS, DEFAULT_RULES, DENY, DESTROY, ENVS, EXEC, HUMAN, OUTBOX, PROBE_SECONDS, PROD, PROD_RULES, READ, TASK, VERBS, WRITE, by_address, clis, reach, run_probe, validate, warnings,
 )
 
 from .gitcmd import MAX_DEPTH, SHELLS, SHELL_FLAGS, WRAPPERS, _is_environment, _name, join_lines, split_segments
@@ -102,6 +102,17 @@ def _start(tokens: List[str], programs: Dict[str, List[str]]) -> Optional[int]:
         if not (_name(token) in WRAPPERS or _is_environment(token) or token.startswith("-") or token.isdigit()):
             return None
     return None
+
+
+URL_HOST = re.compile(r"(?:https?:)?//(?:[^/\s'\"@]*@)?([^/\s'\"?#]+)", re.IGNORECASE)
+
+
+def addresses_fit(system: Dict[str, Any], args: str) -> bool:
+    """For a program a system has only `by_address` (1.7.38): the command names at least one address, and every address it names (the web address of the call, the text it sends, a header) is one of the
+    system's (`reach.when`). A `curl` to the cloud that also names another place is not the system's call: it is judged as any other `curl`."""
+    when = str((system.get("reach") or {}).get("when") or "")
+    hosts = URL_HOST.findall(args)
+    return bool(when and hosts and all(re.search(when, "//" + host, re.IGNORECASE) for host in hosts))
 
 
 def _owner(systems: Dict[str, Any], names: List[str], args: str) -> Optional[str]:
@@ -464,6 +475,7 @@ class _Ctx:
     def __init__(self, root: Optional[Any] = None, cwd: str = "", hold: bool = False) -> None:
         self.root, self.cwd, self.hold = root, cwd, hold
         self.dirs: List[str] = []  # directories this line changes to (`cd tools && ./run.sh`)
+        self.quiet: set = set()  # programs a system lists `by_address`: not among the names that must be accounted for
 
 
 def _file_state(path: str, names: List[str], ctx: _Ctx) -> Tuple[str, str]:
@@ -552,7 +564,7 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
     ctx = ctx or _Ctx()
     text, bodies = _heredocs(join_lines(text))
     segments = split_segments(text)
-    names = list(programs)
+    names = [program for program in programs if program not in ctx.quiet]
     feeds = ctx.hold and (any(_feeds_code(_without_redirects(tokens)) for tokens in segments) or ("<(" in text and any(_head_name(tokens) in ("source", ".") or _head_is_interpreter(tokens) for tokens in segments)))
     for body, expands in bodies:
         if depth < MAX_DEPTH and expands:  # an unquoted here-document: the shell runs what is in `$( )` and backticks
@@ -583,6 +595,8 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                     _scan(inner, systems, programs, depth + 1, found, variables, ctx)
         start = _start(tokens, programs)
         name = _owner(systems, programs[_program(tokens[start])], " ".join(tokens[start + 1:])) if start is not None else None
+        if name is not None and _program(tokens[start]) in ctx.quiet and not addresses_fit(systems[name], " ".join(tokens[start + 1:])):
+            name = None  # a program that only an address makes a call (curl) names an address that is not the system's: the system does not own it
         if name is not None:
             system = systems[name]
             line = " ".join(tokens)  # the environment settings in front of the program say something too
@@ -730,11 +744,18 @@ def classify(command: str, systems: Dict[str, Any], unseen: bool = False, root: 
     if not systems or not command.strip():
         return []
     programs: Dict[str, List[str]] = {}
+    quiet: set = set()  # programs that only an address makes a call (1.7.38): `curl` to an Azure DevOps address; the name alone is no call and holds no line
     for name, system in systems.items():
         for program in clis(system):
             programs.setdefault(program, []).append(name)
+        for program in by_address(system):
+            programs.setdefault(program, []).append(name)
+            quiet.add(program)
+    quiet -= {program for system in systems.values() for program in clis(system)}  # a program some system lists by name is a listed program for all
     found: List[Action] = []
-    _scan(command, systems, programs, 0, found, ctx=_Ctx(root, cwd, hold=unseen))
+    context = _Ctx(root, cwd, hold=unseen)
+    context.quiet = quiet
+    _scan(command, systems, programs, 0, found, ctx=context)
     return [(action, HUMAN if action.unseen else decide(systems[action.system], action.env, action.verb)) for action in found if unseen or not action.unseen]
 
 

@@ -125,9 +125,13 @@ def external_task(action: Any, command: str) -> str:
     return say("gate.external.task", place=place(action.system, action.env), verb=action.verb, call=command)
 
 
-def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str) -> str:
+def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str, offers: Any = None) -> str:
     where = say("gate.external.outbox_draft", draft=draft) if draft else say("gate.external.outbox_nodraft")
-    return say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)
+    text = say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)
+    if offers:  # 1.7.38: the card can also open the connection for the task; the agent says so, and runs the same command again if the user does
+        names = ", ".join(str(item["system"]) for item in offers)
+        text += " " + say("gate.external.outbox.opens", names=names)
+    return text
 
 
 def external_autorun(action: Any, command: str) -> str:

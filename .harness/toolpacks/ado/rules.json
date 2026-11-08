@@ -94,6 +94,58 @@
           "destroy": "deny"
         }
       }
+    },
+    "ado-curl": {
+      "reach": {
+        "cli": [],
+        "by_address": [
+          "curl"
+        ],
+        "when": "(?:^|[\\s'\\\"=/@])(?:dev|vsrm\\.dev)\\.azure\\.com(?![\\w.-])|(?:^|[\\s'\\\"=/@])(?:[\\w-]+\\.)+visualstudio\\.com(?![\\w.-])",
+        "also": {
+          "type": "azure-devops",
+          "field": "url"
+        }
+      },
+      "env": "none",
+      "verbs": [
+        {
+          "pattern": "(?:^|\\s)(?:(?-i:-[A-Za-z]*X)|--request)[\\s=]*['\\\"]?(?i:delete)\\b",
+          "verb": "destroy"
+        },
+        {
+          "pattern": "(?:^|\\s)(?:(?-i:-[A-Za-z]*X)|--request)[\\s=]*['\\\"]?(?!(?i:get|head|options)\\b)[A-Za-z]+",
+          "verb": "write"
+        },
+        {
+          "pattern": "(?:^|\\s)(?:(?-i:-[A-Za-z]*[dFT])|--data(?:-[\\w]+)?|--form(?:-string)?|--upload-file|--json)",
+          "verb": "write"
+        },
+        {
+          "pattern": "^",
+          "verb": "read"
+        }
+      ],
+      "show": {
+        "api": "_apis/([\\w/.-]+)"
+      },
+      "rules": {
+        "none": {
+          "read": "allow",
+          "write": "outbox",
+          "exec": "outbox",
+          "destroy": "deny"
+        }
+      },
+      "say": [
+        {
+          "pattern": "(?:^|\\s)(?:(?:(?-i:-[A-Za-z]*[dFT])|--data(?:-[\\w]+)?|--form(?:-string)?|--upload-file|--json)|(?:(?-i:-[A-Za-z]*X)|--request))",
+          "text": {
+            "en": "Change Azure DevOps with curl",
+            "zh": "用 curl 修改 Azure DevOps"
+          }
+        }
+      ]
     }
   }
 }

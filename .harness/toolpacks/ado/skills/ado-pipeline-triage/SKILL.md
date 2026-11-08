@@ -7,6 +7,8 @@ specificTo: generic
 
 # Why a pipeline run failed
 
+Find the connection first: `harness connections find <words>` (system and environment). If two fit, ask the user which; never guess.
+
 **Do not use `az rest`, `az pipelines` or `az devops`, and do not install any extension**: use `ado`. Reads run without asking.
 
 ## When to Use This Skill

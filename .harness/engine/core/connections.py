@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import messages, netonly
+from . import systems as outside
 from .paths import utc_now
 
 POLICY = "connections"
@@ -39,7 +40,7 @@ ALIAS = re.compile(r"^[a-z][a-z0-9-]{0,40}$")
 IDENTITIES = ("env", "netonly", "keyfile", "tool", "token")  # tool (1.7.13): the program keeps its own sign-in (`az login`); the harness keeps no account, only who the test answered
 SECRET_FIELDS = ("password", "token")
 IDENTITY_FIELDS = ("account", "password", "keyfile", "token")
-OWN_FIELDS = ("type", "env", "auth", "label")  # what a server of the person's own has besides the kind's fields
+OWN_FIELDS = ("type", "env", "auth", "label", "about")  # what a server of the person's own has besides the kind's fields (1.7.38: `about`, one line the agent finds it by)
 TEST_SECONDS = 15
 TOOL_TEST_SECONDS = 60  # a program that keeps its own sign-in (`az`) is slow to start; a type may set `test.timeout` itself (1.7.19)
 VIAS = ("cli", "mcp")  # how a connection of the type is reached: a program in the terminal, or an MCP server VS Code runs (1.7.17)
@@ -107,6 +108,11 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
     texts = [test_command(kind), kind.get("match") or ""] + [str((auth or {}).get("args") or "") for auth in (kind.get("auth") or {}).values()]
     if any("{password}" in text for text in texts):
         out.append(f"types.{name}: a password never goes on a command line; give it through `env` of the auth")
+    if kind.get("open") is not None:  # 1.7.38: how far Open to the agent may go: one word, or {env: word} with "*" for the rest
+        given = kind["open"]
+        words = [given] if isinstance(given, str) else list(given.values()) if isinstance(given, dict) else [None]
+        if not all(isinstance(word, str) and word in outside.OPEN_SCOPES for word in words) or (isinstance(given, dict) and not all(str(env).lower() in outside.ENVS + ("*",) for env in given)):
+            out.append(f"types.{name}.open: one of {', '.join(outside.OPEN_SCOPES)}, or {{environment: one of them}} (\"*\" for the rest)")
     for key in ("say", "body"):  # 1.7.20: what a held call's card says and shows
         if kind.get(key) is not None and not isinstance(kind.get(key), list):
             out.append(f"types.{name}.{key}: a list of rules")
@@ -369,8 +375,30 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
         for key in ("toolpack", "openable", "item", "link"):
             if kind.get(key) is not None:
                 system[key] = kind[key]
+        system["open"] = connection_scope(kind, server)
         out[alias] = system
     return {alias: system for alias, system in out.items() if alias not in (tools_policy.get("systems") or {})}
+
+
+def type_scope(kind: Dict[str, Any], env: str) -> str:
+    """How far Open to the agent may go for a connection of this type in this environment (1.7.38): the type's `open`; a type that has none and says `openable: true` is `all` in dev, ist and qat
+    (the old word); a type that names its items (`item`, `link`) and says nothing is `items` (as before 1.7.38); else `no`. Prod is never opened."""
+    if str(env).lower() == outside.PROD:
+        return outside.NO
+    if kind.get("open") is not None:
+        return outside.scope_rule(kind["open"], env)
+    if kind.get("openable") is True and str(env).lower() in ("dev", "ist", "qat"):
+        return outside.ALL
+    return outside.ITEMS if kind.get("item") and kind.get("link") else outside.NO  # a type from before 1.7.38 that names its items had the linked items opened by Open to the agent: it keeps that
+
+
+def connection_scope(kind: Dict[str, Any], server: Dict[str, Any]) -> str:
+    """The scope of one connection: its type's, lowered by the connection's own `open` when the company wrote one (1.7.38: a company can tighten, never loosen)."""
+    env = str(server.get("env") or "")
+    scope = type_scope(kind, env)
+    if server.get("open") is not None:
+        scope = outside.lower_scope(scope, outside.scope_rule(server["open"], env))
+    return scope
 
 
 def _host(address: Any) -> str:
@@ -394,7 +422,7 @@ def widen(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
             continue
         hosts = sorted({_host(server.get(str(also.get("field")))) for server in listed(root).values() if server.get("type") == also.get("type")} - {""})
         if hosts:
-            found = "|".join(re.escape(host) + r"(?![\w.-])" for host in hosts)  # not `host.evil.example`, not another port
+            found = "|".join(r"(?<![\w.-])" + re.escape(host) + r"(?![\w.-])" for host in hosts)  # not `host.evil.example`, not `evil-host`, not another port
             out[name] = dict(system, reach=dict(system["reach"], when=f"(?:{system['reach']['when']})|{found}"))
     return out
 
@@ -427,9 +455,81 @@ def brief(root: Path, alias: str, call: str = "") -> Dict[str, Any]:
     folder = (toolpacks.installed(root).get(pack) or {}).get("folder") if pack else None
     put = (toolpacks.ledger(root)["packs"].get(pack) or {}).get("skills") or []  # the names in .github/skills/: the company's word leads them (1.7.30)
     skills = sorted(str(one) for one in put) or (sorted(item.name for item in (folder / "skills").iterdir() if item.is_dir()) if isinstance(folder, Path) and (folder / "skills").is_dir() else [])
-    return {"alias": alias, "env": str(server.get("env") or ""), "type": str(server.get("type") or ""), "label": str(kind.get("label") or ""),
+    return {"alias": alias, "env": str(server.get("env") or ""), "type": str(server.get("type") or ""), "label": str(kind.get("label") or ""), "about": " ".join(str(server.get("about") or "").split()),
             "fields": {key: value for key, value in fields.items() if value}, "toolpack": pack, "skills": skills, "program": str((kind.get("cli") or [""])[0]), "call": call, "missing": lost,
             "signin": bool(_way(kind, server).get("identity") == "tool" and not identity_of(read_env(root), alias, kind, server))}
+
+
+# --- finding a connection (1.7.38): what the agent is told, a little at a time ----------------------------------------------------------------------------
+
+def _words(value: Any) -> List[str]:
+    """`repos` and `domains` may be a list or one text with commas; the words of one field, as written."""
+    items = value if isinstance(value, list) else str(value or "").split(",")
+    return [str(item).strip() for item in items if str(item).strip()]
+
+
+def kind_counts(root: Path, aliases: Optional[List[str]] = None) -> str:
+    """Layer 0 (1.7.38): what kinds of connection there are and how many of each, in a few words (`3 SQL Server, 1 Azure DevOps`). Never a name: the agent finds one with `connections find`."""
+    known = types(root)
+    count: Dict[str, int] = {}
+    for alias, server in listed(root).items():
+        if aliases is not None and alias not in aliases:
+            continue
+        label = str((known.get(str(server.get("type"))) or {}).get("label") or server.get("type") or "?")
+        count[label] = count.get(label, 0) + 1
+    return ", ".join(f"{n} {label}" for label, n in count.items())
+
+
+def describe(root: Path, alias: str, servers: Optional[Dict[str, Dict[str, Any]]] = None, kinds: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """What `find` knows of one connection: `{alias, type, type_label, env, label, about, repos, domains}` (the fields the company wrote for finding it; no secret, no sign-in)."""
+    server = (listed(root) if servers is None else servers).get(alias) or {}
+    kind = (types(root) if kinds is None else kinds).get(str(server.get("type"))) or {}
+    return {"alias": alias, "type": str(server.get("type") or ""), "type_label": str(kind.get("label") or server.get("type") or ""), "env": str(server.get("env") or ""),
+            "label": str(server.get("label") or ""), "about": " ".join(str(server.get("about") or "").split()), "repos": _words(server.get("repos")), "domains": _words(server.get("domains"))}
+
+
+_TOKEN = re.compile(r"[a-z0-9]+")
+_WORD = re.compile(r"[a-z0-9_]+")
+ENV_WORDS = frozenset(("dev", "ist", "qat", "uat", "prod"))  # a word that names an environment fits an environment (or a name that has it as a word), never the start of another word (`dev` is not `devops`)
+
+
+def _tokens(*texts: Any) -> List[str]:
+    """The words of some texts, lower case; a word with underscores (a repository, `acme_etl_jobs`) is kept whole and also in its parts."""
+    out: List[str] = []
+    for text in texts:
+        for word in _WORD.findall(str(text or "").lower()):
+            out.append(word)
+            out.extend(part for part in _TOKEN.findall(word) if part != word)
+    return out
+
+
+FIND_LIMIT = 5
+
+
+def find(root: Path, text: str, limit: int = FIND_LIMIT) -> Dict[str, Any]:
+    """Layer 1 (1.7.38): the connections that fit some words (`sales warehouse dev`). A word fits when it is, or starts, a word of the name, the type, the sentence `about`, the label, the `repos` or
+    the `domains` of a connection; an environment must be the word itself (`dev` is not `devops`). The connection that fits the most words comes first, then the name counts, then the order of the
+    list. `{matches: [describe...], total, all}`: `total` fitted, `all` connections there are."""
+    words = list(dict.fromkeys(_WORD.findall(str(text or "").lower())))
+    servers, kinds = listed(root), types(root)
+    rows = [describe(root, alias, servers, kinds) for alias in servers]
+    scored = []
+    for position, row in enumerate(rows):
+        name, kind, env = _tokens(row["alias"]), _tokens(row["type"], row["type_label"]), _tokens(row["env"])
+        other = _tokens(row["about"], row["label"], " ".join(row["repos"]), " ".join(row["domains"]))
+        hit, weight = 0, 0
+        for word in words:
+            if word in ENV_WORDS:
+                here = (3 if word in name else 0) or (2 if word in env else 0) or (1 if word in other else 0)
+            else:
+                fits = lambda tokens: any(token == word or (len(word) >= 3 and token.startswith(word)) for token in tokens)  # noqa: E731
+                here = (3 if fits(name) else 0) or (2 if fits(kind) else 0) or (1 if fits(other) else 0)
+            if here:
+                hit, weight = hit + 1, weight + here
+        if hit:
+            scored.append((-hit, -weight, position, row))
+    scored.sort(key=lambda item: item[:3])
+    return {"matches": [item[3] for item in scored[:limit]], "total": len(scored), "all": len(rows)}
 
 
 # --- a test of the way in ----------------------------------------------------------------------------------------------------------------------------------

@@ -65,7 +65,7 @@ def write_draft(root: Path, task: str, code: str, action: Any, command: str, ses
 _SEPARATORS = re.compile(r"\n|;|&&|\|\||\|")
 
 
-def merge_into_waiting(root: Path, task: str, session_id: str, command: str, action: Any, minutes: int) -> str:
+def merge_into_waiting(root: Path, task: str, session_id: str, command: str, action: Any, minutes: int, offers: Optional[List[Dict[str, Any]]] = None) -> str:
     """The code of a waiting card this command takes over, or "" (1.7.27). The agent sent a line of several commands (a read, then a write); it was held whole. It then sends the write alone:
     the same write, the same task, not yet approved. That is the same card, not a second one: the waiting entry gets the short command, keeps its code, and its draft is written again."""
     text = approvals.collapse(command)
@@ -79,7 +79,7 @@ def merge_into_waiting(root: Path, task: str, session_id: str, command: str, act
         parts = [approvals.collapse(part) for part in _SEPARATORS.split(old)]
         if old == text or len(parts) < 2 or text not in parts or item.get("system", "") != action.system:
             continue
-        if approvals.rewrite(root, str(item["code"]), session_id, text, minutes, extra=entry_extra(action, task), file=approvals.ACTIONS):
+        if approvals.rewrite(root, str(item["code"]), session_id, text, minutes, extra=entry_extra(action, task, offers), file=approvals.ACTIONS):
             try:
                 (root / draft_path(task, item["code"], action.system)).unlink()
             except OSError:
@@ -102,12 +102,24 @@ def mark(root: Path, relative: Optional[str], state: str) -> None:
     path.write_text(_STATE_LINE.sub(lambda _match: line, text, count=1), encoding="utf-8")
 
 
-def entry_extra(action: Any, task: Optional[str]) -> Dict[str, Any]:
-    """What the person sees in `approve-action` besides the command. The draft is `draft_of(entry)`."""
+def entry_extra(action: Any, task: Optional[str], offers: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """What the person sees in `approve-action` besides the command. The draft is `draft_of(entry)`. `offers` (1.7.38): the connections of the line that the card may open for the task
+    (`{system, env, scope: all|items, refs?}`); a request to open one is accepted only for a connection named here."""
     extra = {"system": action.system, "env": action.env, "verb": action.verb, "target": action.target, "task": task or ""}
     if not getattr(action, "named", True):
         extra["named"] = False  # no verbs rule matched: the card and the draft say so
+    if offers:
+        extra["offers"] = offers
     return extra
+
+
+def offer_for(root: Path, task: str, code: str, name: str) -> Optional[Dict[str, Any]]:
+    """The offer of the held call with this code, for this connection (1.7.38): what the card's "Open <name> for this task" may ask. None when the code names no call of this task that waits for
+    the person, or the call offers nothing for that connection. This is what binds an opening to a real held call: the board checks it, and the agent cannot ask the board."""
+    entry = next((item for item in pending_for(root, task) if str(item.get("code")) == str(code or "").strip().upper()), None)
+    if not entry:
+        return None
+    return next((dict(one) for one in entry.get("offers") or [] if isinstance(one, dict) and one.get("system") == name), None)
 
 
 def draft_of(entry: Dict[str, Any]) -> str:
@@ -163,6 +175,38 @@ def moved_on(root: Path, entries: List[Dict[str, Any]]) -> set:
         if asked is not None and any(begun > asked + MOVED_MARGIN_S for begun in _terminal_starts(root, str(item.get("surface") or ""), str(item.get("session_id") or ""))):
             out.add(str(item.get("code")))
     return out
+
+
+def opened_for(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The held calls of this task whose connections the person has opened from the card, and the agent has not run again yet (1.7.38), oldest first. Not approvals: the command is judged anew."""
+    minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+    found = [item for item in approvals.opened_all(root, minutes, file=approvals.ACTIONS) if item.get("task") == task]
+    return sorted(found, key=lambda item: str(item.get("opened_at", "")))
+
+
+def mark_opened(root: Path, task: str, code: str, names: List[str]) -> Optional[Dict[str, Any]]:
+    """The card of a held call opened these connections for the task (1.7.38): see `approvals.mark_opened`. The draft says what happened."""
+    minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+    done = approvals.mark_opened(root, str(code or ""), names, minutes, file=approvals.ACTIONS)
+    if done and done.get("state") == "opened":
+        mark(root, draft_of(done), "opened")
+    return done
+
+
+def mark_opened_everywhere(root: Path, task: str, names: List[str]) -> int:
+    """A connection is open for the task now (1.7.38): every held call of the task that offered it has done its part, not only the card the button was on. How many entries changed."""
+    changed = 0
+    for item in pending_for(root, task):
+        reached = [name for name in names if any(isinstance(one, dict) and one.get("system") == name for one in item.get("offers") or [])]
+        if reached and mark_opened(root, task, str(item["code"]), reached):
+            changed += 1
+    return changed
+
+
+def settle_opened(root: Path, task: str, command: str) -> int:
+    """The agent runs a command again whose connection was opened from its card: the green card goes (1.7.38)."""
+    minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+    return approvals.settle(root, task, command, minutes, file=approvals.ACTIONS)
 
 
 def approved_for(root: Path, task: str) -> List[Dict[str, Any]]:

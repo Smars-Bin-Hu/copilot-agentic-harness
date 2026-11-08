@@ -21,6 +21,10 @@ You do not have to write it by hand: set your connections up in Get ready first,
 | `auth` | no | which way in of the type (its first one when left out) |
 | the type's fields | as the type says | `host`, `port`, `database`; `org`, `project` ... |
 | `label` | no | words for people |
+| `about` | no | (1.7.38) one sentence the agent finds this connection by (`harness connections find`): what data it holds and what it is for. A connection of one's own can set it in the form (**What it is for**) |
+| `repos` | no | (1.7.38) the code repositories that work against it, a list (`["acme_dw"]`) or one text with commas; `find` matches them, so a task that names a repository finds the connection |
+| `domains` | no | (1.7.38) the knowledge base domains it serves, a list or one text with commas; `find` matches them |
+| `open` | no | (1.7.38) lowers how far Open to the agent may go for this connection: `"no"`, `"items"` or `{env: word}`. A connection takes the type's word; this can only make it stricter (`all` > `items` > `no`) |
 | `rules` | no | this connection's own gate rules, over the type's (`{env: {verb: decision}}`) |
 
 Never in this file: an account, a password, a key, a token. Each person's own are kept in `.harness/.env` by Get ready, and `reinstall` carries them.

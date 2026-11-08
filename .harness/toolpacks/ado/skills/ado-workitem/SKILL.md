@@ -7,6 +7,8 @@ specificTo: generic
 
 # Azure DevOps work items with `ado`
 
+Find the connection first: `harness connections find <words>` (system and environment). If two fit, ask the user which; never guess.
+
 **Do not use `az rest`, `az boards` or `az devops`, and do not install any extension.** Every step is one `ado` command; it knows the addresses, versions, sign-in and the connection.
 
 ## When to Use This Skill

@@ -748,46 +748,50 @@
       h("p", {class: "sub set-note", title: t("desk.set.note")}, t("desk.set.note")));
   }
 
-  // "Open to the agent" (1.7.6): a setting of the task at the head of its page, beside Independent review. One chip per environment the protocol knows; clickable only when a
-  // system of the company pack reaches it; prod is never a choice. A click is `harness task allow --env <e> --on` (or --off): no code, it can be closed at once. The agent's writes and
-  // procedures on that environment's listed systems then run without the outbox. Not drawn when no system is listed.
+  // "Open to the agent" (1.7.6; by connection since 1.7.38): a setting of the task at the head of its page, beside Independent review. It lists what the person opened for this task, each one with a
+  // button that closes it: connections (a held write's card opens them: `Open <connection> for this task`), and the linked items. Nothing to open here before a call is held; the
+  // card of the call is where the person decides. A click on Close is `harness task allow --conn <name> --off`: no code, it can be closed at once. Not drawn when there is nothing to say.
   const DOOR = ["M3 14V3.5A1.5 1.5 0 0 1 4.5 2h5A1.5 1.5 0 0 1 11 3.5V14", "M11 6h2.5v8H11", "M3 14h10.5", "M8 8.5h.01"];
   let closeEnvs = null;
-  const keepEnvs = (on) => { try { if (on) sessionStorage.setItem("tk-envs-open", "1"); else sessionStorage.removeItem("tk-envs-open"); } catch (error) { /* no storage: the pop closes, as before */ } };  // a click on a chip reloads the page: the pop stays open, so the next click is one more click
+  const keepEnvs = (on) => { try { if (on) sessionStorage.setItem("tk-envs-open", "1"); else sessionStorage.removeItem("tk-envs-open"); } catch (error) { /* no storage: the pop closes, as before */ } };  // a click reloads the page: the pop stays open, so the next click is one more click
   const keptEnvs = () => { try { return sessionStorage.getItem("tk-envs-open") === "1"; } catch (error) { return false; } };
   document.addEventListener("click", (event) => { if (closeEnvs && !event.target.closest(".tk-env")) closeEnvs(); });
   document.addEventListener("keydown", (event) => { if (closeEnvs && event.key === "Escape") closeEnvs(); });
   function envButton() {
     const found = desk.allow;
     closeEnvs = null;
-    if (!found || !found.envs || !found.envs.length) return null;
-    const open = found.envs.filter((item) => item.open);
+    if (!found || (!(found.open || []).length && !found.links && !(found.can || []).length)) return null;
+    const rows = found.open || [];
+    const links = found.links;
     const can = served() && full.status === "open" && SERVE.runs("task allow");
-    const chips = found.envs.map((item) => {
-      const listed = item.systems.length > 0;
-      const asks = item.asks || [];  // systems of a tool pack on this environment: each write waits for the person whatever is open (1.7.38)
-      const tip = !listed ? (asks.length ? t(asks.length === 1 ? "desk.set.open.asks" : "desk.set.open.asks.many", {env: item.env, systems: asks.join(", ")}) : t("desk.set.open.none", {env: item.env})) : item.open ? t("desk.set.open.close", {env: item.env, systems: item.systems.join(", ")}) : t("desk.set.open.open", {env: item.env, systems: item.systems.join(", ")});
-      const seen = item.reach;  // reached from VS Code (1.7.9): a dot on the chip, the words on hover
-      const why = (one) => one.state === "denied" ? (one.launch || t("desk.reach.why.identity")) : one.why === "no-answer" ? t("desk.reach.why.no-answer") : t("desk.reach.why.exit", {why: one.why});
-      const part = (one) => one.state === "ok" ? t("desk.reach.ok", {env: one.system, who: one.who || "-"}) : one.state === "unknown" ? t("desk.reach.unknown", {env: one.system}) : t("desk.reach.bad", {env: one.system, launch: why(one)});
-      const seenTip = seen ? (seen.parts || []).map(part).join("\n") : "";  // one line per server of this environment
-      const chip = h("button", {type: "button", class: "chip env" + (item.open ? " on" : ""), "aria-pressed": item.open ? "true" : "false", title: tip + (seenTip ? "\n" + seenTip : ""), disabled: listed && can ? null : "disabled"},
-        seen ? h("i", {class: "reach-dot " + (seen.state === "ok" ? "ok" : seen.state === "unknown" ? "unknown" : "bad")}) : null, (item.label || item.env) + (item.open ? " ✓" : ""));
-      chip.addEventListener("click", () => {
-        chips.forEach((node) => { node.disabled = true; });
-        SERVE.post("/api/act", {action: "task allow", task: desk.name, env: item.env, runner: chip.getAttribute("aria-pressed") === "true" ? "off" : "on", step: "act"}).then(() => { keepEnvs(true); SERVE.done(); }, (error) => { chips.forEach((node) => { node.disabled = false; }); SERVE.failed(error); });
-      });
-      return chip;
-    });
-    const never = (found.never || []).map((env) => h("span", {class: "chip env never", title: t("desk.set.open.never", {env})}, env));
-    const note = open.length ? h("p", {class: "set-tip"}, t("desk.set.open.note", {envs: open.map((item) => item.env).join(", "), systems: [...new Set(open.flatMap((item) => item.systems))].join(", ")})) : null;
-    const asking = [...new Set(found.envs.flatMap((item) => item.asks || []))];
-    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip")), h("p", {class: "set-warn"}, t("desk.set.open.warn")), h("div", {class: "chips env-chips"}, chips, never), note,
-      asking.length ? h("p", {class: "sub"}, t(asking.length === 1 ? "desk.set.open.asks.pop" : "desk.set.open.asks.pop.many", {systems: asking.join(", ")})) : null,
+    const buttons = [];
+    const flip = (name, on, node) => {
+      buttons.forEach((one) => { one.disabled = true; });
+      SERVE.post("/api/act", {action: "task allow", task: desk.name, env: name, runner: on ? "on" : "off", step: "act"}).then(() => { keepEnvs(true); SERVE.done(); }, (error) => { buttons.forEach((one) => { one.disabled = false; }); SERVE.failed(error); });
+    };
+    const rowFor = (item) => {
+      const close = h("button", {type: "button", class: "act", title: item.known ? t("desk.set.open.conn.tip", {name: item.name}) : t("desk.set.open.conn.gone", {name: item.name}), disabled: can ? null : "disabled"}, t("desk.set.open.conn.close"));
+      buttons.push(close);
+      close.addEventListener("click", () => flip(item.name, false, close));
+      return h("div", {class: "open-row", "data-conn": item.name}, h("b", null, item.name), item.env && item.env !== "none" ? tag(item.env, "hot") : null, h("span", {class: "sub"}, t("desk.set.open.conn.scope")), close);
+    };
+    const linksRow = () => {
+      const systems = links.systems.join(", ");
+      const refs = links.refs.join(", ");
+      const toggle = h("button", {type: "button", class: "act" + (links.open ? "" : " hot"), title: links.open ? t("desk.set.open.links.on.tip", {systems}) : t("desk.set.open.links.off.tip", {systems}), disabled: can ? null : "disabled"}, links.open ? t("desk.set.open.conn.close") : t("desk.outbox.open", {name: t("desk.set.open.links")}));
+      buttons.push(toggle);
+      toggle.addEventListener("click", () => flip("links", !links.open, toggle));
+      return h("div", {class: "open-row", "data-conn": "links"}, h("b", null, t("desk.set.open.links")), h("span", {class: "sub"}, links.open ? t("desk.set.open.links.row", {refs}) : t("desk.set.open.links.off.row", {refs})), toggle);
+    };
+    const shown = [...rows.map(rowFor), links ? linksRow() : null].filter(Boolean);
+    const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip.conn")), h("p", {class: "set-warn"}, t("desk.set.open.warn")),
+      h("div", {class: "open-list"}, shown.length ? [h("b", {class: "sub"}, t("desk.set.open.list")), ...shown] : h("p", {class: "sub"}, t("desk.set.open.empty"))),
+      (found.can || []).length ? h("p", {class: "sub"}, t("desk.set.open.can", {names: found.can.join(", ")})) : null,
+      h("p", {class: "sub"}, t("desk.set.open.never")),
       can ? null : h("p", {class: "set-warn"}, t("desk.set.open.cannot")));
-    const unreached = found.envs.filter((item) => item.reach && (item.reach.state === "denied" || item.reach.state === "failed")).map((item) => item.env.toUpperCase());  // VS Code cannot reach these (1.7.9)
-    const button = h("button", {type: "button", class: "rv-btn" + (open.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip") + (unreached.length ? "\n" + t("desk.reach.pill", {envs: unreached.join(", ")}) : "")},
-      icon(DOOR, 14), h("span", {class: "rv-name"}, t("desk.set.open")), h("b", null, open.length ? open.map((item) => item.label || item.env).join(", ") : t("desk.set.open.off")), unreached.length ? h("i", {class: "reach-dot bad pill"}) : null);
+    const names = [...rows.map((item) => item.name), ...(links && links.open ? [t("desk.set.open.links")] : [])];
+    const button = h("button", {type: "button", class: "rv-btn" + (names.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip.conn")},
+      icon(DOOR, 14), h("span", {class: "rv-name"}, t("desk.set.open")), h("b", null, names.length ? (names.length > 2 ? String(names.length) : names.join(", ")) : t("desk.set.open.off")));
     const show = (on) => { if (on && closeReview) closeReview(); pop.hidden = !on; button.setAttribute("aria-expanded", String(on)); closeEnvs = on ? () => show(false) : null; if (on) inView(pop); };
     button.addEventListener("click", () => { keepEnvs(false); show(pop.hidden); });
     if (keptEnvs()) { keepEnvs(false); setTimeout(() => show(true), 0); }
@@ -1078,15 +1082,15 @@
 
   function waitBand() {
     if (desk.past) return pastNote();
-    const told = approvedCard();
+    const told = [approvedCard(), openedCard()].filter(Boolean);  // the approved calls, and the calls whose connection was opened: the one step left is to tell the agent
     const left = (desk.outbox || []).filter((item) => item.moved_on).map((item) => outboxCard(item, []));  // calls the agent went on without: not a wait, but still here to dismiss (or approve), whatever else the task waits for (1.7.38)
-    if (!needsCard()) return left.length ? [told, ...left].filter(Boolean) : told;
+    if (!needsCard()) return told.length || left.length ? [...told, ...left] : null;
     const items = needItems().filter((item) => item.action !== "approve-action");  // the held calls have cards of their own
     const strong = items.filter((item) => JUMPS[item.action]);
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
-    const cards = told ? [told] : [];  // the approved calls first: the one step left is to tell the agent
-    cards.push(...(desk.outbox || []).filter((item) => !item.moved_on).map((item, index) => outboxCard(item, index || told ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
+    const cards = [...told];
+    cards.push(...(desk.outbox || []).filter((item) => !item.moved_on).map((item, index) => outboxCard(item, index || told.length ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
     cards.push(...strong.map((item, index) => strongCard(item, index || cards.length ? [] : notes)));
     if (other.length || (!strong.length && !cards.length)) cards.push(otherCard(other, strong.length || cards.length ? [] : notes));  // the held calls stand for themselves
     return [...cards, ...left];
@@ -1123,6 +1127,28 @@
       h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good")),
       codes.map((code) => { const title = titles.get(code) || (approvedCalls.get(code) || {}).title || ""; return h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, code), title ? h("span", {class: "tk-call-say"}, title) : null); }),  // each code stands in front of its own title (1.7.29)  // which call was approved (1.7.25)
       h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : all ? "desk.outbox.told" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
+      h("div", {class: "tk-need-go tk-call-go"}, tell, said));
+  }
+  // After "Open <connection> for this task" on a card (1.7.38): the connection is open, the command is not approved. A green card asks the person to tell the agent to run it again; it goes when the agent has.
+  const toldOpened = new Set();
+  function openedCard() {
+    const list = Array.isArray(desk.opened) ? desk.opened : [];
+    if (!list.length || desk.past) return null;
+    const names = [...new Set(list.flatMap((item) => item.names))];
+    const all = list.every((item) => toldOpened.has(item.code));
+    const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);
+    const can = served() && canAct() && !asking;
+    const tell = h("button", {type: "button", class: "act hot big", disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.opened.tell"));
+    const said = h("div", {class: "bad"});
+    tell.addEventListener("click", () => {
+      tell.disabled = true; tell.textContent = t("board.serve.working");
+      SERVE.post("/api/send", {task: desk.name, kind: "answer", lang: "", note: "", body: t("desk.outbox.opened.body", {names: names.join(", ")}), step: "act"})
+        .then(() => { list.forEach((item) => toldOpened.add(item.code)); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); tell.disabled = false; tell.textContent = t(all ? "desk.outbox.tell.again" : "desk.outbox.opened.tell"); });
+    });
+    return h("section", {class: "tk-need strong tk-call done", "data-action": "opened"},
+      h("div", {class: "tk-need-h"}, tag(t("desk.outbox.opened"), "good")),
+      list.map((item) => h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, item.code), item.title ? h("span", {class: "tk-call-say"}, item.title) : null)),
+      h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : "desk.outbox.opened.hint", {names: names.join(", "), minutes: TELL_MINUTES})),
       h("div", {class: "tk-need-go tk-call-go"}, tell, said));
   }
   const SQL_WORDS = /\b(select|from|where|insert|into|update|set|delete|merge|exec|execute|create|alter|drop|truncate|table|values|join|on|group by|order by|having|union|with|begin|commit|rollback|tran|declare|if|else|while|top|as|and|or|not|null|is|in|exists|case|when|then|end|nocount)\b/gi;
@@ -1215,9 +1241,16 @@
     const yes = h("button", {type: "button", class: "act hot big", disabled: "disabled", title: t("desk.outbox.view_first")}, t("desk.outbox.approve"));
     // Why Approve is grey is shown by motion, not words: View pulses until it was opened, then the code box until a code is typed (hand test: the tip alone was not seen).
     const gone = Boolean(item.moved_on);  // the agent ran other commands after this call: it does not wait for it, so nothing pulses and Dismiss is the main button
+    const opens = gone ? [] : (item.offers || []).map((offer) => {  // 1.7.38: one button for each connection of the line that the card may open for the task; it needs the same code as Approve
+      const tip = t(offer.scope === "items" ? "desk.outbox.open.tip.items" : "desk.outbox.open.tip.all", {name: offer.system, refs: (offer.refs || []).join(", ")});
+      const open = h("button", {type: "button", class: "act tk-open", "data-conn": offer.system, disabled: "disabled", title: tip}, t("desk.outbox.open", {name: offer.system}));
+      open.dataset.tip = tip;
+      return open;
+    });
     const arm = () => {
       yes.disabled = !ready_();
       yes.title = ready_() || !can ? "" : viewedCalls.has(item.code) ? t("desk.outbox.type_code") : t("desk.outbox.view_first");
+      opens.forEach((open) => { open.disabled = !ready_(); open.title = ready_() || !can ? open.dataset.tip : yes.title; });
       view.classList.toggle("pulse", can && !gone && !viewedCalls.has(item.code));
       input.classList.toggle("pulse", can && !gone && viewedCalls.has(item.code) && !input.value.trim());
     };
@@ -1234,6 +1267,11 @@
       SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then(() => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), title: (item.says || []).join(" \u00b7 ") || String(item.command || "").replace(/\s+/g, " ").slice(0, 80)}); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
     };
     yes.addEventListener("click", send);
+    opens.forEach((open) => open.addEventListener("click", () => {
+      if (!ready_()) return;
+      opens.forEach((one) => { one.disabled = true; }); yes.disabled = true;
+      SERVE.post("/api/act", {action: "task allow", task: desk.name, step: "act", env: open.dataset.conn, runner: "on", code: input.value.trim()}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); });
+    }));
     input.addEventListener("keydown", (event) => { if (isEnter(event) && !yes.disabled) send(); });
     no.addEventListener("click", () => {
       no.disabled = true;
@@ -1251,7 +1289,7 @@
       words ? rawFold(item) : h("div", {class: "tk-cmd-peek"}, h("code", null, peek)),
       gone ? h("p", {class: "hint"}, t("desk.outbox.moved.note")) : null,
       notes,
-      h("div", {class: "tk-need-go tk-call-go"}, view, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), no, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));  // View first in the row: the eye goes View, code, Approve
+      h("div", {class: "tk-need-go tk-call-go"}, view, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), ...opens, no, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));  // View first in the row: the eye goes View, code, Approve
   }
 
   // The words for a task that has nothing waiting on it, on the Live tab: closed, not started, quiet, or at work with nothing to decide.

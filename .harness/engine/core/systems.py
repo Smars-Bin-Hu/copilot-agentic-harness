@@ -25,6 +25,10 @@ READ, WRITE, DESTROY, EXEC = "read", "write", "destroy", "exec"
 VERBS = (READ, WRITE, DESTROY, EXEC)
 ENVS = ("dev", "ist", "qat", "prod", "none")
 PROD = "prod"
+# How far Open to the agent may go for one connection (1.7.38, C12): `no` (a write or a run always waits for the person), `items` (only the items the task is linked to), `all` (every
+# write and run of the connection). From the loosest to the strictest is the reverse of the order here; a company can only lower a type's scope.
+NO, ITEMS, ALL = "no", "items", "all"
+OPEN_SCOPES = (NO, ITEMS, ALL)
 PROBE_SECONDS = 5  # a probe that takes longer than this is "not reachable": the Enter screen and doctor must not hang on it
 PROBE_OUTPUT = 4000  # what is kept of a probe's output, for the pattern
 
@@ -45,6 +49,7 @@ SYSTEMS_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "cli": {"type": ["string", "array"], "items": {"type": "string", "minLength": 1}},
+                    "by_address": {"type": "array", "items": {"type": "string", "minLength": 1}},  # 1.7.38: programs (`curl`) that are a call of this system only when their arguments match `when`; any other use of the program is not the system's, and its name alone holds nothing
                     "when": {"type": "string", "minLength": 1},
                     "also": {"type": "object", "required": ["type", "field"], "properties": {"type": {"type": "string", "minLength": 1}, "field": {"type": "string", "minLength": 1}}, "additionalProperties": False},  # 1.7.38: the hosts that the connections of this type have in this field are part of `when`
                 },
@@ -73,6 +78,7 @@ SYSTEMS_SCHEMA = {
             },
             "toolpack": {"type": "string", "minLength": 1},  # 1.7.12: written by the harness for a system an installed tool pack brings
             "openable": {"type": "boolean"},
+            "open": {"type": "string", "enum": list(OPEN_SCOPES)},  # 1.7.38: how far Open to the agent goes for this system; see `open_scope`
             "item": {"type": ["string", "array"], "minLength": 1, "items": {"type": "string", "minLength": 1}},  # 1.7.18: a pattern whose first group is the id of the item a write names (a work item); 1.7.25: a pattern, or a list of them; every group of every match names an item
             "link": {"type": "string", "minLength": 1},  # 1.7.18: the link type of `harness task link` that names such an item (ado)  # 1.7.13: may Open to the agent let its writes through? Default: yes, but not for a tool pack's system  # 1.7.7: {name: pattern}; the first group is the fact a card shows beside a command (server, port)
             "needs": {  # 1.7.9: `probes` names one probe per environment (another server, another account); `denied` is what a call prints when the identity is not let in
@@ -93,6 +99,12 @@ def clis(system: Dict[str, Any]) -> List[str]:
     return [item.lower() for item in ([reach] if isinstance(reach, str) else reach)]
 
 
+def by_address(system: Dict[str, Any]) -> List[str]:
+    """The programs that belong to a system only for an address its `when` names (1.7.38: `curl` to an Azure DevOps address), in lower case."""
+    reach = (system.get("reach") or {}).get("by_address") or []
+    return [item.lower() for item in ([reach] if isinstance(reach, str) else reach)]
+
+
 def validate(systems: Any) -> List[str]:
     """What is wrong with the `systems` of a policy: a list of texts, empty when it is fine. Never raises."""
     if systems in (None, {}):
@@ -104,9 +116,11 @@ def validate(systems: Any) -> List[str]:
     for name, system in systems.items():
         if not re.match(_NAME, name):
             errors.append(f"systems.{name}: a name is lower case letters, digits, - and _, and starts with a letter")
-        if not clis(system):
+        if not clis(system) and not by_address(system):
             errors.append(f"systems.{name}.reach: give at least one program in `cli`")
         when = (system.get("reach") or {}).get("when")
+        if by_address(system) and not when:
+            errors.append(f"systems.{name}.reach: `by_address` needs a `when` that names the address")
         for program in clis(system) if not when else ():
             if program in owner:
                 errors.append(f"systems.{name}.reach: {program!r} is also the reach of {owner[program]!r}; give one of them a `when`")
@@ -146,10 +160,36 @@ def warnings(systems: Dict[str, Any]) -> List[str]:
 
 def openable(system: Dict[str, Any]) -> bool:
     """May Open to the agent let this system's held calls through (1.7.13)? A system says so with `openable`; a tool pack's system (a ticket board, a pipeline, a database) is closed unless it
-    says yes: its writes reach people or data, so the person approves each one. One place for the gate and the task page (1.7.38: the page said a tool pack's environment was open, and it was not)."""
+    says yes: its writes reach people or data, so the person approves each one. Since 1.7.38 `open` says how far, and this is only the old way to say `all` or `no`."""
     if isinstance(system.get("openable"), bool):
         return system["openable"]
     return not system.get("toolpack")
+
+
+def scope_rule(rule: Any, env: str) -> str:
+    """The scope a type (or a connection) declares for an environment (1.7.38): `rule` is one word (`"items"`, for every environment) or `{env: word}` with `"*"` for the rest. What is not
+    declared, or is not one of the three words, is `no`."""
+    if isinstance(rule, str):
+        return rule if rule in OPEN_SCOPES else NO
+    if isinstance(rule, dict):
+        found = rule.get(str(env).lower()) or rule.get("*")
+        return found if found in OPEN_SCOPES else NO
+    return NO
+
+
+def lower_scope(first: str, second: str) -> str:
+    """The stricter of two scopes: a company can tighten what a type says, never loosen it."""
+    return min((first, second), key=OPEN_SCOPES.index)
+
+
+def open_scope(system: Dict[str, Any], env: str) -> str:
+    """How far Open to the agent may go for a call of this system in this environment (1.7.38): `all`, `items` or `no`. Prod is never opened, whatever a system says. A system that gives `open`
+    (a connection derives it from its type) is read as it says; a system written by hand without it keeps the old rule: open to the agent where `openable` is true, in dev, ist and qat."""
+    if str(env or "").lower() == PROD:
+        return NO
+    if system.get("open") in OPEN_SCOPES:
+        return system["open"]
+    return ALL if openable(system) and str(env or "").lower() in ("dev", "ist", "qat") else NO
 
 
 def environments(systems: Dict[str, Any], only_openable: bool = False) -> Dict[str, List[str]]:

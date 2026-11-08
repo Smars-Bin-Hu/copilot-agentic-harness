@@ -2559,7 +2559,7 @@
   "board.enter.sys.state.partly": "部分",
   "board.enter.getready.tip": "打开“开始设置”：这份副本的设置、工具和连接。",
   "board.enter.getready": "开始设置",
-  "serve.already": "这份副本的看板已经在运行：已在浏览器打开并完成配对。可以关闭这个窗口。",
+  "serve.already": "这份副本的看板已经在运行，端口 {port}：{url}。已在浏览器打开并完成配对。可以关闭这个窗口。",
   "board.enter.tag.wait": "等待中",
   "board.enter.tag.fail": "需要你",
   "board.enter.t.vscode": "VS Code",

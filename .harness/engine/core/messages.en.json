@@ -2559,7 +2559,7 @@
   "board.enter.sys.state.partly": "partly",
   "board.enter.getready.tip": "Open Get ready: the setup of this copy, tools and connections.",
   "board.enter.getready": "Get ready",
-  "serve.already": "The board of this copy is already running: it is open in your browser and pairs it. You can close this window.",
+  "serve.already": "The board of this copy is already running, on port {port}: {url}. It is open in your browser and pairs it. You can close this window.",
   "board.enter.tag.wait": "waiting",
   "board.enter.tag.fail": "needs you",
   "board.enter.t.vscode": "VS Code",

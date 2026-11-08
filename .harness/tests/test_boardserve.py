@@ -235,6 +235,37 @@ class ServeTests(ServeCase):
         self.request("POST", "/api/reopen", {})  # not twice in a moment
         self.assertEqual(len(self.links), before + 1)
 
+    def test_one_board_for_a_copy_a_start_on_any_other_port_tells_the_running_port_and_opens_it(self) -> None:
+        """Q19: before, only a start on the same port found the board that runs; a start on another port made a second board for the same copy."""
+        other = free_port()
+        out = io.StringIO()
+        again: list = []
+        before = len(self.links)
+        found = boardserve.serve(self.root, port=other, interactive=True, out=out, opener=again.append)
+        self.assertEqual((found["already"], found["port"], found["stopped"]), (True, self.port, False))
+        self.assertEqual(out.getvalue().strip(), messages.text("serve.already", port=self.port, url=f"http://127.0.0.1:{self.port}/"))  # the port and the address of the board that runs
+        self.assertIn(str(self.port), out.getvalue())
+        self.assertEqual(len(self.links), before + 1, "the running board opened the browser with a new code")
+        with socket.socket() as probe:  # no second board listens on the other port
+            self.assertNotEqual(probe.connect_ex(("127.0.0.1", other)), 0)
+        self.assertEqual(json.loads(board_serve_file(self.root).read_text(encoding="utf-8"))["port"], self.port)
+        found = boardserve.serve(self.root, port=self.port, interactive=True, out=io.StringIO(), opener=again.append)  # the same port too
+        self.assertEqual((found["already"], found["port"]), (True, self.port))
+        self.assertEqual(again[-1], f"http://127.0.0.1:{self.port}/", "the new code was refused once in a moment: the plain address opens")  # (the test's opener returns nothing, which the second start reads as "not opened")
+
+    def test_the_status_names_the_folder_the_board_serves(self) -> None:
+        self.assertEqual(self.request("POST", "/api/status", {})[1]["root"], str(self.root))
+
+    def test_running_board_ignores_a_stale_file_and_a_board_of_another_copy(self) -> None:
+        self.assertEqual(boardserve.running_board(self.root), self.port)
+        other = self.root / "other-copy"
+        (other / ".harness" / "runtime").mkdir(parents=True)
+        (other / ".harness" / "runtime" / "board-serve.json").write_text(json.dumps({"port": self.port, "pid": 1}), encoding="utf-8")
+        self.assertEqual(boardserve.running_board(other), 0, "the port answers, but with the folder of another copy")
+        (other / ".harness" / "runtime" / "board-serve.json").write_text(json.dumps({"port": free_port(), "pid": 1}), encoding="utf-8")
+        self.assertEqual(boardserve.running_board(other), 0, "nothing answers there: a file of a board that crashed")
+        self.assertEqual(boardserve.running_board(self.root / "no-folder"), 0)
+
     def test_a_close_with_no_reason_keeps_the_pages_own_words(self) -> None:
         cookie = self.pair()
         self.assertEqual(self.request("POST", "/api/close", {"task": "job1"}, cookie=cookie)[0], 200)

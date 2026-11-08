@@ -250,6 +250,7 @@ class OutboxOnThePageTests(OutboxCase):
         minutes = 10
         self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "outbox")
         self.assertFalse(taskdesk.outbox_view(self.root, TASK)[0]["moved_on"], "just held: the agent is on its way to start the wait")
+        self.assertEqual(taskdesk.outbox_view(self.root, TASK)[0]["agent"], "", "and the card says nothing of the agent yet")
         self.assertEqual(self.term("tk show T-7"), {})  # a read it runs meanwhile: no matter
         self.assertEqual(core_outbox.moved_on(self.root, core_outbox.pending_for(self.root, TASK)), set())
         with mock.patch.object(core_outbox, "START_GRACE_S", 0.0):  # the minutes it has to start a wait cannot be waited for in a test

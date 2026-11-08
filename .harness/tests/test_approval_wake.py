@@ -11,7 +11,7 @@ from unittest import mock
 from support import pre_tool
 from taskcase import NAME, SESSION, TASK, TaskCase
 
-from core import approvals, outbox
+from core import approvals, messages, outbox
 from modules.task import boardserve, task as task_ops, taskdesk, tasklife
 from modules.task.common import CommandError
 
@@ -212,3 +212,38 @@ class WaitingIsNotWorkingTests(WakeCase):
         self.stand(code, "wait")
         approvals.wait_mark(self.root, code, "running", 10, now=time.time() - 60, file=approvals.ACTIONS)  # the beat is old
         self.assertTrue(tasklife.at_work(self.root, self.data()))
+
+
+class PageTests(WakeCase):
+    """The Dismiss row of the card: the reasons are the engine's, in both languages; the page sends them and the line."""
+
+    def test_the_reasons_of_the_page_are_the_reasons_of_the_engine(self) -> None:
+        import re
+
+        from modules.task import taskhtml
+
+        desk = (taskhtml.WEB / "desk.js").read_text(encoding="utf-8")
+        found = re.search(r'const REASONS = (\[[^\]]*\]), LINE_REASONS = (\[[^\]]*\]);', desk)
+        self.assertTrue(found)
+        self.assertEqual(json.loads(found.group(1)), list(outbox.REASONS))
+        self.assertEqual(json.loads(found.group(2)), list(outbox.LINE_REASONS))
+        for lang in ("en", "zh"):
+            table = messages.table(lang)
+            for reason in outbox.REASONS:
+                self.assertIn(f"desk.outbox.reason.{reason}", table, lang)
+                self.assertIn(f"outbox.reason.{reason}", table, lang)
+                self.assertIn(f"wait.approval.follow.{reason}", table, lang)
+            for key in ("desk.outbox.reason.none", "desk.outbox.reason.title", "desk.outbox.reason.line.ph", "desk.outbox.reason.go", "desk.outbox.agent.wait", "desk.outbox.agent.ended", "desk.outbox.told.wait", "wait.approval.follow.none"):
+                self.assertIn(key, table, (lang, key))
+        self.assertIn('reason, note: note || ""', desk)
+        self.assertIn("data-reason", desk)
+
+    def test_the_card_says_where_the_agent_stands_only_when_it_knows(self) -> None:
+        code = self.held()
+        self.assertEqual(taskdesk.outbox_view(self.root, TASK)[0]["agent"], "", "held a moment ago, no wait yet: nothing is said")
+        self.stand(code, "wait")
+        self.assertEqual(taskdesk.outbox_view(self.root, TASK)[0]["agent"], "wait")
+        self.stand(code, "ended")
+        self.assertEqual(taskdesk.outbox_view(self.root, TASK)[0]["agent"], "ended")
+        self.stand(code, "gone")
+        self.assertEqual(taskdesk.outbox_view(self.root, TASK)[0]["agent"], "away")

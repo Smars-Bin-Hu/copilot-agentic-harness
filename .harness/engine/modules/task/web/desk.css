@@ -184,7 +184,7 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 .tk-call-go{flex-wrap:wrap;gap:8px}.tk-code-in{display:inline-flex;align-items:center;gap:8px}.tk-code-in input.code{width:11ch;font-family:ui-monospace,Menlo,monospace;letter-spacing:2px;text-transform:uppercase}.tk-code-in input.code::placeholder{text-transform:none;letter-spacing:0;font-family:inherit}
 /* Dismiss with a reason (1.7.38): a row of reasons under the buttons; the two that take a line show a box */
 .tk-reasons{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;flex:1 1 100%;padding-top:6px;border-top:1px dashed var(--line)}.tk-reasons[hidden]{display:none}
-.tk-reasons .tk-reason.on{background:var(--track);border-color:var(--line2);font-weight:600}.tk-reason-line-row{display:inline-flex;flex:1 1 100%;gap:8px;align-items:center}.tk-reason-line-row[hidden]{display:none}.tk-reason-line{flex:1 1 14em;min-width:0}
+.tk-reasons .tk-reason.on{background:var(--track);border-color:var(--line2);font-weight:600}.tk-reason-line-row{display:flex;flex-wrap:wrap;flex:1 1 100%;min-width:0;gap:8px;align-items:center}.tk-reason-line-row[hidden]{display:none}.tk-reason-line{flex:1 1 10em;min-width:0;max-width:100%}.tk-reasons{min-width:0;max-width:100%}
 .tk-agent{margin:0 0 6px}
 /* the work delivered, to accept (1.7.38): the agent's summary as it wrote it, then the two answers */
 .tk-accept-sum{margin:6px 0 10px}.tk-accept-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:min(40vh,320px);overflow:auto;margin-top:4px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--track);font-size:13.5px;line-height:1.5}

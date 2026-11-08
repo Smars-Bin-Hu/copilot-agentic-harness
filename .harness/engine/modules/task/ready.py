@@ -216,6 +216,14 @@ class Ready:
             return {"state": "fail", "why": "failed", "detail": found["failed"]}
         if found["errors"]:
             return {"state": "fail", "why": "errors", "n": found["errors"], "detail": found["first"]}
+        try:
+            from core import toolpacks
+
+            clash = toolpacks.clash_lines(self.root)  # 1.7.38 (C11 T2-09): a company pack with the name of a factory pack is an error of `doctor`; the kept clean answer is older than the file, so it is looked at here (two folder listings)
+        except Exception:  # noqa: BLE001 - a look at two folders must not break the line
+            clash = []
+        if clash:
+            return {"state": "fail", "why": "errors", "n": len(clash), "detail": short(clash[0])}
         return {"state": "ok", "why": "ok", "n": 0}
 
     def drop_doctor(self) -> None:

@@ -70,7 +70,8 @@
     "options": [
       "-i"
     ],
-    "include": "^\\s*:r\\s+(?:\"([^\"\\r\\n]+)\"|(\\S+))"
+    "include": "^\\s*:r\\s+(?:\"([^\"\\r\\n]+)\"|(\\S+))",
+    "unjudged": "^\\s*(?:!!|:(?:connect|out|error|perftrace|serverlist|setvar|on\\s+error|exit|xml|listvar|ed)\\b)|\\$\\("
   },
   "body": [
     {

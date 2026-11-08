@@ -132,18 +132,19 @@ def type_problems(kind: Dict[str, Any]) -> List[str]:
             except re.error as error:
                 out.append(f"types.{name}.{key}[{index}]: bad pattern: {error}")
     given = kind.get("input")  # 1.7.38 (C12 RC-G1): the options that name a file the call reads its statements from, and how such a file names more files
-    if given is not None and not (isinstance(given, dict) and set(given) <= {"options", "include"} and isinstance(given.get("options"), list) and given["options"] and all(isinstance(one, str) and one for one in given["options"]) and isinstance(given.get("include", ""), str)):
+    if given is not None and not (isinstance(given, dict) and set(given) <= {"options", "include", "unjudged"} and isinstance(given.get("options"), list) and given["options"] and all(isinstance(one, str) and one for one in given["options"]) and isinstance(given.get("include", ""), str) and isinstance(given.get("unjudged", ""), str)):
         out.append(f"types.{name}.input: {{\"options\": [\"-i\"], \"include\": <a pattern whose group is a file>}}: `options` are the options that name a file; `include` is optional")
     for key in ("expect", "denied", "down", "match", "signin_lost", "command"):
         try:
             re.compile(_fill(kind.get(key) or "", {}, escape=True) if key == "match" else kind.get(key) or "")
         except re.error as error:
             out.append(f"types.{name}.{key}: bad pattern: {error}")
-    if isinstance(given, dict) and isinstance(given.get("include"), str) and given["include"]:
-        try:
-            re.compile(given["include"])
-        except re.error as error:
-            out.append(f"types.{name}.input.include: bad pattern: {error}")
+    for part in ("include", "unjudged"):
+        if isinstance(given, dict) and isinstance(given.get(part), str) and given[part]:
+            try:
+                re.compile(given[part])
+            except re.error as error:
+                out.append(f"types.{name}.input.{part}: bad pattern: {error}")
     return out
 
 

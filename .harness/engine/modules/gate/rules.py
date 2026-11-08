@@ -140,7 +140,7 @@ def external_task(action: Any, command: str) -> str:
 
 def external_outbox(action: Any, command: str, code: str, minutes: int, draft: str, offers: Any = None, changed: Any = None) -> str:
     where = say("gate.external.outbox_draft", draft=draft) if draft else say("gate.external.outbox_nodraft")
-    key = {"unread": "gate.external.input_unread", "twice": "gate.external.input_twice"}.get(getattr(action, "file_why", ""))  # 1.7.38: a file the gate could not judge made this a write
+    key = {"unread": "gate.external.input_unread", "twice": "gate.external.input_twice", "directive": "gate.external.input_directive"}.get(getattr(action, "file_why", ""))  # 1.7.38: a file the gate could not judge made this a write
     gap = messages.gap()
     note = say(key, file=action.file) + gap if key else ""
     text = note + (say("gate.external.changed_file", files=", ".join(str(one) for one in changed)) + gap if changed else "") + say("gate.external.outbox", place=place(action.system, action.env), verb=_verb(action.verb), call=command, code=code, minutes=minutes, where=where)

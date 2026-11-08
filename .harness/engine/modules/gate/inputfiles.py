@@ -112,6 +112,10 @@ def read(system: Dict[str, Any], args: List[str], root: Path, folder: Optional[P
         include = re.compile(str(given["include"]), re.IGNORECASE | re.MULTILINE) if given.get("include") else None
     except re.error:
         include = None
+    try:  # lines the gate cannot judge from the text (sqlcmd's `!!` runs a shell command, `:connect` sends what follows to another server, `$(...)` makes words at run time)
+        unjudged = re.compile(str(given["unjudged"]), re.IGNORECASE | re.MULTILINE) if given.get("unjudged") else None
+    except re.error:
+        unjudged = re.compile(r"(?!)")  # a broken pattern judges nothing as safe: every file with input is held below
     seen: List[Path] = []
     verbs: List[Optional[str]] = []
 
@@ -133,6 +137,8 @@ def read(system: Dict[str, Any], args: List[str], root: Path, folder: Optional[P
             unread(name, "twice")
         verb = verb_of_text(system, text)
         verbs.append(verb)
+        if verb != "destroy" and unjudged is not None and (unjudged.pattern == "(?!)" or unjudged.search(text)):
+            unread(name, "directive")  # held as a write, never passed as a read: what it does is not in its words (a destroy found in it still refuses)
         if verb == "destroy":
             found.file = name  # the file that decided: named in the refusal
             found.state = "destroy"

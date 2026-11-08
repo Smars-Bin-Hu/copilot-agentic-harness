@@ -109,6 +109,18 @@ class ScriptFileTests(TaskCase):
         read = self.script("-- a look\nUSE AcmeDW;\nGO\nSET NOCOUNT ON;\nSELECT TOP 5 * FROM dbo.orders;\n", "r.sql")
         self.assertEqual(self.term(f"{SERVER} -i {read}"), {})
 
+    def test_a_file_of_reads_with_a_line_the_gate_cannot_judge_is_held_not_run(self) -> None:
+        """A shell command (`!!`), another server (`:connect`) or words made at run time (`$(...)`) are not in the text: such a file is held as a write, never passed as a read; a drop in it still refuses."""
+        for name, text in (("shell.sql", "SELECT 1;\n!! rm -rf /tmp/x\n"), ("other.sql", ":connect prod-server\nSELECT 1;\n"), ("var.sql", ":setvar what orders\nSELECT * FROM dbo.$(what);\n"), ("out.sql", ":out /tmp/x.txt\nSELECT 1;\n")):
+            path = self.script(text, name)
+            reason = self.held(f"{SERVER} -i {path}")
+            self.assertIn(name, reason, name)
+            self.assertIn("!!", reason)
+        drop = self.script(":connect prod-server\nDROP TABLE dbo.orders;\n", "both.sql")
+        self.refused(f"{SERVER} -i {drop}", drop)
+        self.open_connection()
+        self.held(f"{SERVER} -i {self.script('SELECT 1;' + chr(10) + '!! whoami' + chr(10), 'shell2.sql')}")  # an opened connection does not let it through either: what it does is not known
+
     def test_a_script_that_calls_a_procedure_is_an_exec_and_waits_in_dev(self) -> None:
         path = self.script("EXEC dbo.usp_load;\n", "e.sql")
         self.held(f"{SERVER} -i {path}")

@@ -50,7 +50,7 @@ class Action:
     why: str = ""  # an unseen call that is not an unreadable program name: "file" (a script the gate cannot read), "encoded" (an encoded PowerShell command); "command" (1.7.38): a word the system's own program does not have, its `target`
     unseen: bool = False  # a segment the gate cannot read (a program in a variable it cannot expand): held, never guessed (1.7.21)
     file: str = ""  # (1.7.38, C12 RC-G1) a file the call names as its input (`sqlcmd -i`): the one whose text made the call a destroy, or the first one the gate could not judge
-    file_why: str = ""  # "destroy" (the file holds one: refused), "unread" (missing, too big, not text: held as a write), "twice" (the line names the file again and may change it: held as a write)
+    file_why: str = ""  # "destroy" (the file holds one: refused), "unread" (missing, too big, not text: held as a write), "twice" (the line names the file again and may change it: held as a write), "directive" (a line the gate cannot judge, such as `!!` or `:connect`: held as a write)
 
     def facts(self) -> Dict[str, Any]:
         facts: Dict[str, Any] = {"system": self.system, "env": self.env, "verb": self.verb, "target": self.target}
@@ -639,7 +639,7 @@ def _scan(text: str, systems: Dict[str, Any], programs: Dict[str, List[str]], de
                     elif read.state:  # a file the gate cannot judge: the call is at least a write
                         verb = inputfiles.strictest([verb, WRITE])
                         file, file_why = (read.file, read.state) if verb == WRITE else ("", "")
-            found.append(Action(name, environment(system, line), verb or WRITE, target, " ".join(tokens), named=verb is not None and file_why not in ("unread", "twice"), call=" ".join([_program(tokens[start])] + tokens[start + 1:]), file=file, file_why=file_why))
+            found.append(Action(name, environment(system, line), verb or WRITE, target, " ".join(tokens), named=verb is not None and file_why not in ("unread", "twice", "directive"), call=" ".join([_program(tokens[start])] + tokens[start + 1:]), file=file, file_why=file_why))
             continue
         if start is not None:
             continue  # the program of a listed system, none of whose systems owns this call: judged, and nothing to hold

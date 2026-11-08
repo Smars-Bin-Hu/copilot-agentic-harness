@@ -304,7 +304,8 @@ class BoardChecksItself(ConnectionsCase):
         return ready.Ready(self.root, Link(), lambda _root: {"errors": 0, "first": "", "failed": ""}, checker=checker or reachcheck.Checker(self.root, probe=lambda _root: None))
 
     def line(self, check) -> dict:
-        return next(item for item in check.answer(True)["checks"] if item["id"] == "systems")
+        """The connections row of the optional block (1.7.38): `names` with a state each, `rows` for the hover table."""
+        return next(item for item in check.answer(True)["optional"]["items"] if item["key"] == "connections")
 
     def test_probe_all_writes_what_the_hook_would_and_leaves_a_connection_without_an_identity_to_the_hook(self) -> None:
         from core import reach
@@ -340,17 +341,25 @@ class BoardChecksItself(ConnectionsCase):
         self.assertTrue(checker.start())  # Check and Open VS Code ask whatever the age
         checker.last.join(10)
 
-    def test_the_line_has_names_with_a_state_a_table_and_no_word_about_an_account_when_never_checked(self) -> None:
+    def test_the_row_has_names_with_a_state_a_table_and_no_problem_for_a_sign_in_that_was_never_tested(self) -> None:
         connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
         found = self.line(self.ready())
-        self.assertEqual((found["why"], found["check"]), ("unknown", True))
-        self.assertFalse(found.get("launch") or found.get("identities"))  # "VS Code needs your account" is for a refused identity only
-        self.assertEqual(found["names"], [{"name": "db-dev", "state": "unknown"}, {"name": "db-ist", "state": "unknown"}])
+        self.assertEqual(found["names"], [{"name": "db-dev", "state": "untested", "saved": True}, {"name": "db-ist", "state": "none", "saved": False}])  # saved, not tested yet: waiting; nothing saved: not signed in
+        self.assertEqual([problem["key"] for problem in found["problems"]], ["signin"])  # only db-ist is a problem
+        self.assertIn("db-ist", found["problems"][0]["text"])
+        self.assertNotIn("db-dev", found["problems"][0]["text"])
         connections.probe_all(self.root)  # db-ist has no identity kept here: left to the hook
         found = self.line(self.ready())
-        self.assertEqual(found["names"], [{"name": "db-dev", "state": "ok"}, {"name": "db-ist", "state": "unknown"}])
+        self.assertEqual(found["names"], [{"name": "db-dev", "state": "ok", "saved": True}, {"name": "db-ist", "state": "none", "saved": False}])
         row = found["rows"][0]
         self.assertEqual((row["system"], row["env"], row["state"], row["reason"]), ("db-dev", "dev", "ok", "alice"))
+        self.assertEqual(self.ready().answer(True)["optional"]["identities"], 1)  # one sign-in saved and its test passed: the VS Code button may say "with identities"
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "wrong"})
+        connections.probe_all(self.root)
+        found = self.line(self.ready())
+        self.assertEqual(found["names"][0]["state"], "down")  # saved, and the last test failed
+        self.assertEqual([problem["key"] for problem in found["problems"]], ["signin", "down"])
+        self.assertEqual(self.ready().answer(True)["optional"]["identities"], 0)
 
     def test_a_connection_without_an_environment_has_an_empty_env_cell_and_a_system_with_two_states_is_partly(self) -> None:
         from core import reach
@@ -366,16 +375,16 @@ class BoardChecksItself(ConnectionsCase):
                          [("s", "dev", "ok", "pack-a"), ("s", "ist", "down", "pack-a"), ("t", "", "down", ""), ("u", "", "unknown", "")])
 
     def test_regression_a_connection_added_while_the_screen_is_open_shows_at_once_not_after_the_cache(self) -> None:
-        """The first answer said "none" and the folder cache (10 s) kept it: a connection added a second later was not on the screen until the cache ran out."""
+        """The first answer said "none" and the cache (10 s) kept it: a connection added a second later was not on the screen until the cache ran out."""
         for name in ("connections.company.json",):
             (self.root / ".harness" / "policies" / name).unlink()
         check = self.ready()
-        self.assertEqual(self.line(check)["why"], "none")
+        self.assertEqual(self.line(check)["names"], [])
         self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"}})
-        self.assertEqual(self.line(check)["why"], "unknown")  # the same Ready object, no time passed
+        self.assertEqual([one["name"] for one in self.line(check)["names"]], ["db-dev"])  # the same Ready object, no time passed
         connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
         connections.probe_all(self.root)
-        self.assertEqual(self.line(check)["state"], "ok")
+        self.assertEqual(self.line(check)["names"][0]["state"], "ok")
 
 
 class RulesOfTheType(ConnectionsCase):

@@ -40,16 +40,21 @@ SLOW_GATE_SHARE = 0.5  # of the PreToolUse timeout: the SDK engine lets a call t
 DEFAULT_HOOK_TIMEOUT = 30
 
 
+TOPICS = "HARNESS_DOCTOR_TOPICS"  # the board's own run (1.7.38): a warning about the company's content (knowledge base, its copies, standards, repositories) says so, `[WARN:company]`; a person's run prints `[WARN]` as always
+
+
 class Report:
     def __init__(self) -> None:
         self.errors = 0
         self.lines: List[str] = []
+        self.topic = ""  # the part of the run that is going on: `company` while the checks of the repositories, the knowledge base, its copies and the standards run
 
     def ok(self, message: str) -> None:
         self.lines.append(f"[OK]    {message}")
 
     def warn(self, message: str) -> None:
-        self.lines.append(f"[WARN]  {message}")
+        mark = f"[WARN:{self.topic}] " if self.topic and os.environ.get(TOPICS) else "[WARN]  "
+        self.lines.append(f"{mark}{message}")
 
     def error(self, message: str) -> None:
         self.errors += 1
@@ -834,13 +839,21 @@ def run(root: Path) -> int:
     check_overrides(report, root)
     sample = check_output(report, root)
     check_user(report, root)
+    report.topic = "company"
     check_targets(report, root)
+    report.topic = ""
     check_location(report, root)
+    report.topic = "company"
     check_knowledge_base(report, root)
-    check_skills(report, root)
+    report.topic = ""
+    check_skills(report, root)  # skills, packs and systems: the items of readyitems.py say more, so they are not counted twice
+    report.topic = "company"
     check_company(report, root)
+    report.topic = ""
     check_toolpacks(report, root)
+    report.topic = "company"
     check_standards(report, root)
+    report.topic = ""
     check_task_names(report, root)
     check_optional_packages(report, root)
     check_vscode(report)

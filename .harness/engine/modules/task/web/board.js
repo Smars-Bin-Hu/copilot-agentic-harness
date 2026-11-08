@@ -401,13 +401,9 @@
     shift.replaceChildren(...[button("offwork", off, "board.offwork", "board.offwork.hint"), button("onwork", on, "board.onwork", "board.onwork.hint")]);
     newSlot.replaceChildren(...[rows.length ? newTask() : null].filter(Boolean));
     paintFound(DATA.serve && DATA.serve.kb_found);
-    paintSetup(DATA.serve && DATA.serve.setup);
     paintSpace(DATA.serve && DATA.serve.space);
     statusBox.replaceChildren(...[SHELL.vsPill(vscode), typeof SERVE !== "undefined" ? SERVE.pairMark() : null, kbMark].filter(Boolean));
   }
-  // The big warning (1.6.59): what this copy lacks before it can do real work. It stays until that is set; a click opens the setup guide.
-  const setupBar = h("a", {class: "setup-bar", href: "/setup", hidden: ""});
-  setupBar.addEventListener("click", (event) => { if (typeof DOCK === "undefined") return; event.preventDefault(); DOCK.setupWindow(); });
   const kbTip = h("span", {class: "kb-tip"});
   const kbMark = h("span", {class: "kb-mark", tabindex: "0", hidden: ""}, h("i"), t("board.kb.mark"), kbTip);
   function placeTip() {  // fixed: the header cuts off what leaves it. Over a wallpaper the header's blur makes the header, not the window, what `fixed` counts from: that offset is measured and taken off
@@ -427,22 +423,13 @@
     kbMark.dataset.sig = sig;
     kbTip.replaceChildren(h("b", null, t("board.kb.found")), h("ul", null, items.map((text) => h("li", null, text.replace(/[.\u3002]$/, "")))));
   }
-  function paintSetup(list) {
-    const items = list || [];
-    if (!setupBar.isConnected) { const top = document.querySelector(".lb-top"); if (top) top.after(setupBar); }
-    setupBar.hidden = !items.length;
-    const sig = items.join();
-    if (setupBar.dataset.sig === sig) return;
-    setupBar.dataset.sig = sig;
-    setupBar.replaceChildren(h("i"), h("span", null, t("board.setup.warn", {n: items.length})), h("span", {class: "setup-more"}, items.map((key) => h("span", null, t("board.setup." + key)))));
-  }
   // The task folders over `board.archive_over_mb` (1.6.109, tasksize.py, measured once an hour): how much, the largest closed tasks, and a button that ticks
   // the largest closed ones until the rest is under the limit, in the list, where the person unticks any and archives the rest. "Later" hides it in this
   // browser until the folders grow by another tenth.
   const spaceBar = h("div", {class: "space-bar", hidden: ""});
   const SPACE_SHOWN = 3;
   function paintSpace(space) {
-    if (!spaceBar.isConnected) { const top = setupBar.isConnected ? setupBar : document.querySelector(".lb-top"); if (top) top.after(spaceBar); }
+    if (!spaceBar.isConnected) { const top = typeof READYBAR !== "undefined" ? READYBAR.node() : document.querySelector(".lb-top"); if (top) top.after(spaceBar); }
     const later = Number(keep.get("spaceLater", "0")) || 0;
     const show = Boolean(space && space.over) && !(later && space.total < later * 1.1);
     spaceBar.hidden = !show;
@@ -545,7 +532,7 @@
   }
 
   app.replaceChildren(
-    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: DATA.serve ? "sub has-status" : "sub"}, boardName, DATA.serve ? [" \u00b7 ", statusBox] : [" \u00b7 ", stamp])), h("div", {class: "lb-right"}, shift, seg, newSlot)), SHELL.banner(), said,
+    h("div", {class: "lb-top"}, h("div", null, h("h1", null, t("board.brand")), h("div", {class: DATA.serve ? "sub has-status" : "sub"}, boardName, DATA.serve ? [" \u00b7 ", statusBox] : [" \u00b7 ", stamp])), h("div", {class: "lb-right"}, shift, seg, newSlot)), typeof READYBAR !== "undefined" ? READYBAR.node() : null, SHELL.banner(), said,
     kpis, controls, lobby.node,
     pick, tableBox, more,
     h("footer", null, t("board.footer"), " ", t(DATA.serve ? "board.copy.hint.served" : "board.copy.hint"), DATA.serve ? null : " ", DATA.serve ? null : stampNote), copyright());
@@ -571,7 +558,7 @@
     if (typeof CHAT !== "undefined") CHAT.seen(data.rows);  // the New task notice may be waiting for its task
     archiveTo = data.archive_to || "";
     SHELL.vs(data.vscode);
-    if (DATA.serve) { DATA.serve.setup = data.setup; DATA.serve.kb_found = data.kb_found; DATA.serve.space = data.space; paintFound(data.kb_found); paintSetup(data.setup); }
+    if (DATA.serve) { DATA.serve.kb_found = data.kb_found; DATA.serve.space = data.space; paintFound(data.kb_found); }
     const text = JSON.stringify([data.rows, data.hidden, data.vscode || null]);
     if (text !== shown) { rows = data.rows; hidden = data.hidden; vscode = data.vscode || null; shown = text; draw(); } else { paintStamp(); paintSpace(data.space); }
   }

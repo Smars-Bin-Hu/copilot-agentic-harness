@@ -73,7 +73,7 @@ from . import tasksize
 from . import wallpaper
 from . import autorun, boardterm, chatask, chatnew, chatsend, common, gatereview, health, intake, mdtree, task as task_ops, taskarchive, taskboard, taskdesk, taskfiles, taskhtml, taskinbox, tasklife, tasksub, taskreview, vslink
 from . import ready as readiness
-from . import reachcheck
+from . import reachcheck, vsrestart
 from .common import CommandError
 
 HEADER = "X-Harness-Board"
@@ -271,6 +271,8 @@ class Board:
         self.version = disk_version(root)  # the release this process loaded: code changed on disk is not used until the board starts again (B63)
         self.checker = reachcheck.Checker(root)  # the board looks at the outside connections itself, in the background (1.7.19)
         self.ready = readiness.Ready(root, self.link, checker=self.checker)  # the Enter screen (`/api/ready`)
+        self.restarter = vsrestart.Restart(launchenv.vscode_running, self.open_vscode, gone=self.link.hurry)  # the VS Code button of the screen (1.7.38): quit, wait, open
+        self.ready.restart = self.restarter
         self.space = tasksize.Watch(root)  # how much room the task folders take, measured once an hour (1.6.109)
         self.who: Tuple[Any, str] = (None, "")  # (the stamp of the user files, the name) for `user_name`
 
@@ -373,12 +375,34 @@ class Board:
         for row in result["tasks"]:  # the agent is at work in the chat: say something to it, or stop it
             if row.get("status") == "open" and (row.get("chat") or {}).get("state") == "busy" and "steer" in self.served:
                 row["actions"] = [item for item in row["actions"] if item["action"] not in ("steer", "stop")] + [{"action": "steer", "command": ""}, {"action": "stop", "command": ""}]
-        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "setup": core_setup.missing(self.root), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
+        return {"rows": result["tasks"], "hidden": result["closed_hidden"], "as_of": utc_now(), "kb_found": company.found_in_place(self.root), "archive_to": taskarchive.remembered(self.root), "vscode": self.link.status(),
                 "space": self.space.view(result["tasks"])}
+
+    def open_vscode(self) -> None:
+        """Bring the VS Code window of this folder forward, started with this computer's settings; the connections are checked at once. Raises the reason when it cannot be asked (`/api/open`, and the end of a restart)."""
+        if not self.link.status().get("ready") and not launchenv.vscode_running():
+            launchenv.mark_started(self.root)  # this start has the settings: what an earlier one lacked no longer holds
+        asked = self.link.open_window()
+        if asked != "queued":
+            raise ValueError(say("serve.open.off") if asked == "off" else say("serve.open.no-cli"))
+        self.checker.start()  # the connections are checked at once, in VS Code's environment, so the Enter screen has a word within seconds (1.7.19)
+
+    def working_tasks(self) -> List[str]:
+        """The names of the open tasks whose agent is at work now: the hook log says so and VS Code does not say its chat runs no turn (`idle`), or VS Code says the chat is busy. A restart of VS Code would stop them."""
+        found: List[str] = []
+        for task in tasks.folders(self.root):
+            data = tasks.read(self.root, task)
+            if not data or data.get("status") != "open":
+                continue
+            chat = self.link.chat_of(task)
+            busy = chat.get("bound") and chat.get("state") == "busy"
+            if busy or (tasklife.at_work(self.root, data) and not (chat.get("bound") and chat.get("state") in CHAT_STILL)):
+                found.append(Path(task).name)
+        return found
 
     def page(self) -> str:
         found = self.rows()
-        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "kb_found": found["kb_found"], "setup": found["setup"], "space": found["space"]}, self.refresh), hidden=found["hidden"])
+        return taskhtml.board_page(found["rows"], found["as_of"], 0, serve=self.serve_info({"archive_to": found["archive_to"], "vscode": found["vscode"], "kb_found": found["kb_found"], "space": found["space"]}, self.refresh), hidden=found["hidden"])
 
     def desk(self, name: str, trace_tree: bool = False) -> Dict[str, Any]:
         found = taskdesk.desk(self.root, name, self.served, trace_tree)  # the tree reads whole logs: only for a Trace tab that is open
@@ -1427,13 +1451,22 @@ def handler_for(board: Board) -> type:
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
                 if not data.get("anyway") and launchenv.extra(board.root) and launchenv.vscode_running() and launchenv.seen(board.root).get("ok") is not True:  # it is running and no chat found it started with the settings: starting it again gives it nothing (1.7.21); the person may still open it (`anyway`, 1.7.29)
                     return self.answer(409, {"error": say("serve.open.running_env"), "running": True})
-                if not board.link.status().get("ready") and not launchenv.vscode_running():
-                    launchenv.mark_started(board.root)  # this start has the settings: what an earlier one lacked no longer holds
-                asked = board.link.open_window()
-                if asked != "queued":
-                    return self.answer(409, {"error": say("serve.open.off") if asked == "off" else say("serve.open.no-cli")})
-                board.checker.start()  # the connections are checked at once, in VS Code's environment, so the Enter screen has a word within seconds (1.7.19)
+                try:
+                    board.open_vscode()
+                except ValueError as error:
+                    return self.answer(409, {"error": str(error)})
                 return self.answer(200, {"result": {"queued": True}})
+            if path == "/api/restart":  # the VS Code button of the Enter screen (1.7.38): quit the normal way, wait, open again. The paired browser only; never a kill
+                if not board.paired(self.token()):
+                    return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
+                if str(data.get("step", "")) == "state":
+                    return self.answer(200, {"result": board.restarter.view()})
+                if os.environ.get("TERM_PROGRAM") == "vscode" or os.environ.get("VSCODE_IPC_HOOK_CLI"):  # this board runs in a terminal of VS Code: quitting VS Code would stop it
+                    return self.answer(409, {"error": say("restart.inside"), "inside": True})
+                names = [] if data.get("anyway") else board.working_tasks()
+                if names:
+                    return self.answer(409, {"error": say("restart.busy", names=", ".join(names)), "busy": names})
+                return self.answer(200, {"result": {"started": board.restarter.start(bool(data.get("open", True)))}})
             if path == "/api/reach":  # the Check button of the outside systems line: the board checks the connections now (the paired browser only)
                 if not board.paired(self.token()):
                     return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})

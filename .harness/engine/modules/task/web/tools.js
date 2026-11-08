@@ -5,7 +5,7 @@
 const TOOLS = (function () {
   const TABS = ["company", "computer"];
   const LABEL = {company: "setup.sec.company", computer: "setup.sec.computer"};
-  const OLD = {packs: ["company", "packs"], connections: ["company", "connections"]};  // the names of the three tabs before 1.7.38
+  const OLD = {packs: ["company", "packs"], connections: ["company", "connections"], local: ["computer", ""]};  // the names of the three tabs before 1.7.38; `local` is the name the Enter screen and the board's block (readyui.js) use for the window of block C
 
   // The dot of a tab and the words of its line in Get ready: ok (green), warn (something is missing here), none (nothing set, grey).
   function states() {

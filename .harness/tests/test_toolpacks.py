@@ -1287,6 +1287,43 @@ class ShippedFactoryPacks(ToolpackCase):
         for word in listed:
             self.assertIn(word, out, word)
 
+    @staticmethod
+    def ado_program():
+        """The `ado` program of the repository loaded as a module (it has no .py name); nothing runs on loading."""
+        import importlib.machinery
+        import importlib.util
+
+        from support import REPO
+
+        path = str(REPO / ".harness" / "toolpacks" / "ado" / "bin" / "ado")
+        spec = importlib.util.spec_from_loader("ado_program", importlib.machinery.SourceFileLoader("ado_program", path))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_ado_turns_only_a_line_break_and_one_backslash_and_the_card_reads_the_text_the_same_way(self) -> None:
+        """1.7.38: `C:\\temp\\data` was broken (`\\t` a tab, the other backslashes dropped). Only `\\n` and `\\\\` are turned; the held card (cmdview) does the same."""
+        from modules.task import cmdview
+
+        ado = self.ado_program()
+        cases = {  # written -> what the program writes
+            r"line one\nline two": "line one\nline two",
+            r"a\\b": "a\\b",  # two backslashes are one
+            r"a\\nb": "a\\nb",  # a backslash and n, no line break
+            r"C:\temp\data": "C:\\temp\\data",  # a path: \t and \d stay
+            r"C:\temp\new": "C:\\temp\new",  # but \n is a line break: a path with it goes in a file
+            r"\d+\s*": "\\d+\\s*",
+            r"tab\there": "tab\\there",
+            r'say \"hi\"': 'say \\"hi\\"',
+            "plain": "plain", "": "", "end\\": "end\\",
+            r"\\\\": "\\\\",
+            r"\\\n": "\\\n",
+        }
+        for written, expected in cases.items():
+            self.assertEqual(ado.unescaped(written), expected, written)
+            self.assertEqual(cmdview._unescape(written), expected, written)  # noqa: SLF001 - the two must stay the same
+            self.assertEqual(ado.unescaped(written), cmdview._unescape(written), written)  # noqa: SLF001
+
 
 TWO_WAYS = dict(KIND, auth={"signin": {"identity": "tool", "login": "trk-login --org {org}", "label": "Its own sign-in", "needs": ["trk-login"]},
                             "token": {"identity": "token", "label": "Token", "env": {"TRACKER_TOKEN": "token"}}},

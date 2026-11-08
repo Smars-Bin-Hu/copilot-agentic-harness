@@ -173,8 +173,9 @@ def _shell_value(text: str, quote: str) -> str:
 
 
 def _unescape(text: str) -> str:
-    """The text the program reads `\\n` and `\\t` in as a person reads it: a line break and a tab. Run on what the shell passed on (`_shell_value`), as the program gets it."""
-    return re.sub(r"\\([nt])", lambda found: {"n": "\n", "t": "\t"}[found.group(1)], text)
+    r"""The text as a program reads it that turns `\n` into a line break and `\\` into one backslash (the ado program, `unescaped`: keep the two the same, 1.7.38). Every other backslash stays
+    as written, so a Windows path or a regular expression is shown whole. Run on what the shell passed on (`_shell_value`), as the program gets it."""
+    return re.sub(r"\\([n\\])", lambda found: "\n" if found.group(1) == "n" else "\\", text)
 
 
 def body_of(args: str, rules: Optional[List[Dict[str, Any]]], folder: Optional[Path], root: Optional[Path] = None) -> Optional[Dict[str, Any]]:

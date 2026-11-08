@@ -242,9 +242,10 @@ def table(rows, heads) -> str:
 
 
 def unescaped(text: str) -> str:
-    """`--text`/`--description` words as the held card shows them (harness cmdview): a literal `\\n` is a line break, `\\t` a tab, `\\\\` one backslash, `\\"` a quote; so what is written is what the card said.
-    Inside shell double quotes the shell has already turned `\\\\` into one backslash; in single quotes ado sees it as written."""
-    return re.sub(r"\\(.)", lambda found: {"n": "\n", "t": "\t"}.get(found.group(1), found.group(1)), text)
+    r"""`--text`/`--description` words as the held card shows them (harness `modules/task/cmdview.py` `_unescape`: keep the two the same). Only two things are turned: `\n` (a backslash and n) is a
+    line break and `\\` (two backslashes) is one backslash. Every other backslash stays as written, so `C:\temp\data` and `\d+` arrive whole; `\\n` is a backslash and n.
+    The shell has turned things already: in double quotes `\\` came as one backslash, in single quotes ado sees the text as written. A text with a Windows path or a regular expression goes in a file (`--file`)."""
+    return re.sub(r"\\([n\\])", lambda found: "\n" if found.group(1) == "n" else "\\", text)
 
 
 def comment_html(text: str) -> str:
@@ -990,7 +991,7 @@ def deploy(ado: Ado, args) -> str:
 
 # --- the command line ----------------------------------------------------------------------------------------------------------------------------------------
 
-PACK_VERSION = "0.4.5"  # the same as toolpack.json
+PACK_VERSION = "0.4.7"  # the same as toolpack.json
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1042,7 +1043,7 @@ def parser() -> argparse.ArgumentParser:
     one.add_argument("--top", type=int, default=50)
     add("tags", "the tags in use")
     one = add("comment", "add a comment (a write: the person approves it)", "id")
-    one.add_argument("--text", default="", help="the words; each line stays a line; a literal \\n is a line break (\\\\n for backslash n)")
+    one.add_argument("--text", default="", help="the words; each line stays a line; a literal \\n is a line break, \\\\ is one backslash, any other backslash stays; a Windows path or a regular expression goes in a file (--file)")
     one.add_argument("--file", default="", help="or a file that holds them")
     for name, helptext in (("update", "change fields of a work item (a write)"), ("create", "a new work item (a write)")):
         change = add(name, helptext, *(["id"] if name == "update" else []))

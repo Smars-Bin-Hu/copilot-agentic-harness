@@ -8,7 +8,7 @@ any path in ways a regular expression does not see.
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Pattern, Tuple
+from typing import Callable, List, Optional, Pattern, Tuple
 
 from .policy import Compiled
 
@@ -145,8 +145,21 @@ def tree_write(command: str, compiled: Compiled) -> Optional[str]:
     return _first(command, compiled.tree_writes)
 
 
-def check(command: str, compiled: Compiled) -> Optional[Verdict]:
-    """`("deny", why)`, `("ask", why)` or None. Deny rules come first."""
+def _segment(text: str, at: int) -> str:
+    """The one command of the line (cut at `;`, `&`, `|`, `(` and a new line) that the character at `at` is in."""
+    left = max((text.rfind(char, 0, at) for char in _SEPARATORS), default=-1) + 1
+    rights = [index for index in (text.find(char, at) for char in _SEPARATORS) if index != -1]
+    return text[left: min(rights) if rights else len(text)]
+
+
+_NET_PROGRAM = re.compile(r"[\w.-]+$")
+
+
+def check(command: str, compiled: Compiled, judged: Optional[Callable[[str], bool]] = None) -> Optional[Verdict]:
+    """`("deny", why)`, `("ask", why)` or None. Deny rules come first.
+
+    `judged` (1.7.38): says of one command of the line whether a system the gate knows has judged it. The `ask` rule of the network does not ask again for a `curl` that was judged (a curl to an
+    Azure DevOps address is a read, a write or a destroy by its own rule); a curl to any other address, in the same line or alone, still asks."""
     if not command.strip():
         return None
     text = normalize(command)
@@ -154,6 +167,9 @@ def check(command: str, compiled: Compiled) -> Optional[Verdict]:
         if regex.search(text):
             return "deny", why
     for regex, why in compiled.ask:
-        if regex.search(text):
+        for found in regex.finditer(text):
+            program = _NET_PROGRAM.search(found.group(0).strip())
+            if judged is not None and program and program.group(0).lower() in ("curl", "curl.exe") and judged(_segment(text, found.start())):
+                continue
             return "ask", why
     return None

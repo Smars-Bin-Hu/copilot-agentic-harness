@@ -17,7 +17,6 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TextIO, Tuple
 
-from core import systems as outside
 from core import config, messages, tasks
 from core.render import local_time, pad, width  # noqa: F401 - the page and the tests use them from here too
 from core.paths import cli_command, utc_now
@@ -203,13 +202,13 @@ def closed_shown(root: Path) -> int:
     return config.whole((config.policy_or_empty(root, "task").get("board") or {}).get("closed_shown"), CLOSED_SHOWN)
 
 
-def reachable_envs(root: Path) -> set:
-    """The environments a listed outside system reaches (core.systems), for the mark under a task's name; empty when none is listed or the list is broken."""
-    try:
-        systems = config.policy_or_empty(root, "tools").get("systems") or {}
-        return set(outside.environments(systems)) if systems and not outside.validate(systems) else set()
-    except Exception:  # noqa: BLE001
-        return set()
+def opened_marks(data: Dict[str, Any]) -> List[str]:
+    """The connections the person opened for a task (`allow_conn`), and the linked items when those are open: the words of the mark under the task's name."""
+    found = data.get("allow_conn") if isinstance(data.get("allow_conn"), dict) else {}
+    marks = sorted(str(name) for name in found)
+    if data.get("allow_links"):
+        marks.append(say("desk.set.open.links"))
+    return marks
 
 
 def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (), rewrite: bool = True) -> Tuple[Dict[str, Any], List[Dict[str, str]]]:
@@ -228,7 +227,6 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
         result["tasks"] = [row for row in result["tasks"] if id(row) not in gone]
     use_events = taskinsight.events_allowed(root)
     problems = []
-    reaches = reachable_envs(root)
     for row in result["tasks"]:
         row["brief"], row["report"], row["actions"], row["stages"] = None, "", actions(row, tuple(served)), None
         if row["status"] == "new":
@@ -241,8 +239,7 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
         if task_ops.req_placeholders(root, row["task"]):  # REQ.md still holds the template's text (1.7.22): nothing to confirm yet, in any tier
             row["actions"] = [item for item in row["actions"] if item["action"] != "confirm-req"]
         row["req_unconfirmed"] = row["status"] == "open" and task_ops.req_state(root, row["task"]) in ("open", "changed")
-        held = (tasks.read(root, row["task"]) or {}).get("allow_env")
-        row["open_envs"] = sorted(env for env in held if env in reaches) if isinstance(held, dict) and row["status"] == "open" else []  # the environments the person opened for the task (1.7.6): a mark under the name; none without a listed system
+        row["open_conns"] = opened_marks(tasks.read(root, row["task"]) or {}) if row["status"] == "open" else []  # what the person opened for the task (1.7.38: connections, and the linked items): a mark under the name
         if row["status"] == "open":
             row["sub"] = tasksub.from_hooklog(root, tasks.read(root, row["task"]) or {})  # the last tool call of the hook log; a board served with VS Code replaces it with the chat's own line
         key = (str(root), row["task"])

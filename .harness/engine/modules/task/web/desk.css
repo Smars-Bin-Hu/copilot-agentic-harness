@@ -171,10 +171,11 @@ ol.timeline.trace li.tr-in .what{padding-left:16px}
 @media (max-width:900px){.rv-name{display:none}}
 @media (max-width:640px){.tk-info{flex-wrap:wrap}.tk-info-l{flex-basis:100%;flex-wrap:wrap}.rv-pop{right:auto;left:0}}
 @media (max-width:640px){.tk-pane{padding:14px}.tk-top,.tk-sub{padding-left:8px;padding-right:8px}}
-/* "Open to the agent" (1.7.6): the environment chips in the pop of the head pill. An open one is green; one no system reaches is dim; prod is struck through */
-.rv-pop .env-chips .chip.env.on{border-color:var(--good-line);background:var(--good-bg);color:var(--good)}
-.rv-pop .env-chips .chip.env[disabled]{opacity:.45;cursor:not-allowed}
-.rv-pop .env-chips .chip.env.never{opacity:.45;cursor:not-allowed;text-decoration:line-through}
+/* "Open to the agent" (1.7.38): the pop of the head pill lists what is open in this task, one row each with a button that closes it */
+.rv-pop .open-list{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.rv-pop .open-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:6px 8px;border:1px solid var(--good-line);background:var(--good-bg);border-radius:8px}
+.rv-pop .open-row b{overflow-wrap:anywhere;min-width:0}.rv-pop .open-row .sub{flex:1 1 12em;min-width:0}
+.tk-call-go .tk-open{max-width:100%;overflow-wrap:anywhere;white-space:normal;text-align:left}
 /* a call held in the outbox (1.7.7): the facts in one line, the command's first words, the code on the card; the window lays the command out and scrolls both ways */
 .tk-fact .unnamed .why{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:50%;background:var(--approval);color:#fff;font-size:10px;font-weight:700;cursor:help}
 .tk-call-facts{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:13px;margin:4px 0 8px}

@@ -194,6 +194,29 @@ def servers_list(root: Path) -> Dict[str, Any]:
     return {"connections": out, "state": connections.state(root)}
 
 
+def servers_find(root: Path, words: List[str]) -> Dict[str, Any]:
+    """`harness connections find <words>` (1.7.38, layer 1): a few lines, the connections that fit; a read. `_text`, for the agent to read and for a person."""
+    from core import connections
+
+    text = " ".join(words).strip()
+    found = connections.find(root, text) if text else {"matches": [], "total": 0, "all": len(connections.listed(root))}
+    if not found["all"]:
+        return {"_text": say("connections.find.empty")}
+    if not text:
+        return {"_text": say("connections.find.words")}
+    if not found["matches"]:
+        return {"_text": say("connections.find.none", words=text, n=found["all"])}
+    lines = []
+    for one in found["matches"]:
+        where = "" if one["env"] in ("", "none") else f", {one['env'].upper()}"
+        about = one["about"] or one["label"]
+        lines.append(f"{one['alias']}  ({one['type_label']}{where})" + (f"  {about}" if about else ""))
+    if found["total"] > len(found["matches"]):
+        lines.append(say("connections.find.more", n=found["total"] - len(found["matches"])))
+    lines.append(say("connections.find.many", n=found["total"]) if found["total"] > 1 else say("connections.find.one"))
+    return {"_text": "\n".join(lines)}
+
+
 def servers_test(root: Path, alias: str) -> Dict[str, Any]:
     """`harness servers test <alias>`: test the way in with the saved identity, from this terminal."""
     from core import connections
@@ -292,6 +315,9 @@ def register(subparsers: Any) -> None:
     def connections_parser(name: str, help_text: str, wrap: Callable[[Dict[str, Any]], Dict[str, Any]]) -> None:
         listing = subparsers.add_parser(name, help=help_text)
         listing_commands = listing.add_subparsers(dest="connections_command")
+        looking = listing_commands.add_parser("find", help="find the connection a task needs by some words (a name, a system, an environment, what it is for); a few lines, a read")
+        looking.add_argument("words", nargs="+", help="what you look for, for example: sales warehouse dev")
+        looking.set_defaults(handler=lambda a: wrap(servers_find(repo_root(), a.words)))
         probe = listing_commands.add_parser("test", help="test the way in to a connection with its saved identity")
         probe.add_argument("alias")
         probe.set_defaults(handler=lambda a: wrap(servers_test(repo_root(), a.alias)))

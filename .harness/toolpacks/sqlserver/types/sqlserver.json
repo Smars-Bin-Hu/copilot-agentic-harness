@@ -92,6 +92,12 @@
     "port": "-S\\s+\"?[^\\s,\"]+,(\\d+)",
     "database": "-d\\s+(\\S+)"
   },
+  "open": {
+    "dev": "all",
+    "ist": "all",
+    "qat": "no",
+    "prod": "no"
+  },
   "rules": {
     "dev": {
       "read": "allow",

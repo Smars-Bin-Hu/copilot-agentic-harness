@@ -866,10 +866,10 @@ class LinkedItems(TaskCase):
     def test_the_task_page_offers_the_linked_items_chip_only_when_a_pack_can_scope_them(self) -> None:
         from modules.task import taskdesk, tasklife
 
-        self.assertNotIn("links", [item["env"] for item in taskdesk.allow_view(self.root, self.data())["envs"]])
+        self.assertIsNone(taskdesk.allow_view(self.root, self.data())["links"])
         tasklife.link(self.root, NAME, "trk:42", True)
-        chip = [item for item in taskdesk.allow_view(self.root, self.data())["envs"] if item["env"] == "links"]
-        self.assertEqual((len(chip), chip[0]["open"], chip[0]["systems"]), (1, False, ["board"]))
+        row = taskdesk.allow_view(self.root, self.data())["links"]
+        self.assertEqual((row["open"], row["systems"], row["refs"]), (False, ["board"], ["trk:42"]))
 
     # 1.7.25 (C8 R4): one rule instead of a patch for each way round the net
 
@@ -1565,50 +1565,175 @@ class SqlCardWords(HarnessTestCase):
         self.assertIsNone(self.words("sqlcmd -S localhost,14332 -C -i DEV/_manual/load.sql")["body"], "a file is shown by the window, as before")
 
 
-class OpenToTheAgentSaysWhatItOpens(TaskCase):
-    """1.7.38 (C11 T2-01): a tool pack's connection always asks the person; the page said `dev` was open for it. Now only what the switch really opens is listed as open."""
+class OpenRulesOfTheTypes(TaskCase):
+    """1.7.38 (C12 D1): a tool pack's type says how far a connection of it may be opened for a task, per environment; the company can lower it; prod and a destroy are never opened."""
+
+    SQL = "sqlcmd -S localhost,{port} -C -Q \"UPDATE t SET a = 1\""
 
     def setUp(self) -> None:
         super().setUp()
-        use_packs(self.root, "sqlserver")
-        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+        use_packs(self.root, "sqlserver", "ado")
+        self.write_connections({
             "acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql"},
-            "acmedw-ist": {"type": "sqlserver", "env": "ist", "host": "localhost", "port": "14331", "auth": "sql"}}}), encoding="utf-8")
+            "acmedw-ist": {"type": "sqlserver", "env": "ist", "host": "localhost", "port": "14331", "auth": "sql"},
+            "acmedw-qat": {"type": "sqlserver", "env": "qat", "host": "localhost", "port": "14330", "auth": "sql"},
+            "acmedw-prod": {"type": "sqlserver", "env": "prod", "host": "localhost", "port": "14329", "auth": "sql"},
+            "ado": {"type": "azure-devops", "env": "none", "org": "acme", "project": "demo"}})
         (self.root / ".harness/policies/tools.override.json").write_text(json.dumps({"systems": {
             "cloud": {"reach": {"cli": "cloudctl"}, "env": "ist", "verbs": [{"pattern": r"\brun\b", "verb": "exec"}]}}}), encoding="utf-8")
 
-    def test_a_tool_pack_environment_is_listed_as_asking_and_is_not_shown_open(self) -> None:
-        from modules.task import taskdesk
+    def write_connections(self, listed) -> None:
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": listed}), encoding="utf-8")
 
-        stamp = {"at": "2026-11-08T00:00:00+00:00"}
-        view = taskdesk.allow_view(self.root, {"status": "open", "allow_env": {"dev": stamp, "ist": stamp}})
-        envs = {item["env"]: item for item in view["envs"]}
-        self.assertEqual((envs["dev"]["systems"], envs["dev"]["asks"], envs["dev"]["open"]), ([], ["acmedw-dev"], False), "nothing to open: it asks, and is not drawn open")
-        self.assertEqual((envs["ist"]["systems"], envs["ist"]["asks"], envs["ist"]["open"]), (["cloud"], ["acmedw-ist"], True), "a system written by hand is opened; the tool pack's still asks")
-        self.assertEqual((envs["qat"]["systems"], envs["qat"]["asks"]), ([], []))
+    def systems(self):
+        return config.policy_or_empty(self.root, "tools")["systems"]
 
-    def test_the_gate_and_the_page_agree_on_what_can_be_opened(self) -> None:
+    def term(self, command: str):
+        data = pre_tool("sess-main", "run_in_terminal", {"command": command, "explanation": "t", "isBackground": False})
+        data["cwd"] = str(self.root)
+        return self.hook(data)
+
+    def test_the_types_say_how_far_each_environment_may_be_opened(self) -> None:
         from core import systems
-        from modules.gate import handler
 
-        listed = config.policy_or_empty(self.root, "tools")["systems"]
-        for name, system in listed.items():
-            self.assertEqual(handler._openable(system), systems.openable(system), name)  # noqa: SLF001
-        self.assertFalse(systems.openable(listed["acmedw-dev"]))
-        self.assertTrue(systems.openable(listed["cloud"]))
-        self.assertTrue(systems.openable({**listed["acmedw-dev"], "openable": True}))
+        listed = self.systems()
+        self.assertEqual({name: systems.open_scope(listed[name], listed[name]["env"]) for name in ("acmedw-dev", "acmedw-ist", "acmedw-qat", "acmedw-prod", "ado", "cloud")},
+                         {"acmedw-dev": "all", "acmedw-ist": "all", "acmedw-qat": "no", "acmedw-prod": "no", "ado": "items", "cloud": "all"})
+        self.assertEqual(systems.open_scope(dict(listed["acmedw-dev"], open="all"), "prod"), "no", "prod is never opened, whatever a system says")
+        self.assertEqual(systems.open_scope({"toolpack": "x"}, "dev"), "no", "a tool pack's system that says nothing stays closed")
+        self.assertEqual(systems.open_scope({"openable": True, "toolpack": "x"}, "dev"), "all", "the old word still opens a system in dev, ist and qat")
 
-    def test_task_allow_for_such_an_environment_says_it_still_asks(self) -> None:
+    def test_the_company_can_lower_what_a_type_says_but_not_raise_it(self) -> None:
+        from core import systems
+
+        self.write_connections({
+            "acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "auth": "sql", "open": "no"},
+            "acmedw-qat": {"type": "sqlserver", "env": "qat", "host": "localhost", "port": "14330", "auth": "sql", "open": "all"},
+            "acmedw-ist": {"type": "sqlserver", "env": "ist", "host": "localhost", "port": "14331", "auth": "sql", "open": {"ist": "items"}},
+            "acmedw-prod": {"type": "sqlserver", "env": "prod", "host": "localhost", "port": "14329", "auth": "sql", "open": "all"}})
+        listed = self.systems()
+        self.assertEqual({name: listed[name]["open"] for name in ("acmedw-dev", "acmedw-qat", "acmedw-ist", "acmedw-prod")}, {"acmedw-dev": "no", "acmedw-qat": "no", "acmedw-ist": "items", "acmedw-prod": "no"})
+        self.assertEqual(systems.open_scope(listed["acmedw-ist"], "ist"), "items")
+
+    def test_a_type_with_a_wrong_open_word_is_reported(self) -> None:
+        kind = {"type": "x", "label": "X", "cli": ["x"], "fields": {"a": {"label": "A"}}, "match": "x", "auth": {"own": {"identity": "env"}}, "test": "x", "open": {"dev": "everything"}}
+        self.assertTrue(any(".open" in problem for problem in connections.type_problems(kind)))
+        kind["open"] = {"dev": "all", "*": "no"}
+        self.assertEqual([problem for problem in connections.type_problems(kind) if ".open" in problem], [])
+        kind["open"] = "items"
+        self.assertEqual([problem for problem in connections.type_problems(kind) if ".open" in problem], [])
+
+    def test_the_cli_opens_a_connection_by_its_type_and_says_no_to_the_rest(self) -> None:
         from modules.task import tasklife
 
         self.new()
-        asks = tasklife.set_allow(self.root, NAME, "dev", True, interactive=True)
-        from core import messages
+        self.assertEqual(tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=True)["open"], ["acmedw-dev"])
+        self.assertEqual(tasklife.set_allow(self.root, NAME, "acmedw-ist", True, interactive=True)["open"], ["acmedw-dev", "acmedw-ist"])
+        for name in ("acmedw-qat", "acmedw-prod", "dev"):
+            with self.assertRaises(Exception, msg=name):
+                tasklife.set_allow(self.root, NAME, name, True, interactive=True)
+        self.assertEqual(tasklife.set_allow(self.root, NAME, "ado", True, interactive=True)["env"], "links", "an items connection opens as its linked items")
+        self.assertTrue(self.data()["allow_links"])
 
-        self.assertEqual(asks["next"], messages.text("task.allow.on.asks", env="DEV"))
-        opens = tasklife.set_allow(self.root, NAME, "ist", True, interactive=True)
-        self.assertEqual(opens["next"], messages.text("task.allow.on", env="IST"), "a system written by hand is opened")
-        self.assertTrue(tasklife.set_allow(self.root, NAME, "dev", False, interactive=True)["next"])
+    def test_the_gate_lets_an_opened_connection_through_only_for_a_write_or_a_run_and_never_in_another_connection(self) -> None:
+        from modules.task import tasklife
+
+        self.new()
+        dev, ist, qat = (self.SQL.format(port=port) for port in (14332, 14331, 14330))
+        self.assertEqual(self.term(dev)["permissionDecision"], "deny")
+        tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=True)
+        self.assertEqual(self.term(dev), {})
+        self.assertEqual(self.term(ist)["permissionDecision"], "deny", "another connection of the same type stays closed")
+        self.assertEqual(self.term(qat)["permissionDecision"], "deny")
+        self.assertEqual(self.term(f"sqlcmd -S localhost,14332 -C -Q \"EXEC dbo.usp_job_start @name = N'x'\""), {}, "a run passes too")
+        self.assertEqual(self.term("sqlcmd -S localhost,14332 -C -Q \"DROP TABLE t\"")["permissionDecision"], "deny", "a destroy never passes")
+        rows = [row["external"] for row in self.session_log("sess-main") if row.get("external")]
+        self.assertEqual([(row["system"], row["verb"], row.get("opened")) for row in rows],
+                         [("acmedw-dev", "write", None), ("acmedw-dev", "write", True), ("acmedw-ist", "write", None), ("acmedw-qat", "write", None), ("acmedw-dev", "exec", True), ("acmedw-dev", "destroy", None)])
+
+    def test_a_line_that_writes_two_connections_passes_only_when_both_are_open(self) -> None:
+        from modules.task import tasklife
+
+        self.new()
+        both = self.SQL.format(port=14332) + " && " + self.SQL.format(port=14331)
+        tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=True)
+        self.assertEqual(self.term(both)["permissionDecision"], "deny")
+        tasklife.set_allow(self.root, NAME, "acmedw-ist", True, interactive=True)
+        self.assertEqual(self.term(both), {})
+
+    def test_a_subagent_gets_nothing_from_an_opened_connection(self) -> None:
+        from modules.task import tasklife
+
+        self.new()
+        tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=True)
+        data = pre_tool("sess-main", "run_in_terminal", {"command": self.SQL.format(port=14332), "explanation": "t", "isBackground": False})
+        data["cwd"], data["agent_type"] = str(self.root), "reviewer"
+        self.assertEqual(self.hook(data)["permissionDecision"], "deny")
+
+    def test_the_agent_cannot_open_a_connection_itself(self) -> None:
+        from modules.task import tasklife
+
+        self.new()
+        with self.assertRaises(Exception):
+            tasklife.set_allow(self.root, NAME, "acmedw-dev", True, interactive=False)  # the agent's terminal is no tty
+        done = self.cli("task", "allow", "--conn", "acmedw-dev", "--on")  # a pipe, not a person at a terminal
+        self.assertNotEqual(done.returncode, 0)
+        self.assertNotIn("acmedw-dev", self.data().get("allow_conn", {}))
+        task_json = f".workspace/sandbox/tasks/{NAME}/.task/task.json"
+        for write in (f"echo '{{}}' > {task_json}", f"sed -i '' 's/open/x/' {task_json}"):
+            self.assertEqual(self.term(write)["permissionDecision"], "deny", write)  # the file that holds the opening is the harness's alone
+        edit = pre_tool("sess-main", "Write", {"path": task_json, "file_text": "{}"})
+        edit["cwd"] = str(self.root)
+        self.assertEqual(self.hook(edit)["permissionDecision"], "deny")
+
+    def test_the_held_call_says_which_connections_the_card_can_open(self) -> None:
+        from core import approvals, outbox
+
+        self.new()
+        reason = self.term(self.SQL.format(port=14332))["permissionDecisionReason"]
+        self.assertIn("acmedw-dev", reason)
+        self.assertIn(outbox.say("gate.external.outbox.opens", names="acmedw-dev"), reason)
+        entry = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
+        self.assertEqual(entry["offers"], [{"system": "acmedw-dev", "env": "dev", "scope": "all"}])
+        self.assertEqual(outbox.offer_for(self.root, TASK, entry["code"].lower(), "acmedw-dev")["scope"], "all")
+        self.assertIsNone(outbox.offer_for(self.root, TASK, entry["code"], "acmedw-ist"), "the call offers only what it reached")
+        self.assertIsNone(outbox.offer_for(self.root, "other/task", entry["code"], "acmedw-dev"), "the code of another task's call opens nothing here")
+        self.assertNotIn("opens", self.term(self.SQL.format(port=14330))["permissionDecisionReason"].lower().replace("opened", ""), "qat cannot be opened: the card offers nothing and the text does not")
+        self.assertEqual([item for item in approvals.pending(self.root, 10, file=approvals.ACTIONS) if item["system"] == "acmedw-qat"][0].get("offers"), None)
+
+    def test_a_line_that_writes_two_connections_offers_one_button_for_each(self) -> None:
+        from core import approvals
+
+        self.new()
+        self.term(self.SQL.format(port=14332) + " && " + self.SQL.format(port=14331))
+        entry = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
+        self.assertEqual(sorted(offer["system"] for offer in entry["offers"]), ["acmedw-dev", "acmedw-ist"])
+
+    def test_a_card_offers_the_linked_items_of_an_ado_connection_and_only_for_an_item_the_task_names(self) -> None:
+        from core import approvals
+        from modules.task import tasklife
+
+        self.new()
+        self.term("ado comment 123 --text hi")  # not linked: refused, no card
+        self.assertEqual(approvals.pending(self.root, 10, file=approvals.ACTIONS), [])
+        tasklife.link(self.root, NAME, "ado:123", True)
+        self.assertEqual(self.term("ado comment 123 --text hi")["permissionDecision"], "deny")
+        entry = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
+        self.assertEqual(entry["offers"], [{"system": "ado", "env": "none", "scope": "items", "refs": ["ado:123"]}])
+        self.term("ado create --type Bug --title x")  # a new item: no opening covers it
+        created = [item for item in approvals.pending(self.root, 10, file=approvals.ACTIONS) if "create" in item["command"]][0]
+        self.assertIsNone(created.get("offers"))
+        tasklife.set_allow(self.root, NAME, "ado", True, interactive=True)
+        self.assertEqual(self.term("ado comment 123 --text hi"), {})
+
+    def test_a_company_that_lowers_ado_to_no_keeps_the_linked_items_held(self) -> None:
+        from modules.task import tasklife
+
+        self.write_connections({"ado": {"type": "azure-devops", "env": "none", "org": "acme", "project": "demo", "open": "no"}})
+        self.new()
+        tasklife.link(self.root, NAME, "ado:123", True)
+        tasklife.set_allow(self.root, NAME, "links", True, interactive=True)
+        self.assertEqual(self.term("ado comment 123 --text hi")["permissionDecision"], "deny")
 
 
 class AdoHostsOfConnections(HarnessTestCase):
@@ -1662,12 +1787,48 @@ class AdoHostsOfConnections(HarnessTestCase):
                                           "HARNESS_CONNECTION_LAB_ORG": "acme", "HARNESS_CONNECTION_LAB_PROJECT": "demo", "HARNESS_CONNECTION_LAB_URL": "https://localhost:18443"})
         self.assertEqual(self.term(self.DELETE.format(base="https://localhost:18443")), "deny")
 
-    def test_curl_to_such_a_host_gets_the_same_answer_as_curl_to_the_cloud(self) -> None:
-        """`ado-any` is the system of `az`; a curl call is judged by the rule of the network (asked first), cloud or lab alike."""
+    def test_curl_to_an_azure_devops_address_is_judged_like_az_rest(self) -> None:
+        """1.7.38 (C12 Q20): a curl call to dev.azure.com, to *.visualstudio.com or to the `url` of a connection: a read runs, a write is held for the person, a delete is refused."""
+        from core import approvals
+
         self.connect(url="https://localhost:18443")
-        for line in ("curl -X DELETE {base}/acme/demo/_apis/wit/workitems/1", "curl -X POST -d '{{}}' {base}/acme/demo/_apis/wit/workitems/1/comments", "curl {base}/acme/demo/_apis/wit/workitems/1"):
-            self.assertEqual(self.term(line.format(base="https://localhost:18443")), self.term(line.format(base="https://dev.azure.com")), line)
-            self.assertNotEqual(self.term(line.format(base="https://localhost:18443")), "allow", line)
+        for base in ("https://dev.azure.com", "https://vsrm.dev.azure.com", "https://acme.visualstudio.com", "https://localhost:18443"):
+            self.assertEqual(self.term(f"curl -s {base}/acme/demo/_apis/wit/workitems/1"), "allow", base)
+            self.assertEqual(self.term(f"curl -s -H 'Accept: application/json' -o out.json {base}/acme/demo/_apis/wit/workitems/1"), "allow", base)
+            self.assertEqual(self.term(f"curl -X GET {base}/_apis/projects | jq ."), "allow", base)
+            self.assertEqual(self.term(f"curl {base}/_apis/projects -I"), "allow", base)
+            for line in (f"curl -X DELETE {base}/acme/demo/_apis/wit/workitems/1", f"curl --request delete {base}/x", f"curl -sX DELETE {base}/x", f"curl -XDELETE {base}/x", f"curl --request=DELETE {base}/x"):
+                self.assertEqual(self.term(line), "deny", line)
+                self.assertEqual(approvals.pending(self.root, 10, file=approvals.ACTIONS), [], f"a delete is refused, not held: {line}")
+        for line in ("curl -X POST -d '{{}}' {base}/x", "curl -X PATCH {base}/x", "curl -X PUT {base}/x", "curl -d '{{}}' {base}/x", "curl --data-binary @body.json {base}/x", "curl -F file=@a.txt {base}/x", "curl -T a.txt {base}/x",
+                     "curl -s --json '{{}}' {base}/x", "curl {base}/x -sSd '{{}}'"):
+            before = len(approvals.pending(self.root, 10, file=approvals.ACTIONS))
+            self.assertEqual(self.term(line.format(base="https://dev.azure.com")), "deny", line)
+            self.assertEqual(len(approvals.pending(self.root, 10, file=approvals.ACTIONS)), before + 1, f"a write is held for the person: {line}")
+
+    def test_curl_to_another_address_asks_as_before(self) -> None:
+        self.connect(url="https://localhost:18443")
+        for line in ("curl https://example.com/x", "curl -X DELETE https://example.com/x", "curl https://dev.azure.com.evil.example/x", "curl https://evil-dev.azure.com/x", "curl https://localhost:18444/x",
+                     "curl https://dev.azure.com/x https://example.com/y", "curl https://dev.azure.com/x && curl https://example.com/y", "curl https://example.com/x | tee out && curl https://dev.azure.com/x",
+                     "curl -d 'https://dev.azure.com/x' https://example.com/y"):
+            self.assertEqual(self.term(line), "ask", line)
+
+    def test_the_word_curl_alone_holds_nothing(self) -> None:
+        """`curl` is a program that only an address makes a call: a line that names it as a word, or a script that runs it elsewhere, is not held by the rule of listed programs."""
+        self.connect()
+        (self.root / "fetch.sh").write_text("#!/bin/sh\ncurl -s https://example.com/a\n", encoding="utf-8")
+        for line in ("echo curl", "grep curl notes.txt", "which curl", "python3 -c \"print('curl')\"", "git commit -m 'curl: retry'", "bash fetch.sh", "docker run --rm curlimages/curl --version"):
+            self.assertNotEqual(self.term(line), "deny", line)
+
+    def test_the_rules_of_the_pack_name_curl_by_address_only(self) -> None:
+        from core import systems
+
+        self.connect()
+        listed = config.policy_or_empty(self.root, "tools")["systems"]
+        self.assertEqual(systems.validate(listed), [])
+        self.assertEqual((systems.clis(listed["ado-curl"]), systems.by_address(listed["ado-curl"])), ([], ["curl"]))
+        self.assertNotIn("curl", [program for system in listed.values() for program in systems.clis(system)])
+        self.assertTrue(systems.validate({"x": {"reach": {"by_address": ["curl"]}}}), "an address-only program needs a `when`")
 
     def test_the_rules_file_of_the_pack_checks_clean(self) -> None:
         from support import REPO

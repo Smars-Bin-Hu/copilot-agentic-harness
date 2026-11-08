@@ -501,51 +501,62 @@ def handoff(root: Path, raw_task: str, what: str, env: str, detail: str = "") ->
     return {"task": task, "handoff": what, "env": env, "next": say("task.handoff.next"), **defects_synced(root, task)}
 
 
-ALLOW_KEY = "allow_env"
-ALLOW_ENVS = ("dev", "ist", "qat")  # the environments a person may open for a task; prod never, and a system with no environment (`none`) has nothing to open
-LINKS = "links"  # 1.7.18: not an environment: the items the task is linked to (a work item); the agent's writes to them go through, to no other item
+ALLOW_KEY = "allow_conn"  # 1.7.38: the connections the person opened for this task, `{name: {at, env}}`. Before it was `allow_env` (environments); that old key is not read any more: nothing is opened by it
+RETIRED_KEY = "allow_env"
+RETIRED_ENVS = ("dev", "ist", "qat", "prod")  # the names an environment switch had; `task allow --env` says it is gone
+LINKS = "links"  # 1.7.18: not a connection: the items the task is linked to (a work item); the agent's writes to them go through, to no other item
 LINKS_KEY = "allow_links"
 
 
-def allowed_env(data: Dict[str, Any], env: str) -> bool:
-    """Did the person open this environment for this task (`task allow --env <E> --on`, 1.7.4)? The gate then lets a write or a procedure of a listed system there through, instead of holding it."""
+def allowed_conn(data: Dict[str, Any], name: str) -> bool:
+    """Did the person open this connection for this task? The gate then lets a write or a run on it through, instead of holding it."""
     found = data.get(ALLOW_KEY) if isinstance(data.get(ALLOW_KEY), dict) else {}
-    return str(env).lower() in found
+    return str(name) in found
 
 
-def set_allow(root: Path, raw_task: str, env: str, on: bool, interactive: Optional[bool] = None) -> Dict[str, Any]:
-    """The person opens an environment for one task (the agent's writes and procedures on the listed systems of that environment run without a further approval), or
-    closes it again. Terminal only, no code: the switch ends with the task and can be turned off at once. A destroy is still refused, prod cannot be opened, and
-    every call still leaves its line in the log."""
+def conn_scope(system: Dict[str, Any]) -> str:
+    """How far Open to the agent may go for a connection (1.7.38): its type's rule for its environment. A system that serves several environments (written by hand with `env_from`) takes the widest
+    of its non-prod ones; the gate still asks again for each call, with the environment of that call."""
+    from core import systems as outside
+
+    envs = {system["env"]} if system.get("env") else {rule["env"] for rule in system.get("env_from") or []} | ({system["default_env"]} if system.get("default_env") else set())
+    scopes = [outside.open_scope(system, env) for env in sorted(envs)] or [outside.open_scope(system, "none")]
+    return max(scopes, key=outside.OPEN_SCOPES.index)
+
+
+def set_allow(root: Path, raw_task: str, name: str, on: bool, interactive: Optional[bool] = None, env: str = "") -> Dict[str, Any]:
+    """The person opens one connection for one task (the agent's writes and runs on it go through with no further approval), or closes it again; `links` opens the items the task is linked to.
+    Terminal only, no code: the switch ends with the task and can be turned off at once. A destroy is still refused, prod cannot be opened, and every call still leaves its line in the log.
+    What a connection may be opened to is its type's word (`open`), lowered by the company: `all`, `items` (the linked items) or `no`. The board's card asks for the code of the held call first
+    (`core.outbox.offer_for`); this function is what both call. `env`: the environment the card's call was in; a system written by hand that serves several environments is then opened for that one only."""
     task_ops.person("task allow", interactive, typed=False)
-    env = " ".join(str(env or "").split()).lower()
-    if env == LINKS:
+    name = " ".join(str(name or "").split()).lower()
+    if name == LINKS:
         return _set_allow_links(root, raw_task, on)
-    if env not in ALLOW_ENVS:
-        raise CommandError(say("task.allow.env", env=env or "-", allowed=", ".join(ALLOW_ENVS)))
+    from core import config, systems as outside
+
+    system = (config.policy_or_empty(root, "tools").get("systems") or {}).get(name)
     task = task_ops.resolve(root, raw_task)
+    if on:
+        if not isinstance(system, dict):
+            raise CommandError(say("task.allow.retired" if name in RETIRED_ENVS else "task.allow.unknown", name=name or "-"))
+        scope = conn_scope(system)
+        if scope == outside.ITEMS:  # the connection opens as its linked items (ado)
+            return dict(_set_allow_links(root, raw_task, True), conn=name)
+        if scope != outside.ALL:
+            raise CommandError(say("task.allow.no", name=name))
     with task_ops.locked(root, task) as data:
         task_ops.require_open(data)
         held = data.get(ALLOW_KEY) if isinstance(data.get(ALLOW_KEY), dict) else {}
-        before = env in held
+        before = name in held
         if on:
-            held[env] = {"at": utc_now()}
+            held[name] = {"at": utc_now(), "env": str((system or {}).get("env") or env or "").lower()}
         else:
-            held.pop(env, None)
+            held.pop(name, None)
         data[ALLOW_KEY] = held
         if before != on:
-            task_ops.note(data, "allow-env", f"{env}: {'on' if on else 'off'}")
-    key = "task.allow.on" if on else "task.allow.off"
-    if on:  # 1.7.38: an environment whose systems all come from tool packs lets nothing through: say so (the board does not offer it)
-        try:
-            from core import config, systems as outside
-
-            listed = config.policy_or_empty(root, "tools").get("systems") or {}
-            if outside.environments(listed) and not outside.environments(listed, only_openable=True).get(env):
-                key = "task.allow.on.asks"
-        except Exception:  # noqa: BLE001 - the note is a help; the switch is set
-            pass
-    return {"task": task, "env": env, "on": on, "changed": before != on, "open": sorted(held), "next": say(key, env=env.upper())}
+            task_ops.note(data, "allow-env", f"{name}: {'on' if on else 'off'}")
+    return {"task": task, "conn": name, "on": on, "changed": before != on, "open": sorted(held), "next": say("task.allow.conn.on" if on else "task.allow.conn.off", name=name)}
 
 
 def _set_allow_links(root: Path, raw_task: str, on: bool) -> Dict[str, Any]:

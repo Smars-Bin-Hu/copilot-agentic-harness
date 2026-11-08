@@ -103,7 +103,7 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     git = gitcmd.classify(event.command) if guard_git else gitcmd.Verdict()
     if git.kind == gitcmd.NEVER:
         return Decision(permission="deny", reason=rules.git_never(git.why, gitcmd.collapse(event.command)))
-    verdict = terminal.check(event.command, compiled)
+    verdict = terminal.check(event.command, compiled, network_judged(ctx))
     if verdict is not None and verdict[0] == "deny":
         return Decision(permission="deny", reason=rules.terminal_denied(verdict[1]))
     port = asks_board(ctx, event.command)
@@ -123,6 +123,28 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     permission, why = verdict
     reason = rules.terminal_denied(why) if permission == "deny" else rules.terminal_ask(why)
     return Decision(permission=permission, reason=reason)
+
+
+def network_judged(ctx: Context) -> Optional[Any]:
+    """For the ask rule of the network (1.7.38, Q20): says of one command whether a system the gate knows has judged it, so a `curl` to an Azure DevOps address is not asked about twice. A curl owns by the
+    addresses it names only when every one is the system's (`external.addresses_fit`): a curl to the cloud that also names another place is judged as any other curl. Nothing when the list cannot be read."""
+    try:
+        listed = ctx.policy("tools").get("systems") or {}
+        if not listed or external.validate(listed):
+            return None
+    except Exception:  # noqa: BLE001 - the rule asks as before
+        return None
+
+    def judged(segment: str) -> bool:
+        try:
+            found = external.classify(segment, listed)
+            if not found or not all(action.system for action, _decision in found):
+                return False
+            return True  # a program that only an address makes a call is owned only when every address it names is the system's (external.addresses_fit)
+        except Exception:  # noqa: BLE001 - when in doubt, ask
+            return False
+
+    return judged
 
 
 def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
@@ -152,7 +174,18 @@ def judge_external(event: HookEvent, ctx: Context) -> Optional[Dict[str, Any]]:
     for item in pool:
         if external.DECISIONS.index(item["decision"]) > external.DECISIONS.index(best["decision"]):
             best = item
+    best["offers"] = _offers([item["offer"] for item in stopped if item.get("offer")])
     return best
+
+
+def _offers(found: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """One offer for each connection of a held line (the same connection twice is one offer; its linked items are joined)."""
+    out: Dict[str, Dict[str, Any]] = {}
+    for item in found:
+        have = out.setdefault(item["system"], dict(item))
+        if item.get("refs"):
+            have["refs"] = sorted(set(have.get("refs") or []) | set(item["refs"]))
+    return list(out.values())
 
 
 def _judge_one(event: HookEvent, ctx: Context, systems: Dict[str, Any], action: external.Action, decision: str) -> Dict[str, Any]:
@@ -160,26 +193,37 @@ def _judge_one(event: HookEvent, ctx: Context, systems: Dict[str, Any], action: 
     how = "allow" if passes else ""  # what let it through (core.calls): the evidence says it (1.7.9)
     if action.unseen:  # a command whose program the gate cannot read: it may be a listed one, so it is held, whatever the task allows
         return {"action": action, "decision": decision, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "unseen": True}
-    if event.agent_type.strip():  # a subagent (the reviewer, the mapper) reads only: the person's leave (a plan, a grant, an open environment, an approval) is the main agent's, never its own (1.7.9)
+    if event.agent_type.strip():  # a subagent (the reviewer, the mapper) reads only: the person's leave (a plan, a grant, an open connection, an approval) is the main agent's, never its own (1.7.9)
         return {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": False, "how": how, "code": "", "subagent": not passes}
     opened = False
+    system = systems.get(action.system) or {}
+    scope = systems_mod.open_scope(system, action.env)  # 1.7.38: how far the person may open this connection: all, items or no (prod is always no)
     if decision == external.TASK:
         data = _open_task(ctx)
         if data and _test_granted(data, action.env):
             passes, how = True, "runner"
         elif data and tasks.plan_approved(ctx.root, data["task"], data):
             passes, how = True, "plan"
-    scoped = _item_scope(action.call or action.text, systems.get(action.system) or {}, action.verb, _open_task(ctx)) if decision in (external.TASK, external.OUTBOX, external.HUMAN) else None
+    scoped = _item_scope(action.call or action.text, system, action.verb, _open_task(ctx)) if decision in (external.TASK, external.OUTBOX, external.HUMAN) else None
     if scoped and scoped[0] == "unlinked":  # a write to an item the task does not name: refused, with the line that links it (1.7.18)
         return {"action": action, "decision": external.DENY, "passes": False, "approved": False, "opened": False, "how": "", "code": "", "unlinked": scoped[1]}
-    if scoped and scoped[0] == "opened":  # a write to an item the task names, and the person opened it (`task allow --links`, with the items named then)
+    if scoped and scoped[0] == "opened" and scope in (systems_mod.ITEMS, systems_mod.ALL):  # a write to an item the task names, and the person opened it (`task allow --links`, with the items named then)
         return {"action": action, "decision": decision, "passes": True, "approved": False, "opened": True, "how": "opened", "code": ""}
-    if decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes and _openable(systems.get(action.system) or {}):
+    if scoped and scoped[0] == "opened":  # the person opened the linked items, but this connection's type does not let them through (a company lowered it to `no`): held as before
+        scoped = ("linked", scoped[1])
+    held = decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes
+    if held and scope == systems_mod.ALL and action.verb != external.DESTROY:  # the person opened this connection for this task (`task allow --conn`, 1.7.38): no further approval. A destroy never passes
         data = _open_task(ctx)
-        opened = bool(data and _env_opened(data, action.env))  # the person opened this environment for this task (`task allow`, 1.7.4): no further approval
+        opened = bool(data and _conn_opened(data, action.system, action.env))
         passes = opened
         how = "opened" if opened else ""
-    return {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": opened, "how": how, "code": ""}
+    result = {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": opened, "how": how, "code": ""}
+    if decision == external.OUTBOX and not passes:  # what the card can offer: open this connection (or its linked items) for the task. A line with writes to two connections has one offer for each
+        if scope == systems_mod.ALL and action.verb != external.DESTROY:
+            result["offer"] = {"system": action.system, "env": action.env, "scope": systems_mod.ALL}
+        elif scope == systems_mod.ITEMS and scoped and scoped[0] == "linked":
+            result["offer"] = {"system": action.system, "env": action.env, "scope": systems_mod.ITEMS, "refs": [scoped[1]]}
+    return result
 
 
 def check_mcp(event: HookEvent, ctx: Context) -> Optional[Decision]:
@@ -235,15 +279,15 @@ def _item_scope(call: str, system: Dict[str, Any], verb: str, data: Optional[Dic
     return ("linked", shut[0]) if shut else ("opened", refs_named[0])
 
 
-def _openable(system: Dict[str, Any]) -> bool:
-    """May Open to the agent let this system's held calls through? One rule, `core.systems.openable`."""
-    return systems_mod.openable(system)
-
-
-def _env_opened(data: Dict[str, Any], env: str) -> bool:
-    """The person opened this environment for the task (`task allow --env <E> --on`, 1.7.4: `allow_env` in task.json, written by tasklife.set_allow). A gate module reads the task's data only."""
-    found = data.get("allow_env") if isinstance(data.get("allow_env"), dict) else {}
-    return str(env).lower() in found
+def _conn_opened(data: Dict[str, Any], name: str, env: str = "") -> bool:
+    """The person opened this connection for the task (`task allow --conn <name> --on`, or the button on a held card, 1.7.38: `allow_conn` in task.json, written by tasklife.set_allow).
+    A gate module reads the task's data only. The old `allow_env` (environments, before 1.7.38) is not read: nothing is opened by it."""
+    found = data.get("allow_conn") if isinstance(data.get("allow_conn"), dict) else {}
+    held = found.get(str(name))
+    if held is None:
+        return False
+    kept = str((held or {}).get("env") or "").lower() if isinstance(held, dict) else ""
+    return not kept or kept == str(env).lower()  # a system of several environments opened from a card is open there only; a connection has one environment
 
 
 def _test_granted(data: Dict[str, Any], env: str) -> bool:
@@ -289,9 +333,10 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
             outbox.mark(ctx.root, outbox.draft_of(used), "sent")
             return None  # the person read this command and approved it: it runs once
         task = data["task"] if data else None
-        code = outbox.merge_into_waiting(ctx.root, task or "", event.session_id, event.command, action, minutes) or approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task))
+        offers = (judged.get("offers") or []) if task else []  # an opening is for a task: with no task open, the card offers none
+        code = outbox.merge_into_waiting(ctx.root, task or "", event.session_id, event.command, action, minutes, offers) or approvals.request(ctx.root, event.surface, event.session_id, event.command, minutes, file=approvals.ACTIONS, extra=outbox.entry_extra(action, task, offers))
         draft = outbox.write_draft(ctx.root, task, code, action, command, event.session_id, minutes) if task else ""
-        return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft), facts=dict(facts, kind="external-outbox"))
+        return Decision(permission="deny", reason=rules.external_outbox(action, command, code, minutes, draft, offers), facts=dict(facts, kind="external-outbox"))
     if judged.get("unseen"):
         named = action.target if action.unseen else ""
         key = {"file": "gate.external.unreadable_file", "encoded": "gate.external.encoded"}.get(action.why) or ("gate.external.unreadable" if named else "gate.external.unseen")
@@ -300,6 +345,16 @@ def check_external(event: HookEvent, ctx: Context, judged: Optional[Dict[str, An
         return Decision(permission="deny", reason=rules.say("gate.external.unlinked", system=action.system, ref=judged["unlinked"], call=command, step=_link_step(ctx, judged["unlinked"], data)), facts=dict(facts, kind="external-unlinked"))
     reason = {external.DENY: rules.external_denied, external.TASK: rules.external_task}.get(decision, rules.external_human)(action, command)
     return Decision(permission="deny", reason=reason, facts=facts)
+
+
+def settle_opened(ctx: Context, command: str) -> None:
+    """The agent runs again a command whose connection the person opened from its card (1.7.38): the green card of the page has done its work. Never in the way of the call."""
+    try:
+        data = _open_task(ctx)
+        if data:
+            outbox.settle_opened(ctx.root, data["task"], command)
+    except Exception:  # noqa: BLE001 - a card that stays a little longer is no harm
+        pass
 
 
 def _link_step(ctx: Context, ref: str, data: Optional[Dict[str, Any]]) -> str:
@@ -329,15 +384,33 @@ def named_line(ctx: Context, one: Dict[str, str]) -> str:
         info = {"alias": one["alias"], "env": one["env"], "fields": {}, "skills": [], "program": "", "toolpack": "", "label": "", "call": one["call"]}
     info.setdefault("missing", [])
     info.setdefault("signin", False)
+    info.setdefault("about", "")
     env = "" if info["env"] in ("", "none") else f" ({info['env'].upper()})"
     fields = ", ".join(f"{key}={value}" for key, value in info["fields"].items())
-    head = f"- {info['alias']}{env}" + (f": {info['label']}" if info["label"] else "") + (f" [{fields}]" if fields else "")
+    head = f"- {info['alias']}{env}" + (f": {info['label']}" if info["label"] else "") + (f" [{fields}]" if fields else "") + (rules.say("connections.named.about", about=info["about"]) if info.get("about") else "")
     wrap = rules.say("connections.named.wrap", alias=info["alias"]) if one["call"].startswith(f"harness as {info['alias']} --") else ""
     lacks = "".join(" " + rules.say("connections.named.missing", program=program) for program in info["missing"])  # 1.7.37: a program the pack needs is not on this computer
     lacks += " " + rules.say("connections.named.signin", alias=info["alias"]) if info["signin"] else ""
+    lacks += open_text(ctx, info["alias"], info["env"])
     if info["skills"]:
         return head + rules.say("connections.named.pack", toolpack=info["toolpack"], skills=", ".join(info["skills"]), program=info["program"] or "-") + wrap + lacks
     return head + rules.say("connections.named.test", call=info["call"]) + lacks
+
+
+def open_text(ctx: Context, alias: str, env: str) -> str:
+    """Layer 2 (1.7.38): whether the person opened this connection for the task in hand, in a few words. Nothing when it is not open (a held call says what to do)."""
+    try:
+        data = _open_task(ctx)
+        if not data:
+            return ""
+        if _conn_opened(data, alias, env):
+            return rules.say("connections.named.opened")
+        system = (ctx.policy("tools").get("systems") or {}).get(alias) or {}
+        if data.get("allow_links") and system.get("item") and systems_mod.open_scope(system, env) in (systems_mod.ITEMS, systems_mod.ALL):
+            return rules.say("connections.named.items")
+    except Exception:  # noqa: BLE001 - a line of help must not be lost for this
+        pass
+    return ""
 
 
 def named_servers(event: HookEvent, ctx: Context) -> Optional[Decision]:
@@ -351,7 +424,31 @@ def named_servers(event: HookEvent, ctx: Context) -> Optional[Decision]:
         return None
     if not found:
         return None
+    told = ctx.module_state(NAME).setdefault("told", [])
+    told.extend(one["alias"] for one in found if one["alias"] not in told)  # the details are given: the first call to it needs not give them again
     return Decision(context=rules.say("connections.named.context", lines="\n".join(named_line(ctx, one) for one in found)))
+
+
+def first_reach(event: HookEvent, ctx: Context) -> Optional[Decision]:
+    """Layer 2 (1.7.38): the first time a command of the agent that reached a connection has run in a chat (read after it ran, whether it worked or not), the connection's details once: fields, the
+    tool pack's skill and program, whether the sign-in is saved, and whether the person opened it for this task. A connection a prompt named has had them already. A call that was held did not
+    run: the card and the hold message speak then, and the details come with the next call that does. Never in the way of anything."""
+    try:
+        listed = ctx.policy("tools").get("systems") or {}
+        if not listed or external.validate(listed):
+            return None
+        known = connections.listed(ctx.root)
+        names = list(dict.fromkeys(action.system for action, _decision in external.classify(event.command, listed) if action.system in known))
+        told = ctx.module_state(NAME).setdefault("told", [])
+        fresh = [name for name in names if name not in told]
+        if not fresh:
+            return None
+        calls_of = {one["alias"]: one for one in connections.calls(ctx.root)}
+        told.extend(fresh)
+        lines = [named_line(ctx, calls_of.get(name) or {"alias": name, "env": str(known[name].get("env") or ""), "call": ""}) for name in fresh]
+        return Decision(context=rules.say("connections.first.context", names=", ".join(fresh), lines="\n".join(lines)))
+    except Exception:  # noqa: BLE001 - details are help; nothing is stopped for them
+        return None
 
 
 def asks_board(ctx: Context, text: str) -> int:
@@ -457,14 +554,14 @@ def check_wrapped(event: HookEvent, ctx: Context, judged: Optional[Dict[str, Any
 
 
 def wrapped_context(ctx: Context) -> Optional[Decision]:
-    """At the start of a chat: one line with the servers (alias and environment) and where their commands are, and which go through `harness as`.
-    The command of each is given only at a prompt that names it (`named_servers`): a chat that never touches a server pays for one line."""
+    """At the start of a chat: one line with the kinds of connection and how many of each (1.7.38; before it listed every name), and which go through `harness as`.
+    The connection a task needs is found with `harness connections find` (layer 1); its details come when a prompt names it (`named_servers`) or at the first call that reaches it (`first_reach`)."""
     try:
         found = connections.calls(ctx.root)
     except Exception:  # noqa: BLE001 - a server list that cannot be read must not stop the chat
         found = []
     wrapped = connections.state(ctx.root).get("wrap") or []
-    parts = [rules.say("connections.calls.context", servers=", ".join(f"{one['alias']} ({one['env'].upper()})" for one in found))] if found else []
+    parts = [rules.say("connections.kinds.context", kinds=connections.kind_counts(ctx.root, [one["alias"] for one in found]))] if found else []  # layer 0 (1.7.38): kinds and counts, not names
     if wrapped:
         parts.append(rules.say("connections.wrap.context", aliases=", ".join(wrapped), first=wrapped[0]))
     try:
@@ -479,7 +576,7 @@ def wrapped_context(ctx: Context) -> Optional[Decision]:
 def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.event == "SessionStart" or (event.event in ("PostToolUse", "PostToolUseFailure") and event.tool_kind == "terminal"):
         watch_reach(event, ctx)
-        return wrapped_context(ctx) if event.event == "SessionStart" else None
+        return wrapped_context(ctx) if event.event == "SessionStart" else first_reach(event, ctx)
     if event.event == "UserPromptSubmit":
         told = merge([approved_context(event, ctx), named_servers(event, ctx)])
         return None if told.is_empty() else told
@@ -506,6 +603,8 @@ def handle(event: HookEvent, ctx: Context) -> Optional[Decision]:
     if event.tool_kind == "terminal":
         # Without target repositories the harness behaves as before: only the ask rules in gate.json look at git.
         judged = judge_external(event, ctx)
+        if judged:
+            settle_opened(ctx, event.command)
         wrong = check_wrapped(event, ctx, judged)
         if wrong:
             return wrong

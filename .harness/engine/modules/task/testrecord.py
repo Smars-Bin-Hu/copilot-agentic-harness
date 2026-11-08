@@ -168,12 +168,12 @@ def log_update(folder: Path, line: str) -> str:
     return "LOG.md"
 
 
-OPEN_KEY = "allow_env"  # the environments the person opened to the agent for this task (tasklife.set_allow, the head of the page): the stronger leave, so it grants the runner too (1.7.9)
+OPEN_KEY = "allow_conn"  # the connections the person opened to the agent for this task (tasklife.set_allow, the card of a held call): a connection of the environment opened is the stronger leave, so it grants the runner too (1.7.9; 1.7.38: by connection)
 
 
 def opened(data: Dict[str, Any], env: str) -> bool:
     found = data.get(OPEN_KEY) if isinstance(data.get(OPEN_KEY), dict) else {}
-    return str(env).lower() in found
+    return any(isinstance(item, dict) and str(item.get("env") or "").lower() == str(env).lower() for item in found.values())
 
 
 def granted(data: Dict[str, Any], env: str) -> bool:
@@ -210,10 +210,10 @@ def set_runner(root: Path, raw_task: str, env: str, agent: bool, interactive: Op
         else:
             held.pop(chosen.upper(), None)
             open_now = fresh.get(OPEN_KEY) if isinstance(fresh.get(OPEN_KEY), dict) else {}
-            if chosen.lower() in open_now:  # back to the person means back: the environment opened to the agent closes too
-                open_now.pop(chosen.lower(), None)
+            for name in [name for name, item in open_now.items() if isinstance(item, dict) and str(item.get("env") or "").lower() == chosen.lower()]:  # back to the person means back: the connections of that environment opened to the agent close too
+                open_now.pop(name, None)
                 fresh[OPEN_KEY] = open_now
-                task_ops.note(fresh, "allow-env", f"{chosen.lower()}: off")
+                task_ops.note(fresh, "allow-env", f"{name}: off")
         fresh[RUNNER_KEY] = held
         if before != agent:
             task_ops.note(fresh, "test-runner", f"{chosen}: {'agent' if agent else 'person'}")

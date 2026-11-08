@@ -7,6 +7,8 @@ specificTo: generic
 
 # SQL Server jobs: start, wait, check
 
+Find the connection first: `harness connections find <words>` (system and environment). If two fit, ask the user which; never guess.
+
 A sample skill of the `sqlserver` tool pack (made-up names). In your copy of the pack, put the team's real procedure and table names in and keep the shape. The commands are run with `sqlcmd -E`; the identity is on the process (see the pack's README), never in a command.
 
 ## When to Use This Skill
@@ -17,7 +19,7 @@ A sample skill of the `sqlserver` tool pack (made-up names). In your copy of the
 ## Step-by-Step Workflows
 
 1. **Name the job and the environment.** The job names are in the knowledge base (`environment.md` of the domain); UNKNOWN is not a name. The connection of each environment, and its command, is in `harness connections` (`call`).
-2. **Start it.** A procedure is an `exec`: the gate holds it for the user (the outbox) unless the user opened the environment for this task (`harness task allow`). Run exactly:
+2. **Start it.** A procedure is an `exec`: the gate holds it for the user (the outbox) unless the user opened that connection for this task (the button on the card of the held call). Run exactly:
 
    ```
    sqlcmd -S sql-dev.example.local,1433 -E -Q "EXEC dbo.usp_job_start @name = N'<job name>'"
@@ -48,4 +50,4 @@ A sample skill of the `sqlserver` tool pack (made-up names). In your copy of the
 |-------|----------|
 | `harness wait` says the command is not a read | The probe query has a verb the pack counts as a write (`INTO`, `EXEC`); use a plain `SELECT` |
 | `matched: false` after the timeout | The job may still run; show the user the last status from `--out` and ask whether to wait again |
-| The gate holds the start procedure | Expected: the user approves the exact command once, or opens DEV for this task |
+| The gate holds the start procedure | Expected: the user approves the exact command once, or opens the DEV connection for this task |

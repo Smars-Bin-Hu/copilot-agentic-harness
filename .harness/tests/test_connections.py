@@ -212,8 +212,9 @@ class GateTests(ConnectionsCase):
         start["cwd"] = str(self.root)
         told = self.hook(start).get("additionalContext", "")
         self.assertIn("harness as db-dev --", told)
-        # the start of a chat names the servers in one line; a prompt that names one gets a command that reaches it (1.7.10)
-        self.assertIn("db-dev (DEV), db-ist (IST)", told)
+        # the start of a chat says what kinds of connection there are and how to find one, not their names (1.7.38); a prompt that names one gets a command that reaches it (1.7.10)
+        self.assertIn("2 Fake DB", told)
+        self.assertNotIn("db-ist", told)  # the one name is that of the connection this window reaches through the prefix
         self.assertNotIn("fakedb --host", told)
         asked = payload("UserPromptSubmit", SESSION, prompt="db-dev和db-ist都查一下")
         asked["cwd"] = str(self.root)

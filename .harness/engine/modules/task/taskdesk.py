@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core import systems as outside
-from core import approval, config, messages, outbox, reach, tasks
+from core import approval, config, messages, outbox, tasks
 from core.paths import cli_command, utc_now
 
 from . import autorun, cmdview, common, evidence, health, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
@@ -148,6 +148,7 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
             system = systems.get(item.get("system", "")) or {}
             out.append({"moved_on": str(item["code"]) in gone,
                 "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True),
+                "offers": [{"system": str(one.get("system", "")), "env": str(one.get("env", "")), "scope": str(one.get("scope", "")), "refs": [str(ref) for ref in one.get("refs") or []]} for one in item.get("offers") or [] if isinstance(one, dict) and one.get("system")],  # 1.7.38: the connections this card may open for the task
                 "command": item["command"], "created_at": item.get("created_at", ""), "session_id": item.get("session_id", ""), "draft": outbox.draft_of(item).split("/", 4)[-1] if outbox.draft_of(item) else "",
                 "layout": cmdview.layout(item["command"], folder),
                 **call_words(item["command"], system, folder, root),
@@ -176,26 +177,42 @@ def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
         return []
 
 
-def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
-    """The Task settings field "Open to the agent" (1.7.6): each environment the protocol knows, with the systems of the company pack that reach it (none: the chip
-    cannot be clicked) and whether the person opened it for this task (`task allow`). Prod is listed as never. Empty `envs` when no system is listed: the field is not drawn."""
+def opened_view(root: Path, task: str) -> List[Dict[str, Any]]:
+    """The held calls of this task whose connections the person opened from the card and that the agent has not run again (1.7.38): the page keeps a green card, and asks the person to tell the agent."""
     try:
         systems = config.policy_or_empty(root, "tools").get("systems") or {}
-        valid = bool(systems) and not outside.validate(systems)
-        every = outside.environments(systems) if valid else {}
-        reaches = outside.environments(systems, only_openable=True) if valid else {}  # 1.7.38: the systems Open to the agent can let through; a tool pack's system always asks the person
-        seen = {line["env"]: line for line in reach.by_env(reach.view(root, systems))} if every else {}  # reached from VS Code (1.7.9), across the systems of each environment
+        out = []
+        for item in outbox.opened_for(root, task):
+            said = ""
+            try:
+                said = " \u00b7 ".join(call_words(item["command"], systems.get(item.get("system", "")) or {}, tasks.task_dir(root, task), root)["says"])
+            except Exception:  # noqa: BLE001 - a title is a help; the card has the code anyway
+                said = ""
+            out.append({"code": item["code"], "names": [str(name) for name in item.get("opened_for") or []], "title": said or " ".join(str(item["command"]).split())[:80]})
+        return out
+    except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
+        return []
+
+
+def allow_view(root: Path, data: Dict[str, Any]) -> Dict[str, Any]:
+    """The Task settings field "Open to the agent" (1.7.38): the connections the person opened for this task (`open`, each can be closed), the linked items when a connection of the task's tickets
+    is opened by them (`links`), and the connections a held call's card could open (`can`, for the words of the pop). Nothing to draw when there is none of these. The switch ends with the task."""
+    try:
+        systems = config.policy_or_empty(root, "tools").get("systems") or {}
+        systems = systems if systems and not outside.validate(systems) else {}
     except Exception:  # noqa: BLE001 - a broken list is doctor's to report; the field is then not drawn
-        every, reaches, seen = {}, {}, {}
-    opened = data.get("allow_env") if isinstance(data.get("allow_env"), dict) and data.get("status") == "open" else {}  # the switch ends with the task (hand test B90-a: a closed task said dev was open)
-    envs = [{"env": env, "systems": reaches.get(env, []), "asks": [name for name in every.get(env, []) if name not in reaches.get(env, [])], "open": env in opened and bool(reaches.get(env)), "since": str((opened.get(env) or {}).get("at") or ""),
-             "reach": {"state": seen[env]["state"], "parts": seen[env]["parts"]} if env in seen else None} for env in tasklife.ALLOW_ENVS] if every else []
+        systems = {}
+    is_open = data.get("status") == "open"
+    held = data.get(tasklife.ALLOW_KEY) if isinstance(data.get(tasklife.ALLOW_KEY), dict) and is_open else {}
+    rows = [{"name": name, "env": str((item or {}).get("env") or (systems.get(name) or {}).get("env") or ""), "since": str((item or {}).get("at") or ""), "known": name in systems} for name, item in sorted(held.items())]
+    can = sorted(name for name, system in systems.items() if name not in held and isinstance(system, dict) and tasklife.conn_scope(system) == outside.ALL)
     refs = {str(item.get("ref", "")).split(":", 1)[0] for item in (data.get("links") or []) if isinstance(item, dict)}
-    scoped = sorted(name for name, system in (systems or {}).items() if isinstance(system, dict) and system.get("item") and system.get("link") in refs) if refs else []
-    if scoped:  # 1.7.18: the items the task is linked to, a chip of their own: the agent's writes to them only
-        on = bool(data.get(tasklife.LINKS_KEY)) and data.get("status") == "open"
-        envs = envs + [{"env": tasklife.LINKS, "label": messages.text("desk.set.open.links"), "systems": scoped, "asks": [], "open": on, "since": str((data.get(tasklife.LINKS_KEY) or {}).get("at") or "") if on else "", "reach": None}]
-    return {"envs": envs, "never": [outside.PROD]}
+    scoped = sorted(name for name, system in systems.items() if isinstance(system, dict) and system.get("item") and system.get("link") in refs and tasklife.conn_scope(system) in (outside.ITEMS, outside.ALL)) if refs else []
+    links = None
+    if scoped:  # 1.7.18: the items the task is linked to: the agent's writes to them only
+        on = bool(data.get(tasklife.LINKS_KEY)) and is_open
+        links = {"systems": scoped, "open": on, "since": str((data.get(tasklife.LINKS_KEY) or {}).get("at") or "") if on else "", "refs": [str(item.get("ref")) for item in (data.get("links") or []) if isinstance(item, dict) and item.get("ref")]}
+    return {"open": rows, "links": links, "can": can, "never": [outside.PROD]}
 
 
 def links_view(root: Path, data: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -463,7 +480,7 @@ def desk(root: Path, name: str, served: Any = (), trace_tree: bool = True) -> Di
         "links": links_view(root, data), "link_types": link_types(root),
         "forked_to": [task_ops.name_of(str(event.get("detail", ""))) for event in data.get("events") or [] if event.get("what") == "fork" and event.get("detail")],
         "todo": {"done": done, "total": total},
-        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "approved": approved_view(root, task) if row.get("status") == "open" else [], "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
+        "docs": docs, "files": taskfiles.listing(root, task), "evidence": evidence.listing(root, task), "allow": allow_view(root, data), "outbox": outbox_view(root, task) if row.get("status") == "open" else [], "approved": approved_view(root, task) if row.get("status") == "open" else [], "opened": opened_view(root, task) if row.get("status") == "open" else [], "intake": intake_view(root, task, data, row), "history": events, "changes": changed(root, task, data), "rounds": past_rounds(root, task, data, review, events),
         "plan_approval": plan_approval(root, task, data), "review": review, "test": testing(root, task, data), "commit": commitmsg.view(root, task, data), "todo_left": len(task_ops.todo_left(root, task)), "req_placeholders": task_ops.req_placeholders(root, task) if row.get("status") == "open" else 0, "req_sections": task_ops.req_unfilled(root, task) if row.get("status") == "open" else [], "req_unconfirmed": needs_req(data) and row.get("status") == "open" and task_ops.req_state(root, task) in ("open", "changed"), "stages": taskstages.of(root, task, data, timing=True), "active": bool(row.get("active")),
         "state": row.get("state") or "", "held": bool(row.get("held")), "unheld_s": row.get("unheld_s"),
         "actions": offered(root, row, task, tuple(served), data),

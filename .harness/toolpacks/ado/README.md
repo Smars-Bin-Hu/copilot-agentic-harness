@@ -21,7 +21,7 @@ There is no delete. A write to a work item the task is not linked to is refused;
 3. Each person, once: Get ready, Tools, **This computer** (the az `bin` folder; the CA bundle behind a proxy that inspects TLS), then **Connections**, `ado`: **Sign in** (`signin`) or paste the token (`token`; kept in `.harness/.env`, never in a file that is shared), **Test**, **Save**. Open VS Code from the board.
 4. Try: "read ado:<id>", then "comment on it: checked" - the comment waits on the task page.
 
-`rules.json` holds `ado-any` (an `az rest` call to any Azure DevOps address) and `ado-az` (`az devops`, `az boards`, `az pipelines`: `show`, `list`, `query` and a GET `invoke` run; anything else is held; a delete is refused), for the day the agent reaches for `az` anyway.
+`rules.json` holds `ado-any` (an `az rest` call to any Azure DevOps address: `dev.azure.com`, `*.visualstudio.com`, and the `url` of each connection of this type; a delete is refused, a post or put is held) and `ado-az` (`az devops`, `az boards`, `az pipelines`: `show`, `list`, `query` and a GET `invoke` run; anything else is held; a delete is refused), for the day the agent reaches for `az` anyway.
 
 Skills: `ado-workitem`, `ado-pipeline-triage`, `ado-release`. To name them with your company's skill prefix, rename the folders and their `name:` to `<prefix>-ado-...`.
 

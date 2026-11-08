@@ -46,6 +46,7 @@ SYSTEMS_SCHEMA = {
                 "properties": {
                     "cli": {"type": ["string", "array"], "items": {"type": "string", "minLength": 1}},
                     "when": {"type": "string", "minLength": 1},
+                    "also": {"type": "object", "required": ["type", "field"], "properties": {"type": {"type": "string", "minLength": 1}, "field": {"type": "string", "minLength": 1}}, "additionalProperties": False},  # 1.7.38: the hosts that the connections of this type have in this field are part of `when`
                 },
                 "additionalProperties": False,
             },

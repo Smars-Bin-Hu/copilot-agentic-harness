@@ -1497,6 +1497,70 @@ class ShippedFactoryPacks(ToolpackCase):
         version = json.loads((folder / "toolpack.json").read_text(encoding="utf-8"))["version"]
         self.assertEqual(self.ado_program().PACK_VERSION, version)
 
+class AdoHostsOfConnections(HarnessTestCase):
+    """1.7.38 (C11 T2-02): `ado-any` guards `az rest` to dev.azure.com; the address of an ado connection (`url`: an Azure DevOps Server, a lab) is guarded the same way."""
+
+    DELETE = "az rest --method delete --url {base}/acme/demo/_apis/wit/workitems/1?api-version=7.0"
+    POST = "az rest --method post --url {base}/acme/demo/_apis/wit/workitems/1/comments --body '{{}}'"
+    GET = "az rest --method get --url {base}/acme/demo/_apis/wit/workitems/1"
+
+    def connect(self, **fields) -> None:
+        use_packs(self.root, "ado")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {"ado": {
+            "type": "azure-devops", "env": "none", "org": "acme", "project": "demo", **fields}}}), encoding="utf-8")
+
+    def term(self, line: str) -> str:
+        event = pre_tool("s-ado", "run_in_terminal", {"command": line, "explanation": "t", "isBackground": False})
+        event["cwd"] = str(self.root)
+        return self.hook(event).get("permissionDecision", "allow")
+
+    def test_az_rest_to_the_address_of_a_connection_is_judged_like_dev_azure_com(self) -> None:
+        self.connect(url="https://tfs.example.local/tfs")
+        cloud = "https://dev.azure.com"
+        self.assertEqual([self.term(line.format(base=cloud)) for line in (self.DELETE, self.POST, self.GET)], ["deny", "deny", "allow"], "the cloud: delete refused, write held, read free")
+        for base in ("https://tfs.example.local/tfs", "http://TFS.example.local", "https://tfs.example.local"):
+            self.assertEqual([self.term(line.format(base=base)) for line in (self.DELETE, self.POST, self.GET)], ["deny", "deny", "allow"], base)
+        for short in ("-m delete", "--method DELETE", "--method 'delete'"):
+            self.assertEqual(self.term(f"az rest {short} --url https://tfs.example.local/tfs/x"), "deny", short)
+
+    def test_a_port_counts_and_a_look_alike_host_does_not(self) -> None:
+        self.connect(url="https://localhost:18443")
+        self.assertEqual(self.term(self.DELETE.format(base="https://localhost:18443")), "deny")
+        self.assertEqual(self.term(self.POST.format(base="https://localhost:18443")), "deny")
+        for other in ("https://localhost:18444", "https://localhost", "https://localhost:184430", "https://localhost:18443.evil.example"):
+            self.assertEqual(self.term(self.DELETE.format(base=other)), "allow", f"{other}: not an address of a connection; the gate does not know the host")
+
+    def test_every_connection_adds_its_host_and_a_connection_without_url_adds_none(self) -> None:
+        self.connect()
+        self.assertEqual(self.term(self.DELETE.format(base="https://tfs.example.local/tfs")), "allow", "no connection names this host")
+        self.assertEqual(self.term(self.DELETE.format(base="https://dev.azure.com")), "deny")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+            "ado": {"type": "azure-devops", "env": "none", "org": "a", "project": "p", "url": "https://one.example.local/tfs"},
+            "ado2": {"type": "azure-devops", "env": "none", "org": "b", "project": "q", "url": "https://two.example.local:8443"},
+            "other": {"type": "sqlserver", "env": "dev", "host": "three.example.local"}}}), encoding="utf-8")
+        for base in ("https://one.example.local/tfs", "https://two.example.local:8443"):
+            self.assertEqual(self.term(self.DELETE.format(base=base)), "deny", base)
+        self.assertEqual(self.term(self.DELETE.format(base="https://three.example.local")), "allow")
+
+    def test_a_connection_of_the_own_kind_in_the_env_file_counts_too(self) -> None:
+        use_packs(self.root, "ado")
+        connections.write_env(self.root, {"HARNESS_CONNECTION_LAB_ALIAS": "lab", "HARNESS_CONNECTION_LAB_TYPE": "azure-devops", "HARNESS_CONNECTION_LAB_ENV": "none",
+                                          "HARNESS_CONNECTION_LAB_ORG": "acme", "HARNESS_CONNECTION_LAB_PROJECT": "demo", "HARNESS_CONNECTION_LAB_URL": "https://localhost:18443"})
+        self.assertEqual(self.term(self.DELETE.format(base="https://localhost:18443")), "deny")
+
+    def test_curl_to_such_a_host_gets_the_same_answer_as_curl_to_the_cloud(self) -> None:
+        """`ado-any` is the system of `az`; a curl call is judged by the rule of the network (asked first), cloud or lab alike."""
+        self.connect(url="https://localhost:18443")
+        for line in ("curl -X DELETE {base}/acme/demo/_apis/wit/workitems/1", "curl -X POST -d '{{}}' {base}/acme/demo/_apis/wit/workitems/1/comments", "curl {base}/acme/demo/_apis/wit/workitems/1"):
+            self.assertEqual(self.term(line.format(base="https://localhost:18443")), self.term(line.format(base="https://dev.azure.com")), line)
+            self.assertNotEqual(self.term(line.format(base="https://localhost:18443")), "allow", line)
+
+    def test_the_rules_file_of_the_pack_checks_clean(self) -> None:
+        from support import REPO
+
+        self.assertEqual(toolpacks.problems(self.root, REPO / ".harness" / "toolpacks" / "ado"), [])
+
+
 class AdoProgramConnection(HarnessTestCase):
     """1.7.38: the `ado` program reaches the saved connection, or the one the harness hands over while it tests, and nothing else. A small web server on this computer stands in for Azure DevOps."""
 

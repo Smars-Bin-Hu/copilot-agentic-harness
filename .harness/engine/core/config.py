@@ -100,6 +100,8 @@ def load_policy(root: Path, name: str) -> Dict[str, Any]:
             made = connections.derived(root, found)
             if made:
                 found = dict(found, systems={**made, **(found.get("systems") or {})})
+            if found.get("systems"):  # 1.7.38: a system that also guards the hosts of the connections (`reach.also`)
+                found = dict(found, systems=connections.widen(root, found["systems"]))
         except Exception:  # noqa: BLE001 - a broken server list must not take the gate's hand-written systems away; doctor reports it
             pass
     return found

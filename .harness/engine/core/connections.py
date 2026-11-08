@@ -373,6 +373,32 @@ def derived(root: Path, tools_policy: Dict[str, Any]) -> Dict[str, Dict[str, Any
     return {alias: system for alias, system in out.items() if alias not in (tools_policy.get("systems") or {})}
 
 
+def _host(address: Any) -> str:
+    """The `host` or `host:port` of an address (`https://tfs.example.local/tfs` -> `tfs.example.local`); empty when there is none."""
+    from urllib.parse import urlsplit
+
+    text = str(address or "").strip()
+    try:
+        return (urlsplit(text if "//" in text else "//" + text).netloc.rpartition("@")[2]).lower()
+    except ValueError:
+        return ""
+
+
+def widen(root: Path, systems: Dict[str, Any]) -> Dict[str, Any]:
+    """A system that names `reach.also` = `{"type", "field"}` also owns every call to a host that a connection of that type has in that field (1.7.38, C11 T2-02): the `url` of an
+    Azure DevOps connection is a host the system of `az rest` must guard like `dev.azure.com`. The host is added to `reach.when`; a system with no such connection is left as it is."""
+    out = dict(systems)
+    for name, system in systems.items():
+        also = (system.get("reach") or {}).get("also") if isinstance(system, dict) else None
+        if not isinstance(also, dict) or not system["reach"].get("when"):
+            continue
+        hosts = sorted({_host(server.get(str(also.get("field")))) for server in listed(root).values() if server.get("type") == also.get("type")} - {""})
+        if hosts:
+            found = "|".join(re.escape(host) + r"(?![\w.-])" for host in hosts)  # not `host.evil.example`, not another port
+            out[name] = dict(system, reach=dict(system["reach"], when=f"(?:{system['reach']['when']})|{found}"))
+    return out
+
+
 def calls(root: Path) -> List[Dict[str, str]]:
     """How the agent reaches each server: `[{alias, env, call}]`, `call` being the server's test command (no password in it), with `harness as <alias> --`
     before it when this window reaches the server through the prefix. Only the servers the window was opened with, when it was opened from the board."""

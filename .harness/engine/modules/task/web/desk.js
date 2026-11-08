@@ -1102,6 +1102,9 @@
   // Approve is `harness approve-action` with that code (the board's act, no preview); Dismiss takes the call away without running anything.
   const viewedCalls = new Set();
   const enteredCodes = new Map();  // what the person typed or clicked into a card's code box, kept when the card is drawn again
+  const reasonRows = new Map();  // code -> {kind}: the "Why not?" row of a card is open, and which of the two reasons that take a line is chosen (1.7.38); the line itself is a `data-keep` field
+  const reasonLines = new Map();  // code -> the line typed in the reason box, kept when the card is drawn again
+  const REASONS = ["command", "connection", "later", "other_way"], LINE_REASONS = ["command", "other_way"];
   const approvedCalls = new Map();  // code -> {at}: approved on this page and not yet told to the agent; the agent runs an approved call only when it is prompted, so the card offers to tell it
   const TELL_MINUTES = 10;  // the approval's life (git.approval_minutes by default): past it, telling is no use
   // After an approval: a green card with the codes and one button that tells the chat to run them (a send to the chat, as an answer), in place of typing it.
@@ -1113,10 +1116,12 @@
     const codes = [...new Set([...(left ? [...left] : []), ...approvedCalls.keys()])];
     if (!codes.length || desk.past) return null;
     const titles = new Map((Array.isArray(desk.approved) ? desk.approved : []).map((item) => [item.code, item.title]));
-    const all = codes.every((code) => toldCodes.has(code));
+    const heardBy = new Map((Array.isArray(desk.approved) ? desk.approved : []).map((item) => [item.code, item.told || ""]));  // "wait": its wait returned; "message": the board woke it (1.7.38)
+    const all = codes.every((code) => toldCodes.has(code) || heardBy.get(code));
+    const viaWait = codes.every((code) => heardBy.get(code) === "wait");
     const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);  // the agent waits for an answer in its chat: a message from here would answer the wrong thing (1.7.20)
     const can = served() && canAct() && !asking;
-    const tell = h("button", {type: "button", class: "act hot big", disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.tell"));
+    const tell = h("button", {type: "button", class: "act" + (all ? "" : " hot") + " big", disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.tell"));
     const said = h("div", {class: "bad"});
     tell.addEventListener("click", () => {
       tell.disabled = true; tell.textContent = t("board.serve.working");
@@ -1126,7 +1131,7 @@
     return h("section", {class: "tk-need strong tk-call done"},
       h("div", {class: "tk-need-h"}, tag(t("desk.outbox.approved"), "good")),
       codes.map((code) => { const title = titles.get(code) || (approvedCalls.get(code) || {}).title || ""; return h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, code), title ? h("span", {class: "tk-call-say"}, title) : null); }),  // each code stands in front of its own title (1.7.29)  // which call was approved (1.7.25)
-      h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : all ? "desk.outbox.told" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
+      h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : viaWait ? "desk.outbox.told.wait" : all ? "desk.outbox.told" : "desk.outbox.tell.hint", {minutes: TELL_MINUTES})),
       h("div", {class: "tk-need-go tk-call-go"}, tell, said));
   }
   // After "Open <connection> for this task" on a card (1.7.38): the connection is open, the command is not approved. A green card asks the person to tell the agent to run it again; it goes when the agent has.
@@ -1135,10 +1140,11 @@
     const list = Array.isArray(desk.opened) ? desk.opened : [];
     if (!list.length || desk.past) return null;
     const names = [...new Set(list.flatMap((item) => item.names))];
-    const all = list.every((item) => toldOpened.has(item.code));
+    const all = list.every((item) => toldOpened.has(item.code) || item.told);
+    const viaWait = list.every((item) => item.told === "wait");
     const asking = ["asking", "question", "confirm"].includes(desk.waiting_why);
     const can = served() && canAct() && !asking;
-    const tell = h("button", {type: "button", class: "act hot big", disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.opened.tell"));
+    const tell = h("button", {type: "button", class: "act" + (all ? "" : " hot") + " big", disabled: can ? null : "disabled"}, t(all ? "desk.outbox.tell.again" : "desk.outbox.opened.tell"));
     const said = h("div", {class: "bad"});
     tell.addEventListener("click", () => {
       tell.disabled = true; tell.textContent = t("board.serve.working");
@@ -1148,7 +1154,7 @@
     return h("section", {class: "tk-need strong tk-call done", "data-action": "opened"},
       h("div", {class: "tk-need-h"}, tag(t("desk.outbox.opened"), "good")),
       list.map((item) => h("div", {class: "tk-call-row"}, h("code", {class: "code-chip still"}, item.code), item.title ? h("span", {class: "tk-call-say"}, item.title) : null)),
-      h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : "desk.outbox.opened.hint", {names: names.join(", "), minutes: TELL_MINUTES})),
+      h("p", {class: "sub"}, t(asking ? "desk.outbox.tell.asking" : viaWait ? "desk.outbox.told.wait" : all ? "desk.outbox.told" : "desk.outbox.opened.hint", {names: names.join(", "), minutes: TELL_MINUTES})),
       h("div", {class: "tk-need-go tk-call-go"}, tell, said));
   }
   const SQL_WORDS = /\b(select|from|where|insert|into|update|set|delete|merge|exec|execute|create|alter|drop|truncate|table|values|join|on|group by|order by|having|union|with|begin|commit|rollback|tran|declare|if|else|while|top|as|and|or|not|null|is|in|exists|case|when|then|end|nocount)\b/gi;
@@ -1255,7 +1261,7 @@
       input.classList.toggle("pulse", can && !gone && viewedCalls.has(item.code) && !input.value.trim());
     };
     input.addEventListener("input", arm);
-    const no = h("button", {type: "button", class: "act" + (gone ? " hot big" : ""), disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
+    const no = h("button", {type: "button", class: "act" + (gone ? " hot big" : ""), disabled: can ? null : "disabled", "aria-expanded": reasonRows.has(item.code) ? "true" : "false"}, t("desk.outbox.dismiss"));
     const view = h("button", {type: "button", class: "act big tk-view"}, t("desk.outbox.view"));
     const said = h("div", {class: "bad"});
     view.addEventListener("click", () => { callWindow(item, (code) => { input.value = code; enteredCodes.set(item.code, code); arm(); yes.focus(); }); arm(); });  // the code is not filled in by opening View: the person types it, or clicks it in View (1.7.29)
@@ -1273,10 +1279,49 @@
       SERVE.post("/api/act", {action: "task allow", task: desk.name, step: "act", env: open.dataset.conn, runner: "on", code: input.value.trim()}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); });
     }));
     input.addEventListener("keydown", (event) => { if (isEnter(event) && !yes.disabled) send(); });
-    no.addEventListener("click", () => {
+    // Dismiss opens a row "Why not?" (1.7.38): one click on a reason dismisses the call with it; the two reasons that take a line open a box first. "No reason" dismisses with none. The agent is told the reason:
+    // at once by its wait, or woken with it; with none it stops that path and tells what was not done.
+    const reasonBox = h("div", {class: "tk-reasons", role: "group", "aria-label": t("desk.outbox.reason.title")});
+    const dismiss = (reason, note) => {
+      reasonBox.querySelectorAll("button").forEach((one) => { one.disabled = true; });
       no.disabled = true;
-      SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code}).then(() => SERVE.done(), (error) => { said.replaceChildren(...SERVE.reasons(error.message)); no.disabled = false; });
+      SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code, reason, note: note || ""}).then(() => { reasonRows.delete(item.code); reasonLines.delete(item.code); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); no.disabled = false; reasonBox.querySelectorAll("button").forEach((one) => { one.disabled = false; }); });
+    };
+    const paintReasons = () => {
+      const open = reasonRows.get(item.code);
+      reasonBox.hidden = !open;
+      no.setAttribute("aria-expanded", open ? "true" : "false");
+      if (!open || reasonBox.firstChild) return;
+      const line = h("input", {class: "tk-reason-line", type: "text", maxlength: 500, autocomplete: "off", placeholder: t("desk.outbox.reason.line.ph"), "aria-label": t("desk.outbox.reason.line.ph"), "data-keep": "reason." + item.code});
+      line.value = reasonLines.get(item.code) || "";
+      line.addEventListener("input", () => reasonLines.set(item.code, line.value));
+      const go = h("button", {type: "button", class: "act hot", "data-act": "reason-go"}, t("desk.outbox.reason.go"));
+      const lineRow = h("span", {class: "tk-reason-line-row"}, line, go);
+      lineRow.hidden = !LINE_REASONS.includes(open.kind);
+      const chips = REASONS.map((kind) => {
+        const chip = h("button", {type: "button", class: "act tk-reason" + (open.kind === kind ? " on" : ""), "data-reason": kind}, t("desk.outbox.reason." + kind));
+        chip.addEventListener("click", () => {
+          if (!LINE_REASONS.includes(kind)) return dismiss(kind, "");
+          reasonRows.set(item.code, {kind});
+          chips.forEach((one) => one.classList.toggle("on", one === chip));
+          lineRow.hidden = false;
+          line.focus();
+        });
+        return chip;
+      });
+      const none = h("button", {type: "button", class: "act tk-reason", "data-reason": "none"}, t("desk.outbox.reason.none"));
+      none.addEventListener("click", () => dismiss("", ""));
+      const send = () => { const kind = (reasonRows.get(item.code) || {}).kind; if (LINE_REASONS.includes(kind)) dismiss(kind, line.value); };
+      go.addEventListener("click", send);
+      line.addEventListener("keydown", (event) => { if (isEnter(event)) send(); });
+      reasonBox.replaceChildren(h("span", {class: "sub", title: t("desk.outbox.reason.tip")}, t("desk.outbox.reason.title")), ...chips, none, lineRow);
+    };
+    no.addEventListener("click", () => {
+      if (reasonRows.has(item.code)) reasonRows.delete(item.code); else reasonRows.set(item.code, {kind: ""});
+      reasonBox.replaceChildren();
+      paintReasons();
     });
+    paintReasons();
     input.value = enteredCodes.get(item.code) || "";  // the card was drawn again: what the person put in stays
     arm();
     const peek = item.command.length > 110 ? item.command.slice(0, 110) + "…" : item.command;
@@ -1287,9 +1332,9 @@
       callFacts(item),
       manyWrites(item) ? null : bodyBlock(item),
       words ? rawFold(item) : h("div", {class: "tk-cmd-peek"}, h("code", null, peek)),
-      gone ? h("p", {class: "hint"}, t("desk.outbox.moved.note")) : null,
+      gone ? h("p", {class: "hint"}, t("desk.outbox.moved.note")) : item.agent === "wait" || item.agent === "ended" ? h("p", {class: "sub tk-agent", "data-agent": item.agent}, t("desk.outbox.agent." + item.agent)) : null,  // 1.7.38: where the agent stands: it waits here, or it stopped on this call
       notes,
-      h("div", {class: "tk-need-go tk-call-go"}, view, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), ...opens, no, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));  // View first in the row: the eye goes View, code, Approve
+      h("div", {class: "tk-need-go tk-call-go"}, view, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), ...opens, no, h("span", {class: "sub"}, t("desk.outbox.same_as")), reasonBox, said));  // View first in the row: the eye goes View, code, Approve
   }
 
   // The words for a task that has nothing waiting on it, on the Live tab: closed, not started, quiet, or at work with nothing to decide.

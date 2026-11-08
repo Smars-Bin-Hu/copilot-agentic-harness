@@ -151,18 +151,57 @@ def approve(root: Path, code: str, limit_minutes: int, now: Optional[float] = No
     return None
 
 
-def dismiss(root: Path, code: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> Optional[Dict[str, Any]]:
-    """Take a pending entry away (the person said no, on the board: 1.7.7). The entry, or None when no pending entry has the code."""
+def dismiss(root: Path, code: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE, reason: str = "", note: str = "") -> Optional[Dict[str, Any]]:
+    """Take a pending entry away (the person said no, on the board: 1.7.7). The entry as it was, with the `reason` and `note` the person gave (1.7.38), or None when no pending entry has the code.
+    A stub stays for a while (state `dismissed`, with the reason): the agent that waits for this code (`harness wait --approval`) reads its answer there."""
     now = time.time() if now is None else now
     with state_lock(path(root, file)):
         entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
         for item in entries:
             if item["state"] == "pending" and item["code"] == code.strip().upper():
-                entries.remove(item)
+                done = dict(item)
+                item.pop("offers", None)
+                item.pop("wait", None)
+                item.update(state="dismissed", at=now, dismissed_at=utc_now(), reason=reason, note=note)
                 _write(root, entries, file)
-                return dict(item)
+                return dict(done, reason=reason, note=note)
         _write(root, entries, file)
     return None
+
+
+def find(root: Path, code: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> Optional[Dict[str, Any]]:
+    """The entry with this code in any state it can still be in (pending, approved, opened, or dismissed a moment ago), or None (1.7.38). What `harness wait --approval` looks at."""
+    now = time.time() if now is None else now
+    wanted = str(code or "").strip().upper()
+    return next((dict(item) for item in _read(root, file) if item.get("code") == wanted and _alive(item, limit_minutes * 60.0, now)), None)
+
+
+def wait_mark(root: Path, code: str, state: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> bool:
+    """The agent's wait on a pending entry (1.7.38, `harness wait --approval`): `running` (with the time of its last beat), `timeout` (it ended by time: the agent was told to end its turn and say what waits),
+    or `gone` (it ended another way: the terminal was stopped). The board reads it to know whether the agent waits for the call. Only a pending entry takes it; True when it did."""
+    now = time.time() if now is None else now
+    with state_lock(path(root, file)):
+        entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
+        for item in entries:
+            if item["state"] == "pending" and item["code"] == str(code or "").strip().upper():
+                kept = item.get("wait") if isinstance(item.get("wait"), dict) else {}
+                item["wait"] = {"state": state, "beat": now, "since": kept.get("since") or now}
+                _write(root, entries, file)
+                return True
+    return False
+
+
+def told(root: Path, code: str, how: str, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> bool:
+    """The agent was told that the person decided (1.7.38): by the wait that was running (`wait`) or by a message the board sent to its chat (`message`). The card of the page then does not ask the person to tell it."""
+    now = time.time() if now is None else now
+    with state_lock(path(root, file)):
+        entries = [item for item in _read(root, file) if _alive(item, limit_minutes * 60.0, now)]
+        for item in entries:
+            if item["code"] == str(code or "").strip().upper():
+                item["told"] = how
+                _write(root, entries, file)
+                return True
+    return False
 
 
 def opened_all(root: Path, limit_minutes: int, now: Optional[float] = None, file: str = FILE) -> List[Dict[str, Any]]:

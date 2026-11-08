@@ -10,6 +10,7 @@ new draft with a new code. The state line of the draft follows: waiting, approve
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -89,8 +90,8 @@ def merge_into_waiting(root: Path, task: str, session_id: str, command: str, act
     return ""
 
 
-def mark(root: Path, relative: Optional[str], state: str) -> None:
-    """Set the state line of a draft: `approved` or `sent`, with the time. A draft that is gone is left alone."""
+def mark(root: Path, relative: Optional[str], state: str, reason: str = "") -> None:
+    """Set the state line of a draft: `approved` or `sent`, with the time (`dismissed` with the reason, when there is one). A draft that is gone is left alone."""
     if not relative:
         return
     path = root / relative
@@ -98,7 +99,9 @@ def mark(root: Path, relative: Optional[str], state: str) -> None:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return
-    line = f"- {say('outbox.draft.state')}: {say('outbox.state.' + state, at=utc_now())} {STATE_MARK}"
+    key = f"outbox.state.{state}"
+    words = say(key, at=utc_now()) + (say("outbox.state.reason", reason=say(f"outbox.reason.{reason}")) if reason in REASONS else "")
+    line = f"- {say('outbox.draft.state')}: {words} {STATE_MARK}"
     path.write_text(_STATE_LINE.sub(lambda _match: line, text, count=1), encoding="utf-8")
 
 
@@ -137,44 +140,56 @@ def pending_for(root: Path, task: str) -> List[Dict[str, Any]]:
     return sorted(found, key=lambda item: str(item.get("created_at", "")))
 
 
-MOVED_MARGIN_S = 1.5  # calls that run together start together: a call that began within this of the held one was in the same batch, not a next move
-LOG_TAIL = 256 * 1024
-_starts: Dict[str, Any] = {}  # log file -> (size, mtime), the start times of its allowed terminal calls
+WAIT_FRESH_S = 20  # a wait on a code that wrote its beat within this is running (it writes one every 5 seconds)
+START_GRACE_S = 120  # a call held this long ago may have no wait yet: the agent is on its way to run it
 
 
-def _terminal_starts(root: Path, surface: str, session_id: str) -> List[float]:
-    """When each terminal call that went through began in a session (from its hook log, the tail of it); empty when the log is missing."""
-    from . import copilot_events, logs
-
-    path = logs.session_log_path(root, surface or "vscode", session_id)
+def running_wait(item: Dict[str, Any], now: Optional[float] = None) -> bool:
+    """Is the agent's `harness wait --approval` on this held call running now (1.7.38)? Its beat is fresh. A wait whose terminal was stopped stops beating and is not running."""
+    wait = item.get("wait") if isinstance(item.get("wait"), dict) else {}
+    now = time.time() if now is None else now
     try:
-        stat = path.stat()
-    except OSError:
-        return []
-    key, stamp = str(path), (stat.st_size, stat.st_mtime_ns)
-    held = _starts.get(key)
-    if held is None or held[0] != stamp:
-        found = [copilot_events.seconds(row.get("at")) for row in logs.read_tail(path, LOG_TAIL)
-                 if row.get("event") == "PreToolUse" and row.get("tool_kind") == "terminal" and row.get("decision") not in ("deny", "ask")]
-        held = (stamp, [one for one in found if one is not None])
-        if len(_starts) > 200:
-            _starts.clear()
-        _starts[key] = held
-    return held[1]
+        return wait.get("state") == "running" and now - float(wait.get("beat", 0)) <= WAIT_FRESH_S
+    except (TypeError, ValueError):
+        return False
+
+
+def agent_place(item: Dict[str, Any], now: Optional[float] = None) -> str:
+    """Where the agent stands towards this held call (1.7.38, C11 Q21): `wait` (its `harness wait --approval` on the code is running), `ended` (its wait ran out and it was told to end its turn and say what waits
+    for this card; a call held a moment ago counts too, for the agent has had no time to start its wait), or `away` (it did neither: it went on)."""
+    now = time.time() if now is None else now
+    wait = item.get("wait") if isinstance(item.get("wait"), dict) else {}
+    if running_wait(item, now):
+        return "wait"
+    if wait.get("state") == "timeout":
+        return "ended"
+    try:
+        return "ended" if not wait and now - float(item.get("at", 0)) <= START_GRACE_S else "away"
+    except (TypeError, ValueError):
+        return "away"
+
+
+def agent_waits(item: Dict[str, Any], now: Optional[float] = None) -> bool:
+    return agent_place(item, now) != "away"
+
+
+def agent_waiting(root: Path, task: str) -> bool:
+    """Does the agent of this task sit in `harness wait --approval` on one of its held calls (1.7.38)? It makes no tool call and calls no model then, so the task is not at work: it waits for the person,
+    and the person can answer (the page would otherwise say "working" and refuse Approve for the minutes that the log shows no call). Never in the way of a look: a file that cannot be read says no."""
+    try:
+        minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
+        now = time.time()
+        return any(item.get("task") == task and running_wait(item, now) for item in approvals.pending(root, minutes, file=approvals.ACTIONS))
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def moved_on(root: Path, entries: List[Dict[str, Any]]) -> set:
-    """The codes of held calls the agent did not wait for (1.7.38, C11 T2-04). The gate tells the agent to stop and ask the person; an agent that then runs another terminal command in the same
-    session has gone on without this call (it was a command it got wrong and replaced, a line it split). The facts are in the hook log of the session; nothing is guessed from the chat.
-    Such a call stays in the outbox, the person may still approve or dismiss it, but the task is not "waiting for you" because of it."""
-    from . import copilot_events
-
-    out = set()
-    for item in entries:
-        asked = copilot_events.seconds(item.get("created_at"))
-        if asked is not None and any(begun > asked + MOVED_MARGIN_S for begun in _terminal_starts(root, str(item.get("surface") or ""), str(item.get("session_id") or ""))):
-            out.add(str(item.get("code")))
-    return out
+    """The codes of held calls the agent does not wait for (1.7.38; before it guessed from the commands the agent ran after the held one). The gate tells the agent to run
+    `harness wait --approval <code>` and to end its turn when that runs out; an agent that did neither has gone on without this call. Such a call stays in the outbox, the person may still
+    approve or dismiss it, but the task is not "waiting for you" because of it."""
+    now = time.time()
+    return {str(item.get("code")) for item in entries if not agent_waits(item, now)}
 
 
 def opened_for(root: Path, task: str) -> List[Dict[str, Any]]:
@@ -245,15 +260,57 @@ def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, int
     return {"approved": True, "command": done["command"], "system": done.get("system", ""), "valid_minutes": minutes, "draft": draft_of(done), "next": say("gate.action.next")}
 
 
-def dismiss_action(root: Path, code: str, interactive: Optional[bool] = None) -> Dict[str, Any]:
-    """The person says no to a held call (the board, 1.7.7): the entry goes, the draft says dismissed, the agent is not told (it already stopped). Nothing is run."""
+REASONS = ("command", "connection", "later", "other_way")  # why the person did not approve (1.7.38): the command is wrong, a wrong connection or environment, not now, do it another way
+LINE_REASONS = ("command", "other_way")  # these two may carry a line of the person's own words
+NOTE_CHARS = 500
+
+
+def dismiss_action(root: Path, code: str, interactive: Optional[bool] = None, reason: str = "", note: str = "") -> Dict[str, Any]:
+    """The person says no to a held call (the board, 1.7.7): the entry goes, the draft says dismissed. Nothing is run. `reason` (1.7.38, one of REASONS, or none) and `note` (a line, for the two reasons
+    that take one) are what the agent is told: at once by its wait on the code, else by a message from the board when it has a reason (the board decides; `agent` says where the agent stood)."""
     if interactive is None:
         interactive = sys.stdin.isatty() and sys.stdout.isatty()
     if not interactive:
         raise ValueError(say("gate.action.terminal_only"))
+    reason = str(reason or "").strip()
+    if reason and reason not in REASONS:
+        raise ValueError(say("gate.action.reason.bad", reasons=", ".join(REASONS)))
+    note = " ".join(str(note or "").split())[:NOTE_CHARS] if reason in LINE_REASONS else ""
     minutes = approvals.minutes(config.policy_or_empty(root, GATE_POLICY))
-    done = approvals.dismiss(root, code, minutes, file=approvals.ACTIONS)
+    before = approvals.find(root, code, minutes, file=approvals.ACTIONS)
+    done = approvals.dismiss(root, code, minutes, file=approvals.ACTIONS, reason=reason, note=note)
     if done is None:
         raise ValueError(say("gate.action.refused"))
-    mark(root, draft_of(done), "dismissed")
-    return {"dismissed": True, "command": done["command"], "system": done.get("system", ""), "draft": draft_of(done), "next": say("gate.action.dismissed")}
+    mark(root, draft_of(done), "dismissed", reason=reason)
+    return {"dismissed": True, "code": done["code"], "command": done["command"], "system": done.get("system", ""), "task": done.get("task", ""), "draft": draft_of(done), "reason": reason, "note": note,
+            "agent": agent_place(before or done), "next": say("gate.action.dismissed")}
+
+
+def reason_text(reason: str, note: str = "") -> str:
+    """The reason in words, for the agent and the draft: the kind, then the person's line."""
+    words = say(f"outbox.reason.{reason}") if reason in REASONS else say("outbox.reason.none")
+    return f"{words}: {note}" if note else words
+
+
+def decided(entry: Dict[str, Any], minutes: int = approvals.DEFAULT_MINUTES) -> Dict[str, Any]:
+    """What `harness wait --approval` answers once the person decided: the facts of the entry and the text for the agent (1.7.38). `state`: approved, opened or dismissed."""
+    state = entry.get("state")
+    if state == "approved":
+        return {"approved": True, "state": "approved", "next": say("wait.approval.approved", minutes=minutes)}
+    if state == "opened":
+        names = ", ".join(str(name) for name in entry.get("opened_for") or [])
+        return {"approved": False, "state": "opened", "opened": True, "names": names, "next": say("wait.approval.opened", names=names)}
+    reason, note = str(entry.get("reason") or ""), str(entry.get("note") or "")
+    why = reason_text(reason, note)
+    return {"approved": False, "state": "dismissed", "dismissed": True, "reason": reason or "none", "note": note, "why": why, "next": say("wait.approval.not_approved", why=why, follow=follow_text(reason)), "exit_code": 1}
+
+
+def follow_text(reason: str) -> str:
+    """What the agent is to do after a call was not approved, by the reason (the rules for the agent: one source, here)."""
+    return say(f"wait.approval.follow.{reason}") if reason in REASONS else say("wait.approval.follow.none")
+
+
+def wake_dismissed(entry: Dict[str, Any]) -> str:
+    """The message the board sends to an agent whose turn ended on a call the person did not approve, and gave a reason for (1.7.38)."""
+    reason, note = str(entry.get("reason") or ""), str(entry.get("note") or "")
+    return say("wake.dismissed", code=str(entry.get("code") or ""), why=reason_text(reason, note), follow=follow_text(reason))

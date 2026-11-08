@@ -776,6 +776,8 @@ def at_work(root: Path, data: Dict[str, Any], why: Optional[str] = None) -> bool
         return False
     if not held(root, data) or not (active_now(root, data) or subagent_running(root, data)):
         return False
+    if outbox.agent_waiting(root, str(data.get("task") or "")):  # 1.7.38: it sits in `harness wait --approval` on a held call: it makes no call, it waits for the person
+        return False
     if why is None:
         why = "cancelled" if cancelled_at(data) else ""
     return why != "cancelled"

@@ -143,10 +143,10 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
         folder = tasks.task_dir(root, task)
         out = []
         waiting = outbox.pending_for(root, task)
-        gone = outbox.moved_on(root, waiting)  # 1.7.38: the agent went on without these
+        gone = outbox.moved_on(root, waiting)  # 1.7.38: the agent does not wait for these (its wait on the code is not running, and it did not end its turn on it)
         for item in waiting:
             system = systems.get(item.get("system", "")) or {}
-            out.append({"moved_on": str(item["code"]) in gone,
+            out.append({"moved_on": str(item["code"]) in gone, "agent": outbox.agent_place(item),
                 "code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "named": item.get("named", True),
                 "offers": [{"system": str(one.get("system", "")), "env": str(one.get("env", "")), "scope": str(one.get("scope", "")), "refs": [str(ref) for ref in one.get("refs") or []]} for one in item.get("offers") or [] if isinstance(one, dict) and one.get("system")],  # 1.7.38: the connections this card may open for the task
                 "command": item["command"], "created_at": item.get("created_at", ""), "session_id": item.get("session_id", ""), "draft": outbox.draft_of(item).split("/", 4)[-1] if outbox.draft_of(item) else "",
@@ -171,7 +171,7 @@ def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
             except Exception:  # noqa: BLE001 - a title is a help; the card has the command anyway
                 said = ""
             out.append({"code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "command": item["command"],
-                        "approved_at": item.get("approved_at", ""), "title": said or " ".join(str(item["command"]).split())[:80]})
+                        "approved_at": item.get("approved_at", ""), "title": said or " ".join(str(item["command"]).split())[:80], "told": str(item.get("told") or "")})  # told: "wait" (its wait returned), "message" (the board woke it)
         return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
         return []
@@ -188,7 +188,7 @@ def opened_view(root: Path, task: str) -> List[Dict[str, Any]]:
                 said = " \u00b7 ".join(call_words(item["command"], systems.get(item.get("system", "")) or {}, tasks.task_dir(root, task), root)["says"])
             except Exception:  # noqa: BLE001 - a title is a help; the card has the code anyway
                 said = ""
-            out.append({"code": item["code"], "names": [str(name) for name in item.get("opened_for") or []], "title": said or " ".join(str(item["command"]).split())[:80]})
+            out.append({"code": item["code"], "names": [str(name) for name in item.get("opened_for") or []], "title": said or " ".join(str(item["command"]).split())[:80], "told": str(item.get("told") or "")})
         return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
         return []

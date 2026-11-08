@@ -248,6 +248,10 @@ def servers_login(root: Path, alias: str, kind: str = "", given: Optional[List[s
 def _wait(root: Path, args: Any) -> Dict[str, Any]:
     from . import wait  # it imports this module's CommandError
 
+    if args.approval:  # 1.7.38: wait for the person's answer on a held call
+        return wait.run_approval_wait(root, args.approval, min(max(args.timeout, wait.APPROVAL_TIMEOUT[0]), wait.APPROVAL_TIMEOUT[1]))  # never past what VS Code allows a terminal call
+    if not args.run or not args.until:
+        raise CommandError(say("wait.approval.args"))
     return wait.run_wait(root, args.run, args.until, args.every, args.timeout, args.out, args.task)
 
 
@@ -334,9 +338,10 @@ def register(subparsers: Any) -> None:
     connections_parser("connections", "the connections of this copy (the company pack's and your own) and whether an identity is saved for each; `test <alias>` tests the way in", lambda found: found)
     connections_parser("servers", "renamed: use `harness connections`. This old name says so, then does the same", lambda found: dict(found, renamed=say("connections.renamed")))  # 1.7.20
 
-    waiting = subparsers.add_parser("wait", help="wait for an outside system to reach a state in one call: run a read of a listed system every N seconds until its output matches a pattern, or a timeout; the last output goes to a file of the task")
-    waiting.add_argument("--run", required=True, help="the read-only command of a listed system to run each round, whole, in quotes")
-    waiting.add_argument("--until", required=True, help="a pattern (regular expression) the output must match to end the wait")
+    waiting = subparsers.add_parser("wait", help="wait in one call, with no model call: for an outside system to reach a state (--run, --until: a read of a listed system every N seconds until its output matches, or a timeout; the last output goes to a file of the task), or for the person to decide on a held call (--approval <code>)")
+    waiting.add_argument("--approval", default="", metavar="CODE", help="wait for the person to approve the held call with this code, open its connection for the task, or dismiss it: returns at once when they do, after 9 minutes when nobody has")
+    waiting.add_argument("--run", default="", help="the read-only command of a listed system to run each round, whole, in quotes")
+    waiting.add_argument("--until", default="", help="a pattern (regular expression) the output must match to end the wait")
     waiting.add_argument("--every", type=int, default=30, help="seconds between rounds (5 to 600; default 30)")
     waiting.add_argument("--timeout", type=int, default=540, help="seconds after which the wait ends with exit code 1 (10 to 7200; default 540: VS Code hands a terminal call back after 10 minutes, so a longer job is waited for with one call after another)")
     waiting.add_argument("--out", default="", help="a file inside the task folder where the last output is written whole, to record as evidence: RUNS/DEV/wait-job.txt means the task's own RUNS/")

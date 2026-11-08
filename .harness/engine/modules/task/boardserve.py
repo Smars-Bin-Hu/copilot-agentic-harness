@@ -55,7 +55,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
-from core import ahp, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
+from core import ahp, approvals, company, config, messages, outbox, reach, registry, state, targets, tasks, toolpacks, user
 from core import launchenv
 from core import connections as conn_core
 from core.paths import board_serve_file, board_serve_port, utc_now
@@ -624,8 +624,8 @@ class Board:
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
-    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "") -> Dict[str, Any]:
-        """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only."""
+    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "") -> Dict[str, Any]:
+        """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only; `reason` and `note` for `dismiss action`."""
         if action in ALL_AT_ONCE:
             if "pause" not in self.actions:
                 raise CommandError(say("serve.action.off", action=action))
@@ -636,12 +636,13 @@ class Board:
         if action not in self.actions:
             raise CommandError(say("serve.action.off", action=action))
         still = False if action in SETTINGS else self.idle(action, task)
-        if action == "dismiss action":  # the person says no to a held call (1.7.7): the code names it, nothing runs
+        if action == "dismiss action":  # the person says no to a held call (1.7.7): the code names it, nothing runs. A reason (1.7.38) goes to the agent: at once by its wait, else by a message when its turn ended
             try:
-                result = outbox.dismiss_action(self.root, str(code or ""), interactive=True)
+                result = outbox.dismiss_action(self.root, str(code or ""), interactive=True, reason=str(reason or ""), note=str(note or ""))
             except ValueError as error:
                 raise CommandError(str(error)) from None
             noted(self.root, task, action)
+            result["told"] = self.after_dismiss(result)
             return result
         if action == "task allow":  # the person closes a connection for this task with one click (1.7.6); the same function as `task allow`. Opening one needs the code of a held call that offers it (1.7.38)
             name = " ".join(str(env_name or "").split()).lower()
@@ -651,8 +652,11 @@ class Board:
                 if not offer:
                     raise CommandError(say("serve.allow.code", name=name or "-"))
             result = tasklife.set_allow(self.root, task, name, on, interactive=True, env=str((offer or {}).get("env") or ""))
-            if offer:  # the held calls that offered it have done their part: the page then asks the person to tell the agent (1.7.38)
-                outbox.mark_opened_everywhere(self.root, result.get("task") or task, [name])
+            if offer:  # the held calls that offered it have done their part: the agent that waits hears at once, one whose turn ended is woken, else the page asks the person to tell it (1.7.38)
+                found = result.get("task") or task_ops.resolve(self.root, task)
+                stood = {str(item["code"]): outbox.agent_place(item) for item in outbox.pending_for(self.root, found) if any(isinstance(one, dict) and one.get("system") == name for one in item.get("offers") or [])}
+                outbox.mark_opened_everywhere(self.root, found, [name])
+                self.after_decision(found, [(each, place) for each, place in stood.items() if (self.entry(each) or {}).get("state") == "opened"], messages.text("desk.outbox.opened.body", names=name))
             noted(self.root, result.get("task") or task, action)
             return result
         if action == "task link":  # one click, no code: the person names an item of an outside tool in the task, or takes it away (1.7.20); the same function as `task link add|remove`
@@ -680,6 +684,7 @@ class Board:
         if action == "approve-plan" and with_req:
             plain = call
             call = lambda **kw: plain(with_req=True, **kw)  # noqa: E731 - the requirement and the plan, one code
+        stood = self.entry(code) if action == "approve-action" and step == "act" else None  # where the agent stood before the person's yes (1.7.38)
         out = io.StringIO()
         if step == "preview":
             def stop(asked: str) -> str:
@@ -697,7 +702,64 @@ class Board:
         except ValueError as error:  # core.outbox says no with a plain error; the page shows it as a refusal
             raise CommandError(str(error)) from None
         noted(self.root, result.get("task") or task, action)
+        if stood and stood.get("task"):
+            self.after_decision(str(stood["task"]), [(str(stood["code"]), outbox.agent_place(stood))], messages.text("desk.outbox.tell.body", codes=str(stood["code"])))
         return result
+
+    # --- the agent, after the person decided on a held call (1.7.38) -----------------------------------------------
+
+    def entry(self, code: str) -> Optional[Dict[str, Any]]:
+        """The entry of a held call by its code, in any state it is in (None when none)."""
+        try:
+            return approvals.find(self.root, str(code or ""), approvals.minutes(config.policy_or_empty(self.root, "gate")), file=approvals.ACTIONS)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def after_decision(self, task: str, decided: List[Tuple[str, str]], text: str) -> None:
+        """The person approved calls or opened their connection. `decided`: each code and where the agent stood (`outbox.agent_place`). One that waits in `harness wait --approval` hears it by itself
+        (the entry is marked). One whose wait ran out and whose turn ended is woken with `text`, as one message for all of them. Others are left: the card asks the person to tell the agent."""
+        minutes = approvals.minutes(config.policy_or_empty(self.root, "gate"))
+        for code, place in decided:
+            if place == "wait":
+                approvals.told(self.root, code, "wait", minutes, file=approvals.ACTIONS)
+        ended = [code for code, place in decided if place == "ended"]
+        if ended and self.wake(task, text):
+            for code in ended:
+                approvals.told(self.root, code, "message", minutes, file=approvals.ACTIONS)
+
+    def after_dismiss(self, done: Dict[str, Any]) -> str:
+        """The person did not approve a held call. The agent that waits has the reason from its wait. One whose turn ended on the call is woken with the reason, when there is one; without a reason, or when the
+        agent went on, it is only written in the task. Returns what happened: `wait`, `message` or `logged`."""
+        try:
+            task = str(done.get("task") or "")
+            entry = self.entry(str(done.get("code") or "")) or {}
+            if done.get("agent") == "wait":
+                return "wait"
+            if done.get("reason") and done.get("agent") == "ended" and task and self.wake(task, outbox.wake_dismissed(entry)):
+                return "message"
+            if task:
+                with task_ops.locked(self.root, task) as data:
+                    task_ops.note(data, "outbox-dismiss", f"{done.get('code')}: {outbox.reason_text(str(done.get('reason') or ''), str(done.get('note') or ''))}")
+        except Exception:  # noqa: BLE001 - the call is dismissed; a missing line must not undo it in the person's eyes
+            pass
+        return "logged"
+
+    def wake(self, task: str, text: str) -> bool:
+        """Send `text` to the chat of the task as an answer (the agent's turn ended; the person has decided), without the person's saved drafts. False when it cannot go (no chat, VS Code closed, the chat is busy):
+        nothing is lost, the page then asks the person to tell the agent."""
+        try:
+            found = tasks.read(self.root, task) or {}
+            made = chatsend.prepare(self.root, task, "answer", "", "", text, "", with_drafts=False)
+            model = chatsend.model_of(found)
+            done = self.link.dispatch("send", task, made["text"], model, [])
+        except Exception:  # noqa: BLE001 - see above
+            return False
+        try:
+            tasklife.set_waiting(self.root, task, None)  # it works again; the card of the wait is gone with the answer
+        except Exception:  # noqa: BLE001
+            pass
+        self.sent(task, found, "answer", made["text"], done, {"why": "", "lang": made["lang"], "model": model or {}, "drafts": 0, "files": [], "by": "board"})
+        return True
 
     # --- talking to the chat (B72) ---------------------------------------------------------------------------------
 
@@ -1774,7 +1836,7 @@ def handler_for(board: Board) -> type:
             if action not in FREE and not board.paired(self.token()):
                 return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
             try:
-                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")))
+                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")), str(data.get("reason", "")), str(data.get("note", "")))
             except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
                 return self.answer(409, {"error": str(error)})
             print(say("serve.did", action=action, task=task_ops.name_of(task) if task else "-"), flush=True)

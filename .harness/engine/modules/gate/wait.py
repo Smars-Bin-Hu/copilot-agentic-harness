@@ -10,6 +10,12 @@ a longer job is waited for with one call after another, each a model call, still
 
 The command must reach a listed outside system and be a read: the gate classifies it (`external.classify`), as it does when the agent runs
 `harness wait` itself (the hook unwraps `--run`); a write, a procedure or a program that is no listed system is refused here too.
+
+`harness wait --approval <code>` (1.7.38, C12 Q12): the other wait. A call to an outside system is held for the person; the gate tells the agent to run this. It reads one file
+(the held call's entry) every second and calls no model; it returns at once when the person approves the call, opens its connection for the task, or dismisses it (with the reason), and
+ends after at most 9 minutes (`--timeout`) when nobody has answered: the agent is then told to end its turn and say what waits, and the board wakes it when the person decides later.
+While it runs, it writes a beat into the entry every few seconds: that is how the board knows the agent waits for the call (core.outbox.agent_place). It only reads the approval state,
+so the gate lets it through for the agent.
 """
 
 from __future__ import annotations
@@ -21,7 +27,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from core import config, messages, tasks
+from core import approvals, config, messages, outbox, tasks
 
 from . import external
 from .commands import CommandError
@@ -109,3 +115,44 @@ def run_wait(root: Path, command: str, until: str, every: int = 30, timeout: int
         "next": say("wait.next.matched", out=out or "-") if matched else say("wait.next.timeout", seconds=seconds, out=out or "-"),
         **({} if matched else {"exit_code": 1}),
     }
+
+
+APPROVAL_TIMEOUT = (5, 570)  # seconds; under the 10 minutes after which VS Code returns a terminal call
+POLL_SECONDS = 1.0
+BEAT_SECONDS = 5.0
+
+
+def run_approval_wait(root: Path, code: str, timeout: int = DEFAULT_TIMEOUT, clock: Any = time.monotonic, sleep: Any = time.sleep, poll: float = POLL_SECONDS, beat: float = BEAT_SECONDS) -> Dict[str, Any]:
+    """Wait for the person to decide on the held call with this code. Returns at once when they have, else after `timeout` seconds. A `CommandError` when no such call waits."""
+    code = str(code or "").strip().upper()
+    if not (APPROVAL_TIMEOUT[0] <= timeout <= APPROVAL_TIMEOUT[1]):
+        raise CommandError(say("wait.approval.range", min=APPROVAL_TIMEOUT[0], max=APPROVAL_TIMEOUT[1]))
+    minutes = approvals.minutes(config.policy_or_empty(root, "gate"))
+    found = approvals.find(root, code, minutes, file=approvals.ACTIONS)
+    if found is None:
+        raise CommandError(say("wait.approval.none", code=code or "-"))
+    started = clock()
+    last_beat = None
+    try:
+        while True:
+            found = approvals.find(root, code, minutes, file=approvals.ACTIONS)
+            if found is None:
+                raise CommandError(say("wait.approval.none", code=code))
+            if found.get("state") != "pending":
+                return {"code": code, "seconds": int(clock() - started), **outbox.decided(found, minutes)}
+            now = clock()
+            if last_beat is None or now - last_beat >= beat:
+                approvals.wait_mark(root, code, "running", minutes, file=approvals.ACTIONS)
+                last_beat = now
+            if now - started + poll > timeout:
+                break
+            sleep(poll)
+        again = approvals.find(root, code, minutes, file=approvals.ACTIONS)  # the person may have decided in the last moment
+        if again is not None and again.get("state") != "pending":
+            return {"code": code, "seconds": int(clock() - started), **outbox.decided(again, minutes)}
+        approvals.wait_mark(root, code, "timeout", minutes, file=approvals.ACTIONS)
+        seconds = int(clock() - started)
+        return {"code": code, "approved": False, "state": "pending", "waiting": True, "seconds": seconds, "next": say("wait.approval.timeout", seconds=seconds, code=code)}
+    except BaseException:
+        approvals.wait_mark(root, code, "gone", minutes, file=approvals.ACTIONS)  # stopped (the terminal was closed, an error): the agent no longer waits for it
+        raise

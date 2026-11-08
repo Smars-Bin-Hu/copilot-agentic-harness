@@ -217,11 +217,47 @@ const SETUP = (function () {
     const values = () => ({name: name.value, language: st.lang, repos_root: st.root, singles: st.singles, kb_mode: st.mode, kb_path: kbPath.value, kb_replace: st.replace, skill_prefix: prefix.value, install_command: install.value, refused: st.refused, rules: st.rules});
     const chips = ["en", "zh"].map((lang) => {
       const chip = h("button", {type: "button", class: "chip", "data-lang": lang}, t("desk.send.lang." + lang));
-      chip.addEventListener("click", () => setLang(lang));
+      chip.addEventListener("click", () => chooseLang(lang));
       return chip;
     });
     const langNote = h("span", {class: "sv-info", tabindex: "0", hidden: "", title: t("setup.language.forced")}, "\u24d8");  // only when HARNESS_LANGUAGE is set in the environment the board runs in
     const setLang = (lang) => { st.lang = lang; chips.forEach((chip) => { const on = chip.dataset.lang === lang; chip.classList.toggle("on", on); chip.setAttribute("aria-pressed", on ? "true" : "false"); }); };
+    // The form is in the language the person chose, at once (C12 N10): the language is written now (the call the settings panel makes), the page loads again in it, and what was typed is put back.
+    const KEEP = "harness.setup.keep";
+    function chooseLang(lang) {
+      const was = st.lang;
+      setLang(lang);
+      if (lang === was || lang === document.documentElement.lang || !st.form) return;
+      try { sessionStorage.setItem(KEEP, JSON.stringify(values())); if (finished) sessionStorage.setItem("harness.reopen", "setup"); } catch (error) { /* the form then starts again from what is saved */ }  // in a window over the board: dock.js opens it again
+      chips.forEach((chip) => { chip.disabled = true; });
+      SERVE.post("/api/language", {language: lang}, true).then(() => { chips.forEach((chip) => { chip.disabled = false; }); }, (error) => {  // the page is loading again when it worked
+        try { sessionStorage.removeItem(KEEP); sessionStorage.removeItem("harness.reopen"); } catch (nothing) { /* nothing to remove */ }
+        chips.forEach((chip) => { chip.disabled = false; });
+        setLang(was);
+        said.replaceChildren(...SERVE.reasons(error.message || error));
+      });
+    }
+    function keepBack() {  // after that reload: what was typed in the form
+      let kept = null;
+      try { kept = JSON.parse(sessionStorage.getItem(KEEP) || "null"); sessionStorage.removeItem(KEEP); } catch (error) { kept = null; }
+      if (!kept || typeof kept !== "object") return;
+      name.value = String(kept.name || name.value);
+      st.root = typeof kept.repos_root === "string" ? kept.repos_root : st.root;
+      st.singles = Array.isArray(kept.singles) ? kept.singles : st.singles;
+      st.refused = Array.isArray(kept.refused) ? kept.refused : st.refused;
+      st.rules = Array.isArray(kept.rules) ? kept.rules : st.rules;
+      paintRepos();
+      paintRules();
+      if (["none", "package", "folder"].includes(kept.kb_mode) && kept.kb_mode !== "none") {
+        setMode(kept.kb_mode);
+        kbPath.value = String(kept.kb_path || "");
+        if (kbPath.value.trim()) checkKb();
+      }
+      prefix.value = String(kept.skill_prefix || prefix.value);
+      install.value = String(kept.install_command || install.value);
+      more.open = more.open || Boolean(install.value || st.rules.length);
+      gate();
+    }
     const star = () => h("b", {class: "su-star", "aria-hidden": "true"}, " *");
     const kbStar = star();
     kbStar.hidden = true;
@@ -405,7 +441,7 @@ const SETUP = (function () {
     }
     function paint(found) {
       paintShort(found);
-      if (!st.form) fill(found);
+      if (!st.form) { fill(found); keepBack(); }
       app.classList.remove("su-loading");
       if (!st.scrolled) {  // the Enter screen sent the person to the section that is missing (1.7.36): ?sec=you|company|computer
         st.scrolled = true;

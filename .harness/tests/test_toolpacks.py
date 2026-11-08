@@ -1715,7 +1715,7 @@ class OpenRulesOfTheTypes(TaskCase):
         self.new()
         reason = self.term(self.SQL.format(port=14332))["permissionDecisionReason"]
         self.assertIn("acmedw-dev", reason)
-        self.assertIn(outbox.say("gate.external.outbox.opens", names="acmedw-dev"), reason)
+        self.assertIn(outbox.say("gate.external.outbox.opens", buttons=outbox.say("gate.external.outbox.button", text=outbox.say("desk.outbox.open", name="acmedw-dev"))), reason)
         entry = approvals.pending(self.root, 10, file=approvals.ACTIONS)[-1]
         self.assertEqual(entry["offers"], [{"system": "acmedw-dev", "env": "dev", "scope": "all"}])
         self.assertEqual(outbox.offer_for(self.root, TASK, entry["code"].lower(), "acmedw-dev")["scope"], "all")

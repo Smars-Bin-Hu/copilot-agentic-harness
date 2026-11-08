@@ -13,6 +13,10 @@ The core rules are in [AGENTS.md](../AGENTS.md). This file adds what applies whi
 - When the reason says to stop retrying, stop at once and tell the user what stopped you.
 - When a terminal command needs the user to confirm, wait for the user to decide. Do not get around it with another command.
 
+## Approvals
+
+- The user approves a plan, confirms a requirement, approves a promote and decides on a held call to an outside system by pressing a button on the task page of the board. Say which button. Do not tell the user to run a command for it.
+
 ## git commands
 
 - With a target repository set up, read-only git commands (`status`, `diff`, `log`, `show`, `branch`) run directly. Other git commands are refused, and the reason has the whole command and a code.

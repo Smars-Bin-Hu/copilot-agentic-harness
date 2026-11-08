@@ -458,7 +458,7 @@
     const key = JSON.stringify([c.names, root.lang]);
     if (sy.dataset.k !== key) {
       sy.dataset.k = key;
-      const title = (item) => (c.key === "packs" ? (item.state === "ok" ? "" : t("machine.conn.notusable", {programs: item.missing || ""})) : t("board.enter.cs." + item.state));
+      const title = (item) => (hover ? "" : c.key === "packs" ? (item.state === "ok" ? "" : t("machine.conn.notusable", {programs: item.missing || ""})) : t("board.enter.cs." + item.state));  // the connections row has its window on hover: a second bubble beside it covered the lines below (C12 N7)
       sy.replaceChildren(...c.names.map((item) => h("span", {class: "sy-i", title: title(item)}, h("i", {class: "sy-d " + (DOT[item.state] || "unknown")}), item.name)), h("span", {class: "sy-more", hidden: ""}));
     }
     fitNames(sy);
@@ -503,10 +503,11 @@
           const nodes = [];
           if (note) nodes.push(note);
           if ((view.notes || []).length) {
-            nodes.push(view.notes.map((n) => n.text).join(" "));
+            const gap = root.lang === "zh" ? "" : " ";  // a Chinese sentence ends in a full stop: no space after it (C12 N11)
+            nodes.push(view.notes.map((n) => n.text).join(gap));
             const seen = new Set();
             const links = view.notes.map((n) => n.fix).filter((fix) => { if (!fix || !fix.to || seen.has(fix.label)) return false; seen.add(fix.label); return true; });
-            links.forEach((fix, index) => nodes.push(index ? " · " : " ", READY.link(fix, {done: () => poll(), onState: showRestart, opened: () => { chk0.opened = Date.now(); }, fail: (error) => { chk0.fail = error.message; render(); }}, fix.short || fix.label)));
+            links.forEach((fix, index) => nodes.push(index ? " · " : gap, READY.link(fix, {done: () => poll(), onState: showRestart, opened: () => { chk0.opened = Date.now(); }, fail: (error) => { chk0.fail = error.message; render(); }}, fix.short || fix.label)));
           }
           if (!req && c && c.launch) { const b = h("button", {type: "button", class: "en-open", "data-launch": "1"}, t("board.enter.launch")); nodes.push(h("br"), t("board.enter.m.systems.launch"), h("br"), b); }
           p.replaceChildren(...nodes);
@@ -566,8 +567,8 @@
     const live = Boolean(chk0.restart && (chk0.restart.state === "quitting" || chk0.restart.state === "opening"));
     const going = chk0.restarting || live;
     if (!chk0.last) { vsBtn.hidden = true; vsNote.hidden = true; return; }
-    vsBtn.hidden = false;
     const vs = checks.find((x) => x.id === "vscode");
+    const up = chk0.last.vscode_button && chk0.last.vscode_button.up;
     const lost = Boolean(chk0.restart && chk0.restart.state === "failed" && ((vs && vs.state !== "ok") || (chk0.restart.since || 0) < 120));  // the same two minutes as the VS Code line
     const failed = !live && (Boolean(chk0.fail) || lost);
     const said = live ? READY.restartNote(chk0.restart) : failed ? (chk0.fail || READY.restartNote(chk0.restart)) : "";  // the label says Quitting only once the board is quitting: a question about a working agent comes first
@@ -575,9 +576,9 @@
     setText(vsNote, said);
     vsNote.hidden = !said;
     vsNote.classList.toggle("bad", failed);
+    vsBtn.hidden = Boolean(up && vs && vs.state === "ok" && !going && !failed && !said);  // VS Code runs with this copy's settings and nothing is going on: nothing to press, and a button that need not be pressed made people stop and wonder (C12 N15)
     vsBtn.disabled = going;
     vsBtn.classList.toggle("hot", !ready && !chk0.setup && Boolean(vs) && vs.state !== "ok");
-    const up = chk0.last.vscode_button && chk0.last.vscode_button.up;
     vsBtn.title = going ? "" : t(up ? "board.enter.vs.restart.tip" : "board.enter.vs.open.tip");
   }
   function fitList() {  // a short window: the list scrolls inside the room under the wordmark instead of running into it

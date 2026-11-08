@@ -64,6 +64,7 @@ def deliver(root: Path, raw_task: str = "", summary: str = "", skipped: Optional
         }
         task_ops.note(data, "deliver", one_line(text, 100))
         links = tasklife.links_hint(root, data, still_open=True)  # a ticket the task names: the agent may offer to update it in its summary
+    mark_done(root, task, "accept.status.delivered")  # the Status line says it now, so the Stop hook has no TASK.md to ask the agent for: that was one more turn for every delivery (C12 RB-N4)
     outbox.agent_left(root, task)  # a call it held and never waited on is left behind now: the task shows "to accept", not "waits for your approval" (1.7.38, C12 TB-03)
     return {"task": task, "delivered": True, "next": say("accept.delivered") + (" " + links if links else "")}
 
@@ -83,9 +84,10 @@ _UPDATED_LINE = re.compile(r"^(\s*- \*\*(?:Updated|\u66f4\u65b0)\*\*\s*[:\uff1a]
 
 
 def mark_done(root: Path, task: str, key: str) -> bool:
-    """The board closed the task (the person accepted, or the promote did): the Status line of `TASK.md` says so (1.7.38, C12 TB-12). The agent wrote it before it stopped and it said "waiting for the user
-    to check and promote"; nobody was left to change it, and the closed task's Overview showed the old state. Only the Status and the Updated line, and only when they are there as the template makes them.
-    `key`: `accept.status.accepted` or `accept.status.promoted`. True when the file changed. Never raises: the task is closed whatever happens here."""
+    """The Status line of `TASK.md` says where the task stands, when the board or `task deliver` moves it (1.7.38, C12 TB-12, RB-N4): the person accepted, the promote closed it, or the agent delivered.
+    The agent wrote the line before it stopped and it said "waiting for the user to check and promote"; nobody was left to change it, and the closed task's Overview showed the old state.
+    Only the Status and the Updated line, and only when they are there as the template makes them.
+    `key`: `accept.status.accepted`, `accept.status.promoted` or `accept.status.delivered`. True when the file changed. Never raises: the task is closed whatever happens here."""
     try:
         path = tasks.task_dir(root, task) / tasks.TASK_FILE
         text = path.read_text(encoding="utf-8")

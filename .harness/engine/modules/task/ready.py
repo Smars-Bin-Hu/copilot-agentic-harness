@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from core import config, launchenv, messages, readyitems, shortcmd, targets, tasks
+from core import connections as conn_core
 from core import reach, systems as outside
 
 from . import reachcheck
@@ -293,8 +294,17 @@ class Ready:
         order = {"dev": 0, "ist": 1, "qat": 2, "prod": 3}
         pack_of = lambda system: str((systems.get(system) or {}).get("toolpack") or "")  # noqa: E731
         first_env = lambda system: min(order.get(item["env"], -1) for item in raw if item["system"] == system)  # noqa: E731
-        # The order of the Connections window: by kind (the pack), then environment, then name; the file's order told nothing (1.7.38)
-        raw = sorted(raw, key=lambda item: (not pack_of(item["system"]), pack_of(item["system"]), first_env(item["system"]), item["system"], order.get(item["env"], -1)))
+        try:
+            listed, kinds = conn_core.listed(self.root), conn_core.types(self.root)
+        except Exception:  # noqa: BLE001 - a broken list is doctor's to report; the table then keeps the order of the packs
+            listed, kinds = {}, {}
+        try:
+            loose = set(conn_core.unsigned(self.root))  # a connection with no sign-in kept here: its row says so, as the name with its dot did (C12 N7)
+        except Exception:  # noqa: BLE001 - see above
+            loose = set()
+        label_of = lambda system: str((kinds.get(str((listed.get(system) or {}).get("type") or "")) or {}).get("label") or "").casefold()  # noqa: E731
+        # The order of the Connections window: by the label of the kind, then environment, then name (`servers.js`); the table was ordered by the name of the pack, so the two lists differed (C12 N6)
+        raw = sorted(raw, key=lambda item: (not label_of(item["system"]), label_of(item["system"]), not pack_of(item["system"]), pack_of(item["system"]), first_env(item["system"]), item["system"], order.get(item["env"], -1)))
         for system in dict.fromkeys(item["system"] for item in raw):
             mine = [item for item in raw if item["system"] == system]
             states = {kind(item["state"]) for item in mine}
@@ -307,6 +317,8 @@ class Ready:
                     why = reach.failed_words(item)
                 elif item["state"] == reach.OK:
                     why = item.get("who", "")
+                elif system in loose:
+                    why = messages.text("board.enter.cs.none")
                 rows.append({"system": system, "env": "" if item["env"] in ("none", "any") else item["env"], "state": kind(item["state"]), "reason": short(why), "at": item.get("at", ""),
                              "pack": str((systems.get(system) or {}).get("toolpack") or "")})
         return {"names": names, "rows": rows, "checking": self.checker.busy()}

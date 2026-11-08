@@ -46,7 +46,7 @@ To find a file, read [.harness/INDEX.md](.harness/INDEX.md) (the path index). Do
 - Work is done in tasks: one task, one folder, under `.workspace/sandbox/tasks/<task>/`.
   When the user asks you to produce or change files, or mentions an existing task, first open or pick up the task with the skill `harness-my-task`. Plain questions need no task. A look that touches a server or a file (run a read, see what comes back) is a Q&A task: open it without asking, answer, close it.
 - With a task, write only inside the task folder. Files in a target repository cannot be changed directly: they are written only by a promote the user approves,
-  and the task's `DEV/` can be written only after the user approves the plan (`PLAN.md`) in the terminal.
+  and the task's `DEV/` can be written only after the user approves the plan (`PLAN.md`) on the task page.
   How a task folder is used (`TASK.md`, `REQ.md`, `DEV/`, what not to write): [workspace.instructions.md](.github/instructions/workspace.instructions.md).
   Only the user may change the confirmation line of `REQ.md`, under autorun too. Do not fill it in when it is empty: the review package tells the reviewer to treat the requirement as "to be confirmed", and that is not a problem.
 - Only the user can switch independent checks on: the user writes `[review]=n` in a prompt or on the task page. You cannot switch them on, approve for the user, or waive them.

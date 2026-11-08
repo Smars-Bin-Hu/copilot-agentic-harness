@@ -1299,7 +1299,7 @@
     const send = () => {
       if (!ready_()) return;
       yes.disabled = true; yes.textContent = t("board.serve.working");
-      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim(), seen: {code: item.code, files: viewedCalls.get(item.code) || {}}}).then((data) => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), heard: data && data.result && data.result.agent === "wait" ? "wait" : "", title: (item.says || []).join(" \u00b7 ") || String(item.command || "").replace(/\s+/g, " ").slice(0, 80)}); SERVE.done(); }, (error) => { if (error.data && error.data.changed) viewedCalls.delete(item.code); said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });  // a file changed since View: View pulses again
+      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim(), seen: {code: item.code, files: viewedCalls.get(item.code) || {}}}).then((data) => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), heard: data && data.result && data.result.agent === "wait" ? "wait" : "", title: (item.says || []).join(" \u00b7 ") || (() => { const one = String(item.command || "").replace(/\s+/g, " "); return one.length > 80 ? one.slice(0, 79).trimEnd() + "\u2026" : one; })()}); SERVE.done(); }, (error) => { if (error.data && error.data.changed) viewedCalls.delete(item.code); said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });  // a file changed since View: View pulses again
     };
     yes.addEventListener("click", send);
     opens.forEach((open) => open.addEventListener("click", () => {

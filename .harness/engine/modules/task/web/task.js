@@ -120,8 +120,8 @@
     const columns = hasUsage ? 9 : 7;
     const rows = [];
     for (const entry of info.prompts) {
-      const notes = [["report.tag.denied", "denied"], ["report.tag.blocks", "stop_blocks"], ["report.tag.failed", "failed_tool_calls"]]
-        .filter(([, field]) => entry[field]).map(([key, field]) => [" ", tag(t(key, {n: entry[field]}), "bad")]);
+      const notes = [["report.tag.denied", "denied"], ["report.tag.held", "held"], ["report.tag.blocks", "stop_blocks"], ["report.tag.failed", "failed_tool_calls"]]
+        .filter(([, field]) => entry[field]).map(([key, field]) => [" ", tag(t(key, {n: entry[field]}), field === "held" ? "" : "bad")]);  // a held call waited for the person: not a fault (C12 RB-N6)
       if (entry.compactions && entry.compactions.length) notes.push([" ", h("span", {class: "tag", title: compactedText(entry.compactions)}, t("report.tag.compacted", {n: entry.compactions.length}))]);
       rows.push(h("tr", null,
         h("td", null, entry.n), h("td", {class: "when"}, when(entry.at, 5, 16)),

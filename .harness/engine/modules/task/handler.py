@@ -338,6 +338,8 @@ def task_file_stop(ctx: Context, data: Dict[str, Any]) -> Optional[Decision]:
     validate_policy(policy)  # a broken policy raises: hook.py logs it and the reminder does not run (fail-open)
     if not policy.get("task_file_reminder", True) or not tasks.task_file(ctx.root, data["task"]).is_file():
         return None
+    if isinstance(data.get("deliver"), dict):
+        return None  # `task deliver` wrote the Status line of TASK.md itself; the person's next message takes the delivery away (C12 RB-N4)
     state = relay(ctx)
     if not state["wrote"] or state["task_file"] or state["reminded"]:
         return None

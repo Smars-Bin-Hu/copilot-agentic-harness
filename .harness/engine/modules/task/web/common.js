@@ -193,12 +193,13 @@ function actionTitle(key) {
 }
 function actionButton(row, item, extra) {
   const label = t("board.action." + item.action.replace(" ", "-"));
+  const shown = extra && /(^|\s)big(\s|$)/.test(extra) ? label.charAt(0).toUpperCase() + label.slice(1) : label;  // the main buttons of a card start with a capital as Accept and close and Not yet do; the small ones of a list stay as they are (C12 N13)
   const live = typeof SERVE !== "undefined" && SERVE.runs(item.action);  // serve.js is there only when the server sent the page
   const hot = isHot(row, item);
   // While the agent is in the middle of a turn nothing is pressed on the page: a question about the result is a doubt, and the person decides when the answer is in
   // (stop the agent in VS Code first, or wait for it to stop)
   const locked = typeof SERVE !== "undefined" && row.state === "working" && item.action !== "archive" && !TALK.includes(item.action);
-  const button = h("button", {class: "act" + (CHAT_ACTIONS.includes(item.action) ? " chat-act" : "") + (hot ? " hot" : "") + (live ? " live" : "") + (locked ? " locked" : "") + (extra ? " " + extra : ""), type: "button", title: locked ? t("board.action.busy") : live ? "" : item.command, "data-label": label}, label);
+  const button = h("button", {class: "act" + (CHAT_ACTIONS.includes(item.action) ? " chat-act" : "") + (hot ? " hot" : "") + (live ? " live" : "") + (locked ? " locked" : "") + (extra ? " " + extra : ""), type: "button", title: locked ? t("board.action.busy") : live ? "" : item.command, "data-label": shown}, shown);
   if (locked) button.disabled = true;
   if (chatGone(row) && CHAT_ACTIONS.includes(item.action) && item.action !== "send") {  // Send stays: its panel lets the person copy the message
     button.disabled = true;

@@ -16,6 +16,7 @@ from unittest import mock
 from support import ENGINE, HarnessTestCase, confirm_requirement, payload, subagent_start
 
 from core import messages, tasks
+from core.paths import utc_now
 from core.state import update_state
 from modules.task import task as task_ops
 from modules.task import tasklife
@@ -673,6 +674,19 @@ class RelayReminderTests(LifeCase):
         reason = self.stop()["reason"]
         self.hook(payload("UserPromptSubmit", S1, prompt=reason))
         self.assertEqual(self.stop(), {})
+
+    def test_a_delivery_writes_the_status_line_itself_so_stop_asks_for_no_task_file(self) -> None:
+        """C12 RB-N4: the agent delivered, the Stop hook sent it back to write TASK.md, and that was one more turn (a premium request) for every delivery."""
+        self.new("job", "rca")
+        self.done(f"{BASE}/job/RCA.md")
+        self.cli_json("task", "deliver", "--task", "job", "--summary", "RCA done. Look at RCA.md.")
+        self.assertEqual(self.stop(), {})
+        status = next(line for line in (self.folder() / "TASK.md").read_text(encoding="utf-8").splitlines() if line.startswith(("- **Status", "- **状态")))
+        self.assertIn(messages.text("accept.status.delivered", date=utc_now()[:10]), status)
+        self.assertNotIn("task_file_not_updated", [row.get("kind") for row in self.session_log(S1)])
+        self.hook(payload("UserPromptSubmit", S1, prompt="not yet: add the numbers"))  # the person's next message takes the delivery away
+        self.done(f"{BASE}/job/RCA.md")
+        self.assertEqual(self.stop()["decision"], "block", "work after that is asked for again")
 
     def test_updating_the_task_file_is_enough(self) -> None:
         self.new()

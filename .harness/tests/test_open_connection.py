@@ -50,7 +50,7 @@ class OpenFromTheCard(TaskCase):
     def test_a_connection_a_type_does_not_let_open_gets_no_offer(self) -> None:
         reason = self.term(QAT)["permissionDecisionReason"]
         self.assertEqual(taskdesk.outbox_view(self.root, TASK)[-1]["offers"], [])
-        self.assertNotIn(outbox.say("gate.external.outbox.opens", names="acmedw-qat"), reason)
+        self.assertNotIn(outbox.say("desk.outbox.open", name="acmedw-qat"), reason)
 
     def test_with_no_task_open_the_card_offers_nothing(self) -> None:
         self.run_cli("task", "close", "--task", TASK, "--force")  # no open task: the call has no task to open a connection for

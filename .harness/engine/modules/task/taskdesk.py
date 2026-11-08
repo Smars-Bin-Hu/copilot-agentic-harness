@@ -166,6 +166,12 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
         return []
 
 
+def cut_command(command: Any, size: int = 80) -> str:
+    """The start of a command, on one line, for the title of a card: with a mark when it was cut (C12 N14)."""
+    one = " ".join(str(command).split())
+    return one if len(one) <= size else one[: size - 1].rstrip() + "\u2026"
+
+
 def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
     """The calls of this task approved on the board or in a terminal and not run yet (1.7.24): the page keeps its green card, and tells the agent, until the command has run.
     1.7.25: each has a `title` (the sentence of its type's `say`, else the start of the command), so the card says which call was approved."""
@@ -179,7 +185,7 @@ def approved_view(root: Path, task: str) -> List[Dict[str, Any]]:
             except Exception:  # noqa: BLE001 - a title is a help; the card has the command anyway
                 said = ""
             out.append({"code": item["code"], "system": item.get("system", ""), "env": item.get("env", ""), "verb": item.get("verb", ""), "target": item.get("target", ""), "command": item["command"],
-                        "approved_at": item.get("approved_at", ""), "title": said or " ".join(str(item["command"]).split())[:80], "told": str(item.get("told") or "")})  # told: "wait" (its wait returned), "message" (the board woke it)
+                        "approved_at": item.get("approved_at", ""), "title": said or cut_command(item["command"]), "told": str(item.get("told") or "")})  # told: "wait" (its wait returned), "message" (the board woke it)
         return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
         return []
@@ -197,7 +203,7 @@ def opened_view(root: Path, task: str) -> List[Dict[str, Any]]:
             except Exception:  # noqa: BLE001 - a title is a help; the card has the code anyway
                 said = ""
             names = [str(name) for name in item.get("opened_for") or []]
-            out.append({"code": item["code"], "names": names, "shown": [outbox.opened_words(name, item.get("opened_offers")) for name in names], "title": said or " ".join(str(item["command"]).split())[:80], "told": str(item.get("told") or "")})
+            out.append({"code": item["code"], "names": names, "shown": [outbox.opened_words(name, item.get("opened_offers")) for name in names], "title": said or cut_command(item["command"]), "told": str(item.get("told") or "")})
         return out
     except Exception:  # noqa: BLE001 - a page must not fail over the outbox of one task
         return []

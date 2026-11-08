@@ -161,7 +161,8 @@ class PathIndexTests(unittest.TestCase):
     def test_every_indexed_path_exists(self) -> None:
         paths = self.paths()
         self.assertGreater(len(paths), 15)
-        self.assertEqual([path for path in paths if not (REPO / path).exists()], [])
+        shipped_without = {"knowledge-base/"}  # the harness ships without it: the folder is made when a knowledge base is imported (C12 N1)
+        self.assertEqual([path for path in paths if path not in shipped_without and not (REPO / path).exists()], [])
 
     def test_every_shipped_skill_and_harness_folder_is_indexed(self) -> None:
         index = text(self.INDEX)

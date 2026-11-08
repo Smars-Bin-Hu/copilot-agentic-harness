@@ -541,5 +541,8 @@ const DOCK = (function () {
   }
 
   if (typeof DATA !== "undefined" && DATA.serve) build();
+  try {  // the page loaded again after the language was chosen in the form of Get ready: its window comes back with what was typed (setup.js)
+    if (sessionStorage.getItem("harness.reopen") === "setup") { sessionStorage.removeItem("harness.reopen"); setTimeout(setupWindow, 0); }
+  } catch (error) { /* then the window stays shut */ }
   return {start, allSkills, kbWindow, setupWindow, enterScreen, chooseOnPage, syncCompany};
 })();

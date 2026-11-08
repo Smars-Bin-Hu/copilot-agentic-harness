@@ -403,6 +403,21 @@ class BoardChecksItself(ConnectionsCase):
         self.assertEqual([problem["key"] for problem in found["problems"]], ["signin", "down"])
         self.assertEqual(self.ready().answer(True)["optional"]["identities"], 0)
 
+    def test_the_table_follows_the_order_of_the_window_and_says_not_signed_in_for_a_connection_with_no_sign_in(self) -> None:
+        """C12 N6, N7: the window sorts by the label of the kind, then environment, then name; the table sorted by the name of the pack and said "not checked" with no reason where the name had said "Not signed in"."""
+        put_type(self.root, dict(KIND, type="rbk", label="Acme runbooks", cli=["rbk"], test="rbk {auth} --who"))
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"},
+                      "db-ist": {"type": "fakedb", "env": "ist", "auth": "own", "host": "db2", "port": "5000"},
+                      "zz-run": {"type": "rbk", "env": "dev", "auth": "own"}})
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        rows = self.line(self.ready())["rows"]
+        self.assertEqual([row["system"] for row in rows], ["zz-run", "db-dev", "db-ist"], "Acme runbooks before Fake DB, as the window lists them")
+        for row in rows:
+            if row["system"] == "db-ist":
+                self.assertEqual(row["reason"], messages.text("board.enter.cs.none"))
+            if row["system"] == "db-dev":
+                self.assertEqual(row["reason"], "", "signed in, not tested yet: nothing to say")
+
     def test_the_row_of_the_enter_screen_says_how_many_more_connections_have_their_pack_off_and_they_are_not_in_the_table(self) -> None:
         """Q22."""
         self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"}, "old-a": {"type": "offtype", "env": "dev"}})

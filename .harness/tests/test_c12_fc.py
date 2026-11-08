@@ -16,7 +16,7 @@ from test_c12_fb import SCRIPT, SYSTEMS
 
 from test_connections import ConnectionsCase
 
-from core import approvals, company, config, connections, messages, outbox, pinfiles, reach
+from core import approval, approvals, company, config, connections, messages, outbox, pinfiles, reach, redact
 from modules.task import cmdview, kbsetup, setupjob, taskdesk
 
 ENGINE = Path(__file__).resolve().parents[1] / "engine"
@@ -246,6 +246,86 @@ class FolderUpdateListTests(unittest.TestCase):
         body = source[start: source.index("function paintParts(", start)]
         self.assertIn("...(send ? [send] : [])", body)
         self.assertNotIn("]: []), send)", body)
+
+
+class ReportCountsHeldApartTests(unittest.TestCase):
+    """RB-N6: a call that waits for the person is held, not refused; the report counted it as refused and told the agent to try another way."""
+
+    def test_a_held_call_is_counted_as_held_and_a_refused_one_as_refused(self) -> None:
+        from modules.task import taskinsight
+
+        at = "2026-01-01T00:00:0{}+00:00"
+        rows = [
+            {"at": at.format(1), "event": "PreToolUse", "decision": "deny", "kind": "external-outbox", "external": {"system": "ado", "decision": "outbox"}},
+            {"at": at.format(2), "event": "PreToolUse", "decision": "deny", "external": {"system": "sql", "decision": "human"}},
+            {"at": at.format(3), "event": "PreToolUse", "decision": "deny", "external": {"system": "ado", "decision": "deny"}},  # a destroy: refused
+            {"at": at.format(4), "event": "PreToolUse", "decision": "deny"},  # a terminal command the gate refused
+        ]
+        start = taskinsight.copilot_events.seconds(at.format(0))
+        counted = taskinsight.count_rows(rows, start, start + 60)
+        self.assertEqual((counted["held"], counted["denied"], counted["external_calls"], counted["external_denied"]), (2, 2, 3, 1))
+
+    def test_the_words_do_not_send_the_agent_to_another_way_and_the_held_have_their_own_line(self) -> None:
+        for language in ("en", "zh"):
+            refused = json.loads((ENGINE / "core" / f"messages.{language}.json").read_text(encoding="utf-8"))
+            self.assertNotIn("try another way", refused["insight.finding.refused"])
+            self.assertIn("{held}", refused["insight.finding.held"])
+            self.assertIn("{n}", refused["report.tag.held"])
+        self.assertNotIn("换一种做法", json.loads((ENGINE / "core" / "messages.zh.json").read_text(encoding="utf-8"))["insight.finding.refused"])
+
+
+class SmallThingsTests(unittest.TestCase):
+    def test_a_path_with_a_name_in_words_is_not_masked_as_a_key(self) -> None:
+        """RB-N8: the Live tab showed `-i ".*** Procedures/dbo.usp_load_orders.sql"`: from `workspace` to `Stored` was one long run, and `AcmeDW` did not read as a path part."""
+        line = 'sqlcmd -S localhost,14332 -C -d AcmeDW -i ".workspace/sandbox/tasks/rb-05-deploy-proc/DEV/acme_dw/AcmeDW/dbo/Stored Procedures/dbo.usp_load_orders.sql"'
+        self.assertEqual(redact.text(line), line)
+        for secret in ("sk-abcdefghijklmnop1234567890", "aB3dE9xQ/kJ9sL2mN7/pQ4rT6vX8/zY1cV3bN5/mK7jH9gF2dS4aP6"):
+            self.assertIn(redact.MASK, redact.text(f"x {secret} y"), secret)
+
+    def test_the_code_of_a_plan_a_requirement_and_a_promote_is_six_capitals_like_the_code_of_a_held_call(self) -> None:
+        """N13: it was eight small letters and digits."""
+        self.assertEqual(approval.code_of("6e285378ab"), "6E2853")
+        asked = []
+        approval.ask("go?", "6e285378ab", "no", reader=lambda prompt: (asked.append(prompt), "6e2853")[1])  # typed small: accepted
+        self.assertIn("6E2853", asked[0])
+        with self.assertRaises(approval.Refused):
+            approval.ask("go?", "6e285378ab", "no", reader=lambda _prompt: "6e2854")
+
+    def test_the_title_of_a_card_ends_with_a_mark_when_the_command_was_cut(self) -> None:
+        short = "sqlcmd -S h -Q \"SELECT 1\""
+        self.assertEqual(taskdesk.cut_command(short), short)
+        long = "sqlcmd -S localhost,14332 -C -d AcmeDW -Q \"UPDATE dbo.orders_stage SET warehouse_code = N'WH-01' WHERE warehouse_code IS NULL\""
+        cut = taskdesk.cut_command(long)
+        self.assertTrue(cut.endswith("\u2026") and len(cut) <= 80, cut)
+
+    def test_the_held_call_names_the_button_as_the_card_does(self) -> None:
+        """N12: a connection that opens only the linked items has its own words on the card; the agent was told "open ado for this task"."""
+        from modules.gate import rules
+
+        class Action:
+            system, env, verb = "ado", "none", "write"
+
+        reason = rules.external_outbox(Action(), "ado update 1", "ABC123", 10, "", [{"system": "ado", "scope": "items"}, {"system": "acmedw-dev", "scope": "all"}])
+        self.assertIn(messages.text("desk.outbox.open.items", name="ado"), reason)
+        self.assertIn(messages.text("desk.outbox.open", name="acmedw-dev"), reason)
+
+    def test_the_agent_is_not_told_to_run_a_command_to_approve(self) -> None:
+        """RB-N8: the agent told the person to run `harness task approve-plan --with-req` in a terminal; the board has the button."""
+        for language in ("en", "zh"):
+            table = json.loads((ENGINE / "core" / f"messages.{language}.json").read_text(encoding="utf-8"))
+            for key in ("task.step.plan", "task.step.approve", "task.step.approve_req", "gate.task.plan_first", "gate.task.plan_req", "promote.dry.ask", "promote.not_approved"):
+                self.assertNotIn("task approve-", table[key], key)  # a command to run
+                self.assertNotIn("{approve}", table[key], key)
+                self.assertIn("{@board.action.approve-", table[key], key)
+        root = ENGINE.parents[1]
+        for relative in ("AGENTS.md", ".github/instructions/workspace.instructions.md"):
+            self.assertNotIn("approve-plan", (root / relative).read_text(encoding="utf-8"), relative)
+        self.assertIn("Do not tell the user to run a command for it", (root / ".github" / "copilot-instructions.md").read_text(encoding="utf-8"))
+
+    def test_the_words_of_the_wait_that_ran_out_say_the_confirmation_code(self) -> None:
+        en = json.loads((ENGINE / "core" / "messages.en.json").read_text(encoding="utf-8"))
+        self.assertIn("confirmation code", en["wait.approval.timeout"])
+        self.assertNotIn("its code", en["wait.approval.timeout"])
 
 
 if __name__ == "__main__":

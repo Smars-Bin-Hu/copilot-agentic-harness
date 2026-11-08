@@ -3665,6 +3665,6 @@
   "connections.find.one.env": "只有一个符合，就在要求的环境 {env}。用它。",
   "connections.ask": "请用户选的时候，不要预选 PROD，也不要把用户刚刚否掉的连接放在第一个。",
   "accept.status.accepted": "做完：{date} 在看板上验收",
-  "accept.status.promoted": "做完：已写回，{date} 由看板关闭",
+  "accept.status.promoted": "做完：已 promote，{date} 由看板关闭",
   "desk.live.approval": "等你批准"
 }

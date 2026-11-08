@@ -59,7 +59,7 @@ The board gives a task one state, the first that holds:
 
 ### Closing is your acceptance
 
-The agent never asks "close the task?". A **look** and a **chore on a ticket** are closed by the agent (the writes were approved on their cards). A **development task** is accepted by its promote: the board closes it when the agent has stopped and nothing else waits (the files to commit stay on the Changes tab). A **test, RCA, design or analysis** ends when the agent runs `harness task deliver` with a short summary and stops; the task shows *to accept*, and you press **Accept and close** (no chat, no tokens) or **Not yet** (the reply box opens). A test where you skipped an environment says so in the summary, on your word.
+The agent never asks "close the task?". A **look** and a **chore on a ticket** are closed by the agent (the writes were approved on their cards). A **development task** is accepted by its promote: the board closes it, on its own clock (no page needs to be open), when the agent has stopped and nothing else waits (the files to commit stay on the Changes tab), and writes the status in `TASK.md`. A **test, RCA, design or analysis** ends when the agent runs `harness task deliver` with a short summary and stops; the task shows *to accept* (before a requirement you have not confirmed yet: confirming it does not call the agent or take the acceptance away), and you press **Accept and close** (no chat, no tokens) or **Not yet** (the reply box opens). A test where you skipped an environment says so in the summary, on your word.
 
 ### 9.4 The requirement: the agent writes, you confirm
 

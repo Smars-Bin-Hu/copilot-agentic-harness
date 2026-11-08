@@ -432,7 +432,7 @@ const SETUP = (function () {
       }, (error) => { st.busy = false; gate(); said.replaceChildren(...SERVE.reasons(error.message || error)); });
     }
     go.addEventListener("click", () => {
-      st.busy = true;
+      st.busy = st.touched = true;
       gate();
       said.replaceChildren();
       ask("act", {...values(), stamp: st.stamp}).then(follow,
@@ -585,6 +585,9 @@ const SETUP = (function () {
       h("div", {class: "su-end"}, go, finishTip, goNote, lookNote), said));
     gate();
     load();
+    // Finish writes the language first and goes on for a while. A reload in the middle (the page asks to stay, but a reload by hand or a second tab happens) would lose the work it shows: the page that finds it running goes on showing it (1.7.38).
+    SERVE.stay(() => st.touched && app.isConnected);
+    ask("job").then((found) => { if (found.running && !st.busy) { st.busy = st.touched = true; gate(); follow(); } }, () => {});
     return {busy: () => st.busy, dirty: () => Boolean(st.form) && !st.saved && JSON.stringify(values()) !== st.opened};
   }
   if (DATA.getReady) {

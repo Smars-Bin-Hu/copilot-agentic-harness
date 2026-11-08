@@ -252,7 +252,7 @@ const SHELL = (function () {
     said.hidden = true;
     for (const button of seg.querySelectorAll("button")) button.disabled = true;
     tabKeep.set("harness.reopen", "settings");
-    SERVE.post("/api/language", {language: value}).then(() => {
+    SERVE.post("/api/language", {language: value}, true).then(() => {
       for (const button of seg.querySelectorAll("button")) button.disabled = false;  // the page is reloading when the language changed; if not, the buttons come back
     }, (error) => {
       tabKeep.set("harness.reopen", null);

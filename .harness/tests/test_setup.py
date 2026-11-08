@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -588,6 +590,105 @@ class CompanyFactsTests(unittest.TestCase):
         self.assertIn('title: t("setup.language.forced")', source)
         self.assertIn('title: t("setup.finish.note")', source)
         self.assertIn("sec=", (web / "enter.js").read_text(encoding="utf-8"))
+
+
+WEB = support.REPO / ".harness" / "engine" / "modules" / "task" / "web"
+FINISH_SCRIPT = r"""
+const assert = require("assert"), fs = require("fs"), vm = require("vm");
+const [web, mode, change] = process.argv.slice(2);  // mode: "press" (the person presses Finish) or "resume" (the page is loaded again while the work runs); change: a text to take out of setup.js
+class Node {
+  constructor(tag) { this.tag = tag; this.attrs = {}; this.kids = []; this.on = {}; this.hidden = false; this.disabled = false; this.value = ""; this.textContent = ""; this.dataset = {}; this.style = {}; this.isConnected = true; this.checked = false; this.open = false; this.classes = new Set(); this.classList = {add: (c) => this.classes.add(c), remove: (c) => this.classes.delete(c), toggle: (c, on) => (on === undefined ? !this.classes.has(c) : on) ? this.classes.add(c) : this.classes.delete(c), contains: (c) => this.classes.has(c)}; }
+  setAttribute(name, value) { this.attrs[name] = value; if (name === "hidden") this.hidden = true; if (name === "disabled") this.disabled = true; if (name.startsWith("data-")) this.dataset[name.slice(5)] = value; if (name === "class") String(value).split(" ").forEach((c) => this.classes.add(c)); }
+  get lastChild() { return this.kids[this.kids.length - 1] || {}; }
+  getAttribute(name) { return this.attrs[name] === undefined ? null : this.attrs[name]; }
+  append(...kids) { this.kids.push(...kids); }
+  replaceChildren(...kids) { this.kids = kids; }
+  addEventListener(type, fn) { (this.on[type] = this.on[type] || []).push(fn); }
+  removeEventListener() {}
+  querySelector() { return null; }
+  querySelectorAll() { return []; }
+  remove() {}
+  after() {}
+  focus() {}
+  scrollIntoView() {}
+  contains() { return false; }
+}
+const all = [];
+const document = {documentElement: {lang: "en"}, hidden: false, body: new Node("body"), activeElement: null,
+  createElement: (tag) => { const node = new Node(tag); all.push(node); return node; }, createTextNode: (text) => ({text}),
+  getElementById: (id) => (id === "data" ? {textContent: JSON.stringify({serve: {actions: []}, getReady: false})} : new Node("main")),
+  querySelector() { return null; }, querySelectorAll() { return []; }, addEventListener() {}, removeEventListener() {}};
+let reloads = 0, left = [];
+const location = {hash: "", pathname: "/setup", search: "", reload() { reloads++; }, assign(where) { left.push(where); }};
+// The board, in the part Finish meets: every answer carries the language; the work writes it first, then goes on; the work is over after `LONG` asks.
+const LONG = 5;
+let language = "en", asks = 0, running = mode === "resume";
+const found = {problem: "", name: "Tester", language: "en", language_forced: false, repos_root: "", root: null, singles: [], broken: [], skill_prefix: "", install_command: "", rules: [], example: "/x", stamp: "s1",
+  kb: {here: false, domains: 0, domain_skills: 0, version: "", path: "", prefix: ""}, company: {}, short: {found: "/bin/harness", command: "", windows: false}, reopen: false};
+function answer(step, body) {
+  if (step === "state") return found;
+  if (step === "guide") return {missing: [], declared: [], sections: [], company: false};
+  if (step === "act") { running = true;  /* the person chose zh: the work writes it first */ asks = 0; setTimeout(() => { language = "zh"; }, 0); return {lines: [], running: true, done: false, total: 6, stamp: "s1"}; }
+  if (step === "job") {
+    if (running && ++asks > LONG) running = false;
+    return {lines: running ? [{key: "kb", ok: true, detail: "x"}] : [{key: "kb", ok: true, detail: "x"}, {key: "doctor", ok: true, detail: "y"}], running, done: !running, total: 6, stamp: "s2"};
+  }
+  return {};
+}
+const fetch = (path, options) => {
+  const body = JSON.parse(options.body || "{}");
+  const data = path === "/api/status" ? {paired: true} : path === "/api/setup" ? {result: answer(body.step, body)} : {};
+  return Promise.resolve({ok: true, json: () => Promise.resolve({...data, language})});
+};
+const quick = (fn, ms) => setTimeout(fn, Math.min(ms || 0, 3));
+const context = vm.createContext({document, location, fetch, window: {addEventListener() {}}, history: {replaceState() {}}, Node, URLSearchParams, console, setTimeout: quick, clearTimeout, setInterval: () => 0, clearInterval() {}, JSON, Promise});
+const load = (file, edit) => vm.runInContext(edit ? fs.readFileSync(web + "/" + file, "utf8").replace(edit, "") : fs.readFileSync(web + "/" + file, "utf8"), context, {filename: file});
+vm.runInContext("DATA = undefined;", context);
+for (const file of ["common.js", "serve.js"]) load(file);
+vm.runInContext("globalThis.SERVE = SERVE;", context);
+vm.runInContext(fs.readFileSync(web + "/setup.js", "utf8").replace(change || "\0", "") + "\nglobalThis.SETUP = SETUP;", context, {filename: "setup.js"});
+const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+(async () => {
+  await wait(20);  // the pairing
+  const app = new Node("main");
+  context.SETUP.mount(app);
+  await wait(30);
+  if (mode === "press") {
+    const go = all.find((node) => node.attrs.class === "act hot big");
+    assert.ok(go, "the Finish button is drawn");
+    assert.strictEqual(go.disabled, false, "the form is ready to be sent");
+    for (const fn of go.on.click) fn();
+  }
+  for (let turn = 0; turn < 100 && !left.length; turn++) await wait(10);
+  console.log(JSON.stringify({reloads, left}));
+  process.exit(0);
+})();
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
+class FinishKeepsThePageTests(unittest.TestCase):
+    """N1 of the retest: with 中文 chosen, Finish wrote the language first, the next answer carried it, and the page loaded itself again in the middle of the work: a stale form and no way back to Enter."""
+
+    def run_page(self, mode: str, change: str = "") -> dict:
+        with tempfile.TemporaryDirectory() as folder:
+            file = Path(folder) / "finish.js"
+            file.write_text(FINISH_SCRIPT, encoding="utf-8")
+            done = subprocess.run([shutil.which("node"), str(file), str(WEB), mode, change], capture_output=True, text=True, check=False)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout.strip().splitlines()[-1])
+
+    def test_a_changed_language_does_not_load_the_page_again_while_the_work_runs(self) -> None:
+        seen = self.run_page("press")
+        self.assertEqual(seen, {"reloads": 0, "left": ["/"]}, "the work is followed to its end, then the page leaves for Enter")
+
+    def test_without_asking_to_stay_the_page_is_lost(self) -> None:
+        seen = self.run_page("press", "SERVE.stay(() => st.touched && app.isConnected);")
+        self.assertGreaterEqual(seen["reloads"], 1, "the test can see the fault it is for")
+
+    def test_a_page_loaded_again_while_the_work_runs_goes_on_showing_it(self) -> None:
+        seen = self.run_page("resume")
+        self.assertEqual(seen, {"reloads": 0, "left": ["/"]})
 
 
 if __name__ == "__main__":

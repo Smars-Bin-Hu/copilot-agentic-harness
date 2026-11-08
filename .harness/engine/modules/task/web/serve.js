@@ -24,16 +24,20 @@ const SERVE = (function () {
   }
 
   let reloading = false;
+  // A page that shows work in progress asks to stay (1.7.38): the Get ready form writes the language first and goes on for a while, and a reload then lost the work it was showing.
+  // `keep()` says whether it still asks. The page that changes the language itself (the settings panel) passes `now`: that one reloads.
+  const keepers = [];
+  const stay = (keep) => { keepers.push(keep); };
 
   // Every call of the page waits for the pairing of this load: asked before it, a paired browser would be refused and told it is not paired.
-  const post = (path, body) => ready.then(() => send(path, body));
+  const post = (path, body, now) => ready.then(() => send(path, body, now));
 
-  function send(path, body) {
+  function send(path, body, now) {
     return fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json", "X-Harness-Board": "1"}, body: JSON.stringify(body)})
       .then((response) => response.json().then((data) => {
         if (response.ok) {
           // The language was changed while the page was open: its texts are the old ones, so the page is loaded again (once: the address is the same, the server now sends the new ones).
-          if (data.language && data.language !== document.documentElement.lang && !reloading) { reloading = true; location.reload(); }
+          if (data.language && data.language !== document.documentElement.lang && !reloading && (now || !keepers.some((keep) => keep()))) { reloading = true; location.reload(); }
           return data;
         }
         if (data.unpaired) unpairedNote();  // the server says it: a button that does nothing would be worse
@@ -393,5 +397,5 @@ const SERVE = (function () {
     if (kpis) kpis.after(banner(true));
   }
 
-  return {call, file, pairMark, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, openVS, restartVS, restartWhy, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
+  return {call, file, stay, pairMark, runs: (action) => serve.actions.includes(action), act, archive, start, banner, post, openVS, restartVS, restartWhy, vsButton, ready, dialog, reasons, failed, done, busy: () => busy, open: () => stack.length > 0, onChange: (call) => { after = call; }};
 })();

@@ -389,7 +389,7 @@ class OutboxOnThePageTests(OutboxCase):
         from modules.task import taskhtml
 
         desk = (taskhtml.WEB / "desk.js").read_text(encoding="utf-8")
-        self.assertIn('SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()})', desk)  # the code must be typed (hand test B90-b: an empty box approved)
+        self.assertIn('SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim(), seen: {code: item.code, files: viewedCalls.get(item.code) || {}}})', desk)  # the code must be typed (hand test B90-b: an empty box approved)
         self.assertIn('const ready_ = () => can && viewedCalls.has(item.code) && input.value.trim().length > 0;', desk)
         self.assertNotIn("placeholder: item.code", desk)  # the box does not show the code
         self.assertIn('SERVE.post("/api/act", {action: "dismiss action", task: desk.name, step: "act", code: item.code, reason, note: note || ""})', desk)  # 1.7.38: with the reason the person chose

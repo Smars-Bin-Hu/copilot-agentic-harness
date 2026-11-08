@@ -251,9 +251,18 @@ def approved_for(root: Path, task: str) -> List[Dict[str, Any]]:
     return sorted(found, key=lambda item: str(item.get("approved_at", "")))
 
 
-def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None) -> Dict[str, Any]:
+class FileChanged(ValueError):
+    """A file the call names is not what the person saw in View (1.7.38, C12 RB-N5): `files` are those that changed."""
+
+    def __init__(self, message: str, files: List[str]) -> None:
+        super().__init__(message)
+        self.files = files
+
+
+def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, interactive: Optional[bool] = None, out: Any = None, seen: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Show the outside calls waiting in the outbox, then approve the one whose code is typed. Terminal only, like `approve-command`; the board calls it with `interactive=True` and the code
-    typed on the page (1.7.7). The draft of the entry is marked approved."""
+    typed on the page (1.7.7). The draft of the entry is marked approved. `seen` (the board, 1.7.38): `{code, files}`, the files the card named and their digests when the person pressed View; when the files are not those
+    now, nothing is approved and the person is asked to read them again: what is approved and pinned is what was read, not what stood there a moment later."""
     out = out or sys.stdout
     if interactive is None:
         interactive = sys.stdin.isatty() and sys.stdout.isatty()
@@ -275,6 +284,10 @@ def approve_action(root: Any, reader: Optional[Callable[[str], str]] = None, int
     answer = (reader or input)(say("gate.action.prompt")).strip()
     chosen = next((item for item in waiting if str(item.get("code")) == answer.upper()), None) if answer else None
     kept = pinfiles.pins(str(chosen["command"]), Path(root), str(chosen.get("task") or ""), str(chosen.get("cwd") or "")) if chosen else {}  # the files the line names, as the person read them (1.7.38, C12 TB-05)
+    if chosen and isinstance(seen, dict) and str(seen.get("code") or "").upper() == str(chosen.get("code") or "").upper() and isinstance(seen.get("files"), dict):
+        moved = pinfiles.changed({str(key): str(value) for key, value in seen["files"].items()}, kept)
+        if moved:
+            raise FileChanged(say("gate.action.changed", files=", ".join(moved[:3]) + (f" +{len(moved) - 3}" if len(moved) > 3 else "")), moved)
     done = approvals.approve(root, answer, minutes, file=approvals.ACTIONS, files=kept) if answer else None
     if done is None:
         raise ValueError(say("gate.action.refused"))

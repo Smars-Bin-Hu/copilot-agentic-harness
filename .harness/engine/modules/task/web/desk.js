@@ -1120,7 +1120,7 @@
   // The card shows the facts (what, where, the pack's `show` facts, the target) and the first words of the command; View opens the small window with the command laid out line by line
   // and the file it reads, whole, scrolling. The code is typed on the card, as the design says a person reads the command first: Approve wakes once the window was opened.
   // Approve is `harness approve-action` with that code (the board's act, no preview); Dismiss takes the call away without running anything.
-  const viewedCalls = new Set();
+  const viewedCalls = new Map();  // code -> the files of the call and their digests, as the card had them when View was pressed: Approve sends them back, and the server asks for a new View when a file is not the same (1.7.38, C12 RB-N5)
   const enteredCodes = new Map();  // what the person typed or clicked into a card's code box, kept when the card is drawn again
   const reasonRows = new Map();  // code -> {kind}: the "Why not?" row of a card is open, and which of the two reasons that take a line is chosen (1.7.38); the line itself is a `data-keep` field
   const reasonLines = new Map();  // code -> the line typed in the reason box, kept when the card is drawn again
@@ -1227,8 +1227,8 @@
   // The raw command is folded: ids, headers and long addresses are not on the face of the card. A line of several writes (1.7.38) says each on a line of its own, with its own facts and text.
   const sayLine = (item) => {
     if (manyWrites(item)) {
-      return h("div", {class: "tk-parts"}, h("span", {class: "tk-writes"}, t("desk.outbox.writes", {n: item.parts.length})),
-        h("ol", null, item.parts.map((part) => h("li", null, h("div", {class: "tk-call-say"}, part.say), Object.keys(part.facts || {}).length ? h("div", {class: "tk-call-facts"}, ...factList(part.facts)) : null, bodyBlock(part)))));
+      return h("div", {class: "tk-parts"}, h("span", {class: "tk-writes"}, t(item.parts.every((part) => part.say) ? "desk.outbox.writes" : "desk.outbox.statements", {n: item.parts.length})),  // statements: the type gave no title to each, and one may be a read
+        h("ol", null, item.parts.map((part) => h("li", null, part.say ? h("div", {class: "tk-call-say"}, part.say) : null, Object.keys(part.facts || {}).length ? h("div", {class: "tk-call-facts"}, ...factList(part.facts)) : null, bodyBlock(part)))));
     }
     return item.say ? h("div", {class: "tk-call-say"}, item.say) : null;
   };
@@ -1251,7 +1251,7 @@
     return block ? (block.kind === "option" ? block.value : block.text) : item.command;
   }
   function callWindow(item, onCode) {
-    viewedCalls.add(item.code);
+    viewedCalls.set(item.code, item.seen || {});
     const copy = h("button", {type: "button", class: "act"}, t("desk.outbox.copy"));
     copy.addEventListener("click", () => { navigator.clipboard.writeText(callBody(item)).then(() => { copy.textContent = t("desk.outbox.copied"); }, () => {}); });
     const close = h("button", {type: "button", class: "act"}, t("board.serve.cancel"));
@@ -1299,7 +1299,7 @@
     const send = () => {
       if (!ready_()) return;
       yes.disabled = true; yes.textContent = t("board.serve.working");
-      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then((data) => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), heard: data && data.result && data.result.agent === "wait" ? "wait" : "", title: (item.says || []).join(" \u00b7 ") || String(item.command || "").replace(/\s+/g, " ").slice(0, 80)}); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
+      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim(), seen: {code: item.code, files: viewedCalls.get(item.code) || {}}}).then((data) => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), heard: data && data.result && data.result.agent === "wait" ? "wait" : "", title: (item.says || []).join(" \u00b7 ") || String(item.command || "").replace(/\s+/g, " ").slice(0, 80)}); SERVE.done(); }, (error) => { if (error.data && error.data.changed) viewedCalls.delete(item.code); said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });  // a file changed since View: View pulses again
     };
     yes.addEventListener("click", send);
     opens.forEach((open) => open.addEventListener("click", () => {

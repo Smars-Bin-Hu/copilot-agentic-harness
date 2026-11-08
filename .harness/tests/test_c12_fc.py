@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import shutil
 import tempfile
@@ -9,12 +10,14 @@ import unittest
 from pathlib import Path
 
 import support  # noqa: F401 - the engine on sys.path
-from support import GIT, HarnessTestCase, make_repo, make_root
+from support import GIT, HarnessTestCase, make_repo, make_root, pre_tool, use_packs
+from taskcase import SESSION, TASK, TaskCase
+from test_c12_fb import SCRIPT, SYSTEMS
 
 from test_connections import ConnectionsCase
 
-from core import company, connections, messages, reach
-from modules.task import kbsetup, setupjob
+from core import approvals, company, config, connections, messages, outbox, pinfiles, reach
+from modules.task import cmdview, kbsetup, setupjob, taskdesk
 
 ENGINE = Path(__file__).resolve().parents[1] / "engine"
 WEB = ENGINE / "modules" / "task" / "web"
@@ -138,6 +141,111 @@ class DoctorKeepsNoReachStateTests(ConnectionsCase):
         self.assertIn(messages.text("desk.reach.said", said="connection refused"), words)
         self.assertEqual(companyview.reason(kept["db-dev:dev"]), words)
         self.assertEqual(reach.failed_words({"why": "no-answer"}), messages.text("desk.reach.why.no-answer"))
+
+
+class ScriptAndStatementCardTests(HarnessTestCase):
+    """N4: a quoted path as long as a query is a path. N5: a line that runs two statements shows both."""
+
+    LONG = ".workspace/sandbox/tasks/rb-05-deploy-proc/DEV/acme_dw/AcmeDW/dbo/Stored Procedures/dbo.usp_load_orders.sql"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.folder = self.root / ".workspace" / "sandbox" / "tasks" / "rb-05-deploy-proc"
+        script = self.root / self.LONG
+        script.parent.mkdir(parents=True)
+        script.write_text("CREATE OR ALTER PROCEDURE dbo.usp_load_orders AS SELECT 1;\nGO\n", encoding="utf-8")
+
+    def test_a_long_quoted_path_after_i_shows_the_script_and_stays_a_value_not_a_block(self) -> None:
+        found = cmdview.layout(f'cd {self.root} && sqlcmd -S localhost,14332 -C -d AcmeDW -i "{self.LONG}"', self.folder, self.root, str(self.root))
+        self.assertIsNotNone(found["script"], "the script of -i is shown on the card and in View")
+        self.assertEqual(found["script"]["lines"], 2)
+        self.assertIn("usp_load_orders", found["script"]["text"])
+        option = next(line for line in found["lines"] if line["text"] == "-i")
+        self.assertEqual(option["value"], self.LONG)
+        self.assertNotIn("block", {line["kind"] for line in found["lines"]})
+        self.assertIsNotNone(cmdview.layout(f'sqlcmd -i "{self.LONG}"', self.folder, self.root, str(self.root))["script"], "also without a cd")
+        # a quoted text that is a long query is still a block, and no file
+        query = cmdview.layout('sqlcmd -S localhost,14332 -Q "UPDATE dbo.orders SET status = 1 WHERE id = 1 AND region = 2"', self.folder, self.root)
+        self.assertEqual((query["script"], [line["kind"] for line in query["lines"]].count("block")), (None, 1))
+
+    def words(self, line: str) -> dict:
+        use_packs(self.root, "sqlserver")
+        (self.root / ".harness/policies/connections.company.json").write_text(json.dumps({"connections": {
+            "acmedw-dev": {"type": "sqlserver", "env": "dev", "host": "localhost", "port": "14332", "database": "AcmeDW", "auth": "sql"},
+            "acmedw-ist": {"type": "sqlserver", "env": "ist", "host": "localhost", "port": "14331", "database": "AcmeDW", "auth": "sql"}}}), encoding="utf-8")
+        systems = config.policy_or_empty(self.root, "tools")["systems"]
+        return taskdesk.call_words(line, systems["acmedw-dev"], self.root, self.root)
+
+    def test_two_statements_on_two_servers_are_two_parts_each_with_its_own_server_and_statement(self) -> None:
+        first, second = "UPDATE dbo.orders SET status = 1 WHERE id = 1", "UPDATE dbo.orders SET status = 2 WHERE id = 2"
+        found = self.words(f'sqlcmd -S localhost,14332 -C -d AcmeDW -Q "{first}" && sqlcmd -S localhost,14331 -C -d AcmeDW -Q "{second}"')
+        self.assertEqual([part["body"]["text"] for part in found["parts"]], [first, second])
+        self.assertEqual([part["facts"]["port"] for part in found["parts"]], ["14332", "14331"])
+        self.assertEqual(found["says"], [], "this type gives no title")
+        self.assertEqual(found["body"]["text"], first)
+
+    def test_one_statement_is_as_before_and_a_cd_is_no_statement(self) -> None:
+        found = self.words(f'cd {self.root} && sqlcmd -S localhost,14332 -C -Q "UPDATE dbo.orders SET status = 1 WHERE id = 1"')
+        self.assertNotIn("parts", found)
+        self.assertEqual(found["body"]["text"], "UPDATE dbo.orders SET status = 1 WHERE id = 1")
+        self.assertEqual(found["facts"]["port"], "14332")
+
+
+class SeenInViewTests(TaskCase):
+    """RB-N5: Approve pins the file the person read in View, not the one that is there a moment later."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        (self.root / ".harness" / "policies" / "tools.override.json").write_text(json.dumps({"systems": SYSTEMS}), encoding="utf-8")
+        self.new()
+        self.script = self.root / TASK / SCRIPT
+        self.script.parent.mkdir(parents=True, exist_ok=True)
+        self.script.write_text("SELECT 1;\n", encoding="utf-8")
+        self.line = f"sqlctl -S h -i {TASK}/{SCRIPT} -v Day=1"
+        data = pre_tool(SESSION, "run_in_terminal", {"command": self.line, "explanation": "t", "isBackground": False})
+        data["cwd"] = str(self.root)
+        self.assertEqual(self.hook(data)["permissionDecision"], "deny")  # held
+
+    def approve(self, seen=None) -> dict:
+        code = approvals.pending(self.root, 10, file=approvals.ACTIONS)[0]["code"]
+        return outbox.approve_action(self.root, reader=lambda _asked: code, interactive=True, out=io.StringIO(), seen=seen)
+
+    def test_the_card_carries_the_digests_of_the_files_it_names(self) -> None:
+        card = taskdesk.outbox_view(self.root, TASK)[0]
+        self.assertEqual(card["seen"], pinfiles.pins(self.line, self.root, TASK))
+        self.assertEqual(list(card["seen"]), [SCRIPT])
+
+    def test_a_file_changed_between_view_and_approve_is_not_approved_and_asks_for_a_new_view(self) -> None:
+        card = taskdesk.outbox_view(self.root, TASK)[0]
+        seen = {"code": card["code"], "files": card["seen"]}
+        self.script.write_text("DROP TABLE dbo.orders;\n", encoding="utf-8")
+        with self.assertRaises(outbox.FileChanged) as caught:
+            self.approve(seen)
+        self.assertEqual(caught.exception.files, [SCRIPT])
+        self.assertIn(SCRIPT, str(caught.exception))
+        self.assertIn(messages.text("desk.outbox.view"), str(caught.exception))
+        self.assertEqual(approvals.approved(self.root, SESSION, 10, file=approvals.ACTIONS), [], "nothing was approved")
+        self.assertEqual(len(approvals.pending(self.root, 10, file=approvals.ACTIONS)), 1, "the call is still held")
+        fresh = taskdesk.outbox_view(self.root, TASK)[0]  # the card is drawn again: View shows the file as it is now
+        self.assertIn("DROP TABLE", fresh["layout"]["script"]["text"])
+        done = self.approve({"code": fresh["code"], "files": fresh["seen"]})
+        self.assertTrue(done["approved"])
+        pinned = approvals.approved(self.root, SESSION, 10, file=approvals.ACTIONS)[0]["files"]
+        self.assertEqual(pinned, fresh["seen"], "what is pinned is what was read")
+
+    def test_an_approval_from_the_terminal_or_for_another_card_is_pinned_as_before(self) -> None:
+        self.assertTrue(self.approve()["approved"])  # no `seen`: the terminal
+        self.assertEqual(list(approvals.approved(self.root, SESSION, 10, file=approvals.ACTIONS)[0]["files"]), [SCRIPT])
+
+
+class FolderUpdateListTests(unittest.TestCase):
+    def test_the_list_of_a_folder_update_never_hands_a_bare_null_to_replacechildren(self) -> None:
+        """N3: `replaceChildren(..., null)` writes the word "null" into the page (a state with no Send button)."""
+        source = (WEB / "setup.js").read_text(encoding="utf-8")
+        start = source.index("function paintChanges()")
+        body = source[start: source.index("function paintParts(", start)]
+        self.assertIn("...(send ? [send] : [])", body)
+        self.assertNotIn("]: []), send)", body)
 
 
 if __name__ == "__main__":

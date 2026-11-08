@@ -128,24 +128,32 @@ def layout(command: str, folder: Optional[Path] = None, root: Optional[Path] = N
             nxt = None  # an option at the end of a command takes no value from the next one
         if item["text"].startswith("-") and not item["quoted"] and len(item["text"]) > 1:
             if nxt is not None and (nxt["quoted"] or not nxt["text"].startswith("-") or nxt["text"] == "-1"):
-                if nxt["quoted"] and (len(nxt["text"]) >= LONG or "\n" in nxt["text"]):
+                named = _script_in(folder, nxt, script, root, cwd, command)  # a quoted path as long as a query is still a path (C12 N4): the file is shown, and the path stays a value, not a block of text
+                if nxt["quoted"] and (len(nxt["text"]) >= LONG or "\n" in nxt["text"]) and named is None:
                     lines.append({"kind": "option", "text": item["text"], "value": ""})
                     lines.append({"kind": "block", "text": nxt["text"]})
                 else:
                     lines.append({"kind": "option", "text": item["text"], "value": nxt["text"], **({"quoted": True} if nxt["quoted"] else {})})  # quoted: the body of the call when there is no block (a short query)
-                    if script is None and folder is not None:
-                        script = script_of(folder, nxt["text"], root, cwd, command)
+                    script = script or named
                 index += 2
                 continue
             lines.append({"kind": "flag", "text": item["text"]})
-        elif item["quoted"] and (len(item["text"]) >= LONG or "\n" in item["text"]):
-            lines.append({"kind": "block", "text": item["text"]})
         else:
-            lines.append({"kind": "arg", "text": item["text"], **({"quoted": True} if item["quoted"] else {})})
-            if script is None and folder is not None:
-                script = script_of(folder, item["text"], root, cwd, command)
+            named = _script_in(folder, item, script, root, cwd, command)
+            if item["quoted"] and (len(item["text"]) >= LONG or "\n" in item["text"]) and named is None:
+                lines.append({"kind": "block", "text": item["text"]})
+            else:
+                lines.append({"kind": "arg", "text": item["text"], **({"quoted": True} if item["quoted"] else {})})
+                script = script or named
         index += 1
     return {"program": found[0]["text"], "lines": lines, "script": script}
+
+
+def _script_in(folder: Optional[Path], token: Dict[str, Any], found: Optional[Dict[str, Any]], root: Optional[Path], cwd: str, command: str) -> Optional[Dict[str, Any]]:
+    """The file this token names, when no script was found yet on the line and the token can be a path (one line, no operator)."""
+    if found is not None or folder is None or token.get("op") or "\n" in token["text"]:
+        return None
+    return script_of(folder, token["text"], root, cwd, command)
 
 
 def script_of(folder: Path, value: str, root: Optional[Path] = None, cwd: str = "", command: str = "") -> Optional[Dict[str, Any]]:

@@ -653,8 +653,9 @@ class Board:
         print(say("serve.did", action="close", task=task_ops.name_of(result["task"])), flush=True)
         return result
 
-    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "") -> Dict[str, Any]:
-        """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only; `reason` and `note` for `dismiss action`."""
+    def act(self, action: str, task: str, step: str, code: str = "", with_req: bool = False, n: Any = None, env_name: str = "", who: str = "", reason: str = "", note: str = "", seen: Any = None) -> Dict[str, Any]:
+        """Run one action. `step`: `preview` or `act` for an approval; pause and resume act at once. `env_name` and `who` (agent or person) are for `test runner` only; `reason` and `note` for `dismiss action`;
+        `seen` for `approve-action` only: what the person saw when they pressed View (`outbox.approve_action`)."""
         if action in ALL_AT_ONCE:
             if "pause" not in self.actions:
                 raise CommandError(say("serve.action.off", action=action))
@@ -718,6 +719,9 @@ class Board:
         if action == "approve-plan" and with_req:
             plain = call
             call = lambda **kw: plain(with_req=True, **kw)  # noqa: E731 - the requirement and the plan, one code
+        if action == "approve-action" and isinstance(seen, dict):
+            held = call
+            call = lambda **kw: held(seen=seen, **kw)  # noqa: E731 - the files of the card, as the person saw them (1.7.38, C12 RB-N5)
         stood = self.entry(code) if action == "approve-action" and step == "act" else None  # where the agent stood before the person's yes (1.7.38)
         out = io.StringIO()
         if step == "preview":
@@ -734,7 +738,9 @@ class Board:
         try:
             result = call(reader=lambda _asked: code, interactive=True, out=out)
         except ValueError as error:  # core.outbox says no with a plain error; the page shows it as a refusal
-            raise CommandError(str(error)) from None
+            refusal = CommandError(str(error))
+            refusal.changed = list(getattr(error, "files", []) or [])  # a file of the call changed after View: the page asks to press View again
+            raise refusal from None
         noted(self.root, result.get("task") or task, action)
         if stood and stood.get("task"):
             place = outbox.agent_place(stood)
@@ -1874,9 +1880,9 @@ def handler_for(board: Board) -> type:
             if action not in FREE and not board.paired(self.token()):
                 return self.answer(403, {"error": say("serve.pair.needed"), "unpaired": True})
             try:
-                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")), str(data.get("reason", "")), str(data.get("note", "")))
+                result = board.act(action, task, step, str(data.get("code", "")), bool(data.get("with_req")), data.get("n"), str(data.get("env", "")), str(data.get("runner", "")), str(data.get("reason", "")), str(data.get("note", "")), data.get("seen"))
             except Exception as error:  # noqa: BLE001 - a refusal is shown on the page, as the terminal shows it
-                return self.answer(409, {"error": str(error)})
+                return self.answer(409, {"error": str(error), **({"changed": error.changed} if getattr(error, "changed", None) else {})})
             print(say("serve.did", action=action, task=task_ops.name_of(task) if task else "-"), flush=True)
             return self.answer(200, {"result": result})
 

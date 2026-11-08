@@ -181,7 +181,7 @@ const SETUP = (function () {
       if (send) send.addEventListener("click", () => TERM.run(u.pull, checkKb));  // the Terminal says how it ended; the form looks again when it ended well
       kbChanges.hidden = !rows.length && !subjects.length && !send;
       kbChanges.replaceChildren(...(rows.length ? [h("ul", {class: "su-chg"}, rows.map((row) => h("li", {class: row.change}, h("b", null, MARK[row.change] || "~"), " ", h("code", null, row.path))), u.total > rows.length ? h("li", {class: "su-soft"}, t("setup.kb.update.more", {n: u.total - rows.length})) : null)] : []),
-        ...(subjects.length ? [h("ul", {class: "su-chg"}, subjects.map((line) => h("li", null, line)), u.ahead > subjects.length ? h("li", {class: "su-soft"}, t("setup.kb.update.more", {n: u.ahead - subjects.length})) : null)] : []), send);
+        ...(subjects.length ? [h("ul", {class: "su-chg"}, subjects.map((line) => h("li", null, line)), u.ahead > subjects.length ? h("li", {class: "su-soft"}, t("setup.kb.update.more", {n: u.ahead - subjects.length})) : null)] : []), ...(send ? [send] : []));  // never a bare null: replaceChildren writes it as the word "null" (C12 N3)
     }
     // The check of a chosen folder (`company.layout`): green for what is right, a warning with the place for the rest. It stops nothing, and it says what the states below will say.
     function paintParts(parts) {

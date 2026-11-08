@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from core import systems as outside
-from core import approval, config, messages, outbox, tasks
+from core import approval, config, messages, outbox, pinfiles, tasks
 from core.paths import cli_command, utc_now
 
 from . import accept, autorun, cmdview, common, evidence, health, mdtree, task as task_ops, taskboard, taskinsight, commitmsg, tasklife, taskfiles, taskreview, tasksnap, taskstages, testdefects, testrecord, tasktrace
@@ -124,13 +124,19 @@ def call_words(command: str, system: Dict[str, Any], folder: Path, root: Optiona
     programs = outside.clis(system)
     rules = system.get("say")
     parts = []
+    texts = []  # a type that says nothing in words but has a statement or a text of each command (SQL): one part for each command that has one (C12 N5)
     for text in cmdview.commands(command):
         args = cmdview.args_of(text, programs)
         said = cmdview.say_of(args, rules)
+        body = cmdview.body_of(args, system.get("body"), folder, root)
         if said:
-            parts.append({"say": said, "facts": cmdview.facts(text, system.get("show")), "body": cmdview.body_of(args, system.get("body"), folder, root)})  # by command, not by the word `ado` (a `--conn ado` is no second write)
+            parts.append({"say": said, "facts": cmdview.facts(text, system.get("show")), "body": body})  # by command, not by the word `ado` (a `--conn ado` is no second write)
+        if body:
+            texts.append({"say": said, "facts": cmdview.facts(text, system.get("show")), "body": body})
+    if len(texts) > 1 and len(texts) > len(parts):
+        parts = texts  # the line runs several statements, and they do not all have a title: each is shown with its own server and text, the second is not hidden behind the first
     if parts:
-        return {"say": parts[0]["say"], "says": [part["say"] for part in parts], "writes": len(parts), "facts": parts[0]["facts"] if len(parts) == 1 else {}, "body": parts[0]["body"], **({"parts": parts} if len(parts) > 1 else {})}
+        return {"say": parts[0]["say"], "says": [part["say"] for part in parts if part["say"]], "writes": len(parts), "facts": parts[0]["facts"] if len(parts) == 1 else {}, "body": parts[0]["body"], **({"parts": parts} if len(parts) > 1 else {})}
     args = cmdview.args_of(command, programs)
     return {"say": "", "says": [], "writes": 0, "facts": cmdview.facts(command, system.get("show")), "body": cmdview.body_of(args, system.get("body"), folder, root)}
 
@@ -152,6 +158,7 @@ def outbox_view(root: Path, task: str) -> List[Dict[str, Any]]:
                 "offers": [{"system": str(one.get("system", "")), "env": str(one.get("env", "")), "scope": str(one.get("scope", "")), "refs": [str(ref) for ref in one.get("refs") or []]} for one in item.get("offers") or [] if isinstance(one, dict) and one.get("system")],  # 1.7.38: the connections this card may open for the task
                 "command": item["command"], "created_at": item.get("created_at", ""), "session_id": item.get("session_id", ""), "draft": outbox.draft_of(item).split("/", 4)[-1] if outbox.draft_of(item) else "",
                 "layout": cmdview.layout(item["command"], folder, root, str(item.get("cwd") or "")),
+                "seen": pinfiles.pins(str(item["command"]), root, str(item.get("task") or ""), str(item.get("cwd") or "")),  # the files the line names, as they are as this card is drawn: what View shows and Approve is held to (RB-N5)
                 **call_words(item["command"], system, folder, root),
             })
         return out

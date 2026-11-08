@@ -59,6 +59,67 @@ assert.strictEqual(stages(row, true).steps[0].since, Date.parse("2026-11-01T09:5
 
 
 @unittest.skipUnless(NODE, "node is not installed")
+class ButtonsAreNotCoveredTests(unittest.TestCase):
+    def test_the_number_on_the_book_says_what_it_counts_on_hover_of_the_number_and_of_the_button(self) -> None:
+        """Retest N12: the badge showed a bare 4 and the hover of the button said only Knowledge base."""
+        source = between((WEB / "dock.js").read_text(encoding="utf-8"), "  function badge(n) {", "  function watchStale()")
+        script = r"""
+const assert = require("assert");
+const TEXT = {"dock.kb": "Knowledge base", "dock.kb.badge.one": "1 stale card", "dock.kb.badge.n": "{n} stale cards"};
+const t = (key, values) => TEXT[key].replace(/\{(\w+)\}/g, (whole, name) => values[name]);
+const mark = {hidden: true, textContent: "", title: ""}, book = {title: "Knowledge base"};
+global.document = {querySelector: (selector) => (selector === ".dock-count" ? mark : selector === ".dock-book" ? book : null)};
+""" + source + r"""
+badge(4);
+assert.deepStrictEqual([mark.hidden, mark.textContent, mark.title, book.title], [false, "4", "4 stale cards", "Knowledge base \u00b7 4 stale cards"]);
+badge(1);
+assert.strictEqual(mark.title, "1 stale card");
+badge(120);
+assert.strictEqual(mark.textContent, "99+");
+badge(0);
+assert.deepStrictEqual([mark.hidden, mark.title, book.title], [true, "", "Knowledge base"]);
+"""
+        done = run_node(script)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_the_reply_bar_steps_aside_while_a_button_of_the_page_lies_under_it(self) -> None:
+        """Retest N11: the Say something pill sat on Approve and Dismiss. The check is by geometry: a button, link or field of the page under any part of the bar."""
+        source = between((WEB / "reply.js").read_text(encoding="utf-8"), "  const under = () => {", "  const soon = ")
+        script = r"""
+const assert = require("assert");
+const rect = (left, top, right, bottom) => ({left, top, right, bottom, width: right - left, height: bottom - top});
+const part = (box, extra) => Object.assign({hidden: false, getBoundingClientRect: () => rect(...box)}, extra);
+const bar = {children: [part([400, 700, 560, 744]), part([100, 100, 120, 120], {hidden: true})], classList: {toggle(name, on) { bar.on = on; }}};
+const mine = {open: false};
+let buttons = [];
+global.document = {querySelectorAll: () => buttons};
+global.requestAnimationFrame = (fn) => { fn(); return 1; };
+""" + source + r"""
+const button = (box, extra) => Object.assign({disabled: false, closest: () => null, getBoundingClientRect: () => rect(...box)}, extra);
+assert.strictEqual(under(), false, "nothing on the page: the bar stays");
+buttons = [button([100, 300, 200, 330])];
+assert.strictEqual(under(), false, "a button far from the bar");
+buttons = [button([480, 690, 560, 720])];  // Approve, half under the bar
+assert.strictEqual(under(), true);
+buttons = [button([480, 690, 560, 720], {disabled: true})];
+assert.strictEqual(under(), false, "a disabled button takes no click: nothing to cover");
+buttons = [button([480, 690, 560, 720], {closest: () => ({})})];
+assert.strictEqual(under(), false, "a hidden part of the page");
+buttons = [button([480, 690, 560, 720])];
+mine.open = true;
+assert.strictEqual(under(), false, "with the panel open the bar is the panel's own");
+mine.open = false;
+dodge();
+assert.strictEqual(bar.on, true);
+buttons = [];
+dodge();
+assert.strictEqual(bar.on, false, "scrolled free: the bar is back");
+"""
+        done = run_node(script)
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+
+@unittest.skipUnless(NODE, "node is not installed")
 class PairingLinkTests(unittest.TestCase):
     def test_a_link_pasted_into_a_tab_that_shows_the_board_is_read(self) -> None:
         """Only what follows the # changes then, so the page does not load again; the code stayed in the address bar and the page said "not paired"."""

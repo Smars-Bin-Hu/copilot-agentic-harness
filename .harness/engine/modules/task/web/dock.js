@@ -109,10 +109,13 @@ const DOCK = (function () {
   const STALE_EVERY = 600000;  // ms; the view is kept as long (kbview.py)
   const UNPAIRED_EVERY = 30000;  // a page opened before its browser is paired asks again soon
   function badge(n) {
-    const mark = document.querySelector(".dock-count");
+    const mark = document.querySelector(".dock-count"), book = document.querySelector(".dock-book");
     if (!mark) return;
     mark.hidden = !n;
     mark.textContent = n > 99 ? "99+" : String(n);
+    const words = n ? t(n === 1 ? "dock.kb.badge.one" : "dock.kb.badge.n", {n}) : "";  // what the number counts, on hover of the number and of the button (retest N12)
+    mark.title = words;
+    if (book) book.title = words ? t("dock.kb") + " \u00b7 " + words : t("dock.kb");
   }
   function watchStale() {
     SERVE.post("/api/kb", {op: "detail", fresh: false}).then((data) => {

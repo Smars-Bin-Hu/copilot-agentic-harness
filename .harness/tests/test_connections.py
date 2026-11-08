@@ -7,12 +7,13 @@ from unittest import mock
 import os
 import stat
 import sys
+import types
 from pathlib import Path
 from typing import Any, Dict
 
 from support import HarnessTestCase, pre_tool, put_type
 
-from core import config, connections
+from core import config, connections, messages
 from modules.gate import external
 
 SESSION = "sess-servers"
@@ -347,6 +348,31 @@ class BoardChecksItself(ConnectionsCase):
         checker.last.join(10)
         self.assertTrue(checker.start())  # Check and Open VS Code ask whatever the age
         checker.last.join(10)
+
+    def test_no_check_starts_while_vscode_is_quitting_and_one_that_does_not_answer_is_told_in_the_singular(self) -> None:
+        """Retest N3: after a failed restart the Enter screen showed "1 do not answer" for a minute: a check had run against a VS Code that was half gone."""
+        from core import reach
+        from modules.task import reachcheck
+
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        asked = []
+        check = self.ready(reachcheck.Checker(self.root, probe=lambda root: asked.append(1)))
+        states = {"state": "quitting", "since": 5.0}
+        check.restart = types.SimpleNamespace(view=lambda: states)
+        check.answer(True)
+        self.assertEqual(asked, [], "a quit is waiting: no check")
+        for state, since in (("failed", 100.0), ("opening", 200.0)):
+            states.update(state=state, since=since)
+            check.answer(True)
+            self.assertEqual(asked, [], state)
+        states.update(state="failed", since=400.0)  # long ago: the board looks again
+        check.answer(True)
+        check.checker.last.join(10)
+        self.assertEqual(asked, [1])
+        reach._write(self.root, {"db-dev:dev": {"state": reach.FAILED, "at": "2026-11-08T10:00:00Z", "why": "no-answer", "who": "", "source": "board"}})
+        found = self.line(self.ready())
+        self.assertIn(messages.text("ready.conn.down.one", n=1), found["detail"])
+        self.assertEqual(next(problem for problem in found["problems"] if problem["key"] == "down")["short"], messages.text("ready.p.down.short.one", n=1))
 
     def test_the_row_has_names_with_a_state_a_table_and_no_problem_for_a_sign_in_that_was_never_tested(self) -> None:
         connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})

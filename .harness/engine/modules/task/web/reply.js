@@ -78,7 +78,30 @@ const REPLY = (function () {
     h("div", {class: "rp-scroll"}, box, files.tray,
       skillRow, h("div", {class: "rp-lang"}, files.attach, files.picker, h("span", {class: "sub"}, t("desk.send.lang")), h("span", {class: "chips"}, chips)),
       settingsSlot, draftBox, whole, waiting, said), h("div", {class: "rp-f"}, hint, kbd, save, later, go), edges);
-  document.body.append(h("div", {class: "rp-bar"}, pill, halt, back, again), panel);
+  const bar = h("div", {class: "rp-bar"}, pill, halt, back, again);
+  document.body.append(bar, panel);
+  // The bar must not cover a button of the page (retest N11: it sat on Approve and Dismiss when a card ended at the bottom of the window). While a button, link or field lies under it, the bar fades and lets the click through;
+  // a scroll that frees the place brings it back. The key R still works.
+  const under = () => {
+    const parts = [...bar.children].filter((node) => !node.hidden).map((node) => node.getBoundingClientRect());
+    if (!parts.length || mine.open) return false;
+    const box = {left: Math.min(...parts.map((r) => r.left)) - 4, right: Math.max(...parts.map((r) => r.right)) + 4, top: Math.min(...parts.map((r) => r.top)) - 4, bottom: Math.max(...parts.map((r) => r.bottom)) + 4};
+    return [...document.querySelectorAll("#app button, #app a[href], #app input, #app select, #app textarea, #app summary")].some((node) => {
+      if (node.closest("[hidden]") || node.disabled) return false;
+      const r = node.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && r.bottom > box.top && r.top < box.bottom && r.right > box.left && r.left < box.right;
+    });
+  };
+  let aside = false, looking = 0;
+  const dodge = () => {
+    looking = 0;
+    const now = under();
+    if (now !== aside) { aside = now; bar.classList.toggle("aside", now); }
+  };
+  const soon = () => { if (!looking) looking = requestAnimationFrame(dodge); };
+  addEventListener("scroll", soon, {passive: true, capture: true});
+  addEventListener("resize", soon);
+  setInterval(() => { if (!document.hidden) soon(); }, 800);  // the page draws in place every few seconds: a card may arrive under the bar
   // Where the panel stands (1.6.103): the person moves it by its header and sizes it by any edge or corner, so it does not cover the messages it answers. It floats over the page and moves
   // nothing in it. The place is kept in this browser; a double click on the header puts it back. On a narrow screen it stays where it is made to be.
   const PLACE = "harness.reply.place";

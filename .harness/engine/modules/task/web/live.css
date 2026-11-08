@@ -118,6 +118,7 @@
 
 /* ---------- the reply: no box on the page. One pill; a panel over the page ---------- */
 .rp-bar{position:fixed;left:50%;bottom:22px;z-index:50;transform:translateX(-50%);display:flex;align-items:center;gap:8px}
+.rp-bar.aside{opacity:.22;pointer-events:none}.rp-bar{transition:opacity .15s}  /* a button of the page lies under the bar: it fades and lets the click through (reply.js) */
 .rp-stop{display:inline-flex;align-items:center;gap:7px;height:44px;margin:0;padding:0 16px;border-radius:999px;border:1px solid var(--line2);background:var(--card);color:var(--ink);font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;box-shadow:var(--shadow),0 10px 40px rgba(0,0,0,.18);white-space:nowrap}
 .rp-stop[hidden]{display:none}
 .rp-stop:hover,.rp-stop:focus-visible{border-color:var(--bad);color:var(--bad)}

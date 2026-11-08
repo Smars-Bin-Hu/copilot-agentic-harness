@@ -39,6 +39,7 @@ RETRY_FAILED = 20.0  # a doctor that failed or found errors is run again no soon
 REFRESH_CLEAN = 600.0  # a clean doctor is looked at again after this long
 FOLDERS_FOR = 10.0  # seconds the optional items are kept
 RUNNING_KEEP = 8.0  # seconds the answer "a VS Code runs on this computer" is kept
+QUIT_QUIET = 180.0  # seconds after a restart began during which a failed one still holds the connection checks back (the quit is waiting for the person)
 BUTTON_HOLD = 12.0  # seconds a changed answer of "a VS Code runs" must stand before the button changes its words (1.7.38: helper processes that come and go made it jump between Open and Restart)
 REASON_MAX = 300
 # What the link says (`vslink.status()["why"]`) -> the state of the VS Code line. A host that is still starting, or a connection that dropped, is told as waiting: it comes back by itself.
@@ -350,6 +351,13 @@ class Ready:
                 held["shown"] = raw
             return bool(held["shown"])
 
+    def quitting(self) -> bool:
+        """A restart of VS Code is going on, or ended a moment ago with VS Code still not quit: a check of the connections now would find a VS Code half gone and tell a false problem ("1 does not answer"). It waits."""
+        if self.restart is None:
+            return False
+        view = self.restart.view()
+        return view["state"] in ("quitting", "opening") or (view["state"] == "failed" and 0 < view["since"] < QUIT_QUIET)
+
     def vscode_button(self, vscode: Dict[str, Any], identities: int) -> Dict[str, Any]:
         """The VS Code button of the screen. `open`: no VS Code runs for this copy or at all; `restart`: one runs; `identities`: one runs and some connection has a sign-in saved and a test that passed. `up`: one runs."""
         up = vscode["state"] in ("ok", "wait") or self.process_up()
@@ -414,7 +422,8 @@ class Ready:
         vscode = add("vscode", self.vscode)
         add("copilot", lambda: self.copilot(vscode))
         try:
-            self.checker.maybe()  # the board asks the connections itself: the screen need not wait for a chat
+            if not self.quitting():
+                self.checker.maybe()  # the board asks the connections itself: the screen need not wait for a chat
         except Exception:  # noqa: BLE001 - a check of the connections that cannot start is not a reason to fail a poll
             pass
         optional = self.optional()

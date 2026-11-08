@@ -265,7 +265,7 @@ def connections_item(root: Path) -> Dict[str, Any]:
                          "short": say("ready.p.signin.short", n=len(none)), "fix": fix_tools("connections", say("ready.fix.signin"))})
     if down:
         problems.append({"key": "down", "text": say("ready.p.down.one" if len(down) == 1 else "ready.p.down", n=len(down), names=names_text(down)), "why": say("ready.p.down.why"),
-                         "short": say("ready.p.down.short", n=len(down)), "fix": fix_tools("connections", say("ready.fix.test"))})
+                         "short": say("ready.p.down.short.one" if len(down) == 1 else "ready.p.down.short", n=len(down)), "fix": fix_tools("connections", say("ready.fix.test"))})
     if certificate_missing(root):
         problems.append({"key": "cert", "text": say("ready.p.cert"), "why": say("ready.p.cert.why"), "short": say("ready.p.cert.short"), "fix": fix_tools("local", say("ready.fix.local"), "network")})
     if not found:
@@ -275,7 +275,7 @@ def connections_item(root: Path) -> Dict[str, Any]:
     for state, key in (("none", "ready.conn.unsigned"), ("down", "ready.conn.down"), ("untested", "ready.conn.untested")):
         n = len([one for one in found if one["state"] == state])
         if n:
-            parts.append(say(key, n=n))
+            parts.append(say(key + ".one" if n == 1 and state == "down" else key, n=n))
     detail = " \u00b7 ".join(parts)
     return item("connections", "yellow" if problems else "ok" if ok == len(found) else "grey", detail, problems[0]["fix"] if problems else {}, [{"name": one["name"], "state": one["state"], "saved": one["saved"]} for one in found], problems)
 

@@ -190,7 +190,8 @@ def view(root: Path, listed: Dict[str, Any]) -> List[Dict[str, Any]]:
                 launch = messages.text("reach.denied.saved", alias=name)  # an identity is kept here and was not accepted: starting VS Code again would change nothing
             if started_wrong:
                 line = {**line, "state": DENIED, "why": "vscode-env", "who": ""}
-                launch = messages.text("reach.vscode_env")
+                gaps = [str(item) for item in lacks.get("missing") or []]
+                launch = messages.text("reach.vscode_env", missing=", ".join(gaps[:3]) + (", \u2026" if len(gaps) > 3 else "") if gaps else "-")
             out.append({"system": name, "env": env, **line, "launch": launch})
     return out
 

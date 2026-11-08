@@ -229,11 +229,14 @@ def servers_view(root: Path, vscode_open: bool) -> Dict[str, Any]:
         kind = known.get(str(server.get("type"))) or {}
         auth = (kind.get("auth") or {}).get(server.get("auth") or next(iter(kind.get("auth") or {}), ""), {}) or {}
         saved = conn_core.identity_of(env, alias, kind, server)
+        reached = (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", "")
+        tool = conn_core.tool_program(auth) if auth.get("identity") == "tool" else ""
         rows.append({"alias": alias, "label": server.get("label", ""), "type": server.get("type", ""), "type_label": kind.get("label", server.get("type", "")), "toolpack": kind.get("toolpack", ""), "known": bool(kind), "via": kind.get("via", "cli"), "login": auth.get("login", ""),
                      "env": server.get("env", ""), "auth": server.get("auth", ""), "auth_label": auth.get("label", ""), "identity": auth.get("identity", ""), "own": bool(server.get("own")),
                      "fields": {field: server.get(field, spec.get("default", "")) for field, spec in (kind.get("fields") or {}).items()},
-                     "tool": conn_core.tool_program(auth) if auth.get("identity") == "tool" else "",  # 1.7.38: the program whose own sign-in this connection uses; one sign-in per computer, shared
-                     "account": saved.get("account", ""), "saved": bool(saved), "reach": (seen.get(f"{alias}:{server.get('env', '')}") or {}).get("state", ""),
+                     "tool": tool,  # 1.7.38: the program whose own sign-in this connection uses; one sign-in per computer, shared
+                     "account": saved.get("account", ""), "saved": bool(saved), "reach": reached,
+                     "signed": bool(saved) or (bool(tool) and reached == reach.OK),  # a program keeps its own sign-in: a check that got through says it is signed in, whether or not the account was kept here. The Enter screen counts the same (retest N4)
                      "who": str((seen.get(f"{alias}:{server.get('env', '')}") or {}).get("who") or "")})  # 1.7.38: the name a passed test answered with: a token has no account of its own to show
     kinds_out = {name: {"label": kind.get("label", name), "fields": kind.get("fields") or {}, "auth": {mode: {"label": (spec or {}).get("label", mode), "identity": (spec or {}).get("identity", ""), "login": (spec or {}).get("login", "")} for mode, spec in (kind.get("auth") or {}).items()}}
                  for name, kind in known.items() if not conn_core.type_problems(kind)}

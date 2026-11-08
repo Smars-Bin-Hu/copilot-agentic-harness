@@ -2844,6 +2844,7 @@
   "connections.own.tip": "你在这台电脑上加的连接，不在公司包里。",
   "connections.saved.tip": "已以 {account} 登录。点 Sign in 可以修改，点 × 可以忘掉。",
   "connections.token.saved": "token 已保存",
+  "connections.signed.tip": "已登录：这个程序自己保存登录，上次检查也通过了。点“测试”会记下它回答的名字。",
   "connections.none": "还没登录",
   "connections.none.tip": "还没登录。点 Sign in，填写后测试通过就会保存。",
   "connections.account": "账户",

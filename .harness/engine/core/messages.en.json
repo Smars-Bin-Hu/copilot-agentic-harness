@@ -2844,6 +2844,7 @@
   "connections.own.tip": "A connection you added on this computer; it is not in the company pack.",
   "connections.saved.tip": "Signed in as {account}. Press Sign in to change it, or × to forget it.",
   "connections.token.saved": "token saved",
+  "connections.signed.tip": "Signed in: the program keeps its own sign-in, and the last check got through. Press Test to keep the name it answers with.",
   "connections.none": "not signed in",
   "connections.none.tip": "Not signed in. Press Sign in, type it, and it is kept when the test passes.",
   "connections.account": "account",

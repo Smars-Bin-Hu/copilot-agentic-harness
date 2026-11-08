@@ -157,18 +157,18 @@ const SERVERS = (function () {
     function paint() {
       const last = env.results.get(key);
       const bad = fail();
-      const dot = h("span", {class: "su-dot " + (via ? "none" : bad ? "bad" : row.saved ? "ok" : "ring")});
+      const dot = h("span", {class: "su-dot " + (via ? "none" : bad ? "bad" : row.signed ? "ok" : "ring")});  // `signed`: kept here, or a program's own sign-in that the last check got through (the Enter screen counts the same)
       let words;
       if (via === "mcp") words = h("span", {class: "tl-who none"}, t("connections.state.mcp"));
       else if (via === "nopack") words = h("span", {class: "tl-who none", title: t("connections.state.nopack.tip")}, t("connections.state.nopack"));  // the gate still judges its calls (1.7.38)
-      else if (!row.saved && !last) words = h("span", {class: "tl-who none"}, t("connections.none"));
+      else if (!row.signed && !last) words = h("span", {class: "tl-who none"}, t("connections.none"));
       else {
         // Who it is signed in as (1.7.38): the account kept here; else the name the last test answered with; else, for a token, that a token is saved. A failed test of something not kept says it was not kept.
-        const who = row.account || (last && last.state === "ok" && last.who) || row.who || (row.saved && row.identity === "token" ? t("connections.token.saved") : "");
+        const who = row.account || (last && last.state === "ok" && last.who) || row.who || (row.saved && row.identity === "token" ? t("connections.token.saved") : row.signed && !row.saved ? t("connections.tool.signed") : "");
         const failed = last && last.timeout ? t("connections.state.timeout", {seconds: last.timeout}) : t(row.saved ? "connections.state.testfailed" : "connections.state.notsaved");
         words = h("span", {class: "tl-who" + (bad ? " bad" : "")}, who + (bad ? (who ? " · " : "") + failed : ""));
       }
-      const tip = last ? (last.state === "ok" ? t("connections.tip.ok", {who: last.who || "-", seconds: last.seconds}) : last.layers && last.layers.text ? last.layers.text : "") : row.saved ? t("connections.saved.tip", {account: row.account || row.who || "-"}) : t("connections.none.tip");
+      const tip = last ? (last.state === "ok" ? t("connections.tip.ok", {who: last.who || "-", seconds: last.seconds}) : last.layers && last.layers.text ? last.layers.text : "") : row.saved ? t("connections.saved.tip", {account: row.account || row.who || "-"}) : row.signed ? t("connections.signed.tip") : t("connections.none.tip");
       const share = row.tool ? h("span", {class: "sv-info", tabindex: "0", title: t(names.length ? "connections.shared.with" : "connections.shared.one", {program: row.tool, names: names.join(", ")})}, "ⓘ") : null;
       const forget = row.saved && !via ? h("button", {type: "button", class: "mc-x", title: t(row.own ? "connections.forget.own.tip" : "connections.forget.tip"), "aria-label": t("connections.forget")}, "×") : null;
       if (forget) forget.addEventListener("click", () => sure(forget, row, () => {
@@ -179,7 +179,7 @@ const SERVERS = (function () {
       stateBox.title = tip;
       const note = env.notes.get(key);
       why.replaceChildren(...[last && layersBox(last, env.go), last && bad && !row.saved ? h("p", {class: "tl-say sub"}, t("connections.notsaved")) : null, note ? h("p", {class: "tl-say" + (note.bad ? " bad" : " sub")}, note.said) : null].filter(Boolean));
-      signBtn.className = "act" + (row.saved || via ? "" : " hot");
+      signBtn.className = "act" + (row.signed || via ? "" : " hot");
       signBtn.hidden = Boolean(via);
       testBtn.hidden = Boolean(via);
       testBtn.disabled = !row.saved && row.identity !== "tool";
@@ -336,8 +336,8 @@ const SERVERS = (function () {
 
   // One line for Get ready and the Enter screen: how many servers, how many with the person's identity.
   function summary() {
-    return ask("list").then((found) => ({orphans: found.signins.orphans.map((item) => item.name), n: found.connections.length, saved: found.connections.filter((row) => row.saved).length,
-      rows: found.connections.filter((row) => row.via !== "mcp").map((row) => ({alias: row.alias, saved: Boolean(row.saved), account: row.account || "", env: row.env || "", own: Boolean(row.own), tool: row.tool || "", failed: Boolean(row.saved) && (row.reach === "denied" || row.reach === "failed")}))}));
+    return ask("list").then((found) => ({orphans: found.signins.orphans.map((item) => item.name), n: found.connections.length, saved: found.connections.filter((row) => row.signed).length,
+      rows: found.connections.filter((row) => row.via !== "mcp").map((row) => ({alias: row.alias, saved: Boolean(row.signed), account: row.account || "", env: row.env || "", own: Boolean(row.own), tool: row.tool || "", failed: Boolean(row.saved) && (row.reach === "denied" || row.reach === "failed")}))}));
   }
 
   // "Open VS Code with identities": tick the identities this window holds; those that cannot share it are reached through `harness as`, marked so.

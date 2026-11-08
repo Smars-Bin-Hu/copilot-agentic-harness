@@ -443,6 +443,21 @@ class UnsavedConnectionTest(ConnectionsCase):
         self.assertNotIn("_PASSWORD", out)
         self.assertEqual(connections.derived(self.root, {}) .get("my-trk"), None, "not saved: no system yet")
 
+    def test_a_program_that_keeps_its_own_sign_in_is_signed_in_when_the_last_check_got_through_whether_or_not_the_account_was_kept(self) -> None:
+        """Retest N4: the Enter screen counted the runbook signed in (its check passed) and the window said not signed in until Test was pressed."""
+        from core import reach
+        from modules.task import boardserve
+
+        connections.save(self.root, "my-trk", {}, own=self.mine("my-trk", auth="signin"), who="ann")
+        row = lambda: next(item for item in boardserve.servers_view(self.root, False)["connections"] if item["alias"] == "my-trk")  # noqa: E731
+        self.assertEqual((row()["tool"], row()["saved"], row()["signed"]), ("true", True, True))
+        connections.forget_tool(self.root, "true")  # the account is not kept here any more
+        self.assertEqual((row()["saved"], row()["signed"]), (False, False), "no check has got through yet")
+        reach._write(self.root, {"my-trk:none": {"state": reach.OK, "at": "2026-11-08T10:00:00Z", "why": "", "who": "ann", "source": "board"}})
+        self.assertEqual((row()["saved"], row()["signed"], row()["who"]), (False, True, "ann"))
+        reach._write(self.root, {"my-trk:none": {"state": reach.DENIED, "at": "2026-11-08T10:00:00Z", "why": "identity", "who": "", "source": "board"}})
+        self.assertFalse(row()["signed"])
+
     def test_two_connections_with_the_same_org_and_project_are_told_apart_by_name(self) -> None:
         self.assertEqual(connections.command(self.kind, self.mine("a-one"), {}, "a-one"), "envdump --conn a-one")
         self.assertEqual(connections.command(self.kind, self.mine("b-two"), {}, "b-two"), "envdump --conn b-two")

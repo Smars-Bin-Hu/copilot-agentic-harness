@@ -3296,7 +3296,7 @@
   "connections.signin": "登录",
   "connections.state.testfailed": "测试没通过",
   "connections.state.notsaved": "测试没通过 · 没有保存",
-  "connections.notsaved": "什么都没保存：登录测试通过才会保存。先处理上面的原因，再点一次 Sign in。",
+  "connections.notsaved": "什么都没保存。先处理上面的原因，再点 Sign in，重新输入。",
   "connections.state.nopack": "它的 tool pack 没开；gate 仍按它的规则管",
   "connections.company": "公司",
   "connections.company.tip": "由公司知识库列出。",
@@ -3540,5 +3540,8 @@
   "ready.conn.off.one": "另有 1 个连接的工具包已关闭：{names}。它不计入。",
   "ready.conn.off": "另有 {n} 个连接的工具包已关闭：{names}。它们不计入。",
   "setup.fact.conns.off.one": "另有 1 个连接的工具包已关闭：{names}。它不计入。",
-  "setup.fact.conns.off": "另有 {n} 个连接的工具包已关闭：{names}。它们不计入。"
+  "setup.fact.conns.off": "另有 {n} 个连接的工具包已关闭：{names}。它们不计入。",
+  "connections.state.untested": "已保存，还没测通",
+  "connections.untested.tip": "登录已保存，但还没有测试连到系统。原因解决后点 Test，不用再输一遍。",
+  "connections.kept": "登录已保存。测试没连到系统，所以不能说明登录有错。解决上面的原因后，点 Test。"
 }

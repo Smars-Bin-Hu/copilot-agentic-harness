@@ -517,3 +517,75 @@ class UnsavedConnectionTest(ConnectionsCase):
         self.assertEqual(connections.variables(self.kind, self.mine("my-trk"), {"token": "s3cret"}), {"TRK_PAT": "s3cret"})
         connections.forget(self.root, "my-trk")
         self.assertNotIn("HARNESS_CONNECTION_MY_TRK_TOKEN", env())
+
+
+class KeptWhenTheTestNeverReached(ConnectionsCase):
+    """Q1: a sign-in test that broke at the program or at the address keeps what was typed ("saved, not tested yet"); one that broke at the sign-in or at the account access keeps nothing."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        put_type(self.root, dict(KIND, type="nodb", label="No DB", cli=["nodb-missing"], match="--host\\s+{host}:{port}\\b", test="nodb-missing --host {host}:{port} {auth} --who"))
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"},
+                      "db-down": {"type": "fakedb", "env": "ist", "auth": "own", "host": "db3", "port": "9999"},
+                      "db-none": {"type": "nodb", "env": "qat", "auth": "own", "host": "db4", "port": "5000"}})
+        from modules.task import boardserve
+
+        self.board = boardserve.Board(self.root, False, 8799, [])
+        self.addCleanup(lambda: self.board.link.stop() if hasattr(self.board.link, "stop") else None)
+
+    def typed(self, alias: str, password: str = "right", account: str = "alice", **extra: Any) -> Dict[str, Any]:
+        return self.board.servers({"step": "test", "alias": alias, "account": account, "password": password, "keep": True, **extra})
+
+    def row(self, alias: str) -> Dict[str, Any]:
+        return next(item for item in self.board.servers({"step": "list"})["connections"] if item["alias"] == alias)
+
+    def test_a_test_that_never_reached_the_server_keeps_the_sign_in_and_marks_it_not_tested_yet(self) -> None:
+        from core import reach
+
+        found = self.typed("db-down")
+        self.assertEqual((found["state"], found["layers"]["broken"], found["kept"]), ("down", "address", True))
+        self.assertEqual(connections.read_env(self.root)["HARNESS_CONNECTION_DB_DOWN_ACCOUNT"], "alice")
+        self.assertEqual(connections.read_env(self.root)["HARNESS_CONNECTION_DB_DOWN_PASSWORD"], "right")
+        line = reach.read(self.root)["db-down:ist"]
+        self.assertEqual((line["state"], line["why"]), (reach.UNKNOWN, connections.UNTESTED))
+        row = self.row("db-down")
+        self.assertEqual((row["saved"], row["untested"], row["reach"]), (True, True, reach.UNKNOWN))
+        from core import readyitems
+
+        self.assertEqual({one["name"]: one["state"] for one in readyitems.connection_states(self.root)}["db-down"], "untested")  # waiting, not a problem of the Enter screen
+
+    def test_a_program_that_is_not_there_keeps_the_sign_in_too(self) -> None:
+        found = self.typed("db-none")
+        self.assertEqual((found["state"], found["layers"]["broken"], found["kept"]), ("missing", "program", True))
+        self.assertTrue(self.row("db-none")["untested"])
+
+    def test_a_wrong_sign_in_is_not_kept(self) -> None:
+        found = self.typed("db-dev", password="wrong")
+        self.assertEqual((found["state"], found["layers"]["broken"], found["kept"]), ("denied", "access", False))
+        self.assertNotIn("HARNESS_CONNECTION_DB_DEV_PASSWORD", connections.read_env(self.root))
+        self.assertFalse(self.row("db-dev")["saved"])
+
+    def test_nothing_typed_and_a_window_that_did_not_ask_keep_nothing(self) -> None:
+        found = self.typed("db-down", password="", account="")
+        self.assertFalse(found["kept"])
+        self.assertEqual(connections.read_env(self.root), {})
+        found = self.board.servers({"step": "test", "alias": "db-down", "account": "alice", "password": "right"})  # the own-connection form never asks: it keeps nothing before Save
+        self.assertNotIn("kept", found)
+        self.assertEqual(connections.read_env(self.root), {})
+
+    def test_test_works_without_typing_again_and_a_pass_clears_the_mark(self) -> None:
+        self.typed("db-down")
+        self.company({"db-dev": {"type": "fakedb", "env": "dev", "auth": "own", "host": "db1", "port": "5000"}, "db-down": {"type": "fakedb", "env": "ist", "auth": "own", "host": "db3", "port": "5000"},
+                      "db-none": {"type": "nodb", "env": "qat", "auth": "own", "host": "db4", "port": "5000"}})  # the address is mended
+        self.assertTrue(self.row("db-down")["untested"])
+        answer = self.board.servers({"step": "test", "alias": "db-down", "saved": True})  # nothing typed: it uses what was kept
+        self.assertEqual((answer["state"], answer["who"]), ("ok", "alice"))
+        row = self.row("db-down")
+        self.assertEqual((row["untested"], row["reach"], row["who"]), (False, "ok", "alice"))
+
+    def test_a_kept_sign_in_that_is_tested_again_and_fails_is_a_failed_test_not_an_untested_one(self) -> None:
+        self.typed("db-down")
+        answer = self.board.servers({"step": "test", "alias": "db-down", "saved": True})  # the address is still down
+        self.assertEqual(answer["state"], "down")
+        row = self.row("db-down")
+        self.assertEqual((row["untested"], row["reach"], row["saved"]), (False, "failed", True))

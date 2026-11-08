@@ -3296,7 +3296,7 @@
   "connections.signin": "Sign in",
   "connections.state.testfailed": "test failed",
   "connections.state.notsaved": "test failed · not saved",
-  "connections.notsaved": "Nothing was saved: a sign-in is kept only when its test passes. Fix the cause above, then press Sign in again.",
+  "connections.notsaved": "Nothing was saved. Fix the cause above, then press Sign in and type it again.",
   "connections.state.nopack": "its tool pack is off; the gate still guards it",
   "connections.company": "company",
   "connections.company.tip": "Listed by the company's knowledge base.",
@@ -3540,5 +3540,8 @@
   "ready.conn.off.one": "1 more connection has its tool pack off: {names}. It is not counted.",
   "ready.conn.off": "{n} more connections have their tool pack off: {names}. They are not counted.",
   "setup.fact.conns.off.one": "1 more connection has its tool pack off: {names}. It is not counted.",
-  "setup.fact.conns.off": "{n} more connections have their tool pack off: {names}. They are not counted."
+  "setup.fact.conns.off": "{n} more connections have their tool pack off: {names}. They are not counted.",
+  "connections.state.untested": "saved, not tested yet",
+  "connections.untested.tip": "The sign-in is saved, but no test has reached the system yet. Press Test when the cause is fixed: nothing needs typing again.",
+  "connections.kept": "The sign-in is saved. The test did not reach the system, so it does not say the sign-in is wrong. Fix the cause above, then press Test."
 }

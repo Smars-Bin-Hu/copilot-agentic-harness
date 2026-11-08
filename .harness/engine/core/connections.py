@@ -146,6 +146,9 @@ def test_seconds(kind: Dict[str, Any], server: Optional[Dict[str, Any]] = None) 
     return float(TOOL_TEST_SECONDS if delivery(kind, server or {})["identity"] == "tool" else TEST_SECONDS)
 
 
+UNTESTED = "untested"  # the `why` of a `reach` line: the sign-in is kept and no test has got through to the system yet
+
+
 def env_key(alias: str, field: str) -> str:
     return PREFIX + alias.upper().replace("-", "_") + "_" + field.upper()
 
@@ -634,6 +637,23 @@ def save(root: Path, alias: str, given: Dict[str, str], own: Optional[Dict[str, 
         changes[env_key(alias, "alias")] = alias
         changes.update({env_key(alias, key): str(value) for key, value in own.items() if key not in ("own",) and value not in (None, "")})
     write_env(root, changes)
+
+
+def keep_untested(root: Path, alias: str, found: Dict[str, Any], given: Dict[str, str]) -> bool:
+    """A sign-in whose test never reached the system is kept, marked "not tested yet" (1.7.38). It broke at the program or at the address: nothing says the account is wrong, and the person would
+    have to type it again after fixing a certificate or a proxy. A sign-in that broke at the sign-in or at the account access is not kept (it is wrong), nor one that broke for a reason no step
+    can name (a timeout). Nothing typed (a program keeps its own sign-in) means nothing to keep. True when it was kept."""
+    from . import reach
+
+    server = listed(root).get(alias)
+    kind = types(root).get(str((server or {}).get("type")))
+    if not server or not kind or found.get("state") in ("ok", "mcp") or (found.get("layers") or {}).get("broken") not in ("program", "address"):
+        return False
+    if delivery(kind, server)["identity"] == "tool" or not given_identity(kind, server, given):
+        return False
+    save(root, alias, given)
+    reach.record(root, f"{alias}:{server.get('env', '')}", reach.UNKNOWN, UNTESTED)
+    return True
 
 
 def forget_tool(root: Path, program: str) -> None:

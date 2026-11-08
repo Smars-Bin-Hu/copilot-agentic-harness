@@ -154,21 +154,25 @@ const SERVERS = (function () {
       const last = env.results.get(key);
       return last ? !["ok", "mcp"].includes(last.state) : row.saved && (row.reach === "denied" || row.reach === "failed");
     };
+    // A sign-in kept because its test never reached the system (Q1): the answer just now says `kept`; after the window was closed, the row says `untested`.
+    const waiting = () => { const last = env.results.get(key); return last ? Boolean(last.kept) : Boolean(row.untested); };
     function paint() {
       const last = env.results.get(key);
-      const bad = fail();
-      const dot = h("span", {class: "su-dot " + (via ? "none" : bad ? "bad" : row.signed ? "ok" : "ring")});  // `signed`: kept here, or a program's own sign-in that the last check got through (the Enter screen counts the same)
+      const wait = waiting();
+      const bad = fail() && !wait;
+      const dot = h("span", {class: "su-dot " + (via ? "none" : bad ? "bad" : wait ? "ring" : row.signed ? "ok" : "ring")});  // `signed`: kept here, or a program's own sign-in that the last check got through (the Enter screen counts the same)
       let words;
       if (via === "mcp") words = h("span", {class: "tl-who none"}, t("connections.state.mcp"));
       else if (via === "nopack") words = h("span", {class: "tl-who none", title: t("connections.state.nopack.tip")}, t("connections.state.nopack"));  // the gate still judges its calls (1.7.38)
       else if (!row.signed && !last) words = h("span", {class: "tl-who none"}, t("connections.none"));
       else {
         // Who it is signed in as (1.7.38): the account kept here; else the name the last test answered with; else, for a token, that a token is saved. A failed test of something not kept says it was not kept.
-        const who = row.account || (last && last.state === "ok" && last.who) || row.who || (row.saved && row.identity === "token" ? t("connections.token.saved") : row.signed && !row.saved ? t("connections.tool.signed") : "");
+        const who = row.account || (last && last.state === "ok" && last.who) || ((row.saved || row.signed) && row.who) || (row.saved && row.identity === "token" ? t("connections.token.saved") : row.signed && !row.saved ? t("connections.tool.signed") : "");
         const failed = last && last.timeout ? t("connections.state.timeout", {seconds: last.timeout}) : t(row.saved ? "connections.state.testfailed" : "connections.state.notsaved");
-        words = h("span", {class: "tl-who" + (bad ? " bad" : "")}, who + (bad ? (who ? " · " : "") + failed : ""));
+        const note = wait ? t("connections.state.untested") : bad ? failed : "";
+        words = h("span", {class: "tl-who" + (bad ? " bad" : "")}, who + (note ? (who ? " · " : "") + note : ""));
       }
-      const tip = last ? (last.state === "ok" ? t("connections.tip.ok", {who: last.who || "-", seconds: last.seconds}) : last.layers && last.layers.text ? last.layers.text : "") : row.saved ? t("connections.saved.tip", {account: row.account || row.who || "-"}) : row.signed ? t("connections.signed.tip") : t("connections.none.tip");
+      const tip = wait ? t("connections.untested.tip") : last ? (last.state === "ok" ? t("connections.tip.ok", {who: last.who || "-", seconds: last.seconds}) : last.layers && last.layers.text ? last.layers.text : "") : row.saved ? t("connections.saved.tip", {account: row.account || row.who || "-"}) : row.signed ? t("connections.signed.tip") : t("connections.none.tip");
       const share = row.tool ? h("span", {class: "sv-info", tabindex: "0", title: t(names.length ? "connections.shared.with" : "connections.shared.one", {program: row.tool, names: names.join(", ")})}, "ⓘ") : null;
       const forget = row.saved && !via ? h("button", {type: "button", class: "mc-x", title: t(row.own ? "connections.forget.own.tip" : "connections.forget.tip"), "aria-label": t("connections.forget")}, "×") : null;
       if (forget) forget.addEventListener("click", () => sure(forget, row, () => {
@@ -178,8 +182,9 @@ const SERVERS = (function () {
       stateBox.replaceChildren(...[dot, words, share, forget].filter(Boolean));
       stateBox.title = tip;
       const note = env.notes.get(key);
-      why.replaceChildren(...[last && layersBox(last, env.go), last && bad && !row.saved ? h("p", {class: "tl-say sub"}, t("connections.notsaved")) : null, note ? h("p", {class: "tl-say" + (note.bad ? " bad" : " sub")}, note.said) : null].filter(Boolean));
+      why.replaceChildren(...[last && layersBox(last, env.go), last && wait ? h("p", {class: "tl-say sub"}, t("connections.kept")) : null, last && bad && !row.saved ? h("p", {class: "tl-say sub"}, t("connections.notsaved")) : null, note ? h("p", {class: "tl-say" + (note.bad ? " bad" : " sub")}, note.said) : null].filter(Boolean));
       signBtn.className = "act" + (row.signed || via ? "" : " hot");
+      testBtn.className = "act" + (wait ? " hot" : "");  // saved, not tested yet: the next thing to press
       signBtn.hidden = Boolean(via);
       testBtn.hidden = Boolean(via);
       testBtn.disabled = !row.saved && row.identity !== "tool";
@@ -258,8 +263,9 @@ const SERVERS = (function () {
     const run = () => {
       busy(true);
       const values = {alias: row.alias, account: account.value.trim(), password: password.value, keyfile: keyfile ? keyfile.value.trim() : ""};
-      ask("test", values).then((answer) => {
+      ask("test", {...values, keep: true}).then((answer) => {
         keep(answer);
+        if (answer.kept) { password.value = ""; env.redraw(); return; }  // the test never reached the system: the sign-in is kept, and the row says so (Test works without typing again)
         if (!["ok", "mcp"].includes(answer.state)) { busy(false); return; }
         return ask("save", values).then(() => { password.value = ""; env.results.delete(row.alias); env.redraw(); });
       }, (error) => { busy(false); env.results.set(row.alias, {state: "failed", why: error.message, layers: {steps: {}, broken: "", text: error.message, link: null}}); busy(false); });

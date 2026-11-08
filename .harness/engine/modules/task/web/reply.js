@@ -81,13 +81,14 @@ const REPLY = (function () {
   const bar = h("div", {class: "rp-bar"}, pill, halt, back, again);
   document.body.append(bar, panel);
   // The bar must not cover a button of the page (retest N11: it sat on Approve and Dismiss when a card ended at the bottom of the window). While a button, link or field lies under it, the bar fades and lets the click through;
-  // a scroll that frees the place brings it back. The key R still works.
+  // a scroll that frees the place brings it back. The key R still works. A grey button counts too (C12 TB-14: Approve and Open are grey until the code is typed, and the bar lay over them as it did before):
+  // the person reads it, and it wakes under the bar.
   const under = () => {
     const parts = [...bar.children].filter((node) => !node.hidden).map((node) => node.getBoundingClientRect());
     if (!parts.length || mine.open) return false;
     const box = {left: Math.min(...parts.map((r) => r.left)) - 4, right: Math.max(...parts.map((r) => r.right)) + 4, top: Math.min(...parts.map((r) => r.top)) - 4, bottom: Math.max(...parts.map((r) => r.bottom)) + 4};
     return [...document.querySelectorAll("#app button, #app a[href], #app input, #app select, #app textarea, #app summary")].some((node) => {
-      if (node.closest("[hidden]") || node.disabled) return false;
+      if (node.closest("[hidden]")) return false;
       const r = node.getBoundingClientRect();
       return r.width > 0 && r.height > 0 && r.bottom > box.top && r.top < box.bottom && r.right > box.left && r.left < box.right;
     });
@@ -102,6 +103,8 @@ const REPLY = (function () {
   addEventListener("scroll", soon, {passive: true, capture: true});
   addEventListener("resize", soon);
   setInterval(() => { if (!document.hidden) soon(); }, 800);  // the page draws in place every few seconds: a card may arrive under the bar
+  const appNode = document.getElementById("app");
+  if (appNode && window.MutationObserver) new MutationObserver(soon).observe(appNode, {childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "hidden"]});  // a card drawn, or a button woken, is looked at at once, not after the next tick
   // Where the panel stands (1.6.103): the person moves it by its header and sizes it by any edge or corner, so it does not cover the messages it answers. It floats over the page and moves
   // nothing in it. The place is kept in this browser; a double click on the header puts it back. On a narrow screen it stays where it is made to be.
   const PLACE = "harness.reply.place";

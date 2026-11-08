@@ -766,7 +766,7 @@
     const chips = found.envs.map((item) => {
       const listed = item.systems.length > 0;
       const asks = item.asks || [];  // systems of a tool pack on this environment: each write waits for the person whatever is open (1.7.38)
-      const tip = !listed ? (asks.length ? t("desk.set.open.asks", {env: item.env, systems: asks.join(", ")}) : t("desk.set.open.none", {env: item.env})) : item.open ? t("desk.set.open.close", {env: item.env, systems: item.systems.join(", ")}) : t("desk.set.open.open", {env: item.env, systems: item.systems.join(", ")});
+      const tip = !listed ? (asks.length ? t(asks.length === 1 ? "desk.set.open.asks" : "desk.set.open.asks.many", {env: item.env, systems: asks.join(", ")}) : t("desk.set.open.none", {env: item.env})) : item.open ? t("desk.set.open.close", {env: item.env, systems: item.systems.join(", ")}) : t("desk.set.open.open", {env: item.env, systems: item.systems.join(", ")});
       const seen = item.reach;  // reached from VS Code (1.7.9): a dot on the chip, the words on hover
       const why = (one) => one.state === "denied" ? (one.launch || t("desk.reach.why.identity")) : one.why === "no-answer" ? t("desk.reach.why.no-answer") : t("desk.reach.why.exit", {why: one.why});
       const part = (one) => one.state === "ok" ? t("desk.reach.ok", {env: one.system, who: one.who || "-"}) : one.state === "unknown" ? t("desk.reach.unknown", {env: one.system}) : t("desk.reach.bad", {env: one.system, launch: why(one)});
@@ -783,7 +783,7 @@
     const note = open.length ? h("p", {class: "set-tip"}, t("desk.set.open.note", {envs: open.map((item) => item.env).join(", "), systems: [...new Set(open.flatMap((item) => item.systems))].join(", ")})) : null;
     const asking = [...new Set(found.envs.flatMap((item) => item.asks || []))];
     const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip")), h("p", {class: "set-warn"}, t("desk.set.open.warn")), h("div", {class: "chips env-chips"}, chips, never), note,
-      asking.length ? h("p", {class: "sub"}, t("desk.set.open.asks.pop", {systems: asking.join(", ")})) : null,
+      asking.length ? h("p", {class: "sub"}, t(asking.length === 1 ? "desk.set.open.asks.pop" : "desk.set.open.asks.pop.many", {systems: asking.join(", ")})) : null,
       can ? null : h("p", {class: "set-warn"}, t("desk.set.open.cannot")));
     const unreached = found.envs.filter((item) => item.reach && (item.reach.state === "denied" || item.reach.state === "failed")).map((item) => item.env.toUpperCase());  // VS Code cannot reach these (1.7.9)
     const button = h("button", {type: "button", class: "rv-btn" + (open.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip") + (unreached.length ? "\n" + t("desk.reach.pill", {envs: unreached.join(", ")}) : "")},

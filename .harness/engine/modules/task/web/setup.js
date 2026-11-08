@@ -417,6 +417,7 @@ const SETUP = (function () {
     function follow() {
       ask("job").then((found) => {
         paintLines(found);
+        if (found.lines.length !== st.seenLines) { st.seenLines = found.lines.length; loadTools(); }  // a step ended: the packs and connections it brought show now, not at the end (1.7.38)
         if (found.running) { setTimeout(follow, 700); return; }
         st.busy = false;
         go.textContent = t(found.done ? (finished ? "setup.save" : "setup.finish") : "setup.run.again");  // after a stop, the same button runs it again
@@ -424,6 +425,7 @@ const SETUP = (function () {
         st.saved = found.done;
         gate();
         if (!found.done) return;
+        loadTools();
         st.parts = null;  // what the folder had is now copied: the states below follow the copy itself, read again (1.7.22; "Not found yet" stayed after the copy)
         loadGuide();
         leave();

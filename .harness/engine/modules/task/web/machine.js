@@ -32,18 +32,20 @@ const MACHINE = (function () {
     const rec = state.recipe || {tool_folders: [], error: ""};
     const who = (row) => row.needed_by.map((item) => item.pack === "harness" ? t("machine.prog.harness") : item.why === "signin" ? t("machine.prog.signin", {pack: item.pack, program: row.program}) : item.pack).filter((x, i, all) => all.indexOf(x) === i).join(", ");
     const rows = state.programs.map((row) => {
-      const head = h("div", {class: "tl-prow"}, dot(row.found ? "ok" : "need"), h("b", {class: "tl-pname"}, row.program), h("span", {class: "tl-pwho", title: row.needed_by.map((item) => item.pack + (item.conn ? " ← " + item.conn : "")).join("\n")}, "← ", who(row)),
-        h("code", {class: "tl-ppath" + (row.found ? "" : " need"), title: row.found ? row.path : t("machine.prog.missing.tip", {program: row.program})}, row.found ? row.path : t("machine.prog.missing")));
-      if (row.found) return h("div", {class: "tl-prog", "data-focus": "prog:" + row.program}, head);
-      const input = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", "aria-label": t("machine.prog.here", {program: row.program}), placeholder: t("machine.prog.ph.of", {program: row.program}), value: row.hint || ""});
-      const use = h("button", {type: "button", class: "act"}, t("machine.prog.use"));
-      const go = () => {
-        use.disabled = true; said.replaceChildren();
-        ask("folder-add", {program: row.program, path: input.value.trim()}).then((next) => { repaint(next); }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { use.disabled = false; });
-      };
-      use.addEventListener("click", go);
-      input.addEventListener("keydown", (event) => { if (isEnter(event)) go(); });
-      return h("div", {class: "tl-prog", "data-focus": "prog:" + row.program}, head, h("div", {class: "tl-phere"}, row.hint ? h("span", {class: "sv-own", title: t("machine.recipe.from", {value: row.hint})}, t("machine.recipe.mark")) : null, input, use));
+      const parts = [dot(row.found ? "ok" : "need"), h("b", {class: "tl-pname"}, row.program), h("span", {class: "tl-pwho", title: row.needed_by.map((item) => item.pack + (item.conn ? " \u2190 " + item.conn : "")).join("\n")}, "\u2190 ", who(row)),
+        h("code", {class: "tl-ppath" + (row.found ? "" : " need"), title: row.found ? row.path : t("machine.prog.missing.tip", {program: row.program})}, row.found ? row.path : t("machine.prog.missing"))];
+      if (!row.found) {  // not found: the folder it is in, on the same line (it wraps on a narrow window)
+        const input = h("input", {class: "su-in su-mono", autocomplete: "off", spellcheck: "false", "aria-label": t("machine.prog.here", {program: row.program}), placeholder: t("machine.prog.ph.of", {program: row.program}), value: row.hint || ""});
+        const use = h("button", {type: "button", class: "act"}, t("machine.prog.use"));
+        const go = () => {
+          use.disabled = true; said.replaceChildren();
+          ask("folder-add", {program: row.program, path: input.value.trim()}).then((next) => { repaint(next); }, (error) => { said.replaceChildren(h("span", {class: "bad"}, error.message)); }).then(() => { use.disabled = false; });
+        };
+        use.addEventListener("click", go);
+        input.addEventListener("keydown", (event) => { if (isEnter(event)) go(); });
+        parts.push(row.hint ? h("span", {class: "sv-own", title: t("machine.recipe.from", {value: row.hint})}, t("machine.recipe.mark")) : null, input, use);
+      }
+      return h("div", {class: "tl-prog", "data-focus": "prog:" + row.program}, h("div", {class: "tl-prow"}, ...parts));
     });
     const general = rec.tool_folders.filter((item) => !item.program);  // an older recipe hint names no program: shown as a hint
     const added = state.paths.map((item) => {

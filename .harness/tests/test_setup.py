@@ -518,6 +518,44 @@ class CompanyFactsTests(unittest.TestCase):
             self.assertEqual(setup.company_facts(root)["prefix"]["kb"], "acme")
             self.assertIn("company", setup.status(root))
 
+    def test_the_form_counts_what_the_knowledge_base_brings_and_names_the_company_skills_that_are_not_by_the_rules(self) -> None:
+        """1.7.41: card 3 says path, domains, domain skills, version, the files of instructions and standards, the company's skills and which break the naming rule."""
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            kb = root / "knowledge-base"
+            company = kb / "company"
+            (company / "instructions").mkdir(parents=True)
+            for name in ("knowledgebase.instructions.md", "etl.instructions.md", "README.md"):  # a README is no instruction
+                (company / "instructions" / name).write_text("x", encoding="utf-8")
+            (company / "standards").mkdir()
+            (company / "standards" / "code-standards.md").write_text("x", encoding="utf-8")
+            (company / "company.json").write_text(json.dumps({"skill_prefix": "acme"}), encoding="utf-8")
+            (company / "manifest.json").write_text(json.dumps({"version": "2026.11.05"}), encoding="utf-8")
+            for name, has_file in (("acme-good", True), ("release-notes", True), ("acme-empty", False)):
+                (company / "skills" / name).mkdir(parents=True)
+                if has_file:
+                    (company / "skills" / name / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+            for domain, count in (("sales", 2), ("hr", 1)):
+                for index in range(count):
+                    (kb / "domains" / domain / "skills" / f"domain-{domain}-{index}").mkdir(parents=True)
+                    (kb / "domains" / domain / "skills" / f"domain-{domain}-{index}" / "SKILL.md").write_text("x", encoding="utf-8")
+            (kb / "domains" / "empty").mkdir()
+            found = setup.status(root, {"found": True, "command": "", "windows": False})
+            self.assertEqual((found["kb"]["here"], found["kb"]["domains"], found["kb"]["domain_skills"], found["kb"]["version"], found["kb"]["prefix"]), (True, 3, 3, "2026.11.05", "acme"))
+            self.assertTrue(found["kb"]["path"].endswith("knowledge-base"))
+            facts = found["company"]
+            self.assertEqual((facts["instructions_n"], facts["standards_n"]), (2, 1))
+            self.assertEqual((facts["skills"]["n"], facts["skills"]["off"]), (3, ["acme-empty", "release-notes"]), "no SKILL.md, or not the company's word")
+            self.assertEqual(facts["own_packs"], [])
+            (company / "tools" / "packs" / "acmejobs").mkdir(parents=True)
+            self.assertEqual(setup.company_facts(root)["own_packs"], ["acmejobs"])
+        with tempfile.TemporaryDirectory() as folder:  # no knowledge base: every count is zero and nothing raises
+            root = Path(folder)
+            (root / ".harness" / "policies").mkdir(parents=True)
+            found = setup.status(root, {"found": True, "command": "", "windows": False})
+            self.assertEqual((found["kb"], found["company"]["skills"], found["company"]["instructions_n"]), ({"here": False, "domains": 0, "domain_skills": 0, "version": "", "path": "", "prefix": ""}, {"n": 0, "off": []}, 0))
+
     def test_the_page_draws_four_cards_and_keeps_every_control(self) -> None:
         web = support.REPO / ".harness" / "engine" / "modules" / "task" / "web"
         source = (web / "setup.js").read_text(encoding="utf-8")

@@ -25,6 +25,7 @@ const SETUP = (function () {
     const kbLearn = h("button", {type: "button", class: "su-link"}, t("setup.kb.learn"));
     kbLearn.addEventListener("click", () => DOCK.allSkills("kb"));
     const kbPick = h("button", {type: "button", class: "act"}, t("setup.browse"));
+    kbPick.hidden = true;
     kbPick.addEventListener("click", () => DOCK.chooseOnPage(kbPick.dataset.kind, kbPath.value.trim(), (path) => { kbPath.value = path; checkKb(); gate(); }));
     const kbReplaceBox = h("input", {type: "checkbox"});
     const kbReplace = h("label", {class: "su-tick", hidden: ""}, kbReplaceBox, h("span", null, t("setup.kb.replace")));

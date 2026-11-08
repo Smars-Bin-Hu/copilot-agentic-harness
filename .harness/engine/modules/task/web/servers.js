@@ -144,7 +144,7 @@ const SERVERS = (function () {
     const rest = Object.entries(f).filter(([key, value]) => value && key !== "url").map(([, value]) => value);
     return address || rest.join(" · ") || Object.values(f).filter(Boolean).join(" · ");
   }
-  function connRow(row, found, env) {  // env: {results: Map, redraw, go}
+  function connRow(row, found, env) {  // env: {results: Map, paints: Map, redraw, go}
     const key = row.alias;
     const names = found.connections.filter((one) => row.tool && one.tool === row.tool && one.alias !== key).map((one) => one.alias);
     const stateBox = h("span", {class: "tl-state"});
@@ -182,7 +182,8 @@ const SERVERS = (function () {
       testBtn.disabled = !row.saved && row.identity !== "tool";
       testBtn.title = testBtn.disabled ? t("connections.test.off") : "";
     }
-    const busy = (on, say) => { signBtn.disabled = testBtn.disabled = on; if (!on) paint(); else why.replaceChildren(h("p", {class: "tl-say sub"}, say || t("connections.testing"))); };
+    const again = () => (env.paints.get(key) || paint)();  // the list may have been drawn again while a test ran: the row that is on the page shows the answer
+    const busy = (on, say) => { signBtn.disabled = testBtn.disabled = on; if (!on) again(); else why.replaceChildren(h("p", {class: "tl-say sub"}, say || t("connections.testing"))); };
     const keep = (found0) => { env.results.set(key, found0); };
     // A sign-in that a program keeps: it is tested, and the name it answers with is kept when the test passes (nothing secret is typed or kept here).
     const afterTool = () => {
@@ -216,6 +217,7 @@ const SERVERS = (function () {
     const chip = envChip(row.env);
     const title = [...new Set([row.alias, row.label])].concat([row.type_label + (row.auth_label ? " · " + row.auth_label : ""), place(row), (row.fields || {}).url]).filter(Boolean).join("\n");
     paint();
+    env.paints.set(key, paint);
     return h("div", {class: "tl-crow", "data-focus": "sign:" + key, "data-alias": key},
       h("div", {class: "tl-c1"}, h("span", {class: "tl-id", title}, h("b", {class: "sv-alias"}, key), h("span", {class: "sv-kind"}, row.type_label), chip || h("code", {class: "sv-where"}, place(row)), source),
         h("span", {class: "tl-act"}, stateBox, signBtn, testBtn)), why, form);
@@ -257,7 +259,7 @@ const SERVERS = (function () {
     const addBox = h("div", {class: "tl-add", hidden: ""});
     const add = h("button", {type: "button", class: "act", "aria-expanded": "false"}, t("connections.own.add"));
     const out = h("button", {type: "button", class: "act", title: t("connections.export.tip")}, t("connections.export"));  // one's own connections, to put in the company pack
-    const env = {results, redraw: () => redraw(), go: (name, part, focus) => ctx.go(name, part, focus)};
+    const env = {results, paints: new Map(), redraw: () => redraw(), go: (name, part, focus) => ctx.go(name, part, focus)};
     add.addEventListener("click", () => {
       const open = addBox.hidden;
       addBox.hidden = !open; add.setAttribute("aria-expanded", String(open));

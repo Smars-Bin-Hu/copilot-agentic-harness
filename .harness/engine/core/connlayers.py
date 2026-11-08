@@ -23,6 +23,7 @@ from . import messages
 STEPS = ("program", "signin", "access", "address")
 OK, BAD, UNKNOWN, SKIP = "ok", "bad", "unknown", "skip"
 CERT = re.compile(r"certificate|CERTIFICATE_VERIFY|\bSSL\b|\bTLS\b|self[- ]signed|local issuer|not trusted", re.IGNORECASE)
+NETWORK = re.compile(r"no such host|could not resolve|name or service not known|nodename nor servname|getaddrinfo|ENOTFOUND|connection refused|connection timed out|network is unreachable|no route to host|unable to open tcp|timed out", re.IGNORECASE)  # a program says so in its own words
 PROXY = re.compile(r"\bproxy\b|\b407\b|tunnel", re.IGNORECASE)
 ADDRESS_FIELDS = ("url", "host", "address", "server")
 
@@ -77,7 +78,7 @@ def classify(kind: Dict[str, Any], server: Dict[str, Any], alias: str, state: st
                 return _out(_layers(program=OK, signin=OK, access=BAD), "access", "access.tool", {"account": account or say("connections.layer.thisaccount"), "where": where}, None)
             return _out(_layers(program=OK, signin=UNKNOWN, access=UNKNOWN), "", "denied.unsure", {"account": account or say("connections.layer.thisaccount"), "where": where}, None)
         return _out(_layers(program=OK, signin=OK, access=BAD), "access", "access.token" if how == "token" else "access.typed", {"where": where, "account": account or "-"}, None)
-    if state == "down":
+    if state == "down" or (state == "failed" and NETWORK.search(output or "")):
         if CERT.search(output or ""):
             return _out(_layers(program=OK, signin=OK if have_credential else UNKNOWN, access=UNKNOWN, address=BAD), "address", "address.cert", {"address": address}, {"part": "network", "focus": ""})
         if PROXY.search(output or ""):

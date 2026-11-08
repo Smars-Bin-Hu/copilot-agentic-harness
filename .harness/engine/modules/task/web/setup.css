@@ -112,10 +112,10 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .tl-progs{border-top:1px solid var(--line)}.tl-prog{padding:8px 0;border-bottom:1px solid var(--line)}
 .tl-prow{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;font-size:13.5px}.tl-pname{min-width:76px;font:700 13.5px var(--mono)}
 .tl-pwho{flex:0 1 230px;min-width:0;color:var(--soft);font-size:12.5px;overflow-wrap:anywhere}.tl-ppath{flex:1 1 200px;min-width:0;font:12px var(--mono);color:var(--soft);overflow-wrap:anywhere}.tl-ppath.need{color:var(--hot)}
-.tl-phere{display:flex;align-items:center;gap:6px;margin:6px 0 0 20px}.tl-phere input{flex:1;min-width:0}
+.tl-prow input{flex:0 1 230px;min-width:150px}
 .tl-sumline{display:inline-flex;align-items:center;gap:6px;font-weight:400;font-size:12.5px}.tl-sum.ok{color:var(--good)}.tl-sum.need{color:var(--hot)}
 .tl-win .sv-acts .sv-said{flex:1 1 100%;min-width:0}
-@media (max-width:600px){.tl-l2{margin-left:0}.tl-phere{margin-left:0}.tl-act{margin-left:0;justify-content:flex-start;flex:1 1 100%}}
+@media (max-width:600px){.tl-l2{margin-left:0}.tl-act{margin-left:0;justify-content:flex-start;flex:1 1 100%}}
 /* 1.7.41: the form's card 3 (From the company, optional) and card 4 (Local): the knowledge base and the repositories are rows like the others; yellow means "not found" and never stops Enter */
 .su-head .su-tag{margin-left:auto;flex:none;font:11px var(--mono);letter-spacing:1px;color:var(--soft)}
 .su-off{color:var(--hot)}.su-soft{color:var(--soft)}.su-fact[data-kind=need]>.su-fv.su-text{color:var(--hot)}.su-fv.su-rich{color:var(--ink)}
@@ -126,4 +126,4 @@ html.lite .su-busy::before{animation:none}@media (prefers-reduced-motion:reduce)
 .su-facts>.su-row{padding-left:16px;gap:8px}
 @media(max-width:600px){.su-fact.su-kbrow,.su-fact.su-repos{flex-wrap:wrap}.su-kbv,.su-repov{flex:1 1 100%;padding-left:16px}.su-fact-open{margin-left:16px}}
 .dialog.tl-win{max-width:820px}  /* the three windows are as wide as the prototype: one connection or one pack fits on a line */
-@media (min-width:700px){.tl-l1,.tl-c1,.tl-id{flex-wrap:nowrap}.tl-id{flex:1 1 0}.tl-id .sv-alias{flex:0 1 auto;min-width:3ch}.tl-id .sv-kind,.tl-id .sv-where{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tl-id .sv-own{flex:none}}
+@media (min-width:700px){.tl-l1,.tl-c1,.tl-id{flex-wrap:nowrap}.tl-id{flex:1 1 0}.tl-id .sv-alias{flex:0 1 auto;min-width:3ch}.tl-id .sv-kind{flex:0 10 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tl-id .sv-where{flex:0 100 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tl-id .sv-own{flex:none}}

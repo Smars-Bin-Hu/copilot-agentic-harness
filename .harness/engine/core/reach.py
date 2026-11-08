@@ -127,6 +127,14 @@ def recent(root: Path, keys: List[str], seconds: float = 300.0, now: Optional[fl
     return True
 
 
+def record(root: Path, key: str, state: str, why: str = "", who: str = "") -> None:
+    """What a test or a sign-in on the board found out about one connection (`<alias>:<env>`), kept where the probes keep theirs (1.7.41): the rows of the Connections window and the
+    Enter screen read the same place, so a connection that was signed in again does not show the old failure."""
+    found = read(root)
+    found[key] = {"state": state, "at": utc_now(), "why": why[:200], "who": who, "source": "test"}
+    _write(root, found)
+
+
 def start(root: Path, listed: Dict[str, Any]) -> bool:
     """At the start of a chat: start the probes in a process of their own and return at once. False when nothing was started (no probe, or fresh)."""
     if not any(probes(system) for system in (listed or {}).values()) or fresh(root, listed):

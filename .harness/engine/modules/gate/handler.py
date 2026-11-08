@@ -220,14 +220,15 @@ def _judge_one(event: HookEvent, ctx: Context, systems: Dict[str, Any], action: 
     if scoped and scoped[0] == "opened":  # the person opened the linked items, but this connection's type does not let them through (a company lowered it to `no`): held as before
         scoped = ("linked", scoped[1])
     held = decision in (external.TASK, external.OUTBOX, external.HUMAN) and not passes
-    if held and scope == systems_mod.ALL and action.verb != external.DESTROY:  # the person opened this connection for this task (`task allow --conn`, 1.7.38): no further approval. A destroy never passes
+    unjudged = getattr(action, "file_why", "") in UNJUDGED_FILE  # a script whose content the gate could not judge: opening the connection does not let it through (C12 RC-G1)
+    if held and scope == systems_mod.ALL and action.verb != external.DESTROY and not unjudged:  # the person opened this connection for this task (`task allow --conn`, 1.7.38): no further approval. A destroy never passes
         data = _open_task(ctx)
         opened = bool(data and _conn_opened(data, action.system, action.env))
         passes = opened
         how = "opened" if opened else ""
     result = {"action": action, "decision": decision, "passes": passes, "approved": False, "opened": opened, "how": how, "code": ""}
     if decision == external.OUTBOX and not passes:  # what the card can offer: open this connection (or its linked items) for the task. A line with writes to two connections has one offer for each
-        if scope == systems_mod.ALL and action.verb != external.DESTROY:
+        if scope == systems_mod.ALL and action.verb != external.DESTROY and not unjudged:
             result["offer"] = {"system": action.system, "env": action.env, "scope": systems_mod.ALL}
         elif scope == systems_mod.ITEMS and scoped and scoped[0] == "linked":
             result["offer"] = {"system": action.system, "env": action.env, "scope": systems_mod.ITEMS, "refs": [scoped[1]]}
@@ -285,6 +286,9 @@ def _item_scope(call: str, system: Dict[str, Any], verb: str, data: Optional[Dic
     refs = {toolpacks.normal_ref(str(item)) for item in ((opened or {}).get("refs") or [])} if isinstance(opened, dict) else set()
     shut = [ref for ref in refs_named if ref not in refs]
     return ("linked", shut[0]) if shut else ("opened", refs_named[0])
+
+
+UNJUDGED_FILE = ("unread", "twice", "directive")  # a call whose script file the gate could not judge: each run waits for the person, an opened connection or not
 
 
 def _conn_opened(data: Dict[str, Any], name: str, env: str = "") -> bool:

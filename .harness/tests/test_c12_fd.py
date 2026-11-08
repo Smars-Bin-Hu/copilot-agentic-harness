@@ -120,6 +120,7 @@ class ScriptFileTests(TaskCase):
         self.refused(f"{SERVER} -i {drop}", drop)
         self.open_connection()
         self.held(f"{SERVER} -i {self.script('SELECT 1;' + chr(10) + '!! whoami' + chr(10), 'shell2.sql')}")  # an opened connection does not let it through either: what it does is not known
+        self.held(f"{SERVER} -i {TASK}/DEV/_manual/missing.sql")  # nor a file it cannot read
 
     def test_a_script_that_calls_a_procedure_is_an_exec_and_waits_in_dev(self) -> None:
         path = self.script("EXEC dbo.usp_load;\n", "e.sql")

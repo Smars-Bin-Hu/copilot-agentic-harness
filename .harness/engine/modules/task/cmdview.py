@@ -163,7 +163,7 @@ def say_of(args: str, rules: Optional[List[Dict[str, Any]]]) -> str:
 
 
 def _shell_value(text: str, quote: str) -> str:
-    """What the shell passes on for a value written between these quotes (1.7.25): in double quotes `\\` is a backslash, `\"` a quote, `\$` a dollar, a backtick after a backslash a backtick, any other
+    r"""What the shell passes on for a value written between these quotes (1.7.25): in double quotes `\\` is a backslash, `\"` a quote, `\$` a dollar, a backtick after a backslash a backtick, any other
     backslash stays as it is; in single quotes everything stays; with no quote a backslash is dropped and the character after it stays."""
     if quote == "'":
         return text

@@ -125,6 +125,9 @@ def check_terminal(event: HookEvent, ctx: Context, compiled: Compiled, policy: d
     return Decision(permission=permission, reason=reason)
 
 
+FILE_OPTIONS = re.compile(r"(?:^|\s)(?:-[A-Za-z]*[oODK]|--(?:output|remote-name|remote-header-name|dump-header|trace|trace-ascii|stderr|config|create-dirs|libcurl)\b)")
+
+
 def network_judged(ctx: Context) -> Optional[Any]:
     """For the ask rule of the network (1.7.38, Q20): says of one command whether a system the gate knows has judged it, so a `curl` to an Azure DevOps address is not asked about twice. A curl owns by the
     addresses it names only when every one is the system's (`external.addresses_fit`): a curl to the cloud that also names another place is judged as any other curl. Nothing when the list cannot be read."""
@@ -136,6 +139,8 @@ def network_judged(ctx: Context) -> Optional[Any]:
         return None
 
     def judged(segment: str) -> bool:
+        if FILE_OPTIONS.search(segment):  # a curl that writes a file (`-o`, `-O`, `--output`, `-D`, a config file) could write a guardrail file: it asks, as before
+            return False
         try:
             found = external.classify(segment, listed)
             if not found or not all(action.system for action, _decision in found):

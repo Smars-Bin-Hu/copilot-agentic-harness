@@ -1815,7 +1815,7 @@ class AdoHostsOfConnections(HarnessTestCase):
         self.connect(url="https://localhost:18443")
         for base in ("https://dev.azure.com", "https://vsrm.dev.azure.com", "https://acme.visualstudio.com", "https://localhost:18443"):
             self.assertEqual(self.term(f"curl -s {base}/acme/demo/_apis/wit/workitems/1"), "allow", base)
-            self.assertEqual(self.term(f"curl -s -H 'Accept: application/json' -o out.json {base}/acme/demo/_apis/wit/workitems/1"), "allow", base)
+            self.assertEqual(self.term(f"curl -s -H 'Accept: application/json' {base}/acme/demo/_apis/wit/workitems/1 > .workspace/out.json"), "allow", base)
             self.assertEqual(self.term(f"curl -X GET {base}/_apis/projects | jq ."), "allow", base)
             self.assertEqual(self.term(f"curl {base}/_apis/projects -I"), "allow", base)
             for line in (f"curl -X DELETE {base}/acme/demo/_apis/wit/workitems/1", f"curl --request delete {base}/x", f"curl -sX DELETE {base}/x", f"curl -XDELETE {base}/x", f"curl --request=DELETE {base}/x"):
@@ -1826,6 +1826,20 @@ class AdoHostsOfConnections(HarnessTestCase):
             before = len(approvals.pending(self.root, 10, file=approvals.ACTIONS))
             self.assertEqual(self.term(line.format(base="https://dev.azure.com")), "deny", line)
             self.assertEqual(len(approvals.pending(self.root, 10, file=approvals.ACTIONS)), before + 1, f"a write is held for the person: {line}")
+
+    def test_a_curl_that_writes_a_file_asks_even_for_a_read(self) -> None:
+        """`-o` could write a guardrail file: the read of Azure DevOps that saves to a file keeps the ask of the network rule (a redirection into the task folder does not)."""
+        self.connect()
+        for line in ("curl -s -o out.json https://dev.azure.com/acme/_apis/projects", "curl -sSo out.json https://dev.azure.com/x", "curl -O https://dev.azure.com/x", "curl --output out.json https://dev.azure.com/x",
+                     "curl --remote-name https://dev.azure.com/x", "curl -D headers.txt https://dev.azure.com/x", "curl -K cfg https://dev.azure.com/x", "curl -o .harness/policies/gate.json https://dev.azure.com/x"):
+            self.assertEqual(self.term(line), "ask", line)
+        self.assertEqual(self.term("curl -s https://dev.azure.com/x"), "allow")
+
+    def test_the_letters_of_curl_options_are_read_with_their_case(self) -> None:
+        """`-f` is not `-F`, `-x` (a proxy) is not `-X`, `-t` is not `-T`: a read that uses them is still a read."""
+        self.connect()
+        for line in ("curl -fsSL https://dev.azure.com/x", "curl -x proxy:8080 https://dev.azure.com/x", "curl -t x https://dev.azure.com/x", "curl -X GET https://dev.azure.com/x", "curl -k -L --max-time 5 -H 'A: b' https://dev.azure.com/x"):
+            self.assertEqual(self.term(line), "allow", line)
 
     def test_curl_to_another_address_asks_as_before(self) -> None:
         self.connect(url="https://localhost:18443")

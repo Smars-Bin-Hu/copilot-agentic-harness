@@ -60,7 +60,7 @@ What the line cannot show: a build or test tool, a scheduled job or a git hook c
 
 **2. When the program writes (next).** A tool pack's own program (for example `ado`) can ask the harness right before it writes: is this exact write approved, or inside the linked items you opened? If not, it does not write, and the request lands on the task page. However the agent started the program, the write goes through this check, so the gaps of checkpoint 1 close for that program.
 
-Its limits: the program cannot tell you from the agent, so a write you type by hand would ask you too; and an agent could skip the program and call the service's web address itself. The opening gets small; it does not close. For Azure DevOps it gets smaller still at checkpoint 1: a `curl` to `dev.azure.com`, to `*.visualstudio.com` or to the address of a connection is judged like `az rest` (a read runs, a write is held, a delete is refused). A `curl` to any other address asks you as before.
+Its limits: the program cannot tell you from the agent, so a write you type by hand would ask you too; and an agent could skip the program and call the service's web address itself. The opening gets small; it does not close. For Azure DevOps it gets smaller still at checkpoint 1: a `curl` to `dev.azure.com`, to `*.visualstudio.com` or to the address of a connection is judged like `az rest` (a read runs, a write is held, a delete is refused). A `curl` to any other address asks you as before, and so does one that saves to a file with `-o`: use `>` into the task folder.
 
 ## The agent is told a little at a time
 

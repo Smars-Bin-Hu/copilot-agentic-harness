@@ -110,15 +110,15 @@
       "env": "none",
       "verbs": [
         {
-          "pattern": "(?:^|\\s)(?:-[A-Za-z]*X|--request)[\\s=]*['\\\"]?delete\\b",
+          "pattern": "(?:^|\\s)(?:(?-i:-[A-Za-z]*X)|--request)[\\s=]*['\\\"]?(?i:delete)\\b",
           "verb": "destroy"
         },
         {
-          "pattern": "(?:^|\\s)(?:-[A-Za-z]*X|--request)[\\s=]*['\\\"]?(?!(?:get|head|options)\\b)[a-z]+",
+          "pattern": "(?:^|\\s)(?:(?-i:-[A-Za-z]*X)|--request)[\\s=]*['\\\"]?(?!(?i:get|head|options)\\b)[A-Za-z]+",
           "verb": "write"
         },
         {
-          "pattern": "(?:^|\\s)(?:-[A-Za-z]*[dFT]|--data(?:-[\\w]+)?|--form(?:-string)?|--upload-file|--json)",
+          "pattern": "(?:^|\\s)(?:(?-i:-[A-Za-z]*[dFT])|--data(?:-[\\w]+)?|--form(?:-string)?|--upload-file|--json)",
           "verb": "write"
         },
         {
@@ -139,7 +139,7 @@
       },
       "say": [
         {
-          "pattern": "(?:^|\\s)(?:-[A-Za-z]*[dFT]|--data(?:-[\\w]+)?|--form(?:-string)?|--upload-file|--json|-[A-Za-z]*X|--request)",
+          "pattern": "(?:^|\\s)(?:(?:(?-i:-[A-Za-z]*[dFT])|--data(?:-[\\w]+)?|--form(?:-string)?|--upload-file|--json)|(?:(?-i:-[A-Za-z]*X)|--request))",
           "text": {
             "en": "Change Azure DevOps with curl",
             "zh": "用 curl 修改 Azure DevOps"

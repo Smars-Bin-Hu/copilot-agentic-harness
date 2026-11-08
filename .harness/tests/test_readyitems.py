@@ -151,6 +151,16 @@ class ConnectionStateTests(ConnectionsCase):
         with mock.patch.object(readyitems.conn_core, "types", return_value={"fakedb": {"via": "mcp", "type": "fakedb"}}):
             self.assertEqual(readyitems.connection_states(self.root), [])  # a connection VS Code runs through MCP is not here
 
+    def test_a_vscode_started_without_the_settings_does_not_make_every_saved_sign_in_a_failure(self) -> None:
+        connections.save(self.root, "db-dev", {"account": "alice", "password": "right"})
+        connections.probe_all(self.root)
+        seen = self.root / launchenv.SEEN
+        seen.parent.mkdir(parents=True, exist_ok=True)
+        seen.write_text(json.dumps({"ok": False, "missing": ["PATH"]}), encoding="utf-8")
+        states = {one["name"]: one["state"] for one in readyitems.connection_states(self.root)}
+        self.assertEqual(states["db-dev"], "untested")  # not "down": the VS Code row says what is wrong
+        self.assertEqual([problem["key"] for problem in by_key(readyitems.items(self.root))["connections"]["problems"]], ["signin"])  # only db-ist, which has nothing saved
+
     def test_the_sentence_names_the_first_four_and_counts_the_rest(self) -> None:
         self.company({f"db-{n}": {"type": "fakedb", "env": "dev", "auth": "own", "host": f"h{n}", "port": "5000"} for n in range(12)})
         problem = by_key(readyitems.items(self.root))["connections"]["problems"][0]

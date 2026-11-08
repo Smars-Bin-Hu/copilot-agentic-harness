@@ -1793,6 +1793,7 @@ def serve(root: Path, everything: bool = True, port: Optional[int] = None, out: 
     if ready is not None:
         ready(server)
     else:
+        board.ready.vs_running.get()  # is any VS Code running: the button of the Enter screen says Open or Restart from the first answer
         board.ready.start_doctor()  # the Enter screen waits for it: it runs while the browser opens and pairs (1.6.104), not from the page's first question
         threading.Thread(target=wait_for_enter, args=(board, address, out), daemon=True).start()
     try:

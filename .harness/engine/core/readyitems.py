@@ -20,7 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import config, domainskills, launchenv, messages, reach, skillcheck, skillgroups, standards, targets, toolpacks
+from . import config, domainskills, launchenv, messages, reach, skillcheck, skillgroups, targets, toolpacks
 from . import connections as conn_core
 
 SHOWN_NAMES = 4  # names in one sentence of the board block; the rest is "+N"
@@ -178,14 +178,17 @@ def connection_states(root: Path) -> List[Dict[str, Any]]:
     none (no sign-in, and no test passed), untested (a sign-in is saved and no test has run yet)."""
     known, env = conn_core.types(root), conn_core.read_env(root)
     systems = config.policy_or_empty(root, "tools").get("systems") or {}
-    seen = reach.view(root, systems) if systems else []
+    try:
+        seen = reach.view(root, systems) if systems else []
+    except Exception:  # noqa: BLE001 - a broken list of systems is doctor's to report: the sign-ins are still told
+        seen = []
     out: List[Dict[str, Any]] = []
     for alias, server in conn_core.listed(root).items():
         kind = known.get(str(server.get("type"))) or {}
         if kind.get("via") == "mcp":
             continue
         saved = bool(conn_core.identity_of(env, alias, kind, server))
-        states = [line["state"] for line in seen if line["system"] == alias]
+        states = [reach.UNKNOWN if line.get("why") == "vscode-env" else line["state"] for line in seen if line["system"] == alias]  # a VS Code started without this computer's settings says nothing of the sign-in: its own row says that
         passed = bool(states) and all(state == reach.OK for state in states) or (not states and saved)
         failed = any(state in (reach.DENIED, reach.FAILED) for state in states)
         state = "ok" if passed else "none" if not saved else "down" if failed else "untested"

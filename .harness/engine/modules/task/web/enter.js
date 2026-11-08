@@ -471,11 +471,11 @@
       const view = !lit ? {state: "check", level: "", tag: "", note: "", notes: [], soft: false, tip: ""} : req ? reqView(c) : optView(c);
       if (req && view.state !== "ok") { all = false; if (lit && view.state !== "check") missing += 1; }
       if (view.state === "check") { anyCheck = true; if (!c || req || !lit) pending = true; }
-      setClass(li, "row s-" + view.state + (view.level ? " l-" + view.level : "") + (req ? " blocks" : " warns") + (!req && c && c.fix && c.fix.to ? " has-fix" : "") + (!req && c && c.names && c.names.length ? " has-names" : ""));
+      setClass(li, "row s-" + view.state + (view.level ? " l-" + view.level : "") + (req ? " blocks" : " warns") + (!req && c && ((c.home && c.home.to) || (c.fix && c.fix.to)) ? " has-fix" : "") + (!req && c && c.names && c.names.length ? " has-names" : ""));
       setText(li.querySelector(".t"), t("board.enter.t." + id));
       const em = li.querySelector("em");
       li.title = view.tip || "";
-      li.dataset.fix = !req && c && c.fix && c.fix.to ? "1" : "";
+      li.dataset.fix = !req && c && ((c.home && c.home.to) || (c.fix && c.fix.to)) ? "1" : "";
       if (!req && c && c.names && c.names.length) { setText(em, ""); names(li, c, id === "connections"); } else { noNames(li); setText(em, view.tag || (view.state === "check" ? "" : "—")); }
       const p = li.querySelector(".m");
       const keyNote = JSON.stringify([view.note, (view.notes || []).map((n) => [n.text, n.fix && n.fix.label]), id === "vscode" ? [chk0.restart && chk0.restart.state, chk0.restart && chk0.restart.why, chk0.fail] : "", c && c.launch, root.lang]);
@@ -640,7 +640,8 @@
     const name = event.target.closest(".row.has-fix .t");
     if (!name || list.classList.contains("folded")) return;
     const item = itemOf(name.closest("li").dataset.id);
-    if (item && item.fix) READY.go(item.fix, {done: () => poll()});
+    const to = item && ((item.home && item.home.to) ? item.home : item.fix);  // the row's own window; a note's link leads to the fix (1.7.38)
+    if (to) READY.go(to, {done: () => poll()});
   });
   list.addEventListener("click", (event) => {  // Windows: the company's launch script asks for the identity in a window of its own and starts VS Code with it (1.7.9)
     const button = event.target.closest("[data-launch]");

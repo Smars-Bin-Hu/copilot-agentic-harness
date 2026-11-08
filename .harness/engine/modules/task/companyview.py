@@ -155,7 +155,7 @@ def tools(root: Path, lang: str) -> List[Dict[str, Any]]:
             missing.append("untested")
         missing += list(dict.fromkeys(f"program:{program['name']}" for program in programs if not program["found"]))
         reads = _reads(manifest, kinds)
-        out.append({"name": name, "version": str(manifest.get("version") or ""), "about": str(manifest.get("description") or ""), "programs": programs, "reads": reads, "read_names": _read_names(manifest, kinds),
+        out.append({"name": name, "source": str(item.get("source") or ""), "version": str(manifest.get("version") or ""), "about": str(manifest.get("description") or ""), "programs": programs, "reads": reads, "read_names": _read_names(manifest, kinds),
                     "writes": _lines(kinds, "write", lang), "execs": _lines(kinds, "exec", lang), "destroys": _lines(kinds, "destroy", lang),
                     "types": [{"type": key, "label": str(kind.get("label") or key), "via": str(kind.get("via") or "cli")} for key, kind in types.items()], "connections": links, "missing": missing})
     return out

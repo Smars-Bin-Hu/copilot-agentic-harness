@@ -207,45 +207,6 @@ const DOCK = (function () {
     driftCard(synced);
     const packed = h("p", {class: "su-note kb-packed", hidden: ""});
     const pack = h("button", {type: "button", class: "act", title: t("dock.pack.hint"), hidden: hasCompany ? null : ""}, t("dock.pack"));
-    // The servers set up on this computer (1.7.10): the company's, and one's own, which can go in the company pack (the server only, never the identity).
-    const serversRow = h("div", {class: "kb-servers", hidden: ""});
-    function paintServers() {
-      SERVE.post("/api/connections", {step: "list"}).then((data) => {
-        const rows = (data.result && data.result.connections) || [];
-        serversRow.hidden = !rows.length;
-        serversRow.replaceChildren(h("span", {class: "kb-sv-head", title: t("dock.connections.tip")}, t("dock.connections")), ...rows.map(serverChip));
-      }, () => { serversRow.hidden = true; });
-    }
-    function serverChip(row) {
-      const env = row.env && row.env !== "none" ? row.env.toUpperCase() : "", where = Object.values(row.fields || {}).filter(Boolean).join(", ");
-      const tip = [`${row.alias}: ${env ? env + " · " : ""}${row.type_label || row.type}`, where ? t("dock.connections.where", {where}) : "", t(row.own ? "dock.connections.own" : "dock.connections.company"), t(row.saved ? "dock.connections.saved" : "dock.connections.unsaved")].filter(Boolean).join("\n");
-      const chip = h("span", {class: "kb-sv" + (row.own ? " own" : ""), title: tip, tabindex: "0"}, h("i", {class: "kb-sv-dot"}), h("span", null, row.alias), env ? h("em", null, env) : null);
-      if (!row.own || !hasCompany) return chip;
-      const up = h("button", {type: "button", class: "kb-sv-up", title: t("dock.connections.share.tip"), "aria-label": t("dock.connections.share.tip")}, "\u21ea");
-      up.addEventListener("click", () => shareWindow(row));
-      chip.append(up);
-      return chip;
-    }
-    function shareWindow(row) {  // what goes in the pack, shown before it is written: the server's fields, no account, no password
-      const lines = [["type", row.type_label || row.type], ["env", row.env && row.env !== "none" ? row.env.toUpperCase() : ""], ["auth", row.auth_label || row.auth], ...Object.entries(row.fields || {})].filter(([, value]) => value);
-      const note = h("p", {class: "su-note"});
-      const go = h("button", {type: "button", class: "act hot"}, t("dock.connections.share.go"));
-      const no = h("button", {type: "button", class: "act"}, t("board.new.close"));
-      const win = SERVE.dialog([h("h2", null, t("dock.connections.share.title", {alias: row.alias})), h("p", {class: "sub"}, t("dock.connections.share.lead")),
-        h("ul", {class: "kb-sv-lines"}, lines.map(([key, value]) => h("li", null, h("b", null, key + ": "), h("code", null, String(value))))), note, h("div", {class: "row win-foot"}, go, no)]);
-      win.box.classList.add("kb-sv-win");
-      no.addEventListener("click", win.close);
-      go.addEventListener("click", () => {
-        go.disabled = true;
-        SERVE.post("/api/connections", {step: "share", aliases: [row.alias]}).then((data) => {
-          win.close();
-          packed.hidden = false; packed.classList.remove("bad");
-          packed.textContent = data.result.next + (data.result.sync_error ? " " + plainWords(data.result.sync_error) : "");
-          paintServers();
-        }, (error) => { go.disabled = false; note.classList.add("bad"); note.textContent = error.message || String(error); });
-      });
-    }
-    paintServers();
     function paintPackError(error) {  // changes git does not hold: they are the person's, so the way on shows them and commits them in the person's own Terminal window
       const skills = error.data && error.data.skills;
       if (skills) {  // what a skill lacks is written in the skill: that is a change in the knowledge base, so an agent makes it
@@ -270,7 +231,7 @@ const DOCK = (function () {
       packed.textContent = t("dock.pack.working");
       SERVE.post("/api/company", {op: "pack", out}).then((data) => { packed.textContent = t("dock.pack.done", {file: data.result.package, files: data.result.files}); }, (error) => { packed.classList.add("bad"); paintPackError(error); }).then(() => { pack.disabled = false; });
     }));
-    const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "kb-bar"}, h("div", {class: "chips dock-tabs"}, tabs), age, rebuild, again), alarm, synced, stage, serversRow, packed, h("div", {class: "row"}, pack, no)]);
+    const view = SERVE.dialog([h("h2", null, t("dock.kb")), h("div", {class: "kb-bar"}, h("div", {class: "chips dock-tabs"}, tabs), age, rebuild, again), alarm, synced, stage, packed, h("div", {class: "row"}, pack, no)]);
     view.box.classList.add("dock-window", "kb-window");
     view.holds = () => false;  // it only reads: nothing here can be lost
     let timer = 0, current = "", seenView = "", word = "", searched = "", ticket = 0, extra = null, painted = null, detailTimer = 0;  // word, searched: what was typed in Look up, kept while the tab changes; ticket: the newest search
@@ -444,7 +405,7 @@ const DOCK = (function () {
       stage.replaceChildren(h("p", {class: "sub"}, t("dock.kb.working")));
       if (key === "lookup") { lookup(); return; }
       const op = ["health", "atlas", "company"].includes(key) ? key : "status";
-      const paint = key === "health" ? health : key === "atlas" ? (found) => ATLAS.draw(stage, found) : key === "company" ? (found) => COMPANYTAB.draw(stage, found, {goMap: () => show("atlas")}) : key === "overview" ? overview : domains;
+      const paint = key === "health" ? health : key === "atlas" ? (found) => ATLAS.draw(stage, found) : key === "company" ? (found) => COMPANYTAB.draw(stage, found, {goMap: () => show("atlas"), goDomains: () => show("domains"), goTools: typeof TOOLS !== "undefined" ? () => TOOLS.open("packs", () => show("company")) : null}) : key === "overview" ? overview : domains;
       again.onclick = () => { clearTimeout(timer); load(op, paint, true); loadDetail(true); };
       load(op, paint, !asked.has(op));
       asked.add(op);

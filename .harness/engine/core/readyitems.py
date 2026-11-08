@@ -285,7 +285,19 @@ def items(root: Path) -> List[Dict[str, Any]]:
         except Exception as error:  # noqa: BLE001 - one part that cannot be read must not hide the others
             problem = {"key": key, "text": say("ready.p.error", name=say(f"board.enter.t.{key}")), "why": f"{type(error).__name__}: {error}"[:200], "short": "", "fix": {}}
             out.append(item(key, "yellow", say("ready.error"), problems=[problem]))
+        out[-1]["home"] = home(key)
     return out
+
+
+def home(key: str) -> Dict[str, Any]:
+    """Where the name of a row leads: its own window (Tool packs for the packs, even when the fix of a problem is in Local). A note's link leads to the fix."""
+    if key == "packs":
+        return fix_tools("packs", say("board.enter.t.packs"))
+    if key == "connections":
+        return fix_tools("connections", say("board.enter.t.connections"))
+    if key == "repos":
+        return fix_setup("company", say("board.enter.t.repos"))
+    return fix_kb("overview" if key == "kb" else "company", say(f"board.enter.t.{key}"))
 
 
 def problems(listed: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

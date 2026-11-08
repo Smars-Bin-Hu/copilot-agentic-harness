@@ -214,13 +214,35 @@ const SERVERS = (function () {
       if (!form.hidden) { const first = form.querySelector("input"); if (first) first.focus(); }
     });
     const source = row.own ? h("span", {class: "sv-own sv-from", title: t("connections.own.tip")}, t("connections.own")) : h("span", {class: "sv-own sv-from", title: t("connections.company.tip")}, t("connections.company"));
+    // A connection of one's own can go in the company pack (the place only, never the account): it was a button of the knowledge base window until 1.7.38.
+    const up = row.own ? h("button", {type: "button", class: "mc-x tl-share", title: t("dock.connections.share.tip"), "aria-label": t("dock.connections.share.tip")}, "\u21ea") : null;
+    if (up) up.addEventListener("click", () => shareWindow(row, (said, bad) => { why.replaceChildren(h("p", {class: "tl-say" + (bad ? " bad" : " sub")}, said)); }));
     const chip = envChip(row.env);
     const title = [...new Set([row.alias, row.label])].concat([row.type_label + (row.auth_label ? " · " + row.auth_label : ""), place(row), (row.fields || {}).url]).filter(Boolean).join("\n");
     paint();
     env.paints.set(key, paint);
     return h("div", {class: "tl-crow", "data-focus": "sign:" + key, "data-alias": key},
       h("div", {class: "tl-c1"}, h("span", {class: "tl-id", title}, h("b", {class: "sv-alias"}, key), h("span", {class: "sv-kind"}, row.type_label), chip || h("code", {class: "sv-where"}, place(row)), source),
-        h("span", {class: "tl-act"}, stateBox, signBtn, testBtn)), why, form);
+        h("span", {class: "tl-act"}, stateBox, up, signBtn, testBtn)), why, form);
+  }
+
+  // What goes in the company pack, shown before it is written: the connection's fields, no account, no password.
+  function shareWindow(row, tell) {
+    const lines = [["type", row.type_label || row.type], ["env", row.env && row.env !== "none" ? row.env.toUpperCase() : ""], ["auth", row.auth_label || row.auth], ...Object.entries(row.fields || {})].filter(([, value]) => value);
+    const note = h("p", {class: "su-note"});
+    const go = h("button", {type: "button", class: "act hot"}, t("dock.connections.share.go"));
+    const no = h("button", {type: "button", class: "act"}, t("board.new.close"));
+    const win = SERVE.dialog([h("h2", null, t("dock.connections.share.title", {alias: row.alias})), h("p", {class: "sub"}, t("dock.connections.share.lead")),
+      h("ul", {class: "kb-sv-lines"}, lines.map(([key, value]) => h("li", null, h("b", null, key + ": "), h("code", null, String(value))))), note, h("div", {class: "row win-foot"}, go, no)]);
+    win.box.classList.add("kb-sv-win");
+    no.addEventListener("click", win.close);
+    go.addEventListener("click", () => {
+      go.disabled = true;
+      ask("share", {aliases: [row.alias]}).then((result) => {
+        win.close();
+        tell(result.next + (result.sync_error ? " " + String(result.sync_error).replace(/`/g, "") : ""), Boolean(result.sync_error));
+      }, (error) => { go.disabled = false; note.classList.add("bad"); note.textContent = error.message || String(error); });
+    });
   }
 
   // The form of a sign-in that needs typing: an account and a password (or one token, or a key file). Sign in tests with what was typed and keeps it only when the test passes.

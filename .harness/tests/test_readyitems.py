@@ -37,7 +37,7 @@ class KnowledgeBaseTests(TaskCase):
         for key in ("instructions", "skills", "standards"):
             self.assertEqual((found[key]["state"], found[key]["detail"], found[key]["problems"]), ("grey", readyitems.DASH, []), key)  # nothing to say before a knowledge base is in
         for entry in found.values():
-            self.assertEqual(set(entry), {"key", "state", "detail", "fix", "names", "problems"} | ({"found"} if entry["key"] == "kb" else set()))
+            self.assertEqual(set(entry), {"key", "state", "detail", "fix", "home", "names", "problems"} | ({"found"} if entry["key"] == "kb" else set()))
         problems = readyitems.problems(list(found.values()))
         self.assertEqual(problems[0]["row"], "kb")
         self.assertEqual({problem["row"] for problem in problems}, {entry["key"] for entry in found.values() if entry["problems"]})
@@ -107,6 +107,17 @@ class InstructionsTests(TaskCase):
         found = readyitems.files_item("instructions", folder, True)
         self.assertEqual((found["state"], found["problems"]), ("ok", []))
         self.assertIn("2", found["detail"])
+
+
+class HomeTests(TaskCase):
+    def test_the_name_of_a_row_opens_its_own_window_even_when_the_fix_is_elsewhere(self) -> None:
+        """1.7.38: Tool packs opens the Tool packs window; a missing program's note leads to Local."""
+        found = {entry["key"]: entry["home"] for entry in readyitems.items(self.root)}
+        self.assertEqual((found["packs"]["to"], found["packs"]["tab"]), ("tools", "packs"))
+        self.assertEqual((found["connections"]["to"], found["connections"]["tab"]), ("tools", "connections"))
+        self.assertEqual((found["kb"]["to"], found["kb"]["tab"]), ("kb", "overview"))
+        self.assertEqual((found["skills"]["to"], found["skills"]["tab"]), ("kb", "company"))
+        self.assertEqual((found["repos"]["to"], found["repos"]["sec"]), ("setup", "company"))
 
 
 class CertificateAndRepositoriesTests(TaskCase):

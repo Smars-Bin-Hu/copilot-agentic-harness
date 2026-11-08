@@ -80,9 +80,17 @@ const COMPANYTAB = (function () {
       h("span", {class: "co-miss", title: t("dock.co.unknown.tip", {name})}, t("dock.co.unknown"))));
   }
 
-  function toolsSection(found) {
+  // The tools the company selected (1.7.38): grouped as the skills are, the company's own packs first, then the factory packs it turns on, then a folder tried on this computer.
+  // Change opens the Tool packs window, where a factory pack is turned on or off.
+  function toolsSection(found, options) {
     const unknown = found.unknown_use || [];
-    return h("section", {class: "co-sec"}, head("tools", found.tools.length), found.tools.map((item) => pack(item, found.tools.length <= 3)), unknown.map(unknownPack), found.tools.length || unknown.length ? null : h("p", {class: "sub"}, t("dock.co.tools.none")));
+    const change = h("button", {type: "button", class: "act kb-mini co-change", title: t("dock.co.tools.change.tip")}, t("dock.co.tools.change"));
+    change.addEventListener("click", () => { if (options.goTools) options.goTools(); });
+    const groups = [["company", found.tools.filter((item) => item.source === "company")], ["harness", found.tools.filter((item) => item.source === "harness")], ["added", found.tools.filter((item) => item.source !== "company" && item.source !== "harness")]];
+    const open = found.tools.length <= 3;
+    return h("section", {class: "co-sec"}, head("tools", found.tools.length, change),
+      groups.map(([key, rows]) => rows.length ? h("details", {class: "co-group", open: ""}, h("summary", null, t("dock.co.tools." + key), h("span", {class: "co-n"}, rows.length)), rows.map((item) => pack(item, open))) : null),
+      unknown.map(unknownPack), found.tools.length || unknown.length ? null : h("p", {class: "sub"}, t("dock.co.tools.none")));
   }
 
   function skill(item) {
@@ -90,11 +98,19 @@ const COMPANYTAB = (function () {
       () => [h("b", null, item.name), item.about ? h("span", null, item.about) : null, item.pack ? h("span", {class: "sub"}, t("dock.co.skill.pack", {pack: item.pack})) : null, item.synced ? null : h("span", {class: "sub"}, t("dock.co.unsynced.tip"))]);
   }
 
-  function skillsSection(found) {
+  function skillsSection(found, options) {
     const groups = [["company", found.skills.company], ["pack", found.skills.pack], ["harness", found.skills.harness]];
     const total = groups.reduce((sum, [, rows]) => sum + rows.length, 0);
     return h("section", {class: "co-sec"}, head("skills", total), groups.map(([key, rows]) => rows.length ? h("details", {class: "co-group", open: key !== "harness" ? "" : null},
-      h("summary", null, t("dock.co.skills." + key), h("span", {class: "co-n"}, rows.length)), rows.map((row, index) => [row.pack && (!index || rows[index - 1].pack !== row.pack) ? h("h4", {class: "co-sub"}, row.pack) : null, skill(row)])) : null));
+      h("summary", null, t("dock.co.skills." + key), h("span", {class: "co-n"}, rows.length)), rows.map((row, index) => [row.pack && (!index || rows[index - 1].pack !== row.pack) ? h("h4", {class: "co-sub"}, row.pack) : null, skill(row)])) : null),
+      domainLink(options));
+  }
+
+  function domainLink(options) {  // the domain skills have their own tab: a way there, not a copy (1.7.38)
+    if (!options.goDomains) return null;
+    const go = h("button", {type: "button", class: "co-link"}, t("dock.co.skills.domains"));
+    go.addEventListener("click", options.goDomains);
+    return h("p", {class: "sub co-domains"}, go);
   }
 
   function filesSection(found) {
@@ -106,7 +122,8 @@ const COMPANYTAB = (function () {
 
   function draw(stage, found, options) {
     stage.classList.add("co-stage");
-    stage.replaceChildren(company(found), toolsSection(found), skillsSection(found), filesSection(found));  // the domains have their own tab: not repeated here (1.7.35)
+    const given = options || {};
+    stage.replaceChildren(company(found), toolsSection(found, given), skillsSection(found, given), filesSection(found));  // the domains have their own tab: not repeated here (1.7.35)
   }
   const clear = () => { if (pop) pop.hidden = true; };
   return {draw, clear};

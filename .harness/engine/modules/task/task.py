@@ -489,6 +489,36 @@ def _req_unfilled(root: Path, task: str) -> List[Tuple[str, int]]:
     return found
 
 
+_FIELD_PLACEHOLDER = re.compile(r"^\s*[-*]\s+\*\*[^*\n]+\*\*\s*[:：]\s*<[^<>\n]+>\s*$")  # `- **Updated**: <yyyy-mm-dd>`
+
+
+def without_placeholders(text: str) -> str:
+    """A document of the task as a person reads it on the page (1.7.38, C11 T2-05): the lines that are still the template's `<...>` are left out, and a heading that this empties goes too.
+    The file is not changed; what the agent never filled in is not shown as if it were an answer."""
+    lines = text.splitlines()
+    gone = [False] * len(lines)
+    fence = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            fence = not fence
+        elif not fence and (_FIELD_PLACEHOLDER.match(line) or re.match(r"^<[^<>\n]+>$", stripped)):
+            gone[index] = True
+    for index, line in enumerate(lines):
+        if gone[index] or not re.match(r"^#{2,6}\s+\S", line.strip()):
+            continue
+        rest = [(other, dropped) for other, dropped in zip(lines[index + 1:], gone[index + 1:]) if dropped or other.strip()]
+        body = []
+        for other, dropped in rest:
+            if re.match(r"^#{1,6}\s+\S", other.strip()) and not dropped:
+                break
+            body.append(dropped)
+        if body and all(body):  # everything under it was the template's
+            gone[index] = True
+    kept = [line for line, dropped in zip(lines, gone) if not dropped]
+    return "\n".join(kept) + ("\n" if text.endswith("\n") else "")
+
+
 def req_placeholders(root: Path, task: str) -> int:
     """How many lines of REQ.md are still the template's `<...>` (the agent left them instead of writing the answer, or "none"). 0 when there is no REQ.md."""
     return sum(count for _heading, count in _req_unfilled(root, task))

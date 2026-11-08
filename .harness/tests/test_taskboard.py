@@ -923,6 +923,51 @@ class PageTests(BoardCase):
         again, _problems = taskboard.board_rows(self.root, True)  # a closed task's numbers are kept, not worked out again
         self.assertEqual([row["brief"] for row in again["tasks"]], [row["brief"] for row in result["tasks"]])
 
+    def test_a_task_closed_a_moment_ago_gets_its_credits_when_copilot_writes_them(self) -> None:
+        """1.7.38 (C11 T2-08): the agent closed the task inside its last turn; Copilot writes the credits when the turn ends. The board must not keep the empty numbers of the first look."""
+        self.prompt("c1")
+        self.new("fresh", "qa", session="c1")
+        self.cli_json("task", "close", "--task", "fresh")
+        real = taskboard.insight
+
+        def credits(value):
+            def run(root, task, use_events=None):
+                info, now = real(root, task, use_events)
+                return dict(info, source="copilot-events", totals=dict(info["totals"], aiu=value)), now
+            return run
+
+        def aiu() -> Any:
+            result, _problems = taskboard.board_rows(self.root, True)
+            return next(row for row in result["tasks"] if row["name"] == "fresh")["brief"]["aiu"]
+
+        with mock.patch.object(taskboard, "insight", credits(None)):
+            self.assertIsNone(aiu())
+        with mock.patch.object(taskboard, "insight", credits(7.5)):
+            self.assertEqual(aiu(), 7.5, "worked out again, not the kept empty numbers")
+        with mock.patch.object(taskboard, "insight", credits(None)):
+            self.assertEqual(aiu(), 7.5, "with credits, it is kept")
+
+    def test_a_task_closed_long_ago_with_no_credits_is_not_worked_out_at_every_look(self) -> None:
+        self.prompt("c1")
+        self.new("ancient", "qa", session="c1")
+        self.cli_json("task", "close", "--task", "ancient")
+        path = self.root / BASE / "ancient" / ".task" / "task.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["updated_at"] = "2026-01-01T00:00:00+00:00"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        real = taskboard.insight
+        calls = []
+
+        def run(root, task, use_events=None):
+            calls.append(task)
+            info, now = real(root, task, use_events)
+            return dict(info, source="copilot-events", totals=dict(info["totals"], aiu=None)), now
+
+        with mock.patch.object(taskboard, "insight", run):
+            taskboard.board_rows(self.root, True)
+            taskboard.board_rows(self.root, True)
+        self.assertEqual(len([call for call in calls if call.endswith("ancient")]), 1)
+
     def test_a_served_board_writes_a_tasks_page_only_when_the_task_changed(self) -> None:
         """1.6.109: the served board asks for the rows every few seconds and draws a task's page when it is asked for; writing every page each time only cost time."""
         self.new("alpha")

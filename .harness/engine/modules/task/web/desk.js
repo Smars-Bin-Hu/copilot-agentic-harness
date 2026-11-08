@@ -425,7 +425,7 @@
 
   // The row an action button is made for (what `actionButton` and the dialogs read of the task).
   function actionRow() {
-    return {name: desk.name, waiting: desk.waiting, state: desk.state, chat: desk.chat, ask: desk.ask, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed,
+    return {name: desk.name, waiting: desk.waiting, state: desk.state, chat: desk.chat, ask: desk.ask, todo_left: desk.todo_left, req_unconfirmed: desk.req_unconfirmed, req_sections: desk.req_sections,
       result_missing: FILES[desk.kind] && ["design", "rca"].includes(desk.kind) && !doc(FILES[desk.kind]) ? FILES[desk.kind] : ""};  // a design or an RCA task without its result file: the close dialog warns
   }
   const OPTIONAL = ["pause", "resume", "autorun on", "close"];  // the person may do these any time; the rest is what the task waits for
@@ -765,7 +765,8 @@
     const can = served() && full.status === "open" && SERVE.runs("task allow");
     const chips = found.envs.map((item) => {
       const listed = item.systems.length > 0;
-      const tip = !listed ? t("desk.set.open.none", {env: item.env}) : item.open ? t("desk.set.open.close", {env: item.env, systems: item.systems.join(", ")}) : t("desk.set.open.open", {env: item.env, systems: item.systems.join(", ")});
+      const asks = item.asks || [];  // systems of a tool pack on this environment: each write waits for the person whatever is open (1.7.38)
+      const tip = !listed ? (asks.length ? t("desk.set.open.asks", {env: item.env, systems: asks.join(", ")}) : t("desk.set.open.none", {env: item.env})) : item.open ? t("desk.set.open.close", {env: item.env, systems: item.systems.join(", ")}) : t("desk.set.open.open", {env: item.env, systems: item.systems.join(", ")});
       const seen = item.reach;  // reached from VS Code (1.7.9): a dot on the chip, the words on hover
       const why = (one) => one.state === "denied" ? (one.launch || t("desk.reach.why.identity")) : one.why === "no-answer" ? t("desk.reach.why.no-answer") : t("desk.reach.why.exit", {why: one.why});
       const part = (one) => one.state === "ok" ? t("desk.reach.ok", {env: one.system, who: one.who || "-"}) : one.state === "unknown" ? t("desk.reach.unknown", {env: one.system}) : t("desk.reach.bad", {env: one.system, launch: why(one)});
@@ -780,7 +781,9 @@
     });
     const never = (found.never || []).map((env) => h("span", {class: "chip env never", title: t("desk.set.open.never", {env})}, env));
     const note = open.length ? h("p", {class: "set-tip"}, t("desk.set.open.note", {envs: open.map((item) => item.env).join(", "), systems: [...new Set(open.flatMap((item) => item.systems))].join(", ")})) : null;
+    const asking = [...new Set(found.envs.flatMap((item) => item.asks || []))];
     const pop = h("div", {class: "rv-pop", hidden: true}, h("b", null, t("desk.set.open")), h("p", {class: "sub"}, t("desk.set.open.tip")), h("p", {class: "set-warn"}, t("desk.set.open.warn")), h("div", {class: "chips env-chips"}, chips, never), note,
+      asking.length ? h("p", {class: "sub"}, t("desk.set.open.asks.pop", {systems: asking.join(", ")})) : null,
       can ? null : h("p", {class: "set-warn"}, t("desk.set.open.cannot")));
     const unreached = found.envs.filter((item) => item.reach && (item.reach.state === "denied" || item.reach.state === "failed")).map((item) => item.env.toUpperCase());  // VS Code cannot reach these (1.7.9)
     const button = h("button", {type: "button", class: "rv-btn" + (open.length ? " on" : ""), "aria-haspopup": "dialog", "aria-expanded": "false", title: t("desk.set.open.tip") + (unreached.length ? "\n" + t("desk.reach.pill", {envs: unreached.join(", ")}) : "")},
@@ -1070,22 +1073,23 @@
       h("div", {class: "tk-need-h"}, h("div", {class: "tk-need-t"}, h("h2", null, idle ? idle.title : t("desk.actions.title")), askBubble()), items.length || desk.waiting ? waitedLine() : null),
       notes,
       idle ? [h("p", {class: "hint"}, idle.hint), resumeButton(), idle.prompt ? promptLine(idle.prompt) : null, jump]
-        : h("div", {class: "tk-acts"}, items.map((item) => h("div", {class: "tk-act"}, talkButtons(row, item), h("p", {class: "hint"}, hintOf(item))))));
+        : h("div", {class: "tk-acts"}, items.map((item) => h("div", {class: "tk-act"}, talkButtons(row, item), h("p", {class: "hint"}, hintOf(item)), ["question", "confirm"].includes(item.action) && desk.ask && served() ? h("div", {class: "tk-asked"}, askCard().build()) : null))));  // what the chat asks is on the card, not only behind the bubble (1.7.38, C11 T2-13)
   }
 
   function waitBand() {
     if (desk.past) return pastNote();
     const told = approvedCard();
-    if (!needsCard()) return told;
+    const left = (desk.outbox || []).filter((item) => item.moved_on).map((item) => outboxCard(item, []));  // calls the agent went on without: not a wait, but still here to dismiss (or approve), whatever else the task waits for (1.7.38)
+    if (!needsCard()) return left.length ? [told, ...left].filter(Boolean) : told;
     const items = needItems().filter((item) => item.action !== "approve-action");  // the held calls have cards of their own
     const strong = items.filter((item) => JUMPS[item.action]);
     const other = items.filter((item) => !JUMPS[item.action]);
     const notes = waitNotes().filter(Boolean);
     const cards = told ? [told] : [];  // the approved calls first: the one step left is to tell the agent
-    cards.push(...(desk.outbox || []).map((item, index) => outboxCard(item, index || told ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
+    cards.push(...(desk.outbox || []).filter((item) => !item.moved_on).map((item, index) => outboxCard(item, index || told ? [askNote()].filter(Boolean) : notes)));  // the other notes once; the question note on each held card
     cards.push(...strong.map((item, index) => strongCard(item, index || cards.length ? [] : notes)));
     if (other.length || (!strong.length && !cards.length)) cards.push(otherCard(other, strong.length || cards.length ? [] : notes));  // the held calls stand for themselves
-    return cards;
+    return [...cards, ...left];
   }
 
   // --- a call to an outside system held in the outbox (1.7.7) -------------------------------------------------------------------------------------------------
@@ -1139,30 +1143,40 @@
       if (line.kind === "program") rows.push(h("div", {class: "cmd-line"}, h("span", {class: "cmd-prog"}, line.text)));
       else if (line.kind === "option") rows.push(h("div", {class: "cmd-line in"}, h("span", {class: "cmd-opt"}, line.text), line.value ? [" ", h("span", {class: "cmd-val"}, line.value)] : null));
       else if (line.kind === "flag") rows.push(h("div", {class: "cmd-line in"}, h("span", {class: "cmd-opt"}, line.text)));
+      else if (line.kind === "sep") rows.push(h("div", {class: "cmd-sep"}, h("span", null, line.text)));  // the next command of the line (1.7.38)
       else if (line.kind === "block") rows.push(h("div", {class: "cmd-block"}, sqlNodes(line.text)));
       else rows.push(h("div", {class: "cmd-line in"}, h("span", {class: "cmd-val"}, line.text)));
     }
     return h("div", {class: "cmd-fmt"}, rows);
   }
   const known = (key, plain) => (Object.prototype.hasOwnProperty.call(TEXT, key) ? t(key) : plain);  // a word of the harness in the language of the page; a name a tool pack gives stays as it is
+  const factSpan = (label, value, hot) => (value ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), hot ? tag(value, "hot") : h("code", null, value)) : null);
+  const factList = (facts) => Object.entries(facts || {}).map(([name, value]) => factSpan(known("desk.outbox.fact." + name, name), value));
+  const manyWrites = (item) => Array.isArray(item.parts) && item.parts.length > 1;  // a held line of several writes: each has its own words, facts and text (1.7.38)
   function callFacts(item) {
     const verb = known("desk.outbox.verb." + item.verb, item.verb);
-    const fact = (label, value, hot) => (value ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, label), hot ? tag(value, "hot") : h("code", null, value)) : null);
+    const many = manyWrites(item);
     return h("div", {class: "tk-call-facts"},
-      fact(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), item.env && item.env !== "none" ? [" ", tag(item.env, "hot")] : null),
-      ...Object.entries(item.facts || {}).map(([name, value]) => fact(known("desk.outbox.fact." + name, name), value)),
-      fact(t("desk.outbox.target"), item.target),
+      factSpan(t("desk.outbox.what"), item.named === false ? h("span", {class: "unnamed", title: t("desk.outbox.unnamed")}, item.verb, " ", h("span", {class: "why"}, "?")) : verb), h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.system")), h("b", null, item.system), item.env && item.env !== "none" ? [" ", tag(item.env, "hot")] : null),
+      ...(many ? [] : factList(item.facts)),
+      many ? null : factSpan(t("desk.outbox.target"), item.target),
       item.layout && item.layout.script ? h("span", {class: "tk-fact"}, h("span", {class: "k"}, t("desk.outbox.script")), h("code", null, item.layout.script.path), " ", h("span", {class: "sub"}, t("desk.outbox.lines", {n: item.layout.script.lines}))) : null);
   }
   // The card of a call whose type says what it does in words (1.7.20): the title is that sentence, and the text it writes stands in a block of its own (a file of the task, or the text as written).
-  // The raw command is folded: ids, headers and long addresses are not on the face of the card.
-  const sayLine = (item) => (item.say ? h("div", {class: "tk-call-say"}, item.say, item.writes > 1 ? h("span", {class: "tk-writes"}, t("desk.outbox.writes", {n: item.writes})) : null) : null);
+  // The raw command is folded: ids, headers and long addresses are not on the face of the card. A line of several writes (1.7.38) says each on a line of its own, with its own facts and text.
+  const sayLine = (item) => {
+    if (manyWrites(item)) {
+      return h("div", {class: "tk-parts"}, h("span", {class: "tk-writes"}, t("desk.outbox.writes", {n: item.parts.length})),
+        h("ol", null, item.parts.map((part) => h("li", null, h("div", {class: "tk-call-say"}, part.say), Object.keys(part.facts || {}).length ? h("div", {class: "tk-call-facts"}, ...factList(part.facts)) : null, bodyBlock(part)))));
+    }
+    return item.say ? h("div", {class: "tk-call-say"}, item.say) : null;
+  };
   function bodyBlock(item) {
     const body = item.body;
     if (!body) return null;
     if (body.missing) return h("div", {class: "tk-call-body missing"}, h("p", {class: "bad"}, t("desk.outbox.body.missing", {path: body.path, dismiss: t("desk.outbox.dismiss")})));
     return h("div", {class: "tk-call-body"},
-      h("div", {class: "tk-body-h"}, h("b", null, t("desk.outbox.body")), " ", h("span", {class: "sub"}, [body.path ? t("desk.outbox.body.file", {path: body.path}) : "", body.lines > 1 ? t("desk.outbox.body.lines", {n: body.lines}) : ""].filter(Boolean).join(" \u00b7 "))),
+      h("div", {class: "tk-body-h"}, h("b", null, body.label || t("desk.outbox.body")), " ", h("span", {class: "sub"}, [body.path ? t("desk.outbox.body.file", {path: body.path}) : "", body.lines > 1 ? t("desk.outbox.body.lines", {n: body.lines}) : ""].filter(Boolean).join(" \u00b7 "))),
       h("pre", {class: "tk-body-text", tabindex: "0"}, body.text), body.cut ? h("p", {class: "sub"}, t("desk.outbox.body.cut")) : null);
   }
   const rawFold = (item) => h("details", {class: "tk-raw"}, h("summary", null, t("desk.outbox.raw")), h("pre", {class: "cmd-script one"}, item.command));
@@ -1185,7 +1199,7 @@
     const codeChip = h("button", {type: "button", class: "ev code-chip", title: t("desk.outbox.code_tip")}, item.code);
     const view = SERVE.dialog([h("h2", null, t("desk.outbox.window")), sayLine(item), callFacts(item), h("p", {class: "sub"}, t("desk.outbox.asked", {at: when(item.created_at, 0, 16)}), " ", codeChip),
       h("div", {class: "win-body"},  // one scrolling body (both ways); the blocks in it scroll sideways only; the buttons stay in view
-        bodyBlock(item),
+        manyWrites(item) ? null : bodyBlock(item),
         h("div", {class: "cmd-scroll flat"}, commandNodes(item.layout)),
         script ? [h("p", null, h("b", null, script.path), " ", h("span", {class: "sub"}, t("desk.outbox.script.note", {n: script.lines}))), h("div", {class: "cmd-scroll flat"}, h("pre", {class: "cmd-script"}, sqlNodes(script.text)), script.cut ? h("p", {class: "sub"}, t("desk.cut")) : null)] : null,
         h("p", {class: "sub"}, t("desk.outbox.as_written")), h("div", {class: "cmd-scroll one"}, h("pre", {class: "cmd-script"}, item.command))),
@@ -1200,14 +1214,15 @@
     const ready_ = () => can && viewedCalls.has(item.code) && input.value.trim().length > 0;  // the window was opened and a code was typed (the one the agent gave, in the draft's name)
     const yes = h("button", {type: "button", class: "act hot big", disabled: "disabled", title: t("desk.outbox.view_first")}, t("desk.outbox.approve"));
     // Why Approve is grey is shown by motion, not words: View pulses until it was opened, then the code box until a code is typed (hand test: the tip alone was not seen).
+    const gone = Boolean(item.moved_on);  // the agent ran other commands after this call: it does not wait for it, so nothing pulses and Dismiss is the main button
     const arm = () => {
       yes.disabled = !ready_();
       yes.title = ready_() || !can ? "" : viewedCalls.has(item.code) ? t("desk.outbox.type_code") : t("desk.outbox.view_first");
-      view.classList.toggle("pulse", can && !viewedCalls.has(item.code));
-      input.classList.toggle("pulse", can && viewedCalls.has(item.code) && !input.value.trim());
+      view.classList.toggle("pulse", can && !gone && !viewedCalls.has(item.code));
+      input.classList.toggle("pulse", can && !gone && viewedCalls.has(item.code) && !input.value.trim());
     };
     input.addEventListener("input", arm);
-    const no = h("button", {type: "button", class: "act", disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
+    const no = h("button", {type: "button", class: "act" + (gone ? " hot big" : ""), disabled: can ? null : "disabled"}, t("desk.outbox.dismiss"));
     const view = h("button", {type: "button", class: "act big tk-view"}, t("desk.outbox.view"));
     const said = h("div", {class: "bad"});
     view.addEventListener("click", () => { callWindow(item, (code) => { input.value = code; enteredCodes.set(item.code, code); arm(); yes.focus(); }); arm(); });  // the code is not filled in by opening View: the person types it, or clicks it in View (1.7.29)
@@ -1216,7 +1231,7 @@
     const send = () => {
       if (!ready_()) return;
       yes.disabled = true; yes.textContent = t("board.serve.working");
-      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then(() => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), title: item.say || String(item.command || "").replace(/\s+/g, " ").slice(0, 80)}); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
+      SERVE.post("/api/act", {action: "approve-action", task: desk.name, step: "act", code: input.value.trim()}).then(() => { approvedCalls.set(input.value.trim().toUpperCase(), {at: Date.now(), title: (item.says || []).join(" \u00b7 ") || String(item.command || "").replace(/\s+/g, " ").slice(0, 80)}); SERVE.done(); }, (error) => { said.replaceChildren(...SERVE.reasons(error.message)); arm(); yes.textContent = t("desk.outbox.approve"); });
     };
     yes.addEventListener("click", send);
     input.addEventListener("keydown", (event) => { if (isEnter(event) && !yes.disabled) send(); });
@@ -1228,12 +1243,13 @@
     arm();
     const peek = item.command.length > 110 ? item.command.slice(0, 110) + "…" : item.command;
     const words = Boolean(item.say || item.body);  // the type says it in words: the card shows that and folds the command
-    return h("section", {class: "tk-need strong tk-call", "data-action": "approve-action", "data-code": item.code},
-      h("div", {class: "tk-need-h"}, tag(t("task.waiting.outbox"), "hot"), h("span", {class: "sub", title: item.draft ? t("desk.outbox.draft.tip", {file: item.draft}) : null}, t("desk.outbox.since", {at: when(item.created_at, 11, 16)}))),  // the draft's file name is on hover, not on the card (1.7.26)
+    return h("section", {class: "tk-need tk-call" + (gone ? " moved" : " strong"), "data-action": "approve-action", "data-code": item.code},
+      h("div", {class: "tk-need-h"}, tag(t(gone ? "desk.outbox.moved" : "task.waiting.outbox"), gone ? "" : "hot"), h("span", {class: "sub", title: item.draft ? t("desk.outbox.draft.tip", {file: item.draft}) : null}, t("desk.outbox.since", {at: when(item.created_at, 11, 16)}))),  // the draft's file name is on hover, not on the card (1.7.26)
       sayLine(item),
       callFacts(item),
-      bodyBlock(item),
+      manyWrites(item) ? null : bodyBlock(item),
       words ? rawFold(item) : h("div", {class: "tk-cmd-peek"}, h("code", null, peek)),
+      gone ? h("p", {class: "hint"}, t("desk.outbox.moved.note")) : null,
       notes,
       h("div", {class: "tk-need-go tk-call-go"}, view, h("span", {class: "tk-code-in"}, h("span", {class: "sub"}, t("board.serve.code")), input, yes), no, h("span", {class: "sub"}, t("desk.outbox.same_as")), said));  // View first in the row: the eye goes View, code, Approve
   }
@@ -1265,7 +1281,7 @@
     const chat = served() && !desk.past ? desk.chat : null;
     const onLive = current === "live" && hasStream();
     if (typeof LIVE !== "undefined" && served()) {
-      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).map((item) => item.command), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed"});
+      LIVE.config({task: desk.task, chat, held: (desk.outbox || []).filter((item) => !item.moved_on).map((item) => item.command), approved: (desk.approved || []).map((item) => item.command), off: desk.status === "open" && !desk.past ? "" : desk.status || "closed"});
       LIVE.want("tab", onLive);
       LIVE.visible(onLive);
     }

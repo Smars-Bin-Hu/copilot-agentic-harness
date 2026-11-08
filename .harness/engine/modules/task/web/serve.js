@@ -220,15 +220,9 @@ const SERVE = (function () {
     if (item.action === "stop") return CHAT.stop(row);
     if (item.action === "close") return close(row);
     if (item.action === "archive") return archive([row.name], serve.archive_to);
-    // A plan stands on a confirmed requirement: the plan alone is refused, and one code can confirm the requirement and approve the plan.
-    if (item.action === "approve-plan" && row.req_unconfirmed && !withReq) {
-      const go = h("button", {class: "act hot", type: "button"}, t("board.plan.req.go"));
-      const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
-      const view = dialog([h("h2", null, t("board.plan.req.title")), h("p", null, t("board.plan.req")), h("div", {class: "row"}, go, no)]);
-      no.addEventListener("click", view.close);
-      go.addEventListener("click", () => { view.close(); act(button, row, item, true); });
-      return;
-    }
+    // A plan stands on a confirmed requirement: the plan alone is refused, so one code confirms the requirement and approves the plan (1.7.38, C11 T2-11: no window of its own before the code; the window with the code says it).
+    const joint = item.action === "approve-plan" && Boolean(row.req_unconfirmed);
+    withReq = withReq || joint;
     const body = {action: item.action, task: row.name, ...(withReq ? {with_req: true} : {})};
     if (free(item.action)) {
       button.textContent = t("board.serve.working");
@@ -247,7 +241,9 @@ const SERVE = (function () {
       const no = h("button", {class: "act", type: "button"}, t("board.serve.cancel"));
       const said = h("div", {class: "bad"});
       // What the terminal would show can be long (a promote lists every file): it scrolls in its own box, so the code and the buttons stay in view.
-      const view = dialog([h("h2", null, button.dataset.label + " · " + row.name), h("div", {class: "screen"}, data.result.screen.map((line) => h("p", {class: "sub"}, line))),
+      const view = dialog([h("h2", null, button.dataset.label + " · " + row.name), joint ? h("p", null, t("board.plan.req")) : null,
+        joint && (row.req_sections || []).length ? h("p", {class: "bad"}, t("desk.req.unfinished", {sections: row.req_sections.join(", ")})) : null,  // the card says it; so does the window the code is typed in
+        h("div", {class: "screen"}, data.result.screen.map((line) => h("p", {class: "sub"}, line))),
         h("p", null, data.result.ask), input, h("div", {class: "row"}, yes, no), said]);
       no.addEventListener("click", view.close);
       const send = () => {

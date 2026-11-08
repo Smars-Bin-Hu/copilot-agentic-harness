@@ -185,7 +185,18 @@ def todo_counts(root: Path, task: str) -> Optional[Dict[str, int]]:
 
 CLOSED_SHOWN = 50  # how many closed tasks the board lists (the newest); `board.closed_shown` in task.json
 _closed: Dict[Tuple[str, str], Tuple[str, Any, str]] = {}  # a closed task does not change: its numbers and page are made once
-_written: Dict[Tuple[str, str], str] = {}  # (root, task) -> the `updated_at` of the task when a served board last wrote its page
+_written: Dict[Tuple[str, str], Any] = {}  # (root, task) -> (the `updated_at` of the task, its credits) when a served board last wrote its page
+USAGE_WAIT_S = 15 * 60  # Copilot writes the credits of a turn when the turn ends: a task the agent closed in its last turn has none yet; its numbers are not kept for this long
+
+
+def usage_pending(row: Dict[str, Any], brief: Dict[str, Any]) -> bool:
+    """A closed task whose credits Copilot's record does not hold yet (1.7.38, C11 T2-08): it was closed a moment ago, from inside the turn that is still running. Its numbers are made again at the next look."""
+    if brief.get("aiu") is not None or brief.get("source") != "copilot-events":
+        return False
+    from core import copilot_events
+
+    closed = copilot_events.seconds(row.get("updated_at"))
+    return closed is not None and time.time() - closed < USAGE_WAIT_S
 
 
 def closed_shown(root: Path) -> int:
@@ -243,11 +254,12 @@ def board_rows(root: Path, everything: bool, refresh: int = 0, served: Any = (),
             info, now = insight(root, row["task"], use_events)
             row["brief"] = taskinsight.brief(info)
             page = common.task_report_file(root, task_ops.name_of(row["task"]), common.REPORT_HTML)
-            if rewrite or _written.get(key) != row["updated_at"] or not page.is_file():
+            stamp = (row["updated_at"], row["brief"].get("aiu"))
+            if rewrite or _written.get(key) != stamp or not page.is_file():
                 write_task_page(root, row["task"], info, refresh, now)
-                _written[key] = row["updated_at"]
+                _written[key] = stamp
             row["report"] = page.relative_to(root / common.REPORTS_DIR).as_posix()
-            if row["status"] == "closed":
+            if row["status"] == "closed" and not usage_pending(row, row["brief"]):
                 _closed[key] = (row["updated_at"], row["brief"], row["report"])
         except Exception as error:  # noqa: BLE001 - one bad task must not take the board away
             problems.append({"task": row["task"], "error": f"{type(error).__name__}: {error}"})

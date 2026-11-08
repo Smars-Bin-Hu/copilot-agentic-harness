@@ -92,6 +92,21 @@ class ReadinessTests(TaskCase):
         self.assertEqual(found["problems"]["required"], [])
         self.assertNotIn("ver", [entry["id"] for entry in found["checks"]])  # N11: no version line
 
+    def test_a_company_pack_with_the_name_of_a_factory_pack_turns_the_doctor_line_red_at_once(self) -> None:
+        """1.7.38 (C11 T2-09): `doctor` says [ERROR] for it; the kept clean answer of the board was older than the file, and the line stayed green."""
+        import support
+
+        support.use_packs(self.root, "ado")
+        check = ready.Ready(self.root, StubLink(UP), clean)
+        self.assertEqual(line(settled(check), "doctor")["state"], "ok")
+        folder = self.root / "knowledge-base" / "company" / "tools" / "packs" / "ado"
+        folder.mkdir(parents=True)
+        found = check.answer(True)
+        self.assertEqual((line(found, "doctor")["state"], line(found, "doctor")["n"]), ("fail", 1), "no new doctor run was needed")
+        self.assertFalse(found["ready"])
+        folder.rmdir()
+        self.assertEqual(line(check.answer(True), "doctor")["state"], "ok")
+
     def test_the_doctor_is_first_unknown_then_run_once_off_the_calling_thread(self) -> None:
         gate, calls = threading.Event(), []
 

@@ -129,7 +129,7 @@ const SERVERS = (function () {
     kind.addEventListener("change", draw);
     auth.addEventListener("change", drawIdentity);
     draw();
-    return h("div", {class: "sv-own-form"}, h("div", {class: "sv-fields"}, field(t("connections.own.kind"), kind), field(t("connections.own.name"), alias), field(t("connections.own.env"), env), field(t("connections.own.auth"), auth)), fields, rest);
+    return h("div", {class: "sv-own-form"}, h("div", {class: "sv-fields"}, field(t("connections.own.kind"), kind), field(t("connections.own.name"), alias), field(t("connections.own.env"), env), field(t("connections.own.auth"), auth)), h("p", {class: "sub"}, t("connections.own.env.prod")), fields, rest);  // why there is no PROD (1.7.38)
   }
 
   // One connection (1.7.38): name, type, where it points (the environment chip, or `org · project`), whether the company or the person added it, the sign-in (a dot and the account), Sign in and Test.
@@ -160,7 +160,7 @@ const SERVERS = (function () {
       const dot = h("span", {class: "su-dot " + (via ? "none" : bad ? "bad" : row.saved ? "ok" : "ring")});
       let words;
       if (via === "mcp") words = h("span", {class: "tl-who none"}, t("connections.state.mcp"));
-      else if (via === "nopack") words = h("span", {class: "tl-who none"}, t("connections.state.nopack"));
+      else if (via === "nopack") words = h("span", {class: "tl-who none", title: t("connections.state.nopack.tip")}, t("connections.state.nopack"));  // the gate still judges its calls (1.7.38)
       else if (!row.saved && !last) words = h("span", {class: "tl-who none"}, t("connections.none"));
       else {
         // Who it is signed in as (1.7.38): the account kept here; else the name the last test answered with; else, for a token, that a token is saved. A failed test of something not kept says it was not kept.

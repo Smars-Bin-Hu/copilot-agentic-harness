@@ -5,7 +5,11 @@
         "cli": [
           "az"
         ],
-        "when": "(?:dev|vsrm\\.dev)\\.azure\\.com/|\\.visualstudio\\.com/"
+        "when": "(?:dev|vsrm\\.dev)\\.azure\\.com/|\\.visualstudio\\.com/",
+        "also": {
+          "type": "azure-devops",
+          "field": "url"
+        }
       },
       "env": "none",
       "verbs": [

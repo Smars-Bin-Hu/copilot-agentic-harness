@@ -309,6 +309,9 @@ def waiting(root: Path, task: str, data: Dict[str, Any]) -> Dict[str, str]:
         return {"why": "req", "since": written}  # written, not confirmed: no plan can be approved on it (1.5.30). It waits since the agent wrote it, not since the task was opened
     held = outbox.pending_for(root, task)
     if held:
+        gone = outbox.moved_on(root, held)  # 1.7.38: a call the agent did not wait for (it ran other commands after it) is no wait of the person's
+        held = [item for item in held if str(item.get("code")) not in gone]
+    if held:
         return {"why": "outbox", "since": str(held[0].get("created_at") or updated)}  # a call to an outside system waits in the outbox (1.7.7): the agent stopped on it
     handed = data.get("handoff")
     if isinstance(handed, dict) and handed.get("what") in HANDOFFS and handed.get("since"):
@@ -532,7 +535,17 @@ def set_allow(root: Path, raw_task: str, env: str, on: bool, interactive: Option
         data[ALLOW_KEY] = held
         if before != on:
             task_ops.note(data, "allow-env", f"{env}: {'on' if on else 'off'}")
-    return {"task": task, "env": env, "on": on, "changed": before != on, "open": sorted(held), "next": say("task.allow.on" if on else "task.allow.off", env=env.upper())}
+    key = "task.allow.on" if on else "task.allow.off"
+    if on:  # 1.7.38: an environment whose systems all come from tool packs lets nothing through: say so (the board does not offer it)
+        try:
+            from core import config, systems as outside
+
+            listed = config.policy_or_empty(root, "tools").get("systems") or {}
+            if outside.environments(listed) and not outside.environments(listed, only_openable=True).get(env):
+                key = "task.allow.on.asks"
+        except Exception:  # noqa: BLE001 - the note is a help; the switch is set
+            pass
+    return {"task": task, "env": env, "on": on, "changed": before != on, "open": sorted(held), "next": say(key, env=env.upper())}
 
 
 def _set_allow_links(root: Path, raw_task: str, on: bool) -> Dict[str, Any]:

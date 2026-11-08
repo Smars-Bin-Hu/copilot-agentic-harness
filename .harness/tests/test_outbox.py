@@ -196,6 +196,42 @@ class OutboxOnThePageTests(OutboxCase):
         self.assertTrue(view[0]["draft"].startswith("OUTBOX/"))
         self.assertEqual(view[0]["facts"], {})
 
+    def test_a_held_call_the_agent_went_on_without_is_marked_and_is_no_wait_of_the_person(self) -> None:
+        """1.7.38 (C11 T2-04): the agent held on a command it got wrong ran another one at once. The card stays (the person may dismiss or approve it), but the task does not say it waits for the person."""
+        from core import outbox as core_outbox
+        from modules.task import taskboard, taskdesk, tasklife
+
+        self.new()
+        code = code_of(self.term(COMMENT)["permissionDecisionReason"])
+        self.assertEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "outbox")
+        self.assertFalse(taskdesk.outbox_view(self.root, TASK)[0]["moved_on"], "nothing ran after it: the agent waits")
+        self.assertEqual(self.term("tk show T-7"), {})  # a read, started in the same moment: the batch of the held call
+        self.assertEqual(core_outbox.moved_on(self.root, core_outbox.pending_for(self.root, TASK)), set(), "calls that start together are one batch, not a next move")
+        with mock.patch.object(core_outbox, "MOVED_MARGIN_S", 0.0):  # the agent's next move comes seconds later; the test cannot wait
+            self.assertEqual(self.term("tk show T-8"), {})
+            self.assertEqual(core_outbox.moved_on(self.root, core_outbox.pending_for(self.root, TASK)), {code})
+            self.assertNotEqual(tasklife.waiting(self.root, TASK, self.data())["why"], "outbox", "the task is not waiting for the person because of it")
+            rows, _problems = taskboard.board_rows(self.root, False, 0, ("approve-action",), rewrite=False)
+            row = next(item for item in rows["tasks"] if item["task"] == TASK)
+            self.assertNotEqual(row["waiting_why"], "outbox")
+            (view,) = taskdesk.outbox_view(self.root, TASK)
+            self.assertEqual((view["code"], view["moved_on"]), (code, True), "still on the page, marked")
+            self.assertEqual([item["code"] for item in core_outbox.pending_for(self.root, TASK)], [code], "still held: it can be approved or dismissed")
+            self.approve(code)
+            self.assertEqual([item["code"] for item in taskdesk.approved_view(self.root, TASK)], [code])
+
+    def test_a_refused_call_and_a_file_edit_after_a_held_call_are_not_a_move_on(self) -> None:
+        from core import outbox as core_outbox
+        from modules.task import taskdesk
+
+        self.new()
+        self.term(COMMENT)
+        with mock.patch.object(core_outbox, "MOVED_MARGIN_S", 0.0):
+            self.assertEqual(self.term(COMMENT)["permissionDecision"], "deny")  # the same call held again
+            self.term('tk comment T-9 "another write"')  # another held call
+            self.edit("TASK.md")
+            self.assertTrue(all(not item["moved_on"] for item in taskdesk.outbox_view(self.root, TASK)))
+
     def test_an_approved_call_stays_on_the_page_until_the_command_has_run(self) -> None:
         """1.7.24: the green card is the server's, not the page's memory: it is there after the agent answered or the page was loaded again, and goes when the command ran (the approval is used up)."""
         from modules.task import taskdesk
